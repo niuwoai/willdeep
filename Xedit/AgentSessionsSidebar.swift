@@ -105,17 +105,14 @@ struct AgentSessionsSidebar: View {
 
     @ViewBuilder
     private var someIMAccountFooter: some View {
-        if let account = someIMAccount {
-            Divider()
-            HStack(spacing: 8) {
+        Divider()
+        HStack(spacing: 8) {
+            if let account = someIMAccount {
                 Button {
                     openSomeIMAccount()
                 } label: {
                     HStack(spacing: 8) {
-                        Image(systemName: "sparkles")
-                            .font(.system(size: 12, weight: .semibold))
-                            .foregroundStyle(appState.editorSettings.interfaceSkin.palette.accent)
-                            .frame(width: 16, height: 16)
+                        someIMAvatar(title: account.email, isAnonymous: false)
                         VStack(alignment: .leading, spacing: 1) {
                             Text(L10n.Sidebar.someIMAccountTitle)
                                 .font(.system(size: 11, weight: .semibold))
@@ -140,9 +137,11 @@ struct AgentSessionsSidebar: View {
                     }
                     .padding(.horizontal, 10)
                     .frame(height: 42)
+                    .frame(maxWidth: .infinity, alignment: .leading)
                     .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
+                .frame(maxWidth: .infinity, alignment: .leading)
                 .disabled(isOpeningSomeIMAccount)
                 .help(someIMAccountStatus.isEmpty ? L10n.Sidebar.someIMOpenTooltip : someIMAccountStatus)
 
@@ -164,11 +163,66 @@ struct AgentSessionsSidebar: View {
                 .buttonStyle(.plain)
                 .disabled(isRefreshingSomeIMAccount)
                 .help(L10n.Sidebar.someIMRefreshTooltip)
+            } else {
+                Button {
+                    openSomeIMSettings(autogenerateBrowserLogin: true)
+                } label: {
+                    HStack(spacing: 8) {
+                        someIMAvatar(title: "", isAnonymous: true)
+                        VStack(alignment: .leading, spacing: 1) {
+                            Text(L10n.Sidebar.someIMAccountTitle)
+                                .font(.system(size: 11, weight: .semibold))
+                                .foregroundStyle(.primary)
+                                .lineLimit(1)
+                            Text(L10n.Sidebar.someIMNotLoggedIn)
+                                .font(.system(size: 10, weight: .medium))
+                                .foregroundStyle(.secondary)
+                                .lineLimit(1)
+                        }
+                        Spacer(minLength: 0)
+                        Image(systemName: "gearshape")
+                            .font(.system(size: 10, weight: .semibold))
+                            .foregroundStyle(.tertiary)
+                    }
+                    .padding(.horizontal, 10)
+                    .frame(height: 42)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .simultaneousGesture(TapGesture().onEnded {
+                    openSomeIMSettings(autogenerateBrowserLogin: true)
+                })
+                .help(L10n.Sidebar.someIMNotLoggedInTooltip)
             }
-            .padding(.horizontal, 8)
-            .padding(.vertical, 7)
-            .background(appState.editorSettings.interfaceSkin.palette.controlFill.opacity(0.48))
         }
+        .padding(.horizontal, 8)
+        .padding(.vertical, 7)
+        .background(appState.editorSettings.interfaceSkin.palette.controlFill.opacity(0.48))
+        .contentShape(Rectangle())
+        .onTapGesture {
+            if someIMAccount == nil {
+                openSomeIMSettings(autogenerateBrowserLogin: true)
+            }
+        }
+    }
+
+    private func someIMAvatar(title: String, isAnonymous: Bool) -> some View {
+        ZStack {
+            Circle()
+                .fill(isAnonymous ? Color.secondary.opacity(0.16) : appState.editorSettings.interfaceSkin.palette.accent.opacity(0.22))
+            if isAnonymous {
+                Image(systemName: "person.crop.circle")
+                    .font(.system(size: 17, weight: .semibold))
+                    .foregroundStyle(.secondary)
+            } else {
+                Text(someIMAvatarInitials(from: title))
+                    .font(.system(size: 10, weight: .bold))
+                    .foregroundStyle(appState.editorSettings.interfaceSkin.palette.accent)
+            }
+        }
+        .frame(width: 28, height: 28)
     }
 
     private var sidebarHeader: some View {
@@ -776,6 +830,20 @@ struct AgentSessionsSidebar: View {
                 }
             }
         }
+    }
+
+    @MainActor
+    private func openSomeIMSettings(autogenerateBrowserLogin: Bool = false) {
+        EditorSettingsNavigation.shared.openSomeIM(
+            autogenerateBrowserLogin: autogenerateBrowserLogin,
+            appState: appState
+        )
+    }
+
+    private func someIMAvatarInitials(from value: String) -> String {
+        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let first = trimmed.first else { return "S" }
+        return String(first).uppercased()
     }
 
     private func workspaceDisplayName(_ key: String) -> String {

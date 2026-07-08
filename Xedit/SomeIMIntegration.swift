@@ -9,6 +9,7 @@
 
 import Foundation
 import AppKit
+import Security
 import SwiftUI
 
 enum SomeIMGenerationKind: String, Codable, CaseIterable, Identifiable {
@@ -206,13 +207,89 @@ struct SomeIMAccount: Codable, Equatable {
     }
 }
 
+struct SomeIMBrowserLoginRequest: Equatable {
+    var code: String
+    var pairToken: String
+    var url: URL
+    var createdAt: Date
+}
+
+struct SomeIMBrowserLoginStatus: Equatable {
+    enum State: String {
+        case pending
+        case connected
+        case expired
+        case unknown
+    }
+
+    var state: State
+    var account: SomeIMAccount?
+}
+
 struct SomeIMGeneratedImage: Equatable, Sendable {
     let fileURL: URL
     let model: String
 }
 
 enum SomeIMClient {
-    private static let willDeepClientID = "willdeep"
+    static let willDeepClientID = "willdeep"
+
+    static func makeBrowserLoginRequest(settings: SomeIMIntegrationSettings) throws -> SomeIMBrowserLoginRequest {
+        let code = try randomDeviceCode()
+        let pairToken = try randomPairToken()
+        let url = try browserLoginURL(settings: settings.normalized, code: code, pairToken: pairToken)
+        return SomeIMBrowserLoginRequest(code: code, pairToken: pairToken, url: url, createdAt: Date())
+    }
+
+    static func checkBrowserLoginStatus(
+        request loginRequest: SomeIMBrowserLoginRequest,
+        settings: SomeIMIntegrationSettings
+    ) async throws -> SomeIMBrowserLoginStatus {
+        try await checkBrowserLoginStatus(
+            request: loginRequest,
+            settings: settings,
+            session: AgentNetworkSupport.defaultSession()
+        )
+    }
+
+    static func checkBrowserLoginStatus(
+        request loginRequest: SomeIMBrowserLoginRequest,
+        settings: SomeIMIntegrationSettings,
+        session: URLSession
+    ) async throws -> SomeIMBrowserLoginStatus {
+        let normalized = settings.normalized
+        let endpoint = try browserStatusEndpoint(from: normalized.baseURL, code: loginRequest.code)
+        var request = URLRequest(url: endpoint)
+        request.httpMethod = "GET"
+        request.timeoutInterval = 12
+        request.setValue("application/json", forHTTPHeaderField: "Accept")
+        request.setValue("Bearer \(loginRequest.pairToken)", forHTTPHeaderField: "Authorization")
+        applyClientLoginSecret(to: &request)
+        AgentNetworkSupport.applyStandardHeaders(to: &request)
+        let data = try await send(request, session: session)
+        let decoded = try decodeEnvelope(BrowserLoginStatusData.self, from: data)
+        let state = SomeIMBrowserLoginStatus.State(rawValue: decoded.status.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()) ?? .unknown
+        guard state == .connected else {
+            return SomeIMBrowserLoginStatus(state: state, account: nil)
+        }
+        guard let apiKey = decoded.api_key?.trimmingCharacters(in: .whitespacesAndNewlines), !apiKey.isEmpty,
+              let accountData = decoded.account else {
+            return SomeIMBrowserLoginStatus(state: .connected, account: nil)
+        }
+        let account = accountData.account(
+            fallbackEmail: "",
+            fallbackModel: decoded.default_model?.nonEmpty ?? SomeIMIntegrationSettings.defaultTextModel
+        )
+        SomeIMIntegrationStore.saveAPIKey(apiKey)
+        if let token = decoded.token?.trimmingCharacters(in: .whitespacesAndNewlines), !token.isEmpty {
+            SomeIMIntegrationStore.saveSessionToken(token)
+        }
+        SomeIMIntegrationStore.saveAccount(account)
+        var nextSettings = normalized
+        nextSettings.enabled = true
+        SomeIMIntegrationStore.saveSettings(nextSettings)
+        return SomeIMBrowserLoginStatus(state: .connected, account: account)
+    }
 
     static func sendClientLoginCode(
         email: String,
@@ -532,6 +609,54 @@ enum SomeIMClient {
         return url
     }
 
+    private static func browserStatusEndpoint(from baseURL: String, code: String) throws -> URL {
+        guard var components = URLComponents(url: try publicAPIEndpoint(from: baseURL, suffix: "public/client-login/browser-status"), resolvingAgainstBaseURL: false) else {
+            throw AgentClientError.invalidResponse
+        }
+        components.queryItems = [
+            URLQueryItem(name: "client_id", value: willDeepClientID),
+            URLQueryItem(name: "willdeep_device_code", value: code)
+        ]
+        guard let url = components.url else { throw AgentClientError.invalidResponse }
+        return url
+    }
+
+    private static func browserLoginURL(settings: SomeIMIntegrationSettings, code: String, pairToken: String) throws -> URL {
+        guard var components = URLComponents(string: settings.baseURL.trimmingCharacters(in: .whitespacesAndNewlines)) else {
+            throw AgentClientError.invalidResponse
+        }
+        components.path = "/customer/login"
+        components.queryItems = [
+            URLQueryItem(name: "client_id", value: willDeepClientID),
+            URLQueryItem(name: "willdeep_device_code", value: code),
+            URLQueryItem(name: "willdeep_pair_token", value: pairToken),
+            URLQueryItem(name: "return_to", value: "willdeep"),
+            URLQueryItem(name: "next", value: "/customer?willdeep_return=1&willdeep_device_code=\(code)&willdeep_pair_token=\(pairToken)")
+        ]
+        guard let url = components.url else { throw AgentClientError.invalidResponse }
+        return url
+    }
+
+    private static func randomDeviceCode() throws -> String {
+        var bytes = [UInt8](repeating: 0, count: 8)
+        let status = SecRandomCopyBytes(kSecRandomDefault, bytes.count, &bytes)
+        guard status == errSecSuccess else {
+            throw AgentToolError.invalidArgument("Unable to create a random some.im login code.")
+        }
+        let alphabet = Array("ABCDEFGHJKLMNPQRSTUVWXYZ23456789")
+        let raw = bytes.map { alphabet[Int($0) % alphabet.count] }
+        return "WD-\(String(raw.prefix(4)))-\(String(raw.suffix(4)))"
+    }
+
+    private static func randomPairToken() throws -> String {
+        var bytes = [UInt8](repeating: 0, count: 32)
+        let status = SecRandomCopyBytes(kSecRandomDefault, bytes.count, &bytes)
+        guard status == errSecSuccess else {
+            throw AgentToolError.invalidArgument("Unable to create a secure some.im browser login token.")
+        }
+        return bytes.map { String(format: "%02x", $0) }.joined()
+    }
+
     private static func jsonRequest(url: URL, method: String) -> URLRequest {
         var request = URLRequest(url: url)
         request.httpMethod = method
@@ -560,10 +685,10 @@ enum SomeIMClient {
     }
 
     private static func decodeEnvelope<T: Decodable>(_ type: T.Type, from data: Data) throws -> T {
-        if let direct = try? JSONDecoder().decode(T.self, from: data) {
-            return direct
+        if let envelope = try? JSONDecoder().decode(APIEnvelope<T>.self, from: data) {
+            return envelope.data
         }
-        return try JSONDecoder().decode(APIEnvelope<T>.self, from: data).data
+        return try JSONDecoder().decode(T.self, from: data)
     }
 
     private static func credits(fromUSD usd: String) -> String {
@@ -663,13 +788,96 @@ enum SomeIMClient {
         let account: AccountData
     }
 
-    private struct AccountData: Decodable {
+    private struct BrowserLoginStatusData: Decodable {
+        let status: String
+        let api_key: String?
+        let default_model: String?
+        let token: String?
+        let account: AccountData?
+
+        private enum CodingKeys: String, CodingKey {
+            case status
+            case state
+            case loginStatus = "login_status"
+            case apiKey = "api_key"
+            case apiKeyCamel = "apiKey"
+            case appAPIKey = "app_api_key"
+            case appAPIKeyCamel = "appApiKey"
+            case willDeepAPIKey = "willdeep_api_key"
+            case willDeepAPIKeyCamel = "willdeepApiKey"
+            case defaultModel = "default_model"
+            case defaultModelCamel = "defaultModel"
+            case token
+            case sessionToken = "session_token"
+            case sessionTokenCamel = "sessionToken"
+            case customerSession = "customer_session"
+            case customerSessionCamel = "customerSession"
+            case account
+            case customer
+            case user
+            case credentials
+            case credential
+        }
+
+        init(from decoder: Decoder) throws {
+            let container = try decoder.container(keyedBy: CodingKeys.self)
+            status = try container.decodeFirstString(for: [.status, .state, .loginStatus]) ?? "unknown"
+            let directAPIKey = try container.decodeFirstString(for: [
+                .apiKey,
+                .apiKeyCamel,
+                .appAPIKey,
+                .appAPIKeyCamel,
+                .willDeepAPIKey,
+                .willDeepAPIKeyCamel
+            ])
+            let directDefaultModel = try container.decodeFirstString(for: [.defaultModel, .defaultModelCamel])
+            let directToken = try container.decodeFirstString(for: [
+                .token,
+                .sessionToken,
+                .sessionTokenCamel,
+                .customerSession,
+                .customerSessionCamel
+            ])
+            let credentials = try container.decodeFirstCredentials(for: [.credentials, .credential])
+            api_key = directAPIKey ?? credentials.apiKey
+            default_model = directDefaultModel ?? credentials.defaultModel
+            token = directToken ?? credentials.token
+            account = try container.decodeFirstAccount(for: [.account, .customer, .user])
+                ?? credentials.account
+        }
+    }
+
+    fileprivate struct AccountData: Decodable {
         let email: String?
         let tenant_id: String?
         let balance_usd: String?
         let credits: String?
         let credits_per_usd: Int?
         let default_model: String?
+
+        private enum CodingKeys: String, CodingKey {
+            case email
+            case tenantID = "tenant_id"
+            case tenantIDCamel = "tenantID"
+            case balanceUSD = "balance_usd"
+            case balanceUSDCamel = "balanceUSD"
+            case balance
+            case credits
+            case creditsPerUSD = "credits_per_usd"
+            case creditsPerUSDCamel = "creditsPerUSD"
+            case defaultModel = "default_model"
+            case defaultModelCamel = "defaultModel"
+        }
+
+        init(from decoder: Decoder) throws {
+            let container = try decoder.container(keyedBy: CodingKeys.self)
+            email = try container.decodeFirstString(for: [.email])
+            tenant_id = try container.decodeFirstString(for: [.tenantID, .tenantIDCamel])
+            balance_usd = try container.decodeFirstString(for: [.balanceUSD, .balanceUSDCamel, .balance])
+            credits = try container.decodeFirstString(for: [.credits])
+            credits_per_usd = try container.decodeFirstInt(for: [.creditsPerUSD, .creditsPerUSDCamel])
+            default_model = try container.decodeFirstString(for: [.defaultModel, .defaultModelCamel])
+        }
 
         func account(fallbackEmail: String, fallbackModel: String) -> SomeIMAccount {
             let balance = balance_usd?.trimmingCharacters(in: .whitespacesAndNewlines).nonEmpty ?? "0"
@@ -685,6 +893,60 @@ enum SomeIMClient {
         }
     }
 
+    fileprivate struct BrowserLoginCredentials: Decodable {
+        let apiKey: String?
+        let defaultModel: String?
+        let token: String?
+        let account: AccountData?
+
+        private enum CodingKeys: String, CodingKey {
+            case apiKey = "api_key"
+            case apiKeyCamel = "apiKey"
+            case appAPIKey = "app_api_key"
+            case appAPIKeyCamel = "appApiKey"
+            case willDeepAPIKey = "willdeep_api_key"
+            case willDeepAPIKeyCamel = "willdeepApiKey"
+            case defaultModel = "default_model"
+            case defaultModelCamel = "defaultModel"
+            case token
+            case sessionToken = "session_token"
+            case sessionTokenCamel = "sessionToken"
+            case customerSession = "customer_session"
+            case customerSessionCamel = "customerSession"
+            case account
+            case customer
+            case user
+        }
+
+        init(apiKey: String?, defaultModel: String?, token: String?, account: AccountData?) {
+            self.apiKey = apiKey
+            self.defaultModel = defaultModel
+            self.token = token
+            self.account = account
+        }
+
+        init(from decoder: Decoder) throws {
+            let container = try decoder.container(keyedBy: CodingKeys.self)
+            apiKey = try container.decodeFirstString(for: [
+                .apiKey,
+                .apiKeyCamel,
+                .appAPIKey,
+                .appAPIKeyCamel,
+                .willDeepAPIKey,
+                .willDeepAPIKeyCamel
+            ])
+            defaultModel = try container.decodeFirstString(for: [.defaultModel, .defaultModelCamel])
+            token = try container.decodeFirstString(for: [
+                .token,
+                .sessionToken,
+                .sessionTokenCamel,
+                .customerSession,
+                .customerSessionCamel
+            ])
+            account = try container.decodeFirstAccount(for: [.account, .customer, .user])
+        }
+    }
+
     private struct AccountBalanceData: Decodable {
         let tenant_id: String
         let currency: String
@@ -697,8 +959,60 @@ enum SomeIMClient {
     }
 }
 
+private extension KeyedDecodingContainer {
+    func decodeFirstString(for keys: [Key]) throws -> String? {
+        for key in keys {
+            if let value = try? decodeIfPresent(String.self, forKey: key)?
+                .trimmingCharacters(in: .whitespacesAndNewlines),
+               !value.isEmpty {
+                return value
+            }
+            if let value = try? decodeIfPresent(Int.self, forKey: key) {
+                return String(value)
+            }
+            if let value = try? decodeIfPresent(Double.self, forKey: key) {
+                return String(value)
+            }
+        }
+        return nil
+    }
+
+    func decodeFirstInt(for keys: [Key]) throws -> Int? {
+        for key in keys {
+            if let value = try? decodeIfPresent(Int.self, forKey: key) {
+                return value
+            }
+            if let string = try? decodeIfPresent(String.self, forKey: key)?
+                .trimmingCharacters(in: .whitespacesAndNewlines),
+               let value = Int(string) {
+                return value
+            }
+        }
+        return nil
+    }
+
+    func decodeFirstAccount(for keys: [Key]) throws -> SomeIMClient.AccountData? {
+        for key in keys {
+            if let value = try decodeIfPresent(SomeIMClient.AccountData.self, forKey: key) {
+                return value
+            }
+        }
+        return nil
+    }
+
+    func decodeFirstCredentials(for keys: [Key]) throws -> SomeIMClient.BrowserLoginCredentials {
+        for key in keys {
+            if let value = try decodeIfPresent(SomeIMClient.BrowserLoginCredentials.self, forKey: key) {
+                return value
+            }
+        }
+        return SomeIMClient.BrowserLoginCredentials(apiKey: nil, defaultModel: nil, token: nil, account: nil)
+    }
+}
+
 struct SomeIMIntegrationSettingsView: View {
     @EnvironmentObject private var appState: AppState
+    @ObservedObject private var settingsNavigation = EditorSettingsNavigation.shared
     @State private var settings = SomeIMIntegrationStore.loadSettings()
     @State private var apiKey = SomeIMIntegrationStore.loadAPIKey()
     @State private var account = SomeIMIntegrationStore.loadAccount()
@@ -709,6 +1023,10 @@ struct SomeIMIntegrationSettingsView: View {
     @State private var isSendingCode = false
     @State private var isVerifyingCode = false
     @State private var isRefreshingBalance = false
+    @State private var browserLoginRequest: SomeIMBrowserLoginRequest?
+    @State private var browserLoginWatcher: Task<Void, Never>?
+    @State private var isWatchingBrowserLogin = false
+    @State private var handledBrowserLoginAutogenerateRequestID: UUID?
     @State private var status = ""
 
     private var imageModels: [SomeIMModel] {
@@ -721,6 +1039,83 @@ struct SomeIMIntegrationSettingsView: View {
 
     var body: some View {
         Form {
+            Section(L10n.Settings.SomeIM.browserLoginSection) {
+                VStack(alignment: .leading, spacing: 10) {
+                    Text(L10n.Settings.SomeIM.browserLoginDescription)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+
+                    if let browserLoginRequest {
+                        HStack(alignment: .top, spacing: 14) {
+                            SettingsQRCodeView(
+                                text: browserLoginRequest.url.absoluteString,
+                                accessibilityLabel: L10n.Settings.SomeIM.browserLoginQRCodeAccessibilityLabel,
+                                unavailableText: L10n.Settings.SomeIM.browserLoginQRCodeUnavailable,
+                                pointSize: 132
+                            )
+
+                            VStack(alignment: .leading, spacing: 8) {
+                                LabeledContent(L10n.Settings.SomeIM.browserLoginCodeLabel) {
+                                    Text(browserLoginRequest.code)
+                                        .font(.system(size: 18, weight: .bold, design: .monospaced))
+                                        .textSelection(.enabled)
+                                }
+                                Text(browserLoginRequest.url.absoluteString)
+                                    .font(.caption.monospaced())
+                                    .foregroundStyle(.secondary)
+                                    .lineLimit(4)
+                                    .textSelection(.enabled)
+                                HStack(spacing: 6) {
+                                    if isWatchingBrowserLogin {
+                                        ProgressView()
+                                            .scaleEffect(0.6)
+                                            .controlSize(.small)
+                                    }
+                                    Text(browserLoginStatusText)
+                                        .font(.caption)
+                                        .foregroundStyle(.secondary)
+                                }
+                            }
+                        }
+                    } else if let account {
+                        ConnectorUnavailablePlaceholder(
+                            title: L10n.Settings.SomeIM.browserLoginConnectedTitle,
+                            systemImage: "checkmark.circle",
+                            description: L10n.Settings.SomeIM.browserLoginConnectedDescription(account.email)
+                        )
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                    } else {
+                        ConnectorUnavailablePlaceholder(
+                            title: L10n.Settings.SomeIM.browserLoginPlaceholderTitle,
+                            systemImage: "link.badge.plus",
+                            description: L10n.Settings.SomeIM.browserLoginPlaceholderDescription
+                        )
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                    }
+
+                    HStack {
+                        Button(L10n.Settings.SomeIM.generateBrowserLoginLink) {
+                            generateBrowserLoginLink(openInBrowser: false)
+                        }
+                        Button(L10n.Settings.SomeIM.openBrowserLoginLink) {
+                            if browserLoginRequest == nil {
+                                generateBrowserLoginLink(openInBrowser: true)
+                            } else {
+                                openBrowserLoginLink()
+                            }
+                        }
+                        if browserLoginRequest != nil {
+                            Button(L10n.Settings.SomeIM.copyBrowserLoginLink) {
+                                copyBrowserLoginLink()
+                            }
+                            Button(L10n.Settings.SomeIM.copyBrowserLoginCode) {
+                                copyBrowserLoginCode()
+                            }
+                        }
+                    }
+                }
+            }
+
             Section(L10n.Settings.SomeIM.accountSection) {
                 if let account {
                     LabeledContent(L10n.Settings.SomeIM.accountConnected) {
@@ -832,6 +1227,18 @@ struct SomeIMIntegrationSettingsView: View {
             }
         }
         .formStyle(.grouped)
+        .onAppear {
+            consumeBrowserLoginAutogenerateRequestIfNeeded()
+        }
+        .onReceive(settingsNavigation.$someIMBrowserLoginAutogenerateRequestID) { _ in
+            consumeBrowserLoginAutogenerateRequestIfNeeded()
+        }
+    }
+
+    private var browserLoginStatusText: String {
+        guard browserLoginRequest != nil else { return status }
+        if isWatchingBrowserLogin { return L10n.Settings.SomeIM.browserLoginWaiting }
+        return status.isEmpty ? L10n.Settings.SomeIM.browserLoginReady : status
     }
 
     private var relayRegionBinding: Binding<SomeIMRelayRegion> {
@@ -913,6 +1320,119 @@ struct SomeIMIntegrationSettingsView: View {
         SomeIMIntegrationStore.saveAPIKey(trimmedKey)
         appState.syncSomeIMProvider(settings: normalized, apiKey: trimmedKey)
         status = L10n.Settings.savedStatus
+    }
+
+    private func generateBrowserLoginLink(openInBrowser: Bool) {
+        do {
+            let request = try SomeIMClient.makeBrowserLoginRequest(settings: settings.normalized)
+            browserLoginRequest = request
+            status = L10n.Settings.SomeIM.browserLoginReady
+            startBrowserLoginWatcher(for: request)
+            if openInBrowser {
+                _ = NSWorkspace.shared.open(request.url)
+            }
+        } catch {
+            status = error.localizedDescription
+        }
+    }
+
+    private func consumeBrowserLoginAutogenerateRequestIfNeeded() {
+        guard let requestID = settingsNavigation.someIMBrowserLoginAutogenerateRequestID,
+              handledBrowserLoginAutogenerateRequestID != requestID else {
+            return
+        }
+        handledBrowserLoginAutogenerateRequestID = requestID
+        guard account == nil else { return }
+        if let request = browserLoginRequest {
+            if !isWatchingBrowserLogin {
+                startBrowserLoginWatcher(for: request)
+            }
+        } else {
+            generateBrowserLoginLink(openInBrowser: false)
+        }
+    }
+
+    private func openBrowserLoginLink() {
+        if let request = browserLoginRequest {
+            if !isWatchingBrowserLogin {
+                startBrowserLoginWatcher(for: request)
+            }
+            _ = NSWorkspace.shared.open(request.url)
+            status = L10n.Settings.SomeIM.browserLoginOpened
+        } else {
+            generateBrowserLoginLink(openInBrowser: true)
+        }
+    }
+
+    private func copyBrowserLoginLink() {
+        guard let url = browserLoginRequest?.url else { return }
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(url.absoluteString, forType: .string)
+        status = L10n.Settings.SomeIM.browserLoginCopied
+    }
+
+    private func copyBrowserLoginCode() {
+        guard let code = browserLoginRequest?.code else { return }
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(code, forType: .string)
+        status = L10n.Settings.SomeIM.browserLoginCodeCopied
+    }
+
+    private func startBrowserLoginWatcher(for loginRequest: SomeIMBrowserLoginRequest) {
+        stopBrowserLoginWatcher()
+        isWatchingBrowserLogin = true
+        status = L10n.Settings.SomeIM.browserLoginWaiting
+        let currentSettings = settings.normalized
+        browserLoginWatcher = Task {
+            let deadline = Date().addingTimeInterval(10 * 60)
+            var lastError: String?
+            while !Task.isCancelled, Date() < deadline {
+                do {
+                    let result = try await SomeIMClient.checkBrowserLoginStatus(request: loginRequest, settings: currentSettings)
+                    if result.state == .connected, let linked = result.account {
+                        await MainActor.run {
+                            account = linked
+                            accountEmail = linked.email
+                            apiKey = SomeIMIntegrationStore.loadAPIKey()
+                            settings = SomeIMIntegrationStore.loadSettings()
+                            appState.syncSomeIMProvider(settings: settings, apiKey: apiKey)
+                            appState.syncSomeIMImageUnderstanding(apiKey: apiKey)
+                            browserLoginRequest = nil
+                            isWatchingBrowserLogin = false
+                            status = L10n.Settings.SomeIM.browserLoginConnected
+                        }
+                        return
+                    }
+                    if result.state == .connected {
+                        await MainActor.run {
+                            isWatchingBrowserLogin = false
+                            status = L10n.Settings.SomeIM.browserLoginMissingCredentials
+                        }
+                        return
+                    }
+                    if result.state == .expired {
+                        await MainActor.run {
+                            isWatchingBrowserLogin = false
+                            status = L10n.Settings.SomeIM.browserLoginExpired
+                        }
+                        return
+                    }
+                } catch {
+                    lastError = error.localizedDescription
+                }
+                try? await Task.sleep(nanoseconds: 2_000_000_000)
+            }
+            await MainActor.run {
+                isWatchingBrowserLogin = false
+                status = lastError ?? L10n.Settings.SomeIM.browserLoginExpired
+            }
+        }
+    }
+
+    private func stopBrowserLoginWatcher() {
+        browserLoginWatcher?.cancel()
+        browserLoginWatcher = nil
+        isWatchingBrowserLogin = false
     }
 
     private func sendCode() {
