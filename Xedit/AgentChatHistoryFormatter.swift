@@ -971,8 +971,26 @@ enum AgentChatHistoryRenderer {
         let parsed = MarkdownInline.attributedString(from: raw)
         let converted = NSMutableAttributedString(attributedString: NSAttributedString(parsed))
         applyMissingBaseAttributes(to: converted, baseFont: baseFont, color: color)
+        applyInlineCodeChipAttributes(to: converted)
         applyPathChipAttributes(to: converted, baseFont: baseFont, color: color)
         return converted
+    }
+
+    private static func applyInlineCodeChipAttributes(to attributed: NSMutableAttributedString) {
+        let fullRange = NSRange(location: 0, length: attributed.length)
+        guard fullRange.length > 0 else { return }
+        attributed.enumerateAttribute(.backgroundColor, in: fullRange, options: []) { value, range, _ in
+            guard range.length > 0 else { return }
+            let nsColor: NSColor?
+            if let color = value as? NSColor {
+                nsColor = color
+            } else {
+                nsColor = nil
+            }
+            guard let nsColor else { return }
+            attributed.addAttribute(.agentChatHistoryInlineCodeChipColor, value: nsColor, range: range)
+            attributed.removeAttribute(.backgroundColor, range: range)
+        }
     }
 
     // 文件引用识别正则。**关键约束**:带斜杠的普通词(`GB/T`、`TCP/IP`、

@@ -510,6 +510,12 @@ struct AgentSessionsSidebar: View {
                     // expression here would only refresh when the row's
                     // session changes, not when the runtime's `isResponding`
                     // flips mid-stream.
+                    if activeScheduledTaskCount(for: session) > 0 {
+                        Image(systemName: "clock.fill")
+                            .font(.system(size: 9, weight: .semibold))
+                            .foregroundStyle(Color.accentColor)
+                            .help(L10n.Sidebar.hasActiveScheduledTasksTooltip)
+                    }
                     AgentSessionRowStatusDot(
                         runtime: observedRuntime,
                         isActive: isActive
@@ -564,7 +570,7 @@ struct AgentSessionsSidebar: View {
                 appState.toggleAgentSessionPinned(id: session.id)
             }
             Button(session.isArchived ? L10n.Sidebar.sessionMenuUnarchive : L10n.Sidebar.sessionMenuArchive) {
-                appState.toggleAgentSessionArchived(id: session.id)
+                requestArchiveToggle(for: session)
             }
             Divider()
             Button(L10n.Sidebar.sessionMenuRename) {
@@ -598,6 +604,39 @@ struct AgentSessionsSidebar: View {
         let response = alert.runModal()
         guard response == .alertFirstButtonReturn else { return }
         appState.deleteAgentSession(id: session.id)
+    }
+
+    /// Enabled scheduled tasks (routines) created from this session. Archiving
+    /// a session stops these, so the row shows a clock badge and archiving
+    /// confirms first.
+    private func activeScheduledTaskCount(for session: AgentSession) -> Int {
+        appState.agentRoutines.filter { $0.originSessionID == session.id && $0.isEnabled }.count
+    }
+
+    /// Archive / unarchive with a guard: archiving a session that still owns
+    /// active scheduled tasks confirms first, then removes those tasks (they
+    /// won't run once the session is archived).
+    private func requestArchiveToggle(for session: AgentSession) {
+        // Unarchiving, or no active tasks → just toggle.
+        if session.isArchived || activeScheduledTaskCount(for: session) == 0 {
+            appState.toggleAgentSessionArchived(id: session.id)
+            return
+        }
+        let count = activeScheduledTaskCount(for: session)
+        let alert = NSAlert()
+        alert.messageText = L10n.Sidebar.archiveWithTasksTitle
+        alert.informativeText = L10n.Sidebar.archiveWithTasksMessage("\(count)")
+        alert.alertStyle = .warning
+        alert.addButton(withTitle: L10n.Sidebar.archiveWithTasksConfirm)
+        alert.addButton(withTitle: L10n.Sidebar.archiveWithTasksCancel)
+        if let confirmButton = alert.buttons.first {
+            confirmButton.hasDestructiveAction = true
+        }
+        guard alert.runModal() == .alertFirstButtonReturn else { return }
+        for routine in appState.agentRoutines where routine.originSessionID == session.id {
+            appState.deleteAgentRoutine(id: routine.id)
+        }
+        appState.toggleAgentSessionArchived(id: session.id)
     }
 
     /// Pop a tiny NSAlert with an accessory NSTextField for renaming.
@@ -676,7 +715,7 @@ struct AgentSessionsSidebar: View {
 
                 // Archive / Unarchive
                 Button {
-                    appState.toggleAgentSessionArchived(id: session.id)
+                    requestArchiveToggle(for: session)
                 } label: {
                     Image(systemName: session.isArchived ? "tray.and.arrow.up" : "archivebox")
                         .font(.system(size: 10, weight: .medium))

@@ -479,7 +479,9 @@ struct MarkdownPreviewBlockView: View {
 enum MarkdownInline {
     static func attributedString(from raw: String) -> AttributedString {
         guard var attributed = try? AttributedString(markdown: raw) else {
-            return AttributedString(raw)
+            var fallback = AttributedString(raw)
+            MarkdownInlineSemanticEnhancer.insertHexColorSwatches(into: &fallback)
+            return fallback
         }
         // SwiftUI's parsed AttributedString tags inline code runs with
         // .code; we re-style those runs to look like a real code chip:
@@ -491,7 +493,65 @@ enum MarkdownInline {
             attributed[run.range].backgroundColor = Color.primary.opacity(0.08)
             attributed[run.range].foregroundColor = Color(nsColor: .labelColor)
         }
+        MarkdownInlineSemanticEnhancer.insertHexColorSwatches(into: &attributed)
         return attributed
+    }
+}
+
+enum MarkdownInlineSemanticEnhancer {
+    private static let hexColorRegex = try? NSRegularExpression(
+        pattern: #"(?<![A-Za-z0-9_])#(?:[0-9A-Fa-f]{3}|[0-9A-Fa-f]{6}|[0-9A-Fa-f]{8})(?![A-Za-z0-9_])"#
+    )
+
+    static func insertHexColorSwatches(into attributed: inout AttributedString) {
+        let plain = String(attributed.characters)
+        guard !plain.isEmpty, let regex = hexColorRegex else { return }
+        let nsPlain = plain as NSString
+        let fullRange = NSRange(location: 0, length: nsPlain.length)
+        let matches = regex.matches(in: plain, range: fullRange)
+        for match in matches.reversed() {
+            guard let range = Range(match.range, in: plain) else { continue }
+            let literal = String(plain[range])
+            guard let color = nsColor(fromHexLiteral: literal) else { continue }
+            let upperOffset = plain.distance(from: plain.startIndex, to: range.upperBound)
+            let insertionIndex = attributed.index(attributed.startIndex, offsetByCharacters: upperOffset)
+            var swatch = AttributedString(" ■")
+            swatch.font = .system(size: 11, weight: .semibold)
+            swatch.foregroundColor = Color(nsColor: color)
+            attributed.insert(swatch, at: insertionIndex)
+        }
+    }
+
+    static func nsColor(fromHexLiteral literal: String) -> NSColor? {
+        guard literal.first == "#" else { return nil }
+        let raw = String(literal.dropFirst())
+        let expanded: String
+        switch raw.count {
+        case 3:
+            expanded = raw.map { "\($0)\($0)" }.joined()
+        case 6, 8:
+            expanded = raw
+        default:
+            return nil
+        }
+
+        guard let value = UInt64(expanded, radix: 16) else { return nil }
+        let red: CGFloat
+        let green: CGFloat
+        let blue: CGFloat
+        let alpha: CGFloat
+        if expanded.count == 8 {
+            red = CGFloat((value >> 24) & 0xff) / 255
+            green = CGFloat((value >> 16) & 0xff) / 255
+            blue = CGFloat((value >> 8) & 0xff) / 255
+            alpha = CGFloat(value & 0xff) / 255
+        } else {
+            red = CGFloat((value >> 16) & 0xff) / 255
+            green = CGFloat((value >> 8) & 0xff) / 255
+            blue = CGFloat(value & 0xff) / 255
+            alpha = 1
+        }
+        return NSColor(calibratedRed: red, green: green, blue: blue, alpha: alpha)
     }
 }
 

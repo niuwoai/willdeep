@@ -26027,6 +26027,91 @@
         }
       }
     },
+    "sidebar.archive-with-tasks.title" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Archive this session?"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "归档此会话？"
+          }
+        }
+      }
+    },
+    "sidebar.archive-with-tasks.message" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "This session has %@ active scheduled task(s). Archiving stops and removes them — they won't run anymore."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "此会话有 %@ 个活跃定时任务。归档会停止并移除它们——它们将不再运行。"
+          }
+        }
+      }
+    },
+    "sidebar.archive-with-tasks.confirm" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Archive & Stop Tasks"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "归档并停止任务"
+          }
+        }
+      }
+    },
+    "sidebar.archive-with-tasks.cancel" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Cancel"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "取消"
+          }
+        }
+      }
+    },
+    "sidebar.has-active-scheduled-tasks.tooltip" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Has active scheduled tasks"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "有活跃定时任务"
+          }
+        }
+      }
+    },
     "sidebar.delete-session.confirm" : {
       "comment" : "destructive confirm button in the delete-session alert",
       "extractionState" : "manual",

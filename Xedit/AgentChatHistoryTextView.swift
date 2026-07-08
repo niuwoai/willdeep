@@ -724,6 +724,7 @@ private final class AgentChatHistoryBubbleLayoutManager: NSLayoutManager {
         drawAgentBubbles(forGlyphRange: glyphsToShow, at: origin)
         drawAgentTables(forGlyphRange: glyphsToShow, at: origin)
         drawAgentCodeBlocks(forGlyphRange: glyphsToShow, at: origin)
+        drawInlineCodeChips(forGlyphRange: glyphsToShow, at: origin)
         super.drawBackground(forGlyphRange: glyphsToShow, at: origin)
     }
 
@@ -864,6 +865,46 @@ private final class AgentChatHistoryBubbleLayoutManager: NSLayoutManager {
             NSColor.separatorColor.withAlphaComponent(0.10).setStroke()
             path.lineWidth = 1
             path.stroke()
+        }
+    }
+
+    private func drawInlineCodeChips(forGlyphRange glyphsToShow: NSRange, at origin: NSPoint) {
+        guard let textStorage else { return }
+        let characterRange = self.characterRange(forGlyphRange: glyphsToShow, actualGlyphRange: nil)
+        let fullStorageRange = NSRange(location: 0, length: textStorage.length)
+        var drawnRanges = Set<String>()
+        textStorage.enumerateAttribute(.agentChatHistoryInlineCodeChipColor, in: characterRange, options: []) { value, range, _ in
+            guard range.length > 0, let color = value as? NSColor else { return }
+            var fullEffectiveRange = NSRange(location: 0, length: 0)
+            _ = textStorage.attribute(
+                .agentChatHistoryInlineCodeChipColor,
+                at: range.location,
+                longestEffectiveRange: &fullEffectiveRange,
+                in: fullStorageRange
+            )
+            let drawKey = "\(fullEffectiveRange.location)-\(fullEffectiveRange.length)"
+            guard drawnRanges.insert(drawKey).inserted else { return }
+            let chipGlyphRange = glyphRange(forCharacterRange: fullEffectiveRange, actualCharacterRange: nil)
+            drawInlineChipRange(chipGlyphRange, color: color, clippedTo: glyphsToShow, at: origin)
+        }
+    }
+
+    private func drawInlineChipRange(
+        _ fullGlyphRange: NSRange,
+        color: NSColor,
+        clippedTo glyphsToShow: NSRange,
+        at origin: NSPoint
+    ) {
+        enumerateLineFragments(forGlyphRange: fullGlyphRange) { _, _, textContainer, lineGlyphRange, _ in
+            let lineRange = NSIntersectionRange(lineGlyphRange, fullGlyphRange)
+            let visibleRange = NSIntersectionRange(lineRange, glyphsToShow)
+            guard visibleRange.length > 0 else { return }
+            var rect = self.boundingRect(forGlyphRange: visibleRange, in: textContainer)
+            guard !rect.isNull, !rect.isEmpty else { return }
+            rect = rect.offsetBy(dx: origin.x, dy: origin.y).insetBy(dx: -4, dy: -1.5)
+            let radius = min(6, rect.height / 2)
+            color.setFill()
+            NSBezierPath(roundedRect: rect.integral, xRadius: radius, yRadius: radius).fill()
         }
     }
 

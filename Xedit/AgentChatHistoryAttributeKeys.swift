@@ -18,6 +18,7 @@ extension NSAttributedString.Key {
     static let agentChatHistoryShowTurnReport = NSAttributedString.Key("AgentChatHistoryShowTurnReport")
     static let agentChatHistoryTableBlockID = NSAttributedString.Key("AgentChatHistoryTableBlockID")
     static let agentChatHistoryTablePayload = NSAttributedString.Key("AgentChatHistoryTablePayload")
+    static let agentChatHistoryInlineCodeChipColor = NSAttributedString.Key("AgentChatHistoryInlineCodeChipColor")
     static let agentChatHistoryTextAttachment = NSAttributedString.Key("AgentChatHistoryTextAttachment")
     static let agentChatHistoryFilePath = NSAttributedString.Key("AgentChatHistoryFilePath")
     static let agentChatHistoryImageReferenceMarker = NSAttributedString.Key("AgentChatHistoryImageReferenceMarker")

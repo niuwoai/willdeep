@@ -1229,6 +1229,14 @@ nonisolated enum L10n {
         }
         static let deleteSessionConfirm = String(localized: "sidebar.delete-session.confirm", defaultValue: "Delete")
         static let deleteSessionCancel = String(localized: "sidebar.delete-session.cancel", defaultValue: "Cancel")
+        static let archiveWithTasksTitle = String(localized: "sidebar.archive-with-tasks.title", defaultValue: "Archive this session?")
+        static func archiveWithTasksMessage(_ count: String) -> String {
+            let template = String(localized: "sidebar.archive-with-tasks.message", defaultValue: "This session has %@ active scheduled task(s). Archiving stops and removes them — they won't run anymore.")
+            return String(format: template, count)
+        }
+        static let archiveWithTasksConfirm = String(localized: "sidebar.archive-with-tasks.confirm", defaultValue: "Archive & Stop Tasks")
+        static let archiveWithTasksCancel = String(localized: "sidebar.archive-with-tasks.cancel", defaultValue: "Cancel")
+        static let hasActiveScheduledTasksTooltip = String(localized: "sidebar.has-active-scheduled-tasks.tooltip", defaultValue: "Has active scheduled tasks")
         static let renameSessionAlertTitle = String(localized: "sidebar.rename-session.alert-title", defaultValue: "Rename Session")
         static let renameSessionAlertMessage = String(localized: "sidebar.rename-session.alert-message", defaultValue: "Give this conversation a new name.")
         static let renameSessionConfirm = String(localized: "sidebar.rename-session.confirm", defaultValue: "Save")
