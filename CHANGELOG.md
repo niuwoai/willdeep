@@ -1,5 +1,17 @@
 # Changelog
 
+## 1.136.0-rc26 - 2026-07-08
+
+### Added
+
+- **some.im 登录态跨 App 共享**：apiKey / sessionToken 改存共享 Keychain 访问组（Team `ZH2S7D6PL6`，entitlement `keychain-access-groups`），通过独立私有 Swift 包 [`SomeIMSharedSession`](https://github.com/xurenlu/SomeIMSharedSession) 收拢读写。一处登录、本机所有签名 App 都登录；一处登出、大家一起登出（登录/登出经 `DistributedNotificationCenter` 广播不含任何密钥的变更通知，各 App 收到后重读凭据并对账 agent provider）。首次启动把旧的 per-app Keychain 凭据一次性迁移进共享组、验证读回后删旧。`saveAPIKey("")` 由「删 key」改为 no-op，杜绝设置页空串误覆盖导致的「登录一会儿就掉」。
+- **some.im 设置页「退出登录」按钮**：账户区新增带二次确认的退出登录，清共享会话（广播全 App）+ 本地缓存 + agent provider；文案 en / zh-Hans 齐备。
+- **CI 私有包鉴权**：`test.yml` 用只读 deploy key（secret `SOMEIM_DEPLOY_KEY`）解析私有 `SomeIMSharedSession` 包，https→ssh 重写仅限定该包仓，公开依赖 SwiftTerm 不受影响。
+
+### Changed
+
+- 版本号从 **1.136.0-rc25** 递增为 **1.136.0-rc26**。
+
 ## 1.136.0-rc25 - 2026-07-08
 
 ### Changed
