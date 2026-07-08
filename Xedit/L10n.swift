@@ -1257,6 +1257,7 @@ nonisolated enum L10n {
             return String(format: template, a1)
         }
         static let someIMOpenTooltip = String(localized: "sidebar.some-im.open-tooltip", defaultValue: "Open some.im with this account")
+        static let someIMSettingsTooltip = String(localized: "sidebar.some-im.settings-tooltip", defaultValue: "Open some.im settings")
         static let someIMRefreshTooltip = String(localized: "sidebar.some-im.refresh-tooltip", defaultValue: "Refresh some.im credits")
         static let someIMNotLoggedIn = String(localized: "sidebar.some-im.not-logged-in", defaultValue: "Not signed in")
         static let someIMNotLoggedInTooltip = String(localized: "sidebar.some-im.not-logged-in-tooltip", defaultValue: "Open some.im integration settings")
