@@ -1,7 +1,7 @@
 # some.im 省心托管路由设计
 
 > Last updated: 2026-07-08  
-> Status: proposal / design review draft  
+> Status: Phase 1 + 1.5 + 2 + 3 已实现 (v1.136.0-rc24) — 客户端裁判 someim-judge 动态路由、会话只升不降、composer 入口、x-willdeep-session-id + 本机随机 x-willdeep-workspace-id、输出质检(本地重复/空检测 + 裁判复核)+ 单次升档重试、per-message route 决策元数据 + footer 档位标记；37 单测全绿。待办：真机端到端验证；可选:turn-report 卡片细节 + usage-stats 派生计数(元数据已就位,后续廉价)  
 > Scope: WillDeep macOS App 的 Agent composer 模型选择与 some.im provider 请求链路  
 > Revision: r2 — 结合 some.im 服务端实配（failover 链 / someim-judge / 按需 upstream header / coding 档准入）修订
 

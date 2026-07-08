@@ -68,6 +68,15 @@ nonisolated enum L10n {
         static let removeHelp = String(localized: "agent-text-attachment.remove-help", defaultValue: "Remove pasted text")
     }
 
+    /// some.im "省心托管" managed-routing composer entries.
+    enum AgentManagedRouting {
+        static let title = String(localized: "agent-managed-routing.title", defaultValue: "Managed")
+        static let titleHigh = String(localized: "agent-managed-routing.title-high", defaultValue: "Managed · High")
+        static let titlePremium = String(localized: "agent-managed-routing.title-premium", defaultValue: "Managed · Premium")
+        static let reset = String(localized: "agent-managed-routing.reset", defaultValue: "Reset managed tier")
+        static let footerPrefix = String(localized: "agent-managed-routing.footer-prefix", defaultValue: "Managed")
+    }
+
     enum AgentGeneratedImage {
         static let quoteAction = String(localized: "agent-generated-image.quote-action", defaultValue: "Quote Image")
         static let quoteHelp = String(localized: "agent-generated-image.quote-help", defaultValue: "Reference this generated image in your next reply without uploading it again.")

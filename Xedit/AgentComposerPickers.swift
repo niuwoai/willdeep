@@ -721,6 +721,34 @@ struct ModelPickerPill: View {
                 Divider()
             }
 
+            // some.im "省心托管" — session-level managed routing. Only offered
+            // when some.im is the active provider. Selecting it clears any
+            // explicit override; once the session has escalated, a reset entry
+            // appears to drop the only-goes-up floor back to low.
+            if menuSnapshot.isSomeIMActive {
+                Button {
+                    appState.selectSomeIMManagedRouting()
+                    refreshMenuSnapshot()
+                } label: {
+                    HStack {
+                        Text(L10n.AgentManagedRouting.title)
+                        if menuSnapshot.managedActive {
+                            Image(systemName: "checkmark")
+                        }
+                    }
+                }
+                if menuSnapshot.managedActive,
+                   let floor = menuSnapshot.managedFloor, floor > .low {
+                    Button {
+                        appState.resetManagedRoutingFloor()
+                        refreshMenuSnapshot()
+                    } label: {
+                        Text(L10n.AgentManagedRouting.reset)
+                    }
+                }
+                Divider()
+            }
+
             // Library entries — one Section per provider, models
             // listed flat under it. Previously this was a nested
             // Menu-in-Menu but SwiftUI's macOS implementation
@@ -981,7 +1009,10 @@ struct ModelPickerPill: View {
             hotModels: hot,
             newModels: newModels,
             fetchedModels: fetched,
-            currentModelLabel: currentModelLabel
+            currentModelLabel: currentModelLabel,
+            isSomeIMActive: library.active?.providerID == AgentProviderPreset.someIMID,
+            managedActive: appState.activeRuntime?.managedRouting != nil,
+            managedFloor: appState.activeRuntime?.managedRouting?.minimumTier
         )
     }
 
@@ -990,6 +1021,21 @@ struct ModelPickerPill: View {
     /// when there's more than one library entry, so the user always
     /// knows which provider this chat is talking to).
     private var currentModelLabel: String {
+        // Managed routing has no single model — show the "省心托管" label with
+        // the escalated tier suffix instead of a resolved model name.
+        if let managed = appState.activeRuntime?.managedRouting {
+            let core: String
+            switch managed.minimumTier {
+            case .low: core = L10n.AgentManagedRouting.title
+            case .high: core = L10n.AgentManagedRouting.titleHigh
+            case .premium: core = L10n.AgentManagedRouting.titlePremium
+            }
+            guard appState.agentProviderLibrary.entries.count > 1,
+                  let active = appState.agentProviderLibrary.active else {
+                return core
+            }
+            return "\(active.displayName) · \(core)"
+        }
         let routed = appState.agentConfiguration.normalized.model(for: .interactive)
         let model = appState.agentSessionModelOverride?.trimmingCharacters(in: .whitespacesAndNewlines)
             .nilIfEmpty ?? routed
@@ -1010,6 +1056,9 @@ struct ModelPickerPill: View {
         let newModels: [String]
         let fetchedModels: [String]
         let currentModelLabel: String
+        let isSomeIMActive: Bool
+        let managedActive: Bool
+        let managedFloor: AgentManagedCapabilityTier?
 
         static let empty = ModelPickerMenuSnapshot(
             configuredModel: "",
@@ -1020,7 +1069,10 @@ struct ModelPickerPill: View {
             hotModels: [],
             newModels: [],
             fetchedModels: [],
-            currentModelLabel: ""
+            currentModelLabel: "",
+            isSomeIMActive: false,
+            managedActive: false,
+            managedFloor: nil
         )
     }
 }

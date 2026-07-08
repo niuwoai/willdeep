@@ -393,6 +393,10 @@ extension AgentChatHistoryRenderer {
                 result.append(AgentChatHistoryFooterChrome.separator)
                 result.append(AgentChatHistoryFooterChrome.label(summary))
             }
+            if let route = message.managedRoute {
+                result.append(AgentChatHistoryFooterChrome.separator)
+                result.append(AgentChatHistoryFooterChrome.label(route.footerChipText))
+            }
             // 1.103.0-rc11: turn-report 图标(原 AgentTurnPostStrip 左侧)
             // 折进 footer,跟 copy/clock/tokens/retry 同一行;只挂在最后一条
             // assistant 上,无工具调用的轮(toolCount==0)与历史轮都不显示。

@@ -114,6 +114,10 @@ final class AgentRuntime: ObservableObject, Identifiable {
     /// ask the chat loop to run tools, but never execute them directly.
     @Published var latestWidgetToolAction: AgentWidgetToolAction?
     @Published var sessionModelOverride: String?
+    /// Per-session some.im managed-routing state ("省心托管"). Mirrors
+    /// `AgentSession.managedRouting`; non-nil only for managed sessions and
+    /// carries the only-goes-up capability floor.
+    @Published var managedRouting: AgentManagedRoutingState?
     /// True after the runtime successfully applied at least one patch.
     /// Drives the "正在编辑 / N 个文件已更改" worktree card so empty
     /// sessions never light it up.
@@ -196,6 +200,7 @@ final class AgentRuntime: ObservableObject, Identifiable {
         self.learningEvents = session.learningEvents
         self.latestTurnRecall = session.latestTurnRecall
         self.sidePanelState = session.sidePanelState
+        self.managedRouting = session.managedRouting
     }
 
     /// Move an idle/new session to another workspace. Used by the
@@ -277,6 +282,7 @@ final class AgentRuntime: ObservableObject, Identifiable {
         session.learningEvents = learningEvents
         session.latestTurnRecall = latestTurnRecall
         session.sidePanelState = sidePanelState
+        session.managedRouting = managedRouting
         session.updatedAt = Date()
         // Two title sources fight for this slot:
         //   1. User-set (sidebar rename) — `titleIsUserSet == true`,
@@ -296,6 +302,38 @@ final class AgentRuntime: ObservableObject, Identifiable {
             }
         }
         AgentSessionStore.saveAsync(session)
+    }
+
+    // MARK: - Managed routing ("省心托管") floor
+
+    /// Raise the managed-routing capability floor. Only-goes-up: a tier at or
+    /// below the current floor is ignored. Returns true if the floor rose.
+    /// Callers persist afterwards.
+    @discardableResult
+    func raiseManagedFloor(to tier: AgentManagedCapabilityTier, reason: String?) -> Bool {
+        guard var state = managedRouting else { return false }
+        guard tier > state.minimumTier else { return false }
+        state.minimumTier = tier
+        state.lastEscalatedAt = Date()
+        state.lastEscalationReason = reason
+        managedRouting = state
+        return true
+    }
+
+    /// Record the main-call model the router resolved to this turn
+    /// (diagnostic only; does not affect the floor).
+    func noteManagedSelectedModel(_ model: String) {
+        guard var state = managedRouting else { return }
+        guard state.lastSelectedModel != model else { return }
+        state.lastSelectedModel = model
+        managedRouting = state
+    }
+
+    /// Reset the managed floor to `.low` (user "重置托管档位"). No-op when the
+    /// session is not managed.
+    func resetManagedFloor() {
+        guard managedRouting != nil else { return }
+        managedRouting = AgentManagedRoutingState()
     }
 
     /// True if this session has no real user messages yet.

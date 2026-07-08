@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.136.0-rc24 - 2026-07-08
+
+### Added
+
+- **some.im「省心托管」动态路由（Phase 1 + Phase 2 + Phase 3）**：composer 模型菜单在 some.im provider 下新增「省心托管」入口。选中后每个用户轮先用轻量裁判模型 `someim-judge`（底层非思考 DeepSeek）判断任务域（coding/general）与复杂度（low/high），结合会话级「只升不降」能力档位动态选择本轮实际模型（`someim-coding-plan-low/high/premium`、`someim-auto-flash/pro`）；裁判失败自动回退本地启发式。无 tool call 的输出会做质检（本地确定性重复/空输出检测 + `someim-judge` 复核），命中明确生成故障时清掉本轮输出并升一档重试一次（每用户轮至多一次）。some.im 请求附带 `x-willdeep-session-id` 与本机随机 `x-willdeep-workspace-id`（只发随机 UUID，不含任何本地路径）。裁判与主模型共用同一 provider 并发槽；路由锁定每用户轮一次，tool 循环内不重判。可观测性：每条 assistant 消息记录本轮 route 决策（选中模型/档位/domain/complexity/是否 fallback/是否升档），消息 footer 显示「托管 · Low/High/Premium」标记（升档 ↑、fallback ~）。设计文档：`docs/SOME_IM_MANAGED_ROUTING_DESIGN.md`。
+
+### Changed
+
+- 版本号从 **1.136.0-rc23** 递增为 **1.136.0-rc24**。
+
 ## 1.136.0-rc23 - 2026-07-08
 
 ### Fixed

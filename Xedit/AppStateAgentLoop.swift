@@ -365,6 +365,22 @@ extension AppState {
         persistActiveAgentSession()
     }
 
+    /// Stable local key for a runtime's workspace, mirroring
+    /// `AgentSession.workspaceSidebarGroupKey` but from the live runtime
+    /// location. Fed only to `AgentWorkspaceIdentityStore` for local UUID
+    /// lookup — never transmitted.
+    private static func managedWorkspaceKey(for runtime: AgentRuntime) -> String {
+        let location = runtime.workspaceLocation ?? runtime.workspaceRootPath.map { .local(path: $0) }
+        switch location {
+        case .local(let path):
+            return path.isEmpty ? AgentSession.noWorkspaceSidebarGroupKey : path
+        case .remote(let runtimeID, let path):
+            return "remote:\(runtimeID.uuidString):\(RemotePathValidator.normalizedWorkspaceRoot(path))"
+        case .none:
+            return AgentSession.noWorkspaceSidebarGroupKey
+        }
+    }
+
     @MainActor
     func runAgentLoop(for runtime: AgentRuntime, configuration: AgentConfiguration) async {
         defer {
@@ -392,7 +408,65 @@ extension AppState {
             resumeAgentLoopForPendingBackgroundCompletions(for: runtime)
         }
 
-        let client = AgentClient(configuration: configuration)
+        // some.im context headers (session id + workspace id) ride on every
+        // some.im request this turn — main stream, route judge, model fetch.
+        // Provider-gated in the adapter, so non-some.im providers never see them.
+        let someIMContext: SomeIMRequestContext? = {
+            guard configuration.providerID == AgentProviderPreset.someIMID else { return nil }
+            let workspaceID = AgentWorkspaceIdentityStore.workspaceID(
+                forWorkspaceKey: Self.managedWorkspaceKey(for: runtime)
+            )
+            return SomeIMRequestContext(sessionID: runtime.id.uuidString, workspaceID: workspaceID)
+        }()
+
+        // "省心托管" dynamic routing. Resolved ONCE per user turn, BEFORE the
+        // tool-call loop, so the whole loop reuses a single model — no
+        // mid-turn re-judging that could desync tool_call pairing. The judge
+        // shares this turn's already-held provider slot; `routeJudge` never
+        // acquires/releases a slot and never throws, so the `defer` above
+        // still owns every release path.
+        var turnConfiguration = configuration
+        var managedRouteDecision: AgentManagedRouteDecision?
+        if runtime.managedRouting != nil,
+           configuration.providerID == AgentProviderPreset.someIMID {
+            let floor = runtime.managedRouting?.minimumTier ?? .low
+            let judgeInput = SomeIMRouteJudgeInput(
+                latestUserMessage: runtime.messages.last(where: { $0.role == .user })?.content ?? "",
+                workspaceAvailable: runtime.workspaceLocation != nil || (runtime.workspaceRootPath?.isEmpty == false),
+                selectedFileLanguage: openedFileURL.flatMap { $0.pathExtension.isEmpty ? nil : $0.pathExtension },
+                interactionMode: "\(runtime.interactionMode)",
+                approvalMode: "\(runtime.approvalMode)",
+                toolsEnabled: true,
+                conversationSummary: runtime.contextSummary
+            )
+            let judgeClient = AgentClient(configuration: configuration, someIMContext: someIMContext)
+            let resolution = await SomeIMManagedRouting.route(input: judgeInput, floor: floor) { system, user, maxTokens in
+                await judgeClient.routeJudge(
+                    model: SomeIMManagedModel.judge,
+                    systemPrompt: system,
+                    userPayload: user,
+                    maxTokens: maxTokens
+                )
+            }
+            turnConfiguration.model = resolution.model
+            runtime.noteManagedSelectedModel(resolution.model)
+            managedRouteDecision = AgentManagedRouteDecision(
+                selectedModel: resolution.model,
+                tier: resolution.effectiveTier,
+                domain: resolution.verdict.domain,
+                complexity: resolution.verdict.complexity,
+                didFallback: resolution.usedFallback
+            )
+            // Only a real judge verdict raises the persisted floor — a network
+            // fallback must not lock the session into a high tier.
+            if !resolution.usedFallback {
+                runtime.raiseManagedFloor(to: resolution.effectiveTier, reason: resolution.verdict.reason)
+            }
+        }
+
+        // `var` so a managed output-quality failure can swap in an escalated
+        // client and re-run the round (see the no-tool-call guard below).
+        var client = AgentClient(configuration: turnConfiguration, someIMContext: someIMContext)
         // Resolve the runtime's workspace path for tool execution —
         // never read AppState.rootDirectory here. Concurrent runtimes
         // can be running against different workspaces; the window's
@@ -446,6 +520,10 @@ extension AppState {
             attachedSkills: runtime.currentTurnAttachedSkills
         )
         let memoryContextBlock = AgentMemoryEngine.contextBlock(for: retrievedMemories)
+
+        // Managed-routing output quality caps its escalation at one retry per
+        // user turn (design doc §"重试限制").
+        var didQualityRetry = false
 
         for _ in 0..<Self.maxAgentToolRounds {
             // Background-job completion notices. Pulled at the top of
@@ -731,10 +809,69 @@ extension AppState {
                     runtime.messages[index].toolCalls = latestToolCalls
                 }
                 runtime.messages[index].elapsedSeconds = Date().timeIntervalSince(turnStartedAt)
+                runtime.messages[index].managedRoute = managedRouteDecision
             }
 
             // No tool calls → assistant finished talking. Capture patches and return.
             guard !latestToolCalls.isEmpty else {
+                // Phase 2: managed-routing output quality check + single
+                // escalation retry. Only for a managed some.im turn that
+                // produced text, hasn't already retried, and can still climb a
+                // tier. On failure we discard this output and re-run the round
+                // one tier up: the outer loop rebuilds provider-ready history
+                // from `runtime.messages` (excluding the removed message), so a
+                // retry that emits tool calls flows into the tool path and
+                // history stays intact. The judge shares this turn's slot.
+                if !didQualityRetry,
+                   runtime.managedRouting != nil,
+                   configuration.providerID == AgentProviderPreset.someIMID,
+                   let escalatedModel = SomeIMManagedModel.escalated(from: turnConfiguration.model),
+                   let index = runtime.messages.firstIndex(where: { $0.id == assistantID }),
+                   !runtime.messages[index].content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                       || !(runtime.messages[index].reasoningContent ?? "").isEmpty {
+                    let assistantText = runtime.messages[index].content
+                    let reasoningText = runtime.messages[index].reasoningContent
+                    let latestUserMessage = runtime.messages.last(where: { $0.role == .user })?.content ?? ""
+                    let qualityConfig = turnConfiguration
+                    let qualityContext = someIMContext
+                    let decision = await SomeIMManagedRouting.outputQuality(
+                        assistantText: assistantText,
+                        reasoningText: reasoningText,
+                        latestUserMessage: latestUserMessage,
+                        model: turnConfiguration.model,
+                        finishReason: finishReason
+                    ) { system, user, maxTokens in
+                        await AgentClient(configuration: qualityConfig, someIMContext: qualityContext)
+                            .routeJudge(
+                                model: SomeIMManagedModel.judge,
+                                systemPrompt: system,
+                                userPayload: user,
+                                maxTokens: maxTokens
+                            )
+                    }
+                    if decision.shouldRetry {
+                        didQualityRetry = true
+                        if let dropIndex = runtime.messages.firstIndex(where: { $0.id == assistantID }) {
+                            runtime.messages.remove(at: dropIndex)
+                        }
+                        turnConfiguration.model = escalatedModel
+                        client = AgentClient(configuration: turnConfiguration, someIMContext: someIMContext)
+                        let escalatedTier = SomeIMManagedModel.tier(of: escalatedModel)
+                        if let escalatedTier {
+                            runtime.raiseManagedFloor(to: escalatedTier, reason: "output-quality:\(decision.failureType)")
+                        }
+                        runtime.noteManagedSelectedModel(escalatedModel)
+                        // Carry the escalation into this turn's route metadata so
+                        // the retried message's footer shows the climbed tier.
+                        managedRouteDecision?.didEscalate = true
+                        managedRouteDecision?.failureType = decision.failureType
+                        managedRouteDecision?.selectedModel = escalatedModel
+                        if let escalatedTier {
+                            managedRouteDecision?.tier = escalatedTier
+                        }
+                        continue
+                    }
+                }
                 attachRecentGeneratedToolImages(to: assistantID, in: runtime)
                 captureAgentPatchProposals(for: runtime, fromMessageID: assistantID)
                 // A stream can end "successfully" having produced nothing

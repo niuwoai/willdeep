@@ -954,8 +954,14 @@ extension AppState {
         // disk session needs this seeded.
         if let runtime = activeRuntime {
             let session = runtime.session
-            let routedModel = agentConfiguration.normalized.model(for: .interactive)
-            runtime.sessionModelOverride = session.modelID == routedModel ? nil : session.modelID
+            if runtime.managedRouting != nil {
+                // Managed session: the model is resolved per-turn by the
+                // judge, so there is no single override to seed.
+                runtime.sessionModelOverride = nil
+            } else {
+                let routedModel = agentConfiguration.normalized.model(for: .interactive)
+                runtime.sessionModelOverride = session.modelID == routedModel ? nil : session.modelID
+            }
             syncWorkspaceContext(for: session)
             autoSummarizeTitleIfPlaceholder(runtime)
         }
@@ -1351,7 +1357,12 @@ extension AppState {
     /// different session still write their final state to disk.
     func persistAgentSession(runtime: AgentRuntime) {
         guard let index = agentSessions.firstIndex(where: { $0.id == runtime.id }) else { return }
-        if let override = runtime.sessionModelOverride, !override.isEmpty {
+        if runtime.managedRouting != nil {
+            // Managed routing resolves a model per-turn; there is no single
+            // session model. Keep modelID clear so nothing downstream mistakes
+            // a route-default snapshot for an explicit user choice.
+            runtime.session.modelID = nil
+        } else if let override = runtime.sessionModelOverride, !override.isEmpty {
             runtime.session.modelID = override
         } else if runtime.id == activeAgentSessionID {
             runtime.session.modelID = agentConfiguration.normalized.model(for: .interactive)
@@ -1412,6 +1423,10 @@ extension AppState {
     }
 
     func setAgentSessionModel(_ model: String?) {
+        // Picking any explicit model (or route-default) exits managed
+        // routing — the three session-selection states (route default /
+        // explicit model / managed) are mutually exclusive.
+        activeRuntime?.managedRouting = nil
         let trimmed = model?.trimmingCharacters(in: .whitespacesAndNewlines)
         if let trimmed, !trimmed.isEmpty {
             if agentModelIsCompatibleWithActiveProvider(trimmed) {
@@ -1475,5 +1490,28 @@ extension AppState {
         } else {
             setAgentSessionModel(trimmed)
         }
+    }
+
+    // MARK: - some.im managed routing ("省心托管") selection
+
+    /// Composer entry point for "省心托管". Only valid when the active
+    /// provider is some.im. Sets a fresh `.low` managed-routing floor and
+    /// clears any explicit model override so the three session-selection
+    /// states stay mutually exclusive.
+    func selectSomeIMManagedRouting() {
+        guard let runtime = activeRuntime else { return }
+        guard agentProviderLibrary.active?.providerID == AgentProviderPreset.someIMID else { return }
+        runtime.sessionModelOverride = nil
+        if runtime.managedRouting == nil {
+            runtime.managedRouting = AgentManagedRoutingState()
+        }
+        persistActiveAgentSession()
+    }
+
+    /// User tapped "重置托管档位" — drop the only-goes-up floor back to `.low`.
+    func resetManagedRoutingFloor() {
+        guard let runtime = activeRuntime else { return }
+        runtime.resetManagedFloor()
+        persistActiveAgentSession()
     }
 }

@@ -3894,6 +3894,96 @@
         }
       }
     },
+    "agent-managed-routing.title" : {
+      "comment" : "some.im managed-routing composer menu item / pill label",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Managed"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "省心托管"
+          }
+        }
+      }
+    },
+    "agent-managed-routing.title-high" : {
+      "comment" : "some.im managed-routing pill label once the session floor has escalated to high",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Managed · High"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "省心托管 · High"
+          }
+        }
+      }
+    },
+    "agent-managed-routing.title-premium" : {
+      "comment" : "some.im managed-routing pill label once the session floor has escalated to premium",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Managed · Premium"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "省心托管 · Premium"
+          }
+        }
+      }
+    },
+    "agent-managed-routing.reset" : {
+      "comment" : "some.im managed-routing menu item that resets the only-goes-up capability floor back to low",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Reset managed tier"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "重置托管档位"
+          }
+        }
+      }
+    },
+    "agent-managed-routing.footer-prefix" : {
+      "comment" : "Assistant message footer chip prefix for a some.im managed-routing turn; followed by the tier (Low/High/Premium)",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Managed"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "托管"
+          }
+        }
+      }
+    },
     "agent-worktree-summary.files-changed" : {
       "comment" : "Composer worktree summary bar. Placeholder is the changed file count.",
       "extractionState" : "manual",

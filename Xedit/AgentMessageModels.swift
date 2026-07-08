@@ -295,6 +295,10 @@ nonisolated struct AgentMessage: Identifiable, Codable, Equatable {
     /// the fixed prefix before dynamic workspace/memory/history blocks.
     var requestPrefixHash: String?
     var requestStablePrefixCharacters: Int?
+    /// some.im managed-routing decision for this assistant turn (nil on
+    /// non-managed turns). Records the resolved model / tier / domain /
+    /// complexity plus fallback and escalation markers for observability.
+    var managedRoute: AgentManagedRouteDecision?
     /// 1.81.0-rc1：role == .workflowReport 时挂载的 workflow 运行数据。
     /// engine 边跑边 mutate 这里的字段（subAgents 状态、totalUsageTokens、
     /// summary 等），UI 卡片读它显示进度。其它 role 一定是 nil；旧版本
@@ -326,6 +330,7 @@ nonisolated struct AgentMessage: Identifiable, Codable, Equatable {
         originLabel: String? = nil,
         requestPrefixHash: String? = nil,
         requestStablePrefixCharacters: Int? = nil,
+        managedRoute: AgentManagedRouteDecision? = nil,
         workflowReport: WorkflowReport? = nil,
         widget: AgentWidget? = nil,
         createdAt: Date = Date()
@@ -349,6 +354,7 @@ nonisolated struct AgentMessage: Identifiable, Codable, Equatable {
         self.originLabel = originLabel
         self.requestPrefixHash = requestPrefixHash
         self.requestStablePrefixCharacters = requestStablePrefixCharacters
+        self.managedRoute = managedRoute
         self.workflowReport = workflowReport
         self.widget = widget
         self.createdAt = createdAt
@@ -362,6 +368,7 @@ nonisolated struct AgentMessage: Identifiable, Codable, Equatable {
         case cachedPromptTokens, cacheWritePromptTokens, reasoningTokens
         case elapsedSeconds
         case origin, originLabel, requestPrefixHash, requestStablePrefixCharacters
+        case managedRoute
         case createdAt
     }
 
@@ -386,6 +393,7 @@ nonisolated struct AgentMessage: Identifiable, Codable, Equatable {
         originLabel = try container.decodeIfPresent(String.self, forKey: .originLabel)
         requestPrefixHash = try container.decodeIfPresent(String.self, forKey: .requestPrefixHash)
         requestStablePrefixCharacters = try container.decodeIfPresent(Int.self, forKey: .requestStablePrefixCharacters)
+        managedRoute = try container.decodeIfPresent(AgentManagedRouteDecision.self, forKey: .managedRoute)
         createdAt = try container.decode(Date.self, forKey: .createdAt)
     }
 }
