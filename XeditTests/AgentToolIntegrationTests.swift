@@ -510,8 +510,8 @@ extension WillDeepTests {
         #expect(stats.longestStreak == 3)
     }
 
-    @Test("AgentUsageStats current streak is zero when today has no messages")
-    func testUsageStatsCurrentStreakZeroWhenTodayEmpty() {
+    @Test("AgentUsageStats current streak preserves yesterday run when today is empty")
+    func testUsageStatsCurrentStreakPreservesYesterdayRunWhenTodayEmpty() {
         let calendar = Calendar.current
         let now = Date()
         let yesterday = calendar.date(byAdding: .day, value: -1, to: calendar.startOfDay(for: now))!
@@ -520,6 +520,23 @@ extension WillDeepTests {
         let messages = [
             userMessage("a", at: dayBefore),
             userMessage("b", at: yesterday)
+        ]
+        let session = makeSession(modelID: nil, messages: messages)
+        let stats = AgentUsageStats.overview(for: [session], now: now)
+        #expect(stats.currentStreak == 2)
+        #expect(stats.longestStreak == 2)
+    }
+
+    @Test("AgentUsageStats current streak is zero after missing yesterday and today")
+    func testUsageStatsCurrentStreakZeroAfterGap() {
+        let calendar = Calendar.current
+        let now = Date()
+        let twoDaysAgo = calendar.date(byAdding: .day, value: -2, to: calendar.startOfDay(for: now))!
+        let threeDaysAgo = calendar.date(byAdding: .day, value: -3, to: calendar.startOfDay(for: now))!
+
+        let messages = [
+            userMessage("a", at: threeDaysAgo),
+            userMessage("b", at: twoDaysAgo)
         ]
         let session = makeSession(modelID: nil, messages: messages)
         let stats = AgentUsageStats.overview(for: [session], now: now)
