@@ -23277,13 +23277,13 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Push-to-talk in the composer transcribes 100% on-device. Nothing leaves your Mac."
+            "value" : "Push-to-talk in the composer transcribes on-device. Optional AI cleanup can polish the result after transcription."
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "在输入框里按住说话,转写 100% 在本机完成。任何数据都不会离开你的 Mac。"
+            "value" : "在输入框里说话会先在本机转写。可选的 AI 整理可以在转写后润色输入内容。"
           }
         }
       }
@@ -23301,6 +23301,159 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "本机语音(SenseVoice)"
+          }
+        }
+      }
+    },
+    "settings.voice.cleanup.bullet-points" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Structure into points"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "整理成要点"
+          }
+        }
+      }
+    },
+    "settings.voice.cleanup.bullet-points-description" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Use the configured AI model to lightly organize longer dictation into a few clear points."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "使用当前配置的 AI 模型,把较长口述轻度整理成几个清晰要点。"
+          }
+        }
+      }
+    },
+    "settings.voice.cleanup.mode" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "After transcription"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "转写后处理"
+          }
+        }
+      }
+    },
+    "settings.voice.cleanup.off" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Off"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "关闭"
+          }
+        }
+      }
+    },
+    "settings.voice.cleanup.off-description" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Append the local transcript exactly as produced by SenseVoice."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "直接追加 SenseVoice 在本机生成的原始转写文本。"
+          }
+        }
+      }
+    },
+    "settings.voice.cleanup.privacy-note" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "When AI cleanup is enabled, the transcribed text is sent to your configured AI provider. Voice audio still stays on this Mac."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "开启 AI 整理后,转写文本会发送给你配置的 AI provider；语音音频仍只留在本机。"
+          }
+        }
+      }
+    },
+    "settings.voice.cleanup.punctuation" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Punctuation + paragraphs"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "标点和分段"
+          }
+        }
+      }
+    },
+    "settings.voice.cleanup.punctuation-description" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Use the configured AI model to add punctuation, paragraphs, and light wording cleanup without summarizing."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "使用当前配置的 AI 模型补标点、分段和轻度润色,不做总结。"
+          }
+        }
+      }
+    },
+    "settings.voice.cleanup.section" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "AI Cleanup"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "AI 整理"
           }
         }
       }
