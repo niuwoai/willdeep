@@ -1,6 +1,6 @@
 # WillDeep Product Overview
 
-> Last updated: 2026-07-09 | Current version: v1.136.0-rc29
+> Last updated: 2026-07-09 | Current version: v1.136.0-rc30
 
 ## Positioning
 
@@ -14,6 +14,7 @@ WillDeep is configured for non-App-Store distribution without App Sandbox so it 
 
 WillDeep 是 SwiftUI + AppKit 桥接的 macOS 应用，单进程多窗口。代码层次：
 
+- **对话区左侧用户输入刻度尺 + 轮数上限放大（1.136.0-rc30）** —— Agent 对话区左边缘一列等距短横线,每条对应一次用户输入;hover 变长并浮出小卡片(用户说了啥/AI 回了啥/改了哪些文件),点击滚动到该处(复用历史 NSTextView 的用户消息锚点,纯原生)。同时把对话区渲染上限从 20 条提到 60 条(约 30 轮)。
 - **Markdown 颜色语义渲染（1.136.0-rc29）** —— Agent 聊天 Markdown 的 inline code 在历史 TextKit 渲染里升级为圆角胶囊绘制;`#RGB` / `#RRGGBB` / `#RRGGBBAA` 颜色字面量会自动追加同色小方块。流式消息与落定历史共用同一套 inline 语义增强,截图里那种 `#8B3F52` + 色块效果可直接由普通 Markdown 文本触发。
 - **定时任务的会话归档守卫 + 列表时钟图标（1.136.0-rc29）** —— 归档仍有活跃定时任务的会话时先弹确认(确认后停止并移除这些任务);会话列表里挂着活跃定时任务的行,最前面显示一个时钟小图标。
 - **会话内定时任务（1.136.0-rc28）** —— Agent 可在对话里用 `schedule_task` 工具安排定时任务(interval 或每日,可带 `goal` 目标),transcript 底部出现可点击的定时任务卡片、点开看详情;设了 goal 的任务每次触发会自判目标是否达成,达成即调用 `complete_scheduled_task` 自我移除(卡片转「已完成」、侧栏消失)。复用既有 Routine 调度器;卡片以持久化的 `.scheduledTask` role 随会话保留且不发给 LLM。

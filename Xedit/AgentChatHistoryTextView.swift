@@ -46,6 +46,11 @@ struct AgentChatHistoryTextView: NSViewRepresentable {
     var searchQuery: String = ""
     var activeSearchMatchIndex: Int? = nil
     var onSearchResultCountChange: ((Int) -> Void)? = nil
+    /// Imperative "scroll to this user message" trigger from the left-edge
+    /// user-input minimap. The token debounces so the same target can be
+    /// re-selected: bump the token to fire again with the same id.
+    var scrollToUserMessageToken: Int = 0
+    var scrollToUserMessageID: UUID? = nil
     @Environment(\.colorScheme) private var colorScheme
 
     func makeNSView(context: Context) -> AgentChatHistoryNSTextView {
@@ -88,6 +93,7 @@ struct AgentChatHistoryTextView: NSViewRepresentable {
             activeMatchIndex: activeSearchMatchIndex,
             isDark: colorScheme == .dark
         )
+        nsView.applyScrollRequest(token: scrollToUserMessageToken, userMessageID: scrollToUserMessageID)
     }
 
     private func configure(_ view: AgentChatHistoryNSTextView) {
@@ -389,6 +395,41 @@ final class AgentChatHistoryNSTextView: NSTextView {
         DispatchQueue.main.async { [weak self] in
             self?.scrollRangeToVisible(range)
         }
+    }
+
+    // MARK: - User-input minimap scroll
+
+    private var lastHandledScrollToken = 0
+
+    /// Called from the representable's `updateNSView` with the minimap's scroll
+    /// token/id. Fires at most once per new token (0 == the initial no-op).
+    func applyScrollRequest(token: Int, userMessageID: UUID?) {
+        guard token != lastHandledScrollToken else { return }
+        lastHandledScrollToken = token
+        guard let userMessageID else { return }
+        _ = scrollToUserMessage(id: userMessageID)
+    }
+
+    /// Scrolls so the top of the user message stamped with `id` is visible.
+    /// Returns true if that message exists in this text view.
+    @discardableResult
+    func scrollToUserMessage(id: UUID) -> Bool {
+        guard let textStorage, textStorage.length > 0 else { return false }
+        let target = id.uuidString
+        let fullRange = NSRange(location: 0, length: textStorage.length)
+        var found: NSRange?
+        textStorage.enumerateAttribute(.agentChatHistoryUserMessageID, in: fullRange, options: []) { value, range, stop in
+            if let string = value as? String, string == target {
+                found = range
+                stop.pointee = true
+            }
+        }
+        guard let range = found else { return false }
+        let anchor = NSRange(location: range.location, length: 0)
+        DispatchQueue.main.async { [weak self] in
+            self?.scrollRangeToVisible(anchor)
+        }
+        return true
     }
 
     private func updateHoveredUserMessage(at point: NSPoint) {

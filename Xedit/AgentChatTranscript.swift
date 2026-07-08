@@ -174,6 +174,10 @@ struct AgentChatTranscript: View {
     /// AgentTurnReportCard 的 SwiftUI popover 开关。Anchor 挂在
     /// AgentChatHistoryTextView wrapper 上即可。
     @State private var showTurnReportPopover = false
+    /// Left-edge user-input minimap → history NSTextView scroll trigger. The
+    /// token bumps on each tick click so re-selecting the same turn re-scrolls.
+    @State private var minimapScrollToken = 0
+    @State private var minimapScrollUserMessageID: UUID?
     @State private var isOlderHistoryPreviewExpanded = false
     @State private var isConversationSearchPresented = false
     @State private var conversationSearchQuery = ""
@@ -261,7 +265,9 @@ struct AgentChatTranscript: View {
                                 },
                                 searchQuery: conversationSearchQuery,
                                 activeSearchMatchIndex: conversationSearchActiveIndex,
-                                onSearchResultCountChange: updateConversationSearchMatchCount
+                                onSearchResultCountChange: updateConversationSearchMatchCount,
+                                scrollToUserMessageToken: minimapScrollToken,
+                                scrollToUserMessageID: minimapScrollUserMessageID
                             )
                                 .frame(maxWidth: AgentDesign.chatMaxContentWidth, alignment: .leading)
                                 .popover(isPresented: $showTurnReportPopover, arrowEdge: .top) {
@@ -521,6 +527,15 @@ struct AgentChatTranscript: View {
                 .zIndex(20)
             }
         }
+        .overlay(alignment: .leading) {
+            let turns = userInputMinimapTurns
+            if turns.count > 1 {
+                AgentTranscriptUserMinimap(turns: turns) { userMessageID in
+                    minimapScrollUserMessageID = userMessageID
+                    minimapScrollToken += 1
+                }
+            }
+        }
         .background(AgentConversationSearchKeyboardShortcutView(onFind: presentConversationSearch))
         .onCompatibleChange(of: conversationSearchQuery) { _, _ in
             conversationSearchActiveIndex = 0
@@ -528,6 +543,14 @@ struct AgentChatTranscript: View {
         .onCompatibleChange(of: appState.activeAgentSessionID) { _, _ in
             closeConversationSearch()
         }
+    }
+
+    /// Turns for the left-edge user-input minimap: one entry per user message
+    /// in the currently-rendered window, with its reply + edited files folded in.
+    private var userInputMinimapTurns: [AgentTranscriptTurnSummary] {
+        let all = visibleMessages
+        let rendered = isConversationSearchActive ? all : renderedMessages(from: all)
+        return AgentTranscriptTurnSummary.build(from: rendered, toolCalls: appState.agentToolCalls)
     }
 
     private var isConversationSearchActive: Bool {
@@ -657,10 +680,11 @@ struct AgentChatTranscript: View {
 
     /// How many messages the in-pane transcript renders at once.
     /// Anything older falls behind the "older history" disclosure
-    /// and is reachable via the standalone reader window. Tuned to
-    /// give plenty of context for a back-and-forth without exposing
-    /// SwiftUI's LazyVStack to the long-list freeze.
-    private static let renderedMessageCap = 20
+    /// and is reachable via the standalone reader window. History is
+    /// baked into a single incrementally-laid-out NSTextView (not a
+    /// LazyVStack), so a larger window doesn't reintroduce the long-list
+    /// freeze; per-message size is still capped by messageContentRenderCap.
+    private static let renderedMessageCap = 60
 
     /// Per-message content size cap (in characters). Any message with
     /// content longer than this gets a start/end preview in the chat

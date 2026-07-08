@@ -2826,6 +2826,7 @@ nonisolated enum L10n {
         static let olderHistoryRoleWorkflow = String(localized: "transcript.older-history.role.workflow", defaultValue: "Workflow")
         static let olderHistoryRoleWidget = String(localized: "transcript.older-history.role.widget", defaultValue: "Widget")
         static let olderHistoryRoleScheduledTask = String(localized: "transcript.older-history.role.scheduled-task", defaultValue: "Scheduled task")
+        static let minimapEmptyUserText = String(localized: "transcript.minimap.empty-user-text", defaultValue: "(no text)")
         static let runningTaskOne = String(localized: "transcript.running-tasks.one", defaultValue: "1 running task")
         static func runningTasksMany(_ a1: String) -> String {
             let template = String(localized: "transcript.running-tasks.many", defaultValue: "%@ running tasks")
