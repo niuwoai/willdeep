@@ -16,7 +16,8 @@ extension AppState {
     }
 
     func alwaysAllowAgentToolCall(id: AgentToolCall.ID) {
-        guard let call = agentToolCalls.first(where: { $0.id == id }) else { return }
+        guard let (runtime, index) = runtimeAndToolCallIndex(containing: id) else { return }
+        let call = runtime.toolCalls[index]
         if let rule = alwaysAllowedCommand(for: call) {
             addAgentAlwaysAllowedCommand(rule)
         }
@@ -41,6 +42,10 @@ extension AppState {
     /// provided"; use `denyAgentToolCall` to skip outright.
     func answerAgentToolCall(id: AgentToolCall.ID, answer: String) {
         resolveAgentToolCallDecision(id: id, decision: .answered(answer))
+    }
+
+    func hasPendingAgentToolDecision(id: AgentToolCall.ID) -> Bool {
+        runtimeAndToolCallIndex(containing: id)?.runtime.pendingToolDecisions[id] != nil
     }
 
     func fillTerminalShortcutProtectedInputs(
@@ -369,18 +374,48 @@ extension AppState {
     }
 
     func resolveAgentToolCallDecision(id: AgentToolCall.ID, decision: AgentToolDecision) {
-        guard let index = agentToolCalls.firstIndex(where: { $0.id == id }) else { return }
-        guard agentToolCalls[index].status == .pendingApproval
-            || agentToolCalls[index].status == .awaitingConfirm
-            || agentToolCalls[index].status == .awaitingUserAnswer else {
+        guard let (runtime, index) = runtimeAndToolCallIndex(containing: id) else { return }
+        guard runtime.toolCalls[index].status == .pendingApproval
+            || runtime.toolCalls[index].status == .awaitingConfirm
+            || runtime.toolCalls[index].status == .awaitingUserAnswer else {
             return
         }
+
+        runtime.pendingToolDecisions[id] = decision
+
         if case .denied(let reason) = decision {
-            agentToolCalls[index].status = .denied
-            agentToolCalls[index].errorMessage = reason
+            runtime.toolCalls[index].status = .denied
+            runtime.toolCalls[index].errorMessage = reason
         }
-        agentToolDecisionWaiter?.resume(returning: decision)
-        agentToolDecisionWaiter = nil
+
+        guard let waiter = runtime.toolDecisionWaiter else { return }
+        guard runtime.toolDecisionWaiterCallID == nil || runtime.toolDecisionWaiterCallID == id else {
+            return
+        }
+
+        runtime.pendingToolDecisions.removeValue(forKey: id)
+        runtime.toolDecisionWaiter = nil
+        runtime.toolDecisionWaiterCallID = nil
+
+        if case .approved = decision {
+            runtime.toolCalls[index].status = .running
+        } else if case .answered = decision {
+            runtime.toolCalls[index].status = .running
+        }
+        waiter.resume(returning: decision)
+    }
+
+    private func runtimeAndToolCallIndex(containing id: AgentToolCall.ID) -> (runtime: AgentRuntime, index: Int)? {
+        if let runtime = activeRuntime,
+           let index = runtime.toolCalls.firstIndex(where: { $0.id == id }) {
+            return (runtime, index)
+        }
+        for runtime in agentRuntimes.values {
+            if let index = runtime.toolCalls.firstIndex(where: { $0.id == id }) {
+                return (runtime, index)
+            }
+        }
+        return nil
     }
 
     private func goalModeCanAutoApproveEscalated(

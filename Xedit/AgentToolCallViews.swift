@@ -393,23 +393,27 @@ struct AgentToolCallCard: View {
             if call.status == .pendingApproval {
                 VStack(alignment: .leading, spacing: 6) {
                     approvalCommandBlock
-                    // rc16:把 Deny 推到最左,Allow / Always Allow 在右侧簇集,
-                    // 对齐 macOS「主操作右、负操作远离」防误触习惯。
-                    HStack {
-                        // 拒绝:空心(描边)按钮;允许:实心(高亮)主操作。
-                        Button(L10n.ToolCard.deny) { appState.denyAgentToolCall(id: call.id) }
-                            .buttonStyle(.bordered)
-                        Spacer(minLength: 0)
-                        if let signature = alwaysAllowSignature {
-                            Button(L10n.ToolCard.alwaysAllow) { appState.alwaysAllowAgentToolCall(id: call.id) }
+                    if decisionAlreadySubmitted {
+                        submittedDecisionNotice
+                    } else {
+                        // rc16:把 Deny 推到最左,Allow / Always Allow 在右侧簇集,
+                        // 对齐 macOS「主操作右、负操作远离」防误触习惯。
+                        HStack {
+                            // 拒绝:空心(描边)按钮;允许:实心(高亮)主操作。
+                            Button(L10n.ToolCard.deny) { appState.denyAgentToolCall(id: call.id) }
                                 .buttonStyle(.bordered)
-                                .help(L10n.ToolCard.alwaysAllowHelp(signature))
+                            Spacer(minLength: 0)
+                            if let signature = alwaysAllowSignature {
+                                Button(L10n.ToolCard.alwaysAllow) { appState.alwaysAllowAgentToolCall(id: call.id) }
+                                    .buttonStyle(.bordered)
+                                    .help(L10n.ToolCard.alwaysAllowHelp(signature))
+                            }
+                            Button(L10n.ToolCard.allow) { appState.approveAgentToolCall(id: call.id) }
+                                .buttonStyle(.borderedProminent)
                         }
-                        Button(L10n.ToolCard.allow) { appState.approveAgentToolCall(id: call.id) }
-                            .buttonStyle(.borderedProminent)
+                        .font(.caption)
+                        .controlSize(.small)
                     }
-                    .font(.caption)
-                    .controlSize(.small)
                 }
             } else if call.status == .awaitingConfirm {
                 VStack(alignment: .leading, spacing: 6) {
@@ -417,29 +421,33 @@ struct AgentToolCallCard: View {
                     Text(L10n.ToolCard.destructiveWarning)
                         .font(.caption2)
                         .foregroundStyle(destructiveAccentColor)
-                    // rc16:同上,Deny 在左,Confirm Run 在右。
-                    HStack {
-                        Button(L10n.ToolCard.deny) {
-                            appState.denyAgentToolCall(id: call.id)
+                    if decisionAlreadySubmitted {
+                        submittedDecisionNotice
+                    } else {
+                        // rc16:同上,Deny 在左,Confirm Run 在右。
+                        HStack {
+                            Button(L10n.ToolCard.deny) {
+                                appState.denyAgentToolCall(id: call.id)
+                            }
+                            Spacer(minLength: 0)
+                            Button {
+                                _ = appState.confirmAgentToolCall(id: call.id, typedConfirmation: "confirm")
+                            } label: {
+                                Text(L10n.ToolCard.confirmRun)
+                                    .font(.caption.weight(.semibold))
+                                    .padding(.horizontal, 9)
+                                    .padding(.vertical, 4)
+                                    .foregroundStyle(destructiveAccentColor)
+                                    .background(Color.clear)
+                                    .overlay(
+                                        RoundedRectangle(cornerRadius: 6, style: .continuous)
+                                            .stroke(destructiveAccentColor.opacity(0.62), lineWidth: 1)
+                                    )
+                            }
+                            .buttonStyle(.plain)
                         }
-                        Spacer(minLength: 0)
-                        Button {
-                            _ = appState.confirmAgentToolCall(id: call.id, typedConfirmation: "confirm")
-                        } label: {
-                            Text(L10n.ToolCard.confirmRun)
-                                .font(.caption.weight(.semibold))
-                                .padding(.horizontal, 9)
-                                .padding(.vertical, 4)
-                                .foregroundStyle(destructiveAccentColor)
-                                .background(Color.clear)
-                                .overlay(
-                                    RoundedRectangle(cornerRadius: 6, style: .continuous)
-                                        .stroke(destructiveAccentColor.opacity(0.62), lineWidth: 1)
-                                )
-                        }
-                        .buttonStyle(.plain)
+                        .font(.caption)
                     }
-                    .font(.caption)
                 }
             } else if call.status == .awaitingUserAnswer {
                 askUserBody
@@ -483,6 +491,19 @@ struct AgentToolCallCard: View {
         }
     }
 
+    private var submittedDecisionNotice: some View {
+        HStack(spacing: 6) {
+            ProgressView()
+                .controlSize(.small)
+                .scaleEffect(0.58)
+                .frame(width: 12, height: 12)
+            Text("已提交决定，等待执行循环接收")
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+        }
+        .padding(.vertical, 2)
+    }
+
     @ViewBuilder
     private var askUserBody: some View {
         let question = call.arguments["question"]?.stringValue() ?? ""
@@ -502,37 +523,41 @@ struct AgentToolCallCard: View {
                     .fixedSize(horizontal: false, vertical: true)
             }
 
-            if !options.isEmpty {
-                if isMultiSelect {
-                    multiSelectChoices(options)
-                } else {
-                    singleSelectChoices(options)
+            if decisionAlreadySubmitted {
+                submittedDecisionNotice
+            } else {
+                if !options.isEmpty {
+                    if isMultiSelect {
+                        multiSelectChoices(options)
+                    } else {
+                        singleSelectChoices(options)
+                    }
                 }
-            }
 
-            // Free-form text input is always available — even with preset
-            // options, the user may want to write "none of these".
-            TextField(options.isEmpty ? L10n.ToolCard.askUserAnswerPlaceholder : L10n.ToolCard.askUserOtherAnswerPlaceholder,
-                      text: $answerInput,
-                      axis: .vertical)
-                .textFieldStyle(.roundedBorder)
-                .font(.system(size: 12))
-                .lineLimit(1...4)
+                // Free-form text input is always available — even with preset
+                // options, the user may want to write "none of these".
+                TextField(options.isEmpty ? L10n.ToolCard.askUserAnswerPlaceholder : L10n.ToolCard.askUserOtherAnswerPlaceholder,
+                          text: $answerInput,
+                          axis: .vertical)
+                    .textFieldStyle(.roundedBorder)
+                    .font(.system(size: 12))
+                    .lineLimit(1...4)
 
-            // rc16:Skip 在左、Send 在右,对齐「正向操作右、误触概率低」的
-            // macOS 习惯。Send 的 disabled 状态自然把视觉重心保留在右侧。
-            HStack(spacing: 6) {
-                Button(L10n.ToolCard.askUserSkip) {
-                    appState.denyAgentToolCall(id: call.id)
-                    resetAskUserInputs()
+                // rc16:Skip 在左、Send 在右,对齐「正向操作右、误触概率低」的
+                // macOS 习惯。Send 的 disabled 状态自然把视觉重心保留在右侧。
+                HStack(spacing: 6) {
+                    Button(L10n.ToolCard.askUserSkip) {
+                        appState.denyAgentToolCall(id: call.id)
+                        resetAskUserInputs()
+                    }
+                    Spacer(minLength: 0)
+                    Button(L10n.ToolCard.askUserSend) {
+                        submitAnswer(options: options, isMultiSelect: isMultiSelect)
+                    }
+                    .disabled(!canSubmitAskUser(isMultiSelect: isMultiSelect))
                 }
-                Spacer(minLength: 0)
-                Button(L10n.ToolCard.askUserSend) {
-                    submitAnswer(options: options, isMultiSelect: isMultiSelect)
-                }
-                .disabled(!canSubmitAskUser(isMultiSelect: isMultiSelect))
+                .font(.caption)
             }
-            .font(.caption)
         }
     }
 
@@ -833,6 +858,10 @@ struct AgentToolCallCard: View {
 
     private var alwaysAllowSignature: String? {
         AgentToolAuthorization.signature(for: call)
+    }
+
+    private var decisionAlreadySubmitted: Bool {
+        appState.hasPendingAgentToolDecision(id: call.id)
     }
 
     private var iconName: String {

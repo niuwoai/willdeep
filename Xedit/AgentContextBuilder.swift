@@ -54,7 +54,7 @@ enum AgentContextBuilder {
     private static let maxCurrentFileCharacters = 12_000
     private static let maxSelectionCharacters = 6_000
     private static let maxRulesCharacters = 6_000
-    static let stablePrefixVersion = "willdeep-agent-system-v7"
+    static let stablePrefixVersion = "willdeep-agent-system-v8"
 
     static func systemPrompt(
         rootDirectory: URL?,
@@ -261,6 +261,7 @@ enum AgentContextBuilder {
             - Do the work directly; avoid ceremonial preambles and postambles.
             - After producing a diff, stop unless the user asked for explanation.
             - No emojis unless the user asks.
+            - For small datasets (about 6 items or fewer), avoid Markdown tables unless the user explicitly asks for a table; use short paragraphs or bullet lists instead.
             - Reference code as `path/to/file.swift:42` so the user can jump to it.
             """,
             """

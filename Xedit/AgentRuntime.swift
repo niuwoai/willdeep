@@ -153,6 +153,14 @@ final class AgentRuntime: ObservableObject, Identifiable {
     /// call (Allow / Deny / Confirm / answer ask_user). Per-runtime
     /// so concurrent sessions don't race over a single waiter slot.
     var toolDecisionWaiter: CheckedContinuation<AgentToolDecision, Never>?
+    /// The specific tool call currently backed by `toolDecisionWaiter`.
+    /// Without this guard, clicking a different pending card could resume
+    /// the wrong continuation when multiple approval cards are visible.
+    var toolDecisionWaiterCallID: AgentToolCall.ID?
+    /// Decisions clicked before the tool loop has registered its waiter.
+    /// This closes the race where the UI card accepts a click but the
+    /// continuation slot is not ready yet, leaving an apparently dead card.
+    var pendingToolDecisions: [AgentToolCall.ID: AgentToolDecision] = [:]
 
     // MARK: - Plan gate
 

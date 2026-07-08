@@ -37,19 +37,12 @@ extension WillDeepTests {
         #expect(decoded.path == path)
     }
 
-    @Test("plain launch routes the initial empty editor window to Agent")
-    func testPlainLaunchRoutesInitialEditorToAgent() {
-        #expect(InitialEditorLaunchRoute.shouldRoutePlainLaunchToAgent(
-            externalEditorOpenSeen: false,
-            didRoutePlainLaunch: false
-        ))
-        #expect(!InitialEditorLaunchRoute.shouldRoutePlainLaunchToAgent(
-            externalEditorOpenSeen: true,
-            didRoutePlainLaunch: false
-        ))
-        #expect(!InitialEditorLaunchRoute.shouldRoutePlainLaunchToAgent(
-            externalEditorOpenSeen: false,
-            didRoutePlainLaunch: true
+    @Test("plain launch opens Agent directly while explicit URLs open Editor")
+    func testPlainLaunchOpensAgentDirectly() {
+        #expect(InitialLaunchPolicy.plainLaunchWindowID == AgentWindowID.value)
+        #expect(!InitialLaunchPolicy.shouldOpenEditor(forInitialExternalURL: nil))
+        #expect(InitialLaunchPolicy.shouldOpenEditor(
+            forInitialExternalURL: URL(fileURLWithPath: "/tmp/willdeep-explicit-open.md")
         ))
     }
 

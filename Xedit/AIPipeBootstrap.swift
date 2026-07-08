@@ -22,6 +22,11 @@ final class WillDeepAppDelegate: NSObject, NSApplicationDelegate {
             FnPushToTalkMonitor.shared.install()
             VoiceModelLifecycleController.shared.install()
         }
+        AboutMenuInstaller.install()
+    }
+
+    func applicationDidBecomeActive(_ notification: Notification) {
+        AboutMenuInstaller.install()
     }
 
     func applicationWillTerminate(_ notification: Notification) {

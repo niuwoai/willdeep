@@ -12,6 +12,23 @@ import Foundation
 // would otherwise be unusable from nonisolated model code (e.g. the
 // persisted session graph's displayName helpers).
 nonisolated enum L10n {
+    enum About {
+        static let appName = String(localized: "about.app-name", defaultValue: "WillDeep")
+        static let buildLabel = String(localized: "about.build-label", defaultValue: "Build")
+        static let bundleIDLabel = String(localized: "about.bundle-id-label", defaultValue: "Bundle ID")
+        static let copyVersionInfo = String(localized: "about.copy-version-info", defaultValue: "Copy Version Info")
+        static let menuItem = String(localized: "about.menu-item", defaultValue: "About WillDeep")
+        static let unknownValue = String(localized: "about.unknown-value", defaultValue: "Unknown")
+        static func versionBadge(_ a1: String) -> String {
+            let template = String(localized: "about.version-badge", defaultValue: "v%@")
+            return String(format: template, a1)
+        }
+        static let versionDetails = String(localized: "about.version-details", defaultValue: "Version Details")
+        static let versionLabel = String(localized: "about.version-label", defaultValue: "Version")
+        static let website = String(localized: "about.website", defaultValue: "Website")
+        static let windowTitle = String(localized: "about.window-title", defaultValue: "About WillDeep")
+    }
+
     enum AppUpdate {
         static let download = String(localized: "app-update.download", defaultValue: "Download")
         static let later = String(localized: "app-update.later", defaultValue: "Later")

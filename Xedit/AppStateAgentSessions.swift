@@ -633,12 +633,14 @@ extension AppState {
     func closeBlockingAgentToolDecision(for runtime: AgentRuntime, reason: String) -> Bool {
         var closedAny = false
         for index in runtime.toolCalls.indices where runtime.toolCalls[index].status.isBlockingForUserDecision {
+            runtime.pendingToolDecisions.removeValue(forKey: runtime.toolCalls[index].id)
             runtime.toolCalls[index].status = .denied
             runtime.toolCalls[index].errorMessage = reason
             closedAny = true
         }
         if let waiter = runtime.toolDecisionWaiter {
             runtime.toolDecisionWaiter = nil
+            runtime.toolDecisionWaiterCallID = nil
             waiter.resume(returning: .denied(reason: reason))
             closedAny = true
         }
@@ -1028,6 +1030,8 @@ extension AppState {
                 runtime.requestTask?.cancel()
                 runtime.toolDecisionWaiter?.resume(returning: .denied(reason: "Empty session pruned"))
                 runtime.toolDecisionWaiter = nil
+                runtime.toolDecisionWaiterCallID = nil
+                runtime.pendingToolDecisions.removeAll()
             }
             agentSubagentRegistry.cancelAll(forParentRuntime: id)
             agentRuntimes.removeValue(forKey: id)
@@ -1104,6 +1108,8 @@ extension AppState {
             doomed.requestTask?.cancel()
             doomed.toolDecisionWaiter?.resume(returning: .denied(reason: "Session deleted"))
             doomed.toolDecisionWaiter = nil
+            doomed.toolDecisionWaiterCallID = nil
+            doomed.pendingToolDecisions.removeAll()
         }
         // Orphaned background subagents must not keep burning tokens
         // for a session that no longer exists.

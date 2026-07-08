@@ -216,7 +216,12 @@ extension AppState {
     /// do not fight over one slot.
     var agentToolDecisionWaiter: CheckedContinuation<AgentToolDecision, Never>? {
         get { activeRuntime?.toolDecisionWaiter }
-        set { activeRuntime?.toolDecisionWaiter = newValue }
+        set {
+            activeRuntime?.toolDecisionWaiter = newValue
+            if newValue == nil {
+                activeRuntime?.toolDecisionWaiterCallID = nil
+            }
+        }
     }
 
     /// Provider request task for the active turn. Each runtime holds its

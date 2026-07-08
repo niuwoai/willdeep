@@ -359,6 +359,7 @@ extension AppState {
         agentErrorDetails = nil
         agentToolDecisionWaiter?.resume(returning: .denied(reason: "Conversation cleared"))
         agentToolDecisionWaiter = nil
+        activeRuntime?.pendingToolDecisions.removeAll()
         isAgentResponding = false
         agentTurnStartedAt = nil
         persistActiveAgentSession()
@@ -1105,6 +1106,20 @@ extension AppState {
     func awaitToolDecision(for runtime: AgentRuntime, forCallID id: AgentToolCall.ID) async -> AgentToolDecision {
         await withTaskCancellationHandler {
             await withCheckedContinuation { continuation in
+                if let decision = runtime.pendingToolDecisions.removeValue(forKey: id) {
+                    if let index = runtime.toolCalls.firstIndex(where: { $0.id == id }),
+                       runtime.toolCalls[index].status.isBlockingForUserDecision {
+                        switch decision {
+                        case .approved, .answered:
+                            runtime.toolCalls[index].status = .running
+                        case .denied(let reason):
+                            runtime.toolCalls[index].status = .denied
+                            runtime.toolCalls[index].errorMessage = reason
+                        }
+                    }
+                    continuation.resume(returning: decision)
+                    return
+                }
                 if Task.isCancelled {
                     continuation.resume(returning: .denied(reason: "Cancelled"))
                     return
@@ -1119,6 +1134,7 @@ extension AppState {
                     }
                     return
                 }
+                runtime.toolDecisionWaiterCallID = id
                 runtime.toolDecisionWaiter = continuation
             }
         } onCancel: {
@@ -1127,8 +1143,11 @@ extension AppState {
             // touch the runtime's continuation slot.
             Task { @MainActor [weak runtime] in
                 guard let runtime else { return }
-                if let waiter = runtime.toolDecisionWaiter {
+                if let waiter = runtime.toolDecisionWaiter,
+                   runtime.toolDecisionWaiterCallID == nil || runtime.toolDecisionWaiterCallID == id {
                     runtime.toolDecisionWaiter = nil
+                    runtime.toolDecisionWaiterCallID = nil
+                    runtime.pendingToolDecisions.removeValue(forKey: id)
                     waiter.resume(returning: .denied(reason: "Cancelled"))
                 }
             }
