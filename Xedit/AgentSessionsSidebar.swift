@@ -43,7 +43,6 @@ struct AgentSessionsSidebar: View {
     @State private var hoveredWorkspaceGroup: String?
     @State private var someIMAccount = SomeIMIntegrationStore.loadAccount()
     @State private var isRefreshingSomeIMAccount = false
-    @State private var isOpeningSomeIMAccount = false
     @State private var someIMAccountStatus = ""
 
     private let initialRowCount = 5
@@ -109,7 +108,8 @@ struct AgentSessionsSidebar: View {
         HStack(spacing: 8) {
             if let account = someIMAccount {
                 Button {
-                    openSomeIMAccount()
+                    // Logged in → open the some.im tab in Settings (not the browser).
+                    openSomeIMSettings()
                 } label: {
                     HStack(spacing: 8) {
                         someIMAvatar(title: account.email, isAnonymous: false)
@@ -125,15 +125,9 @@ struct AgentSessionsSidebar: View {
                                 .lineLimit(1)
                         }
                         Spacer(minLength: 0)
-                        if isOpeningSomeIMAccount {
-                            ProgressView()
-                                .controlSize(.small)
-                                .scaleEffect(0.7)
-                        } else {
-                            Image(systemName: "arrow.up.forward")
-                                .font(.system(size: 10, weight: .semibold))
-                                .foregroundStyle(.tertiary)
-                        }
+                        Image(systemName: "gearshape")
+                            .font(.system(size: 10, weight: .semibold))
+                            .foregroundStyle(.tertiary)
                     }
                     .padding(.horizontal, 10)
                     .frame(height: 42)
@@ -142,8 +136,7 @@ struct AgentSessionsSidebar: View {
                 }
                 .buttonStyle(.plain)
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .disabled(isOpeningSomeIMAccount)
-                .help(someIMAccountStatus.isEmpty ? L10n.Sidebar.someIMOpenTooltip : someIMAccountStatus)
+                .help(someIMAccountStatus.isEmpty ? L10n.Sidebar.someIMSettingsTooltip : someIMAccountStatus)
 
                 Button {
                     refreshSomeIMAccount()
@@ -809,28 +802,6 @@ struct AgentSessionsSidebar: View {
         }
     }
 
-    private func openSomeIMAccount() {
-        guard !isOpeningSomeIMAccount else { return }
-        isOpeningSomeIMAccount = true
-        someIMAccountStatus = ""
-        Task {
-            let result: Result<URL, Error>
-            do {
-                result = .success(try await SomeIMClient.fetchHandoffLoginURL())
-            } catch {
-                result = .failure(error)
-            }
-            await MainActor.run {
-                isOpeningSomeIMAccount = false
-                switch result {
-                case .success(let url):
-                    NSWorkspace.shared.open(url)
-                case .failure(let error):
-                    someIMAccountStatus = error.localizedDescription
-                }
-            }
-        }
-    }
 
     @MainActor
     private func openSomeIMSettings(autogenerateBrowserLogin: Bool = false) {

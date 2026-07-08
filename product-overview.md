@@ -1,6 +1,6 @@
 # WillDeep Product Overview
 
-> Last updated: 2026-07-08 | Current version: v1.136.0-rc26
+> Last updated: 2026-07-08 | Current version: v1.136.0-rc27
 
 ## Positioning
 
@@ -14,6 +14,7 @@ WillDeep is configured for non-App-Store distribution without App Sandbox so it 
 
 WillDeep 是 SwiftUI + AppKit 桥接的 macOS 应用，单进程多窗口。代码层次：
 
+- **some.im 账号入口点击直达设置（1.136.0-rc27）** —— Agent 侧栏底部的 some.im 账号位:已登录点击直接打开「设置 → some.im」整合 tab(齿轮图标),不再跳浏览器;未登录点击仍进浏览器登录。
 - **some.im 登录态跨 App 共享（1.136.0-rc26）** —— apiKey / sessionToken 改存共享 Keychain 访问组（Team `ZH2S7D6PL6`），由独立私有 Swift 包 `SomeIMSharedSession`（`github.com/xurenlu/SomeIMSharedSession`）收拢读写，供 WillDeep / museterm 等同签名 App 共用一份登录态：一处登录处处登录、一处登出处处登出（登录/登出经 `DistributedNotificationCenter` 广播不含密钥的变更通知，各 App 重读凭据并对账 agent provider）。首启一次性把旧 per-app Keychain 凭据迁入共享组、验证读回后删旧；`saveAPIKey("")` 改为 no-op 杜绝空串误覆盖。设置页新增带二次确认的「退出登录」。未签名/dev 走 `SOMEIM_SESSION_FILE` 环境变量逃生舱；CI 用只读 deploy key 解析该私有包。
 - **some.im 生图默认异步化（1.136.0-rc25）** —— `generate_image` 复用 `some_im_create_media_task`，普通 Agent 生图不再阻塞等待同步 `/images/generations`，而是提交到媒体任务中心并由轮询下载产物；some.im 图片媒体任务默认端点改为 `images/async-generations`，短剧分镜/资产图片生成等复用默认 endpoint 的入口同步走异步生图接口。`SomeIMAsyncMediaClient` 的提交、轮询、取消请求显式使用 600 秒 `URLRequest.timeoutInterval`，避免客户端 120 秒 request timeout 先取消长耗时任务。
 - **some.im 省心托管动态路由（1.136.0-rc24）** —— composer 在 some.im provider 下新增「省心托管」入口：每个用户轮先用轻量裁判 `someim-judge`（底层非思考 DeepSeek）判任务域（coding/general）+ 复杂度（low/high），结合会话级「只升不降」档位动态选实际模型（`someim-coding-plan-low/high/premium`、`someim-auto-flash/pro`），裁判失败回退本地启发式。无 tool call 的输出做质检（本地确定性重复/空检测 + `someim-judge` 复核），命中明确生成故障则清掉本轮输出、升一档重试一次（每轮至多一次）。some.im 请求附带 `x-willdeep-session-id` 与本机随机 `x-willdeep-workspace-id`（只发随机 UUID、不含路径）。裁判与主模型共用同一 provider 并发槽；路由锁定每用户轮一次，tool 循环内不重判。每条 assistant 消息记录 route 决策元数据，footer 显示「托管 · Low/High/Premium」（升档 ↑、fallback ~），用户能一眼看出这条用了哪档。设计文档见 `docs/SOME_IM_MANAGED_ROUTING_DESIGN.md`。

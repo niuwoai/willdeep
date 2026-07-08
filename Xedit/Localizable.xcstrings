@@ -22837,6 +22837,23 @@
         }
       }
     },
+    "sidebar.some-im.settings-tooltip" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Open some.im settings"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "打开 some.im 设置"
+          }
+        }
+      }
+    },
     "sidebar.some-im.refresh-tooltip" : {
       "extractionState" : "manual",
       "localizations" : {
