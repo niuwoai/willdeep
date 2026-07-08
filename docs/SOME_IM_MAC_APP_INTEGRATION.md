@@ -1,6 +1,6 @@
 # some.im Mac App Integration
 
-> Last updated: 2026-07-08 | Current version: v1.136.0-rc15
+> Last updated: 2026-07-08 | Current version: v1.136.0-rc25
 
 本文档说明 WillDeep macOS App 如何接入 some.im。目标是让用户用最短路径完成账号连接：在 WillDeep 里点击“在浏览器打开”，到 some.im 完成登录，然后回到 WillDeep 继续使用。API key、customer session 等敏感信息只保存在本机 Keychain，不进入 UI、日志、文档示例或 git。
 
@@ -177,10 +177,12 @@ Settings 中的 some.im 页面与 Onboarding 保持同一心智：
 
 同步 some.im 后，WillDeep 的图像和媒体工具应优先走 some.im：
 
-- 同步图片生成：`SomeIMClient.generateImage(...)`
-- 异步媒体任务：`SomeIMAsyncMediaClient.createImageTask(...)`、`createVideoTask(...)`
+- 普通 Agent 生图：`generate_image` 复用 `some_im_create_media_task`，默认提交 `images/async-generations` 并登记到媒体任务中心。
+- 异步媒体任务：`SomeIMAsyncMediaClient.submit(...)` / `poll(...)` / `cancel(...)`，图片生成默认 `images/async-generations`，视频默认 `videos/generations`，图片编辑默认 `images/edits`。
+- 同步图片低层客户端：`SomeIMClient.generateImage(...)` 仅作为兼容/低层能力保留，Agent 默认生图不应再用它阻塞等待同步响应。
 - 默认图片模型：`gpt-image-2`
 - 视频模型：由 Settings -> some.im 的首选视频模型列表控制
+- some.im 媒体任务提交、轮询、取消请求的单次 `URLRequest.timeoutInterval` 应使用 600 秒 `AgentNetworkSupport.resourceTimeout`，避免客户端先于网关取消长耗时生图。
 
 媒体任务完成后应进入统一媒体任务中心，由既有 artifact 下载与预览流程处理。
 

@@ -101,20 +101,11 @@ struct AgentChatHeader: View {
     }
 
     private var sidePanelShortcutStrip: some View {
-        HStack(spacing: 3) {
+        HStack(spacing: 6) {
             ForEach(frequentSidePanelKinds) { item in
                 sidePanelShortcutButton(for: item)
             }
         }
-        .padding(2)
-        .background(
-            Capsule()
-                .fill(appState.editorSettings.interfaceSkin.palette.controlFill.opacity(0.72))
-        )
-        .overlay(
-            Capsule()
-                .stroke(appState.editorSettings.interfaceSkin.palette.hairline.opacity(0.82), lineWidth: 1)
-        )
         .fixedSize()
     }
 
@@ -128,10 +119,6 @@ struct AgentChatHeader: View {
                 .font(.system(size: 12, weight: isSelected ? .semibold : .regular))
                 .frame(width: 24, height: 22)
                 .contentShape(Rectangle())
-                .background(
-                    RoundedRectangle(cornerRadius: 6)
-                        .fill(isSelected ? palette.accent.opacity(0.18) : Color.clear)
-                )
         }
         .buttonStyle(.plain)
         .focusable(false)

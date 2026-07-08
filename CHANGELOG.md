@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.136.0-rc25 - 2026-07-08
+
+### Changed
+
+- **some.im 生图默认异步化**：`generate_image` 现在复用 `some_im_create_media_task`，普通 Agent 生图会提交到媒体任务中心并由轮询下载产物，不再阻塞等待同步 `/images/generations` 返回。
+- **some.im 图片媒体任务默认端点** 从 `images/generations` 改为 `images/async-generations`；短剧分镜/资产图片生成等复用 `SomeIMAsyncMediaClient.defaultEndpointSuffix` 的入口同步走异步生图接口，视频仍默认 `videos/generations`，图片编辑仍默认 `images/edits`。
+- **some.im 媒体任务请求超时**：提交、轮询、取消请求的单次 `URLRequest.timeoutInterval` 明确设为 `AgentNetworkSupport.resourceTimeout`（600 秒），避免默认 request timeout 120 秒先取消长耗时请求。
+- 版本号从 **1.136.0-rc24** 递增为 **1.136.0-rc25**。
+
 ## 1.136.0-rc24 - 2026-07-08
 
 ### Added

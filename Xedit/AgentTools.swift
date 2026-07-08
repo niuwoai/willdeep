@@ -505,39 +505,9 @@ enum AgentToolRunner {
               !prompt.isEmpty else {
             throw AgentToolError.missingArgument("prompt")
         }
-        let outputDirectory = try AgentMediaTools.mediaOutputDirectory(
-            arguments: arguments,
-            rootDirectory: context.rootDirectory,
-            requiresWorkspace: true
-        )
-        let rawSize = arguments["size"]?.stringValue()?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-        let size = rawSize.isEmpty ? "1024x1024" : rawSize
-        let rawModel = arguments["model"]?.stringValue()?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-        let model = rawModel.isEmpty ? nil : rawModel
-        let image = try await SomeIMClient.generateImage(
-            prompt: prompt,
-            size: size,
-            model: model,
-            outputDirectory: outputDirectory
-        )
-        let attachment = try AgentGeneratedImageAttachmentFactory.attachment(
-            fileURL: image.fileURL,
-            model: image.model,
-            prompt: prompt
-        )
-        return AgentToolResult(
-            summary: "Generated image: \(image.fileURL.lastPathComponent)",
-            payload: """
-            Generated image with some.im model `\(image.model)`.
-
-            Local file:
-            \(image.fileURL.path)
-
-            Reference marker:
-            \(attachment.generatedReferenceMarker ?? "(unavailable)")
-            """,
-            images: [attachment]
-        )
+        var mediaArguments = arguments
+        mediaArguments["kind"] = .string("image_generation")
+        return try await AgentMediaTools.someIMCreateMediaTask(arguments: mediaArguments, context: context)
     }
 
     // MARK: run_command

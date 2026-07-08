@@ -38,6 +38,8 @@ struct SomeIMMediaArtifact: Equatable {
 }
 
 enum SomeIMAsyncMediaClient {
+    private static let mediaRequestTimeout: TimeInterval = AgentNetworkSupport.resourceTimeout
+
     static func submit(
         endpointSuffix: String,
         body: [String: Any],
@@ -187,7 +189,9 @@ enum SomeIMAsyncMediaClient {
             return "videos/generations"
         case .imageEdit, .imageErase, .imageInpaint:
             return "images/edits"
-        case .imageGeneration, .imageUpscale, .shortDrama, .unknown:
+        case .imageGeneration, .shortDrama:
+            return "images/async-generations"
+        case .imageUpscale, .unknown:
             return "images/generations"
         }
     }
@@ -209,6 +213,7 @@ enum SomeIMAsyncMediaClient {
     ) async throws -> SomeIMAsyncMediaResponse {
         var request = URLRequest(url: url)
         request.httpMethod = method
+        request.timeoutInterval = mediaRequestTimeout
         request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
         request.setValue("application/json", forHTTPHeaderField: "Accept")
         if let body {

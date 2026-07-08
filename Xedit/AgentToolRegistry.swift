@@ -551,7 +551,7 @@ enum AgentToolRegistry {
         ),
         AgentToolDescriptor(
             name: "some_im_create_media_task",
-            description: "Submit a some.im async media task and register it in WillDeep's media task side panel. Use for some.im image generation/editing/upscale/erase/inpaint/video workflows when the provider exposes an async or synchronous media endpoint. Defaults to images/generations for images and videos/generations for video; pass endpoint_suffix for custom some.im routes.",
+            description: "Submit a some.im async media task and register it in WillDeep's media task side panel. Use for some.im image generation/editing/upscale/erase/inpaint/video workflows when the provider exposes an async or synchronous media endpoint. Defaults to images/async-generations for image generation, images/edits for image edits, and videos/generations for video; pass endpoint_suffix for custom some.im routes.",
             risk: .write,
             parameters: [
                 AgentToolParameter(name: "kind", type: .string, description: "Optional media kind: image_generation, image_edit, image_upscale, image_erase, image_inpaint, video_generation, short_drama, or unknown. Defaults to image_generation.", required: false),
@@ -564,7 +564,7 @@ enum AgentToolRegistry {
                 AgentToolParameter(name: "output_directory", type: .string, description: "Optional workspace-relative directory for downloaded output artifacts. Defaults to the workspace root when a workspace is open.", required: false),
                 AgentToolParameter(name: "review_item_id", type: .string, description: "Optional short-drama review/fix item UUID this media task is intended to resolve.", required: false),
                 AgentToolParameter(name: "title", type: .string, description: "Optional user-facing task title shown in the media task side panel.", required: false),
-                AgentToolParameter(name: "endpoint_suffix", type: .string, description: "Optional endpoint suffix under the configured some.im base URL, e.g. images/generations, videos/generations, or provider-specific async route.", required: false),
+                AgentToolParameter(name: "endpoint_suffix", type: .string, description: "Optional endpoint suffix under the configured some.im base URL, e.g. images/async-generations, images/generations, videos/generations, or provider-specific async route.", required: false),
                 AgentToolParameter(name: "project_id", type: .string, description: "Optional short-drama project UUID to receive completed artifacts.", required: false),
                 AgentToolParameter(name: "episode_id", type: .string, description: "Optional short-drama episode UUID to receive completed artifacts.", required: false),
                 AgentToolParameter(name: "shot_id", type: .string, description: "Optional short-drama shot UUID to receive completed artifacts.", required: false),
@@ -759,7 +759,7 @@ enum AgentToolRegistry {
                 AgentToolParameter(name: "use_selected_artifact", type: .boolean, description: "For video generation, whether to use the shot's selected artifact as reference/first-frame image. Defaults to true.", required: false),
                 AgentToolParameter(name: "reference_image_path", type: .string, description: "Optional local image path to send as reference/first-frame image for video generation. Overrides selected_artifact_path.", required: false),
                 AgentToolParameter(name: "review_item_id", type: .string, description: "Optional short-drama review/fix item UUID this image or video generation task is intended to resolve.", required: false),
-                AgentToolParameter(name: "endpoint_suffix", type: .string, description: "Optional some.im endpoint suffix. Defaults to images/generations or videos/generations.", required: false),
+                AgentToolParameter(name: "endpoint_suffix", type: .string, description: "Optional some.im endpoint suffix. Defaults to images/async-generations or videos/generations.", required: false),
                 AgentToolParameter(name: "dry_run", type: .boolean, description: "When true, validate the shot, prompt, model, endpoint, and optional video reference image without submitting a provider job. Defaults to false.", required: false)
             ]
         ),
@@ -775,7 +775,7 @@ enum AgentToolRegistry {
                 AgentToolParameter(name: "model", type: .string, description: "Optional some.im model override. Defaults to Settings -> some.im preferred image/video model.", required: false),
                 AgentToolParameter(name: "size", type: .string, description: "Optional image size such as 1024x1024 for image generation.", required: false),
                 AgentToolParameter(name: "use_selected_artifact", type: .boolean, description: "For video generation, whether each shot's selected artifact should be used as reference/first-frame image. Defaults to true.", required: false),
-                AgentToolParameter(name: "endpoint_suffix", type: .string, description: "Optional some.im endpoint suffix. Defaults to images/generations or videos/generations.", required: false),
+                AgentToolParameter(name: "endpoint_suffix", type: .string, description: "Optional some.im endpoint suffix. Defaults to images/async-generations or videos/generations.", required: false),
                 AgentToolParameter(name: "target_filter", type: .string, description: "Optional target filter: all or missing. When missing, image_generation only targets shots without a selected main image, and video_generation only targets shots without a video artifact. Defaults to all.", required: false),
                 AgentToolParameter(name: "dry_run", type: .boolean, description: "When true, only list the shots that would be submitted. Defaults to false.", required: false),
                 AgentToolParameter(name: "max_shots", type: .integer, description: "Safety cap for how many shots to submit in one batch. Defaults to 200; maximum 200.", required: false)
@@ -792,7 +792,7 @@ enum AgentToolRegistry {
                 AgentToolParameter(name: "prompt_override", type: .string, description: "Optional prompt override. Defaults to the asset visual prompt, then description, plus project logline.", required: false),
                 AgentToolParameter(name: "model", type: .string, description: "Optional some.im image model override. Defaults to Settings -> some.im preferred image model.", required: false),
                 AgentToolParameter(name: "size", type: .string, description: "Optional image size such as 1024x1024. Defaults to 1024x1024.", required: false),
-                AgentToolParameter(name: "endpoint_suffix", type: .string, description: "Optional some.im endpoint suffix. Defaults to images/generations.", required: false),
+                AgentToolParameter(name: "endpoint_suffix", type: .string, description: "Optional some.im endpoint suffix. Defaults to images/async-generations.", required: false),
                 AgentToolParameter(name: "dry_run", type: .boolean, description: "When true, validate the character/scene asset and show the prompt/model/endpoint without submitting a provider job. Defaults to false.", required: false)
             ]
         ),
@@ -1002,7 +1002,7 @@ enum AgentToolRegistry {
         ),
         AgentToolDescriptor(
             name: "generate_image",
-            description: "Generate an image through the configured some.im relay. Use this for image creation requests when Settings -> some.im is configured; it defaults to the user's image model preference, normally gpt-image-2. Saves the generated file into the current workspace root by default, or a workspace-relative output_directory when provided. The chat UI renders the result under the assistant markdown and exposes a generated-image reference marker for later edits.",
+            description: "Submit an async image generation task through the configured some.im relay. Use this for image creation requests when Settings -> some.im is configured; it defaults to the user's image model preference, normally gpt-image-2. The task appears in WillDeep's media task side panel and downloaded results are rendered when the async task finishes.",
             risk: .read,
             parameters: [
                 AgentToolParameter(name: "prompt", type: .string, description: "Detailed prompt for the image generator.", required: true),
