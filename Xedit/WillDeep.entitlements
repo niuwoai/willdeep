@@ -19,6 +19,17 @@
 	<key>com.apple.security.device.audio-input</key>
 	<true/>
 
+	<!-- Shared Keychain access group for cross-app some.im login state.
+	     $(AppIdentifierPrefix) expands to the Team ID prefix "ZH2S7D6PL6.".
+	     Every app that shares the login (museterm, etc.) must be signed with
+	     Team ZH2S7D6PL6 and carry this exact same group. Consumed by the
+	     SomeIMSharedSession package via
+	       SomeIMSharedSessionStore.shared.configure(accessGroup: "ZH2S7D6PL6.com.someim.shared"). -->
+	<key>keychain-access-groups</key>
+	<array>
+		<string>$(AppIdentifierPrefix)com.someim.shared</string>
+	</array>
+
 	<!-- App Sandbox is OFF (default for this project). If sandbox ever
 	     gets enabled, also add:
 	       com.apple.security.app-sandbox = true

@@ -11,6 +11,7 @@ import Foundation
 import AppKit
 import Security
 import SwiftUI
+import SomeIMSharedSession
 
 enum SomeIMGenerationKind: String, Codable, CaseIterable, Identifiable {
     case image
@@ -125,12 +126,46 @@ struct SomeIMIntegrationSettings: Codable, Equatable {
 }
 
 enum SomeIMIntegrationStore {
-    static let accountDidChangeNotification = Notification.Name("com.willdeep.someIM.accountDidChange")
+    // Plain immutable constants — `nonisolated` so they can be referenced from
+    // the Sendable cross-app session-observer closure below without hopping
+    // actors (the enum otherwise defaults to main-actor isolation).
+    nonisolated static let accountDidChangeNotification = Notification.Name("com.willdeep.someIM.accountDidChange")
+    /// Posted (local, same-process) whenever the shared some.im session changes
+    /// — including changes made by *another* app. AppState listens to reconcile
+    /// its agent provider so a cross-app login/logout takes effect live.
+    nonisolated static let sessionDidChangeNotification = Notification.Name("com.willdeep.someIM.sessionDidChange")
+
+    /// Shared Keychain access group (Team ZH2S7D6PL6). Must match the
+    /// `keychain-access-groups` entitlement and every other participating app.
+    nonisolated static let sharedAccessGroup = "ZH2S7D6PL6.com.someim.shared"
 
     private static let settingsKey = "com.willdeep.someIM.integrationSettings.v1"
     private static let accountKey = "com.willdeep.someIM.account.v1"
-    private static let apiKeyAccount = "some-im/api-key"
-    private static let sessionTokenAccount = "some-im/customer-session"
+    // Legacy per-app Keychain accounts. Read only for the one-time migration
+    // into the shared store; never written after that.
+    private static let legacyAPIKeyAccount = "some-im/api-key"
+    private static let legacySessionTokenAccount = "some-im/customer-session"
+    private static let migrationDoneKey = "com.willdeep.someIM.sharedSessionMigration.v1"
+
+    private static let migrationLock = NSLock()
+    private nonisolated(unsafe) static var migrationAttempted = false
+    private nonisolated(unsafe) static var sessionObservation: ObservationToken?
+
+    /// Call once at app launch (before any credential access). Wires the shared
+    /// Keychain access group, migrates any legacy per-app credentials, and starts
+    /// forwarding cross-app session changes into `sessionDidChangeNotification`.
+    static func configureSharedSession() {
+        SomeIMSharedSessionStore.shared.configure(accessGroup: sharedAccessGroup)
+        migrateLegacyIfNeeded()
+        guard sessionObservation == nil else { return }
+        sessionObservation = SomeIMSharedSessionStore.shared.observe { _ in
+            // Delivered on the main queue on every login/logout in this or any
+            // other app. Fan out so the account UI and the agent provider
+            // re-read the (already-persisted) shared session.
+            NotificationCenter.default.post(name: accountDidChangeNotification, object: nil)
+            NotificationCenter.default.post(name: sessionDidChangeNotification, object: nil)
+        }
+    }
 
     static func loadSettings() -> SomeIMIntegrationSettings {
         guard let data = UserDefaults.standard.data(forKey: settingsKey),
@@ -155,26 +190,124 @@ enum SomeIMIntegrationStore {
     static func saveAccount(_ account: SomeIMAccount?) {
         if let account, let data = try? JSONEncoder().encode(account) {
             UserDefaults.standard.set(data, forKey: accountKey)
+            // Keep the shared session's identity fields in step with the local
+            // display cache (balance/credits stay local, per-app).
+            mirrorIdentityToShared(email: account.email, tenantID: account.tenantID)
         } else {
             UserDefaults.standard.removeObject(forKey: accountKey)
         }
         NotificationCenter.default.post(name: accountDidChangeNotification, object: nil)
     }
 
+    // MARK: - Secrets (shared Keychain access group is the source of truth)
+
     static func loadAPIKey() -> String {
-        AgentCredentialStore.load(account: apiKeyAccount)
+        migrateLegacyIfNeeded()
+        return SomeIMSharedSessionStore.shared.current()?.apiKey ?? ""
     }
 
     static func saveAPIKey(_ apiKey: String) {
-        AgentCredentialStore.save(apiKey, account: apiKeyAccount)
+        let trimmed = apiKey.trimmingCharacters(in: .whitespacesAndNewlines)
+        // An empty key is a NO-OP, never a logout. Real sign-out goes through
+        // `logout()`; this guard stops an accidental empty save (e.g. the
+        // Settings pane saving while its key field is momentarily blank) from
+        // signing every app out.
+        guard !trimmed.isEmpty else { return }
+        updateSharedSession { $0.apiKey = trimmed }
     }
 
     static func loadSessionToken() -> String {
-        AgentCredentialStore.load(account: sessionTokenAccount)
+        migrateLegacyIfNeeded()
+        return SomeIMSharedSessionStore.shared.current()?.sessionToken ?? ""
     }
 
     static func saveSessionToken(_ token: String) {
-        AgentCredentialStore.save(token, account: sessionTokenAccount)
+        updateSharedSession { $0.sessionToken = token.trimmingCharacters(in: .whitespacesAndNewlines) }
+    }
+
+    /// Sign out of some.im everywhere: clears the shared session (broadcasting to
+    /// all apps) and drops this app's local account cache and enabled flag.
+    static func logout() {
+        SomeIMSharedSessionStore.shared.logout()
+        UserDefaults.standard.removeObject(forKey: accountKey)
+        var settings = loadSettings()
+        if settings.enabled {
+            settings.enabled = false
+            saveSettings(settings)
+        }
+        NotificationCenter.default.post(name: accountDidChangeNotification, object: nil)
+        NotificationCenter.default.post(name: sessionDidChangeNotification, object: nil)
+    }
+
+    // MARK: - Shared session plumbing
+
+    /// Loads the shared session (or a fresh empty one), applies `mutate`,
+    /// reconciles the identity fields from local settings/account, and persists —
+    /// but only if the result carries a real key.
+    private static func updateSharedSession(_ mutate: (inout SomeIMSharedSession) -> Void) {
+        var session = SomeIMSharedSessionStore.shared.current()
+            ?? SomeIMSharedSession(apiKey: "", baseURL: loadSettings().baseURL)
+        mutate(&session)
+        session.baseURL = loadSettings().baseURL
+        if let account = loadAccount() {
+            if session.email.isEmpty { session.email = account.email }
+            if session.tenantID == nil { session.tenantID = account.tenantID }
+        }
+        session.updatedAt = Date()
+        guard session.isValid else { return }
+        SomeIMSharedSessionStore.shared.login(session)
+    }
+
+    /// Pushes fresh email/tenant into an existing shared session. No-op when
+    /// nobody is logged in (never resurrects a session from account data alone).
+    private static func mirrorIdentityToShared(email: String, tenantID: String?) {
+        guard var session = SomeIMSharedSessionStore.shared.current() else { return }
+        var changed = false
+        if !email.isEmpty, session.email != email { session.email = email; changed = true }
+        if let tenantID, session.tenantID != tenantID { session.tenantID = tenantID; changed = true }
+        guard changed else { return }
+        session.updatedAt = Date()
+        SomeIMSharedSessionStore.shared.login(session)
+    }
+
+    /// One-time move of legacy per-app Keychain credentials into the shared
+    /// store. Runs at most once per process; only marks itself permanently done
+    /// (and deletes the legacy items) once the shared copy is verifiably readable
+    /// back — so an unsigned dev build that can't reach the access group keeps
+    /// the legacy items and retries on the next signed launch.
+    private static func migrateLegacyIfNeeded() {
+        migrationLock.lock()
+        defer { migrationLock.unlock() }
+        if migrationAttempted { return }
+        migrationAttempted = true
+
+        let defaults = UserDefaults.standard
+        if defaults.bool(forKey: migrationDoneKey) { return }
+        if SomeIMSharedSessionStore.shared.current() != nil {
+            defaults.set(true, forKey: migrationDoneKey)
+            return
+        }
+        let legacyKey = AgentCredentialStore.load(account: legacyAPIKeyAccount)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !legacyKey.isEmpty else {
+            defaults.set(true, forKey: migrationDoneKey)
+            return
+        }
+        let legacyToken = AgentCredentialStore.load(account: legacySessionTokenAccount)
+        let account = loadAccount()
+        let migrated = SomeIMSharedSession(
+            apiKey: legacyKey,
+            sessionToken: legacyToken,
+            email: account?.email ?? "",
+            tenantID: account?.tenantID,
+            baseURL: loadSettings().baseURL
+        )
+        let ok = SomeIMSharedSessionStore.shared.login(migrated)
+        if ok, SomeIMSharedSessionStore.shared.current()?.apiKey == legacyKey {
+            AgentCredentialStore.save("", account: legacyAPIKeyAccount)
+            AgentCredentialStore.save("", account: legacySessionTokenAccount)
+            defaults.set(true, forKey: migrationDoneKey)
+        }
     }
 
     static func loadClientLoginSecret() -> String {

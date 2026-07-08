@@ -138,6 +138,35 @@ extension AppState {
         agentConfiguration = configuration.normalized
     }
 
+    /// React to a shared some.im session change (this app or another one sharing
+    /// the Keychain access group). Login/key-change adopts the fresh key without
+    /// hijacking the user's active provider; logout drops the some-im entry.
+    func reconcileSomeIMProviderFromSharedSession() {
+        let apiKey = SomeIMIntegrationStore.loadAPIKey()
+        if apiKey.isEmpty {
+            clearSomeIMProvider()
+        } else {
+            syncSomeIMProvider(
+                settings: SomeIMIntegrationStore.loadSettings(),
+                apiKey: apiKey,
+                activate: false
+            )
+            syncSomeIMImageUnderstanding(apiKey: apiKey)
+        }
+    }
+
+    /// Remove every some.im provider entry (used when the shared session is
+    /// cleared). `removeProviderLibraryEntry` re-points `activeID` to a
+    /// surviving entry when one exists.
+    func clearSomeIMProvider() {
+        let someIMEntryIDs = agentProviderLibrary.entries
+            .filter { $0.providerID == "some-im" }
+            .map(\.id)
+        for id in someIMEntryIDs {
+            removeProviderLibraryEntry(id: id)
+        }
+    }
+
     /// Remove a library entry. The library auto-repoints `activeID`
     /// to the next entry; if nothing remains the live configuration
     /// is left as-is (the Settings UI is expected to require at
