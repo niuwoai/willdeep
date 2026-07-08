@@ -108,8 +108,14 @@ struct LocalAgentCLI: Identifiable, Equatable {
         LocalAgentCLI(
             id: "cursor-cli",
             displayName: "Cursor CLI",
-            commandName: "cursor",
+            // Prefer the standalone `cursor-agent` (its own installer drops it
+            // in ~/.local/bin and ships no `cursor` command); fall back to the
+            // `cursor` editor launcher, which forwards `agent` to the same CLI.
+            commandName: "cursor-agent",
             commonPaths: [
+                "\(NSHomeDirectory())/.local/bin/cursor-agent",
+                "/opt/homebrew/bin/cursor-agent",
+                "/usr/local/bin/cursor-agent",
                 "/usr/local/bin/cursor",
                 "/opt/homebrew/bin/cursor"
             ],

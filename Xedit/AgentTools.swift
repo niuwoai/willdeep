@@ -550,6 +550,14 @@ enum AgentToolRunner {
         "/opt/homebrew/sbin",
         "/usr/local/bin",
         "/usr/local/sbin",
+        // User-local install prefixes. When the app is launched from
+        // Finder/Dock it inherits the minimal launchd PATH, so delegated
+        // CLIs (claude/codex/cursor/cline) and the child processes they
+        // fork — node, uv, python, git — can't find tools installed here.
+        // We resolve the four agent executables by absolute path already,
+        // but their children still need these on PATH.
+        "\(NSHomeDirectory())/.local/bin",
+        "\(NSHomeDirectory())/.cargo/bin",
         "/usr/bin",
         "/bin",
         "/usr/sbin",
@@ -912,11 +920,26 @@ enum AgentToolRunner {
         ], environment: environment, isExecutable: isExecutable)
     }
 
+    /// Locate the Cursor Agent CLI. The standalone installer
+    /// (`curl https://cursor.com/install | bash`) drops a `cursor-agent`
+    /// binary in `~/.local/bin` and does NOT provide a `cursor` command,
+    /// so prefer `cursor-agent`. Fall back to the `cursor` editor launcher
+    /// (installed by Cursor.app), which forwards its `agent` subcommand to
+    /// the same headless agent. Both accept the `agent …` command we
+    /// compose, so callers don't need to know which one was found.
     nonisolated static func cursorAgentExecutablePath(
         environment: [String: String] = shellEnvironment(),
         isExecutable: (String) -> Bool = { FileManager.default.isExecutableFile(atPath: $0) }
     ) -> String? {
-        executablePath(commandName: "cursor", preferredPaths: [
+        let home = NSHomeDirectory()
+        if let standalone = executablePath(commandName: "cursor-agent", preferredPaths: [
+            "\(home)/.local/bin/cursor-agent",
+            "/opt/homebrew/bin/cursor-agent",
+            "/usr/local/bin/cursor-agent",
+        ], environment: environment, isExecutable: isExecutable) {
+            return standalone
+        }
+        return executablePath(commandName: "cursor", preferredPaths: [
             "/usr/local/bin/cursor",
             "/opt/homebrew/bin/cursor",
         ], environment: environment, isExecutable: isExecutable)

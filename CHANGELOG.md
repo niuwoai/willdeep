@@ -1,5 +1,16 @@
 # Changelog
 
+## 1.136.0-rc23 - 2026-07-08
+
+### Fixed
+
+- `cursor_agent` 外部委派工具现在能发现官方独立安装的 `cursor-agent`（`curl https://cursor.com/install | bash` 装在 `~/.local/bin/cursor-agent`，且不提供 `cursor` 命令）。此前发现逻辑只查 `cursor` 编辑器启动器，只装了独立 Agent CLI 的用户会被误判为"未安装"、调用直接失败。发现优先级：独立 `cursor-agent` → `cursor` 编辑器启动器（后者会把 `agent` 子命令转发给同一个 headless agent）。`LocalAgentCLI` 设置页发现目录同步更新。
+- 委派给外部 CLI（claude / codex / cursor / cline）时，子进程 PATH 补上 `~/.local/bin` 与 `~/.cargo/bin`。从 Finder/Dock 启动 App 只继承最小 launchd PATH，外部 CLI 再 fork 的 `node` / `uv` / `python` / `git` 若装在用户级前缀里会 `command not found`，导致委派任务跑到一半失败。
+
+### Changed
+
+- 版本号从 **1.136.0-rc22** 递增为 **1.136.0-rc23**。
+
 ## 1.136.0-rc22 - 2026-07-08
 
 ### Fixed

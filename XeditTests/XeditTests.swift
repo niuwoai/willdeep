@@ -1731,11 +1731,29 @@ struct WillDeepTests {
         )
         #expect(codex == "/Applications/Codex.app/Contents/Resources/codex")
 
+        // Editor-launcher fallback: only `cursor` present.
         let cursor = AgentToolRunner.cursorAgentExecutablePath(
             environment: ["PATH": "/usr/local/bin"],
             isExecutable: { $0 == "/usr/local/bin/cursor" }
         )
         #expect(cursor == "/usr/local/bin/cursor")
+
+        // Standalone install: only `cursor-agent` in ~/.local/bin, no `cursor`
+        // command at all. Must still be discovered (regression: previously the
+        // discovery only looked for `cursor` and reported "not installed").
+        let standalone = "\(NSHomeDirectory())/.local/bin/cursor-agent"
+        let cursorAgentOnly = AgentToolRunner.cursorAgentExecutablePath(
+            environment: ["PATH": "/usr/bin"],
+            isExecutable: { $0 == standalone }
+        )
+        #expect(cursorAgentOnly == standalone)
+
+        // When both exist, prefer the standalone `cursor-agent`.
+        let both = AgentToolRunner.cursorAgentExecutablePath(
+            environment: ["PATH": "/usr/local/bin"],
+            isExecutable: { $0 == standalone || $0 == "/usr/local/bin/cursor" }
+        )
+        #expect(both == standalone)
 
         let cline = AgentToolRunner.clineCLIExecutablePath(
             environment: ["PATH": "/usr/local/bin"],
