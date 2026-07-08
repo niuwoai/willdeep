@@ -1203,6 +1203,7 @@ struct SomeIMIntegrationSettingsView: View {
     @State private var isWatchingBrowserLogin = false
     @State private var handledBrowserLoginAutogenerateRequestID: UUID?
     @State private var status = ""
+    @State private var showLogoutConfirm = false
 
     private var imageModels: [SomeIMModel] {
         fetchedModels.filter(\.supportsImageGeneration)
@@ -1281,6 +1282,22 @@ struct SomeIMIntegrationSettingsView: View {
                         Button(L10n.Settings.SomeIM.openSomeIM) {
                             openSomeIM()
                         }
+                        Spacer()
+                        Button(L10n.Settings.SomeIM.logout, role: .destructive) {
+                            showLogoutConfirm = true
+                        }
+                    }
+                    .confirmationDialog(
+                        L10n.Settings.SomeIM.logoutConfirmTitle,
+                        isPresented: $showLogoutConfirm,
+                        titleVisibility: .visible
+                    ) {
+                        Button(L10n.Settings.SomeIM.logout, role: .destructive) {
+                            performLogout()
+                        }
+                        Button(L10n.Settings.SomeIM.logoutCancel, role: .cancel) {}
+                    } message: {
+                        Text(L10n.Settings.SomeIM.logoutConfirmMessage)
                     }
                 } else {
                     Text(L10n.Settings.SomeIM.accountNotConnected)
@@ -1573,6 +1590,19 @@ struct SomeIMIntegrationSettingsView: View {
                 }
             }
         }
+    }
+
+    private func performLogout() {
+        // Clears the shared session (broadcasting to every app on this Mac) and
+        // this app's local caches. The AppState observer also drops the agent
+        // provider off the sessionDidChange broadcast; do it here too for an
+        // immediate, in-view response.
+        SomeIMIntegrationStore.logout()
+        appState.clearSomeIMProvider()
+        account = nil
+        apiKey = ""
+        settings.enabled = false
+        status = L10n.Settings.SomeIM.loggedOut
     }
 
     private func openSomeIM() {
