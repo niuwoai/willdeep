@@ -1,5 +1,16 @@
 # Changelog
 
+## 1.136.0-rc22 - 2026-07-08
+
+### Fixed
+
+- 智能审批 LLM 判官不再因 API key 时序竞态而静默掉线：`configurationForSafetyJudge()` 在运行时配置的 apiKey 为空时，直接从当前激活的 provider library 条目的 Keychain 密钥补齐（读本地副本、不触发 provider-library 的 didSet 级联），消除审计日志里大量 `unavailable / missing api key` 导致的"判官没上岗、直接退回人工"。
+
+### Changed
+
+- Goal 模式不再对所有写操作"一刀切"自动放行。沙箱内、非破坏性的文件写与已校验的公网 `web_fetch` 仍然快速放行以保持自主；命令类调用（`run_command` / `terminal_send_command` / `terminal_send_control` / `call_mcp_tool`）改为走与 smart 模式相同的「静态分类 → LLM 判官」闸门（Goal 模式隐式启用判官）。判官判为危险、判官不可用，或属于需打字确认的破坏性操作时，暂停等待人工，而非盲目执行——按风险分级，向 Codex 的 auto-review 语义靠拢。
+- 版本号从 **1.136.0-rc21** 递增为 **1.136.0-rc22**。
+
 ## 1.136.0-rc21 - 2026-07-08
 
 ### Fixed

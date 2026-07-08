@@ -1,6 +1,6 @@
 # WillDeep Product Overview
 
-> Last updated: 2026-07-08 | Current version: v1.136.0-rc21
+> Last updated: 2026-07-08 | Current version: v1.136.0-rc22
 
 ## Positioning
 
@@ -14,6 +14,7 @@ WillDeep is configured for non-App-Store distribution without App Sandbox so it 
 
 WillDeep 是 SwiftUI + AppKit 桥接的 macOS 应用，单进程多窗口。代码层次：
 
+- **智能审批判官补位 + Goal 按风险过判官（1.136.0-rc22）** —— 两处收敛，向 Codex auto-review 语义靠拢。① 判官 key 兜底：`configurationForSafetyJudge()` 在运行时配置 apiKey 为空时，直接从当前 active provider library 条目的 Keychain 密钥补齐（读本地副本，不触发 provider-library 的 didSet 级联），消除审计日志里大量 `unavailable / missing api key` 造成的“判官没上岗、静默退回人工”。② Goal 模式不再对所有写操作一刀切放行：沙箱内非破坏性文件写与已校验公网 `web_fetch` 仍快速放行以保持自主；命令类调用（`run_command` / `terminal_send_command` / `terminal_send_control` / `call_mcp_tool`）改走与 smart 模式相同的「静态分类 → LLM 判官」闸门（Goal 隐式启用判官），判官判危险、判官不可用或需打字确认的破坏性操作 → 暂停等待人工。
 - **Agent 生成图可见引用链路（1.136.0-rc21）** —— Agent 调用 `generate_image` / some.im 图片任务后，会把生成图保存到当前 workspace（默认根目录，也可由 `output_directory` 指定子目录），并在 assistant Markdown 下方直接渲染缩略图；用户右键“引用”会向 composer 写入 `<generated-image-reference ... />` 标记，后续要求修改该图时走 `edit_generated_image` / `gpt-image-2` 参考图编辑，不再重新上传生成图。
 - **Agent 侧栏快捷入口去框（1.136.0-rc20）** —— Agent 会话区右上 Diff、Terminal、Preview、Files 快捷入口移除外层胶囊框和单个图标选中底框，只用图标颜色与字重表达当前侧栏状态。
 - **Agent 会话内搜索（1.136.0-rc19）** —— Agent 聊天区支持 `Command+F` 呼出右上角悬浮搜索入口，输入关键词后会高亮整段当前会话里的命中，显示当前序号/总数，并可用上一条/下一条按钮跳转；搜索期间自动滚动到底会暂停，避免打断用户定位。
