@@ -20,6 +20,7 @@ final class AgentMobileGatewayDesktopPeer: ObservableObject {
     private var reconnectToken: String?
     private var reconnectSession: URLSession = .shared
     private var shouldReconnect = false
+    private var isRelayConnection = false
     /// 1.87.0-rc3:连续失败次数,做指数退避。每次 receive 失败 +1,
     /// 收到一帧就归 0。退避公式 `min(750ms * 2^n, 30s)`,gateway 不开
     /// 时把 Console 刷屏从每秒一次降到 30s 一次。
@@ -46,6 +47,7 @@ final class AgentMobileGatewayDesktopPeer: ObservableObject {
     func connect(baseURL: URL, desktopToken: String, session: URLSession = .shared) {
         disconnect()
         shouldReconnect = true
+        isRelayConnection = false
         reconnectWebSocketURL = websocketURL(from: baseURL)
         reconnectToken = desktopToken
         reconnectSession = session
@@ -55,6 +57,7 @@ final class AgentMobileGatewayDesktopPeer: ObservableObject {
     func connectRelay(baseURL: URL, room: String, relayToken: String, session: URLSession = .shared) {
         disconnect()
         shouldReconnect = true
+        isRelayConnection = true
         reconnectWebSocketURL = relayWebSocketURL(from: baseURL, room: room)
         reconnectToken = relayToken
         reconnectSession = session
@@ -63,6 +66,7 @@ final class AgentMobileGatewayDesktopPeer: ObservableObject {
 
     func disconnect() {
         shouldReconnect = false
+        isRelayConnection = false
         reconnectTask?.cancel()
         reconnectTask = nil
         snapshotTask?.cancel()
@@ -95,9 +99,15 @@ final class AgentMobileGatewayDesktopPeer: ObservableObject {
         send(AgentMobileGatewayCommandRouter.capabilitiesEnvelope(controller: appState))
         for approval in appState.mobileGatewayPendingToolApprovals {
             send(AgentMobileGatewayCommandRouter.toolPendingEnvelope(approval))
+            if isRelayConnection {
+                MobileRemotePushNotifier.shared.notifyIfNeeded(MobileRemoteAttentionPayload(approval))
+            }
         }
         for proposal in appState.mobileGatewayPendingPatchProposals {
             send(AgentMobileGatewayCommandRouter.patchUpsertEnvelope(proposal))
+            if isRelayConnection {
+                MobileRemotePushNotifier.shared.notifyIfNeeded(MobileRemoteAttentionPayload(proposal))
+            }
         }
         for job in appState.mobileGatewayJobs {
             send(AgentMobileGatewayCommandRouter.jobUpdatedEnvelope(job))

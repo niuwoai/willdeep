@@ -41,6 +41,7 @@ type MobileGatewayConfigInput struct {
 	RelayBaseURL   string
 	RelayRoom      string
 	RelayToken     string
+	RemotePush     MobileRemotePushConfig
 }
 
 type MobileGatewayConfig struct {
@@ -54,6 +55,7 @@ type MobileGatewayConfig struct {
 	RelayBaseURL   string
 	RelayRoom      string
 	RelayToken     string
+	RemotePush     MobileRemotePushConfig
 }
 
 type MobileGateway struct {
@@ -66,6 +68,8 @@ type MobileGateway struct {
 	devices        map[string]*mobileDevice
 	connections    map[*mobileConnection]struct{}
 	desktop        *mobileConnection
+	pushSender     mobileRemotePushSender
+	pushedTargets  map[string]time.Time
 
 	upgrader websocket.Upgrader
 	now      func() time.Time
@@ -80,12 +84,16 @@ type MobileEnvelope struct {
 }
 
 type mobileDevice struct {
-	ID              string    `json:"id"`
-	Name            string    `json:"name"`
-	TokenHash       string    `json:"-"`
-	CreatedAt       time.Time `json:"created_at"`
-	LastConnectedAt time.Time `json:"last_connected_at,omitempty"`
-	RevokedAt       time.Time `json:"revoked_at,omitempty"`
+	ID               string    `json:"id"`
+	Name             string    `json:"name"`
+	TokenHash        string    `json:"-"`
+	CreatedAt        time.Time `json:"created_at"`
+	LastConnectedAt  time.Time `json:"last_connected_at,omitempty"`
+	RevokedAt        time.Time `json:"revoked_at,omitempty"`
+	PushProvider     string    `json:"push_provider,omitempty"`
+	PushAppID        string    `json:"push_app_id,omitempty"`
+	PushClientID     string    `json:"-"`
+	PushRegisteredAt time.Time `json:"push_registered_at,omitempty"`
 }
 
 type mobileConnectionRole string
@@ -127,6 +135,7 @@ var mobileCommandTypes = map[string]struct{}{
 	"job.kill":         {},
 	"workspace.list":   {},
 	"capabilities.get": {},
+	"push.register":    {},
 }
 
 var mobileDesktopEventTypes = map[string]struct{}{
@@ -183,6 +192,7 @@ func NewMobileGatewayConfig(input MobileGatewayConfigInput) (MobileGatewayConfig
 		RelayBaseURL:   strings.TrimRight(strings.TrimSpace(input.RelayBaseURL), "/"),
 		RelayRoom:      strings.Trim(strings.TrimSpace(input.RelayRoom), "/"),
 		RelayToken:     strings.TrimSpace(input.RelayToken),
+		RemotePush:     input.RemotePush.Normalize(),
 	}, nil
 }
 
@@ -211,13 +221,17 @@ func ServeMobileGateway(ctx context.Context, config MobileGatewayConfig) error {
 
 func NewMobileGateway(config MobileGatewayConfig) (*MobileGateway, error) {
 	gateway := &MobileGateway{
-		config:      config,
-		devices:     map[string]*mobileDevice{},
-		connections: map[*mobileConnection]struct{}{},
+		config:        config,
+		devices:       map[string]*mobileDevice{},
+		connections:   map[*mobileConnection]struct{}{},
+		pushedTargets: map[string]time.Time{},
 		upgrader: websocket.Upgrader{
 			CheckOrigin: func(r *http.Request) bool { return true },
 		},
 		now: time.Now,
+	}
+	if sender := NewMobileRemotePushSender(config.RemotePush); sender != nil {
+		gateway.pushSender = sender
 	}
 	if config.AllowPairing {
 		if err := gateway.rotatePairingTokenLocked(gateway.now()); err != nil {
@@ -522,6 +536,7 @@ func (g *MobileGateway) handleDesktopEnvelope(message MobileEnvelope) {
 		}
 	}
 	g.broadcastToDevices(message)
+	g.triggerRemotePushForDesktopEvent(message)
 }
 
 func (g *MobileGateway) handleMobileEnvelope(peer *mobileConnection, message MobileEnvelope) {
@@ -536,6 +551,10 @@ func (g *MobileGateway) handleMobileEnvelope(peer *mobileConnection, message Mob
 			},
 			Timestamp: g.now().UTC().Format(time.RFC3339Nano),
 		})
+		return
+	}
+	if message.Type == "push.register" {
+		g.handlePushRegister(peer, message)
 		return
 	}
 	desktop := g.desktopConnection()
@@ -566,6 +585,44 @@ func (g *MobileGateway) handleMobileEnvelope(peer *mobileConnection, message Mob
 	})
 }
 
+func (g *MobileGateway) handlePushRegister(peer *mobileConnection, message MobileEnvelope) {
+	provider := firstPayloadString(message.Payload, "provider")
+	clientID := firstPayloadString(message.Payload, "client_id", "device_token", "token", "cid")
+	appID := firstPayloadString(message.Payload, "app_id", "appkey", "app_key")
+	now := g.now()
+	if provider == "" || clientID == "" {
+		peer.enqueue(MobileEnvelope{
+			ID:        message.ID,
+			Type:      "error",
+			SessionID: message.SessionID,
+			Payload: map[string]any{
+				"message": "push.register requires provider and client_id",
+				"type":    message.Type,
+			},
+			Timestamp: now.UTC().Format(time.RFC3339Nano),
+		})
+		return
+	}
+	g.mu.Lock()
+	if device := g.devices[peer.deviceID]; device != nil && device.RevokedAt.IsZero() {
+		device.PushProvider = provider
+		device.PushClientID = clientID
+		device.PushAppID = appID
+		device.PushRegisteredAt = now
+	}
+	g.mu.Unlock()
+	peer.enqueue(MobileEnvelope{
+		ID:        message.ID,
+		Type:      "ack",
+		SessionID: message.SessionID,
+		Payload: map[string]any{
+			"type":     message.Type,
+			"provider": provider,
+		},
+		Timestamp: now.UTC().Format(time.RFC3339Nano),
+	})
+}
+
 func (g *MobileGateway) desktopConnection() *mobileConnection {
 	g.mu.Lock()
 	defer g.mu.Unlock()
@@ -583,6 +640,62 @@ func (g *MobileGateway) broadcastToDevices(message MobileEnvelope) {
 	g.mu.Unlock()
 	for _, peer := range peers {
 		peer.enqueue(message)
+	}
+}
+
+func (g *MobileGateway) triggerRemotePushForDesktopEvent(message MobileEnvelope) {
+	if g.pushSender == nil {
+		return
+	}
+	payload, ok := mobileRemoteAttentionPayloadFromEnvelope(message)
+	if !ok {
+		return
+	}
+	key := payload.DedupeKey()
+	now := g.now()
+	g.mu.Lock()
+	if sentAt, ok := g.pushedTargets[key]; ok && now.Sub(sentAt) < 24*time.Hour {
+		g.mu.Unlock()
+		return
+	}
+	targets := make([]mobileRemotePushTarget, 0, len(g.devices))
+	for _, device := range g.devices {
+		if device == nil || !device.RevokedAt.IsZero() {
+			continue
+		}
+		if !strings.EqualFold(device.PushProvider, "umeng") || strings.TrimSpace(device.PushClientID) == "" {
+			continue
+		}
+		targets = append(targets, mobileRemotePushTarget{
+			DeviceID: device.ID,
+			ClientID: strings.TrimSpace(device.PushClientID),
+		})
+	}
+	if len(targets) > 0 {
+		g.pushedTargets[key] = now
+	}
+	g.prunePushedTargetsLocked(now)
+	g.mu.Unlock()
+	if len(targets) == 0 {
+		return
+	}
+	for _, target := range targets {
+		target := target
+		go func() {
+			ctx, cancel := context.WithTimeout(context.Background(), 8*time.Second)
+			defer cancel()
+			if err := g.pushSender.Send(ctx, target.ClientID, payload); err != nil {
+				log.Printf("willdeep-agent mobile push send failed device=%s target=%s: %v", target.DeviceID, key, err)
+			}
+		}()
+	}
+}
+
+func (g *MobileGateway) prunePushedTargetsLocked(now time.Time) {
+	for key, sentAt := range g.pushedTargets {
+		if now.Sub(sentAt) > 24*time.Hour {
+			delete(g.pushedTargets, key)
+		}
 	}
 }
 

@@ -119,6 +119,7 @@ func newServeMobileCommand() *cobra.Command {
 				RelayBaseURL:   relayBaseURL,
 				RelayRoom:      relayRoom,
 				RelayToken:     resolvedRelayToken,
+				RemotePush:     agent.LoadMobileRemotePushConfig(),
 			})
 			if err != nil {
 				return err

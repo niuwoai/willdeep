@@ -80,6 +80,65 @@ struct MobileGatewayPairingPayload: Codable, Equatable {
         return text
     }
 
+    func qrURLString(h5BaseURL: URL) -> String {
+        var components = URLComponents(url: h5BaseURL, resolvingAgainstBaseURL: false)
+        var items = components?.queryItems ?? []
+        items.removeAll { ["p", "pair", "payload", "r", "t", "u", "b", "k", "f"].contains($0.name) }
+        if let compactItems = compactQRCodeItems {
+            items.append(contentsOf: compactItems)
+        } else {
+            items.append(URLQueryItem(name: "p", value: Self.base64URL(qrJSONString)))
+        }
+        components?.queryItems = items
+        return components?.url?.absoluteString ?? qrJSONString
+    }
+
+    private var compactQRCodeItems: [URLQueryItem]? {
+        if let relayRoom = relayRoom?.trimmingCharacters(in: .whitespacesAndNewlines).trimmingCharacters(in: CharacterSet(charactersIn: "/")),
+           let relayToken = relayToken?.trimmingCharacters(in: .whitespacesAndNewlines),
+           !relayRoom.isEmpty,
+           !relayToken.isEmpty {
+            var items = [
+                URLQueryItem(name: "r", value: relayRoom),
+                URLQueryItem(name: "t", value: relayToken)
+            ]
+            let relayBase = Self.trimmedURL(relayBaseURL)
+            if let relayBase, relayBase != Self.defaultRelayBaseURL {
+                items.append(URLQueryItem(name: "u", value: relayBase))
+            }
+            return items
+        }
+
+        let base = Self.trimmedURL(baseURL)
+        let token = pairingToken.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let base, !token.isEmpty else { return nil }
+        var items = [
+            URLQueryItem(name: "b", value: base),
+            URLQueryItem(name: "k", value: token)
+        ]
+        let fallbacks = fallbackBaseURLs.compactMap { Self.trimmedURL($0) }.filter { $0 != base }
+        if !fallbacks.isEmpty {
+            items.append(URLQueryItem(name: "f", value: fallbacks.joined(separator: ",")))
+        }
+        return items
+    }
+
+    private static let defaultRelayBaseURL = "https://j.niuwoai.com"
+
+    private static func trimmedURL(_ value: String?) -> String? {
+        guard let value else { return nil }
+        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines).trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+        return trimmed.isEmpty ? nil : trimmed
+    }
+
+    private static func base64URL(_ value: String) -> String {
+        Data(value.utf8)
+            .base64EncodedString()
+            .replacingOccurrences(of: "+", with: "-")
+            .replacingOccurrences(of: "/", with: "_")
+            .replacingOccurrences(of: "=", with: "")
+    }
+
     func addingFallbackBaseURLs(_ urls: [URL]) -> MobileGatewayPairingPayload {
         let primary = baseURL.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
         var seen = Set([primary])
@@ -180,6 +239,10 @@ final class MobileGatewayCoordinator: ObservableObject {
     /// output (e.g. "listening on …" or a bind error) instead of a silent
     /// "Starting…". Also appended to the failure message on non-zero exit.
     @Published private(set) var recentOutput = ""
+
+    var pairingQRCodeText: String? {
+        pairingPayload?.qrURLString(h5BaseURL: Self.h5BaseURL())
+    }
 
     init(
         appState: AppState,
@@ -718,6 +781,23 @@ final class MobileGatewayCoordinator: ObservableObject {
     /// Protocol version advertised to paired phones. Matches the Go gateway
     /// and the health/pairing contract in docs/MOBILE_GATEWAY_REQUIREMENTS.md.
     static let protocolVersion = "mobile-gateway.v1"
+
+    static func h5BaseURL(defaults: UserDefaults = .standard) -> URL {
+        if let raw = defaults.string(forKey: "com.willdeep.mobileGateway.h5BaseURL")?
+            .trimmingCharacters(in: .whitespacesAndNewlines),
+           let url = URL(string: raw),
+           ["http", "https"].contains(url.scheme?.lowercased() ?? "") {
+            return url
+        }
+        if let raw = ProcessInfo.processInfo.environment["WILLDEEP_H5_BASE_URL"]?
+            .trimmingCharacters(in: .whitespacesAndNewlines),
+           let url = URL(string: raw),
+           ["http", "https"].contains(url.scheme?.lowercased() ?? "") {
+            return url
+        }
+        let host = primaryLANIPv4Address() ?? "127.0.0.1"
+        return URL(string: "http://\(host):5176/")!
+    }
 
     /// Build the QR pairing payload for relay mode without a Go gateway. The
     /// phone joins the relay room using `relay_token`; the LAN `base_url` /

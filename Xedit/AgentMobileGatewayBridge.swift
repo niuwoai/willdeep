@@ -61,6 +61,17 @@ enum AgentMobileGatewayCommandRouter {
                     controller: controller,
                     now: now
                 )
+            case "push.register":
+                let provider = try requiredPayloadString("provider", from: envelope)
+                let clientID = try requiredPayloadString("client_id", aliases: ["device_token", "token", "cid"], from: envelope)
+                let appID = envelope.payload["app_id"]?.stringValue?
+                    .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+                MobileRemotePushNotifier.shared.register(provider: provider, clientID: clientID, appID: appID)
+                return ackEnvelope(
+                    for: envelope,
+                    sessionID: try optionalSessionID(from: envelope),
+                    now: now
+                )
             case "session.select":
                 let sessionID = try requiredSessionID(from: envelope)
                 guard controller.mobileGatewaySelectSession(id: sessionID) else {

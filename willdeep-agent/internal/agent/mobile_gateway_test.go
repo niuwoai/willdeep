@@ -2,10 +2,12 @@ package agent
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -426,12 +428,12 @@ func TestMobileGatewayWorkspaceListRoundTrip(t *testing.T) {
 		Payload: map[string]any{
 			"workspaces": []any{
 				map[string]any{
-					"path":         "/Users/rocky/Sites/Xedit",
-					"name":         "Xedit",
-					"last_used_at": "2026-06-17T03:21:08Z",
+					"path":          "/Users/rocky/Sites/Xedit",
+					"name":          "Xedit",
+					"last_used_at":  "2026-06-17T03:21:08Z",
 					"session_count": 2,
-					"is_current":   true,
-					"is_git_repo":  true,
+					"is_current":    true,
+					"is_git_repo":   true,
 				},
 			},
 		},
@@ -478,6 +480,85 @@ func TestMobileGatewayWorkspaceListWithoutDesktopPeerReturnsError(t *testing.T) 
 	}
 	if response.ID != "wl-orphan" {
 		t.Fatalf("workspace.list error envelope id = %q, want wl-orphan", response.ID)
+	}
+}
+
+func TestMobileGatewayPushRegisterStoresDeviceTokenWithoutDesktopPeer(t *testing.T) {
+	gateway := newTestMobileGateway(t)
+	device, deviceToken := claimTestDevice(t, gateway, "Pixel")
+	server := httptest.NewServer(gateway.routes())
+	defer server.Close()
+
+	header := http.Header{}
+	header.Set("Authorization", "Bearer "+deviceToken)
+	conn, _, err := websocket.DefaultDialer.Dial(mobileTestWSURL(server.URL)+"/mobile/ws", header)
+	if err != nil {
+		t.Fatalf("dial device websocket: %v", err)
+	}
+	defer conn.Close()
+
+	command := MobileEnvelope{
+		ID:   "push-1",
+		Type: "push.register",
+		Payload: map[string]any{
+			"provider":  "umeng",
+			"client_id": "umeng-device-token",
+			"app_id":    "umeng-app",
+		},
+	}
+	if err := conn.WriteJSON(command); err != nil {
+		t.Fatalf("write push.register: %v", err)
+	}
+	var ack MobileEnvelope
+	if err := conn.ReadJSON(&ack); err != nil {
+		t.Fatalf("read push.register ack: %v", err)
+	}
+	if ack.Type != "ack" || ack.ID != "push-1" {
+		t.Fatalf("push.register ack = %#v", ack)
+	}
+
+	gateway.mu.Lock()
+	stored := gateway.devices[device.ID]
+	gateway.mu.Unlock()
+	if stored == nil || stored.PushProvider != "umeng" || stored.PushClientID != "umeng-device-token" || stored.PushAppID != "umeng-app" {
+		t.Fatalf("stored push registration = %#v", stored)
+	}
+}
+
+func TestMobileGatewayRemotePushFiresOnceForAttentionEvent(t *testing.T) {
+	gateway := newTestMobileGateway(t)
+	sender := &fakeMobilePushSender{}
+	gateway.pushSender = sender
+	device, _ := claimTestDevice(t, gateway, "Pixel")
+	gateway.mu.Lock()
+	gateway.devices[device.ID].PushProvider = "umeng"
+	gateway.devices[device.ID].PushClientID = "umeng-device-token"
+	gateway.mu.Unlock()
+
+	event := MobileEnvelope{
+		Type:      "tool.pending",
+		SessionID: "session-1",
+		Payload: map[string]any{
+			"id":                    "tool-1",
+			"title":                 "Approval needed",
+			"summary":               "Review the pending command.",
+			"tool_name":             "terminal_send_command",
+			"input_preview":         "git status",
+			"requires_confirmation": true,
+		},
+	}
+	gateway.handleDesktopEnvelope(event)
+	gateway.handleDesktopEnvelope(event)
+	if !sender.waitForCount(1, time.Second) {
+		t.Fatalf("timed out waiting for remote push send")
+	}
+
+	if got := sender.count(); got != 1 {
+		t.Fatalf("remote push send count = %d, want 1", got)
+	}
+	sent := sender.payloadAt(0)
+	if sent.TargetType != "tool" || sent.TargetID != "tool-1" || sent.SessionID != "session-1" || !sent.RequiresConfirmation {
+		t.Fatalf("remote push payload = %#v", sent)
 	}
 }
 
@@ -592,4 +673,55 @@ func claimTestDevice(t *testing.T, gateway *MobileGateway, name string) (mobileD
 
 func mobileTestWSURL(httpURL string) string {
 	return "ws" + strings.TrimPrefix(httpURL, "http")
+}
+
+type fakeMobilePushSender struct {
+	mu       sync.Mutex
+	payloads []mobileRemoteAttentionPayload
+	notify   chan struct{}
+}
+
+func (s *fakeMobilePushSender) Send(_ context.Context, _ string, payload mobileRemoteAttentionPayload) error {
+	s.mu.Lock()
+	if s.notify == nil {
+		s.notify = make(chan struct{})
+	}
+	s.payloads = append(s.payloads, payload)
+	close(s.notify)
+	s.notify = make(chan struct{})
+	s.mu.Unlock()
+	return nil
+}
+
+func (s *fakeMobilePushSender) count() int {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return len(s.payloads)
+}
+
+func (s *fakeMobilePushSender) payloadAt(index int) mobileRemoteAttentionPayload {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.payloads[index]
+}
+
+func (s *fakeMobilePushSender) waitForCount(count int, timeout time.Duration) bool {
+	deadline := time.After(timeout)
+	for {
+		s.mu.Lock()
+		if len(s.payloads) >= count {
+			s.mu.Unlock()
+			return true
+		}
+		if s.notify == nil {
+			s.notify = make(chan struct{})
+		}
+		notify := s.notify
+		s.mu.Unlock()
+		select {
+		case <-notify:
+		case <-deadline:
+			return false
+		}
+	}
 }
