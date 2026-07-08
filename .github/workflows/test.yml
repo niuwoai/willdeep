@@ -44,6 +44,22 @@ jobs:
           swift --version
           ruby --version
 
+      # The Xedit target depends on the PRIVATE Swift package
+      # github.com/xurenlu/SomeIMSharedSession. GITHUB_TOKEN can't read another
+      # private repo, so give SPM a PAT (repo secret SOMEIM_PACKAGE_TOKEN) with
+      # read access. Locally this isn't needed — a git `insteadOf` rewrite sends
+      # the clone over the developer's SSH key instead.
+      - name: Configure private SPM access
+        env:
+          SOMEIM_PACKAGE_TOKEN: ${{ secrets.SOMEIM_PACKAGE_TOKEN }}
+        run: |
+          if [ -n "$SOMEIM_PACKAGE_TOKEN" ]; then
+            git config --global url."https://x-access-token:${SOMEIM_PACKAGE_TOKEN}@github.com/".insteadOf "https://github.com/"
+            echo "Configured private SPM access via SOMEIM_PACKAGE_TOKEN."
+          else
+            echo "::warning::SOMEIM_PACKAGE_TOKEN is not set — the private SomeIMSharedSession package will fail to resolve."
+          fi
+
       - name: List schemes
         run: xcodebuild -project Xedit.xcodeproj -list
 
