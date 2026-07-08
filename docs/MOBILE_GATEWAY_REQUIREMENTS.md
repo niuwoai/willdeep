@@ -1,6 +1,6 @@
 # WillDeep Mobile Gateway Requirements
 
-> Last updated: 2026-07-07 | Target version: v1.132.0-rc3
+> Last updated: 2026-07-08 | Target version: v1.136.0-rc12
 
 ## Summary
 
@@ -92,7 +92,7 @@ The Android-to-Mac registration command:
     "client_id": "android-umeng-device-token",
     "app_id": "umeng-appkey",
     "platform": "android",
-    "app_version": "1.22.0-rc1"
+    "app_version": "1.22.0-rc3"
   }
 }
 ```
@@ -118,8 +118,8 @@ The gateway does not execute the command. It forwards the command to the desktop
 
 All Mobile Gateway HTTP responses must include:
 
-- `X-App-Version: 1.132.0-rc3`
-- `X-Server-Version: 1.132.0-rc3`
+- `X-App-Version: 1.136.0-rc12`
+- `X-Server-Version: 1.136.0-rc12`
 
 ### `GET /mobile/health`
 
@@ -131,7 +131,7 @@ Response data:
 {
   "version": {
     "name": "willdeep-agent",
-    "version": "1.132.0-rc3",
+    "version": "1.136.0-rc12",
     "go_version": "go1.23.x",
     "os": "darwin",
     "arch": "arm64"

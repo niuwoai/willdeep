@@ -1,6 +1,6 @@
 # WillDeep Product Overview
 
-> Last updated: 2026-07-07 | Current version: v1.132.0-rc3
+> Last updated: 2026-07-08 | Current version: v1.136.0-rc12
 
 ## Positioning
 
@@ -14,6 +14,21 @@ WillDeep is configured for non-App-Store distribution without App Sandbox so it 
 
 WillDeep 是 SwiftUI + AppKit 桥接的 macOS 应用，单进程多窗口。代码层次：
 
+- **Agent 连续天数保留（1.136.0-rc12）** —— Agent 空白页统计面板的当前连续天数现在会在今天尚未开始写时保留截至昨天的连续记录，避免当天刚开始打开 App 就被显示为 0；只有今天和昨天都没有使用记录时才视为断档。
+- **some.im 未绑定入口点击兜底（1.136.0-rc11）** —— Agent 左下角未登录 some.im 区域现在绕过系统 Settings action，直接打开 WillDeep fallback Settings 窗口；头像、文字、空白和齿轮区域都可触发 Settings → some.im 并自动生成浏览器登录链接。
+- **普通启动直进 Agent（1.136.0-rc10）** —— Agent 单例窗口现在是 App 的默认启动 Scene；不带文件/目录意图启动时直接进入 Agent mode，不再先闪出空 Editor 主窗口再延迟关闭。显式打开文件/目录、`willdeep://open?path=...` 和“显示 Editor”入口仍进入 editor mode。
+- **some.im 未绑定入口自动生成登录链接（1.136.0-rc9）** —— Agent 左下角未登录 some.im 的头像/账号区点击后会打开 Settings → some.im，并立即生成浏览器登录链接与二维码；若已有未完成链接，则恢复同一随机码轮询。
+- **some.im 浏览器登录后台轮询修复（1.136.0-rc8）** —— 设置页生成浏览器登录链接后，即使用户跳到浏览器或设置页暂时消失，WillDeep 仍继续等待 some.im `connected` 状态；再次点击“在浏览器打开”会恢复同一随机码轮询，避免网页显示完成但 Mac App 停在二维码。
+- **About 菜单接管修复（1.136.0-rc7）** —— 关于窗口入口改为由 AppDelegate 直接修补系统 App 菜单项，普通启动、Agent 窗口和重新激活后都能打开 WillDeep 自定义 About 窗口，不再落回 macOS 默认 About 面板。
+- **some.im 浏览器登录缺凭据提示（1.136.0-rc6）** —— some.im browser-status 返回 `connected` 但没有 app API key / account 时，设置页会立即显示“some.im 没有返回 WillDeep 凭据”，不再把状态降级为 unknown 后继续等待。
+- **some.im 浏览器登录回写兼容（1.136.0-rc5）** —— some.im browser-status 轮询现在兼容嵌套 `credentials`、camelCase 字段和 `customer/user` 账号形态；浏览器已完成但未返回 WillDeep 凭据时，设置页会立即提示具体原因，不再只显示等待中。
+- **移动网关短二维码（1.136.0-rc4）** —— Mobile Gateway H5 二维码从完整 JSON 的 `p` 参数改为 compact `r` / `t` 或 `b` / `k` 参数，降低二维码密度；旧 `p` payload 仍兼容。
+- **设置入口修正（1.136.0-rc3）** —— Agent 左下 some.im 未登录账号入口现在稳定打开 Settings → some.im；Mobile Gateway 从 Settings → Runtimes 的子 tab 提升为顶层设置分区。
+- **移动网关 H5 二维码（1.136.0-rc2）** —— Mobile Gateway 设置页二维码包装成 H5 URL：Android App 扫码可取认证 payload，系统相机/浏览器扫码则打开 H5 页面，H5 可继续唤起安卓版 App。
+- **自定义关于窗口（1.136.0-rc1）** —— App 菜单的 About 入口现在打开 WillDeep 自己的 SwiftUI 关于窗口，复用 museterm 的单例窗口打开方式和紧凑信息布局；窗口只展示图标、版本、构建号、Bundle ID、官网与复制版本信息操作，不迁入 MuseTerm 的基础介绍或推荐应用内容。
+- **语音输入 AI 轻度整理（1.134.0）** —— Settings → Voice 新增转写后处理选项：关闭、补标点分段、整理成要点。Composer 麦克风与 Fn push-to-talk 都会先用本机 SenseVoice 转写，再按设置决定是否调用当前配置的 AI provider 清理文本；默认关闭，开启时仅发送转写文本，音频仍留在本机。
+- **少量数据少用表格（1.135.0-rc1）** —— Agent 系统提示词新增输出格式偏好：当数据量不多（约 6 条以内）且用户没有主动要求表格时，优先使用短段落或项目符号，减少 Markdown 小表格在聊天渲染中的阅读负担。
+- **some.im 账号级集成（1.133.0-rc2）** —— some.im 从 Settings 的 Integrations 子页提升为顶层设置分区；Agent 左侧栏底部常驻 some.im 账号入口，未登录时也显示匿名头像并一键进入 some.im 设置。设置页新增带短随机码的浏览器登录链接与二维码，并携带隐藏的长配对 token；浏览器完成 some.im 登录后，WillDeep 会通过 some.im HTTPS 状态接口自动取回 app 专用 API key、customer session 与账号余额，把当前窗口从二维码切换为已登录状态。
 - **Editor 入口直达空白标签（1.132.0-rc3）** —— 从 Agent 顶部图标或菜单“显示 Editor”切回编辑器时，如果当前没有任何编辑标签，会自动创建一个 Untitled 空白 tab，让默认 Agent 启动流不再落到“未打开文件夹”的空态页。
 - **Agent 工具审批按调用 ID 交付（1.132.0-rc2）** —— 工具审批卡片点击后会先把决定记录到对应会话和工具 ID；执行循环尚未挂上等待者时也不会丢失点击，多张 pending 卡片并存时不会串线，已提交但未被执行循环接收的卡片会显示等待状态而不是继续露出可点击按钮。
 - **Mobile Gateway 友盟远程推送（1.132.0-rc1）** —— Android 上报友盟 device token 后，Mac 端会在工具审批、补丁审查和 `ask_user` 输入等待时触发 U-Push 自定义 payload；局域网 Go gateway 与默认互联网中继 Swift desktop peer 都支持这一能力，配置从本机 `local.properties` / 环境变量读取，密钥不进入仓库。

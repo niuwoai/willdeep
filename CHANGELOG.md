@@ -1,5 +1,134 @@
 # Changelog
 
+## 1.136.0-rc12 - 2026-07-08
+
+### Fixed
+
+- Agent 空白页统计面板的“当前连续天数”在今天尚未开始写时不再直接清零，会保留截至昨天的连续写作天数；只有今天和昨天都没有记录时才显示 0。
+- 新增连续天数回归测试，覆盖“今天空但昨天连续”和“昨天也断档”两种场景。
+- 版本号从 **1.136.0-rc11** 递增为 **1.136.0-rc12**。
+
+## 1.136.0-rc11 - 2026-07-08
+
+### Fixed
+
+- Agent 左下未绑定 some.im 账号区现在直接打开 fallback Settings 窗口，绕过系统 `showSettingsWindow:` 偶发吞掉程序化打开请求的问题。
+- 未绑定 some.im footer 增加整块点击与 simultaneous tap 兜底，点击头像、文字、空白或齿轮区域都能触发 Settings → some.im 并自动生成浏览器登录链接。
+- 版本号从 **1.136.0-rc10** 递增为 **1.136.0-rc11**。
+
+## 1.136.0-rc10 - 2026-07-08
+
+### Fixed
+
+- 普通启动不再先创建空 Editor 主窗口再延迟切到 Agent；Agent 单例窗口现在作为默认启动 Scene 直接打开。
+- 显式打开文件/目录、`willdeep://open?path=...` 和手动“显示 Editor”仍走 Editor 窗口，不改变 editor mode 入口。
+- 版本号从 **1.136.0-rc9** 递增为 **1.136.0-rc10**。
+
+## 1.136.0-rc9 - 2026-07-08
+
+### Fixed
+
+- Agent 左下未绑定 some.im 的头像/账号区现在点击后会直达 Settings → some.im，并自动生成浏览器登录链接和二维码。
+- some.im 设置页会消费来自导航入口的自动生成请求；如果页面已存在未完成链接，会恢复同一随机码的轮询而不是重新生成。
+- 版本号从 **1.136.0-rc8** 递增为 **1.136.0-rc9**。
+
+## 1.136.0-rc8 - 2026-07-08
+
+### Fixed
+
+- some.im 浏览器登录轮询不再因设置页暂时消失而取消；用户跳到浏览器完成登录后，WillDeep 仍会继续等待并自动接收 `connected` 状态。
+- 已生成的浏览器登录链接在再次点击“在浏览器打开”时会恢复同一随机码的轮询，避免浏览器已完成但 App 停在二维码状态。
+- 浏览器登录卡片现在显示真实轮询状态，不再在 watcher 停止后误导性显示“链接已生成”。
+- 版本号从 **1.136.0-rc7** 递增为 **1.136.0-rc8**。
+
+## 1.136.0-rc7 - 2026-07-08
+
+### Fixed
+
+- About 菜单现在由 AppDelegate 在启动和重新激活时直接接管系统 App 菜单项，避免 SwiftUI commands 只挂在 URL WindowGroup 上导致普通启动或 Agent 窗口里仍打开系统默认 About 面板。
+- 版本号从 **1.136.0-rc6** 递增为 **1.136.0-rc7**。
+
+## 1.136.0-rc6 - 2026-07-08
+
+### Fixed
+
+- some.im 浏览器登录轮询在服务端返回 `connected` 但缺少 WillDeep 凭据时，现在会保留 `connected` 状态并让设置页立即显示明确错误，不再降级为 `unknown` 后继续显示“正在等待浏览器完成登录”。
+- 新增 browser-status `connected` 缺凭据场景的回归测试。
+- 版本号从 **1.136.0-rc5** 递增为 **1.136.0-rc6**。
+
+## 1.136.0-rc5 - 2026-07-08
+
+### Fixed
+
+- some.im 浏览器登录状态回写兼容嵌套 `credentials`、camelCase 凭据字段，以及 `account` / `customer` / `user` 账号字段，避免浏览器显示登录完成但桌面端继续等待。
+- 浏览器登录状态为 connected 但缺少 WillDeep API key / 账号信息时，设置页会立即停止等待并显示明确错误，不再静默转圈到超时。
+- 新增 some.im browser-status 兼容响应单测。
+- 版本号从 **1.136.0-rc4** 递增为 **1.136.0-rc5**。
+
+## 1.136.0-rc4 - 2026-07-07
+
+### Fixed
+
+- Mobile Gateway H5 QR now uses compact `r` / `t` relay parameters or `b` / `k` LAN parameters instead of base64url-wrapped full JSON, reducing QR density for system camera recognition.
+- Kept legacy `p` payload compatibility while making the generated QR URL short by default.
+- 版本号从 **1.136.0-rc3** 递增为 **1.136.0-rc4**。
+
+## 1.136.0-rc3 - 2026-07-07
+
+### Fixed
+
+- Agent 左下 some.im 未登录账号入口现在整行可点击，并在打开 Settings 后补一次目标 pane 选择，避免只弹出设置窗口却没有落到 some.im 页面。
+- Mobile Gateway 从 Settings → Runtimes 的子 tab 提升为顶层设置分区，和 some.im、Voice 等入口保持同级。
+- 版本号从 **1.136.0-rc2** 递增为 **1.136.0-rc3**。
+
+## 1.136.0-rc2 - 2026-07-07
+
+### Fixed
+
+- Mobile Gateway QR now renders an H5 URL with a base64url `p` payload instead of raw JSON, so Android App scanners can extract credentials while system camera/browser scanners open the H5 page.
+- Added H5 QR URL wrapping tests to keep relay credentials recoverable from the `p` parameter.
+- 版本号从 **1.136.0-rc1** 递增为 **1.136.0-rc2**。
+
+## 1.136.0-rc1 - 2026-07-07
+
+### Added
+- **自定义关于窗口** —— App 菜单的 About 入口改为 WillDeep 自己的 SwiftUI 关于窗口，采用 museterm 的单例窗口打开方式和紧凑信息布局；内容只展示 WillDeep 图标、版本、构建号、Bundle ID、官网与复制版本信息操作，不搬 MuseTerm 的产品介绍和推荐应用清单。
+
+### Changed
+- 版本号从 **1.135.0-rc1** 提升为 **1.136.0-rc1**，并同步 Xcode / Go agent / Help / README badge / product overview / Mobile Gateway / Agent Harness 位点。
+
+## 1.135.0-rc1 - 2026-07-07
+
+### Changed
+- **少量数据默认少用 Markdown 表格** —— Agent 系统提示词新增回答格式偏好：当数据量不多（约 6 条以内）且用户没有主动要求表格时，优先使用短段落或项目符号，减少小表格在当前聊天渲染里的阅读负担。
+- **Agent stable prompt 前缀升为 v8** —— 系统提示词稳定前缀版本随格式规则调整同步更新，避免 prompt cache 继续复用旧回答格式约束。
+- 版本号从 **1.134.0** 提升为 **1.135.0-rc1**，并同步 Xcode / Go agent / Help / README badge / product overview / Mobile Gateway / Agent Harness 位点。
+
+## 1.134.0 - 2026-07-07
+
+### Added
+- **语音输入支持 AI 轻度整理** —— Settings → Voice 新增“AI 整理”选项，可选择关闭、补标点分段或整理成要点。麦克风按钮与 Fn push-to-talk 共用同一条转写后处理链路；默认关闭以保持本机转写原行为，开启后只把转写文本发给当前配置的 AI provider，音频仍留在本机。
+
+### Changed
+- 版本号从 **1.133.0-rc2** 提升为 **1.134.0**，并同步 Xcode / Go agent / Help / README badge / product overview / Mobile Gateway / Agent Harness 位点。
+
+## 1.133.0-rc2 - 2026-07-07
+
+### Fixed
+- **some.im 浏览器登录状态自动回写** —— 浏览器登录链接现在携带隐藏的长配对 token；WillDeep 设置页生成链接后会轮询 some.im 的 browser-status 接口，浏览器端完成登录后通过 browser-complete 标记连接完成，WillDeep 会自动保存 app 专用 API key / customer session / 账号余额并把当前窗口从二维码切换为已登录状态。
+
+### Changed
+- 版本号从 **1.133.0-rc1** 提升为 **1.133.0-rc2**，并同步 Xcode / Go agent / Help / README badge / product overview / Mobile Gateway / Agent Harness 位点。
+
+## 1.133.0-rc1 - 2026-07-07
+
+### Added
+- **some.im 账号入口升为一等公民** —— Settings 顶层新增独立 some.im 分区；Agent 左侧栏底部常驻 some.im 账号位，已登录时展示头像/credits 并可打开后台，未登录时展示匿名头像与未登录提示，点击直达 some.im 集成设置。
+- **some.im 浏览器登录链接** —— some.im 设置页可生成带短随机码的浏览器登录链接与二维码，支持复制链接/随机码或直接在浏览器打开；用户在 some.im 页面登录完成后按页面提示回到 WillDeep 继续使用。
+
+### Changed
+- 版本号从 **1.132.0-rc3** 提升为 **1.133.0-rc1**，并同步 Xcode / Go agent / Help / README badge / product overview / Mobile Gateway / Agent Harness 位点。
+
 ## 1.132.0-rc3 - 2026-07-07
 
 ### Fixed
