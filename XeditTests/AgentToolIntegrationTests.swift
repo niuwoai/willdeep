@@ -10,6 +10,170 @@ import Testing
 import Foundation
 @testable import WillDeep
 
+@Suite
+struct AgentContextBuilderPromptTests {
+    @Test("stable prompt discourages small Markdown tables")
+    func testStablePromptDiscouragesSmallMarkdownTables() {
+        let prompt = AgentContextBuilder.stableSystemPromptPrefix(toolsEnabled: true)
+
+        #expect(prompt.contains("For small datasets (about 6 items or fewer), avoid Markdown tables"))
+        #expect(prompt.contains("unless the user explicitly asks for a table"))
+    }
+}
+
+@Suite(.serialized)
+struct SomeIMBrowserLoginStatusTests {
+    @Test("browser login status accepts nested camelCase credentials")
+    @MainActor
+    func testBrowserLoginStatusAcceptsNestedCamelCaseCredentials() async throws {
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.protocolClasses = [SomeIMBrowserLoginMockURLProtocol.self]
+        let session = URLSession(configuration: configuration)
+        SomeIMIntegrationStore.saveAccount(nil)
+        SomeIMIntegrationStore.saveAPIKey("")
+        SomeIMIntegrationStore.saveSessionToken("")
+        defer {
+            session.invalidateAndCancel()
+            SomeIMBrowserLoginMockURLProtocol.handler = nil
+            SomeIMIntegrationStore.saveAccount(nil)
+            SomeIMIntegrationStore.saveAPIKey("")
+            SomeIMIntegrationStore.saveSessionToken("")
+        }
+
+        let pairToken = String(repeating: "a", count: 64)
+        SomeIMBrowserLoginMockURLProtocol.handler = { request in
+            #expect(request.url?.path == "/api/v1/public/client-login/browser-status")
+            #expect(request.value(forHTTPHeaderField: "Authorization") == "Bearer \(pairToken)")
+            let response = HTTPURLResponse(
+                url: request.url!,
+                statusCode: 200,
+                httpVersion: nil,
+                headerFields: ["Content-Type": "application/json"]
+            )!
+            let body = """
+            {
+              "code": 0,
+              "data": {
+                "state": "connected",
+                "credentials": {
+                  "apiKey": "sk-test-browser-login",
+                  "sessionToken": "session-test-browser-login",
+                  "defaultModel": "someim-auto-flash",
+                  "customer": {
+                    "email": "qa@example.com",
+                    "tenantID": "tenant-1",
+                    "balanceUSD": "1.25",
+                    "creditsPerUSD": "100000"
+                  }
+                }
+              }
+            }
+            """.data(using: .utf8)!
+            return (response, body)
+        }
+
+        let request = SomeIMBrowserLoginRequest(
+            code: "WD-TEST-0001",
+            pairToken: pairToken,
+            url: URL(string: "https://some.im/customer/login")!,
+            createdAt: Date()
+        )
+        let result = try await SomeIMClient.checkBrowserLoginStatus(
+            request: request,
+            settings: SomeIMIntegrationSettings(baseURL: "https://some.im/v1"),
+            session: session
+        )
+
+        #expect(result.state == .connected)
+        #expect(result.account?.email == "qa@example.com")
+        #expect(SomeIMIntegrationStore.loadAPIKey() == "sk-test-browser-login")
+        #expect(SomeIMIntegrationStore.loadSessionToken() == "session-test-browser-login")
+    }
+
+    @Test("browser login status preserves connected state when credentials are missing")
+    @MainActor
+    func testBrowserLoginStatusPreservesConnectedWhenCredentialsAreMissing() async throws {
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.protocolClasses = [SomeIMBrowserLoginMockURLProtocol.self]
+        let session = URLSession(configuration: configuration)
+        SomeIMIntegrationStore.saveAccount(nil)
+        SomeIMIntegrationStore.saveAPIKey("")
+        SomeIMIntegrationStore.saveSessionToken("")
+        defer {
+            session.invalidateAndCancel()
+            SomeIMBrowserLoginMockURLProtocol.handler = nil
+            SomeIMIntegrationStore.saveAccount(nil)
+            SomeIMIntegrationStore.saveAPIKey("")
+            SomeIMIntegrationStore.saveSessionToken("")
+        }
+
+        let pairToken = String(repeating: "b", count: 64)
+        SomeIMBrowserLoginMockURLProtocol.handler = { request in
+            #expect(request.value(forHTTPHeaderField: "Authorization") == "Bearer \(pairToken)")
+            let response = HTTPURLResponse(
+                url: request.url!,
+                statusCode: 200,
+                httpVersion: nil,
+                headerFields: ["Content-Type": "application/json"]
+            )!
+            let body = """
+            {
+              "code": 0,
+              "data": {
+                "status": "connected"
+              }
+            }
+            """.data(using: .utf8)!
+            return (response, body)
+        }
+
+        let request = SomeIMBrowserLoginRequest(
+            code: "WD-TEST-0002",
+            pairToken: pairToken,
+            url: URL(string: "https://some.im/customer/login")!,
+            createdAt: Date()
+        )
+        let result = try await SomeIMClient.checkBrowserLoginStatus(
+            request: request,
+            settings: SomeIMIntegrationSettings(baseURL: "https://some.im/v1"),
+            session: session
+        )
+
+        #expect(result.state == .connected)
+        #expect(result.account == nil)
+        #expect(SomeIMIntegrationStore.loadAPIKey().isEmpty)
+    }
+}
+
+private final class SomeIMBrowserLoginMockURLProtocol: URLProtocol {
+    static var handler: ((URLRequest) throws -> (HTTPURLResponse, Data))?
+
+    override class func canInit(with request: URLRequest) -> Bool {
+        true
+    }
+
+    override class func canonicalRequest(for request: URLRequest) -> URLRequest {
+        request
+    }
+
+    override func startLoading() {
+        guard let handler = Self.handler else {
+            client?.urlProtocol(self, didFailWithError: URLError(.badServerResponse))
+            return
+        }
+        do {
+            let (response, data) = try handler(request)
+            client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
+            client?.urlProtocol(self, didLoad: data)
+            client?.urlProtocolDidFinishLoading(self)
+        } catch {
+            client?.urlProtocol(self, didFailWithError: error)
+        }
+    }
+
+    override func stopLoading() {}
+}
+
 extension WillDeepTests {
     // MARK: - Agent tools
 
@@ -418,6 +582,107 @@ extension WillDeepTests {
         #expect(segments[1].count == 1)
     }
 
+    @Test("tool approval clicked before waiter registration is delivered")
+    @MainActor
+    func testToolApprovalClickedBeforeWaiterRegistrationIsDelivered() async throws {
+        let appState = AppState()
+        let existingIDs = Set(appState.agentSessions.map(\.id))
+        let session = appState.startNewAgentSession()
+        defer {
+            for id in appState.agentSessions.map(\.id) where !existingIDs.contains(id) {
+                AgentSessionStore.delete(id: id)
+            }
+        }
+        guard let runtime = appState.agentRuntimes[session.id] else {
+            Issue.record("Expected runtime for new agent session")
+            return
+        }
+
+        let call = AgentToolCall(
+            messageID: UUID(),
+            externalID: "call-approve-before-waiter",
+            toolName: "terminal_send_command",
+            arguments: ["command": .string("kubectl -n tokenhub rollout status deploy/tokenhub")],
+            risk: .write,
+            status: .pendingApproval
+        )
+        appState.agentToolCalls = [call]
+
+        appState.approveAgentToolCall(id: call.id)
+
+        #expect(appState.hasPendingAgentToolDecision(id: call.id))
+        let decision = await appState.awaitToolDecision(for: runtime, forCallID: call.id)
+        if case .approved = decision {
+            // Expected path.
+        } else {
+            Issue.record("Expected approved decision, got \(decision)")
+        }
+        #expect(!appState.hasPendingAgentToolDecision(id: call.id))
+        #expect(runtime.toolCalls.first?.status == .running)
+    }
+
+    @Test("tool approval resumes only the matching waiter")
+    @MainActor
+    func testToolApprovalResumesOnlyMatchingWaiter() async throws {
+        let appState = AppState()
+        let existingIDs = Set(appState.agentSessions.map(\.id))
+        let session = appState.startNewAgentSession()
+        defer {
+            for id in appState.agentSessions.map(\.id) where !existingIDs.contains(id) {
+                AgentSessionStore.delete(id: id)
+            }
+        }
+        guard let runtime = appState.agentRuntimes[session.id] else {
+            Issue.record("Expected runtime for new agent session")
+            return
+        }
+
+        let first = AgentToolCall(
+            messageID: UUID(),
+            externalID: "call-first",
+            toolName: "run_command",
+            arguments: ["command": .string("deploy first")],
+            risk: .write,
+            status: .pendingApproval
+        )
+        let second = AgentToolCall(
+            messageID: UUID(),
+            externalID: "call-second",
+            toolName: "run_command",
+            arguments: ["command": .string("deploy second")],
+            risk: .write,
+            status: .pendingApproval
+        )
+        appState.agentToolCalls = [first, second]
+
+        let firstWait = Task { @MainActor in
+            await appState.awaitToolDecision(for: runtime, forCallID: first.id)
+        }
+        for _ in 0..<3 {
+            await Task.yield()
+        }
+
+        #expect(runtime.toolDecisionWaiterCallID == first.id)
+        appState.approveAgentToolCall(id: second.id)
+        #expect(runtime.toolDecisionWaiterCallID == first.id)
+        #expect(appState.hasPendingAgentToolDecision(id: second.id))
+
+        appState.approveAgentToolCall(id: first.id)
+        let firstDecision = await firstWait.value
+        if case .approved = firstDecision {
+            // Expected path.
+        } else {
+            Issue.record("Expected first call to be approved, got \(firstDecision)")
+        }
+
+        let secondDecision = await appState.awaitToolDecision(for: runtime, forCallID: second.id)
+        if case .approved = secondDecision {
+            // Expected path.
+        } else {
+            Issue.record("Expected second call to be approved, got \(secondDecision)")
+        }
+    }
+
     // MARK: - Usage stats
 
     private func makeSession(
@@ -510,8 +775,8 @@ extension WillDeepTests {
         #expect(stats.longestStreak == 3)
     }
 
-    @Test("AgentUsageStats current streak is zero when today has no messages")
-    func testUsageStatsCurrentStreakZeroWhenTodayEmpty() {
+    @Test("AgentUsageStats current streak preserves yesterday run when today is empty")
+    func testUsageStatsCurrentStreakPreservesYesterdayRunWhenTodayEmpty() {
         let calendar = Calendar.current
         let now = Date()
         let yesterday = calendar.date(byAdding: .day, value: -1, to: calendar.startOfDay(for: now))!
@@ -520,6 +785,23 @@ extension WillDeepTests {
         let messages = [
             userMessage("a", at: dayBefore),
             userMessage("b", at: yesterday)
+        ]
+        let session = makeSession(modelID: nil, messages: messages)
+        let stats = AgentUsageStats.overview(for: [session], now: now)
+        #expect(stats.currentStreak == 2)
+        #expect(stats.longestStreak == 2)
+    }
+
+    @Test("AgentUsageStats current streak is zero after missing yesterday and today")
+    func testUsageStatsCurrentStreakZeroAfterGap() {
+        let calendar = Calendar.current
+        let now = Date()
+        let twoDaysAgo = calendar.date(byAdding: .day, value: -2, to: calendar.startOfDay(for: now))!
+        let threeDaysAgo = calendar.date(byAdding: .day, value: -3, to: calendar.startOfDay(for: now))!
+
+        let messages = [
+            userMessage("a", at: threeDaysAgo),
+            userMessage("b", at: twoDaysAgo)
         ]
         let session = makeSession(modelID: nil, messages: messages)
         let stats = AgentUsageStats.overview(for: [session], now: now)
@@ -711,6 +993,7 @@ extension WillDeepTests {
         #expect(firstDiagnostics.stableCharacters == stable.count)
         #expect(stable.contains("Reply in Simplified Chinese."))
         #expect(stable.contains("never hardcode user-visible JSX/TSX strings"))
+        #expect(stable.contains("For small datasets (about 6 items or fewer), avoid Markdown tables"))
         #expect(stable.contains("Reference code as `path/to/file.swift:42`"))
         #expect(stable.contains("batch them into one assistant turn"))
         #expect(stable.contains("Never log, echo, persist, or expose secrets"))

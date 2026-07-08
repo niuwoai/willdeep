@@ -25,8 +25,8 @@ struct AgentUsageOverview: Equatable {
     /// Distinct calendar days (user's current timezone) that saw at
     /// least one message.
     var activeDays: Int
-    /// Length of the most recent run of consecutive active days that
-    /// includes today (or 0 if today is empty).
+    /// Length of the most recent run of consecutive active days. If
+    /// today is still empty, the run ending yesterday remains current.
     var currentStreak: Int
     /// Length of the longest run of consecutive active days ever.
     var longestStreak: Int
@@ -504,11 +504,21 @@ enum AgentUsageStats {
             }
         }
 
-        // Current streak only counts if today is active (and walks
-        // backward day-by-day from today).
+        // If today has not started yet, keep the streak ending
+        // yesterday visible instead of dropping the dashboard to 0.
         let today = calendar.startOfDay(for: now)
+        let yesterday = calendar.date(byAdding: .day, value: -1, to: today)
+        let currentAnchor: Date
+        if uniqueDays.contains(today) {
+            currentAnchor = today
+        } else if let yesterday, uniqueDays.contains(yesterday) {
+            currentAnchor = yesterday
+        } else {
+            return (0, longest)
+        }
+
         var current = 0
-        var cursor = today
+        var cursor = currentAnchor
         while uniqueDays.contains(cursor) {
             current += 1
             guard let prev = calendar.date(byAdding: .day, value: -1, to: cursor) else { break }

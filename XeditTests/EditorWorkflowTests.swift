@@ -37,19 +37,12 @@ extension WillDeepTests {
         #expect(decoded.path == path)
     }
 
-    @Test("plain launch routes the initial empty editor window to Agent")
-    func testPlainLaunchRoutesInitialEditorToAgent() {
-        #expect(InitialEditorLaunchRoute.shouldRoutePlainLaunchToAgent(
-            externalEditorOpenSeen: false,
-            didRoutePlainLaunch: false
-        ))
-        #expect(!InitialEditorLaunchRoute.shouldRoutePlainLaunchToAgent(
-            externalEditorOpenSeen: true,
-            didRoutePlainLaunch: false
-        ))
-        #expect(!InitialEditorLaunchRoute.shouldRoutePlainLaunchToAgent(
-            externalEditorOpenSeen: false,
-            didRoutePlainLaunch: true
+    @Test("plain launch opens Agent directly while explicit URLs open Editor")
+    func testPlainLaunchOpensAgentDirectly() {
+        #expect(InitialLaunchPolicy.plainLaunchWindowID == AgentWindowID.value)
+        #expect(!InitialLaunchPolicy.shouldOpenEditor(forInitialExternalURL: nil))
+        #expect(InitialLaunchPolicy.shouldOpenEditor(
+            forInitialExternalURL: URL(fileURLWithPath: "/tmp/willdeep-explicit-open.md")
         ))
     }
 
@@ -307,6 +300,26 @@ extension WillDeepTests {
         #expect(appState.activeTab?.isUntitled == true)
         #expect(appState.tabs.first { $0.id == firstID }?.content == "draft")
         #expect(appState.tabs.first { $0.id == firstID }?.isEdited == true)
+    }
+
+    @MainActor
+    @Test("showEditor opens an untitled tab when editor has no tabs")
+    func testShowEditorCreatesUntitledTabWhenEmpty() {
+        let appState = AppState()
+        appState.isAgentPanelVisible = true
+        appState.isPreviewVisible = true
+        appState.isEditorTerminalVisible = true
+        appState.isFocusModeEnabled = true
+
+        _ = appState.showEditor()
+
+        #expect(appState.tabs.count == 1)
+        #expect(appState.activeTab?.title == "Untitled")
+        #expect(appState.activeTab?.isUntitled == true)
+        #expect(appState.isAgentPanelVisible == false)
+        #expect(appState.isPreviewVisible == false)
+        #expect(appState.isEditorTerminalVisible == false)
+        #expect(appState.isFocusModeEnabled == false)
     }
 
     @Test("syntax highlighting selection overrides detected file language")

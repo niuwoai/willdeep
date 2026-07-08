@@ -603,12 +603,9 @@ extension AppState: AgentMobileGatewayControlling {
             }
         } else {
             decision = .denied(reason: "Denied from Android")
-            runtime.toolCalls[index].status = .denied
-            runtime.toolCalls[index].errorMessage = "Denied from Android"
         }
 
-        runtime.toolDecisionWaiter?.resume(returning: decision)
-        runtime.toolDecisionWaiter = nil
+        resolveAgentToolCallDecision(id: call.id, decision: decision)
         return .ok(sessionID: runtime.id, message: approved ? "Tool approved" : "Tool rejected")
     }
 

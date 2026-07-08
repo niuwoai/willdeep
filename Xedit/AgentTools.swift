@@ -191,7 +191,9 @@ enum AgentToolRunner {
             case "some_im_cancel_media_task":
                 result = try await AgentMediaTools.someIMCancelMediaTask(arguments: activeArguments, context: activeContext)
             case "generate_image":
-                result = try await generateImage(arguments: activeArguments)
+                result = try await generateImage(arguments: activeArguments, context: activeContext)
+            case "edit_generated_image":
+                result = try await AgentMediaTools.editGeneratedImage(arguments: activeArguments, context: activeContext)
             case "visual_qa_screenshot":
                 result = try await AgentVisualQATools.analyzeScreenshot(arguments: activeArguments, context: activeContext)
             case "capture_screenshot":
@@ -495,25 +497,17 @@ enum AgentToolRunner {
         )
     }
 
-    private static func generateImage(arguments: [String: AgentJSONValue]) async throws -> AgentToolResult {
+    private static func generateImage(
+        arguments: [String: AgentJSONValue],
+        context: AgentToolContext
+    ) async throws -> AgentToolResult {
         guard let prompt = arguments["prompt"]?.stringValue()?.trimmingCharacters(in: .whitespacesAndNewlines),
               !prompt.isEmpty else {
             throw AgentToolError.missingArgument("prompt")
         }
-        let rawSize = arguments["size"]?.stringValue()?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-        let size = rawSize.isEmpty ? "1024x1024" : rawSize
-        let rawModel = arguments["model"]?.stringValue()?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-        let model = rawModel.isEmpty ? nil : rawModel
-        let image = try await SomeIMClient.generateImage(prompt: prompt, size: size, model: model)
-        return AgentToolResult(
-            summary: "Generated image: \(image.fileURL.lastPathComponent)",
-            payload: """
-            Generated image with some.im model `\(image.model)`.
-
-            Local file:
-            \(image.fileURL.path)
-            """
-        )
+        var mediaArguments = arguments
+        mediaArguments["kind"] = .string("image_generation")
+        return try await AgentMediaTools.someIMCreateMediaTask(arguments: mediaArguments, context: context)
     }
 
     // MARK: run_command
@@ -526,6 +520,14 @@ enum AgentToolRunner {
         "/opt/homebrew/sbin",
         "/usr/local/bin",
         "/usr/local/sbin",
+        // User-local install prefixes. When the app is launched from
+        // Finder/Dock it inherits the minimal launchd PATH, so delegated
+        // CLIs (claude/codex/cursor/cline) and the child processes they
+        // fork — node, uv, python, git — can't find tools installed here.
+        // We resolve the four agent executables by absolute path already,
+        // but their children still need these on PATH.
+        "\(NSHomeDirectory())/.local/bin",
+        "\(NSHomeDirectory())/.cargo/bin",
         "/usr/bin",
         "/bin",
         "/usr/sbin",
@@ -888,11 +890,26 @@ enum AgentToolRunner {
         ], environment: environment, isExecutable: isExecutable)
     }
 
+    /// Locate the Cursor Agent CLI. The standalone installer
+    /// (`curl https://cursor.com/install | bash`) drops a `cursor-agent`
+    /// binary in `~/.local/bin` and does NOT provide a `cursor` command,
+    /// so prefer `cursor-agent`. Fall back to the `cursor` editor launcher
+    /// (installed by Cursor.app), which forwards its `agent` subcommand to
+    /// the same headless agent. Both accept the `agent …` command we
+    /// compose, so callers don't need to know which one was found.
     nonisolated static func cursorAgentExecutablePath(
         environment: [String: String] = shellEnvironment(),
         isExecutable: (String) -> Bool = { FileManager.default.isExecutableFile(atPath: $0) }
     ) -> String? {
-        executablePath(commandName: "cursor", preferredPaths: [
+        let home = NSHomeDirectory()
+        if let standalone = executablePath(commandName: "cursor-agent", preferredPaths: [
+            "\(home)/.local/bin/cursor-agent",
+            "/opt/homebrew/bin/cursor-agent",
+            "/usr/local/bin/cursor-agent",
+        ], environment: environment, isExecutable: isExecutable) {
+            return standalone
+        }
+        return executablePath(commandName: "cursor", preferredPaths: [
             "/usr/local/bin/cursor",
             "/opt/homebrew/bin/cursor",
         ], environment: environment, isExecutable: isExecutable)

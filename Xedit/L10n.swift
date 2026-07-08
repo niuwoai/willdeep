@@ -12,6 +12,23 @@ import Foundation
 // would otherwise be unusable from nonisolated model code (e.g. the
 // persisted session graph's displayName helpers).
 nonisolated enum L10n {
+    enum About {
+        static let appName = String(localized: "about.app-name", defaultValue: "WillDeep")
+        static let buildLabel = String(localized: "about.build-label", defaultValue: "Build")
+        static let bundleIDLabel = String(localized: "about.bundle-id-label", defaultValue: "Bundle ID")
+        static let copyVersionInfo = String(localized: "about.copy-version-info", defaultValue: "Copy Version Info")
+        static let menuItem = String(localized: "about.menu-item", defaultValue: "About WillDeep")
+        static let unknownValue = String(localized: "about.unknown-value", defaultValue: "Unknown")
+        static func versionBadge(_ a1: String) -> String {
+            let template = String(localized: "about.version-badge", defaultValue: "v%@")
+            return String(format: template, a1)
+        }
+        static let versionDetails = String(localized: "about.version-details", defaultValue: "Version Details")
+        static let versionLabel = String(localized: "about.version-label", defaultValue: "Version")
+        static let website = String(localized: "about.website", defaultValue: "Website")
+        static let windowTitle = String(localized: "about.window-title", defaultValue: "About WillDeep")
+    }
+
     enum AppUpdate {
         static let download = String(localized: "app-update.download", defaultValue: "Download")
         static let later = String(localized: "app-update.later", defaultValue: "Later")
@@ -49,6 +66,20 @@ nonisolated enum L10n {
     enum AgentTextAttachment {
         static let pastedFilename = String(localized: "agent-text-attachment.pasted-filename", defaultValue: "Pasted text.txt")
         static let removeHelp = String(localized: "agent-text-attachment.remove-help", defaultValue: "Remove pasted text")
+    }
+
+    /// some.im "省心托管" managed-routing composer entries.
+    enum AgentManagedRouting {
+        static let title = String(localized: "agent-managed-routing.title", defaultValue: "Managed")
+        static let titleHigh = String(localized: "agent-managed-routing.title-high", defaultValue: "Managed · High")
+        static let titlePremium = String(localized: "agent-managed-routing.title-premium", defaultValue: "Managed · Premium")
+        static let reset = String(localized: "agent-managed-routing.reset", defaultValue: "Reset managed tier")
+        static let footerPrefix = String(localized: "agent-managed-routing.footer-prefix", defaultValue: "Managed")
+    }
+
+    enum AgentGeneratedImage {
+        static let quoteAction = String(localized: "agent-generated-image.quote-action", defaultValue: "Quote Image")
+        static let quoteHelp = String(localized: "agent-generated-image.quote-help", defaultValue: "Reference this generated image in your next reply without uploading it again.")
     }
 
     enum AgentSelection {
@@ -280,8 +311,8 @@ nonisolated enum L10n {
     enum Onboarding {
         enum SomeIM {
             static let title = String(localized: "onboarding.some-im.title", defaultValue: "Connect some.im")
-            static let subtitle = String(localized: "onboarding.some-im.subtitle", defaultValue: "Enter your email, verify the code, and WillDeep will configure some.im with the default someim-auto-flash model.")
-            static let note = String(localized: "onboarding.some-im.note", defaultValue: "New some.im accounts receive the current signup bonus. WillDeep shows the remaining balance as credits.")
+            static let subtitle = String(localized: "onboarding.some-im.subtitle", defaultValue: "Open some.im in your browser, sign in, then return to WillDeep. WillDeep will configure chat, image/video generation, and vision fallback automatically.")
+            static let note = String(localized: "onboarding.some-im.note", defaultValue: "Recommended. You can skip this and use your own API key/model setup, but some.im avoids separate vision-model wiring.")
         }
         enum Welcome {
             static let title = String(localized: "onboarding.welcome.title", defaultValue: "Welcome to WillDeep")
@@ -297,9 +328,18 @@ nonisolated enum L10n {
             static let labelBaseURL = String(localized: "onboarding.provider.label-base-url", defaultValue: "Base URL")
             static let labelAPIKey = String(localized: "onboarding.provider.label-api-key", defaultValue: "API key")
             static let labelModel = String(localized: "onboarding.provider.label-model", defaultValue: "Default model")
+            static let someIMRecommendation = String(localized: "onboarding.provider.some-im-recommendation", defaultValue: "Recommendation: connect some.im in the next step if you want one setup for chat, images, videos, and fallback vision routing.")
+            static let visionRequired = String(localized: "onboarding.provider.vision-required", defaultValue: "This chat model does not accept images. Add a VL/vision provider so WillDeep can describe pasted images before sending them to the text model.")
+            static let labelVisionProvider = String(localized: "onboarding.provider.label-vision-provider", defaultValue: "VL provider")
+            static let labelVisionBaseURL = String(localized: "onboarding.provider.label-vision-base-url", defaultValue: "VL Base URL")
+            static let labelVisionAPIKey = String(localized: "onboarding.provider.label-vision-api-key", defaultValue: "VL API key")
+            static let labelVisionModel = String(localized: "onboarding.provider.label-vision-model", defaultValue: "VL model")
             static let errorUnknownPreset = String(localized: "onboarding.provider.error-unknown-preset", defaultValue: "Unknown provider preset.")
             static let errorBaseURLRequired = String(localized: "onboarding.provider.error-base-url-required", defaultValue: "Base URL is required for this provider.")
             static let errorModelRequired = String(localized: "onboarding.provider.error-model-required", defaultValue: "Please specify a model id.")
+            static let errorVisionBaseURLRequired = String(localized: "onboarding.provider.error-vision-base-url-required", defaultValue: "VL Base URL is required for this model.")
+            static let errorVisionModelRequired = String(localized: "onboarding.provider.error-vision-model-required", defaultValue: "Please specify a VL model id.")
+            static let errorVisionAPIKeyRequired = String(localized: "onboarding.provider.error-vision-api-key-required", defaultValue: "VL API key is required for this provider.")
         }
         enum Voice {
             static let title = String(localized: "onboarding.voice.title", defaultValue: "Set up voice transcription")
@@ -1218,6 +1258,8 @@ nonisolated enum L10n {
         }
         static let someIMOpenTooltip = String(localized: "sidebar.some-im.open-tooltip", defaultValue: "Open some.im with this account")
         static let someIMRefreshTooltip = String(localized: "sidebar.some-im.refresh-tooltip", defaultValue: "Refresh some.im credits")
+        static let someIMNotLoggedIn = String(localized: "sidebar.some-im.not-logged-in", defaultValue: "Not signed in")
+        static let someIMNotLoggedInTooltip = String(localized: "sidebar.some-im.not-logged-in-tooltip", defaultValue: "Open some.im integration settings")
         static let workspaceHeader = String(localized: "sidebar.workspace-header", defaultValue: "Workspaces")
         static let workspaceHeaderOpenTooltip = String(localized: "sidebar.workspace-header.open-tooltip", defaultValue: "Open another folder as a new workspace")
         static let workspaceMenuNewChat = String(localized: "sidebar.workspace-menu.new-chat", defaultValue: "New Chat in this Workspace")
@@ -1519,12 +1561,40 @@ nonisolated enum L10n {
             static let verifyingCode = String(localized: "settings.some-im.verifying-code", defaultValue: "Connecting...")
             static let refreshBalance = String(localized: "settings.some-im.refresh-balance", defaultValue: "Refresh Balance")
             static let openSomeIM = String(localized: "settings.some-im.open", defaultValue: "Open some.im")
+            static let logout = String(localized: "settings.some-im.logout", defaultValue: "Sign Out")
+            static let logoutConfirmTitle = String(localized: "settings.some-im.logout-confirm-title", defaultValue: "Sign out of some.im?")
+            static let logoutConfirmMessage = String(localized: "settings.some-im.logout-confirm-message", defaultValue: "This signs out every app on this Mac that shares this some.im login.")
+            static let loggedOut = String(localized: "settings.some-im.logged-out", defaultValue: "Signed out of some.im.")
+            static let logoutCancel = String(localized: "settings.some-im.logout-cancel", defaultValue: "Cancel")
             static let accountNotConnected = String(localized: "settings.some-im.account-not-connected", defaultValue: "Not connected")
             static let accountConnected = String(localized: "settings.some-im.account-connected", defaultValue: "Connected")
             static let creditsLabel = String(localized: "settings.some-im.credits", defaultValue: "Credits")
             static let defaultModelLabel = String(localized: "settings.some-im.default-model", defaultValue: "Default Model")
             static let codeSent = String(localized: "settings.some-im.code-sent", defaultValue: "Verification code sent.")
             static let connected = String(localized: "settings.some-im.connected", defaultValue: "some.im connected.")
+            static let browserLoginSection = String(localized: "settings.some-im.browser-login-section", defaultValue: "Browser Login")
+            static let browserLoginDescription = String(localized: "settings.some-im.browser-login-description", defaultValue: "WillDeep prepares a secure some.im sign-in request automatically. Open it in your browser, sign in, then return to WillDeep when some.im says you can continue.")
+            static let browserLoginPlaceholderTitle = String(localized: "settings.some-im.browser-login-placeholder-title", defaultValue: "Ready for browser sign-in")
+            static let browserLoginPlaceholderDescription = String(localized: "settings.some-im.browser-login-placeholder-description", defaultValue: "Open some.im in your browser to finish signing in. WillDeep will keep waiting here for the account connection.")
+            static let browserLoginQRCodeAccessibilityLabel = String(localized: "settings.some-im.browser-login-qr.accessibility-label", defaultValue: "some.im browser login QR code")
+            static let browserLoginQRCodeUnavailable = String(localized: "settings.some-im.browser-login-qr.unavailable", defaultValue: "QR code unavailable")
+            static let browserLoginCodeLabel = String(localized: "settings.some-im.browser-login-code", defaultValue: "Random Code")
+            static let generateBrowserLoginLink = String(localized: "settings.some-im.generate-browser-login-link", defaultValue: "Generate Link")
+            static let openBrowserLoginLink = String(localized: "settings.some-im.open-browser-login-link", defaultValue: "Open in Browser")
+            static let copyBrowserLoginLink = String(localized: "settings.some-im.copy-browser-login-link", defaultValue: "Copy Link")
+            static let copyBrowserLoginCode = String(localized: "settings.some-im.copy-browser-login-code", defaultValue: "Copy Code")
+            static let browserLoginReady = String(localized: "settings.some-im.browser-login-ready", defaultValue: "Browser sign-in is ready.")
+            static let browserLoginWaiting = String(localized: "settings.some-im.browser-login-waiting", defaultValue: "Waiting for browser sign-in...")
+            static let browserLoginConnected = String(localized: "settings.some-im.browser-login-connected", defaultValue: "some.im account connected.")
+            static let browserLoginExpired = String(localized: "settings.some-im.browser-login-expired", defaultValue: "Browser sign-in expired. Open some.im again to restart.")
+            static let browserLoginMissingCredentials = String(localized: "settings.some-im.browser-login-missing-credentials", defaultValue: "Browser sign-in completed, but some.im did not return WillDeep credentials. Open some.im again and try signing in.")
+            static let browserLoginConnectedTitle = String(localized: "settings.some-im.browser-login-connected-title", defaultValue: "Browser sign-in complete")
+            static func browserLoginConnectedDescription(_ a1: String) -> String {
+                String(localized: "settings.some-im.browser-login-connected-description", defaultValue: "Connected as \(a1). You can close the browser tab and continue in WillDeep.")
+            }
+            static let browserLoginOpened = String(localized: "settings.some-im.browser-login-opened", defaultValue: "some.im opened in your browser. Finish signing in there, then return to WillDeep.")
+            static let browserLoginCopied = String(localized: "settings.some-im.browser-login-copied", defaultValue: "Browser login link copied.")
+            static let browserLoginCodeCopied = String(localized: "settings.some-im.browser-login-code-copied", defaultValue: "Browser login code copied.")
             static let connectionSection = String(localized: "settings.some-im.connection-section", defaultValue: "some.im Integration")
             static let enabledToggle = String(localized: "settings.some-im.enabled-toggle", defaultValue: "Use some.im for multimodal generation")
             static let regionLabel = String(localized: "settings.some-im.region", defaultValue: "Region")
@@ -1685,7 +1755,16 @@ nonisolated enum L10n {
             static let overlayColorDarkGrayCyan = String(localized: "settings.voice.overlay.color.dark-gray-cyan", defaultValue: "Dark gray + cyan")
 
             static let headerTitle = String(localized: "settings.voice.header-title", defaultValue: "On-device Voice (SenseVoice)")
-            static let headerDescription = String(localized: "settings.voice.header-description", defaultValue: "Push-to-talk in the composer transcribes 100% on-device. Nothing leaves your Mac.")
+            static let headerDescription = String(localized: "settings.voice.header-description", defaultValue: "Push-to-talk in the composer transcribes on-device. Optional AI cleanup can polish the result after transcription.")
+            static let cleanupSection = String(localized: "settings.voice.cleanup.section", defaultValue: "AI Cleanup")
+            static let cleanupModeLabel = String(localized: "settings.voice.cleanup.mode", defaultValue: "After transcription")
+            static let cleanupOff = String(localized: "settings.voice.cleanup.off", defaultValue: "Off")
+            static let cleanupPunctuation = String(localized: "settings.voice.cleanup.punctuation", defaultValue: "Punctuation + paragraphs")
+            static let cleanupBulletPoints = String(localized: "settings.voice.cleanup.bullet-points", defaultValue: "Structure into points")
+            static let cleanupOffDescription = String(localized: "settings.voice.cleanup.off-description", defaultValue: "Append the local transcript exactly as produced by SenseVoice.")
+            static let cleanupPunctuationDescription = String(localized: "settings.voice.cleanup.punctuation-description", defaultValue: "Use the configured AI model to add punctuation, paragraphs, and light wording cleanup without summarizing.")
+            static let cleanupBulletPointsDescription = String(localized: "settings.voice.cleanup.bullet-points-description", defaultValue: "Use the configured AI model to lightly organize longer dictation into a few clear points.")
+            static let cleanupPrivacyNote = String(localized: "settings.voice.cleanup.privacy-note", defaultValue: "When AI cleanup is enabled, the transcribed text is sent to your configured AI provider. Voice audio still stays on this Mac.")
             static let languageSection = String(localized: "settings.voice.language.section", defaultValue: "Transcription Language")
             static let languageLabel = String(localized: "settings.voice.language.label", defaultValue: "Language")
             static let languageDescription = String(localized: "settings.voice.language.description", defaultValue: "Follow system is the default. Choose Japanese or another fixed language when you need deterministic voice-input testing.")
@@ -2702,6 +2781,15 @@ nonisolated enum L10n {
             let template = String(localized: "transcript.message-middle-omitted.text", defaultValue: "… %@ characters omitted; showing message start and end …")
             return String(format: template, a1)
         }
+        static let searchPlaceholder = String(localized: "transcript.search.placeholder", defaultValue: "Search conversation...")
+        static let searchNoResults = String(localized: "transcript.search.no-results", defaultValue: "No results")
+        static func searchResultPosition(_ a1: String, _ a2: String) -> String {
+            let template = String(localized: "transcript.search.result-position", defaultValue: "%1$@ / %2$@ results")
+            return String(format: template, a1, a2)
+        }
+        static let searchPreviousHelp = String(localized: "transcript.search.previous-help", defaultValue: "Previous result")
+        static let searchNextHelp = String(localized: "transcript.search.next-help", defaultValue: "Next result")
+        static let searchCloseHelp = String(localized: "transcript.search.close-help", defaultValue: "Close conversation search")
         static let olderHistoryHelp = String(localized: "transcript.older-history.help", defaultValue: "Open in standalone window to view full conversation history")
         static func olderHistoryText(_ a1: String) -> String {
             let template = String(localized: "transcript.older-history.text", defaultValue: "More messages earlier in conversation")

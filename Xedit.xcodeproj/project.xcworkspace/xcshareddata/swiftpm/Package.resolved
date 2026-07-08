@@ -1,6 +1,15 @@
 {
-  "originHash" : "34fc6ded3af11d97770b2e20b5e3cfd72f9d3309ae17ef3278b95041f16c02dc",
+  "originHash" : "aa218247f409bc0142921180605f7f2ccecb8b25bd2e3d82729120bb7a0fff4d",
   "pins" : [
+    {
+      "identity" : "someimsharedsession",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/xurenlu/SomeIMSharedSession.git",
+      "state" : {
+        "revision" : "96a91092dbb68ac8fafa98761ee36940131422b7",
+        "version" : "0.1.0"
+      }
+    },
     {
       "identity" : "swift-argument-parser",
       "kind" : "remoteSourceControl",

@@ -11,6 +11,21 @@
 
 import Foundation
 
+/// Per-request some.im context carried on `some-im` provider calls. The
+/// session id is the Agent runtime UUID; the optional workspace id is a
+/// local-only random UUID from the workspace identity store (never a path).
+/// Values originate from the session — this type only ferries them to the
+/// adapter's header injection point.
+struct SomeIMRequestContext: Equatable {
+    let sessionID: String
+    let workspaceID: String?
+
+    init(sessionID: String, workspaceID: String? = nil) {
+        self.sessionID = sessionID
+        self.workspaceID = workspaceID
+    }
+}
+
 enum AgentNetworkSupport {
     /// "No bytes seen for this long" — not a total budget. Reasoning
     /// models (Qwen3, QwQ, DeepSeek-R1, o-series, Claude extended
@@ -28,6 +43,12 @@ enum AgentNetworkSupport {
     }()
 
     static let userAgentHeaderValue: String = "WillDeep/\(appVersionHeaderValue) (macOS)"
+
+    /// some.im managed-routing context header names. Values come from the
+    /// Agent session (see `SomeIMRequestContext`) and are only attached to
+    /// `some-im` requests — never generated in this helper.
+    static let willDeepSessionHeaderName = "x-willdeep-session-id"
+    static let willDeepWorkspaceHeaderName = "x-willdeep-workspace-id"
 
     static func defaultSession() -> URLSession {
         let configuration = URLSessionConfiguration.default

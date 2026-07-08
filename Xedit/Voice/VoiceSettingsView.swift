@@ -26,6 +26,8 @@ struct VoiceSettingsView: View {
                 Divider().padding(.vertical, 4)
                 languageSection
                 Divider().padding(.vertical, 4)
+                cleanupSection
+                Divider().padding(.vertical, 4)
                 overlaySection
                 Divider().padding(.vertical, 4)
                 lifecycleSection
@@ -239,6 +241,45 @@ struct VoiceSettingsView: View {
                 .font(.caption)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
+        }
+    }
+
+    private var cleanupSection: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text(L10n.Settings.Voice.cleanupSection)
+                .font(.headline)
+
+            LabeledContent(L10n.Settings.Voice.cleanupModeLabel) {
+                Picker("", selection: $preferences.transcriptCleanupMode) {
+                    ForEach(VoiceTranscriptCleanupMode.allCases) { mode in
+                        Text(mode.displayName).tag(mode)
+                    }
+                }
+                .labelsHidden()
+                .frame(width: 260)
+            }
+
+            Text(preferences.transcriptCleanupMode.description)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+
+            if preferences.transcriptCleanupMode.usesAI {
+                HStack(alignment: .top, spacing: 8) {
+                    Image(systemName: "network")
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundStyle(.orange)
+                    Text(L10n.Settings.Voice.cleanupPrivacyNote)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                .padding(10)
+                .background(
+                    RoundedRectangle(cornerRadius: 10)
+                        .fill(Color.orange.opacity(0.08))
+                )
+            }
         }
     }
 

@@ -44,26 +44,51 @@ nonisolated enum AgentMessageOrigin: String, Codable, Equatable {
     case delegatedExternal
 }
 
-/// A user-attached image. Older sessions may still carry inline
-/// `dataBase64`; new composer attachments are file-backed so queued drafts
-/// and session JSON keep only lightweight metadata.
-nonisolated struct AgentImageAttachment: Codable, Equatable, Identifiable {
+nonisolated enum AgentImageAttachmentSource: String, Codable, Equatable, Sendable {
+    case userUpload
+    case generated
+}
+
+/// An image surfaced in the transcript. Unifies two storage models:
+/// user uploads may keep bytes inline (so older sessions round-trip through
+/// session JSON) or be file-backed so queued drafts keep only lightweight
+/// metadata (`byteCount`/`sha256`); generated images keep a small inline
+/// preview plus a workspace-local `filePath` and carry `source`/`model`/
+/// `prompt`, and quoting them sends a text marker instead of re-uploading bytes.
+nonisolated struct AgentImageAttachment: Codable, Equatable, Identifiable, Sendable {
     let id: UUID
     let mimeType: String
+    /// Inline bytes: the full image for legacy uploads, or a small preview for
+    /// generated / file-backed images. `nil` when the bytes live only on disk.
     private let inlineDataBase64: String?
-    let filePath: String?
+    var filePath: String?
     let byteCount: Int?
     let sha256: String?
-    let createdAt: Date
+    var source: AgentImageAttachmentSource?
+    var model: String?
+    var prompt: String?
+    var createdAt: Date?
 
-    init(id: UUID = UUID(), mimeType: String, dataBase64: String) {
+    init(
+        id: UUID = UUID(),
+        mimeType: String,
+        dataBase64: String,
+        source: AgentImageAttachmentSource? = nil,
+        filePath: String? = nil,
+        model: String? = nil,
+        prompt: String? = nil,
+        createdAt: Date? = nil
+    ) {
         self.id = id
         self.mimeType = mimeType
-        self.inlineDataBase64 = dataBase64
-        self.filePath = nil
+        self.inlineDataBase64 = dataBase64.isEmpty ? nil : dataBase64
+        self.filePath = filePath
         self.byteCount = Data(base64Encoded: dataBase64)?.count
         self.sha256 = nil
-        self.createdAt = Date()
+        self.source = source
+        self.model = model
+        self.prompt = prompt
+        self.createdAt = createdAt
     }
 
     init(
@@ -72,7 +97,10 @@ nonisolated struct AgentImageAttachment: Codable, Equatable, Identifiable {
         filePath: String,
         byteCount: Int? = nil,
         sha256: String? = nil,
-        createdAt: Date = Date()
+        source: AgentImageAttachmentSource? = nil,
+        model: String? = nil,
+        prompt: String? = nil,
+        createdAt: Date? = nil
     ) {
         self.id = id
         self.mimeType = mimeType
@@ -80,11 +108,14 @@ nonisolated struct AgentImageAttachment: Codable, Equatable, Identifiable {
         self.filePath = filePath
         self.byteCount = byteCount
         self.sha256 = sha256
+        self.source = source
+        self.model = model
+        self.prompt = prompt
         self.createdAt = createdAt
     }
 
     enum CodingKeys: String, CodingKey {
-        case id, mimeType, dataBase64, filePath, byteCount, sha256, createdAt
+        case id, mimeType, dataBase64, filePath, byteCount, sha256, source, model, prompt, createdAt
     }
 
     init(from decoder: Decoder) throws {
@@ -96,7 +127,10 @@ nonisolated struct AgentImageAttachment: Codable, Equatable, Identifiable {
         byteCount = try container.decodeIfPresent(Int.self, forKey: .byteCount)
             ?? inlineDataBase64.flatMap { Data(base64Encoded: $0)?.count }
         sha256 = try container.decodeIfPresent(String.self, forKey: .sha256)
-        createdAt = try container.decodeIfPresent(Date.self, forKey: .createdAt) ?? Date()
+        source = try container.decodeIfPresent(AgentImageAttachmentSource.self, forKey: .source)
+        model = try container.decodeIfPresent(String.self, forKey: .model)
+        prompt = try container.decodeIfPresent(String.self, forKey: .prompt)
+        createdAt = try container.decodeIfPresent(Date.self, forKey: .createdAt)
     }
 
     func encode(to encoder: Encoder) throws {
@@ -109,13 +143,14 @@ nonisolated struct AgentImageAttachment: Codable, Equatable, Identifiable {
         try container.encodeIfPresent(filePath, forKey: .filePath)
         try container.encodeIfPresent(byteCount, forKey: .byteCount)
         try container.encodeIfPresent(sha256, forKey: .sha256)
-        try container.encode(createdAt, forKey: .createdAt)
+        try container.encodeIfPresent(source, forKey: .source)
+        try container.encodeIfPresent(model, forKey: .model)
+        try container.encodeIfPresent(prompt, forKey: .prompt)
+        try container.encodeIfPresent(createdAt, forKey: .createdAt)
     }
 
-    nonisolated var dataURL: String {
-        "data:\(mimeType);base64,\(dataBase64)"
-    }
-
+    /// Image bytes as base64, read from the inline copy if present, otherwise
+    /// lazily from the file-backed copy.
     nonisolated var dataBase64: String {
         if let inlineDataBase64 {
             return inlineDataBase64
@@ -125,6 +160,10 @@ nonisolated struct AgentImageAttachment: Codable, Equatable, Identifiable {
             return ""
         }
         return data.base64EncodedString()
+    }
+
+    nonisolated var dataURL: String {
+        "data:\(mimeType);base64,\(dataBase64)"
     }
 
     nonisolated var fileURL: URL? {
@@ -141,6 +180,19 @@ nonisolated struct AgentImageAttachment: Codable, Equatable, Identifiable {
             return "file|\(filePath)|\(sha256 ?? "")"
         }
         return "inline|\(id.uuidString)|\(inlineDataBase64?.count ?? 0)"
+    }
+
+    nonisolated var generatedReferenceMarker: String? {
+        guard source == .generated,
+              let filePath = filePath?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !filePath.isEmpty else {
+            return nil
+        }
+        return AgentGeneratedImageReference.marker(
+            id: id.uuidString,
+            path: filePath,
+            model: model
+        )
     }
 
     nonisolated static func fileBacked(
@@ -172,7 +224,7 @@ nonisolated struct AgentImageAttachment: Codable, Equatable, Identifiable {
               let data = Data(base64Encoded: inlineDataBase64) else {
             return self
         }
-        return try Self.fileBacked(data: data, mimeType: mimeType, id: id, createdAt: createdAt)
+        return try Self.fileBacked(data: data, mimeType: mimeType, id: id, createdAt: createdAt ?? Date())
     }
 
     nonisolated func removeStoredFileIfNeeded() {
@@ -210,6 +262,55 @@ nonisolated struct AgentImageAttachment: Codable, Equatable, Identifiable {
         SHA256.hash(data: data)
             .map { String(format: "%02x", $0) }
             .joined()
+    }
+}
+
+nonisolated enum AgentGeneratedImageReference {
+    static let tagName = "generated-image-reference"
+
+    static func marker(id: String, path: String, model: String?) -> String {
+        var attributes = [
+            "id=\"\(escape(id))\"",
+            "path=\"\(escape(path))\""
+        ]
+        if let model = model?.trimmingCharacters(in: .whitespacesAndNewlines), !model.isEmpty {
+            attributes.append("model=\"\(escape(model))\"")
+        }
+        return "<\(tagName) \(attributes.joined(separator: " ")) />"
+    }
+
+    static func path(from marker: String) -> String? {
+        attribute("path", in: marker)
+    }
+
+    private static func escape(_ raw: String) -> String {
+        raw
+            .replacingOccurrences(of: "&", with: "&amp;")
+            .replacingOccurrences(of: "\"", with: "&quot;")
+            .replacingOccurrences(of: "<", with: "&lt;")
+            .replacingOccurrences(of: ">", with: "&gt;")
+    }
+
+    private static func unescape(_ raw: String) -> String {
+        raw
+            .replacingOccurrences(of: "&quot;", with: "\"")
+            .replacingOccurrences(of: "&lt;", with: "<")
+            .replacingOccurrences(of: "&gt;", with: ">")
+            .replacingOccurrences(of: "&amp;", with: "&")
+    }
+
+    private static func attribute(_ name: String, in marker: String) -> String? {
+        guard marker.contains(tagName),
+              let nameRange = marker.range(of: "\(name)=\"") else {
+            return nil
+        }
+        let valueStart = nameRange.upperBound
+        guard let valueEnd = marker[valueStart...].firstIndex(of: "\"") else {
+            return nil
+        }
+        let value = String(marker[valueStart..<valueEnd])
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        return value.isEmpty ? nil : unescape(value)
     }
 }
 
@@ -310,7 +411,9 @@ nonisolated struct AgentMessage: Identifiable, Codable, Equatable {
     /// because DashScope returns HTTP 400 otherwise. Empty for providers
     /// that don't split reasoning out.
     var reasoningContent: String?
-    /// User-attached images, only meaningful for `role == .user`.
+    /// Images attached to the visible message. User messages carry pasted
+    /// uploads; assistant messages can carry generated-image previews whose
+    /// original files live in the workspace and can be quoted by reference.
     var images: [AgentImageAttachment]
     /// Long pasted text captured as compact `.txt` attachments. The
     /// visible bubble renders chips, while AgentClient includes the
@@ -357,6 +460,10 @@ nonisolated struct AgentMessage: Identifiable, Codable, Equatable {
     /// the fixed prefix before dynamic workspace/memory/history blocks.
     var requestPrefixHash: String?
     var requestStablePrefixCharacters: Int?
+    /// some.im managed-routing decision for this assistant turn (nil on
+    /// non-managed turns). Records the resolved model / tier / domain /
+    /// complexity plus fallback and escalation markers for observability.
+    var managedRoute: AgentManagedRouteDecision?
     /// 1.81.0-rc1：role == .workflowReport 时挂载的 workflow 运行数据。
     /// engine 边跑边 mutate 这里的字段（subAgents 状态、totalUsageTokens、
     /// summary 等），UI 卡片读它显示进度。其它 role 一定是 nil；旧版本
@@ -388,6 +495,7 @@ nonisolated struct AgentMessage: Identifiable, Codable, Equatable {
         originLabel: String? = nil,
         requestPrefixHash: String? = nil,
         requestStablePrefixCharacters: Int? = nil,
+        managedRoute: AgentManagedRouteDecision? = nil,
         workflowReport: WorkflowReport? = nil,
         widget: AgentWidget? = nil,
         createdAt: Date = Date()
@@ -411,6 +519,7 @@ nonisolated struct AgentMessage: Identifiable, Codable, Equatable {
         self.originLabel = originLabel
         self.requestPrefixHash = requestPrefixHash
         self.requestStablePrefixCharacters = requestStablePrefixCharacters
+        self.managedRoute = managedRoute
         self.workflowReport = workflowReport
         self.widget = widget
         self.createdAt = createdAt
@@ -424,6 +533,7 @@ nonisolated struct AgentMessage: Identifiable, Codable, Equatable {
         case cachedPromptTokens, cacheWritePromptTokens, reasoningTokens
         case elapsedSeconds
         case origin, originLabel, requestPrefixHash, requestStablePrefixCharacters
+        case managedRoute
         case createdAt
     }
 
@@ -448,6 +558,7 @@ nonisolated struct AgentMessage: Identifiable, Codable, Equatable {
         originLabel = try container.decodeIfPresent(String.self, forKey: .originLabel)
         requestPrefixHash = try container.decodeIfPresent(String.self, forKey: .requestPrefixHash)
         requestStablePrefixCharacters = try container.decodeIfPresent(Int.self, forKey: .requestStablePrefixCharacters)
+        managedRoute = try container.decodeIfPresent(AgentManagedRouteDecision.self, forKey: .managedRoute)
         createdAt = try container.decode(Date.self, forKey: .createdAt)
     }
 }

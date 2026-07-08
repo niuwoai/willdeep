@@ -77,6 +77,32 @@ struct MobileGatewayCoordinatorTests {
     }
 
     @Test
+    func pairingPayloadQRCodeURLUsesCompactParamsForH5AndAppScanners() throws {
+        let payload = MobileGatewayPairingPayload(
+            baseURL: "https://j.niuwoai.com",
+            pairingToken: "relay-secret",
+            protocolVersion: "mobile-gateway.v1",
+            desktopName: "Rocky Mac",
+            expiresAt: Date(timeIntervalSince1970: 1_800_000_000),
+            relayBaseURL: "https://j.niuwoai.com",
+            relayRoom: "room-a",
+            relayToken: "relay-secret"
+        )
+        let url = payload.qrURLString(h5BaseURL: try #require(URL(string: "https://h5.example.com/mobile")))
+        let components = try #require(URLComponents(string: url))
+        let items = Dictionary(uniqueKeysWithValues: (components.queryItems ?? []).compactMap { item in
+            item.value.map { (item.name, $0) }
+        })
+
+        #expect(components.scheme == "https")
+        #expect(components.host == "h5.example.com")
+        #expect(items["r"] == "room-a")
+        #expect(items["t"] == "relay-secret")
+        #expect(items["p"] == nil)
+        #expect(url.count < 70)
+    }
+
+    @Test
     func regenerateRelayRoomProducesFreshRoom() throws {
         let defaults = try #require(UserDefaults(suiteName: "willdeep-mobile-gateway-room-\(UUID().uuidString)"))
         let first = MobileGatewaySettingsStore.regenerateRelayRoom(defaults: defaults)

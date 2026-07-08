@@ -44,6 +44,38 @@ jobs:
           swift --version
           ruby --version
 
+      # The Xedit target depends on the PRIVATE Swift package
+      # github.com/xurenlu/SomeIMSharedSession. GITHUB_TOKEN can't read another
+      # private repo, so authenticate SPM with a read-only deploy key stored in
+      # the SOMEIM_DEPLOY_KEY repo secret. The https→ssh rewrite is scoped to
+      # ONLY that package so the public SwiftTerm dependency keeps resolving
+      # anonymously over https. Locally none of this is needed — a developer's
+      # own git insteadOf/SSH key already covers the clone.
+      - name: Configure private SPM access
+        env:
+          SOMEIM_DEPLOY_KEY: ${{ secrets.SOMEIM_DEPLOY_KEY }}
+        run: |
+          if [ -z "$SOMEIM_DEPLOY_KEY" ]; then
+            echo "::warning::SOMEIM_DEPLOY_KEY is not set — the private SomeIMSharedSession package will fail to resolve."
+            exit 0
+          fi
+          mkdir -p ~/.ssh
+          printf '%s\n' "$SOMEIM_DEPLOY_KEY" > ~/.ssh/someim_deploy_key
+          chmod 600 ~/.ssh/someim_deploy_key
+          ssh-keyscan -t ed25519,rsa github.com >> ~/.ssh/known_hosts 2>/dev/null
+          {
+            echo "Host github.com"
+            echo "  HostName github.com"
+            echo "  User git"
+            echo "  IdentityFile ~/.ssh/someim_deploy_key"
+            echo "  IdentitiesOnly yes"
+          } >> ~/.ssh/config
+          chmod 600 ~/.ssh/config
+          git config --global \
+            url."git@github.com:xurenlu/SomeIMSharedSession".insteadOf \
+            "https://github.com/xurenlu/SomeIMSharedSession"
+          echo "Configured private SPM access via read-only deploy key."
+
       - name: List schemes
         run: xcodebuild -project Xedit.xcodeproj -list
 

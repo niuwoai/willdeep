@@ -99,7 +99,8 @@ extension EditorSettingsTab {
         case .localAgents, .remoteRuntimes: return .runtimes
         case .mobileGateway: return .mobileGateway
         case .terminal: return .terminal
-        case .someIM, .replicate, .connectors: return .integrations
+        case .someIM: return .someIM
+        case .replicate, .connectors: return .integrations
         case .voice: return .voice
         }
     }
@@ -134,8 +135,9 @@ extension EditorSettingsTab {
 enum SettingsGroup: Hashable, CaseIterable, Identifiable {
     case editor
     case ai
-    case runtimes
+    case someIM
     case mobileGateway
+    case runtimes
     case integrations
     case terminal
     case voice
@@ -148,9 +150,10 @@ enum SettingsGroup: Hashable, CaseIterable, Identifiable {
         switch self {
         case .editor: return [.typography, .appearance, .workspace]
         case .ai: return [.agent, .memory, .rules, .skills, .mcp, .tools]
-        case .runtimes: return [.localAgents, .remoteRuntimes]
+        case .someIM: return [.someIM]
         case .mobileGateway: return [.mobileGateway]
-        case .integrations: return [.someIM, .replicate, .connectors]
+        case .runtimes: return [.localAgents, .remoteRuntimes]
+        case .integrations: return [.replicate, .connectors]
         case .terminal: return [.terminal]
         case .voice: return [.voice]
         }
@@ -160,6 +163,8 @@ enum SettingsGroup: Hashable, CaseIterable, Identifiable {
         switch self {
         case .editor: return String(localized: "settings.group.editor", defaultValue: "Editor")
         case .ai: return String(localized: "settings.group.ai", defaultValue: "AI Agents")
+        case .someIM: return L10n.Settings.tabSomeIM
+        case .mobileGateway: return L10n.Settings.tabMobileGateway
         case .runtimes: return String(localized: "settings.group.runtimes", defaultValue: "Runtimes")
         case .mobileGateway: return L10n.Settings.tabMobileGateway
         case .integrations: return String(localized: "settings.group.integrations", defaultValue: "Integrations")
@@ -172,6 +177,8 @@ enum SettingsGroup: Hashable, CaseIterable, Identifiable {
         switch self {
         case .editor: return "textformat"
         case .ai: return "sparkles"
+        case .someIM: return "person.crop.circle.badge.checkmark"
+        case .mobileGateway: return "iphone.radiowaves.left.and.right"
         case .runtimes: return "network"
         case .mobileGateway: return "iphone.gen3.radiowaves.left.and.right"
         case .integrations: return "puzzlepiece.extension"
@@ -186,6 +193,7 @@ final class EditorSettingsNavigation: ObservableObject {
     static let shared = EditorSettingsNavigation()
 
     @Published var selectedTab: EditorSettingsTab = .typography
+    @Published var someIMBrowserLoginAutogenerateRequestID: UUID?
     private var fallbackSettingsWindowController: NSWindowController?
 
     private init() {}
@@ -193,6 +201,22 @@ final class EditorSettingsNavigation: ObservableObject {
     func open(_ tab: EditorSettingsTab, appState: AppState? = nil) {
         selectedTab = tab
         openWindow(appState: appState)
+        DispatchQueue.main.async { [weak self] in
+            self?.selectedTab = tab
+        }
+    }
+
+    func openSomeIM(autogenerateBrowserLogin: Bool, appState: AppState? = nil) {
+        if autogenerateBrowserLogin {
+            someIMBrowserLoginAutogenerateRequestID = UUID()
+            selectedTab = .someIM
+            openFallbackSettingsWindow(appState: appState)
+            DispatchQueue.main.async { [weak self] in
+                self?.selectedTab = .someIM
+            }
+            return
+        }
+        open(.someIM, appState: appState)
     }
 
     /// Open the settings window without changing the selected tab — used

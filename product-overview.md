@@ -1,6 +1,6 @@
 # WillDeep Product Overview
 
-> Last updated: 2026-07-07 | Current version: v1.133.0-rc1
+> Last updated: 2026-07-08 | Current version: v1.136.0-rc26
 
 ## Positioning
 
@@ -14,19 +14,46 @@ WillDeep is configured for non-App-Store distribution without App Sandbox so it 
 
 WillDeep 是 SwiftUI + AppKit 桥接的 macOS 应用，单进程多窗口。代码层次：
 
+- **some.im 登录态跨 App 共享（1.136.0-rc26）** —— apiKey / sessionToken 改存共享 Keychain 访问组（Team `ZH2S7D6PL6`），由独立私有 Swift 包 `SomeIMSharedSession`（`github.com/xurenlu/SomeIMSharedSession`）收拢读写，供 WillDeep / museterm 等同签名 App 共用一份登录态：一处登录处处登录、一处登出处处登出（登录/登出经 `DistributedNotificationCenter` 广播不含密钥的变更通知，各 App 重读凭据并对账 agent provider）。首启一次性把旧 per-app Keychain 凭据迁入共享组、验证读回后删旧；`saveAPIKey("")` 改为 no-op 杜绝空串误覆盖。设置页新增带二次确认的「退出登录」。未签名/dev 走 `SOMEIM_SESSION_FILE` 环境变量逃生舱；CI 用只读 deploy key 解析该私有包。
+- **some.im 生图默认异步化（1.136.0-rc25）** —— `generate_image` 复用 `some_im_create_media_task`，普通 Agent 生图不再阻塞等待同步 `/images/generations`，而是提交到媒体任务中心并由轮询下载产物；some.im 图片媒体任务默认端点改为 `images/async-generations`，短剧分镜/资产图片生成等复用默认 endpoint 的入口同步走异步生图接口。`SomeIMAsyncMediaClient` 的提交、轮询、取消请求显式使用 600 秒 `URLRequest.timeoutInterval`，避免客户端 120 秒 request timeout 先取消长耗时任务。
+- **some.im 省心托管动态路由（1.136.0-rc24）** —— composer 在 some.im provider 下新增「省心托管」入口：每个用户轮先用轻量裁判 `someim-judge`（底层非思考 DeepSeek）判任务域（coding/general）+ 复杂度（low/high），结合会话级「只升不降」档位动态选实际模型（`someim-coding-plan-low/high/premium`、`someim-auto-flash/pro`），裁判失败回退本地启发式。无 tool call 的输出做质检（本地确定性重复/空检测 + `someim-judge` 复核），命中明确生成故障则清掉本轮输出、升一档重试一次（每轮至多一次）。some.im 请求附带 `x-willdeep-session-id` 与本机随机 `x-willdeep-workspace-id`（只发随机 UUID、不含路径）。裁判与主模型共用同一 provider 并发槽；路由锁定每用户轮一次，tool 循环内不重判。每条 assistant 消息记录 route 决策元数据，footer 显示「托管 · Low/High/Premium」（升档 ↑、fallback ~），用户能一眼看出这条用了哪档。设计文档见 `docs/SOME_IM_MANAGED_ROUTING_DESIGN.md`。
+- **智能审批判官补位 + Goal 按风险过判官（1.136.0-rc22）** —— 两处收敛，向 Codex auto-review 语义靠拢。① 判官 key 兜底：`configurationForSafetyJudge()` 在运行时配置 apiKey 为空时，直接从当前 active provider library 条目的 Keychain 密钥补齐（读本地副本，不触发 provider-library 的 didSet 级联），消除审计日志里大量 `unavailable / missing api key` 造成的“判官没上岗、静默退回人工”。② Goal 模式不再对所有写操作一刀切放行：沙箱内非破坏性文件写与已校验公网 `web_fetch` 仍快速放行以保持自主；命令类调用（`run_command` / `terminal_send_command` / `terminal_send_control` / `call_mcp_tool`）改走与 smart 模式相同的「静态分类 → LLM 判官」闸门（Goal 隐式启用判官），判官判危险、判官不可用或需打字确认的破坏性操作 → 暂停等待人工。
+- **Agent 生成图可见引用链路（1.136.0-rc21）** —— Agent 调用 `generate_image` / some.im 图片任务后，会把生成图保存到当前 workspace（默认根目录，也可由 `output_directory` 指定子目录），并在 assistant Markdown 下方直接渲染缩略图；用户右键“引用”会向 composer 写入 `<generated-image-reference ... />` 标记，后续要求修改该图时走 `edit_generated_image` / `gpt-image-2` 参考图编辑，不再重新上传生成图。
+- **Agent 侧栏快捷入口去框（1.136.0-rc20）** —— Agent 会话区右上 Diff、Terminal、Preview、Files 快捷入口移除外层胶囊框和单个图标选中底框，只用图标颜色与字重表达当前侧栏状态。
+- **Agent 会话内搜索（1.136.0-rc19）** —— Agent 聊天区支持 `Command+F` 呼出右上角悬浮搜索入口，输入关键词后会高亮整段当前会话里的命中，显示当前序号/总数，并可用上一条/下一条按钮跳转；搜索期间自动滚动到底会暂停，避免打断用户定位。
+- **some.im 账号区紧凑点数（1.136.0-rc18）** —— Agent 左下 some.im 账号区会把百万/十亿级 credits 显示为 `46.00M` / `4.21B` 这类两位小数缩写，并补齐该区块的中英文本地化，避免中文环境继续显示英文 `credits`。
+- **Diff 侧栏打开不卡顿（1.136.0-rc17）** —— Agent 右侧 Diff 面板会在后台生成彩色 `AttributedString`，并在侧栏渲染前截断超大 diff 为摘要，避免“正在计算 diff”期间窗口被长文本处理拖住。
+- **通用生图免审核（1.136.0-rc16）** —— `generate_image` 现在是无需用户审核的 read-tier Agent 工具，普通图片生成可直接走 some.im relay 默认 `gpt-image-2`；some.im 启用状态、API key 和 prompt 校验仍由调用链保留。
+- **some.im Mac 接入文档与 Skill（1.136.0-rc15）** —— 新增 some.im macOS App 集成文档和内置 skill，沉淀浏览器登录、Keychain、provider sync、VL fallback、onboarding/settings、验证清单等接入规范，后续 Agent 修改该模块时可直接按 skill 工作流处理。
+- **Onboarding some.im 登录简化（1.136.0-rc14）** —— 首启 onboarding 的 some.im 步骤现在和设置页一致：进入步骤即自动准备浏览器登录请求，只保留“在浏览器打开”入口，用户完成 some.im 登录后回到 WillDeep 继续流程。该步骤可跳过；如果用户选择手动 API key + 模型配置，onboarding 会在主模型不支持图片输入时要求补充 VL/视觉 provider、Base URL、API key 和模型，并再次建议直接接入 some.im 以省掉多模态兜底配置。
+- **some.im 浏览器登录简化（1.136.0-rc13）** —— Settings → some.im 进入后会自动准备浏览器登录请求，界面只保留“在浏览器打开”操作；邮箱验证码表单、二维码、随机码、URL 展示和复制按钮已从设置页移除，用户在浏览器完成 some.im 登录后按页面提示回到 WillDeep 继续使用。
+- **Agent 连续天数保留（1.136.0-rc12）** —— Agent 空白页统计面板的当前连续天数现在会在今天尚未开始写时保留截至昨天的连续记录，避免当天刚开始打开 App 就被显示为 0；只有今天和昨天都没有使用记录时才视为断档。
+- **some.im 未绑定入口点击兜底（1.136.0-rc11）** —— Agent 左下角未登录 some.im 区域现在绕过系统 Settings action，直接打开 WillDeep fallback Settings 窗口；头像、文字、空白和齿轮区域都可触发 Settings → some.im 并自动生成浏览器登录链接。
+- **普通启动直进 Agent（1.136.0-rc10）** —— Agent 单例窗口现在是 App 的默认启动 Scene；不带文件/目录意图启动时直接进入 Agent mode，不再先闪出空 Editor 主窗口再延迟关闭。显式打开文件/目录、`willdeep://open?path=...` 和“显示 Editor”入口仍进入 editor mode。
+- **some.im 未绑定入口自动生成登录链接（1.136.0-rc9）** —— Agent 左下角未登录 some.im 的头像/账号区点击后会打开 Settings → some.im，并立即生成浏览器登录链接与二维码；若已有未完成链接，则恢复同一随机码轮询。
+- **some.im 浏览器登录后台轮询修复（1.136.0-rc8）** —— 设置页生成浏览器登录链接后，即使用户跳到浏览器或设置页暂时消失，WillDeep 仍继续等待 some.im `connected` 状态；再次点击“在浏览器打开”会恢复同一随机码轮询，避免网页显示完成但 Mac App 停在二维码。
+- **About 菜单接管修复（1.136.0-rc7）** —— 关于窗口入口改为由 AppDelegate 直接修补系统 App 菜单项，普通启动、Agent 窗口和重新激活后都能打开 WillDeep 自定义 About 窗口，不再落回 macOS 默认 About 面板。
+- **some.im 浏览器登录缺凭据提示（1.136.0-rc6）** —— some.im browser-status 返回 `connected` 但没有 app API key / account 时，设置页会立即显示“some.im 没有返回 WillDeep 凭据”，不再把状态降级为 unknown 后继续等待。
+- **some.im 浏览器登录回写兼容（1.136.0-rc5）** —— some.im browser-status 轮询现在兼容嵌套 `credentials`、camelCase 字段和 `customer/user` 账号形态；浏览器已完成但未返回 WillDeep 凭据时，设置页会立即提示具体原因，不再只显示等待中。
+- **移动网关短二维码（1.136.0-rc4）** —— Mobile Gateway H5 二维码从完整 JSON 的 `p` 参数改为 compact `r` / `t` 或 `b` / `k` 参数，降低二维码密度；旧 `p` payload 仍兼容。
+- **设置入口修正（1.136.0-rc3）** —— Agent 左下 some.im 未登录账号入口现在稳定打开 Settings → some.im；Mobile Gateway 从 Settings → Runtimes 的子 tab 提升为顶层设置分区。
+- **移动网关 H5 二维码（1.136.0-rc2）** —— Mobile Gateway 设置页二维码包装成 H5 URL：Android App 扫码可取认证 payload，系统相机/浏览器扫码则打开 H5 页面，H5 可继续唤起安卓版 App。
+- **自定义关于窗口（1.136.0-rc1）** —— App 菜单的 About 入口现在打开 WillDeep 自己的 SwiftUI 关于窗口，复用 museterm 的单例窗口打开方式和紧凑信息布局；窗口只展示图标、版本、构建号、Bundle ID、官网与复制版本信息操作，不迁入 MuseTerm 的基础介绍或推荐应用内容。
+- **语音输入 AI 轻度整理（1.134.0）** —— Settings → Voice 新增转写后处理选项：关闭、补标点分段、整理成要点。Composer 麦克风与 Fn push-to-talk 都会先用本机 SenseVoice 转写，再按设置决定是否调用当前配置的 AI provider 清理文本；默认关闭，开启时仅发送转写文本，音频仍留在本机。
+- **少量数据少用表格（1.135.0-rc1）** —— Agent 系统提示词新增输出格式偏好：当数据量不多（约 6 条以内）且用户没有主动要求表格时，优先使用短段落或项目符号，减少 Markdown 小表格在聊天渲染中的阅读负担。
+- **some.im 账号级集成（1.133.0-rc2）** —— some.im 从 Settings 的 Integrations 子页提升为顶层设置分区；Agent 左侧栏底部常驻 some.im 账号入口，未登录时也显示匿名头像并一键进入 some.im 设置。设置页新增带短随机码的浏览器登录链接与二维码，并携带隐藏的长配对 token；浏览器完成 some.im 登录后，WillDeep 会通过 some.im HTTPS 状态接口自动取回 app 专用 API key、customer session 与账号余额，把当前窗口从二维码切换为已登录状态。
 - **Agent 最近会话边缘栏（1.133.0-rc1）** —— 当左侧会话列表收起时，窗口左边缘提供轻量 hover 热区，滑出最近活跃会话浮层；浮层只保留有真实用户消息的最近会话，并用 workspace 前两个字符的醒目 badge 辅助区分来源。
-- **Agent 独立窗口 chrome 对齐（1.131.0-rc12）** —— Agent Window 复用透明 titlebar / full-size content chrome 配置，左侧会话列表 toggle 的固定位置真正落在 macOS 红黄绿窗口按钮右侧，sidebar 收起后仍可见可点。
-- **手机网关成为设置窗口顶级入口（1.131.0-rc11）** —— Settings 顶部 tab 直接提供 Mobile Gateway / 手机网关入口，不再藏在 Runtimes 二级分段里；原有状态栏手机入口和设置深链仍直达同一个页面。
-- **Agent 会话列表开关贴近系统窗口按钮（1.131.0-rc10）** —— 左侧会话列表 toggle 固定显示在 macOS 红黄绿窗口按钮右侧，不再跟着聊天 header 跑到会话栏右边；会话列表收起后按钮仍留在同一 chrome 区域，搜索和标题内容会避开这组窗口控件。
-- **Agent 侧边栏资源闲置释放与 Dev Server 工作区共享（1.131.0-rc9）** —— 会话侧边栏记录最后查看时间，终端、嵌入浏览器、Widget 和图片编辑器等重面板在所属会话超过 1 小时未被查看后自动收起并释放资源；Dev Server 面板按 workspace root 聚合后台 dev server / tail 任务，同一工作区的多个会话共享端口型资源视图；旧聊天历史展开也先显示轻量纯文本预览，避免长会话一次性渲染完整富文本。
+- **Editor 入口直达空白标签（1.132.0-rc3）** —— 从 Agent 顶部图标或菜单“显示 Editor”切回编辑器时，如果当前没有任何编辑标签，会自动创建一个 Untitled 空白 tab，让默认 Agent 启动流不再落到“未打开文件夹”的空态页。
+- **Agent 工具审批按调用 ID 交付（1.132.0-rc2）** —— 工具审批卡片点击后会先把决定记录到对应会话和工具 ID；执行循环尚未挂上等待者时也不会丢失点击，多张 pending 卡片并存时不会串线，已提交但未被执行循环接收的卡片会显示等待状态而不是继续露出可点击按钮。
+- **Mobile Gateway 友盟远程推送（1.132.0-rc1）** —— Android 上报友盟 device token 后，Mac 端会在工具审批、补丁审查和 `ask_user` 输入等待时触发 U-Push 自定义 payload；局域网 Go gateway 与默认互联网中继 Swift desktop peer 都支持这一能力，配置从本机 `local.properties` / 环境变量读取，密钥不进入仓库。
+- **Agent 侧边栏资源闲置释放与 Dev Server 工作区共享（1.131.0-rc9）** —— 会话侧边栏记录最后查看时间，终端、嵌入浏览器、Widget 和图片编辑器等重面板在所属会话超过 1 小时未被查看后自动收起并释放资源；Dev Server 面板按 workspace root 聚合后台 dev server / tail 任务，同一工作区的多个会话共享端口型资源视图。
 - **Agent 侧边栏状态跟随会话（1.131.0-rc8）** —— 右侧侧边栏的打开面板、选中文件/预览、媒体任务 scope 与图片编辑器输入现在保存到当前 Agent 会话；切到未打开过侧边栏的会话时自动收起，切回原会话会恢复原侧栏和关联数据，避免跨会话串台。
 - **文本模型图片转写对用户不可见（1.131.0-rc7）** —— 当主模型不支持图片输入时，Image Understanding / VL 生成的描述只进入模型上下文；用户气泡、TextKit 历史记录、旧历史预览和复制按钮继续展示用户原文与图片缩略图，不再把内部图片描述正文暴露在聊天记录中。
 - **普通启动默认 Agent 窗口（1.131.0-rc6）** —— App 冷启动不带文件/目录意图时只保留 Agent 单例窗口；命令行通用打开命令、`willdeep://open?path=...` 和 Finder 右键打开文件或目录仍进入 Editor 模式，Agent 顶部切回 Editor 的图标入口继续保留。
 - **聊天历史气泡底部裁剪修复（1.131.0-rc5）** —— TextKit 历史聊天视图会为气泡背景额外预留底部绘制余量，最后一条用户输入贴近滚动容器底部时也能完整显示圆角矩形、时间和复制区域。
-- **干净 tracked 文件编辑自动落盘与 Dev Server 面板增强（1.131.0-rc4）** —— Agent 对已存在文件调用 `edit_file` / `apply_patch` 时，如果所有目标文件都已纳入 git、当前对 HEAD 干净，并且编辑器里没有未保存缓冲区，会直接写入磁盘，不再要求用户点击 Apply；Dev Server 面板会扫描当前工作区根目录与常见前端/后端目录，支持直接启动、停止、重启前端/后端候选，并可直接 tail 用户指定日志。
-- **Composer 图片附件入队改为磁盘引用（1.131.0-rc3）** —— 新粘贴到 Agent composer 的图片先原子写入 Application Support 下的 `AgentAttachments` 目录，会话和队列只保存路径、大小、SHA-256 与 MIME 元数据；发送给视觉模型或生成缩略图时再按需读取，旧内联 `dataBase64` 会话仍保持兼容。
-- **`terminal_snapshot` 读取新鲜终端屏幕（1.131.0-rc2）** —— Agent 终端改为后台队列喂养 headless 镜像 `Terminal`，`terminal_snapshot` 从镜像读取屏幕文本，不再因主线程被流式富文本渲染占满而拿到陈旧屏幕；可见终端仍在主线程有序绘制，ZMODEM 与 echo 检测保持原有主线程亲和逻辑。
-- **Web 编程专家、Dev Server 侧栏与回复结束补滚（1.131.0-rc1）** —— 新增 `webCoding` 专家和 `activate_expert` 工具，覆盖截图生成 UI、本地 HTML/CSS/图片资源预览、Vite/Next/React/Vue 项目预览与视觉 QA；右侧 Dev Server tab 可查看 dev server 与 `tail -f` 后台任务；`show_widget(html_path:)` 以 HTML 所在目录作为本地 baseURL；AI 回复结束后聊天区会在布局稳定后补滚到底部，避免长回复停在答案中段。
+- **旧聊天历史轻量预览（1.131.0-rc4）** —— Agent transcript 顶部“对话前面还有多条消息”不再点击即打开完整富文本历史窗口；用户先展开最多 4000 字符的纯文本预览，只看角色和正文，降低长会话历史查看时的内存与主线程渲染压力。需要完整 Markdown、表格、工具摘要或复制全文时，再点预览里的“完整详情”打开独立历史窗口。
+- **干净 tracked 文件编辑自动落盘（1.131.0-rc3）** —— Agent 对已存在文件调用 `edit_file` / `apply_patch` 时，如果所有目标文件都已纳入 git、当前对 HEAD 干净，并且编辑器里没有未保存缓冲区，会直接写入磁盘，不再要求用户点击 Apply；未跟踪、已有本地改动或 App 内未保存的文件仍走 inline patch 卡片确认。
+- **Web 编程专家与 Dev Server 面板（1.131.0-rc2）** —— 新增 `webCoding` 专家，用于截图生成 UI、本地 HTML/CSS/图片资源预览、Vite/Next/React/Vue 项目预览与视觉 QA。Agent 可在需要时通过 `ask_user` + `activate_expert` 引导用户激活专家；激活后嵌入浏览器/Chrome 预览截图工具也对 Web 编程专家开放。右侧 Dev Server 面板会扫描当前工作区根目录与常见前端/后端目录，发现 Vite/Next/React/Vue、Node API、Go、Rails、FastAPI 和静态 HTML 启动候选；前端与后端分区支持直接启动、停止、重启，`tail -f` 日志可由用户直接指定并作为后台任务实时查看。`show_widget(html_path:)` 现在会把 HTML 所在目录作为本地 baseURL，允许相对 CSS/JS/图片从用户明确给出的 workspace/tmp 文件旁加载。
 - **Agent 右侧面板更多菜单去重（1.130.0-rc4）** —— 顶部快捷条已经提供的 Diff / Terminal / Preview / Files 不再重复出现在「…」下拉菜单里；更多菜单只保留任务监控、媒体任务、网页组件、图片编辑、计划等非快捷入口，面板已打开时仍保留关闭面板操作。
 - **截图工具与工具结果图片直通视觉模型（1.130.0-rc1）** —— 新增 `capture_screenshot` 工具，可截取本机 Mac 屏幕、Android 设备/模拟器（adb）或 iOS 模拟器（simctl），图片在捕获时即缩放到 ≤1568 长边再随工具结果返回。`AgentToolResult` 新增 `images` 字段、`.tool` 消息携带图片：Anthropic 等视觉模型以 `tool_result` image block 直接“看到”像素并多轮重发，DeepSeek / OpenAI Chat / Gemini 等自动降级为文本 payload（含 OCR + 保存路径，可再调 `visual_qa_screenshot`）。工具卡片内联渲染缩略图（ImageIO 下采样，避免内存失控），点击在预览中打开完整图。
 - **Mobile Gateway 设置默认收起高级参数（1.130.0-rc1）** —— 手机网关设置页不再记住上次展开高级信息的状态；每次进入都先展示连接方式、状态和配对二维码。IP、端口、协议、可执行路径等诊断项仍可手动展开；`j.niuwoai.com` 这类默认公共中继坐标再收进「自定义中继服务」，只有自建兼容 WebSocket 中继时才需要修改。

@@ -26,18 +26,24 @@ struct OnboardingView: View {
     @State private var baseURL: String = "https://api.anthropic.com"
     @State private var apiKey: String = ""
     @State private var model: String = "claude-sonnet-4-5"
+    @State private var visionProviderID: String = AgentImageDescriptionConfiguration.default.providerID
+    @State private var visionBaseURL: String = AgentImageDescriptionConfiguration.default.baseURL
+    @State private var visionAPIKey: String = ""
+    @State private var visionModel: String = AgentImageDescriptionConfiguration.default.model
     @State private var providerSaveError: String?
     @State private var someIMSettings = SomeIMIntegrationStore.loadSettings()
     @State private var someIMAPIKey = SomeIMIntegrationStore.loadAPIKey()
-    @State private var someIMAccountEmail = SomeIMIntegrationStore.loadAccount()?.email ?? ""
-    @State private var someIMVerificationCode = ""
-    @State private var isSendingSomeIMCode = false
-    @State private var isVerifyingSomeIMCode = false
+    @State private var someIMAccount = SomeIMIntegrationStore.loadAccount()
+    @State private var someIMBrowserLoginRequest: SomeIMBrowserLoginRequest?
+    @State private var someIMBrowserLoginWatcher: Task<Void, Never>?
+    @State private var isWatchingSomeIMBrowserLogin = false
     @State private var someIMStatus = ""
 
     private let curatedPresets: [AgentProviderPreset] = AgentProviderPreset.all.filter {
         ["claude", "openai", "deepseek", "openrouter", "dashscope", AgentProviderPreset.customID].contains($0.id)
     }
+
+    private let visionPresets: [AgentProviderPreset] = AgentProviderPreset.all.filter(\.supportsImageInput)
 
     var body: some View {
         VStack(spacing: 0) {
@@ -106,58 +112,138 @@ struct OnboardingView: View {
     // MARK: - Step 2: Provider
 
     private var providerStep: some View {
-        VStack(alignment: .leading, spacing: 18) {
-            stepHeader(
-                L10n.Onboarding.Provider.title,
-                subtitle: L10n.Onboarding.Provider.subtitle
-            )
+        ScrollView {
+            VStack(alignment: .leading, spacing: 18) {
+                stepHeader(
+                    L10n.Onboarding.Provider.title,
+                    subtitle: L10n.Onboarding.Provider.subtitle
+                )
 
-            VStack(alignment: .leading, spacing: 12) {
-                LabeledContent(L10n.Onboarding.Provider.labelProvider) {
-                    Picker("", selection: $presetID) {
-                        ForEach(curatedPresets) { preset in
-                            Text(preset.displayName).tag(preset.id)
+                Label {
+                    Text(L10n.Onboarding.Provider.someIMRecommendation)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                } icon: {
+                    Image(systemName: "sparkles")
+                        .foregroundStyle(.tint)
+                }
+
+                VStack(alignment: .leading, spacing: 12) {
+                    LabeledContent(L10n.Onboarding.Provider.labelProvider) {
+                        Picker("", selection: $presetID) {
+                            ForEach(curatedPresets) { preset in
+                                Text(preset.displayName).tag(preset.id)
+                            }
+                        }
+                        .labelsHidden()
+                        .pickerStyle(.menu)
+                        .onCompatibleChange(of: presetID) { _, newID in
+                            applyPreset(id: newID)
                         }
                     }
-                    .labelsHidden()
-                    .pickerStyle(.menu)
-                    .onCompatibleChange(of: presetID) { _, newID in
-                        applyPreset(id: newID)
+
+                    LabeledContent(L10n.Onboarding.Provider.labelBaseURL) {
+                        TextField("", text: $baseURL)
+                            .textFieldStyle(.roundedBorder)
+                            .disableAutocorrection(true)
+                    }
+
+                    LabeledContent(L10n.Onboarding.Provider.labelAPIKey) {
+                        SecureField("", text: $apiKey)
+                            .textFieldStyle(.roundedBorder)
+                    }
+
+                    LabeledContent(L10n.Onboarding.Provider.labelModel) {
+                        TextField("", text: $model)
+                            .textFieldStyle(.roundedBorder)
+                            .disableAutocorrection(true)
                     }
                 }
 
-                LabeledContent(L10n.Onboarding.Provider.labelBaseURL) {
-                    TextField("", text: $baseURL)
-                        .textFieldStyle(.roundedBorder)
-                        .disableAutocorrection(true)
+                if needsVisionFallback {
+                    visionFallbackSection
                 }
 
-                LabeledContent(L10n.Onboarding.Provider.labelAPIKey) {
-                    SecureField("sk-…", text: $apiKey)
-                        .textFieldStyle(.roundedBorder)
+                if let err = providerSaveError {
+                    Text(err)
+                        .font(.caption)
+                        .foregroundStyle(.red)
                 }
 
-                LabeledContent(L10n.Onboarding.Provider.labelModel) {
-                    TextField("", text: $model)
-                        .textFieldStyle(.roundedBorder)
-                        .disableAutocorrection(true)
-                }
+                Spacer(minLength: 0)
             }
-
-            if let err = providerSaveError {
-                Text(err)
-                    .font(.caption)
-                    .foregroundStyle(.red)
-            }
-
-            Spacer()
         }
+    }
+
+    private var needsVisionFallback: Bool {
+        let trimmedModel = model.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedModel.isEmpty else { return false }
+        guard let preset = curatedPresets.first(where: { $0.id == presetID }) else { return false }
+        guard preset.supportsImageInput else { return true }
+        return !AgentConfiguration.modelAcceptsImageInput(trimmedModel)
+    }
+
+    private var selectedVisionPreset: AgentProviderPreset? {
+        AgentProviderPreset.preset(id: visionProviderID)
+    }
+
+    private var visionFallbackSection: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Label {
+                Text(L10n.Onboarding.Provider.visionRequired)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            } icon: {
+                Image(systemName: "eye")
+                    .foregroundStyle(.orange)
+            }
+
+            LabeledContent(L10n.Onboarding.Provider.labelVisionProvider) {
+                Picker("", selection: $visionProviderID) {
+                    ForEach(visionPresets) { preset in
+                        Text(preset.displayName).tag(preset.id)
+                    }
+                }
+                .labelsHidden()
+                .pickerStyle(.menu)
+                .onCompatibleChange(of: visionProviderID) { _, newID in
+                    applyVisionPreset(id: newID)
+                }
+            }
+
+            LabeledContent(L10n.Onboarding.Provider.labelVisionBaseURL) {
+                TextField("", text: $visionBaseURL)
+                    .textFieldStyle(.roundedBorder)
+                    .disableAutocorrection(true)
+            }
+
+            LabeledContent(L10n.Onboarding.Provider.labelVisionAPIKey) {
+                SecureField("", text: $visionAPIKey)
+                    .textFieldStyle(.roundedBorder)
+            }
+
+            LabeledContent(L10n.Onboarding.Provider.labelVisionModel) {
+                TextField("", text: $visionModel)
+                    .textFieldStyle(.roundedBorder)
+                    .disableAutocorrection(true)
+            }
+        }
+        .padding(12)
+        .background(RoundedRectangle(cornerRadius: 10).fill(Color.orange.opacity(0.08)))
     }
 
     private func applyPreset(id: String) {
         guard let p = curatedPresets.first(where: { $0.id == id }) else { return }
         baseURL = p.baseURL
         model = p.defaultFlashModel
+    }
+
+    private func applyVisionPreset(id: String) {
+        guard let preset = visionPresets.first(where: { $0.id == id }) else { return }
+        visionBaseURL = preset.baseURL
+        visionModel = preset.defaultVisionModel
     }
 
     /// 写入 provider library。空 apiKey 视为「跳过」—— 不动 library。
@@ -178,6 +264,30 @@ struct OnboardingView: View {
         guard !trimmedModel.isEmpty else {
             return L10n.Onboarding.Provider.errorModelRequired
         }
+        let imageDescription: AgentImageDescriptionConfiguration
+        if needsVisionFallback {
+            let trimmedVisionBaseURL = visionBaseURL.trimmingCharacters(in: .whitespacesAndNewlines)
+            let trimmedVisionModel = visionModel.trimmingCharacters(in: .whitespacesAndNewlines)
+            let trimmedVisionKey = visionAPIKey.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !trimmedVisionBaseURL.isEmpty else {
+                return L10n.Onboarding.Provider.errorVisionBaseURLRequired
+            }
+            guard !trimmedVisionModel.isEmpty else {
+                return L10n.Onboarding.Provider.errorVisionModelRequired
+            }
+            if selectedVisionPreset?.requiresAPIKey ?? true,
+               trimmedVisionKey.isEmpty {
+                return L10n.Onboarding.Provider.errorVisionAPIKeyRequired
+            }
+            imageDescription = AgentImageDescriptionConfiguration(
+                providerID: visionProviderID,
+                baseURL: trimmedVisionBaseURL,
+                model: trimmedVisionModel,
+                apiKey: trimmedVisionKey
+            ).normalized
+        } else {
+            imageDescription = appState.agentConfiguration.normalized.imageDescription
+        }
         let entry = AgentProviderEntry(
             providerID: preset.id,
             displayName: preset.displayName,
@@ -189,6 +299,9 @@ struct OnboardingView: View {
         var library = appState.agentProviderLibrary
         library.upsert(entry)
         library.activeID = entry.id
+        var configuration = appState.agentConfiguration.normalized
+        configuration.imageDescription = imageDescription
+        appState.agentConfiguration = configuration.normalized
         appState.agentProviderLibrary = library
         return nil
     }
@@ -204,46 +317,51 @@ struct OnboardingView: View {
 
             VStack(alignment: .leading, spacing: 12) {
                 Toggle(L10n.Settings.SomeIM.enabledToggle, isOn: $someIMSettings.enabled)
-                LabeledContent(L10n.Settings.SomeIM.regionLabel) {
-                    Picker("", selection: someIMRelayRegionBinding) {
-                        ForEach(SomeIMRelayRegion.allCases) { region in
-                            Text(L10n.Settings.SomeIM.regionName(region)).tag(region)
+
+                if let account = someIMAccount {
+                    HStack(alignment: .top, spacing: 12) {
+                        Image(systemName: "checkmark.circle.fill")
+                            .font(.system(size: 24, weight: .medium))
+                            .foregroundStyle(.green)
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text(L10n.Settings.SomeIM.browserLoginConnectedTitle)
+                                .font(.headline)
+                            Text(L10n.Settings.SomeIM.accountSummary(account.email, account.displayCredits))
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
                         }
                     }
-                    .labelsHidden()
-                    .frame(width: 220)
-                }
-
-                LabeledContent(L10n.Settings.SomeIM.baseURLLabel) {
-                    TextField("", text: $someIMSettings.baseURL)
-                        .textFieldStyle(.roundedBorder)
-                        .disableAutocorrection(true)
-                }
-
-                LabeledContent(L10n.Settings.SomeIM.emailLabel) {
-                    TextField("", text: $someIMAccountEmail)
-                        .textFieldStyle(.roundedBorder)
-                        .disableAutocorrection(true)
-                }
-
-                LabeledContent(L10n.Settings.SomeIM.emailCodeLabel) {
-                    TextField("", text: $someIMVerificationCode)
-                        .textFieldStyle(.roundedBorder)
-                        .disableAutocorrection(true)
-                }
-
-                HStack {
-                    Button(isSendingSomeIMCode ? L10n.Settings.SomeIM.sendingCode : L10n.Settings.SomeIM.sendCode) {
-                        sendSomeIMCode()
+                } else {
+                    HStack(alignment: .top, spacing: 12) {
+                        Image(systemName: isWatchingSomeIMBrowserLogin ? "person.badge.clock" : "safari")
+                            .font(.system(size: 24, weight: .medium))
+                            .foregroundStyle(.tint)
+                        VStack(alignment: .leading, spacing: 6) {
+                            Text(L10n.Settings.SomeIM.browserLoginPlaceholderTitle)
+                                .font(.headline)
+                            Text(L10n.Settings.SomeIM.browserLoginPlaceholderDescription)
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                            HStack(spacing: 6) {
+                                if isWatchingSomeIMBrowserLogin {
+                                    ProgressView()
+                                        .scaleEffect(0.6)
+                                        .controlSize(.small)
+                                }
+                                Text(someIMBrowserLoginStatusText)
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            }
+                        }
                     }
-                    .disabled(isSendingSomeIMCode || someIMAccountEmail.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-                    Button(isVerifyingSomeIMCode ? L10n.Settings.SomeIM.verifyingCode : L10n.Settings.SomeIM.verifyCode) {
-                        verifySomeIMCode()
+
+                    Button {
+                        openSomeIMBrowserLogin()
+                    } label: {
+                        Label(L10n.Settings.SomeIM.openBrowserLoginLink, systemImage: "safari")
                     }
-                    .disabled(isVerifyingSomeIMCode
-                        || someIMAccountEmail.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-                        || someIMVerificationCode.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                 }
+
                 Text(L10n.Onboarding.SomeIM.note)
                     .font(.caption)
                     .foregroundStyle(.secondary)
@@ -257,16 +375,15 @@ struct OnboardingView: View {
 
             Spacer()
         }
+        .onAppear {
+            ensureSomeIMBrowserLoginRequestIfNeeded()
+        }
     }
 
-    private var someIMRelayRegionBinding: Binding<SomeIMRelayRegion> {
-        Binding {
-            SomeIMRelayRegion.resolved(for: someIMSettings.baseURL)
-        } set: { region in
-            if let baseURL = region.baseURL {
-                someIMSettings.baseURL = baseURL
-            }
-        }
+    private var someIMBrowserLoginStatusText: String {
+        guard someIMBrowserLoginRequest != nil else { return someIMStatus }
+        if isWatchingSomeIMBrowserLogin { return L10n.Settings.SomeIM.browserLoginWaiting }
+        return someIMStatus.isEmpty ? L10n.Settings.SomeIM.browserLoginReady : someIMStatus
     }
 
     private func commitSomeIM() {
@@ -280,57 +397,94 @@ struct OnboardingView: View {
         someIMStatus = L10n.Settings.savedStatus
     }
 
-    private func sendSomeIMCode() {
-        isSendingSomeIMCode = true
-        someIMStatus = ""
-        let email = someIMAccountEmail
-        let currentSettings = someIMSettings.normalized
-        Task {
-            let result: Result<Void, Error>
-            do {
-                try await SomeIMClient.sendClientLoginCode(email: email, settings: currentSettings)
-                result = .success(())
-            } catch {
-                result = .failure(error)
+    private func ensureSomeIMBrowserLoginRequestIfNeeded() {
+        guard someIMAccount == nil else { return }
+        if let request = someIMBrowserLoginRequest {
+            if !isWatchingSomeIMBrowserLogin {
+                startSomeIMBrowserLoginWatcher(for: request)
             }
-            await MainActor.run {
-                isSendingSomeIMCode = false
-                switch result {
-                case .success:
-                    someIMStatus = L10n.Settings.SomeIM.codeSent
-                case .failure(let error):
-                    someIMStatus = error.localizedDescription
-                }
-            }
+        } else {
+            prepareSomeIMBrowserLoginRequest(openInBrowser: false)
         }
     }
 
-    private func verifySomeIMCode() {
-        isVerifyingSomeIMCode = true
-        someIMStatus = ""
-        let email = someIMAccountEmail
-        let code = someIMVerificationCode
+    private func prepareSomeIMBrowserLoginRequest(openInBrowser: Bool) {
+        do {
+            let normalized = someIMSettings.normalized
+            someIMSettings = normalized
+            let request = try SomeIMClient.makeBrowserLoginRequest(settings: normalized)
+            someIMBrowserLoginRequest = request
+            someIMStatus = L10n.Settings.SomeIM.browserLoginReady
+            startSomeIMBrowserLoginWatcher(for: request)
+            if openInBrowser {
+                _ = NSWorkspace.shared.open(request.url)
+                someIMStatus = L10n.Settings.SomeIM.browserLoginOpened
+            }
+        } catch {
+            someIMStatus = error.localizedDescription
+        }
+    }
+
+    private func openSomeIMBrowserLogin() {
+        if let request = someIMBrowserLoginRequest {
+            if !isWatchingSomeIMBrowserLogin {
+                startSomeIMBrowserLoginWatcher(for: request)
+            }
+            _ = NSWorkspace.shared.open(request.url)
+            someIMStatus = L10n.Settings.SomeIM.browserLoginOpened
+        } else {
+            prepareSomeIMBrowserLoginRequest(openInBrowser: true)
+        }
+    }
+
+    private func startSomeIMBrowserLoginWatcher(for loginRequest: SomeIMBrowserLoginRequest) {
+        someIMBrowserLoginWatcher?.cancel()
+        isWatchingSomeIMBrowserLogin = true
+        someIMStatus = L10n.Settings.SomeIM.browserLoginWaiting
         let currentSettings = someIMSettings.normalized
-        Task {
-            let result: Result<SomeIMAccount, Error>
-            do {
-                result = .success(try await SomeIMClient.verifyClientLoginCode(email: email, code: code, settings: currentSettings))
-            } catch {
-                result = .failure(error)
+        someIMBrowserLoginWatcher = Task {
+            let deadline = Date().addingTimeInterval(10 * 60)
+            var lastError: String?
+            while !Task.isCancelled, Date() < deadline {
+                do {
+                    let result = try await SomeIMClient.checkBrowserLoginStatus(request: loginRequest, settings: currentSettings)
+                    if result.state == .connected, let account = result.account {
+                        await MainActor.run {
+                            someIMAccount = account
+                            someIMAPIKey = SomeIMIntegrationStore.loadAPIKey()
+                            someIMSettings = SomeIMIntegrationStore.loadSettings()
+                            appState.syncSomeIMProvider(settings: someIMSettings, apiKey: someIMAPIKey)
+                            appState.syncSomeIMImageUnderstanding(apiKey: someIMAPIKey)
+                            someIMBrowserLoginRequest = nil
+                            isWatchingSomeIMBrowserLogin = false
+                            someIMStatus = L10n.Settings.SomeIM.accountSummary(account.email, account.displayCredits)
+                        }
+                        return
+                    }
+                    if result.state == .connected {
+                        await MainActor.run {
+                            isWatchingSomeIMBrowserLogin = false
+                            someIMStatus = L10n.Settings.SomeIM.browserLoginMissingCredentials
+                        }
+                        return
+                    }
+                    if result.state == .expired {
+                        await MainActor.run {
+                            someIMBrowserLoginRequest = nil
+                            isWatchingSomeIMBrowserLogin = false
+                            someIMStatus = L10n.Settings.SomeIM.browserLoginExpired
+                        }
+                        return
+                    }
+                } catch {
+                    lastError = error.localizedDescription
+                }
+                try? await Task.sleep(nanoseconds: 2_000_000_000)
             }
             await MainActor.run {
-                isVerifyingSomeIMCode = false
-                switch result {
-                case .success(let account):
-                    someIMAPIKey = SomeIMIntegrationStore.loadAPIKey()
-                    someIMSettings = SomeIMIntegrationStore.loadSettings()
-                    someIMAccountEmail = account.email
-                    appState.syncSomeIMProvider(settings: someIMSettings, apiKey: someIMAPIKey)
-                    appState.syncSomeIMImageUnderstanding(apiKey: someIMAPIKey)
-                    someIMStatus = L10n.Settings.SomeIM.accountSummary(account.email, account.displayCredits)
-                case .failure(let error):
-                    someIMStatus = error.localizedDescription
-                }
+                someIMBrowserLoginRequest = nil
+                isWatchingSomeIMBrowserLogin = false
+                someIMStatus = lastError ?? L10n.Settings.SomeIM.browserLoginExpired
             }
         }
     }

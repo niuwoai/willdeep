@@ -775,7 +775,7 @@ struct CollaborationConnectorSettingsView: View {
     }
 }
 
-private struct ConnectorUnavailablePlaceholder: View {
+struct ConnectorUnavailablePlaceholder: View {
     let title: String
     let systemImage: String
     let description: String

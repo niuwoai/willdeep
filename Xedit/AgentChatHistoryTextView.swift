@@ -41,7 +41,11 @@ struct AgentChatHistoryTextView: NSViewRepresentable {
     var latestTurnReportToolCount: Int? = nil
     /// 1.103.0-rc11: footer 报告图标被点时触发(SwiftUI 侧打开 popover)。
     var onShowTurnReport: (() -> Void)? = nil
+    var onReferenceGeneratedImage: ((String) -> Void)? = nil
     var onOpenFilePath: ((String) -> Void)? = nil
+    var searchQuery: String = ""
+    var activeSearchMatchIndex: Int? = nil
+    var onSearchResultCountChange: ((Int) -> Void)? = nil
     @Environment(\.colorScheme) private var colorScheme
 
     func makeNSView(context: Context) -> AgentChatHistoryNSTextView {
@@ -49,7 +53,9 @@ struct AgentChatHistoryTextView: NSViewRepresentable {
         view.translatesAutoresizingMaskIntoConstraints = false
         view.onRetryLastTurn = onRetryLastTurn
         view.onShowTurnReport = onShowTurnReport
+        view.onReferenceGeneratedImage = onReferenceGeneratedImage
         view.onOpenFilePath = onOpenFilePath
+        view.onSearchResultCountChange = onSearchResultCountChange
         configure(view)
         view.applyMessages(
             messages,
@@ -57,18 +63,30 @@ struct AgentChatHistoryTextView: NSViewRepresentable {
             baseFontSize: baseFontSize,
             latestTurnReportToolCount: latestTurnReportToolCount
         )
+        view.applySearch(
+            query: searchQuery,
+            activeMatchIndex: activeSearchMatchIndex,
+            isDark: colorScheme == .dark
+        )
         return view
     }
 
     func updateNSView(_ nsView: AgentChatHistoryNSTextView, context: Context) {
         nsView.onRetryLastTurn = onRetryLastTurn
         nsView.onShowTurnReport = onShowTurnReport
+        nsView.onReferenceGeneratedImage = onReferenceGeneratedImage
         nsView.onOpenFilePath = onOpenFilePath
+        nsView.onSearchResultCountChange = onSearchResultCountChange
         nsView.applyMessages(
             messages,
             isDark: colorScheme == .dark,
             baseFontSize: baseFontSize,
             latestTurnReportToolCount: latestTurnReportToolCount
+        )
+        nsView.applySearch(
+            query: searchQuery,
+            activeMatchIndex: activeSearchMatchIndex,
+            isDark: colorScheme == .dark
         )
     }
 
@@ -116,6 +134,11 @@ final class AgentChatHistoryNSTextView: NSTextView {
     private var currentIsDark = false
     private var currentBaseFontSize: CGFloat = NSFont.systemFontSize
     private var currentLatestTurnReportToolCount: Int? = nil
+    private var currentBaseAttributedString = NSAttributedString()
+    private var currentSearchQuery = ""
+    private var currentActiveSearchMatchIndex: Int?
+    private var currentSearchIsDark = false
+    private var lastReportedSearchResultCount: Int?
     private var expandedToolGroupIDs = Set<String>()
     private var hoveredUserMessageID: UUID?
     private var hoverTrackingArea: NSTrackingArea?
@@ -129,7 +152,9 @@ final class AgentChatHistoryNSTextView: NSTextView {
     /// 1.103.0-rc11: TextKit footer 里 doc.text 图标被点时回调 SwiftUI 侧
     /// 弹出 AgentTurnReportCard popover —— 见 AgentChatTranscript。
     var onShowTurnReport: (() -> Void)?
+    var onReferenceGeneratedImage: ((String) -> Void)?
     var onOpenFilePath: ((String) -> Void)?
+    var onSearchResultCountChange: ((Int) -> Void)?
 
     init() {
         let textStorage = NSTextStorage()
@@ -193,6 +218,31 @@ final class AgentChatHistoryNSTextView: NSTextView {
         super.mouseExited(with: event)
     }
 
+    override func menu(for event: NSEvent) -> NSMenu? {
+        let point = convert(event.locationInWindow, from: nil)
+        guard let marker = generatedImageReferenceMarker(at: point) else {
+            return super.menu(for: event)
+        }
+        let menu = super.menu(for: event) ?? NSMenu()
+        if !menu.items.isEmpty {
+            menu.addItem(.separator())
+        }
+        let item = NSMenuItem(
+            title: L10n.AgentGeneratedImage.quoteAction,
+            action: #selector(quoteGeneratedImageFromMenu(_:)),
+            keyEquivalent: ""
+        )
+        item.target = self
+        item.representedObject = marker
+        menu.addItem(item)
+        return menu
+    }
+
+    @objc private func quoteGeneratedImageFromMenu(_ sender: NSMenuItem) {
+        guard let marker = sender.representedObject as? String else { return }
+        onReferenceGeneratedImage?(marker)
+    }
+
     /// Swap text storage only when the attributed string actually
     /// changed. SwiftUI calls `updateNSView` on every parent body
     /// pass — without the guard we'd thrash TextKit every frame.
@@ -247,6 +297,11 @@ final class AgentChatHistoryNSTextView: NSTextView {
                 hasher.combine(image.id)
                 hasher.combine(image.mimeType)
                 hasher.combine(image.dataBase64.count)
+                hasher.combine(image.source?.rawValue)
+                hasher.combine(image.filePath)
+                hasher.combine(image.model)
+                hasher.combine(image.prompt)
+                hasher.combine(image.createdAt)
             }
             hasher.combine(m.textAttachments.count)
             hasher.combine(m.toolCallID)
@@ -256,6 +311,10 @@ final class AgentChatHistoryNSTextView: NSTextView {
             hasher.combine(m.cachedPromptTokens)
             hasher.combine(m.cacheWritePromptTokens)
             hasher.combine(m.reasoningTokens)
+            hasher.combine(m.managedRoute?.selectedModel)
+            hasher.combine(m.managedRoute?.tier.rawValue)
+            hasher.combine(m.managedRoute?.didEscalate)
+            hasher.combine(m.managedRoute?.didFallback)
             hasher.combine(m.toolCalls.count)
             for tc in m.toolCalls {
                 hasher.combine(tc.externalID)
@@ -283,12 +342,53 @@ final class AgentChatHistoryNSTextView: NSTextView {
         hasher.combine(expandedToolGroupIDs.sorted())
         hasher.combine(hoveredUserMessageID)
         let hash = hasher.finalize()
-        if hash == lastContentHash, attr.length == textStorage?.length {
+        if hash == lastContentHash, attr.length == currentBaseAttributedString.length {
             return
         }
         lastContentHash = hash
-        textStorage?.setAttributedString(attr)
+        currentBaseAttributedString = attr
+        applySearchHighlight()
         invalidateIntrinsicContentSize()
+    }
+
+    func applySearch(query: String, activeMatchIndex: Int?, isDark: Bool) {
+        currentSearchQuery = AgentTranscriptSearch.normalizedQuery(query)
+        currentActiveSearchMatchIndex = activeMatchIndex
+        currentSearchIsDark = isDark
+        applySearchHighlight()
+    }
+
+    private func applySearchHighlight() {
+        let result = AgentTranscriptSearch.highlightedString(
+            from: currentBaseAttributedString,
+            query: currentSearchQuery,
+            activeMatchIndex: currentActiveSearchMatchIndex,
+            isDark: currentSearchIsDark
+        )
+        textStorage?.setAttributedString(result.attributedString)
+        reportSearchResultCountIfNeeded(result.matchCount)
+        scrollActiveSearchMatchIfNeeded(ranges: result.matchRanges)
+        invalidateIntrinsicContentSize()
+    }
+
+    private func reportSearchResultCountIfNeeded(_ count: Int) {
+        guard lastReportedSearchResultCount != count else { return }
+        lastReportedSearchResultCount = count
+        onSearchResultCountChange?(count)
+    }
+
+    private func scrollActiveSearchMatchIfNeeded(ranges: [NSRange]) {
+        guard let index = AgentTranscriptSearch.clampedActiveIndex(
+            currentActiveSearchMatchIndex,
+            count: ranges.count
+        ) else { return }
+        let range = ranges[index]
+        guard range.location >= 0, NSMaxRange(range) <= (textStorage?.length ?? 0) else {
+            return
+        }
+        DispatchQueue.main.async { [weak self] in
+            self?.scrollRangeToVisible(range)
+        }
     }
 
     private func updateHoveredUserMessage(at point: NSPoint) {
@@ -345,6 +445,32 @@ final class AgentChatHistoryNSTextView: NSTextView {
             return
         }
         updateHoveredUserMessage(id: id)
+    }
+
+    private func generatedImageReferenceMarker(at point: NSPoint) -> String? {
+        guard let layoutManager, let textContainer, let textStorage, textStorage.length > 0 else {
+            return nil
+        }
+        var containerPoint = point
+        containerPoint.x -= textContainerInset.width
+        containerPoint.y -= textContainerInset.height
+        guard containerPoint.x >= 0, containerPoint.y >= 0 else {
+            return nil
+        }
+        layoutManager.ensureLayout(for: textContainer)
+        let glyphIndex = layoutManager.glyphIndex(for: containerPoint, in: textContainer)
+        guard glyphIndex < layoutManager.numberOfGlyphs else {
+            return nil
+        }
+        let charIndex = layoutManager.characterIndexForGlyph(at: glyphIndex)
+        guard charIndex < textStorage.length else {
+            return nil
+        }
+        return textStorage.attribute(
+            .agentChatHistoryImageReferenceMarker,
+            at: charIndex,
+            effectiveRange: nil
+        ) as? String
     }
 
     private func updateHoveredUserMessage(id: UUID?) {

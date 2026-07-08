@@ -1,12 +1,12 @@
 # WillDeep Mobile Gateway Requirements
 
-> Last updated: 2026-07-07 | Target version: v1.133.0-rc1
+> Last updated: 2026-07-08 | Target version: v1.136.0-rc26
 
 ## Summary
 
 Mobile Gateway lets an Android client connect to WillDeep over the default public relay at `https://j.niuwoai.com`, or over the local network as a fallback. The phone is a display and control surface; the Mac remains the authority for Agent execution, tool approval, patch application, workspace access, and safety gates.
 
-This Mac repository implements the Go gateway, Swift desktop peer, and protocol contract. The Android client is developed in the separate `willdeep-android` repository; the public relay is provided by `cdnproxy` at `/ws/broadcast/*`, while this repository still does not ship push notifications or direct mobile access to filesystem and shell APIs.
+This Mac repository implements the Go gateway, Swift desktop peer, protocol contract, and Umeng U-Push trigger path. The Android client is developed in the separate `willdeep-android` repository; the public relay is provided by `cdnproxy` at `/ws/broadcast/*`, while this repository still does not allow direct mobile access to filesystem and shell APIs.
 
 ## Transport Modes
 
@@ -31,9 +31,9 @@ The HTTP API, pairing, device, and WebSocket sections below describe the **local
 
 - No Android project in this phase.
 - No same-network anonymous access.
-- No cloud account or remote push.
-- No direct mobile calls to `/v1/fs/*`, `/v1/run/*`, or other remote-runtime execution APIs.
 - No mobile-side model provider credentials.
+- No push provider server secrets in git, app logs, QR payloads, or mobile WebSocket payloads.
+- No direct mobile calls to `/v1/fs/*`, `/v1/run/*`, or other remote-runtime execution APIs.
 
 ## Gateway Roles
 
@@ -61,8 +61,48 @@ The current Swift bridge supports the first command set needed for phone-to-Mac 
 - `file.read`
 - `queue.update`
 - `capabilities.get`
+- `push.register`
 
 Commands that touch files and queues remain desktop-mediated and must not bypass existing safety gates.
+
+`push.register` is a local capability command. Android sends its remote-push provider and device token after the SDK registration succeeds. In local network gateway mode, the Go gateway stores that token and acknowledges the command without forwarding it to Swift. In internet relay mode, the Swift desktop peer receives the command, stores the token in local user defaults, and acknowledges it.
+
+## Remote Push
+
+WillDeep uses Umeng U-Push as the first remote push provider. The client contract is intentionally small: Android registers its Umeng device token with `push.register`, and the Mac triggers a short custom payload when the desktop needs attention.
+
+Mac-side configuration is local-only. Put values in environment variables or in an ignored `local.properties` file:
+
+```properties
+UMENG_PUSH_ENABLED=true
+UMENG_APPKEY=your_umeng_appkey
+UMENG_APP_MASTER_SECRET=your_umeng_app_master_secret
+UMENG_PRODUCTION_MODE=false
+```
+
+`UMENG_MASTER_SECRET` is accepted as an alias for `UMENG_APP_MASTER_SECRET`; `UMENG_MESSAGE_SECRET` is accepted only as a local-development fallback because some dashboards label secrets differently. Server-side secrets must not be written to tracked source files.
+
+The Android-to-Mac registration command:
+
+```json
+{
+  "type": "push.register",
+  "payload": {
+    "provider": "umeng",
+    "client_id": "android-umeng-device-token",
+    "app_id": "umeng-appkey",
+    "platform": "android",
+    "app_version": "1.22.0-rc3"
+  }
+}
+```
+
+Mac triggers remote push for desktop attention events:
+
+- `tool.pending`
+- `patch.upsert`
+
+The custom payload contains only routing and display-safe summary fields such as `target_type`, `target_id`, `session_id`, `title`, `summary`, `tool_name`, `input_preview`, `requires_answer`, and `requires_confirmation`. Full command arguments, diffs, workspace contents, and secrets stay behind the authenticated gateway. Pushes are de-duplicated per target for 24 hours so periodic Mobile Gateway snapshots do not spam the phone.
 
 ### Mobile Peer
 
@@ -78,8 +118,8 @@ The gateway does not execute the command. It forwards the command to the desktop
 
 All Mobile Gateway HTTP responses must include:
 
-- `X-App-Version: 1.133.0-rc1`
-- `X-Server-Version: 1.133.0-rc1`
+- `X-App-Version: 1.136.0-rc26`
+- `X-Server-Version: 1.136.0-rc26`
 
 ### `GET /mobile/health`
 
@@ -91,7 +131,7 @@ Response data:
 {
   "version": {
     "name": "willdeep-agent",
-    "version": "1.133.0-rc1",
+    "version": "1.136.0-rc26",
     "go_version": "go1.23.x",
     "os": "darwin",
     "arch": "arm64"

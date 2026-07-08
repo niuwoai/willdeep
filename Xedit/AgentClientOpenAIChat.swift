@@ -20,10 +20,16 @@ import Foundation
 struct OpenAIChatAdapter {
     private let configuration: AgentConfiguration
     private let session: URLSession
+    private let someIMContext: SomeIMRequestContext?
 
-    init(configuration: AgentConfiguration, session: URLSession? = nil) {
+    init(
+        configuration: AgentConfiguration,
+        session: URLSession? = nil,
+        someIMContext: SomeIMRequestContext? = nil
+    ) {
         self.configuration = configuration.normalized
         self.session = session ?? AgentNetworkSupport.defaultSession()
+        self.someIMContext = someIMContext
     }
 
     func streamChat(
@@ -203,6 +209,58 @@ struct OpenAIChatAdapter {
         }
     }
 
+    /// Non-streaming JSON judge round trip for managed routing (and, later,
+    /// output-quality checks). `model` is the judge model (e.g.
+    /// `someim-judge`), distinct from `configuration.model`. Returns the raw
+    /// assistant text (expected strict JSON) or nil on any missing-key /
+    /// endpoint / HTTP / decode / network failure — the strategy layer
+    /// applies a local fallback. Mirrors `judgeCommandSafety`'s transport.
+    func routeJudge(
+        model: String,
+        systemPrompt: String,
+        userPayload: String,
+        maxTokens: Int
+    ) async -> String? {
+        guard !configuration.requiresAPIKey || !configuration.apiKey.isEmpty else { return nil }
+
+        let endpoint: URL
+        do { endpoint = try chatCompletionsEndpoint(from: configuration.baseURL) }
+        catch { return nil }
+
+        var request = URLRequest(url: endpoint)
+        request.httpMethod = "POST"
+        request.timeoutInterval = AgentInjectionDefense.judgeTimeout
+        applyAuthenticationHeaders(to: &request)
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+
+        let body: [String: Any] = [
+            "model": model,
+            "stream": false,
+            "max_tokens": maxTokens,
+            "temperature": 0,
+            "messages": [
+                ["role": "system", "content": systemPrompt],
+                ["role": "user", "content": userPayload]
+            ]
+        ]
+        guard let payload = try? JSONSerialization.data(withJSONObject: body, options: []) else { return nil }
+        request.httpBody = payload
+
+        do {
+            let (data, response) = try await session.data(for: request)
+            guard let http = response as? HTTPURLResponse, (200..<300).contains(http.statusCode) else {
+                return nil
+            }
+            guard let decoded = try? JSONDecoder().decode(JudgmentResponse.self, from: data),
+                  let choice = decoded.choices.first else {
+                return nil
+            }
+            return choice.message.content
+        } catch {
+            return nil
+        }
+    }
+
     func fetchModels() async throws -> [String] {
         guard !configuration.requiresAPIKey || !configuration.apiKey.isEmpty else {
             throw AgentClientError.missingAPIKey
@@ -275,6 +333,21 @@ struct OpenAIChatAdapter {
         }
         AgentNetworkSupport.applyStandardHeaders(to: &request)
         applyRelayBrandingHeaders(to: &request)
+        applySomeIMContextHeaders(to: &request)
+    }
+
+    /// Attach `x-willdeep-session-id` (+ optional `x-willdeep-workspace-id`)
+    /// on some.im requests only — the single injection point covers the main
+    /// stream, the safety judge, the route judge, and model fetch. Enables
+    /// some.im-side routing memory / diagnostics without exposing the headers
+    /// to any other provider. Values are opaque session UUIDs, never paths.
+    private func applySomeIMContextHeaders(to request: inout URLRequest) {
+        guard configuration.providerID == AgentProviderPreset.someIMID,
+              let context = someIMContext else { return }
+        request.setValue(context.sessionID, forHTTPHeaderField: AgentNetworkSupport.willDeepSessionHeaderName)
+        if let workspaceID = context.workspaceID, !workspaceID.isEmpty {
+            request.setValue(workspaceID, forHTTPHeaderField: AgentNetworkSupport.willDeepWorkspaceHeaderName)
+        }
     }
 
     /// OpenRouter ranks apps on its public leaderboard by these two

@@ -202,6 +202,38 @@ enum AgentMediaTools {
         return try await someIMCreateMediaTask(arguments: mediaArguments, context: context)
     }
 
+    static func editGeneratedImage(
+        arguments: [String: AgentJSONValue],
+        context: AgentToolContext
+    ) async throws -> AgentToolResult {
+        let rawPath = cleanOptionalString(arguments["image_path"])
+            ?? cleanOptionalString(arguments["reference_image_path"])
+            ?? cleanOptionalString(arguments["source_image_path"])
+            ?? cleanOptionalString(arguments["reference_marker"]).flatMap { marker in
+                AgentGeneratedImageReference.path(from: marker)
+            }
+        guard let rawPath else {
+            throw AgentToolError.missingArgument("image_path")
+        }
+        guard let prompt = cleanOptionalString(arguments["prompt"]) else {
+            throw AgentToolError.missingArgument("prompt")
+        }
+        let imageURL = try resolveImageURL(rawPath, rootDirectory: context.rootDirectory)
+        var mediaArguments = arguments
+        mediaArguments["kind"] = .string("image_edit")
+        mediaArguments["prompt"] = .string(prompt)
+        mediaArguments["reference_image_path"] = .string(imageURL.path)
+        mediaArguments["source_image_path"] = .string(imageURL.path)
+        mediaArguments["endpoint_suffix"] = .string(cleanOptionalString(arguments["endpoint_suffix"]) ?? "images/edits")
+        if cleanOptionalString(arguments["model"]) == nil {
+            mediaArguments["model"] = .string(SomeIMIntegrationSettings.defaultImageModel)
+        }
+        if cleanOptionalString(arguments["title"]) == nil {
+            mediaArguments["title"] = .string("\(imageURL.deletingPathExtension().lastPathComponent) · some.im 图片编辑")
+        }
+        return try await someIMCreateMediaTask(arguments: mediaArguments, context: context)
+    }
+
     private static func submitReplicateMaskEdit(
         arguments: [String: AgentJSONValue],
         context: AgentToolContext,
@@ -303,8 +335,9 @@ enum AgentMediaTools {
         )
         let status = SomeIMAsyncMediaClient.status(from: response.status)
         let title = cleanOptionalString(arguments["title"]) ?? "\(imageURL.deletingPathExtension().lastPathComponent) · some.im \(maskEditTitle(for: operation))"
+        let outputDirectory = try mediaOutputDirectory(arguments: arguments, rootDirectory: context.rootDirectory)
         let artifacts = status == .succeeded
-            ? try await SomeIMAsyncMediaClient.downloadArtifacts(from: response, title: title).map(\.mediaArtifact)
+            ? try await SomeIMAsyncMediaClient.downloadArtifacts(from: response, title: title, outputDirectory: outputDirectory).map(\.mediaArtifact)
             : []
         let task = await MainActor.run {
             registry.create(
@@ -341,6 +374,11 @@ enum AgentMediaTools {
         }
         await recordImageEditSubmission(task: updated, context: context)
         await openMediaTaskPanelIfPossible(context: context)
+        let resultImages = AgentGeneratedImageAttachmentFactory.attachments(
+            from: updated.artifacts,
+            model: model,
+            prompt: prompt
+        )
         return AgentToolResult(
             summary: "submitted masked image edit: \(updated.displayHandle)",
             payload: maskEditResultPayload(
@@ -353,7 +391,8 @@ enum AgentMediaTools {
                 statusURL: response.statusURL,
                 cancelURL: response.cancelURL,
                 followUpAction: "edit_image_with_mask_follow_up"
-            )
+            ),
+            images: resultImages
         )
     }
 
@@ -820,6 +859,7 @@ enum AgentMediaTools {
         let model = cleanOptionalString(arguments["model"]) ?? SomeIMAsyncMediaClient.defaultModel(for: kind, settings: settings)
         let endpointSuffix = cleanOptionalString(arguments["endpoint_suffix"]) ?? SomeIMAsyncMediaClient.defaultEndpointSuffix(for: kind)
         let sourceImageURL = try optionalSourceImageURL(arguments: arguments, rootDirectory: context.rootDirectory)
+        let outputDirectory = try mediaOutputDirectory(arguments: arguments, rootDirectory: context.rootDirectory)
         let body = try someIMRequestBody(arguments: arguments, model: model, kind: kind, sourceImageURL: sourceImageURL)
         let prompt = cleanOptionalString(arguments["prompt"]) ?? someIMPromptSummary(from: body)
 
@@ -831,7 +871,7 @@ enum AgentMediaTools {
         )
         let status = SomeIMAsyncMediaClient.status(from: response.status)
         let artifacts = status == .succeeded
-            ? try await SomeIMAsyncMediaClient.downloadArtifacts(from: response, title: title).map(\.mediaArtifact)
+            ? try await SomeIMAsyncMediaClient.downloadArtifacts(from: response, title: title, outputDirectory: outputDirectory).map(\.mediaArtifact)
             : []
         let task = await MainActor.run {
             registry.create(
@@ -873,7 +913,12 @@ enum AgentMediaTools {
             Endpoint suffix: \(endpointSuffix)
             Source image: \(sourceImageURL?.path ?? "(none)")
             \(mediaTaskToolPayload(task: updated, action: "some_im_create_media_task_follow_up"))
-            """
+            """,
+            images: AgentGeneratedImageAttachmentFactory.attachments(
+                from: updated.artifacts,
+                model: model,
+                prompt: prompt
+            )
         )
     }
 
@@ -898,8 +943,9 @@ enum AgentMediaTools {
         let statusEndpointSuffix = cleanOptionalString(arguments["status_endpoint_suffix"]) ?? existingTask?.statusEndpointSuffix
         let status = SomeIMAsyncMediaClient.status(from: response.status)
         let title = existingTask?.title ?? cleanOptionalString(arguments["title"]) ?? someIMDefaultTitle(for: .unknown)
+        let outputDirectory = try mediaOutputDirectory(arguments: arguments, rootDirectory: context.rootDirectory)
         let artifacts = status == .succeeded
-            ? try await SomeIMAsyncMediaClient.downloadArtifacts(from: response, title: title).map(\.mediaArtifact)
+            ? try await SomeIMAsyncMediaClient.downloadArtifacts(from: response, title: title, outputDirectory: outputDirectory).map(\.mediaArtifact)
             : []
 
         let updated = await MainActor.run {
@@ -929,7 +975,12 @@ enum AgentMediaTools {
         if let updated {
             return AgentToolResult(
                 summary: "some.im \(response.status): \(updated.displayHandle)",
-                payload: mediaTaskToolPayload(task: updated, action: "some_im_poll_media_task_follow_up")
+                payload: mediaTaskToolPayload(task: updated, action: "some_im_poll_media_task_follow_up"),
+                images: AgentGeneratedImageAttachmentFactory.attachments(
+                    from: updated.artifacts,
+                    model: updated.model,
+                    prompt: updated.prompt
+                )
             )
         }
 
@@ -1011,6 +1062,37 @@ enum AgentMediaTools {
             throw AgentToolError.notFound(handle)
         }
         return task
+    }
+
+    static func mediaOutputDirectory(
+        arguments: [String: AgentJSONValue],
+        rootDirectory: URL?,
+        requiresWorkspace: Bool = false
+    ) throws -> URL? {
+        if let rawDirectory = cleanOptionalString(arguments["output_directory"]) {
+            guard let rootDirectory else {
+                throw AgentToolError.noWorkspace
+            }
+            let root = rootDirectory.standardizedFileURL
+            let expanded = NSString(string: rawDirectory).expandingTildeInPath
+            let candidate = expanded.hasPrefix("/")
+                ? URL(fileURLWithPath: expanded)
+                : root.appendingPathComponent(expanded)
+            let standardized = candidate.standardizedFileURL
+            guard standardized.path == root.path || standardized.path.hasPrefix(root.path + "/") else {
+                throw AgentToolError.pathOutsideWorkspace(rawDirectory)
+            }
+            try FileManager.default.createDirectory(at: standardized, withIntermediateDirectories: true)
+            return standardized
+        }
+
+        if let rootDirectory {
+            return rootDirectory.standardizedFileURL
+        }
+        if requiresWorkspace {
+            throw AgentToolError.noWorkspace
+        }
+        return nil
     }
 
     private static func someIMRequestBody(

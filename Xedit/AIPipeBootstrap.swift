@@ -13,6 +13,10 @@ import UserNotifications
 
 final class WillDeepAppDelegate: NSObject, NSApplicationDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
+        // Wire the shared some.im login store before anything reads credentials:
+        // sets the shared Keychain access group, migrates legacy per-app keys,
+        // and starts forwarding cross-app login/logout changes.
+        SomeIMIntegrationStore.configureSharedSession()
         AIPipeBootstrap.initialize()
         AppUpdateChecker.checkForUpdatesOnLaunch()
         // Route taps on agent approval / job notifications back to the
@@ -22,6 +26,11 @@ final class WillDeepAppDelegate: NSObject, NSApplicationDelegate {
             FnPushToTalkMonitor.shared.install()
             VoiceModelLifecycleController.shared.install()
         }
+        AboutMenuInstaller.install()
+    }
+
+    func applicationDidBecomeActive(_ notification: Notification) {
+        AboutMenuInstaller.install()
     }
 
     func applicationWillTerminate(_ notification: Notification) {

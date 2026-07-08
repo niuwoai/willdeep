@@ -16,6 +16,18 @@ struct WillDeepApp: App {
     var body: some Scene {
         let defaultSize = Self.defaultWindowSize
 
+        // Agent is the default launch surface. Keep this scene first so a
+        // plain app launch creates the Agent window directly; explicit file
+        // or folder opens still land in the URL-backed editor WindowGroup
+        // below.
+        Window(L10n.AgentWindow.title, id: AgentWindowID.value) {
+            AgentWindowRootView()
+        }
+        .defaultSize(width: defaultSize.width, height: defaultSize.height)
+        .commands {
+            WillDeepCommands()
+        }
+
         WindowGroup(id: EditorWindowID.value) {
             WindowRootView()
         }
@@ -29,14 +41,6 @@ struct WillDeepApp: App {
         .commands {
             WillDeepCommands()
         }
-
-        // 1.80.0-rc1：Agent 独立成单例窗口。窗口本身不持有 AppState，
-        // 通过 EditorAppStateRegistry 跟随当前聚焦的 editor 窗口 ——
-        // 切到另一个 workspace 的窗口，agent 窗口 transcript 跟着切。
-        Window(L10n.AgentWindow.title, id: AgentWindowID.value) {
-            AgentWindowRootView()
-        }
-        .defaultSize(width: defaultSize.width, height: defaultSize.height)
 
         Settings {
             SettingsRootView()
@@ -354,12 +358,6 @@ private struct WindowRootView: View {
             .background(
                 WindowAccessor { window in
                     windowFocus.attach(to: window, appState: appState)
-                    InitialEditorLaunchRouter.shared.routePlainLaunchEditorIfNeeded(
-                        window: window,
-                        openAgentWindow: {
-                            openWindow(id: AgentWindowID.value)
-                        }
-                    )
                 }
             )
             .onOpenURL { url in
@@ -372,7 +370,6 @@ private struct WindowRootView: View {
                 EditorAppStateRegistry.shared.register(appState)
                 if !didHandleInitialExternalURL, let initialExternalURL {
                     didHandleInitialExternalURL = true
-                    InitialEditorLaunchRouter.shared.noteExternalEditorOpen()
                     handleExternalURL(initialExternalURL)
                 }
                 onboarding.presentIfNeeded()
@@ -389,16 +386,12 @@ private struct WindowRootView: View {
 
     private func handleExternalURL(_ url: URL) {
         if let fileURL = WillDeepExternalURLParser.fileURL(fromOpenURL: url) {
-            InitialEditorLaunchRouter.shared.noteExternalEditorOpen()
             appState.openExternalURL(fileURL, createsMissingFileIfNeeded: true)
             return
         }
 
         if CollaborationConnectorOAuthCoordinator.handleCallback(url) {
             return
-        }
-        if url.isFileURL || FileManager.default.fileExists(atPath: url.path) {
-            InitialEditorLaunchRouter.shared.noteExternalEditorOpen()
         }
         appState.openExternalURL(url)
     }
@@ -418,55 +411,11 @@ enum WillDeepExternalURLParser {
     }
 }
 
-enum InitialEditorLaunchRoute {
-    static func shouldRoutePlainLaunchToAgent(
-        externalEditorOpenSeen: Bool,
-        didRoutePlainLaunch: Bool
-    ) -> Bool {
-        !externalEditorOpenSeen && !didRoutePlainLaunch
-    }
-}
+enum InitialLaunchPolicy {
+    static let plainLaunchWindowID = AgentWindowID.value
 
-@MainActor
-private final class InitialEditorLaunchRouter {
-    static let shared = InitialEditorLaunchRouter()
-
-    private var externalEditorOpenSeen = false
-    private var didRoutePlainLaunch = false
-    private var isPlainLaunchRouteScheduled = false
-
-    func noteExternalEditorOpen() {
-        externalEditorOpenSeen = true
-    }
-
-    func routePlainLaunchEditorIfNeeded(
-        window: NSWindow,
-        openAgentWindow: @escaping () -> Void
-    ) {
-        guard !isPlainLaunchRouteScheduled else { return }
-        guard InitialEditorLaunchRoute.shouldRoutePlainLaunchToAgent(
-            externalEditorOpenSeen: externalEditorOpenSeen,
-            didRoutePlainLaunch: didRoutePlainLaunch
-        ) else {
-            return
-        }
-
-        isPlainLaunchRouteScheduled = true
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) { [weak self, weak window] in
-            guard let self, let window else { return }
-            guard InitialEditorLaunchRoute.shouldRoutePlainLaunchToAgent(
-                externalEditorOpenSeen: self.externalEditorOpenSeen,
-                didRoutePlainLaunch: self.didRoutePlainLaunch
-            ) else {
-                self.isPlainLaunchRouteScheduled = false
-                return
-            }
-
-            self.didRoutePlainLaunch = true
-            window.orderOut(nil)
-            openAgentWindow()
-            window.close()
-        }
+    static func shouldOpenEditor(forInitialExternalURL url: URL?) -> Bool {
+        url != nil
     }
 }
 

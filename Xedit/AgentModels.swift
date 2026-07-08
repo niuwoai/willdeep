@@ -34,6 +34,12 @@ nonisolated struct AgentSession: Identifiable, Codable, Equatable {
     /// can group historical sessions by the actual configured provider.
     var providerID: String?
     var providerDisplayName: String?
+    /// Per-session "省心托管" (some.im managed routing) state. Non-nil only
+    /// when the user selected managed routing for this session; carries the
+    /// only-goes-up capability floor. Orthogonal to `modelID` / override —
+    /// managed sessions never write a resolved model into `modelID`, so the
+    /// managed selection can never leak downstream as a real model name.
+    var managedRouting: AgentManagedRoutingState?
     let createdAt: Date
     var updatedAt: Date
     var messages: [AgentMessage]
@@ -118,6 +124,7 @@ nonisolated struct AgentSession: Identifiable, Codable, Equatable {
         modelID: String? = nil,
         providerID: String? = nil,
         providerDisplayName: String? = nil,
+        managedRouting: AgentManagedRoutingState? = nil,
         createdAt: Date = Date(),
         updatedAt: Date = Date(),
         messages: [AgentMessage] = [],
@@ -147,6 +154,7 @@ nonisolated struct AgentSession: Identifiable, Codable, Equatable {
         self.modelID = modelID
         self.providerID = providerID
         self.providerDisplayName = providerDisplayName
+        self.managedRouting = managedRouting
         self.createdAt = createdAt
         self.updatedAt = updatedAt
         self.messages = messages
@@ -221,7 +229,7 @@ nonisolated struct AgentSession: Identifiable, Codable, Equatable {
     // decodeIfPresent with a default.
     enum CodingKeys: String, CodingKey {
         case id, title, workspaceRootPath, workspaceLocation, localWorkspaceIdentity, modelID
-        case providerID, providerDisplayName
+        case providerID, providerDisplayName, managedRouting
         case createdAt, updatedAt, messages, contextSummary, contextSummaryThroughMessageID
         case didEditFiles, agentEditedPaths, interactionMode, approvalMode, executionAgent, activeExperts, currentPlan, currentGoal, learningEvents, latestTurnRecall, sidePanelState
         case pinnedAt, archivedAt, titleIsUserSet
@@ -238,6 +246,7 @@ nonisolated struct AgentSession: Identifiable, Codable, Equatable {
         self.modelID = try c.decodeIfPresent(String.self, forKey: .modelID)
         self.providerID = try c.decodeIfPresent(String.self, forKey: .providerID)
         self.providerDisplayName = try c.decodeIfPresent(String.self, forKey: .providerDisplayName)
+        self.managedRouting = try c.decodeIfPresent(AgentManagedRoutingState.self, forKey: .managedRouting)
         self.createdAt = try c.decode(Date.self, forKey: .createdAt)
         self.updatedAt = try c.decode(Date.self, forKey: .updatedAt)
         self.messages = try c.decode([AgentMessage].self, forKey: .messages)
@@ -257,6 +266,197 @@ nonisolated struct AgentSession: Identifiable, Codable, Equatable {
         self.pinnedAt = try c.decodeIfPresent(Date.self, forKey: .pinnedAt)
         self.archivedAt = try c.decodeIfPresent(Date.self, forKey: .archivedAt)
         self.titleIsUserSet = try c.decodeIfPresent(Bool.self, forKey: .titleIsUserSet) ?? false
+    }
+}
+
+// MARK: - some.im managed routing ("省心托管")
+
+/// Capability floor for a some.im managed-routing session. The floor only
+/// ever rises within a session ("只升不降"): once a turn proves it needs
+/// `.high` / `.premium`, later turns cannot be dropped back to a weaker tier
+/// by the lightweight judge — only an explicit user reset / model switch /
+/// new session lowers it. See SOME_IM_MANAGED_ROUTING_DESIGN.md.
+nonisolated enum AgentManagedCapabilityTier: String, Codable, Equatable, Comparable {
+    case low
+    case high
+    case premium
+
+    var rank: Int {
+        switch self {
+        case .low: return 0
+        case .high: return 1
+        case .premium: return 2
+        }
+    }
+
+    static func < (lhs: AgentManagedCapabilityTier, rhs: AgentManagedCapabilityTier) -> Bool {
+        lhs.rank < rhs.rank
+    }
+}
+
+/// Persisted per-session state for some.im managed routing. Stored on
+/// `AgentSession` (additively decoded — absent on legacy sessions → nil,
+/// i.e. "not a managed session").
+nonisolated struct AgentManagedRoutingState: Codable, Equatable {
+    /// Lowest capability tier this session may use for the rest of its life
+    /// (until user reset / new session). Starts at `.low`.
+    var minimumTier: AgentManagedCapabilityTier
+    /// Last main-call model the router resolved to. Diagnostic only.
+    var lastSelectedModel: String?
+    var lastEscalatedAt: Date?
+    var lastEscalationReason: String?
+
+    init(
+        minimumTier: AgentManagedCapabilityTier = .low,
+        lastSelectedModel: String? = nil,
+        lastEscalatedAt: Date? = nil,
+        lastEscalationReason: String? = nil
+    ) {
+        self.minimumTier = minimumTier
+        self.lastSelectedModel = lastSelectedModel
+        self.lastEscalatedAt = lastEscalatedAt
+        self.lastEscalationReason = lastEscalationReason
+    }
+}
+
+/// Task domain the routing judge classifies a turn into.
+nonisolated enum SomeIMManagedDomain: String, Codable, Equatable {
+    case coding
+    case general
+}
+
+/// Per-assistant-message record of how managed routing resolved this turn.
+/// Additive observability metadata (footer chip / usage stats) — persisted
+/// with the session, absent (nil) on non-managed turns. `SomeIMManagedComplexity`
+/// lives in SomeIMManagedRouting.swift (same module).
+nonisolated struct AgentManagedRouteDecision: Codable, Equatable {
+    var selectedModel: String
+    var tier: AgentManagedCapabilityTier
+    var domain: SomeIMManagedDomain
+    var complexity: SomeIMManagedComplexity
+    /// The router fell back to the local heuristic (judge unavailable / unparsable).
+    var didFallback: Bool
+    /// An output-quality failure escalated this turn one tier up.
+    var didEscalate: Bool
+    var failureType: String?
+
+    init(
+        selectedModel: String,
+        tier: AgentManagedCapabilityTier,
+        domain: SomeIMManagedDomain,
+        complexity: SomeIMManagedComplexity,
+        didFallback: Bool,
+        didEscalate: Bool = false,
+        failureType: String? = nil
+    ) {
+        self.selectedModel = selectedModel
+        self.tier = tier
+        self.domain = domain
+        self.complexity = complexity
+        self.didFallback = didFallback
+        self.didEscalate = didEscalate
+        self.failureType = failureType
+    }
+
+    /// Short tier label for a footer chip (proper-noun tier names, like the pill).
+    var tierLabel: String {
+        switch tier {
+        case .low: return "Low"
+        case .high: return "High"
+        case .premium: return "Premium"
+        }
+    }
+
+    /// Tier plus an escalation (↑) or fallback (~) marker, e.g. "High↑".
+    var tierMarkers: String {
+        var text = tierLabel
+        if didEscalate {
+            text += "↑"
+        } else if didFallback {
+            text += "~"
+        }
+        return text
+    }
+
+    /// Full footer chip text with a localized "Managed" prefix, e.g.
+    /// "Managed High↑" / "托管 High↑".
+    var footerChipText: String {
+        "\(L10n.AgentManagedRouting.footerPrefix) \(tierMarkers)"
+    }
+}
+
+/// some.im managed-routing model catalogue: the fixed set of main-call model
+/// names a judge decision may resolve to, plus the (domain, tier) → model
+/// mapping and its inverse. These are virtual model names on the some.im
+/// relay, not raw upstream models. See SOME_IM_MANAGED_ROUTING_DESIGN.md
+/// ("模型与命名").
+nonisolated enum SomeIMManagedModel {
+    static let codingLow = "someim-coding-plan-low"
+    static let codingHigh = "someim-coding-plan-high"
+    static let codingPremium = "someim-coding-plan-premium"
+    static let autoFlash = "someim-auto-flash"
+    static let autoPro = "someim-auto-pro"
+
+    /// The lightweight router / output-quality judge model. Backed by a
+    /// non-thinking official DeepSeek behind a clean (no-persona) virtual
+    /// chain. Never selectable as a turn's main model — hence excluded from
+    /// `allowlist`.
+    static let judge = "someim-judge"
+
+    /// Every main-call model a judge decision is allowed to resolve to. A
+    /// `target_model` outside this set is rejected and the local
+    /// (domain, tier) mapping is used instead.
+    static let allowlist: Set<String> = [
+        codingLow, codingHigh, codingPremium, autoFlash, autoPro
+    ]
+
+    /// Fold a historical misspelling (`...-hight`) onto the canonical name so
+    /// a stale alias never leaks downstream. See design doc ("模型与命名").
+    static func canonicalize(_ model: String) -> String {
+        switch model {
+        case "someim-coding-plan-hight":
+            return codingHigh
+        default:
+            return model
+        }
+    }
+
+    /// Resolve the actual main-call model from a task domain and the
+    /// effective capability tier (already merged with the session floor).
+    static func resolve(domain: SomeIMManagedDomain, tier: AgentManagedCapabilityTier) -> String {
+        switch (domain, tier) {
+        case (.coding, .low): return codingLow
+        case (.coding, .high): return codingHigh
+        case (.coding, .premium): return codingPremium
+        case (.general, .low): return autoFlash
+        case (.general, .high): return autoPro
+        // No dedicated general-premium model yet; fall back to auto-pro.
+        case (.general, .premium): return autoPro
+        }
+    }
+
+    /// Inverse of `resolve` for the only-goes-up floor bookkeeping: which
+    /// tier does a resolved model correspond to. Unknown → nil.
+    static func tier(of model: String) -> AgentManagedCapabilityTier? {
+        switch canonicalize(model) {
+        case codingLow, autoFlash: return .low
+        case codingHigh, autoPro: return .high
+        case codingPremium: return .premium
+        default: return nil
+        }
+    }
+
+    /// Next model up its own ladder for a single output-quality escalation
+    /// retry. Returns nil at the top of a ladder so the retry never loops.
+    /// See design doc "升档模型".
+    static func escalated(from model: String) -> String? {
+        switch canonicalize(model) {
+        case codingLow: return codingHigh
+        case codingHigh: return codingPremium
+        case autoFlash: return autoPro
+        // codingPremium / autoPro: top of ladder → no auto-escalation.
+        default: return nil
+        }
     }
 }
 
@@ -868,6 +1068,10 @@ struct AgentConfiguration: Codable, Equatable {
         if lower.contains("deepseek"), !lower.contains("vl") { return false }
         // some.im auto-routing text tier maps to text-only backends.
         if lower.hasPrefix("someim-auto") { return false }
+        // some.im coding-plan tiers currently map to text-only backends
+        // (deepseek / glm chat models). Managed routing never targets a
+        // vision model, so keep the whole family text-only.
+        if lower.hasPrefix("someim-coding") { return false }
         return true
     }
 
@@ -933,6 +1137,7 @@ struct AgentProviderPreset: Identifiable, Equatable {
     static let deepSeekID = "deepseek"
     static let ollamaID = "ollama"
     static let customID = "custom"
+    static let someIMID = "some-im"
 
     var defaultModel: String { defaultFlashModel }
     var defaultVisionModel: String {

@@ -150,7 +150,7 @@ final class FnPushToTalkMonitor {
         let transcript = await recorder.stopAndTranscribe()
         log.info("completeRecording: transcript=\(transcript ?? "<nil>")")
         if let transcript {
-            appendToCurrentComposer(transcript)
+            await appendToCurrentComposer(transcript)
         }
     }
 
@@ -170,7 +170,7 @@ final class FnPushToTalkMonitor {
     /// 在它的 agentInput 末尾拼上转录文本。注意 `agentInput` 是 computed
     /// property 走 `activeRuntime?.input`。如果 workspace 还没有 active
     /// agent session,先按 send path 同款策略懒创建一条,再写入。
-    private func appendToCurrentComposer(_ transcript: String) {
+    private func appendToCurrentComposer(_ transcript: String) async {
         guard let appState = EditorAppStateRegistry.shared.current else {
             log.warning("append: no current AppState — transcript dropped (\(transcript))")
             return
@@ -181,7 +181,8 @@ final class FnPushToTalkMonitor {
             return
         }
         let beforeID = appState.activeAgentSessionID
-        guard appState.appendAgentInputTextCreatingSessionIfNeeded(trimmed) else {
+        let appended = await appState.appendVoiceTranscriptCreatingSessionIfNeeded(trimmed)
+        guard appended else {
             log.warning("append: no activeRuntime after lazy session creation — transcript dropped")
             return
         }

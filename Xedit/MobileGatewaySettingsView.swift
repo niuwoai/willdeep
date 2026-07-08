@@ -86,10 +86,11 @@ struct MobileGatewaySettingsView: View {
             // else (IP / port / executable) is diagnostics, tucked behind
             // the advanced toggle below.
             Section(L10n.Settings.MobileGateway.pairingSection) {
-                if let payload = coordinator.pairingPayload {
+                if let payload = coordinator.pairingPayload,
+                   let qrText = coordinator.pairingQRCodeText {
                     VStack(spacing: 12) {
                         SettingsQRCodeView(
-                            text: payload.qrJSONString,
+                            text: qrText,
                             accessibilityLabel: L10n.Settings.MobileGateway.qrAccessibilityLabel,
                             unavailableText: L10n.Settings.MobileGateway.qrUnavailable,
                             pointSize: 220
@@ -110,7 +111,7 @@ struct MobileGatewaySettingsView: View {
                         HStack(spacing: 8) {
                             Button(L10n.Settings.MobileGateway.copyPayloadButton) {
                                 NSPasteboard.general.clearContents()
-                                NSPasteboard.general.setString(payload.qrJSONString, forType: .string)
+                                NSPasteboard.general.setString(qrText, forType: .string)
                             }
                             Button {
                                 Task { await coordinator.rotatePairingPayload() }

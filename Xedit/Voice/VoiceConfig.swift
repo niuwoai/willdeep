@@ -77,6 +77,34 @@ enum VoiceTranscriptLanguagePreference: String, CaseIterable, Identifiable {
     }
 }
 
+nonisolated enum VoiceTranscriptCleanupMode: String, CaseIterable, Identifiable, Sendable {
+    case off
+    case punctuation
+    case bulletPoints
+
+    var id: String { rawValue }
+
+    var displayName: String {
+        switch self {
+        case .off: return L10n.Settings.Voice.cleanupOff
+        case .punctuation: return L10n.Settings.Voice.cleanupPunctuation
+        case .bulletPoints: return L10n.Settings.Voice.cleanupBulletPoints
+        }
+    }
+
+    var description: String {
+        switch self {
+        case .off: return L10n.Settings.Voice.cleanupOffDescription
+        case .punctuation: return L10n.Settings.Voice.cleanupPunctuationDescription
+        case .bulletPoints: return L10n.Settings.Voice.cleanupBulletPointsDescription
+        }
+    }
+
+    var usesAI: Bool {
+        self != .off
+    }
+}
+
 /// Shim for the fastv `UserPreferences` global the ported STT code reaches
 /// into. Persists voice-only knobs via `com.willdeep.voice.*` keys so they
 /// never collide with the rest of the AgentSettingsStore namespace.
@@ -90,6 +118,7 @@ final class UserPreferences: ObservableObject {
         static let waveformOverlayStyle = "com.willdeep.voice.waveformOverlay.style.v1"
         static let waveformOverlayColorStyle = "com.willdeep.voice.waveformOverlay.colorStyle.v1"
         static let transcriptLanguagePreference = "com.willdeep.voice.transcriptLanguagePreference.v1"
+        static let transcriptCleanupMode = "com.willdeep.voice.transcriptCleanupMode.v1"
     }
 
     @Published var enableCTCDeduplication: Bool {
@@ -111,6 +140,12 @@ final class UserPreferences: ObservableObject {
     @Published var transcriptLanguagePreference: VoiceTranscriptLanguagePreference {
         didSet {
             UserDefaults.standard.set(transcriptLanguagePreference.rawValue, forKey: Keys.transcriptLanguagePreference)
+        }
+    }
+
+    @Published var transcriptCleanupMode: VoiceTranscriptCleanupMode {
+        didSet {
+            UserDefaults.standard.set(transcriptCleanupMode.rawValue, forKey: Keys.transcriptCleanupMode)
         }
     }
 
@@ -149,6 +184,13 @@ final class UserPreferences: ObservableObject {
             self.transcriptLanguagePreference = preference
         } else {
             self.transcriptLanguagePreference = .followSystem
+        }
+
+        if let raw = UserDefaults.standard.string(forKey: Keys.transcriptCleanupMode),
+           let mode = VoiceTranscriptCleanupMode(rawValue: raw) {
+            self.transcriptCleanupMode = mode
+        } else {
+            self.transcriptCleanupMode = .off
         }
     }
 }

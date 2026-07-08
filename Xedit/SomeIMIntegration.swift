@@ -9,7 +9,9 @@
 
 import Foundation
 import AppKit
+import Security
 import SwiftUI
+import SomeIMSharedSession
 
 enum SomeIMGenerationKind: String, Codable, CaseIterable, Identifiable {
     case image
@@ -124,12 +126,46 @@ struct SomeIMIntegrationSettings: Codable, Equatable {
 }
 
 enum SomeIMIntegrationStore {
-    static let accountDidChangeNotification = Notification.Name("com.willdeep.someIM.accountDidChange")
+    // Plain immutable constants — `nonisolated` so they can be referenced from
+    // the Sendable cross-app session-observer closure below without hopping
+    // actors (the enum otherwise defaults to main-actor isolation).
+    nonisolated static let accountDidChangeNotification = Notification.Name("com.willdeep.someIM.accountDidChange")
+    /// Posted (local, same-process) whenever the shared some.im session changes
+    /// — including changes made by *another* app. AppState listens to reconcile
+    /// its agent provider so a cross-app login/logout takes effect live.
+    nonisolated static let sessionDidChangeNotification = Notification.Name("com.willdeep.someIM.sessionDidChange")
+
+    /// Shared Keychain access group (Team ZH2S7D6PL6). Must match the
+    /// `keychain-access-groups` entitlement and every other participating app.
+    nonisolated static let sharedAccessGroup = "ZH2S7D6PL6.com.someim.shared"
 
     private static let settingsKey = "com.willdeep.someIM.integrationSettings.v1"
     private static let accountKey = "com.willdeep.someIM.account.v1"
-    private static let apiKeyAccount = "some-im/api-key"
-    private static let sessionTokenAccount = "some-im/customer-session"
+    // Legacy per-app Keychain accounts. Read only for the one-time migration
+    // into the shared store; never written after that.
+    private static let legacyAPIKeyAccount = "some-im/api-key"
+    private static let legacySessionTokenAccount = "some-im/customer-session"
+    private static let migrationDoneKey = "com.willdeep.someIM.sharedSessionMigration.v1"
+
+    private static let migrationLock = NSLock()
+    private nonisolated(unsafe) static var migrationAttempted = false
+    private nonisolated(unsafe) static var sessionObservation: ObservationToken?
+
+    /// Call once at app launch (before any credential access). Wires the shared
+    /// Keychain access group, migrates any legacy per-app credentials, and starts
+    /// forwarding cross-app session changes into `sessionDidChangeNotification`.
+    static func configureSharedSession() {
+        SomeIMSharedSessionStore.shared.configure(accessGroup: sharedAccessGroup)
+        migrateLegacyIfNeeded()
+        guard sessionObservation == nil else { return }
+        sessionObservation = SomeIMSharedSessionStore.shared.observe { _ in
+            // Delivered on the main queue on every login/logout in this or any
+            // other app. Fan out so the account UI and the agent provider
+            // re-read the (already-persisted) shared session.
+            NotificationCenter.default.post(name: accountDidChangeNotification, object: nil)
+            NotificationCenter.default.post(name: sessionDidChangeNotification, object: nil)
+        }
+    }
 
     static func loadSettings() -> SomeIMIntegrationSettings {
         guard let data = UserDefaults.standard.data(forKey: settingsKey),
@@ -154,26 +190,124 @@ enum SomeIMIntegrationStore {
     static func saveAccount(_ account: SomeIMAccount?) {
         if let account, let data = try? JSONEncoder().encode(account) {
             UserDefaults.standard.set(data, forKey: accountKey)
+            // Keep the shared session's identity fields in step with the local
+            // display cache (balance/credits stay local, per-app).
+            mirrorIdentityToShared(email: account.email, tenantID: account.tenantID)
         } else {
             UserDefaults.standard.removeObject(forKey: accountKey)
         }
         NotificationCenter.default.post(name: accountDidChangeNotification, object: nil)
     }
 
+    // MARK: - Secrets (shared Keychain access group is the source of truth)
+
     static func loadAPIKey() -> String {
-        AgentCredentialStore.load(account: apiKeyAccount)
+        migrateLegacyIfNeeded()
+        return SomeIMSharedSessionStore.shared.current()?.apiKey ?? ""
     }
 
     static func saveAPIKey(_ apiKey: String) {
-        AgentCredentialStore.save(apiKey, account: apiKeyAccount)
+        let trimmed = apiKey.trimmingCharacters(in: .whitespacesAndNewlines)
+        // An empty key is a NO-OP, never a logout. Real sign-out goes through
+        // `logout()`; this guard stops an accidental empty save (e.g. the
+        // Settings pane saving while its key field is momentarily blank) from
+        // signing every app out.
+        guard !trimmed.isEmpty else { return }
+        updateSharedSession { $0.apiKey = trimmed }
     }
 
     static func loadSessionToken() -> String {
-        AgentCredentialStore.load(account: sessionTokenAccount)
+        migrateLegacyIfNeeded()
+        return SomeIMSharedSessionStore.shared.current()?.sessionToken ?? ""
     }
 
     static func saveSessionToken(_ token: String) {
-        AgentCredentialStore.save(token, account: sessionTokenAccount)
+        updateSharedSession { $0.sessionToken = token.trimmingCharacters(in: .whitespacesAndNewlines) }
+    }
+
+    /// Sign out of some.im everywhere: clears the shared session (broadcasting to
+    /// all apps) and drops this app's local account cache and enabled flag.
+    static func logout() {
+        SomeIMSharedSessionStore.shared.logout()
+        UserDefaults.standard.removeObject(forKey: accountKey)
+        var settings = loadSettings()
+        if settings.enabled {
+            settings.enabled = false
+            saveSettings(settings)
+        }
+        NotificationCenter.default.post(name: accountDidChangeNotification, object: nil)
+        NotificationCenter.default.post(name: sessionDidChangeNotification, object: nil)
+    }
+
+    // MARK: - Shared session plumbing
+
+    /// Loads the shared session (or a fresh empty one), applies `mutate`,
+    /// reconciles the identity fields from local settings/account, and persists —
+    /// but only if the result carries a real key.
+    private static func updateSharedSession(_ mutate: (inout SomeIMSharedSession) -> Void) {
+        var session = SomeIMSharedSessionStore.shared.current()
+            ?? SomeIMSharedSession(apiKey: "", baseURL: loadSettings().baseURL)
+        mutate(&session)
+        session.baseURL = loadSettings().baseURL
+        if let account = loadAccount() {
+            if session.email.isEmpty { session.email = account.email }
+            if session.tenantID == nil { session.tenantID = account.tenantID }
+        }
+        session.updatedAt = Date()
+        guard session.isValid else { return }
+        SomeIMSharedSessionStore.shared.login(session)
+    }
+
+    /// Pushes fresh email/tenant into an existing shared session. No-op when
+    /// nobody is logged in (never resurrects a session from account data alone).
+    private static func mirrorIdentityToShared(email: String, tenantID: String?) {
+        guard var session = SomeIMSharedSessionStore.shared.current() else { return }
+        var changed = false
+        if !email.isEmpty, session.email != email { session.email = email; changed = true }
+        if let tenantID, session.tenantID != tenantID { session.tenantID = tenantID; changed = true }
+        guard changed else { return }
+        session.updatedAt = Date()
+        SomeIMSharedSessionStore.shared.login(session)
+    }
+
+    /// One-time move of legacy per-app Keychain credentials into the shared
+    /// store. Runs at most once per process; only marks itself permanently done
+    /// (and deletes the legacy items) once the shared copy is verifiably readable
+    /// back — so an unsigned dev build that can't reach the access group keeps
+    /// the legacy items and retries on the next signed launch.
+    private static func migrateLegacyIfNeeded() {
+        migrationLock.lock()
+        defer { migrationLock.unlock() }
+        if migrationAttempted { return }
+        migrationAttempted = true
+
+        let defaults = UserDefaults.standard
+        if defaults.bool(forKey: migrationDoneKey) { return }
+        if SomeIMSharedSessionStore.shared.current() != nil {
+            defaults.set(true, forKey: migrationDoneKey)
+            return
+        }
+        let legacyKey = AgentCredentialStore.load(account: legacyAPIKeyAccount)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !legacyKey.isEmpty else {
+            defaults.set(true, forKey: migrationDoneKey)
+            return
+        }
+        let legacyToken = AgentCredentialStore.load(account: legacySessionTokenAccount)
+        let account = loadAccount()
+        let migrated = SomeIMSharedSession(
+            apiKey: legacyKey,
+            sessionToken: legacyToken,
+            email: account?.email ?? "",
+            tenantID: account?.tenantID,
+            baseURL: loadSettings().baseURL
+        )
+        let ok = SomeIMSharedSessionStore.shared.login(migrated)
+        if ok, SomeIMSharedSessionStore.shared.current()?.apiKey == legacyKey {
+            AgentCredentialStore.save("", account: legacyAPIKeyAccount)
+            AgentCredentialStore.save("", account: legacySessionTokenAccount)
+            defaults.set(true, forKey: migrationDoneKey)
+        }
     }
 
     static func loadClientLoginSecret() -> String {
@@ -200,10 +334,57 @@ struct SomeIMAccount: Codable, Equatable {
     var defaultModel: String
     var lastUpdatedAt: Date
 
-    var displayCredits: String {
+    nonisolated var displayCredits: String {
         guard let value = Int64(credits) else { return credits }
         return NumberFormatter.localizedString(from: NSNumber(value: value), number: .decimal)
     }
+
+    nonisolated var compactDisplayCredits: String {
+        Self.compactCredits(credits) ?? displayCredits
+    }
+
+    nonisolated static func compactCredits(_ credits: String) -> String? {
+        guard let value = Double(credits.trimmingCharacters(in: .whitespacesAndNewlines)) else { return nil }
+        let magnitude = abs(value)
+        let unit: (divisor: Double, suffix: String)?
+        if magnitude >= 1_000_000_000 {
+            unit = (1_000_000_000, "B")
+        } else if magnitude >= 1_000_000 {
+            unit = (1_000_000, "M")
+        } else {
+            return nil
+        }
+        guard let unit else { return nil }
+
+        let formatter = NumberFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.numberStyle = .decimal
+        formatter.usesGroupingSeparator = false
+        formatter.minimumFractionDigits = 2
+        formatter.maximumFractionDigits = 2
+        let scaled = value / unit.divisor
+        let rendered = formatter.string(from: NSNumber(value: scaled)) ?? String(format: "%.2f", scaled)
+        return rendered + unit.suffix
+    }
+}
+
+struct SomeIMBrowserLoginRequest: Equatable {
+    var code: String
+    var pairToken: String
+    var url: URL
+    var createdAt: Date
+}
+
+struct SomeIMBrowserLoginStatus: Equatable {
+    enum State: String {
+        case pending
+        case connected
+        case expired
+        case unknown
+    }
+
+    var state: State
+    var account: SomeIMAccount?
 }
 
 struct SomeIMGeneratedImage: Equatable, Sendable {
@@ -212,7 +393,64 @@ struct SomeIMGeneratedImage: Equatable, Sendable {
 }
 
 enum SomeIMClient {
-    private static let willDeepClientID = "willdeep"
+    static let willDeepClientID = "willdeep"
+
+    static func makeBrowserLoginRequest(settings: SomeIMIntegrationSettings) throws -> SomeIMBrowserLoginRequest {
+        let code = try randomDeviceCode()
+        let pairToken = try randomPairToken()
+        let url = try browserLoginURL(settings: settings.normalized, code: code, pairToken: pairToken)
+        return SomeIMBrowserLoginRequest(code: code, pairToken: pairToken, url: url, createdAt: Date())
+    }
+
+    static func checkBrowserLoginStatus(
+        request loginRequest: SomeIMBrowserLoginRequest,
+        settings: SomeIMIntegrationSettings
+    ) async throws -> SomeIMBrowserLoginStatus {
+        try await checkBrowserLoginStatus(
+            request: loginRequest,
+            settings: settings,
+            session: AgentNetworkSupport.defaultSession()
+        )
+    }
+
+    static func checkBrowserLoginStatus(
+        request loginRequest: SomeIMBrowserLoginRequest,
+        settings: SomeIMIntegrationSettings,
+        session: URLSession
+    ) async throws -> SomeIMBrowserLoginStatus {
+        let normalized = settings.normalized
+        let endpoint = try browserStatusEndpoint(from: normalized.baseURL, code: loginRequest.code)
+        var request = URLRequest(url: endpoint)
+        request.httpMethod = "GET"
+        request.timeoutInterval = 12
+        request.setValue("application/json", forHTTPHeaderField: "Accept")
+        request.setValue("Bearer \(loginRequest.pairToken)", forHTTPHeaderField: "Authorization")
+        applyClientLoginSecret(to: &request)
+        AgentNetworkSupport.applyStandardHeaders(to: &request)
+        let data = try await send(request, session: session)
+        let decoded = try decodeEnvelope(BrowserLoginStatusData.self, from: data)
+        let state = SomeIMBrowserLoginStatus.State(rawValue: decoded.status.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()) ?? .unknown
+        guard state == .connected else {
+            return SomeIMBrowserLoginStatus(state: state, account: nil)
+        }
+        guard let apiKey = decoded.api_key?.trimmingCharacters(in: .whitespacesAndNewlines), !apiKey.isEmpty,
+              let accountData = decoded.account else {
+            return SomeIMBrowserLoginStatus(state: .connected, account: nil)
+        }
+        let account = accountData.account(
+            fallbackEmail: "",
+            fallbackModel: decoded.default_model?.nonEmpty ?? SomeIMIntegrationSettings.defaultTextModel
+        )
+        SomeIMIntegrationStore.saveAPIKey(apiKey)
+        if let token = decoded.token?.trimmingCharacters(in: .whitespacesAndNewlines), !token.isEmpty {
+            SomeIMIntegrationStore.saveSessionToken(token)
+        }
+        SomeIMIntegrationStore.saveAccount(account)
+        var nextSettings = normalized
+        nextSettings.enabled = true
+        SomeIMIntegrationStore.saveSettings(nextSettings)
+        return SomeIMBrowserLoginStatus(state: .connected, account: account)
+    }
 
     static func sendClientLoginCode(
         email: String,
@@ -379,12 +617,14 @@ enum SomeIMClient {
     static func generateImage(
         prompt: String,
         size: String = "1024x1024",
-        model overrideModel: String? = nil
+        model overrideModel: String? = nil,
+        outputDirectory: URL? = nil
     ) async throws -> SomeIMGeneratedImage {
         try await generateImage(
             prompt: prompt,
             size: size,
             model: overrideModel,
+            outputDirectory: outputDirectory,
             settings: SomeIMIntegrationStore.loadSettings(),
             apiKey: SomeIMIntegrationStore.loadAPIKey(),
             session: AgentNetworkSupport.defaultSession()
@@ -395,6 +635,7 @@ enum SomeIMClient {
         prompt: String,
         size: String,
         model overrideModel: String?,
+        outputDirectory: URL?,
         settings: SomeIMIntegrationSettings,
         apiKey: String,
         session: URLSession
@@ -440,7 +681,7 @@ enum SomeIMClient {
             throw AgentToolError.invalidArgument("some.im returned no image data.")
         }
         if let base64 = first.b64_json, let data = Data(base64Encoded: base64) {
-            let fileURL = outputURL(fileExtension: "png")
+            let fileURL = outputURL(fileExtension: "png", outputDirectory: outputDirectory)
             try data.write(to: fileURL, options: [.atomic])
             return SomeIMGeneratedImage(fileURL: fileURL, model: model)
         } else if let urlString = first.url, let url = URL(string: urlString) {
@@ -456,7 +697,7 @@ enum SomeIMClient {
                 try? FileManager.default.removeItem(at: temporaryURL)
                 throw AgentToolError.httpFailed(http.statusCode, AgentNetworkSupport.limitDebugText(text))
             }
-            let fileURL = outputURL(fileExtension: url.pathExtension.nonEmpty ?? "png")
+            let fileURL = outputURL(fileExtension: url.pathExtension.nonEmpty ?? "png", outputDirectory: outputDirectory)
             try AgentNetworkSupport.moveDownloadedFile(from: temporaryURL, to: fileURL)
             return SomeIMGeneratedImage(fileURL: fileURL, model: model)
         } else {
@@ -532,6 +773,54 @@ enum SomeIMClient {
         return url
     }
 
+    private static func browserStatusEndpoint(from baseURL: String, code: String) throws -> URL {
+        guard var components = URLComponents(url: try publicAPIEndpoint(from: baseURL, suffix: "public/client-login/browser-status"), resolvingAgainstBaseURL: false) else {
+            throw AgentClientError.invalidResponse
+        }
+        components.queryItems = [
+            URLQueryItem(name: "client_id", value: willDeepClientID),
+            URLQueryItem(name: "willdeep_device_code", value: code)
+        ]
+        guard let url = components.url else { throw AgentClientError.invalidResponse }
+        return url
+    }
+
+    private static func browserLoginURL(settings: SomeIMIntegrationSettings, code: String, pairToken: String) throws -> URL {
+        guard var components = URLComponents(string: settings.baseURL.trimmingCharacters(in: .whitespacesAndNewlines)) else {
+            throw AgentClientError.invalidResponse
+        }
+        components.path = "/customer/login"
+        components.queryItems = [
+            URLQueryItem(name: "client_id", value: willDeepClientID),
+            URLQueryItem(name: "willdeep_device_code", value: code),
+            URLQueryItem(name: "willdeep_pair_token", value: pairToken),
+            URLQueryItem(name: "return_to", value: "willdeep"),
+            URLQueryItem(name: "next", value: "/customer?willdeep_return=1&willdeep_device_code=\(code)&willdeep_pair_token=\(pairToken)")
+        ]
+        guard let url = components.url else { throw AgentClientError.invalidResponse }
+        return url
+    }
+
+    private static func randomDeviceCode() throws -> String {
+        var bytes = [UInt8](repeating: 0, count: 8)
+        let status = SecRandomCopyBytes(kSecRandomDefault, bytes.count, &bytes)
+        guard status == errSecSuccess else {
+            throw AgentToolError.invalidArgument("Unable to create a random some.im login code.")
+        }
+        let alphabet = Array("ABCDEFGHJKLMNPQRSTUVWXYZ23456789")
+        let raw = bytes.map { alphabet[Int($0) % alphabet.count] }
+        return "WD-\(String(raw.prefix(4)))-\(String(raw.suffix(4)))"
+    }
+
+    private static func randomPairToken() throws -> String {
+        var bytes = [UInt8](repeating: 0, count: 32)
+        let status = SecRandomCopyBytes(kSecRandomDefault, bytes.count, &bytes)
+        guard status == errSecSuccess else {
+            throw AgentToolError.invalidArgument("Unable to create a secure some.im browser login token.")
+        }
+        return bytes.map { String(format: "%02x", $0) }.joined()
+    }
+
     private static func jsonRequest(url: URL, method: String) -> URLRequest {
         var request = URLRequest(url: url)
         request.httpMethod = method
@@ -560,10 +849,10 @@ enum SomeIMClient {
     }
 
     private static func decodeEnvelope<T: Decodable>(_ type: T.Type, from data: Data) throws -> T {
-        if let direct = try? JSONDecoder().decode(T.self, from: data) {
-            return direct
+        if let envelope = try? JSONDecoder().decode(APIEnvelope<T>.self, from: data) {
+            return envelope.data
         }
-        return try JSONDecoder().decode(APIEnvelope<T>.self, from: data).data
+        return try JSONDecoder().decode(T.self, from: data)
     }
 
     private static func credits(fromUSD usd: String) -> String {
@@ -572,12 +861,27 @@ enum SomeIMClient {
         return max(Int64(0), NSDecimalNumber(decimal: credits).int64Value).description
     }
 
-    private static func outputURL(fileExtension: String) -> URL {
+    private static func outputURL(fileExtension: String, outputDirectory: URL?) -> URL {
         let formatter = DateFormatter()
         formatter.dateFormat = "yyyyMMdd-HHmmss"
         let filename = "willdeep-generated-image-\(formatter.string(from: Date())).\(fileExtension)"
-        return FileManager.default.urls(for: .downloadsDirectory, in: .userDomainMask).first!
-            .appendingPathComponent(filename)
+        let directory = outputDirectory?.standardizedFileURL
+            ?? URL(fileURLWithPath: FileManager.default.currentDirectoryPath).standardizedFileURL
+        try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        let candidate = directory.appendingPathComponent(filename)
+        guard FileManager.default.fileExists(atPath: candidate.path) else {
+            return candidate
+        }
+        let stem = candidate.deletingPathExtension().lastPathComponent
+        let ext = candidate.pathExtension
+        var counter = 2
+        while true {
+            let next = directory.appendingPathComponent("\(stem)-\(counter).\(ext)")
+            if !FileManager.default.fileExists(atPath: next.path) {
+                return next
+            }
+            counter += 1
+        }
     }
 
     private static func detectKinds(model: String, words: [String]) -> [SomeIMGenerationKind] {
@@ -663,13 +967,96 @@ enum SomeIMClient {
         let account: AccountData
     }
 
-    private struct AccountData: Decodable {
+    private struct BrowserLoginStatusData: Decodable {
+        let status: String
+        let api_key: String?
+        let default_model: String?
+        let token: String?
+        let account: AccountData?
+
+        private enum CodingKeys: String, CodingKey {
+            case status
+            case state
+            case loginStatus = "login_status"
+            case apiKey = "api_key"
+            case apiKeyCamel = "apiKey"
+            case appAPIKey = "app_api_key"
+            case appAPIKeyCamel = "appApiKey"
+            case willDeepAPIKey = "willdeep_api_key"
+            case willDeepAPIKeyCamel = "willdeepApiKey"
+            case defaultModel = "default_model"
+            case defaultModelCamel = "defaultModel"
+            case token
+            case sessionToken = "session_token"
+            case sessionTokenCamel = "sessionToken"
+            case customerSession = "customer_session"
+            case customerSessionCamel = "customerSession"
+            case account
+            case customer
+            case user
+            case credentials
+            case credential
+        }
+
+        init(from decoder: Decoder) throws {
+            let container = try decoder.container(keyedBy: CodingKeys.self)
+            status = try container.decodeFirstString(for: [.status, .state, .loginStatus]) ?? "unknown"
+            let directAPIKey = try container.decodeFirstString(for: [
+                .apiKey,
+                .apiKeyCamel,
+                .appAPIKey,
+                .appAPIKeyCamel,
+                .willDeepAPIKey,
+                .willDeepAPIKeyCamel
+            ])
+            let directDefaultModel = try container.decodeFirstString(for: [.defaultModel, .defaultModelCamel])
+            let directToken = try container.decodeFirstString(for: [
+                .token,
+                .sessionToken,
+                .sessionTokenCamel,
+                .customerSession,
+                .customerSessionCamel
+            ])
+            let credentials = try container.decodeFirstCredentials(for: [.credentials, .credential])
+            api_key = directAPIKey ?? credentials.apiKey
+            default_model = directDefaultModel ?? credentials.defaultModel
+            token = directToken ?? credentials.token
+            account = try container.decodeFirstAccount(for: [.account, .customer, .user])
+                ?? credentials.account
+        }
+    }
+
+    fileprivate struct AccountData: Decodable {
         let email: String?
         let tenant_id: String?
         let balance_usd: String?
         let credits: String?
         let credits_per_usd: Int?
         let default_model: String?
+
+        private enum CodingKeys: String, CodingKey {
+            case email
+            case tenantID = "tenant_id"
+            case tenantIDCamel = "tenantID"
+            case balanceUSD = "balance_usd"
+            case balanceUSDCamel = "balanceUSD"
+            case balance
+            case credits
+            case creditsPerUSD = "credits_per_usd"
+            case creditsPerUSDCamel = "creditsPerUSD"
+            case defaultModel = "default_model"
+            case defaultModelCamel = "defaultModel"
+        }
+
+        init(from decoder: Decoder) throws {
+            let container = try decoder.container(keyedBy: CodingKeys.self)
+            email = try container.decodeFirstString(for: [.email])
+            tenant_id = try container.decodeFirstString(for: [.tenantID, .tenantIDCamel])
+            balance_usd = try container.decodeFirstString(for: [.balanceUSD, .balanceUSDCamel, .balance])
+            credits = try container.decodeFirstString(for: [.credits])
+            credits_per_usd = try container.decodeFirstInt(for: [.creditsPerUSD, .creditsPerUSDCamel])
+            default_model = try container.decodeFirstString(for: [.defaultModel, .defaultModelCamel])
+        }
 
         func account(fallbackEmail: String, fallbackModel: String) -> SomeIMAccount {
             let balance = balance_usd?.trimmingCharacters(in: .whitespacesAndNewlines).nonEmpty ?? "0"
@@ -685,6 +1072,60 @@ enum SomeIMClient {
         }
     }
 
+    fileprivate struct BrowserLoginCredentials: Decodable {
+        let apiKey: String?
+        let defaultModel: String?
+        let token: String?
+        let account: AccountData?
+
+        private enum CodingKeys: String, CodingKey {
+            case apiKey = "api_key"
+            case apiKeyCamel = "apiKey"
+            case appAPIKey = "app_api_key"
+            case appAPIKeyCamel = "appApiKey"
+            case willDeepAPIKey = "willdeep_api_key"
+            case willDeepAPIKeyCamel = "willdeepApiKey"
+            case defaultModel = "default_model"
+            case defaultModelCamel = "defaultModel"
+            case token
+            case sessionToken = "session_token"
+            case sessionTokenCamel = "sessionToken"
+            case customerSession = "customer_session"
+            case customerSessionCamel = "customerSession"
+            case account
+            case customer
+            case user
+        }
+
+        init(apiKey: String?, defaultModel: String?, token: String?, account: AccountData?) {
+            self.apiKey = apiKey
+            self.defaultModel = defaultModel
+            self.token = token
+            self.account = account
+        }
+
+        init(from decoder: Decoder) throws {
+            let container = try decoder.container(keyedBy: CodingKeys.self)
+            apiKey = try container.decodeFirstString(for: [
+                .apiKey,
+                .apiKeyCamel,
+                .appAPIKey,
+                .appAPIKeyCamel,
+                .willDeepAPIKey,
+                .willDeepAPIKeyCamel
+            ])
+            defaultModel = try container.decodeFirstString(for: [.defaultModel, .defaultModelCamel])
+            token = try container.decodeFirstString(for: [
+                .token,
+                .sessionToken,
+                .sessionTokenCamel,
+                .customerSession,
+                .customerSessionCamel
+            ])
+            account = try container.decodeFirstAccount(for: [.account, .customer, .user])
+        }
+    }
+
     private struct AccountBalanceData: Decodable {
         let tenant_id: String
         let currency: String
@@ -697,19 +1138,72 @@ enum SomeIMClient {
     }
 }
 
+private extension KeyedDecodingContainer {
+    func decodeFirstString(for keys: [Key]) throws -> String? {
+        for key in keys {
+            if let value = try? decodeIfPresent(String.self, forKey: key)?
+                .trimmingCharacters(in: .whitespacesAndNewlines),
+               !value.isEmpty {
+                return value
+            }
+            if let value = try? decodeIfPresent(Int.self, forKey: key) {
+                return String(value)
+            }
+            if let value = try? decodeIfPresent(Double.self, forKey: key) {
+                return String(value)
+            }
+        }
+        return nil
+    }
+
+    func decodeFirstInt(for keys: [Key]) throws -> Int? {
+        for key in keys {
+            if let value = try? decodeIfPresent(Int.self, forKey: key) {
+                return value
+            }
+            if let string = try? decodeIfPresent(String.self, forKey: key)?
+                .trimmingCharacters(in: .whitespacesAndNewlines),
+               let value = Int(string) {
+                return value
+            }
+        }
+        return nil
+    }
+
+    func decodeFirstAccount(for keys: [Key]) throws -> SomeIMClient.AccountData? {
+        for key in keys {
+            if let value = try decodeIfPresent(SomeIMClient.AccountData.self, forKey: key) {
+                return value
+            }
+        }
+        return nil
+    }
+
+    func decodeFirstCredentials(for keys: [Key]) throws -> SomeIMClient.BrowserLoginCredentials {
+        for key in keys {
+            if let value = try decodeIfPresent(SomeIMClient.BrowserLoginCredentials.self, forKey: key) {
+                return value
+            }
+        }
+        return SomeIMClient.BrowserLoginCredentials(apiKey: nil, defaultModel: nil, token: nil, account: nil)
+    }
+}
+
 struct SomeIMIntegrationSettingsView: View {
     @EnvironmentObject private var appState: AppState
+    @ObservedObject private var settingsNavigation = EditorSettingsNavigation.shared
     @State private var settings = SomeIMIntegrationStore.loadSettings()
     @State private var apiKey = SomeIMIntegrationStore.loadAPIKey()
     @State private var account = SomeIMIntegrationStore.loadAccount()
-    @State private var accountEmail = SomeIMIntegrationStore.loadAccount()?.email ?? ""
-    @State private var verificationCode = ""
     @State private var fetchedModels: [SomeIMModel] = []
     @State private var isFetching = false
-    @State private var isSendingCode = false
-    @State private var isVerifyingCode = false
     @State private var isRefreshingBalance = false
+    @State private var browserLoginRequest: SomeIMBrowserLoginRequest?
+    @State private var browserLoginWatcher: Task<Void, Never>?
+    @State private var isWatchingBrowserLogin = false
+    @State private var handledBrowserLoginAutogenerateRequestID: UUID?
     @State private var status = ""
+    @State private var showLogoutConfirm = false
 
     private var imageModels: [SomeIMModel] {
         fetchedModels.filter(\.supportsImageGeneration)
@@ -721,6 +1215,55 @@ struct SomeIMIntegrationSettingsView: View {
 
     var body: some View {
         Form {
+            Section(L10n.Settings.SomeIM.browserLoginSection) {
+                VStack(alignment: .leading, spacing: 10) {
+                    Text(L10n.Settings.SomeIM.browserLoginDescription)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+
+                    if let account {
+                        ConnectorUnavailablePlaceholder(
+                            title: L10n.Settings.SomeIM.browserLoginConnectedTitle,
+                            systemImage: "checkmark.circle",
+                            description: L10n.Settings.SomeIM.browserLoginConnectedDescription(account.email)
+                        )
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                    } else {
+                        HStack(alignment: .top, spacing: 12) {
+                            Image(systemName: isWatchingBrowserLogin ? "person.badge.clock" : "safari")
+                                .font(.system(size: 22, weight: .medium))
+                                .foregroundStyle(.tint)
+                                .frame(width: 32, height: 32)
+
+                            VStack(alignment: .leading, spacing: 6) {
+                                Text(L10n.Settings.SomeIM.browserLoginPlaceholderTitle)
+                                    .font(.headline)
+                                Text(L10n.Settings.SomeIM.browserLoginPlaceholderDescription)
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                                HStack(spacing: 6) {
+                                    if isWatchingBrowserLogin {
+                                        ProgressView()
+                                            .scaleEffect(0.6)
+                                            .controlSize(.small)
+                                    }
+                                    Text(browserLoginStatusText)
+                                        .font(.caption)
+                                        .foregroundStyle(.secondary)
+                                }
+                            }
+                        }
+                    }
+
+                    HStack {
+                        Button(L10n.Settings.SomeIM.openBrowserLoginLink) {
+                            openBrowserLoginLink()
+                        }
+                        .disabled(account != nil)
+                    }
+                }
+            }
+
             Section(L10n.Settings.SomeIM.accountSection) {
                 if let account {
                     LabeledContent(L10n.Settings.SomeIM.accountConnected) {
@@ -739,32 +1282,26 @@ struct SomeIMIntegrationSettingsView: View {
                         Button(L10n.Settings.SomeIM.openSomeIM) {
                             openSomeIM()
                         }
+                        Spacer()
+                        Button(L10n.Settings.SomeIM.logout, role: .destructive) {
+                            showLogoutConfirm = true
+                        }
+                    }
+                    .confirmationDialog(
+                        L10n.Settings.SomeIM.logoutConfirmTitle,
+                        isPresented: $showLogoutConfirm,
+                        titleVisibility: .visible
+                    ) {
+                        Button(L10n.Settings.SomeIM.logout, role: .destructive) {
+                            performLogout()
+                        }
+                        Button(L10n.Settings.SomeIM.logoutCancel, role: .cancel) {}
+                    } message: {
+                        Text(L10n.Settings.SomeIM.logoutConfirmMessage)
                     }
                 } else {
                     Text(L10n.Settings.SomeIM.accountNotConnected)
                         .foregroundStyle(.secondary)
-                }
-                LabeledContent(L10n.Settings.SomeIM.emailLabel) {
-                    TextField("", text: $accountEmail)
-                        .textFieldStyle(.roundedBorder)
-                        .disableAutocorrection(true)
-                }
-                LabeledContent(L10n.Settings.SomeIM.emailCodeLabel) {
-                    TextField("", text: $verificationCode)
-                        .textFieldStyle(.roundedBorder)
-                        .disableAutocorrection(true)
-                }
-                HStack {
-                    Button(isSendingCode ? L10n.Settings.SomeIM.sendingCode : L10n.Settings.SomeIM.sendCode) {
-                        sendCode()
-                    }
-                    .disabled(isSendingCode || accountEmail.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-                    Button(isVerifyingCode ? L10n.Settings.SomeIM.verifyingCode : L10n.Settings.SomeIM.verifyCode) {
-                        verifyCode()
-                    }
-                    .disabled(isVerifyingCode
-                        || accountEmail.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-                        || verificationCode.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                 }
             }
 
@@ -832,6 +1369,18 @@ struct SomeIMIntegrationSettingsView: View {
             }
         }
         .formStyle(.grouped)
+        .onAppear {
+            ensureBrowserLoginRequestIfNeeded()
+        }
+        .onReceive(settingsNavigation.$someIMBrowserLoginAutogenerateRequestID) { _ in
+            consumeBrowserLoginAutogenerateRequestIfNeeded()
+        }
+    }
+
+    private var browserLoginStatusText: String {
+        guard browserLoginRequest != nil else { return status }
+        if isWatchingBrowserLogin { return L10n.Settings.SomeIM.browserLoginWaiting }
+        return status.isEmpty ? L10n.Settings.SomeIM.browserLoginReady : status
     }
 
     private var relayRegionBinding: Binding<SomeIMRelayRegion> {
@@ -915,60 +1464,109 @@ struct SomeIMIntegrationSettingsView: View {
         status = L10n.Settings.savedStatus
     }
 
-    private func sendCode() {
-        isSendingCode = true
-        status = ""
-        let email = accountEmail
+    private func prepareBrowserLoginRequest(openInBrowser: Bool) {
+        do {
+            let request = try SomeIMClient.makeBrowserLoginRequest(settings: settings.normalized)
+            browserLoginRequest = request
+            status = L10n.Settings.SomeIM.browserLoginReady
+            startBrowserLoginWatcher(for: request)
+            if openInBrowser {
+                _ = NSWorkspace.shared.open(request.url)
+                status = L10n.Settings.SomeIM.browserLoginOpened
+            }
+        } catch {
+            status = error.localizedDescription
+        }
+    }
+
+    private func consumeBrowserLoginAutogenerateRequestIfNeeded() {
+        guard let requestID = settingsNavigation.someIMBrowserLoginAutogenerateRequestID,
+              handledBrowserLoginAutogenerateRequestID != requestID else {
+            return
+        }
+        handledBrowserLoginAutogenerateRequestID = requestID
+        ensureBrowserLoginRequestIfNeeded()
+    }
+
+    private func ensureBrowserLoginRequestIfNeeded() {
+        guard account == nil else { return }
+        if let request = browserLoginRequest {
+            if !isWatchingBrowserLogin {
+                startBrowserLoginWatcher(for: request)
+            }
+        } else {
+            prepareBrowserLoginRequest(openInBrowser: false)
+        }
+    }
+
+    private func openBrowserLoginLink() {
+        if let request = browserLoginRequest {
+            if !isWatchingBrowserLogin {
+                startBrowserLoginWatcher(for: request)
+            }
+            _ = NSWorkspace.shared.open(request.url)
+            status = L10n.Settings.SomeIM.browserLoginOpened
+        } else {
+            prepareBrowserLoginRequest(openInBrowser: true)
+        }
+    }
+
+    private func startBrowserLoginWatcher(for loginRequest: SomeIMBrowserLoginRequest) {
+        stopBrowserLoginWatcher()
+        isWatchingBrowserLogin = true
+        status = L10n.Settings.SomeIM.browserLoginWaiting
         let currentSettings = settings.normalized
-        Task {
-            let result: Result<Void, Error>
-            do {
-                try await SomeIMClient.sendClientLoginCode(email: email, settings: currentSettings)
-                result = .success(())
-            } catch {
-                result = .failure(error)
+        browserLoginWatcher = Task {
+            let deadline = Date().addingTimeInterval(10 * 60)
+            var lastError: String?
+            while !Task.isCancelled, Date() < deadline {
+                do {
+                    let result = try await SomeIMClient.checkBrowserLoginStatus(request: loginRequest, settings: currentSettings)
+                    if result.state == .connected, let linked = result.account {
+                        await MainActor.run {
+                            account = linked
+                            apiKey = SomeIMIntegrationStore.loadAPIKey()
+                            settings = SomeIMIntegrationStore.loadSettings()
+                            appState.syncSomeIMProvider(settings: settings, apiKey: apiKey)
+                            appState.syncSomeIMImageUnderstanding(apiKey: apiKey)
+                            browserLoginRequest = nil
+                            isWatchingBrowserLogin = false
+                            status = L10n.Settings.SomeIM.browserLoginConnected
+                        }
+                        return
+                    }
+                    if result.state == .connected {
+                        await MainActor.run {
+                            isWatchingBrowserLogin = false
+                            status = L10n.Settings.SomeIM.browserLoginMissingCredentials
+                        }
+                        return
+                    }
+                    if result.state == .expired {
+                        await MainActor.run {
+                            browserLoginRequest = nil
+                            isWatchingBrowserLogin = false
+                            status = L10n.Settings.SomeIM.browserLoginExpired
+                        }
+                        return
+                    }
+                } catch {
+                    lastError = error.localizedDescription
+                }
+                try? await Task.sleep(nanoseconds: 2_000_000_000)
             }
             await MainActor.run {
-                isSendingCode = false
-                switch result {
-                case .success:
-                    status = L10n.Settings.SomeIM.codeSent
-                case .failure(let error):
-                    status = error.localizedDescription
-                }
+                browserLoginRequest = nil
+                isWatchingBrowserLogin = false
+                status = lastError ?? L10n.Settings.SomeIM.browserLoginExpired
             }
         }
     }
 
-    private func verifyCode() {
-        isVerifyingCode = true
-        status = ""
-        let email = accountEmail
-        let code = verificationCode
-        let currentSettings = settings.normalized
-        Task {
-            let result: Result<SomeIMAccount, Error>
-            do {
-                result = .success(try await SomeIMClient.verifyClientLoginCode(email: email, code: code, settings: currentSettings))
-            } catch {
-                result = .failure(error)
-            }
-            await MainActor.run {
-                isVerifyingCode = false
-                switch result {
-                case .success(let linked):
-                    account = linked
-                    accountEmail = linked.email
-                    apiKey = SomeIMIntegrationStore.loadAPIKey()
-                    settings = SomeIMIntegrationStore.loadSettings()
-                    appState.syncSomeIMProvider(settings: settings, apiKey: apiKey)
-                    appState.syncSomeIMImageUnderstanding(apiKey: apiKey)
-                    status = L10n.Settings.SomeIM.connected
-                case .failure(let error):
-                    status = error.localizedDescription
-                }
-            }
-        }
+    private func stopBrowserLoginWatcher() {
+        browserLoginWatcher?.cancel()
+        browserLoginWatcher = nil
+        isWatchingBrowserLogin = false
     }
 
     private func refreshBalance() {
@@ -992,6 +1590,19 @@ struct SomeIMIntegrationSettingsView: View {
                 }
             }
         }
+    }
+
+    private func performLogout() {
+        // Clears the shared session (broadcasting to every app on this Mac) and
+        // this app's local caches. The AppState observer also drops the agent
+        // provider off the sessionDidChange broadcast; do it here too for an
+        // immediate, in-view response.
+        SomeIMIntegrationStore.logout()
+        appState.clearSomeIMProvider()
+        account = nil
+        apiKey = ""
+        settings.enabled = false
+        status = L10n.Settings.SomeIM.loggedOut
     }
 
     private func openSomeIM() {

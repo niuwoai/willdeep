@@ -7,6 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		4C6FDA980F6219C8E718AEE6 /* SomeIMSharedSession in Frameworks */ = {isa = PBXBuildFile; productRef = 4D400004B6087AD73D48973E /* SomeIMSharedSession */; };
 		5CA6B0922FC70A00006DFCCC /* WillDeep.help in Resources */ = {isa = PBXBuildFile; fileRef = 5CA6B0912FC70A00006DFCCC /* WillDeep.help */; };
 		5CA6B0A22FD0C9E0006DFCCC /* BundledSkills in Resources */ = {isa = PBXBuildFile; fileRef = 5CA6B0A12FD0C9E0006DFCCC /* BundledSkills */; };
 		5CA6B0B42FDDF001006DFCCC /* AIPipe.m in Sources */ = {isa = PBXBuildFile; fileRef = 5CA6B0AE2FDDF001006DFCCC /* AIPipe.m */; };
@@ -76,11 +77,15 @@
 		};
 		5CA6B0742FC6D8FA006DFCCC /* XeditTests */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+			);
 			path = XeditTests;
 			sourceTree = "<group>";
 		};
 		5CA6B07E2FC6D8FA006DFCCC /* XeditUITests */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+			);
 			path = XeditUITests;
 			sourceTree = "<group>";
 		};
@@ -92,6 +97,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				5CA6B0D02FE2A000006DFCCC /* SwiftTerm in Frameworks */,
+				4C6FDA980F6219C8E718AEE6 /* SomeIMSharedSession in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -195,6 +201,7 @@
 			name = Xedit;
 			packageProductDependencies = (
 				5CA6B0D22FE2A000006DFCCC /* SwiftTerm */,
+				4D400004B6087AD73D48973E /* SomeIMSharedSession */,
 			);
 			productName = WillDeep;
 			productReference = 5CA6B0612FC6D8F9006DFCCC /* WillDeep.app */;
@@ -217,8 +224,6 @@
 				5CA6B0742FC6D8FA006DFCCC /* XeditTests */,
 			);
 			name = XeditTests;
-			packageProductDependencies = (
-			);
 			productName = XeditTests;
 			productReference = 5CA6B0712FC6D8FA006DFCCC /* XeditTests.xctest */;
 			productType = "com.apple.product-type.bundle.unit-test";
@@ -240,8 +245,6 @@
 				5CA6B07E2FC6D8FA006DFCCC /* XeditUITests */,
 			);
 			name = XeditUITests;
-			packageProductDependencies = (
-			);
 			productName = XeditUITests;
 			productReference = 5CA6B07B2FC6D8FA006DFCCC /* XeditUITests.xctest */;
 			productType = "com.apple.product-type.bundle.ui-testing";
@@ -281,6 +284,7 @@
 			minimizedProjectReferenceProxies = 1;
 			packageReferences = (
 				5CA6B0D12FE2A000006DFCCC /* XCRemoteSwiftPackageReference "SwiftTerm" */,
+				8E3B78276C406A11424E710D /* XCRemoteSwiftPackageReference "SomeIMSharedSession" */,
 			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = 5CA6B0622FC6D8F9006DFCCC /* Products */;
@@ -439,7 +443,7 @@
 					"$(SRCROOT)/Xedit/Voice/Libraries/onnxruntime",
 					"$(PROJECT_DIR)/Xedit/Voice/Libraries/onnxruntime",
 				);
-				MARKETING_VERSION = "1.133.0-rc1";
+				MARKETING_VERSION = "1.136.0-rc26";
 				OTHER_LDFLAGS = (
 					"$(inherited)",
 					"$(SRCROOT)/Xedit/Voice/Libraries/onnxruntime/libonnxruntime.1.23.2.dylib",
@@ -494,7 +498,7 @@
 					"$(SRCROOT)/Xedit/Voice/Libraries/onnxruntime",
 					"$(PROJECT_DIR)/Xedit/Voice/Libraries/onnxruntime",
 				);
-				MARKETING_VERSION = "1.133.0-rc1";
+				MARKETING_VERSION = "1.136.0-rc26";
 				OTHER_LDFLAGS = (
 					"$(inherited)",
 					"$(SRCROOT)/Xedit/Voice/Libraries/onnxruntime/libonnxruntime.1.23.2.dylib",
@@ -642,7 +646,7 @@
 				DEVELOPMENT_TEAM = ZH2S7D6PL6;
 				GENERATE_INFOPLIST_FILE = YES;
 				MACOSX_DEPLOYMENT_TARGET = 13.7;
-				MARKETING_VERSION = "1.133.0-rc1";
+				MARKETING_VERSION = "1.136.0-rc26";
 				PRODUCT_BUNDLE_IDENTIFIER = com.willdeep.app.tests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				STRING_CATALOG_GENERATE_SYMBOLS = NO;
@@ -663,7 +667,7 @@
 				DEVELOPMENT_TEAM = ZH2S7D6PL6;
 				GENERATE_INFOPLIST_FILE = YES;
 				MACOSX_DEPLOYMENT_TARGET = 13.7;
-				MARKETING_VERSION = "1.133.0-rc1";
+				MARKETING_VERSION = "1.136.0-rc26";
 				PRODUCT_BUNDLE_IDENTIFIER = com.willdeep.app.tests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				STRING_CATALOG_GENERATE_SYMBOLS = NO;
@@ -682,7 +686,7 @@
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = ZH2S7D6PL6;
 				GENERATE_INFOPLIST_FILE = YES;
-				MARKETING_VERSION = "1.133.0-rc1";
+				MARKETING_VERSION = "1.136.0-rc26";
 				PRODUCT_BUNDLE_IDENTIFIER = com.willdeep.app.uitests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				STRING_CATALOG_GENERATE_SYMBOLS = NO;
@@ -701,7 +705,7 @@
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = ZH2S7D6PL6;
 				GENERATE_INFOPLIST_FILE = YES;
-				MARKETING_VERSION = "1.133.0-rc1";
+				MARKETING_VERSION = "1.136.0-rc26";
 				PRODUCT_BUNDLE_IDENTIFIER = com.willdeep.app.uitests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				STRING_CATALOG_GENERATE_SYMBOLS = NO;
@@ -763,9 +767,22 @@
 				minimumVersion = 1.5.0;
 			};
 		};
+		8E3B78276C406A11424E710D /* XCRemoteSwiftPackageReference "SomeIMSharedSession" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/xurenlu/SomeIMSharedSession.git";
+			requirement = {
+				kind = exactVersion;
+				version = 0.1.0;
+			};
+		};
 /* End XCRemoteSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
+		4D400004B6087AD73D48973E /* SomeIMSharedSession */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 8E3B78276C406A11424E710D /* XCRemoteSwiftPackageReference "SomeIMSharedSession" */;
+			productName = SomeIMSharedSession;
+		};
 		5CA6B0D22FE2A000006DFCCC /* SwiftTerm */ = {
 			isa = XCSwiftPackageProductDependency;
 			package = 5CA6B0D12FE2A000006DFCCC /* XCRemoteSwiftPackageReference "SwiftTerm" */;

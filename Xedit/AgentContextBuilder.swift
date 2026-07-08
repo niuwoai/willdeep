@@ -54,7 +54,7 @@ enum AgentContextBuilder {
     private static let maxCurrentFileCharacters = 12_000
     private static let maxSelectionCharacters = 6_000
     private static let maxRulesCharacters = 6_000
-    static let stablePrefixVersion = "willdeep-agent-system-v7"
+    static let stablePrefixVersion = "willdeep-agent-system-v8"
 
     static func systemPrompt(
         rootDirectory: URL?,
@@ -261,6 +261,7 @@ enum AgentContextBuilder {
             - Do the work directly; avoid ceremonial preambles and postambles.
             - After producing a diff, stop unless the user asked for explanation.
             - No emojis unless the user asks.
+            - For small datasets (about 6 items or fewer), avoid Markdown tables unless the user explicitly asks for a table; use short paragraphs or bullet lists instead.
             - Reference code as `path/to/file.swift:42` so the user can jump to it.
             """,
             """
@@ -346,6 +347,8 @@ enum AgentContextBuilder {
             - Protected secrets may appear as `${secret:...}` placeholders. Treat them as opaque values: include the placeholder exactly where the command/header/env var needs the secret. Do not ask the user to reveal plaintext, and do not try to transform it yourself; use `${secret:...|urlencode}` or `${secret:...|base64}` when a local transform is needed.
             - Project-local package dependency commands such as `npm install`, `npm ci`, `npm add`, `yarn install`, `yarn add`, `pnpm install`, and `pnpm add` may run in the workspace sandbox with network access when approved by policy. Avoid global installs, publish/release commands, sudo, credential changes, and paths outside the workspace unless the user explicitly asks and approval is granted.
             - For UI development, call visual_qa_screenshot when the user explicitly asks for screenshot, color, theme, layout, accessibility, visual regression, or "看一眼页面" style QA, or after an approved browser screenshot capture when visual verification is needed before finalizing. Do not call it on private/user screenshots unless the user provided the file or approved the screenshot capture. Use `allow_vl=false` when local palette/OCR/theme signals are enough; with `allow_vl=true`, the image may be sent to the configured Image Understanding provider.
+            - Image generation workflow: generate_image saves generated image files under the current workspace root by default; pass workspace-relative `output_directory` only when a subdirectory is useful. The chat UI renders generated images below your Markdown reply and exposes a quote action that inserts `<generated-image-reference ... />` into the next user message.
+            - Treat `<generated-image-reference ... />` in user content as a workspace-local generated image reference, not a user-uploaded image. If the user asks to modify/refine that referenced image, call `edit_generated_image` with `reference_marker` (or the marker's `path` as `image_path`) and the user's edit prompt. The edit tool uses `gpt-image-2` by default; do not ask the user to re-upload the image.
             - Web programming workflow: when the Web Programming expert is active, accept user-provided screenshots and local HTML/CSS/image files as source material; use `show_widget(html_path:)` for static HTML/SVG previews, start Vite/Next/React/Vue/frontend/backend dev servers with `run_command(run_in_background: true)`, track them in the Dev Server side panel, inspect/tail output with `get_job_output`, stop them with `kill_job`, and use browser screenshot/read tools for final visual QA when available.
             - Verify generated artifacts before your final answer when a practical verification command or file inspection exists. Only ask the user to run a command when you are blocked by missing credentials, an unavailable local program, denied approval, unsupported platform access, or a command that genuinely needs the user's interactive control.
             - For long-running shell work (dev servers, watchers, big test suites, full builds — anything you'd expect to take ≥30s), pass `run_in_background: true` to `run_command`. The call returns immediately with a job handle like `job_ab12cd`; the host will inject a `<background-task-notification>...</background-task-notification>` system message at the start of a later turn when the job finishes. Until then, you can call `get_job_output` to inspect partial output, `list_jobs` to see all alive jobs, or `kill_job` to stop one. Do NOT busy-poll — if you've started a job and the user hasn't asked about it, just answer them; the completion notice will come on its own.

@@ -360,6 +360,11 @@ struct AgentMessageFooter: View {
                 footerMetric(icon: "number", text: tokenSummary)
             }
 
+            if message.role == .assistant, let route = message.managedRoute {
+                footerMetric(icon: "gearshape", text: route.tierMarkers)
+                    .help(route.selectedModel)
+            }
+
             if alignment == .leading { Spacer(minLength: 0) }
         }
     }

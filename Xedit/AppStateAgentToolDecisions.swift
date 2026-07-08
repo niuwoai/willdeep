@@ -16,7 +16,8 @@ extension AppState {
     }
 
     func alwaysAllowAgentToolCall(id: AgentToolCall.ID) {
-        guard let call = agentToolCalls.first(where: { $0.id == id }) else { return }
+        guard let (runtime, index) = runtimeAndToolCallIndex(containing: id) else { return }
+        let call = runtime.toolCalls[index]
         if let rule = alwaysAllowedCommand(for: call) {
             addAgentAlwaysAllowedCommand(rule)
         }
@@ -41,6 +42,10 @@ extension AppState {
     /// provided"; use `denyAgentToolCall` to skip outright.
     func answerAgentToolCall(id: AgentToolCall.ID, answer: String) {
         resolveAgentToolCallDecision(id: id, decision: .answered(answer))
+    }
+
+    func hasPendingAgentToolDecision(id: AgentToolCall.ID) -> Bool {
+        runtimeAndToolCallIndex(containing: id)?.runtime.pendingToolDecisions[id] != nil
     }
 
     func fillTerminalShortcutProtectedInputs(
@@ -116,22 +121,31 @@ extension AppState {
             arguments: arguments,
             rootDirectory: rootDirectory
         )
-        // Goal mode is intended to run without babysitting. Danger-tier
-        // calls never reach this function, and untrusted MCP servers still
-        // fall back to the per-call gate.
+
+        // Goal mode implicitly enables the auto-approve safety judge for
+        // command-shaped calls so it can stay autonomous without the user
+        // flipping the master toggle. In smart mode this stays exactly
+        // `autoApproveSafeCommands`, so non-goal behavior is unchanged.
+        let judgeAutoApprove = autoApproveSafeCommands || interactionMode == .goal
+
+        // Goal mode runs with high autonomy but no longer blanket-approves
+        // every write-tier call. Sandbox-contained, non-command work (file
+        // writes, validated public `web_fetch`) is fast-pathed here so the
+        // agent isn't babysat; command-shaped calls (run_command, terminal_*,
+        // call_mcp_tool) fall through to the same static-classify → LLM-judge
+        // gate as smart mode. That way a judge-flagged-dangerous command, an
+        // unavailable judge, or a destructive typed-confirmation op pauses
+        // for the user instead of running blind. Danger-tier calls never
+        // reach this function; untrusted MCP servers still hit the per-call
+        // gate below.
         if interactionMode == .goal,
+           !sandboxDecision.requiresTypedConfirmation,
+           !Self.isCommandShapedTool(toolName),
            sandboxDecision.mode != .escalated || goalModeCanAutoApproveEscalated(
                toolName: toolName,
                arguments: arguments
            ) {
-            if toolName == "call_mcp_tool" {
-                if let server = arguments["server"]?.stringValue(),
-                   AgentMCPSettingsStore.isServerTrusted(name: server) {
-                    return .goalMode
-                }
-            } else {
-                return .goalMode
-            }
+            return .goalMode
         }
 
         if approvalMode == .requestEveryTime {
@@ -185,7 +199,7 @@ extension AppState {
             case .fullyTrusted:
                 return .trustedServer
             case .standard:
-                guard autoApproveSafeCommands else { return nil }
+                guard judgeAutoApprove else { return nil }
                 if AgentToolAuthorization.mcpToolNameLooksReadOnly(tool) {
                     return .staticAllowlist
                 }
@@ -204,7 +218,7 @@ extension AppState {
         // this, every `terminal_send_command` fell straight through to a
         // manual prompt; it was the single biggest source of hand approvals.
         if toolName == "terminal_send_command" {
-            guard autoApproveSafeCommands,
+            guard judgeAutoApprove,
                   let command = arguments["command"]?.stringValue(),
                   !command.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
                 return nil
@@ -221,7 +235,7 @@ extension AppState {
         }
 
         if toolName == "terminal_send_control" {
-            guard autoApproveSafeCommands,
+            guard judgeAutoApprove,
                   let control = arguments["control"]?.stringValue()?
                       .trimmingCharacters(in: .whitespacesAndNewlines).lowercased(),
                   ["ctrl_c", "enter", "escape"].contains(control) else {
@@ -232,7 +246,7 @@ extension AppState {
         }
 
         guard toolName == "run_command" else { return nil }
-        guard autoApproveSafeCommands,
+        guard judgeAutoApprove,
               let command = arguments["command"]?.stringValue() else {
             return nil
         }
@@ -324,6 +338,24 @@ extension AppState {
         return result == .allow ? .llmJudge : nil
     }
 
+    /// Tools whose side effects the workspace sandbox alone can't contain —
+    /// they run shell commands or reach an MCP server, so even in goal mode
+    /// they must clear the static-classify → LLM-judge gate rather than being
+    /// blanket-approved. Non-command write tools (file edits within the
+    /// sandbox root, validated public `web_fetch`) are fast-pathed by goal
+    /// mode instead. Keep in sync with the command branches in
+    /// `autoApprovalSource`.
+    nonisolated static let commandShapedToolNames: Set<String> = [
+        "run_command",
+        "terminal_send_command",
+        "terminal_send_control",
+        "call_mcp_tool"
+    ]
+
+    nonisolated static func isCommandShapedTool(_ toolName: String) -> Bool {
+        commandShapedToolNames.contains(toolName)
+    }
+
     nonisolated static func canSendToSafetyJudge(
         toolName: String,
         sandboxDecision: AgentSandboxDecision
@@ -365,22 +397,87 @@ extension AppState {
         if !flash.isEmpty {
             configuration.model = flash
         }
+        // The judge reads the live `agentConfiguration`, whose apiKey can
+        // briefly lag the active library entry: the key is materialized from
+        // Keychain lazily and `applyActiveProviderLibraryEntry()` can
+        // early-return before flushing it into the configuration. When that
+        // window overlaps a tool decision the judge sends an empty key and
+        // silently falls back to a manual prompt — historically a large slice
+        // of judge calls logged `unavailable / missing api key`. If the
+        // resolved key is empty, hydrate it straight from the active entry's
+        // Keychain-backed secret so the judge stays available whenever a key
+        // actually exists.
+        if configuration.requiresAPIKey, configuration.apiKey.isEmpty {
+            let hydrated = activeProviderLibraryAPIKey()
+            if !hydrated.isEmpty {
+                configuration.apiKey = hydrated
+            }
+        }
         return configuration.normalized
     }
 
+    /// The active library entry's API key, reading straight from Keychain via
+    /// a throwaway library copy when the live entry hasn't been materialized
+    /// yet. Never mutates published state, so it's safe to call from the
+    /// synchronous tool-decision path without kicking the provider-library
+    /// `didSet` cascade (and the DeepSeek-key-copied-to-OpenAI-entry class of
+    /// bugs that machinery guards against).
+    private func activeProviderLibraryAPIKey() -> String {
+        guard let activeID = agentProviderLibrary.activeID,
+              let entry = agentProviderLibrary.entries.first(where: { $0.id == activeID }) else {
+            return ""
+        }
+        if entry.apiKeyLoaded { return entry.apiKey }
+        var copy = agentProviderLibrary
+        guard AgentSettingsStore.materializeProviderLibraryAPIKey(in: &copy, id: activeID) else {
+            return entry.apiKey
+        }
+        return copy.entries.first(where: { $0.id == activeID })?.apiKey ?? entry.apiKey
+    }
+
     func resolveAgentToolCallDecision(id: AgentToolCall.ID, decision: AgentToolDecision) {
-        guard let index = agentToolCalls.firstIndex(where: { $0.id == id }) else { return }
-        guard agentToolCalls[index].status == .pendingApproval
-            || agentToolCalls[index].status == .awaitingConfirm
-            || agentToolCalls[index].status == .awaitingUserAnswer else {
+        guard let (runtime, index) = runtimeAndToolCallIndex(containing: id) else { return }
+        guard runtime.toolCalls[index].status == .pendingApproval
+            || runtime.toolCalls[index].status == .awaitingConfirm
+            || runtime.toolCalls[index].status == .awaitingUserAnswer else {
             return
         }
+
+        runtime.pendingToolDecisions[id] = decision
+
         if case .denied(let reason) = decision {
-            agentToolCalls[index].status = .denied
-            agentToolCalls[index].errorMessage = reason
+            runtime.toolCalls[index].status = .denied
+            runtime.toolCalls[index].errorMessage = reason
         }
-        agentToolDecisionWaiter?.resume(returning: decision)
-        agentToolDecisionWaiter = nil
+
+        guard let waiter = runtime.toolDecisionWaiter else { return }
+        guard runtime.toolDecisionWaiterCallID == nil || runtime.toolDecisionWaiterCallID == id else {
+            return
+        }
+
+        runtime.pendingToolDecisions.removeValue(forKey: id)
+        runtime.toolDecisionWaiter = nil
+        runtime.toolDecisionWaiterCallID = nil
+
+        if case .approved = decision {
+            runtime.toolCalls[index].status = .running
+        } else if case .answered = decision {
+            runtime.toolCalls[index].status = .running
+        }
+        waiter.resume(returning: decision)
+    }
+
+    private func runtimeAndToolCallIndex(containing id: AgentToolCall.ID) -> (runtime: AgentRuntime, index: Int)? {
+        if let runtime = activeRuntime,
+           let index = runtime.toolCalls.firstIndex(where: { $0.id == id }) {
+            return (runtime, index)
+        }
+        for runtime in agentRuntimes.values {
+            if let index = runtime.toolCalls.firstIndex(where: { $0.id == id }) {
+                return (runtime, index)
+            }
+        }
+        return nil
     }
 
     private func goalModeCanAutoApproveEscalated(

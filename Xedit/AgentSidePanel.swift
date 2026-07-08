@@ -1481,7 +1481,7 @@ struct AgentSidePanelDiffView: View {
             if trimmed.isEmpty {
                 return .empty
             }
-            return .loaded(diff: diff, summaryDate: Date())
+            return .loaded(diff: AgentSidePanelDiffLimiter.displayText(for: diff), summaryDate: Date())
         }.value
 
         await MainActor.run { state = result }
@@ -1588,22 +1588,55 @@ private struct AgentSidePanelColoredDiffView: View {
     @State private var cachedText: AttributedString?
 
     var body: some View {
-        ScrollView([.vertical, .horizontal]) {
-            Text(cachedText ?? AttributedString(diff))
-                .font(.system(size: 11, design: .monospaced))
-                .textSelection(.enabled)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(12)
+        Group {
+            if cachedKey == cacheKey, let cachedText {
+                ScrollView([.vertical, .horizontal]) {
+                    Text(cachedText)
+                        .font(.system(size: 11, design: .monospaced))
+                        .textSelection(.enabled)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(12)
+                }
+            } else {
+                ProgressView()
+                    .controlSize(.small)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+            }
         }
         .background(AgentDiffColorizer.background(for: palette))
-        .onAppear(perform: refreshIfNeeded)
-        .onCompatibleChange(of: cacheKey) { _, _ in refreshIfNeeded() }
+        .task(id: cacheKey) {
+            await refreshIfNeeded()
+        }
     }
 
-    private func refreshIfNeeded() {
+    private func refreshIfNeeded() async {
         guard cachedKey != cacheKey else { return }
-        cachedText = AgentDiffColorizer.attributed(diff, palette: palette)
-        cachedKey = cacheKey
+        cachedText = nil
+        let nextKey = cacheKey
+        let nextDiff = diff
+        let nextPalette = palette
+        let text = await Task.detached(priority: .userInitiated) {
+            AgentDiffColorizer.attributed(nextDiff, palette: nextPalette)
+        }.value
+        guard !Task.isCancelled, cacheKey == nextKey else { return }
+        cachedText = text
+        cachedKey = nextKey
+    }
+}
+
+enum AgentSidePanelDiffLimiter {
+    nonisolated private static let sampleCharacters = 24 * 1024
+
+    nonisolated static func displayText(for diff: String) -> String {
+        guard diff.count > AppState.worktreeDiffPreviewMaxCharacters else { return diff }
+        let sample = String(diff.prefix(sampleCharacters))
+        return """
+        Diff 文本超过 \(AppState.worktreeDiffPreviewMaxCharacters / 1024)KB，已只显示前 \(sampleCharacters / 1024)KB，避免侧边栏渲染长文本导致窗口卡顿。
+
+        \(sample)
+
+        ... diff 已截断；完整内容可在终端运行 git diff --no-ext-diff HEAD -- 查看。
+        """
     }
 }
 
@@ -1895,11 +1928,11 @@ private enum PreviewPaneCompatibility {
 /// the diff sits in the same palette as the rest of the app. Built once per
 /// load into a single AttributedString so selection/copy still work.
 enum AgentDiffColorizer {
-    static func background(for palette: EditorInterfaceSkinPalette) -> Color {
+    nonisolated static func background(for palette: EditorInterfaceSkinPalette) -> Color {
         palette.previewBase
     }
 
-    static func attributed(_ diff: String, palette: EditorInterfaceSkinPalette) -> AttributedString {
+    nonisolated static func attributed(_ diff: String, palette: EditorInterfaceSkinPalette) -> AttributedString {
         // Red/green that read well on both light and dark skin backgrounds.
         let addition = Color(red: 0.18, green: 0.62, blue: 0.31)
         let deletion = Color(red: 0.83, green: 0.24, blue: 0.30)
@@ -1927,7 +1960,7 @@ enum AgentDiffColorizer {
         return result
     }
 
-    private static func color(
+    nonisolated private static func color(
         forDiffLine line: String,
         addition: Color,
         deletion: Color,

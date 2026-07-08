@@ -1,35 +1,297 @@
 # Changelog
 
+## 1.136.0-rc26 - 2026-07-08
+
+### Added
+
+- **some.im 登录态跨 App 共享**：apiKey / sessionToken 改存共享 Keychain 访问组（Team `ZH2S7D6PL6`，entitlement `keychain-access-groups`），通过独立私有 Swift 包 [`SomeIMSharedSession`](https://github.com/xurenlu/SomeIMSharedSession) 收拢读写。一处登录、本机所有签名 App 都登录；一处登出、大家一起登出（登录/登出经 `DistributedNotificationCenter` 广播不含任何密钥的变更通知，各 App 收到后重读凭据并对账 agent provider）。首次启动把旧的 per-app Keychain 凭据一次性迁移进共享组、验证读回后删旧。`saveAPIKey("")` 由「删 key」改为 no-op，杜绝设置页空串误覆盖导致的「登录一会儿就掉」。
+- **some.im 设置页「退出登录」按钮**：账户区新增带二次确认的退出登录，清共享会话（广播全 App）+ 本地缓存 + agent provider；文案 en / zh-Hans 齐备。
+- **CI 私有包鉴权**：`test.yml` 用只读 deploy key（secret `SOMEIM_DEPLOY_KEY`）解析私有 `SomeIMSharedSession` 包，https→ssh 重写仅限定该包仓，公开依赖 SwiftTerm 不受影响。
+
+### Changed
+
+- 版本号从 **1.136.0-rc25** 递增为 **1.136.0-rc26**。
+
+## 1.136.0-rc25 - 2026-07-08
+
+### Changed
+
+- **some.im 生图默认异步化**：`generate_image` 现在复用 `some_im_create_media_task`，普通 Agent 生图会提交到媒体任务中心并由轮询下载产物，不再阻塞等待同步 `/images/generations` 返回。
+- **some.im 图片媒体任务默认端点** 从 `images/generations` 改为 `images/async-generations`；短剧分镜/资产图片生成等复用 `SomeIMAsyncMediaClient.defaultEndpointSuffix` 的入口同步走异步生图接口，视频仍默认 `videos/generations`，图片编辑仍默认 `images/edits`。
+- **some.im 媒体任务请求超时**：提交、轮询、取消请求的单次 `URLRequest.timeoutInterval` 明确设为 `AgentNetworkSupport.resourceTimeout`（600 秒），避免默认 request timeout 120 秒先取消长耗时请求。
+- 版本号从 **1.136.0-rc24** 递增为 **1.136.0-rc25**。
+
+## 1.136.0-rc24 - 2026-07-08
+
+### Added
+
+- **some.im「省心托管」动态路由（Phase 1 + Phase 2 + Phase 3）**：composer 模型菜单在 some.im provider 下新增「省心托管」入口。选中后每个用户轮先用轻量裁判模型 `someim-judge`（底层非思考 DeepSeek）判断任务域（coding/general）与复杂度（low/high），结合会话级「只升不降」能力档位动态选择本轮实际模型（`someim-coding-plan-low/high/premium`、`someim-auto-flash/pro`）；裁判失败自动回退本地启发式。无 tool call 的输出会做质检（本地确定性重复/空输出检测 + `someim-judge` 复核），命中明确生成故障时清掉本轮输出并升一档重试一次（每用户轮至多一次）。some.im 请求附带 `x-willdeep-session-id` 与本机随机 `x-willdeep-workspace-id`（只发随机 UUID，不含任何本地路径）。裁判与主模型共用同一 provider 并发槽；路由锁定每用户轮一次，tool 循环内不重判。可观测性：每条 assistant 消息记录本轮 route 决策（选中模型/档位/domain/complexity/是否 fallback/是否升档），消息 footer 显示「托管 · Low/High/Premium」标记（升档 ↑、fallback ~）。设计文档：`docs/SOME_IM_MANAGED_ROUTING_DESIGN.md`。
+
+### Changed
+
+- 版本号从 **1.136.0-rc23** 递增为 **1.136.0-rc24**。
+
+## 1.136.0-rc23 - 2026-07-08
+
+### Fixed
+
+- `cursor_agent` 外部委派工具现在能发现官方独立安装的 `cursor-agent`（`curl https://cursor.com/install | bash` 装在 `~/.local/bin/cursor-agent`，且不提供 `cursor` 命令）。此前发现逻辑只查 `cursor` 编辑器启动器，只装了独立 Agent CLI 的用户会被误判为"未安装"、调用直接失败。发现优先级：独立 `cursor-agent` → `cursor` 编辑器启动器（后者会把 `agent` 子命令转发给同一个 headless agent）。`LocalAgentCLI` 设置页发现目录同步更新。
+- 委派给外部 CLI（claude / codex / cursor / cline）时，子进程 PATH 补上 `~/.local/bin` 与 `~/.cargo/bin`。从 Finder/Dock 启动 App 只继承最小 launchd PATH，外部 CLI 再 fork 的 `node` / `uv` / `python` / `git` 若装在用户级前缀里会 `command not found`，导致委派任务跑到一半失败。
+
+### Changed
+
+- 版本号从 **1.136.0-rc22** 递增为 **1.136.0-rc23**。
+
+## 1.136.0-rc22 - 2026-07-08
+
+### Fixed
+
+- 智能审批 LLM 判官不再因 API key 时序竞态而静默掉线：`configurationForSafetyJudge()` 在运行时配置的 apiKey 为空时，直接从当前激活的 provider library 条目的 Keychain 密钥补齐（读本地副本、不触发 provider-library 的 didSet 级联），消除审计日志里大量 `unavailable / missing api key` 导致的"判官没上岗、直接退回人工"。
+
+### Changed
+
+- Goal 模式不再对所有写操作"一刀切"自动放行。沙箱内、非破坏性的文件写与已校验的公网 `web_fetch` 仍然快速放行以保持自主；命令类调用（`run_command` / `terminal_send_command` / `terminal_send_control` / `call_mcp_tool`）改为走与 smart 模式相同的「静态分类 → LLM 判官」闸门（Goal 模式隐式启用判官）。判官判为危险、判官不可用，或属于需打字确认的破坏性操作时，暂停等待人工，而非盲目执行——按风险分级，向 Codex 的 auto-review 语义靠拢。
+- 版本号从 **1.136.0-rc21** 递增为 **1.136.0-rc22**。
+
+## 1.136.0-rc21 - 2026-07-08
+
+### Fixed
+
+- `generate_image` / some.im 图片任务产出的生成图会挂到最终 assistant 消息，在 Markdown 下方直接显示缩略图，不再只藏在工具结果里。
+- 生成图默认保存到当前 workspace 根目录，可通过 `output_directory` 指定 workspace 内子目录，不再落到下载目录。
+- 聊天区生成图支持右键“引用”，会向 composer 写入 `<generated-image-reference ... />` 标记；后续修改该图时可通过 `edit_generated_image` 发送给 `gpt-image-2` 作为参考图，不需要重新上传图片。
+- 版本号从 **1.136.0-rc20** 递增为 **1.136.0-rc21**。
+
+## 1.136.0-rc20 - 2026-07-08
+
+### Fixed
+
+- Agent 会话区右上 Diff、Terminal、Preview、Files 快捷入口移除外层胶囊框和选中图标底框，避免图标外再套一层圆角矩形。
+- 选中态改用图标强调色与字重表达，保持可点击热区和侧栏切换行为不变。
+- 版本号从 **1.136.0-rc19** 递增为 **1.136.0-rc20**。
+
+## 1.136.0-rc19 - 2026-07-08
+
+### Added
+
+- Agent 聊天会话新增 `Command+F` 会话内搜索：右上角显示悬浮搜索入口，输入后高亮所有命中，并提供上一条/下一条和当前命中计数。
+- 搜索模式会临时纳入当前会话完整可见历史，不再只覆盖默认渲染的最近消息；当前命中会自动滚入视口，搜索时不会被自动到底滚动打断。
+- 新增搜索匹配与活动高亮回归测试，锁定大小写无关匹配和当前命中特殊高亮。
+- 版本号从 **1.136.0-rc18** 递增为 **1.136.0-rc19**。
+
+## 1.136.0-rc18 - 2026-07-08
+
+### Fixed
+
+- Agent 左下 some.im 账号区改用紧凑 credits 展示，百万/十亿级数字显示为 `46.00M` / `4.21B`，避免长余额挤爆侧栏。
+- 补齐 some.im 账号区 credits、打开账号、刷新余额等文案的中英文本地化，中文环境不再显示英文 `credits`。
+- 新增回归测试，锁定 some.im credits 紧凑格式保留两位小数。
+- 版本号从 **1.136.0-rc17** 递增为 **1.136.0-rc18**。
+
+## 1.136.0-rc17 - 2026-07-08
+
+### Fixed
+
+- Agent 右侧 Diff 面板的彩色 diff 渲染改为后台生成 `AttributedString`，避免打开面板时主线程同步拆行和着色导致窗口卡顿。
+- Diff 面板在侧栏渲染前会截断超大 diff 并提示如何查看完整内容，防止长文本直接进入 SwiftUI `Text`。
+- 新增回归测试，锁定超大 diff 会在进入侧栏显示前降级。
+- 版本号从 **1.136.0-rc16** 递增为 **1.136.0-rc17**。
+
+## 1.136.0-rc16 - 2026-07-08
+
+### Fixed
+
+- `generate_image` 现在作为无需用户审核的 read-tier Agent 工具直接执行；some.im 启用、API key 和 prompt 校验仍在实际调用前保留。
+- 新增回归测试，锁定通用图片生成工具不会进入审批等待。
+- 版本号从 **1.136.0-rc15** 递增为 **1.136.0-rc16**。
+
+## 1.136.0-rc15 - 2026-07-08
+
+### Added
+
+- 新增 `docs/SOME_IM_MAC_APP_INTEGRATION.md`，系统说明 macOS App 接入 some.im 的浏览器登录、Keychain 存储、provider library 同步、VL fallback、onboarding/settings 入口和验证清单。
+- 新增 `BundledSkills/some-im-mac-integration`，让 Agent 在修改或审查 some.im Mac 接入时优先使用该工作流和安全边界。
+- 版本号从 **1.136.0-rc14** 递增为 **1.136.0-rc15**。
+
+## 1.136.0-rc14 - 2026-07-08
+
+### Changed
+
+- Onboarding 的 some.im 步骤改为浏览器登录优先：进入步骤自动准备登录请求，用户点击“在浏览器打开”完成 some.im 登录后回到 WillDeep 继续流程。
+- Onboarding 移除 some.im 邮箱验证码表单；该步骤仍可跳过，用户可以在 AI provider 步骤手动填写 API key 和模型。
+- AI provider onboarding 在所选主模型不支持图片输入时，会要求补充 VL/视觉 provider、Base URL、API key 和模型，并再次建议直接集成 some.im 以省掉多模态兜底配置。
+- 版本号从 **1.136.0-rc13** 递增为 **1.136.0-rc14**。
+
+## 1.136.0-rc13 - 2026-07-08
+
+### Changed
+
+- some.im 设置页的浏览器登录体验简化为进入页面自动准备登录请求，只保留“在浏览器打开”入口；用户在浏览器完成 some.im 登录后，页面提示回到 WillDeep 继续使用。
+- 移除 Settings → some.im 里的邮箱验证码表单、二维码、随机码、URL 展示和复制按钮，避免用户在多个登录入口之间来回猜。
+- 版本号从 **1.136.0-rc12** 递增为 **1.136.0-rc13**。
+
+## 1.136.0-rc12 - 2026-07-08
+
+### Fixed
+
+- Agent 空白页统计面板的“当前连续天数”在今天尚未开始写时不再直接清零，会保留截至昨天的连续写作天数；只有今天和昨天都没有记录时才显示 0。
+- 新增连续天数回归测试，覆盖“今天空但昨天连续”和“昨天也断档”两种场景。
+- 版本号从 **1.136.0-rc11** 递增为 **1.136.0-rc12**。
+
+## 1.136.0-rc11 - 2026-07-08
+
+### Fixed
+
+- Agent 左下未绑定 some.im 账号区现在直接打开 fallback Settings 窗口，绕过系统 `showSettingsWindow:` 偶发吞掉程序化打开请求的问题。
+- 未绑定 some.im footer 增加整块点击与 simultaneous tap 兜底，点击头像、文字、空白或齿轮区域都能触发 Settings → some.im 并自动生成浏览器登录链接。
+- 版本号从 **1.136.0-rc10** 递增为 **1.136.0-rc11**。
+
+## 1.136.0-rc10 - 2026-07-08
+
+### Fixed
+
+- 普通启动不再先创建空 Editor 主窗口再延迟切到 Agent；Agent 单例窗口现在作为默认启动 Scene 直接打开。
+- 显式打开文件/目录、`willdeep://open?path=...` 和手动“显示 Editor”仍走 Editor 窗口，不改变 editor mode 入口。
+- 版本号从 **1.136.0-rc9** 递增为 **1.136.0-rc10**。
+
+## 1.136.0-rc9 - 2026-07-08
+
+### Fixed
+
+- Agent 左下未绑定 some.im 的头像/账号区现在点击后会直达 Settings → some.im，并自动生成浏览器登录链接和二维码。
+- some.im 设置页会消费来自导航入口的自动生成请求；如果页面已存在未完成链接，会恢复同一随机码的轮询而不是重新生成。
+- 版本号从 **1.136.0-rc8** 递增为 **1.136.0-rc9**。
+
+## 1.136.0-rc8 - 2026-07-08
+
+### Fixed
+
+- some.im 浏览器登录轮询不再因设置页暂时消失而取消；用户跳到浏览器完成登录后，WillDeep 仍会继续等待并自动接收 `connected` 状态。
+- 已生成的浏览器登录链接在再次点击“在浏览器打开”时会恢复同一随机码的轮询，避免浏览器已完成但 App 停在二维码状态。
+- 浏览器登录卡片现在显示真实轮询状态，不再在 watcher 停止后误导性显示“链接已生成”。
+- 版本号从 **1.136.0-rc7** 递增为 **1.136.0-rc8**。
+
+## 1.136.0-rc7 - 2026-07-08
+
+### Fixed
+
+- About 菜单现在由 AppDelegate 在启动和重新激活时直接接管系统 App 菜单项，避免 SwiftUI commands 只挂在 URL WindowGroup 上导致普通启动或 Agent 窗口里仍打开系统默认 About 面板。
+- 版本号从 **1.136.0-rc6** 递增为 **1.136.0-rc7**。
+
+## 1.136.0-rc6 - 2026-07-08
+
+### Fixed
+
+- some.im 浏览器登录轮询在服务端返回 `connected` 但缺少 WillDeep 凭据时，现在会保留 `connected` 状态并让设置页立即显示明确错误，不再降级为 `unknown` 后继续显示“正在等待浏览器完成登录”。
+- 新增 browser-status `connected` 缺凭据场景的回归测试。
+- 版本号从 **1.136.0-rc5** 递增为 **1.136.0-rc6**。
+
+## 1.136.0-rc5 - 2026-07-08
+
+### Fixed
+
+- some.im 浏览器登录状态回写兼容嵌套 `credentials`、camelCase 凭据字段，以及 `account` / `customer` / `user` 账号字段，避免浏览器显示登录完成但桌面端继续等待。
+- 浏览器登录状态为 connected 但缺少 WillDeep API key / 账号信息时，设置页会立即停止等待并显示明确错误，不再静默转圈到超时。
+- 新增 some.im browser-status 兼容响应单测。
+- 版本号从 **1.136.0-rc4** 递增为 **1.136.0-rc5**。
+
+## 1.136.0-rc4 - 2026-07-07
+
+### Fixed
+
+- Mobile Gateway H5 QR now uses compact `r` / `t` relay parameters or `b` / `k` LAN parameters instead of base64url-wrapped full JSON, reducing QR density for system camera recognition.
+- Kept legacy `p` payload compatibility while making the generated QR URL short by default.
+- 版本号从 **1.136.0-rc3** 递增为 **1.136.0-rc4**。
+
+## 1.136.0-rc3 - 2026-07-07
+
+### Fixed
+
+- Agent 左下 some.im 未登录账号入口现在整行可点击，并在打开 Settings 后补一次目标 pane 选择，避免只弹出设置窗口却没有落到 some.im 页面。
+- Mobile Gateway 从 Settings → Runtimes 的子 tab 提升为顶层设置分区，和 some.im、Voice 等入口保持同级。
+- 版本号从 **1.136.0-rc2** 递增为 **1.136.0-rc3**。
+
+## 1.136.0-rc2 - 2026-07-07
+
+### Fixed
+
+- Mobile Gateway QR now renders an H5 URL with a base64url `p` payload instead of raw JSON, so Android App scanners can extract credentials while system camera/browser scanners open the H5 page.
+- Added H5 QR URL wrapping tests to keep relay credentials recoverable from the `p` parameter.
+- 版本号从 **1.136.0-rc1** 递增为 **1.136.0-rc2**。
+
+## 1.136.0-rc1 - 2026-07-07
+
+### Added
+- **自定义关于窗口** —— App 菜单的 About 入口改为 WillDeep 自己的 SwiftUI 关于窗口，采用 museterm 的单例窗口打开方式和紧凑信息布局；内容只展示 WillDeep 图标、版本、构建号、Bundle ID、官网与复制版本信息操作，不搬 MuseTerm 的产品介绍和推荐应用清单。
+
+### Changed
+- 版本号从 **1.135.0-rc1** 提升为 **1.136.0-rc1**，并同步 Xcode / Go agent / Help / README badge / product overview / Mobile Gateway / Agent Harness 位点。
+
+## 1.135.0-rc1 - 2026-07-07
+
+### Changed
+- **少量数据默认少用 Markdown 表格** —— Agent 系统提示词新增回答格式偏好：当数据量不多（约 6 条以内）且用户没有主动要求表格时，优先使用短段落或项目符号，减少小表格在当前聊天渲染里的阅读负担。
+- **Agent stable prompt 前缀升为 v8** —— 系统提示词稳定前缀版本随格式规则调整同步更新，避免 prompt cache 继续复用旧回答格式约束。
+- 版本号从 **1.134.0** 提升为 **1.135.0-rc1**，并同步 Xcode / Go agent / Help / README badge / product overview / Mobile Gateway / Agent Harness 位点。
+
+## 1.134.0 - 2026-07-07
+
+### Added
+- **语音输入支持 AI 轻度整理** —— Settings → Voice 新增“AI 整理”选项，可选择关闭、补标点分段或整理成要点。麦克风按钮与 Fn push-to-talk 共用同一条转写后处理链路；默认关闭以保持本机转写原行为，开启后只把转写文本发给当前配置的 AI provider，音频仍留在本机。
+
+### Changed
+- 版本号从 **1.133.0-rc2** 提升为 **1.134.0**，并同步 Xcode / Go agent / Help / README badge / product overview / Mobile Gateway / Agent Harness 位点。
+
+## 1.133.0-rc2 - 2026-07-07
+
+### Fixed
+- **some.im 浏览器登录状态自动回写** —— 浏览器登录链接现在携带隐藏的长配对 token；WillDeep 设置页生成链接后会轮询 some.im 的 browser-status 接口，浏览器端完成登录后通过 browser-complete 标记连接完成，WillDeep 会自动保存 app 专用 API key / customer session / 账号余额并把当前窗口从二维码切换为已登录状态。
+
+### Changed
+- 版本号从 **1.133.0-rc1** 提升为 **1.133.0-rc2**，并同步 Xcode / Go agent / Help / README badge / product overview / Mobile Gateway / Agent Harness 位点。
+
 ## 1.133.0-rc1 - 2026-07-07
 
 ### Added
-- **收起会话列表后可从左边缘呼出最近会话** —— Agent 会话侧栏收起时，鼠标靠近窗口左边缘会滑出最近活跃会话浮层；列表只展示有真实用户消息的最近会话，并在每行前方用明显区分样式显示 workspace 前两个字符，方便在不展开完整侧栏的情况下快速切换上下文。
-- 版本号从 **1.131.0-rc12** 提升为 **1.133.0-rc1**，并同步 Xcode / Go agent / Help / README badge / product overview / Mobile Gateway / Agent Harness 位点。
+- **some.im 账号入口升为一等公民** —— Settings 顶层新增独立 some.im 分区；Agent 左侧栏底部常驻 some.im 账号位，已登录时展示头像/credits 并可打开后台，未登录时展示匿名头像与未登录提示，点击直达 some.im 集成设置。
+- **some.im 浏览器登录链接** —— some.im 设置页可生成带短随机码的浏览器登录链接与二维码，支持复制链接/随机码或直接在浏览器打开；用户在 some.im 页面登录完成后按页面提示回到 WillDeep 继续使用。
+- **收起会话列表后可从左边缘呼出最近会话** —— Agent 会话侧栏收起时，鼠标靠近窗口左边缘会滑出最近活跃会话浮层；列表只展示有真实用户消息的最近会话，并在每行前方用明显区分样式显示 workspace 前两个字符（并入 main 同版本改动）。
 
-## 1.131.0-rc12 - 2026-07-06
+### Changed
+- 版本号从 **1.132.0-rc3** 提升为 **1.133.0-rc1**，并同步 Xcode / Go agent / Help / README badge / product overview / Mobile Gateway / Agent Harness 位点。
+
+## 1.132.0-rc3 - 2026-07-07
 
 ### Fixed
-- **Agent 独立窗口的会话列表开关真正进入红黄绿右侧区域** —— Agent Window 现在复用透明 titlebar / full-size content chrome 配置，让会话列表 toggle 的固定位置落在系统窗口按钮右侧，而不是普通内容区；会话列表收起后按钮仍保留可见。
-- 版本号从 **1.131.0-rc11** 提升为 **1.131.0-rc12**，并同步 Xcode / Go agent / Help / README badge / product overview / Mobile Gateway / Agent Harness 位点。
-
-## 1.131.0-rc11 - 2026-07-06
+- **Editor 入口不再停在未打开文件夹空态** —— 从 Agent 顶部图标或菜单“显示 Editor”切回编辑器时，如果当前没有任何标签，会自动创建一个 Untitled 空白编辑 tab，直接进入可输入状态。
 
 ### Changed
-- **手机网关成为设置窗口顶级入口** —— Settings 顶部 tab 现在直接展示 Mobile Gateway / 手机网关，不再藏在 Runtimes 分组的二级 segmented control 里；原有状态栏和深链跳转仍会直达手机网关设置页。
-- 版本号从 **1.131.0-rc10** 提升为 **1.131.0-rc11**，并同步 Xcode / Go agent / Help / README badge / product overview / Mobile Gateway / Agent Harness 位点。
+- 版本号从 **1.132.0-rc2** 提升为 **1.132.0-rc3**，并同步 Xcode / Go agent / Help / README badge / product overview / Mobile Gateway / Agent Harness 位点。
 
-## 1.131.0-rc10 - 2026-07-06
+## 1.132.0-rc2 - 2026-07-07
+
+### Fixed
+- **Agent 工具审批卡片点击不再丢失** —— 审批决定现在按 runtime + tool call ID 暂存和投递；用户在执行循环注册等待者之前先点 Allow / Deny / Confirm / Send 时，决定会被后续等待者消费，不再出现 terminal command 审批卡片看似可点但没有反应的状态。
+- **多个 pending 工具审批不再串线** —— continuation 记录当前等待的工具 ID，点击其它 pending 卡片只会暂存对应决定，不会唤醒错误的工具调用。
+- **已提交审批显示等待态** —— 工具卡片在决定已记录但执行循环尚未接收时隐藏操作按钮，显示“已提交决定，等待执行循环接收”，避免继续展示不可重复交付的按钮。
 
 ### Changed
-- **左侧会话列表开关移到系统红黄绿按钮右侧** —— Agent 窗口的会话列表 toggle 从聊天 header 内移到窗口左上角 chrome 区域，固定显示在 macOS 关闭 / 最小化 / 全屏按钮右侧；收起会话列表后按钮仍保留在同一位置，聊天 header 会自动避开这组窗口控件。
-- 版本号从 **1.131.0-rc9** 提升为 **1.131.0-rc10**，并同步 Xcode / Go agent / Help / README badge / product overview / Mobile Gateway / Agent Harness 位点。
+- 版本号从 **1.132.0-rc1** 提升为 **1.132.0-rc2**，并同步 Xcode / Go agent / Help / README badge / product overview / Mobile Gateway / Agent Harness 位点。
+
+## 1.132.0-rc1 - 2026-07-06
+
+### Added
+- **Mobile Gateway 接入友盟远程推送触发** —— Android 通过 `push.register` 上报友盟 device token 后，局域网 Go gateway 会在 `tool.pending` / `patch.upsert` 等需要用户注意的桌面事件出现时调用友盟 U-Push；默认互联网中继模式下，Swift desktop peer 会本地保存 token 并直接触发同样的友盟自定义 payload，确保两种连接模式都能把审批、补丁审查和 `ask_user` 输入提醒推到手机。
+- **本机友盟配置读取** —— Mac 端会从环境变量或本机 `local.properties` 读取 `UMENG_PUSH_ENABLED`、`UMENG_APPKEY`、`UMENG_APP_MASTER_SECRET` / `UMENG_MASTER_SECRET`，并兼容 `UMENG_MESSAGE_SECRET` 作为本地调试兜底；`.gitignore` 已忽略 `local.properties`，避免把密钥提交进仓库。
+
+### Changed
+- 版本号从 **1.131.0-rc9** 提升为 **1.132.0-rc1**，并同步 Xcode / Go agent / Help / README badge / product overview / Mobile Gateway / Agent Harness 位点。
 
 ## 1.131.0-rc9 - 2026-07-06
 
 ### Fixed
 - **Agent 侧边栏重资源会在长时间未查看后释放** —— 会话侧边栏记录最后查看时间；终端、嵌入浏览器、Widget 和图片编辑器等重面板在所属会话超过 1 小时未被查看后会自动收起并释放对应资源，其中终端会关闭该会话打开的 tab，嵌入浏览器会重置不可见 WebView 状态。
 - **Dev Server 面板改为 workspace 共享视角** —— 同一工作区内不同 Agent 会话会看到同一组 dev server / tail 后台任务，避免每个会话各自认为要启动一套服务而造成端口占用冲突。
-- **展开旧聊天历史不再默认渲染完整富文本** —— transcript 顶部“对话前面还有多条消息”现在点击后先展示最多 4000 字符的纯文本预览，只保留角色与正文，避免长会话一次性把完整历史烤成富文本导致内存和主线程压力飙升；完整详情仍可通过预览里的“完整详情”按钮打开独立窗口查看。
 
 ### Changed
 - 版本号从 **1.131.0-rc8** 提升为 **1.131.0-rc9**，并同步 Xcode / Go agent / Help / README badge / product overview / Mobile Gateway / Agent Harness 位点。
@@ -67,17 +329,15 @@
 ## 1.131.0-rc4 - 2026-07-06
 
 ### Fixed
-- **干净 tracked 文件的 Agent 编辑直接落盘** —— `edit_file` / `apply_patch` 修改已存在文件时，如果所有目标文件都已经被 git 跟踪、当前对 HEAD 干净，并且 App 内没有未保存编辑，补丁会直接应用，不再要求用户再点一次 Apply。未跟踪文件、已有未提交改动的文件、打开但未保存的文件仍保留 inline patch 卡片等待用户确认。
+- **展开旧聊天历史不再默认渲染完整富文本** —— transcript 顶部“对话前面还有多条消息”现在点击后先展示最多 4000 字符的纯文本预览，只保留角色与正文，避免长会话一次性把完整历史烤成富文本导致内存和主线程压力飙升；完整详情仍可通过预览里的“完整详情”按钮打开独立窗口查看。
 
 ### Changed
-- **Dev Server 面板改为可直接操作项目 dev 环境** —— 面板现在会扫描当前工作区根目录与常见前端/后端目录，发现 Vite/Next/React/Vue、Node API、Go、Rails、FastAPI 和静态 HTML 的启动候选；前端与后端分区支持直接启动、停止、重启，并继续复用后台 job 注册表。
-- **实时日志 tail 不再只回填提示词** —— Dev Server 面板可直接对用户指定的 workspace/tmp/本地日志路径启动 `tail -f` 后台任务，输出尾部与 AI 通过 `run_command(run_in_background=true)` 启动的任务统一展示。
-- 版本号从 **1.131.0-rc3** 提升为 **1.131.0-rc4**（bugfix，递增 rc，避免重写已发布的 `v1.131.0-rc3` tag），并同步 Xcode / Go agent / Help / README badge / product overview / Mobile Gateway / Agent Harness 位点。
+- 版本号从 **1.131.0-rc3** 提升为 **1.131.0-rc4**，并同步 Xcode / Go agent / Help / product overview / Mobile Gateway / Agent Harness 位点。
 
 ## 1.131.0-rc3 - 2026-07-06
 
 ### Fixed
-- **Composer 图片附件入队改为磁盘引用** —— 新粘贴到 Agent composer 的图片会先原子写入 Application Support 下的 `AgentAttachments` 目录，`AgentImageAttachment` / queued message / session JSON 只保存路径、大小、SHA-256 和 MIME 元数据；发送给视觉模型或生成缩略图时再按需从文件读取。旧会话里的内联 `dataBase64` 仍可解码，清空队列、删除队列项或移除草稿图片会清理对应未发送暂存文件，且清理路径只允许命中 App 自己的 `AgentAttachments/<uuid>` 目录，避免排队多张大图时把内存和 session JSON 一起顶高。
+- **干净 tracked 文件的 Agent 编辑直接落盘** —— `edit_file` / `apply_patch` 修改已存在文件时，如果所有目标文件都已经被 git 跟踪、当前对 HEAD 干净，并且 App 内没有未保存编辑，补丁会直接应用，不再要求用户再点一次 Apply。未跟踪文件、已有未提交改动的文件、打开但未保存的文件仍保留 inline patch 卡片等待用户确认。
 
 ### Changed
 - 版本号从 **1.131.0-rc2** 提升为 **1.131.0-rc3**，并同步 Xcode / Go agent / Help / README badge / product overview / Mobile Gateway / Agent Harness 位点。
@@ -85,15 +345,14 @@
 ## 1.131.0-rc2 - 2026-07-06
 
 ### Fixed
-- **`terminal_snapshot` 一直显示旧内容（终端快照读到陈旧屏幕）** —— 根因是 SwiftTerm 的 `LocalProcessTerminalView` 把 PTY 字节固定在**主线程**上 parse 进终端模型（可见 NSView 也在主线程读这个模型来绘制）。当主线程被 Agent 流式渲染富 markdown 占满时，这条 parse 被饿死、模型落后于真实输出，于是快照读到的是旧屏幕。而 `process` 是 `internal(set)`、`LocalProcess` 又写死主队列，子类无法注入后台队列。现在 `AgentLocalProcessTerminalView` 不再继承 `LocalProcessTerminalView`，改为 `TerminalView` + 自持一个 `LocalProcess(dispatchQueue:)`，把 PTY 交付放到专用后台串行队列：`dataReceived` 在该队列上喂一个 **headless 镜像 `Terminal`**（快照即读它，永远新鲜、不被主线程饿死），同时把**可见终端**的模型+绘制 feed 有序 marshal 回主线程（可见终端行为与体验完全不变）。`terminal_snapshot` 改为从镜像在后台队列读取屏幕文本，主线程只留一次极廉价的元数据 hop（仍受 3s 超时护栏保护）。ZMODEM 传输期间镜像暂停喂养（原始协议字节对快照无意义），echo 检测/ZMODEM 桥（`@MainActor`）等主线程亲和逻辑保持在主线程、无数据竞争。Agent 终端与编辑器内置终端两处共享此视图类，同步接入新的 `AgentTerminalProcessDelegate`。
+- **AI 回复结束后聊天区补滚到底部** —— 自动滚动此前只在「消息/工具调用条数变化」时触发（防逐 token 滚动钉死主线程的既有设计），而 assistant 消息在流式开始、内容还近乎空白时就已 append 并完成那次滚动；之后长回复在视口下方持续长高、条数不变、再无滚动，输出结束时视口停在答案中段。现在监听回合结束（`isAgentResponding` true→false），等布局落定后一次性滚到底部哨兵，用户总能看到最新内容；流式期间行为不变、零逐 token 开销。
 
 ### Changed
-- 版本号从 **1.131.0-rc1** 提升为 **1.131.0-rc2**（bugfix，递增 rc），并同步 Xcode / Go agent / Help / README badge / product overview / Mobile Gateway / Agent Harness 位点。
+- **Dev Server 面板改为可直接操作项目 dev 环境** —— 面板现在会扫描当前工作区根目录与常见前端/后端目录，发现 Vite/Next/React/Vue、Node API、Go、Rails、FastAPI 和静态 HTML 的启动候选；前端与后端分区支持直接启动、停止、重启，并继续复用后台 job 注册表。
+- **实时日志 tail 不再只回填提示词** —— Dev Server 面板可直接对用户指定的 workspace/tmp/本地日志路径启动 `tail -f` 后台任务，输出尾部与 AI 通过 `run_command(run_in_background=true)` 启动的任务统一展示。
+- 版本号从 **1.131.0-rc1** 提升为 **1.131.0-rc2**，并同步 Xcode / Go agent / Help / README badge / product overview / Mobile Gateway / Agent Harness 位点。
 
 ## 1.131.0-rc1 - 2026-07-06
-
-### Fixed
-- **AI 回复结束后聊天区补滚到底部** —— 自动滚动此前只在「消息/工具调用条数变化」时触发（防逐 token 滚动钉死主线程的既有设计），而 assistant 消息在流式开始、内容还近乎空白时就已 append 并完成那次滚动；之后长回复在视口下方持续长高、条数不变、再无滚动，输出结束时视口停在答案中段。现在监听回合结束（`isAgentResponding` true→false），等布局落定后一次性滚到底部哨兵，用户总能看到最新内容；流式期间行为不变、零逐 token 开销。
 
 ### Added
 - **Web 编程专家** —— 新增 `webCoding` 专家，覆盖截图生成 UI、本地 HTML/CSS/图片资源预览、Vite/Next/React/Vue 项目预览、浏览器截图 QA 与 dev server 编排；Agent 提示词会在短剧/Web 编程等场景引导用户确认激活对应专家。

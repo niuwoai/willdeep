@@ -264,7 +264,7 @@ extension AgentChatHistoryRenderer {
         case .user:
             return !body.isEmpty || !message.textAttachments.isEmpty || !message.images.isEmpty
         case .assistant:
-            return !body.isEmpty
+            return !body.isEmpty || !message.images.isEmpty
         case .system, .tool, .workflowReport, .widget:
             return false
         }
@@ -304,6 +304,7 @@ extension AgentChatHistoryRenderer {
             if index > 0 {
                 result.append(NSAttributedString(string: "  ", attributes: [.font: font]))
             }
+            let attachmentStart = result.length
             if let thumbnail = chatHistoryThumbnail(for: image) {
                 let attachment = NSTextAttachment()
                 attachment.image = thumbnail
@@ -323,14 +324,28 @@ extension AgentChatHistoryRenderer {
                     ]
                 ))
             }
+            if let marker = image.generatedReferenceMarker {
+                let range = NSRange(location: attachmentStart, length: result.length - attachmentStart)
+                result.addAttribute(.agentChatHistoryImageReferenceMarker, value: marker, range: range)
+            }
         }
     }
 
     private static func chatHistoryThumbnail(for image: AgentImageAttachment) -> NSImage? {
-        guard let data = Data(base64Encoded: image.dataBase64),
-              let source = CGImageSourceCreateWithData(data as CFData, nil) else {
-            return nil
+        if !image.dataBase64.isEmpty,
+           let data = Data(base64Encoded: image.dataBase64),
+           let source = CGImageSourceCreateWithData(data as CFData, nil) {
+            return chatHistoryThumbnail(from: source)
         }
+        if let filePath = image.filePath?.trimmingCharacters(in: .whitespacesAndNewlines),
+           !filePath.isEmpty,
+           let source = CGImageSourceCreateWithURL(URL(fileURLWithPath: filePath) as CFURL, nil) {
+            return chatHistoryThumbnail(from: source)
+        }
+        return nil
+    }
+
+    private static func chatHistoryThumbnail(from source: CGImageSource) -> NSImage? {
         let maxSide: CGFloat = 96
         let options: [CFString: Any] = [
             kCGImageSourceCreateThumbnailFromImageAlways: true,
@@ -377,6 +392,10 @@ extension AgentChatHistoryRenderer {
             if let summary = tokenSummary(for: message) {
                 result.append(AgentChatHistoryFooterChrome.separator)
                 result.append(AgentChatHistoryFooterChrome.label(summary))
+            }
+            if let route = message.managedRoute {
+                result.append(AgentChatHistoryFooterChrome.separator)
+                result.append(AgentChatHistoryFooterChrome.label(route.footerChipText))
             }
             // 1.103.0-rc11: turn-report 图标(原 AgentTurnPostStrip 左侧)
             // 折进 footer,跟 copy/clock/tokens/retry 同一行;只挂在最后一条

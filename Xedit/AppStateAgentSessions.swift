@@ -138,6 +138,35 @@ extension AppState {
         agentConfiguration = configuration.normalized
     }
 
+    /// React to a shared some.im session change (this app or another one sharing
+    /// the Keychain access group). Login/key-change adopts the fresh key without
+    /// hijacking the user's active provider; logout drops the some-im entry.
+    func reconcileSomeIMProviderFromSharedSession() {
+        let apiKey = SomeIMIntegrationStore.loadAPIKey()
+        if apiKey.isEmpty {
+            clearSomeIMProvider()
+        } else {
+            syncSomeIMProvider(
+                settings: SomeIMIntegrationStore.loadSettings(),
+                apiKey: apiKey,
+                activate: false
+            )
+            syncSomeIMImageUnderstanding(apiKey: apiKey)
+        }
+    }
+
+    /// Remove every some.im provider entry (used when the shared session is
+    /// cleared). `removeProviderLibraryEntry` re-points `activeID` to a
+    /// surviving entry when one exists.
+    func clearSomeIMProvider() {
+        let someIMEntryIDs = agentProviderLibrary.entries
+            .filter { $0.providerID == "some-im" }
+            .map(\.id)
+        for id in someIMEntryIDs {
+            removeProviderLibraryEntry(id: id)
+        }
+    }
+
     /// Remove a library entry. The library auto-repoints `activeID`
     /// to the next entry; if nothing remains the live configuration
     /// is left as-is (the Settings UI is expected to require at
@@ -633,12 +662,14 @@ extension AppState {
     func closeBlockingAgentToolDecision(for runtime: AgentRuntime, reason: String) -> Bool {
         var closedAny = false
         for index in runtime.toolCalls.indices where runtime.toolCalls[index].status.isBlockingForUserDecision {
+            runtime.pendingToolDecisions.removeValue(forKey: runtime.toolCalls[index].id)
             runtime.toolCalls[index].status = .denied
             runtime.toolCalls[index].errorMessage = reason
             closedAny = true
         }
         if let waiter = runtime.toolDecisionWaiter {
             runtime.toolDecisionWaiter = nil
+            runtime.toolDecisionWaiterCallID = nil
             waiter.resume(returning: .denied(reason: reason))
             closedAny = true
         }
@@ -963,8 +994,14 @@ extension AppState {
         // disk session needs this seeded.
         if let runtime = activeRuntime {
             let session = runtime.session
-            let routedModel = agentConfiguration.normalized.model(for: .interactive)
-            runtime.sessionModelOverride = session.modelID == routedModel ? nil : session.modelID
+            if runtime.managedRouting != nil {
+                // Managed session: the model is resolved per-turn by the
+                // judge, so there is no single override to seed.
+                runtime.sessionModelOverride = nil
+            } else {
+                let routedModel = agentConfiguration.normalized.model(for: .interactive)
+                runtime.sessionModelOverride = session.modelID == routedModel ? nil : session.modelID
+            }
             syncWorkspaceContext(for: session)
             autoSummarizeTitleIfPlaceholder(runtime)
         }
@@ -1039,6 +1076,8 @@ extension AppState {
                 runtime.requestTask?.cancel()
                 runtime.toolDecisionWaiter?.resume(returning: .denied(reason: "Empty session pruned"))
                 runtime.toolDecisionWaiter = nil
+                runtime.toolDecisionWaiterCallID = nil
+                runtime.pendingToolDecisions.removeAll()
             }
             agentSubagentRegistry.cancelAll(forParentRuntime: id)
             agentRuntimes.removeValue(forKey: id)
@@ -1115,6 +1154,8 @@ extension AppState {
             doomed.requestTask?.cancel()
             doomed.toolDecisionWaiter?.resume(returning: .denied(reason: "Session deleted"))
             doomed.toolDecisionWaiter = nil
+            doomed.toolDecisionWaiterCallID = nil
+            doomed.pendingToolDecisions.removeAll()
         }
         // Orphaned background subagents must not keep burning tokens
         // for a session that no longer exists.
@@ -1356,7 +1397,12 @@ extension AppState {
     /// different session still write their final state to disk.
     func persistAgentSession(runtime: AgentRuntime) {
         guard let index = agentSessions.firstIndex(where: { $0.id == runtime.id }) else { return }
-        if let override = runtime.sessionModelOverride, !override.isEmpty {
+        if runtime.managedRouting != nil {
+            // Managed routing resolves a model per-turn; there is no single
+            // session model. Keep modelID clear so nothing downstream mistakes
+            // a route-default snapshot for an explicit user choice.
+            runtime.session.modelID = nil
+        } else if let override = runtime.sessionModelOverride, !override.isEmpty {
             runtime.session.modelID = override
         } else if runtime.id == activeAgentSessionID {
             runtime.session.modelID = agentConfiguration.normalized.model(for: .interactive)
@@ -1417,6 +1463,10 @@ extension AppState {
     }
 
     func setAgentSessionModel(_ model: String?) {
+        // Picking any explicit model (or route-default) exits managed
+        // routing — the three session-selection states (route default /
+        // explicit model / managed) are mutually exclusive.
+        activeRuntime?.managedRouting = nil
         let trimmed = model?.trimmingCharacters(in: .whitespacesAndNewlines)
         if let trimmed, !trimmed.isEmpty {
             if agentModelIsCompatibleWithActiveProvider(trimmed) {
@@ -1480,5 +1530,28 @@ extension AppState {
         } else {
             setAgentSessionModel(trimmed)
         }
+    }
+
+    // MARK: - some.im managed routing ("省心托管") selection
+
+    /// Composer entry point for "省心托管". Only valid when the active
+    /// provider is some.im. Sets a fresh `.low` managed-routing floor and
+    /// clears any explicit model override so the three session-selection
+    /// states stay mutually exclusive.
+    func selectSomeIMManagedRouting() {
+        guard let runtime = activeRuntime else { return }
+        guard agentProviderLibrary.active?.providerID == AgentProviderPreset.someIMID else { return }
+        runtime.sessionModelOverride = nil
+        if runtime.managedRouting == nil {
+            runtime.managedRouting = AgentManagedRoutingState()
+        }
+        persistActiveAgentSession()
+    }
+
+    /// User tapped "重置托管档位" — drop the only-goes-up floor back to `.low`.
+    func resetManagedRoutingFloor() {
+        guard let runtime = activeRuntime else { return }
+        runtime.resetManagedFloor()
+        persistActiveAgentSession()
     }
 }

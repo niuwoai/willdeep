@@ -38,6 +38,8 @@ struct SomeIMMediaArtifact: Equatable {
 }
 
 enum SomeIMAsyncMediaClient {
+    private static let mediaRequestTimeout: TimeInterval = AgentNetworkSupport.resourceTimeout
+
     static func submit(
         endpointSuffix: String,
         body: [String: Any],
@@ -113,9 +115,12 @@ enum SomeIMAsyncMediaClient {
     static func downloadArtifacts(
         from response: SomeIMAsyncMediaResponse,
         title: String,
+        outputDirectory: URL? = nil,
         session: URLSession? = nil
     ) async throws -> [SomeIMMediaArtifact] {
-        let directory = ImageWorkflowSupport.outputDirectory(prefix: "WillDeep-someIM")
+        let directory = outputDirectory?.standardizedFileURL
+            ?? ImageWorkflowSupport.outputDirectory(prefix: "WillDeep-someIM")
+        try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         var artifacts: [SomeIMMediaArtifact] = []
         let values = outputValues(from: response)
 
@@ -182,7 +187,11 @@ enum SomeIMAsyncMediaClient {
         switch kind {
         case .videoGeneration:
             return "videos/generations"
-        case .imageGeneration, .imageEdit, .imageUpscale, .imageErase, .imageInpaint, .shortDrama, .unknown:
+        case .imageEdit, .imageErase, .imageInpaint:
+            return "images/edits"
+        case .imageGeneration, .shortDrama:
+            return "images/async-generations"
+        case .imageUpscale, .unknown:
             return "images/generations"
         }
     }
@@ -204,6 +213,7 @@ enum SomeIMAsyncMediaClient {
     ) async throws -> SomeIMAsyncMediaResponse {
         var request = URLRequest(url: url)
         request.httpMethod = method
+        request.timeoutInterval = mediaRequestTimeout
         request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
         request.setValue("application/json", forHTTPHeaderField: "Accept")
         if let body {

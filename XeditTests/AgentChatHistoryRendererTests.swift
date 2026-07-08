@@ -155,6 +155,45 @@ struct AgentChatHistoryRendererTests {
     }
 
     @Test
+    func rendersAssistantGeneratedImageWithReferenceMarkerInHistory() {
+        let image = AgentImageAttachment(
+            mimeType: "image/png",
+            dataBase64: Self.tinyPNGBase64,
+            source: .generated,
+            filePath: "/tmp/willdeep-generated-image.png",
+            model: "gpt-image-2",
+            prompt: "test prompt"
+        )
+        let message = AgentMessage(role: .assistant, content: "生成好了。", images: [image])
+
+        let rendered = AgentChatHistoryRenderer.render(messages: [message], isDark: false)
+        let marker = image.generatedReferenceMarker
+
+        #expect(rendered.string.contains("Assistant"))
+        #expect(rendered.string.contains("生成好了。"))
+        #expect(rendered.string.contains("\u{fffc}") || rendered.string.contains("Image attachment"))
+        #expect(marker != nil)
+        #expect(firstAttributeRange(
+            .agentChatHistoryImageReferenceMarker,
+            value: marker ?? "",
+            in: rendered
+        ) != nil)
+    }
+
+    @Test
+    func parsesGeneratedImageReferenceMarkerPath() throws {
+        let marker = AgentGeneratedImageReference.marker(
+            id: "image-1",
+            path: "/tmp/generated & quoted \"image\".png",
+            model: "gpt-image-2"
+        )
+
+        let path = try #require(AgentGeneratedImageReference.path(from: marker))
+
+        #expect(path == "/tmp/generated & quoted \"image\".png")
+    }
+
+    @Test
     func codeCopyRangeExpandsAcrossIconAndLabel() {
         let button = AgentChatHistoryCodeCopyChrome.button(
             copied: false,
@@ -726,6 +765,50 @@ struct AgentChatHistoryRendererTests {
         let usedHeight = layoutManager.usedRect(for: textContainer).height
 
         #expect(view.intrinsicContentSize.height >= ceil(usedHeight + AgentChatHistoryLayoutMetrics.bubbleDrawingVerticalOverscan))
+    }
+
+    @Test
+    func transcriptSearchFindsCaseInsensitiveMatches() {
+        let ranges = AgentTranscriptSearch.matchRanges(
+            in: "Needle, haystack, needle, NEEDLE.",
+            query: "needle"
+        )
+
+        #expect(ranges.count == 3)
+    }
+
+    @Test
+    func transcriptSearchHighlightsActiveMatchDifferently() throws {
+        let base = NSAttributedString(
+            string: "alpha beta Alpha",
+            attributes: [.foregroundColor: NSColor.labelColor]
+        )
+        let result = AgentTranscriptSearch.highlightedString(
+            from: base,
+            query: "alpha",
+            activeMatchIndex: 1,
+            isDark: false
+        )
+
+        #expect(result.matchCount == 2)
+        let firstBackground = try #require(result.attributedString.attribute(
+            .backgroundColor,
+            at: result.matchRanges[0].location,
+            effectiveRange: nil
+        ) as? NSColor)
+        let activeBackground = try #require(result.attributedString.attribute(
+            .backgroundColor,
+            at: result.matchRanges[1].location,
+            effectiveRange: nil
+        ) as? NSColor)
+        let activeUnderline = try #require(result.attributedString.attribute(
+            .underlineStyle,
+            at: result.matchRanges[1].location,
+            effectiveRange: nil
+        ) as? Int)
+
+        #expect(firstBackground != activeBackground)
+        #expect(activeUnderline == NSUnderlineStyle.single.rawValue)
     }
 
     private func firstAttributeRange(

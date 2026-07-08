@@ -73,6 +73,51 @@ struct AgentToolsCoreTests {
         }
     }
 
+    /// Goal mode fast-approves sandbox-contained write tools but must route
+    /// every command-shaped call through the static-classify → LLM-judge
+    /// gate, so a dangerous command pauses for the user instead of being
+    /// blanket-approved. This locks the exact membership the goal-mode
+    /// fast-path in `autoApprovalSource` keys off of.
+    @Test
+    func commandShapedToolsAreExcludedFromGoalModeBlanketApproval() {
+        for name in ["run_command", "terminal_send_command",
+                     "terminal_send_control", "call_mcp_tool"] {
+            #expect(AppState.isCommandShapedTool(name),
+                    "\(name) must stay judge-gated even in goal mode")
+        }
+        for name in ["write_file", "apply_patch", "web_fetch",
+                     "visual_qa_screenshot", "add_memory"] {
+            #expect(!AppState.isCommandShapedTool(name),
+                    "\(name) is sandbox-contained and may be goal fast-pathed")
+        }
+    }
+
+    /// A destructive, typed-confirmation command can never reach the safety
+    /// judge — it always falls back to a human. Goal mode relies on this so
+    /// `rm -rf` / force-push style ops pause instead of auto-running.
+    @Test
+    func typedConfirmationCommandsNeverReachSafetyJudge() {
+        let destructive = AgentSandboxDecision(
+            mode: .workspaceWrite,
+            requiresUserApproval: true,
+            requiresTypedConfirmation: true,
+            reason: "destructive",
+            prefixRule: nil
+        )
+        #expect(!AppState.canSendToSafetyJudge(
+            toolName: "run_command", sandboxDecision: destructive))
+
+        let ordinary = AgentSandboxDecision(
+            mode: .workspaceWrite,
+            requiresUserApproval: true,
+            requiresTypedConfirmation: false,
+            reason: "write",
+            prefixRule: nil
+        )
+        #expect(AppState.canSendToSafetyJudge(
+            toolName: "run_command", sandboxDecision: ordinary))
+    }
+
     @Test
     func delegatedComposerApprovalSourceTreatsExecutorSelectionAsUserApproval() {
         #expect(AppState.delegatedComposerApprovalSource(risk: .read) == nil)

@@ -119,6 +119,11 @@ enum AgentChatHistoryRenderer {
             hasher.combine(image.id)
             hasher.combine(image.mimeType)
             hasher.combine(image.dataBase64.count)
+            hasher.combine(image.source?.rawValue)
+            hasher.combine(image.filePath)
+            hasher.combine(image.model)
+            hasher.combine(image.prompt)
+            hasher.combine(image.createdAt)
         }
         hasher.combine(m.textAttachments.count)
         for attachment in m.textAttachments {
@@ -136,6 +141,10 @@ enum AgentChatHistoryRenderer {
         hasher.combine(m.cacheWritePromptTokens)
         hasher.combine(m.reasoningTokens)
         hasher.combine(m.elapsedSeconds)
+        hasher.combine(m.managedRoute?.selectedModel)
+        hasher.combine(m.managedRoute?.tier.rawValue)
+        hasher.combine(m.managedRoute?.didEscalate)
+        hasher.combine(m.managedRoute?.didFallback)
         hasher.combine(m.toolCalls.count)
         for call in m.toolCalls {
             hasher.combine(call.externalID)
@@ -231,7 +240,7 @@ enum AgentChatHistoryRenderer {
         // layout work bounded. The reader window shows the full body.
         let toolBodyLimit = 8_000
         let latestAssistantMessageID = messages.reversed().first {
-            $0.role == .assistant && !$0.content.isEmpty
+            $0.role == .assistant && (!$0.content.isEmpty || !$0.images.isEmpty)
         }?.id
         let latestAssistantTerminalSummaryMessageID = messages.reversed().first {
             $0.role == .assistant && (!$0.content.isEmpty || !$0.toolCalls.isEmpty)
@@ -242,7 +251,7 @@ enum AgentChatHistoryRenderer {
             let message = messages[index]
             // Skip empty assistant placeholders (the loop emits them
             // while a turn is waiting on tool calls).
-            if message.role == .assistant && message.content.isEmpty && message.toolCalls.isEmpty {
+            if message.role == .assistant && message.content.isEmpty && message.images.isEmpty && message.toolCalls.isEmpty {
                 index += 1
                 continue
             }
@@ -398,6 +407,28 @@ enum AgentChatHistoryRenderer {
                 hasMessageBubbleContent = true
             }
 
+            if message.role == .assistant, !message.images.isEmpty {
+                if hasMessageBubbleContent {
+                    result.append(NSAttributedString(string: "\n", attributes: [.font: bodyFont]))
+                }
+                let imageStart = result.length
+                appendImageAttachments(
+                    message.images,
+                    to: result,
+                    font: bodyFont,
+                    secondaryColor: secondaryColor
+                )
+                let imageRange = NSRange(location: imageStart, length: result.length - imageStart)
+                applyBubbleChrome(
+                    kind: bubbleKind(for: message.role),
+                    to: result,
+                    range: imageRange,
+                    paragraphStyle: bodyParagraphStyle(for: message.role),
+                    foregroundColor: nil
+                )
+                hasMessageBubbleContent = true
+            }
+
             // Tool call summary (when the assistant emitted tool calls
             // *alongside* its own prose). Rendered through the same
             // collapsible header as the standalone tool-call group so
@@ -409,7 +440,7 @@ enum AgentChatHistoryRenderer {
                 keepTerminalCalls: message.id == latestAssistantTerminalSummaryMessageID
             )
             if !inlineToolCalls.isEmpty {
-                if !body.isEmpty {
+                if hasMessageBubbleContent {
                     // Transparent spacer paragraph between the assistant
                     // body bubble and the tool summary bubble. Beyond
                     // resolving the bubble-baseline overlap, this gap

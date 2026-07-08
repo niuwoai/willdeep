@@ -306,6 +306,230 @@
         }
       }
     },
+    "about.app-name" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "WillDeep"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "WillDeep"
+          }
+        }
+      }
+    },
+    "about.build-label" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Build"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "构建号"
+          }
+        }
+      }
+    },
+    "about.bundle-id-label" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Bundle ID"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Bundle ID"
+          }
+        }
+      }
+    },
+    "about.copy-version-info" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Copy Version Info"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "复制版本信息"
+          }
+        }
+      }
+    },
+    "about.menu-item" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "About WillDeep"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "关于 WillDeep"
+          }
+        }
+      }
+    },
+    "about.unknown-value" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Unknown"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "未知"
+          }
+        }
+      }
+    },
+    "about.version-badge" : {
+      "comment" : "%@ is the app version.",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "v%@"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "v%@"
+          }
+        }
+      }
+    },
+    "about.version-details" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Version Details"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "版本信息"
+          }
+        }
+      }
+    },
+    "about.version-label" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Version"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "版本"
+          }
+        }
+      }
+    },
+    "about.website" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Website"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "官网"
+          }
+        }
+      }
+    },
+    "about.window-title" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "About WillDeep"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "关于 WillDeep"
+          }
+        }
+      }
+    },
+    "agent-generated-image.quote-action" : {
+      "comment" : "Context menu action for referencing a generated image in the next chat reply",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Quote Image"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "引用"
+          }
+        }
+      }
+    },
+    "agent-generated-image.quote-help" : {
+      "comment" : "Tooltip for referencing a generated image without uploading it again",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Reference this generated image in your next reply without uploading it again."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "在下一条回复里引用这张生成图，不再重新上传图片。"
+          }
+        }
+      }
+    },
     "agent-image-editor.brush-mode-picker" : {
       "comment" : "Segmented picker label for the brush paint mode in the image mask editor",
       "extractionState" : "manual",
@@ -3666,6 +3890,96 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "移除已粘贴的文本"
+          }
+        }
+      }
+    },
+    "agent-managed-routing.title" : {
+      "comment" : "some.im managed-routing composer menu item / pill label",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Managed"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "省心托管"
+          }
+        }
+      }
+    },
+    "agent-managed-routing.title-high" : {
+      "comment" : "some.im managed-routing pill label once the session floor has escalated to high",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Managed · High"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "省心托管 · High"
+          }
+        }
+      }
+    },
+    "agent-managed-routing.title-premium" : {
+      "comment" : "some.im managed-routing pill label once the session floor has escalated to premium",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Managed · Premium"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "省心托管 · Premium"
+          }
+        }
+      }
+    },
+    "agent-managed-routing.reset" : {
+      "comment" : "some.im managed-routing menu item that resets the only-goes-up capability floor back to low",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Reset managed tier"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "重置托管档位"
+          }
+        }
+      }
+    },
+    "agent-managed-routing.footer-prefix" : {
+      "comment" : "Assistant message footer chip prefix for a some.im managed-routing turn; followed by the tier (Low/High/Premium)",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Managed"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "托管"
           }
         }
       }
@@ -10684,6 +10998,57 @@
         }
       }
     },
+    "onboarding.provider.error-vision-api-key-required" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "VL API key is required for this provider."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "该 VL 服务商需要填写 API key。"
+          }
+        }
+      }
+    },
+    "onboarding.provider.error-vision-base-url-required" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "VL Base URL is required for this model."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "该模型需要填写 VL Base URL。"
+          }
+        }
+      }
+    },
+    "onboarding.provider.error-vision-model-required" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Please specify a VL model id."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "请填写 VL 模型 ID。"
+          }
+        }
+      }
+    },
     "onboarding.provider.error-model-required" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -10786,6 +11151,74 @@
         }
       }
     },
+    "onboarding.provider.label-vision-api-key" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "VL API key"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "VL API key"
+          }
+        }
+      }
+    },
+    "onboarding.provider.label-vision-base-url" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "VL Base URL"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "VL Base URL"
+          }
+        }
+      }
+    },
+    "onboarding.provider.label-vision-model" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "VL model"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "VL 模型"
+          }
+        }
+      }
+    },
+    "onboarding.provider.label-vision-provider" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "VL provider"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "VL 服务商"
+          }
+        }
+      }
+    },
     "onboarding.provider.subtitle" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -10799,6 +11232,23 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "先选一个开始 —— 之后可在 设置 → AI 服务商 里添加更多。只用语音功能的话可以跳过。"
+          }
+        }
+      }
+    },
+    "onboarding.provider.some-im-recommendation" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Recommendation: connect some.im in the next step if you want one setup for chat, images, videos, and fallback vision routing."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "建议：如果你想一次配置聊天、图片、视频和视觉兜底路由，下一步直接连接 some.im 会更省事。"
           }
         }
       }
@@ -10820,19 +11270,36 @@
         }
       }
     },
+    "onboarding.provider.vision-required" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "This chat model does not accept images. Add a VL/vision provider so WillDeep can describe pasted images before sending them to the text model."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "这个聊天模型不能直接接收图片。请补一个 VL/视觉模型服务商，WillDeep 会先把粘贴的图片转成描述，再发给文本模型。"
+          }
+        }
+      }
+    },
     "onboarding.some-im.note" : {
       "extractionState" : "manual",
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "You can skip this and configure it later in Settings -> some.im. The image default is gpt-image-2."
+            "value" : "Recommended. You can skip this and use your own API key/model setup, but some.im avoids separate vision-model wiring."
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "可以先跳过，之后在 Settings → some.im 里配置。图片默认模型是 gpt-image-2。"
+            "value" : "推荐使用。你也可以跳过并使用自己的 API key/模型配置，但 some.im 可以省掉单独配置视觉模型这一步。"
           }
         }
       }
@@ -10843,13 +11310,13 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Optional. Add your relay key so image, video, and future multimodal skills can route to the right model automatically."
+            "value" : "Open some.im in your browser, sign in, then return to WillDeep. WillDeep will configure chat, image/video generation, and vision fallback automatically."
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "可选。填入 relay key 后，图片、视频以及后续多模态技能就能自动路由到合适模型。"
+            "value" : "在浏览器里打开 some.im 并完成登录，然后回到 WillDeep。WillDeep 会自动配置聊天、图片/视频生成和视觉兜底。"
           }
         }
       }
@@ -22285,6 +22752,108 @@
         }
       }
     },
+    "sidebar.some-im.account-title" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "some.im"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "some.im"
+          }
+        }
+      }
+    },
+    "sidebar.some-im.credits" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ credits"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ 点数"
+          }
+        }
+      }
+    },
+    "sidebar.some-im.not-logged-in" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Not signed in"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "未登录"
+          }
+        }
+      }
+    },
+    "sidebar.some-im.not-logged-in-tooltip" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Open some.im integration settings"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "打开 some.im 集成设置"
+          }
+        }
+      }
+    },
+    "sidebar.some-im.open-tooltip" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Open some.im with this account"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "打开当前 some.im 账号"
+          }
+        }
+      }
+    },
+    "sidebar.some-im.refresh-tooltip" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Refresh some.im credits"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "刷新 some.im 点数"
+          }
+        }
+      }
+    },
     "settings.some-im.api-key" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -22298,6 +22867,91 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "API Key"
+          }
+        }
+      }
+    },
+    "settings.some-im.logout" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sign Out"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "退出登录"
+          }
+        }
+      }
+    },
+    "settings.some-im.logout-cancel" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Cancel"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "取消"
+          }
+        }
+      }
+    },
+    "settings.some-im.logout-confirm-message" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "This signs out every app on this Mac that shares this some.im login."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "这会让本机所有共享该 some.im 登录的 App 一起退出登录。"
+          }
+        }
+      }
+    },
+    "settings.some-im.logout-confirm-title" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sign out of some.im?"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "退出 some.im 登录？"
+          }
+        }
+      }
+    },
+    "settings.some-im.logged-out" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Signed out of some.im."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已退出 some.im 登录。"
           }
         }
       }
@@ -22319,6 +22973,330 @@
         }
       }
     },
+    "settings.some-im.browser-login-code" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Random Code"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "随机码"
+          }
+        }
+      }
+    },
+    "settings.some-im.browser-login-code-copied" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Browser login code copied."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "浏览器登录随机码已复制。"
+          }
+        }
+      }
+    },
+    "settings.some-im.browser-login-copied" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Browser login link copied."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "浏览器登录链接已复制。"
+          }
+        }
+      }
+    },
+    "settings.some-im.browser-login-connected" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "some.im account connected."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "some.im 账号已连接。"
+          }
+        }
+      }
+    },
+    "settings.some-im.browser-login-connected-description" : {
+      "comment" : "%@ is the connected some.im account email.",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Connected as %@. You can close the browser tab and continue in WillDeep."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已连接为 %@。可以关闭浏览器标签页并继续在 WillDeep 使用。"
+          }
+        }
+      }
+    },
+    "settings.some-im.browser-login-connected-title" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Browser sign-in complete"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "浏览器登录已完成"
+          }
+        }
+      }
+    },
+    "settings.some-im.browser-login-description" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "WillDeep prepares a secure some.im sign-in request automatically. Open it in your browser, sign in, then return to WillDeep when some.im says you can continue."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "WillDeep 会自动准备安全的 some.im 登录请求。请在浏览器里打开 some.im 并完成登录，页面提示可继续后回到 WillDeep 使用。"
+          }
+        }
+      }
+    },
+    "settings.some-im.browser-login-expired" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Browser sign-in expired. Open some.im again to restart."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "浏览器登录已过期，请重新打开 some.im 开始登录。"
+          }
+        }
+      }
+    },
+    "settings.some-im.browser-login-missing-credentials" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Browser sign-in completed, but some.im did not return WillDeep credentials. Open some.im again and try signing in."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "浏览器登录已完成，但 some.im 没有返回 WillDeep 凭据。请重新打开 some.im 再登录一次。"
+          }
+        }
+      }
+    },
+    "settings.some-im.browser-login-opened" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "some.im opened in your browser. Finish signing in there, then return to WillDeep."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已在浏览器打开 some.im。请在那里完成登录，然后回到 WillDeep。"
+          }
+        }
+      }
+    },
+    "settings.some-im.browser-login-placeholder-description" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Open some.im in your browser to finish signing in. WillDeep will keep waiting here for the account connection."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "在浏览器里打开 some.im 完成登录。WillDeep 会在这里等待账号连接完成。"
+          }
+        }
+      }
+    },
+    "settings.some-im.browser-login-placeholder-title" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ready for browser sign-in"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已准备好浏览器登录"
+          }
+        }
+      }
+    },
+    "settings.some-im.browser-login-qr.accessibility-label" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "some.im browser login QR code"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "some.im 浏览器登录二维码"
+          }
+        }
+      }
+    },
+    "settings.some-im.browser-login-qr.unavailable" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "QR code unavailable"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "二维码不可用"
+          }
+        }
+      }
+    },
+    "settings.some-im.browser-login-ready" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Browser sign-in is ready."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "浏览器登录已准备好。"
+          }
+        }
+      }
+    },
+    "settings.some-im.browser-login-section" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Browser Login"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "浏览器登录"
+          }
+        }
+      }
+    },
+    "settings.some-im.browser-login-waiting" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Waiting for browser sign-in..."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "正在等待浏览器完成登录..."
+          }
+        }
+      }
+    },
+    "settings.some-im.copy-browser-login-code" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Copy Code"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "复制随机码"
+          }
+        }
+      }
+    },
+    "settings.some-im.copy-browser-login-link" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Copy Link"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "复制链接"
+          }
+        }
+      }
+    },
     "settings.some-im.connection-section" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -22332,6 +23310,23 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "some.im 整合"
+          }
+        }
+      }
+    },
+    "settings.some-im.generate-browser-login-link" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Generate Link"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "生成链接"
           }
         }
       }
@@ -22468,6 +23463,23 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "图片生成"
+          }
+        }
+      }
+    },
+    "settings.some-im.open-browser-login-link" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Open in Browser"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "在浏览器打开"
           }
         }
       }
@@ -23277,13 +24289,13 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Push-to-talk in the composer transcribes 100% on-device. Nothing leaves your Mac."
+            "value" : "Push-to-talk in the composer transcribes on-device. Optional AI cleanup can polish the result after transcription."
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "在输入框里按住说话,转写 100% 在本机完成。任何数据都不会离开你的 Mac。"
+            "value" : "在输入框里说话会先在本机转写。可选的 AI 整理可以在转写后润色输入内容。"
           }
         }
       }
@@ -23301,6 +24313,159 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "本机语音(SenseVoice)"
+          }
+        }
+      }
+    },
+    "settings.voice.cleanup.bullet-points" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Structure into points"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "整理成要点"
+          }
+        }
+      }
+    },
+    "settings.voice.cleanup.bullet-points-description" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Use the configured AI model to lightly organize longer dictation into a few clear points."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "使用当前配置的 AI 模型,把较长口述轻度整理成几个清晰要点。"
+          }
+        }
+      }
+    },
+    "settings.voice.cleanup.mode" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "After transcription"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "转写后处理"
+          }
+        }
+      }
+    },
+    "settings.voice.cleanup.off" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Off"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "关闭"
+          }
+        }
+      }
+    },
+    "settings.voice.cleanup.off-description" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Append the local transcript exactly as produced by SenseVoice."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "直接追加 SenseVoice 在本机生成的原始转写文本。"
+          }
+        }
+      }
+    },
+    "settings.voice.cleanup.privacy-note" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "When AI cleanup is enabled, the transcribed text is sent to your configured AI provider. Voice audio still stays on this Mac."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "开启 AI 整理后,转写文本会发送给你配置的 AI provider；语音音频仍只留在本机。"
+          }
+        }
+      }
+    },
+    "settings.voice.cleanup.punctuation" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Punctuation + paragraphs"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "标点和分段"
+          }
+        }
+      }
+    },
+    "settings.voice.cleanup.punctuation-description" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Use the configured AI model to add punctuation, paragraphs, and light wording cleanup without summarizing."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "使用当前配置的 AI 模型补标点、分段和轻度润色,不做总结。"
+          }
+        }
+      }
+    },
+    "settings.voice.cleanup.section" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "AI Cleanup"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "AI 整理"
           }
         }
       }
@@ -27551,6 +28716,114 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "消息预览保留前后片段（最多 %@ 字符，省略 %@ 字符）"
+          }
+        }
+      }
+    },
+    "transcript.search.close-help" : {
+      "comment" : "tooltip for closing the in-conversation search overlay",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Close conversation search"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "关闭对话搜索"
+          }
+        }
+      }
+    },
+    "transcript.search.next-help" : {
+      "comment" : "tooltip for moving to the next in-conversation search result",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Next result"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "下一个结果"
+          }
+        }
+      }
+    },
+    "transcript.search.no-results" : {
+      "comment" : "empty state label for in-conversation search",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No results"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "无结果"
+          }
+        }
+      }
+    },
+    "transcript.search.placeholder" : {
+      "comment" : "placeholder in the in-conversation search field",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Search conversation..."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "搜索对话..."
+          }
+        }
+      }
+    },
+    "transcript.search.previous-help" : {
+      "comment" : "tooltip for moving to the previous in-conversation search result",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Previous result"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "上一个结果"
+          }
+        }
+      }
+    },
+    "transcript.search.result-position" : {
+      "comment" : "current position and total count for in-conversation search",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%1$@ / %2$@ results"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%1$@ / %2$@ 个结果"
           }
         }
       }

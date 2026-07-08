@@ -402,6 +402,10 @@ final class AppState: ObservableObject {
     private var jobRegistrySubscription: AnyCancellable?
     private var mediaTaskRegistrySubscription: AnyCancellable?
     private var sessionSaveFailureSubscription: AnyCancellable?
+    /// Reconciles the some.im agent provider whenever the shared login session
+    /// changes — including logins/logouts made by another app sharing the
+    /// Keychain access group. Login adopts the fresh key; logout drops the entry.
+    private var someIMSessionSubscription: AnyCancellable?
     /// Desktop peer for the LAN Mobile Gateway. The Go gateway handles
     /// pairing/device auth; this bridge translates authorized mobile
     /// commands back into normal AppState Agent operations.
@@ -536,6 +540,16 @@ final class AppState: ObservableObject {
         mediaTaskRegistrySubscription = agentMediaTaskRegistry.objectWillChange
             .sink { [weak self] _ in
                 self?.objectWillChange.send()
+            }
+        // A cross-app some.im login/logout (shared Keychain group) posts this on
+        // the main queue; reconcile our agent provider so the change is live
+        // without a relaunch. Login done inside this app also round-trips here —
+        // harmless, the upsert is idempotent.
+        someIMSessionSubscription = NotificationCenter.default
+            .publisher(for: SomeIMIntegrationStore.sessionDidChangeNotification)
+            .receive(on: RunLoop.main)
+            .sink { [weak self] _ in
+                self?.reconcileSomeIMProviderFromSharedSession()
             }
         agentMediaTaskRegistry.shortDramaStore = agentShortDramaStore
         agentMediaTaskPoller.start(registry: agentMediaTaskRegistry)

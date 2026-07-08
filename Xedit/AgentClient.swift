@@ -110,10 +110,16 @@ enum AgentSafetyJudgeResult: Equatable {
 struct AgentClient {
     private let configuration: AgentConfiguration
     private let session: URLSession?
+    private let someIMContext: SomeIMRequestContext?
 
-    init(configuration: AgentConfiguration, session: URLSession? = nil) {
+    init(
+        configuration: AgentConfiguration,
+        session: URLSession? = nil,
+        someIMContext: SomeIMRequestContext? = nil
+    ) {
         self.configuration = configuration.normalized
         self.session = session
+        self.someIMContext = someIMContext
     }
 
     func streamChat(
@@ -123,7 +129,7 @@ struct AgentClient {
     ) async throws {
         switch configuration.providerKind {
         case .openAIChat:
-            try await OpenAIChatAdapter(configuration: configuration, session: session)
+            try await OpenAIChatAdapter(configuration: configuration, session: session, someIMContext: someIMContext)
                 .streamChat(messages: messages, tools: tools, onEvent: onEvent)
         case .anthropicMessages:
             try await AnthropicMessagesAdapter(configuration: configuration, session: session)
@@ -147,7 +153,7 @@ struct AgentClient {
     ) async -> AgentSafetyJudgeResult {
         switch configuration.providerKind {
         case .openAIChat:
-            return await OpenAIChatAdapter(configuration: configuration, session: session)
+            return await OpenAIChatAdapter(configuration: configuration, session: session, someIMContext: someIMContext)
                 .judgeCommandSafety(command: command, historyContext: historyContext)
         case .anthropicMessages:
             return await AnthropicMessagesAdapter(configuration: configuration, session: session)
@@ -161,10 +167,29 @@ struct AgentClient {
         }
     }
 
+    /// Non-streaming JSON judge round trip for some.im managed routing.
+    /// Returns the raw assistant text (expected strict JSON), or nil on any
+    /// failure so the caller can apply a local fallback. Managed routing is
+    /// some.im-only (always `.openAIChat`); other kinds return nil.
+    func routeJudge(
+        model: String,
+        systemPrompt: String,
+        userPayload: String,
+        maxTokens: Int
+    ) async -> String? {
+        switch configuration.providerKind {
+        case .openAIChat:
+            return await OpenAIChatAdapter(configuration: configuration, session: session, someIMContext: someIMContext)
+                .routeJudge(model: model, systemPrompt: systemPrompt, userPayload: userPayload, maxTokens: maxTokens)
+        default:
+            return nil
+        }
+    }
+
     func fetchModels() async throws -> [String] {
         switch configuration.providerKind {
         case .openAIChat:
-            return try await OpenAIChatAdapter(configuration: configuration, session: session)
+            return try await OpenAIChatAdapter(configuration: configuration, session: session, someIMContext: someIMContext)
                 .fetchModels()
         case .anthropicMessages:
             return try await AnthropicMessagesAdapter(configuration: configuration, session: session)
