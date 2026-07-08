@@ -1002,7 +1002,7 @@ enum AgentToolRegistry {
         AgentToolDescriptor(
             name: "generate_image",
             description: "Generate an image through the configured some.im relay. Use this for image creation requests when Settings -> some.im is configured; it defaults to the user's image model preference, normally gpt-image-2. Returns a local file path in Downloads.",
-            risk: .write,
+            risk: .read,
             parameters: [
                 AgentToolParameter(name: "prompt", type: .string, description: "Detailed prompt for the image generator.", required: true),
                 AgentToolParameter(name: "size", type: .string, description: "Optional output size such as 1024x1024. Defaults to 1024x1024.", required: false),

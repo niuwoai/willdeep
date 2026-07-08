@@ -728,6 +728,50 @@ struct AgentChatHistoryRendererTests {
         #expect(view.intrinsicContentSize.height >= ceil(usedHeight + AgentChatHistoryLayoutMetrics.bubbleDrawingVerticalOverscan))
     }
 
+    @Test
+    func transcriptSearchFindsCaseInsensitiveMatches() {
+        let ranges = AgentTranscriptSearch.matchRanges(
+            in: "Needle, haystack, needle, NEEDLE.",
+            query: "needle"
+        )
+
+        #expect(ranges.count == 3)
+    }
+
+    @Test
+    func transcriptSearchHighlightsActiveMatchDifferently() throws {
+        let base = NSAttributedString(
+            string: "alpha beta Alpha",
+            attributes: [.foregroundColor: NSColor.labelColor]
+        )
+        let result = AgentTranscriptSearch.highlightedString(
+            from: base,
+            query: "alpha",
+            activeMatchIndex: 1,
+            isDark: false
+        )
+
+        #expect(result.matchCount == 2)
+        let firstBackground = try #require(result.attributedString.attribute(
+            .backgroundColor,
+            at: result.matchRanges[0].location,
+            effectiveRange: nil
+        ) as? NSColor)
+        let activeBackground = try #require(result.attributedString.attribute(
+            .backgroundColor,
+            at: result.matchRanges[1].location,
+            effectiveRange: nil
+        ) as? NSColor)
+        let activeUnderline = try #require(result.attributedString.attribute(
+            .underlineStyle,
+            at: result.matchRanges[1].location,
+            effectiveRange: nil
+        ) as? Int)
+
+        #expect(firstBackground != activeBackground)
+        #expect(activeUnderline == NSUnderlineStyle.single.rawValue)
+    }
+
     private func firstAttributeRange(
         _ key: NSAttributedString.Key,
         value expectedValue: String,

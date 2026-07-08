@@ -1,6 +1,6 @@
 # WillDeep Product Overview
 
-> Last updated: 2026-07-08 | Current version: v1.136.0-rc12
+> Last updated: 2026-07-08 | Current version: v1.136.0-rc19
 
 ## Positioning
 
@@ -14,6 +14,13 @@ WillDeep is configured for non-App-Store distribution without App Sandbox so it 
 
 WillDeep 是 SwiftUI + AppKit 桥接的 macOS 应用，单进程多窗口。代码层次：
 
+- **Agent 会话内搜索（1.136.0-rc19）** —— Agent 聊天区支持 `Command+F` 呼出右上角悬浮搜索入口，输入关键词后会高亮整段当前会话里的命中，显示当前序号/总数，并可用上一条/下一条按钮跳转；搜索期间自动滚动到底会暂停，避免打断用户定位。
+- **some.im 账号区紧凑点数（1.136.0-rc18）** —— Agent 左下 some.im 账号区会把百万/十亿级 credits 显示为 `46.00M` / `4.21B` 这类两位小数缩写，并补齐该区块的中英文本地化，避免中文环境继续显示英文 `credits`。
+- **Diff 侧栏打开不卡顿（1.136.0-rc17）** —— Agent 右侧 Diff 面板会在后台生成彩色 `AttributedString`，并在侧栏渲染前截断超大 diff 为摘要，避免“正在计算 diff”期间窗口被长文本处理拖住。
+- **通用生图免审核（1.136.0-rc16）** —— `generate_image` 现在是无需用户审核的 read-tier Agent 工具，普通图片生成可直接走 some.im relay 默认 `gpt-image-2`；some.im 启用状态、API key 和 prompt 校验仍由调用链保留。
+- **some.im Mac 接入文档与 Skill（1.136.0-rc15）** —— 新增 some.im macOS App 集成文档和内置 skill，沉淀浏览器登录、Keychain、provider sync、VL fallback、onboarding/settings、验证清单等接入规范，后续 Agent 修改该模块时可直接按 skill 工作流处理。
+- **Onboarding some.im 登录简化（1.136.0-rc14）** —— 首启 onboarding 的 some.im 步骤现在和设置页一致：进入步骤即自动准备浏览器登录请求，只保留“在浏览器打开”入口，用户完成 some.im 登录后回到 WillDeep 继续流程。该步骤可跳过；如果用户选择手动 API key + 模型配置，onboarding 会在主模型不支持图片输入时要求补充 VL/视觉 provider、Base URL、API key 和模型，并再次建议直接接入 some.im 以省掉多模态兜底配置。
+- **some.im 浏览器登录简化（1.136.0-rc13）** —— Settings → some.im 进入后会自动准备浏览器登录请求，界面只保留“在浏览器打开”操作；邮箱验证码表单、二维码、随机码、URL 展示和复制按钮已从设置页移除，用户在浏览器完成 some.im 登录后按页面提示回到 WillDeep 继续使用。
 - **Agent 连续天数保留（1.136.0-rc12）** —— Agent 空白页统计面板的当前连续天数现在会在今天尚未开始写时保留截至昨天的连续记录，避免当天刚开始打开 App 就被显示为 0；只有今天和昨天都没有使用记录时才视为断档。
 - **some.im 未绑定入口点击兜底（1.136.0-rc11）** —— Agent 左下角未登录 some.im 区域现在绕过系统 Settings action，直接打开 WillDeep fallback Settings 窗口；头像、文字、空白和齿轮区域都可触发 Settings → some.im 并自动生成浏览器登录链接。
 - **普通启动直进 Agent（1.136.0-rc10）** —— Agent 单例窗口现在是 App 的默认启动 Scene；不带文件/目录意图启动时直接进入 Agent mode，不再先闪出空 Editor 主窗口再延迟关闭。显式打开文件/目录、`willdeep://open?path=...` 和“显示 Editor”入口仍进入 editor mode。

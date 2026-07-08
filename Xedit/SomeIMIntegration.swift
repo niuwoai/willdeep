@@ -201,9 +201,37 @@ struct SomeIMAccount: Codable, Equatable {
     var defaultModel: String
     var lastUpdatedAt: Date
 
-    var displayCredits: String {
+    nonisolated var displayCredits: String {
         guard let value = Int64(credits) else { return credits }
         return NumberFormatter.localizedString(from: NSNumber(value: value), number: .decimal)
+    }
+
+    nonisolated var compactDisplayCredits: String {
+        Self.compactCredits(credits) ?? displayCredits
+    }
+
+    nonisolated static func compactCredits(_ credits: String) -> String? {
+        guard let value = Double(credits.trimmingCharacters(in: .whitespacesAndNewlines)) else { return nil }
+        let magnitude = abs(value)
+        let unit: (divisor: Double, suffix: String)?
+        if magnitude >= 1_000_000_000 {
+            unit = (1_000_000_000, "B")
+        } else if magnitude >= 1_000_000 {
+            unit = (1_000_000, "M")
+        } else {
+            return nil
+        }
+        guard let unit else { return nil }
+
+        let formatter = NumberFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.numberStyle = .decimal
+        formatter.usesGroupingSeparator = false
+        formatter.minimumFractionDigits = 2
+        formatter.maximumFractionDigits = 2
+        let scaled = value / unit.divisor
+        let rendered = formatter.string(from: NSNumber(value: scaled)) ?? String(format: "%.2f", scaled)
+        return rendered + unit.suffix
     }
 }
 
@@ -1016,12 +1044,8 @@ struct SomeIMIntegrationSettingsView: View {
     @State private var settings = SomeIMIntegrationStore.loadSettings()
     @State private var apiKey = SomeIMIntegrationStore.loadAPIKey()
     @State private var account = SomeIMIntegrationStore.loadAccount()
-    @State private var accountEmail = SomeIMIntegrationStore.loadAccount()?.email ?? ""
-    @State private var verificationCode = ""
     @State private var fetchedModels: [SomeIMModel] = []
     @State private var isFetching = false
-    @State private var isSendingCode = false
-    @State private var isVerifyingCode = false
     @State private var isRefreshingBalance = false
     @State private var browserLoginRequest: SomeIMBrowserLoginRequest?
     @State private var browserLoginWatcher: Task<Void, Never>?
@@ -1045,26 +1069,26 @@ struct SomeIMIntegrationSettingsView: View {
                         .font(.caption)
                         .foregroundStyle(.secondary)
 
-                    if let browserLoginRequest {
-                        HStack(alignment: .top, spacing: 14) {
-                            SettingsQRCodeView(
-                                text: browserLoginRequest.url.absoluteString,
-                                accessibilityLabel: L10n.Settings.SomeIM.browserLoginQRCodeAccessibilityLabel,
-                                unavailableText: L10n.Settings.SomeIM.browserLoginQRCodeUnavailable,
-                                pointSize: 132
-                            )
+                    if let account {
+                        ConnectorUnavailablePlaceholder(
+                            title: L10n.Settings.SomeIM.browserLoginConnectedTitle,
+                            systemImage: "checkmark.circle",
+                            description: L10n.Settings.SomeIM.browserLoginConnectedDescription(account.email)
+                        )
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                    } else {
+                        HStack(alignment: .top, spacing: 12) {
+                            Image(systemName: isWatchingBrowserLogin ? "person.badge.clock" : "safari")
+                                .font(.system(size: 22, weight: .medium))
+                                .foregroundStyle(.tint)
+                                .frame(width: 32, height: 32)
 
-                            VStack(alignment: .leading, spacing: 8) {
-                                LabeledContent(L10n.Settings.SomeIM.browserLoginCodeLabel) {
-                                    Text(browserLoginRequest.code)
-                                        .font(.system(size: 18, weight: .bold, design: .monospaced))
-                                        .textSelection(.enabled)
-                                }
-                                Text(browserLoginRequest.url.absoluteString)
-                                    .font(.caption.monospaced())
+                            VStack(alignment: .leading, spacing: 6) {
+                                Text(L10n.Settings.SomeIM.browserLoginPlaceholderTitle)
+                                    .font(.headline)
+                                Text(L10n.Settings.SomeIM.browserLoginPlaceholderDescription)
+                                    .font(.caption)
                                     .foregroundStyle(.secondary)
-                                    .lineLimit(4)
-                                    .textSelection(.enabled)
                                 HStack(spacing: 6) {
                                     if isWatchingBrowserLogin {
                                         ProgressView()
@@ -1077,41 +1101,13 @@ struct SomeIMIntegrationSettingsView: View {
                                 }
                             }
                         }
-                    } else if let account {
-                        ConnectorUnavailablePlaceholder(
-                            title: L10n.Settings.SomeIM.browserLoginConnectedTitle,
-                            systemImage: "checkmark.circle",
-                            description: L10n.Settings.SomeIM.browserLoginConnectedDescription(account.email)
-                        )
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                    } else {
-                        ConnectorUnavailablePlaceholder(
-                            title: L10n.Settings.SomeIM.browserLoginPlaceholderTitle,
-                            systemImage: "link.badge.plus",
-                            description: L10n.Settings.SomeIM.browserLoginPlaceholderDescription
-                        )
-                        .frame(maxWidth: .infinity, alignment: .leading)
                     }
 
                     HStack {
-                        Button(L10n.Settings.SomeIM.generateBrowserLoginLink) {
-                            generateBrowserLoginLink(openInBrowser: false)
-                        }
                         Button(L10n.Settings.SomeIM.openBrowserLoginLink) {
-                            if browserLoginRequest == nil {
-                                generateBrowserLoginLink(openInBrowser: true)
-                            } else {
-                                openBrowserLoginLink()
-                            }
+                            openBrowserLoginLink()
                         }
-                        if browserLoginRequest != nil {
-                            Button(L10n.Settings.SomeIM.copyBrowserLoginLink) {
-                                copyBrowserLoginLink()
-                            }
-                            Button(L10n.Settings.SomeIM.copyBrowserLoginCode) {
-                                copyBrowserLoginCode()
-                            }
-                        }
+                        .disabled(account != nil)
                     }
                 }
             }
@@ -1138,28 +1134,6 @@ struct SomeIMIntegrationSettingsView: View {
                 } else {
                     Text(L10n.Settings.SomeIM.accountNotConnected)
                         .foregroundStyle(.secondary)
-                }
-                LabeledContent(L10n.Settings.SomeIM.emailLabel) {
-                    TextField("", text: $accountEmail)
-                        .textFieldStyle(.roundedBorder)
-                        .disableAutocorrection(true)
-                }
-                LabeledContent(L10n.Settings.SomeIM.emailCodeLabel) {
-                    TextField("", text: $verificationCode)
-                        .textFieldStyle(.roundedBorder)
-                        .disableAutocorrection(true)
-                }
-                HStack {
-                    Button(isSendingCode ? L10n.Settings.SomeIM.sendingCode : L10n.Settings.SomeIM.sendCode) {
-                        sendCode()
-                    }
-                    .disabled(isSendingCode || accountEmail.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-                    Button(isVerifyingCode ? L10n.Settings.SomeIM.verifyingCode : L10n.Settings.SomeIM.verifyCode) {
-                        verifyCode()
-                    }
-                    .disabled(isVerifyingCode
-                        || accountEmail.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-                        || verificationCode.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                 }
             }
 
@@ -1228,7 +1202,7 @@ struct SomeIMIntegrationSettingsView: View {
         }
         .formStyle(.grouped)
         .onAppear {
-            consumeBrowserLoginAutogenerateRequestIfNeeded()
+            ensureBrowserLoginRequestIfNeeded()
         }
         .onReceive(settingsNavigation.$someIMBrowserLoginAutogenerateRequestID) { _ in
             consumeBrowserLoginAutogenerateRequestIfNeeded()
@@ -1322,7 +1296,7 @@ struct SomeIMIntegrationSettingsView: View {
         status = L10n.Settings.savedStatus
     }
 
-    private func generateBrowserLoginLink(openInBrowser: Bool) {
+    private func prepareBrowserLoginRequest(openInBrowser: Bool) {
         do {
             let request = try SomeIMClient.makeBrowserLoginRequest(settings: settings.normalized)
             browserLoginRequest = request
@@ -1330,6 +1304,7 @@ struct SomeIMIntegrationSettingsView: View {
             startBrowserLoginWatcher(for: request)
             if openInBrowser {
                 _ = NSWorkspace.shared.open(request.url)
+                status = L10n.Settings.SomeIM.browserLoginOpened
             }
         } catch {
             status = error.localizedDescription
@@ -1342,13 +1317,17 @@ struct SomeIMIntegrationSettingsView: View {
             return
         }
         handledBrowserLoginAutogenerateRequestID = requestID
+        ensureBrowserLoginRequestIfNeeded()
+    }
+
+    private func ensureBrowserLoginRequestIfNeeded() {
         guard account == nil else { return }
         if let request = browserLoginRequest {
             if !isWatchingBrowserLogin {
                 startBrowserLoginWatcher(for: request)
             }
         } else {
-            generateBrowserLoginLink(openInBrowser: false)
+            prepareBrowserLoginRequest(openInBrowser: false)
         }
     }
 
@@ -1360,22 +1339,8 @@ struct SomeIMIntegrationSettingsView: View {
             _ = NSWorkspace.shared.open(request.url)
             status = L10n.Settings.SomeIM.browserLoginOpened
         } else {
-            generateBrowserLoginLink(openInBrowser: true)
+            prepareBrowserLoginRequest(openInBrowser: true)
         }
-    }
-
-    private func copyBrowserLoginLink() {
-        guard let url = browserLoginRequest?.url else { return }
-        NSPasteboard.general.clearContents()
-        NSPasteboard.general.setString(url.absoluteString, forType: .string)
-        status = L10n.Settings.SomeIM.browserLoginCopied
-    }
-
-    private func copyBrowserLoginCode() {
-        guard let code = browserLoginRequest?.code else { return }
-        NSPasteboard.general.clearContents()
-        NSPasteboard.general.setString(code, forType: .string)
-        status = L10n.Settings.SomeIM.browserLoginCodeCopied
     }
 
     private func startBrowserLoginWatcher(for loginRequest: SomeIMBrowserLoginRequest) {
@@ -1392,7 +1357,6 @@ struct SomeIMIntegrationSettingsView: View {
                     if result.state == .connected, let linked = result.account {
                         await MainActor.run {
                             account = linked
-                            accountEmail = linked.email
                             apiKey = SomeIMIntegrationStore.loadAPIKey()
                             settings = SomeIMIntegrationStore.loadSettings()
                             appState.syncSomeIMProvider(settings: settings, apiKey: apiKey)
@@ -1412,6 +1376,7 @@ struct SomeIMIntegrationSettingsView: View {
                     }
                     if result.state == .expired {
                         await MainActor.run {
+                            browserLoginRequest = nil
                             isWatchingBrowserLogin = false
                             status = L10n.Settings.SomeIM.browserLoginExpired
                         }
@@ -1423,6 +1388,7 @@ struct SomeIMIntegrationSettingsView: View {
                 try? await Task.sleep(nanoseconds: 2_000_000_000)
             }
             await MainActor.run {
+                browserLoginRequest = nil
                 isWatchingBrowserLogin = false
                 status = lastError ?? L10n.Settings.SomeIM.browserLoginExpired
             }
@@ -1433,62 +1399,6 @@ struct SomeIMIntegrationSettingsView: View {
         browserLoginWatcher?.cancel()
         browserLoginWatcher = nil
         isWatchingBrowserLogin = false
-    }
-
-    private func sendCode() {
-        isSendingCode = true
-        status = ""
-        let email = accountEmail
-        let currentSettings = settings.normalized
-        Task {
-            let result: Result<Void, Error>
-            do {
-                try await SomeIMClient.sendClientLoginCode(email: email, settings: currentSettings)
-                result = .success(())
-            } catch {
-                result = .failure(error)
-            }
-            await MainActor.run {
-                isSendingCode = false
-                switch result {
-                case .success:
-                    status = L10n.Settings.SomeIM.codeSent
-                case .failure(let error):
-                    status = error.localizedDescription
-                }
-            }
-        }
-    }
-
-    private func verifyCode() {
-        isVerifyingCode = true
-        status = ""
-        let email = accountEmail
-        let code = verificationCode
-        let currentSettings = settings.normalized
-        Task {
-            let result: Result<SomeIMAccount, Error>
-            do {
-                result = .success(try await SomeIMClient.verifyClientLoginCode(email: email, code: code, settings: currentSettings))
-            } catch {
-                result = .failure(error)
-            }
-            await MainActor.run {
-                isVerifyingCode = false
-                switch result {
-                case .success(let linked):
-                    account = linked
-                    accountEmail = linked.email
-                    apiKey = SomeIMIntegrationStore.loadAPIKey()
-                    settings = SomeIMIntegrationStore.loadSettings()
-                    appState.syncSomeIMProvider(settings: settings, apiKey: apiKey)
-                    appState.syncSomeIMImageUnderstanding(apiKey: apiKey)
-                    status = L10n.Settings.SomeIM.connected
-                case .failure(let error):
-                    status = error.localizedDescription
-                }
-            }
-        }
     }
 
     private func refreshBalance() {

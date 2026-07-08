@@ -175,10 +175,15 @@ struct AgentChatTranscript: View {
     /// AgentChatHistoryTextView wrapper 上即可。
     @State private var showTurnReportPopover = false
     @State private var isOlderHistoryPreviewExpanded = false
+    @State private var isConversationSearchPresented = false
+    @State private var conversationSearchQuery = ""
+    @State private var conversationSearchMatchCount = 0
+    @State private var conversationSearchActiveIndex = 0
 
     var body: some View {
-        ScrollViewReader { proxy in
-            ScrollView {
+        ZStack(alignment: .topTrailing) {
+            ScrollViewReader { proxy in
+                ScrollView {
                 // Keep this stack non-lazy. The visible transcript is
                 // already capped and mostly rendered as one NSTextView;
                 // LazyVStack's placement cache is the unstable part when
@@ -226,8 +231,9 @@ struct AgentChatTranscript: View {
                         // the turn ends it folds into the NSTextView
                         // on the next refresh.
                         let allVisible = visibleMessages
-                        let rendered = renderedMessages(from: allVisible)
-                        let omitted = allVisible.count - rendered.count
+                        let searchingConversation = isConversationSearchActive
+                        let rendered = searchingConversation ? allVisible : renderedMessages(from: allVisible)
+                        let omitted = searchingConversation ? 0 : allVisible.count - rendered.count
                         if omitted > 0 {
                             transcriptOlderHistoryCard(
                                 omittedCount: omitted,
@@ -235,7 +241,7 @@ struct AgentChatTranscript: View {
                             )
                         }
 
-                        let streamingMessageID = currentStreamingMessageID
+                        let streamingMessageID = searchingConversation ? nil : currentStreamingMessageID
                         let history = historyMessages(rendered: rendered, streamingID: streamingMessageID)
                         if !history.isEmpty {
                             AgentChatHistoryTextView(
@@ -251,7 +257,10 @@ struct AgentChatTranscript: View {
                                     // 三选一);editor 窗口未开时 chip
                                     // 不再「点了没反应」。
                                     appState.revealAgentReferencedFileInSidePanel(rawPath)
-                                }
+                                },
+                                searchQuery: conversationSearchQuery,
+                                activeSearchMatchIndex: conversationSearchActiveIndex,
+                                onSearchResultCountChange: updateConversationSearchMatchCount
                             )
                                 .frame(maxWidth: AgentDesign.chatMaxContentWidth, alignment: .leading)
                                 .popover(isPresented: $showTurnReportPopover, arrowEdge: .top) {
@@ -445,18 +454,22 @@ struct AgentChatTranscript: View {
             // message is appended. The target is a stable bottom
             // sentinel because historical messages are folded into
             // one NSTextView and no longer expose per-message ids.
-            .onCompatibleChange(of: appState.agentMessages.count) { _, _ in
-                proxy.scrollTo(Self.bottomScrollID, anchor: .bottom)
-            }
-            .onCompatibleChange(of: appState.agentToolCalls.count) { _, _ in
-                proxy.scrollTo(Self.bottomScrollID, anchor: .bottom)
-            }
-            .onCompatibleChange(of: appState.agentLearningEvents.count) { _, _ in
-                proxy.scrollTo(Self.bottomScrollID, anchor: .bottom)
-            }
-            .onCompatibleChange(of: appState.agentQueuedMessages.count) { _, _ in
-                proxy.scrollTo(Self.bottomScrollID, anchor: .bottom)
-            }
+                .onCompatibleChange(of: appState.agentMessages.count) { _, _ in
+                    guard !isConversationSearchActive else { return }
+                    proxy.scrollTo(Self.bottomScrollID, anchor: .bottom)
+                }
+                .onCompatibleChange(of: appState.agentToolCalls.count) { _, _ in
+                    guard !isConversationSearchActive else { return }
+                    proxy.scrollTo(Self.bottomScrollID, anchor: .bottom)
+                }
+                .onCompatibleChange(of: appState.agentLearningEvents.count) { _, _ in
+                    guard !isConversationSearchActive else { return }
+                    proxy.scrollTo(Self.bottomScrollID, anchor: .bottom)
+                }
+                .onCompatibleChange(of: appState.agentQueuedMessages.count) { _, _ in
+                    guard !isConversationSearchActive else { return }
+                    proxy.scrollTo(Self.bottomScrollID, anchor: .bottom)
+                }
             // 1.130.0-rc4：回合结束补一次到底滚动。流式期间只按「条数
             // 变化」滚动（见上方 CRITICAL 注释——逐 token 滚动会把主线
             // 程钉死在布局里），但 assistant 消息是流式开始时就 append
@@ -464,29 +477,102 @@ struct AgentChatTranscript: View {
             // 持续长高、条数不变、再无滚动，长回复结束时视口停在答案
             // 中段。这里watch isAgentResponding 的 true→false 翻转，
             // 等一帧让 TextKit 历史折叠与布局落定后一次性滚到底。
-            .onCompatibleChange(of: appState.isAgentResponding) { _, nowResponding in
-                guard !nowResponding else { return }
-                DispatchQueue.main.async {
-                    proxy.scrollTo(Self.bottomScrollID, anchor: .bottom)
+                .onCompatibleChange(of: appState.isAgentResponding) { _, nowResponding in
+                    guard !nowResponding, !isConversationSearchActive else { return }
+                    DispatchQueue.main.async {
+                        proxy.scrollTo(Self.bottomScrollID, anchor: .bottom)
+                    }
                 }
-            }
+
             // 切走 app 再切回来时,SwiftUI 会重新布局 ScrollView,默认
             // 把滚动位置重置到顶部 —— 用户反馈:本来在看最新消息,
             // 切回来却跳到了最顶上。这里在视图首次出现 + app 重新激活
             // 时把锚点拉回底部哨兵,保证「切回来还在最新处」。
-            .onAppear {
-                // 等一帧让内容先完成布局,直接 scrollTo 在 onAppear 里
-                // 偶尔会落空(目标还没拿到最终高度)。
-                DispatchQueue.main.async {
-                    proxy.scrollTo(Self.bottomScrollID, anchor: .bottom)
+                .onAppear {
+                    // 等一帧让内容先完成布局,直接 scrollTo 在 onAppear 里
+                    // 偶尔会落空(目标还没拿到最终高度)。
+                    DispatchQueue.main.async {
+                        guard !isConversationSearchActive else { return }
+                        proxy.scrollTo(Self.bottomScrollID, anchor: .bottom)
+                    }
+                }
+                .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
+                    DispatchQueue.main.async {
+                        guard !isConversationSearchActive else { return }
+                        proxy.scrollTo(Self.bottomScrollID, anchor: .bottom)
+                    }
                 }
             }
-            .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
-                DispatchQueue.main.async {
-                    proxy.scrollTo(Self.bottomScrollID, anchor: .bottom)
-                }
+            if isConversationSearchPresented {
+                AgentConversationSearchBar(
+                    isPresented: $isConversationSearchPresented,
+                    query: $conversationSearchQuery,
+                    matchCount: conversationSearchMatchCount,
+                    activeIndex: displayedConversationSearchActiveIndex,
+                    onPrevious: selectPreviousConversationSearchMatch,
+                    onNext: selectNextConversationSearchMatch,
+                    onClose: closeConversationSearch
+                )
+                .padding(.top, 12)
+                .padding(.trailing, 24)
+                .transition(.scale(scale: 0.96, anchor: .topTrailing).combined(with: .opacity))
+                .zIndex(20)
             }
         }
+        .background(AgentConversationSearchKeyboardShortcutView(onFind: presentConversationSearch))
+        .onCompatibleChange(of: conversationSearchQuery) { _, _ in
+            conversationSearchActiveIndex = 0
+        }
+        .onCompatibleChange(of: appState.activeAgentSessionID) { _, _ in
+            closeConversationSearch()
+        }
+    }
+
+    private var isConversationSearchActive: Bool {
+        isConversationSearchPresented && !AgentTranscriptSearch.normalizedQuery(conversationSearchQuery).isEmpty
+    }
+
+    private var displayedConversationSearchActiveIndex: Int {
+        AgentTranscriptSearch.clampedActiveIndex(
+            conversationSearchActiveIndex,
+            count: conversationSearchMatchCount
+        ) ?? 0
+    }
+
+    private func presentConversationSearch() {
+        withAnimation(.easeOut(duration: 0.14)) {
+            isConversationSearchPresented = true
+        }
+    }
+
+    private func closeConversationSearch() {
+        withAnimation(.easeOut(duration: 0.12)) {
+            isConversationSearchPresented = false
+        }
+        conversationSearchQuery = ""
+        conversationSearchMatchCount = 0
+        conversationSearchActiveIndex = 0
+    }
+
+    private func updateConversationSearchMatchCount(_ count: Int) {
+        DispatchQueue.main.async {
+            conversationSearchMatchCount = count
+            if count <= 0 {
+                conversationSearchActiveIndex = 0
+            } else if conversationSearchActiveIndex >= count {
+                conversationSearchActiveIndex = count - 1
+            }
+        }
+    }
+
+    private func selectPreviousConversationSearchMatch() {
+        guard conversationSearchMatchCount > 0 else { return }
+        conversationSearchActiveIndex = (displayedConversationSearchActiveIndex - 1 + conversationSearchMatchCount) % conversationSearchMatchCount
+    }
+
+    private func selectNextConversationSearchMatch() {
+        guard conversationSearchMatchCount > 0 else { return }
+        conversationSearchActiveIndex = (displayedConversationSearchActiveIndex + 1) % conversationSearchMatchCount
     }
 
     private var visibleMessages: [AgentMessage] {

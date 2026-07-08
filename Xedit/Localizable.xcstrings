@@ -10872,6 +10872,57 @@
         }
       }
     },
+    "onboarding.provider.error-vision-api-key-required" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "VL API key is required for this provider."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "该 VL 服务商需要填写 API key。"
+          }
+        }
+      }
+    },
+    "onboarding.provider.error-vision-base-url-required" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "VL Base URL is required for this model."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "该模型需要填写 VL Base URL。"
+          }
+        }
+      }
+    },
+    "onboarding.provider.error-vision-model-required" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Please specify a VL model id."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "请填写 VL 模型 ID。"
+          }
+        }
+      }
+    },
     "onboarding.provider.error-model-required" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -10974,6 +11025,74 @@
         }
       }
     },
+    "onboarding.provider.label-vision-api-key" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "VL API key"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "VL API key"
+          }
+        }
+      }
+    },
+    "onboarding.provider.label-vision-base-url" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "VL Base URL"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "VL Base URL"
+          }
+        }
+      }
+    },
+    "onboarding.provider.label-vision-model" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "VL model"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "VL 模型"
+          }
+        }
+      }
+    },
+    "onboarding.provider.label-vision-provider" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "VL provider"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "VL 服务商"
+          }
+        }
+      }
+    },
     "onboarding.provider.subtitle" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -10987,6 +11106,23 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "先选一个开始 —— 之后可在 设置 → AI 服务商 里添加更多。只用语音功能的话可以跳过。"
+          }
+        }
+      }
+    },
+    "onboarding.provider.some-im-recommendation" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Recommendation: connect some.im in the next step if you want one setup for chat, images, videos, and fallback vision routing."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "建议：如果你想一次配置聊天、图片、视频和视觉兜底路由，下一步直接连接 some.im 会更省事。"
           }
         }
       }
@@ -11008,19 +11144,36 @@
         }
       }
     },
+    "onboarding.provider.vision-required" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "This chat model does not accept images. Add a VL/vision provider so WillDeep can describe pasted images before sending them to the text model."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "这个聊天模型不能直接接收图片。请补一个 VL/视觉模型服务商，WillDeep 会先把粘贴的图片转成描述，再发给文本模型。"
+          }
+        }
+      }
+    },
     "onboarding.some-im.note" : {
       "extractionState" : "manual",
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "You can skip this and configure it later in Settings -> some.im. The image default is gpt-image-2."
+            "value" : "Recommended. You can skip this and use your own API key/model setup, but some.im avoids separate vision-model wiring."
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "可以先跳过，之后在 Settings → some.im 里配置。图片默认模型是 gpt-image-2。"
+            "value" : "推荐使用。你也可以跳过并使用自己的 API key/模型配置，但 some.im 可以省掉单独配置视觉模型这一步。"
           }
         }
       }
@@ -11031,13 +11184,13 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Optional. Add your relay key so image, video, and future multimodal skills can route to the right model automatically."
+            "value" : "Open some.im in your browser, sign in, then return to WillDeep. WillDeep will configure chat, image/video generation, and vision fallback automatically."
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "可选。填入 relay key 后，图片、视频以及后续多模态技能就能自动路由到合适模型。"
+            "value" : "在浏览器里打开 some.im 并完成登录，然后回到 WillDeep。WillDeep 会自动配置聊天、图片/视频生成和视觉兜底。"
           }
         }
       }
@@ -22473,6 +22626,40 @@
         }
       }
     },
+    "sidebar.some-im.account-title" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "some.im"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "some.im"
+          }
+        }
+      }
+    },
+    "sidebar.some-im.credits" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ credits"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ 点数"
+          }
+        }
+      }
+    },
     "sidebar.some-im.not-logged-in" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -22503,6 +22690,40 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "打开 some.im 集成设置"
+          }
+        }
+      }
+    },
+    "sidebar.some-im.open-tooltip" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Open some.im with this account"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "打开当前 some.im 账号"
+          }
+        }
+      }
+    },
+    "sidebar.some-im.refresh-tooltip" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Refresh some.im credits"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "刷新 some.im 点数"
           }
         }
       }
@@ -22650,13 +22871,13 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Generate a short random-code link. Sign in to some.im in your browser, then return to WillDeep when the page says the connection is ready."
+            "value" : "WillDeep prepares a secure some.im sign-in request automatically. Open it in your browser, sign in, then return to WillDeep when some.im says you can continue."
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "生成带短随机码的链接。请在浏览器里登录 some.im，页面提示连接完成后再回到 WillDeep 继续使用。"
+            "value" : "WillDeep 会自动准备安全的 some.im 登录请求。请在浏览器里打开 some.im 并完成登录，页面提示可继续后回到 WillDeep 使用。"
           }
         }
       }
@@ -22667,13 +22888,13 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Browser login link expired. Generate a new link."
+            "value" : "Browser sign-in expired. Open some.im again to restart."
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "浏览器登录链接已过期，请重新生成。"
+            "value" : "浏览器登录已过期，请重新打开 some.im 开始登录。"
           }
         }
       }
@@ -22684,13 +22905,13 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Browser sign-in completed, but some.im did not return WillDeep credentials. Generate a new link and try again."
+            "value" : "Browser sign-in completed, but some.im did not return WillDeep credentials. Open some.im again and try signing in."
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "浏览器登录已完成，但 some.im 没有返回 WillDeep 凭据。请重新生成链接再试。"
+            "value" : "浏览器登录已完成，但 some.im 没有返回 WillDeep 凭据。请重新打开 some.im 再登录一次。"
           }
         }
       }
@@ -22701,13 +22922,13 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Browser login link opened."
+            "value" : "some.im opened in your browser. Finish signing in there, then return to WillDeep."
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "浏览器登录链接已打开。"
+            "value" : "已在浏览器打开 some.im。请在那里完成登录，然后回到 WillDeep。"
           }
         }
       }
@@ -22718,13 +22939,13 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Generate a link when you want to sign in through the browser."
+            "value" : "Open some.im in your browser to finish signing in. WillDeep will keep waiting here for the account connection."
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "需要通过浏览器登录时，先生成一个链接。"
+            "value" : "在浏览器里打开 some.im 完成登录。WillDeep 会在这里等待账号连接完成。"
           }
         }
       }
@@ -22735,13 +22956,13 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "No browser login link yet"
+            "value" : "Ready for browser sign-in"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "还没有浏览器登录链接"
+            "value" : "已准备好浏览器登录"
           }
         }
       }
@@ -22786,13 +23007,13 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Browser login link is ready."
+            "value" : "Browser sign-in is ready."
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "浏览器登录链接已生成。"
+            "value" : "浏览器登录已准备好。"
           }
         }
       }
@@ -28230,6 +28451,114 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "消息预览保留前后片段（最多 %@ 字符，省略 %@ 字符）"
+          }
+        }
+      }
+    },
+    "transcript.search.close-help" : {
+      "comment" : "tooltip for closing the in-conversation search overlay",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Close conversation search"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "关闭对话搜索"
+          }
+        }
+      }
+    },
+    "transcript.search.next-help" : {
+      "comment" : "tooltip for moving to the next in-conversation search result",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Next result"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "下一个结果"
+          }
+        }
+      }
+    },
+    "transcript.search.no-results" : {
+      "comment" : "empty state label for in-conversation search",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No results"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "无结果"
+          }
+        }
+      }
+    },
+    "transcript.search.placeholder" : {
+      "comment" : "placeholder in the in-conversation search field",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Search conversation..."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "搜索对话..."
+          }
+        }
+      }
+    },
+    "transcript.search.previous-help" : {
+      "comment" : "tooltip for moving to the previous in-conversation search result",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Previous result"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "上一个结果"
+          }
+        }
+      }
+    },
+    "transcript.search.result-position" : {
+      "comment" : "current position and total count for in-conversation search",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%1$@ / %2$@ results"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%1$@ / %2$@ 个结果"
           }
         }
       }

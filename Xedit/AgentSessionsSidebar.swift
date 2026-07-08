@@ -118,7 +118,7 @@ struct AgentSessionsSidebar: View {
                                 .font(.system(size: 11, weight: .semibold))
                                 .foregroundStyle(.primary)
                                 .lineLimit(1)
-                            Text(L10n.Sidebar.someIMCredits(account.displayCredits))
+                            Text(L10n.Sidebar.someIMCredits(account.compactDisplayCredits))
                                 .font(.system(size: 10, weight: .medium))
                                 .foregroundStyle(.secondary)
                                 .monospacedDigit()

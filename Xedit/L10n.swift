@@ -297,8 +297,8 @@ nonisolated enum L10n {
     enum Onboarding {
         enum SomeIM {
             static let title = String(localized: "onboarding.some-im.title", defaultValue: "Connect some.im")
-            static let subtitle = String(localized: "onboarding.some-im.subtitle", defaultValue: "Enter your email, verify the code, and WillDeep will configure some.im with the default someim-auto-flash model.")
-            static let note = String(localized: "onboarding.some-im.note", defaultValue: "New some.im accounts receive the current signup bonus. WillDeep shows the remaining balance as credits.")
+            static let subtitle = String(localized: "onboarding.some-im.subtitle", defaultValue: "Open some.im in your browser, sign in, then return to WillDeep. WillDeep will configure chat, image/video generation, and vision fallback automatically.")
+            static let note = String(localized: "onboarding.some-im.note", defaultValue: "Recommended. You can skip this and use your own API key/model setup, but some.im avoids separate vision-model wiring.")
         }
         enum Welcome {
             static let title = String(localized: "onboarding.welcome.title", defaultValue: "Welcome to WillDeep")
@@ -314,9 +314,18 @@ nonisolated enum L10n {
             static let labelBaseURL = String(localized: "onboarding.provider.label-base-url", defaultValue: "Base URL")
             static let labelAPIKey = String(localized: "onboarding.provider.label-api-key", defaultValue: "API key")
             static let labelModel = String(localized: "onboarding.provider.label-model", defaultValue: "Default model")
+            static let someIMRecommendation = String(localized: "onboarding.provider.some-im-recommendation", defaultValue: "Recommendation: connect some.im in the next step if you want one setup for chat, images, videos, and fallback vision routing.")
+            static let visionRequired = String(localized: "onboarding.provider.vision-required", defaultValue: "This chat model does not accept images. Add a VL/vision provider so WillDeep can describe pasted images before sending them to the text model.")
+            static let labelVisionProvider = String(localized: "onboarding.provider.label-vision-provider", defaultValue: "VL provider")
+            static let labelVisionBaseURL = String(localized: "onboarding.provider.label-vision-base-url", defaultValue: "VL Base URL")
+            static let labelVisionAPIKey = String(localized: "onboarding.provider.label-vision-api-key", defaultValue: "VL API key")
+            static let labelVisionModel = String(localized: "onboarding.provider.label-vision-model", defaultValue: "VL model")
             static let errorUnknownPreset = String(localized: "onboarding.provider.error-unknown-preset", defaultValue: "Unknown provider preset.")
             static let errorBaseURLRequired = String(localized: "onboarding.provider.error-base-url-required", defaultValue: "Base URL is required for this provider.")
             static let errorModelRequired = String(localized: "onboarding.provider.error-model-required", defaultValue: "Please specify a model id.")
+            static let errorVisionBaseURLRequired = String(localized: "onboarding.provider.error-vision-base-url-required", defaultValue: "VL Base URL is required for this model.")
+            static let errorVisionModelRequired = String(localized: "onboarding.provider.error-vision-model-required", defaultValue: "Please specify a VL model id.")
+            static let errorVisionAPIKeyRequired = String(localized: "onboarding.provider.error-vision-api-key-required", defaultValue: "VL API key is required for this provider.")
         }
         enum Voice {
             static let title = String(localized: "onboarding.voice.title", defaultValue: "Set up voice transcription")
@@ -1539,9 +1548,9 @@ nonisolated enum L10n {
             static let codeSent = String(localized: "settings.some-im.code-sent", defaultValue: "Verification code sent.")
             static let connected = String(localized: "settings.some-im.connected", defaultValue: "some.im connected.")
             static let browserLoginSection = String(localized: "settings.some-im.browser-login-section", defaultValue: "Browser Login")
-            static let browserLoginDescription = String(localized: "settings.some-im.browser-login-description", defaultValue: "Generate a short random-code link. Sign in to some.im in your browser, then return to WillDeep when the page says the connection is ready.")
-            static let browserLoginPlaceholderTitle = String(localized: "settings.some-im.browser-login-placeholder-title", defaultValue: "No browser login link yet")
-            static let browserLoginPlaceholderDescription = String(localized: "settings.some-im.browser-login-placeholder-description", defaultValue: "Generate a link when you want to sign in through the browser.")
+            static let browserLoginDescription = String(localized: "settings.some-im.browser-login-description", defaultValue: "WillDeep prepares a secure some.im sign-in request automatically. Open it in your browser, sign in, then return to WillDeep when some.im says you can continue.")
+            static let browserLoginPlaceholderTitle = String(localized: "settings.some-im.browser-login-placeholder-title", defaultValue: "Ready for browser sign-in")
+            static let browserLoginPlaceholderDescription = String(localized: "settings.some-im.browser-login-placeholder-description", defaultValue: "Open some.im in your browser to finish signing in. WillDeep will keep waiting here for the account connection.")
             static let browserLoginQRCodeAccessibilityLabel = String(localized: "settings.some-im.browser-login-qr.accessibility-label", defaultValue: "some.im browser login QR code")
             static let browserLoginQRCodeUnavailable = String(localized: "settings.some-im.browser-login-qr.unavailable", defaultValue: "QR code unavailable")
             static let browserLoginCodeLabel = String(localized: "settings.some-im.browser-login-code", defaultValue: "Random Code")
@@ -1549,16 +1558,16 @@ nonisolated enum L10n {
             static let openBrowserLoginLink = String(localized: "settings.some-im.open-browser-login-link", defaultValue: "Open in Browser")
             static let copyBrowserLoginLink = String(localized: "settings.some-im.copy-browser-login-link", defaultValue: "Copy Link")
             static let copyBrowserLoginCode = String(localized: "settings.some-im.copy-browser-login-code", defaultValue: "Copy Code")
-            static let browserLoginReady = String(localized: "settings.some-im.browser-login-ready", defaultValue: "Browser login link is ready.")
+            static let browserLoginReady = String(localized: "settings.some-im.browser-login-ready", defaultValue: "Browser sign-in is ready.")
             static let browserLoginWaiting = String(localized: "settings.some-im.browser-login-waiting", defaultValue: "Waiting for browser sign-in...")
             static let browserLoginConnected = String(localized: "settings.some-im.browser-login-connected", defaultValue: "some.im account connected.")
-            static let browserLoginExpired = String(localized: "settings.some-im.browser-login-expired", defaultValue: "Browser login link expired. Generate a new link.")
-            static let browserLoginMissingCredentials = String(localized: "settings.some-im.browser-login-missing-credentials", defaultValue: "Browser sign-in completed, but some.im did not return WillDeep credentials. Generate a new link and try again.")
+            static let browserLoginExpired = String(localized: "settings.some-im.browser-login-expired", defaultValue: "Browser sign-in expired. Open some.im again to restart.")
+            static let browserLoginMissingCredentials = String(localized: "settings.some-im.browser-login-missing-credentials", defaultValue: "Browser sign-in completed, but some.im did not return WillDeep credentials. Open some.im again and try signing in.")
             static let browserLoginConnectedTitle = String(localized: "settings.some-im.browser-login-connected-title", defaultValue: "Browser sign-in complete")
             static func browserLoginConnectedDescription(_ a1: String) -> String {
                 String(localized: "settings.some-im.browser-login-connected-description", defaultValue: "Connected as \(a1). You can close the browser tab and continue in WillDeep.")
             }
-            static let browserLoginOpened = String(localized: "settings.some-im.browser-login-opened", defaultValue: "Browser login link opened.")
+            static let browserLoginOpened = String(localized: "settings.some-im.browser-login-opened", defaultValue: "some.im opened in your browser. Finish signing in there, then return to WillDeep.")
             static let browserLoginCopied = String(localized: "settings.some-im.browser-login-copied", defaultValue: "Browser login link copied.")
             static let browserLoginCodeCopied = String(localized: "settings.some-im.browser-login-code-copied", defaultValue: "Browser login code copied.")
             static let connectionSection = String(localized: "settings.some-im.connection-section", defaultValue: "some.im Integration")
@@ -2747,6 +2756,15 @@ nonisolated enum L10n {
             let template = String(localized: "transcript.message-middle-omitted.text", defaultValue: "… %@ characters omitted; showing message start and end …")
             return String(format: template, a1)
         }
+        static let searchPlaceholder = String(localized: "transcript.search.placeholder", defaultValue: "Search conversation...")
+        static let searchNoResults = String(localized: "transcript.search.no-results", defaultValue: "No results")
+        static func searchResultPosition(_ a1: String, _ a2: String) -> String {
+            let template = String(localized: "transcript.search.result-position", defaultValue: "%1$@ / %2$@ results")
+            return String(format: template, a1, a2)
+        }
+        static let searchPreviousHelp = String(localized: "transcript.search.previous-help", defaultValue: "Previous result")
+        static let searchNextHelp = String(localized: "transcript.search.next-help", defaultValue: "Next result")
+        static let searchCloseHelp = String(localized: "transcript.search.close-help", defaultValue: "Close conversation search")
         static let olderHistoryHelp = String(localized: "transcript.older-history.help", defaultValue: "Open in standalone window to view full conversation history")
         static func olderHistoryText(_ a1: String) -> String {
             let template = String(localized: "transcript.older-history.text", defaultValue: "More messages earlier in conversation")

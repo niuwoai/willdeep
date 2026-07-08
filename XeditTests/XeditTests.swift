@@ -29,6 +29,19 @@ struct WillDeepTests {
 
     // Editor core behavior tests live in EditorCoreBehaviorTests.swift.
 
+    @Test("side panel diff display truncates oversized text")
+    func testSidePanelDiffDisplayTruncatesOversizedText() {
+        let prefix = "diff --git a/large.txt b/large.txt\n"
+        let oversizedDiff = prefix + String(repeating: "+0123456789abcdef\n", count: 8_000)
+
+        let displayText = AgentSidePanelDiffLimiter.displayText(for: oversizedDiff)
+
+        #expect(displayText.count < oversizedDiff.count)
+        #expect(displayText.contains("已只显示前 24KB"))
+        #expect(displayText.contains(prefix))
+        #expect(displayText.contains("完整内容可在终端运行 git diff --no-ext-diff HEAD -- 查看"))
+    }
+
     @MainActor
     @Test("agent thinking indicator only shows while waiting for model output")
     func testAgentThinkingIndicatorState() {
@@ -987,6 +1000,23 @@ struct WillDeepTests {
         #expect(AppState.agentFilePathWithoutLineSuffix("/Users/test/demo/file.vue") == "/Users/test/demo/file.vue")
     }
 
+    @Test("some.im account credits use compact display for sidebar")
+    func testSomeIMAccountCompactCredits() {
+        let account = SomeIMAccount(
+            email: "user@example.com",
+            tenantID: nil,
+            balanceUSD: "42090.04666",
+            credits: "4209004666",
+            creditsPerUSD: 100000,
+            defaultModel: "gpt-image-2",
+            lastUpdatedAt: Date()
+        )
+
+        #expect(account.compactDisplayCredits == "4.21B")
+        #expect(SomeIMAccount.compactCredits("46000000") == "46.00M")
+        #expect(SomeIMAccount.compactCredits("999999") == nil)
+    }
+
     @Test("ask_user tool is registered with userInput risk and a question parameter")
     func testAskUserToolRegistration() {
         let descriptor = AgentToolRegistry.descriptor(for: "ask_user")
@@ -999,6 +1029,20 @@ struct WillDeepTests {
             arguments: ["question": .string("What port should the server bind to?")]
         )
         #expect(risk == .userInput)
+    }
+
+    @Test("generate_image runs without user approval")
+    func testGenerateImageToolDoesNotRequireApproval() {
+        let descriptor = AgentToolRegistry.descriptor(for: "generate_image")
+        #expect(descriptor != nil)
+        #expect(descriptor?.risk == .read)
+        #expect(descriptor?.parameters.contains(where: { $0.name == "prompt" && $0.required }) == true)
+
+        let risk = AgentToolRegistry.risk(
+            for: "generate_image",
+            arguments: ["prompt": .string("A clean product mockup")]
+        )
+        #expect(risk == .read)
     }
 
     @Test("ask_user exposes optional options and multi_select parameters")
