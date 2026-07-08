@@ -70,6 +70,7 @@ struct AgentModeMessageView: View {
     /// streaming assistant message. Defaults to system body so existing
     /// callers that don't pass it keep working.
     var baseFontSize: CGFloat = NSFont.systemFontSize
+    var onReferenceGeneratedImage: (String) -> Void = { _ in }
     // rc10: 之前 hover / 非 hover 用两套 opacity (0.028/0.022 vs
     // 0.038/0.032),非 hover 状态下气泡边线弱到看不见,用户感觉
     // 时间戳和复制 icon 像「漂在外面」(rc9 截图反馈)。统一改用
@@ -194,24 +195,34 @@ struct AgentModeMessageView: View {
                 .foregroundStyle(Color.secondary.opacity(0.78))
                 .frame(width: 18, height: 20, alignment: .center)
                 .padding(.top, 10)
-            if !message.content.isEmpty {
+            if !message.content.isEmpty || !message.images.isEmpty {
                 VStack(alignment: .leading, spacing: 4) {
-                    AgentAssistantMarkdownBody(
-                        content: message.content,
-                        isStreaming: isStreamingThisMessage,
-                        baseFontSize: baseFontSize
+                    VStack(alignment: .leading, spacing: 10) {
+                        if !message.content.isEmpty {
+                            AgentAssistantMarkdownBody(
+                                content: message.content,
+                                isStreaming: isStreamingThisMessage,
+                                baseFontSize: baseFontSize
+                            )
+                        }
+                        if !message.images.isEmpty {
+                            AgentGeneratedImageStrip(
+                                images: message.images,
+                                onReferenceGeneratedImage: onReferenceGeneratedImage
+                            )
+                        }
+                    }
+                    .padding(.horizontal, 14)
+                    .padding(.top, 14)
+                    .padding(.bottom, 10)
+                    .background(
+                        RoundedRectangle(cornerRadius: AgentDesign.cardCornerRadius, style: .continuous)
+                            .fill(Color.primary.opacity(0.035))
                     )
-                        .padding(.horizontal, 14)
-                        .padding(.top, 14)
-                        .padding(.bottom, 10)
-                        .background(
-                            RoundedRectangle(cornerRadius: AgentDesign.cardCornerRadius, style: .continuous)
-                                .fill(Color.primary.opacity(0.035))
-                        )
-                        .overlay(
-                            RoundedRectangle(cornerRadius: AgentDesign.cardCornerRadius, style: .continuous)
-                                .stroke(Color.primary.opacity(0.035), lineWidth: 1)
-                        )
+                    .overlay(
+                        RoundedRectangle(cornerRadius: AgentDesign.cardCornerRadius, style: .continuous)
+                            .stroke(Color.primary.opacity(0.035), lineWidth: 1)
+                    )
                     // Don't show the footer while the stream is still
                     // running — elapsedSeconds isn't stamped until
                     // `.finishedTurn`, so the row would briefly read
@@ -225,6 +236,45 @@ struct AgentModeMessageView: View {
             }
         }
         .frame(maxWidth: AgentDesign.chatMaxContentWidth, alignment: .leading)
+    }
+}
+
+struct AgentGeneratedImageStrip: View {
+    let images: [AgentImageAttachment]
+    let onReferenceGeneratedImage: (String) -> Void
+
+    var body: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 8) {
+                ForEach(images) { image in
+                    imageTile(image)
+                }
+            }
+            .padding(.vertical, 1)
+        }
+    }
+
+    @ViewBuilder
+    private func imageTile(_ image: AgentImageAttachment) -> some View {
+        let thumbnail = AgentImageThumbnail(
+            image: image,
+            size: 144,
+            allowsRemoval: false,
+            onRemove: nil
+        )
+        if let marker = image.generatedReferenceMarker {
+            thumbnail
+                .contextMenu {
+                    Button {
+                        onReferenceGeneratedImage(marker)
+                    } label: {
+                        Label(L10n.AgentGeneratedImage.quoteAction, systemImage: "quote.bubble")
+                    }
+                }
+                .help(L10n.AgentGeneratedImage.quoteHelp)
+        } else {
+            thumbnail
+        }
     }
 }
 

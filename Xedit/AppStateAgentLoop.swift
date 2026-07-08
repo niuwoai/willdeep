@@ -735,6 +735,7 @@ extension AppState {
 
             // No tool calls → assistant finished talking. Capture patches and return.
             guard !latestToolCalls.isEmpty else {
+                attachRecentGeneratedToolImages(to: assistantID, in: runtime)
                 captureAgentPatchProposals(for: runtime, fromMessageID: assistantID)
                 // A stream can end "successfully" having produced nothing
                 // (provider hiccup, content filter, empty stop). Drop the
@@ -743,6 +744,7 @@ extension AppState {
                 // {"role":"assistant"} and the server rejects with 400.
                 if let index = runtime.messages.firstIndex(where: { $0.id == assistantID }),
                    runtime.messages[index].content.isEmpty,
+                   runtime.messages[index].images.isEmpty,
                    runtime.messages[index].toolCalls.isEmpty,
                    (runtime.messages[index].reasoningContent ?? "").isEmpty {
                     runtime.messages.remove(at: index)
@@ -1791,6 +1793,38 @@ extension AppState {
         runtime.messages.append(
             AgentMessage(role: .tool, content: limited, images: images, toolCallID: toolCallID)
         )
+    }
+
+    private func attachRecentGeneratedToolImages(to assistantID: UUID, in runtime: AgentRuntime) {
+        guard let assistantIndex = runtime.messages.firstIndex(where: { $0.id == assistantID }) else {
+            return
+        }
+        let images = recentGeneratedToolImages(before: assistantIndex, in: runtime.messages)
+        guard !images.isEmpty else { return }
+        let existingIDs = Set(runtime.messages[assistantIndex].images.map(\.id))
+        let newImages = images.filter { !existingIDs.contains($0.id) }
+        guard !newImages.isEmpty else { return }
+        runtime.messages[assistantIndex].images.append(contentsOf: newImages)
+    }
+
+    private func recentGeneratedToolImages(before assistantIndex: Int, in messages: [AgentMessage]) -> [AgentImageAttachment] {
+        guard assistantIndex > 0 else { return [] }
+        var grouped: [[AgentImageAttachment]] = []
+        var index = assistantIndex - 1
+        while index >= 0 {
+            let message = messages[index]
+            if message.role == .assistant {
+                break
+            }
+            if message.role == .tool {
+                let generated = message.images.filter { $0.source == .generated }
+                if !generated.isEmpty {
+                    grouped.append(generated)
+                }
+            }
+            index -= 1
+        }
+        return grouped.reversed().flatMap { $0 }
     }
 
     private func diagnoseLocalWorkspaceIfNeeded(

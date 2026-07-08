@@ -68,6 +68,11 @@ nonisolated enum L10n {
         static let removeHelp = String(localized: "agent-text-attachment.remove-help", defaultValue: "Remove pasted text")
     }
 
+    enum AgentGeneratedImage {
+        static let quoteAction = String(localized: "agent-generated-image.quote-action", defaultValue: "Quote Image")
+        static let quoteHelp = String(localized: "agent-generated-image.quote-help", defaultValue: "Reference this generated image in your next reply without uploading it again.")
+    }
+
     enum AgentSelection {
         static let addToConversation = String(localized: "agent-selection.add-to-conversation", defaultValue: "Add to Conversation")
         static let askInSidebar = String(localized: "agent-selection.ask-in-sidebar", defaultValue: "Ask in Side Agent")

@@ -1,6 +1,6 @@
 # WillDeep Product Overview
 
-> Last updated: 2026-07-08 | Current version: v1.136.0-rc19
+> Last updated: 2026-07-08 | Current version: v1.136.0-rc21
 
 ## Positioning
 
@@ -14,6 +14,8 @@ WillDeep is configured for non-App-Store distribution without App Sandbox so it 
 
 WillDeep 是 SwiftUI + AppKit 桥接的 macOS 应用，单进程多窗口。代码层次：
 
+- **Agent 生成图可见引用链路（1.136.0-rc21）** —— Agent 调用 `generate_image` / some.im 图片任务后，会把生成图保存到当前 workspace（默认根目录，也可由 `output_directory` 指定子目录），并在 assistant Markdown 下方直接渲染缩略图；用户右键“引用”会向 composer 写入 `<generated-image-reference ... />` 标记，后续要求修改该图时走 `edit_generated_image` / `gpt-image-2` 参考图编辑，不再重新上传生成图。
+- **Agent 侧栏快捷入口去框（1.136.0-rc20）** —— Agent 会话区右上 Diff、Terminal、Preview、Files 快捷入口移除外层胶囊框和单个图标选中底框，只用图标颜色与字重表达当前侧栏状态。
 - **Agent 会话内搜索（1.136.0-rc19）** —— Agent 聊天区支持 `Command+F` 呼出右上角悬浮搜索入口，输入关键词后会高亮整段当前会话里的命中，显示当前序号/总数，并可用上一条/下一条按钮跳转；搜索期间自动滚动到底会暂停，避免打断用户定位。
 - **some.im 账号区紧凑点数（1.136.0-rc18）** —— Agent 左下 some.im 账号区会把百万/十亿级 credits 显示为 `46.00M` / `4.21B` 这类两位小数缩写，并补齐该区块的中英文本地化，避免中文环境继续显示英文 `credits`。
 - **Diff 侧栏打开不卡顿（1.136.0-rc17）** —— Agent 右侧 Diff 面板会在后台生成彩色 `AttributedString`，并在侧栏渲染前截断超大 diff 为摘要，避免“正在计算 diff”期间窗口被长文本处理拖住。

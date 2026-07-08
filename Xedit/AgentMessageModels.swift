@@ -43,22 +43,109 @@ nonisolated enum AgentMessageOrigin: String, Codable, Equatable {
     case delegatedExternal
 }
 
-/// A user-attached image, encoded inline so it round-trips through session
-/// JSON without a separate blob store. `dataBase64` is the raw image bytes
-/// base64-encoded (no `data:` prefix); `mimeType` is e.g. `image/png`.
-nonisolated struct AgentImageAttachment: Codable, Equatable, Identifiable {
+nonisolated enum AgentImageAttachmentSource: String, Codable, Equatable, Sendable {
+    case userUpload
+    case generated
+}
+
+/// An image surfaced in the transcript. User uploads keep the image bytes
+/// inline so they round-trip through session JSON. Generated images keep only
+/// a small preview inline plus a workspace-local `filePath`; quoting them sends
+/// a text marker instead of uploading those bytes back to the chat model.
+nonisolated struct AgentImageAttachment: Codable, Equatable, Identifiable, Sendable {
     let id: UUID
     let mimeType: String
     let dataBase64: String
+    var source: AgentImageAttachmentSource?
+    var filePath: String?
+    var model: String?
+    var prompt: String?
+    var createdAt: Date?
 
-    init(id: UUID = UUID(), mimeType: String, dataBase64: String) {
+    init(
+        id: UUID = UUID(),
+        mimeType: String,
+        dataBase64: String,
+        source: AgentImageAttachmentSource? = nil,
+        filePath: String? = nil,
+        model: String? = nil,
+        prompt: String? = nil,
+        createdAt: Date? = nil
+    ) {
         self.id = id
         self.mimeType = mimeType
         self.dataBase64 = dataBase64
+        self.source = source
+        self.filePath = filePath
+        self.model = model
+        self.prompt = prompt
+        self.createdAt = createdAt
     }
 
     nonisolated var dataURL: String {
         "data:\(mimeType);base64,\(dataBase64)"
+    }
+
+    nonisolated var generatedReferenceMarker: String? {
+        guard source == .generated,
+              let filePath = filePath?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !filePath.isEmpty else {
+            return nil
+        }
+        return AgentGeneratedImageReference.marker(
+            id: id.uuidString,
+            path: filePath,
+            model: model
+        )
+    }
+}
+
+nonisolated enum AgentGeneratedImageReference {
+    static let tagName = "generated-image-reference"
+
+    static func marker(id: String, path: String, model: String?) -> String {
+        var attributes = [
+            "id=\"\(escape(id))\"",
+            "path=\"\(escape(path))\""
+        ]
+        if let model = model?.trimmingCharacters(in: .whitespacesAndNewlines), !model.isEmpty {
+            attributes.append("model=\"\(escape(model))\"")
+        }
+        return "<\(tagName) \(attributes.joined(separator: " ")) />"
+    }
+
+    static func path(from marker: String) -> String? {
+        attribute("path", in: marker)
+    }
+
+    private static func escape(_ raw: String) -> String {
+        raw
+            .replacingOccurrences(of: "&", with: "&amp;")
+            .replacingOccurrences(of: "\"", with: "&quot;")
+            .replacingOccurrences(of: "<", with: "&lt;")
+            .replacingOccurrences(of: ">", with: "&gt;")
+    }
+
+    private static func unescape(_ raw: String) -> String {
+        raw
+            .replacingOccurrences(of: "&quot;", with: "\"")
+            .replacingOccurrences(of: "&lt;", with: "<")
+            .replacingOccurrences(of: "&gt;", with: ">")
+            .replacingOccurrences(of: "&amp;", with: "&")
+    }
+
+    private static func attribute(_ name: String, in marker: String) -> String? {
+        guard marker.contains(tagName),
+              let nameRange = marker.range(of: "\(name)=\"") else {
+            return nil
+        }
+        let valueStart = nameRange.upperBound
+        guard let valueEnd = marker[valueStart...].firstIndex(of: "\"") else {
+            return nil
+        }
+        let value = String(marker[valueStart..<valueEnd])
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        return value.isEmpty ? nil : unescape(value)
     }
 }
 
@@ -159,7 +246,9 @@ nonisolated struct AgentMessage: Identifiable, Codable, Equatable {
     /// because DashScope returns HTTP 400 otherwise. Empty for providers
     /// that don't split reasoning out.
     var reasoningContent: String?
-    /// User-attached images, only meaningful for `role == .user`.
+    /// Images attached to the visible message. User messages carry pasted
+    /// uploads; assistant messages can carry generated-image previews whose
+    /// original files live in the workspace and can be quoted by reference.
     var images: [AgentImageAttachment]
     /// Long pasted text captured as compact `.txt` attachments. The
     /// visible bubble renders chips, while AgentClient includes the

@@ -250,6 +250,7 @@ struct AgentChatTranscript: View {
                                 onRetryLastTurn: appState.retryLastAgentTurn,
                                 latestTurnReportToolCount: appState.agentLatestTurnReport?.toolSummary.total,
                                 onShowTurnReport: { showTurnReportPopover = true },
+                                onReferenceGeneratedImage: appState.appendGeneratedImageReferenceToAgentInput,
                                 onOpenFilePath: { rawPath in
                                     // Agent mode 里点击 transcript 中
                                     // 的文件 chip,优先把右侧侧栏拉起
@@ -290,7 +291,8 @@ struct AgentChatTranscript: View {
                             AgentModeMessageView(
                                 message: display.rendered,
                                 isStreamingThisMessage: true,
-                                baseFontSize: appState.agentChatBaseFontSize
+                                baseFontSize: appState.agentChatBaseFontSize,
+                                onReferenceGeneratedImage: appState.appendGeneratedImageReferenceToAgentInput
                             )
                                 .id(streamingMessage.id)
                                 .frame(maxWidth: AgentDesign.chatMaxContentWidth, alignment: .leading)
@@ -599,7 +601,7 @@ struct AgentChatTranscript: View {
     }
 
     private func isEmptyThinkingPlaceholder(_ message: AgentMessage) -> Bool {
-        message.role == .assistant && message.content.isEmpty && message.toolCalls.isEmpty
+        message.role == .assistant && message.content.isEmpty && message.images.isEmpty && message.toolCalls.isEmpty
     }
 
     private func shouldShowMessageBubble(_ message: AgentMessage) -> Bool {

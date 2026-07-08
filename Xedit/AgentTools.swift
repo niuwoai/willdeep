@@ -191,7 +191,9 @@ enum AgentToolRunner {
             case "some_im_cancel_media_task":
                 result = try await AgentMediaTools.someIMCancelMediaTask(arguments: activeArguments, context: activeContext)
             case "generate_image":
-                result = try await generateImage(arguments: activeArguments)
+                result = try await generateImage(arguments: activeArguments, context: activeContext)
+            case "edit_generated_image":
+                result = try await AgentMediaTools.editGeneratedImage(arguments: activeArguments, context: activeContext)
             case "visual_qa_screenshot":
                 result = try await AgentVisualQATools.analyzeScreenshot(arguments: activeArguments, context: activeContext)
             case "capture_screenshot":
@@ -495,16 +497,34 @@ enum AgentToolRunner {
         )
     }
 
-    private static func generateImage(arguments: [String: AgentJSONValue]) async throws -> AgentToolResult {
+    private static func generateImage(
+        arguments: [String: AgentJSONValue],
+        context: AgentToolContext
+    ) async throws -> AgentToolResult {
         guard let prompt = arguments["prompt"]?.stringValue()?.trimmingCharacters(in: .whitespacesAndNewlines),
               !prompt.isEmpty else {
             throw AgentToolError.missingArgument("prompt")
         }
+        let outputDirectory = try AgentMediaTools.mediaOutputDirectory(
+            arguments: arguments,
+            rootDirectory: context.rootDirectory,
+            requiresWorkspace: true
+        )
         let rawSize = arguments["size"]?.stringValue()?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         let size = rawSize.isEmpty ? "1024x1024" : rawSize
         let rawModel = arguments["model"]?.stringValue()?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         let model = rawModel.isEmpty ? nil : rawModel
-        let image = try await SomeIMClient.generateImage(prompt: prompt, size: size, model: model)
+        let image = try await SomeIMClient.generateImage(
+            prompt: prompt,
+            size: size,
+            model: model,
+            outputDirectory: outputDirectory
+        )
+        let attachment = try AgentGeneratedImageAttachmentFactory.attachment(
+            fileURL: image.fileURL,
+            model: image.model,
+            prompt: prompt
+        )
         return AgentToolResult(
             summary: "Generated image: \(image.fileURL.lastPathComponent)",
             payload: """
@@ -512,7 +532,11 @@ enum AgentToolRunner {
 
             Local file:
             \(image.fileURL.path)
-            """
+
+            Reference marker:
+            \(attachment.generatedReferenceMarker ?? "(unavailable)")
+            """,
+            images: [attachment]
         )
     }
 

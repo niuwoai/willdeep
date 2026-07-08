@@ -20,6 +20,7 @@ extension NSAttributedString.Key {
     static let agentChatHistoryTablePayload = NSAttributedString.Key("AgentChatHistoryTablePayload")
     static let agentChatHistoryTextAttachment = NSAttributedString.Key("AgentChatHistoryTextAttachment")
     static let agentChatHistoryFilePath = NSAttributedString.Key("AgentChatHistoryFilePath")
+    static let agentChatHistoryImageReferenceMarker = NSAttributedString.Key("AgentChatHistoryImageReferenceMarker")
     static let agentChatHistoryToolGroupID = NSAttributedString.Key("AgentChatHistoryToolGroupID")
     static let agentChatHistoryUserMessageID = NSAttributedString.Key("AgentChatHistoryUserMessageID")
     static let agentChatHistoryHeadingLevel = NSAttributedString.Key("AgentChatHistoryHeadingLevel")

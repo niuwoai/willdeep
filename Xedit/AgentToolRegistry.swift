@@ -561,6 +561,7 @@ enum AgentToolRegistry {
                 AgentToolParameter(name: "size", type: .string, description: "Optional image size such as 1024x1024 when not using input_json.", required: false),
                 AgentToolParameter(name: "reference_image_path", type: .string, description: "Optional local image path to send as the `image` input, useful for image-to-video or image edit workflows. Relative paths resolve from the workspace root when available.", required: false),
                 AgentToolParameter(name: "source_image_path", type: .string, description: "Alias for reference_image_path; persisted on the media task for recovery and chat handoff.", required: false),
+                AgentToolParameter(name: "output_directory", type: .string, description: "Optional workspace-relative directory for downloaded output artifacts. Defaults to the workspace root when a workspace is open.", required: false),
                 AgentToolParameter(name: "review_item_id", type: .string, description: "Optional short-drama review/fix item UUID this media task is intended to resolve.", required: false),
                 AgentToolParameter(name: "title", type: .string, description: "Optional user-facing task title shown in the media task side panel.", required: false),
                 AgentToolParameter(name: "endpoint_suffix", type: .string, description: "Optional endpoint suffix under the configured some.im base URL, e.g. images/generations, videos/generations, or provider-specific async route.", required: false),
@@ -1001,12 +1002,26 @@ enum AgentToolRegistry {
         ),
         AgentToolDescriptor(
             name: "generate_image",
-            description: "Generate an image through the configured some.im relay. Use this for image creation requests when Settings -> some.im is configured; it defaults to the user's image model preference, normally gpt-image-2. Returns a local file path in Downloads.",
+            description: "Generate an image through the configured some.im relay. Use this for image creation requests when Settings -> some.im is configured; it defaults to the user's image model preference, normally gpt-image-2. Saves the generated file into the current workspace root by default, or a workspace-relative output_directory when provided. The chat UI renders the result under the assistant markdown and exposes a generated-image reference marker for later edits.",
             risk: .read,
             parameters: [
                 AgentToolParameter(name: "prompt", type: .string, description: "Detailed prompt for the image generator.", required: true),
                 AgentToolParameter(name: "size", type: .string, description: "Optional output size such as 1024x1024. Defaults to 1024x1024.", required: false),
-                AgentToolParameter(name: "model", type: .string, description: "Optional some.im image model override. Leave empty to use Settings -> some.im priority, default gpt-image-2.", required: false)
+                AgentToolParameter(name: "model", type: .string, description: "Optional some.im image model override. Leave empty to use Settings -> some.im priority, default gpt-image-2.", required: false),
+                AgentToolParameter(name: "output_directory", type: .string, description: "Optional workspace-relative subdirectory for the generated image. Defaults to the workspace root.", required: false)
+            ]
+        ),
+        AgentToolDescriptor(
+            name: "edit_generated_image",
+            description: "Edit a previously generated local image through some.im `gpt-image-2` by sending the workspace image path as the reference image. Use when the user right-clicks/quotes a generated image marker like <generated-image-reference ... /> and asks to modify that image. Do not ask the user to upload the image again; pass image_path from the marker path (or pass the whole marker as reference_marker). Saves outputs in the workspace root by default.",
+            risk: .read,
+            parameters: [
+                AgentToolParameter(name: "image_path", type: .string, description: "Workspace-local image path from the generated-image reference marker. Relative paths resolve from the workspace root.", required: false),
+                AgentToolParameter(name: "reference_marker", type: .string, description: "Optional full <generated-image-reference ... /> marker; used to recover image_path when image_path is omitted.", required: false),
+                AgentToolParameter(name: "prompt", type: .string, description: "Edit instruction describing how to modify the referenced image.", required: true),
+                AgentToolParameter(name: "size", type: .string, description: "Optional output size such as 1024x1024.", required: false),
+                AgentToolParameter(name: "model", type: .string, description: "Optional some.im image edit model override. Defaults to gpt-image-2.", required: false),
+                AgentToolParameter(name: "output_directory", type: .string, description: "Optional workspace-relative subdirectory for edited outputs. Defaults to the workspace root.", required: false)
             ]
         ),
         AgentToolDescriptor(

@@ -93,6 +93,88 @@ nonisolated enum AgentThumbnailImageCache {
     }
 }
 
+enum AgentGeneratedImageAttachmentFactory {
+    private static let previewLongEdge: CGFloat = 768
+    private static let previewQuality: CGFloat = 0.86
+
+    static func attachment(
+        fileURL: URL,
+        model: String,
+        prompt: String?,
+        createdAt: Date = Date()
+    ) throws -> AgentImageAttachment {
+        let info = try ImageWorkflowSupport.loadImage(path: fileURL.path)
+        let preview = downscaledPreview(info.image)
+        guard let jpegData = jpegData(from: preview) else {
+            throw AgentToolError.invalidArgument("Could not encode generated image preview.")
+        }
+        return AgentImageAttachment(
+            mimeType: "image/jpeg",
+            dataBase64: jpegData.base64EncodedString(),
+            source: .generated,
+            filePath: fileURL.standardizedFileURL.path,
+            model: model,
+            prompt: prompt,
+            createdAt: createdAt
+        )
+    }
+
+    static func attachments(
+        from artifacts: [AgentMediaArtifact],
+        model: String?,
+        prompt: String?
+    ) -> [AgentImageAttachment] {
+        artifacts.compactMap { artifact in
+            guard isImageArtifact(artifact) else { return nil }
+            let trimmedModel = model?.trimmingCharacters(in: .whitespacesAndNewlines)
+            let resolvedModel = trimmedModel?.isEmpty == false
+                ? trimmedModel ?? SomeIMIntegrationSettings.defaultImageModel
+                : SomeIMIntegrationSettings.defaultImageModel
+            return try? attachment(
+                fileURL: URL(fileURLWithPath: artifact.filePath),
+                model: resolvedModel,
+                prompt: prompt
+            )
+        }
+    }
+
+    private static func isImageArtifact(_ artifact: AgentMediaArtifact) -> Bool {
+        if let mimeType = artifact.mimeType?.lowercased(), mimeType.hasPrefix("image/") {
+            return true
+        }
+        return AgentImagePasteboardHelper.mimeType(forPath: artifact.filePath) != nil
+    }
+
+    private static func downscaledPreview(_ image: CGImage) -> CGImage {
+        let longEdge = CGFloat(max(image.width, image.height))
+        guard longEdge > previewLongEdge else { return image }
+        let scale = previewLongEdge / longEdge
+        let target = CGSize(
+            width: max(1, (CGFloat(image.width) * scale).rounded()),
+            height: max(1, (CGFloat(image.height) * scale).rounded())
+        )
+        return ImageWorkflowSupport.fit(image, within: target)
+    }
+
+    private static func jpegData(from image: CGImage) -> Data? {
+        let flattened = ImageWorkflowSupport.flatten(image, background: .white)
+        let data = NSMutableData()
+        guard let destination = CGImageDestinationCreateWithData(
+            data as CFMutableData,
+            UTType.jpeg.identifier as CFString,
+            1,
+            nil
+        ) else {
+            return nil
+        }
+        CGImageDestinationAddImage(destination, flattened, [
+            kCGImageDestinationLossyCompressionQuality: previewQuality
+        ] as CFDictionary)
+        guard CGImageDestinationFinalize(destination) else { return nil }
+        return data as Data
+    }
+}
+
 struct AgentImageThumbnail: View {
     let image: AgentImageAttachment
     let size: CGFloat
@@ -118,12 +200,21 @@ struct AgentImageThumbnail: View {
                 RoundedRectangle(cornerRadius: 6)
                     .stroke(Color.secondary.opacity(0.25), lineWidth: 1)
             )
-            .task(id: "\(image.id)-\(image.dataBase64.count)-\(Int(size.rounded(.up)))") {
-                decodedImage = await AgentThumbnailImageCache.image(
-                    forBase64: image.dataBase64,
-                    cacheKey: image.id.uuidString,
-                    targetPixels: size * 2
-                )
+            .task(id: "\(image.id)-\(image.dataBase64.count)-\(image.filePath ?? "")-\(Int(size.rounded(.up)))") {
+                if !image.dataBase64.isEmpty {
+                    decodedImage = await AgentThumbnailImageCache.image(
+                        forBase64: image.dataBase64,
+                        cacheKey: image.id.uuidString,
+                        targetPixels: size * 2
+                    )
+                } else if let filePath = image.filePath {
+                    decodedImage = await AgentThumbnailImageCache.image(
+                        forFileURL: URL(fileURLWithPath: filePath),
+                        targetPixels: size * 2
+                    )
+                } else {
+                    decodedImage = nil
+                }
             }
 
             if allowsRemoval, let onRemove {

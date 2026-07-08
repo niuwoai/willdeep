@@ -494,6 +494,42 @@
         }
       }
     },
+    "agent-generated-image.quote-action" : {
+      "comment" : "Context menu action for referencing a generated image in the next chat reply",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Quote Image"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "引用"
+          }
+        }
+      }
+    },
+    "agent-generated-image.quote-help" : {
+      "comment" : "Tooltip for referencing a generated image without uploading it again",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Reference this generated image in your next reply without uploading it again."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "在下一条回复里引用这张生成图，不再重新上传图片。"
+          }
+        }
+      }
+    },
     "agent-image-editor.brush-mode-picker" : {
       "comment" : "Segmented picker label for the brush paint mode in the image mask editor",
       "extractionState" : "manual",

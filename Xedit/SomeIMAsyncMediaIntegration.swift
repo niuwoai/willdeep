@@ -113,9 +113,12 @@ enum SomeIMAsyncMediaClient {
     static func downloadArtifacts(
         from response: SomeIMAsyncMediaResponse,
         title: String,
+        outputDirectory: URL? = nil,
         session: URLSession? = nil
     ) async throws -> [SomeIMMediaArtifact] {
-        let directory = ImageWorkflowSupport.outputDirectory(prefix: "WillDeep-someIM")
+        let directory = outputDirectory?.standardizedFileURL
+            ?? ImageWorkflowSupport.outputDirectory(prefix: "WillDeep-someIM")
+        try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         var artifacts: [SomeIMMediaArtifact] = []
         let values = outputValues(from: response)
 
@@ -182,7 +185,9 @@ enum SomeIMAsyncMediaClient {
         switch kind {
         case .videoGeneration:
             return "videos/generations"
-        case .imageGeneration, .imageEdit, .imageUpscale, .imageErase, .imageInpaint, .shortDrama, .unknown:
+        case .imageEdit, .imageErase, .imageInpaint:
+            return "images/edits"
+        case .imageGeneration, .imageUpscale, .shortDrama, .unknown:
             return "images/generations"
         }
     }

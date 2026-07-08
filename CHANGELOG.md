@@ -1,5 +1,22 @@
 # Changelog
 
+## 1.136.0-rc21 - 2026-07-08
+
+### Fixed
+
+- `generate_image` / some.im 图片任务产出的生成图会挂到最终 assistant 消息，在 Markdown 下方直接显示缩略图，不再只藏在工具结果里。
+- 生成图默认保存到当前 workspace 根目录，可通过 `output_directory` 指定 workspace 内子目录，不再落到下载目录。
+- 聊天区生成图支持右键“引用”，会向 composer 写入 `<generated-image-reference ... />` 标记；后续修改该图时可通过 `edit_generated_image` 发送给 `gpt-image-2` 作为参考图，不需要重新上传图片。
+- 版本号从 **1.136.0-rc20** 递增为 **1.136.0-rc21**。
+
+## 1.136.0-rc20 - 2026-07-08
+
+### Fixed
+
+- Agent 会话区右上 Diff、Terminal、Preview、Files 快捷入口移除外层胶囊框和选中图标底框，避免图标外再套一层圆角矩形。
+- 选中态改用图标强调色与字重表达，保持可点击热区和侧栏切换行为不变。
+- 版本号从 **1.136.0-rc19** 递增为 **1.136.0-rc20**。
+
 ## 1.136.0-rc19 - 2026-07-08
 
 ### Added

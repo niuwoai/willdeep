@@ -484,12 +484,14 @@ enum SomeIMClient {
     static func generateImage(
         prompt: String,
         size: String = "1024x1024",
-        model overrideModel: String? = nil
+        model overrideModel: String? = nil,
+        outputDirectory: URL? = nil
     ) async throws -> SomeIMGeneratedImage {
         try await generateImage(
             prompt: prompt,
             size: size,
             model: overrideModel,
+            outputDirectory: outputDirectory,
             settings: SomeIMIntegrationStore.loadSettings(),
             apiKey: SomeIMIntegrationStore.loadAPIKey(),
             session: AgentNetworkSupport.defaultSession()
@@ -500,6 +502,7 @@ enum SomeIMClient {
         prompt: String,
         size: String,
         model overrideModel: String?,
+        outputDirectory: URL?,
         settings: SomeIMIntegrationSettings,
         apiKey: String,
         session: URLSession
@@ -545,7 +548,7 @@ enum SomeIMClient {
             throw AgentToolError.invalidArgument("some.im returned no image data.")
         }
         if let base64 = first.b64_json, let data = Data(base64Encoded: base64) {
-            let fileURL = outputURL(fileExtension: "png")
+            let fileURL = outputURL(fileExtension: "png", outputDirectory: outputDirectory)
             try data.write(to: fileURL, options: [.atomic])
             return SomeIMGeneratedImage(fileURL: fileURL, model: model)
         } else if let urlString = first.url, let url = URL(string: urlString) {
@@ -561,7 +564,7 @@ enum SomeIMClient {
                 try? FileManager.default.removeItem(at: temporaryURL)
                 throw AgentToolError.httpFailed(http.statusCode, AgentNetworkSupport.limitDebugText(text))
             }
-            let fileURL = outputURL(fileExtension: url.pathExtension.nonEmpty ?? "png")
+            let fileURL = outputURL(fileExtension: url.pathExtension.nonEmpty ?? "png", outputDirectory: outputDirectory)
             try AgentNetworkSupport.moveDownloadedFile(from: temporaryURL, to: fileURL)
             return SomeIMGeneratedImage(fileURL: fileURL, model: model)
         } else {
@@ -725,12 +728,27 @@ enum SomeIMClient {
         return max(Int64(0), NSDecimalNumber(decimal: credits).int64Value).description
     }
 
-    private static func outputURL(fileExtension: String) -> URL {
+    private static func outputURL(fileExtension: String, outputDirectory: URL?) -> URL {
         let formatter = DateFormatter()
         formatter.dateFormat = "yyyyMMdd-HHmmss"
         let filename = "willdeep-generated-image-\(formatter.string(from: Date())).\(fileExtension)"
-        return FileManager.default.urls(for: .downloadsDirectory, in: .userDomainMask).first!
-            .appendingPathComponent(filename)
+        let directory = outputDirectory?.standardizedFileURL
+            ?? URL(fileURLWithPath: FileManager.default.currentDirectoryPath).standardizedFileURL
+        try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        let candidate = directory.appendingPathComponent(filename)
+        guard FileManager.default.fileExists(atPath: candidate.path) else {
+            return candidate
+        }
+        let stem = candidate.deletingPathExtension().lastPathComponent
+        let ext = candidate.pathExtension
+        var counter = 2
+        while true {
+            let next = directory.appendingPathComponent("\(stem)-\(counter).\(ext)")
+            if !FileManager.default.fileExists(atPath: next.path) {
+                return next
+            }
+            counter += 1
+        }
     }
 
     private static func detectKinds(model: String, words: [String]) -> [SomeIMGenerationKind] {
