@@ -567,8 +567,8 @@ struct GeminiAdapter {
                     ]
                 ])
 
-            case .workflowReport, .widget:
-                // Workflow / widget card 不发给模型，跳过。
+            case .workflowReport, .widget, .scheduledTask:
+                // Workflow / widget / scheduled-task card 不发给模型，跳过。
                 continue
             }
         }

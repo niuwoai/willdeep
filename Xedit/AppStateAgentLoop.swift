@@ -606,6 +606,16 @@ extension AppState {
                 agentSidePanelRequest = AgentSidePanelOpenRequest(kind: .widget)
             }
 
+            // schedule_task queue: each queued card becomes a `.scheduledTask`
+            // message rendered inline. Same pipeline as widgets; the LLM never
+            // sees it (all clients skip .scheduledTask).
+            let pendingScheduledTasks = AgentScheduledTaskRegistry.shared.consumePending(forRuntime: runtime.id)
+            for card in pendingScheduledTasks {
+                runtime.messages.append(
+                    AgentMessage(role: .scheduledTask, content: "", scheduledTask: card)
+                )
+            }
+
             let assistantMessage = AgentMessage(
                 role: .assistant,
                 content: "",

@@ -94,6 +94,12 @@ struct AgentModeMessageView: View {
             } else {
                 EmptyView()
             }
+        case .scheduledTask:
+            if let card = message.scheduledTask {
+                AgentScheduledTaskCardView(card: card)
+            } else {
+                EmptyView()
+            }
         }
     }
 

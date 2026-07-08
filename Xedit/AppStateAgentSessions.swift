@@ -1276,11 +1276,29 @@ extension AppState {
         AgentRoutineStore.save(agentRoutines[index])
         agentRoutineScheduler.routinesChanged(agentRoutines)
 
+        // Goal-bearing tasks self-complete: tell this run to evaluate the goal
+        // and, if met, call complete_scheduled_task with its own id so the task
+        // (and its card) disappears. Plain routines just run the prompt.
+        let dispatchText: String
+        if let goal = routine.goal?.trimmingCharacters(in: .whitespacesAndNewlines), !goal.isEmpty {
+            dispatchText = """
+            \(prompt)
+
+            [定时任务 · 自完成判定] 本次运行来自定时任务「\(routine.name)」(task_id: \(routine.id.uuidString))。
+            目标:\(goal)
+            完成上述工作后,判断该目标是否已达成:
+            - 已达成 → 调用 complete_scheduled_task 工具(task_id 传 \(routine.id.uuidString)),移除这个定时任务;它将不再运行,卡片也会消失。
+            - 未达成 → 正常简短汇报当前进展即可,不要调用 complete_scheduled_task。
+            """
+        } else {
+            dispatchText = prompt
+        }
+
         // dispatchAgentMessage handles the per-provider concurrency
         // cap — if the cap is hit, the dispatch queues and drains
         // FIFO as slots free. So even a fleet of 10 routines hitting
         // the same provider all at 09:00 won't stomp on each other.
-        dispatchAgentMessage(for: runtime, text: prompt, images: [])
+        dispatchAgentMessage(for: runtime, text: dispatchText, images: [])
 
         // Sidebar hides sessions whose persisted `session.messages` is
         // still empty (the "empty New Chat" filter in AgentSessionsSidebar

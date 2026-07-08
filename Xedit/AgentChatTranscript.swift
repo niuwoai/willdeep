@@ -586,6 +586,7 @@ struct AgentChatTranscript: View {
             // — explicitly allowed through.
             if message.role == .workflowReport { return message }
             if message.role == .widget { return message }
+            if message.role == .scheduledTask { return message }
             guard message.role != .tool,
                   message.role != .system,
                   !isEmptyThinkingPlaceholder(message),
@@ -874,6 +875,8 @@ struct AgentChatTranscript: View {
             return L10n.Transcript.olderHistoryRoleWorkflow
         case .widget:
             return L10n.Transcript.olderHistoryRoleWidget
+        case .scheduledTask:
+            return L10n.Transcript.olderHistoryRoleScheduledTask
         }
     }
 }

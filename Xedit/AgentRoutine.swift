@@ -173,6 +173,14 @@ struct AgentRoutine: Identifiable, Codable, Equatable {
     /// The session id produced by the most recent run, so the sidebar can
     /// offer a "跳到上次结果" affordance.
     var lastSessionID: UUID?
+    /// The chat session this routine was scheduled from (via `schedule_task`),
+    /// so the inline card can trace back to where it was created. Nil for
+    /// routines created from the sidebar.
+    var originSessionID: UUID?
+    /// Natural-language goal for a self-completing task. When set, each fired
+    /// run is told to evaluate whether the goal is met and, if so, call
+    /// `complete_scheduled_task` to remove itself. Nil = plain recurring routine.
+    var goal: String?
     let createdAt: Date
     var updatedAt: Date
 
@@ -186,6 +194,8 @@ struct AgentRoutine: Identifiable, Codable, Equatable {
         isEnabled: Bool = true,
         lastRunAt: Date? = nil,
         lastSessionID: UUID? = nil,
+        originSessionID: UUID? = nil,
+        goal: String? = nil,
         createdAt: Date = Date(),
         updatedAt: Date = Date()
     ) {
@@ -198,6 +208,8 @@ struct AgentRoutine: Identifiable, Codable, Equatable {
         self.isEnabled = isEnabled
         self.lastRunAt = lastRunAt
         self.lastSessionID = lastSessionID
+        self.originSessionID = originSessionID
+        self.goal = goal
         self.createdAt = createdAt
         self.updatedAt = updatedAt
     }
@@ -221,7 +233,7 @@ struct AgentRoutine: Identifiable, Codable, Equatable {
     // so older routine JSON keeps loading cleanly.
     enum CodingKeys: String, CodingKey {
         case id, name, prompt, workspaceRootPath, modelID, schedule
-        case isEnabled, lastRunAt, lastSessionID, createdAt, updatedAt
+        case isEnabled, lastRunAt, lastSessionID, originSessionID, goal, createdAt, updatedAt
     }
 
     init(from decoder: Decoder) throws {
@@ -235,6 +247,8 @@ struct AgentRoutine: Identifiable, Codable, Equatable {
         self.isEnabled = try c.decodeIfPresent(Bool.self, forKey: .isEnabled) ?? true
         self.lastRunAt = try c.decodeIfPresent(Date.self, forKey: .lastRunAt)
         self.lastSessionID = try c.decodeIfPresent(UUID.self, forKey: .lastSessionID)
+        self.originSessionID = try c.decodeIfPresent(UUID.self, forKey: .originSessionID)
+        self.goal = try c.decodeIfPresent(String.self, forKey: .goal)
         self.createdAt = try c.decode(Date.self, forKey: .createdAt)
         self.updatedAt = try c.decode(Date.self, forKey: .updatedAt)
     }

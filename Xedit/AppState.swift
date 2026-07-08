@@ -162,6 +162,10 @@ final class AppState: ObservableObject {
     /// mode and optionally focus a file. AgentModeView listens, applies
     /// the request to the active session runtime, then clears it.
     @Published var agentSidePanelRequest: AgentSidePanelOpenRequest?
+    /// One-shot request to open a scheduled task's detail. A transcript
+    /// scheduled-task card sets the routine id; the sidebar Routines section
+    /// observes it, opens that routine's editor sheet, then clears it.
+    @Published var pendingRoutineDetailID: UUID?
     /// Optional scope for the media task side panel. Short-drama rows set
     /// this before opening the panel so the task list can show only the
     /// project / episode / shot / asset the user clicked.

@@ -83,6 +83,14 @@ struct AgentRoutinesSidebarSection: View {
             AgentRoutineEditorView(routine: target.routine, isNew: target.isNew)
                 .environmentObject(appState)
         }
+        .onChange(of: appState.pendingRoutineDetailID) { newValue in
+            // A transcript scheduled-task card asked to open this task's detail.
+            guard let id = newValue else { return }
+            if let routine = appState.agentRoutines.first(where: { $0.id == id }) {
+                editing = RoutineSheetTarget(routine: routine, isNew: false)
+            }
+            appState.pendingRoutineDetailID = nil
+        }
     }
 
     private var header: some View {

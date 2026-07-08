@@ -41,7 +41,7 @@ extension AppState {
             return true
         case .assistant:
             return lastMessage.content.isEmpty && lastMessage.toolCalls.isEmpty
-        case .system, .workflowReport, .widget:
+        case .system, .workflowReport, .widget, .scheduledTask:
             return false
         }
     }

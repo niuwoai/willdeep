@@ -619,8 +619,8 @@ struct OpenAIResponsesAdapter {
                     "output": message.modelContent
                 ])
 
-            case .workflowReport, .widget:
-                // Workflow report / widget 卡片不发给模型 —— 用户直接看
+            case .workflowReport, .widget, .scheduledTask:
+                // Workflow report / widget / scheduled-task 卡片不发给模型 —— 用户直接看
                 // 渲染出的卡片就好；模型如果要看可以在 transcript 里被
                 // 引用，由 user 自己 quote 进下一条消息。
                 continue

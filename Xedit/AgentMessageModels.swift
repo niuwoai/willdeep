@@ -37,6 +37,11 @@ nonisolated enum AgentRole: String, Codable {
     /// 渲染走 AgentWidgetCardView（WKWebView + CSP sandbox）。同样
     /// **不发给 LLM**：所有 AgentClient adapter 看到都跳过。
     case widget
+    /// `schedule_task` 工具在会话里安排定时任务时塞进 transcript 的卡片
+    /// 消息。`content` 留空，任务快照挂在 `scheduledTask` 字段上，渲染走
+    /// AgentScheduledTaskCardView。与 widget 一样**不发给 LLM**，但**会
+    /// 持久化**（是一次操作记录，重开会话应保留）。
+    case scheduledTask
 }
 
 nonisolated enum AgentMessageOrigin: String, Codable, Equatable {
@@ -473,6 +478,10 @@ nonisolated struct AgentMessage: Identifiable, Codable, Equatable {
     /// role 一定 nil；旧 session 反序列化时也是 nil（Codable optional 向
     /// 后兼容）。
     var widget: AgentWidget?
+    /// role == .scheduledTask 时挂载的定时任务快照。其它 role 一定 nil。
+    /// 与 widget/workflowReport 不同，此字段**进 CodingKeys 持久化**，
+    /// 让"我在这里安排了一个定时任务"的记录随会话保留。
+    var scheduledTask: AgentScheduledTaskCard?
     let createdAt: Date
 
     nonisolated init(
@@ -498,6 +507,7 @@ nonisolated struct AgentMessage: Identifiable, Codable, Equatable {
         managedRoute: AgentManagedRouteDecision? = nil,
         workflowReport: WorkflowReport? = nil,
         widget: AgentWidget? = nil,
+        scheduledTask: AgentScheduledTaskCard? = nil,
         createdAt: Date = Date()
     ) {
         self.id = id
@@ -522,6 +532,7 @@ nonisolated struct AgentMessage: Identifiable, Codable, Equatable {
         self.managedRoute = managedRoute
         self.workflowReport = workflowReport
         self.widget = widget
+        self.scheduledTask = scheduledTask
         self.createdAt = createdAt
     }
 
@@ -534,6 +545,7 @@ nonisolated struct AgentMessage: Identifiable, Codable, Equatable {
         case elapsedSeconds
         case origin, originLabel, requestPrefixHash, requestStablePrefixCharacters
         case managedRoute
+        case scheduledTask
         case createdAt
     }
 
@@ -559,6 +571,7 @@ nonisolated struct AgentMessage: Identifiable, Codable, Equatable {
         requestPrefixHash = try container.decodeIfPresent(String.self, forKey: .requestPrefixHash)
         requestStablePrefixCharacters = try container.decodeIfPresent(Int.self, forKey: .requestStablePrefixCharacters)
         managedRoute = try container.decodeIfPresent(AgentManagedRouteDecision.self, forKey: .managedRoute)
+        scheduledTask = try container.decodeIfPresent(AgentScheduledTaskCard.self, forKey: .scheduledTask)
         createdAt = try container.decode(Date.self, forKey: .createdAt)
     }
 }

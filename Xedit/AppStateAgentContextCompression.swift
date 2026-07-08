@@ -134,6 +134,7 @@ extension AppState {
                 case .system: label = "SYSTEM"
                 case .workflowReport: label = "WORKFLOW(\(message.workflowReport?.workflowName ?? "?"))"
                 case .widget: label = "WIDGET(\(message.widget?.title ?? "?"))"
+                case .scheduledTask: label = "SCHEDULED_TASK(\(message.scheduledTask?.title ?? "?"))"
                 }
                 return "\(label):\n\(message.content)"
             }

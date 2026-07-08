@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.136.0-rc28 - 2026-07-09
+
+### Added
+
+- **会话内定时任务(schedule_task)**:Agent 现在能在对话里直接安排一个定时任务——新增 `schedule_task` 工具(支持 `interval_minutes` 或 `daily_at`,可选 `goal` 目标),安排后 transcript 底部会出现一张**定时任务卡片**,点击可打开该任务详情(侧栏编辑器)。定时任务复用既有 Routine 调度器,每次在后台新会话里跑给定 prompt。
+- **达成目的自动消失**:给任务设 `goal` 后,每次触发的那次 agent 会被要求判断目标是否达成;达成则调用新增的 `complete_scheduled_task` 工具移除自己(卡片转为「已完成」灰态、侧栏条目消失)。`AgentRoutine` 新增 `originSessionID` / `goal` 字段(向后兼容)。卡片消息以新的 `.scheduledTask` role 持久化随会话保留,且不发给 LLM。
+- 版本号从 **1.136.0-rc27** 递增为 **1.136.0-rc28**。
+
 ## 1.136.0-rc27 - 2026-07-08
 
 ### Changed
