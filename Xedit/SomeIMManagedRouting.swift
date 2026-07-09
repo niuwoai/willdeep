@@ -256,10 +256,15 @@ nonisolated enum SomeIMManagedRouting {
     static func resolution(
         for verdict: SomeIMRouteJudgeVerdict,
         floor: AgentManagedCapabilityTier,
-        usedFallback: Bool
+        usedFallback: Bool,
+        hasCodingPlan: Bool
     ) -> SomeIMRouteResolution {
         let tier = effectiveTier(for: verdict, floor: floor)
-        let model = SomeIMManagedModel.resolve(domain: verdict.domain, tier: tier)
+        let model = SomeIMManagedModel.resolve(
+            domain: verdict.domain,
+            tier: tier,
+            hasCodingPlan: hasCodingPlan
+        )
         return SomeIMRouteResolution(model: model, effectiveTier: tier, verdict: verdict, usedFallback: usedFallback)
     }
 
@@ -272,13 +277,14 @@ nonisolated enum SomeIMManagedRouting {
     static func route(
         input: SomeIMRouteJudgeInput,
         floor: AgentManagedCapabilityTier,
+        hasCodingPlan: Bool,
         judge: (String, String, Int) async -> String?
     ) async -> SomeIMRouteResolution {
         let raw = await judge(judgeSystemPrompt(), encodeJudgePayload(input), judgeMaxTokens)
         if let raw, let verdict = decodeVerdict(fromRaw: raw) {
-            return resolution(for: verdict, floor: floor, usedFallback: false)
+            return resolution(for: verdict, floor: floor, usedFallback: false, hasCodingPlan: hasCodingPlan)
         }
-        return resolution(for: fallbackVerdict(for: input), floor: floor, usedFallback: true)
+        return resolution(for: fallbackVerdict(for: input), floor: floor, usedFallback: true, hasCodingPlan: hasCodingPlan)
     }
 
     // MARK: - Output quality (Phase 2)

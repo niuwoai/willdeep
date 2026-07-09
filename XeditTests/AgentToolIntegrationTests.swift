@@ -37,9 +37,13 @@ struct SomeIMBrowserLoginStatusTests {
         #expect(components.host == "some.im")
         #expect(components.path == "/customer/login")
         #expect(query["client_id"] == "willdeep")
+        #expect(query["code"] == request.code)
+        #expect(query["device_code"] == request.code)
         #expect(query["willdeep_device_code"] == request.code)
         #expect(request.code.range(of: #"^WD-[A-Z2-9]{4}-[A-Z2-9]{4}$"#, options: .regularExpression) != nil)
+        #expect(query["pair_token"] == request.pairToken)
         #expect(query["willdeep_pair_token"] == request.pairToken)
+        #expect(query["next"]?.contains("pair_token=\(request.pairToken)") == true)
     }
 
     @Test("browser login status accepts nested camelCase credentials")
@@ -105,6 +109,72 @@ struct SomeIMBrowserLoginStatusTests {
         #expect(result.account?.email == "qa@example.com")
         #expect(SomeIMIntegrationStore.loadAPIKey() == "sk-test-browser-login")
         #expect(SomeIMIntegrationStore.loadSessionToken() == "session-test-browser-login")
+    }
+
+    @Test("browser login status accepts flat credentials without nested account")
+    @MainActor
+    func testBrowserLoginStatusAcceptsFlatCredentialsWithoutNestedAccount() async throws {
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.protocolClasses = [SomeIMBrowserLoginMockURLProtocol.self]
+        let session = URLSession(configuration: configuration)
+        configureWritableSomeIMSessionStoreForTest()
+        SomeIMIntegrationStore.logout()
+        defer {
+            session.invalidateAndCancel()
+            SomeIMBrowserLoginMockURLProtocol.handler = nil
+            SomeIMIntegrationStore.logout()
+            restoreSomeIMSessionStoreAfterTest()
+        }
+
+        let pairToken = String(repeating: "d", count: 64)
+        SomeIMBrowserLoginMockURLProtocol.handler = { request in
+            let components = URLComponents(url: request.url!, resolvingAgainstBaseURL: false)!
+            let query = Dictionary(uniqueKeysWithValues: (components.queryItems ?? []).compactMap { item in
+                item.value.map { (item.name, $0) }
+            })
+            #expect(query["code"] == "WD-TEST-0004")
+            #expect(query["device_code"] == "WD-TEST-0004")
+            #expect(query["willdeep_device_code"] == "WD-TEST-0004")
+            #expect(request.value(forHTTPHeaderField: "Authorization") == "Bearer \(pairToken)")
+            let response = HTTPURLResponse(
+                url: request.url!,
+                statusCode: 200,
+                httpVersion: nil,
+                headerFields: ["Content-Type": "application/json"]
+            )!
+            let body = """
+            {
+              "code": 0,
+              "data": {
+                "status": "connected",
+                "api_token": "sk-test-browser-flat",
+                "customer_session_token": "session-test-browser-flat",
+                "email": "flat@example.com",
+                "credits": "9900000",
+                "default_model": "someim-auto-flash"
+              }
+            }
+            """.data(using: .utf8)!
+            return (response, body)
+        }
+
+        let request = SomeIMBrowserLoginRequest(
+            code: "WD-TEST-0004",
+            pairToken: pairToken,
+            url: URL(string: "https://some.im/customer/login")!,
+            createdAt: Date()
+        )
+        let result = try await SomeIMClient.checkBrowserLoginStatus(
+            request: request,
+            settings: SomeIMIntegrationSettings(baseURL: "https://some.im/v1"),
+            session: session
+        )
+
+        #expect(result.state == .connected)
+        #expect(result.account?.email == "flat@example.com")
+        #expect(result.account?.credits == "9900000")
+        #expect(SomeIMIntegrationStore.loadAPIKey() == "sk-test-browser-flat")
+        #expect(SomeIMIntegrationStore.loadSessionToken() == "session-test-browser-flat")
     }
 
     @Test("browser login status preserves connected state when credentials are missing")
@@ -215,6 +285,85 @@ struct SomeIMBrowserLoginStatusTests {
         #expect(result.account == nil)
         #expect(SomeIMIntegrationStore.loadAccount() == nil)
         #expect(SomeIMIntegrationStore.loadAPIKey().isEmpty)
+    }
+
+    @Test("coding plan subscription fetch detects active plan")
+    func testCodingPlanSubscriptionFetchDetectsActivePlan() async throws {
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.protocolClasses = [SomeIMBrowserLoginMockURLProtocol.self]
+        let session = URLSession(configuration: configuration)
+        defer {
+            session.invalidateAndCancel()
+            SomeIMBrowserLoginMockURLProtocol.handler = nil
+        }
+
+        SomeIMBrowserLoginMockURLProtocol.handler = { request in
+            #expect(request.url?.path == "/api/v1/customer/plan/subscription")
+            #expect(request.value(forHTTPHeaderField: "Authorization") == "Bearer session-plan")
+            let response = HTTPURLResponse(
+                url: request.url!,
+                statusCode: 200,
+                httpVersion: nil,
+                headerFields: ["Content-Type": "application/json"]
+            )!
+            let body = """
+            {
+              "code": 0,
+              "data": {
+                "subscription": {
+                  "plan_id": "plan-pro",
+                  "plan_name": "pro",
+                  "plan_display_name": "Coding Pro",
+                  "period_end": "2099-01-01T00:00:00Z",
+                  "status": "active"
+                }
+              }
+            }
+            """.data(using: .utf8)!
+            return (response, body)
+        }
+
+        let status = try await SomeIMClient.fetchCodingPlanStatus(
+            settings: SomeIMIntegrationSettings(baseURL: "https://some.im/v1"),
+            sessionToken: "session-plan",
+            session: session
+        )
+
+        #expect(status.isActiveNow)
+        #expect(status.planID == "plan-pro")
+        #expect(status.planName == "Coding Pro")
+    }
+
+    @Test("coding plan subscription fetch treats null subscription as no plan")
+    func testCodingPlanSubscriptionFetchTreatsNullAsNoPlan() async throws {
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.protocolClasses = [SomeIMBrowserLoginMockURLProtocol.self]
+        let session = URLSession(configuration: configuration)
+        defer {
+            session.invalidateAndCancel()
+            SomeIMBrowserLoginMockURLProtocol.handler = nil
+        }
+
+        SomeIMBrowserLoginMockURLProtocol.handler = { request in
+            #expect(request.url?.path == "/api/v1/customer/plan/subscription")
+            let response = HTTPURLResponse(
+                url: request.url!,
+                statusCode: 200,
+                httpVersion: nil,
+                headerFields: ["Content-Type": "application/json"]
+            )!
+            let body = #"{"code":0,"data":{"subscription":null}}"#.data(using: .utf8)!
+            return (response, body)
+        }
+
+        let status = try await SomeIMClient.fetchCodingPlanStatus(
+            settings: SomeIMIntegrationSettings(baseURL: "https://some.im/v1"),
+            sessionToken: "session-none",
+            session: session
+        )
+
+        #expect(!status.isActiveNow)
+        #expect(status.planID == nil)
     }
 }
 

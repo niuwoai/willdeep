@@ -1,8 +1,8 @@
 # some.im 省心托管路由设计
 
-> Last updated: 2026-07-08  
-> Status: Phase 1 + 1.5 + 2 + 3 已实现 (v1.136.0-rc24) — 客户端裁判 someim-judge 动态路由、会话只升不降、composer 入口、x-willdeep-session-id + 本机随机 x-willdeep-workspace-id、输出质检(本地重复/空检测 + 裁判复核)+ 单次升档重试、per-message route 决策元数据 + footer 档位标记；37 单测全绿。待办：真机端到端验证；可选:turn-report 卡片细节 + usage-stats 派生计数(元数据已就位,后续廉价)  
-> Scope: WillDeep macOS App 的 Agent composer 模型选择与 some.im provider 请求链路  
+> Last updated: 2026-07-09
+> Status: Phase 1 + 1.5 + 2 + 3 + coding-plan entitlement 已实现 (v1.136.0-rc37) — 客户端裁判 someim-judge 动态路由、coding plan 权益缓存、会话只升不降、composer 入口、x-willdeep-session-id + 本机随机 x-willdeep-workspace-id、输出质检(本地重复/空检测 + 裁判复核)+ 单次升档重试、per-message route 决策元数据 + footer 档位标记。待办：真机端到端验证；可选:turn-report 卡片细节 + usage-stats 派生计数(元数据已就位,后续廉价)
+> Scope: WillDeep macOS App 的 Agent composer 模型选择与 some.im provider 请求链路
 > Revision: r2 — 结合 some.im 服务端实配（failover 链 / someim-judge / 按需 upstream header / coding 档准入）修订
 
 本文档描述一个拟议功能：当用户在 WillDeep 的 composer 模型选择处，为 `some-im` provider 选择“省心托管”后，WillDeep 不再把本轮 Agent 请求固定发给某一个静态模型，而是在每轮调用前用 some.im 提供的轻量裁判模型判断任务类型与复杂度，再动态选择本轮实际模型。若本轮输出没有 tool call，还可以对输出做轻量质量检查；发现明确的异常输出时，清掉本轮 assistant 输出并升档重试。
@@ -14,10 +14,9 @@
 - 只对 `some-im` provider 生效，不改变 OpenAI、DeepSeek、DashScope、Custom 等其他 provider 的行为。
 - 在 composer 模型菜单里提供“省心托管”入口，让用户不必手动理解 Flash / Pro / coding / general 档位。
 - 对每轮用户输入进行动态路由：
-  - 编程类简单任务使用 `someim-coding-plan-low`。
-  - 编程类复杂任务使用 `someim-coding-plan-high`。
-  - 通用简单任务使用 `someim-auto-flash`。
-  - 通用复杂任务使用 `someim-auto-pro`。
+  - 有 coding plan 时，low / high / premium 全部使用 `someim-coding-plan-*`。
+  - 没有 coding plan 且裁判域为 coding 时，使用 `someim-code-low/high/premium`。
+  - 没有 coding plan 且裁判域为 general 时，使用 `someim-auto-flash/pro/premium`。
 - 向 some.im provider 请求附加稳定上下文 headers：
   - `x-willdeep-session-id: <local-session-id>`
   - `x-willdeep-workspace-id: <local-workspace-id>`
@@ -25,8 +24,8 @@
 - 质检失败时自动升档重试：
   - `someim-coding-plan-low` -> `someim-coding-plan-high`
   - `someim-coding-plan-high` -> `someim-coding-plan-premium`
-  - `someim-auto-flash` -> `someim-auto-pro`
-  - `someim-auto-pro` 后续是否升到通用 premium，取决于 some.im 是否提供明确模型。
+  - `someim-code-low` -> `someim-code-high` -> `someim-code-premium`
+  - `someim-auto-flash` -> `someim-auto-pro` -> `someim-auto-premium`
 - 同一托管会话内采用“只升不降”的最低档位策略：一旦本会话升到 high 或 premium，后续轮次不能被轻量裁判降回更低能力档，除非用户手动重置托管档位、切换为显式模型或开启新会话。
 - 保持现有工具调用安全边界：只要本轮出现 tool call，就不做输出质检重试。
 
@@ -100,12 +99,17 @@ composer pill 可以展示：
 
 ### 主调用模型
 
-| 任务域 | 复杂度 | 模型 |
-| --- | --- | --- |
-| coding | low | `someim-coding-plan-low` |
-| coding | high | `someim-coding-plan-high` |
-| general | low | `someim-auto-flash` |
-| general | high | `someim-auto-pro` |
+| coding plan | 任务域 | 档位 | 模型 |
+| --- | --- | --- | --- |
+| 有 | coding/general | low | `someim-coding-plan-low` |
+| 有 | coding/general | high | `someim-coding-plan-high` |
+| 有 | coding/general | premium | `someim-coding-plan-premium` |
+| 无 | coding | low | `someim-code-low` |
+| 无 | coding | high | `someim-code-high` |
+| 无 | coding | premium | `someim-code-premium` |
+| 无 | general | low | `someim-auto-flash` |
+| 无 | general | high | `someim-auto-pro` |
+| 无 | general | premium | `someim-auto-premium` |
 
 注意：最初口头描述中出现过误拼 `someim-coding-plan-hight`；正式协议统一为 `someim-coding-plan-high`。**该 legacy alias 兼容映射已退役**（some.im 侧确认命名为 `high`）：WillDeep 不再折叠 `hight`，万一收到 `hight`（不在 allowlist）会被丢弃并优雅回退到本地 (domain, tier) 映射。
 
@@ -116,8 +120,12 @@ composer pill 可以展示：
 | `someim-coding-plan-low` | `someim-coding-plan-high` |
 | `someim-coding-plan-high` | `someim-coding-plan-premium` |
 | `someim-coding-plan-premium` | 不再自动升档 |
+| `someim-code-low` | `someim-code-high` |
+| `someim-code-high` | `someim-code-premium` |
+| `someim-code-premium` | 不再自动升档 |
 | `someim-auto-flash` | `someim-auto-pro` |
-| `someim-auto-pro` | 待定：若 some.im 提供通用 premium，可升到该模型；否则不再自动升档 |
+| `someim-auto-pro` | `someim-auto-premium` |
+| `someim-auto-premium` | 不再自动升档 |
 
 ### 会话级只升不降
 
@@ -145,16 +153,19 @@ enum AgentManagedCapabilityTier: String, Codable, Equatable {
 }
 ```
 
-然后每轮先由 judge 判断任务域，再用会话最低档位修正模型：
+然后每轮先由 judge 判断任务域，再读取 coding plan 权益并用会话最低档位修正模型：
 
-| Judge 任务域 | Judge 复杂度 | 会话最低档 | 实际模型 |
-| --- | --- | --- | --- |
-| coding | low | low | `someim-coding-plan-low` |
-| coding | low | high | `someim-coding-plan-high` |
-| coding | low | premium | `someim-coding-plan-premium` |
-| general | low | low | `someim-auto-flash` |
-| general | low | high | `someim-auto-pro` |
-| general | low | premium | 通用 premium，若不存在则 `someim-auto-pro` |
+| Coding Plan | Judge 任务域 | Judge 复杂度 | 会话最低档 | 实际模型 |
+| --- | --- | --- | --- | --- |
+| 有 | coding/general | low | low | `someim-coding-plan-low` |
+| 有 | coding/general | low | high | `someim-coding-plan-high` |
+| 有 | coding/general | low | premium | `someim-coding-plan-premium` |
+| 无 | coding | low | low | `someim-code-low` |
+| 无 | coding | low | high | `someim-code-high` |
+| 无 | coding | low | premium | `someim-code-premium` |
+| 无 | general | low | low | `someim-auto-flash` |
+| 无 | general | low | high | `someim-auto-pro` |
+| 无 | general | low | premium | `someim-auto-premium` |
 
 升档触发规则：
 
@@ -195,15 +206,19 @@ WillDeep 侧不应该把 judge 模型暴露成普通可选聊天模型，除非 
 
 > 本节记录 some.im 服务端「虚拟模型 → 真实模型 failover 链」的实际配置，以及由此产生、必须在接入前解决的能力一致性问题。链路语义：failover 链是数组，正常只用第 1 棒，第 1 棒返回连接错 / 429 / 5xx 时才顺延到下一棒。
 
-### 当前对应关系（2026-07-08）
+### 当前对应关系（2026-07-09）
 
 | 虚拟模型 | 真实 failover 链（先 1 后 2） | 用途 |
 | --- | --- | --- |
-| `someim-auto-flash` | `deepseek-v4-flash` | 通用简单 |
-| `someim-auto-pro` | `deepseek-v4-pro` | 通用复杂 |
-| `someim-coding-plan-low` | `deepseek-v4-flash` → `glm-5` → (待验证便宜棒) | 编程简单 |
-| `someim-coding-plan-high` | `deepseek-v4-pro` → `glm-5.2` | 编程复杂 |
-| `someim-coding-plan-premium` | `gpt-5.5`（单棒，无 failover） | 编程高难 |
+| `someim-coding-plan-low` | some.im 配置 | 有 coding plan 时的 low 档 |
+| `someim-coding-plan-high` | some.im 配置 | 有 coding plan 时的 high 档 |
+| `someim-coding-plan-premium` | some.im 配置 | 有 coding plan 时的 premium 档 |
+| `someim-code-low` | some.im 配置 | 无 coding plan 且裁判域为 coding 的 low 档 |
+| `someim-code-high` | some.im 配置 | 无 coding plan 且裁判域为 coding 的 high 档 |
+| `someim-code-premium` | some.im 配置 | 无 coding plan 且裁判域为 coding 的 premium 档 |
+| `someim-auto-flash` | some.im 配置 | 无 coding plan 且裁判域为 general 的 low 档 |
+| `someim-auto-pro` | some.im 配置 | 无 coding plan 且裁判域为 general 的 high 档 |
+| `someim-auto-premium` | some.im 配置 | 无 coding plan 且裁判域为 general 的 premium 档 |
 | `someim-judge` | `deepseek-v4-flash`（默认关 thinking、无 persona） | 路由裁判 + 输出质检 |
 
 历史上曾考虑 premium = `claude-opus-4.7 → gpt-5.5`、裁判 = `Qwen3.5-35B-A3B-IQ3_S`，均因能力一致性问题移除（Claude thinking block 签名跨棒回放、3-bit 量化裁判 JSON 不可靠 + 思考吃满 max_tokens），见下。
@@ -408,19 +423,20 @@ judge 必须输出严格 JSON，不要 Markdown：
 
 WillDeep 必须本地验证 judge 输出：
 
-- JSON 解析失败：走默认 `someim-auto-flash` 或当前静态 route default。
+- JSON 解析失败：忽略 judge 输出，按本地 fallback heuristic 生成 `(domain, tier)`，再结合 coding plan 权益映射到实际模型。
 - `target_model` 不在允许列表：忽略 target，按 `domain + complexity` 本地映射。
-- `confidence` 低于阈值，例如 `< 0.45`：保守使用 `someim-auto-pro` 或当前 Pro 档。
+- `confidence` 低于阈值，例如 `< 0.45`：先升一档，再按 `(hasCodingPlan, domain, tier)` 本地映射。
 - judge 请求超时或失败：不阻塞用户，直接走默认 fallback。
 
 建议 fallback：
 
 ```text
-若 latest_user_message 或上下文显然涉及代码/仓库/文件修改 -> someim-coding-plan-high
-否则 -> someim-auto-flash
+若 latest_user_message 或上下文显然涉及代码/仓库/文件修改 -> domain=coding, tier=high
+否则 -> domain=general, tier=low
+最终模型仍由 hasCodingPlan 决定：有 plan 走 coding-plan；无 plan 时 coding 走 code、general 走 auto。
 ```
 
-如果想更省钱，也可以代码任务默认 `someim-coding-plan-low`，但复杂任务误判成本更高。这个策略需要产品取舍。
+如果想更省钱，也可以代码任务默认 low 档，但复杂任务误判成本更高。这个策略需要产品取舍。
 
 ## 输出质检协议
 
@@ -874,9 +890,13 @@ some.im 需要提供：
    - `someim-coding-plan-low`
    - `someim-coding-plan-high`
    - `someim-coding-plan-premium`
+   - `someim-code-low`
+   - `someim-code-high`
+   - `someim-code-premium`
    - `someim-auto-flash`
    - `someim-auto-pro`
-5. 如果通用复杂输出也需要 premium，明确模型名。
+   - `someim-auto-premium`
+5. auto 家族在省心托管中使用 flash/pro/premium 命名，对应 low/high/premium 档位。
 6. 接收并记录 `x-willdeep-session-id` header。
 7. 接收并记录 `x-willdeep-workspace-id` header。
 8. 按需返回 `x-someim-upstream-model`（仅当请求带 WillDeep 特有 header 时），暴露真实命中上游模型。
@@ -945,10 +965,10 @@ some.im 需要提供：
 
 1. 配置 some.im provider。
 2. 在 composer 选“省心托管”。
-3. 输入简单代码问题，确认实际模型为 `someim-coding-plan-low`。
-4. 输入复杂仓库修改任务，确认实际模型为 `someim-coding-plan-high` 或更高。
-5. 输入通用闲聊，确认实际模型为 `someim-auto-flash`。
-6. 输入复杂非编程分析，确认实际模型为 `someim-auto-pro`。
+3. 有 coding plan 时输入简单代码问题，确认实际模型为 `someim-coding-plan-low`。
+4. 有 coding plan 时输入通用闲聊，确认实际模型仍为 `someim-coding-plan-low`。
+5. 无 coding plan 时输入复杂仓库修改任务，确认实际模型为 `someim-code-high` 或更高。
+6. 无 coding plan 时输入通用闲聊，确认实际模型为 `someim-auto-flash`。
 7. 让 mock 模型输出重复循环，确认自动升档重试。
 8. 让 mock 模型输出 tool call，确认不做质检。
 9. 重启 App 后同一会话继续发送，确认 `x-willdeep-session-id` 不变。
@@ -1030,7 +1050,7 @@ some.im 需要提供：
 
 ### 仍待决
 
-- `someim-auto-pro`（通用复杂）质检失败后是否有通用 premium 模型？暂无则不再自动升档。
+- 无 coding plan 的 general premium 档由 `someim-auto-premium` 承接；仍需真机实测该虚拟模型的上游 failover 配置。
 - coding 档待验证便宜棒的最终名单（LongCat 首选 / MiniMax 次选 / MiMo 暂不进 coding 档）与逐棒实测结果。
 - 主调用的 persona 注入（网关在 WillDeep Agent prompt 前拼 persona）是否拉低 tool call 命中率？只能实测。
 - glm-5 / glm-5.2 的 tool call arguments 是否为 object（非 string），WillDeep 是否需要容错层。

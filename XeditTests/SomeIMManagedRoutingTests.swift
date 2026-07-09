@@ -16,30 +16,44 @@ import Foundation
 struct SomeIMManagedModelMappingTests {
 
     @Test
-    func resolvesEveryDomainAndTier() {
-        #expect(SomeIMManagedModel.resolve(domain: .coding, tier: .low) == "someim-coding-plan-low")
-        #expect(SomeIMManagedModel.resolve(domain: .coding, tier: .high) == "someim-coding-plan-high")
-        #expect(SomeIMManagedModel.resolve(domain: .coding, tier: .premium) == "someim-coding-plan-premium")
-        #expect(SomeIMManagedModel.resolve(domain: .general, tier: .low) == "someim-auto-flash")
-        #expect(SomeIMManagedModel.resolve(domain: .general, tier: .high) == "someim-auto-pro")
-        // No dedicated general-premium model yet → auto-pro fallback.
-        #expect(SomeIMManagedModel.resolve(domain: .general, tier: .premium) == "someim-auto-pro")
+    func resolvesEveryDomainAndTierWithoutPlan() {
+        #expect(SomeIMManagedModel.resolve(domain: .coding, tier: .low, hasCodingPlan: false) == "someim-code-low")
+        #expect(SomeIMManagedModel.resolve(domain: .coding, tier: .high, hasCodingPlan: false) == "someim-code-high")
+        #expect(SomeIMManagedModel.resolve(domain: .coding, tier: .premium, hasCodingPlan: false) == "someim-code-premium")
+        #expect(SomeIMManagedModel.resolve(domain: .general, tier: .low, hasCodingPlan: false) == "someim-auto-flash")
+        #expect(SomeIMManagedModel.resolve(domain: .general, tier: .high, hasCodingPlan: false) == "someim-auto-pro")
+        #expect(SomeIMManagedModel.resolve(domain: .general, tier: .premium, hasCodingPlan: false) == "someim-auto-premium")
+    }
+
+    @Test
+    func resolvesEveryTierToCodingPlanWhenPlanIsActive() {
+        #expect(SomeIMManagedModel.resolve(domain: .coding, tier: .low, hasCodingPlan: true) == "someim-coding-plan-low")
+        #expect(SomeIMManagedModel.resolve(domain: .coding, tier: .high, hasCodingPlan: true) == "someim-coding-plan-high")
+        #expect(SomeIMManagedModel.resolve(domain: .coding, tier: .premium, hasCodingPlan: true) == "someim-coding-plan-premium")
+        #expect(SomeIMManagedModel.resolve(domain: .general, tier: .low, hasCodingPlan: true) == "someim-coding-plan-low")
+        #expect(SomeIMManagedModel.resolve(domain: .general, tier: .high, hasCodingPlan: true) == "someim-coding-plan-high")
+        #expect(SomeIMManagedModel.resolve(domain: .general, tier: .premium, hasCodingPlan: true) == "someim-coding-plan-premium")
     }
 
     @Test
     func tierInverseMapsKnownModels() {
         #expect(SomeIMManagedModel.tier(of: "someim-coding-plan-low") == .low)
+        #expect(SomeIMManagedModel.tier(of: "someim-code-low") == .low)
         #expect(SomeIMManagedModel.tier(of: "someim-auto-flash") == .low)
         #expect(SomeIMManagedModel.tier(of: "someim-coding-plan-high") == .high)
+        #expect(SomeIMManagedModel.tier(of: "someim-code-high") == .high)
         #expect(SomeIMManagedModel.tier(of: "someim-auto-pro") == .high)
         #expect(SomeIMManagedModel.tier(of: "someim-coding-plan-premium") == .premium)
+        #expect(SomeIMManagedModel.tier(of: "someim-code-premium") == .premium)
+        #expect(SomeIMManagedModel.tier(of: "someim-auto-premium") == .premium)
         #expect(SomeIMManagedModel.tier(of: "gpt-4.1") == nil)
     }
 
     @Test
     func allowlistCoversMainModelsButNotJudge() {
         #expect(SomeIMManagedModel.allowlist.contains("someim-coding-plan-low"))
-        #expect(SomeIMManagedModel.allowlist.contains("someim-auto-pro"))
+        #expect(SomeIMManagedModel.allowlist.contains("someim-code-high"))
+        #expect(SomeIMManagedModel.allowlist.contains("someim-auto-premium"))
         // The judge is never a turn's main model.
         #expect(!SomeIMManagedModel.allowlist.contains(SomeIMManagedModel.judge))
     }
@@ -170,26 +184,53 @@ struct SomeIMRouteResolutionTests {
 
     @Test
     func mergesVerdictWithFloorOnlyUp() {
-        // Judge says coding-low, but the session floor is high → coding-high.
+        // Judge says coding-low, but the session floor is high → code-high.
         let verdict = SomeIMRouteJudgeVerdict(domain: .coding, complexity: .low, confidence: 0.9)
-        let res = SomeIMManagedRouting.resolution(for: verdict, floor: .high, usedFallback: false)
+        let res = SomeIMManagedRouting.resolution(
+            for: verdict,
+            floor: .high,
+            usedFallback: false,
+            hasCodingPlan: false
+        )
         #expect(res.effectiveTier == .high)
-        #expect(res.model == "someim-coding-plan-high")
+        #expect(res.model == "someim-code-high")
     }
 
     @Test
     func lowConfidenceEscalatesOneStep() {
         let verdict = SomeIMRouteJudgeVerdict(domain: .coding, complexity: .low, confidence: 0.2)
-        let res = SomeIMManagedRouting.resolution(for: verdict, floor: .low, usedFallback: false)
+        let res = SomeIMManagedRouting.resolution(
+            for: verdict,
+            floor: .low,
+            usedFallback: false,
+            hasCodingPlan: false
+        )
         #expect(res.effectiveTier == .high)
-        #expect(res.model == "someim-coding-plan-high")
+        #expect(res.model == "someim-code-high")
     }
 
     @Test
-    func generalLowStaysFlash() {
+    func generalLowUsesAutoFlashWithoutPlan() {
         let verdict = SomeIMRouteJudgeVerdict(domain: .general, complexity: .low, confidence: 0.9)
-        let res = SomeIMManagedRouting.resolution(for: verdict, floor: .low, usedFallback: false)
+        let res = SomeIMManagedRouting.resolution(
+            for: verdict,
+            floor: .low,
+            usedFallback: false,
+            hasCodingPlan: false
+        )
         #expect(res.model == "someim-auto-flash")
+    }
+
+    @Test
+    func planUsesCodingPlanEvenForGeneralDomain() {
+        let verdict = SomeIMRouteJudgeVerdict(domain: .general, complexity: .low, confidence: 0.9)
+        let res = SomeIMManagedRouting.resolution(
+            for: verdict,
+            floor: .high,
+            usedFallback: false,
+            hasCodingPlan: true
+        )
+        #expect(res.model == "someim-coding-plan-high")
     }
 
     @Test
@@ -215,8 +256,18 @@ struct SomeIMRouteOrchestrationTests {
     @Test
     func usesJudgeVerdictWhenParseable() async {
         let input = SomeIMRouteJudgeInput(latestUserMessage: "hi")
-        let res = await SomeIMManagedRouting.route(input: input, floor: .low) { _, _, _ in
+        let res = await SomeIMManagedRouting.route(input: input, floor: .low, hasCodingPlan: false) { _, _, _ in
             #"{"domain":"coding","complexity":"high","confidence":0.9}"#
+        }
+        #expect(res.usedFallback == false)
+        #expect(res.model == "someim-code-high")
+    }
+
+    @Test
+    func activePlanRoutesJudgeVerdictToCodingPlanFamily() async {
+        let input = SomeIMRouteJudgeInput(latestUserMessage: "hi")
+        let res = await SomeIMManagedRouting.route(input: input, floor: .low, hasCodingPlan: true) { _, _, _ in
+            #"{"domain":"general","complexity":"high","confidence":0.9}"#
         }
         #expect(res.usedFallback == false)
         #expect(res.model == "someim-coding-plan-high")
@@ -225,20 +276,19 @@ struct SomeIMRouteOrchestrationTests {
     @Test
     func fallsBackWhenJudgeReturnsNil() async {
         let input = SomeIMRouteJudgeInput(latestUserMessage: "写代码 fix bug", workspaceAvailable: true)
-        let res = await SomeIMManagedRouting.route(input: input, floor: .low) { _, _, _ in nil }
+        let res = await SomeIMManagedRouting.route(input: input, floor: .low, hasCodingPlan: false) { _, _, _ in nil }
         #expect(res.usedFallback == true)
-        #expect(res.model == "someim-coding-plan-high")
+        #expect(res.model == "someim-code-high")
     }
 
     @Test
     func fallbackDoesNotDropBelowFloor() async {
         // Even a general fallback must respect an existing premium floor.
         let input = SomeIMRouteJudgeInput(latestUserMessage: "hello")
-        let res = await SomeIMManagedRouting.route(input: input, floor: .premium) { _, _, _ in nil }
+        let res = await SomeIMManagedRouting.route(input: input, floor: .premium, hasCodingPlan: false) { _, _, _ in nil }
         #expect(res.usedFallback == true)
         #expect(res.effectiveTier == .premium)
-        // No dedicated general-premium model → auto-pro fallback.
-        #expect(res.model == "someim-auto-pro")
+        #expect(res.model == "someim-auto-premium")
     }
 }
 
@@ -280,8 +330,12 @@ struct SomeIMEscalationTests {
         #expect(SomeIMManagedModel.escalated(from: "someim-coding-plan-low") == "someim-coding-plan-high")
         #expect(SomeIMManagedModel.escalated(from: "someim-coding-plan-high") == "someim-coding-plan-premium")
         #expect(SomeIMManagedModel.escalated(from: "someim-coding-plan-premium") == nil)
+        #expect(SomeIMManagedModel.escalated(from: "someim-code-low") == "someim-code-high")
+        #expect(SomeIMManagedModel.escalated(from: "someim-code-high") == "someim-code-premium")
+        #expect(SomeIMManagedModel.escalated(from: "someim-code-premium") == nil)
         #expect(SomeIMManagedModel.escalated(from: "someim-auto-flash") == "someim-auto-pro")
-        #expect(SomeIMManagedModel.escalated(from: "someim-auto-pro") == nil)
+        #expect(SomeIMManagedModel.escalated(from: "someim-auto-pro") == "someim-auto-premium")
+        #expect(SomeIMManagedModel.escalated(from: "someim-auto-premium") == nil)
     }
 }
 

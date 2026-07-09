@@ -69,6 +69,32 @@ struct SomeIMModel: Identifiable, Codable, Equatable {
     }
 }
 
+struct SomeIMCodingPlanStatus: Codable, Equatable {
+    var hasActivePlan: Bool
+    var planID: String?
+    var planName: String?
+    var periodEnd: Date?
+    var checkedAt: Date
+
+    static let unknown = SomeIMCodingPlanStatus(
+        hasActivePlan: false,
+        planID: nil,
+        planName: nil,
+        periodEnd: nil,
+        checkedAt: .distantPast
+    )
+
+    var isActiveNow: Bool {
+        guard hasActivePlan else { return false }
+        guard let periodEnd else { return true }
+        return periodEnd > Date()
+    }
+
+    var isStale: Bool {
+        Date().timeIntervalSince(checkedAt) > 10 * 60
+    }
+}
+
 struct SomeIMIntegrationSettings: Codable, Equatable {
     static let defaultBaseURL = SomeIMRelayRegion.internationalBaseURL
     static let defaultImageModel = "gpt-image-2"
@@ -141,6 +167,7 @@ enum SomeIMIntegrationStore {
 
     private static let settingsKey = "com.willdeep.someIM.integrationSettings.v1"
     private static let accountKey = "com.willdeep.someIM.account.v1"
+    private static let codingPlanStatusKey = "com.willdeep.someIM.codingPlanStatus.v1"
     // Legacy per-app Keychain accounts. Read only for the one-time migration
     // into the shared store; never written after that.
     private static let legacyAPIKeyAccount = "some-im/api-key"
@@ -282,6 +309,7 @@ enum SomeIMIntegrationStore {
         SomeIMSharedSessionStore.shared.logout()
         #endif
         UserDefaults.standard.removeObject(forKey: accountKey)
+        UserDefaults.standard.removeObject(forKey: codingPlanStatusKey)
         var settings = loadSettings()
         if settings.enabled {
             settings.enabled = false
@@ -289,6 +317,20 @@ enum SomeIMIntegrationStore {
         }
         NotificationCenter.default.post(name: accountDidChangeNotification, object: nil)
         NotificationCenter.default.post(name: sessionDidChangeNotification, object: nil)
+    }
+
+    static func loadCodingPlanStatus() -> SomeIMCodingPlanStatus {
+        guard let data = UserDefaults.standard.data(forKey: codingPlanStatusKey),
+              let decoded = try? JSONDecoder().decode(SomeIMCodingPlanStatus.self, from: data) else {
+            return .unknown
+        }
+        return decoded
+    }
+
+    static func saveCodingPlanStatus(_ status: SomeIMCodingPlanStatus) {
+        if let data = try? JSONEncoder().encode(status) {
+            UserDefaults.standard.set(data, forKey: codingPlanStatusKey)
+        }
     }
 
     // MARK: - Shared session plumbing
@@ -519,10 +561,13 @@ enum SomeIMClient {
         guard state == .connected else {
             return SomeIMBrowserLoginStatus(state: state, account: nil)
         }
-        guard let apiKey = decoded.api_key?.trimmingCharacters(in: .whitespacesAndNewlines), !apiKey.isEmpty,
-              let accountData = decoded.account else {
+        guard let apiKey = decoded.api_key?.trimmingCharacters(in: .whitespacesAndNewlines), !apiKey.isEmpty else {
+            // 诊断：some.im 回了 connected 却没给出可识别的 API Key。只打字段名、不打任何值
+            // （避免泄露 token / 邮箱），用来判断是服务端字段名不在识别清单里，还是压根没下发凭据。
+            logBrowserStatusMissingKey(from: data)
             return SomeIMBrowserLoginStatus(state: .connected, account: nil)
         }
+        let accountData = decoded.account ?? .empty
         let account = accountData.account(
             fallbackEmail: "",
             fallbackModel: decoded.default_model?.nonEmpty ?? SomeIMIntegrationSettings.defaultTextModel
@@ -684,6 +729,52 @@ enum SomeIMClient {
             throw AgentToolError.invalidArgument("some.im returned an invalid login URL.")
         }
         return url
+    }
+
+    static func fetchCodingPlanStatus() async throws -> SomeIMCodingPlanStatus {
+        try await fetchCodingPlanStatus(
+            settings: SomeIMIntegrationStore.loadSettings(),
+            sessionToken: SomeIMIntegrationStore.loadSessionToken(),
+            session: AgentNetworkSupport.defaultSession()
+        )
+    }
+
+    static func fetchCodingPlanStatus(
+        settings: SomeIMIntegrationSettings,
+        sessionToken: String,
+        session: URLSession
+    ) async throws -> SomeIMCodingPlanStatus {
+        let token = sessionToken.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !token.isEmpty else {
+            return SomeIMCodingPlanStatus(
+                hasActivePlan: false,
+                planID: nil,
+                planName: nil,
+                periodEnd: nil,
+                checkedAt: Date()
+            )
+        }
+        let endpoint = try publicAPIEndpoint(from: settings.normalized.baseURL, suffix: "customer/plan/subscription")
+        var request = jsonRequest(url: endpoint, method: "GET")
+        request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        let data = try await send(request, session: session)
+        let decoded = try decodeEnvelope(CodingPlanSubscriptionData.self, from: data)
+        guard let subscription = decoded.subscription else {
+            return SomeIMCodingPlanStatus(
+                hasActivePlan: false,
+                planID: nil,
+                planName: nil,
+                periodEnd: nil,
+                checkedAt: Date()
+            )
+        }
+        return SomeIMCodingPlanStatus(
+            hasActivePlan: subscription.status.lowercased() == "active",
+            planID: subscription.plan_id.trimmingCharacters(in: .whitespacesAndNewlines).nonEmpty,
+            planName: (subscription.plan_display_name ?? subscription.plan_name).trimmingCharacters(in: .whitespacesAndNewlines).nonEmpty,
+            periodEnd: parseRFC3339Date(subscription.period_end),
+            checkedAt: Date()
+        )
     }
 
     static func fetchModels(
@@ -873,6 +964,8 @@ enum SomeIMClient {
         }
         components.queryItems = [
             URLQueryItem(name: "client_id", value: willDeepClientID),
+            URLQueryItem(name: "code", value: code),
+            URLQueryItem(name: "device_code", value: code),
             URLQueryItem(name: "willdeep_device_code", value: code)
         ]
         guard let url = components.url else { throw AgentClientError.invalidResponse }
@@ -884,12 +977,16 @@ enum SomeIMClient {
             throw AgentClientError.invalidResponse
         }
         components.path = "/customer/login"
+        let next = "/customer?willdeep_return=1&code=\(code)&device_code=\(code)&willdeep_device_code=\(code)&pair_token=\(pairToken)&willdeep_pair_token=\(pairToken)"
         components.queryItems = [
             URLQueryItem(name: "client_id", value: willDeepClientID),
+            URLQueryItem(name: "code", value: code),
+            URLQueryItem(name: "device_code", value: code),
             URLQueryItem(name: "willdeep_device_code", value: code),
+            URLQueryItem(name: "pair_token", value: pairToken),
             URLQueryItem(name: "willdeep_pair_token", value: pairToken),
             URLQueryItem(name: "return_to", value: "willdeep"),
-            URLQueryItem(name: "next", value: "/customer?willdeep_return=1&willdeep_device_code=\(code)&willdeep_pair_token=\(pairToken)")
+            URLQueryItem(name: "next", value: next)
         ]
         guard let url = components.url else { throw AgentClientError.invalidResponse }
         return url
@@ -925,6 +1022,22 @@ enum SomeIMClient {
         return request
     }
 
+    /// 仅记录 browser-status 响应里出现的字段名（含嵌套 data/result/payload 一层），不记录任何值，
+    /// 便于诊断「connected 却无凭据」时服务端到底把 key 放哪、或有没有下发。
+    private static func logBrowserStatusMissingKey(from data: Data) {
+        var names = Set<String>()
+        if let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
+            names.formUnion(root.keys)
+            for wrapper in ["data", "result", "payload", "credentials", "credential", "account"] {
+                if let nested = root[wrapper] as? [String: Any] {
+                    names.formUnion(nested.keys.map { "\(wrapper).\($0)" })
+                }
+            }
+        }
+        let fields = names.sorted().joined(separator: ", ")
+        print("[some.im] browser-status connected but no recognizable api_key; response fields: [\(fields)]")
+    }
+
     private static func applyClientLoginSecret(to request: inout URLRequest) {
         let secret = SomeIMIntegrationStore.loadClientLoginSecret()
         guard !secret.isEmpty else { return }
@@ -953,6 +1066,18 @@ enum SomeIMClient {
         let decimal = Decimal(string: usd.trimmingCharacters(in: .whitespacesAndNewlines)) ?? 0
         let credits = decimal * Decimal(100000)
         return max(Int64(0), NSDecimalNumber(decimal: credits).int64Value).description
+    }
+
+    private static func parseRFC3339Date(_ raw: String) -> Date? {
+        let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return nil }
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        if let date = formatter.date(from: trimmed) {
+            return date
+        }
+        formatter.formatOptions = [.withInternetDateTime]
+        return formatter.date(from: trimmed)
     }
 
     private static func outputURL(fileExtension: String, outputDirectory: URL?) -> URL {
@@ -1046,6 +1171,18 @@ enum SomeIMClient {
         }
     }
 
+    private struct CodingPlanSubscriptionData: Decodable {
+        let subscription: CodingPlanSubscription?
+    }
+
+    private struct CodingPlanSubscription: Decodable {
+        let plan_id: String
+        let plan_name: String
+        let plan_display_name: String?
+        let period_end: String
+        let status: String
+    }
+
     private struct APIEnvelope<T: Decodable>: Decodable {
         let data: T
     }
@@ -1078,6 +1215,8 @@ enum SomeIMClient {
             case appAPIKeyCamel = "appApiKey"
             case willDeepAPIKey = "willdeep_api_key"
             case willDeepAPIKeyCamel = "willdeepApiKey"
+            case apiToken = "api_token"
+            case apiTokenCamel = "apiToken"
             case defaultModel = "default_model"
             case defaultModelCamel = "defaultModel"
             case token
@@ -1085,8 +1224,11 @@ enum SomeIMClient {
             case sessionTokenCamel = "sessionToken"
             case customerSession = "customer_session"
             case customerSessionCamel = "customerSession"
+            case customerSessionToken = "customer_session_token"
+            case customerSessionTokenCamel = "customerSessionToken"
             case account
             case customer
+            case profile
             case user
             case credentials
             case credential
@@ -1101,7 +1243,9 @@ enum SomeIMClient {
                 .appAPIKey,
                 .appAPIKeyCamel,
                 .willDeepAPIKey,
-                .willDeepAPIKeyCamel
+                .willDeepAPIKeyCamel,
+                .apiToken,
+                .apiTokenCamel
             ])
             let directDefaultModel = try container.decodeFirstString(for: [.defaultModel, .defaultModelCamel])
             let directToken = try container.decodeFirstString(for: [
@@ -1109,14 +1253,18 @@ enum SomeIMClient {
                 .sessionToken,
                 .sessionTokenCamel,
                 .customerSession,
-                .customerSessionCamel
+                .customerSessionCamel,
+                .customerSessionToken,
+                .customerSessionTokenCamel
             ])
             let credentials = try container.decodeFirstCredentials(for: [.credentials, .credential])
+            let flatAccount = try AccountData(from: decoder)
             api_key = directAPIKey ?? credentials.apiKey
             default_model = directDefaultModel ?? credentials.defaultModel
             token = directToken ?? credentials.token
-            account = try container.decodeFirstAccount(for: [.account, .customer, .user])
+            account = try container.decodeFirstAccount(for: [.account, .customer, .profile, .user])
                 ?? credentials.account
+                ?? (flatAccount.hasAnyAccountInfo ? flatAccount : nil)
         }
     }
 
@@ -1130,26 +1278,66 @@ enum SomeIMClient {
 
         private enum CodingKeys: String, CodingKey {
             case email
+            case customerEmail = "customer_email"
+            case customerEmailCamel = "customerEmail"
+            case userEmail = "user_email"
+            case userEmailCamel = "userEmail"
             case tenantID = "tenant_id"
             case tenantIDCamel = "tenantID"
+            case tenantIdCamel = "tenantId"
             case balanceUSD = "balance_usd"
             case balanceUSDCamel = "balanceUSD"
+            case balanceUSDCamelAlt = "balanceUsd"
             case balance
             case credits
+            case creditBalance = "credit_balance"
+            case creditBalanceCamel = "creditBalance"
             case creditsPerUSD = "credits_per_usd"
             case creditsPerUSDCamel = "creditsPerUSD"
+            case creditsPerUSDCamelAlt = "creditsPerUsd"
             case defaultModel = "default_model"
             case defaultModelCamel = "defaultModel"
         }
 
         init(from decoder: Decoder) throws {
             let container = try decoder.container(keyedBy: CodingKeys.self)
-            email = try container.decodeFirstString(for: [.email])
-            tenant_id = try container.decodeFirstString(for: [.tenantID, .tenantIDCamel])
-            balance_usd = try container.decodeFirstString(for: [.balanceUSD, .balanceUSDCamel, .balance])
-            credits = try container.decodeFirstString(for: [.credits])
-            credits_per_usd = try container.decodeFirstInt(for: [.creditsPerUSD, .creditsPerUSDCamel])
+            email = try container.decodeFirstString(for: [.email, .customerEmail, .customerEmailCamel, .userEmail, .userEmailCamel])
+            tenant_id = try container.decodeFirstString(for: [.tenantID, .tenantIDCamel, .tenantIdCamel])
+            balance_usd = try container.decodeFirstString(for: [.balanceUSD, .balanceUSDCamel, .balanceUSDCamelAlt, .balance])
+            credits = try container.decodeFirstString(for: [.credits, .creditBalance, .creditBalanceCamel])
+            credits_per_usd = try container.decodeFirstInt(for: [.creditsPerUSD, .creditsPerUSDCamel, .creditsPerUSDCamelAlt])
             default_model = try container.decodeFirstString(for: [.defaultModel, .defaultModelCamel])
+        }
+
+        static let empty = AccountData(
+            email: nil,
+            tenantID: nil,
+            balanceUSD: nil,
+            credits: nil,
+            creditsPerUSD: nil,
+            defaultModel: nil
+        )
+
+        init(
+            email: String?,
+            tenantID: String?,
+            balanceUSD: String?,
+            credits: String?,
+            creditsPerUSD: Int?,
+            defaultModel: String?
+        ) {
+            self.email = email
+            self.tenant_id = tenantID
+            self.balance_usd = balanceUSD
+            self.credits = credits
+            self.credits_per_usd = creditsPerUSD
+            self.default_model = defaultModel
+        }
+
+        var hasAnyAccountInfo: Bool {
+            [email, tenant_id, balance_usd, credits, default_model].contains { value in
+                !(value?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ?? true)
+            } || credits_per_usd != nil
         }
 
         func account(fallbackEmail: String, fallbackModel: String) -> SomeIMAccount {
@@ -1179,6 +1367,8 @@ enum SomeIMClient {
             case appAPIKeyCamel = "appApiKey"
             case willDeepAPIKey = "willdeep_api_key"
             case willDeepAPIKeyCamel = "willdeepApiKey"
+            case apiToken = "api_token"
+            case apiTokenCamel = "apiToken"
             case defaultModel = "default_model"
             case defaultModelCamel = "defaultModel"
             case token
@@ -1186,8 +1376,11 @@ enum SomeIMClient {
             case sessionTokenCamel = "sessionToken"
             case customerSession = "customer_session"
             case customerSessionCamel = "customerSession"
+            case customerSessionToken = "customer_session_token"
+            case customerSessionTokenCamel = "customerSessionToken"
             case account
             case customer
+            case profile
             case user
         }
 
@@ -1206,7 +1399,9 @@ enum SomeIMClient {
                 .appAPIKey,
                 .appAPIKeyCamel,
                 .willDeepAPIKey,
-                .willDeepAPIKeyCamel
+                .willDeepAPIKeyCamel,
+                .apiToken,
+                .apiTokenCamel
             ])
             defaultModel = try container.decodeFirstString(for: [.defaultModel, .defaultModelCamel])
             token = try container.decodeFirstString(for: [
@@ -1214,9 +1409,11 @@ enum SomeIMClient {
                 .sessionToken,
                 .sessionTokenCamel,
                 .customerSession,
-                .customerSessionCamel
+                .customerSessionCamel,
+                .customerSessionToken,
+                .customerSessionTokenCamel
             ])
-            account = try container.decodeFirstAccount(for: [.account, .customer, .user])
+            account = try container.decodeFirstAccount(for: [.account, .customer, .profile, .user])
         }
     }
 
@@ -1649,6 +1846,10 @@ struct SomeIMIntegrationSettingsView: View {
                     }
                     if result.state == .connected {
                         await MainActor.run {
+                            // some.im 认为浏览器已登录，却没回 WillDeep 可识别的 API Key。
+                            // 必须丢弃这个已被服务端标记为 connected 的一次性 code，否则下次点
+                            // 「在浏览器打开」会复用它、被秒回同一条错误。清空后再点会自动 mint 新 code。
+                            browserLoginRequest = nil
                             isWatchingBrowserLogin = false
                             status = L10n.Settings.SomeIM.browserLoginMissingCredentials
                         }

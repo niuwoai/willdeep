@@ -440,7 +440,12 @@ extension AppState {
                 conversationSummary: runtime.contextSummary
             )
             let judgeClient = AgentClient(configuration: configuration, someIMContext: someIMContext)
-            let resolution = await SomeIMManagedRouting.route(input: judgeInput, floor: floor) { system, user, maxTokens in
+            let hasCodingPlan = await refreshedSomeIMCodingPlanStatusIfNeeded().isActiveNow
+            let resolution = await SomeIMManagedRouting.route(
+                input: judgeInput,
+                floor: floor,
+                hasCodingPlan: hasCodingPlan
+            ) { system, user, maxTokens in
                 await judgeClient.routeJudge(
                     model: SomeIMManagedModel.judge,
                     systemPrompt: system,

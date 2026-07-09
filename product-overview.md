@@ -1,6 +1,6 @@
 # WillDeep Product Overview
 
-> Last updated: 2026-07-09 | Current version: v1.136.0-rc35
+> Last updated: 2026-07-09 | Current version: v1.136.0-rc39
 
 ## Positioning
 
@@ -14,6 +14,8 @@ WillDeep is configured for non-App-Store distribution without App Sandbox so it 
 
 WillDeep 是 SwiftUI + AppKit 桥接的 macOS 应用，单进程多窗口。代码层次：
 
+- **some.im 浏览器登录协议兼容（1.136.0-rc38）** —— 浏览器登录 URL 与状态轮询同时带新旧参数名（`code` / `device_code` / `willdeep_device_code`，`pair_token` / `willdeep_pair_token`），browser-status 也兼容扁平返回的 `api_token`、`customer_session_token`、`email`、`credits` 等字段；只要 some.im 返回 app API key，WillDeep 就能保存共享 session，不再因为缺少嵌套 `account` 对象误报“登录完成但没返回凭据”。
+- **some.im Coding Plan 感知托管路由（1.136.0-rc37）** —— WillDeep 登录 some.im 后会定期查询 `/customer/plan/subscription` 并缓存 coding plan 权益；省心托管每轮裁判后按权益选模型族：有 plan 时 low/high/premium 全部走 `someim-coding-plan-*`，没有 plan 时编程域走 `someim-code-low/high/premium`、通用域走 `someim-auto-flash/pro/premium`。
 - **委派 coding agent 默认免审核（1.136.0-rc35）** —— `claude_code` / `codex_cli` / `cursor_agent` / `cline_cli` 这类把整段任务委派给本机已装 CLI agent 的工具，默认 smart 模式下不再逐次弹审批，直接放行（`.staticAllowlist`），因为这三家各自自带审批 + 沙箱审核、视为可信。`requestEveryTime` 模式仍逐次问，goal 模式本就已放行，子进程自身沙箱边界不变（不提权）。
 - **本地模型设置拆分与离线 composer 备选（1.136.0-rc35）** —— “标题和上下文压缩先用本地”拆成“会话标题先用本地”和“上下文压缩先用本地”两个开关；上下文压缩默认不走本地小模型，避免误压缩长上下文。设置页新增“加入 composer 模型备选”和显示名称，勾选后会用固定本地 provider 条目把 Ollama / Local OpenAI 兼容模型放进 composer 模型菜单，断网时可手动切到本地聊天。
 - **some.im 登录凭据落库校验（1.136.0-rc34）** —— 浏览器配对返回 connected 后，必须先把 app API Key 写入共享 session 并读回验证，成功后才保存 account 与启用 some.im；若 some.im 没返回 key 或本机 Keychain/共享 session 写入失败，设置页不再显示“已连接但 API Key 为空”。设置页也会监听 some.im account/session 变更并重读 API Key，跨 App 登录或浏览器回调后能同步填上输入框与 Agent provider。

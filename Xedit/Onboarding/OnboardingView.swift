@@ -467,6 +467,9 @@ struct OnboardingView: View {
                     }
                     if result.state == .connected {
                         await MainActor.run {
+                            // 丢弃这个已被服务端标记 connected 却没回凭据的一次性 code，
+                            // 否则重试会复用它、被秒回同一条错误。清空后重新打开会 mint 新 code。
+                            someIMBrowserLoginRequest = nil
                             isWatchingSomeIMBrowserLogin = false
                             someIMStatus = L10n.Settings.SomeIM.browserLoginMissingCredentials
                         }

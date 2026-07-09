@@ -151,6 +151,7 @@ final class AppState: ObservableObject {
     /// Hot/new flags discovered from provider model metadata. some.im
     /// exposes these through public pricing and `/v1/models` extensions.
     @Published var agentDiscoveredModelMetadata: [AgentModelDiscovery] = []
+    @Published var someIMCodingPlanStatus = SomeIMIntegrationStore.loadCodingPlanStatus()
     /// Model IDs explicitly chosen in the composer, most-recently-used
     /// first. This is separate from fetched IDs so a large /models
     /// result doesn't drown out the handful of models the user actually
@@ -421,6 +422,8 @@ final class AppState: ObservableObject {
     /// changes — including logins/logouts made by another app sharing the
     /// Keychain access group. Login adopts the fresh key; logout drops the entry.
     private var someIMSessionSubscription: AnyCancellable?
+    var someIMCodingPlanRefreshTimer: Timer?
+    var someIMCodingPlanRefreshTask: Task<Void, Never>?
     /// Desktop peer for the LAN Mobile Gateway. The Go gateway handles
     /// pairing/device auth; this bridge translates authorized mobile
     /// commands back into normal AppState Agent operations.
@@ -566,7 +569,10 @@ final class AppState: ObservableObject {
             .receive(on: RunLoop.main)
             .sink { [weak self] _ in
                 self?.reconcileSomeIMProviderFromSharedSession()
+                self?.refreshSomeIMCodingPlanStatus(force: true)
             }
+        startSomeIMCodingPlanRefreshTimer()
+        refreshSomeIMCodingPlanStatus(force: false)
         agentMediaTaskRegistry.shortDramaStore = agentShortDramaStore
         agentMediaTaskPoller.start(registry: agentMediaTaskRegistry)
         // Terminals are high-frequency UI surfaces: user typing, title
@@ -657,6 +663,8 @@ final class AppState: ObservableObject {
         jobRegistrySubscription?.cancel()
         mediaTaskRegistrySubscription?.cancel()
         sessionSaveFailureSubscription?.cancel()
+        someIMCodingPlanRefreshTask?.cancel()
+        someIMCodingPlanRefreshTimer?.invalidate()
         agentSidePanelResourceReaperTimer?.invalidate()
         Task { @MainActor [poller = agentMediaTaskPoller] in
             poller.stop()

@@ -138,6 +138,42 @@ extension AppState {
         agentConfiguration = configuration.normalized
     }
 
+    func startSomeIMCodingPlanRefreshTimer() {
+        someIMCodingPlanRefreshTimer?.invalidate()
+        let timer = Timer(timeInterval: 10 * 60, repeats: true) { [weak self] _ in
+            Task { @MainActor [weak appState = self] in
+                appState?.refreshSomeIMCodingPlanStatus(force: false)
+            }
+        }
+        RunLoop.main.add(timer, forMode: .common)
+        someIMCodingPlanRefreshTimer = timer
+    }
+
+    func refreshSomeIMCodingPlanStatus(force: Bool) {
+        if !force, !someIMCodingPlanStatus.isStale {
+            return
+        }
+        someIMCodingPlanRefreshTask?.cancel()
+        someIMCodingPlanRefreshTask = Task { @MainActor [weak self] in
+            guard let self else { return }
+            _ = await self.refreshedSomeIMCodingPlanStatusIfNeeded(force: force)
+        }
+    }
+
+    func refreshedSomeIMCodingPlanStatusIfNeeded(force: Bool = false) async -> SomeIMCodingPlanStatus {
+        if !force, !someIMCodingPlanStatus.isStale {
+            return someIMCodingPlanStatus
+        }
+        do {
+            let status = try await SomeIMClient.fetchCodingPlanStatus()
+            someIMCodingPlanStatus = status
+            SomeIMIntegrationStore.saveCodingPlanStatus(status)
+            return status
+        } catch {
+            return someIMCodingPlanStatus
+        }
+    }
+
     func syncLocalModelComposerProvider(settings rawSettings: AgentLocalModelSettings) {
         let settings = rawSettings.normalized
         let entryID = AgentLocalModelSettings.composerProviderEntryID

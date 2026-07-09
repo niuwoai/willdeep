@@ -1,5 +1,36 @@
 # Changelog
 
+## 1.136.0-rc39 - 2026-07-09
+
+### Fixed
+
+- **some.im 浏览器登录卡死自恢复**：当 browser-status 返回 `connected` 却没有可识别的 WillDeep API Key 时，现在会丢弃这个已被服务端标记为 connected 的一次性登录 `code`（此前保留在内存里，导致再点「在浏览器打开」复用死 code、被秒回同一条“已登录但没有返回凭据”，只能重启 App 才能恢复）。清空后再次打开即会 mint 全新 `code`。设置页与 Onboarding 两处轮询均已修复。
+- **some.im 登录诊断日志**：`connected` 却无凭据时，记录响应里出现的字段名（仅字段名、不含任何值，避免泄露 token / 邮箱），便于比对 some.im 实际返回的 key 命名或确认是否根本没下发凭据。
+- 版本号从 **1.136.0-rc38** 递增为 **1.136.0-rc39**。
+
+## 1.136.0-rc38 - 2026-07-09
+
+### Fixed
+
+- **some.im 浏览器登录协议兼容**：浏览器登录 URL 和状态轮询同时携带 `code` / `device_code` / `willdeep_device_code` 与 `pair_token` / `willdeep_pair_token`，兼容按新旧参数名实现的 some.im 控制面。
+- **some.im 扁平凭据回写兼容**：browser-status 返回 `connected` 且携带 app API key 时，不再强制要求嵌套 `account` 对象；支持扁平 `email` / `credits` / `default_model` 与 `api_token` / `customer_session_token` 字段，避免误报“已登录但没有返回凭据”。
+- 版本号从 **1.136.0-rc37** 递增为 **1.136.0-rc38**。
+
+## 1.136.0-rc37 - 2026-07-09
+
+### Fixed
+
+- **修正 some.im auto 托管模型命名**：无 coding plan 且裁判域为 general 时，low/high/premium 分别解析为 `someim-auto-flash/pro/premium`，不再使用不存在的 `someim-auto-low/high`。
+- 版本号从 **1.136.0-rc36** 递增为 **1.136.0-rc37**。
+
+## 1.136.0-rc36 - 2026-07-09
+
+### Changed
+
+- **some.im Coding Plan 感知托管路由**：登录 some.im 后会定期查询 `/customer/plan/subscription` 并缓存 coding plan 状态；省心托管路由在每轮裁判后根据该状态选择模型族。
+- **托管模型族按权益拆分**：有 coding plan 时，low/high/premium 统一解析为 `someim-coding-plan-low/high/premium`；没有 plan 时，编程域解析为 `someim-code-low/high/premium`，通用域解析为 auto 家族。
+- 版本号从 **1.136.0-rc35** 递增为 **1.136.0-rc36**。
+
 ## 1.136.0-rc35 - 2026-07-09
 
 ### Changed

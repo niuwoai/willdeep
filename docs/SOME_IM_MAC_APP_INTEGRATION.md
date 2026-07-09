@@ -1,6 +1,6 @@
 # some.im Mac App Integration
 
-> Last updated: 2026-07-08 | Current version: v1.136.0-rc25
+> Last updated: 2026-07-09 | Current version: v1.136.0-rc39
 
 本文档说明 WillDeep macOS App 如何接入 some.im。目标是让用户用最短路径完成账号连接：在 WillDeep 里点击“在浏览器打开”，到 some.im 完成登录，然后回到 WillDeep 继续使用。API key、customer session 等敏感信息只保存在本机 Keychain，不进入 UI、日志、文档示例或 git。
 
@@ -48,7 +48,7 @@ WillDeep 侧生成一次性登录请求：
 
 - `code`：短随机码，用于服务端识别登录会话。
 - `pairToken`：长随机配对 token，只放进浏览器登录 URL 和后续 `Authorization` header，不展示给用户。
-- `url`：打开 some.im 的浏览器登录页，携带 `client_id=willdeep`、`code`、`pair_token` 等参数。
+- `url`：打开 some.im 的浏览器登录页，携带 `client_id=willdeep`、`code`、`device_code`、`willdeep_device_code`、`pair_token`、`willdeep_pair_token` 等参数；其中 `code` / `pair_token` 是文档名，`willdeep_*` 是旧控制面兼容名。
 
 实现入口：
 
@@ -68,8 +68,8 @@ let status = try await SomeIMClient.checkBrowserLoginStatus(
 状态处理约定：
 
 - `pending`：继续等待。
-- `connected` + account + api key：保存凭据，配置 provider，清空当前登录请求。
-- `connected` 但缺凭据：停止等待并显示明确错误。
+- `connected` + app API key：保存凭据，配置 provider，清空当前登录请求；账号摘要可来自嵌套 `account/customer/user/profile`，也可来自扁平 `email/credits/default_model` 字段。
+- `connected` 但缺 app API key：停止等待并显示明确错误。
 - `expired`：清空当前登录请求，提示用户重新打开 some.im。
 - 网络错误：短暂记录错误，轮询到 10 分钟截止。
 
