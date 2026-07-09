@@ -23127,6 +23127,23 @@
         }
       }
     },
+    "settings.some-im.browser-login-credential-save-failed" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "some.im returned credentials, but WillDeep could not save them locally. Check Keychain access and try signing in again."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "some.im 已返回凭据，但 WillDeep 没能把它保存到本机。请检查钥匙串访问权限后重新登录。"
+          }
+        }
+      }
+    },
     "settings.some-im.browser-login-missing-credentials" : {
       "extractionState" : "manual",
       "localizations" : {

@@ -1,5 +1,22 @@
 # Changelog
 
+## 1.136.0-rc35 - 2026-07-09
+
+### Changed
+
+- **本地模型辅助任务拆分**：设置页将“标题和上下文压缩先用本地”拆成“会话标题先用本地”和“上下文压缩先用本地”两个独立开关；旧配置只迁移到标题偏好，上下文压缩默认保持远端 provider。
+- **本地模型 composer 备选**：新增“加入 composer 模型备选”和显示名称输入框；勾选后自动维护一个固定 ID 的 Ollama / Local OpenAI provider 条目，让本地聊天模型进入 composer 模型菜单，取消勾选时只移除这个自动条目。
+- **委派 coding agent 默认免审核**：`claude_code` / `codex_cli` / `cursor_agent` / `cline_cli` 在默认 smart 模式下不再逐次弹人工审批，直接放行（`.staticAllowlist`）——它们各自自带审批 + 沙箱审核，视为可信。`requestEveryTime`（每次都问）模式仍会逐次询问；子进程自身的沙箱边界不变（不提权）。
+- 版本号从 **1.136.0-rc34** 递增为 **1.136.0-rc35**。
+
+## 1.136.0-rc34 - 2026-07-09
+
+### Fixed
+
+- **some.im 浏览器登录凭据落库校验**：浏览器配对返回 connected 后，WillDeep 现在必须先把 app API Key 写入共享 session 并读回验证，成功后才保存 account 与启用 some.im；如果 some.im 没返回 key，或本机 Keychain / 共享 session 写入失败，不再把设置页显示成已连接但 API Key 为空。
+- **some.im 设置页同步共享登录态**：设置页订阅 some.im account/session 变更通知，通知到达时会重新读取 account、settings 与 API Key，并同步 Agent provider / 图片理解配置，避免跨 App 登录或浏览器回调后只刷新账号摘要、不刷新 API Key 输入框。
+- 版本号从 **1.136.0-rc33** 递增为 **1.136.0-rc34**。
+
 ## 1.136.0-rc33 - 2026-07-09
 
 ### Changed

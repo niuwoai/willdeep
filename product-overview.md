@@ -1,6 +1,6 @@
 # WillDeep Product Overview
 
-> Last updated: 2026-07-09 | Current version: v1.136.0-rc33
+> Last updated: 2026-07-09 | Current version: v1.136.0-rc35
 
 ## Positioning
 
@@ -14,6 +14,9 @@ WillDeep is configured for non-App-Store distribution without App Sandbox so it 
 
 WillDeep 是 SwiftUI + AppKit 桥接的 macOS 应用，单进程多窗口。代码层次：
 
+- **委派 coding agent 默认免审核（1.136.0-rc35）** —— `claude_code` / `codex_cli` / `cursor_agent` / `cline_cli` 这类把整段任务委派给本机已装 CLI agent 的工具，默认 smart 模式下不再逐次弹审批，直接放行（`.staticAllowlist`），因为这三家各自自带审批 + 沙箱审核、视为可信。`requestEveryTime` 模式仍逐次问，goal 模式本就已放行，子进程自身沙箱边界不变（不提权）。
+- **本地模型设置拆分与离线 composer 备选（1.136.0-rc35）** —— “标题和上下文压缩先用本地”拆成“会话标题先用本地”和“上下文压缩先用本地”两个开关；上下文压缩默认不走本地小模型，避免误压缩长上下文。设置页新增“加入 composer 模型备选”和显示名称，勾选后会用固定本地 provider 条目把 Ollama / Local OpenAI 兼容模型放进 composer 模型菜单，断网时可手动切到本地聊天。
+- **some.im 登录凭据落库校验（1.136.0-rc34）** —— 浏览器配对返回 connected 后，必须先把 app API Key 写入共享 session 并读回验证，成功后才保存 account 与启用 some.im；若 some.im 没返回 key 或本机 Keychain/共享 session 写入失败，设置页不再显示“已连接但 API Key 为空”。设置页也会监听 some.im account/session 变更并重读 API Key，跨 App 登录或浏览器回调后能同步填上输入框与 Agent provider。
 - **输入 minimap 悬停对齐 Codex（1.136.0-rc33）** —— 会话区左侧标记用户输入位置的刻度条，hover 改为鱼眼放大：被悬停刻度最长最深（accent 满强度），临近几条按距离渐次变短变浅、平滑过渡到静止态，不再只有单条突变；悬停缩略卡从“自左滑出+渐显”改为直接出现（`.identity`），刻度间快速切换不再有滑入滑出的花哨感，刻度鱼眼仍保留 0.12s 平滑动画。
 - **会话切换即时响应（1.136.0-rc32）** —— 点击左侧会话列表时先切换选中态与 transcript，再用不刷新 `updatedAt` 的路径保存旧会话，避免保存/重排挡在 UI 反馈前；侧栏工作区分组预先缓存显示名与远端 runtime 描述，排序不再反复触发路径解析或 UserDefaults JSON decode。另外两处主线程减负：composer context ring 的 `estimatedAgentSystemMessage` 加了 `(messageCount, sessionID, 1s)` 缓存，切换时两个 token 估算器共享一次 system prompt 构建 + 内存检索（原来各跑一遍、共两遍）；`syncWorkspaceContext` 在工作区安全域已激活时跳过重复的 `isExistingDirectory` 文件系统 stat。
 - **some.im 浏览器登录控制面固定（1.136.0-rc31）** —— 浏览器登录页与配对状态轮询固定使用 `https://some.im` 控制面，不再从当前推理 Base URL 推导 `/customer/login`，避免选择国内推理节点 `https://api.niuwoai.com/v1` 时打开错误网页登录域名。配对码继续统一使用 some.im 端接受的 `WD-` 前缀。

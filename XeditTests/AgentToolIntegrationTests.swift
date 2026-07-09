@@ -48,15 +48,13 @@ struct SomeIMBrowserLoginStatusTests {
         let configuration = URLSessionConfiguration.ephemeral
         configuration.protocolClasses = [SomeIMBrowserLoginMockURLProtocol.self]
         let session = URLSession(configuration: configuration)
-        SomeIMIntegrationStore.saveAccount(nil)
-        SomeIMIntegrationStore.saveAPIKey("")
-        SomeIMIntegrationStore.saveSessionToken("")
+        configureWritableSomeIMSessionStoreForTest()
+        SomeIMIntegrationStore.logout()
         defer {
             session.invalidateAndCancel()
             SomeIMBrowserLoginMockURLProtocol.handler = nil
-            SomeIMIntegrationStore.saveAccount(nil)
-            SomeIMIntegrationStore.saveAPIKey("")
-            SomeIMIntegrationStore.saveSessionToken("")
+            SomeIMIntegrationStore.logout()
+            restoreSomeIMSessionStoreAfterTest()
         }
 
         let pairToken = String(repeating: "a", count: 64)
@@ -115,15 +113,13 @@ struct SomeIMBrowserLoginStatusTests {
         let configuration = URLSessionConfiguration.ephemeral
         configuration.protocolClasses = [SomeIMBrowserLoginMockURLProtocol.self]
         let session = URLSession(configuration: configuration)
-        SomeIMIntegrationStore.saveAccount(nil)
-        SomeIMIntegrationStore.saveAPIKey("")
-        SomeIMIntegrationStore.saveSessionToken("")
+        configureWritableSomeIMSessionStoreForTest()
+        SomeIMIntegrationStore.logout()
         defer {
             session.invalidateAndCancel()
             SomeIMBrowserLoginMockURLProtocol.handler = nil
-            SomeIMIntegrationStore.saveAccount(nil)
-            SomeIMIntegrationStore.saveAPIKey("")
-            SomeIMIntegrationStore.saveSessionToken("")
+            SomeIMIntegrationStore.logout()
+            restoreSomeIMSessionStoreAfterTest()
         }
 
         let pairToken = String(repeating: "b", count: 64)
@@ -162,6 +158,72 @@ struct SomeIMBrowserLoginStatusTests {
         #expect(result.account == nil)
         #expect(SomeIMIntegrationStore.loadAPIKey().isEmpty)
     }
+
+    @Test("browser login does not mark account connected without api key")
+    @MainActor
+    func testBrowserLoginDoesNotMarkAccountConnectedWithoutAPIKey() async throws {
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.protocolClasses = [SomeIMBrowserLoginMockURLProtocol.self]
+        let session = URLSession(configuration: configuration)
+        configureWritableSomeIMSessionStoreForTest()
+        SomeIMIntegrationStore.logout()
+        defer {
+            session.invalidateAndCancel()
+            SomeIMBrowserLoginMockURLProtocol.handler = nil
+            SomeIMIntegrationStore.logout()
+            restoreSomeIMSessionStoreAfterTest()
+        }
+
+        let pairToken = String(repeating: "c", count: 64)
+        SomeIMBrowserLoginMockURLProtocol.handler = { request in
+            #expect(request.value(forHTTPHeaderField: "Authorization") == "Bearer \(pairToken)")
+            let response = HTTPURLResponse(
+                url: request.url!,
+                statusCode: 200,
+                httpVersion: nil,
+                headerFields: ["Content-Type": "application/json"]
+            )!
+            let body = """
+            {
+              "code": 0,
+              "data": {
+                "status": "connected",
+                "account": {
+                  "email": "qa-no-key@example.com",
+                  "credits": "4200000",
+                  "defaultModel": "someim-auto-flash"
+                }
+              }
+            }
+            """.data(using: .utf8)!
+            return (response, body)
+        }
+
+        let request = SomeIMBrowserLoginRequest(
+            code: "WD-TEST-0003",
+            pairToken: pairToken,
+            url: URL(string: "https://some.im/customer/login")!,
+            createdAt: Date()
+        )
+        let result = try await SomeIMClient.checkBrowserLoginStatus(
+            request: request,
+            settings: SomeIMIntegrationSettings(baseURL: "https://some.im/v1"),
+            session: session
+        )
+
+        #expect(result.state == .connected)
+        #expect(result.account == nil)
+        #expect(SomeIMIntegrationStore.loadAccount() == nil)
+        #expect(SomeIMIntegrationStore.loadAPIKey().isEmpty)
+    }
+}
+
+private func configureWritableSomeIMSessionStoreForTest() {
+    SomeIMIntegrationStore._setTestSharedSessionOverride(enabled: true)
+}
+
+private func restoreSomeIMSessionStoreAfterTest() {
+    SomeIMIntegrationStore._setTestSharedSessionOverride(enabled: false)
 }
 
 private final class SomeIMBrowserLoginMockURLProtocol: URLProtocol {

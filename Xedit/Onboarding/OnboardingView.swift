@@ -391,10 +391,14 @@ struct OnboardingView: View {
         someIMSettings = normalized
         let trimmedKey = someIMAPIKey.trimmingCharacters(in: .whitespacesAndNewlines)
         SomeIMIntegrationStore.saveSettings(normalized)
-        SomeIMIntegrationStore.saveAPIKey(trimmedKey)
-        appState.syncSomeIMProvider(settings: normalized, apiKey: trimmedKey)
-        appState.syncSomeIMImageUnderstanding(apiKey: trimmedKey)
-        someIMStatus = L10n.Settings.savedStatus
+        if trimmedKey.isEmpty || SomeIMIntegrationStore.saveAPIKey(trimmedKey) {
+            appState.syncSomeIMProvider(settings: normalized, apiKey: trimmedKey)
+            appState.syncSomeIMImageUnderstanding(apiKey: trimmedKey)
+            someIMStatus = L10n.Settings.savedStatus
+        } else {
+            someIMAPIKey = SomeIMIntegrationStore.loadAPIKey()
+            someIMStatus = L10n.Settings.SomeIM.browserLoginCredentialSaveFailed
+        }
     }
 
     private func ensureSomeIMBrowserLoginRequestIfNeeded() {

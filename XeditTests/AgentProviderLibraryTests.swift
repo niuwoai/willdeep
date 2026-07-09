@@ -214,12 +214,16 @@ struct AgentProviderLibraryTests {
             visionModel: "",
             summaryModel: "",
             preferForImageUnderstanding: true,
-            preferForSummaries: true
+            preferForTitles: true,
+            preferForContextSummaries: false,
+            exposeAsComposerModel: false,
+            composerDisplayName: " "
         ).normalized
 
         #expect(settings.baseURL == AgentLocalModelSettings.defaultBaseURL)
         #expect(settings.visionModel == AgentLocalModelSettings.defaultVisionModelID)
         #expect(settings.summaryModel == AgentLocalModelSettings.defaultSummaryModelID)
+        #expect(settings.composerDisplayName == AgentLocalModelSettings.defaultComposerDisplayName)
     }
 
     @Test
@@ -230,11 +234,34 @@ struct AgentProviderLibraryTests {
             visionModel: AgentLocalModelSettings.defaultSummaryModelID,
             summaryModel: AgentLocalModelSettings.defaultSummaryModelID,
             preferForImageUnderstanding: true,
-            preferForSummaries: true
+            preferForTitles: true,
+            preferForContextSummaries: false,
+            exposeAsComposerModel: false,
+            composerDisplayName: AgentLocalModelSettings.defaultComposerDisplayName
         ).normalized
 
         #expect(settings.visionModel == AgentLocalModelSettings.defaultVisionModelID)
         #expect(settings.summaryModel == AgentLocalModelSettings.defaultSummaryModelID)
+    }
+
+    @Test
+    func localModelSettingsDecodeLegacySummaryPreferenceKeepsContextCompressionRemoteByDefault() throws {
+        let data = Data("""
+        {
+          "enabled": true,
+          "baseURL": "\(AgentLocalModelSettings.defaultBaseURL)",
+          "visionModel": "\(AgentLocalModelSettings.defaultVisionModelID)",
+          "summaryModel": "\(AgentLocalModelSettings.defaultSummaryModelID)",
+          "preferForImageUnderstanding": true,
+          "preferForSummaries": true
+        }
+        """.utf8)
+
+        let settings = try JSONDecoder().decode(AgentLocalModelSettings.self, from: data).normalized
+
+        #expect(settings.preferForTitles == true)
+        #expect(settings.preferForContextSummaries == false)
+        #expect(settings.exposeAsComposerModel == false)
     }
 
     @Test
@@ -439,6 +466,46 @@ struct AgentProviderLibraryTests {
         #expect(imageDescription.baseURL == SomeIMRelayRegion.chinaBaseURL)
         #expect(imageDescription.model == SomeIMIntegrationSettings.defaultVisionModel)
         #expect(imageDescription.apiKey == "sk-some-im")
+    }
+
+    @MainActor
+    @Test
+    func syncingLocalModelComposerProviderAddsAndRemovesBackupEntry() {
+        let sandbox = KeychainSandbox()
+        _ = sandbox
+
+        let appState = AppState()
+        let settings = AgentLocalModelSettings(
+            enabled: true,
+            baseURL: " http://127.0.0.1:11434/v1 ",
+            visionModel: "qwen-vl-local",
+            summaryModel: "qwen-chat-local",
+            preferForImageUnderstanding: true,
+            preferForTitles: true,
+            preferForContextSummaries: false,
+            exposeAsComposerModel: true,
+            composerDisplayName: " Offline Local "
+        )
+
+        appState.syncLocalModelComposerProvider(settings: settings)
+
+        let entry = appState.agentProviderLibrary.entries.first {
+            $0.id == AgentLocalModelSettings.composerProviderEntryID
+        }
+        #expect(entry?.providerID == AgentProviderPreset.ollamaID)
+        #expect(entry?.displayName == "Offline Local")
+        #expect(entry?.baseURL == AgentLocalModelSettings.defaultBaseURL)
+        #expect(entry?.flashPrimary == "qwen-chat-local")
+        #expect(entry?.flashAlternates == ["qwen-vl-local"])
+        #expect(entry?.apiKey == "")
+
+        var disabled = settings
+        disabled.exposeAsComposerModel = false
+        appState.syncLocalModelComposerProvider(settings: disabled)
+
+        #expect(!appState.agentProviderLibrary.entries.contains {
+            $0.id == AgentLocalModelSettings.composerProviderEntryID
+        })
     }
 
     // MARK: - Bug fix: image_url sent to text-only model through a relay

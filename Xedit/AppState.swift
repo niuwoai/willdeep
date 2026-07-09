@@ -536,6 +536,7 @@ final class AppState: ObservableObject {
         self.agentDiscoveredModelMetadata = AgentSettingsStore.loadDiscoveredModelMetadata()
         self.agentRecentlyUsedModelIDs = AgentSettingsStore.loadRecentlyUsedModelIDs()
         self.agentAlwaysAllowedCommands = AgentSettingsStore.loadAlwaysAllowedCommands()
+        syncLocalModelComposerProvider(settings: AgentSettingsStore.loadLocalModelSettings())
         // Sweep persisted "New Chat" rows that never received a user
         // message — every ⌘N press creates one on disk, and over time
         // the sidebar fills with identical empty placeholders. At launch

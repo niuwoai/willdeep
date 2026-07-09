@@ -150,6 +150,10 @@ enum SomeIMIntegrationStore {
     private static let migrationLock = NSLock()
     private nonisolated(unsafe) static var migrationAttempted = false
     private nonisolated(unsafe) static var sessionObservation: ObservationToken?
+    #if DEBUG
+    private nonisolated(unsafe) static var testSharedSessionOverrideEnabled = false
+    private nonisolated(unsafe) static var testSharedSessionOverride: SomeIMSharedSession?
+    #endif
 
     /// Call once at app launch (before any credential access). Wires the shared
     /// Keychain access group, migrates any legacy per-app credentials, and starts
@@ -202,33 +206,81 @@ enum SomeIMIntegrationStore {
     // MARK: - Secrets (shared Keychain access group is the source of truth)
 
     static func loadAPIKey() -> String {
+        #if DEBUG
+        if testSharedSessionOverrideEnabled {
+            return testSharedSessionOverride?.apiKey ?? ""
+        }
+        #endif
         migrateLegacyIfNeeded()
-        return SomeIMSharedSessionStore.shared.current()?.apiKey ?? ""
+        return currentSharedSession()?.apiKey ?? ""
     }
 
-    static func saveAPIKey(_ apiKey: String) {
+    @discardableResult
+    static func saveAPIKey(_ apiKey: String) -> Bool {
         let trimmed = apiKey.trimmingCharacters(in: .whitespacesAndNewlines)
         // An empty key is a NO-OP, never a logout. Real sign-out goes through
         // `logout()`; this guard stops an accidental empty save (e.g. the
         // Settings pane saving while its key field is momentarily blank) from
         // signing every app out.
-        guard !trimmed.isEmpty else { return }
-        updateSharedSession { $0.apiKey = trimmed }
+        guard !trimmed.isEmpty else { return false }
+        return updateSharedSession { $0.apiKey = trimmed }
     }
 
     static func loadSessionToken() -> String {
+        #if DEBUG
+        if testSharedSessionOverrideEnabled {
+            return testSharedSessionOverride?.sessionToken ?? ""
+        }
+        #endif
         migrateLegacyIfNeeded()
-        return SomeIMSharedSessionStore.shared.current()?.sessionToken ?? ""
+        return currentSharedSession()?.sessionToken ?? ""
     }
 
-    static func saveSessionToken(_ token: String) {
+    @discardableResult
+    static func saveSessionToken(_ token: String) -> Bool {
         updateSharedSession { $0.sessionToken = token.trimmingCharacters(in: .whitespacesAndNewlines) }
+    }
+
+    @discardableResult
+    static func saveAuthenticatedSession(
+        apiKey: String,
+        sessionToken: String?,
+        account: SomeIMAccount,
+        settings: SomeIMIntegrationSettings
+    ) -> Bool {
+        let trimmedKey = apiKey.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedKey.isEmpty else { return false }
+        let normalizedSettings = settings.normalized
+        var session = currentSharedSession()
+            ?? SomeIMSharedSession(apiKey: "", baseURL: normalizedSettings.baseURL)
+        session.apiKey = trimmedKey
+        if let token = sessionToken?.trimmingCharacters(in: .whitespacesAndNewlines), !token.isEmpty {
+            session.sessionToken = token
+        }
+        session.email = account.email
+        session.tenantID = account.tenantID
+        session.baseURL = normalizedSettings.baseURL
+        session.updatedAt = Date()
+        guard session.isValid,
+              persistSharedSession(session),
+              currentSharedSession()?.apiKey == trimmedKey else {
+            return false
+        }
+        return true
     }
 
     /// Sign out of some.im everywhere: clears the shared session (broadcasting to
     /// all apps) and drops this app's local account cache and enabled flag.
     static func logout() {
+        #if DEBUG
+        if testSharedSessionOverrideEnabled {
+            testSharedSessionOverride = nil
+        } else {
+            SomeIMSharedSessionStore.shared.logout()
+        }
+        #else
         SomeIMSharedSessionStore.shared.logout()
+        #endif
         UserDefaults.standard.removeObject(forKey: accountKey)
         var settings = loadSettings()
         if settings.enabled {
@@ -244,8 +296,9 @@ enum SomeIMIntegrationStore {
     /// Loads the shared session (or a fresh empty one), applies `mutate`,
     /// reconciles the identity fields from local settings/account, and persists —
     /// but only if the result carries a real key.
-    private static func updateSharedSession(_ mutate: (inout SomeIMSharedSession) -> Void) {
-        var session = SomeIMSharedSessionStore.shared.current()
+    @discardableResult
+    private static func updateSharedSession(_ mutate: (inout SomeIMSharedSession) -> Void) -> Bool {
+        var session = currentSharedSession()
             ?? SomeIMSharedSession(apiKey: "", baseURL: loadSettings().baseURL)
         mutate(&session)
         session.baseURL = loadSettings().baseURL
@@ -254,21 +307,53 @@ enum SomeIMIntegrationStore {
             if session.tenantID == nil { session.tenantID = account.tenantID }
         }
         session.updatedAt = Date()
-        guard session.isValid else { return }
-        SomeIMSharedSessionStore.shared.login(session)
+        guard session.isValid,
+              persistSharedSession(session),
+              currentSharedSession()?.apiKey == session.apiKey else {
+            return false
+        }
+        return true
     }
 
     /// Pushes fresh email/tenant into an existing shared session. No-op when
     /// nobody is logged in (never resurrects a session from account data alone).
     private static func mirrorIdentityToShared(email: String, tenantID: String?) {
-        guard var session = SomeIMSharedSessionStore.shared.current() else { return }
+        guard var session = currentSharedSession() else { return }
         var changed = false
         if !email.isEmpty, session.email != email { session.email = email; changed = true }
         if let tenantID, session.tenantID != tenantID { session.tenantID = tenantID; changed = true }
         guard changed else { return }
         session.updatedAt = Date()
-        SomeIMSharedSessionStore.shared.login(session)
+        persistSharedSession(session)
     }
+
+    private static func currentSharedSession() -> SomeIMSharedSession? {
+        #if DEBUG
+        if testSharedSessionOverrideEnabled {
+            return testSharedSessionOverride
+        }
+        #endif
+        return SomeIMSharedSessionStore.shared.current()
+    }
+
+    @discardableResult
+    private static func persistSharedSession(_ session: SomeIMSharedSession) -> Bool {
+        #if DEBUG
+        if testSharedSessionOverrideEnabled {
+            testSharedSessionOverride = session
+            NotificationCenter.default.post(name: sessionDidChangeNotification, object: nil)
+            return true
+        }
+        #endif
+        return SomeIMSharedSessionStore.shared.login(session)
+    }
+
+    #if DEBUG
+    static func _setTestSharedSessionOverride(enabled: Bool, session: SomeIMSharedSession? = nil) {
+        testSharedSessionOverrideEnabled = enabled
+        testSharedSessionOverride = session
+    }
+    #endif
 
     /// One-time move of legacy per-app Keychain credentials into the shared
     /// store. Runs at most once per process; only marks itself permanently done
@@ -442,14 +527,18 @@ enum SomeIMClient {
             fallbackEmail: "",
             fallbackModel: decoded.default_model?.nonEmpty ?? SomeIMIntegrationSettings.defaultTextModel
         )
-        SomeIMIntegrationStore.saveAPIKey(apiKey)
-        if let token = decoded.token?.trimmingCharacters(in: .whitespacesAndNewlines), !token.isEmpty {
-            SomeIMIntegrationStore.saveSessionToken(token)
-        }
-        SomeIMIntegrationStore.saveAccount(account)
         var nextSettings = normalized
         nextSettings.enabled = true
+        guard SomeIMIntegrationStore.saveAuthenticatedSession(
+            apiKey: apiKey,
+            sessionToken: decoded.token,
+            account: account,
+            settings: nextSettings
+        ) else {
+            return SomeIMBrowserLoginStatus(state: .connected, account: nil)
+        }
         SomeIMIntegrationStore.saveSettings(nextSettings)
+        SomeIMIntegrationStore.saveAccount(account)
         return SomeIMBrowserLoginStatus(state: .connected, account: account)
     }
 
@@ -514,14 +603,18 @@ enum SomeIMClient {
             fallbackEmail: email,
             fallbackModel: decoded.default_model.nonEmpty ?? SomeIMIntegrationSettings.defaultTextModel
         )
-        SomeIMIntegrationStore.saveAPIKey(decoded.api_key)
-        if let token = decoded.token?.trimmingCharacters(in: .whitespacesAndNewlines), !token.isEmpty {
-            SomeIMIntegrationStore.saveSessionToken(token)
-        }
-        SomeIMIntegrationStore.saveAccount(account)
         var nextSettings = normalized
         nextSettings.enabled = true
+        guard SomeIMIntegrationStore.saveAuthenticatedSession(
+            apiKey: decoded.api_key,
+            sessionToken: decoded.token,
+            account: account,
+            settings: nextSettings
+        ) else {
+            throw URLError(.userAuthenticationRequired)
+        }
         SomeIMIntegrationStore.saveSettings(nextSettings)
+        SomeIMIntegrationStore.saveAccount(account)
         return account
     }
 
@@ -1373,6 +1466,12 @@ struct SomeIMIntegrationSettingsView: View {
         .onAppear {
             ensureBrowserLoginRequestIfNeeded()
         }
+        .onReceive(NotificationCenter.default.publisher(for: SomeIMIntegrationStore.accountDidChangeNotification)) { _ in
+            reloadSharedSessionState()
+        }
+        .onReceive(NotificationCenter.default.publisher(for: SomeIMIntegrationStore.sessionDidChangeNotification)) { _ in
+            reloadSharedSessionState()
+        }
         .onReceive(settingsNavigation.$someIMBrowserLoginAutogenerateRequestID) { _ in
             consumeBrowserLoginAutogenerateRequestIfNeeded()
         }
@@ -1460,9 +1559,24 @@ struct SomeIMIntegrationSettingsView: View {
         settings = normalized
         let trimmedKey = apiKey.trimmingCharacters(in: .whitespacesAndNewlines)
         SomeIMIntegrationStore.saveSettings(normalized)
-        SomeIMIntegrationStore.saveAPIKey(trimmedKey)
-        appState.syncSomeIMProvider(settings: normalized, apiKey: trimmedKey)
-        status = L10n.Settings.savedStatus
+        if trimmedKey.isEmpty || SomeIMIntegrationStore.saveAPIKey(trimmedKey) {
+            appState.syncSomeIMProvider(settings: normalized, apiKey: trimmedKey)
+            status = L10n.Settings.savedStatus
+        } else {
+            apiKey = SomeIMIntegrationStore.loadAPIKey()
+            status = L10n.Settings.SomeIM.browserLoginCredentialSaveFailed
+        }
+    }
+
+    private func reloadSharedSessionState() {
+        let latestSettings = SomeIMIntegrationStore.loadSettings()
+        let latestAPIKey = SomeIMIntegrationStore.loadAPIKey()
+        settings = latestSettings
+        apiKey = latestAPIKey
+        account = SomeIMIntegrationStore.loadAccount()
+        guard !latestAPIKey.isEmpty else { return }
+        appState.syncSomeIMProvider(settings: latestSettings, apiKey: latestAPIKey)
+        appState.syncSomeIMImageUnderstanding(apiKey: latestAPIKey)
     }
 
     private func prepareBrowserLoginRequest(openInBrowser: Bool) {
@@ -1525,11 +1639,8 @@ struct SomeIMIntegrationSettingsView: View {
                     let result = try await SomeIMClient.checkBrowserLoginStatus(request: loginRequest, settings: currentSettings)
                     if result.state == .connected, let linked = result.account {
                         await MainActor.run {
-                            account = linked
-                            apiKey = SomeIMIntegrationStore.loadAPIKey()
-                            settings = SomeIMIntegrationStore.loadSettings()
-                            appState.syncSomeIMProvider(settings: settings, apiKey: apiKey)
-                            appState.syncSomeIMImageUnderstanding(apiKey: apiKey)
+                            reloadSharedSessionState()
+                            account = SomeIMIntegrationStore.loadAccount() ?? linked
                             browserLoginRequest = nil
                             isWatchingBrowserLogin = false
                             status = L10n.Settings.SomeIM.browserLoginConnected

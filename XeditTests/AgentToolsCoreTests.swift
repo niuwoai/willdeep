@@ -92,6 +92,22 @@ struct AgentToolsCoreTests {
         }
     }
 
+    /// Delegated coding agents (Claude Code / Codex / Cursor / Cline) ship
+    /// their own approval + sandbox review, so they auto-approve by default.
+    /// Locks the exact membership `autoApprovalSource` keys off of — a rename
+    /// or a new delegated agent must be added deliberately.
+    @Test
+    func trustedDelegatedAgentToolsAreRecognized() {
+        for name in ["claude_code", "codex_cli", "cursor_agent", "cline_cli"] {
+            #expect(AppState.isTrustedDelegatedAgentTool(name),
+                    "\(name) should auto-approve as a trusted delegated agent")
+        }
+        for name in ["run_command", "spawn_agent", "write_file", "call_mcp_tool", "lark_cli"] {
+            #expect(!AppState.isTrustedDelegatedAgentTool(name),
+                    "\(name) is not a trusted delegated coding agent")
+        }
+    }
+
     /// A destructive, typed-confirmation command can never reach the safety
     /// judge — it always falls back to a human. Goal mode relies on this so
     /// `rm -rf` / force-push style ops pause instead of auto-running.

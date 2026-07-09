@@ -1597,6 +1597,7 @@ nonisolated enum L10n {
             static let browserLoginConnected = String(localized: "settings.some-im.browser-login-connected", defaultValue: "some.im account connected.")
             static let browserLoginExpired = String(localized: "settings.some-im.browser-login-expired", defaultValue: "Browser sign-in expired. Open some.im again to restart.")
             static let browserLoginMissingCredentials = String(localized: "settings.some-im.browser-login-missing-credentials", defaultValue: "Browser sign-in completed, but some.im did not return WillDeep credentials. Open some.im again and try signing in.")
+            static let browserLoginCredentialSaveFailed = String(localized: "settings.some-im.browser-login-credential-save-failed", defaultValue: "some.im returned credentials, but WillDeep could not save them locally. Check Keychain access and try signing in again.")
             static let browserLoginConnectedTitle = String(localized: "settings.some-im.browser-login-connected-title", defaultValue: "Browser sign-in complete")
             static func browserLoginConnectedDescription(_ a1: String) -> String {
                 String(localized: "settings.some-im.browser-login-connected-description", defaultValue: "Connected as \(a1). You can close the browser tab and continue in WillDeep.")
@@ -1658,8 +1659,12 @@ nonisolated enum L10n {
             static let visionModel = String(localized: "settings.local-model.vision-model", defaultValue: "图片理解模型")
             static let summaryModel = String(localized: "settings.local-model.summary-model", defaultValue: "Summary 模型")
             static let preferVision = String(localized: "settings.local-model.prefer-vision", defaultValue: "图片识别先用本地")
-            static let preferSummary = String(localized: "settings.local-model.prefer-summary", defaultValue: "标题和上下文压缩先用本地")
-            static let description = String(localized: "settings.local-model.description", defaultValue: "启用后，图片理解、会话标题和上下文 summary 会先请求本机 OpenAI-compatible 服务；失败时自动回退到你配置的远端 provider。普通生产对话仍建议使用 OpenAI、Claude 或 some.im 等主 provider，本地小模型更适合低风险辅助任务。")
+            static let preferTitle = String(localized: "settings.local-model.prefer-title", defaultValue: "会话标题先用本地")
+            static let preferContextSummary = String(localized: "settings.local-model.prefer-context-summary", defaultValue: "上下文压缩先用本地")
+            static let exposeComposerModel = String(localized: "settings.local-model.expose-composer-model", defaultValue: "加入 composer 模型备选")
+            static let composerModelName = String(localized: "settings.local-model.composer-model-name", defaultValue: "composer 显示名称")
+            static let composerModelNamePlaceholder = String(localized: "settings.local-model.composer-model-name-placeholder", defaultValue: "Local Chat (Ollama)")
+            static let description = String(localized: "settings.local-model.description", defaultValue: "启用后，图片理解、会话标题可先请求本机 OpenAI-compatible 服务；上下文压缩默认不走本地，避免小模型误压缩长上下文。失败时自动回退到你配置的远端 provider。")
             static let downloadSection = String(localized: "settings.local-model.download-section", defaultValue: "模型下载")
             static let packageLabel = String(localized: "settings.local-model.package", defaultValue: "推荐包")
             static let filesLabel = String(localized: "settings.local-model.files", defaultValue: "必要文件")
@@ -1679,7 +1684,7 @@ nonisolated enum L10n {
             static let notInstalled = String(localized: "settings.local-model.not-installed", defaultValue: "尚未下载完整模型包。")
             static let canceled = String(localized: "settings.local-model.canceled", defaultValue: "下载已取消。")
             static let downloadHelp = String(localized: "settings.local-model.download-help", defaultValue: "只下载主模型 GGUF 和 mmproj 视觉 projector，不会下载同仓库里的所有量化版本。下载完成后仍需要 Ollama、LM Studio 或 llama.cpp server 加载这些文件并提供 OpenAI-compatible endpoint。")
-            static let localProviderListed = String(localized: "settings.local-model.provider-listed", defaultValue: "Provider 列表里也会出现 “Ollama / Local OpenAI”。可以手动选择它做聊天模型，但默认不推荐用于复杂生产任务。")
+            static let localProviderListed = String(localized: "settings.local-model.provider-listed", defaultValue: "勾选“加入 composer 模型备选”后，本地模型会以你设置的名称进入模型菜单；断网时可手动切过去聊天。")
 
             static func progress(_ fileIndex: String, _ fileCount: String, _ fileName: String) -> String {
                 let template = String(localized: "settings.local-model.progress", defaultValue: "文件 %1$@/%2$@：%3$@")

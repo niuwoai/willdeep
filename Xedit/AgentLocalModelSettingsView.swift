@@ -9,6 +9,8 @@ import SwiftUI
 import AppKit
 
 struct AgentLocalModelSettingsSection: View {
+    @EnvironmentObject private var appState: AppState
+
     @ObservedObject private var downloader = AgentLocalModelDownloader.shared
     @ObservedObject private var finder = AgentLocalModelFileFinder.shared
 
@@ -40,8 +42,18 @@ struct AgentLocalModelSettingsSection: View {
 
             Toggle(L10n.Settings.LocalModel.preferVision, isOn: $settings.preferForImageUnderstanding)
                 .onCompatibleChange(of: settings.preferForImageUnderstanding) { _, _ in save() }
-            Toggle(L10n.Settings.LocalModel.preferSummary, isOn: $settings.preferForSummaries)
-                .onCompatibleChange(of: settings.preferForSummaries) { _, _ in save() }
+            Toggle(L10n.Settings.LocalModel.preferTitle, isOn: $settings.preferForTitles)
+                .onCompatibleChange(of: settings.preferForTitles) { _, _ in save() }
+            Toggle(L10n.Settings.LocalModel.preferContextSummary, isOn: $settings.preferForContextSummaries)
+                .onCompatibleChange(of: settings.preferForContextSummaries) { _, _ in save() }
+            Toggle(L10n.Settings.LocalModel.exposeComposerModel, isOn: $settings.exposeAsComposerModel)
+                .onCompatibleChange(of: settings.exposeAsComposerModel) { _, _ in save() }
+
+            LabeledContent(L10n.Settings.LocalModel.composerModelName) {
+                TextField(L10n.Settings.LocalModel.composerModelNamePlaceholder, text: $settings.composerDisplayName, onCommit: save)
+                    .textFieldStyle(.roundedBorder)
+                    .disabled(!settings.exposeAsComposerModel)
+            }
 
             HStack {
                 Button(L10n.Settings.buttonSave) { save() }
@@ -254,6 +266,7 @@ struct AgentLocalModelSettingsSection: View {
         settings = normalized
         savedSettings = normalized
         AgentSettingsStore.saveLocalModelSettings(normalized)
+        appState.syncLocalModelComposerProvider(settings: normalized)
         statusMessage = L10n.Settings.savedStatus
         Task { @MainActor in
             try? await Task.sleep(nanoseconds: 1_800_000_000)

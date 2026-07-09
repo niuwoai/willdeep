@@ -14,13 +14,18 @@ struct AgentLocalModelSettings: Codable, Equatable {
     static let defaultVisionModelID = "qwen3.5-4b-vl-q4_k_m"
     static let defaultSummaryModelID = "qwen3.5-4b-q4_k_m"
     static let defaultModelID = defaultSummaryModelID
+    static let defaultComposerDisplayName = "Local Chat (Ollama)"
+    static let composerProviderEntryID = UUID(uuidString: "9C9B8A64-4F84-4D9C-8F4F-4C7C6F63616C")!
 
     var enabled: Bool
     var baseURL: String
     var visionModel: String
     var summaryModel: String
     var preferForImageUnderstanding: Bool
-    var preferForSummaries: Bool
+    var preferForTitles: Bool
+    var preferForContextSummaries: Bool
+    var exposeAsComposerModel: Bool
+    var composerDisplayName: String
 
     static let `default` = AgentLocalModelSettings(
         enabled: false,
@@ -28,14 +33,87 @@ struct AgentLocalModelSettings: Codable, Equatable {
         visionModel: defaultVisionModelID,
         summaryModel: defaultSummaryModelID,
         preferForImageUnderstanding: true,
-        preferForSummaries: true
+        preferForTitles: true,
+        preferForContextSummaries: false,
+        exposeAsComposerModel: false,
+        composerDisplayName: defaultComposerDisplayName
     )
+
+    init(
+        enabled: Bool,
+        baseURL: String,
+        visionModel: String,
+        summaryModel: String,
+        preferForImageUnderstanding: Bool,
+        preferForTitles: Bool,
+        preferForContextSummaries: Bool,
+        exposeAsComposerModel: Bool,
+        composerDisplayName: String
+    ) {
+        self.enabled = enabled
+        self.baseURL = baseURL
+        self.visionModel = visionModel
+        self.summaryModel = summaryModel
+        self.preferForImageUnderstanding = preferForImageUnderstanding
+        self.preferForTitles = preferForTitles
+        self.preferForContextSummaries = preferForContextSummaries
+        self.exposeAsComposerModel = exposeAsComposerModel
+        self.composerDisplayName = composerDisplayName
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case enabled
+        case baseURL
+        case visionModel
+        case summaryModel
+        case preferForImageUnderstanding
+        case preferForSummaries
+        case preferForTitles
+        case preferForContextSummaries
+        case exposeAsComposerModel
+        case composerDisplayName
+    }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        let defaults = Self.default
+        let legacyPreferForSummaries = try c.decodeIfPresent(Bool.self, forKey: .preferForSummaries)
+        self.enabled = try c.decodeIfPresent(Bool.self, forKey: .enabled) ?? defaults.enabled
+        self.baseURL = try c.decodeIfPresent(String.self, forKey: .baseURL) ?? defaults.baseURL
+        self.visionModel = try c.decodeIfPresent(String.self, forKey: .visionModel) ?? defaults.visionModel
+        self.summaryModel = try c.decodeIfPresent(String.self, forKey: .summaryModel) ?? defaults.summaryModel
+        self.preferForImageUnderstanding = try c.decodeIfPresent(Bool.self, forKey: .preferForImageUnderstanding)
+            ?? defaults.preferForImageUnderstanding
+        self.preferForTitles = try c.decodeIfPresent(Bool.self, forKey: .preferForTitles)
+            ?? legacyPreferForSummaries
+            ?? defaults.preferForTitles
+        self.preferForContextSummaries = try c.decodeIfPresent(Bool.self, forKey: .preferForContextSummaries)
+            ?? defaults.preferForContextSummaries
+        self.exposeAsComposerModel = try c.decodeIfPresent(Bool.self, forKey: .exposeAsComposerModel)
+            ?? defaults.exposeAsComposerModel
+        self.composerDisplayName = try c.decodeIfPresent(String.self, forKey: .composerDisplayName)
+            ?? defaults.composerDisplayName
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var c = encoder.container(keyedBy: CodingKeys.self)
+        try c.encode(enabled, forKey: .enabled)
+        try c.encode(baseURL, forKey: .baseURL)
+        try c.encode(visionModel, forKey: .visionModel)
+        try c.encode(summaryModel, forKey: .summaryModel)
+        try c.encode(preferForImageUnderstanding, forKey: .preferForImageUnderstanding)
+        try c.encode(preferForTitles, forKey: .preferForTitles)
+        try c.encode(preferForContextSummaries, forKey: .preferForContextSummaries)
+        try c.encode(exposeAsComposerModel, forKey: .exposeAsComposerModel)
+        try c.encode(composerDisplayName, forKey: .composerDisplayName)
+    }
 
     var normalized: AgentLocalModelSettings {
         var result = self
         result.baseURL = result.baseURL.trimmingCharacters(in: .whitespacesAndNewlines)
         result.visionModel = result.visionModel.trimmingCharacters(in: .whitespacesAndNewlines)
         result.summaryModel = result.summaryModel.trimmingCharacters(in: .whitespacesAndNewlines)
+        result.composerDisplayName = result.composerDisplayName.trimmingCharacters(in: .whitespacesAndNewlines)
         if result.baseURL.isEmpty {
             result.baseURL = Self.defaultBaseURL
         }
@@ -44,6 +122,9 @@ struct AgentLocalModelSettings: Codable, Equatable {
         }
         if result.summaryModel.isEmpty {
             result.summaryModel = Self.defaultSummaryModelID
+        }
+        if result.composerDisplayName.isEmpty {
+            result.composerDisplayName = Self.defaultComposerDisplayName
         }
         return result
     }
@@ -64,7 +145,8 @@ struct AgentLocalModelSettings: Codable, Equatable {
 
 enum AgentLocalAuxiliaryPurpose {
     case imageUnderstanding
-    case summary
+    case title
+    case contextSummary
 }
 
 nonisolated enum AgentLocalModelPrompting {
@@ -573,8 +655,11 @@ extension AppState {
         case .imageUnderstanding:
             guard settings.preferForImageUnderstanding else { return nil }
             return settings.configuration(model: settings.visionModel)
-        case .summary:
-            guard settings.preferForSummaries else { return nil }
+        case .title:
+            guard settings.preferForTitles else { return nil }
+            return settings.configuration(model: settings.summaryModel)
+        case .contextSummary:
+            guard settings.preferForContextSummaries else { return nil }
             return settings.configuration(model: settings.summaryModel)
         }
     }
@@ -588,7 +673,7 @@ extension AppState {
 
     func contextCompressionConfigurationCandidates() -> [AgentConfiguration] {
         auxiliaryConfigurationCandidates(
-            local: localAuxiliaryConfiguration(for: .summary),
+            local: localAuxiliaryConfiguration(for: .contextSummary),
             fallback: agentConfiguration.normalized.resolved(for: .compression)
         )
     }
@@ -600,7 +685,7 @@ extension AppState {
         fallback.proModel = remoteModelID
         fallback.routingMode = .flash
         return auxiliaryConfigurationCandidates(
-            local: localAuxiliaryConfiguration(for: .summary),
+            local: localAuxiliaryConfiguration(for: .title),
             fallback: fallback
         )
     }

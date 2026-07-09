@@ -152,6 +152,18 @@ extension AppState {
             return nil
         }
 
+        // Delegated coding agents (Claude Code / Codex / Cursor / Cline) are
+        // trusted to run without WillDeep's per-call gate by default: each
+        // ships its own approval + sandbox review, so asking again is
+        // redundant friction. `requestEveryTime` above still forces a manual
+        // prompt for users who opt into asking for everything, and goal mode
+        // already auto-approves them earlier. This only skips WillDeep's outer
+        // gate — `.staticAllowlist` keeps the subprocess under the sandbox
+        // mode the policy computed (see `sandboxModeForToolExecution`).
+        if Self.isTrustedDelegatedAgentTool(toolName) {
+            return .staticAllowlist
+        }
+
         if sandboxDecision.requiresTypedConfirmation {
             return nil
         }
@@ -354,6 +366,22 @@ extension AppState {
 
     nonisolated static func isCommandShapedTool(_ toolName: String) -> Bool {
         commandShapedToolNames.contains(toolName)
+    }
+
+    /// Delegated coding-agent tools that ship their own approval + sandbox
+    /// review (Claude Code, Codex CLI, Cursor Agent, Cline CLI). We trust
+    /// their internal safety layer, so `autoApprovalSource` auto-approves them
+    /// by default in every mode except `requestEveryTime`. Keep in sync with
+    /// the same names in `workspaceAccessCanAutoApprove`.
+    nonisolated static let trustedDelegatedAgentToolNames: Set<String> = [
+        "claude_code",
+        "codex_cli",
+        "cursor_agent",
+        "cline_cli"
+    ]
+
+    nonisolated static func isTrustedDelegatedAgentTool(_ toolName: String) -> Bool {
+        trustedDelegatedAgentToolNames.contains(toolName)
     }
 
     nonisolated static func canSendToSafetyJudge(

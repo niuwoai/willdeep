@@ -138,6 +138,31 @@ extension AppState {
         agentConfiguration = configuration.normalized
     }
 
+    func syncLocalModelComposerProvider(settings rawSettings: AgentLocalModelSettings) {
+        let settings = rawSettings.normalized
+        let entryID = AgentLocalModelSettings.composerProviderEntryID
+        guard settings.enabled, settings.exposeAsComposerModel else {
+            if agentProviderLibrary.entries.contains(where: { $0.id == entryID }) {
+                removeProviderLibraryEntry(id: entryID)
+            }
+            return
+        }
+
+        let entry = AgentProviderEntry(
+            id: entryID,
+            providerID: AgentProviderPreset.ollamaID,
+            displayName: settings.composerDisplayName,
+            baseURL: settings.baseURL,
+            apiKey: "",
+            flashPrimary: settings.summaryModel,
+            flashAlternates: settings.visionModel == settings.summaryModel ? [] : [settings.visionModel],
+            proPrimary: settings.summaryModel,
+            proAlternates: [],
+            routingMode: .flash
+        )
+        upsertProviderLibraryEntry(entry)
+    }
+
     /// React to a shared some.im session change (this app or another one sharing
     /// the Keychain access group). Login/key-change adopts the fresh key without
     /// hijacking the user's active provider; logout drops the some-im entry.
