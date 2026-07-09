@@ -194,16 +194,15 @@ nonisolated enum SomeIMManagedRouting {
 
     /// Parse a judge reply into a verdict. Lenient about markdown fences /
     /// trailing prose (extracts the first `{...}` block). Drops a
-    /// `target_model` outside the allowlist and canonicalizes a legacy
-    /// `hight` spelling. Returns nil when nothing usable decodes.
+    /// `target_model` outside the allowlist. Returns nil when nothing usable
+    /// decodes.
     static func decodeVerdict(fromRaw raw: String) -> SomeIMRouteJudgeVerdict? {
         guard let jsonData = extractJSONObject(from: raw) else { return nil }
         guard var verdict = try? JSONDecoder().decode(SomeIMRouteJudgeVerdict.self, from: jsonData) else {
             return nil
         }
         if let target = verdict.targetModel {
-            let canonical = SomeIMManagedModel.canonicalize(target)
-            verdict.targetModel = SomeIMManagedModel.allowlist.contains(canonical) ? canonical : nil
+            verdict.targetModel = SomeIMManagedModel.allowlist.contains(target) ? target : nil
         }
         return verdict
     }

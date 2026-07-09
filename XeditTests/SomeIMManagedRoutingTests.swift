@@ -37,13 +37,6 @@ struct SomeIMManagedModelMappingTests {
     }
 
     @Test
-    func canonicalizesLegacyHightSpelling() {
-        #expect(SomeIMManagedModel.canonicalize("someim-coding-plan-hight") == "someim-coding-plan-high")
-        #expect(SomeIMManagedModel.tier(of: "someim-coding-plan-hight") == .high)
-        #expect(SomeIMManagedModel.canonicalize("someim-coding-plan-low") == "someim-coding-plan-low")
-    }
-
-    @Test
     func allowlistCoversMainModelsButNotJudge() {
         #expect(SomeIMManagedModel.allowlist.contains("someim-coding-plan-low"))
         #expect(SomeIMManagedModel.allowlist.contains("someim-auto-pro"))
@@ -161,13 +154,6 @@ struct SomeIMRouteJudgeParsingTests {
         let raw = #"{"domain":"coding","complexity":"low","target_model":"gpt-5.5","confidence":0.8}"#
         let verdict = SomeIMManagedRouting.decodeVerdict(fromRaw: raw)
         #expect(verdict?.targetModel == nil)
-    }
-
-    @Test
-    func canonicalizesLegacyTargetSpelling() {
-        let raw = #"{"domain":"coding","complexity":"high","target_model":"someim-coding-plan-hight","confidence":0.8}"#
-        let verdict = SomeIMManagedRouting.decodeVerdict(fromRaw: raw)
-        #expect(verdict?.targetModel == "someim-coding-plan-high")
     }
 
     @Test
@@ -296,8 +282,6 @@ struct SomeIMEscalationTests {
         #expect(SomeIMManagedModel.escalated(from: "someim-coding-plan-premium") == nil)
         #expect(SomeIMManagedModel.escalated(from: "someim-auto-flash") == "someim-auto-pro")
         #expect(SomeIMManagedModel.escalated(from: "someim-auto-pro") == nil)
-        // Legacy spelling canonicalizes before laddering.
-        #expect(SomeIMManagedModel.escalated(from: "someim-coding-plan-hight") == "someim-coding-plan-premium")
     }
 }
 

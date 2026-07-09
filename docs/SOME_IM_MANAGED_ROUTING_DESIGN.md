@@ -107,7 +107,7 @@ composer pill 可以展示：
 | general | low | `someim-auto-flash` |
 | general | high | `someim-auto-pro` |
 
-注意：最初口头描述中出现了 `someim-coding-plan-hight`。建议正式协议统一为 `someim-coding-plan-high`。如果 some.im 侧已经存在拼写为 `hight` 的历史模型，需要在 WillDeep 里做显式兼容映射，并在文档中标注为 legacy alias。
+注意：最初口头描述中出现过误拼 `someim-coding-plan-hight`；正式协议统一为 `someim-coding-plan-high`。**该 legacy alias 兼容映射已退役**（some.im 侧确认命名为 `high`）：WillDeep 不再折叠 `hight`，万一收到 `hight`（不在 allowlist）会被丢弃并优雅回退到本地 (domain, tier) 映射。
 
 ### 升档模型
 

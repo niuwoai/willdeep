@@ -410,17 +410,6 @@ nonisolated enum SomeIMManagedModel {
         codingLow, codingHigh, codingPremium, autoFlash, autoPro
     ]
 
-    /// Fold a historical misspelling (`...-hight`) onto the canonical name so
-    /// a stale alias never leaks downstream. See design doc ("模型与命名").
-    static func canonicalize(_ model: String) -> String {
-        switch model {
-        case "someim-coding-plan-hight":
-            return codingHigh
-        default:
-            return model
-        }
-    }
-
     /// Resolve the actual main-call model from a task domain and the
     /// effective capability tier (already merged with the session floor).
     static func resolve(domain: SomeIMManagedDomain, tier: AgentManagedCapabilityTier) -> String {
@@ -438,7 +427,7 @@ nonisolated enum SomeIMManagedModel {
     /// Inverse of `resolve` for the only-goes-up floor bookkeeping: which
     /// tier does a resolved model correspond to. Unknown → nil.
     static func tier(of model: String) -> AgentManagedCapabilityTier? {
-        switch canonicalize(model) {
+        switch model {
         case codingLow, autoFlash: return .low
         case codingHigh, autoPro: return .high
         case codingPremium: return .premium
@@ -450,7 +439,7 @@ nonisolated enum SomeIMManagedModel {
     /// retry. Returns nil at the top of a ladder so the retry never loops.
     /// See design doc "升档模型".
     static func escalated(from model: String) -> String? {
-        switch canonicalize(model) {
+        switch model {
         case codingLow: return codingHigh
         case codingHigh: return codingPremium
         case autoFlash: return autoPro
