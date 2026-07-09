@@ -87,6 +87,11 @@ struct AgentTranscriptUserMinimap: View {
     private let tickWidth: CGFloat = 11
     private let tickHoverWidth: CGFloat = 22
     private let stripWidth: CGFloat = 26
+    /// Fisheye reach: how many ticks on each side of the hovered one still
+    /// grow/darken. The focused tick has weight 1 (longest, darkest); the
+    /// weight falls off linearly to 0 at `hoverRadius`, so a tick this far
+    /// out already sits at its resting size — no hard color step at the edge.
+    private let hoverRadius = 3
 
     var body: some View {
         VStack(spacing: 0) {
@@ -100,10 +105,12 @@ struct AgentTranscriptUserMinimap: View {
     }
 
     private func tickRow(index: Int, turn: AgentTranscriptTurnSummary) -> some View {
-        let hovered = hoveredIndex == index
+        let focused = hoveredIndex == index
+        let weight = hoverWeight(for: index)
+        let width = tickWidth + (tickHoverWidth - tickWidth) * weight
         return RoundedRectangle(cornerRadius: 1, style: .continuous)
-            .fill(hovered ? Color.accentColor : Color.secondary.opacity(0.4))
-            .frame(width: hovered ? tickHoverWidth : tickWidth, height: tickHeight)
+            .fill(tickColor(weight: weight))
+            .frame(width: width, height: tickHeight)
             .frame(width: stripWidth, height: rowHeight, alignment: .leading)
             .contentShape(Rectangle())
             .onHover { inside in
@@ -115,16 +122,40 @@ struct AgentTranscriptUserMinimap: View {
             }
             .onTapGesture { onSelect(turn.id) }
             .overlay(alignment: .leading) {
-                if hovered {
+                if focused {
                     card(for: turn)
                         .offset(x: tickHoverWidth + 14)
                         .allowsHitTesting(false)
                         .fixedSize()
-                        .transition(.opacity.combined(with: .move(edge: .leading)))
+                        // Appear directly (no slide). Switching between ticks
+                        // just swaps the card in place instead of animating one
+                        // out to the left while the next slides in.
+                        .transition(.identity)
                 }
             }
-            .animation(.easeOut(duration: 0.12), value: hovered)
-            .zIndex(hovered ? 1 : 0)
+            // Animate the fisheye (widths + colors of the whole neighborhood)
+            // on `hoveredIndex`, so moving between ticks glides; the card above
+            // opts out via `.identity` and stays instant.
+            .animation(.easeOut(duration: 0.12), value: hoveredIndex)
+            .zIndex(focused ? 1 : 0)
+    }
+
+    /// Fisheye weight for a tick given the current hover: 1 at the focused
+    /// tick, falling off linearly to 0 at `hoverRadius` ticks away, 0 when
+    /// nothing is hovered.
+    private func hoverWeight(for index: Int) -> CGFloat {
+        guard let hovered = hoveredIndex else { return 0 }
+        let distance = abs(index - hovered)
+        guard distance < hoverRadius else { return 0 }
+        return 1 - CGFloat(distance) / CGFloat(hoverRadius)
+    }
+
+    /// Graduated tick color: the focused tick is the accent color at full
+    /// strength (darkest), fading outward through lighter accent tints to the
+    /// resting secondary tint once the fisheye weight reaches 0.
+    private func tickColor(weight: CGFloat) -> Color {
+        guard weight > 0 else { return Color.secondary.opacity(0.4) }
+        return Color.accentColor.opacity(0.4 + 0.6 * weight)
     }
 
     private func card(for turn: AgentTranscriptTurnSummary) -> some View {
