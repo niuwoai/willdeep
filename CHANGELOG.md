@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.136.0-rc40 - 2026-07-09
+
+### Fixed
+
+- **Workflow（`/code-review` 等）在 some.im 模型下空转卡死**：workflow 的子 agent 此前建 client 时漏传 `someIMContext`（会话/工作区上下文头），而主循环每个 some.im 请求都会带。结果在**经 some.im 连接的模型**（如 gpt-5.5）上，子 agent 请求缺合法会话上下文被 some.im stall，卡片只剩一个「Workflow」图标、无进度无报错。现按主循环同样逻辑构造 `someIMContext` 并透传到 `WorkflowEngine → AgentSubagentRunner`。
+- **Workflow 看门狗超时**：新增单次运行 360s 看门狗（`AppStateAgentWorkflows.runWorkflowWithWatchdog`）。子 agent 的 provider 请求 stall 时不再无限挂起，超时即把卡片转为 `.failed` 并给出「模型/网关可能没响应」的原因。
+- **`/code-review` 全维度失败不再伪装成功**：4 个 review 维度全失败时，此前会返回一句成功字符串让卡片变绿勾；现改为抛 `WorkflowError.allTasksFailed`，卡片正确显示 `.failed`。
+- 版本号从 **1.136.0-rc39** 递增为 **1.136.0-rc40**。
+
 ## 1.136.0-rc39 - 2026-07-09
 
 ### Fixed

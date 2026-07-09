@@ -27,6 +27,10 @@ final class WorkflowEngine {
     let runtimeID: UUID
     let workspaceURL: URL?
     let configuration: AgentConfiguration
+    /// rc40:some.im 会话/工作区上下文头。子 agent 的每个 provider 请求都要带上,
+    /// 否则 some.im 收不到合法会话上下文 → 请求 stall,卡片永远空转。由
+    /// `startWorkflow` 按主循环同样的逻辑构造后透传进来(非 some.im provider 为 nil)。
+    let someIMContext: SomeIMRequestContext?
     weak var appState: AppState?
 
     init(
@@ -34,12 +38,14 @@ final class WorkflowEngine {
         runtimeID: UUID,
         workspaceURL: URL?,
         configuration: AgentConfiguration,
+        someIMContext: SomeIMRequestContext?,
         appState: AppState
     ) {
         self.reportID = reportID
         self.runtimeID = runtimeID
         self.workspaceURL = workspaceURL
         self.configuration = configuration
+        self.someIMContext = someIMContext
         self.appState = appState
     }
 
@@ -65,7 +71,8 @@ final class WorkflowEngine {
             outcome = try await AgentSubagentRunner.run(
                 prompt: prompt,
                 configuration: configuration,
-                workspaceURL: workspaceURL
+                workspaceURL: workspaceURL,
+                someIMContext: someIMContext
             )
         } catch is CancellationError {
             mutateReport { report in
@@ -135,6 +142,7 @@ final class WorkflowEngine {
                 prompt: prompt,
                 configuration: configuration,
                 workspaceURL: workspaceURL,
+                someIMContext: someIMContext,
                 outputSchema: schema
             )
         } catch is CancellationError {
@@ -285,6 +293,11 @@ enum WorkflowError: Error, LocalizedError {
     /// rc18:JSON Codable decode 失败 —— validate 过了但 Decodable 类型
     /// 对不上(很罕见,通常是 schema 和 Swift 类型不一致)。
     case structuredOutputDecodeFailed(label: String, underlying: Error, json: String)
+    /// rc40:所有子任务(维度)都失败了 —— 别再伪装成绿勾成功,直接 fail。
+    case allTasksFailed(reason: String)
+    /// rc40:整个 workflow 超过看门狗时限还没结束(大概率某个子 agent 的
+    /// provider 请求 stall) —— 抛出让卡片变 failed 并给出原因,而不是永远挂着。
+    case timedOut(seconds: Double)
 
     var errorDescription: String? {
         switch self {
@@ -301,6 +314,10 @@ enum WorkflowError: Error, LocalizedError {
         case .structuredOutputDecodeFailed(let label, let underlying, let json):
             let preview = json.prefix(120)
             return "Structured output for \"\(label)\" passed schema but failed Codable decode (\(underlying.localizedDescription)). JSON head: \(preview)"
+        case .allTasksFailed(let reason):
+            return reason
+        case .timedOut(let seconds):
+            return "Workflow timed out after \(Int(seconds))s with no result. The model/provider likely never responded — check the provider connection (for some.im-hosted models, confirm the account is still signed in)."
         }
     }
 }

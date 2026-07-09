@@ -78,7 +78,9 @@ struct CodeReviewWorkflow: WorkflowDefinition {
             return "## \(dim.label.capitalized)\n\n\(result)"
         }
         if parts.isEmpty {
-            return "All review dimensions failed. Check that there are uncommitted changes and the agent has read access."
+            // rc40:全维度失败别再返回成功字符串(会让卡片变绿勾伪装完成)。抛错 →
+            // 卡片 .failed,用户能看到确实出问题了。
+            throw WorkflowError.allTasksFailed(reason: "All review dimensions failed. The model/provider likely didn't respond — check the provider connection, and that there are uncommitted changes the agent can read.")
         }
 
         return "# Code review — working tree diff\n\n" + parts.joined(separator: "\n\n---\n\n")
@@ -117,7 +119,7 @@ struct CodeReviewWorkflow: WorkflowDefinition {
             return "## \(dim.label.capitalized)\n\n\(result)"
         }
         if parts.isEmpty {
-            return "All review dimensions failed. Check that PR #\(prNumber) exists and `gh` is authenticated."
+            throw WorkflowError.allTasksFailed(reason: "All review dimensions failed. Check that PR #\(prNumber) exists, `gh` is authenticated, and the provider responded.")
         }
 
         return "# Code review — PR #\(prNumber)\n\n" + parts.joined(separator: "\n\n---\n\n")

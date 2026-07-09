@@ -369,7 +369,9 @@ extension AppState {
     /// `AgentSession.workspaceSidebarGroupKey` but from the live runtime
     /// location. Fed only to `AgentWorkspaceIdentityStore` for local UUID
     /// lookup — never transmitted.
-    private static func managedWorkspaceKey(for runtime: AgentRuntime) -> String {
+    // Not `private`: WorkflowEngine wiring in AppStateAgentWorkflows.swift builds
+    // the same some.im context and needs this key.
+    static func managedWorkspaceKey(for runtime: AgentRuntime) -> String {
         let location = runtime.workspaceLocation ?? runtime.workspaceRootPath.map { .local(path: $0) }
         switch location {
         case .local(let path):

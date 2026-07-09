@@ -1,6 +1,6 @@
 # some.im Mac App Integration
 
-> Last updated: 2026-07-09 | Current version: v1.136.0-rc39
+> Last updated: 2026-07-09 | Current version: v1.136.0-rc40
 
 本文档说明 WillDeep macOS App 如何接入 some.im。目标是让用户用最短路径完成账号连接：在 WillDeep 里点击“在浏览器打开”，到 some.im 完成登录，然后回到 WillDeep 继续使用。API key、customer session 等敏感信息只保存在本机 Keychain，不进入 UI、日志、文档示例或 git。
 

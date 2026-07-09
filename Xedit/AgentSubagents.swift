@@ -357,9 +357,14 @@ enum AgentSubagentRunner {
         workspaceURL: URL?,
         runtimeDescriptor: RuntimeDescriptor? = nil,
         workspaceLocation: WorkspaceLocation? = nil,
+        someIMContext: SomeIMRequestContext? = nil,
         outputSchema: AgentStructuredSchema? = nil
     ) async throws -> Outcome {
-        let client = AgentClient(configuration: configuration)
+        // some.im-gated providers require the session/workspace context headers on
+        // every request; without them some.im rejects/stalls the call. Workflow
+        // subagents used to omit this (unlike the main loop), so a `/code-review`
+        // on a some.im model hung as an empty card. Forward it here.
+        let client = AgentClient(configuration: configuration, someIMContext: someIMContext)
         var transcript: [AgentMessage] = [
             AgentMessage(role: .system, content: systemPrompt(workspaceURL: workspaceURL, outputSchema: outputSchema)),
             AgentMessage(role: .user, content: prompt),
