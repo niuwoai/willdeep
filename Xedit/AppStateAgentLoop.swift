@@ -1108,13 +1108,20 @@ extension AppState {
                 // `spawn_agent` can't run through AgentToolRunner — it
                 // needs the turn's provider configuration plus the
                 // subagent registry, both of which only exist up here.
+                // Pass `turnConfiguration`, not the base `configuration`:
+                // under someIM managed routing the turn's effective model was
+                // resolved by the judge (and possibly output-quality escalated)
+                // into `turnConfiguration.model`. Handing the child the base
+                // `configuration` would silently drop it to the flash tier while
+                // the parent runs the escalated tier. Outside managed routing
+                // `turnConfiguration == configuration`, so behaviour is unchanged.
                 if call.toolName == "spawn_agent" {
                     await executeSpawnAgentToolCall(
                         call,
                         recordID: recordID,
                         arguments: argsDict,
                         runtime: runtime,
-                        configuration: configuration,
+                        configuration: turnConfiguration,
                         workspaceURL: workspaceURL,
                         runtimeDescriptor: remoteRuntimeDescriptor,
                         workspaceLocation: workspaceLocation

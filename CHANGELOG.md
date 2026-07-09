@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.136.0-rc41 - 2026-07-09
+
+### Fixed
+
+- **省心托管下 `spawn_agent` 子 agent 悄悄跑基础 tier**：当轮实际生效的模型由 judge 路由（及无 tool_call 时的输出质量升档）写入 `turnConfiguration.model`，但 `spawn_agent` 的调用处一直传的是没被路由过的基础 `configuration`。结果 some.im 省心托管开启时，父 agent 在跑升档后的 tier（如 `someim-code-premium`），子 agent 却继承 base flash tier，输出无声变差。现改为向 `executeSpawnAgentToolCall` 传 `turnConfiguration`，子 agent 与父 agent 同 tier。非托管场景 `turnConfiguration == configuration`，行为不变。
+- 版本号从 **1.136.0-rc40** 递增为 **1.136.0-rc41**。
+
 ## 1.136.0-rc40 - 2026-07-09
 
 ### Fixed
