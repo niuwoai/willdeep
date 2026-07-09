@@ -20,16 +20,22 @@ struct AgentSidePanelOpenRequest: Equatable, Identifiable {
     let kind: AgentSidePanelKind
     let file: URL?
     let mediaTaskScope: AgentMediaTaskScope?
+    /// When set (with `kind == .files`), the Files panel expands its tree down
+    /// to this directory and selects it — used by a chat path reference that
+    /// points at a folder inside the current workspace.
+    let revealFolder: URL?
 
     init(
         kind: AgentSidePanelKind,
         file: URL? = nil,
         mediaTaskScope: AgentMediaTaskScope? = nil,
+        revealFolder: URL? = nil,
         id: UUID = UUID()
     ) {
         self.kind = kind
         self.file = file
         self.mediaTaskScope = mediaTaskScope
+        self.revealFolder = revealFolder
         self.id = id
     }
 }
@@ -1530,8 +1536,17 @@ struct AgentSidePanelFilesView: View {
                 placeholderNoWorkspace
             }
         }
-        .onAppear { rebuildIfNeeded() }
+        .onAppear {
+            rebuildIfNeeded()
+            if let target = appState.agentSidePanelRequest?.revealFolder {
+                revealFolder(target)
+            }
+        }
         .onCompatibleChange(of: appState.activeAgentSessionID) { _, _ in rebuildIfNeeded() }
+        .onCompatibleChange(of: appState.agentSidePanelRequest) { _, request in
+            guard let request, request.kind == .files, let target = request.revealFolder else { return }
+            revealFolder(target)
+        }
         .onCompatibleChange(of: selectedFile) { _, newValue in
             // 用户点的若是 markdown / html,顺手把面板切到 Preview,
             // 看效果不用再切菜单。其它文件类型保持在 Files 内,
@@ -1569,6 +1584,14 @@ struct AgentSidePanelFilesView: View {
         if newPath == rootPath { return }
         rootPath = newPath
         root = resolved.map { FileSystemNode(url: $0) }
+    }
+
+    /// Expand the tree down to `target` and select it. Driven by a chat path
+    /// reference that resolved to a folder inside this workspace.
+    private func revealFolder(_ target: URL) {
+        rebuildIfNeeded()
+        guard let node = root?.expandToDescendant(target) else { return }
+        selectedFolderURL = node.url
     }
 
     private func openFileInEditor(_ url: URL) {

@@ -256,12 +256,11 @@ struct AgentChatTranscript: View {
                                 onShowTurnReport: { showTurnReportPopover = true },
                                 onReferenceGeneratedImage: appState.appendGeneratedImageReferenceToAgentInput,
                                 onOpenFilePath: { rawPath in
-                                    // Agent mode 里点击 transcript 中
-                                    // 的文件 chip,优先把右侧侧栏拉起
-                                    // 来给反馈(Preview / Diff / Files
-                                    // 三选一);editor 窗口未开时 chip
-                                    // 不再「点了没反应」。
-                                    appState.revealAgentReferencedFileInSidePanel(rawPath)
+                                    // Agent mode 里点击 transcript 中的路径
+                                    // chip:workspace 内的目录 → 右侧 Files
+                                    // 展开到该目录;workspace 外(含 `~/…`)
+                                    // → Finder 定位;文件 → Preview。
+                                    appState.revealAgentReferencedPath(rawPath)
                                 },
                                 searchQuery: conversationSearchQuery,
                                 activeSearchMatchIndex: conversationSearchActiveIndex,

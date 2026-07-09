@@ -56,6 +56,15 @@ extension AppState {
                 return "模型返回了无法识别的内容（非标准 SSE/JSON）。如果反复出现，多半是 Base URL 指向了不兼容的服务。"
             case .serverStatus(let provider):
                 let code = provider.statusCode
+                // If the provider told us *why* in the response body, lead with
+                // its own message — a 403 `token_plan_required` ("requires an
+                // active Coding Plan subscription") is far more actionable than
+                // the generic "check your API key" guess, which for that case
+                // is actively misleading. Only fall back to the status-code
+                // hint when the body carries no usable message.
+                if let serverMessage = Self.providerErrorMessage(from: provider.responseBody) {
+                    return "模型服务返回 HTTP \(code)：\(serverMessage)"
+                }
                 let hint: String
                 switch code {
                 case 401, 403:
@@ -77,6 +86,46 @@ extension AppState {
             }
         }
         return error.localizedDescription
+    }
+
+    /// Pull a human-readable message out of a provider's JSON error body so
+    /// the headline can show the server's own explanation. Handles the common
+    /// shapes: `{"message": "..."}`, `{"error": "code", "message": "..."}`
+    /// (some.im), and `{"error": {"message": "...", "code": "..."}}`
+    /// (OpenAI / Anthropic). Returns nil when the body isn't JSON or carries
+    /// no usable message — the caller then falls back to the status-code hint.
+    /// The full body is always available under the error card's "Details".
+    nonisolated static func providerErrorMessage(from body: String) -> String? {
+        let trimmed = body.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty,
+              let data = trimmed.data(using: .utf8),
+              let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+            return nil
+        }
+
+        func clean(_ value: Any?) -> String? {
+            guard let text = (value as? String)?
+                .trimmingCharacters(in: .whitespacesAndNewlines), !text.isEmpty else {
+                return nil
+            }
+            // Keep the headline readable — the full payload lives in Details.
+            return text.count > 300 ? String(text.prefix(300)) + "…" : text
+        }
+
+        // Top-level `message` (some.im, many gateways).
+        if let message = clean(root["message"]) {
+            // Prefix a short error code when it adds signal (e.g. token_plan_required).
+            if let code = clean(root["error"]), code != message, code.count <= 40 {
+                return "\(message)（\(code)）"
+            }
+            return message
+        }
+        // Nested `error` object (OpenAI / Anthropic).
+        if let errorObject = root["error"] as? [String: Any] {
+            if let message = clean(errorObject["message"]) { return message }
+        }
+        // Bare string `error`.
+        return clean(root["error"])
     }
 
     /// Whether the error banner should expose a "Retry" affordance.

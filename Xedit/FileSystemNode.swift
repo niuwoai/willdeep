@@ -73,18 +73,62 @@ final class FileSystemNode: ObservableObject, Identifiable, Hashable {
     ///   and `isDirectory` is true.
     func loadChildren() {
         guard isDirectory, children == nil else { return }
+        let nodes = Self.scanChildren(of: url)
+        DispatchQueue.main.async { [weak self] in
+            self?.children = nodes
+        }
+    }
 
+    /// Synchronous sibling of `loadChildren` used by reveal-to-path: assigns
+    /// `children` on the current runloop so the caller can immediately walk
+    /// one level deeper without waiting for the async dispatch. Idempotent —
+    /// a no-op once children are loaded.
+    func loadChildrenSyncIfNeeded() {
+        guard isDirectory, children == nil else { return }
+        children = Self.scanChildren(of: url)
+    }
+
+    /// Expand this subtree along the path toward `target`, loading each level
+    /// synchronously and marking the ancestors `isExpanded`. Returns the node
+    /// whose URL equals `target`, or nil if `target` isn't a descendant (or
+    /// sits beyond a directory's child cap / hidden-file filter). Used to
+    /// reveal a chat-referenced folder in the Files tree.
+    @discardableResult
+    func expandToDescendant(_ target: URL) -> FileSystemNode? {
+        let targetPath = target.standardizedFileURL.path
+        let selfPath = url.standardizedFileURL.path
+        guard targetPath == selfPath || targetPath.hasPrefix(selfPath + "/") else { return nil }
+        isExpanded = true
+        if targetPath == selfPath { return self }
+        guard isDirectory else { return nil }
+        loadChildrenSyncIfNeeded()
+        guard let children else { return nil }
+        for child in children {
+            let childPath = child.url.standardizedFileURL.path
+            if targetPath == childPath || targetPath.hasPrefix(childPath + "/") {
+                return child.expandToDescendant(target)
+            }
+        }
+        return nil
+    }
+
+    func reloadChildren() {
+        children = nil
+        loadChildren()
+    }
+
+    /// Shared directory scan behind `loadChildren` / `loadChildrenSyncIfNeeded`.
+    /// Directories first, then files, alphabetically; hidden files skipped;
+    /// bounded by `maxLoadedChildren`. Returns `[]` on permission errors so the
+    /// caller can cache the empty result and avoid re-scanning.
+    private static func scanChildren(of url: URL) -> [FileSystemNode] {
         let keys: [URLResourceKey] = [.isDirectoryKey]
         guard let enumerator = FileManager.default.enumerator(
             at: url,
             includingPropertiesForKeys: keys,
             options: [.skipsHiddenFiles]
         ) else {
-            // Permission denied or other error — set to empty to avoid repeated attempts.
-            DispatchQueue.main.async { [weak self] in
-                self?.children = []
-            }
-            return
+            return []
         }
 
         var contents: [URL] = []
@@ -102,7 +146,7 @@ final class FileSystemNode: ObservableObject, Identifiable, Hashable {
             }
         }
 
-        let nodes = contents
+        return contents
             .map { FileSystemNode(url: $0) }
             .sorted { a, b in
                 if a.isDirectory != b.isDirectory {
@@ -110,15 +154,6 @@ final class FileSystemNode: ObservableObject, Identifiable, Hashable {
                 }
                 return a.name.localizedStandardCompare(b.name) == .orderedAscending
             }
-
-        DispatchQueue.main.async { [weak self] in
-            self?.children = nodes
-        }
-    }
-
-    func reloadChildren() {
-        children = nil
-        loadChildren()
     }
 }
 

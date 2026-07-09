@@ -54,6 +54,30 @@ struct AgentToolsCoreTests {
         #expect(AgentToolCallStatus.denied.rawValue == "denied")
     }
 
+    /// The provider-error headline extracts the server's own message from a
+    /// JSON error body across the common shapes, so a 403 like
+    /// `token_plan_required` shows "requires an active Coding Plan
+    /// subscription" instead of a misleading "check your API key" guess.
+    @Test
+    func providerErrorMessageExtractsServerExplanation() {
+        // some.im shape: top-level message + short error code.
+        let someIM = #"{"error":"token_plan_required","message":"model someim-coding-plan-low requires an active Coding Plan subscription"}"#
+        let someIMResult = AppState.providerErrorMessage(from: someIM)
+        #expect(someIMResult?.contains("requires an active Coding Plan subscription") == true)
+        #expect(someIMResult?.contains("token_plan_required") == true)
+
+        // OpenAI/Anthropic shape: nested error object.
+        #expect(AppState.providerErrorMessage(
+            from: #"{"error":{"message":"Invalid API key","type":"auth"}}"#) == "Invalid API key")
+
+        // Bare string error.
+        #expect(AppState.providerErrorMessage(from: #"{"error":"rate limited"}"#) == "rate limited")
+
+        // Non-JSON / empty → nil (caller falls back to the status-code hint).
+        #expect(AppState.providerErrorMessage(from: "<html>502 Bad Gateway</html>") == nil)
+        #expect(AppState.providerErrorMessage(from: "   ") == nil)
+    }
+
     /// Approval source round-trips as a plain string. The UI uses these
     /// to badge auto-approved calls — drift here would mis-attribute
     /// approvals after a session reload.

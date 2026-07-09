@@ -150,12 +150,12 @@ extension AppState {
 
         if performsSafetyChecks {
             if Self.isBinaryFile(at: fileURL) {
-                let alert = NSAlert()
-                alert.messageText = L10n.Alert.binaryFileTitle
-                alert.informativeText = L10n.Alert.binaryFileMessage(fileURL.lastPathComponent)
-                alert.alertStyle = .warning
-                alert.addButton(withTitle: L10n.Alert.binaryFileButtonOk)
-                alert.runModal()
+                // Non-text file (PDF / PPT / Office / image / binary): our text
+                // editor can't render it meaningfully. Locate it in Finder so
+                // the user opens it with the right app, instead of the old
+                // dead-end warning alert that left them stuck. Only text-type
+                // files continue into the built-in editor below.
+                revealInFinder(fileURL)
                 revertOpenSelection(to: fallbackURL)
                 return false
             }
@@ -188,6 +188,57 @@ extension AppState {
             fallbackURL: fallbackURL,
             allowLargeFile: allowLargeFile
         )
+    }
+
+    /// Route a chat path reference (`~/.oh-my-zsh/cache`, `/Users/...`, or a
+    /// workspace-relative path) to the right place:
+    ///   • a folder inside the current workspace → expand the right-hand Files
+    ///     tree down to it and select it;
+    ///   • any path outside the workspace → locate it in Finder;
+    ///   • everything else → the existing resolve→Preview / empty-Files-panel
+    ///     fallback.
+    /// Replaces the old always-Preview behavior, which never resolved `~/`
+    /// paths or directories at all.
+    func revealAgentReferencedPath(_ rawPath: String) {
+        let cleaned = Self.agentFilePathWithoutLineSuffix(rawPath)
+        let expanded = (cleaned as NSString).expandingTildeInPath
+
+        if expanded.hasPrefix("/") {
+            let url = URL(fileURLWithPath: expanded).standardizedFileURL
+            var isDirectory: ObjCBool = false
+            if FileManager.default.fileExists(atPath: url.path, isDirectory: &isDirectory) {
+                if agentReferencedPathIsInsideWorkspace(url) {
+                    if isDirectory.boolValue {
+                        agentSidePanelRequest = AgentSidePanelOpenRequest(kind: .files, revealFolder: url)
+                        return
+                    }
+                    // In-workspace file — fall through to the existing Preview path.
+                } else {
+                    // Outside the workspace — let Finder open/locate it.
+                    revealInFinder(url)
+                    return
+                }
+            }
+        }
+
+        // Relative refs, in-workspace files, and unresolved paths keep the
+        // existing resolve→Preview / empty-Files-panel behavior.
+        revealAgentReferencedFileInSidePanel(rawPath)
+    }
+
+    /// Whether `url` sits inside the current workspace, resolved the same way
+    /// `AgentSidePanelFilesView` roots its tree (active runtime workspace path,
+    /// else the editor's `rootDirectory`), so "inside" matches the tree shown.
+    private func agentReferencedPathIsInsideWorkspace(_ url: URL) -> Bool {
+        let base: URL?
+        if let path = activeRuntime?.workspaceRootPath, !path.isEmpty {
+            base = URL(fileURLWithPath: path).standardizedFileURL
+        } else {
+            base = rootDirectory?.standardizedFileURL
+        }
+        guard let basePath = base?.path else { return false }
+        let target = url.standardizedFileURL.path
+        return target == basePath || target.hasPrefix(basePath + "/")
     }
 
     @discardableResult
