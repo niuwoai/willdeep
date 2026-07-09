@@ -1,6 +1,6 @@
 # WillDeep Product Overview
 
-> Last updated: 2026-07-09 | Current version: v1.136.0-rc30
+> Last updated: 2026-07-09 | Current version: v1.136.0-rc32
 
 ## Positioning
 
@@ -14,6 +14,8 @@ WillDeep is configured for non-App-Store distribution without App Sandbox so it 
 
 WillDeep 是 SwiftUI + AppKit 桥接的 macOS 应用，单进程多窗口。代码层次：
 
+- **会话切换即时响应（1.136.0-rc32）** —— 点击左侧会话列表时先切换选中态与 transcript，再用不刷新 `updatedAt` 的路径保存旧会话，避免保存/重排挡在 UI 反馈前；侧栏工作区分组预先缓存显示名与远端 runtime 描述，排序不再反复触发路径解析或 UserDefaults JSON decode。另外两处主线程减负：composer context ring 的 `estimatedAgentSystemMessage` 加了 `(messageCount, sessionID, 1s)` 缓存，切换时两个 token 估算器共享一次 system prompt 构建 + 内存检索（原来各跑一遍、共两遍）；`syncWorkspaceContext` 在工作区安全域已激活时跳过重复的 `isExistingDirectory` 文件系统 stat。
+- **some.im 浏览器登录控制面固定（1.136.0-rc31）** —— 浏览器登录页与配对状态轮询固定使用 `https://some.im` 控制面，不再从当前推理 Base URL 推导 `/customer/login`，避免选择国内推理节点 `https://api.niuwoai.com/v1` 时打开错误网页登录域名。配对码继续统一使用 some.im 端接受的 `WD-` 前缀。
 - **对话区左侧用户输入刻度尺 + 轮数上限放大（1.136.0-rc30）** —— Agent 对话区左边缘一列等距短横线,每条对应一次用户输入;hover 变长并浮出小卡片(用户说了啥/AI 回了啥/改了哪些文件),点击滚动到该处(复用历史 NSTextView 的用户消息锚点,纯原生)。同时把对话区渲染上限从 20 条提到 60 条(约 30 轮)。
 - **Markdown 颜色语义渲染（1.136.0-rc29）** —— Agent 聊天 Markdown 的 inline code 在历史 TextKit 渲染里升级为圆角胶囊绘制;`#RGB` / `#RRGGBB` / `#RRGGBBAA` 颜色字面量会自动追加同色小方块。流式消息与落定历史共用同一套 inline 语义增强,截图里那种 `#8B3F52` + 色块效果可直接由普通 Markdown 文本触发。
 - **定时任务的会话归档守卫 + 列表时钟图标（1.136.0-rc29）** —— 归档仍有活跃定时任务的会话时先弹确认(确认后停止并移除这些任务);会话列表里挂着活跃定时任务的行,最前面显示一个时钟小图标。

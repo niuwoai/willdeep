@@ -307,6 +307,17 @@ final class AppState: ObservableObject {
     /// Same invalidation rules as `agentTokenEstimateCache`. Not @Published.
     var agentBaselineEstimateCache: (messageCount: Int, sessionID: AgentSession.ID?, value: Int, at: Date)?
 
+    /// Memo for `estimatedAgentSystemMessage` — the single `system` message
+    /// (prompt skeleton + retrieved memory). Both `estimatedAgentTokens` and
+    /// `estimatedAgentBaselineTokens` independently build it, so on a session
+    /// switch (which misses BOTH value caches at once) the full system-prompt
+    /// construction + memory retrieval ran twice on the main thread inside the
+    /// click path — a measurable slice of the switch "慢半拍". Sharing one
+    /// build across the two estimators halves it. Same (messageCount,
+    /// sessionID, 1s) invalidation as the value caches above, so it inherits
+    /// their precision tradeoff and adds no new staleness. Not @Published.
+    var agentSystemMessageCache: (messageCount: Int, sessionID: AgentSession.ID?, value: AgentMessage, at: Date)?
+
     /// Active Agent-mode session id. nil means "scratch" — Editor-mode
     /// chat keeps working without forcing a session to exist.
     @Published var activeAgentSessionID: AgentSession.ID? {

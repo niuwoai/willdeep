@@ -968,8 +968,8 @@ extension AppState {
 
     func selectAgentSession(id: AgentSession.ID) {
         guard agentSessions.contains(where: { $0.id == id }) else { return }
-        // Save the outgoing session first.
-        persistActiveAgentSession()
+        guard activeAgentSessionID != id else { return }
+        let outgoingRuntime = activeRuntime
 
         // rc4: switching away from a session no longer kills its in-flight
         // turn. Each runtime owns its own request task and waiter; with
@@ -987,6 +987,13 @@ extension AppState {
         activeAgentSessionID = id
         subscribeToActiveRuntime()
         evictInactiveAgentRuntimesIfNeeded()
+
+        // Keep the click path visually instant: the highlighted row and
+        // transcript switch first, then the outgoing runtime is saved without
+        // marking it newly active or moving it to the top of the sidebar.
+        if let outgoingRuntime {
+            persistAgentSession(runtime: outgoingRuntime, touchUpdatedAt: false, moveToFront: false)
+        }
 
         // Re-derive the session model override from the persisted
         // session record. The runtime carries it across the lifetime
@@ -1033,6 +1040,12 @@ extension AppState {
         }
 
         let url = URL(fileURLWithPath: path).standardizedFileURL
+        // Already validated + security-scoped this workspace on an earlier
+        // switch (the common case: hopping between two sessions in the same
+        // folder). `activateSecurityScope` would early-return anyway, but the
+        // `isExistingDirectory` stat below still hit the filesystem on every
+        // single session switch — skip it once the scope is live.
+        if securityScopedAccessURLs.contains(url) { return }
         guard Self.isExistingDirectory(url) else { return }
         _ = activateSecurityScope(for: url)
     }
@@ -1413,7 +1426,11 @@ extension AppState {
     /// Persist a specific runtime's session. Used by the turn loop's
     /// defer so background runtimes that finish while the user is on a
     /// different session still write their final state to disk.
-    func persistAgentSession(runtime: AgentRuntime) {
+    func persistAgentSession(
+        runtime: AgentRuntime,
+        touchUpdatedAt: Bool = true,
+        moveToFront: Bool = true
+    ) {
         guard let index = agentSessions.firstIndex(where: { $0.id == runtime.id }) else { return }
         if runtime.managedRouting != nil {
             // Managed routing resolves a model per-turn; there is no single
@@ -1431,7 +1448,7 @@ extension AppState {
         runtime.session.providerID = activeProvider?.providerID ?? agentConfiguration.normalized.providerID
         runtime.session.providerDisplayName = activeProvider?.displayName
             ?? AgentProviderPreset.preset(id: runtime.session.providerID ?? "")?.displayName
-        runtime.persist()
+        runtime.persist(touchUpdatedAt: touchUpdatedAt)
         agentSessions[index] = runtime.session
         // `persist()` just stamped `updatedAt = now`, so this session is
         // the newest — a single move-to-front keeps the list sorted.
@@ -1440,7 +1457,7 @@ extension AppState {
         // hundreds of already-ordered sessions each time; and because
         // `agentSessions` is @Published, the wholesale reorder also
         // invalidated the sidebar more than needed.
-        if index > 0 {
+        if moveToFront, index > 0 {
             let updated = agentSessions.remove(at: index)
             agentSessions.insert(updated, at: 0)
         }

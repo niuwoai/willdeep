@@ -75,6 +75,25 @@ extension AppState {
     /// baseline cancel cleanly out of `used` → the ring tracks only what the
     /// conversation adds.
     var estimatedAgentSystemMessage: AgentMessage {
+        let now = Date()
+        let messageCount = agentMessages.count
+        let sessionID = activeAgentSessionID
+        if let cached = agentSystemMessageCache,
+           cached.messageCount == messageCount,
+           cached.sessionID == sessionID,
+           now.timeIntervalSince(cached.at) < 1.0 {
+            return cached.value
+        }
+        let message = buildEstimatedAgentSystemMessage()
+        agentSystemMessageCache = (messageCount, sessionID, message, now)
+        return message
+    }
+
+    /// Uncached construction behind `estimatedAgentSystemMessage`. Builds the
+    /// full system prompt and runs memory retrieval (both touch UserDefaults /
+    /// project rules), so callers must go through the cached accessor above —
+    /// this is the expensive path the switch used to run twice.
+    private func buildEstimatedAgentSystemMessage() -> AgentMessage {
         let promptProfile = AgentSystemPromptProfile.automatic(
             modelID: activeAgentModelID,
             providerID: agentConfiguration.normalized.providerID

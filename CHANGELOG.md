@@ -1,5 +1,22 @@
 # Changelog
 
+## 1.136.0-rc32 - 2026-07-09
+
+### Fixed
+
+- **Agent 会话切换延迟优化**：点击左侧会话列表时先切换 `activeAgentSessionID`，再以不刷新 `updatedAt`、不移动列表位置的方式保存旧会话，避免保存和会话重排挡在选中态反馈前。
+- **Agent 侧栏分组热路径减负**：工作区分组预先缓存 display name 与远端 runtime 描述，排序比较不再反复 `URL(fileURLWithPath:)` 或 JSON decode UserDefaults，降低 SwiftUI body 重算时的主线程开销。
+- **Agent context ring 估算减半**：`estimatedAgentSystemMessage` 新增与两个 token 估算值同款的 `(messageCount, sessionID, 1s)` 缓存。此前 `estimatedAgentTokens` 与 `estimatedAgentBaselineTokens` 会在会话切换（两个值缓存同时失效）时各自完整构建一遍 system prompt 并跑一遍内存检索，两次都压在点击主线程上；现在两个估算器共享一次构建，切换时最重的“system prompt 构建 + 内存检索”从 2 次降到 1 次。
+- **Agent 切换跳过重复工作区 stat**：`syncWorkspaceContext` 在目标会话工作区已经激活过安全域时直接返回，不再每次会话切换都对同一目录做一次 `isExistingDirectory` 文件系统 stat（同工作区内多会话来回切时最明显）。
+- 版本号从 **1.136.0-rc31** 递增为 **1.136.0-rc32**。
+
+## 1.136.0-rc31 - 2026-07-09
+
+### Fixed
+
+- **some.im 浏览器登录控制面固定**：浏览器登录页与配对状态轮询固定使用 `https://some.im` 控制面，不再从当前推理 Base URL 推导 `/customer/login`，避免选择国内推理节点 `https://api.niuwoai.com/v1` 时打开错误网页登录域名。配对码继续统一使用 some.im 端接受的 `WD-` 前缀。
+- 版本号从 **1.136.0-rc30** 递增为 **1.136.0-rc31**。
+
 ## 1.136.0-rc30 - 2026-07-09
 
 ### Added

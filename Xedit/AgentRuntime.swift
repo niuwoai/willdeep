@@ -260,7 +260,7 @@ final class AgentRuntime: ObservableObject, Identifiable {
     /// main actor; write failures are broadcast via
     /// `AgentSessionStore.saveDidFailNotification` (each AppState
     /// instance claims failures for the runtimes it owns).
-    func persist() {
+    func persist(touchUpdatedAt: Bool = true) {
         session.messages = messages
         session.contextSummary = contextSummary
         session.contextSummaryThroughMessageID = contextSummaryThroughMessageID
@@ -283,7 +283,9 @@ final class AgentRuntime: ObservableObject, Identifiable {
         session.latestTurnRecall = latestTurnRecall
         session.sidePanelState = sidePanelState
         session.managedRouting = managedRouting
-        session.updatedAt = Date()
+        if touchUpdatedAt {
+            session.updatedAt = Date()
+        }
         // Two title sources fight for this slot:
         //   1. User-set (sidebar rename) — `titleIsUserSet == true`,
         //      we leave it alone forever.

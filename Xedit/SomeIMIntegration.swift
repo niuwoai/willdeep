@@ -394,11 +394,12 @@ struct SomeIMGeneratedImage: Equatable, Sendable {
 
 enum SomeIMClient {
     static let willDeepClientID = "willdeep"
+    private static let browserControlOrigin = "https://some.im"
 
     static func makeBrowserLoginRequest(settings: SomeIMIntegrationSettings) throws -> SomeIMBrowserLoginRequest {
         let code = try randomDeviceCode()
         let pairToken = try randomPairToken()
-        let url = try browserLoginURL(settings: settings.normalized, code: code, pairToken: pairToken)
+        let url = try browserLoginURL(code: code, pairToken: pairToken)
         return SomeIMBrowserLoginRequest(code: code, pairToken: pairToken, url: url, createdAt: Date())
     }
 
@@ -419,7 +420,7 @@ enum SomeIMClient {
         session: URLSession
     ) async throws -> SomeIMBrowserLoginStatus {
         let normalized = settings.normalized
-        let endpoint = try browserStatusEndpoint(from: normalized.baseURL, code: loginRequest.code)
+        let endpoint = try browserStatusEndpoint(code: loginRequest.code)
         var request = URLRequest(url: endpoint)
         request.httpMethod = "GET"
         request.timeoutInterval = 12
@@ -773,8 +774,8 @@ enum SomeIMClient {
         return url
     }
 
-    private static func browserStatusEndpoint(from baseURL: String, code: String) throws -> URL {
-        guard var components = URLComponents(url: try publicAPIEndpoint(from: baseURL, suffix: "public/client-login/browser-status"), resolvingAgainstBaseURL: false) else {
+    private static func browserStatusEndpoint(code: String) throws -> URL {
+        guard var components = URLComponents(url: try publicAPIEndpoint(from: browserControlOrigin, suffix: "public/client-login/browser-status"), resolvingAgainstBaseURL: false) else {
             throw AgentClientError.invalidResponse
         }
         components.queryItems = [
@@ -785,8 +786,8 @@ enum SomeIMClient {
         return url
     }
 
-    private static func browserLoginURL(settings: SomeIMIntegrationSettings, code: String, pairToken: String) throws -> URL {
-        guard var components = URLComponents(string: settings.baseURL.trimmingCharacters(in: .whitespacesAndNewlines)) else {
+    private static func browserLoginURL(code: String, pairToken: String) throws -> URL {
+        guard var components = URLComponents(string: browserControlOrigin) else {
             throw AgentClientError.invalidResponse
         }
         components.path = "/customer/login"

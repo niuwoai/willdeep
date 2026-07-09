@@ -21,6 +21,13 @@
 import AppKit
 import SwiftUI
 
+private struct SidebarWorkspaceGroup: Identifiable {
+    let id: String
+    let displayName: String
+    let remoteRuntime: RuntimeDescriptor?
+    let sessions: [AgentSession]
+}
+
 struct AgentSessionsSidebar: View {
     @EnvironmentObject var appState: AppState
     @State private var expandedWorkspaces = AgentSidebarWorkspaceStateStore.load(.expandedWorkspaces)
@@ -321,14 +328,16 @@ struct AgentSessionsSidebar: View {
             .padding(.horizontal, 14)
             .padding(.bottom, 6)
 
-            ForEach(groupedSessions, id: \.0) { workspace, sessions in
-                workspaceGroup(workspace: workspace, sessions: sessions, now: now)
+            ForEach(groupedSessions) { group in
+                workspaceGroup(group, now: now)
             }
         }
     }
 
     @ViewBuilder
-    private func workspaceGroup(workspace: String, sessions: [AgentSession], now: Date) -> some View {
+    private func workspaceGroup(_ group: SidebarWorkspaceGroup, now: Date) -> some View {
+        let workspace = group.id
+        let sessions = group.sessions
         let activeSessions = sessions.filter { !$0.isArchived }
         let archivedSessions = sessions.filter { $0.isArchived }
             .sorted { ($0.archivedAt ?? .distantPast) > ($1.archivedAt ?? .distantPast) }
@@ -337,7 +346,7 @@ struct AgentSessionsSidebar: View {
         let visible = isExpanded ? activeSessions : Array(activeSessions.prefix(initialRowCount))
         let archivedExpanded = expandedArchivedGroups.contains(workspace)
         let remoteWorkspace = remoteWorkspaceGroup(from: workspace)
-        let remoteRuntime = remoteWorkspace.flatMap { AgentRuntimeStore.descriptor(id: $0.runtimeID) }
+        let remoteRuntime = group.remoteRuntime
         let isWorkspaceHovered = hoveredWorkspaceGroup == workspace
 
         VStack(alignment: .leading, spacing: 0) {
@@ -358,7 +367,7 @@ struct AgentSessionsSidebar: View {
                             .font(.system(size: 11))
                             .foregroundStyle(remoteWorkspace == nil ? Color.secondary : WorkspacePresentation.remoteTint(for: remoteRuntime))
                             .frame(width: 14, height: 14)
-                        Text(workspaceDisplayName(workspace))
+                        Text(group.displayName)
                             .font(.system(size: 12, weight: .semibold))
                             .lineLimit(1)
                             .truncationMode(.middle)
@@ -730,7 +739,7 @@ struct AgentSessionsSidebar: View {
         .frame(minWidth: isHovered ? 40 : 0, alignment: .trailing)
     }
 
-    private var groupedSessions: [(String, [AgentSession])] {
+    private var groupedSessions: [SidebarWorkspaceGroup] {
         // Hide empty "New Chat" rows — sessions that never got a user
         // message just clutter the sidebar with a wall of identical
         // placeholders (see screenshot). The active session is always kept
@@ -747,6 +756,7 @@ struct AgentSessionsSidebar: View {
         let groups = Dictionary(grouping: visibleSessions) { session in
             session.workspaceSidebarGroupKey
         }
+        let remoteDescriptors = remoteRuntimeDescriptorsByID
         // Group order rules — fully static, never depends on session
         // updatedAt or on which folder is currently open. The user
         // explicitly asked for the workspace list to stop moving around
@@ -761,17 +771,32 @@ struct AgentSessionsSidebar: View {
         // recency — only the folder ordering is frozen.
         return groups
             .filter { !appState.hiddenWorkspaceKeys.contains($0.key) }
-            .map { ($0.key, $0.value.sorted(by: sessionOrder)) }
+            .map { entry in
+                let remoteWorkspace = remoteWorkspaceGroup(from: entry.key)
+                let remoteRuntime = remoteWorkspace.flatMap { remoteDescriptors[$0.runtimeID] }
+                return SidebarWorkspaceGroup(
+                    id: entry.key,
+                    displayName: workspaceDisplayName(entry.key, remoteDescriptors: remoteDescriptors),
+                    remoteRuntime: remoteRuntime,
+                    sessions: entry.value.sorted(by: sessionOrder)
+                )
+            }
             .sorted { lhs, rhs in
-                let lKey = lhs.0
-                let rKey = rhs.0
+                let lKey = lhs.id
+                let rKey = rhs.id
                 let lIsNoWorkspace = (lKey == AgentSession.noWorkspaceSidebarGroupKey)
                 let rIsNoWorkspace = (rKey == AgentSession.noWorkspaceSidebarGroupKey)
                 if lIsNoWorkspace != rIsNoWorkspace { return !lIsNoWorkspace }
-                let lName = workspaceDisplayName(lKey)
-                let rName = workspaceDisplayName(rKey)
-                return lName.localizedCaseInsensitiveCompare(rName) == .orderedAscending
+                return lhs.displayName.localizedCaseInsensitiveCompare(rhs.displayName) == .orderedAscending
             }
+    }
+
+    private var remoteRuntimeDescriptorsByID: [UUID: RuntimeDescriptor] {
+        var descriptors: [UUID: RuntimeDescriptor] = [:]
+        for descriptor in AgentRuntimeStore.loadDescriptors() {
+            descriptors[descriptor.id] = descriptor
+        }
+        return descriptors
     }
 
     private var workspaceStatePruneKey: [String] {
@@ -856,13 +881,21 @@ struct AgentSessionsSidebar: View {
         return String(first).uppercased()
     }
 
-    private func workspaceDisplayName(_ key: String) -> String {
+    private func workspaceDisplayName(
+        _ key: String,
+        remoteDescriptors: [UUID: RuntimeDescriptor]
+    ) -> String {
         if key == AgentSession.noWorkspaceSidebarGroupKey { return L10n.Workspace.noWorkspace }
         if let remote = remoteWorkspaceGroup(from: key) {
-            let runtime = AgentRuntimeStore.descriptor(id: remote.runtimeID)
+            let runtime = remoteDescriptors[remote.runtimeID]
             return WorkspacePresentation.remoteDisplayName(runtime: runtime, path: remote.path)
         }
-        return URL(fileURLWithPath: key).lastPathComponent
+        return localWorkspaceDisplayName(key)
+    }
+
+    private func localWorkspaceDisplayName(_ path: String) -> String {
+        let trimmed = path.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+        return trimmed.split(separator: "/").last.map(String.init) ?? path
     }
 
     private func localWorkspacePath(for key: String) -> String? {

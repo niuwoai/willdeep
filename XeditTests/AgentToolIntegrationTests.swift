@@ -23,6 +23,25 @@ struct AgentContextBuilderPromptTests {
 
 @Suite(.serialized)
 struct SomeIMBrowserLoginStatusTests {
+    @Test("browser login request always opens some.im control plane")
+    func testBrowserLoginRequestUsesSomeIMControlPlane() throws {
+        let request = try SomeIMClient.makeBrowserLoginRequest(
+            settings: SomeIMIntegrationSettings(baseURL: "https://api.niuwoai.com/v1")
+        )
+        let components = try #require(URLComponents(url: request.url, resolvingAgainstBaseURL: false))
+        let query = Dictionary(uniqueKeysWithValues: (components.queryItems ?? []).compactMap { item in
+            item.value.map { (item.name, $0) }
+        })
+
+        #expect(components.scheme == "https")
+        #expect(components.host == "some.im")
+        #expect(components.path == "/customer/login")
+        #expect(query["client_id"] == "willdeep")
+        #expect(query["willdeep_device_code"] == request.code)
+        #expect(request.code.range(of: #"^WD-[A-Z2-9]{4}-[A-Z2-9]{4}$"#, options: .regularExpression) != nil)
+        #expect(query["willdeep_pair_token"] == request.pairToken)
+    }
+
     @Test("browser login status accepts nested camelCase credentials")
     @MainActor
     func testBrowserLoginStatusAcceptsNestedCamelCaseCredentials() async throws {

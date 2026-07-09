@@ -468,24 +468,38 @@ enum AgentRuntimeStore {
     private static let defaultsKey = "com.willdeep.agentRuntime.descriptors.v1"
     private static var defaultsOverride: UserDefaults?
     private static var defaults: UserDefaults { defaultsOverride ?? .standard }
+    private static let descriptorsLock = NSLock()
+    private static var descriptorsCache: [RuntimeDescriptor]?
 
     static func loadDescriptors() -> [RuntimeDescriptor] {
+        descriptorsLock.lock()
+        if let descriptorsCache {
+            descriptorsLock.unlock()
+            return descriptorsCache
+        }
+        descriptorsLock.unlock()
+
         guard let data = defaults.data(forKey: defaultsKey),
               let decoded = try? JSONDecoder().decode([RuntimeDescriptor].self, from: data) else {
+            cacheDescriptors([])
             return []
         }
-        return decoded
+        let descriptors = decoded
             .filter { $0.transport != .local }
             .map(\.normalized)
             .sorted { $0.displayName.localizedCaseInsensitiveCompare($1.displayName) == .orderedAscending }
+        cacheDescriptors(descriptors)
+        return descriptors
     }
 
     static func saveDescriptors(_ descriptors: [RuntimeDescriptor]) {
         let cleaned = descriptors
             .filter { $0.transport != .local }
             .map(\.normalized)
+            .sorted { $0.displayName.localizedCaseInsensitiveCompare($1.displayName) == .orderedAscending }
         if let data = try? JSONEncoder().encode(cleaned) {
             defaults.set(data, forKey: defaultsKey)
+            cacheDescriptors(cleaned)
         }
     }
 
@@ -509,10 +523,23 @@ enum AgentRuntimeStore {
         saveDescriptors(loadDescriptors().filter { $0.id != id })
     }
 
+    private static func cacheDescriptors(_ descriptors: [RuntimeDescriptor]) {
+        descriptorsLock.lock()
+        descriptorsCache = descriptors
+        descriptorsLock.unlock()
+    }
+
+    private static func resetDescriptorCache() {
+        descriptorsLock.lock()
+        descriptorsCache = nil
+        descriptorsLock.unlock()
+    }
+
     @discardableResult
     static func setTestDefaults(_ defaults: UserDefaults?) -> UserDefaults? {
         let previous = defaultsOverride
         defaultsOverride = defaults
+        resetDescriptorCache()
         return previous
     }
 }
