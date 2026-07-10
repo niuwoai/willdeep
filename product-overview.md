@@ -1,6 +1,6 @@
 # WillDeep Product Overview
 
-> Last updated: 2026-07-09 | Current version: v1.136.0-rc41
+> Last updated: 2026-07-10 | Current version: v1.136.0-rc42
 
 ## Positioning
 
@@ -14,6 +14,7 @@ WillDeep is configured for non-App-Store distribution without App Sandbox so it 
 
 WillDeep 是 SwiftUI + AppKit 桥接的 macOS 应用，单进程多窗口。代码层次：
 
+- **会话级产物清单（1.136.0-rc42）** —— Agent 右侧任务监控里的“产物”不再从 Git 未提交变更按扩展名猜测，而是使用持久化的会话级产物路径，并合并严格属于当前 runtime 的媒体任务输出；只收录本会话新建的用户可交付文档、图片、音视频等文件，排除已有源码修改和 `build`、`.local-cache`、`node_modules` 等临时目录。产物提交 Git 后仍保留；“工作文件”继续单独展示本会话关联的未提交变更，两块口径在界面中明确标注且不会重复列同一文件。
 - **some.im 浏览器登录协议兼容（1.136.0-rc38）** —— 浏览器登录 URL 与状态轮询同时带新旧参数名（`code` / `device_code` / `willdeep_device_code`，`pair_token` / `willdeep_pair_token`），browser-status 也兼容扁平返回的 `api_token`、`customer_session_token`、`email`、`credits` 等字段；只要 some.im 返回 app API key，WillDeep 就能保存共享 session，不再因为缺少嵌套 `account` 对象误报“登录完成但没返回凭据”。
 - **some.im Coding Plan 感知托管路由（1.136.0-rc37）** —— WillDeep 登录 some.im 后会定期查询 `/customer/plan/subscription` 并缓存 coding plan 权益；省心托管每轮裁判后按权益选模型族：有 plan 时 low/high/premium 全部走 `someim-coding-plan-*`，没有 plan 时编程域走 `someim-code-low/high/premium`、通用域走 `someim-auto-flash/pro/premium`。
 - **委派 coding agent 默认免审核（1.136.0-rc35）** —— `claude_code` / `codex_cli` / `cursor_agent` / `cline_cli` 这类把整段任务委派给本机已装 CLI agent 的工具，默认 smart 模式下不再逐次弹审批，直接放行（`.staticAllowlist`），因为这三家各自自带审批 + 沙箱审核、视为可信。`requestEveryTime` 模式仍逐次问，goal 模式本就已放行，子进程自身沙箱边界不变（不提权）。

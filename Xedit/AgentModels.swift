@@ -60,6 +60,10 @@ nonisolated struct AgentSession: Identifiable, Codable, Equatable {
     /// session. The worktree-change card reads from this — anything not
     /// in here (user's own diffs, untracked `.pyc` etc.) is filtered out.
     var agentEditedPaths: [String]
+    /// Workspace-relative, user-facing files created by the Agent in this
+    /// conversation. Unlike `agentEditedPaths`, this is an artifact ledger:
+    /// it survives Git commits and excludes transient build/cache output.
+    var agentArtifactPaths: [String]
     /// Per-session interaction mode. Persisted so re-selecting a session
     /// resumes plan/goal context without the user having to redo setup.
     var interactionMode: AgentInteractionMode
@@ -132,6 +136,7 @@ nonisolated struct AgentSession: Identifiable, Codable, Equatable {
         contextSummaryThroughMessageID: AgentMessage.ID? = nil,
         didEditFiles: Bool = false,
         agentEditedPaths: [String] = [],
+        agentArtifactPaths: [String] = [],
         interactionMode: AgentInteractionMode = .normal,
         approvalMode: AgentApprovalMode = .smart,
         executionAgent: AgentExecutionAgent = .willDeep,
@@ -162,6 +167,7 @@ nonisolated struct AgentSession: Identifiable, Codable, Equatable {
         self.contextSummaryThroughMessageID = contextSummaryThroughMessageID
         self.didEditFiles = didEditFiles
         self.agentEditedPaths = agentEditedPaths
+        self.agentArtifactPaths = agentArtifactPaths
         self.interactionMode = interactionMode
         self.approvalMode = approvalMode
         self.executionAgent = executionAgent
@@ -231,7 +237,7 @@ nonisolated struct AgentSession: Identifiable, Codable, Equatable {
         case id, title, workspaceRootPath, workspaceLocation, localWorkspaceIdentity, modelID
         case providerID, providerDisplayName, managedRouting
         case createdAt, updatedAt, messages, contextSummary, contextSummaryThroughMessageID
-        case didEditFiles, agentEditedPaths, interactionMode, approvalMode, executionAgent, activeExperts, currentPlan, currentGoal, learningEvents, latestTurnRecall, sidePanelState
+        case didEditFiles, agentEditedPaths, agentArtifactPaths, interactionMode, approvalMode, executionAgent, activeExperts, currentPlan, currentGoal, learningEvents, latestTurnRecall, sidePanelState
         case pinnedAt, archivedAt, titleIsUserSet
     }
 
@@ -254,6 +260,7 @@ nonisolated struct AgentSession: Identifiable, Codable, Equatable {
         self.contextSummaryThroughMessageID = try c.decodeIfPresent(AgentMessage.ID.self, forKey: .contextSummaryThroughMessageID)
         self.didEditFiles = try c.decodeIfPresent(Bool.self, forKey: .didEditFiles) ?? false
         self.agentEditedPaths = try c.decodeIfPresent([String].self, forKey: .agentEditedPaths) ?? []
+        self.agentArtifactPaths = try c.decodeIfPresent([String].self, forKey: .agentArtifactPaths) ?? []
         self.interactionMode = try c.decodeIfPresent(AgentInteractionMode.self, forKey: .interactionMode) ?? .normal
         self.approvalMode = try c.decodeIfPresent(AgentApprovalMode.self, forKey: .approvalMode) ?? .smart
         self.executionAgent = try c.decodeIfPresent(AgentExecutionAgent.self, forKey: .executionAgent) ?? .willDeep

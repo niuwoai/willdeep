@@ -16,6 +16,7 @@ struct AgentTaskMonitorSnapshot: Equatable {
     var jobDigest: [String]
     var mediaTaskDigest: [String]
     var todoDigest: [String]
+    var artifactDigest: [String]
     var workFileDigest: [String]
     var learningDigest: [String]
 
@@ -45,6 +46,7 @@ struct AgentTaskMonitorSnapshot: Equatable {
         digest.append(contentsOf: jobDigest.map { "job:\($0)" })
         digest.append(contentsOf: mediaTaskDigest.map { "media:\($0)" })
         digest.append(contentsOf: todoDigest.map { "todo:\($0)" })
+        digest.append(contentsOf: artifactDigest.map { "artifact:\($0)" })
         digest.append(contentsOf: workFileDigest.map { "work:\($0)" })
         digest.append(contentsOf: learningDigest.map { "learning:\($0)" })
         return digest
@@ -55,6 +57,7 @@ struct AgentTaskMonitorSnapshot: Equatable {
             || !jobDigest.isEmpty
             || !mediaTaskDigest.isEmpty
             || !todoDigest.isEmpty
+            || !artifactDigest.isEmpty
             || !workFileDigest.isEmpty
             || !learningDigest.isEmpty
     }
@@ -78,6 +81,7 @@ struct AgentTaskMonitorSnapshot: Equatable {
             jobDigest: jobDigest(from: appState),
             mediaTaskDigest: mediaTaskDigest(from: appState),
             todoDigest: todoDigest(from: appState),
+            artifactDigest: artifactDigest(from: appState),
             workFileDigest: appState.agentWorktreeChanges.files.map { change in
                 [
                     change.path,
@@ -136,6 +140,15 @@ struct AgentTaskMonitorSnapshot: Equatable {
                     String(Int(task.updatedAt.timeIntervalSince1970))
                 ].joined(separator: ":")
             }
+    }
+
+    private static func artifactDigest(from appState: AppState) -> [String] {
+        guard let runtime = appState.activeRuntime else { return [] }
+        let workspaceArtifacts = runtime.agentArtifactPaths.map { "workspace:\($0)" }
+        let mediaArtifacts = appState.agentMediaTaskRegistry.tasks
+            .filter { $0.runtimeID == runtime.id }
+            .flatMap { task in task.artifacts.map { "media:\($0.filePath)" } }
+        return (workspaceArtifacts + mediaArtifacts).sorted()
     }
 
     private static func learningDigest(from appState: AppState) -> [String] {

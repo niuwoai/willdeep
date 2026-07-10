@@ -211,6 +211,13 @@ extension AppState {
         set { activeRuntime?.agentEditedPaths = newValue }
     }
 
+    /// User-facing files created in the active conversation. This is not a
+    /// Git-status view; committed outputs remain in the session ledger.
+    var agentArtifactRelativePaths: Set<String> {
+        get { activeRuntime?.agentArtifactPaths ?? [] }
+        set { activeRuntime?.agentArtifactPaths = newValue }
+    }
+
     /// Continuation resumed when the user resolves the currently-blocked
     /// tool call. Each runtime owns its own waiter so concurrent sessions
     /// do not fight over one slot.

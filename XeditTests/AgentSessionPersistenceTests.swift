@@ -36,6 +36,7 @@ struct AgentSessionPersistenceTests {
         #expect(session.contextSummary == nil)
         #expect(session.contextSummaryThroughMessageID == nil)
         #expect(session.didEditFiles == false)
+        #expect(session.agentArtifactPaths.isEmpty)
         #expect(session.workspaceRootPath == nil)
         #expect(session.sidePanelState == .empty)
     }
@@ -69,6 +70,8 @@ struct AgentSessionPersistenceTests {
             contextSummary: "summary used only for model context",
             contextSummaryThroughMessageID: UUID(uuidString: "44444444-4444-4444-4444-444444444444"),
             didEditFiles: true,
+            agentEditedPaths: ["Sources/App.swift", "reports/result.pdf"],
+            agentArtifactPaths: ["reports/result.pdf"],
             interactionMode: .plan,
             currentPlan: plan,
             currentGoal: goal,
@@ -125,6 +128,8 @@ struct AgentSessionPersistenceTests {
         #expect(decoded.latestTurnRecall?.items.count == 1)
         #expect(decoded.latestTurnRecall?.items.first?.kind == .memory)
         #expect(decoded.didEditFiles == true)
+        #expect(decoded.agentEditedPaths == ["Sources/App.swift", "reports/result.pdf"])
+        #expect(decoded.agentArtifactPaths == ["reports/result.pdf"])
         #expect(decoded.sidePanelState.kind == AgentSidePanelKind.imageEditor)
         #expect(decoded.sidePanelState.selectedFilePath == "/Users/test/proj/README.md")
         #expect(decoded.sidePanelState.mediaTaskScope?.shotID == "shot-1")
