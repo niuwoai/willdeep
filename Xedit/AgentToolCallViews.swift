@@ -257,7 +257,13 @@ struct AgentToolCallGroup: View {
             return "command: \(trimmed(command, limit: 140))\(cwd)"
         }
         if call.toolName == "terminal_send_command", let command = call.arguments["command"]?.stringValue() {
-            return "命令: \(trimmed(command, limit: 140))"
+            var summary = "命令: \(trimmed(command, limit: 140))"
+            if let paths = call.arguments["zmodem_upload_paths"]?.stringArrayValue(), !paths.isEmpty {
+                summary += " · zmodem_upload_paths: \(paths.count)"
+            } else if let directory = call.arguments["zmodem_download_directory"]?.stringValue(), !directory.isEmpty {
+                summary += " · zmodem_download_directory: \(trimmed(directory, limit: 72))"
+            }
+            return summary
         }
         if call.toolName == "terminal_send_control", let raw = call.arguments["control"]?.stringValue() {
             return "按键: \(AgentToolDisplay.controlLabel(for: raw))"
@@ -847,7 +853,18 @@ struct AgentToolCallCard: View {
     /// 友好按键说明,而不是裸的 `ctrl_c`。
     private var approvalDetail: (title: String, body: String)? {
         if let command = fullCommand {
-            return (L10n.ToolCard.command, command)
+            var body = command
+            if call.toolName == "terminal_send_command",
+               let uploadPaths = call.arguments["zmodem_upload_paths"]?.stringArrayValue(),
+               !uploadPaths.isEmpty {
+                body += "\n\nzmodem_upload_paths:\n" + uploadPaths.joined(separator: "\n")
+            }
+            if call.toolName == "terminal_send_command",
+               let downloadDirectory = call.arguments["zmodem_download_directory"]?.stringValue(),
+               !downloadDirectory.isEmpty {
+                body += "\n\nzmodem_download_directory:\n\(downloadDirectory)"
+            }
+            return (L10n.ToolCard.command, body)
         }
         if call.toolName == "terminal_send_control",
            let raw = call.arguments["control"]?.stringValue() {
@@ -857,7 +874,10 @@ struct AgentToolCallCard: View {
     }
 
     private var alwaysAllowSignature: String? {
-        AgentToolAuthorization.signature(for: call)
+        AgentToolAuthorization.suggestedPersistentSignature(
+            toolName: call.toolName,
+            arguments: call.arguments
+        )
     }
 
     private var decisionAlreadySubmitted: Bool {

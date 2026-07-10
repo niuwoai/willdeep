@@ -129,6 +129,12 @@ if [[ -z "$VERSION" ]]; then
   echo "❌ 没能从 pbxproj 抓到 MARKETING_VERSION"
   exit 1
 fi
+
+if [[ -z "${WILLDEEP_CLIENT_LOGIN_SECRET:-}" ]]; then
+  echo "❌ 缺少 WILLDEEP_CLIENT_LOGIN_SECRET，无法生成可用的 some.im 浏览器登录包"
+  echo "   请在本地发布环境设置该变量后重新运行 release.sh；不要把密钥写入 Git。"
+  exit 1
+fi
 DMG_PATH="${BUILD_DIR}/${PRODUCT_NAME}-${VERSION}.dmg"
 
 # ----- 记录起点 commit（最后输出 release 摘要用） ---------------------------

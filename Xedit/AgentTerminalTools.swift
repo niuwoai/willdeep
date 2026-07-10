@@ -182,9 +182,87 @@ enum AgentTerminalTools {
               !command.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
             throw AgentToolError.missingArgument("command")
         }
+        let pathSelection = try zmodemPathSelection(arguments: arguments, rootDirectory: context.rootDirectory)
         return try await MainActor.run {
-            try controller.sendApprovedCommand(command, secretRedactionValues: context.secretRedactionValues)
+            try controller.sendApprovedCommand(
+                command,
+                zmodemPathSelection: pathSelection,
+                secretRedactionValues: context.secretRedactionValues
+            )
         }
+    }
+
+    static func hasZModemPathSelection(_ arguments: [String: AgentJSONValue]) -> Bool {
+        arguments["zmodem_upload_paths"] != nil || arguments["zmodem_download_directory"] != nil
+    }
+
+    static func zmodemPathSelection(
+        arguments: [String: AgentJSONValue],
+        rootDirectory: URL?
+    ) throws -> TerminalZModemPathSelection? {
+        let uploadPaths = arguments["zmodem_upload_paths"]?.stringArrayValue()
+        let rawDownloadDirectory = arguments["zmodem_download_directory"]?.stringValue()
+        let hasUploadPaths = uploadPaths?.isEmpty == false
+        let hasDownloadDirectory = rawDownloadDirectory?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false
+
+        guard !(hasUploadPaths && hasDownloadDirectory) else {
+            throw AgentToolError.invalidArgument(
+                "Provide either zmodem_upload_paths or zmodem_download_directory, not both."
+            )
+        }
+        if arguments["zmodem_upload_paths"] != nil, uploadPaths == nil {
+            throw AgentToolError.invalidArgument("zmodem_upload_paths must be an array of local file paths.")
+        }
+        if let uploadPaths, !uploadPaths.isEmpty {
+            guard uploadPaths.count <= 32 else {
+                throw AgentToolError.invalidArgument("zmodem_upload_paths supports at most 32 files per transfer.")
+            }
+            let files = try uploadPaths.map { rawPath in
+                let url = try resolveLocalPath(rawPath, rootDirectory: rootDirectory)
+                var isDirectory: ObjCBool = false
+                guard FileManager.default.fileExists(atPath: url.path, isDirectory: &isDirectory),
+                      !isDirectory.boolValue else {
+                    throw AgentToolError.invalidArgument("ZMODEM upload file does not exist or is not a file: \(url.path)")
+                }
+                guard FileManager.default.isReadableFile(atPath: url.path) else {
+                    throw AgentToolError.invalidArgument("ZMODEM upload file is not readable: \(url.path)")
+                }
+                return url
+            }
+            return .upload(files: files)
+        }
+        if let rawDownloadDirectory, hasDownloadDirectory {
+            let directory = try resolveLocalPath(rawDownloadDirectory, rootDirectory: rootDirectory)
+            var isDirectory: ObjCBool = false
+            guard FileManager.default.fileExists(atPath: directory.path, isDirectory: &isDirectory),
+                  isDirectory.boolValue else {
+                throw AgentToolError.invalidArgument(
+                    "ZMODEM download directory does not exist or is not a directory: \(directory.path)"
+                )
+            }
+            guard FileManager.default.isWritableFile(atPath: directory.path) else {
+                throw AgentToolError.invalidArgument("ZMODEM download directory is not writable: \(directory.path)")
+            }
+            return .download(directory: directory)
+        }
+        return nil
+    }
+
+    private static func resolveLocalPath(_ rawPath: String, rootDirectory: URL?) throws -> URL {
+        let trimmed = rawPath.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else {
+            throw AgentToolError.invalidArgument("ZMODEM local paths cannot be empty.")
+        }
+        let expanded = NSString(string: trimmed).expandingTildeInPath
+        if expanded.hasPrefix("/") {
+            return URL(fileURLWithPath: expanded).standardizedFileURL
+        }
+        guard let rootDirectory else {
+            throw AgentToolError.invalidArgument(
+                "Relative ZMODEM local paths require an open workspace; otherwise provide an absolute path."
+            )
+        }
+        return rootDirectory.appendingPathComponent(expanded).standardizedFileURL
     }
 
     static func sendControl(arguments: [String: AgentJSONValue], context: AgentToolContext) async throws -> AgentToolResult {

@@ -933,6 +933,10 @@ final class AgentLocalProcessTerminalView: TerminalView, TerminalViewDelegate, L
         super.paste(sender)
     }
 
+    func prepareZModemPathSelection(_ selection: TerminalZModemPathSelection?) {
+        zmodemBridge.preparePathSelection(selection)
+    }
+
     // MARK: TerminalViewDelegate
 
     func send(source: TerminalView, data: ArraySlice<UInt8>) {
@@ -1305,7 +1309,11 @@ final class AgentTerminalTab: ObservableObject, Identifiable, AgentTerminalProce
 
     // MARK: Agent-tool surface
 
-    func sendApprovedCommand(_ command: String, secretRedactionValues: [String] = []) throws -> AgentToolResult {
+    func sendApprovedCommand(
+        _ command: String,
+        zmodemPathSelection: TerminalZModemPathSelection? = nil,
+        secretRedactionValues: [String] = []
+    ) throws -> AgentToolResult {
         let trimmed = command.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { throw AgentToolError.missingArgument("command") }
         guard isRunning else {
@@ -1314,11 +1322,20 @@ final class AgentTerminalTab: ObservableObject, Identifiable, AgentTerminalProce
         let visibleCommand = AgentSecretStore.redact(trimmed, secretValues: secretRedactionValues)
         recordCommand(visibleCommand)
         lastActivity = Date()
+        terminalView.prepareZModemPathSelection(zmodemPathSelection)
         terminalView.send(txt: trimmed + "\n")
-        let payload = """
+        var payload = """
         Sent command to Agent Terminal tab \"\(title)\".
         Command: \(visibleCommand)
         """
+        switch zmodemPathSelection {
+        case .upload(let files):
+            payload += "\nPrepared ZMODEM upload files:\n" + files.map(\.path).joined(separator: "\n")
+        case .download(let directory):
+            payload += "\nPrepared ZMODEM download directory: \(directory.path)"
+        case nil:
+            break
+        }
         return AgentToolResult(summary: "terminal: \(visibleCommand.prefix(80))", payload: payload)
     }
 
@@ -1952,9 +1969,17 @@ final class AgentInteractiveTerminalController: ObservableObject {
         )
     }
 
-    func sendApprovedCommand(_ command: String, secretRedactionValues: [String] = []) throws -> AgentToolResult {
+    func sendApprovedCommand(
+        _ command: String,
+        zmodemPathSelection: TerminalZModemPathSelection? = nil,
+        secretRedactionValues: [String] = []
+    ) throws -> AgentToolResult {
         let tab = try activeTabForToolUse()
-        return try tab.sendApprovedCommand(command, secretRedactionValues: secretRedactionValues)
+        return try tab.sendApprovedCommand(
+            command,
+            zmodemPathSelection: zmodemPathSelection,
+            secretRedactionValues: secretRedactionValues
+        )
     }
 
     func sendApprovedControl(_ control: AgentTerminalControl) throws -> AgentToolResult {

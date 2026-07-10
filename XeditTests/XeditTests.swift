@@ -1263,6 +1263,43 @@ struct WillDeepTests {
         #expect(gated == nil)
     }
 
+    @Test("remote media-task tools auto-approve by default but not in requestEveryTime")
+    @MainActor
+    func testMediaTaskToolsAutoApproval() async {
+        let sandbox = KeychainSandbox()
+        defer { withExtendedLifetime(sandbox) {} }
+        let appState = AppState()
+        let root = URL(fileURLWithPath: "/tmp/willdeep-test-workspace")
+
+        // 提交·轮询·取消都应默认免审批（含 some.im 与 replicate 家族）。
+        for tool in [
+            "some_im_create_media_task",
+            "some_im_poll_media_task",
+            "some_im_cancel_media_task",
+            "replicate_create_prediction",
+            "replicate_poll_prediction",
+            "replicate_cancel_prediction",
+        ] {
+            let approved = await appState.autoApprovalSource(
+                toolName: tool,
+                arguments: ["task_id": .string("t-123")],
+                risk: .write,
+                rootDirectory: root
+            )
+            #expect(approved == .staticAllowlist, "\(tool) 应默认免审批")
+        }
+
+        // requestEveryTime 模式仍强制人工确认。
+        let gated = await appState.autoApprovalSource(
+            toolName: "some_im_create_media_task",
+            arguments: ["task_id": .string("t-123")],
+            risk: .write,
+            rootDirectory: root,
+            approvalMode: .requestEveryTime
+        )
+        #expect(gated == nil)
+    }
+
     @Test("MCP settings keep trusted and untrusted sets mutually exclusive")
     @MainActor
     func testMCPTrustSetsAreMutuallyExclusive() throws {
@@ -1460,6 +1497,18 @@ struct WillDeepTests {
             approvalMode: .smart
         )
         #expect(smart == .staticAllowlist)
+
+        let zmodemPathSelection = await appState.autoApprovalSource(
+            toolName: "terminal_send_command",
+            arguments: [
+                "command": .string("rz"),
+                "zmodem_upload_paths": .array([.string("build/app.tar.gz")]),
+            ],
+            risk: .write,
+            rootDirectory: root,
+            approvalMode: .smart
+        )
+        #expect(zmodemPathSelection == nil)
 
         let workspace = await appState.autoApprovalSource(
             toolName: "run_command",

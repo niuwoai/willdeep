@@ -1596,6 +1596,7 @@ nonisolated enum L10n {
             static let browserLoginWaiting = String(localized: "settings.some-im.browser-login-waiting", defaultValue: "Waiting for browser sign-in...")
             static let browserLoginConnected = String(localized: "settings.some-im.browser-login-connected", defaultValue: "some.im account connected.")
             static let browserLoginExpired = String(localized: "settings.some-im.browser-login-expired", defaultValue: "Browser sign-in expired. Open some.im again to restart.")
+            static let browserLoginClientSecretMissing = String(localized: "settings.some-im.browser-login-client-secret-missing", defaultValue: "This build is missing the some.im client-login secret. Set WILLDEEP_CLIENT_LOGIN_SECRET and rebuild WillDeep.")
             static let browserLoginMissingCredentials = String(localized: "settings.some-im.browser-login-missing-credentials", defaultValue: "Browser sign-in completed, but some.im did not return WillDeep credentials. Open some.im again and try signing in.")
             static let browserLoginCredentialSaveFailed = String(localized: "settings.some-im.browser-login-credential-save-failed", defaultValue: "some.im returned credentials, but WillDeep could not save them locally. Check Keychain access and try signing in again.")
             static let browserLoginConnectedTitle = String(localized: "settings.some-im.browser-login-connected-title", defaultValue: "Browser sign-in complete")

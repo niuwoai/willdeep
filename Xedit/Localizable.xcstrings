@@ -23127,6 +23127,23 @@
         }
       }
     },
+    "settings.some-im.browser-login-client-secret-missing" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "This build is missing the some.im client-login secret. Set WILLDEEP_CLIENT_LOGIN_SECRET and rebuild WillDeep."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "当前构建缺少 some.im 客户端登录密钥。请设置 WILLDEEP_CLIENT_LOGIN_SECRET 后重新编译 WillDeep。"
+          }
+        }
+      }
+    },
     "settings.some-im.browser-login-credential-save-failed" : {
       "extractionState" : "manual",
       "localizations" : {

@@ -161,6 +161,8 @@ struct AgentGlobalRulesTests {
         #expect(prompt.contains("If the active terminal is SSH'd into a server"))
         #expect(prompt.contains("avoid creating or overwriting files with heredoc"))
         #expect(prompt.contains("WillDeep's visible side-panel terminal supports rz/sz ZMODEM transfers"))
+        #expect(prompt.contains("zmodem_upload_paths"))
+        #expect(prompt.contains("zmodem_download_directory"))
         #expect(prompt.contains("command -v rz sz"))
         #expect(prompt.contains("install lrzsz"))
         #expect(prompt.contains("small auditable heredoc or patch-style shell fallback is acceptable"))
@@ -187,6 +189,59 @@ struct AgentGlobalRulesTests {
         let start = try #require(maybeStart)
         #expect(isDownloadDirection(start.direction))
         #expect(String(decoding: start.displayPrefix, as: UTF8.self) == "sending file\r")
+    }
+
+    @Test
+    func zmodemToolResolvesPreselectedWorkspacePaths() throws {
+        let tempDir = try makeTemporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: tempDir) }
+        let fileURL = tempDir.appendingPathComponent("upload.txt")
+        try Data("hello".utf8).write(to: fileURL)
+
+        let upload = try AgentTerminalTools.zmodemPathSelection(
+            arguments: ["zmodem_upload_paths": .array([.string("upload.txt")])],
+            rootDirectory: tempDir
+        )
+        #expect(upload == .upload(files: [fileURL.standardizedFileURL]))
+
+        let download = try AgentTerminalTools.zmodemPathSelection(
+            arguments: ["zmodem_download_directory": .string(".")],
+            rootDirectory: tempDir
+        )
+        #expect(download == .download(directory: tempDir.standardizedFileURL))
+    }
+
+    @Test
+    func zmodemToolRejectsConflictingPathSelections() throws {
+        let tempDir = try makeTemporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: tempDir) }
+        let fileURL = tempDir.appendingPathComponent("upload.txt")
+        try Data("hello".utf8).write(to: fileURL)
+
+        #expect(throws: AgentToolError.self) {
+            try AgentTerminalTools.zmodemPathSelection(
+                arguments: [
+                    "zmodem_upload_paths": .array([.string(fileURL.path)]),
+                    "zmodem_download_directory": .string(tempDir.path),
+                ],
+                rootDirectory: tempDir
+            )
+        }
+    }
+
+    @Test
+    func zmodemPreparedPathIsDirectionBoundAndOneShot() {
+        let now = Date()
+        let fileURL = URL(fileURLWithPath: "/tmp/upload.txt")
+        var prepared = TerminalZModemPreparedSelection(lifetime: 60)
+        prepared.prepare(.upload(files: [fileURL]), now: now)
+
+        #expect(prepared.consume(for: .downloadFromRemote, now: now) == nil)
+        #expect(prepared.consume(for: .uploadToRemote, now: now) == nil)
+
+        prepared.prepare(.upload(files: [fileURL]), now: now)
+        #expect(prepared.consume(for: .uploadToRemote, now: now) == .upload(files: [fileURL]))
+        #expect(prepared.consume(for: .uploadToRemote, now: now) == nil)
     }
 
     private func isUploadDirection(_ direction: TerminalZModemDirection) -> Bool {

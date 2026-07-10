@@ -453,17 +453,18 @@ struct AgentProviderLibraryTests {
 
     @MainActor
     @Test
-    func syncingSomeIMImageUnderstandingUsesDomesticVisionModel() {
+    func syncingSomeIMImageUnderstandingUsesResolvedRelayRoute() {
         let sandbox = KeychainSandbox()
         _ = sandbox
+        let settings = SomeIMIntegrationSettings(baseURL: SomeIMRelayRegion.internationalBaseURL)
 
         let appState = AppState()
 
-        appState.syncSomeIMImageUnderstanding(apiKey: " sk-some-im ")
+        appState.syncSomeIMImageUnderstanding(apiKey: " sk-some-im ", settings: settings)
 
         let imageDescription = appState.agentConfiguration.imageDescription
         #expect(imageDescription.providerID == "some-im")
-        #expect(imageDescription.baseURL == SomeIMRelayRegion.chinaBaseURL)
+        #expect(imageDescription.baseURL == SomeIMRelayRegion.internationalBaseURL)
         #expect(imageDescription.model == SomeIMIntegrationSettings.defaultVisionModel)
         #expect(imageDescription.apiKey == "sk-some-im")
     }

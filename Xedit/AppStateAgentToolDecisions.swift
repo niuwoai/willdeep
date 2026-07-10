@@ -84,7 +84,10 @@ extension AppState {
     }
 
     func alwaysAllowedCommand(for call: AgentToolCall) -> AgentAlwaysAllowedCommand? {
-        guard let signature = AgentToolAuthorization.signature(for: call) else {
+        guard let signature = AgentToolAuthorization.suggestedPersistentSignature(
+            toolName: call.toolName,
+            arguments: call.arguments
+        ) else {
             return nil
         }
         return AgentAlwaysAllowedCommand(commandSignature: signature)
@@ -164,6 +167,14 @@ extension AppState {
             return .staticAllowlist
         }
 
+        // Remote media-render jobs (some.im / Replicate submit·poll·cancel)
+        // have no local side effects; auto-approve them so the agent isn't
+        // gated on every submit and status poll. `requestEveryTime` above still
+        // forces a manual prompt for users who opt into asking for everything.
+        if Self.isAutoApprovedMediaTaskTool(toolName) {
+            return .staticAllowlist
+        }
+
         if sandboxDecision.requiresTypedConfirmation {
             return nil
         }
@@ -230,6 +241,12 @@ extension AppState {
         // this, every `terminal_send_command` fell straight through to a
         // manual prompt; it was the single biggest source of hand approvals.
         if toolName == "terminal_send_command" {
+            // A preselected ZMODEM path can read a local file or write a local
+            // directory. Keep that choice visible to the user instead of
+            // approving it from the shell command text alone.
+            guard !AgentTerminalTools.hasZModemPathSelection(arguments) else {
+                return nil
+            }
             guard judgeAutoApprove,
                   let command = arguments["command"]?.stringValue(),
                   !command.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
@@ -382,6 +399,27 @@ extension AppState {
 
     nonisolated static func isTrustedDelegatedAgentTool(_ toolName: String) -> Bool {
         trustedDelegatedAgentToolNames.contains(toolName)
+    }
+
+    /// Remote media-generation lifecycle tools (submit / poll / cancel an
+    /// async some.im or Replicate render job). They carry `.write` risk in the
+    /// registry because they do reach a remote service, but they have no local
+    /// side effects and asking the user to Allow every submit — and then every
+    /// poll of the same job — is pure friction. Auto-approve them by default in
+    /// every mode except `requestEveryTime` (which still forces a manual
+    /// prompt). `.staticAllowlist` keeps them under the sandbox mode the policy
+    /// computed (read-only here), same as the delegated-agent tools above.
+    nonisolated static let autoApprovedMediaTaskToolNames: Set<String> = [
+        "some_im_create_media_task",
+        "some_im_poll_media_task",
+        "some_im_cancel_media_task",
+        "replicate_create_prediction",
+        "replicate_poll_prediction",
+        "replicate_cancel_prediction"
+    ]
+
+    nonisolated static func isAutoApprovedMediaTaskTool(_ toolName: String) -> Bool {
+        autoApprovedMediaTaskToolNames.contains(toolName)
     }
 
     nonisolated static func canSendToSafetyJudge(

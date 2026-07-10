@@ -7,6 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		7E2F8B7A2F9E4A1C9E0B1001 /* SomeIMClientLoginSecret.generated.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7E2F8B7A2F9E4A1C9E0B1002 /* SomeIMClientLoginSecret.generated.swift */; };
 		4C6FDA980F6219C8E718AEE6 /* SomeIMSharedSession in Frameworks */ = {isa = PBXBuildFile; productRef = 4D400004B6087AD73D48973E /* SomeIMSharedSession */; };
 		5CA6B0922FC70A00006DFCCC /* WillDeep.help in Resources */ = {isa = PBXBuildFile; fileRef = 5CA6B0912FC70A00006DFCCC /* WillDeep.help */; };
 		5CA6B0A22FD0C9E0006DFCCC /* BundledSkills in Resources */ = {isa = PBXBuildFile; fileRef = 5CA6B0A12FD0C9E0006DFCCC /* BundledSkills */; };
@@ -34,6 +35,7 @@
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
+		7E2F8B7A2F9E4A1C9E0B1002 /* SomeIMClientLoginSecret.generated.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "$(DERIVED_FILE_DIR)/SomeIMClientLoginSecret.generated.swift"; sourceTree = "<absolute>"; };
 		5CA6B0612FC6D8F9006DFCCC /* WillDeep.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = WillDeep.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		5CA6B0712FC6D8FA006DFCCC /* XeditTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = XeditTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		5CA6B07B2FC6D8FA006DFCCC /* XeditUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = XeditUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -185,6 +187,7 @@
 			isa = PBXNativeTarget;
 			buildConfigurationList = 5CA6B0842FC6D8FA006DFCCC /* Build configuration list for PBXNativeTarget "Xedit" */;
 			buildPhases = (
+				7E2F8B7A2F9E4A1C9E0B1003 /* Generate some.im client login secret */,
 				5CA6B05D2FC6D8F9006DFCCC /* Sources */,
 				5CA6B05E2FC6D8F9006DFCCC /* Frameworks */,
 				5CA6B05F2FC6D8F9006DFCCC /* Resources */,
@@ -325,6 +328,25 @@
 /* End PBXResourcesBuildPhase section */
 
 /* Begin PBXShellScriptBuildPhase section */
+		7E2F8B7A2F9E4A1C9E0B1003 /* Generate some.im client login secret */ = {
+			isa = PBXShellScriptBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+			);
+			inputPaths = (
+			);
+			name = "Generate some.im client login secret";
+			outputFileListPaths = (
+			);
+			outputPaths = (
+				"$(DERIVED_FILE_DIR)/SomeIMClientLoginSecret.generated.swift",
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/zsh;
+			shellScript = "set -euo pipefail\noutput=\"${DERIVED_FILE_DIR}/SomeIMClientLoginSecret.generated.swift\"\nmkdir -p \"${DERIVED_FILE_DIR}\"\n/usr/bin/ruby -rjson -e 'path=ARGV.fetch(0); value=ENV.fetch(\"WILLDEEP_CLIENT_LOGIN_SECRET\", \"\").strip; body=\"import Foundation\\n\\nenum SomeIMGeneratedClientLoginSecret {\\n    static let value = \#{JSON.generate(value)}\\n}\\n\"; File.write(path, body)' \"${output}\"\n";
+		};
 		5CA6B0B72FE10A01006DFCCC /* Build willdeep-agent */ = {
 			isa = PBXShellScriptBuildPhase;
 			buildActionMask = 2147483647;
@@ -372,6 +394,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				7E2F8B7A2F9E4A1C9E0B1001 /* SomeIMClientLoginSecret.generated.swift in Sources */,
 				5CA6B0B42FDDF001006DFCCC /* AIPipe.m in Sources */,
 				5CA6B0B52FDDF001006DFCCC /* AIPipeConfig.m in Sources */,
 				5CA6B0B62FDDF001006DFCCC /* AIPipeLogItem.m in Sources */,
@@ -414,6 +437,7 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CLANG_CXX_LANGUAGE_STANDARD = "c++17";
+				CODE_SIGN_ENTITLEMENTS = Xedit/WillDeep.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
 				CURRENT_PROJECT_VERSION = 1;
@@ -443,7 +467,7 @@
 					"$(SRCROOT)/Xedit/Voice/Libraries/onnxruntime",
 					"$(PROJECT_DIR)/Xedit/Voice/Libraries/onnxruntime",
 				);
-				MARKETING_VERSION = "1.136.0-rc42";
+				MARKETING_VERSION = "1.136.0-rc51";
 				OTHER_LDFLAGS = (
 					"$(inherited)",
 					"$(SRCROOT)/Xedit/Voice/Libraries/onnxruntime/libonnxruntime.1.23.2.dylib",
@@ -498,7 +522,7 @@
 					"$(SRCROOT)/Xedit/Voice/Libraries/onnxruntime",
 					"$(PROJECT_DIR)/Xedit/Voice/Libraries/onnxruntime",
 				);
-				MARKETING_VERSION = "1.136.0-rc42";
+				MARKETING_VERSION = "1.136.0-rc51";
 				OTHER_LDFLAGS = (
 					"$(inherited)",
 					"$(SRCROOT)/Xedit/Voice/Libraries/onnxruntime/libonnxruntime.1.23.2.dylib",
@@ -646,7 +670,7 @@
 				DEVELOPMENT_TEAM = ZH2S7D6PL6;
 				GENERATE_INFOPLIST_FILE = YES;
 				MACOSX_DEPLOYMENT_TARGET = 13.7;
-				MARKETING_VERSION = "1.136.0-rc42";
+				MARKETING_VERSION = "1.136.0-rc51";
 				PRODUCT_BUNDLE_IDENTIFIER = com.willdeep.app.tests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				STRING_CATALOG_GENERATE_SYMBOLS = NO;
@@ -667,7 +691,7 @@
 				DEVELOPMENT_TEAM = ZH2S7D6PL6;
 				GENERATE_INFOPLIST_FILE = YES;
 				MACOSX_DEPLOYMENT_TARGET = 13.7;
-				MARKETING_VERSION = "1.136.0-rc42";
+				MARKETING_VERSION = "1.136.0-rc51";
 				PRODUCT_BUNDLE_IDENTIFIER = com.willdeep.app.tests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				STRING_CATALOG_GENERATE_SYMBOLS = NO;
@@ -686,7 +710,7 @@
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = ZH2S7D6PL6;
 				GENERATE_INFOPLIST_FILE = YES;
-				MARKETING_VERSION = "1.136.0-rc42";
+				MARKETING_VERSION = "1.136.0-rc51";
 				PRODUCT_BUNDLE_IDENTIFIER = com.willdeep.app.uitests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				STRING_CATALOG_GENERATE_SYMBOLS = NO;
@@ -705,7 +729,7 @@
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = ZH2S7D6PL6;
 				GENERATE_INFOPLIST_FILE = YES;
-				MARKETING_VERSION = "1.136.0-rc42";
+				MARKETING_VERSION = "1.136.0-rc51";
 				PRODUCT_BUNDLE_IDENTIFIER = com.willdeep.app.uitests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				STRING_CATALOG_GENERATE_SYMBOLS = NO;

@@ -1,6 +1,6 @@
 # some.im Mac App Integration
 
-> Last updated: 2026-07-09 | Current version: v1.136.0-rc40
+> Last updated: 2026-07-10 | Current version: v1.136.0-rc51
 
 本文档说明 WillDeep macOS App 如何接入 some.im。目标是让用户用最短路径完成账号连接：在 WillDeep 里点击“在浏览器打开”，到 some.im 完成登录，然后回到 WillDeep 继续使用。API key、customer session 等敏感信息只保存在本机 Keychain，不进入 UI、日志、文档示例或 git。
 
@@ -17,7 +17,8 @@
    - Agent provider：`some-im` + `someim-auto-flash`
    - Image Understanding / VL fallback：`some-im` + `qwen3-vl-plus`
    - 图片默认模型：`gpt-image-2`
-   - 视频模型列表按 some.im 返回或用户设置走
+   - 视频默认模型：`seedance-2.0`，模型列表按 some.im 返回或用户偏好走
+   - API Base：通过 `GET /api/v1/public/client-location` 自动判断，中国使用 `api.niuwoai.com`，其他地区使用 `some.im`
 
 ### 可跳过路径：用户自己配置 provider
 
@@ -81,7 +82,7 @@ let status = try await SomeIMClient.checkBrowserLoginStatus(
 - `saveAccount(_:)`：保存账号摘要到 `UserDefaults`，用于显示邮箱、credits、默认模型。
 - `saveAPIKey(_:)`：保存 some.im app 专用 API key 到 Keychain。
 - `saveSessionToken(_:)`：保存 customer session token 到 Keychain。
-- `loadClientLoginSecret()`：从环境变量 `WILLDEEP_CLIENT_LOGIN_SECRET` 或 Info.plist 注入值读取客户端登录签名 secret。
+- `loadClientLoginSecret()`：优先读取运行时环境变量，其次读取 Xcode 构建阶段从 `WILLDEEP_CLIENT_LOGIN_SECRET` 生成的 Swift 常量；真实 secret 不写入源码或 Info.plist。
 
 严禁：
 
@@ -117,7 +118,7 @@ appState.syncSomeIMImageUnderstanding(apiKey: apiKey)
 默认值：
 
 - `providerID`: `some-im`
-- `baseURL`: 当前实现使用 `SomeIMRelayRegion.chinaBaseURL`
+- `baseURL`: 使用 some.im 公共位置接口解析后的当前自动路由
 - `model`: `SomeIMIntegrationSettings.defaultVisionModel`，当前为 `qwen3-vl-plus`
 - `apiKey`: same some.im app key
 
@@ -169,7 +170,8 @@ Settings 中的 some.im 页面与 Onboarding 保持同一心智：
 - 自动准备浏览器登录请求。
 - 主操作只有“在浏览器打开”。
 - 登录完成后显示账号、credits、默认模型。
-- 保留启用开关、region/base URL/API key 和模型列表等高级配置，但浏览器登录区不展示调试信息。
+- 不展示启用开关、region、Base URL 或 API key；登录与 Keychain 状态自动驱动接入。
+- 图片/视频模型偏好自动保存，进入页面后自动拉取模型列表。
 
 如果将来需要重新引入高级调试入口，应放进折叠区，并明确标注不适合普通用户。
 
@@ -181,7 +183,7 @@ Settings 中的 some.im 页面与 Onboarding 保持同一心智：
 - 异步媒体任务：`SomeIMAsyncMediaClient.submit(...)` / `poll(...)` / `cancel(...)`，图片生成默认 `images/async-generations`，视频默认 `videos/generations`，图片编辑默认 `images/edits`。
 - 同步图片低层客户端：`SomeIMClient.generateImage(...)` 仅作为兼容/低层能力保留，Agent 默认生图不应再用它阻塞等待同步响应。
 - 默认图片模型：`gpt-image-2`
-- 视频模型：由 Settings -> some.im 的首选视频模型列表控制
+- 视频模型：默认 `seedance-2.0`，由 Settings -> some.im 的首选视频模型列表控制
 - some.im 媒体任务提交、轮询、取消请求的单次 `URLRequest.timeoutInterval` 应使用 600 秒 `AgentNetworkSupport.resourceTimeout`，避免客户端先于网关取消长耗时生图。
 
 媒体任务完成后应进入统一媒体任务中心，由既有 artifact 下载与预览流程处理。
@@ -199,7 +201,7 @@ Settings 中的 some.im 页面与 Onboarding 保持同一心智：
 ## 安全检查清单
 
 - [ ] API key 和 session token 只进 Keychain。
-- [ ] client login secret 只从环境变量或 Info.plist 注入读取。
+- [ ] client login secret 只从运行时环境变量或编译生成的 Swift 常量读取。
 - [ ] UI 不显示 pair token、完整浏览器登录 URL 或二维码。
 - [ ] 日志、错误、测试 fixture 不含真实 token。
 - [ ] 所有用户可见文案走 i18n。

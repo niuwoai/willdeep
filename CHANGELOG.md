@@ -1,5 +1,79 @@
 # Changelog
 
+## 1.136.0-rc51 - 2026-07-10
+
+### Changed
+
+- **some.im 按远端国家自动选路**：启动时访问 some.im 公共客户端位置接口；中国（`CN`）自动使用 `https://api.niuwoai.com/v1`，其余地区或位置接口暂不可用时使用全球线路或保留上次可用线路。
+- **移除手工“some.im 整合”设置**：不再让用户选择开关、地区、Base URL 或编辑 API Key；登录状态与 Keychain 凭据自动驱动接入，只保留图片/视频模型偏好并自动拉取模型。
+- **视频默认模型**：新旧空配置统一补齐为 `seedance-2.0`。
+
+### Fixed
+
+- **设置页点数格式统一**：some.im Account 中的大额 credits 与会话列表左下账户区共用 `M/B` 两位小数紧凑格式，避免再次显示十位超长数字。
+- 版本号从 **1.136.0-rc50** 递增为 **1.136.0-rc51**。
+
+## 1.136.0-rc50 - 2026-07-10
+
+### Fixed
+
+- **修复 Debug 包缺少共享 Keychain 签名权限**：为 Xedit Debug 配置补上 `Xedit/WillDeep.entitlements`，让浏览器登录回传的 some.im 凭据可以写入共享 session；未被本地签名授权时仍保留普通 Keychain 回退。
+- 版本号从 **1.136.0-rc49** 递增为 **1.136.0-rc50**。
+
+## 1.136.0-rc49 - 2026-07-10
+
+### Fixed
+
+- **修复无签名 Debug 包无法保存 some.im 登录凭据**：检测到共享 Keychain access group entitlement 不可用时，Debug 包回退到当前 App 的普通 Keychain；正式签名包继续使用共享 Keychain。
+- 版本号从 **1.136.0-rc48** 递增为 **1.136.0-rc49**。
+
+## 1.136.0-rc48 - 2026-07-10
+
+### Changed
+
+- **打包脚本自动读取 some.im 客户端密钥**：`debug_install_mac_apps.rb` 与 `release_mac_apps.rb` 在本地未设置 `WILLDEEP_CLIENT_LOGIN_SECRET` 时，通过 SSH 从 `root@h1.niuwoai.com:/etc/niuwo/niuwo.env` 读取；值只在当前构建进程内传递，不写日志或本地文件。
+- 版本号从 **1.136.0-rc47** 递增为 **1.136.0-rc48**。
+
+## 1.136.0-rc47 - 2026-07-10
+
+### Fixed
+
+- **some.im 客户端登录密钥不再写入 Info.plist**：保留编译期 Swift 常量注入，移除旧的 Info.plist 占位符，避免同一密钥在 App 包中重复保存。
+- 版本号从 **1.136.0-rc46** 递增为 **1.136.0-rc47**。
+
+## 1.136.0-rc46 - 2026-07-10
+
+### Fixed
+
+- **some.im 客户端登录密钥改为编译期 Swift 常量**：Xcode 从 `WILLDEEP_CLIENT_LOGIN_SECRET` 生成 DerivedData 源文件，`debug_install_mac_apps.rb` 与 `release_mac_apps.rb` 在缺少变量时拒绝打包；真实密钥不写入源码仓库。
+- 版本号从 **1.136.0-rc45** 递增为 **1.136.0-rc46**。
+
+## 1.136.0-rc45 - 2026-07-10
+
+### Fixed
+
+- **修复 some.im 浏览器登录包漏注入客户端密钥**：Release 打包现在要求构建环境提供 `WILLDEEP_CLIENT_LOGIN_SECRET`；运行时若 bundle 仍缺少该值，会在打开登录前直接提示构建配置问题，不再让浏览器登录后才显示“没有返回凭据”。密钥值不写入仓库、日志或 UI。
+- 版本号从 **1.136.0-rc44** 递增为 **1.136.0-rc45**。
+
+## 1.136.0-rc44 - 2026-07-10
+
+### Fixed
+
+- **some.im 浏览器登录状态不再静默卡在等待**：兼容 `success`、`completed`、`authorized`、`logged_in` 等完成态；轮询遇到 401/404 或网络错误时立即在登录卡片显示原因，同时继续重试，不再把请求失败伪装成“正在等待浏览器登录”。
+- 新增 completed-style 浏览器登录状态回归测试。
+- 版本号从 **1.136.0-rc43** 递增为 **1.136.0-rc44**。
+
+## 1.136.0-rc43 - 2026-07-10
+
+### Fixed
+
+- **复杂一次性命令不再推荐“总是允许”**：审批卡把“已有永久规则如何匹配”和“当前调用是否值得新建永久规则”拆成两层。常规、短小且可复用的命令（如 `git push origin branch`）仍显示“总是允许”；参数过多、命令过长、SSH 套远端命令、shell/解释器内联脚本和参数过深的 Lark CLI 调用只显示本次允许，避免为低复用命令制造永久授权规则。
+- **不为按钮展示额外消耗模型调用**：长期复用价值先由本地确定性策略判断，安全判官继续只负责“当前命令能否自动执行”；已保存的旧规则仍按原签名匹配，不会因 UI 收紧而失效。
+- **侧边栏终端 ZMODEM 支持工具预选本机路径**：`terminal_send_command` 新增 `zmodem_upload_paths` 和 `zmodem_download_directory` 参数，Agent 可在远端 `rz` / `sz` 握手前直接指定本机文件或目录；参数缺省时仍由用户通过 macOS 文件面板选择，并限制为一次性、方向匹配的预选。
+- 新增授权推荐边界测试，覆盖可复用 `git push`、多参数 `go test`、SSH 远端层、`ruby -e` 内联脚本和短终端命令。
+- **远程媒体任务默认免审批**：`some_im_create_media_task` / `some_im_poll_media_task` / `some_im_cancel_media_task` 及对应的 `replicate_*` 预测工具是异步渲染任务的提交·轮询·取消，无本地副作用，却在每次提交（乃至每次轮询同一任务）时都弹「允许/拒绝」。现按静态白名单默认放行（仍保持 `.write` 语义与只读沙箱），仅 `requestEveryTime` 模式仍强制手动确认。
+- 版本号从 **1.136.0-rc42** 递增为 **1.136.0-rc43**。
+
 ## 1.136.0-rc42 - 2026-07-10
 
 ### Fixed

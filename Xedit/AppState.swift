@@ -571,6 +571,10 @@ final class AppState: ObservableObject {
                 self?.reconcileSomeIMProviderFromSharedSession()
                 self?.refreshSomeIMCodingPlanStatus(force: true)
             }
+        Task { @MainActor [weak self] in
+            guard !SomeIMIntegrationStore.loadAPIKey().isEmpty else { return }
+            await self?.refreshSomeIMRelayRouting()
+        }
         startSomeIMCodingPlanRefreshTimer()
         refreshSomeIMCodingPlanStatus(force: false)
         agentMediaTaskRegistry.shortDramaStore = agentShortDramaStore

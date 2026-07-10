@@ -398,6 +398,82 @@ enum AgentCommandAuthorization {
 ///    file_remove are deliberately not pinnable because their blast
 ///    radius depends entirely on the path argument.
 enum AgentToolAuthorization {
+    /// Signature offered by the approval card as a durable rule.
+    ///
+    /// `signature` remains the matching contract for rules the user already
+    /// saved. This narrower entry point only controls whether a *new* rule is
+    /// worth suggesting. Keeping those concerns separate lets us stop
+    /// advertising one-off, deeply wrapped commands without silently
+    /// invalidating existing preferences.
+    static func suggestedPersistentSignature(
+        toolName: String,
+        arguments: [String: AgentJSONValue]
+    ) -> String? {
+        guard let signature = signature(toolName: toolName, arguments: arguments) else {
+            return nil
+        }
+
+        switch toolName {
+        case "run_command", "terminal_send_command":
+            guard let command = arguments["command"]?.stringValue(),
+                  commandLooksReusable(command) else {
+                return nil
+            }
+            if toolName == "terminal_send_command",
+               AgentTerminalTools.hasZModemPathSelection(arguments) {
+                // File and destination selections are deliberately exact and
+                // almost always one-off, even when the visible command is the
+                // reusable-looking `rz` or `sz`.
+                return nil
+            }
+        case "lark_cli":
+            let cliArguments = AgentLarkCLI.normalizedArguments(
+                arguments["arguments"]?.stringArrayValue() ?? []
+            )
+            guard cliArguments.count <= 4,
+                  cliArguments.allSatisfy({ $0.count <= 80 }) else {
+                return nil
+            }
+        default:
+            break
+        }
+
+        return signature
+    }
+
+    /// Cheap, deterministic first-pass for the approval UI. The safety judge
+    /// answers whether a command is safe to execute *now*; this answers the
+    /// different question of whether its authorization shape is likely to be
+    /// useful again. Avoiding another LLM round trip here keeps every approval
+    /// card responsive and prevents spending tokens just to decide whether to
+    /// render an optional button.
+    private static func commandLooksReusable(_ command: String) -> Bool {
+        let trimmed = command.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty,
+              trimmed.count <= 180,
+              let tokens = AgentCommandAuthorization.shellTokens(from: trimmed),
+              !tokens.isEmpty,
+              tokens.count <= 5,
+              tokens.allSatisfy({ $0.count <= 80 }) else {
+            return false
+        }
+
+        let executable = URL(fileURLWithPath: tokens[0]).lastPathComponent.lowercased()
+        if executable == "ssh" {
+            // A local command wrapping a second remote command has two scopes
+            // and usually contains host-specific, one-off arguments.
+            return false
+        }
+
+        let inlineProgramFlags: Set<String> = ["-c", "-lc", "-e"]
+        if ["sh", "bash", "zsh", "fish", "ruby", "python", "python3", "node"].contains(executable),
+           tokens.dropFirst().contains(where: { inlineProgramFlags.contains($0.lowercased()) }) {
+            return false
+        }
+
+        return true
+    }
+
     static func signature(toolName: String, arguments: [String: AgentJSONValue]) -> String? {
         switch toolName {
         case "run_command":
@@ -407,7 +483,17 @@ enum AgentToolAuthorization {
             guard let command = AgentCommandAuthorization.cleaned(arguments["command"]?.stringValue() ?? "") else {
                 return nil
             }
-            return "terminal_command:\(command)"
+            var signature = "terminal_command:\(command)"
+            if let uploadPaths = arguments["zmodem_upload_paths"]?.stringArrayValue(),
+               !uploadPaths.isEmpty {
+                signature += "|zmodem_upload:" + uploadPaths.joined(separator: "\u{1F}")
+            }
+            if let downloadDirectory = AgentCommandAuthorization.cleaned(
+                arguments["zmodem_download_directory"]?.stringValue() ?? ""
+            ) {
+                signature += "|zmodem_download:\(downloadDirectory)"
+            }
+            return signature
         case "terminal_send_control":
             guard let control = AgentCommandAuthorization.cleaned(arguments["control"]?.stringValue() ?? "")?.lowercased(),
                   ["ctrl_c", "enter", "escape"].contains(control) else {

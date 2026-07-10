@@ -111,6 +111,50 @@ struct SomeIMBrowserLoginStatusTests {
         #expect(SomeIMIntegrationStore.loadSessionToken() == "session-test-browser-login")
     }
 
+    @Test("browser login status accepts completed-style server states")
+    @MainActor
+    func testBrowserLoginStatusAcceptsCompletedServerState() async throws {
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.protocolClasses = [SomeIMBrowserLoginMockURLProtocol.self]
+        let session = URLSession(configuration: configuration)
+        configureWritableSomeIMSessionStoreForTest()
+        SomeIMIntegrationStore.logout()
+        defer {
+            session.invalidateAndCancel()
+            SomeIMBrowserLoginMockURLProtocol.handler = nil
+            SomeIMIntegrationStore.logout()
+            restoreSomeIMSessionStoreAfterTest()
+        }
+
+        let pairToken = String(repeating: "e", count: 64)
+        SomeIMBrowserLoginMockURLProtocol.handler = { request in
+            let response = HTTPURLResponse(
+                url: request.url!,
+                statusCode: 200,
+                httpVersion: nil,
+                headerFields: ["Content-Type": "application/json"]
+            )!
+            let body = #"{"code":0,"data":{"status":"completed","api_key":"sk-test-completed","email":"completed@example.com"}}"#.data(using: .utf8)!
+            return (response, body)
+        }
+
+        let request = SomeIMBrowserLoginRequest(
+            code: "WD-TEST-0005",
+            pairToken: pairToken,
+            url: URL(string: "https://some.im/customer/login")!,
+            createdAt: Date()
+        )
+        let result = try await SomeIMClient.checkBrowserLoginStatus(
+            request: request,
+            settings: SomeIMIntegrationSettings(baseURL: "https://some.im/v1"),
+            session: session
+        )
+
+        #expect(result.state == .connected)
+        #expect(result.account?.email == "completed@example.com")
+        #expect(SomeIMIntegrationStore.loadAPIKey() == "sk-test-completed")
+    }
+
     @Test("browser login status accepts flat credentials without nested account")
     @MainActor
     func testBrowserLoginStatusAcceptsFlatCredentialsWithoutNestedAccount() async throws {
@@ -364,6 +408,45 @@ struct SomeIMBrowserLoginStatusTests {
 
         #expect(!status.isActiveNow)
         #expect(status.planID == nil)
+    }
+
+    @Test("some.im relay route follows the public client country")
+    @MainActor
+    func testAutomaticRelayRouteUsesClientCountry() async throws {
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.protocolClasses = [SomeIMBrowserLoginMockURLProtocol.self]
+        let session = URLSession(configuration: configuration)
+        defer {
+            session.invalidateAndCancel()
+            SomeIMBrowserLoginMockURLProtocol.handler = nil
+        }
+
+        SomeIMBrowserLoginMockURLProtocol.handler = { request in
+            #expect(request.url?.host == "some.im")
+            #expect(request.url?.path == "/api/v1/public/client-location")
+            #expect(request.value(forHTTPHeaderField: "Authorization") == nil)
+            let response = HTTPURLResponse(
+                url: request.url!,
+                statusCode: 200,
+                httpVersion: nil,
+                headerFields: ["Content-Type": "application/json"]
+            )!
+            let body = #"{"code":0,"data":{"ip":"203.0.113.10","country":"CN","region":"china","recommended_api_base":"https://api.niuwoai.com/v1"}}"#.data(using: .utf8)!
+            return (response, body)
+        }
+
+        let chinaBaseURL = try await SomeIMClient.resolveAutomaticRelayBaseURL(session: session)
+        #expect(chinaBaseURL == SomeIMRelayRegion.chinaBaseURL)
+        #expect(SomeIMRelayRegion.automaticBaseURL(for: "US") == SomeIMRelayRegion.internationalBaseURL)
+        #expect(SomeIMRelayRegion.automaticBaseURL(for: nil) == SomeIMRelayRegion.internationalBaseURL)
+    }
+
+    @Test("some.im video model defaults to Seedance 2.0")
+    @MainActor
+    func testDefaultVideoModel() {
+        let settings = SomeIMIntegrationSettings(preferredVideoModel: "", preferredVideoModels: []).normalized
+        #expect(settings.preferredVideoModel == "seedance-2.0")
+        #expect(settings.preferredVideoModels.first == "seedance-2.0")
     }
 }
 

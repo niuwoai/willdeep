@@ -23,12 +23,14 @@ Use this skill when working on WillDeep's macOS some.im integration. Keep the us
 
 - Browser login is the preferred account path. Generate a short device code plus hidden pair token, open some.im in the user's browser, poll browser-status, then save returned credentials locally.
 - Do not show QR codes, raw login URLs, pair tokens, or email-code forms unless the user explicitly asks to reintroduce an advanced/debug path.
+- Resolve the relay automatically through `GET https://some.im/api/v1/public/client-location`: use `https://api.niuwoai.com/v1` only for `country=CN`, otherwise use `https://some.im/v1`. Do not expose region, Base URL, enable, or API-key controls in the normal Settings flow.
 - Save the some.im API key through `SomeIMIntegrationStore.saveAPIKey`; save non-secret routing settings through `SomeIMIntegrationStore.saveSettings`.
 - After a successful account link, call both:
   - `appState.syncSomeIMProvider(settings:apiKey:)`
   - `appState.syncSomeIMImageUnderstanding(apiKey:)`
 - For manual provider setup, detect text-only main models with `AgentConfiguration.modelAcceptsImageInput`. If the main model cannot accept images, require a VL/image-understanding provider, base URL, API key when required, and model id.
 - Keep all visible strings localized through `L10n` and `Localizable.xcstrings`.
+- Keep media defaults aligned with the product contract: `gpt-image-2` for images and `seedance-2.0` for video.
 
 ## Verification Checklist
 

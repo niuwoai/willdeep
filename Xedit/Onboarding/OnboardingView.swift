@@ -37,6 +37,7 @@ struct OnboardingView: View {
     @State private var someIMBrowserLoginRequest: SomeIMBrowserLoginRequest?
     @State private var someIMBrowserLoginWatcher: Task<Void, Never>?
     @State private var isWatchingSomeIMBrowserLogin = false
+    @State private var someIMBrowserLoginLastError: String?
     @State private var someIMStatus = ""
 
     private let curatedPresets: [AgentProviderPreset] = AgentProviderPreset.all.filter {
@@ -382,6 +383,9 @@ struct OnboardingView: View {
 
     private var someIMBrowserLoginStatusText: String {
         guard someIMBrowserLoginRequest != nil else { return someIMStatus }
+        if let someIMBrowserLoginLastError, !someIMBrowserLoginLastError.isEmpty {
+            return someIMBrowserLoginLastError
+        }
         if isWatchingSomeIMBrowserLogin { return L10n.Settings.SomeIM.browserLoginWaiting }
         return someIMStatus.isEmpty ? L10n.Settings.SomeIM.browserLoginReady : someIMStatus
     }
@@ -403,6 +407,10 @@ struct OnboardingView: View {
 
     private func ensureSomeIMBrowserLoginRequestIfNeeded() {
         guard someIMAccount == nil else { return }
+        guard SomeIMIntegrationStore.clientLoginSecretConfigured else {
+            someIMStatus = L10n.Settings.SomeIM.browserLoginClientSecretMissing
+            return
+        }
         if let request = someIMBrowserLoginRequest {
             if !isWatchingSomeIMBrowserLogin {
                 startSomeIMBrowserLoginWatcher(for: request)
@@ -413,11 +421,16 @@ struct OnboardingView: View {
     }
 
     private func prepareSomeIMBrowserLoginRequest(openInBrowser: Bool) {
+        guard SomeIMIntegrationStore.clientLoginSecretConfigured else {
+            someIMStatus = L10n.Settings.SomeIM.browserLoginClientSecretMissing
+            return
+        }
         do {
             let normalized = someIMSettings.normalized
             someIMSettings = normalized
             let request = try SomeIMClient.makeBrowserLoginRequest(settings: normalized)
             someIMBrowserLoginRequest = request
+            someIMBrowserLoginLastError = nil
             someIMStatus = L10n.Settings.SomeIM.browserLoginReady
             startSomeIMBrowserLoginWatcher(for: request)
             if openInBrowser {
@@ -430,6 +443,10 @@ struct OnboardingView: View {
     }
 
     private func openSomeIMBrowserLogin() {
+        guard SomeIMIntegrationStore.clientLoginSecretConfigured else {
+            someIMStatus = L10n.Settings.SomeIM.browserLoginClientSecretMissing
+            return
+        }
         if let request = someIMBrowserLoginRequest {
             if !isWatchingSomeIMBrowserLogin {
                 startSomeIMBrowserLoginWatcher(for: request)
@@ -444,6 +461,7 @@ struct OnboardingView: View {
     private func startSomeIMBrowserLoginWatcher(for loginRequest: SomeIMBrowserLoginRequest) {
         someIMBrowserLoginWatcher?.cancel()
         isWatchingSomeIMBrowserLogin = true
+        someIMBrowserLoginLastError = nil
         someIMStatus = L10n.Settings.SomeIM.browserLoginWaiting
         let currentSettings = someIMSettings.normalized
         someIMBrowserLoginWatcher = Task {
@@ -452,6 +470,13 @@ struct OnboardingView: View {
             while !Task.isCancelled, Date() < deadline {
                 do {
                     let result = try await SomeIMClient.checkBrowserLoginStatus(request: loginRequest, settings: currentSettings)
+                    if lastError != nil {
+                        lastError = nil
+                        await MainActor.run {
+                            guard someIMBrowserLoginRequest?.code == loginRequest.code else { return }
+                            someIMBrowserLoginLastError = nil
+                        }
+                    }
                     if result.state == .connected, let account = result.account {
                         await MainActor.run {
                             someIMAccount = account
@@ -485,12 +510,17 @@ struct OnboardingView: View {
                     }
                 } catch {
                     lastError = error.localizedDescription
+                    await MainActor.run {
+                        guard someIMBrowserLoginRequest?.code == loginRequest.code else { return }
+                        someIMBrowserLoginLastError = "浏览器登录状态查询失败：\(error.localizedDescription)"
+                    }
                 }
                 try? await Task.sleep(nanoseconds: 2_000_000_000)
             }
             await MainActor.run {
                 someIMBrowserLoginRequest = nil
                 isWatchingSomeIMBrowserLogin = false
+                someIMBrowserLoginLastError = nil
                 someIMStatus = lastError ?? L10n.Settings.SomeIM.browserLoginExpired
             }
         }

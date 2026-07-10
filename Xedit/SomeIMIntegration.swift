@@ -53,6 +53,12 @@ enum SomeIMRelayRegion: String, CaseIterable, Identifiable {
             return .custom
         }
     }
+
+    static func automaticBaseURL(for countryCode: String?) -> String {
+        countryCode?.trimmingCharacters(in: .whitespacesAndNewlines).uppercased() == "CN"
+            ? chinaBaseURL
+            : internationalBaseURL
+    }
 }
 
 struct SomeIMModel: Identifiable, Codable, Equatable {
@@ -98,6 +104,7 @@ struct SomeIMCodingPlanStatus: Codable, Equatable {
 struct SomeIMIntegrationSettings: Codable, Equatable {
     static let defaultBaseURL = SomeIMRelayRegion.internationalBaseURL
     static let defaultImageModel = "gpt-image-2"
+    static let defaultVideoModel = "seedance-2.0"
     static let defaultTextModel = "someim-auto-flash"
     static let defaultVisionModel = "qwen3-vl-plus"
 
@@ -113,8 +120,8 @@ struct SomeIMIntegrationSettings: Codable, Equatable {
         baseURL: String = defaultBaseURL,
         preferredImageModel: String = defaultImageModel,
         preferredImageModels: [String] = [defaultImageModel],
-        preferredVideoModel: String = "",
-        preferredVideoModels: [String] = []
+        preferredVideoModel: String = defaultVideoModel,
+        preferredVideoModels: [String] = [defaultVideoModel]
     ) {
         self.enabled = enabled
         self.baseURL = baseURL
@@ -130,7 +137,7 @@ struct SomeIMIntegrationSettings: Codable, Equatable {
             baseURL: baseURL.trimmingCharacters(in: .whitespacesAndNewlines).nonEmpty ?? Self.defaultBaseURL,
             preferredImageModel: preferredImageModel.trimmingCharacters(in: .whitespacesAndNewlines).nonEmpty ?? Self.defaultImageModel,
             preferredImageModels: preferredImageModels,
-            preferredVideoModel: preferredVideoModel.trimmingCharacters(in: .whitespacesAndNewlines),
+            preferredVideoModel: preferredVideoModel.trimmingCharacters(in: .whitespacesAndNewlines).nonEmpty ?? Self.defaultVideoModel,
             preferredVideoModels: preferredVideoModels
         )
     }
@@ -186,7 +193,16 @@ enum SomeIMIntegrationStore {
     /// Keychain access group, migrates any legacy per-app credentials, and starts
     /// forwarding cross-app session changes into `sessionDidChangeNotification`.
     static func configureSharedSession() {
-        SomeIMSharedSessionStore.shared.configure(accessGroup: sharedAccessGroup)
+        #if DEBUG
+        // Debug installs are often ad-hoc signed on machines without a local
+        // Apple development identity. In that case macOS ignores the invalid
+        // access-group entitlement; use the app's ordinary Keychain namespace
+        // so browser login can still persist credentials locally.
+        let accessGroup = hasSharedKeychainAccessGroup ? sharedAccessGroup : ""
+        #else
+        let accessGroup = sharedAccessGroup
+        #endif
+        SomeIMSharedSessionStore.shared.configure(accessGroup: accessGroup)
         migrateLegacyIfNeeded()
         guard sessionObservation == nil else { return }
         sessionObservation = SomeIMSharedSessionStore.shared.observe { _ in
@@ -196,6 +212,18 @@ enum SomeIMIntegrationStore {
             NotificationCenter.default.post(name: accountDidChangeNotification, object: nil)
             NotificationCenter.default.post(name: sessionDidChangeNotification, object: nil)
         }
+    }
+
+    private static var hasSharedKeychainAccessGroup: Bool {
+        guard let task = SecTaskCreateFromSelf(nil),
+              let groups = SecTaskCopyValueForEntitlement(
+                  task,
+                  "keychain-access-groups" as CFString,
+                  nil
+              ) as? [String] else {
+            return false
+        }
+        return groups.contains(sharedAccessGroup)
     }
 
     static func loadSettings() -> SomeIMIntegrationSettings {
@@ -441,10 +469,17 @@ enum SomeIMIntegrationStore {
         let env = ProcessInfo.processInfo.environment["WILLDEEP_CLIENT_LOGIN_SECRET"]?
             .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         if !env.isEmpty { return env }
+        let generated = SomeIMGeneratedClientLoginSecret.value
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        if !generated.isEmpty { return generated }
         let info = (Bundle.main.object(forInfoDictionaryKey: "WillDeepSomeIMClientLoginSecret") as? String)?
             .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         if info.hasPrefix("$(") { return "" }
         return info
+    }
+
+    static var clientLoginSecretConfigured: Bool {
+        !loadClientLoginSecret().isEmpty
     }
 
     static var isConfigured: Bool {
@@ -514,6 +549,21 @@ struct SomeIMBrowserLoginStatus: Equatable {
     var account: SomeIMAccount?
 }
 
+private extension SomeIMBrowserLoginStatus.State {
+    static func fromServerValue(_ value: String) -> Self {
+        switch value.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() {
+        case "connected", "success", "succeeded", "complete", "completed", "authorized", "authenticated", "logged_in", "logged-in":
+            return .connected
+        case "expired", "cancelled", "canceled", "timeout", "timed_out", "timed-out":
+            return .expired
+        case "pending", "waiting", "processing", "authorizing", "in_progress", "in-progress":
+            return .pending
+        default:
+            return .unknown
+        }
+    }
+}
+
 struct SomeIMGeneratedImage: Equatable, Sendable {
     let fileURL: URL
     let model: String
@@ -528,6 +578,22 @@ enum SomeIMClient {
         let pairToken = try randomPairToken()
         let url = try browserLoginURL(code: code, pairToken: pairToken)
         return SomeIMBrowserLoginRequest(code: code, pairToken: pairToken, url: url, createdAt: Date())
+    }
+
+    static func resolveAutomaticRelayBaseURL() async throws -> String {
+        try await resolveAutomaticRelayBaseURL(session: AgentNetworkSupport.defaultSession())
+    }
+
+    static func resolveAutomaticRelayBaseURL(session: URLSession) async throws -> String {
+        let endpoint = try publicAPIEndpoint(from: browserControlOrigin, suffix: "public/client-location")
+        var request = URLRequest(url: endpoint)
+        request.httpMethod = "GET"
+        request.timeoutInterval = 12
+        request.setValue("application/json", forHTTPHeaderField: "Accept")
+        AgentNetworkSupport.applyStandardHeaders(to: &request)
+        let data = try await send(request, session: session)
+        let decoded = try decodeEnvelope(ClientLocationData.self, from: data)
+        return SomeIMRelayRegion.automaticBaseURL(for: decoded.country)
     }
 
     static func checkBrowserLoginStatus(
@@ -557,7 +623,7 @@ enum SomeIMClient {
         AgentNetworkSupport.applyStandardHeaders(to: &request)
         let data = try await send(request, session: session)
         let decoded = try decodeEnvelope(BrowserLoginStatusData.self, from: data)
-        let state = SomeIMBrowserLoginStatus.State(rawValue: decoded.status.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()) ?? .unknown
+        let state = SomeIMBrowserLoginStatus.State.fromServerValue(decoded.status)
         guard state == .connected else {
             return SomeIMBrowserLoginStatus(state: state, account: nil)
         }
@@ -1175,6 +1241,10 @@ enum SomeIMClient {
         let subscription: CodingPlanSubscription?
     }
 
+    private struct ClientLocationData: Decodable {
+        let country: String?
+    }
+
     private struct CodingPlanSubscription: Decodable {
         let plan_id: String
         let plan_name: String
@@ -1492,6 +1562,7 @@ struct SomeIMIntegrationSettingsView: View {
     @State private var browserLoginRequest: SomeIMBrowserLoginRequest?
     @State private var browserLoginWatcher: Task<Void, Never>?
     @State private var isWatchingBrowserLogin = false
+    @State private var browserLoginLastError: String?
     @State private var handledBrowserLoginAutogenerateRequestID: UUID?
     @State private var status = ""
     @State private var showLogoutConfirm = false
@@ -1558,7 +1629,7 @@ struct SomeIMIntegrationSettingsView: View {
             Section(L10n.Settings.SomeIM.accountSection) {
                 if let account {
                     LabeledContent(L10n.Settings.SomeIM.accountConnected) {
-                        Text(L10n.Settings.SomeIM.accountSummary(account.email, account.displayCredits))
+                        Text(L10n.Settings.SomeIM.accountSummary(account.email, account.compactDisplayCredits))
                             .foregroundStyle(.secondary)
                     }
                     LabeledContent(L10n.Settings.SomeIM.defaultModelLabel) {
@@ -1596,41 +1667,6 @@ struct SomeIMIntegrationSettingsView: View {
                 }
             }
 
-            Section(L10n.Settings.SomeIM.connectionSection) {
-                Toggle(L10n.Settings.SomeIM.enabledToggle, isOn: $settings.enabled)
-                LabeledContent(L10n.Settings.SomeIM.regionLabel) {
-                    Picker("", selection: relayRegionBinding) {
-                        ForEach(SomeIMRelayRegion.allCases) { region in
-                            Text(L10n.Settings.SomeIM.regionName(region)).tag(region)
-                        }
-                    }
-                    .labelsHidden()
-                    .frame(width: 220)
-                }
-                LabeledContent(L10n.Settings.SomeIM.baseURLLabel) {
-                    TextField("", text: $settings.baseURL)
-                        .textFieldStyle(.roundedBorder)
-                }
-                LabeledContent(L10n.Settings.SomeIM.apiKeyLabel) {
-                    RevealableSecretField(text: $apiKey, placeholder: "", onCommit: save)
-                }
-                HStack {
-                    Button(L10n.Settings.buttonSave) { save() }
-                    Button(isFetching ? L10n.Settings.SomeIM.fetchingModels : L10n.Settings.SomeIM.fetchModels) {
-                        fetchModels()
-                    }
-                    .disabled(isFetching)
-                    if !status.isEmpty {
-                        Text(status)
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    }
-                }
-                Text(L10n.Settings.SomeIM.description)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
-
             Section(L10n.Settings.SomeIM.imageSection) {
                 modelPicker(
                     L10n.Settings.SomeIM.imageModelLabel,
@@ -1663,6 +1699,16 @@ struct SomeIMIntegrationSettingsView: View {
         .onAppear {
             ensureBrowserLoginRequestIfNeeded()
         }
+        .task {
+            await appState.refreshSomeIMRelayRouting()
+            reloadSharedSessionState()
+            if !apiKey.isEmpty, fetchedModels.isEmpty {
+                fetchModels()
+            }
+        }
+        .onChange(of: settings) { updated in
+            persistModelPreferences(updated)
+        }
         .onReceive(NotificationCenter.default.publisher(for: SomeIMIntegrationStore.accountDidChangeNotification)) { _ in
             reloadSharedSessionState()
         }
@@ -1676,18 +1722,11 @@ struct SomeIMIntegrationSettingsView: View {
 
     private var browserLoginStatusText: String {
         guard browserLoginRequest != nil else { return status }
+        if let browserLoginLastError, !browserLoginLastError.isEmpty {
+            return browserLoginLastError
+        }
         if isWatchingBrowserLogin { return L10n.Settings.SomeIM.browserLoginWaiting }
         return status.isEmpty ? L10n.Settings.SomeIM.browserLoginReady : status
-    }
-
-    private var relayRegionBinding: Binding<SomeIMRelayRegion> {
-        Binding {
-            SomeIMRelayRegion.resolved(for: settings.baseURL)
-        } set: { region in
-            if let baseURL = region.baseURL {
-                settings.baseURL = baseURL
-            }
-        }
     }
 
     private func modelPicker(
@@ -1751,18 +1790,12 @@ struct SomeIMIntegrationSettingsView: View {
             .filter { !$0.isEmpty }
     }
 
-    private func save() {
-        let normalized = settings.normalized
-        settings = normalized
-        let trimmedKey = apiKey.trimmingCharacters(in: .whitespacesAndNewlines)
+    private func persistModelPreferences(_ updated: SomeIMIntegrationSettings) {
+        let normalized = updated.normalized
         SomeIMIntegrationStore.saveSettings(normalized)
-        if trimmedKey.isEmpty || SomeIMIntegrationStore.saveAPIKey(trimmedKey) {
-            appState.syncSomeIMProvider(settings: normalized, apiKey: trimmedKey)
-            status = L10n.Settings.savedStatus
-        } else {
-            apiKey = SomeIMIntegrationStore.loadAPIKey()
-            status = L10n.Settings.SomeIM.browserLoginCredentialSaveFailed
-        }
+        let trimmedKey = apiKey.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedKey.isEmpty else { return }
+        appState.syncSomeIMProvider(settings: normalized, apiKey: trimmedKey, activate: false)
     }
 
     private func reloadSharedSessionState() {
@@ -1777,9 +1810,14 @@ struct SomeIMIntegrationSettingsView: View {
     }
 
     private func prepareBrowserLoginRequest(openInBrowser: Bool) {
+        guard SomeIMIntegrationStore.clientLoginSecretConfigured else {
+            status = L10n.Settings.SomeIM.browserLoginClientSecretMissing
+            return
+        }
         do {
             let request = try SomeIMClient.makeBrowserLoginRequest(settings: settings.normalized)
             browserLoginRequest = request
+            browserLoginLastError = nil
             status = L10n.Settings.SomeIM.browserLoginReady
             startBrowserLoginWatcher(for: request)
             if openInBrowser {
@@ -1802,6 +1840,10 @@ struct SomeIMIntegrationSettingsView: View {
 
     private func ensureBrowserLoginRequestIfNeeded() {
         guard account == nil else { return }
+        guard SomeIMIntegrationStore.clientLoginSecretConfigured else {
+            status = L10n.Settings.SomeIM.browserLoginClientSecretMissing
+            return
+        }
         if let request = browserLoginRequest {
             if !isWatchingBrowserLogin {
                 startBrowserLoginWatcher(for: request)
@@ -1812,6 +1854,10 @@ struct SomeIMIntegrationSettingsView: View {
     }
 
     private func openBrowserLoginLink() {
+        guard SomeIMIntegrationStore.clientLoginSecretConfigured else {
+            status = L10n.Settings.SomeIM.browserLoginClientSecretMissing
+            return
+        }
         if let request = browserLoginRequest {
             if !isWatchingBrowserLogin {
                 startBrowserLoginWatcher(for: request)
@@ -1826,6 +1872,7 @@ struct SomeIMIntegrationSettingsView: View {
     private func startBrowserLoginWatcher(for loginRequest: SomeIMBrowserLoginRequest) {
         stopBrowserLoginWatcher()
         isWatchingBrowserLogin = true
+        browserLoginLastError = nil
         status = L10n.Settings.SomeIM.browserLoginWaiting
         let currentSettings = settings.normalized
         browserLoginWatcher = Task {
@@ -1834,6 +1881,13 @@ struct SomeIMIntegrationSettingsView: View {
             while !Task.isCancelled, Date() < deadline {
                 do {
                     let result = try await SomeIMClient.checkBrowserLoginStatus(request: loginRequest, settings: currentSettings)
+                    if lastError != nil {
+                        lastError = nil
+                        await MainActor.run {
+                            guard browserLoginRequest?.code == loginRequest.code else { return }
+                            browserLoginLastError = nil
+                        }
+                    }
                     if result.state == .connected, let linked = result.account {
                         await MainActor.run {
                             reloadSharedSessionState()
@@ -1865,12 +1919,17 @@ struct SomeIMIntegrationSettingsView: View {
                     }
                 } catch {
                     lastError = error.localizedDescription
+                    await MainActor.run {
+                        guard browserLoginRequest?.code == loginRequest.code else { return }
+                        browserLoginLastError = "浏览器登录状态查询失败：\(error.localizedDescription)"
+                    }
                 }
                 try? await Task.sleep(nanoseconds: 2_000_000_000)
             }
             await MainActor.run {
                 browserLoginRequest = nil
                 isWatchingBrowserLogin = false
+                browserLoginLastError = nil
                 status = lastError ?? L10n.Settings.SomeIM.browserLoginExpired
             }
         }

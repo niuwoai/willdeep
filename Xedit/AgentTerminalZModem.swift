@@ -17,6 +17,52 @@ enum TerminalZModemDirection {
     case downloadFromRemote
 }
 
+enum TerminalZModemPathSelection: Equatable {
+    case upload(files: [URL])
+    case download(directory: URL)
+
+    func matches(_ direction: TerminalZModemDirection) -> Bool {
+        switch (self, direction) {
+        case (.upload, .uploadToRemote), (.download, .downloadFromRemote):
+            return true
+        default:
+            return false
+        }
+    }
+}
+
+struct TerminalZModemPreparedSelection {
+    private var selection: TerminalZModemPathSelection?
+    private var expiresAt: Date?
+    private let lifetime: TimeInterval
+
+    init(lifetime: TimeInterval = 60) {
+        self.lifetime = lifetime
+    }
+
+    mutating func prepare(_ selection: TerminalZModemPathSelection?, now: Date = Date()) {
+        self.selection = selection
+        expiresAt = selection == nil ? nil : now.addingTimeInterval(lifetime)
+    }
+
+    mutating func consume(
+        for direction: TerminalZModemDirection,
+        now: Date = Date()
+    ) -> TerminalZModemPathSelection? {
+        defer {
+            selection = nil
+            expiresAt = nil
+        }
+        guard let selection,
+              let expiresAt,
+              now <= expiresAt,
+              selection.matches(direction) else {
+            return nil
+        }
+        return selection
+    }
+}
+
 struct TerminalZModemStart {
     var direction: TerminalZModemDirection
     var displayPrefix: [UInt8]
@@ -88,6 +134,7 @@ final class TerminalZModemBridge {
     private weak var terminalView: AgentLocalProcessTerminalView?
     private var detector = TerminalZModemDetector()
     private var session: TerminalZModemProcessSession?
+    private var preparedSelection = TerminalZModemPreparedSelection()
 
     init(terminalView: AgentLocalProcessTerminalView) {
         self.terminalView = terminalView
@@ -95,6 +142,10 @@ final class TerminalZModemBridge {
 
     var isActive: Bool {
         session != nil
+    }
+
+    func preparePathSelection(_ selection: TerminalZModemPathSelection?) {
+        preparedSelection.prepare(selection)
     }
 
     func handleRemoteBytes(_ bytes: [UInt8]) -> Bool {
@@ -113,6 +164,7 @@ final class TerminalZModemBridge {
 
     private func startSession(_ start: TerminalZModemStart) {
         guard let terminalView else { return }
+        let selectedPath = preparedSelection.consume(for: start.direction)
         guard let command = Self.localCommand(for: start.direction) else {
             terminalView.cancelRemoteZModem(message: Self.localInstallHint(for: start.direction))
             return
@@ -120,7 +172,13 @@ final class TerminalZModemBridge {
 
         switch start.direction {
         case .uploadToRemote:
-            guard let files = Self.chooseUploadFiles(), !files.isEmpty else {
+            let files: [String]?
+            if case .some(.upload(let selectedFiles)) = selectedPath {
+                files = selectedFiles.map(\.path)
+            } else {
+                files = Self.chooseUploadFiles()
+            }
+            guard let files, !files.isEmpty else {
                 terminalView.cancelRemoteZModem(message: "WillDeep ZMODEM upload cancelled.")
                 return
             }
@@ -131,7 +189,13 @@ final class TerminalZModemBridge {
                 initialBytes: start.protocolBytes
             )
         case .downloadFromRemote:
-            guard let directory = Self.chooseDownloadDirectory() else {
+            let directory: URL?
+            if case .some(.download(let selectedDirectory)) = selectedPath {
+                directory = selectedDirectory
+            } else {
+                directory = Self.chooseDownloadDirectory()
+            }
+            guard let directory else {
                 terminalView.cancelRemoteZModem(message: "WillDeep ZMODEM download cancelled.")
                 return
             }

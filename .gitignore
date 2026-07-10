@@ -1,6 +1,7 @@
 .alma-snapshots
 DerivedData/
 build/
+Xedit/Generated/
 *.profraw
 
 # Sensitive files — never commit. See CLAUDE.md §8.

@@ -740,6 +740,8 @@ struct AgentToolsCoreTests {
         #expect(editShortcut?.risk == .write)
         #expect(snapshot?.description.contains("whether the active terminal appears to be local or SSH'd into a server") == true)
         #expect(sendCommand?.description.contains("never send a local-intended command into an SSH'd server tab") == true)
+        #expect(sendCommand?.parameters.contains(where: { $0.name == "zmodem_upload_paths" && $0.type == .stringArray }) == true)
+        #expect(sendCommand?.parameters.contains(where: { $0.name == "zmodem_download_directory" && $0.type == .string }) == true)
 
         let commandDecision = AgentSandboxPolicy.decision(
             toolName: "terminal_send_command",
@@ -785,6 +787,15 @@ struct AgentToolsCoreTests {
         )
         #expect(commandSignature == "terminal_command:systemctl status nginx --no-pager")
 
+        let zmodemSignature = AgentToolAuthorization.signature(
+            toolName: "terminal_send_command",
+            arguments: [
+                "command": .string("rz"),
+                "zmodem_upload_paths": .array([.string("build/app.tar.gz")]),
+            ]
+        )
+        #expect(zmodemSignature == "terminal_command:rz|zmodem_upload:build/app.tar.gz")
+
         let controlSignature = AgentToolAuthorization.signature(
             toolName: "terminal_send_control",
             arguments: ["control": .string("ctrl_c")]
@@ -797,6 +808,63 @@ struct AgentToolsCoreTests {
         )
         #expect(enterSignature == "terminal_control:enter")
         #expect(controlSignature != enterSignature)
+    }
+
+    @Test
+    func alwaysAllowSuggestionHidesComplexOneOffCommands() {
+        let reusable = AgentToolAuthorization.suggestedPersistentSignature(
+            toolName: "run_command",
+            arguments: ["command": .string("git push origin feature/approval-ui")]
+        )
+        #expect(reusable == "git push")
+
+        let manyArguments = AgentToolAuthorization.suggestedPersistentSignature(
+            toolName: "run_command",
+            arguments: [
+                "command": .string("go test ./... -run TestApprovalPolicy -count=1 -timeout=8m")
+            ]
+        )
+        #expect(manyArguments == nil)
+
+        let remoteLayer = AgentToolAuthorization.suggestedPersistentSignature(
+            toolName: "run_command",
+            arguments: ["command": .string("ssh deploy@example.com systemctl restart willdeep")]
+        )
+        #expect(remoteLayer == nil)
+
+        let inlineScript = AgentToolAuthorization.suggestedPersistentSignature(
+            toolName: "run_command",
+            arguments: ["command": .string("ruby -e 'puts :one_off'")]
+        )
+        #expect(inlineScript == nil)
+
+        let exactTerminalCommand = AgentToolAuthorization.suggestedPersistentSignature(
+            toolName: "terminal_send_command",
+            arguments: ["command": .string("systemctl status nginx --no-pager")]
+        )
+        #expect(exactTerminalCommand == "terminal_command:systemctl status nginx --no-pager")
+
+        let zmodemFileSelection = AgentToolAuthorization.suggestedPersistentSignature(
+            toolName: "terminal_send_command",
+            arguments: [
+                "command": .string("rz"),
+                "zmodem_upload_paths": .array([.string("build/app.tar.gz")]),
+            ]
+        )
+        #expect(zmodemFileSelection == nil)
+    }
+
+    @Test
+    func existingAlwaysAllowSignatureContractRemainsStableForComplexCommands() {
+        let command = "go test ./... -run TestApprovalPolicy -count=1 -timeout=8m"
+        #expect(AgentToolAuthorization.signature(
+            toolName: "run_command",
+            arguments: ["command": .string(command)]
+        ) == "go test")
+        #expect(AgentToolAuthorization.suggestedPersistentSignature(
+            toolName: "run_command",
+            arguments: ["command": .string(command)]
+        ) == nil)
     }
 
     @Test

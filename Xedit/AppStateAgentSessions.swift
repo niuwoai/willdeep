@@ -124,14 +124,17 @@ extension AppState {
         }
     }
 
-    func syncSomeIMImageUnderstanding(apiKey: String) {
+    func syncSomeIMImageUnderstanding(
+        apiKey: String,
+        settings: SomeIMIntegrationSettings? = nil
+    ) {
         let trimmedKey = apiKey.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmedKey.isEmpty else { return }
 
         var configuration = agentConfiguration.normalized
         configuration.imageDescription = AgentImageDescriptionConfiguration(
             providerID: "some-im",
-            baseURL: SomeIMRelayRegion.chinaBaseURL,
+            baseURL: (settings ?? SomeIMIntegrationStore.loadSettings()).normalized.baseURL,
             model: SomeIMIntegrationSettings.defaultVisionModel,
             apiKey: trimmedKey
         ).normalized
@@ -213,6 +216,26 @@ extension AppState {
                 activate: false
             )
             syncSomeIMImageUnderstanding(apiKey: apiKey)
+        }
+    }
+
+    func refreshSomeIMRelayRouting() async {
+        do {
+            let baseURL = try await SomeIMClient.resolveAutomaticRelayBaseURL()
+            var settings = SomeIMIntegrationStore.loadSettings()
+            settings.baseURL = baseURL
+            let apiKey = SomeIMIntegrationStore.loadAPIKey()
+            if !apiKey.isEmpty {
+                settings.enabled = true
+            }
+            let normalized = settings.normalized
+            SomeIMIntegrationStore.saveSettings(normalized)
+            guard !apiKey.isEmpty else { return }
+            syncSomeIMProvider(settings: normalized, apiKey: apiKey, activate: false)
+            syncSomeIMImageUnderstanding(apiKey: apiKey, settings: normalized)
+        } catch {
+            // Keep the last known route when the lightweight location probe is
+            // temporarily unavailable; the existing relay remains usable.
         }
     }
 

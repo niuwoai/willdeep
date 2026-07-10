@@ -1,6 +1,6 @@
 # WillDeep Product Overview
 
-> Last updated: 2026-07-10 | Current version: v1.136.0-rc42
+> Last updated: 2026-07-10 | Current version: v1.136.0-rc51
 
 ## Positioning
 
@@ -14,6 +14,11 @@ WillDeep is configured for non-App-Store distribution without App Sandbox so it 
 
 WillDeep 是 SwiftUI + AppKit 桥接的 macOS 应用，单进程多窗口。代码层次：
 
+- **some.im 自动区域路由与精简设置（1.136.0-rc51）** —— App 启动时通过 some.im 公共位置接口识别当前国家/地区：中国自动使用 `api.niuwoai.com`，其余地区自动使用 `some.im`；设置页移除手工开关、区域、Base URL 与 API Key 区块，只保留浏览器登录和媒体模型偏好。账户点数统一使用 `M/B` 紧凑格式，视频默认模型为 `seedance-2.0`。
+- **some.im Debug 登录凭据保存兼容（1.136.0-rc50）** —— Debug 配置显式携带共享 Keychain entitlements；若本地签名仍未授权该 access group，则自动使用普通 Keychain 保存浏览器登录凭据。密钥仍由打包脚本从服务器环境自动注入编译常量。
+- **some.im 浏览器登录状态反馈与兼容（1.136.0-rc44）** —— 浏览器登录轮询兼容多种服务端完成态；轮询错误会直接显示在设置页/首次启动页，同时继续重试，避免网络或接口错误被误显示为持续等待。
+- **永久命令授权按复用价值推荐（1.136.0-rc43）** —— 工具审批卡不再只因“能生成命令签名”就显示“总是允许”。短小、参数少、以后仍可能复用的命令继续提供永久授权；参数过多、命令过长、SSH 套远端命令、shell/解释器内联脚本等一次性调用只保留本次允许。该判断走本地确定性策略，不为渲染一个可选按钮新增 LLM 调用；已有永久规则继续按旧签名生效。
+- **侧边栏终端 ZMODEM 可由工具直接指定路径（1.136.0-rc43）** —— `terminal_send_command` 支持 `zmodem_upload_paths`（上传文件数组）和 `zmodem_download_directory`（下载目录），路径支持绝对路径或相对当前 workspace 的路径；Xedit 在远端 `rz` / `sz` 握手时使用一次性预选，未提供参数时保留 macOS 文件/目录面板兜底。
 - **会话级产物清单（1.136.0-rc42）** —— Agent 右侧任务监控里的“产物”不再从 Git 未提交变更按扩展名猜测，而是使用持久化的会话级产物路径，并合并严格属于当前 runtime 的媒体任务输出；只收录本会话新建的用户可交付文档、图片、音视频等文件，排除已有源码修改和 `build`、`.local-cache`、`node_modules` 等临时目录。产物提交 Git 后仍保留；“工作文件”继续单独展示本会话关联的未提交变更，两块口径在界面中明确标注且不会重复列同一文件。
 - **some.im 浏览器登录协议兼容（1.136.0-rc38）** —— 浏览器登录 URL 与状态轮询同时带新旧参数名（`code` / `device_code` / `willdeep_device_code`，`pair_token` / `willdeep_pair_token`），browser-status 也兼容扁平返回的 `api_token`、`customer_session_token`、`email`、`credits` 等字段；只要 some.im 返回 app API key，WillDeep 就能保存共享 session，不再因为缺少嵌套 `account` 对象误报“登录完成但没返回凭据”。
 - **some.im Coding Plan 感知托管路由（1.136.0-rc37）** —— WillDeep 登录 some.im 后会定期查询 `/customer/plan/subscription` 并缓存 coding plan 权益；省心托管每轮裁判后按权益选模型族：有 plan 时 low/high/premium 全部走 `someim-coding-plan-*`，没有 plan 时编程域走 `someim-code-low/high/premium`、通用域走 `someim-auto-flash/pro/premium`。
@@ -119,7 +124,7 @@ WillDeep 是 SwiftUI + AppKit 桥接的 macOS 应用，单进程多窗口。代�
 - **口述生成终端录制（1.128.0-rc1）** —— Agent 新增 `terminal_create_shortcut` 工具，可把用户口述的终端操作转换为保存的终端录制捷径；事件支持命令、可见文本、控制键和等待时间，生成前需要用户审批。该工具拒绝生成 password / protected / echo-off 隐藏输入事件，密码类步骤仍建议由用户手动录制受保护输入。
 - **终端录制回放状态可视化（1.127.0-rc1）** —— 终端录制捷径列表展示录制总耗时；回放时当前捷径会以播放 icon 和 accent 高亮标记，并显示剩余时间、当前事件进度、预计结束时间，完成或中断后保留状态，方便判断自动输入是否仍在执行。
 - **AI 辅助终端录制编辑（1.126.0-rc1）** —— Agent 新增 `terminal_list_shortcuts` / `terminal_edit_shortcut` 工具，可让 AI 先读取终端录制的事件结构，再在用户批准后改标题、等待时间、删除事件或替换可见输入文本；echo-off 密码片段只暴露为受保护事件，不向模型返回明文。本版还让同一录制里重复的隐藏输入共用一个本地凭据引用，并取消 Keychain 保存前的比较性读取，减少多次输密码解锁钥匙串的情况。
-- **some.im 邮箱验证码自动接入（1.127.0-rc1）** —— Onboarding 与 Settings 可通过邮箱验证码连接 some.im：邮箱不存在时由 some.im 自动注册并发放 app 专用令牌，WillDeep 默认把 Agent provider 文本模型设置为 `someim-auto-flash`；左下角账户入口展示按 `1 USD = 100000 credits` 换算的剩余 credits，并通过一次性 handoff 链接打开已自动登录的 some.im 后台。客户端 secret 可通过 `WILLDEEP_CLIENT_LOGIN_SECRET` 环境变量或 `WillDeepSomeIMClientLoginSecret` Info.plist 注入，真实密钥不进入仓库。
+- **some.im 邮箱验证码自动接入（1.127.0-rc1）** —— Onboarding 与 Settings 可通过邮箱验证码连接 some.im：邮箱不存在时由 some.im 自动注册并发放 app 专用令牌，WillDeep 默认把 Agent provider 文本模型设置为 `someim-auto-flash`；左下角账户入口展示按 `1 USD = 100000 credits` 换算的剩余 credits，并通过一次性 handoff 链接打开已自动登录的 some.im 后台。客户端 secret 由构建环境注入，真实密钥不进入仓库。
 - **Agent Composer 触发符语义统一（1.125.0-rc1）** —— Agent composer 现在按通用心智拆分触发符：`/` 只打开命令 / workflow palette，`@` 只引用 workspace 与项目文件，`$` 打开 Skill picker 并把技能 chip 显示为 `$skill`；技能不再混入 `@` 引用列表，减少“提及对象”和“调用能力包”之间的歧义。
 - **Mobile Gateway 默认公网中继（1.124.0-rc1）** —— Mobile Gateway 默认使用 `https://j.niuwoai.com` 作为 relay base URL，并为每次安装自动生成稳定 room；配对二维码携带 relay 信息，Mac desktop peer 与 Android 客户端都连接 `/ws/broadcast/*` 公网房间来交换既有 `session.list`、`message.send`、审批、补丁和 worktree 事件，手机离开局域网后仍能操作办公室 Mac 上的当前 Agent 会话。
 - **Mobile Gateway Public Relay（1.123.0-rc1）** —— Mobile Gateway 配对二维码可携带 `cdnproxy` relay 信息；Mac desktop peer 与 Android 客户端都连接 `/ws/broadcast/*` 公网房间来交换既有 `session.list`、`message.send`、审批、补丁和 worktree 事件，手机离开局域网后仍能操作办公室 Mac 上的当前 Agent 会话。
