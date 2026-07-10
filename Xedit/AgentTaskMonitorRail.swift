@@ -150,23 +150,21 @@ struct AgentTaskMonitorRail: View {
 
     @ViewBuilder
     private var deliverablesSection: some View {
-        let files = deliverableFiles
+        let artifacts = sessionArtifacts
         AgentRailSection(title: "产物", systemImage: "doc.richtext") {
-            if let root = appState.agentWorktreeChanges.repositoryRoot ?? appState.rootDirectory {
-                AgentRailMetaRow(label: "默认工作目录", value: root.lastPathComponent)
-            }
-            if files.isEmpty {
-                AgentRailEmptyRow(text: "尚未识别最终文件")
+            AgentRailMetaRow(label: "范围", value: "当前会话产生的文件与媒体")
+            if artifacts.isEmpty {
+                AgentRailEmptyRow(text: "本会话尚未产生文件或媒体产物")
             } else {
                 VStack(alignment: .leading, spacing: 8) {
-                    ForEach(files) { file in
+                    ForEach(artifacts) { artifact in
                         AgentRailFileButton(
-                            title: file.fileName,
-                            subtitle: file.path,
-                            systemImage: "doc.text",
-                            tint: .accentColor
+                            title: artifact.fileName,
+                            subtitle: artifact.displayPath,
+                            systemImage: artifact.systemImage,
+                            tint: artifact.tint
                         ) {
-                            appState.openAgentChangedFile(file.path)
+                            appState.openAgentReferencedFile(artifact.url.path)
                         }
                     }
                 }
@@ -177,16 +175,18 @@ struct AgentTaskMonitorRail: View {
     @ViewBuilder
     private var workFilesSection: some View {
         let groups = workFileGroups
+        let files = sessionWorkFiles
         AgentRailSection(title: "工作文件", systemImage: "folder") {
-            if appState.agentWorktreeChanges.isEmpty {
+            AgentRailMetaRow(label: "口径", value: "当前会话关联的未提交变更")
+            if files.isEmpty {
                 AgentRailEmptyRow(text: "暂无已修改文件")
             } else {
                 VStack(alignment: .leading, spacing: 8) {
                     ForEach(groups) { group in
                         AgentRailDirectoryRow(group: group)
                     }
-                    if appState.agentWorktreeChanges.fileCount > groups.reduce(0, { $0 + $1.count }) {
-                        Text(L10n.AgentWorktreeSummary.moreFiles(appState.agentWorktreeChanges.fileCount - groups.reduce(0, { $0 + $1.count })))
+                    if files.count > groups.reduce(0, { $0 + $1.count }) {
+                        Text(L10n.AgentWorktreeSummary.moreFiles(files.count - groups.reduce(0, { $0 + $1.count })))
                             .font(.caption2)
                             .foregroundStyle(.secondary)
                     }
@@ -531,30 +531,44 @@ struct AgentTaskMonitorRail: View {
         }
     }
 
-    private var deliverableFiles: [AgentFileChangeSummary] {
-        appState.agentWorktreeChanges.files
-            .filter { change in
-                guard change.kind != .deleted else { return false }
-                let ext = URL(fileURLWithPath: change.path).pathExtension.lowercased()
-                return ["md", "markdown", "html", "pdf", "csv", "json", "xlsx", "docx"].contains(ext)
-            }
-            .sorted { lhs, rhs in
-                deliverableRank(lhs.path) < deliverableRank(rhs.path)
-            }
-            .prefix(4)
-            .map { $0 }
-    }
+    private var sessionArtifacts: [AgentRailArtifact] {
+        guard let runtime = appState.activeRuntime else { return [] }
+        var artifactsByPath: [String: AgentRailArtifact] = [:]
 
-    private func deliverableRank(_ path: String) -> Int {
-        let lower = path.lowercased()
-        if lower.hasSuffix(".md") || lower.hasSuffix(".markdown") { return 0 }
-        if lower.contains("report") || lower.contains("analysis") { return 1 }
-        return 2
+        if let workspaceURL = try? runtime.localWorkspaceURLForOptimisticUse() {
+            for relativePath in runtime.agentArtifactPaths.sorted() {
+                let url = workspaceURL.appendingPathComponent(relativePath).standardizedFileURL
+                var isDirectory: ObjCBool = false
+                guard FileManager.default.fileExists(atPath: url.path, isDirectory: &isDirectory),
+                      !isDirectory.boolValue else {
+                    continue
+                }
+                artifactsByPath[url.path] = AgentRailArtifact(
+                    url: url,
+                    displayPath: relativePath
+                )
+            }
+        }
+
+        let mediaTasks = appState.agentMediaTaskRegistry.tasks
+            .filter { $0.runtimeID == runtime.id }
+            .sorted { $0.updatedAt > $1.updatedAt }
+        for artifact in mediaTasks.flatMap(\.artifacts) {
+            let url = URL(fileURLWithPath: artifact.filePath).standardizedFileURL
+            guard FileManager.default.fileExists(atPath: url.path) else { continue }
+            artifactsByPath[url.path] = AgentRailArtifact(
+                url: url,
+                displayPath: artifact.filePath
+            )
+        }
+
+        return artifactsByPath.values.sorted { lhs, rhs in
+            lhs.displayPath.localizedStandardCompare(rhs.displayPath) == .orderedAscending
+        }
     }
 
     private var workFileGroups: [AgentRailDirectoryGroup] {
-        let deliverablePaths = Set(deliverableFiles.map(\.path))
-        let groups = Dictionary(grouping: appState.agentWorktreeChanges.files.filter { !deliverablePaths.contains($0.path) }) { change in
+        let groups = Dictionary(grouping: sessionWorkFiles) { change in
             let parts = change.path.split(separator: "/")
             return parts.count > 1 ? String(parts[0]) : "根目录"
         }
@@ -573,6 +587,11 @@ struct AgentTaskMonitorRail: View {
             }
             .prefix(6)
             .map { $0 }
+    }
+
+    private var sessionWorkFiles: [AgentFileChangeSummary] {
+        let artifactPaths = appState.activeRuntime?.agentArtifactPaths ?? []
+        return appState.agentWorktreeChanges.files.filter { !artifactPaths.contains($0.path) }
     }
 
     private var learningSummary: (memory: Int, skill: Int, mcp: Int, total: Int) {
@@ -725,6 +744,42 @@ private struct AgentRailDirectoryGroup: Identifiable {
     var name: String
     var count: Int
     var preview: [String]
+}
+
+private struct AgentRailArtifact: Identifiable {
+    let url: URL
+    let displayPath: String
+
+    var id: String { url.path }
+    var fileName: String { url.lastPathComponent }
+
+    var systemImage: String {
+        switch url.pathExtension.lowercased() {
+        case "png", "jpg", "jpeg", "gif", "webp", "heic", "svg":
+            return "photo"
+        case "mp4", "mov", "m4v", "webm", "avi":
+            return "film"
+        case "mp3", "wav", "m4a", "aac":
+            return "waveform"
+        case "pdf":
+            return "doc.richtext"
+        default:
+            return "doc.text"
+        }
+    }
+
+    var tint: Color {
+        switch url.pathExtension.lowercased() {
+        case "png", "jpg", "jpeg", "gif", "webp", "heic", "svg":
+            return .blue
+        case "mp4", "mov", "m4v", "webm", "avi":
+            return .orange
+        case "mp3", "wav", "m4a", "aac":
+            return .pink
+        default:
+            return .accentColor
+        }
+    }
 }
 
 private struct AgentRailMediaTaskRow: View {

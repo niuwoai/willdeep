@@ -226,7 +226,10 @@ extension AppState {
         }
         let baselineTask = workspaceURL.map { workspaceURL in
             Task.detached(priority: .utility) {
-                await Self.loadAgentWorktreeSnapshot(for: workspaceURL)
+                await Self.loadAgentWorktreeSnapshot(
+                    for: workspaceURL,
+                    captureArtifactFiles: true
+                )
             }
         }
 

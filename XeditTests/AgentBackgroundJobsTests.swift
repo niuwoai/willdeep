@@ -715,6 +715,7 @@ struct AgentBackgroundJobsTests {
             jobDigest: [],
             mediaTaskDigest: [],
             todoDigest: ["goal:write tests"],
+            artifactDigest: [],
             workFileDigest: [],
             learningDigest: []
         )
@@ -727,6 +728,7 @@ struct AgentBackgroundJobsTests {
             jobDigest: [],
             mediaTaskDigest: [],
             todoDigest: ["goal:write tests"],
+            artifactDigest: [],
             workFileDigest: [],
             learningDigest: []
         )

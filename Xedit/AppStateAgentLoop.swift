@@ -498,7 +498,10 @@ extension AppState {
         let remoteRuntimeDescriptor: RuntimeDescriptor? = workspaceLocation?.remoteRuntimeID.flatMap {
             AgentRuntimeStore.descriptor(id: $0)
         }
-        let turnBaselineSnapshot = await Self.loadAgentWorktreeSnapshot(for: workspaceURL)
+        let turnBaselineSnapshot = await Self.loadAgentWorktreeSnapshot(
+            for: workspaceURL,
+            captureArtifactFiles: true
+        )
         if workspaceURL != nil {
             runtime.worktreeChanges = turnBaselineSnapshot.changes.filtering(paths: runtime.agentEditedPaths)
         }

@@ -572,8 +572,15 @@ extension AppState {
         }
 
         let targetDirectory = workspaceURL.standardizedFileURL
-        let snapshot = await Self.loadAgentWorktreeSnapshot(for: targetDirectory)
+        let snapshot = await Self.loadAgentWorktreeSnapshot(
+            for: targetDirectory,
+            captureArtifactFiles: true
+        )
         let changedPaths = Self.agentWorktreePathsChangedSinceBaseline(
+            baseline: baselineSnapshot,
+            current: snapshot
+        )
+        let createdArtifactPaths = Self.agentArtifactPathsCreatedSinceBaseline(
             baseline: baselineSnapshot,
             current: snapshot
         )
@@ -583,6 +590,8 @@ extension AppState {
         if runtime.worktreeChanges != filteredChanges {
             runtime.worktreeChanges = filteredChanges
         }
+        var shouldPersistSession = false
+
         // didEditFiles flips on any real worktree movement (including
         // run_command side effects), but only after attributing changed paths
         // against this turn's baseline. Pre-existing user diffs should not
@@ -590,6 +599,13 @@ extension AppState {
         if snapshot.fingerprint != baselineSnapshot.fingerprint, !attributedPaths.isEmpty {
             runtime.agentEditedPaths = attributedPaths
             runtime.didEditFiles = true
+            shouldPersistSession = true
+        }
+        if !createdArtifactPaths.isEmpty {
+            runtime.agentArtifactPaths.formUnion(createdArtifactPaths)
+            shouldPersistSession = true
+        }
+        if shouldPersistSession {
             persistAgentSession(runtime: runtime)
         }
 
@@ -610,11 +626,16 @@ extension AppState {
         var changes: AgentWorktreeChangeSummary
         var fingerprint: String
         var fileSignatures: [String: String]
+        /// User-facing document/media files found directly on disk. This is
+        /// intentionally independent from Git so `.gitignore` cannot hide a
+        /// real conversation output.
+        var artifactFileSignatures: [String: String] = [:]
     }
 
     nonisolated static func loadAgentWorktreeSnapshot(
         for directoryURL: URL?,
-        restrictTo: Set<String>? = nil
+        restrictTo: Set<String>? = nil,
+        captureArtifactFiles: Bool = false
     ) async -> AgentWorktreeSnapshot {
         guard let directoryURL else {
             return AgentWorktreeSnapshot(
@@ -630,11 +651,15 @@ extension AppState {
             let changes = Self.loadAgentWorktreeChangeSummary(status: status, restrictTo: restrictTo)
             let fingerprint = Self.agentWorktreeFingerprint(status: status)
             let fileSignatures = Self.agentWorktreeFileSignatures(status: status)
+            let artifactFileSignatures = captureArtifactFiles
+                ? Self.agentArtifactFileSignatures(in: targetDirectory)
+                : [:]
             return AgentWorktreeSnapshot(
                 status: status,
                 changes: changes,
                 fingerprint: fingerprint,
-                fileSignatures: fileSignatures
+                fileSignatures: fileSignatures,
+                artifactFileSignatures: artifactFileSignatures
             )
         }.value
     }
@@ -686,6 +711,93 @@ extension AppState {
             let path = change.path
             return current.fileSignatures[path] != baseline.fileSignatures[path] ? path : nil
         })
+    }
+
+    /// Returns user-facing files newly created during one Agent tool turn.
+    /// This deliberately does not equate "anything Git noticed" with an
+    /// artifact: existing modified files belong in Work Files, while build
+    /// products and caches are transient implementation detail.
+    nonisolated static func agentArtifactPathsCreatedSinceBaseline(
+        baseline: AgentWorktreeSnapshot,
+        current: AgentWorktreeSnapshot
+    ) -> Set<String> {
+        Set(current.artifactFileSignatures.keys.filter { path in
+            baseline.artifactFileSignatures[path] == nil
+        })
+    }
+
+    /// Lightweight, Git-independent inventory of files that can be surfaced
+    /// as conversation artifacts. Transient trees are pruned before descent,
+    /// avoiding the cost and noise of build products, dependencies and caches.
+    nonisolated static func agentArtifactFileSignatures(in directoryURL: URL) -> [String: String] {
+        let root = directoryURL.standardizedFileURL
+        let rootPrefix = root.path.hasSuffix("/") ? root.path : root.path + "/"
+        let keys: Set<URLResourceKey> = [
+            .isDirectoryKey,
+            .isRegularFileKey,
+            .fileSizeKey,
+            .contentModificationDateKey
+        ]
+        guard let enumerator = FileManager.default.enumerator(
+            at: root,
+            includingPropertiesForKeys: Array(keys),
+            options: [.skipsHiddenFiles, .skipsPackageDescendants],
+            errorHandler: { _, _ in true }
+        ) else {
+            return [:]
+        }
+
+        var signatures: [String: String] = [:]
+        for case let fileURL as URL in enumerator {
+            let standardized = fileURL.standardizedFileURL
+            guard standardized.path.hasPrefix(rootPrefix) else { continue }
+            let relativePath = String(standardized.path.dropFirst(rootPrefix.count))
+            guard !relativePath.isEmpty else { continue }
+            let values = try? standardized.resourceValues(forKeys: keys)
+            if values?.isDirectory == true {
+                if isAgentTransientArtifactDirectory(relativePath) {
+                    enumerator.skipDescendants()
+                }
+                continue
+            }
+            guard values?.isRegularFile == true,
+                  isAgentSessionArtifactPath(relativePath) else {
+                continue
+            }
+            let size = values?.fileSize ?? -1
+            let modified = values?.contentModificationDate?.timeIntervalSince1970 ?? -1
+            signatures[relativePath] = "size=\(size)|mtime=\(modified)"
+        }
+        return signatures
+    }
+
+    nonisolated static func isAgentTransientArtifactDirectory(_ path: String) -> Bool {
+        let transientComponents: Set<String> = [
+            ".git", ".build", "build", "deriveddata", "node_modules",
+            ".local-cache", "cache", "caches", "tmp", "temp",
+            "__pycache__", ".pytest_cache", "coverage"
+        ]
+        return path.split(separator: "/").contains { component in
+            transientComponents.contains(component.lowercased())
+        }
+    }
+
+    /// Artifact is a conversation-created, user-consumable document or media
+    /// file. Source edits and transient build/cache trees stay under Work
+    /// Files, where their Git-oriented semantics are explicit.
+    nonisolated static func isAgentSessionArtifactPath(_ path: String) -> Bool {
+        guard !isAgentTransientArtifactDirectory(path) else {
+            return false
+        }
+
+        let artifactExtensions: Set<String> = [
+            "md", "markdown", "txt", "html", "pdf", "csv", "json",
+            "xlsx", "xls", "docx", "pptx", "png", "jpg", "jpeg",
+            "gif", "webp", "heic", "svg", "mp4", "mov", "m4v",
+            "webm", "avi", "mp3", "wav", "m4a", "aac", "zip"
+        ]
+        let ext = URL(fileURLWithPath: path).pathExtension.lowercased()
+        return artifactExtensions.contains(ext)
     }
 
     nonisolated static func loadAgentWorktreeDiffPreview(

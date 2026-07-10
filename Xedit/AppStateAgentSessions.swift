@@ -977,6 +977,7 @@ extension AppState {
             pruneEmptyAgentSessions(excluding: runtime.id)
             runtime.rebindWorkspace(to: url.path)
             runtime.worktreeChanges = .init()
+            runtime.agentArtifactPaths = []
             persistAgentSession(runtime: runtime)
             unhideWorkspace(key: runtime.session.workspaceSidebarGroupKey)
             return runtime.session
@@ -999,6 +1000,7 @@ extension AppState {
             pruneEmptyAgentSessions(excluding: runtime.id)
             runtime.rebindRemoteWorkspace(runtimeID: runtimeID, path: normalizedPath)
             runtime.worktreeChanges = .init()
+            runtime.agentArtifactPaths = []
             persistAgentSession(runtime: runtime)
             unhideWorkspace(key: runtime.session.workspaceSidebarGroupKey)
             return runtime.session

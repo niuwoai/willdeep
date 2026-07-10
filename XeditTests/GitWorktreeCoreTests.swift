@@ -218,6 +218,70 @@ struct GitWorktreeCoreTests {
         ) == Set(["agent-output.txt"]))
     }
 
+    @Test("session artifacts include new deliverables but exclude build output and source edits")
+    func testSessionArtifactAttributionHasExplicitSemantics() {
+        let root = URL(fileURLWithPath: "/tmp/willdeep-git-root")
+        let baseline = AppState.AgentWorktreeSnapshot(
+            status: GitRepositoryStatus(repositoryRoot: root),
+            changes: AgentWorktreeChangeSummary(repositoryRoot: root),
+            fingerprint: "before",
+            fileSignatures: ["Sources/App.swift": "modified|size=10"],
+            artifactFileSignatures: [:]
+        )
+        let current = AppState.AgentWorktreeSnapshot(
+            status: GitRepositoryStatus(repositoryRoot: root),
+            changes: AgentWorktreeChangeSummary(
+                repositoryRoot: root,
+                files: [
+                    AgentFileChangeSummary(path: "reports/result.pdf", kind: .untracked, lineStats: AgentLineChangeStats(added: nil, deleted: nil)),
+                    AgentFileChangeSummary(path: "media/preview.mp4", kind: .added, lineStats: AgentLineChangeStats(added: nil, deleted: nil)),
+                    AgentFileChangeSummary(path: "build/report.json", kind: .untracked, lineStats: AgentLineChangeStats(added: nil, deleted: nil)),
+                    AgentFileChangeSummary(path: "Sources/App.swift", kind: .modified, lineStats: AgentLineChangeStats(added: 1, deleted: 0)),
+                ]
+            ),
+            fingerprint: "after",
+            fileSignatures: [
+                "reports/result.pdf": "untracked|size=20",
+                "media/preview.mp4": "added|size=30",
+                "build/report.json": "untracked|size=40",
+                "Sources/App.swift": "modified|size=12",
+            ],
+            artifactFileSignatures: [
+                "reports/result.pdf": "size=20|mtime=1",
+                "media/preview.mp4": "size=30|mtime=1",
+            ]
+        )
+
+        #expect(AppState.agentArtifactPathsCreatedSinceBaseline(
+            baseline: baseline,
+            current: current
+        ) == Set(["reports/result.pdf", "media/preview.mp4"]))
+        #expect(!AppState.isAgentSessionArtifactPath(".local-cache/output.json"))
+        #expect(!AppState.isAgentSessionArtifactPath("Sources/NewView.swift"))
+    }
+
+    @Test("artifact inventory finds git-ignored deliverables and prunes transient trees")
+    func testArtifactInventoryIsIndependentFromGitStatus() throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("willdeep_artifact_inventory_\(UUID().uuidString)")
+        try FileManager.default.createDirectory(
+            at: root.appendingPathComponent("exports"),
+            withIntermediateDirectories: true
+        )
+        try FileManager.default.createDirectory(
+            at: root.appendingPathComponent("build"),
+            withIntermediateDirectories: true
+        )
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        try Data("pdf".utf8).write(to: root.appendingPathComponent("exports/result.pdf"))
+        try Data("json".utf8).write(to: root.appendingPathComponent("build/report.json"))
+        try Data("swift".utf8).write(to: root.appendingPathComponent("App.swift"))
+
+        let signatures = AppState.agentArtifactFileSignatures(in: root)
+        #expect(Set(signatures.keys) == Set(["exports/result.pdf"]))
+    }
+
     @Test("agent worktree diff preview is limited to attributed files")
     func testWorktreeDiffPreviewLimitsTrackedDiffToAttributedFiles() throws {
         let repository = FileManager.default.temporaryDirectory

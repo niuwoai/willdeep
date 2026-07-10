@@ -127,6 +127,10 @@ final class AgentRuntime: ObservableObject, Identifiable {
     /// card so it shows only files Agent touched — never the user's own
     /// uncommitted edits or untracked junk like `__pycache__/*.pyc`.
     @Published var agentEditedPaths: Set<String> = []
+    /// User-facing files created during this conversation. Kept separately
+    /// from Git state so committing an output does not make it disappear from
+    /// the right-rail artifact list.
+    @Published var agentArtifactPaths: Set<String> = []
     /// Live `git status` snapshot for this session's workspace. Each
     /// runtime owns its own — switching from a session in workspace A
     /// to one in workspace B shouldn't briefly show A's changes. The
@@ -191,6 +195,7 @@ final class AgentRuntime: ObservableObject, Identifiable {
         self.contextSummaryThroughMessageID = session.contextSummaryThroughMessageID
         self.didEditFiles = session.didEditFiles
         self.agentEditedPaths = Set(session.agentEditedPaths)
+        self.agentArtifactPaths = Set(session.agentArtifactPaths)
         self.interactionMode = session.interactionMode
         self.approvalMode = session.approvalMode
         self.executionAgent = session.executionAgent
@@ -273,6 +278,7 @@ final class AgentRuntime: ObservableObject, Identifiable {
         }
         session.didEditFiles = didEditFiles
         session.agentEditedPaths = agentEditedPaths.sorted()
+        session.agentArtifactPaths = agentArtifactPaths.sorted()
         session.interactionMode = interactionMode
         session.approvalMode = approvalMode
         session.executionAgent = executionAgent

@@ -329,7 +329,7 @@ extension AppState {
         let changes = try AgentPatchApplier.parse(diff)
         let root = resolvedRoot.standardizedFileURL
         let rootPath = root.path
-        var pendingWrites: [(url: URL, content: String, relativePath: String)] = []
+        var pendingWrites: [(url: URL, content: String, relativePath: String, isNewFile: Bool)] = []
 
         for change in changes {
             let url = try resolveAgentPatchURL(change.path, root: root, rootPath: rootPath)
@@ -341,7 +341,7 @@ extension AppState {
                 }
                 let newContent = try AgentPatchApplier.apply(change, to: "")
                 let relativePath = Self.relativeWorkspacePath(for: url, root: root, rootPath: rootPath)
-                pendingWrites.append((url, newContent, relativePath))
+                pendingWrites.append((url, newContent, relativePath, true))
                 continue
             }
             guard FileManager.default.fileExists(atPath: url.path) else {
@@ -351,7 +351,7 @@ extension AppState {
             let currentContent = try editableContent(forAgentPatchURL: url)
             let newContent = try AgentPatchApplier.apply(change, to: currentContent)
             let relativePath = Self.relativeWorkspacePath(for: url, root: root, rootPath: rootPath)
-            pendingWrites.append((url, newContent, relativePath))
+            pendingWrites.append((url, newContent, relativePath, false))
         }
 
         for pendingWrite in pendingWrites {
@@ -373,10 +373,15 @@ extension AppState {
             // Agent actually touched in THIS session — never the user's
             // own diffs or untracked build artifacts.
             var edited = agentEditedRelativePaths
+            var artifacts = agentArtifactRelativePaths
             for write in pendingWrites where !write.relativePath.isEmpty {
                 edited.insert(write.relativePath)
+                if write.isNewFile, Self.isAgentSessionArtifactPath(write.relativePath) {
+                    artifacts.insert(write.relativePath)
+                }
             }
             agentEditedRelativePaths = edited
+            agentArtifactRelativePaths = artifacts
             persistActiveAgentSession()
         }
 
