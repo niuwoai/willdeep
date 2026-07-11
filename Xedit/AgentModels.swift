@@ -332,6 +332,12 @@ nonisolated enum SomeIMManagedDomain: String, Codable, Equatable {
     case general
 }
 
+nonisolated enum AgentManagedRouteFamily: Equatable {
+    case general
+    case coding
+    case unknown
+}
+
 /// Per-assistant-message record of how managed routing resolved this turn.
 /// Additive observability metadata (footer chip / usage stats) — persisted
 /// with the session, absent (nil) on non-managed turns. `SomeIMManagedComplexity`
@@ -385,10 +391,58 @@ nonisolated struct AgentManagedRouteDecision: Codable, Equatable {
         return text
     }
 
-    /// Full footer chip text with a localized "Managed" prefix, e.g.
-    /// "Managed High↑" / "托管 High↑".
+    /// Footer family is derived from the virtual model that was actually used,
+    /// not from the judge's original domain. Coding-plan entitlement routes a
+    /// general verdict through `someim-coding-plan-*`, which should therefore
+    /// still be presented as the programming model family.
+    var footerFamily: AgentManagedRouteFamily {
+        let model = selectedModel.lowercased()
+        if model.hasPrefix("someim-auto-") {
+            return .general
+        }
+        if model.hasPrefix("someim-coding-") || model.hasPrefix("someim-code-") {
+            return .coding
+        }
+        return .unknown
+    }
+
+    /// User-facing capability name derived from the actual virtual model.
+    /// The coding families call the same three effective levels low/high/
+    /// premium, while the footer presents them consistently as flash/pro/
+    /// premium alongside the auto family.
+    var footerLevelLabel: String {
+        let model = selectedModel.lowercased()
+        if model.hasSuffix("-premium") { return "premium" }
+        if model.hasSuffix("-pro") || model.hasSuffix("-high") { return "pro" }
+        if model.hasSuffix("-flash") || model.hasSuffix("-low") { return "flash" }
+        switch tier {
+        case .low: return "flash"
+        case .high: return "pro"
+        case .premium: return "premium"
+        }
+    }
+
+    var footerLevelMarkers: String {
+        var text = footerLevelLabel
+        if didEscalate {
+            text += "↑"
+        } else if didFallback {
+            text += "~"
+        }
+        return text
+    }
+
+    /// Full footer text derived from the actual model family and level, e.g.
+    /// `托管-通用-flash` or `托管-编程-pro↑`.
     var footerChipText: String {
-        "\(L10n.AgentManagedRouting.footerPrefix) \(tierMarkers)"
+        switch footerFamily {
+        case .general:
+            return L10n.AgentManagedRouting.generalFooter(footerLevelMarkers)
+        case .coding:
+            return L10n.AgentManagedRouting.codingFooter(footerLevelMarkers)
+        case .unknown:
+            return "\(L10n.AgentManagedRouting.footerPrefix) \(tierMarkers)"
+        }
     }
 }
 

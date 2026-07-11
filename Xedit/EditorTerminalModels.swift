@@ -46,6 +46,33 @@ struct EditorTerminalSettings: Codable, Equatable {
     var followsInterfaceSkin: Bool { colorSchemeID == Self.followSkinColorSchemeID }
 }
 
+/// Common local shells shown in Terminal settings. The text field beside the
+/// picker remains the escape hatch for a shell installed at another path.
+struct EditorTerminalShellOption: Identifiable, Hashable {
+    let name: String
+    let path: String
+
+    var id: String { path }
+
+    static let common: [EditorTerminalShellOption] = [
+        EditorTerminalShellOption(name: "zsh", path: "/bin/zsh"),
+        EditorTerminalShellOption(name: "bash", path: "/bin/bash"),
+        EditorTerminalShellOption(name: "sh", path: "/bin/sh"),
+        EditorTerminalShellOption(name: "fish (Homebrew)", path: "/opt/homebrew/bin/fish"),
+        EditorTerminalShellOption(name: "fish (Intel Homebrew)", path: "/usr/local/bin/fish"),
+        EditorTerminalShellOption(name: "ksh", path: "/bin/ksh"),
+        EditorTerminalShellOption(name: "tcsh", path: "/bin/tcsh")
+    ]
+
+    static func options(for currentPath: String) -> [EditorTerminalShellOption] {
+        let trimmed = currentPath.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty, !common.contains(where: { $0.path == trimmed }) else {
+            return common
+        }
+        return common + [EditorTerminalShellOption(name: trimmed, path: trimmed)]
+    }
+}
+
 /// Cursor shapes the user can pick. Maps to SwiftTerm's CursorStyle
 /// (combined with the blink flag) at apply time.
 enum EditorTerminalCursorStyle: String, CaseIterable, Identifiable {

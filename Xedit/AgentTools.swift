@@ -198,6 +198,32 @@ enum AgentToolRunner {
                 result = try await AgentVisualQATools.analyzeScreenshot(arguments: activeArguments, context: activeContext)
             case "capture_screenshot":
                 result = try await AgentCaptureTools.captureScreenshot(arguments: activeArguments, context: activeContext)
+            case "computer_use_permissions":
+                result = try await AgentComputerUseTools.permissions()
+            case "computer_use_request_permissions":
+                result = try await AgentComputerUseTools.requestPermissions(arguments: activeArguments)
+            case "computer_use_list_apps":
+                result = try await AgentComputerUseTools.listApps()
+            case "computer_use_launch_app":
+                result = try await AgentComputerUseTools.launchApp(arguments: activeArguments)
+            case "computer_use_get_app_state":
+                result = try await AgentComputerUseTools.getAppState(arguments: activeArguments)
+            case "computer_use_click":
+                result = try await AgentComputerUseTools.perform(action: "click", arguments: activeArguments)
+            case "computer_use_secondary_action":
+                result = try await AgentComputerUseTools.perform(action: "secondary_action", arguments: activeArguments)
+            case "computer_use_scroll":
+                result = try await AgentComputerUseTools.perform(action: "scroll", arguments: activeArguments)
+            case "computer_use_drag":
+                result = try await AgentComputerUseTools.perform(action: "drag", arguments: activeArguments)
+            case "computer_use_type_text":
+                result = try await AgentComputerUseTools.perform(action: "type_text", arguments: activeArguments)
+            case "computer_use_press_key":
+                result = try await AgentComputerUseTools.perform(action: "press_key", arguments: activeArguments)
+            case "computer_use_set_value":
+                result = try await AgentComputerUseTools.perform(action: "set_value", arguments: activeArguments)
+            case "computer_use_restart_helper":
+                result = try await AgentComputerUseTools.restartHelper()
             case "chrome_status":
                 result = try await AgentChromeTools.status(arguments: activeArguments)
             case "chrome_read_page":

@@ -74,6 +74,19 @@ nonisolated enum AgentToolDisplay {
         "generate_image": "生成图片",
         "visual_qa_screenshot": "截图视觉检查",
         "capture_screenshot": "截屏",
+        "computer_use_permissions": "电脑操作权限",
+        "computer_use_request_permissions": "请求电脑操作权限",
+        "computer_use_list_apps": "列出 Mac 应用",
+        "computer_use_launch_app": "后台启动 Mac 应用",
+        "computer_use_get_app_state": "读取应用界面",
+        "computer_use_click": "点击应用控件",
+        "computer_use_secondary_action": "打开应用菜单",
+        "computer_use_scroll": "滚动应用界面",
+        "computer_use_drag": "拖拽应用界面",
+        "computer_use_type_text": "输入应用文本",
+        "computer_use_press_key": "发送应用按键",
+        "computer_use_set_value": "设置应用控件值",
+        "computer_use_restart_helper": "重启电脑操作 Helper",
         "chrome_status": "Chrome 状态",
         "chrome_read_page": "读取网页",
         "chrome_read_selection": "读取网页选区",
@@ -1078,10 +1091,12 @@ private enum TerminalShortcutProtectedInputState: Equatable {
     case filled(TerminalShortcutProtectedPromptSet)
 }
 
-private struct TerminalShortcutProtectedPromptSet: Equatable {
+struct TerminalShortcutProtectedPromptSet: Identifiable, Equatable {
     let shortcutID: UUID
     let title: String
     let prompts: [TerminalShortcutProtectedPrompt]
+
+    var id: UUID { shortcutID }
 
     static func parse(payload: String) -> TerminalShortcutProtectedPromptSet? {
         guard let data = payload.data(using: .utf8),
@@ -1112,7 +1127,7 @@ private struct TerminalShortcutProtectedPromptSet: Equatable {
     }
 }
 
-private struct TerminalShortcutProtectedPrompt: Identifiable, Equatable {
+struct TerminalShortcutProtectedPrompt: Identifiable, Equatable {
     let eventIndex: Int
     let label: String
 

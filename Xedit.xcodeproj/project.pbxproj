@@ -192,6 +192,7 @@
 				5CA6B05E2FC6D8F9006DFCCC /* Frameworks */,
 				5CA6B05F2FC6D8F9006DFCCC /* Resources */,
 				5CA6B0B72FE10A01006DFCCC /* Build willdeep-agent */,
+				5CA6B0E12FE10A02006DFCCC /* Build WillDeep Computer Use Helper */,
 				5CA6B0C02FE10B00006DFCCC /* Re-sign ONNX dylib (Release only) */,
 			);
 			buildRules = (
@@ -367,6 +368,27 @@
 			shellPath = /bin/zsh;
 			shellScript = "set -euo pipefail\nif ! command -v go >/dev/null 2>&1; then\n  echo \"warning: go not found; skipping willdeep-agent resource build\"\n  exit 0\nfi\nif ! command -v lipo >/dev/null 2>&1; then\n  echo \"warning: lipo not found; skipping willdeep-agent universal resource build\"\n  exit 0\nfi\nmkdir -p \"$TARGET_BUILD_DIR/$UNLOCALIZED_RESOURCES_FOLDER_PATH\"\ntmpdir=\"$(mktemp -d)\"\ntrap 'rm -rf \"$tmpdir\"' EXIT\ncd \"$SRCROOT/willdeep-agent\"\nCGO_ENABLED=0 GOOS=darwin GOARCH=arm64 go build -trimpath -o \"$tmpdir/willdeep-agent-arm64\" ./cmd/willdeep-agent\nCGO_ENABLED=0 GOOS=darwin GOARCH=amd64 go build -trimpath -o \"$tmpdir/willdeep-agent-amd64\" ./cmd/willdeep-agent\nlipo -create \"$tmpdir/willdeep-agent-arm64\" \"$tmpdir/willdeep-agent-amd64\" -output \"$TARGET_BUILD_DIR/$UNLOCALIZED_RESOURCES_FOLDER_PATH/willdeep-agent\"\nchmod +x \"$TARGET_BUILD_DIR/$UNLOCALIZED_RESOURCES_FOLDER_PATH/willdeep-agent\"\nlipo -info \"$TARGET_BUILD_DIR/$UNLOCALIZED_RESOURCES_FOLDER_PATH/willdeep-agent\"\n";
 		};
+		5CA6B0E12FE10A02006DFCCC /* Build WillDeep Computer Use Helper */ = {
+			isa = PBXShellScriptBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+			);
+			inputPaths = (
+				"$(SRCROOT)/ComputerUseHelper/main.swift",
+				"$(SRCROOT)/ComputerUseHelper/Info.plist",
+			);
+			name = "Build WillDeep Computer Use Helper";
+			outputFileListPaths = (
+			);
+			outputPaths = (
+				"$(TARGET_BUILD_DIR)/$(UNLOCALIZED_RESOURCES_FOLDER_PATH)/WillDeepComputerUseHelper.app",
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/zsh;
+			shellScript = "set -euo pipefail\nsource=\"$SRCROOT/ComputerUseHelper/main.swift\"\nplist=\"$SRCROOT/ComputerUseHelper/Info.plist\"\napp=\"$TARGET_BUILD_DIR/$UNLOCALIZED_RESOURCES_FOLDER_PATH/WillDeepComputerUseHelper.app\"\ncontents=\"$app/Contents\"\nmacos=\"$contents/MacOS\"\ntmpdir=\"$(mktemp -d)\"\ntrap 'rm -rf \"$tmpdir\"' EXIT\nrm -rf \"$app\"\nmkdir -p \"$macos\"\ncp \"$plist\" \"$contents/Info.plist\"\nmodule_cache=\"$DERIVED_FILE_DIR/computer-use-module-cache\"\nmkdir -p \"$module_cache\"\nxcrun swiftc -target arm64-apple-macos13.7 -module-cache-path \"$module_cache\" -framework AppKit -framework ApplicationServices -framework CoreGraphics -framework ImageIO \"$source\" -o \"$tmpdir/helper-arm64\"\nxcrun swiftc -target x86_64-apple-macos13.7 -module-cache-path \"$module_cache\" -framework AppKit -framework ApplicationServices -framework CoreGraphics -framework ImageIO \"$source\" -o \"$tmpdir/helper-x86_64\"\nlipo -create \"$tmpdir/helper-arm64\" \"$tmpdir/helper-x86_64\" -output \"$macos/WillDeepComputerUseHelper\"\nchmod +x \"$macos/WillDeepComputerUseHelper\"\nsign=\"${EXPANDED_CODE_SIGN_IDENTITY:-${CODE_SIGN_IDENTITY:--}}\"\n[ -n \"$sign\" ] || sign=\"-\"\ncodesign --force --sign \"$sign\" --timestamp=none \"$app\"\n";
+		};
 		5CA6B0C02FE10B00006DFCCC /* Re-sign ONNX dylib (Release only) */ = {
 			isa = PBXShellScriptBuildPhase;
 			buildActionMask = 2147483647;
@@ -467,7 +489,7 @@
 					"$(SRCROOT)/Xedit/Voice/Libraries/onnxruntime",
 					"$(PROJECT_DIR)/Xedit/Voice/Libraries/onnxruntime",
 				);
-				MARKETING_VERSION = "1.136.0-rc51";
+				MARKETING_VERSION = "1.138.0-rc4";
 				OTHER_LDFLAGS = (
 					"$(inherited)",
 					"$(SRCROOT)/Xedit/Voice/Libraries/onnxruntime/libonnxruntime.1.23.2.dylib",
@@ -522,7 +544,7 @@
 					"$(SRCROOT)/Xedit/Voice/Libraries/onnxruntime",
 					"$(PROJECT_DIR)/Xedit/Voice/Libraries/onnxruntime",
 				);
-				MARKETING_VERSION = "1.136.0-rc51";
+				MARKETING_VERSION = "1.138.0-rc4";
 				OTHER_LDFLAGS = (
 					"$(inherited)",
 					"$(SRCROOT)/Xedit/Voice/Libraries/onnxruntime/libonnxruntime.1.23.2.dylib",
@@ -670,7 +692,7 @@
 				DEVELOPMENT_TEAM = ZH2S7D6PL6;
 				GENERATE_INFOPLIST_FILE = YES;
 				MACOSX_DEPLOYMENT_TARGET = 13.7;
-				MARKETING_VERSION = "1.136.0-rc51";
+				MARKETING_VERSION = "1.138.0-rc4";
 				PRODUCT_BUNDLE_IDENTIFIER = com.willdeep.app.tests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				STRING_CATALOG_GENERATE_SYMBOLS = NO;
@@ -691,7 +713,7 @@
 				DEVELOPMENT_TEAM = ZH2S7D6PL6;
 				GENERATE_INFOPLIST_FILE = YES;
 				MACOSX_DEPLOYMENT_TARGET = 13.7;
-				MARKETING_VERSION = "1.136.0-rc51";
+				MARKETING_VERSION = "1.138.0-rc4";
 				PRODUCT_BUNDLE_IDENTIFIER = com.willdeep.app.tests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				STRING_CATALOG_GENERATE_SYMBOLS = NO;
@@ -710,7 +732,7 @@
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = ZH2S7D6PL6;
 				GENERATE_INFOPLIST_FILE = YES;
-				MARKETING_VERSION = "1.136.0-rc51";
+				MARKETING_VERSION = "1.138.0-rc4";
 				PRODUCT_BUNDLE_IDENTIFIER = com.willdeep.app.uitests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				STRING_CATALOG_GENERATE_SYMBOLS = NO;
@@ -729,7 +751,7 @@
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = ZH2S7D6PL6;
 				GENERATE_INFOPLIST_FILE = YES;
-				MARKETING_VERSION = "1.136.0-rc51";
+				MARKETING_VERSION = "1.138.0-rc4";
 				PRODUCT_BUNDLE_IDENTIFIER = com.willdeep.app.uitests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				STRING_CATALOG_GENERATE_SYMBOLS = NO;

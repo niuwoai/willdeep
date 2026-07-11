@@ -185,12 +185,34 @@ struct VoiceSettingsView: View {
                     .labelsHidden()
                     .frame(width: 260)
                 }
+
+                LabeledContent(L10n.Settings.Voice.overlayWaveLabel) {
+                    Picker("", selection: $preferences.waveformOverlayWaveStyle) {
+                        ForEach(WaveformOverlayWaveStyle.allCases) { waveStyle in
+                            Text(waveStyle.displayName).tag(waveStyle)
+                        }
+                    }
+                    .labelsHidden()
+                    .frame(width: 220)
+                }
+
+                LabeledContent(L10n.Settings.Voice.overlayCornerLabel) {
+                    Picker("", selection: $preferences.waveformOverlayCornerStyle) {
+                        ForEach(WaveformOverlayCornerStyle.allCases) { cornerStyle in
+                            Text(cornerStyle.displayName).tag(cornerStyle)
+                        }
+                    }
+                    .labelsHidden()
+                    .frame(width: 220)
+                }
             }
 
             HStack(alignment: .center, spacing: 12) {
                 WaveformOverlayPreviewSwatch(
                     style: preferences.waveformOverlayStyle,
-                    colorStyle: preferences.waveformOverlayColorStyle
+                    colorStyle: preferences.waveformOverlayColorStyle,
+                    waveStyle: preferences.waveformOverlayWaveStyle,
+                    cornerStyle: preferences.waveformOverlayCornerStyle
                 )
 
                 VStack(alignment: .leading, spacing: 3) {
@@ -391,6 +413,8 @@ struct VoiceSettingsView: View {
 private struct WaveformOverlayPreviewSwatch: View {
     let style: WaveformOverlayWindowStyle
     let colorStyle: WaveformOverlayWindowColorStyle
+    let waveStyle: WaveformOverlayWaveStyle
+    let cornerStyle: WaveformOverlayCornerStyle
 
     @Environment(\.colorScheme) private var colorScheme
 
@@ -414,23 +438,13 @@ private struct WaveformOverlayPreviewSwatch: View {
                     .frame(width: 8, height: 8)
                     .shadow(color: config.barColor.opacity(0.5), radius: 3)
             } else {
-                HStack(spacing: style.barSpacing) {
-                    ForEach(Array([0.35, 0.65, 0.9, 0.58, 0.4].enumerated()), id: \.offset) { _, height in
-                        RoundedRectangle(cornerRadius: style.barWidth / 2, style: .continuous)
-                            .fill(
-                                LinearGradient(
-                                    colors: [
-                                        config.barColor.opacity(0.95),
-                                        config.barColor.opacity(0.7),
-                                        config.barColor.opacity(0.45),
-                                    ],
-                                    startPoint: .top,
-                                    endPoint: .bottom
-                                )
-                            )
-                            .frame(width: style.barWidth, height: CGFloat(height) * style.maxBarHeight)
-                    }
-                }
+                WaveformOverlayBars(
+                    windowStyle: style,
+                    waveStyle: waveStyle,
+                    primaryColor: config.barColor,
+                    accentColor: config.barAccentColor,
+                    audioLevel: 0.76
+                )
                 .padding(.horizontal, style.horizontalPadding)
                 .padding(.vertical, style.verticalPadding)
             }
@@ -441,16 +455,17 @@ private struct WaveformOverlayPreviewSwatch: View {
 
     @ViewBuilder
     private func background(config: WaveformOverlayColorConfig) -> some View {
+        let cornerRadius = cornerStyle.radius(for: style.size)
         if config.useMaterial {
-            RoundedRectangle(cornerRadius: style.cornerRadius, style: .continuous)
+            RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
                 .fill(.ultraThinMaterial)
                 .background {
-                    RoundedRectangle(cornerRadius: style.cornerRadius, style: .continuous)
+                    RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
                         .fill(config.backgroundColor.opacity(config.backgroundOpacity))
                 }
-                .clipShape(RoundedRectangle(cornerRadius: style.cornerRadius, style: .continuous))
+                .clipShape(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
         } else {
-            RoundedRectangle(cornerRadius: style.cornerRadius, style: .continuous)
+            RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
                 .fill(config.backgroundColor.opacity(config.backgroundOpacity))
         }
     }
@@ -470,7 +485,13 @@ private struct WaveformOverlayColorSwatch: View {
             HStack(spacing: 2) {
                 ForEach(Array([0.5, 0.8, 0.65].enumerated()), id: \.offset) { _, height in
                     RoundedRectangle(cornerRadius: 1, style: .continuous)
-                        .fill(config.barColor)
+                        .fill(
+                            LinearGradient(
+                                colors: [config.barColor, config.barAccentColor],
+                                startPoint: .top,
+                                endPoint: .bottom
+                            )
+                        )
                         .frame(width: 2, height: CGFloat(height) * 12)
                 }
             }

@@ -10,17 +10,23 @@ import SwiftUI
 struct WaveformOverlayColorConfig {
     let backgroundColor: Color
     let barColor: Color
+    let barAccentColor: Color
+    let borderColor: Color
     let backgroundOpacity: Double
     let useMaterial: Bool
 
     init(
         backgroundColor: Color,
         barColor: Color,
+        barAccentColor: Color? = nil,
+        borderColor: Color? = nil,
         backgroundOpacity: Double = 0.25,
         useMaterial: Bool = true
     ) {
         self.backgroundColor = backgroundColor
         self.barColor = barColor
+        self.barAccentColor = barAccentColor ?? barColor
+        self.borderColor = borderColor ?? Color.primary.opacity(0.08)
         self.backgroundOpacity = backgroundOpacity
         self.useMaterial = useMaterial
     }
@@ -70,15 +76,6 @@ enum WaveformOverlayWindowStyle: String, CaseIterable, Identifiable {
         case .compact: return CGSize(width: 88, height: 32)
         case .normal: return CGSize(width: 108, height: 36)
         case .large: return CGSize(width: 128, height: 44)
-        }
-    }
-
-    var cornerRadius: CGFloat {
-        switch self {
-        case .minimal: return 12
-        case .compact: return 12
-        case .normal: return 14
-        case .large: return 16
         }
     }
 
@@ -137,6 +134,131 @@ enum WaveformOverlayWindowStyle: String, CaseIterable, Identifiable {
     }
 }
 
+enum WaveformOverlayCornerStyle: String, CaseIterable, Identifiable {
+    case subtle
+    case rounded
+    case soft
+    case capsule
+
+    var id: String { rawValue }
+
+    var displayName: String {
+        switch self {
+        case .subtle: return L10n.Settings.Voice.overlayCornerSubtle
+        case .rounded: return L10n.Settings.Voice.overlayCornerRounded
+        case .soft: return L10n.Settings.Voice.overlayCornerSoft
+        case .capsule: return L10n.Settings.Voice.overlayCornerCapsule
+        }
+    }
+
+    func radius(for size: CGSize) -> CGFloat {
+        switch self {
+        case .subtle: return 6
+        case .rounded: return 12
+        case .soft: return 18
+        case .capsule: return min(size.width, size.height) / 2
+        }
+    }
+}
+
+enum WaveformOverlayWaveStyle: String, CaseIterable, Identifiable {
+    case classic
+    case equalizer
+    case spectrum
+    case pulse
+    case digital
+    case skyline
+
+    var id: String { rawValue }
+
+    var displayName: String {
+        switch self {
+        case .classic: return L10n.Settings.Voice.overlayWaveClassic
+        case .equalizer: return L10n.Settings.Voice.overlayWaveEqualizer
+        case .spectrum: return L10n.Settings.Voice.overlayWaveSpectrum
+        case .pulse: return L10n.Settings.Voice.overlayWavePulse
+        case .digital: return L10n.Settings.Voice.overlayWaveDigital
+        case .skyline: return L10n.Settings.Voice.overlayWaveSkyline
+        }
+    }
+
+    var barCount: Int {
+        switch self {
+        case .classic: return 5
+        case .equalizer: return 9
+        case .spectrum: return 13
+        case .pulse: return 7
+        case .digital: return 11
+        case .skyline: return 9
+        }
+    }
+
+    func barHeight(at index: Int, audioLevel: CGFloat) -> CGFloat {
+        let level = min(max(audioLevel, 0), 1)
+        let profile: [CGFloat]
+        switch self {
+        case .classic: profile = [0.36, 0.62, 1, 0.62, 0.36]
+        case .equalizer: profile = [0.28, 0.55, 0.86, 0.48, 1, 0.66, 0.92, 0.52, 0.3]
+        case .spectrum: profile = [0.2, 0.35, 0.52, 0.72, 0.9, 1, 0.86, 0.68, 0.48, 0.7, 0.5, 0.32, 0.2]
+        case .pulse: profile = [0.18, 0.28, 0.58, 1, 0.58, 0.28, 0.18]
+        case .digital: profile = [0.24, 0.48, 0.74, 0.4, 0.92, 0.62, 0.98, 0.45, 0.76, 0.5, 0.26]
+        case .skyline: profile = [0.24, 0.42, 0.72, 1, 0.56, 0.84, 0.48, 0.7, 0.3]
+        }
+        let floor: CGFloat = self == .digital ? 0.18 : 0.12
+        return floor + profile[index] * (0.25 + level * 0.75)
+    }
+
+    func barWidth(for style: WaveformOverlayWindowStyle) -> CGFloat {
+        switch self {
+        case .spectrum, .digital: return max(2, style.barWidth * 0.58)
+        case .equalizer, .skyline: return max(2.5, style.barWidth * 0.78)
+        case .classic, .pulse: return style.barWidth
+        }
+    }
+
+    func spacing(for style: WaveformOverlayWindowStyle) -> CGFloat {
+        switch self {
+        case .spectrum, .digital: return max(1.5, style.barSpacing * 0.48)
+        case .equalizer, .skyline: return max(2, style.barSpacing * 0.68)
+        case .classic, .pulse: return style.barSpacing
+        }
+    }
+}
+
+struct WaveformOverlayBars: View {
+    let windowStyle: WaveformOverlayWindowStyle
+    let waveStyle: WaveformOverlayWaveStyle
+    let primaryColor: Color
+    let accentColor: Color
+    let audioLevel: CGFloat
+
+    var body: some View {
+        HStack(spacing: waveStyle.spacing(for: windowStyle)) {
+            ForEach(0..<waveStyle.barCount, id: \.self) { index in
+                let width = waveStyle.barWidth(for: windowStyle)
+                RoundedRectangle(cornerRadius: width / 2, style: .continuous)
+                    .fill(
+                        LinearGradient(
+                            colors: [
+                                primaryColor.opacity(0.98),
+                                accentColor.opacity(0.78),
+                                primaryColor.opacity(0.42),
+                            ],
+                            startPoint: .top,
+                            endPoint: .bottom
+                        )
+                    )
+                    .frame(
+                        width: width,
+                        height: waveStyle.barHeight(at: index, audioLevel: audioLevel) * windowStyle.maxBarHeight
+                    )
+                    .shadow(color: primaryColor.opacity(0.42), radius: 2)
+            }
+        }
+        .animation(.easeOut(duration: 0.12), value: audioLevel)
+    }
+}
+
 enum WaveformOverlayWindowColorStyle: String, CaseIterable, Identifiable {
     case blue
     case purple
@@ -159,6 +281,18 @@ enum WaveformOverlayWindowColorStyle: String, CaseIterable, Identifiable {
     case darkGrayRed
     case darkGrayYellow
     case darkGrayCyan
+    case quantumCyan
+    case neonTokyo
+    case auroraMint
+    case ionStorm
+    case plasmaCore
+    case solarFlare
+    case hologram
+    case laserGrid
+    case deepSpace
+    case cyberSunset
+    case lunarSignal
+    case cosmicGrape
 
     var id: String { rawValue }
 
@@ -185,6 +319,18 @@ enum WaveformOverlayWindowColorStyle: String, CaseIterable, Identifiable {
         case .darkGrayRed: return L10n.Settings.Voice.overlayColorDarkGrayRed
         case .darkGrayYellow: return L10n.Settings.Voice.overlayColorDarkGrayYellow
         case .darkGrayCyan: return L10n.Settings.Voice.overlayColorDarkGrayCyan
+        case .quantumCyan: return L10n.Settings.Voice.overlayColorQuantumCyan
+        case .neonTokyo: return L10n.Settings.Voice.overlayColorNeonTokyo
+        case .auroraMint: return L10n.Settings.Voice.overlayColorAuroraMint
+        case .ionStorm: return L10n.Settings.Voice.overlayColorIonStorm
+        case .plasmaCore: return L10n.Settings.Voice.overlayColorPlasmaCore
+        case .solarFlare: return L10n.Settings.Voice.overlayColorSolarFlare
+        case .hologram: return L10n.Settings.Voice.overlayColorHologram
+        case .laserGrid: return L10n.Settings.Voice.overlayColorLaserGrid
+        case .deepSpace: return L10n.Settings.Voice.overlayColorDeepSpace
+        case .cyberSunset: return L10n.Settings.Voice.overlayColorCyberSunset
+        case .lunarSignal: return L10n.Settings.Voice.overlayColorLunarSignal
+        case .cosmicGrape: return L10n.Settings.Voice.overlayColorCosmicGrape
         }
     }
 
@@ -337,6 +483,41 @@ enum WaveformOverlayWindowColorStyle: String, CaseIterable, Identifiable {
                 backgroundOpacity: 0.85,
                 useMaterial: false
             )
+        case .quantumCyan:
+            return neonConfig(background: Color(red: 0.025, green: 0.08, blue: 0.15), primary: Color(red: 0.0, green: 0.95, blue: 1.0), accent: Color(red: 0.27, green: 0.4, blue: 1.0))
+        case .neonTokyo:
+            return neonConfig(background: Color(red: 0.09, green: 0.02, blue: 0.14), primary: Color(red: 1.0, green: 0.12, blue: 0.72), accent: Color(red: 0.0, green: 0.88, blue: 1.0))
+        case .auroraMint:
+            return neonConfig(background: Color(red: 0.01, green: 0.12, blue: 0.16), primary: Color(red: 0.22, green: 1.0, blue: 0.72), accent: Color(red: 0.15, green: 0.66, blue: 1.0))
+        case .ionStorm:
+            return neonConfig(background: Color(red: 0.06, green: 0.05, blue: 0.2), primary: Color(red: 0.38, green: 0.55, blue: 1.0), accent: Color(red: 0.72, green: 0.27, blue: 1.0))
+        case .plasmaCore:
+            return neonConfig(background: Color(red: 0.16, green: 0.02, blue: 0.2), primary: Color(red: 1.0, green: 0.24, blue: 0.88), accent: Color(red: 1.0, green: 0.52, blue: 0.2))
+        case .solarFlare:
+            return neonConfig(background: Color(red: 0.18, green: 0.035, blue: 0.01), primary: Color(red: 1.0, green: 0.2, blue: 0.04), accent: Color(red: 1.0, green: 0.78, blue: 0.04))
+        case .hologram:
+            return neonConfig(background: Color(red: 0.025, green: 0.11, blue: 0.18), primary: Color(red: 0.25, green: 0.95, blue: 1.0), accent: Color(red: 0.6, green: 0.42, blue: 1.0))
+        case .laserGrid:
+            return neonConfig(background: Color(red: 0.015, green: 0.025, blue: 0.02), primary: Color(red: 0.62, green: 1.0, blue: 0.0), accent: Color(red: 0.0, green: 1.0, blue: 0.55))
+        case .deepSpace:
+            return neonConfig(background: Color(red: 0.015, green: 0.025, blue: 0.09), primary: Color(red: 0.62, green: 0.75, blue: 1.0), accent: Color(red: 0.92, green: 0.95, blue: 1.0))
+        case .cyberSunset:
+            return neonConfig(background: Color(red: 0.12, green: 0.025, blue: 0.12), primary: Color(red: 1.0, green: 0.32, blue: 0.38), accent: Color(red: 1.0, green: 0.62, blue: 0.1))
+        case .lunarSignal:
+            return neonConfig(background: Color(red: 0.1, green: 0.12, blue: 0.16), primary: Color(red: 0.86, green: 0.96, blue: 1.0), accent: Color(red: 0.48, green: 0.7, blue: 1.0))
+        case .cosmicGrape:
+            return neonConfig(background: Color(red: 0.1, green: 0.025, blue: 0.18), primary: Color(red: 0.86, green: 0.38, blue: 1.0), accent: Color(red: 0.44, green: 0.7, blue: 1.0))
         }
+    }
+
+    private func neonConfig(background: Color, primary: Color, accent: Color) -> WaveformOverlayColorConfig {
+        WaveformOverlayColorConfig(
+            backgroundColor: background,
+            barColor: primary,
+            barAccentColor: accent,
+            borderColor: primary.opacity(0.62),
+            backgroundOpacity: 0.96,
+            useMaterial: false
+        )
     }
 }

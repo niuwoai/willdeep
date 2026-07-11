@@ -1030,6 +1030,19 @@ extension AppState {
         )
     }
 
+    func addAgentChatSelectionToTask(_ rawContent: String) {
+        let content = AgentTextAttachment.sanitizedPastedContent(rawContent)
+        guard !content.isEmpty else { return }
+        if activeRuntime == nil {
+            _ = activeRuntimeAfterCreatingNewSession()
+        }
+        agentPendingTextAttachments.append(
+            AgentTextAttachment(filename: L10n.AgentSelection.chatExcerptFilename, content: content)
+        )
+        isAgentPanelVisible = true
+        agentComposerFocusRevision += 1
+    }
+
     func appendGeneratedImageReferenceToAgentInput(_ marker: String) {
         let trimmed = marker.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }

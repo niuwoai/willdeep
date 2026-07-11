@@ -182,6 +182,14 @@ enum AgentSandboxPolicy {
                 reason: "This tool can modify state or run external code.",
                 prefixRule: nil
             )
+        case "computer_use_request_permissions", "computer_use_launch_app", "computer_use_get_app_state", "computer_use_click", "computer_use_secondary_action", "computer_use_scroll", "computer_use_drag", "computer_use_type_text", "computer_use_press_key", "computer_use_set_value", "computer_use_restart_helper":
+            return AgentSandboxDecision(
+                mode: .escalated,
+                requiresUserApproval: true,
+                requiresTypedConfirmation: false,
+                reason: "Computer Use can inspect or control another macOS app and must remain visibly user-approved.",
+                prefixRule: nil
+            )
         default:
             return AgentSandboxDecision(
                 mode: .readOnly,

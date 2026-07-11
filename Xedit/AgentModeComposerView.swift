@@ -74,7 +74,7 @@ struct AgentChatComposer: View {
                 .frame(maxWidth: AgentDesign.chatMaxContentWidth)
             }
             .frame(maxWidth: .infinity)
-            .padding(.horizontal, 28)
+            .padding(.horizontal, AgentDesign.chatHorizontalInset)
             .padding(.vertical, 14)
         }
         .onAppear {
@@ -435,6 +435,11 @@ private struct ComposerCard: View {
     /// can call back into it from SwiftUI callbacks.
     @State private var coordinatorRef = ComposerCoordinatorRef()
     @State private var isSecretSheetPresented = false
+    /// A terminal recording may deliberately omit echo-off values so the
+    /// agent can never see them. When that happens, surface a focused secure
+    /// prompt instead of making the user hunt for the completed tool card.
+    @State private var pendingTerminalProtectedInput: TerminalShortcutProtectedPromptSet?
+    @State private var lastAutoPresentedTerminalShortcutID: UUID?
 
     private var filteredSlashCommands: [SlashCommand] {
         SlashCommand.filter(
@@ -587,7 +592,7 @@ private struct ComposerCard: View {
                         }
                     ),
                     placeholder: L10n.Composer.inputPlaceholder,
-                    onSubmit: { appState.sendAgentMessage() },
+                    onSubmit: { submitComposer() },
                     onPasteImage: handlePastedImage,
                     onPasteText: handlePastedText,
                     historyProvider: { appState.agentMessages
@@ -649,13 +654,13 @@ private struct ComposerCard: View {
 
             HStack(spacing: 6) {
                 AttachButton(action: attachImageFromPanel)
-                InsertSecretButton {
-                    isSecretSheetPresented = true
-                }
                 ComposerAdaptiveControlStrip()
                 Spacer(minLength: 0)
                 if !appState.agentQueuedMessages.isEmpty {
                     QueueBadge()
+                }
+                InsertSecretButton {
+                    isSecretSheetPresented = true
                 }
                 MicPushToTalkButton()
                 SendStopButton()
@@ -679,6 +684,9 @@ private struct ComposerCard: View {
         .onCompatibleChange(of: appState.agentComposerFocusRevision) { _, _ in
             inputFocused = true
         }
+        .onCompatibleChange(of: appState.agentToolCalls) { _, _ in
+            presentPendingTerminalProtectedInputIfNeeded()
+        }
         .sheet(isPresented: $isSecretSheetPresented) {
             AgentSecretInsertSheet(
                 onCancel: {
@@ -691,6 +699,11 @@ private struct ComposerCard: View {
                     inputFocused = true
                 }
             )
+        }
+        .sheet(item: $pendingTerminalProtectedInput) { promptSet in
+            AgentTerminalProtectedInputSheet(promptSet: promptSet) {
+                inputFocused = true
+            }
         }
     }
 
@@ -706,10 +719,51 @@ private struct ComposerCard: View {
         // 先把当前 raw input 里的 args 切出来 —— workflow 命令需要它，
         // core 命令忽略。然后再清空输入框。
         let args = SlashCommand.argsForCommand(appState.agentInput)
+        if command.argumentMode.acceptsArguments && args.isEmpty {
+            stageSlashCommandForArguments(command)
+            return true
+        }
+        executeSlashCommand(command, args: args)
+        return true
+    }
+
+    /// Enter outside the palette executes an exact slash invocation that was
+    /// previously staged for arguments. Non-command text keeps the ordinary
+    /// composer send path.
+    private func submitComposer() {
+        let commands = SlashCommand.builtIn(state: appState)
+        guard let invocation = SlashCommand.invocation(in: appState.agentInput, commands: commands) else {
+            appState.sendAgentMessage()
+            return
+        }
+
+        if invocation.command.argumentMode.requiresArguments && invocation.args.isEmpty {
+            // Let the workflow surface its localized missing-arguments error,
+            // but keep the staged command in the composer for correction.
+            invocation.command.action(invocation.args)
+            inputFocused = true
+            return
+        }
+        executeSlashCommand(invocation.command, args: invocation.args)
+    }
+
+    private func stageSlashCommandForArguments(_ command: SlashCommand) {
+        let staged = command.title + " "
         slashMenuVisible = false
+        slashMenuSelection = 0
+        slashMenuQuery = ""
+        if coordinatorRef.coordinator?.replaceComposerText(with: staged) != true {
+            appState.agentInput = staged
+        }
+        inputFocused = true
+    }
+
+    private func executeSlashCommand(_ command: SlashCommand, args: String) {
+        slashMenuVisible = false
+        slashMenuSelection = 0
+        slashMenuQuery = ""
         appState.agentInput = ""
         command.action(args)
-        return true
     }
 
     private func handleAtQueryChange(_ query: String?) {
@@ -752,6 +806,36 @@ private struct ComposerCard: View {
             separator = " "
         }
         appState.agentInput = current + separator + placeholders.joined(separator: " ")
+    }
+
+    private func presentPendingTerminalProtectedInputIfNeeded() {
+        guard !isSecretSheetPresented,
+              pendingTerminalProtectedInput == nil,
+              let call = appState.agentToolCalls.last(where: {
+                  $0.toolName == "terminal_create_shortcut" && $0.status == .succeeded
+              }),
+              let payload = call.result?.payload,
+              let promptSet = TerminalShortcutProtectedPromptSet.parse(payload: payload),
+              promptSet.shortcutID != lastAutoPresentedTerminalShortcutID else {
+            return
+        }
+
+        let pendingEventIndexes = Set(
+            appState.agentTerminalController.shortcuts
+                .first(where: { $0.id == promptSet.shortcutID })?
+                .events.enumerated()
+                .filter { $0.element.needsProtectedInputValue }
+                .map(\.offset) ?? []
+        )
+        let pendingPrompts = promptSet.prompts.filter { pendingEventIndexes.contains($0.eventIndex) }
+        guard !pendingPrompts.isEmpty else { return }
+
+        lastAutoPresentedTerminalShortcutID = promptSet.shortcutID
+        pendingTerminalProtectedInput = TerminalShortcutProtectedPromptSet(
+            shortcutID: promptSet.shortcutID,
+            title: promptSet.title,
+            prompts: pendingPrompts
+        )
     }
 
     private func closeAtMenu() {
@@ -985,6 +1069,83 @@ private struct AgentSecretInputRow: View {
             guard shouldFocusOnAppear else { return }
             DispatchQueue.main.async { secretFocused = true }
         }
+    }
+}
+
+private struct AgentTerminalProtectedInputSheet: View {
+    @EnvironmentObject private var appState: AppState
+    @Environment(\.dismiss) private var dismiss
+    @State private var valuesByEventIndex: [Int: String] = [:]
+    @FocusState private var focusedEventIndex: Int?
+
+    let promptSet: TerminalShortcutProtectedPromptSet
+    let onDismiss: () -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            HStack(spacing: 8) {
+                Image(systemName: "lock.shield")
+                    .font(.system(size: 18, weight: .semibold))
+                    .foregroundStyle(.tint)
+                Text(L10n.AgentTerminal.shortcutPasswordCardTitle(promptSet.title))
+                    .font(.headline)
+            }
+
+            Text(L10n.AgentTerminal.shortcutPasswordCardDescription)
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+
+            VStack(spacing: 10) {
+                ForEach(promptSet.prompts) { prompt in
+                    SecureField(prompt.label, text: valueBinding(for: prompt.eventIndex))
+                        .textFieldStyle(.roundedBorder)
+                        .focused($focusedEventIndex, equals: prompt.eventIndex)
+                }
+            }
+
+            HStack {
+                Spacer()
+                Button(L10n.AgentTerminal.shortcutRenameCancel) {
+                    dismissSheet()
+                }
+                Button(L10n.AgentTerminal.shortcutPasswordSave) {
+                    guard appState.fillTerminalShortcutProtectedInputs(
+                        shortcutID: promptSet.shortcutID,
+                        valuesByEventIndex: valuesByEventIndex
+                    ) else {
+                        return
+                    }
+                    dismissSheet()
+                }
+                .buttonStyle(.borderedProminent)
+                .disabled(!hasAllValues)
+            }
+        }
+        .padding(20)
+        .frame(width: 440)
+        .onAppear {
+            focusedEventIndex = promptSet.prompts.first?.eventIndex
+        }
+    }
+
+    private var hasAllValues: Bool {
+        promptSet.prompts.allSatisfy {
+            !(valuesByEventIndex[$0.eventIndex] ?? "")
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+                .isEmpty
+        }
+    }
+
+    private func valueBinding(for eventIndex: Int) -> Binding<String> {
+        Binding(
+            get: { valuesByEventIndex[eventIndex] ?? "" },
+            set: { valuesByEventIndex[eventIndex] = $0 }
+        )
+    }
+
+    private func dismissSheet() {
+        dismiss()
+        onDismiss()
     }
 }
 

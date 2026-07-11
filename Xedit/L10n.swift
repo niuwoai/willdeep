@@ -75,6 +75,14 @@ nonisolated enum L10n {
         static let titlePremium = String(localized: "agent-managed-routing.title-premium", defaultValue: "Managed · Premium")
         static let reset = String(localized: "agent-managed-routing.reset", defaultValue: "Reset managed tier")
         static let footerPrefix = String(localized: "agent-managed-routing.footer-prefix", defaultValue: "Managed")
+        static func generalFooter(_ level: String) -> String {
+            let template = String(localized: "agent-managed-routing.footer-general", defaultValue: "Managed-General-%@")
+            return String(format: template, level)
+        }
+        static func codingFooter(_ level: String) -> String {
+            let template = String(localized: "agent-managed-routing.footer-coding", defaultValue: "Managed-Coding-%@")
+            return String(format: template, level)
+        }
     }
 
     enum AgentGeneratedImage {
@@ -84,8 +92,10 @@ nonisolated enum L10n {
 
     enum AgentSelection {
         static let addToConversation = String(localized: "agent-selection.add-to-conversation", defaultValue: "Add to Conversation")
+        static let addToTask = String(localized: "agent-selection.add-to-task", defaultValue: "Add to Task")
         static let askInSidebar = String(localized: "agent-selection.ask-in-sidebar", defaultValue: "Ask in Side Agent")
         static let askPrompt = String(localized: "agent-selection.ask-prompt", defaultValue: "Ask about the attached selection: ")
+        static let chatExcerptFilename = String(localized: "agent-selection.chat-excerpt-filename", defaultValue: "Chat excerpt.txt")
         static let filenamePrefix = String(localized: "agent-selection.filename-prefix", defaultValue: "Selection")
         static let selectionAttachedHint = String(localized: "agent-selection.selection-attached-hint", defaultValue: "Selection attached · Tools available")
         static let untitledFile = String(localized: "agent-selection.untitled-file", defaultValue: "Untitled")
@@ -756,6 +766,7 @@ nonisolated enum L10n {
         static let openSidePanel = String(localized: "header.open-side-panel", defaultValue: "Open Side Panel")
         static let showSidebar = String(localized: "header.show-sidebar", defaultValue: "Show Sidebar")
         static let hideSidebar = String(localized: "header.hide-sidebar", defaultValue: "Hide Sidebar")
+        static let sidebarAutoHidden = String(localized: "header.sidebar-auto-hidden", defaultValue: "Widen the window to show the sidebar")
         static let searchSessions = String(localized: "header.search-sessions", defaultValue: "Search Chats")
     }
 
@@ -1731,6 +1742,8 @@ nonisolated enum L10n {
             static let overlayPositionLabel = String(localized: "settings.voice.overlay.position", defaultValue: "Position")
             static let overlaySizeLabel = String(localized: "settings.voice.overlay.size", defaultValue: "Size")
             static let overlayColorLabel = String(localized: "settings.voice.overlay.color", defaultValue: "Color")
+            static let overlayWaveLabel = String(localized: "settings.voice.overlay.wave", defaultValue: "Waveform")
+            static let overlayCornerLabel = String(localized: "settings.voice.overlay.corner", defaultValue: "Corner radius")
             static let overlayPreviewTitle = String(localized: "settings.voice.overlay.preview.title", defaultValue: "Preview")
             static let overlayPreviewDescription = String(localized: "settings.voice.overlay.preview.description", defaultValue: "Uses the same style presets as fastv's floating transcription toolbar.")
             static let overlayPreviewButton = String(localized: "settings.voice.overlay.preview.button", defaultValue: "Show bar")
@@ -1747,6 +1760,18 @@ nonisolated enum L10n {
             static let overlayStyleNormal = String(localized: "settings.voice.overlay.style.normal", defaultValue: "Normal")
             static let overlayStyleLarge = String(localized: "settings.voice.overlay.style.large", defaultValue: "Large")
 
+            static let overlayWaveClassic = String(localized: "settings.voice.overlay.wave.classic", defaultValue: "Classic bars")
+            static let overlayWaveEqualizer = String(localized: "settings.voice.overlay.wave.equalizer", defaultValue: "Equalizer")
+            static let overlayWaveSpectrum = String(localized: "settings.voice.overlay.wave.spectrum", defaultValue: "Spectrum")
+            static let overlayWavePulse = String(localized: "settings.voice.overlay.wave.pulse", defaultValue: "Pulse")
+            static let overlayWaveDigital = String(localized: "settings.voice.overlay.wave.digital", defaultValue: "Digital matrix")
+            static let overlayWaveSkyline = String(localized: "settings.voice.overlay.wave.skyline", defaultValue: "Neon skyline")
+
+            static let overlayCornerSubtle = String(localized: "settings.voice.overlay.corner.subtle", defaultValue: "Subtle")
+            static let overlayCornerRounded = String(localized: "settings.voice.overlay.corner.rounded", defaultValue: "Rounded")
+            static let overlayCornerSoft = String(localized: "settings.voice.overlay.corner.soft", defaultValue: "Soft")
+            static let overlayCornerCapsule = String(localized: "settings.voice.overlay.corner.capsule", defaultValue: "Capsule")
+
             static let overlayColorBlue = String(localized: "settings.voice.overlay.color.blue", defaultValue: "Blue")
             static let overlayColorPurple = String(localized: "settings.voice.overlay.color.purple", defaultValue: "Purple")
             static let overlayColorPink = String(localized: "settings.voice.overlay.color.pink", defaultValue: "Pink")
@@ -1758,6 +1783,18 @@ nonisolated enum L10n {
             static let overlayColorDarkGrayWhite = String(localized: "settings.voice.overlay.color.dark-gray-white", defaultValue: "Dark gray + white")
             static let overlayColorDarkBlueCyan = String(localized: "settings.voice.overlay.color.dark-blue-cyan", defaultValue: "Dark blue + cyan")
             static let overlayColorDarkPurplePink = String(localized: "settings.voice.overlay.color.dark-purple-pink", defaultValue: "Dark purple + pink")
+            static let overlayColorQuantumCyan = String(localized: "settings.voice.overlay.color.quantum-cyan", defaultValue: "Quantum cyan")
+            static let overlayColorNeonTokyo = String(localized: "settings.voice.overlay.color.neon-tokyo", defaultValue: "Neon Tokyo")
+            static let overlayColorAuroraMint = String(localized: "settings.voice.overlay.color.aurora-mint", defaultValue: "Aurora mint")
+            static let overlayColorIonStorm = String(localized: "settings.voice.overlay.color.ion-storm", defaultValue: "Ion storm")
+            static let overlayColorPlasmaCore = String(localized: "settings.voice.overlay.color.plasma-core", defaultValue: "Plasma core")
+            static let overlayColorSolarFlare = String(localized: "settings.voice.overlay.color.solar-flare", defaultValue: "Solar flare")
+            static let overlayColorHologram = String(localized: "settings.voice.overlay.color.hologram", defaultValue: "Hologram")
+            static let overlayColorLaserGrid = String(localized: "settings.voice.overlay.color.laser-grid", defaultValue: "Laser grid")
+            static let overlayColorDeepSpace = String(localized: "settings.voice.overlay.color.deep-space", defaultValue: "Deep space")
+            static let overlayColorCyberSunset = String(localized: "settings.voice.overlay.color.cyber-sunset", defaultValue: "Cyber sunset")
+            static let overlayColorLunarSignal = String(localized: "settings.voice.overlay.color.lunar-signal", defaultValue: "Lunar signal")
+            static let overlayColorCosmicGrape = String(localized: "settings.voice.overlay.color.cosmic-grape", defaultValue: "Cosmic grape")
             static let overlayColorDarkGreenLime = String(localized: "settings.voice.overlay.color.dark-green-lime", defaultValue: "Dark green + lime")
             static let overlayColorDarkRedCoral = String(localized: "settings.voice.overlay.color.dark-red-coral", defaultValue: "Dark red + coral")
             static let overlayColorDarkGrayBlue = String(localized: "settings.voice.overlay.color.dark-gray-blue", defaultValue: "Dark gray + blue")

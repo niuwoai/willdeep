@@ -1048,6 +1048,120 @@ enum AgentToolRegistry {
             ]
         ),
         AgentToolDescriptor(
+            name: "computer_use_permissions",
+            description: "Read the separate WillDeep Computer Use helper's Accessibility and Screen & System Audio Recording permission status. Read-only.",
+            risk: .read,
+            parameters: []
+        ),
+        AgentToolDescriptor(
+            name: "computer_use_request_permissions",
+            description: "Open macOS permission prompts for the separate WillDeep Computer Use helper. Ask only after the user has explicitly approved enabling desktop control. It may request Accessibility for app controls and Screen & System Audio Recording for visual state screenshots.",
+            risk: .write,
+            parameters: [
+                AgentToolParameter(name: "accessibility", type: .boolean, description: "Request Accessibility permission. Defaults to true.", required: false),
+                AgentToolParameter(name: "screen_capture", type: .boolean, description: "Request Screen & System Audio Recording permission. Defaults to true.", required: false)
+            ]
+        ),
+        AgentToolDescriptor(
+            name: "computer_use_list_apps",
+            description: "List running macOS applications visible to the separate WillDeep Computer Use helper. Read-only.",
+            risk: .read,
+            parameters: []
+        ),
+        AgentToolDescriptor(
+            name: "computer_use_launch_app",
+            description: "Launch one macOS app in the background through the separate WillDeep Computer Use helper. It does not activate the app or steal focus. Requires approval.",
+            risk: .write,
+            parameters: [AgentToolParameter(name: "app", type: .string, description: "Application bundle identifier, for example `com.apple.Notes`.", required: true)]
+        ),
+        AgentToolDescriptor(
+            name: "computer_use_get_app_state",
+            description: "Read a macOS app's Accessibility tree and capture only its visible front window. Returns fresh element refs plus a screenshot. Requires approval because the screenshot may contain private information. Always call this before desktop actions and refresh after every action.",
+            risk: .write,
+            parameters: [
+                AgentToolParameter(name: "app", type: .string, description: "Running application bundle identifier or localized app name. Omit only when pid is provided.", required: false),
+                AgentToolParameter(name: "pid", type: .integer, description: "Running application process ID. Omit only when app is provided.", required: false)
+            ]
+        ),
+        AgentToolDescriptor(
+            name: "computer_use_click",
+            description: "Click a fresh Accessibility element ref, or click coordinates in the most recent target-window screenshot. Requires approval. Use element refs first; use pixels only when the app exposes no usable Accessibility tree.",
+            risk: .write,
+            parameters: [
+                AgentToolParameter(name: "ref", type: .string, description: "Fresh element ref from computer_use_get_app_state. Omit for pixel fallback.", required: false),
+                AgentToolParameter(name: "pid", type: .integer, description: "Target process ID; optional when ref is supplied.", required: false),
+                AgentToolParameter(name: "x", type: .integer, description: "Screenshot-relative x coordinate for pixel fallback.", required: false),
+                AgentToolParameter(name: "y", type: .integer, description: "Screenshot-relative y coordinate for pixel fallback.", required: false),
+                AgentToolParameter(name: "click_count", type: .integer, description: "1, 2, or 3. Defaults to 1.", required: false)
+            ]
+        ),
+        AgentToolDescriptor(
+            name: "computer_use_secondary_action",
+            description: "Open an element's context menu with Accessibility, falling back to a right-click at screenshot coordinates. Requires approval.",
+            risk: .write,
+            parameters: [
+                AgentToolParameter(name: "ref", type: .string, description: "Fresh element ref; omit for pixel fallback.", required: false),
+                AgentToolParameter(name: "pid", type: .integer, description: "Target process ID; optional when ref is supplied.", required: false),
+                AgentToolParameter(name: "x", type: .integer, description: "Screenshot-relative x coordinate for pixel fallback.", required: false),
+                AgentToolParameter(name: "y", type: .integer, description: "Screenshot-relative y coordinate for pixel fallback.", required: false)
+            ]
+        ),
+        AgentToolDescriptor(
+            name: "computer_use_scroll",
+            description: "Scroll the target macOS app after a fresh state snapshot. Requires approval.",
+            risk: .write,
+            parameters: [
+                AgentToolParameter(name: "pid", type: .integer, description: "Target process ID.", required: true),
+                AgentToolParameter(name: "direction", type: .string, description: "up, down, left, or right.", required: true),
+                AgentToolParameter(name: "pages", type: .integer, description: "1 through 8 pages; defaults to 1.", required: false)
+            ]
+        ),
+        AgentToolDescriptor(
+            name: "computer_use_drag",
+            description: "Drag from one screenshot-relative coordinate to another in the target macOS app. Requires approval.",
+            risk: .write,
+            parameters: [
+                AgentToolParameter(name: "pid", type: .integer, description: "Target process ID.", required: true),
+                AgentToolParameter(name: "from_x", type: .integer, description: "Screenshot-relative starting x coordinate.", required: true),
+                AgentToolParameter(name: "from_y", type: .integer, description: "Screenshot-relative starting y coordinate.", required: true),
+                AgentToolParameter(name: "to_x", type: .integer, description: "Screenshot-relative ending x coordinate.", required: true),
+                AgentToolParameter(name: "to_y", type: .integer, description: "Screenshot-relative ending y coordinate.", required: true)
+            ]
+        ),
+        AgentToolDescriptor(
+            name: "computer_use_type_text",
+            description: "Type text into the target macOS app. Requires approval because it can change external app state. Never use for passwords, API keys, one-time codes, or other sensitive data.",
+            risk: .write,
+            parameters: [
+                AgentToolParameter(name: "pid", type: .integer, description: "Target process ID.", required: true),
+                AgentToolParameter(name: "text", type: .string, description: "Non-sensitive text to type.", required: true)
+            ]
+        ),
+        AgentToolDescriptor(
+            name: "computer_use_press_key",
+            description: "Send a keyboard key or modifier combination such as `cmd+s`, `tab`, or `return` to the target macOS app. Requires approval.",
+            risk: .write,
+            parameters: [
+                AgentToolParameter(name: "pid", type: .integer, description: "Target process ID.", required: true),
+                AgentToolParameter(name: "key", type: .string, description: "Key or combination such as cmd+s, ctrl+shift+t, tab, return, escape, or left.", required: true)
+            ]
+        ),
+        AgentToolDescriptor(
+            name: "computer_use_set_value",
+            description: "Set a value through a fresh Accessibility element ref, for example a text field or slider. Requires approval and should not be used for secrets.",
+            risk: .write,
+            parameters: [
+                AgentToolParameter(name: "ref", type: .string, description: "Fresh editable element ref.", required: true),
+                AgentToolParameter(name: "value", type: .string, description: "Non-sensitive value to set.", required: true)
+            ]
+        ),
+        AgentToolDescriptor(
+            name: "computer_use_restart_helper",
+            description: "Restart only the separate WillDeep Computer Use helper and then report its permissions. Use after the user changes macOS permissions; WillDeep itself does not need a restart.",
+            risk: .write,
+            parameters: []
+        ),
+        AgentToolDescriptor(
             name: "chrome_status",
             description: "Check whether the WillDeep Browser Chrome extension native bridge is reachable on localhost and return protocol/version/capability details. Read-only.",
             risk: .read,

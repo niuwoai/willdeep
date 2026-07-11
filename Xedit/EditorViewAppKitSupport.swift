@@ -45,6 +45,11 @@ struct BracketPair {
 }
 
 final class WillDeepTextView: NSTextView {
+    private enum ShortcutKeyCode {
+        static let leftArrow: UInt16 = 123
+        static let rightArrow: UInt16 = 124
+    }
+
     var currentLineColor: NSColor = NSColor.selectedTextBackgroundColor.withAlphaComponent(0.16)
     var foldedPlaceholderColor: NSColor = NSColor.secondaryLabelColor
     var foldedPlaceholderBackgroundColor: NSColor = NSColor.secondaryLabelColor.withAlphaComponent(0.12)
@@ -257,6 +262,42 @@ final class WillDeepTextView: NSTextView {
             }
         }
         super.mouseDown(with: event)
+    }
+
+    /// Mirrors the standard macOS plain-text editing convention: Command-left
+    /// and Command-right move to the beginning and end of the current line.
+    /// Route through TextKit's command dispatch rather than computing offsets
+    /// ourselves so selections, writing direction, undo, and accessibility
+    /// keep the native NSTextView behavior. Command-Shift extends selection.
+    override func keyDown(with event: NSEvent) {
+        let modifiers = event.modifierFlags.intersection([.command, .shift, .option, .control])
+        let extendsSelection = modifiers == [.command, .shift]
+        let isCommandArrow = modifiers == .command || extendsSelection
+
+        guard isCommandArrow else {
+            super.keyDown(with: event)
+            return
+        }
+
+        let command: Selector?
+        switch event.keyCode {
+        case ShortcutKeyCode.leftArrow:
+            command = extendsSelection
+                ? #selector(NSResponder.moveToBeginningOfLineAndModifySelection(_:))
+                : #selector(NSResponder.moveToBeginningOfLine(_:))
+        case ShortcutKeyCode.rightArrow:
+            command = extendsSelection
+                ? #selector(NSResponder.moveToEndOfLineAndModifySelection(_:))
+                : #selector(NSResponder.moveToEndOfLine(_:))
+        default:
+            command = nil
+        }
+
+        guard let command else {
+            super.keyDown(with: event)
+            return
+        }
+        doCommand(by: command)
     }
 
     /// Always paste as plain text so external rich text (HTML / RTF /

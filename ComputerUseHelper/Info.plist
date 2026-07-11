@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>CFBundleDisplayName</key>
+	<string>WillDeep Computer Use</string>
+	<key>CFBundleExecutable</key>
+	<string>WillDeepComputerUseHelper</string>
+	<key>CFBundleIdentifier</key>
+	<string>com.willdeep.computer-use-helper</string>
+	<key>CFBundleName</key>
+	<string>WillDeep Computer Use</string>
+	<key>CFBundlePackageType</key>
+	<string>APPL</string>
+	<key>CFBundleShortVersionString</key>
+	<string>1.138.0-rc4</string>
+	<key>CFBundleVersion</key>
+	<string>1</string>
+	<key>LSUIElement</key>
+	<true/>
+	<key>NSScreenCaptureUsageDescription</key>
+	<string>WillDeep Computer Use captures the app window you explicitly authorize so its Agent can verify and operate the visible interface.</string>
+</dict>
+</plist>

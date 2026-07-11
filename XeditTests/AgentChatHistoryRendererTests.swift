@@ -796,6 +796,36 @@ struct AgentChatHistoryRendererTests {
     }
 
     @Test
+    @MainActor
+    func selectedHistoryTextCanBeAddedToCurrentTask() {
+        let view = AgentChatHistoryNSTextView()
+        view.string = "alpha selected excerpt omega"
+        view.setSelectedRange(NSRange(location: 6, length: 16))
+        var receivedText: String?
+        view.onAddSelectionToTask = { receivedText = $0 }
+
+        let didAdd = view.addCurrentSelectionToTask()
+
+        #expect(didAdd)
+        #expect(receivedText == "selected excerpt")
+    }
+
+    @Test
+    @MainActor
+    func emptyHistorySelectionIsNotAddedToCurrentTask() {
+        let view = AgentChatHistoryNSTextView()
+        view.string = "message"
+        view.setSelectedRange(NSRange(location: 0, length: 0))
+        var callbackCount = 0
+        view.onAddSelectionToTask = { _ in callbackCount += 1 }
+
+        let didAdd = view.addCurrentSelectionToTask()
+
+        #expect(!didAdd)
+        #expect(callbackCount == 0)
+    }
+
+    @Test
     func transcriptSearchFindsCaseInsensitiveMatches() {
         let ranges = AgentTranscriptSearch.matchRanges(
             in: "Needle, haystack, needle, NEEDLE.",

@@ -11,7 +11,7 @@ import Testing
 import Foundation
 @testable import WillDeep
 
-@Suite
+@Suite(.serialized)
 @MainActor
 struct AgentEntryModelSelectionTests {
     /// Per-test sandbox handle. Initialise at the top of each `@Test`
@@ -216,6 +216,53 @@ struct AgentEntryModelSelectionTests {
         // No override needed because Pro routing already maps to
         // deepseek-v4-pro.
         #expect(app.agentSessionModelOverride == nil)
+    }
+
+    @Test
+    func signedInSomeIMDefaultsNewChatsToManagedRouting() {
+        let _sandbox = installKeychainSandbox(); _ = _sandbox
+        let app = AppState()
+        SomeIMIntegrationStore._setTestSharedSessionOverride(enabled: true)
+        defer { SomeIMIntegrationStore._setTestSharedSessionOverride(enabled: false) }
+        #expect(SomeIMIntegrationStore.saveAPIKey("test-fixture-someim-key"))
+
+        app.syncSomeIMProvider(
+            settings: SomeIMIntegrationSettings(enabled: true),
+            apiKey: "test-fixture-someim-key"
+        )
+        let session = app.startNewAgentSession()
+
+        #expect(app.agentProviderLibrary.active?.providerID == AgentProviderPreset.someIMID)
+        #expect(session.modelID == nil)
+        #expect(session.managedRouting != nil)
+        #expect(app.activeRuntime?.managedRouting != nil)
+        #expect(AgentSettingsStore.loadDefaultModelModePreference() == .automatic)
+    }
+
+    @Test
+    func manualModelChoiceOverridesManagedDefaultUntilUserSelectsManagedAgain() {
+        let _sandbox = installKeychainSandbox(); _ = _sandbox
+        let app = AppState()
+        SomeIMIntegrationStore._setTestSharedSessionOverride(enabled: true)
+        defer { SomeIMIntegrationStore._setTestSharedSessionOverride(enabled: false) }
+        #expect(SomeIMIntegrationStore.saveAPIKey("test-fixture-someim-key"))
+        app.syncSomeIMProvider(
+            settings: SomeIMIntegrationSettings(enabled: true),
+            apiKey: "test-fixture-someim-key"
+        )
+        app.startNewAgentSession()
+
+        app.setAgentSessionModel("someim-auto-flash")
+        #expect(AgentSettingsStore.loadDefaultModelModePreference() == .explicitModel)
+        let explicitSession = app.startNewAgentSession()
+        #expect(explicitSession.managedRouting == nil)
+        #expect(explicitSession.modelID == "someim-auto-flash")
+
+        app.selectSomeIMManagedRouting()
+        #expect(AgentSettingsStore.loadDefaultModelModePreference() == .managed)
+        let managedSession = app.startNewAgentSession()
+        #expect(managedSession.modelID == nil)
+        #expect(managedSession.managedRouting != nil)
     }
 }
 

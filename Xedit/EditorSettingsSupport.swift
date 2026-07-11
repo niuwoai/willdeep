@@ -209,14 +209,18 @@ final class EditorSettingsNavigation: ObservableObject {
     func openSomeIM(autogenerateBrowserLogin: Bool, appState: AppState? = nil) {
         if autogenerateBrowserLogin {
             someIMBrowserLoginAutogenerateRequestID = UUID()
-            selectedTab = .someIM
-            openFallbackSettingsWindow(appState: appState)
-            DispatchQueue.main.async { [weak self] in
-                self?.selectedTab = .someIM
-            }
-            return
         }
-        open(.someIM, appState: appState)
+        // Always use the same concrete Settings window for this deep-link.
+        // `showSettingsWindow:` may report success from the Agent window while
+        // leaving the system Settings scene on its previous tab (or hidden).
+        // The fallback controller is stable for both logged-in and logged-out
+        // account footer actions, so the account name and gear reliably land
+        // on the some.im integration pane.
+        selectedTab = .someIM
+        openFallbackSettingsWindow(appState: appState)
+        DispatchQueue.main.async { [weak self] in
+            self?.selectedTab = .someIM
+        }
     }
 
     /// Open the settings window without changing the selected tab — used

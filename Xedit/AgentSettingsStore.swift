@@ -14,6 +14,16 @@ struct AgentModelDiscovery: Codable, Equatable {
     var isNew: Bool
 }
 
+enum AgentDefaultModelModePreference: String, Equatable {
+    /// No explicit choice yet. A signed-in some.im account may default new
+    /// chats to managed routing.
+    case automatic
+    /// The user explicitly selected some.im managed routing.
+    case managed
+    /// The user explicitly selected a concrete model or route default.
+    case explicitModel
+}
+
 enum AgentWebSearchProvider: String, CaseIterable, Codable, Identifiable {
     case auto
     case exa
@@ -27,6 +37,7 @@ enum AgentSettingsStore {
     private static let knownModelsKey = "com.willdeep.agentSettings.knownModels.v1"
     private static let discoveredModelMetadataKey = "com.willdeep.agentSettings.discoveredModelMetadata.v1"
     private static let recentlyUsedModelsKey = "com.willdeep.agentSettings.recentlyUsedModels.v1"
+    private static let defaultModelModePreferenceKey = "com.willdeep.agentSettings.defaultModelModePreference.v1"
     private static let alwaysAllowedCommandsKey = "com.willdeep.agentSettings.alwaysAllowedCommands.v1"
     private static let autoApproveKey = "com.willdeep.agentSettings.autoApproveSafeCommands.v1"
     private static let perProviderConcurrencyKey = "com.willdeep.agentSettings.perProviderConcurrencyLimit.v1"
@@ -193,6 +204,20 @@ enum AgentSettingsStore {
 
     static func saveRecentlyUsedModelIDs(_ ids: [String]) {
         defaults.set(cleanedRecentlyUsedModelIDs(ids), forKey: recentlyUsedModelsKey)
+    }
+
+    static func loadDefaultModelModePreference() -> AgentDefaultModelModePreference {
+        if let raw = defaults.string(forKey: defaultModelModePreferenceKey),
+           let preference = AgentDefaultModelModePreference(rawValue: raw) {
+            return preference
+        }
+        // Backward-compatible inference: before this preference existed,
+        // recently-used models were written only by explicit picker actions.
+        return loadRecentlyUsedModelIDs().isEmpty ? .automatic : .explicitModel
+    }
+
+    static func saveDefaultModelModePreference(_ preference: AgentDefaultModelModePreference) {
+        defaults.set(preference.rawValue, forKey: defaultModelModePreferenceKey)
     }
 
     private static func cleanedRecentlyUsedModelIDs(_ ids: [String], limit: Int = 24) -> [String] {

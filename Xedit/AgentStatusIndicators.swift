@@ -128,7 +128,10 @@ struct AgentStatsDashboard: View {
     }
 
     private var overview: AgentUsageOverview {
-        AgentUsageStats.overview(for: filteredUsageSnapshots)
+        AgentUsageStats.overview(
+            for: filteredUsageSnapshots,
+            allTimeStreakSessions: appState.agentUsageSnapshots
+        )
     }
 
     private var modelUsageRows: [AgentModelUsageRow] {

@@ -196,6 +196,7 @@ enum AgentUsageStats {
 
     static func overview(
         for sessions: [AgentUsageSessionSnapshot],
+        allTimeStreakSessions: [AgentUsageSessionSnapshot]? = nil,
         now: Date = Date()
     ) -> AgentUsageOverview {
         let allMessages = sessions.flatMap(\.messages)
@@ -218,8 +219,10 @@ enum AgentUsageStats {
         let uniqueDays = Set(dayKeys)
         let activeDays = uniqueDays.count
 
+        let streakMessages = (allTimeStreakSessions ?? sessions).flatMap(\.messages)
+        let streakDays = Set(streakMessages.map { calendar.startOfDay(for: $0.createdAt) })
         let streaks = computeStreaks(
-            uniqueDays: uniqueDays,
+            uniqueDays: streakDays,
             now: now,
             calendar: calendar
         )

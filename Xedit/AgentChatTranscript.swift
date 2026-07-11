@@ -255,6 +255,7 @@ struct AgentChatTranscript: View {
                                 latestTurnReportToolCount: appState.agentLatestTurnReport?.toolSummary.total,
                                 onShowTurnReport: { showTurnReportPopover = true },
                                 onReferenceGeneratedImage: appState.appendGeneratedImageReferenceToAgentInput,
+                                onAddSelectionToTask: appState.addAgentChatSelectionToTask,
                                 onOpenFilePath: { rawPath in
                                     // Agent mode 里点击 transcript 中的路径
                                     // chip:workspace 内的目录 → 右侧 Files
@@ -442,7 +443,7 @@ struct AgentChatTranscript: View {
                         .frame(height: 1)
                         .id(Self.bottomScrollID)
                 }
-                .padding(.horizontal, 28)
+                .padding(.horizontal, AgentDesign.chatHorizontalInset)
                 .padding(.vertical, 20)
                 .frame(maxWidth: .infinity, alignment: .leading)
             }

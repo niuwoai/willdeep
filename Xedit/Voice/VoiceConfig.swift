@@ -117,6 +117,8 @@ final class UserPreferences: ObservableObject {
         static let waveformOverlayPosition = "com.willdeep.voice.waveformOverlay.position.v1"
         static let waveformOverlayStyle = "com.willdeep.voice.waveformOverlay.style.v1"
         static let waveformOverlayColorStyle = "com.willdeep.voice.waveformOverlay.colorStyle.v1"
+        static let waveformOverlayWaveStyle = "com.willdeep.voice.waveformOverlay.waveStyle.v1"
+        static let waveformOverlayCornerStyle = "com.willdeep.voice.waveformOverlay.cornerStyle.v1"
         static let transcriptLanguagePreference = "com.willdeep.voice.transcriptLanguagePreference.v1"
         static let transcriptCleanupMode = "com.willdeep.voice.transcriptCleanupMode.v1"
     }
@@ -135,6 +137,14 @@ final class UserPreferences: ObservableObject {
 
     @Published var waveformOverlayColorStyle: WaveformOverlayWindowColorStyle {
         didSet { UserDefaults.standard.set(waveformOverlayColorStyle.rawValue, forKey: Keys.waveformOverlayColorStyle) }
+    }
+
+    @Published var waveformOverlayWaveStyle: WaveformOverlayWaveStyle {
+        didSet { UserDefaults.standard.set(waveformOverlayWaveStyle.rawValue, forKey: Keys.waveformOverlayWaveStyle) }
+    }
+
+    @Published var waveformOverlayCornerStyle: WaveformOverlayCornerStyle {
+        didSet { UserDefaults.standard.set(waveformOverlayCornerStyle.rawValue, forKey: Keys.waveformOverlayCornerStyle) }
     }
 
     @Published var transcriptLanguagePreference: VoiceTranscriptLanguagePreference {
@@ -177,6 +187,20 @@ final class UserPreferences: ObservableObject {
             self.waveformOverlayColorStyle = colorStyle
         } else {
             self.waveformOverlayColorStyle = .darkGrayBlue
+        }
+
+        if let raw = UserDefaults.standard.string(forKey: Keys.waveformOverlayWaveStyle),
+           let waveStyle = WaveformOverlayWaveStyle(rawValue: raw) {
+            self.waveformOverlayWaveStyle = waveStyle
+        } else {
+            self.waveformOverlayWaveStyle = .classic
+        }
+
+        if let raw = UserDefaults.standard.string(forKey: Keys.waveformOverlayCornerStyle),
+           let cornerStyle = WaveformOverlayCornerStyle(rawValue: raw) {
+            self.waveformOverlayCornerStyle = cornerStyle
+        } else {
+            self.waveformOverlayCornerStyle = .rounded
         }
 
         if let raw = UserDefaults.standard.string(forKey: Keys.transcriptLanguagePreference),
