@@ -138,8 +138,19 @@ extension EditorSettingsView {
         Form {
             Section(L10n.EditorTerminal.settingsSection) {
                 LabeledContent(L10n.EditorTerminal.shell) {
-                    TextField("/bin/zsh", text: terminalSetting(\.shellPath))
-                        .textFieldStyle(.roundedBorder)
+                    HStack(spacing: 8) {
+                        Picker("", selection: terminalSetting(\.shellPath)) {
+                            ForEach(EditorTerminalShellOption.options(for: appState.editorTerminalSettings.shellPath)) { option in
+                                Text(option.name).tag(option.path)
+                            }
+                        }
+                        .labelsHidden()
+                        .pickerStyle(.menu)
+                        .accessibilityLabel(L10n.EditorTerminal.shell)
+
+                        TextField("/bin/zsh", text: terminalSetting(\.shellPath))
+                            .textFieldStyle(.roundedBorder)
+                    }
                 }
 
                 Picker(L10n.EditorTerminal.font, selection: terminalSetting(\.fontName)) {

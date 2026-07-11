@@ -468,12 +468,13 @@ struct ComposerTextEditor: NSViewRepresentable {
 
         private func updateSlashMenuVisibility(for newValue: String) {
             // Show the palette only when the buffer starts with "/" and
-            // has no embedded newline yet. A trailing space ends the
-            // command name and dismisses the menu.
+            // the user is still editing the command token. The first
+            // whitespace starts argument entry and dismisses the palette.
             let trimmed = newValue.trimmingCharacters(in: .whitespaces)
             let shouldShow = newValue.hasPrefix("/")
                 && !newValue.contains("\n")
                 && !trimmed.isEmpty
+                && !newValue.dropFirst().contains(where: { $0.isWhitespace })
             if slashMenuVisible.wrappedValue != shouldShow {
                 slashMenuVisible.wrappedValue = shouldShow
                 if shouldShow {
@@ -593,6 +594,22 @@ struct ComposerTextEditor: NSViewRepresentable {
             let didReplace = replaceCurrentTriggerToken(trigger: 0x24, replacement: replacement)
             skillMenuVisible.wrappedValue = false
             return didReplace
+        }
+
+        /// Replaces the complete composer buffer and parks the caret at the
+        /// end. Slash-command selection uses this to stage `/<command> ` for
+        /// argument entry without losing focus or placing the caret at zero.
+        func replaceComposerText(with replacement: String) -> Bool {
+            guard let textView = activeTextView else { return false }
+            textView.string = replacement
+            lastPublishedValue = replacement
+            text.wrappedValue = replacement
+            let end = (replacement as NSString).length
+            textView.setSelectedRange(NSRange(location: end, length: 0))
+            textView.needsDisplay = true
+            historyIndex = nil
+            lastHistoryString = nil
+            return true
         }
     }
 

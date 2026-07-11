@@ -1,6 +1,6 @@
 # some.im Mac App Integration
 
-> Last updated: 2026-07-10 | Current version: v1.136.0-rc51
+> Last updated: 2026-07-10 | Current version: v1.136.0-rc52
 
 本文档说明 WillDeep macOS App 如何接入 some.im。目标是让用户用最短路径完成账号连接：在 WillDeep 里点击“在浏览器打开”，到 some.im 完成登录，然后回到 WillDeep 继续使用。API key、customer session 等敏感信息只保存在本机 Keychain，不进入 UI、日志、文档示例或 git。
 
@@ -18,7 +18,7 @@
    - Image Understanding / VL fallback：`some-im` + `qwen3-vl-plus`
    - 图片默认模型：`gpt-image-2`
    - 视频默认模型：`seedance-2.0`，模型列表按 some.im 返回或用户偏好走
-   - API Base：通过 `GET /api/v1/public/client-location` 自动判断，中国使用 `api.niuwoai.com`，其他地区使用 `some.im`
+   - API Base：并发查询 Cloudflare 代理后的 `GET https://some.im/api/v1/public/client-location`、`GET https://myip.ipip.net` 与 `GET https://api.myip.la/en?json`；任一路明确返回中国即使用 `api.niuwoai.com`，没有中国但至少一路有效返回非中国时使用 `some.im`，三路都失败则保留上次线路。不得从当前推理 Base（尤其是未部署在 Cloudflare 后的 `api.niuwoai.com`）获取国家
 
 ### 可跳过路径：用户自己配置 provider
 

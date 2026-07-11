@@ -270,6 +270,19 @@ enum SomeIMIntegrationStore {
         return currentSharedSession()?.apiKey ?? ""
     }
 
+    /// Deterministic login gate for automatic UI defaults. Unit tests must
+    /// explicitly opt into the shared-session override so a developer's real
+    /// some.im login can never influence session-default tests.
+    static func hasAuthenticatedSessionForAutomaticDefaults() -> Bool {
+        #if DEBUG
+        if ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil,
+           !testSharedSessionOverrideEnabled {
+            return false
+        }
+        #endif
+        return !loadAPIKey().trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
     @discardableResult
     static func saveAPIKey(_ apiKey: String) -> Bool {
         let trimmed = apiKey.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -572,6 +585,15 @@ struct SomeIMGeneratedImage: Equatable, Sendable {
 enum SomeIMClient {
     static let willDeepClientID = "willdeep"
     private static let browserControlOrigin = "https://some.im"
+    private static let someIMClientLocationEndpoint = URL(string: "https://some.im/api/v1/public/client-location")!
+    private static let ipipClientLocationEndpoint = URL(string: "https://myip.ipip.net")!
+    private static let myIPLAClientLocationEndpoint = URL(string: "https://api.myip.la/en?json")!
+    private static let countryProbeTimeout: TimeInterval = 8
+
+    private enum CountryProbeVerdict: Sendable {
+        case china
+        case outsideChina
+    }
 
     static func makeBrowserLoginRequest(settings: SomeIMIntegrationSettings) throws -> SomeIMBrowserLoginRequest {
         let code = try randomDeviceCode()
@@ -585,15 +607,73 @@ enum SomeIMClient {
     }
 
     static func resolveAutomaticRelayBaseURL(session: URLSession) async throws -> String {
-        let endpoint = try publicAPIEndpoint(from: browserControlOrigin, suffix: "public/client-location")
-        var request = URLRequest(url: endpoint)
+        async let someIMVerdict = probeSomeIMCountry(session: session)
+        async let ipipVerdict = probeIPIPCountry(session: session)
+        async let myIPLAVerdict = probeMyIPLACountry(session: session)
+
+        let results = await [someIMVerdict, ipipVerdict, myIPLAVerdict].compactMap { $0 }
+        if results.contains(where: { $0 == .china }) {
+            return SomeIMRelayRegion.chinaBaseURL
+        }
+        guard results.contains(where: { $0 == .outsideChina }) else {
+            throw AgentClientError.invalidResponse
+        }
+        return SomeIMRelayRegion.internationalBaseURL
+    }
+
+    private static func probeSomeIMCountry(session: URLSession) async -> CountryProbeVerdict? {
+        do {
+            let data = try await send(countryProbeRequest(url: someIMClientLocationEndpoint), session: session)
+            let decoded = try decodeEnvelope(ClientLocationData.self, from: data)
+            return countryVerdict(codeOrName: decoded.country)
+        } catch {
+            return nil
+        }
+    }
+
+    private static func probeIPIPCountry(session: URLSession) async -> CountryProbeVerdict? {
+        do {
+            let data = try await send(
+                countryProbeRequest(url: ipipClientLocationEndpoint, accept: "text/plain"),
+                session: session
+            )
+            guard let text = String(data: data, encoding: .utf8), text.contains("来自于") else {
+                return nil
+            }
+            return text.contains("中国") ? .china : .outsideChina
+        } catch {
+            return nil
+        }
+    }
+
+    private static func probeMyIPLACountry(session: URLSession) async -> CountryProbeVerdict? {
+        do {
+            let data = try await send(countryProbeRequest(url: myIPLAClientLocationEndpoint), session: session)
+            let decoded = try JSONDecoder().decode(MyIPLALocationData.self, from: data)
+            return countryVerdict(codeOrName: decoded.location?.countryCode)
+                ?? countryVerdict(codeOrName: decoded.location?.countryName)
+        } catch {
+            return nil
+        }
+    }
+
+    private static func countryProbeRequest(url: URL, accept: String = "application/json") -> URLRequest {
+        var request = URLRequest(url: url)
         request.httpMethod = "GET"
-        request.timeoutInterval = 12
-        request.setValue("application/json", forHTTPHeaderField: "Accept")
+        request.timeoutInterval = countryProbeTimeout
+        request.setValue(accept, forHTTPHeaderField: "Accept")
         AgentNetworkSupport.applyStandardHeaders(to: &request)
-        let data = try await send(request, session: session)
-        let decoded = try decodeEnvelope(ClientLocationData.self, from: data)
-        return SomeIMRelayRegion.automaticBaseURL(for: decoded.country)
+        return request
+    }
+
+    private static func countryVerdict(codeOrName: String?) -> CountryProbeVerdict? {
+        let normalized = codeOrName?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        guard !normalized.isEmpty else { return nil }
+        let uppercased = normalized.uppercased()
+        if uppercased == "CN" || uppercased == "CHN" || uppercased.contains("CHINA") || normalized.contains("中国") {
+            return .china
+        }
+        return .outsideChina
     }
 
     static func checkBrowserLoginStatus(
@@ -1243,6 +1323,20 @@ enum SomeIMClient {
 
     private struct ClientLocationData: Decodable {
         let country: String?
+    }
+
+    private struct MyIPLALocationData: Decodable {
+        let location: Location?
+
+        struct Location: Decodable {
+            let countryCode: String?
+            let countryName: String?
+
+            private enum CodingKeys: String, CodingKey {
+                case countryCode = "country_code"
+                case countryName = "country_name"
+            }
+        }
     }
 
     private struct CodingPlanSubscription: Decodable {

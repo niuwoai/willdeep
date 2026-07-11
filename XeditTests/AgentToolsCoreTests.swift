@@ -54,6 +54,28 @@ struct AgentToolsCoreTests {
         #expect(AgentToolCallStatus.denied.rawValue == "denied")
     }
 
+    @Test("terminal protected-input payload exposes only prompts, never values")
+    func terminalProtectedInputPromptSetParsesPendingPrompts() {
+        let shortcutID = UUID()
+        let payload = """
+        {
+          "id": "\(shortcutID.uuidString)",
+          "title": "Deploy staging",
+          "events": [
+            {"index": 2, "kind": "protected_placeholder", "placeholder": "Staging password", "needs_value": true},
+            {"index": 3, "kind": "protected_echo_off_input", "needs_value": false}
+          ]
+        }
+        """
+
+        let promptSet = TerminalShortcutProtectedPromptSet.parse(payload: payload)
+        #expect(promptSet?.shortcutID == shortcutID)
+        #expect(promptSet?.title == "Deploy staging")
+        #expect(promptSet?.prompts == [
+            TerminalShortcutProtectedPrompt(eventIndex: 2, label: "Staging password")
+        ])
+    }
+
     /// The provider-error headline extracts the server's own message from a
     /// JSON error body across the common shapes, so a 403 like
     /// `token_plan_required` shows "requires an active Coding Plan

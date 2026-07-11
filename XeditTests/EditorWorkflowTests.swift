@@ -563,6 +563,47 @@ extension WillDeepTests {
         #expect(WillDeepTextView.outdentingLines("    one\n\ttwo\n  three") == "one\ntwo\nthree")
     }
 
+    @MainActor
+    @Test("editor Command-arrow follows macOS line navigation")
+    func testEditorCommandArrowMovesToLineBoundary() throws {
+        let textView = WillDeepTextView(frame: .zero)
+        textView.string = "alpha\nbeta\ngamma"
+        textView.setSelectedRange(NSRange(location: 8, length: 0))
+
+        textView.keyDown(with: try keyEvent(keyCode: 123, modifiers: .command))
+        #expect(textView.selectedRange() == NSRange(location: 6, length: 0))
+
+        textView.keyDown(with: try keyEvent(keyCode: 124, modifiers: .command))
+        #expect(textView.selectedRange() == NSRange(location: 10, length: 0))
+    }
+
+    @MainActor
+    @Test("editor Command-Shift-arrow extends selection to line boundary")
+    func testEditorCommandShiftArrowExtendsSelectionToLineBoundary() throws {
+        let textView = WillDeepTextView(frame: .zero)
+        textView.string = "alpha\nbeta\ngamma"
+        textView.setSelectedRange(NSRange(location: 8, length: 0))
+
+        textView.keyDown(with: try keyEvent(keyCode: 123, modifiers: [.command, .shift]))
+        #expect(textView.selectedRange() == NSRange(location: 6, length: 2))
+    }
+
+    @MainActor
+    private func keyEvent(keyCode: UInt16, modifiers: NSEvent.ModifierFlags) throws -> NSEvent {
+        try #require(NSEvent.keyEvent(
+            with: .keyDown,
+            location: .zero,
+            modifierFlags: modifiers,
+            timestamp: 0,
+            windowNumber: 0,
+            context: nil,
+            characters: "",
+            charactersIgnoringModifiers: "",
+            isARepeat: false,
+            keyCode: keyCode
+        ))
+    }
+
     @Test("save cleanup trims whitespace and ensures final newline")
     func testSaveCleanupTrimsWhitespaceAndEnsuresFinalNewline() {
         let settings = EditorSettings(

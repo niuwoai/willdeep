@@ -49,8 +49,8 @@ struct AgentModeView: View {
         min(max(liveSidePanelWidth ?? sidePanelWidth, sidePanelWidthRange.lowerBound), sidePanelWidthRange.upperBound)
     }
 
-    private var contentMinWidth: CGFloat {
-        (sessionsSidebarVisible ? sidebarWidth : 0)
+    private func contentMinWidth(isSidebarVisible: Bool) -> CGFloat {
+        (isSidebarVisible ? sidebarWidth : 0)
             + chatColumnComfortWidth
             // 面板宽度现在会随窗口宽度自适应封顶(见 panelWidthCap),
             // 窗口下限只需保证「最窄面板」放得下,不再跟着持久化宽度
@@ -59,25 +59,35 @@ struct AgentModeView: View {
     }
 
     /// 侧栏(含 1pt 分隔线)当前占用的宽度。
-    private var sidebarOccupiedWidth: CGFloat {
-        sessionsSidebarVisible ? sidebarWidth + 1 : 0
+    private func sidebarOccupiedWidth(isSidebarVisible: Bool) -> CGFloat {
+        isSidebarVisible ? sidebarWidth + 1 : 0
     }
 
     /// 窗口宽度给面板的封顶:面板再宽也必须给「会话侧栏 + chat 舒适
     /// 宽」留出空间。否则小窗口(如 ~655pt)下持久化的 320+ 宽度会
     /// 直接吃掉半个窗口(rc 用户截图:预览面板占了一半还多),chat
     /// 列被裁得没法看。窗口拉大后自动恢复到用户拖出来的偏好宽度。
-    private func panelWidthCap(totalWidth: CGFloat) -> Double {
+    private func panelWidthCap(totalWidth: CGFloat, isSidebarVisible: Bool) -> Double {
         guard totalWidth > 0 else { return sidePanelWidthRange.upperBound }
-        let available = Double(totalWidth - sidebarOccupiedWidth - 1) - Double(chatColumnComfortWidth)
+        let available = Double(totalWidth - sidebarOccupiedWidth(isSidebarVisible: isSidebarVisible) - 1)
+            - Double(chatColumnComfortWidth)
         return min(sidePanelWidthRange.upperBound, max(sidePanelWidthRange.lowerBound, available))
     }
 
     var body: some View {
         GeometryReader { proxy in
-            mainContent(totalWidth: proxy.size.width)
+            let autoHidden = AgentModeResponsiveLayout.shouldAutoHideSessionsSidebar(
+                totalWidth: proxy.size.width,
+                userPrefersVisible: sessionsSidebarVisible,
+                activeSidePanel: appState.agentSidePanelKind,
+                sidePanelMinimumWidth: CGFloat(sidePanelWidthRange.lowerBound)
+            )
+            mainContent(totalWidth: proxy.size.width, isSidebarAutoHidden: autoHidden)
                 .overlay(alignment: .topLeading) {
-                    AgentSessionsSidebarChromeToggleButton(isVisible: $sessionsSidebarVisible)
+                    AgentSessionsSidebarChromeToggleButton(
+                        isVisible: sidebarVisibilityBinding(isAutoHidden: autoHidden),
+                        isAutoHidden: autoHidden
+                    )
                         .padding(.leading, sidebarToggleLeadingFromWindowEdge)
                         .padding(.top, sidebarToggleTopFromWindowEdge)
                 }
@@ -85,9 +95,12 @@ struct AgentModeView: View {
     }
 
     @ViewBuilder
-    private func mainContent(totalWidth: CGFloat) -> some View {
+    private func mainContent(totalWidth: CGFloat, isSidebarAutoHidden: Bool) -> some View {
         let skin = appState.editorSettings.interfaceSkin
-        let cap = panelWidthCap(totalWidth: totalWidth)
+        let effectiveSidebarVisible = sessionsSidebarVisible && !isSidebarAutoHidden
+        let occupiedSidebarWidth = sidebarOccupiedWidth(isSidebarVisible: effectiveSidebarVisible)
+        let minimumContentWidth = contentMinWidth(isSidebarVisible: effectiveSidebarVisible)
+        let cap = panelWidthCap(totalWidth: totalWidth, isSidebarVisible: effectiveSidebarVisible)
         // 「已提交」宽度在整个拖拽过程中保持不变(AppStorage 只在松手
         // 时写入),拖拽期间面板/chat 的**内容**都按它排版,只有 frame
         // 跟着鼠标走 —— 这是消除拖拽闪动的关键:文本不再逐鼠标事件
@@ -95,10 +108,10 @@ struct AgentModeView: View {
         let committedPanelWidth = min(max(sidePanelWidth, sidePanelWidthRange.lowerBound), cap)
         let panelWidth = min(currentSidePanelWidth, cap)
         let isResizingPanel = liveSidePanelWidth != nil
-        let frozenChatWidth = max(totalWidth - sidebarOccupiedWidth - 1 - CGFloat(committedPanelWidth), 0)
+        let frozenChatWidth = max(totalWidth - occupiedSidebarWidth - 1 - CGFloat(committedPanelWidth), 0)
         let activeSidePanel = appState.agentSidePanelKind
         HStack(spacing: 0) {
-            if sessionsSidebarVisible {
+            if effectiveSidebarVisible {
                 AgentSessionsSidebar()
                     .frame(width: sidebarWidth)
                     // `.frame(width:)` 是 SwiftUI 的「建议」宽度,父 HStack
@@ -181,11 +194,11 @@ struct AgentModeView: View {
         // 右面板」的固定宽度之和还窄(contentMinSize 只挡交互式拖拽,
         // 挡不住平铺工具 / 编程式 resize),HStack 溢出时不再默认居中
         // 把左栏推出窗体左缘 —— 靠左钉住,溢出只从右缘裁掉。
-        .frame(minWidth: contentMinWidth, maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
+        .frame(minWidth: minimumContentWidth, maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
         .background(skin.windowBackground)
-        .background(AgentWindowMinWidthSetter(minWidth: contentMinWidth))
+        .background(AgentWindowMinWidthSetter(minWidth: minimumContentWidth))
         .overlay(alignment: .leading) {
-            if !sessionsSidebarVisible {
+            if !effectiveSidebarVisible {
                 AgentRecentSessionEdgeRail()
                     .zIndex(10)
             }
@@ -237,6 +250,13 @@ struct AgentModeView: View {
         Binding(
             get: { appState.agentSidePanelKind },
             set: { appState.agentSidePanelKind = $0 }
+        )
+    }
+
+    private func sidebarVisibilityBinding(isAutoHidden: Bool) -> Binding<Bool> {
+        Binding(
+            get: { sessionsSidebarVisible && !isAutoHidden },
+            set: { sessionsSidebarVisible = $0 }
         )
     }
 
@@ -301,10 +321,12 @@ struct AgentModeView: View {
 private struct AgentSessionsSidebarChromeToggleButton: View {
     @EnvironmentObject var appState: AppState
     @Binding var isVisible: Bool
+    let isAutoHidden: Bool
 
     var body: some View {
         let palette = appState.editorSettings.interfaceSkin.palette
         Button {
+            guard !isAutoHidden else { return }
             isVisible.toggle()
         } label: {
             Image(systemName: "sidebar.left")
@@ -323,9 +345,27 @@ private struct AgentSessionsSidebarChromeToggleButton: View {
             RoundedRectangle(cornerRadius: 7)
                 .stroke(palette.hairline.opacity(0.8), lineWidth: 1)
         )
-        .help(isVisible ? L10n.Header.hideSidebar : L10n.Header.showSidebar)
-        .accessibilityLabel(Text(isVisible ? L10n.Header.hideSidebar : L10n.Header.showSidebar))
+        .help(isAutoHidden ? L10n.Header.sidebarAutoHidden : (isVisible ? L10n.Header.hideSidebar : L10n.Header.showSidebar))
+        .accessibilityLabel(Text(isAutoHidden ? L10n.Header.sidebarAutoHidden : (isVisible ? L10n.Header.hideSidebar : L10n.Header.showSidebar)))
+        .opacity(isAutoHidden ? 0.72 : 1)
         .keyboardShortcut("\\", modifiers: .command)
+    }
+}
+
+enum AgentModeResponsiveLayout {
+    /// Base width where chat + composer still feel usable with the session list.
+    /// Add the minimum right-panel width when that panel is open.
+    static let sidebarAutoHideBaseWidth: CGFloat = 800
+
+    static func shouldAutoHideSessionsSidebar(
+        totalWidth: CGFloat,
+        userPrefersVisible: Bool,
+        activeSidePanel: AgentSidePanelKind?,
+        sidePanelMinimumWidth: CGFloat
+    ) -> Bool {
+        guard userPrefersVisible, totalWidth > 0 else { return false }
+        let threshold = sidebarAutoHideBaseWidth + (activeSidePanel == nil ? 0 : sidePanelMinimumWidth)
+        return totalWidth < threshold
     }
 }
 
@@ -442,6 +482,7 @@ enum AgentDesign {
 
     // Paddings & sizes.
     static let chatMaxContentWidth: CGFloat = 1040
+    static let chatHorizontalInset: CGFloat = 18
     static let userMessageMaxWidthRatio: CGFloat = 0.95
     static let messageVerticalSpacing: CGFloat = 18
     static let composerHeight: CGFloat = 124

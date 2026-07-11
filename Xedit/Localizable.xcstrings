@@ -2560,6 +2560,24 @@
         }
       }
     },
+    "agent-selection.add-to-task" : {
+      "comment" : "Chat history selection menu item that stages the excerpt in the current task composer",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Add to Task"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "添加到任务"
+          }
+        }
+      }
+    },
     "agent-selection.ask-in-sidebar" : {
       "comment" : "Editor context menu item that opens the side Agent panel with selected text attached",
       "extractionState" : "manual",
@@ -2592,6 +2610,24 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "请基于已添加的选区回答："
+          }
+        }
+      }
+    },
+    "agent-selection.chat-excerpt-filename" : {
+      "comment" : "Filename for a text attachment created from a selected chat-history excerpt",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Chat excerpt.txt"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "对话摘录.txt"
           }
         }
       }
@@ -3980,6 +4016,42 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "托管"
+          }
+        }
+      }
+    },
+    "agent-managed-routing.footer-general" : {
+      "comment" : "Assistant footer label for the actual someim-auto managed model; placeholder is flash/pro/premium with an optional route marker",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Managed-General-%@"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "托管-通用-%@"
+          }
+        }
+      }
+    },
+    "agent-managed-routing.footer-coding" : {
+      "comment" : "Assistant footer label for the actual someim-coding or someim-code managed model; placeholder is flash/pro/premium with an optional route marker",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Managed-Coding-%@"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "托管-编程-%@"
           }
         }
       }
@@ -9430,6 +9502,23 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "显示侧栏"
+          }
+        }
+      }
+    },
+    "header.sidebar-auto-hidden" : {
+      "extractionState" : "extracted_with_value",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Widen the window to show the sidebar"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "加宽窗口以显示侧栏"
           }
         }
       }
@@ -24810,6 +24899,90 @@
         }
       }
     },
+    "settings.voice.overlay.color.aurora-mint" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Aurora mint" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "极光薄荷" } }
+      }
+    },
+    "settings.voice.overlay.color.cosmic-grape" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Cosmic grape" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "宇宙葡萄" } }
+      }
+    },
+    "settings.voice.overlay.color.cyber-sunset" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Cyber sunset" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "赛博日落" } }
+      }
+    },
+    "settings.voice.overlay.color.deep-space" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Deep space" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "深空" } }
+      }
+    },
+    "settings.voice.overlay.color.hologram" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Hologram" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "全息投影" } }
+      }
+    },
+    "settings.voice.overlay.color.ion-storm" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Ion storm" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "离子风暴" } }
+      }
+    },
+    "settings.voice.overlay.color.laser-grid" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Laser grid" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "激光网格" } }
+      }
+    },
+    "settings.voice.overlay.color.lunar-signal" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Lunar signal" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "月面信号" } }
+      }
+    },
+    "settings.voice.overlay.color.neon-tokyo" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Neon Tokyo" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "霓虹东京" } }
+      }
+    },
+    "settings.voice.overlay.color.plasma-core" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Plasma core" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "等离子核心" } }
+      }
+    },
+    "settings.voice.overlay.color.quantum-cyan" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Quantum cyan" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "量子青" } }
+      }
+    },
+    "settings.voice.overlay.color.solar-flare" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Solar flare" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "太阳耀斑" } }
+      }
+    },
     "settings.voice.overlay.color" : {
       "extractionState" : "extracted_with_value",
       "localizations" : {
@@ -25184,6 +25357,41 @@
         }
       }
     },
+    "settings.voice.overlay.corner" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Corner radius" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "圆角" } }
+      }
+    },
+    "settings.voice.overlay.corner.capsule" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Capsule" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "胶囊" } }
+      }
+    },
+    "settings.voice.overlay.corner.rounded" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Rounded" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "圆润" } }
+      }
+    },
+    "settings.voice.overlay.corner.soft" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Soft" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "柔和" } }
+      }
+    },
+    "settings.voice.overlay.corner.subtle" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Subtle" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "微圆角" } }
+      }
+    },
     "settings.voice.overlay.description" : {
       "extractionState" : "extracted_with_value",
       "localizations" : {
@@ -25386,6 +25594,55 @@
             "value" : "大小"
           }
         }
+      }
+    },
+    "settings.voice.overlay.wave" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Waveform" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "波形" } }
+      }
+    },
+    "settings.voice.overlay.wave.classic" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Classic bars" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "经典波条" } }
+      }
+    },
+    "settings.voice.overlay.wave.digital" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Digital matrix" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "数字矩阵" } }
+      }
+    },
+    "settings.voice.overlay.wave.equalizer" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Equalizer" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "均衡器" } }
+      }
+    },
+    "settings.voice.overlay.wave.pulse" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Pulse" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "脉冲" } }
+      }
+    },
+    "settings.voice.overlay.wave.skyline" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Neon skyline" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "霓虹天际线" } }
+      }
+    },
+    "settings.voice.overlay.wave.spectrum" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Spectrum" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "频谱" } }
       }
     },
     "settings.voice.overlay.style.compact" : {

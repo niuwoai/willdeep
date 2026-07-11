@@ -454,6 +454,55 @@ struct AgentManagedRouteDecisionTests {
     }
 
     @Test
+    func footerUsesActualModelFamilyAndLevel() {
+        let cases: [(String, AgentManagedCapabilityTier, AgentManagedRouteFamily, String)] = [
+            ("someim-auto-flash", .low, .general, "flash"),
+            ("someim-auto-pro", .high, .general, "pro"),
+            ("someim-auto-premium", .premium, .general, "premium"),
+            ("someim-coding-plan-low", .low, .coding, "flash"),
+            ("someim-coding-plan-high", .high, .coding, "pro"),
+            ("someim-coding-plan-premium", .premium, .coding, "premium"),
+            ("someim-code-low", .low, .coding, "flash"),
+            ("someim-code-high", .high, .coding, "pro"),
+            ("someim-code-premium", .premium, .coding, "premium"),
+        ]
+
+        for (selectedModel, tier, expectedFamily, expectedLevel) in cases {
+            let route = AgentManagedRouteDecision(
+                selectedModel: selectedModel,
+                tier: tier,
+                domain: .general,
+                complexity: .low,
+                didFallback: false
+            )
+
+            #expect(route.footerFamily == expectedFamily)
+            #expect(route.footerLevelLabel == expectedLevel)
+            let expectedText = expectedFamily == .general
+                ? L10n.AgentManagedRouting.generalFooter(expectedLevel)
+                : L10n.AgentManagedRouting.codingFooter(expectedLevel)
+            #expect(route.footerChipText == expectedText)
+        }
+    }
+
+    @Test
+    func footerLevelKeepsEscalationAndFallbackMarkers() {
+        var escalated = AgentManagedRouteDecision(
+            selectedModel: "someim-code-high",
+            tier: .high,
+            domain: .coding,
+            complexity: .high,
+            didFallback: false,
+            didEscalate: true
+        )
+        #expect(escalated.footerLevelMarkers == "pro↑")
+
+        escalated.didEscalate = false
+        escalated.didFallback = true
+        #expect(escalated.footerLevelMarkers == "pro~")
+    }
+
+    @Test
     func decodesOnAssistantMessage() throws {
         var message = AgentMessage(role: .assistant, content: "hi")
         message.managedRoute = AgentManagedRouteDecision(

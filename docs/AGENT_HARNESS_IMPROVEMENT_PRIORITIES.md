@@ -1,6 +1,6 @@
 # Agent Harness Improvement Priorities
 
-> Last updated: 2026-07-10 | Current version: v1.136.0-rc51
+> Last updated: 2026-07-12 | Current version: v1.138.0-rc4
 
 这份文档用于回答一个核心问题：一个 harness 级 Agent 要继续变强，哪些问题必须优先解决。
 

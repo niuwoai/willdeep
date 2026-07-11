@@ -15,15 +15,54 @@ import AppKit
 /// network, no LLM round-trip. Each one runs synchronously against
 /// AppState. The model-picker case opens the existing model picker
 /// surface; the others call public AppState APIs directly.
+enum SlashCommandArgumentMode: Equatable {
+    case none
+    case optional(placeholder: String)
+    case required(placeholder: String)
+
+    var placeholder: String? {
+        switch self {
+        case .none: return nil
+        case .optional(let placeholder), .required(let placeholder): return placeholder
+        }
+    }
+
+    var acceptsArguments: Bool {
+        self != .none
+    }
+
+    var requiresArguments: Bool {
+        if case .required = self { return true }
+        return false
+    }
+}
+
 struct SlashCommand: Identifiable {
     let id: String
     let title: String
     let subtitle: String
     let symbol: String
+    let argumentMode: SlashCommandArgumentMode
     /// 接收用户输入框里去掉 leading slash-command 后的 trailing args
     /// （已 trim 空白）。绝大多数命令忽略这个参数；workflow 类命令
     /// 把它当 query 转给 startWorkflow。
     let action: (_ args: String) -> Void
+
+    init(
+        id: String,
+        title: String,
+        subtitle: String,
+        symbol: String,
+        argumentMode: SlashCommandArgumentMode = .none,
+        action: @escaping (_ args: String) -> Void
+    ) {
+        self.id = id
+        self.title = title
+        self.subtitle = subtitle
+        self.symbol = symbol
+        self.argumentMode = argumentMode
+        self.action = action
+    }
 
     static func builtIn(state: AppState) -> [SlashCommand] {
         let core: [SlashCommand] = [
@@ -56,7 +95,10 @@ struct SlashCommand: Identifiable {
                 id: "workflow-\(workflow.name)",
                 title: workflow.slashCommand,
                 subtitle: workflow.shortDescription,
-                symbol: "wand.and.rays"
+                symbol: "wand.and.rays",
+                argumentMode: workflow.allowsEmptyArgs
+                    ? .optional(placeholder: workflow.argsPlaceholder)
+                    : .required(placeholder: workflow.argsPlaceholder)
             ) { args in
                 state.startWorkflow(slashCommand: workflow.slashCommand, args: args)
             }
@@ -95,6 +137,20 @@ struct SlashCommand: Identifiable {
         guard let spaceIdx = trimmed.firstIndex(of: " ") else { return "" }
         return String(trimmed[trimmed.index(after: spaceIdx)...])
             .trimmingCharacters(in: .whitespaces)
+    }
+
+    /// Finds an exact slash-command invocation in the composer. Arguments
+    /// are deliberately excluded from matching so `/research topic` resolves
+    /// to `/research`, while ordinary prose beginning with `/` falls through.
+    static func invocation(
+        in rawInput: String,
+        commands: [SlashCommand]
+    ) -> (command: SlashCommand, args: String)? {
+        let trimmed = rawInput.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard trimmed.hasPrefix("/") else { return nil }
+        let commandName = String(trimmed.prefix { !$0.isWhitespace })
+        guard let command = commands.first(where: { $0.title == commandName }) else { return nil }
+        return (command, argsForCommand(rawInput))
     }
 }
 
@@ -153,6 +209,12 @@ private struct SlashCommandRow: View {
                     .font(.system(size: 10))
                     .foregroundStyle(isSelected ? Color.white.opacity(0.85) : Color.secondary)
                     .lineLimit(1)
+                if let placeholder = command.argumentMode.placeholder {
+                    Text(placeholder)
+                        .font(.system(size: 9, design: .monospaced))
+                        .foregroundStyle(isSelected ? Color.white.opacity(0.7) : Color.secondary.opacity(0.85))
+                        .lineLimit(1)
+                }
             }
             Spacer(minLength: 0)
         }

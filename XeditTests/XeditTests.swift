@@ -7,6 +7,7 @@
 
 import Testing
 import Foundation
+import CoreGraphics
 @testable import WillDeep
 
 @Suite(.serialized)
@@ -28,6 +29,42 @@ struct WillDeepTests {
     }
 
     // Editor core behavior tests live in EditorCoreBehaviorTests.swift.
+
+    @Test("agent session sidebar auto-hides only below responsive width")
+    func testAgentSessionSidebarAutoHideThreshold() {
+        let sidePanelMinimumWidth: CGFloat = 240
+
+        #expect(AgentModeResponsiveLayout.shouldAutoHideSessionsSidebar(
+            totalWidth: 799,
+            userPrefersVisible: true,
+            activeSidePanel: nil,
+            sidePanelMinimumWidth: sidePanelMinimumWidth
+        ) == true)
+        #expect(AgentModeResponsiveLayout.shouldAutoHideSessionsSidebar(
+            totalWidth: 800,
+            userPrefersVisible: true,
+            activeSidePanel: nil,
+            sidePanelMinimumWidth: sidePanelMinimumWidth
+        ) == false)
+        #expect(AgentModeResponsiveLayout.shouldAutoHideSessionsSidebar(
+            totalWidth: 600,
+            userPrefersVisible: false,
+            activeSidePanel: nil,
+            sidePanelMinimumWidth: sidePanelMinimumWidth
+        ) == false)
+        #expect(AgentModeResponsiveLayout.shouldAutoHideSessionsSidebar(
+            totalWidth: 1_039,
+            userPrefersVisible: true,
+            activeSidePanel: .backgroundTasks,
+            sidePanelMinimumWidth: sidePanelMinimumWidth
+        ) == true)
+        #expect(AgentModeResponsiveLayout.shouldAutoHideSessionsSidebar(
+            totalWidth: 1_040,
+            userPrefersVisible: true,
+            activeSidePanel: .backgroundTasks,
+            sidePanelMinimumWidth: sidePanelMinimumWidth
+        ) == false)
+    }
 
     @Test("side panel diff display truncates oversized text")
     func testSidePanelDiffDisplayTruncatesOversizedText() {

@@ -139,19 +139,20 @@ struct WaveformOverlayView: View {
     @ObservedObject var manager: WaveformOverlayWindowManager
     @ObservedObject private var preferences = UserPreferences.shared
     @Environment(\.colorScheme) private var colorScheme
-    @State private var bars: [CGFloat] = [0.35, 0.55, 0.75, 0.55, 0.35]
     @State private var rotation: Double = 0
     @State private var containerScale: CGFloat = 0.8
     @State private var containerOpacity: Double = 0
 
     var body: some View {
         let style = preferences.waveformOverlayStyle
+        let waveStyle = preferences.waveformOverlayWaveStyle
         let colorConfig = preferences.waveformOverlayColorStyle.colorConfig(for: colorScheme)
         let barColor = colorConfig.barColor
         let size = style.size
+        let cornerRadius = preferences.waveformOverlayCornerStyle.radius(for: size)
 
         ZStack {
-            background(config: colorConfig, cornerRadius: style.cornerRadius)
+            background(config: colorConfig, cornerRadius: cornerRadius)
 
             Group {
                 switch manager.state {
@@ -173,28 +174,13 @@ struct WaveformOverlayView: View {
                                 .shadow(color: barColor.opacity(0.5), radius: 3)
                                 .animation(.easeOut(duration: 0.12), value: manager.audioLevel)
                         } else {
-                            HStack(spacing: style.barSpacing) {
-                                ForEach(0..<bars.count, id: \.self) { i in
-                                    RoundedRectangle(cornerRadius: style.barWidth / 2, style: .continuous)
-                                        .fill(
-                                            LinearGradient(
-                                                colors: [
-                                                    barColor.opacity(0.95),
-                                                    barColor.opacity(0.7),
-                                                    barColor.opacity(0.45),
-                                                ],
-                                                startPoint: .top,
-                                                endPoint: .bottom
-                                            )
-                                        )
-                                        .frame(width: style.barWidth, height: bars[i] * style.maxBarHeight)
-                                        .shadow(color: barColor.opacity(0.35), radius: 2)
-                                }
-                            }
-                            .onAppear { animateBars() }
-                            .onCompatibleChange(of: manager.audioLevel) { _, level in
-                                updateBars(level)
-                            }
+                            WaveformOverlayBars(
+                                windowStyle: style,
+                                waveStyle: waveStyle,
+                                primaryColor: barColor,
+                                accentColor: colorConfig.barAccentColor,
+                                audioLevel: CGFloat(manager.audioLevel)
+                            )
                         }
                     }
                     .padding(.horizontal, style.horizontalPadding)
@@ -266,34 +252,9 @@ struct WaveformOverlayView: View {
                 .fill(config.backgroundColor.opacity(config.backgroundOpacity))
                 .overlay(
                     RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
-                        .stroke(Color.primary.opacity(0.08), lineWidth: 1)
+                        .stroke(config.borderColor, lineWidth: 1)
                 )
                 .shadow(color: .black.opacity(0.25), radius: 14, x: 0, y: 6)
-        }
-    }
-
-    private func animateBars() {
-        let base: [CGFloat] = [0.35, 0.55, 0.75, 0.55, 0.35]
-        for i in 0..<bars.count {
-            let delay = Double(i) * 0.08
-            let duration = 0.4 + Double(i) * 0.05
-            DispatchQueue.main.asyncAfter(deadline: .now() + delay) {
-                withAnimation(.easeInOut(duration: duration).repeatForever(autoreverses: true)) {
-                    let v: CGFloat = 0.15
-                    bars[i] = base[i] + CGFloat.random(in: -v...v)
-                }
-            }
-        }
-    }
-
-    private func updateBars(_ level: Float) {
-        let n = min(max(level, 0), 1)
-        if bars.count >= 5 {
-            bars[2] = CGFloat(n * 0.7 + 0.3)
-            bars[1] = CGFloat(n * 0.5 + 0.3)
-            bars[3] = CGFloat(n * 0.5 + 0.3)
-            bars[0] = CGFloat(n * 0.4 + 0.2)
-            bars[4] = CGFloat(n * 0.4 + 0.2)
         }
     }
 

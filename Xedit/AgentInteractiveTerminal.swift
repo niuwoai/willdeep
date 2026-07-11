@@ -1152,7 +1152,7 @@ final class AgentTerminalTab: ObservableObject, Identifiable, AgentTerminalProce
         let env = Self.environmentArray(settings: settings)
         switch kind {
         case .localShell:
-            let shell = Self.loginShellPath()
+            let shell = Self.loginShellPath(settings.shellPath)
             // No workspace → open the shell in the user's home, never the app
             // process cwd (which is "/" for a bundled app). A fresh terminal
             // should land in the current workspace or ~, not the filesystem root.
@@ -1429,7 +1429,9 @@ final class AgentTerminalTab: ObservableObject, Identifiable, AgentTerminalProce
 
     // MARK: Helpers
 
-    private static func loginShellPath() -> String {
+    private static func loginShellPath(_ configured: String) -> String {
+        let trimmed = configured.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !trimmed.isEmpty { return trimmed }
         if let shell = ProcessInfo.processInfo.environment["SHELL"], !shell.isEmpty {
             return shell
         }

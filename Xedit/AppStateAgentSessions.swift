@@ -121,6 +121,7 @@ extension AppState {
         }
         if agentProviderLibrary.activeID == entryID {
             applyActiveProviderLibraryEntry()
+            adoptSomeIMManagedRoutingForEmptySessionIfNeeded()
         }
     }
 
@@ -876,10 +877,12 @@ extension AppState {
         // placeholders in the sidebar.
         pruneEmptyAgentSessions()
 
+        let defaultManagedRouting = defaultSomeIMManagedRoutingState()
         let session = AgentSession(
             workspaceRootPath: rootDirectory?.standardizedFileURL.path,
             workspaceLocation: (rootDirectory?.standardizedFileURL.path).map { WorkspaceLocation.local(path: $0) },
-            modelID: activeAgentModelID
+            modelID: defaultManagedRouting == nil ? activeAgentModelID : nil,
+            managedRouting: defaultManagedRouting
         )
         agentSessions.insert(session, at: 0)
         // Build the runtime BEFORE flipping activeAgentSessionID — the
@@ -927,10 +930,12 @@ extension AppState {
 
         pruneEmptyAgentSessions()
 
+        let defaultManagedRouting = defaultSomeIMManagedRoutingState()
         let session = AgentSession(
             workspaceRootPath: normalizedPath,
             workspaceLocation: normalizedPath.map { WorkspaceLocation.local(path: $0) },
-            modelID: activeAgentModelID
+            modelID: defaultManagedRouting == nil ? activeAgentModelID : nil,
+            managedRouting: defaultManagedRouting
         )
         agentSessions.insert(session, at: 0)
         let newRuntime = AgentRuntime(session: session)
@@ -1030,10 +1035,12 @@ extension AppState {
         }
 
         pruneEmptyAgentSessions()
+        let defaultManagedRouting = defaultSomeIMManagedRoutingState()
         let session = AgentSession(
             workspaceRootPath: nil,
             workspaceLocation: .remote(runtimeID: runtimeID, path: normalizedPath),
-            modelID: activeAgentModelID
+            modelID: defaultManagedRouting == nil ? activeAgentModelID : nil,
+            managedRouting: defaultManagedRouting
         )
         agentSessions.insert(session, at: 0)
         let newRuntime = AgentRuntime(session: session)
@@ -1584,6 +1591,7 @@ extension AppState {
     }
 
     func setAgentSessionModel(_ model: String?) {
+        AgentSettingsStore.saveDefaultModelModePreference(.explicitModel)
         // Picking any explicit model (or route-default) exits managed
         // routing — the three session-selection states (route default /
         // explicit model / managed) are mutually exclusive.
@@ -1666,6 +1674,32 @@ extension AppState {
         if runtime.managedRouting == nil {
             runtime.managedRouting = AgentManagedRoutingState()
         }
+        AgentSettingsStore.saveDefaultModelModePreference(.managed)
+        persistActiveAgentSession()
+    }
+
+    /// Signed-in some.im users start new chats in managed routing until they
+    /// explicitly choose a concrete model. Existing historical conversations
+    /// are never rewritten; login reconciliation may only adopt an empty chat.
+    private func defaultSomeIMManagedRoutingState() -> AgentManagedRoutingState? {
+        guard SomeIMIntegrationStore.hasAuthenticatedSessionForAutomaticDefaults(),
+              agentProviderLibrary.active?.providerID == AgentProviderPreset.someIMID,
+              AgentSettingsStore.loadDefaultModelModePreference() != .explicitModel else {
+            return nil
+        }
+        return AgentManagedRoutingState()
+    }
+
+    private func adoptSomeIMManagedRoutingForEmptySessionIfNeeded() {
+        guard let runtime = activeRuntime,
+              runtime.isEmpty,
+              !runtime.isResponding,
+              runtime.managedRouting == nil,
+              defaultSomeIMManagedRoutingState() != nil else {
+            return
+        }
+        runtime.sessionModelOverride = nil
+        runtime.managedRouting = AgentManagedRoutingState()
         persistActiveAgentSession()
     }
 

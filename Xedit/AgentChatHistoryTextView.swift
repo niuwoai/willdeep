@@ -42,6 +42,7 @@ struct AgentChatHistoryTextView: NSViewRepresentable {
     /// 1.103.0-rc11: footer 报告图标被点时触发(SwiftUI 侧打开 popover)。
     var onShowTurnReport: (() -> Void)? = nil
     var onReferenceGeneratedImage: ((String) -> Void)? = nil
+    var onAddSelectionToTask: ((String) -> Void)? = nil
     var onOpenFilePath: ((String) -> Void)? = nil
     var searchQuery: String = ""
     var activeSearchMatchIndex: Int? = nil
@@ -59,6 +60,7 @@ struct AgentChatHistoryTextView: NSViewRepresentable {
         view.onRetryLastTurn = onRetryLastTurn
         view.onShowTurnReport = onShowTurnReport
         view.onReferenceGeneratedImage = onReferenceGeneratedImage
+        view.onAddSelectionToTask = onAddSelectionToTask
         view.onOpenFilePath = onOpenFilePath
         view.onSearchResultCountChange = onSearchResultCountChange
         configure(view)
@@ -80,6 +82,7 @@ struct AgentChatHistoryTextView: NSViewRepresentable {
         nsView.onRetryLastTurn = onRetryLastTurn
         nsView.onShowTurnReport = onShowTurnReport
         nsView.onReferenceGeneratedImage = onReferenceGeneratedImage
+        nsView.onAddSelectionToTask = onAddSelectionToTask
         nsView.onOpenFilePath = onOpenFilePath
         nsView.onSearchResultCountChange = onSearchResultCountChange
         nsView.applyMessages(
@@ -154,11 +157,14 @@ final class AgentChatHistoryNSTextView: NSTextView {
     /// other copied buttons from restoring themselves.
     private var pendingCodeCopyRestores: [Int: DispatchWorkItem] = [:]
     private var pendingFooterCopyRestores: [Int: DispatchWorkItem] = [:]
+    private var selectionActionView: AgentChatSelectionActionView?
+    private var selectionActionText: String?
     var onRetryLastTurn: (() -> Void)?
     /// 1.103.0-rc11: TextKit footer 里 doc.text 图标被点时回调 SwiftUI 侧
     /// 弹出 AgentTurnReportCard popover —— 见 AgentChatTranscript。
     var onShowTurnReport: (() -> Void)?
     var onReferenceGeneratedImage: ((String) -> Void)?
+    var onAddSelectionToTask: ((String) -> Void)?
     var onOpenFilePath: ((String) -> Void)?
     var onSearchResultCountChange: ((Int) -> Void)?
 
@@ -224,24 +230,153 @@ final class AgentChatHistoryNSTextView: NSTextView {
         super.mouseExited(with: event)
     }
 
+    override func mouseDown(with event: NSEvent) {
+        dismissSelectionAction()
+        super.mouseDown(with: event)
+    }
+
+    override func mouseUp(with event: NSEvent) {
+        super.mouseUp(with: event)
+        guard let selectedText = currentSelectedConversationText() else {
+            dismissSelectionAction()
+            return
+        }
+        showSelectionAction(selectedText: selectedText)
+    }
+
     override func menu(for event: NSEvent) -> NSMenu? {
         let point = convert(event.locationInWindow, from: nil)
-        guard let marker = generatedImageReferenceMarker(at: point) else {
+        let marker = generatedImageReferenceMarker(at: point)
+        let selectedText = currentSelectedConversationText()
+        guard marker != nil || selectedText != nil else {
             return super.menu(for: event)
         }
         let menu = super.menu(for: event) ?? NSMenu()
         if !menu.items.isEmpty {
             menu.addItem(.separator())
         }
+        if let selectedText {
+            menu.addItem(addSelectionToTaskMenuItem(selectedText: selectedText))
+        }
+        if let marker {
+            let item = NSMenuItem(
+                title: L10n.AgentGeneratedImage.quoteAction,
+                action: #selector(quoteGeneratedImageFromMenu(_:)),
+                keyEquivalent: ""
+            )
+            item.target = self
+            item.representedObject = marker
+            menu.addItem(item)
+        }
+        return menu
+    }
+
+    private func addSelectionToTaskMenuItem(selectedText: String) -> NSMenuItem {
         let item = NSMenuItem(
-            title: L10n.AgentGeneratedImage.quoteAction,
-            action: #selector(quoteGeneratedImageFromMenu(_:)),
+            title: L10n.AgentSelection.addToTask,
+            action: #selector(addSelectionToTaskFromMenu(_:)),
             keyEquivalent: ""
         )
         item.target = self
-        item.representedObject = marker
-        menu.addItem(item)
-        return menu
+        item.representedObject = selectedText
+        item.isEnabled = true
+        return item
+    }
+
+    private func showSelectionAction(selectedText: String) {
+        guard let selectionRect = selectedTextBoundingRect() else {
+            dismissSelectionAction()
+            return
+        }
+
+        let actionView = selectionActionView ?? makeSelectionActionView()
+        selectionActionText = selectedText
+        actionView.isHidden = false
+
+        let size = actionView.preferredSize
+        let visible = visibleRect.insetBy(dx: 8, dy: 8)
+        let gap: CGFloat = 6
+        let proposedAboveY = isFlipped
+            ? selectionRect.minY - size.height - gap
+            : selectionRect.maxY + gap
+        let proposedBelowY = isFlipped
+            ? selectionRect.maxY + gap
+            : selectionRect.minY - size.height - gap
+        let fitsAbove = proposedAboveY >= visible.minY
+            && proposedAboveY + size.height <= visible.maxY
+        let targetY = fitsAbove ? proposedAboveY : proposedBelowY
+        let unclampedX = selectionRect.midX - size.width / 2
+        let maxX = max(visible.minX, visible.maxX - size.width)
+        let targetX = min(max(unclampedX, visible.minX), maxX)
+        let maxY = max(visible.minY, visible.maxY - size.height)
+        actionView.frame = NSRect(
+            x: targetX,
+            y: min(max(targetY, visible.minY), maxY),
+            width: size.width,
+            height: size.height
+        )
+    }
+
+    private func makeSelectionActionView() -> AgentChatSelectionActionView {
+        let actionView = AgentChatSelectionActionView(title: L10n.AgentSelection.addToTask)
+        actionView.onAdd = { [weak self] in
+            guard let self, let selectedText = self.selectionActionText else { return }
+            self.dismissSelectionAction()
+            self.onAddSelectionToTask?(selectedText)
+        }
+        addSubview(actionView)
+        selectionActionView = actionView
+        return actionView
+    }
+
+    private func selectedTextBoundingRect() -> NSRect? {
+        let range = selectedRange()
+        guard range.location != NSNotFound,
+              range.length > 0,
+              let layoutManager,
+              let textContainer else {
+            return nil
+        }
+        layoutManager.ensureLayout(for: textContainer)
+        let glyphRange = layoutManager.glyphRange(forCharacterRange: range, actualCharacterRange: nil)
+        guard glyphRange.length > 0 else { return nil }
+        var rect = layoutManager.boundingRect(forGlyphRange: glyphRange, in: textContainer)
+        rect.origin.x += textContainerInset.width
+        rect.origin.y += textContainerInset.height
+        return rect
+    }
+
+    private func dismissSelectionAction() {
+        selectionActionText = nil
+        selectionActionView?.isHidden = true
+    }
+
+    private func currentSelectedConversationText() -> String? {
+        let range = selectedRange()
+        guard range.location != NSNotFound,
+              range.length > 0,
+              NSMaxRange(range) <= (textStorage?.length ?? 0),
+              let storageString = textStorage?.string else {
+            return nil
+        }
+        let rawText = (storageString as NSString).substring(with: range)
+        let selectedText = AgentTextAttachment.sanitizedPastedContent(rawText)
+        return selectedText.isEmpty ? nil : selectedText
+    }
+
+    @discardableResult
+    func addCurrentSelectionToTask() -> Bool {
+        guard let selectedText = currentSelectedConversationText() else { return false }
+        onAddSelectionToTask?(selectedText)
+        return true
+    }
+
+    @objc private func addSelectionToTaskFromMenu(_ sender: NSMenuItem) {
+        guard let selectedText = sender.representedObject as? String else {
+            _ = addCurrentSelectionToTask()
+            return
+        }
+        onAddSelectionToTask?(selectedText)
     }
 
     @objc private func quoteGeneratedImageFromMenu(_ sender: NSMenuItem) {
@@ -267,6 +402,7 @@ final class AgentChatHistoryNSTextView: NSTextView {
         if fp == lastInputFingerprint {
             return
         }
+        dismissSelectionAction()
         lastInputFingerprint = fp
         currentMessages = messages
         currentIsDark = isDark
@@ -519,6 +655,53 @@ final class AgentChatHistoryNSTextView: NSTextView {
         hoveredUserMessageID = id
         lastContentHash = nil
         renderCurrentMessages()
+    }
+}
+
+private final class AgentChatSelectionActionView: NSVisualEffectView {
+    private let actionButton: NSButton
+    var onAdd: (() -> Void)?
+
+    init(title: String) {
+        actionButton = NSButton(title: title, target: nil, action: nil)
+        super.init(frame: .zero)
+
+        material = .popover
+        blendingMode = .withinWindow
+        state = .active
+        wantsLayer = true
+        layer?.cornerRadius = 8
+        layer?.masksToBounds = false
+        shadow = NSShadow()
+        shadow?.shadowColor = NSColor.black.withAlphaComponent(0.18)
+        shadow?.shadowBlurRadius = 8
+        shadow?.shadowOffset = NSSize(width: 0, height: -2)
+
+        actionButton.target = self
+        actionButton.action = #selector(addToTask(_:))
+        actionButton.isBordered = false
+        actionButton.font = NSFont.systemFont(ofSize: 13, weight: .medium)
+        actionButton.contentTintColor = .labelColor
+        actionButton.translatesAutoresizingMaskIntoConstraints = false
+        addSubview(actionButton)
+        NSLayoutConstraint.activate([
+            actionButton.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 10),
+            actionButton.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -10),
+            actionButton.topAnchor.constraint(equalTo: topAnchor, constant: 5),
+            actionButton.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -5),
+        ])
+    }
+
+    required init?(coder: NSCoder) {
+        return nil
+    }
+
+    var preferredSize: NSSize {
+        NSSize(width: ceil(actionButton.intrinsicContentSize.width) + 20, height: 30)
+    }
+
+    @objc private func addToTask(_ sender: NSButton) {
+        onAdd?()
     }
 }
 

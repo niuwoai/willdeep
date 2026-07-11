@@ -361,7 +361,7 @@ struct AgentMessageFooter: View {
             }
 
             if message.role == .assistant, let route = message.managedRoute {
-                footerMetric(icon: "gearshape", text: route.tierMarkers)
+                footerMetric(icon: "gearshape", text: route.footerChipText)
                     .help(route.selectedModel)
             }
 

@@ -21,6 +21,50 @@ struct AgentContextBuilderPromptTests {
     }
 }
 
+@Suite
+struct SlashCommandInteractionTests {
+    @Test("slash workflow metadata distinguishes required optional and immediate commands")
+    @MainActor
+    func argumentModes() {
+        let appState = AppState()
+        let commands = SlashCommand.builtIn(state: appState)
+
+        let research = commands.first { $0.title == "/research" }
+        let bugHunt = commands.first { $0.title == "/bug-hunt" }
+        let clear = commands.first { $0.title == "/clear" }
+
+        #expect(research?.argumentMode.requiresArguments == true)
+        #expect(research?.argumentMode.placeholder == "research question…")
+        #expect(bugHunt?.argumentMode.acceptsArguments == true)
+        #expect(bugHunt?.argumentMode.requiresArguments == false)
+        #expect(clear?.argumentMode == SlashCommandArgumentMode.none)
+    }
+
+    @Test("slash invocation parser separates the exact command from its arguments")
+    func invocationParsing() throws {
+        let command = SlashCommand(
+            id: "research",
+            title: "/research",
+            subtitle: "Research",
+            symbol: "magnifyingglass",
+            argumentMode: .required(placeholder: "question")
+        ) { _ in }
+
+        let withArguments = try #require(
+            SlashCommand.invocation(in: "/research   cache behavior", commands: [command])
+        )
+        #expect(withArguments.command.id == "research")
+        #expect(withArguments.args == "cache behavior")
+
+        let staged = try #require(
+            SlashCommand.invocation(in: "/research ", commands: [command])
+        )
+        #expect(staged.args.isEmpty)
+        #expect(SlashCommand.invocation(in: "/researcher topic", commands: [command]) == nil)
+        #expect(SlashCommand.invocation(in: "please /research topic", commands: [command]) == nil)
+    }
+}
+
 @Suite(.serialized)
 struct SomeIMBrowserLoginStatusTests {
     @Test("browser login request always opens some.im control plane")
@@ -410,9 +454,17 @@ struct SomeIMBrowserLoginStatusTests {
         #expect(status.planID == nil)
     }
 
-    @Test("some.im relay route follows the public client country")
+    @Test(
+        "some.im relay route treats any China country probe as authoritative",
+        arguments: [
+            CountryProbeTestCase(someIMCountry: "CN", ipipLocation: "日本 东京", myIPLACountry: "JP", expectedBaseURL: SomeIMRelayRegion.chinaBaseURL),
+            CountryProbeTestCase(someIMCountry: "US", ipipLocation: "中国 浙江 杭州", myIPLACountry: "JP", expectedBaseURL: SomeIMRelayRegion.chinaBaseURL),
+            CountryProbeTestCase(someIMCountry: "US", ipipLocation: "日本 东京", myIPLACountry: "CN", expectedBaseURL: SomeIMRelayRegion.chinaBaseURL),
+            CountryProbeTestCase(someIMCountry: "US", ipipLocation: "日本 东京", myIPLACountry: "JP", expectedBaseURL: SomeIMRelayRegion.internationalBaseURL)
+        ]
+    )
     @MainActor
-    func testAutomaticRelayRouteUsesClientCountry() async throws {
+    func testAutomaticRelayRouteUsesCombinedCountryProbes(testCase: CountryProbeTestCase) async throws {
         let configuration = URLSessionConfiguration.ephemeral
         configuration.protocolClasses = [SomeIMBrowserLoginMockURLProtocol.self]
         let session = URLSession(configuration: configuration)
@@ -422,8 +474,6 @@ struct SomeIMBrowserLoginStatusTests {
         }
 
         SomeIMBrowserLoginMockURLProtocol.handler = { request in
-            #expect(request.url?.host == "some.im")
-            #expect(request.url?.path == "/api/v1/public/client-location")
             #expect(request.value(forHTTPHeaderField: "Authorization") == nil)
             let response = HTTPURLResponse(
                 url: request.url!,
@@ -431,14 +481,35 @@ struct SomeIMBrowserLoginStatusTests {
                 httpVersion: nil,
                 headerFields: ["Content-Type": "application/json"]
             )!
-            let body = #"{"code":0,"data":{"ip":"203.0.113.10","country":"CN","region":"china","recommended_api_base":"https://api.niuwoai.com/v1"}}"#.data(using: .utf8)!
-            return (response, body)
+            switch request.url?.host {
+            case "some.im":
+                #expect(request.url?.absoluteString == "https://some.im/api/v1/public/client-location")
+                let body = try JSONSerialization.data(withJSONObject: [
+                    "code": 0,
+                    "data": ["country": testCase.someIMCountry]
+                ])
+                return (response, body)
+            case "myip.ipip.net":
+                #expect(request.url?.path == "")
+                return (response, Data("当前 IP：203.0.113.10  来自于：\(testCase.ipipLocation)".utf8))
+            case "api.myip.la":
+                #expect(request.url?.path == "/en")
+                #expect(request.url?.query == "json")
+                let body = try JSONSerialization.data(withJSONObject: [
+                    "ip": "203.0.113.10",
+                    "location": [
+                        "country_code": testCase.myIPLACountry,
+                        "country_name": testCase.myIPLACountry == "CN" ? "China" : "Japan"
+                    ]
+                ])
+                return (response, body)
+            default:
+                throw URLError(.unsupportedURL)
+            }
         }
 
-        let chinaBaseURL = try await SomeIMClient.resolveAutomaticRelayBaseURL(session: session)
-        #expect(chinaBaseURL == SomeIMRelayRegion.chinaBaseURL)
-        #expect(SomeIMRelayRegion.automaticBaseURL(for: "US") == SomeIMRelayRegion.internationalBaseURL)
-        #expect(SomeIMRelayRegion.automaticBaseURL(for: nil) == SomeIMRelayRegion.internationalBaseURL)
+        let resolvedBaseURL = try await SomeIMClient.resolveAutomaticRelayBaseURL(session: session)
+        #expect(resolvedBaseURL == testCase.expectedBaseURL)
     }
 
     @Test("some.im video model defaults to Seedance 2.0")
@@ -447,6 +518,17 @@ struct SomeIMBrowserLoginStatusTests {
         let settings = SomeIMIntegrationSettings(preferredVideoModel: "", preferredVideoModels: []).normalized
         #expect(settings.preferredVideoModel == "seedance-2.0")
         #expect(settings.preferredVideoModels.first == "seedance-2.0")
+    }
+}
+
+struct CountryProbeTestCase: Sendable, CustomTestStringConvertible {
+    let someIMCountry: String
+    let ipipLocation: String
+    let myIPLACountry: String
+    let expectedBaseURL: String
+
+    var testDescription: String {
+        "some.im=\(someIMCountry), ipip=\(ipipLocation), myip.la=\(myIPLACountry)"
     }
 }
 
@@ -1120,6 +1202,36 @@ extension WillDeepTests {
         let stats = AgentUsageStats.overview(for: [session], now: now)
         #expect(stats.currentStreak == 0)
         #expect(stats.longestStreak == 2)
+    }
+
+    @Test("AgentUsageStats streaks stay all-time when dashboard range is filtered")
+    func testUsageStatsStreaksIgnoreDashboardRange() {
+        let calendar = Calendar.current
+        let now = Date()
+        let today = calendar.startOfDay(for: now)
+        let messages = (0..<31).map { offset in
+            userMessage(
+                "day \(offset)",
+                at: calendar.date(byAdding: .day, value: -offset, to: today)!
+            )
+        }
+        let fullSnapshot = AgentUsageSessionSnapshot(
+            session: makeSession(modelID: nil, messages: messages)
+        )
+        var filteredSnapshot = fullSnapshot
+        filteredSnapshot.messages = fullSnapshot.messages.filter {
+            $0.createdAt >= calendar.date(byAdding: .hour, value: -24, to: now)!
+        }
+
+        let stats = AgentUsageStats.overview(
+            for: [filteredSnapshot],
+            allTimeStreakSessions: [fullSnapshot],
+            now: now
+        )
+
+        #expect(stats.activeDays <= 2)
+        #expect(stats.currentStreak == 31)
+        #expect(stats.longestStreak == 31)
     }
 
     @Test("AgentUsageStats heatmap returns weekCount × 7 cells in chronological order")
