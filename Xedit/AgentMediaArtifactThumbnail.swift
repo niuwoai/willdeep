@@ -30,13 +30,16 @@ struct AgentMediaArtifactThumbnail: View {
                     )
                     .contentShape(RoundedRectangle(cornerRadius: 8))
                     .onTapGesture(perform: openArtifact)
+                    .contextMenu {
+                        AgentArtifactFileContextMenu(fileURL: fileURL)
+                    }
 
                 if isImageArtifact || canSendVideoArtifactToChat {
                     artifactActionButtons
                         .padding(4)
                 }
             }
-            .help(isImageArtifact ? "预览图片" : "打开产物")
+            .help("用默认 App 打开产物")
             .task(id: "\(fileURL.standardizedFileURL.path)-\(Int(tileSize.width))-\(Int(tileSize.height))") {
                 guard isImageArtifact else {
                     thumbnailImage = nil
@@ -289,11 +292,7 @@ struct AgentMediaArtifactThumbnail: View {
     }
 
     private func openArtifact() {
-        if isImageArtifact {
-            appState.openImagePreview(fileURL)
-            return
-        }
-        NSWorkspace.shared.activateFileViewerSelecting([fileURL])
+        AgentArtifactFileActions.openDefault(fileURL)
     }
 
     private func selectAsShotPrimary() {

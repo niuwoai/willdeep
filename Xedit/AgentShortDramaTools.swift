@@ -576,16 +576,22 @@ enum AgentShortDramaTools {
             throw AgentToolError.notFound(shotID.uuidString)
         }
 
-        let settings = SomeIMIntegrationStore.loadSettings()
-        if kind == .videoGeneration, settings.normalized.preferredVideoModel.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            throw AgentToolError.invalidArgument("Please configure Settings -> some.im preferred video model first.")
-        }
         let prompt = AgentShortDramaPromptBuilder.prompt(
             project: project,
             shot: shot,
             override: optionalString(arguments["prompt_override"])
         )
-        let model = optionalString(arguments["model"]) ?? SomeIMAsyncMediaClient.defaultModel(for: kind, settings: settings)
+        let settings = SomeIMIntegrationStore.loadSettings()
+        let videoEngine = kind == .videoGeneration ? AgentVideoGenerationEngine.parse(arguments: arguments) : .seedance
+        let shouldUseReference = arguments["use_selected_artifact"]?.boolValue() ?? true
+        let referencePath = kind == .videoGeneration
+            ? (optionalString(arguments["reference_image_path"]) ?? (shouldUseReference ? shot.selectedArtifactPath : nil))
+            : nil
+        let hasReferenceImage = referencePath.map(isImagePath) ?? false
+        let model = optionalString(arguments["model"])
+            ?? (kind == .videoGeneration
+                ? AgentVideoGenerationEngine.defaultModel(for: videoEngine, hasReferenceImage: hasReferenceImage)
+                : SomeIMAsyncMediaClient.defaultModel(for: kind, settings: settings))
         let endpointSuffix = optionalString(arguments["endpoint_suffix"]) ?? SomeIMAsyncMediaClient.defaultEndpointSuffix(for: kind)
         let dryRun = arguments["dry_run"]?.boolValue() ?? false
         var body: [String: Any] = [
@@ -597,10 +603,9 @@ enum AgentShortDramaTools {
             body["size"] = optionalString(arguments["size"]) ?? "1024x1024"
             body["response_format"] = "b64_json"
         } else if kind == .videoGeneration {
-            let shouldUseReference = arguments["use_selected_artifact"]?.boolValue() ?? true
-            let referencePath = optionalString(arguments["reference_image_path"]) ?? (shouldUseReference ? shot.selectedArtifactPath : nil)
             referencePathForDryRun = referencePath
-            if let referencePath,
+            if videoEngine == .seedance,
+               let referencePath,
                isImagePath(referencePath),
                let imageDataURL = try? dataURL(for: URL(fileURLWithPath: referencePath)) {
                 body["image"] = imageDataURL
@@ -608,7 +613,8 @@ enum AgentShortDramaTools {
         }
         if dryRun {
             let baseArguments = "project_id=\(projectID.uuidString), episode_id=\(episodeID.uuidString), shot_id=\(shotID.uuidString)"
-            let submitArguments = "\(baseArguments), kind=\(kind.rawValue), dry_run=false"
+            let videoEngineArgument = kind == .videoGeneration ? ", video_engine=\(videoEngine.rawValue)" : ""
+            let submitArguments = "\(baseArguments), kind=\(kind.rawValue)\(videoEngineArgument), dry_run=false"
             var lines = [
                 "Short-drama media task dry-run.",
                 "",
@@ -617,6 +623,7 @@ enum AgentShortDramaTools {
                 "Shot id: \(shotID.uuidString)",
                 "Shot title: \(shot.title)",
                 "Kind: \(kind.rawValue)",
+                "Video engine: \(kind == .videoGeneration ? videoEngine.displayName : "(n/a)")",
                 "Model: \(model)",
                 "Endpoint suffix: \(endpointSuffix)",
                 "Prompt:",
@@ -627,7 +634,11 @@ enum AgentShortDramaTools {
             }
             if kind == .videoGeneration {
                 lines.append("Reference image path: \(referencePathForDryRun ?? "(none)")")
-                lines.append("Reference image attached: \(body["image"] == nil ? "false" : "true")")
+                lines.append("Reference image attached to some.im: \(body["image"] == nil ? "false" : "true")")
+                if videoEngine == .kling {
+                    lines.append("Kling MCP tool: \(hasReferenceImage ? "mcp__kling.image_to_video" : "mcp__kling.text_to_video")")
+                    lines.append("Kling MCP upload required: \(hasReferenceImage ? "true" : "false")")
+                }
             }
             lines += [
                 "",
@@ -644,6 +655,19 @@ enum AgentShortDramaTools {
             return AgentToolResult(
                 summary: "dry-run short drama \(kind.displayName): \(shot.title)",
                 payload: lines.joined(separator: "\n")
+            )
+        }
+
+        if kind == .videoGeneration, videoEngine == .kling {
+            return klingShotVideoHandoff(
+                arguments: arguments,
+                project: project,
+                episode: episode,
+                shot: shot,
+                prompt: prompt,
+                model: model,
+                referencePath: referencePath,
+                reviewItemID: optionalString(arguments["review_item_id"])
             )
         }
 
@@ -1694,6 +1718,101 @@ enum AgentShortDramaTools {
         default: mimeType = "image/png"
         }
         return "data:\(mimeType);base64,\(data.base64EncodedString())"
+    }
+
+    private static func klingShotVideoHandoff(
+        arguments: [String: AgentJSONValue],
+        project: AgentShortDramaProject,
+        episode: AgentShortDramaEpisode,
+        shot: AgentShortDramaShot,
+        prompt: String,
+        model: String,
+        referencePath: String?,
+        reviewItemID: String?
+    ) -> AgentToolResult {
+        let hasReferenceImage = referencePath.map(isImagePath) ?? false
+        let mcpTool = hasReferenceImage ? "mcp__kling.image_to_video" : "mcp__kling.text_to_video"
+        let duration = optionalString(arguments["duration"]) ?? "5"
+        let aspectRatio = optionalString(arguments["aspect_ratio"]) ?? "16:9"
+        let title = "\(shot.title) · 视频生成 · Kling"
+        var anchorPairs = [
+            "project_id=\(project.id.uuidString)",
+            "episode_id=\(episode.id.uuidString)",
+            "shot_id=\(shot.id.uuidString)"
+        ]
+        if let reviewItemID {
+            anchorPairs.append("review_item_id=\(reviewItemID)")
+        }
+        let anchorArguments = anchorPairs.joined(separator: ", ")
+        let registerArguments = ([
+            "provider=kling",
+            "kind=video_generation",
+            "title=\(title)",
+            "prompt=\(prompt)",
+            "model=\(model)",
+            "status=processing"
+        ] + anchorPairs).joined(separator: ", ")
+        let importArguments = ([
+            "provider=kling",
+            "kind=video_generation",
+            "title=\(title)",
+            "prompt=\(prompt)",
+            "model=\(model)"
+        ] + anchorPairs).joined(separator: ", ")
+        let uploadLine = hasReferenceImage
+            ? "kling_upload_tool: mcp__kling.file_upload"
+            : "kling_upload_tool: (none)"
+        let inputLine = hasReferenceImage
+            ? "kling_inputs: first_image=<url returned by mcp__kling.file_upload>"
+            : "kling_inputs: (none)"
+
+        return AgentToolResult(
+            summary: "kling handoff short drama video: \(shot.title)",
+            payload: """
+            Kling short-drama video handoff prepared.
+
+            WillDeep did not submit a paid Kling job directly. Use the Kling MCP tools, then import the result back to this shot.
+
+            Project: \(project.title)
+            Episode: \(episode.title)
+            Shot: \(shot.title)
+            Engine: \(AgentVideoGenerationEngine.kling.displayName)
+            Recommended MCP tool: \(mcpTool)
+            Recommended model: \(model)
+            Duration: \(duration)
+            Aspect ratio: \(aspectRatio)
+            Reference image path: \(referencePath ?? "(none)")
+            Prompt:
+            \(prompt)
+
+            <short-drama-kling-video-handoff>
+            action: short_drama_generate_shot_video_with_kling
+            provider: kling
+            video_engine: kling
+            project_id: \(project.id.uuidString)
+            episode_id: \(episode.id.uuidString)
+            shot_id: \(shot.id.uuidString)
+            shot_title: \(shot.title)
+            \(reviewItemID.map { "review_item_id: \($0)" } ?? "")
+            kling_who_am_i_tool: mcp__kling.who_am_i
+            \(uploadLine)
+            kling_generation_tool: \(mcpTool)
+            kling_query_tool: mcp__kling.query_tasks
+            kling_model: \(model)
+            kling_arguments: prompt=\(prompt), duration=\(duration), aspect_ratio=\(aspectRatio), imageCount=1, resolution=720p
+            \(inputLine)
+            local_first_image_path: \(referencePath ?? "")
+            pending_import_tool: import_media_manifest
+            pending_import_arguments: create a media manifest item with \(registerArguments), remote_task_id=<Kling generation_id>, then call import_media_manifest(import_pending_tasks=true)
+            import_completed_tool: import_media_manifest
+            import_completed_arguments: \(importArguments)
+            open_tasks_tool: short_drama_open_media_tasks
+            open_tasks_arguments: \(anchorArguments), scope=shot
+            refresh_tasks_tool: short_drama_refresh_media_tasks
+            refresh_tasks_arguments: \(anchorArguments), scope=shot
+            </short-drama-kling-video-handoff>
+            """
+        )
     }
 
     private static func parseShotStatus(_ raw: String) -> AgentShortDramaShotStatus {

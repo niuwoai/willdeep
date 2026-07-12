@@ -1127,6 +1127,7 @@ enum AgentMediaImportTools {
         switch normalize(raw) {
         case "some_im", "someim", "some": return .someIM
         case "replicate": return .replicate
+        case "kling", "kling_ai", "klingai", "可灵", "keling": return .kling
         case "skill", "skills": return .skill
         case "local": return .local
         default: return .unknown

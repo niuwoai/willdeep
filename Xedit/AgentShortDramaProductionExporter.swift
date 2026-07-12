@@ -438,7 +438,7 @@ enum AgentShortDramaProductionExporter {
             "- `WILLDEEP_MEDIA_EXTRA_HEADERS_JSON`: optional JSON object of extra headers, such as `{\\\"X-API-Key\\\":\\\"...\\\"}`; keep secrets in a private env file.",
             "- `WILLDEEP_MEDIA_REQUEST_FORMAT`: `json` by default, or `multipart` for providers that require file uploads.",
             "- `WILLDEEP_MEDIA_REQUEST_PRESET`: optional request body preset; use `replicate_predictions` for Replicate `/v1/predictions` so body becomes `{version, input}`.",
-            "- `WILLDEEP_MEDIA_PROVIDER`: provider label written back into the manifest, such as `replicate`, `some_im`, or `skill`.",
+            "- `WILLDEEP_MEDIA_PROVIDER`: provider label written back into the manifest, such as `replicate`, `some_im`, `kling`, or `skill`.",
             "- `WILLDEEP_MEDIA_MODEL`: provider model/version name.",
             "- `WILLDEEP_MEDIA_TIMEOUT_SECONDS`: HTTP timeout, default `300`.",
             "- `WILLDEEP_MEDIA_POLL_URL_TEMPLATE`: async poll URL template, use `{id}` for job id.",
@@ -1660,7 +1660,7 @@ enum AgentShortDramaProductionExporter {
         WILLDEEP_REPLICATE_EXTRA_INPUT_JSON=
 
         # Optional provider label written back into media-import-manifest-template.json.
-        # Supported App providers include: replicate, some_im, skill, local, unknown.
+        # Supported App providers include: replicate, some_im, kling, skill, local, unknown.
         WILLDEEP_MEDIA_PROVIDER=skill
 
         # Optional model, version, or workflow name sent to the API and written back to the manifest.

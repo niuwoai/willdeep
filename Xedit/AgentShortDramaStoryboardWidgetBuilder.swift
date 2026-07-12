@@ -230,7 +230,7 @@ enum AgentShortDramaStoryboardWidgetBuilder {
               \(projectTaskSummary)
               <div class="project-actions">
                 \(toolActionButton(label: "全剧图片", tool: "short_drama_generate_batch_media", arguments: "project_id=\(project.id.uuidString), kind=image_generation", note: "批量提交全剧分镜图片任务，提交后打开媒体任务侧栏。", actionKey: "generate_project_images"))
-                \(toolActionButton(label: "全剧视频", tool: "short_drama_generate_batch_media", arguments: "project_id=\(project.id.uuidString), kind=video_generation", note: "批量提交全剧分镜视频任务，视频应优先复用分镜主图作为首帧参考。", actionKey: "generate_project_videos"))
+                \(toolActionButton(label: "全剧视频", tool: "short_drama_generate_batch_media", arguments: "project_id=\(project.id.uuidString), kind=video_generation", note: "批量提交全剧分镜视频任务，默认使用 Seedance 2.0；如用户指定可灵/Kling，加 video_engine=kling。视频应优先复用分镜主图作为首帧参考。", actionKey: "generate_project_videos"))
                 \(toolActionButton(label: "查看全部任务", tool: "short_drama_open_media_tasks", arguments: "project_id=\(project.id.uuidString), scope=project", note: "打开这个短剧项目的全部媒体任务侧栏。", actionKey: "open_project_media_tasks"))
                 \(toolActionButton(label: "刷新全部任务", tool: "short_drama_refresh_media_tasks", arguments: "project_id=\(project.id.uuidString), scope=project", note: "刷新这个短剧项目范围内的 some.im / Replicate 异步任务状态。", actionKey: "refresh_project_media_tasks"))
                 \(projectActiveTasksAction)
@@ -334,7 +334,7 @@ enum AgentShortDramaStoryboardWidgetBuilder {
             <div>第 \(episode.order) 集：\(escape(episode.title)) <span>\(episode.shots.count) 镜</span> \(episodeTaskSummary)</div>
             <div class="episode-actions">
               \(toolActionButton(label: "批量图片", tool: "short_drama_generate_batch_media", arguments: "project_id=\(project.id.uuidString), episode_id=\(episode.id.uuidString), kind=image_generation", note: "批量提交这一集的分镜图片任务，提交后打开媒体任务侧栏。", actionKey: "generate_episode_images"))
-              \(toolActionButton(label: "批量视频", tool: "short_drama_generate_batch_media", arguments: "project_id=\(project.id.uuidString), episode_id=\(episode.id.uuidString), kind=video_generation", note: "批量提交这一集的分镜视频任务，视频应优先复用分镜主图作为首帧参考。", actionKey: "generate_episode_videos"))
+              \(toolActionButton(label: "批量视频", tool: "short_drama_generate_batch_media", arguments: "project_id=\(project.id.uuidString), episode_id=\(episode.id.uuidString), kind=video_generation", note: "批量提交这一集的分镜视频任务，默认使用 Seedance 2.0；如用户指定可灵/Kling，加 video_engine=kling。视频应优先复用分镜主图作为首帧参考。", actionKey: "generate_episode_videos"))
               \(toolActionButton(label: "查看任务", tool: "short_drama_open_media_tasks", arguments: "project_id=\(project.id.uuidString), episode_id=\(episode.id.uuidString), scope=episode", note: "打开这一集的媒体任务侧栏。", actionKey: "open_episode_media_tasks"))
               \(toolActionButton(label: "刷新任务", tool: "short_drama_refresh_media_tasks", arguments: "project_id=\(project.id.uuidString), episode_id=\(episode.id.uuidString), scope=episode", note: "刷新这一集范围内的 some.im / Replicate 异步任务状态。", actionKey: "refresh_episode_media_tasks"))
               \(activeTasksAction)
@@ -434,7 +434,7 @@ enum AgentShortDramaStoryboardWidgetBuilder {
         )
         let generatePrompt = actionPrompt(
             action: "generate_keyframe",
-            instruction: "请基于这个分镜继续生成关键帧或视频。优先调用 short_drama_generate_shot_media，并使用下面的 project_id / episode_id / shot_id；如果要生成视频，请优先使用 selected_artifact_path 作为参考/首帧图。只有需要自定义 endpoint 或特殊 input_json 时才改用 some_im_create_media_task。",
+            instruction: "请基于这个分镜继续生成关键帧或视频。优先调用 short_drama_generate_shot_media，并使用下面的 project_id / episode_id / shot_id；如果要生成视频，默认使用 Seedance 2.0，并优先使用 selected_artifact_path 作为参考/首帧图；如果用户指定可灵/Kling，请传 video_engine=kling。只有需要自定义 endpoint 或特殊 input_json 时才改用 some_im_create_media_task。",
             project: project,
             episode: episode,
             shot: shot

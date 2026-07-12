@@ -249,7 +249,7 @@ enum AgentMediaTaskChatHandoff {
             parts.append("poll_arguments=task_id=\(task.displayHandle)")
             parts.append("cancel_tool=some_im_cancel_media_task")
             parts.append("cancel_arguments=task_id=\(task.displayHandle)")
-        case .skill, .local, .unknown:
+        case .kling, .skill, .local, .unknown:
             if AgentGenericMediaStatusClient.canPoll(task) {
                 parts.append("generic_poll_tool=short_drama_refresh_media_tasks")
                 parts.append("generic_poll_arguments=\(mediaTaskScopeArguments(task: task))")
@@ -293,7 +293,7 @@ enum AgentMediaTaskChatHandoff {
         case .someIM:
             parts.append("poll_tool=some_im_poll_media_task")
             parts.append("poll_arguments=task_id=\(task.displayHandle)")
-        case .skill, .local, .unknown:
+        case .kling, .skill, .local, .unknown:
             if AgentGenericMediaStatusClient.canPoll(task) {
                 parts.append("generic_poll_tool=short_drama_refresh_media_tasks")
                 parts.append("generic_poll_arguments=\(mediaTaskScopeArguments(task: task))")
@@ -380,7 +380,7 @@ enum AgentMediaTaskChatHandoff {
             lines.append("poll_arguments: task_id=\(task.displayHandle)")
             lines.append("cancel_tool: some_im_cancel_media_task")
             lines.append("cancel_arguments: task_id=\(task.displayHandle)")
-        case .skill, .local, .unknown:
+        case .kling, .skill, .local, .unknown:
             if AgentGenericMediaStatusClient.canPoll(task) {
                 lines.append("generic_poll_tool: short_drama_refresh_media_tasks")
                 lines.append("generic_poll_arguments: \(scopeArguments)")

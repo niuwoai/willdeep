@@ -31,6 +31,9 @@ struct AgentShortDramaArtifactTile: View {
                     )
                     .contentShape(RoundedRectangle(cornerRadius: 8))
                     .onTapGesture(perform: openArtifact)
+                    .contextMenu {
+                        AgentArtifactFileContextMenu(fileURL: fileURL)
+                    }
 
                 if isImageArtifact {
                     HStack(spacing: 3) {
@@ -79,7 +82,7 @@ struct AgentShortDramaArtifactTile: View {
                     .padding(4)
                 }
             }
-            .help(isImageArtifact ? "预览图片" : "在 Finder 中显示")
+            .help("用默认 App 打开产物")
 
             Text(displayTitle)
                 .font(.caption2)
@@ -136,11 +139,7 @@ struct AgentShortDramaArtifactTile: View {
     }
 
     private func openArtifact() {
-        if isImageArtifact {
-            appState.openImagePreview(fileURL)
-            return
-        }
-        NSWorkspace.shared.activateFileViewerSelecting([fileURL])
+        AgentArtifactFileActions.openDefault(fileURL)
     }
 
     private func attachImageToChat() {

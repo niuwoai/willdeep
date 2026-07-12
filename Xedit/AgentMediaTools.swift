@@ -187,6 +187,15 @@ enum AgentMediaTools {
         }
         let imageURL = try resolveImageURL(rawPath, rootDirectory: context.rootDirectory)
         let prompt = cleanOptionalString(arguments["prompt"]) ?? "Generate a short video from this keyframe image."
+        let engine = AgentVideoGenerationEngine.parse(arguments: arguments)
+        if engine == .kling {
+            return klingVideoFromImageHandoff(
+                arguments: arguments,
+                context: context,
+                imageURL: imageURL,
+                prompt: prompt
+            )
+        }
         var mediaArguments: [String: AgentJSONValue] = [
             "kind": .string("video_generation"),
             "prompt": .string(prompt),
@@ -194,6 +203,9 @@ enum AgentMediaTools {
             "source_image_path": .string(imageURL.path),
             "title": .string(cleanOptionalString(arguments["title"]) ?? "\(imageURL.deletingPathExtension().lastPathComponent) · some.im 图生视频")
         ]
+        if cleanOptionalString(arguments["model"]) == nil {
+            mediaArguments["model"] = .string(AgentVideoGenerationEngine.defaultSeedanceModel)
+        }
         for key in ["model", "endpoint_suffix", "project_id", "episode_id", "shot_id", "asset_kind", "asset_id", "review_item_id"] {
             if let value = arguments[key] {
                 mediaArguments[key] = value
@@ -1166,6 +1178,60 @@ enum AgentMediaTools {
         }
     }
 
+    private static func klingVideoFromImageHandoff(
+        arguments: [String: AgentJSONValue],
+        context: AgentToolContext,
+        imageURL: URL,
+        prompt: String
+    ) -> AgentToolResult {
+        let model = cleanOptionalString(arguments["model"])
+            ?? AgentVideoGenerationEngine.defaultModel(for: .kling, hasReferenceImage: true)
+        let duration = cleanOptionalString(arguments["duration"]) ?? "5"
+        let aspectRatio = cleanOptionalString(arguments["aspect_ratio"]) ?? "16:9"
+        let title = cleanOptionalString(arguments["title"]) ?? "\(imageURL.deletingPathExtension().lastPathComponent) · Kling 图生视频"
+        let importArguments = klingImportArguments(arguments: arguments, title: title, prompt: prompt, model: model)
+        let taskArguments = klingPendingTaskArguments(arguments: arguments, title: title, prompt: prompt, model: model)
+        return AgentToolResult(
+            summary: "kling image-to-video handoff: \(imageURL.lastPathComponent)",
+            payload: """
+            Kling image-to-video handoff prepared.
+
+            This tool did not submit a paid Kling job inside WillDeep. To use Kling, call the Kling MCP tools in this order:
+            1. mcp__kling.who_am_i
+            2. mcp__kling.file_upload for the local first-frame image
+            3. mcp__kling.image_to_video with the uploaded URL
+            4. mcp__kling.query_tasks until the video URL is ready
+            5. Download the final video, then import it back to WillDeep.
+
+            Engine: \(AgentVideoGenerationEngine.kling.displayName)
+            Recommended MCP tool: mcp__kling.image_to_video
+            Recommended model: \(model)
+            Duration: \(duration)
+            Aspect ratio: \(aspectRatio)
+            First frame image path: \(imageURL.path)
+            Prompt:
+            \(prompt)
+
+            <kling-video-generation-handoff>
+            action: generate_video_from_image_with_kling
+            provider: kling
+            video_engine: kling
+            kling_tool: image_to_video
+            kling_model: \(model)
+            kling_arguments: prompt=\(prompt), duration=\(duration), imageCount=1, resolution=720p
+            kling_inputs: first_image=<url returned by mcp__kling.file_upload>
+            local_first_image_path: \(imageURL.path)
+            import_completed_tool: import_media_manifest
+            import_completed_note: Save the Kling video into a local outputs directory and import it as a video_generation artifact.
+            pending_import_tool: import_media_manifest
+            pending_import_arguments: create a media manifest item with \(taskArguments), remote_task_id=<Kling generation_id>, then call import_media_manifest(import_pending_tasks=true)
+            import_completed_arguments: \(importArguments)
+            </kling-video-generation-handoff>
+            """,
+            images: []
+        )
+    }
+
     private static func maskEditPrompt(
         arguments: [String: AgentJSONValue],
         operation: AgentImageEditorOperationPreference
@@ -1230,6 +1296,48 @@ enum AgentMediaTools {
         Cancel URL: \(cancelURL ?? "(none)")
         \(followUp)
         """
+    }
+
+    private static func klingPendingTaskArguments(
+        arguments: [String: AgentJSONValue],
+        title: String,
+        prompt: String,
+        model: String
+    ) -> String {
+        var parts = [
+            "provider=kling",
+            "kind=video_generation",
+            "title=\(title)",
+            "prompt=\(prompt)",
+            "model=\(model)",
+            "status=processing"
+        ]
+        appendAnchorArguments(from: arguments, to: &parts)
+        return parts.joined(separator: ", ")
+    }
+
+    private static func klingImportArguments(
+        arguments: [String: AgentJSONValue],
+        title: String,
+        prompt: String,
+        model: String
+    ) -> String {
+        var parts = [
+            "provider=kling",
+            "kind=video_generation",
+            "title=\(title)",
+            "prompt=\(prompt)",
+            "model=\(model)"
+        ]
+        appendAnchorArguments(from: arguments, to: &parts)
+        return parts.joined(separator: ", ")
+    }
+
+    private static func appendAnchorArguments(from arguments: [String: AgentJSONValue], to parts: inout [String]) {
+        for key in ["project_id", "episode_id", "shot_id", "asset_kind", "asset_id", "review_item_id"] {
+            guard let value = cleanOptionalString(arguments[key]) else { continue }
+            parts.append("\(key)=\(value)")
+        }
     }
 
     private static func describe(mediaTask task: AgentMediaTask) -> String {
@@ -1537,6 +1645,7 @@ enum AgentMediaTools {
         switch normalizedMediaToken(raw) {
         case "some_im", "someim", "some": return .someIM
         case "replicate": return .replicate
+        case "kling", "kling_ai", "klingai", "可灵", "keling": return .kling
         case "skill", "skills": return .skill
         case "local": return .local
         default: return .unknown

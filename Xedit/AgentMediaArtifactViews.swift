@@ -265,7 +265,7 @@ enum AgentMediaTaskChoiceWidgetBuilder {
 
     private static func videoPrompt(task: AgentMediaTask, artifact: AgentMediaArtifact) -> String {
         jsString("""
-        请把这张媒体任务候选图作为首帧/参考图提交到 some.im 视频生成任务。请优先使用下面的 recommended_tool 和 recommended_arguments，并根据上下文补充合适的视频运动提示词；如果下面有 review_item_id，也必须一并传入。
+        请把这张媒体任务候选图作为首帧/参考图生成视频。默认使用 Seedance 2.0；如果用户指定可灵/Kling，请在参数中加入 video_engine=kling。请优先使用下面的 recommended_tool 和 recommended_arguments，并根据上下文补充合适的视频运动提示词；如果下面有 review_item_id，也必须一并传入。
 
         \(mediaTaskActionBlock(action: "generate_video_from_image", task: task, artifact: artifact, extraLines: [
             "kind: video_generation",
@@ -799,7 +799,7 @@ enum AgentImageChoiceWidgetBuilder {
 
     private static func videoPrompt(path: String, index: Int, anchor: AnchorContext) -> String {
         AgentMediaTaskChoiceWidgetBuilder.jsString("""
-        请把这张候选图片作为首帧/参考图提交到 some.im 视频生成任务。请调用 generate_video_from_image，image_path 使用下面的路径，并根据上下文补充合适的视频运动提示词；如果下面有 review_item_id，也必须一并传入。
+        请把这张候选图片作为首帧/参考图生成视频。默认使用 Seedance 2.0；如果用户指定可灵/Kling，请调用 generate_video_from_image 时加入 video_engine=kling。image_path 使用下面的路径，并根据上下文补充合适的视频运动提示词；如果下面有 review_item_id，也必须一并传入。
 
         \(choiceBlock(action: "generate_video_from_image", path: path, index: index, anchor: anchor, extraLines: [
             "kind: video_generation",

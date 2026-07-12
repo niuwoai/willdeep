@@ -61,6 +61,7 @@ import SwiftUI
 enum AgentMediaTaskProvider: String, Codable, CaseIterable, Identifiable {
     case someIM
     case replicate
+    case kling
     case skill
     case local
     case unknown
@@ -71,6 +72,7 @@ enum AgentMediaTaskProvider: String, Codable, CaseIterable, Identifiable {
         switch self {
         case .someIM: return "some.im"
         case .replicate: return "Replicate"
+        case .kling: return "Kling"
         case .skill: return "Skill"
         case .local: return "本地"
         case .unknown: return "未知"
@@ -81,6 +83,7 @@ enum AgentMediaTaskProvider: String, Codable, CaseIterable, Identifiable {
         switch self {
         case .someIM: return "sparkles"
         case .replicate: return "arrow.triangle.2.circlepath"
+        case .kling: return "sparkle.magnifyingglass"
         case .skill: return "puzzlepiece.extension"
         case .local: return "desktopcomputer"
         case .unknown: return "questionmark.circle"
@@ -662,7 +665,7 @@ final class AgentMediaTaskPoller {
                 try await cancelReplicate(task, registry: registry)
             case .someIM:
                 try await cancelSomeIM(task, registry: registry)
-            case .skill, .local, .unknown:
+            case .kling, .skill, .local, .unknown:
                 if AgentGenericMediaStatusClient.canCancel(task) {
                     try await cancelGeneric(task, registry: registry)
                 } else {
@@ -704,7 +707,7 @@ final class AgentMediaTaskPoller {
                 try await pollReplicate(task, registry: registry)
             case .someIM:
                 try await pollSomeIM(task, registry: registry)
-            case .skill, .local, .unknown:
+            case .kling, .skill, .local, .unknown:
                 try await pollGenericStatusURL(task, registry: registry)
             }
         } catch {

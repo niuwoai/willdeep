@@ -1,5 +1,33 @@
 # Changelog
 
+## 1.138.0-rc7 - 2026-07-12
+
+### Changed
+
+- **Agent 侧边栏开关贴合原生窗口控件**：把会话侧边栏的显示/隐藏图标从聊天内容区上方移到 macOS 红黄绿窗口控制按钮的右侧；按钮与原生标题栏同高、保留悬停提示和 `Command+\\` 快捷键，避免遮挡侧边栏标题。
+- 版本号从 **1.138.0-rc6** 递增为 **1.138.0-rc7**。
+
+## 1.138.0-rc6 - 2026-07-12
+
+### Added
+
+- **短剧视频生成引擎选择**：`generate_video_from_image`、`short_drama_generate_shot_media` 和 `short_drama_generate_batch_media` 新增 `video_engine` 参数；不传时默认使用 **Seedance 2.0**，用户指定 `kling` / `可灵` 时改为返回 Kling MCP handoff。
+- **Kling MCP 视频生成接线说明**：可灵路径会给出 `who_am_i`、`file_upload`、`image_to_video` / `text_to_video`、`query_tasks` 的执行顺序，以及完成后通过 `import_media_manifest` 导回短剧分镜/媒体任务侧栏的参数。
+- **媒体任务 provider 支持 Kling**：导入或登记可灵生成结果时，侧栏 provider 可显示为 `Kling`，不再归入未知来源。
+
+### Changed
+
+- **短剧视频提示默认口径统一**：候选图、媒体任务行、storyboard widget 和制作包文档中的视频生成提示改为“默认 Seedance 2.0，可指定 Kling/可灵”，避免旧文案强制引导到 some.im。
+- 版本号从 **1.138.0-rc5** 递增为 **1.138.0-rc6**。
+
+## 1.138.0-rc5 - 2026-07-12
+
+### Changed
+
+- **侧边栏产物按系统方式打开**：Agent 媒体任务侧栏与短剧产物缩略图点击后改为用 macOS 默认 App 打开对应文件，不再把图片强制留在内置预览或把非图片只定位到 Finder。
+- **产物右键菜单增强**：产物缩略图右键菜单新增“打开方式”子菜单，可选择系统可用 App 或手动选择其他 App 打开；同时保留“在 Finder 中显示”。
+- 版本号从 **1.138.0-rc4** 递增为 **1.138.0-rc5**。
+
 ## 1.138.0-rc4 - 2026-07-12
 
 ### Changed

@@ -1,6 +1,6 @@
 # WillDeep Product Overview
 
-> Last updated: 2026-07-12 | Current version: v1.138.0-rc4
+> Last updated: 2026-07-12 | Current version: v1.138.0-rc7
 
 ## Positioning
 
@@ -14,6 +14,9 @@ WillDeep is configured for non-App-Store distribution without App Sandbox so it 
 
 WillDeep 是 SwiftUI + AppKit 桥接的 macOS 应用，单进程多窗口。代码层次：
 
+- **Agent 原生标题栏侧边栏开关（1.138.0-rc7）** —— 会话侧边栏的显示/隐藏图标现在直接附着在 macOS 红黄绿窗口控制按钮组的右侧，和原生标题栏同高；保留悬停提示与 `Command+\\` 快捷键，避免原先内容区覆盖层占用侧边栏顶部空间。
+- **短剧视频生成引擎选择（1.138.0-rc6）** —— 短剧与媒体任务的视频生成入口新增 `video_engine` 参数：默认继续走 Seedance 2.0；用户指定 `kling` / `可灵` 时，会返回 Kling MCP handoff，提示按 `who_am_i → file_upload → image_to_video/text_to_video → query_tasks` 执行，并用 `import_media_manifest` 把完成视频导回分镜和媒体任务侧栏。
+- **Agent 侧边栏产物系统打开菜单（1.138.0-rc5）** —— 媒体任务侧栏和短剧产物缩略图点击后使用 macOS 默认 App 打开本地产物文件；右键菜单提供“打开方式”应用列表、手动选择其他 App，以及“在 Finder 中显示”，方便图片、视频、文档产物直接交给外部工具处理。
 - **Agent 聊天窄窗口响应式布局（1.138.0-rc4）** —— Agent 模式聊天正文与 composer 的横向 inset 更紧凑；窗口缩到阈值以下时，左侧会话侧栏会临时自动收起并切换为最近会话 rail，窗口变宽后按用户原本偏好恢复。
 - **编辑器 macOS 行首/行尾导航（1.138.0-rc3）** —— Editor 模式支持 `Command+←` / `Command+→` 跳到当前行首/行尾，并支持 `Command+Shift+←` / `Command+Shift+→` 扩展选区；行为复用原生 TextKit 文本命令。
 - **Composer 保护机密入口与自动输入（1.138.0-rc2）** —— 插入保护机密的锁形按钮移到发送区附近，避免占据附件入口旁的高频位置；Agent 创建的终端快捷操作如检测到尚未填写的受保护输入，会自动弹出安全密码输入框。输入仅保存到本机加密终端保险库，AI 不会接收明文；用户取消后仍可从原工具卡补填。

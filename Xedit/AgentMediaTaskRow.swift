@@ -496,9 +496,9 @@ struct AgentMediaTaskRow: View {
 
         let instruction: String
         if images.count > 1 {
-            instruction = "这个任务有多张候选图。请先调用 short_drama_show_image_choice_widget 让我确认主图；我选定后，优先调用 generate_video_from_image，并携带所选 image_path 与同一组 project_id / episode_id / shot_id；如果下面有 review_item_id，也必须一并传入。"
+            instruction = "这个任务有多张候选图。请先调用 short_drama_show_image_choice_widget 让我确认主图；我选定后，优先调用 generate_video_from_image，并携带所选 image_path 与同一组 project_id / episode_id / shot_id；默认视频引擎是 Seedance 2.0，如果用户指定可灵/Kling，加入 video_engine=kling；如果下面有 review_item_id，也必须一并传入。"
         } else {
-            instruction = "请先调用 short_drama_select_shot_artifact 把 selected_artifact_path 设为该分镜主图，然后调用 generate_video_from_image，image_path 使用 selected_artifact_path，并携带同一组 project_id / episode_id / shot_id；如果下面有 review_item_id，也必须一并传入。"
+            instruction = "请先调用 short_drama_select_shot_artifact 把 selected_artifact_path 设为该分镜主图，然后调用 generate_video_from_image，image_path 使用 selected_artifact_path，并携带同一组 project_id / episode_id / shot_id；默认视频引擎是 Seedance 2.0，如果用户指定可灵/Kling，加入 video_engine=kling；如果下面有 review_item_id，也必须一并传入。"
         }
         let prompt = ([instruction, ""] + lines).joined(separator: "\n")
         let trimmedInput = appState.agentInput.trimmingCharacters(in: .whitespacesAndNewlines)

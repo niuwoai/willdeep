@@ -28,8 +28,6 @@ struct AgentModeView: View {
     @AppStorage("agentSidePanelWidth") private var sidePanelWidth: Double = 320
     @State private var liveSidePanelWidth: Double?
     private let sidePanelWidthRange: ClosedRange<Double> = 240...760
-    private let sidebarToggleLeadingFromWindowEdge: CGFloat = 78
-    private let sidebarToggleTopFromWindowEdge: CGFloat = 7
 
     /// 收窄窗口时的列宽规约(rc 用户反馈:最左列被挤出窗体左缘 /
     /// composer 盖住侧栏 / 右侧内容被文件面板遮住):左右两栏(会话列表、
@@ -83,13 +81,12 @@ struct AgentModeView: View {
                 sidePanelMinimumWidth: CGFloat(sidePanelWidthRange.lowerBound)
             )
             mainContent(totalWidth: proxy.size.width, isSidebarAutoHidden: autoHidden)
-                .overlay(alignment: .topLeading) {
-                    AgentSessionsSidebarChromeToggleButton(
+                .background {
+                    AgentSessionsSidebarWindowChromeToggle(
                         isVisible: sidebarVisibilityBinding(isAutoHidden: autoHidden),
                         isAutoHidden: autoHidden
                     )
-                        .padding(.leading, sidebarToggleLeadingFromWindowEdge)
-                        .padding(.top, sidebarToggleTopFromWindowEdge)
+                    .frame(width: 0, height: 0)
                 }
         }
     }
@@ -318,37 +315,124 @@ struct AgentModeView: View {
     }
 }
 
-private struct AgentSessionsSidebarChromeToggleButton: View {
-    @EnvironmentObject var appState: AppState
+/// Puts the Agent-session sidebar button in the native titlebar, immediately
+/// after the macOS close/minimize/zoom controls. Keeping it in AppKit's
+/// titlebar container makes its vertical position match the traffic lights;
+/// a SwiftUI overlay would instead be anchored in the content area below them.
+private struct AgentSessionsSidebarWindowChromeToggle: NSViewRepresentable {
     @Binding var isVisible: Bool
     let isAutoHidden: Bool
 
-    var body: some View {
-        let palette = appState.editorSettings.interfaceSkin.palette
-        Button {
-            guard !isAutoHidden else { return }
-            isVisible.toggle()
-        } label: {
-            Image(systemName: "sidebar.left")
-                .font(.system(size: 12, weight: .semibold))
-                .frame(width: 24, height: 22)
-                .contentShape(Rectangle())
+    func makeCoordinator() -> Coordinator {
+        Coordinator(isVisible: $isVisible, isAutoHidden: isAutoHidden)
+    }
+
+    func makeNSView(context: Context) -> NSView {
+        let anchor = NSView(frame: .zero)
+        context.coordinator.attach(to: anchor)
+        return anchor
+    }
+
+    func updateNSView(_ nsView: NSView, context: Context) {
+        context.coordinator.update(isVisible: $isVisible, isAutoHidden: isAutoHidden)
+        context.coordinator.attach(to: nsView)
+    }
+
+    static func dismantleNSView(_ nsView: NSView, coordinator: Coordinator) {
+        coordinator.removeButton()
+    }
+
+    final class Coordinator: NSObject {
+        private let buttonWidth: CGFloat = 26
+        private let buttonGapFromZoom: CGFloat = 7
+        private weak var anchorView: NSView?
+        private weak var button: NSButton?
+        private var isVisible: Binding<Bool>
+        private var isAutoHidden: Bool
+
+        init(isVisible: Binding<Bool>, isAutoHidden: Bool) {
+            self.isVisible = isVisible
+            self.isAutoHidden = isAutoHidden
         }
-        .buttonStyle(.plain)
-        .focusable(false)
-        .foregroundStyle(palette.secondaryText)
-        .background(
-            RoundedRectangle(cornerRadius: 7)
-                .fill(palette.controlFill.opacity(0.72))
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: 7)
-                .stroke(palette.hairline.opacity(0.8), lineWidth: 1)
-        )
-        .help(isAutoHidden ? L10n.Header.sidebarAutoHidden : (isVisible ? L10n.Header.hideSidebar : L10n.Header.showSidebar))
-        .accessibilityLabel(Text(isAutoHidden ? L10n.Header.sidebarAutoHidden : (isVisible ? L10n.Header.hideSidebar : L10n.Header.showSidebar)))
-        .opacity(isAutoHidden ? 0.72 : 1)
-        .keyboardShortcut("\\", modifiers: .command)
+
+        func update(isVisible: Binding<Bool>, isAutoHidden: Bool) {
+            self.isVisible = isVisible
+            self.isAutoHidden = isAutoHidden
+            configureButton()
+        }
+
+        func attach(to anchorView: NSView) {
+            self.anchorView = anchorView
+            DispatchQueue.main.async { [weak self] in
+                self?.installButtonIfNeeded()
+            }
+        }
+
+        func removeButton() {
+            button?.removeFromSuperview()
+            button = nil
+        }
+
+        private func installButtonIfNeeded() {
+            guard let window = anchorView?.window,
+                  let zoomButton = window.standardWindowButton(.zoomButton),
+                  let titlebarView = zoomButton.superview else {
+                return
+            }
+
+            let button = button ?? makeButton()
+            if button.superview !== titlebarView {
+                button.removeFromSuperview()
+                titlebarView.addSubview(button, positioned: .above, relativeTo: zoomButton)
+            }
+            self.button = button
+            position(button, after: zoomButton)
+            configureButton()
+        }
+
+        private func makeButton() -> NSButton {
+            let button = NSButton(frame: .zero)
+            button.isBordered = false
+            button.imagePosition = .imageOnly
+            button.focusRingType = .none
+            button.target = self
+            button.action = #selector(toggleSidebar)
+            button.setButtonType(.momentaryPushIn)
+            button.keyEquivalent = "\\"
+            button.keyEquivalentModifierMask = .command
+            if let image = NSImage(systemSymbolName: "sidebar.left", accessibilityDescription: nil) {
+                image.isTemplate = true
+                button.image = image
+            }
+            return button
+        }
+
+        private func position(_ button: NSButton, after zoomButton: NSButton) {
+            let zoomFrame = zoomButton.frame
+            button.frame = NSRect(
+                x: zoomFrame.maxX + buttonGapFromZoom,
+                y: zoomFrame.minY,
+                width: buttonWidth,
+                height: zoomFrame.height
+            )
+        }
+
+        private func configureButton() {
+            guard let button else { return }
+            let title = isAutoHidden
+                ? L10n.Header.sidebarAutoHidden
+                : (isVisible.wrappedValue ? L10n.Header.hideSidebar : L10n.Header.showSidebar)
+            button.isEnabled = !isAutoHidden
+            button.alphaValue = isAutoHidden ? 0.72 : 1
+            button.toolTip = title
+            button.setAccessibilityLabel(title)
+        }
+
+        @objc private func toggleSidebar() {
+            guard !isAutoHidden else { return }
+            isVisible.wrappedValue.toggle()
+            configureButton()
+        }
     }
 }
 

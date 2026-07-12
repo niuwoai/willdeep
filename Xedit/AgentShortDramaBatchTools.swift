@@ -17,6 +17,7 @@ enum AgentShortDramaBatchTools {
         let episodeFilter = optionalUUID(arguments["episode_id"])
         let explicitShotIDs = try uuidArray(arguments["shot_ids"]?.stringArrayValue() ?? [], argumentName: "shot_ids")
         let kind = optionalString(arguments["kind"]) ?? "image_generation"
+        let videoEngine = isVideoGeneration(kind) ? AgentVideoGenerationEngine.parse(arguments: arguments) : .seedance
         let targetFilter = normalizedTargetFilter(optionalString(arguments["target_filter"]) ?? optionalString(arguments["target_mode"]))
         let dryRun = arguments["dry_run"]?.boolValue() ?? false
         let maxShots = max(1, min(arguments["max_shots"]?.intValue() ?? 200, 200))
@@ -54,6 +55,7 @@ enum AgentShortDramaBatchTools {
                 payload: batchSummary(
                     project: project,
                     kind: kind,
+                    videoEngine: videoEngine,
                     targetFilter: targetFilter,
                     dryRun: true,
                     targets: limitedTargets,
@@ -102,12 +104,13 @@ enum AgentShortDramaBatchTools {
             payload: batchSummary(
                 project: project,
                 kind: kind,
-            targetFilter: targetFilter,
-            dryRun: false,
-            targets: limitedTargets,
-            explicitShotIDs: explicitShotIDs,
-            submitted: submitted,
-            failures: failures
+                videoEngine: videoEngine,
+                targetFilter: targetFilter,
+                dryRun: false,
+                targets: limitedTargets,
+                explicitShotIDs: explicitShotIDs,
+                submitted: submitted,
+                failures: failures
             )
         )
     }
@@ -120,6 +123,7 @@ enum AgentShortDramaBatchTools {
     private static func batchSummary(
         project: AgentShortDramaProject,
         kind: String,
+        videoEngine: AgentVideoGenerationEngine,
         targetFilter: String,
         dryRun: Bool,
         targets: [BatchTarget],
@@ -134,8 +138,9 @@ enum AgentShortDramaBatchTools {
         let failureLines = failures.isEmpty ? "(none)" : failures.map { "- \($0)" }.joined(separator: "\n")
         let scopeArguments = batchScopeArguments(project: project, targets: targets)
         let shotIDsArgument = explicitShotIDs.isEmpty ? "" : ", shot_ids=[\(explicitShotIDs.map(\.uuidString).sorted().joined(separator: ","))]"
-        let submitArguments = "\(scopeArguments)\(shotIDsArgument), kind=\(kind), target_filter=\(targetFilter), dry_run=false, max_shots=\(targets.count)"
-        let dryRunArguments = "\(scopeArguments)\(shotIDsArgument), kind=\(kind), target_filter=\(targetFilter), dry_run=true, max_shots=\(targets.count)"
+        let videoEngineArgument = isVideoGeneration(kind) ? ", video_engine=\(videoEngine.rawValue)" : ""
+        let submitArguments = "\(scopeArguments)\(shotIDsArgument), kind=\(kind)\(videoEngineArgument), target_filter=\(targetFilter), dry_run=false, max_shots=\(targets.count)"
+        let dryRunArguments = "\(scopeArguments)\(shotIDsArgument), kind=\(kind)\(videoEngineArgument), target_filter=\(targetFilter), dry_run=true, max_shots=\(targets.count)"
         let targetIDs = targets.map { target in
             "episode_id=\(target.episode.id.uuidString), shot_id=\(target.shot.id.uuidString)"
         }.joined(separator: " | ")
@@ -145,6 +150,7 @@ enum AgentShortDramaBatchTools {
         Project: \(project.title)
         Project id: \(project.id.uuidString)
         Kind: \(kind)
+        Video engine: \(isVideoGeneration(kind) ? videoEngine.displayName : "(n/a)")
         Target filter: \(targetFilter)
         Target shots: \(targets.count)
 
@@ -161,6 +167,7 @@ enum AgentShortDramaBatchTools {
         action: short_drama_batch_media_\(dryRun ? "dry_run" : "submitted")
         project_id: \(project.id.uuidString)
         kind: \(kind)
+        video_engine: \(isVideoGeneration(kind) ? videoEngine.rawValue : "")
         target_filter: \(targetFilter)
         dry_run: \(dryRun)
         explicit_shot_filter_count: \(explicitShotIDs.count)
@@ -270,6 +277,13 @@ enum AgentShortDramaBatchTools {
         raw.trimmingCharacters(in: .whitespacesAndNewlines)
             .lowercased()
             .replacingOccurrences(of: "-", with: "_") != "video_generation"
+    }
+
+    nonisolated private static func isVideoGeneration(_ raw: String) -> Bool {
+        raw.trimmingCharacters(in: .whitespacesAndNewlines)
+            .lowercased()
+            .replacingOccurrences(of: "-", with: "_")
+            .replacingOccurrences(of: " ", with: "_") == "video_generation"
     }
 
     nonisolated private static func selectedImagePath(for shot: AgentShortDramaShot) -> String? {
