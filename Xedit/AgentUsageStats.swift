@@ -83,6 +83,14 @@ struct AgentUsageSessionSnapshot: Identifiable, Equatable {
     var createdAt: Date
     var updatedAt: Date
     var messages: [AgentUsageMessageSnapshot]
+    /// True when this session ran under 省心托管 (some.im managed routing).
+    /// Managed sessions never persist a resolved `modelID` (it's cleared in
+    /// `AppStateAgentSessions` because routing is per-turn), so without this
+    /// flag their usage collapses into the anonymous "unknown-model" bucket
+    /// alongside genuinely-unknown legacy sessions. We carry the signal so
+    /// managed traffic can be attributed to a single "省心托管" pseudo-model
+    /// instead — and legacy nils stay unknown.
+    var isManagedRouting: Bool
 
     init(
         id: UUID,
@@ -91,7 +99,8 @@ struct AgentUsageSessionSnapshot: Identifiable, Equatable {
         providerDisplayName: String?,
         createdAt: Date,
         updatedAt: Date,
-        messages: [AgentUsageMessageSnapshot]
+        messages: [AgentUsageMessageSnapshot],
+        isManagedRouting: Bool = false
     ) {
         self.id = id
         self.modelID = modelID
@@ -100,6 +109,7 @@ struct AgentUsageSessionSnapshot: Identifiable, Equatable {
         self.createdAt = createdAt
         self.updatedAt = updatedAt
         self.messages = messages
+        self.isManagedRouting = isManagedRouting
     }
 
     init(session: AgentSession) {
@@ -110,7 +120,8 @@ struct AgentUsageSessionSnapshot: Identifiable, Equatable {
             providerDisplayName: session.providerDisplayName,
             createdAt: session.createdAt,
             updatedAt: session.updatedAt,
-            messages: session.messages.map { AgentUsageMessageSnapshot(message: $0) }
+            messages: session.messages.map { AgentUsageMessageSnapshot(message: $0) },
+            isManagedRouting: session.managedRouting != nil
         )
     }
 }
@@ -388,6 +399,11 @@ enum AgentUsageStats {
         return total
     }
 
+    /// Display/grouping key for 省心托管 traffic. Doubles as the model label
+    /// in the usage table; no price row matches it, so it shows 未定价 — the
+    /// same as it did while masquerading as unknown-model, just named.
+    static let managedRoutingModelID = "省心托管"
+
     private static func normalizedModelID(_ value: String?) -> String {
         let trimmed = value?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         return trimmed.isEmpty ? "unknown-model" : trimmed
@@ -420,6 +436,11 @@ enum AgentUsageStats {
             let label = message.originLabel?.trimmingCharacters(in: .whitespacesAndNewlines)
             let model = label?.isEmpty == false ? label! : "External CLI"
             return (("delegated-external", "Delegated CLI"), model, true)
+        }
+        // 省心托管:从用户视角"省心托管"本身就是一个模型,聚成一行,而不是
+        // 掉进 unknown-model。只认托管标记,老会话的空 modelID 仍归 unknown。
+        if session.isManagedRouting {
+            return (providerSnapshot(for: session, modelID: Self.managedRoutingModelID), Self.managedRoutingModelID, false)
         }
         let modelID = normalizedModelID(session.modelID)
         return (providerSnapshot(for: session, modelID: modelID), modelID, false)

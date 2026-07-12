@@ -1148,6 +1148,51 @@ extension WillDeepTests {
         _ = calendar
     }
 
+    @Test("AgentUsageStats labels managed-routing sessions 省心托管, leaves legacy nils as unknown-model")
+    func testUsageStatsManagedRoutingModelLabel() {
+        let now = Date()
+        func assistant(_ tokens: Int) -> AgentUsageMessageSnapshot {
+            AgentUsageMessageSnapshot(
+                role: .assistant,
+                contentCharacterCount: 40,
+                usageTokens: tokens,
+                createdAt: now
+            )
+        }
+        // Managed session: modelID is nil (cleared at persist because routing
+        // is per-turn) but isManagedRouting is true → one "省心托管" row.
+        let managed = AgentUsageSessionSnapshot(
+            id: UUID(),
+            modelID: nil,
+            providerID: "some-im",
+            providerDisplayName: "some.im (Rocky's relay)",
+            createdAt: now,
+            updatedAt: now,
+            messages: [assistant(100)],
+            isManagedRouting: true
+        )
+        // Legacy session: modelID also nil, but NOT managed → must stay
+        // unknown-model, never fold into 省心托管.
+        let legacy = AgentUsageSessionSnapshot(
+            id: UUID(),
+            modelID: nil,
+            providerID: "some-im",
+            providerDisplayName: "some.im (Rocky's relay)",
+            createdAt: now,
+            updatedAt: now,
+            messages: [assistant(50)],
+            isManagedRouting: false
+        )
+        let rows = AgentUsageStats.modelUsage(for: [managed, legacy])
+        let managedRow = rows.first { $0.modelID == "省心托管" }
+        let unknownRow = rows.first { $0.modelID == "unknown-model" }
+        #expect(managedRow != nil)
+        #expect(managedRow?.messageCount == 1)
+        #expect(managedRow?.providerName == "some.im (Rocky's relay)")
+        #expect(unknownRow != nil)
+        #expect(unknownRow?.messageCount == 1)
+    }
+
     @Test("AgentUsageStats current streak counts contiguous days ending today")
     func testUsageStatsCurrentStreak() {
         let calendar = Calendar.current

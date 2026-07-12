@@ -660,7 +660,7 @@ struct AgentSemanticActivityStatusLine: View {
             return AgentActivityPhase(label: waitingLabel(for: waiting), systemImage: "hand.raised", tint: .orange)
         }
         if let running = appState.agentToolCalls.last(where: { $0.status == .running }) {
-            return phase(for: running.toolName)
+            return phase(for: running)
         }
         if appState.agentRunningTaskCount > 0 {
             return AgentActivityPhase(label: "任务运行中", systemImage: "play.circle", tint: .green)
@@ -671,11 +671,11 @@ struct AgentSemanticActivityStatusLine: View {
         return AgentActivityPhase(label: "空闲", systemImage: "checkmark.circle", tint: .secondary)
     }
 
-    private func phase(for toolName: String) -> AgentActivityPhase {
+    private func phase(for call: AgentToolCall) -> AgentActivityPhase {
         switch AgentToolKind.of(AgentToolCall(
             messageID: UUID(),
             externalID: "",
-            toolName: toolName,
+            toolName: call.toolName,
             arguments: [:],
             risk: .read,
             status: .running
@@ -689,7 +689,13 @@ struct AgentSemanticActivityStatusLine: View {
         case .applyPatch:
             return AgentActivityPhase(label: "编辑中", systemImage: "pencil.line", tint: .green)
         case .subagent, .claudeCode, .codexCLI, .cursorAgent:
-            return AgentActivityPhase(label: "委派中", systemImage: "person.2", tint: .purple)
+            // Fold the spawn_agent per-round progress ("第 3/12 轮 · 5 次工具")
+            // into the rail so an un-expanded delegation reads as forward
+            // motion, not a frozen spinner. Only spawn_agent sets this;
+            // external-CLI delegations leave it nil → plain "委派中".
+            let progress = call.subagentProgress?.trimmingCharacters(in: .whitespacesAndNewlines)
+            let label = (progress?.isEmpty == false) ? "委派中 · \(progress!)" : "委派中"
+            return AgentActivityPhase(label: label, systemImage: "person.2", tint: .purple)
         case .askUser:
             return AgentActivityPhase(label: "等待你回答", systemImage: "bubble.left.and.text.bubble.right", tint: .orange)
         case .other:

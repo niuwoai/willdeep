@@ -1,5 +1,16 @@
 # Changelog
 
+## 1.140.0-rc5 - 2026-07-13
+
+### Changed
+
+- **用量统计：省心托管流量单列为「省心托管」，不再混进 `unknown-model`** —— 省心托管是每轮由裁判自动路由、没有单一 session 模型，持久化时 `modelID` 被主动清空（`AppStateAgentSessions.swift:1577`），于是它和"老会话/迁移会话的空模型"一起掉进匿名的 `unknown-model` 桶里，看不出是谁。现给用量快照 `AgentUsageSessionSnapshot` 透传 `isManagedRouting`（源自 `session.managedRouting != nil`），托管会话在"模型"分组里聚成一行「省心托管」（从用户视角它本就是一个模型）；**只认托管标记**，老会话的空 `modelID` 仍归 `unknown-model`，不误伤。新增单测覆盖两种空模型的分流。
+- **顶部监控条「委派中」接上子代理轮次进度** —— 输入框上方的活动条（`AgentTaskMonitorRail`）此前派子代理时只显示「委派中」+ 计时，和 rc4 加在卡片上的轮次进度没打通。现把子代理的 `subagentProgress` 折进相位标签，显示「委派中 · 第 3/12 轮 · 5 次工具」；不点开卡片也能看出子代理在往前走。仅 `spawn_agent` 有此进度，外部 CLI 委派仍是纯「委派中」。
+
+### Fixed
+
+- 版本号从 **1.140.0-rc4** 递增为 **1.140.0-rc5**。
+
 ## 1.140.0-rc4 - 2026-07-13
 
 ### Added
