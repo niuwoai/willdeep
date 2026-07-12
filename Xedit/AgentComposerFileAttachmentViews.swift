@@ -14,7 +14,6 @@ struct AgentDocumentContextControls: View {
     let onSetMode: (AgentDocumentTaskMode) -> Void
     let onSetRedaction: (Bool) -> Void
 
-    @State private var isPreviewPresented = false
     @State private var preview: AgentDocumentSendPreview?
 
     var body: some View {
@@ -51,19 +50,17 @@ struct AgentDocumentContextControls: View {
 
             Button {
                 preview = makePreview()
-                isPreviewPresented = preview != nil
             } label: {
                 Label(L10n.Composer.documentSendPreview, systemImage: "eye")
                     .font(.system(size: 11, weight: .medium))
             }
             .buttonStyle(.borderless)
             .focusable(false)
-            .sheet(isPresented: $isPreviewPresented, onDismiss: {
-                preview = nil
-            }) {
-                if let preview {
-                    AgentDocumentSendPreviewSheet(preview: preview)
-                }
+            // `.sheet(item:)` presents only once `preview` is non-nil and hands
+            // the unwrapped value straight to the body — no separate bool that
+            // can flip true before the value lands (which left the modal empty).
+            .sheet(item: $preview) { preview in
+                AgentDocumentSendPreviewSheet(preview: preview)
             }
 
             Spacer(minLength: 0)

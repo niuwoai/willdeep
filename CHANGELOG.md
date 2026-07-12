@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.140.0-rc6 - 2026-07-13
+
+### Fixed
+
+- **文档附件「发送预览」弹窗空白** —— 选中 .md（或任意文档）附件后点「发送预览」，弹出的 modal 只有一个空白窗、没有标题也没有内容。根因是 `AgentDocumentContextControls` 用 `.sheet(isPresented:)` + 另一个 `@State preview` 双状态：按钮在同一 tick 里先 `preview = makePreview()` 再置 `isPreviewPresented = true`，而 sheet 的 `if let preview` body 在 `preview` 赋值被观察到之前就先构建了 → 取到 nil → 整个 sheet 内容为空。改用 `.sheet(item: $preview)`，只在 `preview` 非空时呈现并把解包后的值直接传给 body，消除竞态；`AgentDocumentSendPreview` 补 `Identifiable`。预览文本本身没问题（附件存在时 `composeAttachedPrompt` 即使输入框为空也会产出非空内容）。
+- 版本号从 **1.140.0-rc5** 递增为 **1.140.0-rc6**。
+
 ## 1.140.0-rc5 - 2026-07-13
 
 ### Changed

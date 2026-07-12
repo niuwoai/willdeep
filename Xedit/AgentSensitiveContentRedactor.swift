@@ -13,7 +13,12 @@ nonisolated struct AgentSensitiveContentFinding: Equatable, Sendable {
     let count: Int
 }
 
-nonisolated struct AgentDocumentSendPreview: Equatable, Sendable {
+nonisolated struct AgentDocumentSendPreview: Equatable, Sendable, Identifiable {
+    /// Stable identity so the composer can present this via `.sheet(item:)`
+    /// instead of `.sheet(isPresented:)`. The bool-plus-separate-`@State`
+    /// form raced: the sheet body built its `if let preview` before the
+    /// `preview` assignment was observed, so the modal opened empty.
+    let id = UUID()
     let text: String
     let findings: [AgentSensitiveContentFinding]
 }
