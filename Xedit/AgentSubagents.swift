@@ -351,6 +351,11 @@ enum AgentSubagentRunner {
     /// runtime these must be forwarded, otherwise the child's
     /// `AgentToolContext.remoteBackend` is nil and read-only tools run
     /// against the local Mac instead of the remote box.
+    /// `onProgress` (round, cumulative tool invocations) fires once at the
+    /// end of every round on the main actor. The synchronous `spawn_agent`
+    /// path uses it to keep the tool card's live-progress line current so a
+    /// long child loop reads as "第 3/12 轮" rather than a bare spinner.
+    /// Background / workflow callers leave it nil.
     static func run(
         prompt: String,
         configuration: AgentConfiguration,
@@ -358,7 +363,8 @@ enum AgentSubagentRunner {
         runtimeDescriptor: RuntimeDescriptor? = nil,
         workspaceLocation: WorkspaceLocation? = nil,
         someIMContext: SomeIMRequestContext? = nil,
-        outputSchema: AgentStructuredSchema? = nil
+        outputSchema: AgentStructuredSchema? = nil,
+        onProgress: ((_ round: Int, _ toolInvocations: Int) -> Void)? = nil
     ) async throws -> Outcome {
         // some.im-gated providers require the session/workspace context headers on
         // every request; without them some.im rejects/stalls the call. Workflow
@@ -374,6 +380,10 @@ enum AgentSubagentRunner {
         let toolList = toolDescriptors(includingStructuredOutput: outputSchema != nil)
 
         for round in 1...maxRounds {
+            // Surface "entering round N" to the card before the (potentially
+            // long) streaming round begins — this is the window the user
+            // otherwise stares at a still spinner during.
+            onProgress?(round, toolInvocations)
             var content = ""
             var reasoning = ""
             var toolCalls: [AgentMessageToolCall] = []

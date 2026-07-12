@@ -390,6 +390,15 @@ struct AgentToolCall: Identifiable, Equatable {
     /// to surface a small "Auto-approved" note so the user can audit
     /// what slipped through.
     var approvalSource: AgentToolApprovalSource?
+    /// For `spawn_agent`: the effective model the child loop actually
+    /// runs on (parent model, or the `model` override). Stamped when the
+    /// spawn starts so the card can answer "用的哪个子代理" — previously
+    /// this was collected in the registry but never surfaced in the UI.
+    var subagentModel: String?
+    /// For `spawn_agent`: a short live-progress line for the child loop
+    /// ("第 3/12 轮 · 5 次工具"), refreshed each round so the card shows
+    /// forward motion instead of an opaque "委派中" spinner.
+    var subagentProgress: String?
 
     init(
         id: UUID = UUID(),
@@ -401,7 +410,9 @@ struct AgentToolCall: Identifiable, Equatable {
         status: AgentToolCallStatus,
         result: AgentToolResult? = nil,
         errorMessage: String? = nil,
-        approvalSource: AgentToolApprovalSource? = nil
+        approvalSource: AgentToolApprovalSource? = nil,
+        subagentModel: String? = nil,
+        subagentProgress: String? = nil
     ) {
         self.id = id
         self.messageID = messageID
@@ -413,6 +424,8 @@ struct AgentToolCall: Identifiable, Equatable {
         self.result = result
         self.errorMessage = errorMessage
         self.approvalSource = approvalSource
+        self.subagentModel = subagentModel
+        self.subagentProgress = subagentProgress
     }
 }
 

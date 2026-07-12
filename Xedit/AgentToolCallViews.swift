@@ -287,7 +287,8 @@ struct AgentToolCallGroup: View {
             let label = call.arguments["label"]?.stringValue()
                 ?? call.arguments["prompt"]?.stringValue()
                 ?? ""
-            return label.isEmpty ? nil : "task: \(trimmed(label, limit: 120))"
+            let modelSuffix = (call.subagentModel?.isEmpty == false) ? " · \(call.subagentModel!)" : ""
+            return label.isEmpty ? nil : "task: \(trimmed(label, limit: 120))\(modelSuffix)"
         }
         if ["claude_code", "codex_cli", "cursor_agent"].contains(call.toolName) {
             let prompt = call.arguments["prompt"]?.stringValue() ?? ""
@@ -394,6 +395,20 @@ struct AgentToolCallCard: View {
             }
             .frame(minHeight: 20)
             .help("\(riskBadge): \(argumentsSummary)")
+
+            if let badge = subagentBadgeText {
+                HStack(spacing: 5) {
+                    Image(systemName: "person.2.fill")
+                        .font(.system(size: 9, weight: .semibold))
+                        .foregroundStyle(.purple)
+                    Text(badge)
+                        .font(.system(size: 10, weight: .medium))
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                    Spacer(minLength: 0)
+                }
+            }
 
             if let images = call.result?.images, !images.isEmpty {
                 AgentToolResultImageStrip(images: images)
@@ -847,6 +862,22 @@ struct AgentToolCallCard: View {
             .background(Color(nsColor: .textBackgroundColor))
             .clipShape(RoundedRectangle(cornerRadius: 5))
         }
+    }
+
+    /// spawn_agent-only badge: which model the child runs on plus its live
+    /// round/tool progress. `subagentModel` is stamped when the spawn starts;
+    /// `subagentProgress` refreshes each round and is cleared on finish, so
+    /// after completion this collapses to just the model.
+    private var subagentBadgeText: String? {
+        guard call.toolName == "spawn_agent" else { return nil }
+        var parts: [String] = []
+        if let model = call.subagentModel, !model.isEmpty {
+            parts.append("模型 \(model)")
+        }
+        if call.status == .running, let progress = call.subagentProgress, !progress.isEmpty {
+            parts.append(progress)
+        }
+        return parts.isEmpty ? nil : parts.joined(separator: " · ")
     }
 
     private var argumentsSummary: String {

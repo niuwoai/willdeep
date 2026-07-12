@@ -1923,6 +1923,7 @@ extension AppState {
             if let index = runtime.toolCalls.firstIndex(where: { $0.id == recordID }) {
                 runtime.toolCalls[index].status = status
                 runtime.toolCalls[index].errorMessage = errorMessage
+                runtime.toolCalls[index].subagentProgress = nil
                 if status == .succeeded {
                     runtime.toolCalls[index].result = AgentToolResult(summary: summary, payload: payload)
                 }
@@ -1933,6 +1934,15 @@ extension AppState {
                 payload: payload,
                 source: status == .succeeded ? .toolOutput : .systemNotice
             )
+        }
+
+        // Stamp the child's effective model + a live progress line onto the
+        // tool-call record so the card can show "用的哪个子代理 · 进度到哪了"
+        // instead of an opaque spinner. Both fields are render-only.
+        func updateSubagent(model: String? = nil, progress: String? = nil) {
+            guard let index = runtime.toolCalls.firstIndex(where: { $0.id == recordID }) else { return }
+            if let model { runtime.toolCalls[index].subagentModel = model }
+            if let progress { runtime.toolCalls[index].subagentProgress = progress }
         }
 
         let prompt = arguments["prompt"]?.stringValue()?
@@ -1961,6 +1971,7 @@ extension AppState {
            !modelOverride.isEmpty {
             childConfiguration.model = modelOverride
         }
+        updateSubagent(model: childConfiguration.model, progress: "启动中…")
 
         if runInBackground {
             do {
@@ -1995,7 +2006,11 @@ extension AppState {
                 configuration: childConfiguration,
                 workspaceURL: workspaceURL,
                 runtimeDescriptor: runtimeDescriptor,
-                workspaceLocation: workspaceLocation
+                workspaceLocation: workspaceLocation,
+                onProgress: { round, toolInvocations in
+                    let toolPart = toolInvocations > 0 ? " · \(toolInvocations) 次工具" : ""
+                    updateSubagent(progress: "第 \(round)/\(AgentSubagentRunner.maxRounds) 轮\(toolPart)")
+                }
             )
             let stats = "(subagent \(label): \(outcome.roundCount) round\(outcome.roundCount == 1 ? "" : "s"), \(outcome.toolInvocationCount) tool call\(outcome.toolInvocationCount == 1 ? "" : "s")\(outcome.usageTokens > 0 ? ", \(outcome.usageTokens) tokens" : ""))"
             finishRecord(
