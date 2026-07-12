@@ -145,6 +145,13 @@ struct AgentSessionManagedRoutingDecodeTests {
 struct SomeIMRouteJudgeParsingTests {
 
     @Test
+    func judgePromptDoesNotTreatWorkspaceOrToolsAsCodingEvidence() {
+        let prompt = SomeIMManagedRouting.judgeSystemPrompt()
+        #expect(prompt.contains("仅仅打开了 Workspace、启用了工具或身处开发应用，绝不是 coding 证据"))
+        #expect(prompt.contains("应判为 general"))
+    }
+
+    @Test
     func parsesCleanJSON() {
         let raw = #"{"domain":"coding","complexity":"high","target_model":null,"confidence":0.9,"reason":"multi-file"}"#
         let verdict = SomeIMManagedRouting.decodeVerdict(fromRaw: raw)
@@ -454,24 +461,24 @@ struct AgentManagedRouteDecisionTests {
     }
 
     @Test
-    func footerUsesActualModelFamilyAndLevel() {
-        let cases: [(String, AgentManagedCapabilityTier, AgentManagedRouteFamily, String)] = [
-            ("someim-auto-flash", .low, .general, "flash"),
-            ("someim-auto-pro", .high, .general, "pro"),
-            ("someim-auto-premium", .premium, .general, "premium"),
-            ("someim-coding-plan-low", .low, .coding, "flash"),
-            ("someim-coding-plan-high", .high, .coding, "pro"),
-            ("someim-coding-plan-premium", .premium, .coding, "premium"),
-            ("someim-code-low", .low, .coding, "flash"),
-            ("someim-code-high", .high, .coding, "pro"),
-            ("someim-code-premium", .premium, .coding, "premium"),
+    func footerUsesJudgeDomainAndActualModelLevel() {
+        let cases: [(String, SomeIMManagedDomain, AgentManagedCapabilityTier, AgentManagedRouteFamily, String)] = [
+            ("someim-auto-flash", .general, .low, .general, "flash"),
+            ("someim-auto-pro", .general, .high, .general, "pro"),
+            ("someim-auto-premium", .general, .premium, .general, "premium"),
+            ("someim-coding-plan-low", .general, .low, .general, "flash"),
+            ("someim-coding-plan-high", .coding, .high, .coding, "pro"),
+            ("someim-coding-plan-premium", .coding, .premium, .coding, "premium"),
+            ("someim-code-low", .coding, .low, .coding, "flash"),
+            ("someim-code-high", .coding, .high, .coding, "pro"),
+            ("someim-code-premium", .coding, .premium, .coding, "premium"),
         ]
 
-        for (selectedModel, tier, expectedFamily, expectedLevel) in cases {
+        for (selectedModel, domain, tier, expectedFamily, expectedLevel) in cases {
             let route = AgentManagedRouteDecision(
                 selectedModel: selectedModel,
                 tier: tier,
-                domain: .general,
+                domain: domain,
                 complexity: .low,
                 didFallback: false
             )

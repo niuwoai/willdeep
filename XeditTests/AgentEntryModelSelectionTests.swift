@@ -240,7 +240,7 @@ struct AgentEntryModelSelectionTests {
     }
 
     @Test
-    func manualModelChoiceOverridesManagedDefaultUntilUserSelectsManagedAgain() {
+    func manualModelChoiceOnlyOverridesCurrentChatManagedDefault() {
         let _sandbox = installKeychainSandbox(); _ = _sandbox
         let app = AppState()
         SomeIMIntegrationStore._setTestSharedSessionOverride(enabled: true)
@@ -254,12 +254,6 @@ struct AgentEntryModelSelectionTests {
 
         app.setAgentSessionModel("someim-auto-flash")
         #expect(AgentSettingsStore.loadDefaultModelModePreference() == .explicitModel)
-        let explicitSession = app.startNewAgentSession()
-        #expect(explicitSession.managedRouting == nil)
-        #expect(explicitSession.modelID == "someim-auto-flash")
-
-        app.selectSomeIMManagedRouting()
-        #expect(AgentSettingsStore.loadDefaultModelModePreference() == .managed)
         let managedSession = app.startNewAgentSession()
         #expect(managedSession.modelID == nil)
         #expect(managedSession.managedRouting != nil)

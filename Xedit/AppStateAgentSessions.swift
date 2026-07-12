@@ -1724,12 +1724,12 @@ extension AppState {
     }
 
     /// Signed-in some.im users start new chats in managed routing until they
-    /// explicitly choose a concrete model. Existing historical conversations
-    /// are never rewritten; login reconciliation may only adopt an empty chat.
+    /// explicitly choose a concrete model for the current conversation.
+    /// Existing historical conversations are never rewritten; login
+    /// reconciliation may only adopt an empty chat.
     private func defaultSomeIMManagedRoutingState() -> AgentManagedRoutingState? {
         guard SomeIMIntegrationStore.hasAuthenticatedSessionForAutomaticDefaults(),
-              agentProviderLibrary.active?.providerID == AgentProviderPreset.someIMID,
-              AgentSettingsStore.loadDefaultModelModePreference() != .explicitModel else {
+              agentProviderLibrary.active?.providerID == AgentProviderPreset.someIMID else {
             return nil
         }
         return AgentManagedRoutingState()

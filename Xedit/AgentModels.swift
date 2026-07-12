@@ -411,19 +411,17 @@ nonisolated struct AgentManagedRouteDecision: Codable, Equatable {
         return text
     }
 
-    /// Footer family is derived from the virtual model that was actually used,
-    /// not from the judge's original domain. Coding-plan entitlement routes a
-    /// general verdict through `someim-coding-plan-*`, which should therefore
-    /// still be presented as the programming model family.
+    /// Footer family reflects the routing judge's task-domain verdict. The
+    /// selected virtual model cannot safely provide that meaning: Coding Plan
+    /// entitlement routes both general and coding verdicts through the shared
+    /// `someim-coding-plan-*` family.
     var footerFamily: AgentManagedRouteFamily {
-        let model = selectedModel.lowercased()
-        if model.hasPrefix("someim-auto-") {
+        switch domain {
+        case .general:
             return .general
-        }
-        if model.hasPrefix("someim-coding-") || model.hasPrefix("someim-code-") {
+        case .coding:
             return .coding
         }
-        return .unknown
     }
 
     /// User-facing capability name derived from the actual virtual model.
@@ -452,7 +450,7 @@ nonisolated struct AgentManagedRouteDecision: Codable, Equatable {
         return text
     }
 
-    /// Full footer text derived from the actual model family and level, e.g.
+    /// Full footer text derived from the judge domain and actual model level, e.g.
     /// `托管-通用-flash` or `托管-编程-pro↑`.
     var footerChipText: String {
         switch footerFamily {

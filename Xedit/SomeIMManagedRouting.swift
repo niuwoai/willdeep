@@ -156,6 +156,9 @@ nonisolated enum SomeIMManagedRouting {
         - domain: "coding"（写码/读码/调试/重构/仓库或文件操作/技术实现）或 "general"（其余：闲聊、写作、翻译、通用问答等）。
         - complexity: "low"（简单、局部、单步）或 "high"（复杂、多步、跨文件、架构/算法/安全/疑难调试）。
 
+        领域必须以用户当前意图为准。workspace_available、tools_enabled、interaction_mode、approval_mode 只是环境信息；
+        仅仅打开了 Workspace、启用了工具或身处开发应用，绝不是 coding 证据。用户未要求处理代码、仓库、文件或技术实现时，应判为 general。
+
         只输出一个严格 JSON 对象，不要 markdown、不要解释、不要多余文字：
         {"domain":"coding|general","complexity":"low|high","target_model":null,"confidence":0.0,"reason":"<=200 chars"}
 

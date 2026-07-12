@@ -1,6 +1,6 @@
 # WillDeep Product Overview
 
-> Last updated: 2026-07-13 | Current version: v1.140.0-rc1
+> Last updated: 2026-07-13 | Current version: v1.140.0-rc3
 
 ## Positioning
 
@@ -12,6 +12,7 @@ WillDeep is configured for non-App-Store distribution without App Sandbox so it 
 
 ## 架构概览
 
+- **省心托管默认与领域标签修正（1.140.0-rc2）** —— some.im 登录状态下新聊天始终默认选择省心托管，手动选择具体模型只影响当前会话；托管页脚按裁判实际任务领域显示“通用/编程”，Coding Plan 权益模型族不再被误展示为裁判的编程结论。
 - **Goal 模式会话操作隔离（1.140.0-rc1）** —— Goal 模式不向模型暴露会话改名和 Workspace 切换工具；即使供应商缓存了旧工具定义或模型异常构造调用，执行层也会直接拒绝且不弹确认卡，避免正在运行的目标被暂停。
 - **会话状态工具（1.140.0）** —— Agent 可在任务范围明显变化时提议重命名当前会话，也可在当前目录缺失或错误时提议切换到已知的本地 Workspace；两项操作都必须逐次由用户确认，Goal 模式和智能审批不能绕过。Workspace 切换成功后立即结束当前工具轮次，避免继续使用旧目录上下文。
 - **附件 Source 无工作区降级（1.139.0-rc3）** —— 精确行号引用可映射到本地较大的文本分块并裁出对应原文；章节无法解析时在 Finder 中选中原附件。当前会话未选择工作区时，附件路径不再打开空 Files 侧栏。

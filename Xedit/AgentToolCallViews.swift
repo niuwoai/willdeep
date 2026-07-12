@@ -446,28 +446,43 @@ struct AgentToolCallCard: View {
                         submittedDecisionNotice
                     } else {
                         // rc16:同上,Deny 在左,Confirm Run 在右。
-                        HStack {
-                            Button(L10n.ToolCard.deny) {
+                        // 破坏性命令误点代价高,把两个按钮的点击区放大:字号 caption→subheadline,
+                        // 内边距加大,并给 Deny 也补上等大的描边点击区(原来是裸文字,极难点中)。
+                        HStack(spacing: 8) {
+                            Button {
                                 appState.denyAgentToolCall(id: call.id)
+                            } label: {
+                                Text(L10n.ToolCard.deny)
+                                    .font(.subheadline.weight(.medium))
+                                    .padding(.horizontal, 16)
+                                    .padding(.vertical, 8)
+                                    .foregroundStyle(.secondary)
+                                    .background(Color.clear)
+                                    .overlay(
+                                        RoundedRectangle(cornerRadius: 7, style: .continuous)
+                                            .stroke(Color.secondary.opacity(0.45), lineWidth: 1)
+                                    )
+                                    .contentShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
                             }
+                            .buttonStyle(.plain)
                             Spacer(minLength: 0)
                             Button {
                                 _ = appState.confirmAgentToolCall(id: call.id, typedConfirmation: "confirm")
                             } label: {
                                 Text(L10n.ToolCard.confirmRun)
-                                    .font(.caption.weight(.semibold))
-                                    .padding(.horizontal, 9)
-                                    .padding(.vertical, 4)
+                                    .font(.subheadline.weight(.semibold))
+                                    .padding(.horizontal, 16)
+                                    .padding(.vertical, 8)
                                     .foregroundStyle(destructiveAccentColor)
                                     .background(Color.clear)
                                     .overlay(
-                                        RoundedRectangle(cornerRadius: 6, style: .continuous)
+                                        RoundedRectangle(cornerRadius: 7, style: .continuous)
                                             .stroke(destructiveAccentColor.opacity(0.62), lineWidth: 1)
                                     )
+                                    .contentShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
                             }
                             .buttonStyle(.plain)
                         }
-                        .font(.caption)
                     }
                 }
             } else if call.status == .awaitingUserAnswer {
