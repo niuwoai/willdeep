@@ -17,6 +17,34 @@ extension AppState {
     func setAgentError(_ error: Error, for runtime: AgentRuntime) {
         runtime.errorMessage = Self.friendlyMessage(for: error)
         runtime.errorDetails = Self.details(for: error)
+        runtime.errorRequiresSomeIMLogin = false
+    }
+
+    /// "省心托管 / some.im" needs a live shared-session login. If the login was
+    /// lost (logout in this or another app, an expired token) AFTER a session
+    /// was created on managed routing, a send would otherwise fire an
+    /// unauthenticated relay request that comes back as an empty stream and
+    /// gets silently dropped — the user sees nothing happen. Callers check
+    /// this BEFORE dispatching so they can stop with an actionable error
+    /// instead of a silent no-op.
+    func someIMLoginRequiredForTurn(for runtime: AgentRuntime, providerID: String) -> Bool {
+        guard runtime.managedRouting != nil
+            || providerID == AgentProviderPreset.someIMID else {
+            return false
+        }
+        return SomeIMIntegrationStore
+            .loadAPIKey()
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .isEmpty
+    }
+
+    /// Surface the some.im login gate as an error the user can act on. Keeps
+    /// the user's just-typed message in the transcript so it can be re-sent
+    /// with the "重试" button once they log back in.
+    func setSomeIMLoginRequiredError(for runtime: AgentRuntime) {
+        runtime.errorMessage = "some.im 未登录，「省心托管」无法工作。请先登录 some.im，然后点「重试」重新发送这条消息。"
+        runtime.errorDetails = nil
+        runtime.errorRequiresSomeIMLogin = true
     }
 
     /// Translate the raw `Error` thrown by `AgentClient` into a one-line
@@ -148,6 +176,14 @@ extension AppState {
               let runtime = activeRuntime else { return }
         let configuration = configurationForCurrentTurn(for: runtime)
 
+        // Re-check the some.im login gate: if they clicked 重试 while still
+        // logged out, keep the actionable error up rather than silently
+        // firing another unauthenticated request.
+        guard !someIMLoginRequiredForTurn(for: runtime, providerID: configuration.providerID) else {
+            setSomeIMLoginRequiredError(for: runtime)
+            return
+        }
+
         // Same gate as the dispatch path — a retry counts against the
         // provider quota just like a fresh send. Queueing is fine: when
         // a slot frees, the queue drain will pick up the runtime's
@@ -162,6 +198,7 @@ extension AppState {
 
         runtime.errorMessage = nil
         runtime.errorDetails = nil
+        runtime.errorRequiresSomeIMLogin = false
         runtime.isResponding = true
         runtime.turnStartedAt = Date()
 
@@ -182,6 +219,7 @@ extension AppState {
     func dismissAgentError() {
         agentErrorMessage = nil
         agentErrorDetails = nil
+        agentErrorRequiresSomeIMLogin = false
     }
 
     static func details(for error: Error) -> AgentErrorDetails? {

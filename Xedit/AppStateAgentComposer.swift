@@ -14,6 +14,9 @@ extension AppState {
         // isn't one, lazily create one so a brand-new install can fire
         // off its first message without manually picking ⌘N first.
         guard let runtime = activeRuntime ?? activeRuntimeAfterCreatingNewSession() else { return }
+        if refreshChangedAgentSessionDocumentsIfNeeded(in: runtime) {
+            return
+        }
 
         let userText = runtime.input.trimmingCharacters(in: .whitespacesAndNewlines)
         let images = runtime.pendingImages.map { image in
@@ -21,21 +24,28 @@ extension AppState {
         }
         let textAttachments = runtime.pendingTextAttachments
         let skills = runtime.pendingSkills
-        let files = runtime.pendingFiles
+        let pendingFiles = runtime.pendingFiles
+        let files = mergedAgentDocumentContextFiles(
+            sessionDocuments: runtime.documentAttachments,
+            knowledgeFolders: runtime.knowledgeFolders,
+            pendingFiles: pendingFiles
+        )
         let includeWorkspaceOverview = runtime.pendingIncludeWorkspaceOverview
         let executionAgent = runtime.executionAgent
         guard !userText.isEmpty
                 || !images.isEmpty
                 || !textAttachments.isEmpty
                 || !skills.isEmpty
-                || !files.isEmpty
+                || !pendingFiles.isEmpty
                 || includeWorkspaceOverview else { return }
 
         let prompt = composeAttachedPrompt(
             userText: userText,
             skills: skills,
             files: files,
-            includeWorkspaceOverview: includeWorkspaceOverview
+            includeWorkspaceOverview: includeWorkspaceOverview,
+            documentTaskMode: runtime.documentTaskMode,
+            redactSensitiveContent: runtime.redactSensitiveAttachmentContent
         )
 
         runtime.input = ""
@@ -907,18 +917,24 @@ extension AppState {
         userText: String,
         skills: [AgentSkillEntry],
         files: [AgentFileAttachment],
-        includeWorkspaceOverview: Bool
+        includeWorkspaceOverview: Bool,
+        documentTaskMode: AgentDocumentTaskMode = .automatic,
+        redactSensitiveContent: Bool = true
     ) -> String {
         guard !skills.isEmpty || !files.isEmpty || includeWorkspaceOverview else { return userText }
         var blocks: [String] = []
-        blocks.append("The user attached the following context for this turn — treat it as task setup, not verbatim user text:")
+        blocks.append(AgentAttachedPromptProtocol.preludeHeader)
 
         if includeWorkspaceOverview {
             blocks.append(workspaceOverviewBlock())
         }
 
         for skill in skills {
-            let body = AgentSkillDirectory.loadBody(for: skill) ?? "(skill body unavailable)"
+            let body = (AgentSkillDirectory.loadBody(for: skill) ?? "(skill body unavailable)")
+                .replacingOccurrences(
+                    of: AgentAttachedPromptProtocol.userTextBoundary,
+                    with: AgentAttachedPromptProtocol.escapedUserTextBoundary
+                )
             blocks.append("""
             ### Skill: \(skill.identifier)
             > \(skill.description)
@@ -927,25 +943,125 @@ extension AppState {
             """)
         }
 
+        if !files.isEmpty {
+            blocks.append(documentTaskInstruction(
+                mode: documentTaskMode,
+                userText: userText,
+                files: files
+            ))
+        }
+
         for file in files {
-            let body = readAttachedFileBody(at: file.url)
-            let renderedBody = AgentLocalAttachmentRetriever.renderAttachment(
-                relativePath: file.relativePath,
-                body: body,
-                query: userText
-            )
+            let renderedBody: String
+            if let analysis = file.analysis {
+                renderedBody = AgentLocalAttachmentRetriever.renderAttachment(
+                    relativePath: file.relativePath,
+                    sections: file.includedSections,
+                    query: userText,
+                    containsPotentialPromptInjection: analysis.containsPotentialPromptInjection,
+                    warnings: analysis.warnings
+                )
+            } else {
+                let body = readAttachedFileBody(at: file.url)
+                renderedBody = AgentLocalAttachmentRetriever.renderAttachment(
+                    relativePath: file.relativePath,
+                    body: body,
+                    query: userText
+                )
+            }
+            let protectedBody = redactSensitiveContent
+                ? AgentSensitiveContentRedactor.redact(renderedBody)
+                : renderedBody
             blocks.append("""
             ### File: \(file.relativePath)
 
-            \(renderedBody)
+            \(protectedBody)
             """)
         }
 
         if !userText.isEmpty {
-            blocks.append("---")
+            blocks.append(AgentAttachedPromptProtocol.userTextBoundary)
             blocks.append(userText)
         }
         return blocks.joined(separator: "\n\n")
+    }
+
+    func setAgentDocumentTaskMode(_ mode: AgentDocumentTaskMode) {
+        guard let runtime = activeRuntime else { return }
+        runtime.documentTaskMode = mode
+        runtime.persist(touchUpdatedAt: false)
+    }
+
+    func setAgentSensitiveAttachmentRedaction(_ enabled: Bool) {
+        guard let runtime = activeRuntime else { return }
+        runtime.redactSensitiveAttachmentContent = enabled
+        runtime.persist(touchUpdatedAt: false)
+    }
+
+    func agentDocumentSendPreview() -> AgentDocumentSendPreview? {
+        guard let runtime = activeRuntime else { return nil }
+        let files = mergedAgentDocumentContextFiles(
+            sessionDocuments: runtime.documentAttachments,
+            knowledgeFolders: runtime.knowledgeFolders,
+            pendingFiles: runtime.pendingFiles
+        )
+        guard !files.isEmpty else { return nil }
+        let unredacted = composeAttachedPrompt(
+            userText: runtime.input.trimmingCharacters(in: .whitespacesAndNewlines),
+            skills: [],
+            files: files,
+            includeWorkspaceOverview: false,
+            documentTaskMode: runtime.documentTaskMode,
+            redactSensitiveContent: false
+        )
+        let findings = AgentSensitiveContentRedactor.findings(in: unredacted)
+        let rendered = runtime.redactSensitiveAttachmentContent
+            ? AgentSensitiveContentRedactor.redact(unredacted)
+            : unredacted
+        return AgentDocumentSendPreview(text: rendered, findings: findings)
+    }
+
+    private func documentTaskInstruction(
+        mode: AgentDocumentTaskMode,
+        userText: String,
+        files: [AgentFileAttachment]
+    ) -> String {
+        let resolvedMode: AgentDocumentTaskMode
+        if mode == .automatic {
+            let query = userText.lowercased()
+            if files.count >= 2, query.contains("比较") || query.contains("compare") || query.contains("差异") {
+                resolvedMode = .compare
+            } else if files.contains(where: { $0.analysis?.documentKind == .spreadsheet }),
+                      query.contains("分析") || query.contains("统计") || query.contains("公式") || query.contains("analy") {
+                resolvedMode = .spreadsheetAnalysis
+            } else if query.contains("总结") || query.contains("摘要") || query.contains("summar") {
+                resolvedMode = .summarize
+            } else if query.contains("证据") || query.contains("依据") || query.contains("evidence") {
+                resolvedMode = .evidenceExtraction
+            } else if files.contains(where: { AgentComposerAttachmentSupport.textExtensions.contains($0.url.pathExtension.lowercased()) }),
+                      query.contains("审查") || query.contains("review") || query.contains("bug") {
+                resolvedMode = .codeReview
+            } else {
+                resolvedMode = .automatic
+            }
+        } else {
+            resolvedMode = mode
+        }
+
+        switch resolvedMode {
+        case .automatic:
+            return "Document task mode: automatic. Answer the user's actual request and cite every document-backed claim with the exact [Source: file; locator] marker provided below."
+        case .summarize:
+            return "Document task mode: summarize. Produce a structured summary that preserves important qualifications and cite each major point with an exact [Source: file; locator] marker."
+        case .compare:
+            return "Document task mode: compare. Compare the supplied documents point by point, distinguish missing information from real differences, and cite both sides with exact [Source: file; locator] markers."
+        case .spreadsheetAnalysis:
+            return "Document task mode: spreadsheet analysis. Respect sheet names, formulas, cached values, headers, and hidden-sheet notices; cite every numerical conclusion with an exact [Source: file; sheet/lines] marker."
+        case .codeReview:
+            return "Document task mode: code review. Identify correctness, security, and maintainability issues without inventing repository context; cite findings with exact [Source: file; lines] markers."
+        case .evidenceExtraction:
+            return "Document task mode: evidence extraction. Separate direct evidence from inference, quote only short necessary fragments, and attach an exact [Source: file; locator] marker to every evidence item."
+        }
     }
 
     func readAttachedFileBody(at url: URL) -> String {
@@ -1005,21 +1121,197 @@ extension AppState {
     }
 
     func attachAgentFile(url: URL) {
+        guard let runtime = activeRuntime ?? activeRuntimeAfterCreatingNewSession() else { return }
         let standardized = url.standardizedFileURL
-        guard !agentPendingFiles.contains(where: { $0.url.standardizedFileURL == standardized }) else { return }
+        guard !runtime.pendingFiles.contains(where: { $0.url.standardizedFileURL == standardized }) else { return }
         let relative: String = {
-            guard let root = rootDirectory?.standardizedFileURL.path else { return standardized.lastPathComponent }
+            guard let root = runtime.workspaceRootPath ?? rootDirectory?.standardizedFileURL.path else {
+                return standardized.lastPathComponent
+            }
             let path = standardized.path
             guard path.hasPrefix(root) else { return standardized.lastPathComponent }
             let rel = String(path.dropFirst(root.count))
                 .trimmingCharacters(in: CharacterSet(charactersIn: "/"))
             return rel.isEmpty ? standardized.lastPathComponent : rel
         }()
-        agentPendingFiles.append(AgentFileAttachment(url: standardized, relativePath: relative))
+        let metadata = agentAttachmentSourceMetadata(for: standardized)
+        if let existingIndex = runtime.documentAttachments.firstIndex(where: { $0.id == standardized.path }) {
+            var existing = runtime.documentAttachments[existingIndex]
+            existing.isEnabled = true
+            if existing.parseStatus == .ready,
+               existing.sourceFileSize == metadata.size,
+               existing.sourceModifiedAt == metadata.modifiedAt {
+                runtime.documentAttachments[existingIndex] = existing
+                runtime.pendingFiles.append(existing)
+                runtime.persist(touchUpdatedAt: false)
+                return
+            }
+        }
+
+        var attachment = AgentFileAttachment(url: standardized, relativePath: relative)
+        attachment.sourceFileSize = metadata.size
+        attachment.sourceModifiedAt = metadata.modifiedAt
+        runtime.pendingFiles.append(attachment)
+        runtime.documentAttachments.removeAll { $0.id == attachment.id }
+        runtime.documentAttachments.append(attachment)
+        runtime.persist(touchUpdatedAt: false)
+        analyzeAgentFileAttachment(id: attachment.id, url: standardized, for: runtime)
     }
 
     func detachAgentFile(id: String) {
-        agentPendingFiles.removeAll { $0.id == id }
+        guard let runtime = activeRuntime else { return }
+        runtime.pendingFiles.removeAll { $0.id == id }
+        runtime.documentAttachments.removeAll { $0.id == id }
+        runtime.persist(touchUpdatedAt: false)
+    }
+
+    func toggleAgentFileSection(fileID: String, sectionID: String) {
+        guard let index = agentPendingFiles.firstIndex(where: { $0.id == fileID }) else { return }
+        var files = agentPendingFiles
+        if files[index].excludedSectionIDs.contains(sectionID) {
+            files[index].excludedSectionIDs.remove(sectionID)
+        } else {
+            files[index].excludedSectionIDs.insert(sectionID)
+        }
+        agentPendingFiles = files
+        synchronizePendingAgentFileSelection(fileID: fileID, excludedSectionIDs: files[index].excludedSectionIDs)
+    }
+
+    func setAllAgentFileSections(fileID: String, included: Bool) {
+        guard let index = agentPendingFiles.firstIndex(where: { $0.id == fileID }),
+              let analysis = agentPendingFiles[index].analysis else { return }
+        var files = agentPendingFiles
+        files[index].excludedSectionIDs = included ? [] : Set(analysis.sections.map(\.id))
+        agentPendingFiles = files
+        synchronizePendingAgentFileSelection(fileID: fileID, excludedSectionIDs: files[index].excludedSectionIDs)
+    }
+
+    var hasParsingAgentFileAttachments: Bool {
+        agentPendingFiles.contains { $0.parseStatus == .parsing }
+            || agentSessionDocuments.contains { $0.isEnabled && $0.parseStatus == .parsing }
+            || agentKnowledgeFolders.contains { $0.isEnabled && $0.status == .indexing }
+    }
+
+    func toggleAgentSessionDocumentEnabled(id: String) {
+        guard let runtime = activeRuntime,
+              let index = runtime.documentAttachments.firstIndex(where: { $0.id == id }) else { return }
+        runtime.documentAttachments[index].isEnabled.toggle()
+        runtime.persist(touchUpdatedAt: false)
+    }
+
+    func removeAgentSessionDocument(id: String) {
+        detachAgentFile(id: id)
+    }
+
+    func toggleAgentSessionDocumentSection(fileID: String, sectionID: String) {
+        guard let runtime = activeRuntime,
+              let index = runtime.documentAttachments.firstIndex(where: { $0.id == fileID }) else { return }
+        if runtime.documentAttachments[index].excludedSectionIDs.contains(sectionID) {
+            runtime.documentAttachments[index].excludedSectionIDs.remove(sectionID)
+        } else {
+            runtime.documentAttachments[index].excludedSectionIDs.insert(sectionID)
+        }
+        let excluded = runtime.documentAttachments[index].excludedSectionIDs
+        if let pendingIndex = runtime.pendingFiles.firstIndex(where: { $0.id == fileID }) {
+            runtime.pendingFiles[pendingIndex].excludedSectionIDs = excluded
+        }
+        runtime.persist(touchUpdatedAt: false)
+    }
+
+    func setAllAgentSessionDocumentSections(fileID: String, included: Bool) {
+        guard let runtime = activeRuntime,
+              let index = runtime.documentAttachments.firstIndex(where: { $0.id == fileID }),
+              let analysis = runtime.documentAttachments[index].analysis else { return }
+        let excluded = included ? Set<String>() : Set(analysis.sections.map(\.id))
+        runtime.documentAttachments[index].excludedSectionIDs = excluded
+        if let pendingIndex = runtime.pendingFiles.firstIndex(where: { $0.id == fileID }) {
+            runtime.pendingFiles[pendingIndex].excludedSectionIDs = excluded
+        }
+        runtime.persist(touchUpdatedAt: false)
+    }
+
+    private func analyzeAgentFileAttachment(id: String, url: URL, for runtime: AgentRuntime) {
+        Task { [weak runtime] in
+            do {
+                let analysis = try await AgentDocumentAttachmentParser.analyze(url: url)
+                guard let runtime else { return }
+                if let index = runtime.pendingFiles.firstIndex(where: { $0.id == id }) {
+                    runtime.pendingFiles[index].analysis = analysis
+                    runtime.pendingFiles[index].parseStatus = .ready
+                    runtime.pendingFiles[index].parseError = nil
+                }
+                if let index = runtime.documentAttachments.firstIndex(where: { $0.id == id }) {
+                    runtime.documentAttachments[index].analysis = analysis
+                    runtime.documentAttachments[index].parseStatus = .ready
+                    runtime.documentAttachments[index].parseError = nil
+                }
+                runtime.persist(touchUpdatedAt: false)
+            } catch {
+                guard let runtime else { return }
+                if let index = runtime.pendingFiles.firstIndex(where: { $0.id == id }) {
+                    runtime.pendingFiles[index].parseStatus = .failed
+                    runtime.pendingFiles[index].parseError = error.localizedDescription
+                }
+                if let index = runtime.documentAttachments.firstIndex(where: { $0.id == id }) {
+                    runtime.documentAttachments[index].parseStatus = .failed
+                    runtime.documentAttachments[index].parseError = error.localizedDescription
+                }
+                runtime.persist(touchUpdatedAt: false)
+            }
+        }
+    }
+
+    private func mergedAgentDocumentContextFiles(
+        sessionDocuments: [AgentFileAttachment],
+        knowledgeFolders: [AgentKnowledgeFolder],
+        pendingFiles: [AgentFileAttachment]
+    ) -> [AgentFileAttachment] {
+        var byID: [String: AgentFileAttachment] = [:]
+        for file in sessionDocuments where file.isEnabled && file.parseStatus == .ready {
+            byID[file.id] = file
+        }
+        for file in pendingFiles where file.parseStatus == .ready {
+            byID[file.id] = file
+        }
+        for folder in knowledgeFolders where folder.isEnabled && folder.status == .ready {
+            for file in folder.documents where file.parseStatus == .ready {
+                byID[file.id] = file
+            }
+        }
+        return byID.values.sorted { $0.relativePath.localizedStandardCompare($1.relativePath) == .orderedAscending }
+    }
+
+    private func synchronizePendingAgentFileSelection(fileID: String, excludedSectionIDs: Set<String>) {
+        guard let runtime = activeRuntime else { return }
+        if let index = runtime.documentAttachments.firstIndex(where: { $0.id == fileID }) {
+            runtime.documentAttachments[index].excludedSectionIDs = excludedSectionIDs
+            runtime.persist(touchUpdatedAt: false)
+        }
+    }
+
+    private func refreshChangedAgentSessionDocumentsIfNeeded(in runtime: AgentRuntime) -> Bool {
+        var startedParsing = false
+        for index in runtime.documentAttachments.indices where runtime.documentAttachments[index].isEnabled {
+            let file = runtime.documentAttachments[index]
+            let metadata = agentAttachmentSourceMetadata(for: file.url)
+            guard metadata.size != file.sourceFileSize || metadata.modifiedAt != file.sourceModifiedAt else { continue }
+            runtime.documentAttachments[index].sourceFileSize = metadata.size
+            runtime.documentAttachments[index].sourceModifiedAt = metadata.modifiedAt
+            runtime.documentAttachments[index].parseStatus = .parsing
+            runtime.documentAttachments[index].analysis = nil
+            runtime.documentAttachments[index].parseError = nil
+            analyzeAgentFileAttachment(id: file.id, url: file.url, for: runtime)
+            startedParsing = true
+        }
+        if startedParsing {
+            runtime.persist(touchUpdatedAt: false)
+        }
+        return startedParsing
+    }
+
+    private func agentAttachmentSourceMetadata(for url: URL) -> (size: Int64?, modifiedAt: Date?) {
+        let values = try? url.resourceValues(forKeys: [.fileSizeKey, .contentModificationDateKey])
+        return (values?.fileSize.map(Int64.init), values?.contentModificationDate)
     }
 
     func addAgentTextAttachment(content rawContent: String) {

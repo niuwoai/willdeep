@@ -397,8 +397,76 @@ nonisolated enum L10n {
         static let atPickerSearchPlaceholder = String(localized: "composer.at-picker.search-placeholder", defaultValue: "Search files or workspace...")
         static let addSecretAction = String(localized: "composer.add-secret.action", defaultValue: "Add another secret")
         static let addSecretHelp = String(localized: "composer.add-secret.help", defaultValue: "Add another protected secret, up to three total")
-        static let attachImageHelp = String(localized: "composer.attach-image.help", defaultValue: "Attach image")
+        static let attachFileHelp = String(localized: "composer.attach-file.help", defaultValue: "Attach images or documents")
+        static let attachFilePanelTitle = String(localized: "composer.attach-file.panel-title", defaultValue: "Attach Files or Knowledge Folders")
+        static let attachmentInjectionWarning = String(localized: "composer.attachment.injection-warning", defaultValue: "Suspicious instructions detected")
+        static let attachmentOCRUsed = String(localized: "composer.attachment.ocr-used", defaultValue: "Local OCR used")
+        static let attachmentParseFailed = String(localized: "composer.attachment.parse-failed", defaultValue: "Could not parse this attachment")
+        static let attachmentParsing = String(localized: "composer.attachment.parsing", defaultValue: "Parsing locally…")
+        static let attachmentPreviewHelp = String(localized: "composer.attachment.preview-help", defaultValue: "Preview parsed attachment")
+        static let disableSessionDocument = String(localized: "composer.attachment.session-disable", defaultValue: "Exclude from future turns")
+        static let documentModeAutomatic = String(localized: "composer.document-mode.automatic", defaultValue: "Auto document task")
+        static let documentModeCodeReview = String(localized: "composer.document-mode.code-review", defaultValue: "Code review")
+        static let documentModeCompare = String(localized: "composer.document-mode.compare", defaultValue: "Compare documents")
+        static let documentModeEvidence = String(localized: "composer.document-mode.evidence", defaultValue: "Extract evidence")
+        static let documentModeSpreadsheet = String(localized: "composer.document-mode.spreadsheet", defaultValue: "Analyze spreadsheet")
+        static let documentModeSummarize = String(localized: "composer.document-mode.summarize", defaultValue: "Summarize documents")
+        static let documentRedactSensitive = String(localized: "composer.document.redact-sensitive", defaultValue: "Redact sensitive data")
+        static let documentSendPreview = String(localized: "composer.document.send-preview", defaultValue: "Send preview")
+        static let documentSendPreviewClose = String(localized: "composer.document.send-preview-close", defaultValue: "Close send preview")
+        static let documentSendPreviewTitle = String(localized: "composer.document.send-preview-title", defaultValue: "Document context sent to the model")
+        static let enableSessionDocument = String(localized: "composer.attachment.session-enable", defaultValue: "Include in future turns")
+        static let removeSessionDocument = String(localized: "composer.attachment.session-remove", defaultValue: "Remove from this conversation")
+        static let removeAttachmentHelp = String(localized: "composer.attachment.remove-help", defaultValue: "Remove attachment")
+        static let selectAllAttachmentSections = String(localized: "composer.attachment.select-all", defaultValue: "Select all")
+        static let selectNoAttachmentSections = String(localized: "composer.attachment.select-none", defaultValue: "Select none")
+        static let waitForAttachmentParsing = String(localized: "composer.attachment.wait-for-parsing", defaultValue: "Wait for local attachment parsing to finish")
+        static func attachmentChunk(_ a1: Int) -> String {
+            let template = String(localized: "composer.attachment.chunk", defaultValue: "Chunk %lld")
+            return String(format: template, a1)
+        }
+        static func attachmentPage(_ a1: Int) -> String {
+            let template = String(localized: "composer.attachment.page", defaultValue: "Page %lld")
+            return String(format: template, a1)
+        }
+        static func attachmentReady(_ a1: Int, _ a2: Int) -> String {
+            let template = String(localized: "composer.attachment.ready", defaultValue: "%lld sources · %lld characters extracted")
+            return String(format: template, a1, a2)
+        }
+        static func attachmentSheet(_ a1: String) -> String {
+            let template = String(localized: "composer.attachment.sheet", defaultValue: "Sheet: %@")
+            return String(format: template, a1)
+        }
+        static func sessionDocuments(_ a1: Int) -> String {
+            let template = String(localized: "composer.attachment.session-documents", defaultValue: "Conversation documents · %lld")
+            return String(format: template, a1)
+        }
+        static func documentSensitiveFindings(_ a1: Int) -> String {
+            let template = String(localized: "composer.document.sensitive-findings", defaultValue: "%lld sensitive values detected locally")
+            return String(format: template, a1)
+        }
+        static func attachmentTooLarge(_ a1: String) -> String {
+            let template = String(localized: "composer.attach-file.too-large", defaultValue: "%@ is larger than the 50 MB attachment limit.")
+            return String(format: template, a1)
+        }
+        static func unsupportedAttachment(_ a1: String) -> String {
+            let template = String(localized: "composer.attach-file.unsupported", defaultValue: "%@ is not a supported attachment type.")
+            return String(format: template, a1)
+        }
         static let insertSecretAction = String(localized: "composer.insert-secret.action", defaultValue: "Insert")
+        static let knowledgeFolderApplyExclusions = String(localized: "composer.knowledge-folder.apply-exclusions", defaultValue: "Apply")
+        static let knowledgeFolderExclusionsHelp = String(localized: "composer.knowledge-folder.exclusions-help", defaultValue: "Comma-separated .gitignore-style patterns")
+        static let knowledgeFolderExclusionsPlaceholder = String(localized: "composer.knowledge-folder.exclusions-placeholder", defaultValue: "Extra exclusions, e.g. drafts/**, *.log")
+        static let knowledgeFolderFailed = String(localized: "composer.knowledge-folder.failed", defaultValue: "Could not index this folder")
+        static let knowledgeFolderIndexing = String(localized: "composer.knowledge-folder.indexing", defaultValue: "Indexing local documents…")
+        static func knowledgeFolderReady(_ a1: Int, _ a2: Int) -> String {
+            let template = String(localized: "composer.knowledge-folder.ready", defaultValue: "%lld documents ready · %lld skipped")
+            return String(format: template, a1, a2)
+        }
+        static func knowledgeFolders(_ a1: Int) -> String {
+            let template = String(localized: "composer.knowledge-folder.title", defaultValue: "Knowledge folders · %lld")
+            return String(format: template, a1)
+        }
         static let insertSecretDescription = String(localized: "composer.insert-secret.description", defaultValue: "Add up to three secrets. Each secret is saved locally in Keychain; the model only sees placeholders, and WillDeep resolves them when a local tool runs.")
         static let insertSecretHelp = String(localized: "composer.insert-secret.help", defaultValue: "Insert protected secret")
         static let insertSecretTitle = String(localized: "composer.insert-secret.title", defaultValue: "Insert Protected Secret")
@@ -418,6 +486,16 @@ nonisolated enum L10n {
         static let overflowExecutor = String(localized: "composer.overflow.executor", defaultValue: "Executor")
         static let overflowApproval = String(localized: "composer.overflow.approval", defaultValue: "Approval")
         static let overflowPlugins = String(localized: "composer.overflow.plugins", defaultValue: "Plugins")
+    }
+
+    enum AttachmentCitation {
+        static let exportAction = String(localized: "attachment-citation.export-action", defaultValue: "Export…")
+        static let exportFailed = String(localized: "attachment-citation.export-failed", defaultValue: "Could not export document citation")
+        static let exportTitle = String(localized: "attachment-citation.export-title", defaultValue: "Export Document Citation")
+        static let highlightedSource = String(localized: "attachment-citation.highlighted-source", defaultValue: "Referenced source")
+        static let openOriginal = String(localized: "attachment-citation.open-original", defaultValue: "Open Original")
+        static let showInFinder = String(localized: "attachment-citation.show-in-finder", defaultValue: "Show in Finder")
+        static let windowTitle = String(localized: "attachment-citation.window-title", defaultValue: "Document Citation")
     }
 
     enum ComposerWorkspace {

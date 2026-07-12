@@ -284,6 +284,8 @@ final class AppState: ObservableObject {
     /// knows where to create/destroy runtimes — when rc2 lands there's
     /// no scramble to retrofit lifecycle.
     @Published var agentRuntimes: [AgentSession.ID: AgentRuntime] = [:]
+    var agentKnowledgeFolderWatchers: [String: DispatchSourceFileSystemObject] = [:]
+    var agentKnowledgeFolderReindexTasks: [String: Task<Void, Never>] = [:]
     var isRestoringAgentSidePanelGlobals = false
 
     /// Session ids for which an LLM title-summarization request is

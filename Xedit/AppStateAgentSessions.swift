@@ -804,9 +804,10 @@ extension AppState {
     }
 
     func addAgentImage(data: Data, mimeType: String) {
+        guard let runtime = activeRuntime ?? activeRuntimeAfterCreatingNewSession() else { return }
         let attachment = (try? AgentImageAttachment.fileBacked(data: data, mimeType: mimeType))
             ?? AgentImageAttachment(mimeType: mimeType, dataBase64: data.base64EncodedString())
-        agentPendingImages.append(attachment)
+        runtime.pendingImages.append(attachment)
     }
 
     func removeAgentImage(id: AgentImageAttachment.ID) {
@@ -1014,6 +1015,32 @@ extension AppState {
         return startNewAgentSession(inWorkspaceAt: url.path)
     }
 
+    /// Rebind the runtime that invoked the approved `change_workspace` tool.
+    /// Unlike the composer picker this deliberately keeps the same historical
+    /// conversation; the agent loop stops the current tool round immediately
+    /// afterwards so no operation can accidentally use its captured old root.
+    func changeAgentSessionWorkspaceAfterApproval(
+        runtimeID: AgentSession.ID,
+        to workspacePath: String
+    ) throws -> String {
+        let url = URL(fileURLWithPath: workspacePath).standardizedFileURL
+        guard Self.isExistingDirectory(url) else {
+            throw AgentToolError.invalidArgument("workspace directory does not exist: \(url.path)")
+        }
+        guard let runtime = agentRuntimes[runtimeID] else {
+            throw AgentToolError.invalidArgument("the originating session is no longer available")
+        }
+
+        _ = activateSecurityScope(for: url)
+        registerRecentFolder(url)
+        runtime.rebindWorkspace(to: url.path)
+        runtime.worktreeChanges = .init()
+        runtime.agentArtifactPaths = []
+        persistAgentSession(runtime: runtime)
+        unhideWorkspace(key: runtime.session.workspaceSidebarGroupKey)
+        return url.path
+    }
+
     private func canRebindActiveRuntimeInPlace(_ runtime: AgentRuntime) -> Bool {
         guard !runtime.isResponding else { return false }
         if runtime.isEmpty { return true }
@@ -1186,6 +1213,7 @@ extension AppState {
                 runtime.pendingToolDecisions.removeAll()
             }
             agentSubagentRegistry.cancelAll(forParentRuntime: id)
+            cancelAgentKnowledgeFolderWatchers(sessionID: id)
             agentRuntimes.removeValue(forKey: id)
         }
     }
@@ -1202,6 +1230,7 @@ extension AppState {
         guard let session = materializeAgentSessionIfNeeded(id: sessionID) else { return nil }
         let runtime = AgentRuntime(session: session)
         agentRuntimes[sessionID] = runtime
+        startAgentKnowledgeFolderWatchers(for: runtime)
         evictInactiveAgentRuntimesIfNeeded()
         return runtime
     }
@@ -1246,6 +1275,7 @@ extension AppState {
         for runtime in idle.dropFirst(maximumIdleRuntimes) {
             persistAgentSession(runtime: runtime)
             agentSubagentRegistry.cancelAll(forParentRuntime: runtime.id)
+            cancelAgentKnowledgeFolderWatchers(sessionID: runtime.id)
             agentRuntimes.removeValue(forKey: runtime.id)
         }
     }
@@ -1273,6 +1303,7 @@ extension AppState {
         AgentSessionStore.delete(id: id)
         agentSessions.removeAll { $0.id == id }
         removeAgentUsageSnapshot(id: id)
+        cancelAgentKnowledgeFolderWatchers(sessionID: id)
         agentRuntimes.removeValue(forKey: id)
         if activeAgentSessionID == id {
             activeAgentSessionID = nil
@@ -1488,6 +1519,20 @@ extension AppState {
         // of large session writes (the caller discards the result anyway).
         AgentSessionStore.saveAsync(agentSessions[index])
         upsertAgentUsageSnapshot(for: agentSessions[index])
+    }
+
+    func renameAgentSessionAfterApproval(
+        runtimeID: AgentSession.ID,
+        to newTitle: String
+    ) throws -> String {
+        guard agentRuntimes[runtimeID] != nil else {
+            throw AgentToolError.invalidArgument("the originating session is no longer available")
+        }
+        renameAgentSession(id: runtimeID, to: newTitle)
+        guard let title = agentSessions.first(where: { $0.id == runtimeID })?.title else {
+            throw AgentToolError.invalidArgument("the originating session could not be renamed")
+        }
+        return title
     }
 
     /// Manually request an LLM title summary for a session. Bypasses

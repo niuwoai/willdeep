@@ -112,6 +112,11 @@ struct AgentToolContext {
     /// tied to the visible side-panel session instead of creating hidden SSH
     /// sessions on the model's behalf.
     let terminalController: AgentInteractiveTerminalController?
+    /// Host-owned session actions. These closures are only installed by the
+    /// interactive AppState loop; ad-hoc runners and subagents cannot rename
+    /// or move a user's conversation behind the host's approval boundary.
+    let sessionRenameSink: (@MainActor (String) throws -> String)?
+    let workspaceChangeSink: (@MainActor (String) throws -> String)?
     /// When set, apply_patch should ask the host to immediately apply the
     /// queued proposal using the existing patch applier and audit status.
     let patchAutoApplySource: AgentToolApprovalSource?
@@ -133,6 +138,8 @@ struct AgentToolContext {
         editableContentProvider: (@MainActor (URL) throws -> String)? = nil,
         patchAutoApplySource: AgentToolApprovalSource? = nil,
         terminalController: AgentInteractiveTerminalController? = nil,
+        sessionRenameSink: (@MainActor (String) throws -> String)? = nil,
+        workspaceChangeSink: (@MainActor (String) throws -> String)? = nil,
         secretRedactionValues: [String] = []
     ) {
         self.rootDirectory = rootDirectory
@@ -147,6 +154,8 @@ struct AgentToolContext {
         self.editableContentProvider = editableContentProvider
         self.patchAutoApplySource = patchAutoApplySource
         self.terminalController = terminalController
+        self.sessionRenameSink = sessionRenameSink
+        self.workspaceChangeSink = workspaceChangeSink
         self.secretRedactionValues = Self.uniqueNonEmpty(secretRedactionValues)
     }
 
@@ -188,6 +197,8 @@ struct AgentToolContext {
             editableContentProvider: editableContentProvider,
             patchAutoApplySource: patchAutoApplySource,
             terminalController: terminalController,
+            sessionRenameSink: sessionRenameSink,
+            workspaceChangeSink: workspaceChangeSink,
             secretRedactionValues: secretRedactionValues + values
         )
     }

@@ -173,13 +173,14 @@ enum AgentSandboxPolicy {
                 reason: "Deleting a user skill is destructive.",
                 prefixRule: nil
             )
-        case "call_mcp_tool", "kill_job", "activate_expert", "add_memory", "create_user_skill", "update_user_skill", "suggest_mcp_server", "configure_mcp_server",
+        case "rename_session", "change_workspace",
+             "call_mcp_tool", "kill_job", "activate_expert", "add_memory", "create_user_skill", "update_user_skill", "suggest_mcp_server", "configure_mcp_server",
              "terminal_send_command", "terminal_send_control", "terminal_create_shortcut", "terminal_edit_shortcut":
             return AgentSandboxDecision(
                 mode: .workspaceWrite,
                 requiresUserApproval: true,
                 requiresTypedConfirmation: false,
-                reason: "This tool can modify state or run external code.",
+                reason: "This tool can modify application state or run external code.",
                 prefixRule: nil
             )
         case "computer_use_request_permissions", "computer_use_launch_app", "computer_use_get_app_state", "computer_use_click", "computer_use_secondary_action", "computer_use_scroll", "computer_use_drag", "computer_use_type_text", "computer_use_press_key", "computer_use_set_value", "computer_use_restart_helper":

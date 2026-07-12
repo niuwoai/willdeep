@@ -280,6 +280,8 @@ struct AgentComposerAttachmentStrip: View {
     let files: [AgentFileAttachment]
     let onRemoveWorkspace: () -> Void
     let onRemoveFile: (String) -> Void
+    let onToggleFileSection: (String, String) -> Void
+    let onSetAllFileSections: (String, Bool) -> Void
 
     var body: some View {
         ScrollView(.horizontal, showsIndicators: false) {
@@ -293,11 +295,11 @@ struct AgentComposerAttachmentStrip: View {
                     )
                 }
                 ForEach(files) { file in
-                    chip(
-                        symbol: "doc.text",
-                        label: "@\(file.relativePath)",
-                        help: file.url.path,
-                        onRemove: { onRemoveFile(file.id) }
+                    AgentComposerFileAttachmentChip(
+                        file: file,
+                        onRemove: { onRemoveFile(file.id) },
+                        onToggleSection: { onToggleFileSection(file.id, $0) },
+                        onSetAllSections: { onSetAllFileSections(file.id, $0) }
                     )
                 }
             }

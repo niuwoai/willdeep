@@ -9,7 +9,7 @@
 import Foundation
 import PDFKit
 
-enum AgentOfficeAttachmentReader {
+nonisolated enum AgentOfficeAttachmentReader {
     private static let maxTextCharacters = 120_000
     private static let maxPDFPages = 30
     private static let maxWorkbookSheets = 8
@@ -29,6 +29,34 @@ enum AgentOfficeAttachmentReader {
         }
     }
 
+    static func extractDOCXText(url: URL) -> String? {
+        guard let xml = unzipEntry("word/document.xml", from: url) else { return nil }
+        let parser = XMLParser(data: xml)
+        let delegate = DOCXTextDelegate()
+        parser.delegate = delegate
+        guard parser.parse() else { return nil }
+        let text = delegate.text.trimmingCharacters(in: .whitespacesAndNewlines)
+        return text.isEmpty ? nil : text
+    }
+
+    static func extractXLSXSheets(url: URL) -> [(name: String, text: String, isHidden: Bool)]? {
+        guard let workbookXML = unzipEntry("xl/workbook.xml", from: url) else { return nil }
+        let sheets = parseWorkbookSheets(workbookXML)
+        let rels = unzipEntry("xl/_rels/workbook.xml.rels", from: url).map { parseWorkbookRelationships($0) } ?? [:]
+        let sharedStrings = unzipEntry("xl/sharedStrings.xml", from: url).map { parseSharedStrings($0) } ?? []
+
+        return sheets.prefix(maxWorkbookSheets).map { sheet in
+            let target = rels[sheet.relationshipID] ?? "worksheets/sheet\(sheet.index).xml"
+            let normalizedTarget = target.hasPrefix("xl/") ? String(target.dropFirst(3)) : target
+            let entry = "xl/" + normalizedTarget.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+            guard let sheetXML = unzipEntry(entry, from: url) else {
+                return (sheet.name, "(unable to read \(entry))", sheet.isHidden)
+            }
+            let rows = parseWorksheetRows(sheetXML, sharedStrings: sharedStrings)
+            return (sheet.name, renderSheet(name: sheet.name, rows: rows), sheet.isHidden)
+        }
+    }
+
     private static func readPDF(url: URL) -> String {
         guard let document = PDFDocument(url: url) else {
             return fenced("PDF could not be opened.")
@@ -36,11 +64,16 @@ enum AgentOfficeAttachmentReader {
 
         let pageCount = document.pageCount
         var sections: [String] = ["PDF document: \(pageCount) page\(pageCount == 1 ? "" : "s")"]
+        var extractedPageCount = 0
         for index in 0..<min(pageCount, maxPDFPages) {
             guard let page = document.page(at: index) else { continue }
             let text = page.string?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
             guard !text.isEmpty else { continue }
+            extractedPageCount += 1
             sections.append("Page \(index + 1):\n\(text)")
+        }
+        if pageCount > 0, extractedPageCount == 0 {
+            sections.append("[no extractable text; this may be a scanned PDF that requires OCR]")
         }
         if pageCount > maxPDFPages {
             sections.append("[truncated after \(maxPDFPages) pages]")
@@ -49,18 +82,7 @@ enum AgentOfficeAttachmentReader {
     }
 
     private static func readDOCX(url: URL) -> String {
-        guard let xml = unzipEntry("word/document.xml", from: url) else {
-            return fenced("DOCX text could not be extracted.")
-        }
-        let parser = XMLParser(data: xml)
-        let delegate = DOCXTextDelegate()
-        parser.delegate = delegate
-        guard parser.parse() else {
-            return fenced("DOCX text could not be parsed.")
-        }
-
-        let text = delegate.text.trimmingCharacters(in: .whitespacesAndNewlines)
-        let body = text.isEmpty ? "DOCX contains no extractable text." : text
+        let body = extractDOCXText(url: url) ?? "DOCX text could not be extracted."
         return fenced(limit(body, to: maxTextCharacters))
     }
 
@@ -70,20 +92,10 @@ enum AgentOfficeAttachmentReader {
         }
 
         let sheets = parseWorkbookSheets(workbookXML)
-        let rels = unzipEntry("xl/_rels/workbook.xml.rels", from: url).map { parseWorkbookRelationships($0) } ?? [:]
-        let sharedStrings = unzipEntry("xl/sharedStrings.xml", from: url).map { parseSharedStrings($0) } ?? []
-
         var blocks: [String] = ["Excel workbook: \(sheets.count) sheet\(sheets.count == 1 ? "" : "s")"]
-        for sheet in sheets.prefix(maxWorkbookSheets) {
-            let target = rels[sheet.relationshipID] ?? "worksheets/sheet\(sheet.index).xml"
-            let normalizedTarget = target.hasPrefix("xl/") ? String(target.dropFirst(3)) : target
-            let entry = "xl/" + normalizedTarget.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
-            guard let sheetXML = unzipEntry(entry, from: url) else {
-                blocks.append("## Sheet: \(sheet.name)\n(unable to read \(entry))")
-                continue
-            }
-            let rows = parseWorksheetRows(sheetXML, sharedStrings: sharedStrings)
-            blocks.append(renderSheet(name: sheet.name, rows: rows))
+        for sheet in extractXLSXSheets(url: url) ?? [] {
+            let hiddenLabel = sheet.isHidden ? " [hidden]" : ""
+            blocks.append(sheet.text.replacingOccurrences(of: "## Sheet: \(sheet.name)", with: "## Sheet: \(sheet.name)\(hiddenLabel)"))
         }
 
         if sheets.count > maxWorkbookSheets {
@@ -155,19 +167,18 @@ enum AgentOfficeAttachmentReader {
         process.arguments = ["-p", url.path, entry]
 
         let output = Pipe()
-        let errors = Pipe()
         process.standardOutput = output
-        process.standardError = errors
+        process.standardError = FileHandle.nullDevice
 
         do {
             try process.run()
-            process.waitUntilExit()
         } catch {
             return nil
         }
 
-        guard process.terminationStatus == 0 else { return nil }
         let data = output.fileHandleForReading.readDataToEndOfFile()
+        process.waitUntilExit()
+        guard process.terminationStatus == 0 else { return nil }
         return data.isEmpty ? nil : data
     }
 
@@ -182,19 +193,27 @@ enum AgentOfficeAttachmentReader {
     }
 }
 
-private struct WorkbookSheet {
+private nonisolated struct WorkbookSheet {
     let index: Int
     let name: String
     let relationshipID: String
+    let isHidden: Bool
 }
 
-private final class DOCXTextDelegate: NSObject, XMLParserDelegate {
+private nonisolated final class DOCXTextDelegate: NSObject, XMLParserDelegate {
     private var currentElement = ""
     private var buffer = ""
+    private var paragraphStyle = ""
     private(set) var text = ""
 
     func parser(_ parser: XMLParser, didStartElement elementName: String, namespaceURI: String?, qualifiedName qName: String?, attributes attributeDict: [String: String] = [:]) {
         currentElement = elementName
+        if elementName == "w:p" || elementName == "p" {
+            paragraphStyle = ""
+        }
+        if elementName == "w:pStyle" || elementName == "pStyle" {
+            paragraphStyle = attributeDict["w:val"] ?? attributeDict["val"] ?? ""
+        }
         if elementName == "w:tab" || elementName == "tab" {
             buffer += "\t"
         }
@@ -211,26 +230,42 @@ private final class DOCXTextDelegate: NSObject, XMLParserDelegate {
             let line = buffer.trimmingCharacters(in: .whitespacesAndNewlines)
             if !line.isEmpty {
                 if !text.isEmpty { text += "\n" }
-                text += line
+                let headingLevel = paragraphStyle.lowercased().hasPrefix("heading")
+                    ? Int(paragraphStyle.dropFirst("heading".count))
+                    : nil
+                if let headingLevel {
+                    text += String(repeating: "#", count: min(max(headingLevel, 1), 6)) + " " + line
+                } else {
+                    text += line
+                }
             }
             buffer = ""
+            paragraphStyle = ""
         }
         currentElement = ""
     }
 }
 
-private final class WorkbookSheetsDelegate: NSObject, XMLParserDelegate {
+private nonisolated final class WorkbookSheetsDelegate: NSObject, XMLParserDelegate {
     private(set) var sheets: [WorkbookSheet] = []
 
     func parser(_ parser: XMLParser, didStartElement elementName: String, namespaceURI: String?, qualifiedName qName: String?, attributes attributeDict: [String: String] = [:]) {
         guard elementName == "sheet" || elementName == "s:sheet" else { return }
         let name = attributeDict["name"] ?? "Sheet \(sheets.count + 1)"
         let relationshipID = attributeDict["r:id"] ?? attributeDict["id"] ?? ""
-        sheets.append(WorkbookSheet(index: sheets.count + 1, name: name, relationshipID: relationshipID))
+        let state = attributeDict["state"]?.lowercased() ?? "visible"
+        sheets.append(
+            WorkbookSheet(
+                index: sheets.count + 1,
+                name: name,
+                relationshipID: relationshipID,
+                isHidden: state == "hidden" || state == "veryhidden"
+            )
+        )
     }
 }
 
-private final class WorkbookRelationshipsDelegate: NSObject, XMLParserDelegate {
+private nonisolated final class WorkbookRelationshipsDelegate: NSObject, XMLParserDelegate {
     private(set) var targets: [String: String] = [:]
 
     func parser(_ parser: XMLParser, didStartElement elementName: String, namespaceURI: String?, qualifiedName qName: String?, attributes attributeDict: [String: String] = [:]) {
@@ -240,7 +275,7 @@ private final class WorkbookRelationshipsDelegate: NSObject, XMLParserDelegate {
     }
 }
 
-private final class SharedStringsDelegate: NSObject, XMLParserDelegate {
+private nonisolated final class SharedStringsDelegate: NSObject, XMLParserDelegate {
     private var inStringItem = false
     private var inText = false
     private var buffer = ""
@@ -270,13 +305,15 @@ private final class SharedStringsDelegate: NSObject, XMLParserDelegate {
     }
 }
 
-private final class WorksheetRowsDelegate: NSObject, XMLParserDelegate {
+private nonisolated final class WorksheetRowsDelegate: NSObject, XMLParserDelegate {
     private let sharedStrings: [String]
     private var currentCellReference = ""
     private var currentCellType = ""
     private var currentCellValue = ""
+    private var currentFormula = ""
     private var currentRow: [Int: String] = [:]
     private var inValue = false
+    private var inFormula = false
     private(set) var rows: [[String]] = []
 
     init(sharedStrings: [String]) {
@@ -291,8 +328,11 @@ private final class WorksheetRowsDelegate: NSObject, XMLParserDelegate {
             currentCellReference = attributeDict["r"] ?? ""
             currentCellType = attributeDict["t"] ?? ""
             currentCellValue = ""
+            currentFormula = ""
         case "v", "t":
             inValue = true
+        case "f":
+            inFormula = true
         default:
             break
         }
@@ -301,6 +341,8 @@ private final class WorksheetRowsDelegate: NSObject, XMLParserDelegate {
     func parser(_ parser: XMLParser, foundCharacters string: String) {
         if inValue {
             currentCellValue += string
+        } else if inFormula {
+            currentFormula += string
         }
     }
 
@@ -308,6 +350,8 @@ private final class WorksheetRowsDelegate: NSObject, XMLParserDelegate {
         switch elementName {
         case "v", "t":
             inValue = false
+        case "f":
+            inFormula = false
         case "c":
             let index = columnIndex(from: currentCellReference)
             currentRow[index] = resolvedCellValue()
@@ -325,6 +369,10 @@ private final class WorksheetRowsDelegate: NSObject, XMLParserDelegate {
         let raw = currentCellValue.trimmingCharacters(in: .whitespacesAndNewlines)
         if currentCellType == "s", let idx = Int(raw), sharedStrings.indices.contains(idx) {
             return sharedStrings[idx]
+        }
+        let formula = currentFormula.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !formula.isEmpty {
+            return raw.isEmpty ? "=\(formula)" : "=\(formula) → \(raw)"
         }
         return raw
     }

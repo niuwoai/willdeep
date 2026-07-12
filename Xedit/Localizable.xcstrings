@@ -6898,6 +6898,55 @@
         }
       }
     },
+    "attachment-citation.export-action" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Export…" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "导出…" } }
+      }
+    },
+    "attachment-citation.export-failed" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Could not export document citation" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "无法导出文档引用" } }
+      }
+    },
+    "attachment-citation.export-title" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Export Document Citation" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "导出文档引用" } }
+      }
+    },
+    "attachment-citation.highlighted-source" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Referenced source" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "引用原文" } }
+      }
+    },
+    "attachment-citation.open-original" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Open Original" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "打开原文件" } }
+      }
+    },
+    "attachment-citation.show-in-finder" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Show in Finder" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "在 Finder 中显示" } }
+      }
+    },
+    "attachment-citation.window-title" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Document Citation" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "文档引用" } }
+      }
+    },
     "composer.at-picker.no-matches" : {
       "extractionState" : "extracted_with_value",
       "localizations" : {
@@ -7121,20 +7170,193 @@
         }
       }
     },
-    "composer.attach-image.help" : {
-      "comment" : "Tooltip for the composer image attachment button",
+    "composer.attachment.chunk" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Chunk %lld" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "分块 %lld" } }
+      }
+    },
+    "composer.attachment.injection-warning" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Suspicious instructions detected" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "检测到可疑指令" } }
+      }
+    },
+    "composer.attachment.ocr-used" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Local OCR used" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "已使用本地 OCR" } }
+      }
+    },
+    "composer.attachment.page" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Page %lld" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "第 %lld 页" } }
+      }
+    },
+    "composer.attachment.parse-failed" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Could not parse this attachment" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "无法解析此附件" } }
+      }
+    },
+    "composer.attachment.parsing" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Parsing locally…" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "正在本地解析…" } }
+      }
+    },
+    "composer.attachment.preview-help" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Preview parsed attachment" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "预览附件解析结果" } }
+      }
+    },
+    "composer.attachment.session-disable" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Exclude from future turns" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "后续消息不再使用" } }
+      }
+    },
+    "composer.attachment.session-documents" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Conversation documents · %lld" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "本会话资料 · %lld" } }
+      }
+    },
+    "composer.attachment.session-enable" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Include in future turns" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "后续消息继续使用" } }
+      }
+    },
+    "composer.attachment.session-remove" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Remove from this conversation" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "从本会话资料中移除" } }
+      }
+    },
+    "composer.attachment.ready" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "%lld sources · %lld characters extracted" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "已提取 %lld 个来源 · %lld 个字符" } }
+      }
+    },
+    "composer.attachment.remove-help" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Remove attachment" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "移除附件" } }
+      }
+    },
+    "composer.attachment.select-all" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Select all" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "全选" } }
+      }
+    },
+    "composer.attachment.select-none" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Select none" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "全不选" } }
+      }
+    },
+    "composer.attachment.sheet" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Sheet: %@" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "工作表：%@" } }
+      }
+    },
+    "composer.attachment.wait-for-parsing" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Wait for local attachment parsing to finish" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "等待本地附件解析完成" } }
+      }
+    },
+    "composer.attach-file.help" : {
+      "comment" : "Tooltip for the composer image and document attachment button",
       "extractionState" : "manual",
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Attach image"
+            "value" : "Attach images or documents"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "附加图片"
+            "value" : "附加图片或文档"
+          }
+        }
+      }
+    },
+    "composer.attach-file.panel-title" : {
+      "comment" : "Title of the file picker opened from the Agent composer",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Attach Files or Knowledge Folders"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "附加文件或知识文件夹"
+          }
+        }
+      }
+    },
+    "composer.attach-file.too-large" : {
+      "comment" : "Error shown when a document attachment exceeds the local size limit",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ is larger than the 50 MB attachment limit."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ 超过了 50 MB 的附件大小限制。"
+          }
+        }
+      }
+    },
+    "composer.attach-file.unsupported" : {
+      "comment" : "Error shown when a dropped file is not a supported Agent attachment type",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ is not a supported attachment type."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ 不是受支持的附件类型。"
           }
         }
       }
@@ -7227,6 +7449,132 @@
             "value" : "每行填写一个密码或 Token。插入后，把生成的占位符放到命令、请求头或表单字段真正需要的位置。"
           }
         }
+      }
+    },
+    "composer.document-mode.automatic" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Auto document task" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "自动文档任务" } }
+      }
+    },
+    "composer.document-mode.code-review" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Code review" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "代码审查" } }
+      }
+    },
+    "composer.document-mode.compare" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Compare documents" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "比较文档" } }
+      }
+    },
+    "composer.document-mode.evidence" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Extract evidence" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "提取证据" } }
+      }
+    },
+    "composer.document-mode.spreadsheet" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Analyze spreadsheet" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "分析电子表格" } }
+      }
+    },
+    "composer.document-mode.summarize" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Summarize documents" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "总结文档" } }
+      }
+    },
+    "composer.document.redact-sensitive" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Redact sensitive data" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "脱敏后发送" } }
+      }
+    },
+    "composer.document.send-preview" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Send preview" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "发送预览" } }
+      }
+    },
+    "composer.document.send-preview-close" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Close send preview" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "关闭发送预览" } }
+      }
+    },
+    "composer.document.send-preview-title" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Document context sent to the model" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "将发送给模型的文档上下文" } }
+      }
+    },
+    "composer.document.sensitive-findings" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "%lld sensitive values detected locally" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "本地检测到 %lld 个敏感值" } }
+      }
+    },
+    "composer.knowledge-folder.apply-exclusions" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Apply" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "应用" } }
+      }
+    },
+    "composer.knowledge-folder.exclusions-help" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Comma-separated .gitignore-style patterns" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "使用逗号分隔的 .gitignore 风格规则" } }
+      }
+    },
+    "composer.knowledge-folder.exclusions-placeholder" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Extra exclusions, e.g. drafts/**, *.log" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "额外排除，例如 drafts/**, *.log" } }
+      }
+    },
+    "composer.knowledge-folder.failed" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Could not index this folder" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "无法索引此文件夹" } }
+      }
+    },
+    "composer.knowledge-folder.indexing" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Indexing local documents…" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "正在索引本地文档…" } }
+      }
+    },
+    "composer.knowledge-folder.ready" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "%lld documents ready · %lld skipped" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "%lld 份文档可用 · 已跳过 %lld 项" } }
+      }
+    },
+    "composer.knowledge-folder.title" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Knowledge folders · %lld" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "知识文件夹 · %lld" } }
       }
     },
     "composer.queue-send.help" : {

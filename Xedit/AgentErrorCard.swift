@@ -29,6 +29,19 @@ struct AgentErrorCard: View {
                     .foregroundStyle(.red)
                     .fixedSize(horizontal: false, vertical: true)
                 Spacer(minLength: 0)
+                if appState.agentErrorRequiresSomeIMLogin {
+                    Button {
+                        EditorSettingsNavigation.shared.openSomeIM(
+                            autogenerateBrowserLogin: true,
+                            appState: appState
+                        )
+                    } label: {
+                        Label("去登录 some.im", systemImage: "person.crop.circle.badge.plus")
+                    }
+                    .buttonStyle(.borderless)
+                    .font(.caption)
+                    .help("打开 some.im 登录页；登录后点「重试」重新发送")
+                }
                 if appState.canRetryLastAgentTurn {
                     Button {
                         appState.retryLastAgentTurn()

@@ -91,6 +91,14 @@ nonisolated struct AgentSession: Identifiable, Codable, Equatable {
     /// Structured record of which memories / attached skills were
     /// injected into the latest turn context.
     var latestTurnRecall: AgentTurnRecallSnapshot?
+    /// Parsed local documents kept available for future turns in this
+    /// conversation. The extracted sections are persisted so reopening a
+    /// session does not repeatedly OCR or unzip unchanged files.
+    var documentAttachments: [AgentFileAttachment]
+    /// User-selected folders indexed as session-scoped local knowledge.
+    var knowledgeFolders: [AgentKnowledgeFolder]
+    var documentTaskMode: AgentDocumentTaskMode
+    var redactSensitiveAttachmentContent: Bool
     /// Per-session right side-panel state. The visible Agent pane swaps
     /// this state when the user switches sessions, so a panel opened in
     /// one chat is restored when returning to that chat without leaking
@@ -145,6 +153,10 @@ nonisolated struct AgentSession: Identifiable, Codable, Equatable {
         currentGoal: AgentGoal? = nil,
         learningEvents: [AgentLearningEvent] = [],
         latestTurnRecall: AgentTurnRecallSnapshot? = nil,
+        documentAttachments: [AgentFileAttachment] = [],
+        knowledgeFolders: [AgentKnowledgeFolder] = [],
+        documentTaskMode: AgentDocumentTaskMode = .automatic,
+        redactSensitiveAttachmentContent: Bool = true,
         sidePanelState: AgentSidePanelState = .empty,
         pinnedAt: Date? = nil,
         archivedAt: Date? = nil,
@@ -176,6 +188,10 @@ nonisolated struct AgentSession: Identifiable, Codable, Equatable {
         self.currentGoal = currentGoal
         self.learningEvents = learningEvents
         self.latestTurnRecall = latestTurnRecall
+        self.documentAttachments = documentAttachments
+        self.knowledgeFolders = knowledgeFolders
+        self.documentTaskMode = documentTaskMode
+        self.redactSensitiveAttachmentContent = redactSensitiveAttachmentContent
         self.sidePanelState = sidePanelState
         self.pinnedAt = pinnedAt
         self.archivedAt = archivedAt
@@ -237,7 +253,7 @@ nonisolated struct AgentSession: Identifiable, Codable, Equatable {
         case id, title, workspaceRootPath, workspaceLocation, localWorkspaceIdentity, modelID
         case providerID, providerDisplayName, managedRouting
         case createdAt, updatedAt, messages, contextSummary, contextSummaryThroughMessageID
-        case didEditFiles, agentEditedPaths, agentArtifactPaths, interactionMode, approvalMode, executionAgent, activeExperts, currentPlan, currentGoal, learningEvents, latestTurnRecall, sidePanelState
+        case didEditFiles, agentEditedPaths, agentArtifactPaths, interactionMode, approvalMode, executionAgent, activeExperts, currentPlan, currentGoal, learningEvents, latestTurnRecall, documentAttachments, knowledgeFolders, documentTaskMode, redactSensitiveAttachmentContent, sidePanelState
         case pinnedAt, archivedAt, titleIsUserSet
     }
 
@@ -269,6 +285,10 @@ nonisolated struct AgentSession: Identifiable, Codable, Equatable {
         self.currentGoal = try c.decodeIfPresent(AgentGoal.self, forKey: .currentGoal)
         self.learningEvents = try c.decodeIfPresent([AgentLearningEvent].self, forKey: .learningEvents) ?? []
         self.latestTurnRecall = try c.decodeIfPresent(AgentTurnRecallSnapshot.self, forKey: .latestTurnRecall)
+        self.documentAttachments = try c.decodeIfPresent([AgentFileAttachment].self, forKey: .documentAttachments) ?? []
+        self.knowledgeFolders = try c.decodeIfPresent([AgentKnowledgeFolder].self, forKey: .knowledgeFolders) ?? []
+        self.documentTaskMode = try c.decodeIfPresent(AgentDocumentTaskMode.self, forKey: .documentTaskMode) ?? .automatic
+        self.redactSensitiveAttachmentContent = try c.decodeIfPresent(Bool.self, forKey: .redactSensitiveAttachmentContent) ?? true
         self.sidePanelState = try c.decodeIfPresent(AgentSidePanelState.self, forKey: .sidePanelState) ?? .empty
         self.pinnedAt = try c.decodeIfPresent(Date.self, forKey: .pinnedAt)
         self.archivedAt = try c.decodeIfPresent(Date.self, forKey: .archivedAt)
@@ -1632,13 +1652,95 @@ struct AgentErrorDetails: Equatable, Identifiable {
     }
 }
 
-/// A file the user attached via the composer's `@` picker. We carry the
-/// URL (for display + dedup) and a workspace-relative display path; the
-/// actual contents get re-read at send time so the model always sees
-/// the latest on-disk state, not a stale snapshot.
-struct AgentFileAttachment: Identifiable, Equatable {
+nonisolated enum AgentAttachmentParseStatus: String, Codable, Equatable, Sendable {
+    case parsing
+    case ready
+    case failed
+}
+
+nonisolated enum AgentAttachmentDocumentKind: String, Codable, Equatable, Sendable {
+    case text
+    case pdf
+    case word
+    case spreadsheet
+}
+
+nonisolated enum AgentAttachmentSectionKind: String, Codable, Equatable, Sendable {
+    case page
+    case sheet
+    case heading
+    case chunk
+}
+
+nonisolated struct AgentAttachmentSection: Identifiable, Codable, Equatable, Sendable {
+    let id: String
+    let kind: AgentAttachmentSectionKind
+    let ordinal: Int
+    let title: String
+    let sourceReference: String
+    let text: String
+    let wasRecognizedByOCR: Bool
+}
+
+nonisolated struct AgentAttachmentAnalysis: Codable, Equatable, Sendable {
+    let documentKind: AgentAttachmentDocumentKind
+    let sections: [AgentAttachmentSection]
+    let totalUnitCount: Int
+    let didUseOCR: Bool
+    let warnings: [String]
+    let containsPotentialPromptInjection: Bool
+
+    var extractedCharacterCount: Int {
+        sections.reduce(0) { $0 + $1.text.count }
+    }
+}
+
+/// A local file staged in the composer. Parsing starts immediately so the UI
+/// can preview exactly what will be sent; the original URL remains the source
+/// of truth and can be re-attached when the user wants a fresh parse.
+nonisolated struct AgentFileAttachment: Identifiable, Codable, Equatable, Sendable {
     let url: URL
     let relativePath: String
+    var parseStatus: AgentAttachmentParseStatus = .parsing
+    var analysis: AgentAttachmentAnalysis?
+    var parseError: String?
+    var excludedSectionIDs: Set<String> = []
+    var isEnabled: Bool = true
+    var sourceFileSize: Int64?
+    var sourceModifiedAt: Date?
+
+    var id: String { url.standardizedFileURL.path }
+
+    var includedSections: [AgentAttachmentSection] {
+        guard let analysis else { return [] }
+        return analysis.sections.filter { !excludedSectionIDs.contains($0.id) }
+    }
+}
+
+nonisolated enum AgentKnowledgeFolderIndexStatus: String, Codable, Equatable, Sendable {
+    case indexing
+    case ready
+    case failed
+}
+
+nonisolated enum AgentDocumentTaskMode: String, Codable, CaseIterable, Equatable, Sendable {
+    case automatic
+    case summarize
+    case compare
+    case spreadsheetAnalysis
+    case codeReview
+    case evidenceExtraction
+}
+
+nonisolated struct AgentKnowledgeFolder: Identifiable, Codable, Equatable, Sendable {
+    let url: URL
+    var isEnabled: Bool = true
+    var status: AgentKnowledgeFolderIndexStatus = .indexing
+    var documents: [AgentFileAttachment] = []
+    var excludedPatterns: [String] = []
+    var skippedFileCount: Int = 0
+    var lastIndexedAt: Date?
+    var errorMessage: String?
 
     var id: String { url.standardizedFileURL.path }
 }

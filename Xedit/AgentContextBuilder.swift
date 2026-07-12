@@ -183,6 +183,10 @@ enum AgentContextBuilder {
             sections.append(goalBlock)
         }
 
+        if interactionMode == .goal {
+            sections.append("Goal mode restriction: rename_session and change_workspace are unavailable. Do not request, simulate, or retry either action; keep working in the current session and workspace so the goal run is not paused.")
+        }
+
         if toolsEnabled {
             sections.append("""
             - Current approval mode: \(approvalMode.displayName). \(approvalMode.conciseSystemPromptDescription)
@@ -312,6 +316,7 @@ enum AgentContextBuilder {
                 sections.append("""
                 Extended tool capability map:
                 - Workspace exploration: search_files, grep_files, read_file, list_directory, git_status.
+                - Conversation state: rename_session proposes a durable title for the current conversation; change_workspace proposes rebinding it to a known local directory. Both always require the user's explicit approval.
                 - New files: create_file (path + full content) writes a brand-new file to disk immediately. Always use it for creation — never edit_file/apply_patch.
                 - Proposed edits: edit_file replaces an exact old_string with new_string in an EXISTING file (PREFERRED — the host builds the diff from the real file content). If every edited file is already tracked by git and clean against HEAD, the host writes the edit directly; otherwise it shows a patch card inline in the chat (below your message) that the user clicks Apply on. apply_patch validates a unified diff as a legacy fallback. Goal mode / workspace-access approval auto-apply edits too.
                 - Shell and verification: run_command for build/test/render commands; use run_in_background with list_jobs/get_job_output/kill_job for long tasks.
@@ -328,6 +333,7 @@ enum AgentContextBuilder {
             sections.append("""
             Stable tool contract:
             - You can call tools to look around the workspace before answering: search_files, grep_files, read_file, list_directory, git_status, run_command.
+            - Use rename_session only when the user asks, or when the existing title is clearly misleading after the conversation's scope changes; do not rename repeatedly for cosmetic reasons. Use change_workspace only when the current workspace is missing/wrong and the task clearly identifies another known absolute local directory. Both actions always require explicit per-call approval. After change_workspace succeeds, stop the turn and wait for the user's next message before calling any workspace, file, terminal, or command tool.
             - Treat the visible side-panel terminal as a separate, stateful machine context. Before using terminal_send_command for anything that depends on local-vs-remote location, inspect or rely on terminal_snapshot and keep a session-level note of whether the active terminal tab is a local macOS shell, an SSH session, which host/user it is on, and what directory it shows. If the active terminal is SSH'd into a server, do not send commands that are meant to run locally on the Mac or in the workspace runtime; use run_command instead. If the user explicitly asks to run in the side-panel terminal but the current host is unclear, check terminal_snapshot or ask one concrete confirmation question.
             - When operating the visible side-panel terminal, avoid creating or overwriting files with heredoc, here-string, `cat > file`, `echo > file`, or similar pasted multi-line shell techniques by default. Prefer create_file/edit_file/apply_patch for local workspace files, run_command for ordinary command execution, and explicit file transfer tools for host-to-host copies. If the terminal is the only viable path to a remote host and transfer tools are unavailable, a small auditable heredoc or patch-style shell fallback is acceptable; verify the result afterwards.
             - WillDeep's visible side-panel terminal supports rz/sz ZMODEM transfers by intercepting lrzsz handshakes. With terminal_send_command, pass `zmodem_upload_paths` alongside remote `rz` to preselect local upload files, or `zmodem_download_directory` alongside remote `sz <file>` to preselect the local destination; omit them only when the user should choose through the macOS file panel. Before asking a remote shell to use `rz` or `sz`, check `command -v rz sz`; if missing, tell the user how to install lrzsz for that server OS (for example apt/yum/dnf/apk/brew install lrzsz). The local Mac also needs lrzsz; WillDeep prompts for `brew install lrzsz` if local `rz`/`sz` is missing. If the remote host cannot install lrzsz or ZMODEM setup fails, fall back to scp/rsync, workspace files, attachments, App edit/write flow, apply_patch for local files, or a careful remote shell edit fallback instead.

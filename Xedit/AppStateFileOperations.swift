@@ -203,6 +203,17 @@ extension AppState {
         let cleaned = Self.agentFilePathWithoutLineSuffix(rawPath)
         let expanded = (cleaned as NSString).expandingTildeInPath
 
+        let attachmentDocuments = agentPendingFiles
+            + agentSessionDocuments
+            + agentKnowledgeFolders.flatMap(\.documents)
+        if let attachment = AgentAttachmentCitationResolver.matchingFile(
+            relativePath: cleaned,
+            in: attachmentDocuments
+        ), activeRuntime?.workspaceRootPath?.isEmpty != false {
+            revealInFinder(attachment.url)
+            return
+        }
+
         if expanded.hasPrefix("/") {
             let url = URL(fileURLWithPath: expanded).standardizedFileURL
             var isDirectory: ObjCBool = false

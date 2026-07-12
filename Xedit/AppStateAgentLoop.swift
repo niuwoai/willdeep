@@ -68,6 +68,21 @@ extension AppState {
             persistAgentSession(runtime: runtime)
         }
 
+        // some.im login gate: a session created on 「省心托管」can outlive its
+        // login (logout here or in another app sharing the Keychain group, or
+        // an expired token). Sending anyway would fire an unauthenticated relay
+        // request that returns an empty stream and gets silently dropped at the
+        // "stream ended empty" branch below — the user sees no reply and no
+        // error. Stop here with an actionable, re-sendable error instead. The
+        // user's message is already on screen (appended above); we neither grab
+        // a provider slot nor start a turn.
+        guard !someIMLoginRequiredForTurn(for: runtime, providerID: providerID) else {
+            runtime.isAwaitingProviderSlot = false
+            setSomeIMLoginRequiredError(for: runtime)
+            persistAgentSession(runtime: runtime)
+            return
+        }
+
         // Concurrency gate: cap simultaneous turns per provider so a
         // routine fleet can't blow past the provider's rate limit. If
         // the slot isn't open, queue this dispatch — `releaseProviderSlot`
@@ -93,6 +108,7 @@ extension AppState {
         runtime.isAwaitingProviderSlot = false
         runtime.errorMessage = nil
         runtime.errorDetails = nil
+        runtime.errorRequiresSomeIMLogin = false
         runtime.isResponding = true
         runtime.turnStartedAt = Date()
         runtime.currentTurnAttachedSkills = attachedSkills
@@ -744,7 +760,10 @@ extension AppState {
                     do {
                         try await client.streamChat(
                             messages: requestMessages,
-                            tools: AgentToolRegistry.tools(activeExperts: activeExperts)
+                            tools: AgentToolRegistry.tools(
+                                activeExperts: activeExperts,
+                                interactionMode: runtime.interactionMode
+                            )
                         ) { event in
                             await MainActor.run { [weak runtime] in
                                 guard let runtime,
@@ -911,6 +930,7 @@ extension AppState {
 
             // Execute every tool call, gating on the user when necessary.
             var anyDenied = false
+            var changedWorkspacePath: String?
             for call in latestToolCalls {
                 // Parse argumentsJSON into a dict for downstream risk/dispatch.
                 // The model occasionally emits malformed JSON (especially on
@@ -949,6 +969,62 @@ extension AppState {
                         )
                         continue
                     }
+                }
+
+                // Goal mode must stay autonomous. These confirmation-bound
+                // host actions are not advertised there; this is the final
+                // guard for stale provider schemas or hallucinated calls.
+                if runtime.interactionMode == .goal,
+                   AgentToolRegistry.isSessionMutationTool(call.toolName) {
+                    let blocked = AgentToolCall(
+                        messageID: assistantID,
+                        externalID: call.externalID,
+                        toolName: call.toolName,
+                        arguments: argsDict,
+                        risk: .write,
+                        status: .denied,
+                        approvalSource: nil
+                    )
+                    var record = blocked
+                    record.errorMessage = "Unavailable in Goal mode"
+                    runtime.toolCalls.append(record)
+                    appendToolMessage(
+                        for: runtime,
+                        toolCallID: call.externalID,
+                        payload: "Unavailable in Goal mode: session rename and workspace change are suppressed so the active goal cannot be paused. Continue working in the current session and workspace.",
+                        source: .systemNotice
+                    )
+                    continue
+                }
+
+                // A successful workspace rebind invalidates the root captured
+                // for this model round. Answer every remaining tool_call so
+                // provider history stays structurally valid, but do not run it
+                // against either the stale or newly rebound directory.
+                if let changedWorkspacePath {
+                    let skipped = AgentToolCall(
+                        messageID: assistantID,
+                        externalID: call.externalID,
+                        toolName: call.toolName,
+                        arguments: argsDict,
+                        risk: AgentToolRegistry.risk(
+                            for: call.toolName,
+                            arguments: argsDict,
+                            rootDirectory: workspaceURL
+                        ),
+                        status: .denied,
+                        approvalSource: nil
+                    )
+                    var record = skipped
+                    record.errorMessage = "Skipped after workspace change"
+                    runtime.toolCalls.append(record)
+                    appendToolMessage(
+                        for: runtime,
+                        toolCallID: call.externalID,
+                        payload: "Skipped: the workspace changed to \(changedWorkspacePath). Continue with workspace tools after the user's next message.",
+                        source: .systemNotice
+                    )
+                    continue
                 }
 
                 let risk = AgentToolRegistry.risk(
@@ -1166,7 +1242,21 @@ extension AppState {
                         try self.editableContent(forAgentPatchURL: url)
                     },
                     patchAutoApplySource: patchAutoApplySource,
-                    terminalController: agentTerminalController
+                    terminalController: agentTerminalController,
+                    sessionRenameSink: { title in
+                        try self.renameAgentSessionAfterApproval(
+                            runtimeID: runtime.id,
+                            to: title
+                        )
+                    },
+                    workspaceChangeSink: { path in
+                        let appliedPath = try self.changeAgentSessionWorkspaceAfterApproval(
+                            runtimeID: runtime.id,
+                            to: path
+                        )
+                        changedWorkspacePath = appliedPath
+                        return appliedPath
+                    }
                 )
                 do {
                     let result = try await AgentToolRunner.run(
@@ -1195,7 +1285,8 @@ extension AppState {
                         approvalSource: effectiveApprovalSource,
                         outcome: "succeeded"
                     )
-                    if call.toolName == "run_command" || risk != .read || patchAutoApplySource != nil {
+                    if call.toolName != "change_workspace",
+                       call.toolName == "run_command" || risk != .read || patchAutoApplySource != nil {
                         await refreshGitStatusAfterAgentTool(
                             for: runtime,
                             workspaceURL: workspaceURL,
@@ -1230,6 +1321,21 @@ extension AppState {
                         source: .systemNotice
                     )
                 }
+            }
+
+            if let changedWorkspacePath {
+                let format = String(
+                    localized: "agent.workspace-change.completed",
+                    defaultValue: "Workspace changed to %@. Send your next message to continue in the new workspace."
+                )
+                runtime.messages.append(
+                    AgentMessage(
+                        role: .assistant,
+                        content: String(format: format, changedWorkspacePath),
+                        origin: .nativeModel
+                    )
+                )
+                return
             }
 
             if anyDenied, finishReason == "stop" {

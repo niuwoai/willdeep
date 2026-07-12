@@ -66,6 +66,22 @@ enum AgentToolRegistry {
             parameters: []
         ),
         AgentToolDescriptor(
+            name: "rename_session",
+            description: "Propose a concise new title for the CURRENT conversation. Use sparingly: when the user asks for a rename, or when the existing title is clearly misleading after the task's scope changed. Never churn titles for cosmetic reasons. Always shows the user an approval card before changing session state.",
+            risk: .write,
+            parameters: [
+                AgentToolParameter(name: "title", type: .string, description: "Concise single-line conversation title, at most 120 characters.", required: true)
+            ]
+        ),
+        AgentToolDescriptor(
+            name: "change_workspace",
+            description: "Propose rebinding the CURRENT conversation to a different local workspace. Use only when the current workspace is missing or wrong and the task clearly targets a known absolute local directory. Always shows the user an approval card. After it succeeds, stop the current turn; workspace/file/command tools may resume after the user's next message with the new context.",
+            risk: .write,
+            parameters: [
+                AgentToolParameter(name: "path", type: .string, description: "Absolute path of an existing local directory.", required: true)
+            ]
+        ),
+        AgentToolDescriptor(
             name: "run_command",
             description: "Run a shell command in the workspace root. This is the DEFAULT way to execute any shell command — including ones that reach other machines (scp / rsync / ssh remote-host), file copies, builds, installs, and tests. Only use terminal_send_command instead when the user explicitly asks for the command to be run in the visible side-panel terminal. Requires user approval. Refuses commands that escape the workspace. Pass `run_in_background: true` for long-running tasks (dev servers, watchers, big builds, test suites that take minutes) — the call returns immediately with a job handle and you receive a system notification when the job finishes; meanwhile inspect partial output with `get_job_output` or stop it with `kill_job`.",
             risk: .write,
@@ -1513,8 +1529,14 @@ enum AgentToolRegistry {
         )
     ]
 
-    static func tools(activeExperts: Set<AgentExpert>) -> [AgentToolDescriptor] {
+    static func tools(
+        activeExperts: Set<AgentExpert>,
+        interactionMode: AgentInteractionMode = .normal
+    ) -> [AgentToolDescriptor] {
         all.filter { descriptor in
+            if interactionMode == .goal, isSessionMutationTool(descriptor.name) {
+                return false
+            }
             if descriptor.name.hasPrefix("short_drama_") {
                 return activeExperts.contains(.shortDrama)
             }
@@ -1523,6 +1545,10 @@ enum AgentToolRegistry {
             }
             return true
         }
+    }
+
+    static func isSessionMutationTool(_ name: String) -> Bool {
+        name == "rename_session" || name == "change_workspace"
     }
 
     static func descriptor(for name: String) -> AgentToolDescriptor? {

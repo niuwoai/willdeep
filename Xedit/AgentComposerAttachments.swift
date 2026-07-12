@@ -4,7 +4,7 @@
 //
 //  Small composer chrome split out of AgentModeComposerView.swift in
 //  rc42: three buttons sitting around the text editor —
-//   - `AttachButton`: "+" image-paste trigger
+//   - `AttachButton`: "+" image/document attachment trigger
 //   - `SendStopButton`: sends normally when idle; while the agent is
 //     busy, the arrow queues the composer text and a separate red stop
 //     disc interrupts the active turn.
@@ -30,7 +30,7 @@ struct AttachButton: View {
                 .foregroundStyle(.secondary)
         }
         .buttonStyle(.plain)
-        .help(L10n.Composer.attachImageHelp)
+        .help(L10n.Composer.attachFileHelp)
     }
 }
 
@@ -107,18 +107,25 @@ struct SendStopButton: View {
             }
             .buttonStyle(.plain)
             .disabled(!appState.isAgentResponding && !canSend)
-            .help(appState.isAgentResponding ? L10n.Composer.stopHelp : L10n.Composer.sendHelp)
+            .help(
+                appState.isAgentResponding
+                    ? L10n.Composer.stopHelp
+                    : (appState.hasParsingAgentFileAttachments
+                        ? L10n.Composer.waitForAttachmentParsing
+                        : L10n.Composer.sendHelp)
+            )
         }
         .fixedSize()
     }
 
     private var canSend: Bool {
-        !appState.agentInput.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        !appState.hasParsingAgentFileAttachments
+            && (!appState.agentInput.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
             || !appState.agentPendingImages.isEmpty
             || !appState.agentPendingTextAttachments.isEmpty
             || !appState.agentPendingSkills.isEmpty
             || !appState.agentPendingFiles.isEmpty
-            || appState.agentPendingIncludeWorkspaceOverview
+            || appState.agentPendingIncludeWorkspaceOverview)
     }
 }
 

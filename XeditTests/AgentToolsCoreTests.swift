@@ -54,6 +54,60 @@ struct AgentToolsCoreTests {
         #expect(AgentToolCallStatus.denied.rawValue == "denied")
     }
 
+    @Test("session mutation tools are write-tier and invoke host sinks")
+    func sessionMutationToolsUseApprovedHostActions() async throws {
+        #expect(AgentToolRegistry.descriptor(for: "rename_session")?.risk == .write)
+        #expect(AgentToolRegistry.descriptor(for: "change_workspace")?.risk == .write)
+        let normalToolNames = Set(AgentToolRegistry.tools(activeExperts: []).map(\.name))
+        let goalToolNames = Set(AgentToolRegistry.tools(activeExperts: [], interactionMode: .goal).map(\.name))
+        #expect(normalToolNames.contains("rename_session"))
+        #expect(normalToolNames.contains("change_workspace"))
+        #expect(!goalToolNames.contains("rename_session"))
+        #expect(!goalToolNames.contains("change_workspace"))
+
+        var renamedTitle: String?
+        var changedPath: String?
+        let context = AgentToolContext(
+            rootDirectory: nil,
+            sessionRenameSink: { title in
+                renamedTitle = title
+                return title
+            },
+            workspaceChangeSink: { path in
+                changedPath = path
+                return path
+            }
+        )
+
+        let renameResult = try await AgentToolRunner.run(
+            name: "rename_session",
+            arguments: ["title": .string("  Workspace   migration \n")],
+            context: context
+        )
+        let workspaceResult = try await AgentToolRunner.run(
+            name: "change_workspace",
+            arguments: ["path": .string("/tmp/example")],
+            context: context
+        )
+
+        #expect(renamedTitle == "Workspace migration")
+        #expect(renameResult.payload.contains("Workspace migration"))
+        #expect(changedPath == "/tmp/example")
+        #expect(workspaceResult.payload.contains("Stop"))
+
+        let appState = AppState()
+        for toolName in ["rename_session", "change_workspace"] {
+            let autoApproval = await appState.autoApprovalSource(
+                toolName: toolName,
+                arguments: [:],
+                risk: .write,
+                rootDirectory: nil,
+                interactionMode: .goal
+            )
+            #expect(autoApproval == nil)
+        }
+    }
+
     @Test("terminal protected-input payload exposes only prompts, never values")
     func terminalProtectedInputPromptSetParsesPendingPrompts() {
         let shortcutID = UUID()

@@ -46,6 +46,8 @@ nonisolated enum AgentToolDisplay {
         "read_file": "读取文件",
         "list_directory": "浏览目录",
         "git_status": "查看 Git 状态",
+        "rename_session": "重命名会话",
+        "change_workspace": "更改 Workspace",
         "run_command": "运行命令",
         "terminal_snapshot": "终端快照",
         "terminal_create_shortcut": "生成终端录制",

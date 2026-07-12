@@ -506,6 +506,11 @@ private struct ComposerCard: View {
 
     var body: some View {
         let palette = appState.editorSettings.interfaceSkin.palette
+        let pendingFileIDs = Set(appState.agentPendingFiles.map(\.id))
+        let retainedSessionDocuments = appState.agentSessionDocuments.filter { !pendingFileIDs.contains($0.id) }
+        let hasDocumentContext = !appState.agentPendingFiles.isEmpty
+            || !appState.agentSessionDocuments.isEmpty
+            || !appState.agentKnowledgeFolders.isEmpty
         VStack(alignment: .leading, spacing: 8) {
             if !appState.agentPendingImages.isEmpty {
                 AgentComposerImageStrip(images: appState.agentPendingImages) { id in
@@ -525,12 +530,53 @@ private struct ComposerCard: View {
                 }
             }
 
+            if hasDocumentContext {
+                AgentDocumentContextControls(
+                    mode: appState.agentDocumentTaskMode,
+                    redactsSensitiveContent: appState.agentRedactsSensitiveAttachmentContent,
+                    makePreview: appState.agentDocumentSendPreview,
+                    onSetMode: appState.setAgentDocumentTaskMode,
+                    onSetRedaction: appState.setAgentSensitiveAttachmentRedaction
+                )
+            }
+
+            if !retainedSessionDocuments.isEmpty {
+                AgentSessionDocumentLibraryStrip(
+                    files: retainedSessionDocuments,
+                    onToggleEnabled: { appState.toggleAgentSessionDocumentEnabled(id: $0) },
+                    onRemove: { appState.removeAgentSessionDocument(id: $0) },
+                    onToggleSection: { fileID, sectionID in
+                        appState.toggleAgentSessionDocumentSection(fileID: fileID, sectionID: sectionID)
+                    },
+                    onSetAllSections: { fileID, included in
+                        appState.setAllAgentSessionDocumentSections(fileID: fileID, included: included)
+                    }
+                )
+            }
+
+            if !appState.agentKnowledgeFolders.isEmpty {
+                AgentKnowledgeFolderStrip(
+                    folders: appState.agentKnowledgeFolders,
+                    onToggleEnabled: { appState.toggleAgentKnowledgeFolderEnabled(id: $0) },
+                    onRemove: { appState.removeAgentKnowledgeFolder(id: $0) },
+                    onUpdateExclusions: { folderID, patterns in
+                        appState.updateAgentKnowledgeFolderExclusions(id: folderID, rawPatterns: patterns)
+                    }
+                )
+            }
+
             if !appState.agentPendingFiles.isEmpty || appState.agentPendingIncludeWorkspaceOverview {
                 AgentComposerAttachmentStrip(
                     includeWorkspace: appState.agentPendingIncludeWorkspaceOverview,
                     files: appState.agentPendingFiles,
                     onRemoveWorkspace: { appState.toggleAgentWorkspaceOverview() },
-                    onRemoveFile: { appState.detachAgentFile(id: $0) }
+                    onRemoveFile: { appState.detachAgentFile(id: $0) },
+                    onToggleFileSection: { fileID, sectionID in
+                        appState.toggleAgentFileSection(fileID: fileID, sectionID: sectionID)
+                    },
+                    onSetAllFileSections: { fileID, included in
+                        appState.setAllAgentFileSections(fileID: fileID, included: included)
+                    }
                 )
             }
 
@@ -653,7 +699,7 @@ private struct ComposerCard: View {
             }
 
             HStack(spacing: 6) {
-                AttachButton(action: attachImageFromPanel)
+                AttachButton(action: attachFilesFromPanel)
                 ComposerAdaptiveControlStrip()
                 Spacer(minLength: 0)
                 if !appState.agentQueuedMessages.isEmpty {
@@ -900,38 +946,41 @@ private struct ComposerCard: View {
 
     private func handleDroppedProviders(_ providers: [NSItemProvider]) {
         for provider in providers {
-            if provider.canLoadObject(ofClass: NSImage.self) {
+            if provider.hasItemConformingToTypeIdentifier(UTType.fileURL.identifier) {
+                provider.loadItem(forTypeIdentifier: UTType.fileURL.identifier, options: nil) { item, _ in
+                    let url: URL?
+                    if let fileURL = item as? URL {
+                        url = fileURL
+                    } else if let data = item as? Data {
+                        url = URL(dataRepresentation: data, relativeTo: nil)
+                    } else {
+                        url = nil
+                    }
+                    guard let url else { return }
+                    DispatchQueue.main.async { attachFile(url) }
+                }
+            } else if provider.canLoadObject(ofClass: NSImage.self) {
                 _ = provider.loadObject(ofClass: NSImage.self) { object, _ in
                     guard let image = object as? NSImage,
                           let png = Self.pngData(for: image) else { return }
                     DispatchQueue.main.async { ingest(data: png, mimeType: "image/png") }
                 }
-            } else if provider.hasItemConformingToTypeIdentifier(UTType.fileURL.identifier) {
-                provider.loadItem(forTypeIdentifier: UTType.fileURL.identifier, options: nil) { item, _ in
-                    guard let data = item as? Data,
-                          let url = URL(dataRepresentation: data, relativeTo: nil),
-                          let raw = try? Data(contentsOf: url),
-                          let mime = AgentImagePasteboardHelper.mimeType(forPath: url.path) else { return }
-                    DispatchQueue.main.async { ingest(data: raw, mimeType: mime) }
-                }
             }
         }
     }
 
-    private func attachImageFromPanel() {
+    private func attachFilesFromPanel() {
         let panel = NSOpenPanel()
-        panel.title = "Attach Image"
-        panel.allowedContentTypes = [.image]
+        panel.title = L10n.Composer.attachFilePanelTitle
+        panel.allowedContentTypes = AgentComposerAttachmentSupport.allowedContentTypes
         panel.allowsMultipleSelection = true
         panel.canChooseFiles = true
-        panel.canChooseDirectories = false
+        panel.canChooseDirectories = true
 
         let completion: (NSApplication.ModalResponse) -> Void = { response in
             guard response == .OK else { return }
             for url in panel.urls {
-                guard let data = try? Data(contentsOf: url),
-                      let mime = AgentImagePasteboardHelper.mimeType(forPath: url.path) else { continue }
-                ingest(data: data, mimeType: mime)
+                attachFile(url)
             }
         }
 
@@ -945,6 +994,31 @@ private struct ComposerCard: View {
         } else {
             panel.begin(completionHandler: completion)
         }
+    }
+
+    private func attachFile(_ url: URL) {
+        var isDirectory: ObjCBool = false
+        if FileManager.default.fileExists(atPath: url.path, isDirectory: &isDirectory),
+           isDirectory.boolValue {
+            appState.addAgentKnowledgeFolder(url: url)
+            return
+        }
+
+        if let mime = AgentImagePasteboardHelper.mimeType(forPath: url.path),
+           let data = try? Data(contentsOf: url) {
+            ingest(data: data, mimeType: mime)
+            return
+        }
+
+        guard AgentComposerAttachmentSupport.isSupportedDocument(url) else {
+            appState.agentErrorMessage = L10n.Composer.unsupportedAttachment(url.lastPathComponent)
+            return
+        }
+        guard !AgentComposerAttachmentSupport.documentExceedsSizeLimit(url) else {
+            appState.agentErrorMessage = L10n.Composer.attachmentTooLarge(url.lastPathComponent)
+            return
+        }
+        appState.attachAgentFile(url: url)
     }
 
     private func ingest(data: Data, mimeType: String) {

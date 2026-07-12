@@ -111,7 +111,7 @@ struct AgentStreamingCursor: View {
 /// a one-line "📎 attached: ..." tag plus the user's prose.
 enum AgentAttachedPromptDisplay {
     /// Header emitted by `AppState.composeAttachedPrompt`. Keep in sync.
-    static let preludeHeader = "The user attached the following context for this turn — treat it as task setup, not verbatim user text:"
+    static let preludeHeader = AgentAttachedPromptProtocol.preludeHeader
 
     struct Display {
         /// `true` when the content was actually a spliced prelude and we
@@ -149,11 +149,16 @@ enum AgentAttachedPromptDisplay {
             }
         }
 
-        // 真正的用户文字位于最后一段 "---" 之后(composeAttachedPrompt
-        // 在加 userText 时总会先 append 一行 "---")。没有这行就说明
-        // 用户只挂了 skill/file 但没自己打字,这时只显示 tag。
+        // 新消息使用不可伪造的专用边界。附件正文会在进入 prompt 前
+        // 转义该边界，因此 Markdown 自己的 `---` 不会再被误认成用户
+        // 正文，导致附件尾部与 </untrusted-attachment> 泄漏到气泡。
+        // 旧消息仍兼容 `---`，但有附件时只接受安全信封结束后的分隔线。
         var userText = ""
-        if let separatorIndex = lines.lastIndex(of: "---") {
+        if let boundaryIndex = lines.firstIndex(of: AgentAttachedPromptProtocol.userTextBoundary) {
+            userText = lines[(boundaryIndex + 1)...]
+                .joined(separator: "\n")
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+        } else if let separatorIndex = legacyUserTextSeparatorIndex(in: lines, hasFiles: !files.isEmpty) {
             userText = lines[(separatorIndex + 1)...]
                 .joined(separator: "\n")
                 .trimmingCharacters(in: .whitespacesAndNewlines)
@@ -175,6 +180,16 @@ enum AgentAttachedPromptDisplay {
             files: files,
             hasWorkspace: hasWorkspace
         )
+    }
+
+    private static func legacyUserTextSeparatorIndex(in lines: [String], hasFiles: Bool) -> Int? {
+        guard hasFiles else { return lines.lastIndex(of: "---") }
+        guard let envelopeEnd = lines.lastIndex(where: {
+            $0.trimmingCharacters(in: .whitespaces) == "</untrusted-attachment>"
+        }) else {
+            return nil
+        }
+        return lines.indices.first(where: { $0 > envelopeEnd && lines[$0] == "---" })
     }
 
     private static func attachmentTag(skills: [String], files: [String], hasWorkspace: Bool) -> String {

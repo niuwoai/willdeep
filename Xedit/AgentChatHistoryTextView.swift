@@ -44,6 +44,7 @@ struct AgentChatHistoryTextView: NSViewRepresentable {
     var onReferenceGeneratedImage: ((String) -> Void)? = nil
     var onAddSelectionToTask: ((String) -> Void)? = nil
     var onOpenFilePath: ((String) -> Void)? = nil
+    var onOpenAttachmentCitation: ((AgentAttachmentCitationPayload) -> Void)? = nil
     var searchQuery: String = ""
     var activeSearchMatchIndex: Int? = nil
     var onSearchResultCountChange: ((Int) -> Void)? = nil
@@ -62,6 +63,7 @@ struct AgentChatHistoryTextView: NSViewRepresentable {
         view.onReferenceGeneratedImage = onReferenceGeneratedImage
         view.onAddSelectionToTask = onAddSelectionToTask
         view.onOpenFilePath = onOpenFilePath
+        view.onOpenAttachmentCitation = onOpenAttachmentCitation
         view.onSearchResultCountChange = onSearchResultCountChange
         configure(view)
         view.applyMessages(
@@ -84,6 +86,7 @@ struct AgentChatHistoryTextView: NSViewRepresentable {
         nsView.onReferenceGeneratedImage = onReferenceGeneratedImage
         nsView.onAddSelectionToTask = onAddSelectionToTask
         nsView.onOpenFilePath = onOpenFilePath
+        nsView.onOpenAttachmentCitation = onOpenAttachmentCitation
         nsView.onSearchResultCountChange = onSearchResultCountChange
         nsView.applyMessages(
             messages,
@@ -166,6 +169,7 @@ final class AgentChatHistoryNSTextView: NSTextView {
     var onReferenceGeneratedImage: ((String) -> Void)?
     var onAddSelectionToTask: ((String) -> Void)?
     var onOpenFilePath: ((String) -> Void)?
+    var onOpenAttachmentCitation: ((AgentAttachmentCitationPayload) -> Void)?
     var onSearchResultCountChange: ((Int) -> Void)?
 
     init() {
@@ -794,6 +798,15 @@ extension AgentChatHistoryNSTextView: NSTextViewDelegate {
             return true
         }
 
+        if let citation = textStorage.attribute(
+            .agentChatHistoryAttachmentCitation,
+            at: charIndex,
+            effectiveRange: nil
+        ) as? AgentAttachmentCitationPayload {
+            onOpenAttachmentCitation?(citation)
+            return true
+        }
+
         if let path = textStorage.attribute(.agentChatHistoryFilePath, at: charIndex, effectiveRange: nil) as? String {
             onOpenFilePath?(path)
             return true
@@ -824,6 +837,7 @@ extension AgentChatHistoryNSTextView: NSTextViewDelegate {
             AgentChatHistoryTableLink.value,
             AgentChatHistoryTextAttachmentLink.value,
             AgentChatHistoryFilePathLink.value,
+            AgentChatHistoryAttachmentCitationLink.value,
             "agent-chat-history-tool-group",
         ].contains(value)
     }
@@ -911,6 +925,10 @@ enum AgentChatHistoryTextAttachmentLink {
 
 enum AgentChatHistoryFilePathLink {
     static let value = "agent-chat-history-file-path"
+}
+
+enum AgentChatHistoryAttachmentCitationLink {
+    static let value = "agent-chat-history-attachment-citation"
 }
 
 enum AgentChatHistoryCopyRangeResolver {

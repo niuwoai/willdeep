@@ -1466,6 +1466,20 @@ struct WillDeepTests {
             interactionMode: .normal
         )
         #expect(normalApproval == nil)
+
+        // 会话标题与 workspace 归属永远要求当次人工确认，Goal 模式也不能绕过。
+        for toolName in ["rename_session", "change_workspace"] {
+            let sessionMutationApproval = await appState.autoApprovalSource(
+                toolName: toolName,
+                arguments: toolName == "rename_session"
+                    ? ["title": .string("New title")]
+                    : ["path": .string("/tmp/another-workspace")],
+                risk: .write,
+                rootDirectory: root,
+                interactionMode: .goal
+            )
+            #expect(sessionMutationApproval == nil)
+        }
     }
 
     @Test("smart approval sends non-confirmation network ops to safety judge")

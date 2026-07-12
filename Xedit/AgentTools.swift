@@ -98,6 +98,10 @@ enum AgentToolRunner {
                 result = try await AgentFileTools.glob(arguments: activeArguments, context: activeContext)
             case "git_status":
                 result = try await AgentFileTools.gitStatus(context: activeContext)
+            case "rename_session":
+                result = try await AgentSessionTools.renameSession(arguments: activeArguments, context: activeContext)
+            case "change_workspace":
+                result = try await AgentSessionTools.changeWorkspace(arguments: activeArguments, context: activeContext)
             case "run_command":
                 result = try await runCommand(arguments: activeArguments, context: activeContext)
             case "terminal_list_shortcuts":

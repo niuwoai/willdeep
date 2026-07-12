@@ -56,6 +56,10 @@ final class AgentRuntime: ObservableObject, Identifiable {
     @Published var pendingTextAttachments: [AgentTextAttachment] = []
     @Published var pendingSkills: [AgentSkillEntry] = []
     @Published var pendingFiles: [AgentFileAttachment] = []
+    @Published var documentAttachments: [AgentFileAttachment] = []
+    @Published var knowledgeFolders: [AgentKnowledgeFolder] = []
+    @Published var documentTaskMode: AgentDocumentTaskMode = .automatic
+    @Published var redactSensitiveAttachmentContent: Bool = true
     @Published var pendingIncludeWorkspaceOverview: Bool = false
     @Published var queuedMessages: [AgentQueuedMessage] = []
 
@@ -73,6 +77,10 @@ final class AgentRuntime: ObservableObject, Identifiable {
     @Published var isCompressingContext: Bool = false
     @Published var errorMessage: String?
     @Published var errorDetails: AgentErrorDetails?
+    /// True when `errorMessage` is the "some.im not logged in" gate (see
+    /// `AppState.someIMLoginRequiredForTurn`). Drives the error card's extra
+    /// "去登录 some.im" affordance. Always reset alongside `errorMessage`.
+    @Published var errorRequiresSomeIMLogin: Bool = false
 
     // MARK: - Per-session mode & overrides
 
@@ -204,6 +212,10 @@ final class AgentRuntime: ObservableObject, Identifiable {
         self.currentGoal = session.currentGoal
         self.learningEvents = session.learningEvents
         self.latestTurnRecall = session.latestTurnRecall
+        self.documentAttachments = session.documentAttachments
+        self.knowledgeFolders = session.knowledgeFolders
+        self.documentTaskMode = session.documentTaskMode
+        self.redactSensitiveAttachmentContent = session.redactSensitiveAttachmentContent
         self.sidePanelState = session.sidePanelState
         self.managedRouting = session.managedRouting
     }
@@ -287,6 +299,10 @@ final class AgentRuntime: ObservableObject, Identifiable {
         session.currentGoal = currentGoal
         session.learningEvents = learningEvents
         session.latestTurnRecall = latestTurnRecall
+        session.documentAttachments = documentAttachments
+        session.knowledgeFolders = knowledgeFolders
+        session.documentTaskMode = documentTaskMode
+        session.redactSensitiveAttachmentContent = redactSensitiveAttachmentContent
         session.sidePanelState = sidePanelState
         session.managedRouting = managedRouting
         if touchUpdatedAt {

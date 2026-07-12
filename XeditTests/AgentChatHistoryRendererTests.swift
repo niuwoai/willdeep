@@ -1040,4 +1040,33 @@ struct AgentChatHistoryRendererTests {
         #expect(anchored.contains("/usr/bin/ssh"))
         #expect(anchored.contains("~/.willdeep/skills"))
     }
+
+    @Test
+    func attachmentSourceMarkersBecomePreciseCitationLinks() throws {
+        let rendered = AgentChatHistoryRenderer.render(
+            messages: [
+                AgentMessage(
+                    role: .assistant,
+                    content: "结论来自本地资料。[Source: reports/brief.pdf; page=7]"
+                )
+            ],
+            isDark: false
+        )
+        let citationRange = (rendered.string as NSString).range(of: "[Source: reports/brief.pdf; page=7]")
+        #expect(citationRange.location != NSNotFound)
+        let payload = try #require(
+            rendered.attribute(
+                .agentChatHistoryAttachmentCitation,
+                at: citationRange.location,
+                effectiveRange: nil
+            ) as? AgentAttachmentCitationPayload
+        )
+        #expect(payload.relativePath == "reports/brief.pdf")
+        #expect(payload.sourceReference == "page=7")
+        #expect(
+            rendered.attribute(.link, at: citationRange.location, effectiveRange: nil) as? String
+                == AgentChatHistoryAttachmentCitationLink.value
+        )
+        #expect(rendered.attribute(.agentChatHistoryFilePath, at: citationRange.location, effectiveRange: nil) == nil)
+    }
 }

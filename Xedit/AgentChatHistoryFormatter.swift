@@ -973,6 +973,7 @@ enum AgentChatHistoryRenderer {
         applyMissingBaseAttributes(to: converted, baseFont: baseFont, color: color)
         applyInlineCodeChipAttributes(to: converted, baseFont: baseFont)
         applyHexSwatchAttributes(to: converted, baseFont: baseFont)
+        applyAttachmentCitationAttributes(to: converted, baseFont: baseFont)
         applyPathChipAttributes(to: converted, baseFont: baseFont, color: color)
         return converted
     }
@@ -1021,6 +1022,44 @@ enum AgentChatHistoryRenderer {
                 attributed.removeAttribute(NSAttributedString.Key("SwiftUI.ForegroundColor"), range: found)
             }
             searchStart = NSMaxRange(found)
+        }
+    }
+
+    private static let attachmentCitationRegex = try? NSRegularExpression(
+        pattern: #"\[Source:\s*([^;\]\n]+);\s*([^\]\n]+)\]"#,
+        options: [.caseInsensitive]
+    )
+
+    private static func applyAttachmentCitationAttributes(
+        to attributed: NSMutableAttributedString,
+        baseFont: NSFont
+    ) {
+        let fullRange = NSRange(location: 0, length: attributed.length)
+        guard fullRange.length > 0, let regex = attachmentCitationRegex else { return }
+        let string = attributed.string as NSString
+        regex.enumerateMatches(in: attributed.string, range: fullRange) { match, _, _ in
+            guard let match,
+                  match.numberOfRanges == 3,
+                  match.range.length > 0 else { return }
+            let relativePath = string.substring(with: match.range(at: 1))
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            let sourceReference = string.substring(with: match.range(at: 2))
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !relativePath.isEmpty, !sourceReference.isEmpty else { return }
+
+            let tint = NSColor.systemIndigo
+            attributed.addAttributes([
+                .font: NSFont.monospacedSystemFont(ofSize: max(10, baseFont.pointSize - 1), weight: .medium),
+                .foregroundColor: tint,
+                .backgroundColor: tint.withAlphaComponent(0.09),
+                .underlineColor: tint.withAlphaComponent(0.40),
+                .underlineStyle: NSUnderlineStyle.single.rawValue,
+                .link: AgentChatHistoryAttachmentCitationLink.value,
+                .agentChatHistoryAttachmentCitation: AgentAttachmentCitationPayload(
+                    relativePath: relativePath,
+                    sourceReference: sourceReference
+                ),
+            ], range: match.range)
         }
     }
 

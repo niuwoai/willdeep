@@ -263,6 +263,7 @@ struct AgentChatTranscript: View {
                                     // → Finder 定位;文件 → Preview。
                                     appState.revealAgentReferencedPath(rawPath)
                                 },
+                                onOpenAttachmentCitation: appState.openAgentAttachmentCitation,
                                 searchQuery: conversationSearchQuery,
                                 activeSearchMatchIndex: conversationSearchActiveIndex,
                                 onSearchResultCountChange: updateConversationSearchMatchCount,

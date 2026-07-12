@@ -83,6 +83,13 @@ extension AppState {
         set { activeRuntime?.errorDetails = newValue }
     }
 
+    /// Whether the current error banner is the some.im login gate — lets the
+    /// error card offer a "去登录 some.im" button instead of the generic retry.
+    var agentErrorRequiresSomeIMLogin: Bool {
+        get { activeRuntime?.errorRequiresSomeIMLogin ?? false }
+        set { activeRuntime?.errorRequiresSomeIMLogin = newValue }
+    }
+
     /// Images staged in the composer for the next user message.
     var agentPendingImages: [AgentImageAttachment] {
         get { activeRuntime?.pendingImages ?? [] }
@@ -105,6 +112,27 @@ extension AppState {
     var agentPendingFiles: [AgentFileAttachment] {
         get { activeRuntime?.pendingFiles ?? [] }
         set { activeRuntime?.pendingFiles = newValue }
+    }
+
+    /// Parsed documents retained for every future turn in this session.
+    var agentSessionDocuments: [AgentFileAttachment] {
+        get { activeRuntime?.documentAttachments ?? [] }
+        set { activeRuntime?.documentAttachments = newValue }
+    }
+
+    var agentKnowledgeFolders: [AgentKnowledgeFolder] {
+        get { activeRuntime?.knowledgeFolders ?? [] }
+        set { activeRuntime?.knowledgeFolders = newValue }
+    }
+
+    var agentDocumentTaskMode: AgentDocumentTaskMode {
+        get { activeRuntime?.documentTaskMode ?? .automatic }
+        set { activeRuntime?.documentTaskMode = newValue }
+    }
+
+    var agentRedactsSensitiveAttachmentContent: Bool {
+        get { activeRuntime?.redactSensitiveAttachmentContent ?? true }
+        set { activeRuntime?.redactSensitiveAttachmentContent = newValue }
     }
 
     /// Whether the next send should include a workspace overview block.

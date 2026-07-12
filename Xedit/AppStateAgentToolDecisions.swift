@@ -119,6 +119,13 @@ extension AppState {
     ) async -> AgentToolApprovalSource? {
         guard risk == .write else { return nil }
 
+        // Conversation identity and workspace binding are user-facing host
+        // state. They always stay behind an explicit per-call approval card,
+        // including Goal mode and any smart/allowlist approval setting.
+        if toolName == "rename_session" || toolName == "change_workspace" {
+            return nil
+        }
+
         let sandboxDecision = AgentSandboxPolicy.decision(
             toolName: toolName,
             arguments: arguments,
