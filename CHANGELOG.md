@@ -1,5 +1,27 @@
 # Changelog
 
+## 1.146.0-rc2 - 2026-07-13
+
+### Fixed
+
+- **发消息后 AI 侧「无返回、无报错、界面像死了」不再静默** —— 修复两类静默无回应：
+  - **空流被当成功**：provider 返回 HTTP 2xx 但 SSE 流没有任何事件（中继 token 失效被回成空 body、上游抖动、限流表现为空流）时，四个流式适配器（OpenAI Chat / Anthropic / OpenAI Responses / Gemini）现在会抛出明确的 `emptyStream` 错误并弹出可「重试」的错误卡片，而不是悄悄丢掉整轮、删掉占位消息后一言不发。流正常结束但模型零输出的情况在主循环里也补了同款反馈。
+  - **排队等并发槽时全屏聊天无指示**：消息发出后没抢到 provider 并发槽（同一 provider 已跑满 `perProviderConcurrencyLimit`，如多会话/双开/routine 并发）时，`isResponding` 仍为 false，全屏 `AgentChatTranscript` 之前对这个状态没有任何渲染——用户只看到自己的消息、界面像死了，直到某个槽空出来才「又开始输出」。现在全屏主聊天也会显示「正在排队，等待空闲的并发槽位…」提示条（此前仅侧栏有）。
+
+### Changed
+
+- 版本号从 **1.146.0-rc1** 递增为 **1.146.0-rc2**。
+
+## 1.146.0-rc1 - 2026-07-13
+
+### Fixed
+
+- **Workflow 超时不再被卡死子任务拖住** —— workflow watchdog 改为非结构化竞速实现；当 provider stream 或子 agent 网络请求不响应取消时，`/code-review` 等 workflow 会按超时转为失败卡片并给出原因，不再一直空转无返回。
+
+### Changed
+
+- 版本号从 **1.146.0** 递增为 **1.146.0-rc1**。
+
 ## 1.146.0 - 2026-07-13
 
 ### Added

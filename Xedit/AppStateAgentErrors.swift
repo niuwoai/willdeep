@@ -109,6 +109,8 @@ extension AppState {
                     hint = "查看「Details」里的响应体定位原因。"
                 }
                 return "模型服务返回 HTTP \(code)。\(hint)"
+            case .emptyStream:
+                return "模型服务返回了空响应（连接正常，但没有任何内容、也没有报错）。多半是上游临时抽风、被限流，或「省心托管 / some.im」的中继 token 已失效。点「重试」再发一次；如果反复空响应，多半要重新登录 some.im，或换个 provider/模型。"
             case .unsupportedProviderKind(let kind):
                 return "当前 provider 使用的传输协议（\(kind.rawValue)）在这个版本里还没接通。到 Settings → Agent Providers 里换一个支持的 provider，或等下个版本。"
             }
@@ -223,6 +225,23 @@ extension AppState {
     }
 
     static func details(for error: Error) -> AgentErrorDetails? {
+        if case AgentClientError.emptyStream(let providerID, let model) = error {
+            return AgentErrorDetails(sections: [
+                AgentErrorDetails.Section(
+                    title: "Empty stream",
+                    text: """
+                    Provider: \(providerID)
+                    Model: \(model)
+
+                    The provider returned HTTP 2xx but the SSE stream closed \
+                    without emitting any content, tool call, or finish_reason. \
+                    Common causes: an expired managed-routing (some.im) token \
+                    that the relay answers with an empty body instead of 401, \
+                    an upstream rate-limit, or a provider-side hiccup.
+                    """
+                )
+            ])
+        }
         guard case AgentClientError.serverStatus(let providerError) = error else {
             return nil
         }
@@ -303,6 +322,13 @@ extension AppState {
             default:
                 return false
             }
+        }
+        // An empty stream is usually a transient upstream hiccup; in
+        // autonomous goal mode we retry a bounded number of times before
+        // surfacing the error. (In normal mode there's no auto-retry — the
+        // error card with its 重试 button shows immediately.)
+        if case AgentClientError.emptyStream = error {
+            return true
         }
         guard case AgentClientError.serverStatus(let providerError) = error else {
             return false

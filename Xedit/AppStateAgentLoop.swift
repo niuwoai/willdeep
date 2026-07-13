@@ -927,6 +927,19 @@ extension AppState {
                    runtime.messages[index].toolCalls.isEmpty,
                    (runtime.messages[index].reasoningContent ?? "").isEmpty {
                     runtime.messages.remove(at: index)
+                    // Zero-event streams already throw `emptyStream` from the
+                    // adapter and surface via the catch path. This is the
+                    // other empty case — the stream finished cleanly but the
+                    // model produced nothing at all. Never leave dead air:
+                    // reuse the same actionable, retryable error so the user
+                    // always gets feedback instead of a silent no-reply.
+                    setAgentError(
+                        AgentClientError.emptyStream(
+                            providerID: configuration.providerID,
+                            model: turnConfiguration.model
+                        ),
+                        for: runtime
+                    )
                 }
                 return
             }

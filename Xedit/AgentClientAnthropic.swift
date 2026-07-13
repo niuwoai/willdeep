@@ -129,6 +129,18 @@ struct AnthropicMessagesAdapter {
             // event happened to be.
             pendingEventName = ""
         }
+
+        // A 2xx stream that carried no text, reasoning, tool call, stop_reason
+        // or error is an empty no-op (e.g. an expired relay token answered
+        // with an empty body instead of 401). Surface it so the caller shows
+        // an actionable, retryable error rather than silently dropping the
+        // turn.
+        if !streamState.didEmitStreamEvent {
+            throw AgentClientError.emptyStream(
+                providerID: configuration.providerID,
+                model: configuration.model
+            )
+        }
     }
 
     // MARK: - judgeCommandSafety
@@ -255,6 +267,13 @@ struct AnthropicMessagesAdapter {
         /// Tool-use blocks indexed by their content_block index.
         var toolBlocks: [Int: PendingToolCall] = [:]
         var toolCallEmissionGate = AgentToolCallStreamEmissionGate()
+        /// Set the moment the stream carries a real signal (text, reasoning,
+        /// a tool block, a stop_reason, or a mid-stream error). A 2xx
+        /// response that closes with none of these — an expired relay token
+        /// answered with an empty body, an upstream hiccup — would otherwise
+        /// look like a silent success; `streamChat` throws `emptyStream` when
+        /// this stays false. `message_start` (usage only) does NOT count.
+        var didEmitStreamEvent = false
         /// Carried from `message_start` (Anthropic emits input_tokens
         /// up front) so the final `usageReported` can include both
         /// halves once `message_delta` brings output_tokens.
@@ -292,6 +311,7 @@ struct AnthropicMessagesAdapter {
         case "content_block_start":
             guard let event = try? JSONDecoder().decode(ContentBlockStartEvent.self, from: payload) else { return }
             if event.content_block.type == "tool_use" {
+                state.didEmitStreamEvent = true
                 var pending = PendingToolCall()
                 pending.externalID = event.content_block.id ?? ""
                 pending.toolName = event.content_block.name ?? ""
@@ -304,6 +324,7 @@ struct AnthropicMessagesAdapter {
             switch event.delta.type {
             case "text_delta":
                 if let text = event.delta.text, !text.isEmpty {
+                    state.didEmitStreamEvent = true
                     await onEvent(.textDelta(text))
                 }
             case "thinking_delta":
@@ -312,10 +333,12 @@ struct AnthropicMessagesAdapter {
                 // forward through the reasoning channel for symmetry
                 // with DashScope/DeepSeek if a future preset opts in.
                 if let trace = event.delta.thinking, !trace.isEmpty {
+                    state.didEmitStreamEvent = true
                     await onEvent(.reasoningDelta(trace))
                 }
             case "input_json_delta":
                 if let partial = event.delta.partial_json, var pending = state.toolBlocks[event.index] {
+                    state.didEmitStreamEvent = true
                     pending.appendArguments(partial)
                     state.toolBlocks[event.index] = pending
                     await emitToolCallsIfChanged(state: &state, onEvent: onEvent)
@@ -343,6 +366,7 @@ struct AnthropicMessagesAdapter {
                 case "stop_sequence": mapped = "stop"
                 default:            mapped = reason
                 }
+                state.didEmitStreamEvent = true
                 await onEvent(.finishedTurn(mapped))
             }
             if let usage = event.usage {
@@ -383,6 +407,7 @@ struct AnthropicMessagesAdapter {
             } else {
                 reason = "anthropic_error"
             }
+            state.didEmitStreamEvent = true
             await onEvent(.finishedTurn(reason))
 
         default:

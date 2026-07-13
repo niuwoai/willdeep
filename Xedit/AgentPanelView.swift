@@ -394,7 +394,10 @@ private func formatThinkingElapsed(_ seconds: TimeInterval) -> String {
     return "\(hours)h \(mm)m"
 }
 
-private struct AgentInlineStatusDivider: View {
+// Shared with the full-screen transcript (`AgentChatTranscript`) so the
+// "waiting for a provider slot" queue hint renders consistently in both the
+// sidebar and the main chat.
+struct AgentInlineStatusDivider: View {
     let text: String
     /// Optional trailing caption rendered next to the label — used by the
     /// thinking divider to show live elapsed seconds.

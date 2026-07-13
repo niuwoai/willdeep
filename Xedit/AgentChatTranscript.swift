@@ -352,6 +352,18 @@ struct AgentChatTranscript: View {
                         }
                     }
 
+                    // 消息已发出、但还没抢到 provider 并发槽（同一 provider
+                    // 已有 perProviderConcurrencyLimit 个 turn 在跑，比如多
+                    // 会话/双开/routine 并发）时，dispatch 走排队分支、
+                    // isResponding 仍为 false，下面的 thinking / 呼吸指示都不会
+                    // 亮。若这里不补一行，用户只看到自己的消息、界面像死了，
+                    // 直到某个槽空出来 drain 才「又开始输出」。参照侧栏
+                    // AgentPanelView 的同款提示。
+                    if appState.activeRuntime?.isAwaitingProviderSlot == true {
+                        AgentInlineStatusDivider(text: "正在排队，等待空闲的并发槽位…")
+                            .frame(maxWidth: AgentDesign.chatMaxContentWidth)
+                    }
+
                     if appState.shouldShowAgentThinkingIndicator {
                         AgentThinkingDivider()
                             .frame(maxWidth: AgentDesign.chatMaxContentWidth)

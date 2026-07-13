@@ -1621,6 +1621,14 @@ enum AgentClientError: LocalizedError {
     case invalidBaseURL
     case invalidResponse
     case serverStatus(AgentProviderHTTPError)
+    /// The provider accepted the request (HTTP 2xx) but the SSE stream
+    /// closed without emitting a single meaningful event — no text, no
+    /// reasoning, no tool call, not even a finish_reason. A relay whose
+    /// token has expired (or an upstream hiccup / rate-limit expressed as
+    /// an empty body) shows up exactly like this. Without this case the
+    /// turn would be treated as a silent success: placeholder dropped, no
+    /// card, no reply — the user sees nothing happen.
+    case emptyStream(providerID: String, model: String)
     /// Thrown when `AgentClient` is asked to talk to a provider whose
     /// transport-protocol family has no adapter wired up yet. Only
     /// expected during the multi-provider rollout — once Anthropic /
@@ -1637,6 +1645,8 @@ enum AgentClientError: LocalizedError {
             return "The model provider returned an invalid response."
         case .serverStatus(let error):
             return "The model provider returned HTTP \(error.statusCode)."
+        case .emptyStream(let providerID, let model):
+            return "The provider \(providerID) (\(model)) returned an empty stream."
         case .unsupportedProviderKind(let kind):
             return "Support for the \(kind.rawValue) protocol is not enabled in this build yet."
         }

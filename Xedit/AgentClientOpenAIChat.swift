@@ -81,6 +81,12 @@ struct OpenAIChatAdapter {
 
         var pendingToolCalls: [Int: PendingToolCall] = [:]
         var toolCallEmissionGate = AgentToolCallStreamEmissionGate()
+        // Track whether the stream ever carried a meaningful signal. A 2xx
+        // response whose SSE body is empty (or is just `[DONE]`) decodes to
+        // zero events and would otherwise return as a silent success — the
+        // caller then drops the placeholder assistant message and the user
+        // sees nothing happen. We convert that into an explicit error below.
+        var didEmitStreamEvent = false
 
         for try await line in bytes.lines {
             try Task.checkCancellation()
@@ -94,13 +100,16 @@ struct OpenAIChatAdapter {
 
             for choice in chunk.choices {
                 if let reasoning = choice.delta.reasoning_content, !reasoning.isEmpty {
+                    didEmitStreamEvent = true
                     await onEvent(.reasoningDelta(reasoning))
                 }
                 if let content = choice.delta.content, !content.isEmpty {
+                    didEmitStreamEvent = true
                     await onEvent(.textDelta(content))
                 }
 
                 if let calls = choice.delta.tool_calls {
+                    didEmitStreamEvent = true
                     for call in calls {
                         let slot = call.index ?? 0
                         var pending = pendingToolCalls[slot] ?? PendingToolCall()
@@ -118,6 +127,7 @@ struct OpenAIChatAdapter {
                 }
 
                 if let finishReason = choice.finish_reason {
+                    didEmitStreamEvent = true
                     let signature = Self.signature(of: pendingToolCalls)
                     if toolCallEmissionGate.shouldEmit(signature: signature, force: true) {
                         await onEvent(.toolCallsUpdated(Self.snapshot(of: pendingToolCalls)))
@@ -140,6 +150,17 @@ struct OpenAIChatAdapter {
                     reasoning: usage.reasoningTokens
                 ))
             }
+        }
+
+        // Zero meaningful events over a 2xx stream. Surface it as an error the
+        // caller can present (and retry) instead of a silent no-op. A
+        // usage-only final chunk doesn't count as a real reply, so this still
+        // fires when the provider sends nothing but token accounting.
+        if !didEmitStreamEvent {
+            throw AgentClientError.emptyStream(
+                providerID: configuration.providerID,
+                model: configuration.model
+            )
         }
     }
 

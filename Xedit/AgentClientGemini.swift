@@ -115,6 +115,16 @@ struct GeminiAdapter {
             }
             await handleResponse(chunk, state: &state, onEvent: onEvent)
         }
+
+        // A 2xx stream that produced no text, function call or finishReason
+        // is an empty no-op. Surface it as a retryable error rather than
+        // silently dropping the turn.
+        if !state.didEmitStreamEvent {
+            throw AgentClientError.emptyStream(
+                providerID: configuration.providerID,
+                model: configuration.model
+            )
+        }
     }
 
     // MARK: - judgeCommandSafety
@@ -255,6 +265,11 @@ struct GeminiAdapter {
         /// onto the parsed value.
         var functionCalls: [Int: PendingFunctionCall] = [:]
         var emittedSignature = ""
+        /// True once the stream carries a real signal (text, a function
+        /// call, or a finishReason). A 2xx stream that closes with none of
+        /// these would look like a silent success; `streamChat` throws
+        /// `emptyStream` when this stays false. Usage-only chunks don't count.
+        var didEmitStreamEvent = false
     }
 
     private struct PendingFunctionCall {
@@ -274,7 +289,7 @@ struct GeminiAdapter {
         guard let candidate = chunk.candidates?.first else {
             // Some chunks carry only `usageMetadata` (no candidate
             // payload) — surface those below and skip the part walk.
-            await emitUsageAndFinish(chunk, onEvent: onEvent)
+            await emitUsageAndFinish(chunk, state: &state, onEvent: onEvent)
             return
         }
 
@@ -288,6 +303,7 @@ struct GeminiAdapter {
         var functionCallIndex = state.functionCalls.count
         for part in candidate.content?.parts ?? [] {
             if let text = part.text, !text.isEmpty {
+                state.didEmitStreamEvent = true
                 await onEvent(.textDelta(text))
             }
             if let call = part.functionCall {
@@ -313,15 +329,17 @@ struct GeminiAdapter {
             let signature = Self.signature(of: snapshot)
             if signature != state.emittedSignature {
                 state.emittedSignature = signature
+                state.didEmitStreamEvent = true
                 await onEvent(.toolCallsUpdated(snapshot))
             }
         }
 
-        await emitUsageAndFinish(chunk, onEvent: onEvent)
+        await emitUsageAndFinish(chunk, state: &state, onEvent: onEvent)
     }
 
     private func emitUsageAndFinish(
         _ chunk: GenerateContentResponse,
+        state: inout StreamState,
         onEvent: @escaping @Sendable (AgentClientEvent) async -> Void
     ) async {
         if let usage = chunk.usageMetadata {
@@ -354,6 +372,7 @@ struct GeminiAdapter {
             case "MALFORMED_FUNCTION_CALL": mapped = "tool_calls"
             default:                mapped = reason.lowercased()
             }
+            state.didEmitStreamEvent = true
             await onEvent(.finishedTurn(mapped))
         }
     }

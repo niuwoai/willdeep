@@ -121,6 +121,16 @@ struct OpenAIResponsesAdapter {
             // misrouted to whatever event we last saw.
             pendingEventName = ""
         }
+
+        // A 2xx stream that produced no text, reasoning, function call,
+        // completion or error is an empty no-op. Surface it as a retryable
+        // error instead of a silent dropped turn.
+        if !state.didEmitStreamEvent {
+            throw AgentClientError.emptyStream(
+                providerID: configuration.providerID,
+                model: configuration.model
+            )
+        }
     }
 
     // MARK: - judgeCommandSafety
@@ -285,6 +295,11 @@ struct OpenAIResponsesAdapter {
         var functionCalls: [String: PendingFunctionCall] = [:]
         var orderedItemIDs: [String] = []
         var toolCallEmissionGate = AgentToolCallStreamEmissionGate()
+        /// True once the stream carries a real signal (text, reasoning, a
+        /// function call, a completion, or a mid-stream error). A 2xx
+        /// response that closes with none of these would look like a silent
+        /// success; `streamChat` throws `emptyStream` when this stays false.
+        var didEmitStreamEvent = false
     }
 
     private struct PendingFunctionCall {
@@ -323,6 +338,7 @@ struct OpenAIResponsesAdapter {
         case "response.output_text.delta":
             if let event = try? JSONDecoder().decode(OutputTextDeltaEvent.self, from: payload),
                let delta = event.delta, !delta.isEmpty {
+                state.didEmitStreamEvent = true
                 await onEvent(.textDelta(delta))
             }
 
@@ -335,6 +351,7 @@ struct OpenAIResponsesAdapter {
             // light up without per-provider branching upstream.
             if let event = try? JSONDecoder().decode(ReasoningDeltaEvent.self, from: payload),
                let delta = event.delta, !delta.isEmpty {
+                state.didEmitStreamEvent = true
                 await onEvent(.reasoningDelta(delta))
             }
 
@@ -349,6 +366,7 @@ struct OpenAIResponsesAdapter {
                event.item?.type == "function_call",
                let itemID = event.item?.id,
                !itemID.isEmpty {
+                state.didEmitStreamEvent = true
                 let callID = event.item?.call_id ?? itemID
                 let pending = PendingFunctionCall(
                     externalID: callID,
@@ -424,6 +442,7 @@ struct OpenAIResponsesAdapter {
                         ))
                     }
                 }
+                state.didEmitStreamEvent = true
                 let reason = Self.finishReason(from: event.response)
                 await onEvent(.finishedTurn(reason))
             }
@@ -441,6 +460,7 @@ struct OpenAIResponsesAdapter {
             } else {
                 reason = "openai_responses_error"
             }
+            state.didEmitStreamEvent = true
             await onEvent(.finishedTurn(reason))
 
         default:
