@@ -1,5 +1,17 @@
 # Changelog
 
+## 1.148.0-rc1 - 2026-07-13
+
+### Fixed
+
+- **Composer 的「搜索技能」面板漏接 skill 本地化** —— 仓库早已有 `AgentSkillLocalization`（中英文 name/description/别名表 + 多语言召回池），设置页、`list_skills` 工具、移动网关都用了，唯独 composer 的 `$` 技能面板没接：说明直接显示英文原始 `description`，搜索只匹配英文 `identifier/name/description`，中文用户搜「日报」「浏览器」命中不了 `daily-report`/`browser`。现在：
+  - **展示**：面板每行的说明改走 `AgentSkillLocalization.displayDescription`，按用户语言本地化（`$identifier` 调用名保持原样，因为那是要输入的调用 token）。
+  - **搜索召回**：过滤改用 `AgentSkillLocalization.searchableText`，把 skill 的多语言 name/description/别名都纳入命中池；且 `searchableText` 现在**同时拼英文和中文两张表**（不再只拼当前语言那张），实现真正双向召回——中文关键词命中英文原文 skill，英文关键词对中文用户也照常命中。
+
+### Changed
+
+- 版本号从 **1.148.0** 递增为 **1.148.0-rc1**。
+
 ## 1.148.0 - 2026-07-13
 
 ### Added

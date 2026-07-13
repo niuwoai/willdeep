@@ -497,10 +497,12 @@ private struct ComposerCard: View {
     /// `$` picker entries are only skills / reusable capability packs.
     private var filteredSkillEntries: [SkillPickerEntry] {
         let q = skillMenuQuery.lowercased()
+        // Match against the full multilingual searchable text (identifier +
+        // every language's name/description/aliases) so e.g. "日报" or
+        // "浏览器" recalls the English-authored daily-report / browser
+        // skills, and English keywords still work for zh users.
         let skills = q.isEmpty ? skillCatalog : skillCatalog.filter {
-            $0.identifier.lowercased().contains(q)
-                || $0.name.lowercased().contains(q)
-                || $0.description.lowercased().contains(q)
+            AgentSkillLocalization.searchableText(for: $0).contains(q)
         }
         return skills.map { .skill($0) }
     }

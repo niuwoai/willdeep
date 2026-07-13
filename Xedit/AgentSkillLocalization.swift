@@ -39,18 +39,40 @@ enum AgentSkillLocalization {
             entry.description,
             entry.url.path
         ]
-        if entry.source == .bundled, let metadata = metadata(for: entry) {
-            parts.append(metadata.name)
-            parts.append(metadata.description)
-            parts.append(contentsOf: metadata.aliases)
+        // Pool EVERY language's translation into the recall set — not just
+        // the current UI locale's — so a Chinese keyword finds an
+        // English-authored skill and vice versa. This is what makes the
+        // multilingual "命中池" work regardless of who is searching.
+        if entry.source == .bundled {
+            for metadata in allMetadata(for: entry) {
+                parts.append(metadata.name)
+                parts.append(metadata.description)
+                parts.append(contentsOf: metadata.aliases)
+            }
         }
         return parts.joined(separator: "\n").lowercased()
     }
 
+    /// Locale-specific metadata, used for DISPLAY (labels shown to the user
+    /// in their own language).
     private static func metadata(for entry: AgentSkillEntry) -> AgentSkillLocalizedMetadata? {
-        let slug = entry.identifier.split(separator: ":").last.map(String.init) ?? entry.identifier
+        let slug = slug(for: entry)
         let table = prefersSimplifiedChinese ? zhHansMetadata : enMetadata
         return table[slug] ?? table[entry.name]
+    }
+
+    /// Metadata from ALL language tables, used for SEARCH (every translation
+    /// joins the recall pool). Deduped by identity of the returned struct is
+    /// unnecessary — each table contributes at most one entry per slug.
+    private static func allMetadata(for entry: AgentSkillEntry) -> [AgentSkillLocalizedMetadata] {
+        let slug = slug(for: entry)
+        return [enMetadata, zhHansMetadata].compactMap { table in
+            table[slug] ?? table[entry.name]
+        }
+    }
+
+    private static func slug(for entry: AgentSkillEntry) -> String {
+        entry.identifier.split(separator: ":").last.map(String.init) ?? entry.identifier
     }
 
     private static var prefersSimplifiedChinese: Bool {

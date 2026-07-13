@@ -391,7 +391,11 @@ enum SkillPickerEntry: Identifiable, Equatable {
 
     var subtitle: String {
         switch self {
-        case .skill(let skill): return skill.description
+        // Localized description so a zh user sees the skill explained in
+        // Chinese instead of the raw English SKILL.md frontmatter. The
+        // title stays the raw `$identifier` because that is the literal
+        // invocation token the user types.
+        case .skill(let skill): return AgentSkillLocalization.displayDescription(for: skill)
         }
     }
 }
