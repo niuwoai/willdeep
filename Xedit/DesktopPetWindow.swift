@@ -366,7 +366,12 @@ private struct DesktopPetOverlayView: View {
         .padding(.horizontal, 13)
         .padding(.vertical, 11)
         .frame(width: 220, alignment: .leading)
-        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+        // The bubble floats over the desktop wallpaper, so `.ultraThinMaterial`
+        // let a dark wallpaper bleed through and washed out the `.secondary`
+        // status / session labels until they were unreadable. `.regularMaterial`
+        // is opaque enough to be its own contrast substrate — the semantic text
+        // colors stay legible on any wallpaper, light or dark.
+        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
         .overlay {
             RoundedRectangle(cornerRadius: 18, style: .continuous)
                 .strokeBorder(.white.opacity(0.26), lineWidth: 1)

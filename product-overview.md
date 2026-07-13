@@ -1,6 +1,6 @@
 # WillDeep Product Overview
 
-> Last updated: 2026-07-13 | Current version: v1.148.0-rc1
+> Last updated: 2026-07-13 | Current version: v1.148.0-rc2
 
 ## Positioning
 
@@ -11,6 +11,8 @@ Official product domain: [willdeep.com](https://willdeep.com).
 WillDeep is configured for non-App-Store distribution without App Sandbox so it can access local project files with fewer permission interruptions.
 
 ## 架构概览
+
+- **桌面宠物浮窗文字对比修复（1.148.0-rc2）** —— 宠物气泡原用 `.ultraThinMaterial`，深色桌面壁纸会透上来把 `.secondary` 文字（守望中/会话标题）冲淡到不可读；改用 `.regularMaterial`，材质自带不透明衬底，语义色文字在任意壁纸下都清晰。
 
 - **Composer 技能面板本地化补齐（1.148.0-rc1）** —— `AgentSkillLocalization` 这套 skill 中英文展示/多语言召回设施此前只接了设置页、`list_skills` 工具和移动网关，composer 的 `$` 搜索技能面板漏接。现在面板每行说明走 `displayDescription` 按用户语言显示，搜索走 `searchableText`；且 `searchableText` 改为同时纳入英文和中文两张翻译表（name/description/别名），实现双向多语言召回——中文关键词能命中英文原文 skill，反之亦然。skill 的 `$identifier` 调用名保持原样不翻译。
 
