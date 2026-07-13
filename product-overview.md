@@ -1,6 +1,6 @@
 # WillDeep Product Overview
 
-> Last updated: 2026-07-13 | Current version: v1.148.0-rc2
+> Last updated: 2026-07-13 | Current version: v1.149.0
 
 ## Positioning
 
@@ -16,7 +16,7 @@ WillDeep is configured for non-App-Store distribution without App Sandbox so it 
 
 - **Composer 技能面板本地化补齐（1.148.0-rc1）** —— `AgentSkillLocalization` 这套 skill 中英文展示/多语言召回设施此前只接了设置页、`list_skills` 工具和移动网关，composer 的 `$` 搜索技能面板漏接。现在面板每行说明走 `displayDescription` 按用户语言显示，搜索走 `searchableText`；且 `searchableText` 改为同时纳入英文和中文两张翻译表（name/description/别名），实现双向多语言召回——中文关键词能命中英文原文 skill，反之亦然。skill 的 `$identifier` 调用名保持原样不翻译。
 
-- **桌面宠物与实时对话浮窗（1.148.0）** —— Agent 顶栏提供爪印开关，设置页可选择 22 个随 App 打包的像素宠物；透明、跨 Space 的浮窗展示当前会话最新一条用户/助手消息，点击气泡跳回对应会话。宠物直接订阅 `AgentRuntime`：待机轻浮动、工具运行走路、思考跳跃、等待审批抖动、回复就绪转圈、任务完成庆祝。新增恢复的六个原创科幻梗形象：天线植物学家、宇宙学者、爪痕硬汉、植能机器人、云锻工程师和红帽客服英雄；它们不复刻特定电影角色、演员肖像或标识。
+- **桌面宠物与实时对话浮窗（1.148.0）** —— Agent 顶栏提供爪印开关，设置页可选择 22 个随 App 打包的像素宠物；透明、跨 Space 的浮窗展示当前会话最新一条用户/助手消息，点击气泡跳回对应会话。宠物直接订阅 `AgentRuntime`：待机轻浮动、工具运行走路、思考跳跃、等待审批抖动、回复就绪转圈、任务完成庆祝。新增恢复的六个原创科幻梗形象：天线植物学家、宇宙学者、爪痕硬汉、植能机器人、云锻工程师和红帽客服英雄；它们不复刻特定电影角色、演员肖像或标识。宠物默认开启、可自由拖动（位置写回本地偏好并在下次显示时恢复），右键菜单可一键跳到设置里独立的「桌面宠物」标签（1.149.0）。
 - **会话落盘跨进程竞态修复（1.146.0-rc4）** —— 双开 App、设置窗口第二个 AppState、routine 进程会读写同一个 `agent-sessions/` 目录，而此前的写入编排（串行写队列、合并/排序 ticket、metadata-only 追踪）全是进程内 `static`，跨进程零保证：启动 prune 可能误删另一进程刚写入用户消息的会话，两进程写同 id 时是 last-writer-wins。现在 prune 删除改走 `deleteIfStillEmpty(id:)`，在 `NSFileCoordinator` 协调读下**重读磁盘确认此刻仍无用户消息**才删；`save/saveAsync/delete` 的文件读写统一经 `NSFileCoordinator` 跨进程串行协调（失败降级为原子写，不丢操作），保留原进程内串行写队列与 `.atomic` 语义；prune 另加 90s 最近修改宽限窗口，跳过很可能仍被其他进程使用的活会话文件。仅第 1+2 层（删除前二次校验 + mtime 宽限 + 写协调），未引入 pid 心跳标记。
 - **媒体任务生成中占位（1.146.0）** —— 图片/视频媒体任务仍在排队或生成时，产物条会先显示与真实缩略图同尺寸的“生成中”占位卡；已有部分产物时占位卡保留在横向列表末尾，提示还有远端产物未完成，避免多图任务看起来像已经全部结束。
 - **Workflow watchdog 超时兜底（1.146.0-rc3）** —— `/code-review` 等依赖子 agent 的 workflow 在 provider stream 或网络请求卡住且不响应取消时，会按 watchdog 超时把卡片转为失败并显示原因；超时实现不再等待已卡死的子任务自然结束，避免工作流长期空转没有返回。

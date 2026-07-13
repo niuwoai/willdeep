@@ -28,6 +28,8 @@ extension L10n {
         static let emptyMessage = String(localized: "desktop-pet.empty-message", defaultValue: "Start a conversation and I will keep you posted here.")
         static let emptySessionTitle = String(localized: "desktop-pet.empty-session-title", defaultValue: "No active conversation")
         static let hideAction = String(localized: "desktop-pet.hide-action", defaultValue: "Hide desktop pet")
+        static let settingsAction = String(localized: "desktop-pet.settings-action", defaultValue: "Desktop pet settings…")
+        static let settingsTabTitle = String(localized: "desktop-pet.settings.tab-title", defaultValue: "Desktop Pet")
         static let statusComplete = String(localized: "desktop-pet.status.complete", defaultValue: "Task complete")
         static let statusIdle = String(localized: "desktop-pet.status.idle", defaultValue: "Keeping watch")
         static let statusNeedsAttention = String(localized: "desktop-pet.status.needs-attention", defaultValue: "Needs your attention")

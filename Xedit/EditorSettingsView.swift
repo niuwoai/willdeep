@@ -158,7 +158,17 @@ struct EditorSettingsView: View {
         case .tools: toolsSettings
         case .terminal: terminalSettings
         case .voice: VoiceSettingsView()
+        case .pet: petSettings
         }
+    }
+
+    private var petSettings: some View {
+        Form {
+            Section(L10n.DesktopPet.settingsSectionTitle) {
+                DesktopPetSettingsSection()
+            }
+        }
+        .formStyle(.grouped)
     }
 
     private var agentSettings: some View {
@@ -384,10 +394,6 @@ struct EditorSettingsView: View {
                 Text(L10n.Settings.AgentBehavior.agentAppearanceDescription("\(Int(AgentSettingsStore.chatBaseFontSizeMin))", "\(Int(AgentSettingsStore.chatBaseFontSizeMax))"))
                     .font(.caption)
                     .foregroundStyle(.secondary)
-            }
-
-            Section(L10n.DesktopPet.settingsSectionTitle) {
-                DesktopPetSettingsSection()
             }
         }
         .formStyle(.grouped)

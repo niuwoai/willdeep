@@ -84,6 +84,7 @@ enum EditorSettingsTab: Hashable {
     case tools
     case terminal
     case voice
+    case pet
 }
 
 extension EditorSettingsTab {
@@ -102,6 +103,7 @@ extension EditorSettingsTab {
         case .someIM: return .someIM
         case .replicate, .connectors: return .integrations
         case .voice: return .voice
+        case .pet: return .pet
         }
     }
 
@@ -126,6 +128,7 @@ extension EditorSettingsTab {
         case .tools: return L10n.Settings.tabTools
         case .terminal: return L10n.Settings.tabTerminal
         case .voice: return L10n.Settings.tabVoice
+        case .pet: return L10n.DesktopPet.settingsTabTitle
         }
     }
 }
@@ -141,6 +144,7 @@ enum SettingsGroup: Hashable, CaseIterable, Identifiable {
     case integrations
     case terminal
     case voice
+    case pet
 
     var id: Self { self }
 
@@ -156,6 +160,7 @@ enum SettingsGroup: Hashable, CaseIterable, Identifiable {
         case .integrations: return [.replicate, .connectors]
         case .terminal: return [.terminal]
         case .voice: return [.voice]
+        case .pet: return [.pet]
         }
     }
 
@@ -170,6 +175,7 @@ enum SettingsGroup: Hashable, CaseIterable, Identifiable {
         case .integrations: return String(localized: "settings.group.integrations", defaultValue: "Integrations")
         case .terminal: return String(localized: "settings.group.terminal", defaultValue: "Terminal")
         case .voice: return String(localized: "settings.group.voice", defaultValue: "Voice")
+        case .pet: return L10n.DesktopPet.settingsTabTitle
         }
     }
 
@@ -184,6 +190,7 @@ enum SettingsGroup: Hashable, CaseIterable, Identifiable {
         case .integrations: return "puzzlepiece.extension"
         case .terminal: return "rectangle.bottomthird.inset.filled"
         case .voice: return "waveform"
+        case .pet: return "pawprint.fill"
         }
     }
 }

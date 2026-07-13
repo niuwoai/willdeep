@@ -47,13 +47,20 @@ struct AgentModeView: View {
         min(max(liveSidePanelWidth ?? sidePanelWidth, sidePanelWidthRange.lowerBound), sidePanelWidthRange.upperBound)
     }
 
+    /// 窗口绝对最小宽 / 高。侧栏自动隐藏、右面板关闭时,按内容算出的
+    /// 下限会掉到「只剩 chat 舒适宽」(~320),窗口能被拖成一条没法用的
+    /// 竖窄条(用户反馈截图)。这里钉一个硬地板,任何情况下都不许更窄。
+    static let absoluteMinContentWidth: CGFloat = 720
+    static let absoluteMinContentHeight: CGFloat = 480
+
     private func contentMinWidth(isSidebarVisible: Bool) -> CGFloat {
-        (isSidebarVisible ? sidebarWidth : 0)
+        let content = (isSidebarVisible ? sidebarWidth : 0)
             + chatColumnComfortWidth
             // 面板宽度现在会随窗口宽度自适应封顶(见 panelWidthCap),
             // 窗口下限只需保证「最窄面板」放得下,不再跟着持久化宽度
             // 走 —— 也就免了拖拽提交后反复改写 contentMinSize。
             + (appState.agentSidePanelKind != nil ? CGFloat(sidePanelWidthRange.lowerBound) : 0)
+        return max(content, Self.absoluteMinContentWidth)
     }
 
     /// 侧栏(含 1pt 分隔线)当前占用的宽度。
@@ -484,12 +491,18 @@ private struct AgentWindowMinWidthSetter: NSViewRepresentable {
 
     private func applyAsync(from view: NSView) {
         let target = minWidth
+        let targetHeight = AgentModeView.absoluteMinContentHeight
         DispatchQueue.main.async {
             guard let window = view.window else { return }
             if abs(window.contentMinSize.width - target) > 0.5 {
                 window.contentMinSize.width = target
             }
-            // 只更新最小宽度约束,不在侧栏打开的同一帧同步 setFrame。
+            // 高度下限固定(不随内容变),之前完全没设,窗口能被拖成
+            // 一条横扁条 —— 一并钉住。
+            if abs(window.contentMinSize.height - targetHeight) > 0.5 {
+                window.contentMinSize.height = targetHeight
+            }
+            // 只更新最小尺寸约束,不在侧栏打开的同一帧同步 setFrame。
             // setFrame(display: true) 会强制窗口立即布局和重绘,在右侧
             // 终端 / 媒体面板首次挂载时容易把打开动作拖成可感知卡顿。
         }
