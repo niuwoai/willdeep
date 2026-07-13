@@ -339,14 +339,18 @@ enum AgentSessionStore {
     }
 
     private struct UsageToolCallIndex: Decodable {
+        let externalID: String
+        let toolName: String
         let argumentsJSON: String
 
         enum CodingKeys: String, CodingKey {
-            case argumentsJSON
+            case externalID, toolName, argumentsJSON
         }
 
         init(from decoder: Decoder) throws {
             let c = try decoder.container(keyedBy: CodingKeys.self)
+            externalID = try c.decodeIfPresent(String.self, forKey: .externalID) ?? ""
+            toolName = try c.decodeIfPresent(String.self, forKey: .toolName) ?? ""
             argumentsJSON = try c.decodeIfPresent(String.self, forKey: .argumentsJSON) ?? ""
         }
     }
@@ -358,6 +362,9 @@ enum AgentSessionStore {
         let images: [UsageImageIndex]
         let textAttachments: [UsageTextAttachmentIndex]
         let toolCalls: [UsageToolCallIndex]
+        let toolCallID: String?
+        let toolCallStatus: AgentToolCallStatus?
+        let toolErrorMessage: String?
         let usageTokens: Int?
         let promptTokens: Int?
         let completionTokens: Int?
@@ -371,6 +378,7 @@ enum AgentSessionStore {
 
         enum CodingKeys: String, CodingKey {
             case role, content, reasoningContent, images, textAttachments, toolCalls
+            case toolCallID, toolCallStatus, toolErrorMessage
             case usageTokens, promptTokens, completionTokens
             case cachedPromptTokens, cacheWritePromptTokens, reasoningTokens
             case origin, originLabel, requestStablePrefixCharacters
@@ -385,6 +393,9 @@ enum AgentSessionStore {
             images = try c.decodeIfPresent([UsageImageIndex].self, forKey: .images) ?? []
             textAttachments = try c.decodeIfPresent([UsageTextAttachmentIndex].self, forKey: .textAttachments) ?? []
             toolCalls = try c.decodeIfPresent([UsageToolCallIndex].self, forKey: .toolCalls) ?? []
+            toolCallID = try c.decodeIfPresent(String.self, forKey: .toolCallID)
+            toolCallStatus = try c.decodeIfPresent(AgentToolCallStatus.self, forKey: .toolCallStatus)
+            toolErrorMessage = try c.decodeIfPresent(String.self, forKey: .toolErrorMessage)
             usageTokens = try c.decodeIfPresent(Int.self, forKey: .usageTokens)
             promptTokens = try c.decodeIfPresent(Int.self, forKey: .promptTokens)
             completionTokens = try c.decodeIfPresent(Int.self, forKey: .completionTokens)
@@ -420,6 +431,11 @@ enum AgentSessionStore {
                 reasoningCharacterCount: reasoningContent?.count ?? 0,
                 imageCount: images.count,
                 toolCallArgumentCharacterCount: toolCalls.reduce(0) { $0 + $1.argumentsJSON.count },
+                toolCallNames: toolCalls.map(\.toolName),
+                toolCallExternalIDs: toolCalls.map(\.externalID),
+                toolCallID: toolCallID,
+                toolCallStatus: toolCallStatus,
+                toolErrorMessage: toolErrorMessage,
                 usageTokens: usageTokens,
                 promptTokens: promptTokens,
                 completionTokens: completionTokens,
@@ -442,9 +458,14 @@ enum AgentSessionStore {
         let createdAt: Date
         let updatedAt: Date
         let messages: [UsageMessageIndex]
+        let workspaceLocation: WorkspaceLocation?
+        let workspaceRootPath: String?
+        let agentEditedPaths: [String]
+        let agentArtifactPaths: [String]
 
         enum CodingKeys: String, CodingKey {
             case id, modelID, providerID, providerDisplayName, createdAt, updatedAt, messages
+            case workspaceLocation, workspaceRootPath, agentEditedPaths, agentArtifactPaths
         }
 
         init(from decoder: Decoder) throws {
@@ -456,6 +477,10 @@ enum AgentSessionStore {
             createdAt = try c.decode(Date.self, forKey: .createdAt)
             updatedAt = try c.decode(Date.self, forKey: .updatedAt)
             messages = try c.decodeIfPresent([UsageMessageIndex].self, forKey: .messages) ?? []
+            workspaceLocation = try c.decodeIfPresent(WorkspaceLocation.self, forKey: .workspaceLocation)
+            workspaceRootPath = try c.decodeIfPresent(String.self, forKey: .workspaceRootPath)
+            agentEditedPaths = try c.decodeIfPresent([String].self, forKey: .agentEditedPaths) ?? []
+            agentArtifactPaths = try c.decodeIfPresent([String].self, forKey: .agentArtifactPaths) ?? []
         }
 
         var snapshot: AgentUsageSessionSnapshot {
@@ -466,8 +491,25 @@ enum AgentSessionStore {
                 providerDisplayName: providerDisplayName,
                 createdAt: createdAt,
                 updatedAt: updatedAt,
-                messages: messages.compactMap(\.snapshot)
+                messages: messages.compactMap(\.snapshot),
+                workspaceIdentifier: workspaceIdentifier,
+                editedFileCount: agentEditedPaths.count,
+                artifactCount: agentArtifactPaths.count,
+                artifactPaths: agentArtifactPaths
             )
+        }
+
+        private var workspaceIdentifier: String? {
+            let location = workspaceLocation ?? workspaceRootPath.map { .local(path: $0) }
+            guard let location else { return nil }
+            switch location {
+            case .local(let path):
+                let normalized = path.trimmingCharacters(in: .whitespacesAndNewlines)
+                return normalized.isEmpty ? nil : "local:\(normalized)"
+            case .remote(let runtimeID, let path):
+                let normalized = path.trimmingCharacters(in: .whitespacesAndNewlines)
+                return normalized.isEmpty ? nil : "remote:\(runtimeID.uuidString):\(normalized)"
+            }
         }
     }
 

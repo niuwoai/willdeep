@@ -1148,6 +1148,97 @@ extension WillDeepTests {
         _ = calendar
     }
 
+    @Test("AgentUsageStats measures persisted work ledgers and used capabilities")
+    func testUsageStatsTracksWorkAndCapabilityData() {
+        let now = Date()
+        let toolCalls = [
+            AgentMessageToolCall(externalID: "read", toolName: "read_file", argumentsJSON: "{}"),
+            AgentMessageToolCall(externalID: "command", toolName: "run_command", argumentsJSON: "{}"),
+            AgentMessageToolCall(externalID: "research", toolName: "web_search", argumentsJSON: "{}"),
+            AgentMessageToolCall(externalID: "image", toolName: "generate_image", argumentsJSON: "{}")
+        ]
+        let session = AgentSession(
+            title: "dashboard work",
+            workspaceRootPath: "/tmp/dashboard-work",
+            createdAt: now,
+            updatedAt: now,
+            messages: [
+                userMessage("build the dashboard", at: now),
+                AgentMessage(role: .assistant, content: "working", toolCalls: toolCalls, createdAt: now),
+                AgentMessage(role: .workflowReport, content: "", createdAt: now)
+            ],
+            agentEditedPaths: ["Xedit/AgentUsageStats.swift", "Xedit/AgentStatusIndicators.swift"],
+            agentArtifactPaths: ["docs/dashboard-notes.md"]
+        )
+
+        let stats = AgentUsageStats.overview(for: [session], now: now)
+        let capabilityCounts = Dictionary(
+            uniqueKeysWithValues: AgentUsageStats.capabilityUsage(for: [session]).map { ($0.capability, $0.callCount) }
+        )
+
+        #expect(stats.userTurnCount == 1)
+        #expect(stats.toolCallCount == 4)
+        #expect(stats.editedFileCount == 2)
+        #expect(stats.artifactCount == 1)
+        #expect(stats.workflowCount == 1)
+        #expect(stats.workspaceCount == 1)
+        #expect(capabilityCounts[.workspace] == 1)
+        #expect(capabilityCounts[.terminal] == 1)
+        #expect(capabilityCounts[.research] == 1)
+        #expect(capabilityCounts[.media] == 1)
+    }
+
+    @Test("AgentUsageStats builds this week's deliverables and explicit failure review")
+    func testUsageStatsBuildsWorkbenchRows() {
+        let calendar = Calendar(identifier: .gregorian)
+        let now = ISO8601DateFormatter().date(from: "2026-07-13T08:00:00Z")!
+        let recent = AgentUsageSessionSnapshot(
+            id: UUID(),
+            modelID: nil,
+            providerID: nil,
+            providerDisplayName: nil,
+            createdAt: now,
+            updatedAt: now,
+            messages: [
+                AgentUsageMessageSnapshot(
+                    role: .assistant,
+                    contentCharacterCount: 0,
+                    toolCallNames: ["run_command"],
+                    toolCallExternalIDs: ["command-1"],
+                    createdAt: now
+                ),
+                AgentUsageMessageSnapshot(
+                    role: .tool,
+                    contentCharacterCount: 0,
+                    toolCallID: "command-1",
+                    toolCallStatus: .failed,
+                    toolErrorMessage: "Command exited with status 1",
+                    createdAt: now
+                )
+            ],
+            artifactPaths: ["reports/weekly-summary.md"]
+        )
+        let old = AgentUsageSessionSnapshot(
+            id: UUID(),
+            modelID: nil,
+            providerID: nil,
+            providerDisplayName: nil,
+            createdAt: now.addingTimeInterval(-14 * 86_400),
+            updatedAt: now.addingTimeInterval(-14 * 86_400),
+            messages: [],
+            artifactPaths: ["reports/old-summary.md"]
+        )
+
+        let deliverables = AgentUsageStats.weeklyDeliverables(for: [recent, old], now: now, calendar: calendar)
+        let failures = AgentUsageStats.failedToolCallReview(for: [recent, old], now: now, calendar: calendar)
+
+        #expect(deliverables.map(\.displayName) == ["weekly-summary.md"])
+        #expect(deliverables.first?.sessionCount == 1)
+        #expect(failures.count == 1)
+        #expect(failures.first?.toolName == "run_command")
+        #expect(failures.first?.errorSummary == "Command exited with status 1")
+    }
+
     @Test("AgentUsageStats labels managed-routing sessions 省心托管, leaves legacy nils as unknown-model")
     func testUsageStatsManagedRoutingModelLabel() {
         let now = Date()

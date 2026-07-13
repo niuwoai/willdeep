@@ -6,13 +6,9 @@
 //  out of AgentModeView.swift in rc42:
 //
 //   - `AgentStatsDashboard`: the activity panel shown inside the empty
-//     state for installs with at least one session. Two tabs (Overview /
-//     Models) × three ranges (All / 30d / 7d), an 8-cell stat grid,
-//     a heatmap that auto-sizes its column count to the available
-//     width, and a tongue-in-cheek "War and Peace equivalents" fun
-//     fact when the token total crosses 5%.
-//   - `StatCell`: the small label-on-top-of-value tile used by the
-//     dashboard grid.
+//     state for installs with at least one session. Its overview follows a
+//     quiet, Codex-like activity page: one metric strip, an activity map,
+//     and two grounded summaries for work patterns and used capabilities.
 //   - `PlanStatusPill`: tiny capsule that labels the current AgentPlan
 //     status — proposed (orange) / approved+executing (green) / done
 //     (blue) / rejected (red). Used by `AgentPlanCard`.
@@ -71,20 +67,22 @@ struct AgentStatsDashboard: View {
         VStack(alignment: .leading, spacing: 12) {
             tabBar
             if selectedTab == .overview {
-                statsGrid
-                heatmap
+                metricStrip
+                activitySection
+                detailSections
+                workbenchSection
                 funFact
             } else {
                 modelUsageList
             }
         }
-        .padding(16)
+        .padding(18)
         .background(
-            RoundedRectangle(cornerRadius: 10)
+            RoundedRectangle(cornerRadius: 14)
                 .fill(palette.panelFill)
         )
         .overlay(
-            RoundedRectangle(cornerRadius: 10)
+            RoundedRectangle(cornerRadius: 14)
                 .stroke(palette.hairline, lineWidth: 1)
         )
     }
@@ -138,6 +136,18 @@ struct AgentStatsDashboard: View {
         AgentUsageStats.modelUsage(for: filteredUsageSnapshots)
     }
 
+    private var capabilityRows: [AgentCapabilityUsageRow] {
+        AgentUsageStats.capabilityUsage(for: filteredUsageSnapshots)
+    }
+
+    private var weeklyDeliverables: [AgentWeeklyDeliverableRow] {
+        AgentUsageStats.weeklyDeliverables(for: appState.agentUsageSnapshots)
+    }
+
+    private var failedToolCallReviewRows: [AgentFailedToolCallReviewRow] {
+        AgentUsageStats.failedToolCallReview(for: appState.agentUsageSnapshots)
+    }
+
     private var filteredUsageSnapshots: [AgentUsageSessionSnapshot] {
         guard let days = range.days else { return appState.agentUsageSnapshots }
         let calendar = Calendar.current
@@ -151,61 +161,212 @@ struct AgentStatsDashboard: View {
         }.filter { !$0.messages.isEmpty }
     }
 
-    private var statsGrid: some View {
+    private var metricStrip: some View {
         let stats = overview
-        return LazyVGrid(columns: [
-            GridItem(.flexible(), spacing: 10),
-            GridItem(.flexible(), spacing: 10),
-            GridItem(.flexible(), spacing: 10),
-            GridItem(.flexible(), spacing: 10)
-        ], spacing: 10) {
-            StatCell(title: L10n.StatCell.sessions, value: "\(stats.sessionCount)")
-            StatCell(title: L10n.StatCell.messages, value: formatCompact(stats.messageCount))
-            StatCell(
-                title: stats.hasAnyRealUsage ? L10n.StatCell.tokens : L10n.StatCell.tokensEstimated,
-                value: formatTokens(stats.totalTokens)
+        return HStack(spacing: 0) {
+            DashboardMetric(
+                title: L10n.StatsDashboard.metricTaskTurns,
+                value: formatCompact(stats.userTurnCount)
             )
-            StatCell(title: L10n.StatCell.activeDays, value: "\(stats.activeDays)")
-            StatCell(title: L10n.StatCell.currentStreak, value: "\(stats.currentStreak)d")
-            StatCell(title: L10n.StatCell.longestStreak, value: "\(stats.longestStreak)d")
-            StatCell(title: L10n.StatCell.peakHour, value: peakHourLabel(stats.peakHour))
-            StatCell(title: L10n.StatCell.favoriteModel, value: stats.favoriteModel ?? "—")
+            DashboardMetric(
+                title: L10n.StatsDashboard.metricToolCalls,
+                value: formatCompact(stats.toolCallCount)
+            )
+            DashboardMetric(
+                title: L10n.StatsDashboard.metricFilesChanged,
+                value: formatCompact(stats.editedFileCount)
+            )
+            DashboardMetric(
+                title: L10n.StatsDashboard.metricArtifacts,
+                value: formatCompact(stats.artifactCount)
+            )
+            DashboardMetric(
+                title: L10n.StatsDashboard.metricCurrentStreak,
+                value: L10n.StatsDashboard.dayCount("\(stats.currentStreak)")
+            )
+        }
+        .padding(.vertical, 4)
+        .background(appState.editorSettings.interfaceSkin.palette.controlFill.opacity(0.52))
+        .clipShape(RoundedRectangle(cornerRadius: 10))
+    }
+
+    private var activitySection: some View {
+        let stats = overview
+        return VStack(alignment: .leading, spacing: 9) {
+            HStack {
+                Text(L10n.StatsDashboard.activityTitle)
+                    .font(.system(size: 12, weight: .semibold))
+                Spacer(minLength: 0)
+                Text(L10n.StatsDashboard.activitySummary(
+                    formatCompact(overview.messageCount),
+                    stats.hasAnyRealUsage ? formatTokens(overview.totalTokens) : "≈\(formatTokens(overview.totalTokens))"
+                ))
+                    .font(.system(size: 10))
+                    .foregroundStyle(.secondary)
+            }
+
+            GeometryReader { proxy in
+                let cellSize: CGFloat = 10
+                let cellSpacing: CGFloat = 3
+                let weekCount = heatmapWeekCount(
+                    for: proxy.size.width,
+                    cellSize: cellSize,
+                    spacing: cellSpacing
+                )
+                let cells = AgentUsageStats.heatmap(for: filteredUsageSnapshots, weekCount: weekCount)
+                let maxCount = cells.flatMap { $0 }.map(\.count).max() ?? 0
+
+                HStack(spacing: cellSpacing) {
+                    ForEach(Array(cells.enumerated()), id: \.offset) { _, column in
+                        VStack(spacing: cellSpacing) {
+                            ForEach(column) { cell in
+                                RoundedRectangle(cornerRadius: 2)
+                                    .fill(color(for: cell.count, peak: maxCount))
+                                    .frame(width: cellSize, height: cellSize)
+                                    .help(L10n.HeatmapCell.tooltip(cellDateLabel(cell.date), String(cell.count)))
+                            }
+                        }
+                    }
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .frame(height: heatmapHeight)
         }
     }
 
-    private var heatmap: some View {
-        GeometryReader { proxy in
-            let cellSize: CGFloat = 11
-            let cellSpacing: CGFloat = 3
-            let weekCount = heatmapWeekCount(
-                for: proxy.size.width,
-                cellSize: cellSize,
-                spacing: cellSpacing
-            )
-            let cells = AgentUsageStats.heatmap(for: filteredUsageSnapshots, weekCount: weekCount)
-            let maxCount = cells.flatMap { $0 }.map(\.count).max() ?? 0
+    private var heatmapHeight: CGFloat {
+        let cellSize: CGFloat = 10
+        let cellSpacing: CGFloat = 3
+        return 7 * cellSize + 6 * cellSpacing
+    }
 
-            HStack(spacing: cellSpacing) {
-                ForEach(Array(cells.enumerated()), id: \.offset) { _, column in
-                    VStack(spacing: cellSpacing) {
-                        ForEach(column) { cell in
-                            RoundedRectangle(cornerRadius: 2)
-                                .fill(color(for: cell.count, peak: maxCount))
-                                .frame(width: cellSize, height: cellSize)
-                                .help(L10n.HeatmapCell.tooltip(cellDateLabel(cell.date), String(cell.count)))
+    private var detailSections: some View {
+        HStack(alignment: .top, spacing: 24) {
+            insightSection
+                .frame(maxWidth: .infinity, alignment: .leading)
+            capabilitySection
+                .frame(maxWidth: .infinity, alignment: .leading)
+        }
+    }
+
+    private var workbenchSection: some View {
+        HStack(alignment: .top, spacing: 10) {
+            DashboardWorkbenchCard(
+                title: L10n.StatsDashboard.weeklyDeliverablesTitle,
+                subtitle: L10n.StatsDashboard.weeklyDeliverablesSubtitle,
+                symbol: "shippingbox",
+                tint: appState.editorSettings.interfaceSkin.palette.accent
+            ) {
+                if weeklyDeliverables.isEmpty {
+                    Text(L10n.StatsDashboard.weeklyDeliverablesEmpty)
+                        .font(.system(size: 10))
+                        .foregroundStyle(.secondary)
+                        .frame(maxWidth: .infinity, minHeight: 42, alignment: .leading)
+                } else {
+                    ForEach(weeklyDeliverables.prefix(3)) { artifact in
+                        HStack(spacing: 6) {
+                            Image(systemName: "doc")
+                                .font(.system(size: 10, weight: .medium))
+                                .foregroundStyle(.secondary)
+                                .frame(width: 13)
+                            Text(artifact.displayName)
+                                .font(.system(size: 10, weight: .medium))
+                                .lineLimit(1)
+                                .truncationMode(.middle)
+                            Spacer(minLength: 0)
+                            Text(L10n.StatsDashboard.deliverableSessionCount("\(artifact.sessionCount)"))
+                                .font(.system(size: 9))
+                                .foregroundStyle(.secondary)
                         }
                     }
                 }
             }
-            .frame(maxWidth: .infinity, alignment: .leading)
+            DashboardWorkbenchCard(
+                title: L10n.StatsDashboard.failureReviewTitle,
+                subtitle: L10n.StatsDashboard.failureReviewSubtitle,
+                symbol: "exclamationmark.triangle",
+                tint: failedToolCallReviewRows.isEmpty ? .secondary : .orange
+            ) {
+                if failedToolCallReviewRows.isEmpty {
+                    Label(L10n.StatsDashboard.failureReviewEmpty, systemImage: "checkmark.circle")
+                        .font(.system(size: 10))
+                        .foregroundStyle(.secondary)
+                        .frame(maxWidth: .infinity, minHeight: 42, alignment: .leading)
+                } else {
+                    ForEach(failedToolCallReviewRows.prefix(2)) { failure in
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(failure.toolName)
+                                .font(.system(size: 10, weight: .semibold, design: .monospaced))
+                                .lineLimit(1)
+                            Text(failure.errorSummary)
+                                .font(.system(size: 9))
+                                .foregroundStyle(.secondary)
+                                .lineLimit(1)
+                                .truncationMode(.tail)
+                        }
+                    }
+                }
+            }
         }
-        .frame(height: heatmapHeight)
     }
 
-    private var heatmapHeight: CGFloat {
-        let cellSize: CGFloat = 11
-        let cellSpacing: CGFloat = 3
-        return 7 * cellSize + 6 * cellSpacing
+    private var insightSection: some View {
+        let stats = overview
+        return VStack(alignment: .leading, spacing: 8) {
+            Text(L10n.StatsDashboard.insightsTitle)
+                .font(.system(size: 12, weight: .semibold))
+            DashboardInsightRow(
+                title: L10n.StatsDashboard.insightSessions,
+                value: formatCompact(stats.sessionCount)
+            )
+            DashboardInsightRow(
+                title: L10n.StatsDashboard.insightWorkspaces,
+                value: formatCompact(stats.workspaceCount)
+            )
+            DashboardInsightRow(
+                title: L10n.StatsDashboard.insightActiveDays,
+                value: L10n.StatsDashboard.dayCount("\(stats.activeDays)")
+            )
+            DashboardInsightRow(
+                title: L10n.StatsDashboard.insightPeakHour,
+                value: peakHourLabel(stats.peakHour)
+            )
+            if stats.workflowCount > 0 {
+                DashboardInsightRow(
+                    title: L10n.StatsDashboard.insightWorkflows,
+                    value: formatCompact(stats.workflowCount)
+                )
+            }
+        }
+    }
+
+    private var capabilitySection: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(L10n.StatsDashboard.capabilitiesTitle)
+                .font(.system(size: 12, weight: .semibold))
+            if capabilityRows.isEmpty {
+                Text(L10n.StatsDashboard.capabilitiesEmpty)
+                    .font(.system(size: 11))
+                    .foregroundStyle(.secondary)
+                    .frame(minHeight: 68, alignment: .leading)
+            } else {
+                ForEach(capabilityRows.prefix(5)) { row in
+                    HStack(spacing: 7) {
+                        Image(systemName: row.capability.systemImage)
+                            .font(.system(size: 11, weight: .medium))
+                            .foregroundStyle(appState.editorSettings.interfaceSkin.palette.accent)
+                            .frame(width: 16)
+                        Text(row.capability.title)
+                            .font(.system(size: 11))
+                            .lineLimit(1)
+                        Spacer(minLength: 0)
+                        Text(L10n.StatsDashboard.callCount(formatCompact(row.callCount)))
+                            .font(.system(size: 10))
+                            .foregroundStyle(.secondary)
+                    }
+                }
+            }
+        }
     }
 
     private var modelUsageList: some View {
@@ -337,7 +498,7 @@ struct AgentStatsDashboard: View {
     }
 
     private func heatmapWeekCount(for width: CGFloat, cellSize: CGFloat, spacing: CGFloat) -> Int {
-        let minimumWeekCount = 12
+        let minimumWeekCount = 16
         let availableWidth = max(0, width)
         let stride = cellSize + spacing
         guard stride > 0 else { return minimumWeekCount }
@@ -438,6 +599,86 @@ struct StatCell: View {
         .padding(.vertical, 8)
         .background(appState.editorSettings.interfaceSkin.palette.controlFill.opacity(0.72))
         .clipShape(RoundedRectangle(cornerRadius: 6))
+    }
+}
+
+private struct DashboardMetric: View {
+    let title: String
+    let value: String
+
+    var body: some View {
+        VStack(spacing: 3) {
+            Text(value)
+                .font(.system(size: 15, weight: .semibold))
+                .foregroundStyle(.primary)
+                .lineLimit(1)
+                .truncationMode(.middle)
+            Text(title)
+                .font(.system(size: 9))
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
+                .truncationMode(.tail)
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.horizontal, 5)
+        .overlay(alignment: .trailing) {
+            Divider()
+                .padding(.vertical, 5)
+        }
+    }
+}
+
+private struct DashboardInsightRow: View {
+    let title: String
+    let value: String
+
+    var body: some View {
+        HStack(spacing: 8) {
+            Text(title)
+                .font(.system(size: 11))
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
+            Spacer(minLength: 0)
+            Text(value)
+                .font(.system(size: 11, weight: .medium))
+                .foregroundStyle(.primary)
+                .lineLimit(1)
+                .truncationMode(.middle)
+        }
+    }
+}
+
+private struct DashboardWorkbenchCard<Content: View>: View {
+    let title: String
+    let subtitle: String
+    let symbol: String
+    let tint: Color
+    @ViewBuilder let content: Content
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 7) {
+            HStack(spacing: 6) {
+                Image(systemName: symbol)
+                    .font(.system(size: 10, weight: .semibold))
+                    .foregroundStyle(tint)
+                    .frame(width: 13)
+                Text(title)
+                    .font(.system(size: 11, weight: .semibold))
+                    .lineLimit(1)
+                Spacer(minLength: 0)
+            }
+            Text(subtitle)
+                .font(.system(size: 9))
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
+            VStack(alignment: .leading, spacing: 5) {
+                content
+            }
+        }
+        .frame(maxWidth: .infinity, minHeight: 90, alignment: .topLeading)
+        .padding(9)
+        .background(Color.secondary.opacity(0.055))
+        .clipShape(RoundedRectangle(cornerRadius: 8))
     }
 }
 

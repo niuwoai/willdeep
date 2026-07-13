@@ -428,6 +428,14 @@ nonisolated struct AgentMessage: Identifiable, Codable, Equatable {
     /// When `role == .tool`, the external id of the assistant tool_call this
     /// message answers.
     var toolCallID: String?
+    /// Persisted terminal state for a tool result. This deliberately lives on
+    /// the result message, so the activity dashboard can review real failures
+    /// after a session has been reopened instead of inferring them from prose.
+    var toolCallStatus: AgentToolCallStatus?
+    /// A concise, already-redacted failure reason for the tool result.
+    /// Populated only for explicit execution failures; user-denied calls are
+    /// kept distinct from failures in the workbench review.
+    var toolErrorMessage: String?
     /// Real prompt+completion tokens reported by the provider for the
     /// turn that produced this assistant message. Only assistant
     /// messages populate this. Older sessions without it fall back to
@@ -493,6 +501,8 @@ nonisolated struct AgentMessage: Identifiable, Codable, Equatable {
         textAttachments: [AgentTextAttachment] = [],
         toolCalls: [AgentMessageToolCall] = [],
         toolCallID: String? = nil,
+        toolCallStatus: AgentToolCallStatus? = nil,
+        toolErrorMessage: String? = nil,
         usageTokens: Int? = nil,
         promptTokens: Int? = nil,
         completionTokens: Int? = nil,
@@ -518,6 +528,8 @@ nonisolated struct AgentMessage: Identifiable, Codable, Equatable {
         self.textAttachments = textAttachments
         self.toolCalls = toolCalls
         self.toolCallID = toolCallID
+        self.toolCallStatus = toolCallStatus
+        self.toolErrorMessage = toolErrorMessage
         self.usageTokens = usageTokens
         self.promptTokens = promptTokens
         self.completionTokens = completionTokens
@@ -540,6 +552,7 @@ nonisolated struct AgentMessage: Identifiable, Codable, Equatable {
     /// breaking older session JSON.
     enum CodingKeys: String, CodingKey {
         case id, role, content, reasoningContent, images, textAttachments, toolCalls, toolCallID
+        case toolCallStatus, toolErrorMessage
         case usageTokens, promptTokens, completionTokens
         case cachedPromptTokens, cacheWritePromptTokens, reasoningTokens
         case elapsedSeconds
@@ -559,6 +572,8 @@ nonisolated struct AgentMessage: Identifiable, Codable, Equatable {
         textAttachments = try container.decodeIfPresent([AgentTextAttachment].self, forKey: .textAttachments) ?? []
         toolCalls = try container.decodeIfPresent([AgentMessageToolCall].self, forKey: .toolCalls) ?? []
         toolCallID = try container.decodeIfPresent(String.self, forKey: .toolCallID)
+        toolCallStatus = try container.decodeIfPresent(AgentToolCallStatus.self, forKey: .toolCallStatus)
+        toolErrorMessage = try container.decodeIfPresent(String.self, forKey: .toolErrorMessage)
         usageTokens = try container.decodeIfPresent(Int.self, forKey: .usageTokens)
         promptTokens = try container.decodeIfPresent(Int.self, forKey: .promptTokens)
         completionTokens = try container.decodeIfPresent(Int.self, forKey: .completionTokens)

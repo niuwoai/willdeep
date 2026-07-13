@@ -533,7 +533,9 @@ extension AppState {
             for: runtime,
             toolCallID: externalID,
             payload: toolPayload,
-            source: status == .succeeded ? .toolOutput : .systemNotice
+            source: status == .succeeded ? .toolOutput : .systemNotice,
+            outcomeStatus: status,
+            errorMessage: errorMessage
         )
         let visibleContent = Self.delegatedAgentVisibleContent(
             executionAgent: executionAgent,

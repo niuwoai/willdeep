@@ -965,7 +965,9 @@ extension AppState {
                         appendToolMessage(
                             for: runtime,
                             toolCallID: call.externalID,
-                            payload: "Tool arguments JSON could not be parsed; re-emit the call with valid JSON. Raw payload: \(call.argumentsJSON.prefix(400))"
+                            payload: "Tool arguments JSON could not be parsed; re-emit the call with valid JSON. Raw payload: \(call.argumentsJSON.prefix(400))",
+                            outcomeStatus: .failed,
+                            errorMessage: failed.errorMessage
                         )
                         continue
                     }
@@ -988,11 +990,13 @@ extension AppState {
                     var record = blocked
                     record.errorMessage = "Unavailable in Goal mode"
                     runtime.toolCalls.append(record)
-                    appendToolMessage(
-                        for: runtime,
-                        toolCallID: call.externalID,
-                        payload: "Unavailable in Goal mode: session rename and workspace change are suppressed so the active goal cannot be paused. Continue working in the current session and workspace.",
-                        source: .systemNotice
+                        appendToolMessage(
+                            for: runtime,
+                            toolCallID: call.externalID,
+                            payload: "Unavailable in Goal mode: session rename and workspace change are suppressed so the active goal cannot be paused. Continue working in the current session and workspace.",
+                            source: .systemNotice,
+                            outcomeStatus: .denied,
+                            errorMessage: record.errorMessage
                     )
                     continue
                 }
@@ -1018,11 +1022,13 @@ extension AppState {
                     var record = skipped
                     record.errorMessage = "Skipped after workspace change"
                     runtime.toolCalls.append(record)
-                    appendToolMessage(
-                        for: runtime,
-                        toolCallID: call.externalID,
-                        payload: "Skipped: the workspace changed to \(changedWorkspacePath). Continue with workspace tools after the user's next message.",
-                        source: .systemNotice
+                        appendToolMessage(
+                            for: runtime,
+                            toolCallID: call.externalID,
+                            payload: "Skipped: the workspace changed to \(changedWorkspacePath). Continue with workspace tools after the user's next message.",
+                            source: .systemNotice,
+                            outcomeStatus: .denied,
+                            errorMessage: record.errorMessage
                     )
                     continue
                 }
@@ -1114,7 +1120,9 @@ extension AppState {
                             for: runtime,
                             toolCallID: call.externalID,
                             payload: "User skipped the question.",
-                            source: .systemNotice
+                            source: .systemNotice,
+                            outcomeStatus: .denied,
+                            errorMessage: reason
                         )
                         continue
                     case .approved:
@@ -1131,7 +1139,8 @@ extension AppState {
                         for: runtime,
                         toolCallID: call.externalID,
                         payload: answer,
-                        source: .userAnswer
+                        source: .userAnswer,
+                        outcomeStatus: .succeeded
                     )
                     continue
                 }
@@ -1149,7 +1158,9 @@ extension AppState {
                         for: runtime,
                         toolCallID: call.externalID,
                         payload: "Blocked: Plan mode is active and no plan has been approved yet. Emit a ```plan``` block listing the steps you intend to take, then stop and wait for the user to approve.",
-                        source: .systemNotice
+                        source: .systemNotice,
+                        outcomeStatus: .denied,
+                        errorMessage: "Plan mode: needs user approval"
                     )
                     continue
                 }
@@ -1174,7 +1185,9 @@ extension AppState {
                             for: runtime,
                             toolCallID: call.externalID,
                             payload: "Tool call denied by the user.",
-                            source: .systemNotice
+                            source: .systemNotice,
+                            outcomeStatus: .denied,
+                            errorMessage: reason
                         )
                         continue
                     }
@@ -1293,7 +1306,13 @@ extension AppState {
                             baselineSnapshot: turnBaselineSnapshot
                         )
                     }
-                    appendToolMessage(for: runtime, toolCallID: call.externalID, payload: result.payload, images: result.images)
+                    appendToolMessage(
+                        for: runtime,
+                        toolCallID: call.externalID,
+                        payload: result.payload,
+                        images: result.images,
+                        outcomeStatus: .succeeded
+                    )
                 } catch {
                     let workspaceIssue = diagnoseLocalWorkspaceIfNeeded(
                         after: error,
@@ -1318,7 +1337,9 @@ extension AppState {
                         for: runtime,
                         toolCallID: call.externalID,
                         payload: "Tool error: \(errorMessage)\n\n(WillDeep: this tool call failed. Do not stop here — diagnose the cause from the exit code/stderr above and try another approach to accomplish the goal. Only give up if you are genuinely blocked, and then explain what you tried and what you still need.)",
-                        source: .systemNotice
+                        source: .systemNotice,
+                        outcomeStatus: .failed,
+                        errorMessage: errorMessage
                     )
                 }
             }
@@ -1932,7 +1953,9 @@ extension AppState {
                 for: runtime,
                 toolCallID: call.externalID,
                 payload: payload,
-                source: status == .succeeded ? .toolOutput : .systemNotice
+                source: status == .succeeded ? .toolOutput : .systemNotice,
+                outcomeStatus: status,
+                errorMessage: errorMessage
             )
         }
 
@@ -2058,7 +2081,9 @@ extension AppState {
         toolCallID: String,
         payload: String,
         images: [AgentImageAttachment] = [],
-        source: AgentInjectionDefense.ToolMessageSource = .toolOutput
+        source: AgentInjectionDefense.ToolMessageSource = .toolOutput,
+        outcomeStatus: AgentToolCallStatus? = nil,
+        errorMessage: String? = nil
     ) {
         let sanitized = AgentInjectionDefense.sanitizedToolMessageContent(
             payload: payload,
@@ -2076,7 +2101,14 @@ extension AppState {
         // image blocks). Text-only providers ignore `images` and use the
         // sanitized text payload.
         runtime.messages.append(
-            AgentMessage(role: .tool, content: limited, images: images, toolCallID: toolCallID)
+            AgentMessage(
+                role: .tool,
+                content: limited,
+                images: images,
+                toolCallID: toolCallID,
+                toolCallStatus: outcomeStatus,
+                toolErrorMessage: errorMessage
+            )
         )
     }
 

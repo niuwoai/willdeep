@@ -15,6 +15,23 @@ import Foundation
 struct AgentUsageOverview: Equatable {
     var sessionCount: Int
     var messageCount: Int
+    /// User-authored requests. This is intentionally narrower than total
+    /// messages: a tool result or workflow card is not a new task.
+    var userTurnCount: Int
+    /// Tool calls requested by the model. Historical data does not retain a
+    /// reliable outcome for every call, so this is an invocation count — not
+    /// a misleading "success" metric.
+    var toolCallCount: Int
+    /// Files changed by the agent, counted from each session's persisted
+    /// work ledger.
+    var editedFileCount: Int
+    /// User-facing artifacts created during sessions, counted from the
+    /// separate artifact ledger rather than guessed from Git status.
+    var artifactCount: Int
+    /// Explicit slash-workflow runs represented by persisted workflow cards.
+    var workflowCount: Int
+    /// Distinct local or remote workspaces represented in the selected range.
+    var workspaceCount: Int
     /// Sum of `AgentMessage.usageTokens` where reported; for messages
     /// without a real usage number we fall back to chars/4 + per-image
     /// budget so old sessions still contribute something.
@@ -75,6 +92,85 @@ struct AgentModelUsageRow: Identifiable, Equatable {
     }
 }
 
+/// A human-scale grouping of the raw tool names recorded in a conversation.
+/// It lets the dashboard describe what the agent actually helped with without
+/// pretending that merely enabled Skills or MCP servers were used.
+enum AgentUsageCapability: String, CaseIterable, Hashable, Identifiable {
+    case workspace
+    case coding
+    case terminal
+    case research
+    case browser
+    case media
+    case automation
+    case integration
+    case general
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .workspace: return L10n.StatsDashboard.capabilityWorkspace
+        case .coding: return L10n.StatsDashboard.capabilityCoding
+        case .terminal: return L10n.StatsDashboard.capabilityTerminal
+        case .research: return L10n.StatsDashboard.capabilityResearch
+        case .browser: return L10n.StatsDashboard.capabilityBrowser
+        case .media: return L10n.StatsDashboard.capabilityMedia
+        case .automation: return L10n.StatsDashboard.capabilityAutomation
+        case .integration: return L10n.StatsDashboard.capabilityIntegration
+        case .general: return L10n.StatsDashboard.capabilityGeneral
+        }
+    }
+
+    var systemImage: String {
+        switch self {
+        case .workspace: return "folder"
+        case .coding: return "chevron.left.forwardslash.chevron.right"
+        case .terminal: return "terminal"
+        case .research: return "globe"
+        case .browser: return "safari"
+        case .media: return "photo.on.rectangle"
+        case .automation: return "clock.arrow.circlepath"
+        case .integration: return "puzzlepiece.extension"
+        case .general: return "wrench.and.screwdriver"
+        }
+    }
+}
+
+struct AgentCapabilityUsageRow: Identifiable, Equatable {
+    let capability: AgentUsageCapability
+    let callCount: Int
+
+    var id: AgentUsageCapability { capability }
+}
+
+/// A distinct artifact referenced by chats that were active in the current
+/// calendar week. Artifact ledgers are session-scoped, so the label remains
+/// honest: this is work surfaced from this week's active chats, not a guess
+/// based on Git status or filesystem timestamps.
+struct AgentWeeklyDeliverableRow: Identifiable, Equatable {
+    let path: String
+    let sessionCount: Int
+    let mostRecentSessionUpdate: Date
+
+    var id: String { path }
+
+    var displayName: String {
+        let name = (path as NSString).lastPathComponent
+        return name.isEmpty ? path : name
+    }
+}
+
+/// A persisted, explicit tool execution failure. Denied approvals are not
+/// included: a user choosing not to run a tool is not a tool failure.
+struct AgentFailedToolCallReviewRow: Identifiable, Equatable {
+    let toolName: String
+    let errorSummary: String
+    let occurredAt: Date
+
+    var id: String { "\(toolName)|\(occurredAt.timeIntervalSinceReferenceDate)|\(errorSummary)" }
+}
+
 struct AgentUsageSessionSnapshot: Identifiable, Equatable {
     let id: UUID
     var modelID: String?
@@ -83,6 +179,10 @@ struct AgentUsageSessionSnapshot: Identifiable, Equatable {
     var createdAt: Date
     var updatedAt: Date
     var messages: [AgentUsageMessageSnapshot]
+    var workspaceIdentifier: String?
+    var editedFileCount: Int
+    var artifactCount: Int
+    var artifactPaths: [String]
     /// True when this session ran under 省心托管 (some.im managed routing).
     /// Managed sessions never persist a resolved `modelID` (it's cleared in
     /// `AppStateAgentSessions` because routing is per-turn), so without this
@@ -100,6 +200,10 @@ struct AgentUsageSessionSnapshot: Identifiable, Equatable {
         createdAt: Date,
         updatedAt: Date,
         messages: [AgentUsageMessageSnapshot],
+        workspaceIdentifier: String? = nil,
+        editedFileCount: Int = 0,
+        artifactCount: Int = 0,
+        artifactPaths: [String] = [],
         isManagedRouting: Bool = false
     ) {
         self.id = id
@@ -109,6 +213,10 @@ struct AgentUsageSessionSnapshot: Identifiable, Equatable {
         self.createdAt = createdAt
         self.updatedAt = updatedAt
         self.messages = messages
+        self.workspaceIdentifier = workspaceIdentifier
+        self.editedFileCount = editedFileCount
+        self.artifactCount = artifactCount
+        self.artifactPaths = artifactPaths
         self.isManagedRouting = isManagedRouting
     }
 
@@ -121,8 +229,24 @@ struct AgentUsageSessionSnapshot: Identifiable, Equatable {
             createdAt: session.createdAt,
             updatedAt: session.updatedAt,
             messages: session.messages.map { AgentUsageMessageSnapshot(message: $0) },
+            workspaceIdentifier: Self.workspaceIdentifier(for: session.workspaceLocation ?? session.workspaceRootPath.map { .local(path: $0) }),
+            editedFileCount: session.agentEditedPaths.count,
+            artifactCount: session.agentArtifactPaths.count,
+            artifactPaths: session.agentArtifactPaths,
             isManagedRouting: session.managedRouting != nil
         )
+    }
+
+    private static func workspaceIdentifier(for location: WorkspaceLocation?) -> String? {
+        guard let location else { return nil }
+        switch location {
+        case .local(let path):
+            let normalized = path.trimmingCharacters(in: .whitespacesAndNewlines)
+            return normalized.isEmpty ? nil : "local:\(normalized)"
+        case .remote(let runtimeID, let path):
+            let normalized = path.trimmingCharacters(in: .whitespacesAndNewlines)
+            return normalized.isEmpty ? nil : "remote:\(runtimeID.uuidString):\(normalized)"
+        }
     }
 }
 
@@ -132,6 +256,11 @@ struct AgentUsageMessageSnapshot: Equatable {
     var reasoningCharacterCount: Int
     var imageCount: Int
     var toolCallArgumentCharacterCount: Int
+    var toolCallNames: [String]
+    var toolCallExternalIDs: [String]
+    var toolCallID: String?
+    var toolCallStatus: AgentToolCallStatus?
+    var toolErrorMessage: String?
     var usageTokens: Int?
     var promptTokens: Int?
     var completionTokens: Int?
@@ -149,6 +278,11 @@ struct AgentUsageMessageSnapshot: Equatable {
         reasoningCharacterCount: Int = 0,
         imageCount: Int = 0,
         toolCallArgumentCharacterCount: Int = 0,
+        toolCallNames: [String] = [],
+        toolCallExternalIDs: [String] = [],
+        toolCallID: String? = nil,
+        toolCallStatus: AgentToolCallStatus? = nil,
+        toolErrorMessage: String? = nil,
         usageTokens: Int? = nil,
         promptTokens: Int? = nil,
         completionTokens: Int? = nil,
@@ -165,6 +299,11 @@ struct AgentUsageMessageSnapshot: Equatable {
         self.reasoningCharacterCount = reasoningCharacterCount
         self.imageCount = imageCount
         self.toolCallArgumentCharacterCount = toolCallArgumentCharacterCount
+        self.toolCallNames = toolCallNames
+        self.toolCallExternalIDs = toolCallExternalIDs
+        self.toolCallID = toolCallID
+        self.toolCallStatus = toolCallStatus
+        self.toolErrorMessage = toolErrorMessage
         self.usageTokens = usageTokens
         self.promptTokens = promptTokens
         self.completionTokens = completionTokens
@@ -184,6 +323,11 @@ struct AgentUsageMessageSnapshot: Equatable {
             reasoningCharacterCount: message.reasoningContent?.count ?? 0,
             imageCount: message.images.count,
             toolCallArgumentCharacterCount: message.toolCalls.reduce(0) { $0 + $1.argumentsJSON.count },
+            toolCallNames: message.toolCalls.map(\.toolName),
+            toolCallExternalIDs: message.toolCalls.map(\.externalID),
+            toolCallID: message.toolCallID,
+            toolCallStatus: message.toolCallStatus,
+            toolErrorMessage: message.toolErrorMessage,
             usageTokens: message.usageTokens,
             promptTokens: message.promptTokens,
             completionTokens: message.completionTokens,
@@ -213,6 +357,12 @@ enum AgentUsageStats {
         let allMessages = sessions.flatMap(\.messages)
         let messageCount = allMessages.count
         let sessionCount = sessions.count
+        let userTurnCount = allMessages.count { $0.role == .user }
+        let toolCallCount = allMessages.reduce(0) { $0 + $1.toolCallNames.count }
+        let editedFileCount = sessions.reduce(0) { $0 + $1.editedFileCount }
+        let artifactCount = sessions.reduce(0) { $0 + $1.artifactCount }
+        let workflowCount = allMessages.count { $0.role == .workflowReport }
+        let workspaceCount = Set(sessions.compactMap(\.workspaceIdentifier)).count
 
         var totalTokens = 0
         var hasAnyRealUsage = false
@@ -255,6 +405,12 @@ enum AgentUsageStats {
         return AgentUsageOverview(
             sessionCount: sessionCount,
             messageCount: messageCount,
+            userTurnCount: userTurnCount,
+            toolCallCount: toolCallCount,
+            editedFileCount: editedFileCount,
+            artifactCount: artifactCount,
+            workflowCount: workflowCount,
+            workspaceCount: workspaceCount,
             totalTokens: totalTokens,
             hasAnyRealUsage: hasAnyRealUsage,
             activeDays: activeDays,
@@ -385,7 +541,131 @@ enum AgentUsageStats {
             }
     }
 
+    static func capabilityUsage(for sessions: [AgentSession]) -> [AgentCapabilityUsageRow] {
+        capabilityUsage(for: sessions.map { AgentUsageSessionSnapshot(session: $0) })
+    }
+
+    static func capabilityUsage(for sessions: [AgentUsageSessionSnapshot]) -> [AgentCapabilityUsageRow] {
+        var counts: [AgentUsageCapability: Int] = [:]
+        for toolName in sessions.flatMap(\.messages).flatMap(\.toolCallNames) {
+            counts[capability(for: toolName), default: 0] += 1
+        }
+
+        return counts.map { AgentCapabilityUsageRow(capability: $0.key, callCount: $0.value) }
+            .sorted {
+                if $0.callCount != $1.callCount { return $0.callCount > $1.callCount }
+                return $0.capability.rawValue < $1.capability.rawValue
+            }
+    }
+
+    static func weeklyDeliverables(
+        for sessions: [AgentUsageSessionSnapshot],
+        now: Date = Date(),
+        calendar: Calendar = .current
+    ) -> [AgentWeeklyDeliverableRow] {
+        guard let week = calendar.dateInterval(of: .weekOfYear, for: now) else { return [] }
+        var entries: [String: (sessionIDs: Set<UUID>, mostRecent: Date)] = [:]
+
+        for session in sessions where week.contains(session.updatedAt) {
+            for path in session.artifactPaths {
+                let normalized = path.trimmingCharacters(in: .whitespacesAndNewlines)
+                guard !normalized.isEmpty else { continue }
+                var entry = entries[normalized] ?? ([], session.updatedAt)
+                entry.sessionIDs.insert(session.id)
+                entry.mostRecent = max(entry.mostRecent, session.updatedAt)
+                entries[normalized] = entry
+            }
+        }
+
+        return entries.map {
+            AgentWeeklyDeliverableRow(
+                path: $0.key,
+                sessionCount: $0.value.sessionIDs.count,
+                mostRecentSessionUpdate: $0.value.mostRecent
+            )
+        }
+        .sorted {
+            if $0.mostRecentSessionUpdate != $1.mostRecentSessionUpdate {
+                return $0.mostRecentSessionUpdate > $1.mostRecentSessionUpdate
+            }
+            return $0.path.localizedStandardCompare($1.path) == .orderedAscending
+        }
+    }
+
+    static func failedToolCallReview(
+        for sessions: [AgentUsageSessionSnapshot],
+        now: Date = Date(),
+        calendar: Calendar = .current
+    ) -> [AgentFailedToolCallReviewRow] {
+        guard let week = calendar.dateInterval(of: .weekOfYear, for: now) else { return [] }
+        var reviewRows: [AgentFailedToolCallReviewRow] = []
+
+        for session in sessions {
+            var namesByCallID: [String: String] = [:]
+            for message in session.messages {
+                for (identifier, name) in zip(message.toolCallExternalIDs, message.toolCallNames) where !identifier.isEmpty && !name.isEmpty {
+                    namesByCallID[identifier] = name
+                }
+            }
+            for message in session.messages {
+                guard message.role == .tool,
+                      message.toolCallStatus == .failed,
+                      week.contains(message.createdAt),
+                      let callID = message.toolCallID,
+                      let toolName = namesByCallID[callID] else {
+                    continue
+                }
+                reviewRows.append(
+                    AgentFailedToolCallReviewRow(
+                        toolName: toolName,
+                        errorSummary: errorSummary(message.toolErrorMessage),
+                        occurredAt: message.createdAt
+                    )
+                )
+            }
+        }
+
+        return reviewRows.sorted { $0.occurredAt > $1.occurredAt }
+    }
+
     // MARK: - Internals
+
+    private static func capability(for rawToolName: String) -> AgentUsageCapability {
+        let toolName = rawToolName.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        if toolName.contains("web_search") || toolName.contains("web_fetch") || toolName.contains("research") {
+            return .research
+        }
+        if toolName.contains("browser") || toolName.contains("computer_use") || toolName.contains("computer") {
+            return .browser
+        }
+        if toolName.contains("image") || toolName.contains("video") || toolName.contains("audio") || toolName.contains("media") {
+            return .media
+        }
+        if toolName.contains("terminal") || toolName.contains("run_command") || toolName.contains("shell") {
+            return .terminal
+        }
+        if toolName.contains("workflow") || toolName.contains("schedule") || toolName.contains("routine") {
+            return .automation
+        }
+        if toolName.contains("mcp") || toolName.contains("connector") || toolName.contains("integration") {
+            return .integration
+        }
+        if toolName.contains("read_file") || toolName.contains("list_directory") || toolName.contains("search_files") {
+            return .workspace
+        }
+        if toolName.contains("patch") || toolName.contains("edit") || toolName.contains("write") || toolName.contains("git") || toolName.contains("grep") || toolName.contains("code") {
+            return .coding
+        }
+        return .general
+    }
+
+    private static func errorSummary(_ message: String?) -> String {
+        let normalized = (message ?? "")
+            .replacingOccurrences(of: "\n", with: " ")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !normalized.isEmpty else { return L10n.StatsDashboard.failureDetailUnavailable }
+        return String(normalized.prefix(140))
+    }
 
     private static func estimateTokens(for message: AgentUsageMessageSnapshot) -> Int {
         var total = max(0, message.contentCharacterCount / 4)
@@ -415,12 +695,12 @@ enum AgentUsageStats {
     ) -> (id: String, name: String) {
         if let providerID = session.providerID?.trimmingCharacters(in: .whitespacesAndNewlines),
            !providerID.isEmpty {
-            let display = session.providerDisplayName?.trimmingCharacters(in: .whitespacesAndNewlines)
             return (
                 providerID,
-                display?.isEmpty == false
-                    ? display!
-                    : AgentProviderPreset.preset(id: providerID)?.displayName ?? providerID
+                AgentProviderPreset.normalizedDisplayName(
+                    providerID: providerID,
+                    storedDisplayName: session.providerDisplayName
+                ) ?? providerID
             )
         }
 

@@ -1383,12 +1383,58 @@ nonisolated enum L10n {
     }
 
     enum StatsDashboard {
+        static let activityTitle = String(localized: "stats-dashboard.activity.title", defaultValue: "Activity")
+        static let capabilitiesEmpty = String(localized: "stats-dashboard.capabilities.empty", defaultValue: "Use a tool in a chat and your most-used capabilities will appear here.")
+        static let capabilitiesTitle = String(localized: "stats-dashboard.capabilities.title", defaultValue: "Most-used capabilities")
+        static let capabilityAutomation = String(localized: "stats-dashboard.capability.automation", defaultValue: "Automation")
+        static let capabilityBrowser = String(localized: "stats-dashboard.capability.browser", defaultValue: "Browser & computer")
+        static let capabilityCoding = String(localized: "stats-dashboard.capability.coding", defaultValue: "Code changes")
+        static let capabilityGeneral = String(localized: "stats-dashboard.capability.general", defaultValue: "Other tools")
+        static let capabilityIntegration = String(localized: "stats-dashboard.capability.integration", defaultValue: "MCP & integrations")
+        static let capabilityMedia = String(localized: "stats-dashboard.capability.media", defaultValue: "Images & media")
+        static let capabilityResearch = String(localized: "stats-dashboard.capability.research", defaultValue: "Web research")
+        static let capabilityTerminal = String(localized: "stats-dashboard.capability.terminal", defaultValue: "Terminal")
+        static let capabilityWorkspace = String(localized: "stats-dashboard.capability.workspace", defaultValue: "Workspace files")
+        static func activitySummary(_ a1: String, _ a2: String) -> String {
+            let template = String(localized: "stats-dashboard.activity.summary", defaultValue: "%1$@ messages · %2$@ tokens")
+            return String(format: template, a1, a2)
+        }
+        static func callCount(_ a1: String) -> String {
+            let template = String(localized: "stats-dashboard.capabilities.call-count", defaultValue: "%@ calls")
+            return String(format: template, a1)
+        }
+        static func dayCount(_ a1: String) -> String {
+            let template = String(localized: "stats-dashboard.day-count", defaultValue: "%@ days")
+            return String(format: template, a1)
+        }
+        static func deliverableSessionCount(_ a1: String) -> String {
+            let template = String(localized: "stats-dashboard.deliverables.session-count", defaultValue: "%@ chats")
+            return String(format: template, a1)
+        }
+        static let failureDetailUnavailable = String(localized: "stats-dashboard.failure.detail-unavailable", defaultValue: "No error summary recorded")
+        static let failureReviewEmpty = String(localized: "stats-dashboard.failure.empty", defaultValue: "No recorded tool failures this week")
+        static let failureReviewSubtitle = String(localized: "stats-dashboard.failure.subtitle", defaultValue: "Explicit execution failures only")
+        static let failureReviewTitle = String(localized: "stats-dashboard.failure.title", defaultValue: "Failed tool-call review")
+        static let insightsTitle = String(localized: "stats-dashboard.insights.title", defaultValue: "Work insights")
+        static let insightActiveDays = String(localized: "stats-dashboard.insight.active-days", defaultValue: "Active days")
+        static let insightPeakHour = String(localized: "stats-dashboard.insight.peak-hour", defaultValue: "Peak time")
+        static let insightSessions = String(localized: "stats-dashboard.insight.sessions", defaultValue: "Chats")
+        static let insightWorkflows = String(localized: "stats-dashboard.insight.workflows", defaultValue: "Workflows")
+        static let insightWorkspaces = String(localized: "stats-dashboard.insight.workspaces", defaultValue: "Workspaces")
+        static let metricArtifacts = String(localized: "stats-dashboard.metric.artifacts", defaultValue: "Artifacts")
+        static let metricCurrentStreak = String(localized: "stats-dashboard.metric.current-streak", defaultValue: "Current streak")
+        static let metricFilesChanged = String(localized: "stats-dashboard.metric.files-changed", defaultValue: "Files changed")
+        static let metricTaskTurns = String(localized: "stats-dashboard.metric.task-turns", defaultValue: "Task turns")
+        static let metricToolCalls = String(localized: "stats-dashboard.metric.tool-calls", defaultValue: "Tool calls")
         static let range24h = String(localized: "stats-dashboard.range.24h", defaultValue: "24h")
         static let range30d = String(localized: "stats-dashboard.range.30d", defaultValue: "30d")
         static let range7d = String(localized: "stats-dashboard.range.7d", defaultValue: "7d")
         static let rangeAll = String(localized: "stats-dashboard.range.all", defaultValue: "All")
         static let tabsModels = String(localized: "stats-dashboard.tabs.models", defaultValue: "Models")
         static let tabsOverview = String(localized: "stats-dashboard.tabs.overview", defaultValue: "Overview")
+        static let weeklyDeliverablesEmpty = String(localized: "stats-dashboard.deliverables.empty", defaultValue: "No artifacts from chats active this week")
+        static let weeklyDeliverablesSubtitle = String(localized: "stats-dashboard.deliverables.subtitle", defaultValue: "Artifacts from chats updated this week")
+        static let weeklyDeliverablesTitle = String(localized: "stats-dashboard.deliverables.title", defaultValue: "This week’s deliverables")
     }
 
     enum SymbolJump {

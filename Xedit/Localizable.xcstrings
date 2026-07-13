@@ -27404,6 +27404,76 @@
         }
       }
     },
+    "stats-dashboard.activity.summary" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "%1$@ messages · %2$@ tokens" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "%1$@ 条消息 · %2$@ Token" } }
+      }
+    },
+    "stats-dashboard.activity.title" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Activity" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "活动足迹" } }
+      }
+    },
+    "stats-dashboard.capabilities.call-count" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "%@ calls" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "%@ 次调用" } }
+      }
+    },
+    "stats-dashboard.capabilities.empty" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Use a tool in a chat and your most-used capabilities will appear here." } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "在对话中调用工具后，这里会显示你的常用能力。" } }
+      }
+    },
+    "stats-dashboard.capabilities.title" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Most-used capabilities" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "常用能力" } }
+      }
+    },
+    "stats-dashboard.capability.automation" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Automation" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "自动化" } } } },
+    "stats-dashboard.capability.browser" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Browser & computer" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "浏览器与电脑操作" } } } },
+    "stats-dashboard.capability.coding" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Code changes" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "代码修改" } } } },
+    "stats-dashboard.capability.general" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Other tools" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "其他工具" } } } },
+    "stats-dashboard.capability.integration" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "MCP & integrations" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "MCP 与集成" } } } },
+    "stats-dashboard.capability.media" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Images & media" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "图片与媒体" } } } },
+    "stats-dashboard.capability.research" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Web research" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "联网调研" } } } },
+    "stats-dashboard.capability.terminal" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Terminal" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "终端" } } } },
+    "stats-dashboard.capability.workspace" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Workspace files" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "工作区文件" } } } },
+    "stats-dashboard.day-count" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "%@ days" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "%@ 天" } }
+      }
+    },
+    "stats-dashboard.deliverables.empty" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "No artifacts from chats active this week" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "本周活跃会话暂无交付物" } } } },
+    "stats-dashboard.deliverables.session-count" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "%@ chats" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "%@ 个会话" } } } },
+    "stats-dashboard.deliverables.subtitle" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Artifacts from chats updated this week" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "来自本周更新会话的产物" } } } },
+    "stats-dashboard.deliverables.title" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "This week’s deliverables" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "本周交付物" } } } },
+    "stats-dashboard.failure.detail-unavailable" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "No error summary recorded" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "未记录错误摘要" } } } },
+    "stats-dashboard.failure.empty" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "No recorded tool failures this week" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "本周没有记录到失败调用" } } } },
+    "stats-dashboard.failure.subtitle" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Explicit execution failures only" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "仅统计明确的执行失败" } } } },
+    "stats-dashboard.failure.title" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Failed tool-call review" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "失败工具调用复盘" } } } },
+    "stats-dashboard.insight.active-days" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Active days" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "活跃天数" } } } },
+    "stats-dashboard.insight.peak-hour" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Peak time" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "高峰时段" } } } },
+    "stats-dashboard.insight.sessions" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Chats" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "会话" } } } },
+    "stats-dashboard.insight.workflows" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Workflows" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "工作流" } } } },
+    "stats-dashboard.insight.workspaces" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Workspaces" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "工作区" } } } },
+    "stats-dashboard.insights.title" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Work insights" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "工作洞察" } } } },
+    "stats-dashboard.metric.artifacts" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Artifacts" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "交付物" } } } },
+    "stats-dashboard.metric.current-streak" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Current streak" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "当前连续" } } } },
+    "stats-dashboard.metric.files-changed" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Files changed" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "改动文件" } } } },
+    "stats-dashboard.metric.task-turns" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Task turns" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "任务轮次" } } } },
+    "stats-dashboard.metric.tool-calls" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Tool calls" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "工具调用" } } } },
     "stats-dashboard.range.7d" : {
       "comment" : "date range selector",
       "extractionState" : "manual",
