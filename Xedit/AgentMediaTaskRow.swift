@@ -181,7 +181,7 @@ struct AgentMediaTaskRow: View {
                 .background(Capsule().fill(Color.accentColor.opacity(0.07)))
             }
 
-            if !task.artifacts.isEmpty {
+            if shouldShowArtifactStrip {
                 VStack(alignment: .leading, spacing: 6) {
                     HStack(spacing: 6) {
                         Text("产物")
@@ -205,11 +205,14 @@ struct AgentMediaTaskRow: View {
                             ForEach(task.artifacts) { artifact in
                                 AgentMediaArtifactThumbnail(artifact: artifact, sourceTask: task)
                             }
+                            if task.isActive {
+                                AgentMediaPendingArtifactPlaceholder(status: task.status)
+                            }
                         }
                         .padding(.vertical, 1)
                     }
-                    if task.artifacts.count > 1 {
-                        Text("点击缩略图预览；图片可进入蒙版编辑")
+                    if let artifactHintText {
+                        Text(artifactHintText)
                             .font(.caption2)
                             .foregroundStyle(.secondary)
                     }
@@ -240,6 +243,23 @@ struct AgentMediaTaskRow: View {
 
     private var imageArtifacts: [AgentMediaArtifact] {
         task.artifacts.filter(isImageArtifact)
+    }
+
+    private var shouldShowArtifactStrip: Bool {
+        !task.artifacts.isEmpty || task.isActive
+    }
+
+    private var artifactHintText: String? {
+        if task.isActive, task.artifacts.isEmpty {
+            return "正在等待第一份产物；完成后会替换为可预览缩略图"
+        }
+        if task.isActive {
+            return "已有产物可先预览；末尾占位表示任务仍在生成"
+        }
+        if task.artifacts.count > 1 {
+            return "点击缩略图预览；图片可进入蒙版编辑"
+        }
+        return nil
     }
 
     private var statusTint: Color {
@@ -521,5 +541,37 @@ struct AgentMediaTaskRow: View {
         }
         let ext = URL(fileURLWithPath: artifact.filePath).pathExtension.lowercased()
         return ["png", "jpg", "jpeg", "webp", "gif", "tif", "tiff", "heic"].contains(ext)
+    }
+}
+
+private struct AgentMediaPendingArtifactPlaceholder: View {
+    let status: AgentMediaTaskStatus
+    private let tileSize = CGSize(width: 96, height: 78)
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            ZStack {
+                RoundedRectangle(cornerRadius: 8)
+                    .fill(Color.primary.opacity(0.035))
+                RoundedRectangle(cornerRadius: 8)
+                    .strokeBorder(Color.primary.opacity(0.12), style: StrokeStyle(lineWidth: 1, dash: [3, 3]))
+                VStack(spacing: 7) {
+                    ProgressView()
+                        .controlSize(.small)
+                    Text(status.displayName)
+                        .font(.caption2.weight(.semibold))
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                }
+            }
+            .frame(width: tileSize.width, height: tileSize.height)
+            .help("媒体任务仍在生成，产物完成后会出现在这里")
+
+            Text("生成中")
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
+                .frame(width: tileSize.width, alignment: .leading)
+        }
     }
 }
