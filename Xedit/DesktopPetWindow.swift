@@ -136,6 +136,8 @@ final class DesktopPetWindowManager: ObservableObject {
     private enum DefaultsKey {
         static let isEnabled = "com.willdeep.desktop-pet.enabled.v1"
         static let appearance = "com.willdeep.desktop-pet.appearance.v1"
+        static let originX = "com.willdeep.desktop-pet.origin-x.v1"
+        static let originY = "com.willdeep.desktop-pet.origin-y.v1"
     }
 
     @Published private(set) var presentation = DesktopPetPresentation.empty
@@ -149,7 +151,9 @@ final class DesktopPetWindowManager: ObservableObject {
     private var celebrationEndsAt: Date?
 
     private init() {
-        isEnabled = UserDefaults.standard.object(forKey: DefaultsKey.isEnabled) as? Bool ?? false
+        // 默认开启桌面宠物:首次启动即陪伴,用户可随时在右键菜单 /
+        // 设置里关闭(关闭状态会写回 UserDefaults,不会被这个默认值覆盖)。
+        isEnabled = UserDefaults.standard.object(forKey: DefaultsKey.isEnabled) as? Bool ?? true
         appearance = UserDefaults.standard.string(forKey: DefaultsKey.appearance)
             .flatMap(DesktopPetAppearance.init(rawValue:)) ?? .robotFox
     }
@@ -183,6 +187,29 @@ final class DesktopPetWindowManager: ObservableObject {
     func openCurrentSession() {
         guard let sessionID = presentation.sessionID else { return }
         AgentNotificationResponder.reveal(runtimeID: sessionID)
+    }
+
+    /// 打开设置窗口并跳到「桌面宠物」标签(右键菜单入口)。
+    func openSettings() {
+        EditorSettingsNavigation.shared.open(.pet, appState: appState)
+    }
+
+    /// 按增量位移拖动宠物窗口。SwiftUI 的 y 轴向下、AppKit 向上,
+    /// 所以纵向取反。
+    func moveWindow(by delta: CGSize) {
+        guard let window else { return }
+        var origin = window.frame.origin
+        origin.x += delta.width
+        origin.y -= delta.height
+        window.setFrameOrigin(origin)
+    }
+
+    /// 拖动结束后把当前位置写回 UserDefaults,下次显示时恢复。
+    func persistWindowPosition() {
+        guard let window else { return }
+        let origin = window.frame.origin
+        UserDefaults.standard.set(Double(origin.x), forKey: DefaultsKey.originX)
+        UserDefaults.standard.set(Double(origin.y), forKey: DefaultsKey.originY)
     }
 
     private func startPollingIfNeeded() {
@@ -267,7 +294,7 @@ final class DesktopPetWindowManager: ObservableObject {
         host.frame = NSRect(origin: .zero, size: size)
 
         let panel = NSPanel(
-            contentRect: Self.defaultFrame(for: size),
+            contentRect: Self.savedOrDefaultFrame(for: size),
             styleMask: [.borderless, .nonactivatingPanel],
             backing: .buffered,
             defer: false
@@ -296,6 +323,26 @@ final class DesktopPetWindowManager: ObservableObject {
         window = nil
     }
 
+    /// 优先用用户拖动后保存的位置;没有保存值、或保存的位置落在
+    /// 已断开的显示器上(不与任何屏幕相交)时,退回右下角默认位。
+    private static func savedOrDefaultFrame(for size: NSSize) -> NSRect {
+        let defaults = UserDefaults.standard
+        guard defaults.object(forKey: DefaultsKey.originX) != nil,
+              defaults.object(forKey: DefaultsKey.originY) != nil else {
+            return defaultFrame(for: size)
+        }
+        let rect = NSRect(
+            x: defaults.double(forKey: DefaultsKey.originX),
+            y: defaults.double(forKey: DefaultsKey.originY),
+            width: size.width,
+            height: size.height
+        )
+        guard NSScreen.screens.contains(where: { $0.frame.intersects(rect) }) else {
+            return defaultFrame(for: size)
+        }
+        return rect
+    }
+
     private static func defaultFrame(for size: NSSize) -> NSRect {
         let screen = NSScreen.main ?? NSScreen.screens.first
         guard let screen else { return NSRect(origin: .zero, size: size) }
@@ -312,6 +359,26 @@ final class DesktopPetWindowManager: ObservableObject {
 
 private struct DesktopPetOverlayView: View {
     @ObservedObject var manager: DesktopPetWindowManager
+
+    /// DragGesture 报告的是自手势开始起的累计位移;这里缓存上一帧的
+    /// 累计值,每帧只把「增量」喂给窗口,实现跟手拖动。
+    @State private var lastDragTranslation: CGSize = .zero
+
+    private var dragGesture: some Gesture {
+        DragGesture(minimumDistance: 2)
+            .onChanged { value in
+                let delta = CGSize(
+                    width: value.translation.width - lastDragTranslation.width,
+                    height: value.translation.height - lastDragTranslation.height
+                )
+                lastDragTranslation = value.translation
+                manager.moveWindow(by: delta)
+            }
+            .onEnded { _ in
+                lastDragTranslation = .zero
+                manager.persistWindowPosition()
+            }
+    }
 
     var body: some View {
         TimelineView(.animation) { context in
@@ -332,7 +399,11 @@ private struct DesktopPetOverlayView: View {
             }
             .frame(width: 360, height: 190, alignment: .bottomTrailing)
             .contentShape(Rectangle())
+            .gesture(dragGesture)
             .contextMenu {
+                Button(L10n.DesktopPet.settingsAction) {
+                    manager.openSettings()
+                }
                 Button(L10n.DesktopPet.hideAction) {
                     manager.setEnabled(false)
                 }
