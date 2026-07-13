@@ -1180,6 +1180,20 @@ extension AppState {
         let toRemove = agentSessions.filter { session in
             if session.id == activeID { return false }
             if session.id == protectedID { return false }
+            // Cross-process grace: a file another WillDeep just wrote (or
+            // is mid-write on) reads as empty on our stale scan but is
+            // very likely a live session in that process. Skip anything
+            // touched within the grace window; a truly abandoned
+            // placeholder falls outside it and prunes on a later launch.
+            // Placed ahead of the metadata-only shortcut so it guards the
+            // startup path too, where loadAll marks every session
+            // metadata-only. The delete-time re-read in deleteIfStillEmpty
+            // is the hard safety gate; this just avoids even attempting a
+            // delete on a freshly-touched file.
+            if let mtime = AgentSessionStore.fileModificationDate(id: session.id),
+               Date().timeIntervalSince(mtime) < AgentSessionStore.pruneGracePeriod {
+                return false
+            }
             if AgentSessionStore.isMetadataOnly(session.id) {
                 return !AgentSessionStore.metadataOnlySessionHasUserMessage(session.id)
             }
@@ -1192,13 +1206,20 @@ extension AppState {
                     return false
                 }
             }
-            return !session.messages.contains(where: { $0.role == .user })
+            if session.messages.contains(where: { $0.role == .user }) { return false }
+            return true
         }
         guard !toRemove.isEmpty else { return }
-        for session in toRemove {
-            AgentSessionStore.delete(id: session.id)
+        // Delete each only if its on-disk copy is STILL empty — another
+        // process may have flushed a user message into it between our scan
+        // and now. Ids that decline deletion stay in the in-memory list so
+        // we never drop a session that still exists (and has history) on
+        // disk.
+        var removedIDs = Set<AgentSession.ID>()
+        for session in toRemove where AgentSessionStore.deleteIfStillEmpty(id: session.id) {
+            removedIDs.insert(session.id)
         }
-        let removedIDs = Set(toRemove.map(\.id))
+        guard !removedIDs.isEmpty else { return }
         agentSessions.removeAll { removedIDs.contains($0.id) }
         agentUsageSnapshots.removeAll { removedIDs.contains($0.id) }
         // Tear down any runtimes left for the pruned sessions, lest

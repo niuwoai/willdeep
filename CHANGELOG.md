@@ -1,5 +1,18 @@
 # Changelog
 
+## 1.146.0-rc4 - 2026-07-13
+
+### Fixed
+
+- **会话落盘跨进程竞态导致数据丢失** —— 双开 App（或设置窗口第二个 AppState、routine 进程）读写同一会话目录时，此前的写入编排（串行写队列、合并/排序 ticket、metadata-only 追踪）全是进程内 `static`，对另一个进程零保证，存在两类隐患：
+  - **启动 prune 误删**：进程 B 启动扫描目录，把进程 A 刚 append 用户消息、还没落盘的会话判成“空占位”而删除，A 的真实历史随之丢失。现在 prune 的删除动作改走新的 `deleteIfStillEmpty(id:)`——在文件协调（`NSFileCoordinator`）下**重新读一次磁盘文件**，只有当磁盘副本此刻仍无用户消息才删，否则跳过并保留在会话列表里。
+  - **同 id 覆写（lost update）**：两进程写同一 `<uuid>.json` 是 last-writer-wins。现在 `save` / `saveAsync` / `delete` 的文件读写统一经 `NSFileCoordinator` 跨进程串行协调（协调失败时降级为原子写，不丢操作），并保留原有进程内串行写队列与 `.atomic` 语义。
+  - 额外加了 **90s 最近修改宽限窗口**：prune 会跳过 mtime 很新的会话文件（很可能是另一进程正在使用的活会话），确实被遗弃的空占位在后续启动超窗后照常清理。
+
+### Changed
+
+- 版本号从 **1.146.0-rc3** 递增为 **1.146.0-rc4**。
+
 ## 1.146.0-rc3 - 2026-07-13
 
 ### Fixed

@@ -1,6 +1,6 @@
 # WillDeep Product Overview
 
-> Last updated: 2026-07-13 | Current version: v1.146.0-rc3
+> Last updated: 2026-07-13 | Current version: v1.146.0-rc4
 
 ## Positioning
 
@@ -12,6 +12,7 @@ WillDeep is configured for non-App-Store distribution without App Sandbox so it 
 
 ## 架构概览
 
+- **会话落盘跨进程竞态修复（1.146.0-rc4）** —— 双开 App、设置窗口第二个 AppState、routine 进程会读写同一个 `agent-sessions/` 目录，而此前的写入编排（串行写队列、合并/排序 ticket、metadata-only 追踪）全是进程内 `static`，跨进程零保证：启动 prune 可能误删另一进程刚写入用户消息的会话，两进程写同 id 时是 last-writer-wins。现在 prune 删除改走 `deleteIfStillEmpty(id:)`，在 `NSFileCoordinator` 协调读下**重读磁盘确认此刻仍无用户消息**才删；`save/saveAsync/delete` 的文件读写统一经 `NSFileCoordinator` 跨进程串行协调（失败降级为原子写，不丢操作），保留原进程内串行写队列与 `.atomic` 语义；prune 另加 90s 最近修改宽限窗口，跳过很可能仍被其他进程使用的活会话文件。仅第 1+2 层（删除前二次校验 + mtime 宽限 + 写协调），未引入 pid 心跳标记。
 - **媒体任务生成中占位（1.146.0）** —— 图片/视频媒体任务仍在排队或生成时，产物条会先显示与真实缩略图同尺寸的“生成中”占位卡；已有部分产物时占位卡保留在横向列表末尾，提示还有远端产物未完成，避免多图任务看起来像已经全部结束。
 - **Workflow watchdog 超时兜底（1.146.0-rc3）** —— `/code-review` 等依赖子 agent 的 workflow 在 provider stream 或网络请求卡住且不响应取消时，会按 watchdog 超时把卡片转为失败并显示原因；超时实现不再等待已卡死的子任务自然结束，避免工作流长期空转没有返回。
 - **Computer Use 活动画面（1.145.0）** —— 当前任务通过 `computer_use_*` 读取或操作 Mac 应用时，聊天区右上角持续显示最新窗口截图；点击可在 Agent 全窗口蒙版中放大，支持关闭按钮、点击背景和 Escape 退出。预览只跟随当前会话与当前执行轮次，不改变既有工具审批、永久授权、辅助功能权限和录屏权限边界；截图继续使用本地文件附件与缩略图缓存，避免在 SwiftUI 状态中长期保留大尺寸位图。

@@ -169,7 +169,7 @@ enum AgentSessionStore {
                 try ensureDirectory()
                 let url = directory.appendingPathComponent("\(id.uuidString).json")
                 let data = try encoder.encode(payload)
-                try data.write(to: url, options: .atomic)
+                try coordinatedWrite(data, to: url)
             } catch {
                 print("AgentSessionStore: failed to save session \(id): \(error)")
                 // Keep the unwritten snapshot around as an in-memory
@@ -672,7 +672,7 @@ enum AgentSessionStore {
                 try ensureDirectory()
                 let url = directory.appendingPathComponent("\(session.id.uuidString).json")
                 let data = try encoder.encode(session)
-                try data.write(to: url, options: .atomic)
+                try coordinatedWrite(data, to: url)
                 return true
             } catch {
                 print("AgentSessionStore: failed to save session \(session.id): \(error)")
@@ -690,9 +690,7 @@ enum AgentSessionStore {
         return writeQueue.sync {
             let url = directory.appendingPathComponent("\(id.uuidString).json")
             do {
-                if FileManager.default.fileExists(atPath: url.path) {
-                    try FileManager.default.removeItem(at: url)
-                }
+                try coordinatedRemove(at: url)
                 metadataOnlySessions.remove(id)
                 return true
             } catch {
@@ -702,11 +700,147 @@ enum AgentSessionStore {
         }
     }
 
+    /// Deletes the session file ONLY if its on-disk copy is (still) empty
+    /// — has no user message. Guards the startup prune against a
+    /// cross-process lost delete: another running WillDeep may have
+    /// flushed a real user message into this id AFTER our in-memory scan
+    /// classified it as a prunable "New Chat" placeholder. We re-read the
+    /// file under file coordination and bail if it now holds history.
+    /// Returns true iff a file was actually removed.
+    ///
+    /// The unconditional `delete(id:)` above stays for user-initiated
+    /// deletions where the caller owns the session and truly means it.
+    @discardableResult
+    static func deleteIfStillEmpty(id: UUID) -> Bool {
+        // Our own not-yet-flushed snapshot is the freshest truth. If it
+        // carries a user message the session is decidedly not empty.
+        if let pending = pendingWrites.peek(id),
+           pending.messages.contains(where: { $0.role == .user }) {
+            return false
+        }
+        return writeQueue.sync {
+            let url = directory.appendingPathComponent("\(id.uuidString).json")
+            var safeToDelete = true
+            coordinatedRead(at: url) { readURL in
+                guard let data = try? Data(contentsOf: readURL) else {
+                    // File already gone — nothing to remove, and nothing
+                    // lost. Leave `safeToDelete` true so we no-op cleanly.
+                    return
+                }
+                if let index = try? decoder.decode(SessionIndex.self, from: data) {
+                    if index.hasUserMessage { safeToDelete = false }
+                } else {
+                    // Unreadable or mid-write from another process — stay
+                    // conservative and keep the file rather than risk
+                    // deleting real (if momentarily undecodable) history.
+                    safeToDelete = false
+                }
+            }
+            guard safeToDelete else { return false }
+            pendingWrites.cancel(id)
+            do {
+                try coordinatedRemove(at: url)
+                metadataOnlySessions.remove(id)
+                return true
+            } catch {
+                print("AgentSessionStore: failed to delete empty session \(id): \(error)")
+                return false
+            }
+        }
+    }
+
+    /// Last-modified timestamp of a session's file on disk, or nil if it
+    /// doesn't exist. The startup prune skips files touched within
+    /// `pruneGracePeriod` — a file another process just wrote (or is
+    /// mid-write on) reads as empty on our stale scan but is very likely
+    /// a live session.
+    static func fileModificationDate(id: UUID) -> Date? {
+        let url = directory.appendingPathComponent("\(id.uuidString).json")
+        return (try? FileManager.default.attributesOfItem(atPath: url.path))?[.modificationDate] as? Date
+    }
+
+    /// Recent-write grace window for the startup prune. A session file
+    /// modified within this window is presumed live in some process and
+    /// left alone; genuinely-abandoned placeholders fall outside it and
+    /// get pruned on a later launch.
+    static let pruneGracePeriod: TimeInterval = 90
+
     private static func ensureDirectory() throws {
         let dir = directory
         var isDir: ObjCBool = false
         if !FileManager.default.fileExists(atPath: dir.path, isDirectory: &isDir) {
             try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        }
+    }
+
+    // MARK: - Cross-process file coordination
+    //
+    // Two WillDeep processes (a second window builds its own AppState, and
+    // routine/agent processes touch the same directory) read and write the
+    // same `<uuid>.json` files. The in-process `writeQueue` orders our own
+    // writes but gives zero guarantee against another process. `.atomic`
+    // stops half-written reads but not lost updates or a delete racing a
+    // foreign write. `NSFileCoordinator` serializes access across processes
+    // on the same URL, so a coordinated write completes before a foreign
+    // coordinated read/write starts, and the delete-time re-read below sees
+    // a consistent file rather than one mid-replacement.
+    //
+    // On the rare event coordination itself fails, we fall back to the
+    // previous uncoordinated behavior rather than drop the operation — the
+    // change only ever adds safety, never removes the baseline.
+
+    private static func coordinatedWrite(_ data: Data, to url: URL) throws {
+        let coordinator = NSFileCoordinator()
+        var coordError: NSError?
+        var writeError: Error?
+        coordinator.coordinate(writingItemAt: url, options: [.forReplacing], error: &coordError) { writeURL in
+            do {
+                try data.write(to: writeURL, options: .atomic)
+            } catch {
+                writeError = error
+            }
+        }
+        if coordError != nil {
+            // Couldn't acquire a coordinated slot — degrade to a direct
+            // atomic write so the save is never silently dropped.
+            try data.write(to: url, options: .atomic)
+            return
+        }
+        if let writeError { throw writeError }
+    }
+
+    private static func coordinatedRemove(at url: URL) throws {
+        let coordinator = NSFileCoordinator()
+        var coordError: NSError?
+        var removeError: Error?
+        coordinator.coordinate(writingItemAt: url, options: [.forDeleting], error: &coordError) { removeURL in
+            do {
+                if FileManager.default.fileExists(atPath: removeURL.path) {
+                    try FileManager.default.removeItem(at: removeURL)
+                }
+            } catch {
+                removeError = error
+            }
+        }
+        if coordError != nil {
+            if FileManager.default.fileExists(atPath: url.path) {
+                try FileManager.default.removeItem(at: url)
+            }
+            return
+        }
+        if let removeError { throw removeError }
+    }
+
+    private static func coordinatedRead(at url: URL, _ body: (URL) -> Void) {
+        let coordinator = NSFileCoordinator()
+        var coordError: NSError?
+        coordinator.coordinate(readingItemAt: url, options: [.withoutChanges], error: &coordError) { readURL in
+            body(readURL)
+        }
+        if coordError != nil {
+            // Coordination unavailable — read the URL directly so callers
+            // still get a decision instead of stalling.
+            body(url)
         }
     }
 
