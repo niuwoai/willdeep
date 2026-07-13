@@ -1,6 +1,12 @@
 {
   "sourceLanguage" : "en",
   "strings" : {
+    "desktop-pet.appearance.antenna-botanist" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Antenna botanist" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "天线植物学家" } } } },
+    "desktop-pet.appearance.cloud-forge" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Cloud-forge engineer" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "云锻工程师" } } } },
+    "desktop-pet.appearance.cosmic-scholar" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Cosmic scholar" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "宇宙学者" } } } },
+    "desktop-pet.appearance.feral-mechanic" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Feral mechanic" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "爪痕硬汉" } } } },
+    "desktop-pet.appearance.helpdesk-hero" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Helpdesk hero" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "红帽客服英雄" } } } },
+    "desktop-pet.appearance.plant-robot" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Plant robot" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "植能机器人" } } } },
     "desktop-pet.accessibility-label" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "WillDeep desktop pet" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "WillDeep 桌面宠物" } } } },
     "desktop-pet.appearance.ape-commander" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Ape commander" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "猩猩指挥官" } } } },
     "desktop-pet.appearance.bear-girl" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Bear hoodie friend" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "熊耳帽女孩" } } } },

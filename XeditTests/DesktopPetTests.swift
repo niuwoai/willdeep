@@ -27,6 +27,7 @@ struct DesktopPetTests {
         #expect(DesktopPetAppearance.paranormalTech.assetName == "DesktopPetParanormalTech")
         #expect(DesktopPetAppearance.cyberDrifter.assetName == "DesktopPetCyberDrifter")
         #expect(DesktopPetAppearance.whistleCaptain.assetName == "DesktopPetWhistleCaptain")
-        #expect(DesktopPetAppearance.allCases.count == 16)
+        #expect(DesktopPetAppearance.cloudForge.assetName == "DesktopPetCloudForge")
+        #expect(DesktopPetAppearance.allCases.count == 22)
     }
 }

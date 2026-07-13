@@ -37,6 +37,12 @@ enum DesktopPetAppearance: String, CaseIterable, Identifiable {
     case paranormalTech
     case cyberDrifter
     case whistleCaptain
+    case antennaBotanist
+    case cosmicScholar
+    case feralMechanic
+    case plantRobot
+    case cloudForge
+    case helpdeskHero
 
     var id: String { rawValue }
 
@@ -58,6 +64,12 @@ enum DesktopPetAppearance: String, CaseIterable, Identifiable {
         case .paranormalTech: "DesktopPetParanormalTech"
         case .cyberDrifter: "DesktopPetCyberDrifter"
         case .whistleCaptain: "DesktopPetWhistleCaptain"
+        case .antennaBotanist: "DesktopPetAntennaBotanist"
+        case .cosmicScholar: "DesktopPetCosmicScholar"
+        case .feralMechanic: "DesktopPetFeralMechanic"
+        case .plantRobot: "DesktopPetPlantRobot"
+        case .cloudForge: "DesktopPetCloudForge"
+        case .helpdeskHero: "DesktopPetHelpdesk"
         }
     }
 
@@ -79,6 +91,12 @@ enum DesktopPetAppearance: String, CaseIterable, Identifiable {
         case .paranormalTech: L10n.DesktopPet.appearanceParanormalTech
         case .cyberDrifter: L10n.DesktopPet.appearanceCyberDrifter
         case .whistleCaptain: L10n.DesktopPet.appearanceWhistleCaptain
+        case .antennaBotanist: L10n.DesktopPet.appearanceAntennaBotanist
+        case .cosmicScholar: L10n.DesktopPet.appearanceCosmicScholar
+        case .feralMechanic: L10n.DesktopPet.appearanceFeralMechanic
+        case .plantRobot: L10n.DesktopPet.appearancePlantRobot
+        case .cloudForge: L10n.DesktopPet.appearanceCloudForge
+        case .helpdeskHero: L10n.DesktopPet.appearanceHelpdeskHero
         }
     }
 }
