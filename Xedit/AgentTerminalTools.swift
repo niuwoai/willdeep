@@ -94,14 +94,23 @@ enum AgentTerminalTools {
                 // on its own queue, so this reflects the latest PTY output even
                 // while the UI is mid-render.
                 raw.mirror.resize(cols: raw.cols, rows: raw.rows)
-                let rawOutput = raw.mirror.captureViewport()
-                let redacted = AgentTerminalRedactor.redact(rawOutput)
-                let trimmed = String(redacted.suffix(max(1, maxCharacters)))
+                let rawCapture = raw.mirror.capture()
+                let redactedOutput = AgentTerminalRedactor.redact(rawCapture.viewport)
+                let redactedMarkedOutput = AgentTerminalRedactor.redact(rawCapture.markedViewport)
+                let redactedCursorLine = AgentTerminalRedactor.redact(rawCapture.cursorLine)
+                let trimmed = String(redactedOutput.suffix(max(1, maxCharacters)))
+                let trimmedMarked = String(redactedMarkedOutput.suffix(max(1, maxCharacters)))
                 return RedactedTerminalSnapshot(
                     isRunning: raw.isRunning,
                     runtimeName: raw.runtimeName,
                     runtimeTarget: raw.runtimeTarget,
                     output: trimmed,
+                    markedOutput: trimmedMarked,
+                    cursorLine: redactedCursorLine,
+                    cursorRow: rawCapture.cursorRow,
+                    cursorColumn: rawCapture.cursorColumn,
+                    rows: rawCapture.rows,
+                    cols: rawCapture.cols,
                     recentCommands: raw.recentCommands
                 )
             }
@@ -124,14 +133,31 @@ enum AgentTerminalTools {
         let screen = snapshot.output.isEmpty
             ? (snapshot.isRunning ? "(no terminal output yet)" : "(terminal produced no output before exiting)")
             : snapshot.output
+        let markedScreen = snapshot.markedOutput.isEmpty
+            ? screen
+            : snapshot.markedOutput
+        let cursorLine = snapshot.cursorLine.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            ? "(cursor is on a blank line)"
+            : snapshot.cursorLine
         let payload = """
         \(statusLine)
+
+        Terminal context rules:
+        - The cursor line below is the best current prompt/input indicator.
+        - Lines above the cursor marker are prior visible output/history; they may describe a previous local shell before SSH or before directory changes.
+        - If Runtime target is "local", the tab may still contain a nested manual SSH session; verify host/cwd from the cursor line or a command such as hostname/pwd before making machine-specific claims.
+
+        Cursor:
+        row \(snapshot.cursorRow + 1)/\(snapshot.rows), column \(snapshot.cursorColumn + 1)/\(snapshot.cols)
+
+        Current cursor line:
+        \(cursorLine)
 
         Recent AI/auto commands:
         \(recent)
 
-        --- latest visible screen ---
-        \(screen)
+        --- latest visible screen (=> marks current cursor line) ---
+        \(markedScreen)
         """
         let summary = snapshot.isRunning
             ? "terminal connected: \(snapshot.runtimeName)"
@@ -148,6 +174,12 @@ enum AgentTerminalTools {
         let runtimeName: String
         let runtimeTarget: String
         let output: String
+        let markedOutput: String
+        let cursorLine: String
+        let cursorRow: Int
+        let cursorColumn: Int
+        let rows: Int
+        let cols: Int
         let recentCommands: [String]
     }
 

@@ -134,6 +134,7 @@ extension AppState {
 
         runtime.errorMessage = nil
         runtime.errorDetails = nil
+        runtime.latestComputerUseActivity = nil
         runtime.isResponding = true
         runtime.turnStartedAt = Date()
         runtime.currentTurnAttachedSkills = attachedSkills

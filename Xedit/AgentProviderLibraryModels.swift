@@ -65,9 +65,10 @@ struct AgentProviderEntry: Identifiable, Codable, Equatable {
     ) {
         self.id = id
         self.providerID = providerID
-        self.displayName = (displayName?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false
-                            ? displayName!
-                            : AgentProviderPreset.preset(id: providerID)?.displayName ?? providerID)
+        self.displayName = AgentProviderPreset.normalizedDisplayName(
+            providerID: providerID,
+            storedDisplayName: displayName
+        ) ?? providerID
         // Defensive trim: pasted API keys / base URLs frequently bring
         // surrounding whitespace or a trailing newline along, and a
         // `Bearer sk-…\n` Authorization header is rejected as HTTP 401
@@ -100,7 +101,11 @@ struct AgentProviderEntry: Identifiable, Codable, Equatable {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         self.id = try c.decode(UUID.self, forKey: .id)
         self.providerID = try c.decode(String.self, forKey: .providerID)
-        self.displayName = try c.decode(String.self, forKey: .displayName)
+        let decodedDisplayName = try c.decode(String.self, forKey: .displayName)
+        self.displayName = AgentProviderPreset.normalizedDisplayName(
+            providerID: self.providerID,
+            storedDisplayName: decodedDisplayName
+        ) ?? self.providerID
         self.baseURL = try c.decode(String.self, forKey: .baseURL)
         let decodedAPIKey = try c.decodeIfPresent(String.self, forKey: .apiKey) ?? ""
         self.apiKey = decodedAPIKey

@@ -1,6 +1,198 @@
 {
   "sourceLanguage" : "en",
   "strings" : {
+    "computer-use-preview.close" : {
+      "localizations" : { "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "关闭电脑操作预览" } } }
+    },
+    "computer-use-preview.open" : {
+      "localizations" : { "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "打开最新电脑操作截图" } } }
+    },
+    "consultation.button-help" : {
+      "localizations" : { "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "打开多专家会诊或圆桌群聊" } } }
+    },
+    "consultation.cancel" : {
+      "localizations" : { "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "取消" } } }
+    },
+    "consultation.chair-name" : {
+      "localizations" : { "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "WillDeep 主持人" } } }
+    },
+    "consultation.copy-final" : {
+      "localizations" : { "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "复制最终结论" } } }
+    },
+    "consultation.error.already-running" : {
+      "localizations" : { "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "已有一场会诊正在进行。" } } }
+    },
+    "consultation.error.all-experts-failed" : {
+      "localizations" : { "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "所有外部专家都未能产出可用的首轮评审。" } } }
+    },
+    "consultation.error.empty-chair" : {
+      "localizations" : { "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "WillDeep 主持人返回了空白归纳。" } } }
+    },
+    "consultation.error.empty-expert" : {
+      "localizations" : { "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "%@ 未返回评审内容。" } } }
+    },
+    "consultation.error.invalid-configuration" : {
+      "localizations" : { "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "请至少选择两位可用专家。" } } }
+    },
+    "consultation.error.report-unavailable" : {
+      "localizations" : { "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "会诊报告已不可用。" } } }
+    },
+    "consultation.error.task-required" : {
+      "localizations" : { "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "请先输入会诊议题。" } } }
+    },
+    "consultation.error.two-experts" : {
+      "localizations" : { "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "请至少选择两位已安装的专家。" } } }
+    },
+    "consultation.experts-label" : {
+      "localizations" : { "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "专家" } } }
+    },
+    "consultation.failed" : {
+      "localizations" : { "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "会诊失败：%@" } } }
+    },
+    "consultation.installed" : {
+      "localizations" : { "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "已安装" } } }
+    },
+    "consultation.interrupted" : {
+      "localizations" : { "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "上次应用会话结束时，此会诊已中断。" } } }
+    },
+    "consultation.group-chat-title" : {
+      "localizations" : { "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "专家圆桌群聊" } } }
+    },
+    "consultation.group-opening-label" : {
+      "localizations" : { "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "开场" } } }
+    },
+    "consultation.group-rounds" : {
+      "localizations" : { "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "群聊轮数" } } }
+    },
+    "consultation.group-rounds-value" : {
+      "localizations" : { "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "群聊轮数：%d" } } }
+    },
+    "consultation.model-placeholder" : {
+      "localizations" : { "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "模型 ID（可选；留空使用 CLI 默认值）" } } }
+    },
+    "consultation.model-picker-help" : {
+      "localizations" : { "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "选择建议的 %@ 模型 ID" } } }
+    },
+    "consultation.model.use-cli-default" : {
+      "localizations" : { "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "使用 CLI 默认模型" } } }
+    },
+    "consultation.mode-label" : {
+      "localizations" : { "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "模式" } } }
+    },
+    "consultation.mode.group-chat" : {
+      "localizations" : { "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "圆桌群聊" } } }
+    },
+    "consultation.mode.group-chat-description" : {
+      "localizations" : { "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "专家依次发言并看到完整公共对话，WillDeep 在轮次之间主持归纳。" } } }
+    },
+    "consultation.mode.structured" : {
+      "localizations" : { "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "结构化会诊" } } }
+    },
+    "consultation.mode.structured-description" : {
+      "localizations" : { "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "并行独立评审、一次互评，再由 WillDeep 汇总定稿。" } } }
+    },
+    "consultation.not-installed" : {
+      "localizations" : { "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "CLI 未安装" } } }
+    },
+    "consultation.phase.draft" : {
+      "localizations" : { "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "WillDeep 正在准备初版方案" } } }
+    },
+    "consultation.phase.final" : {
+      "localizations" : { "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "WillDeep 正在撰写最终结论" } } }
+    },
+    "consultation.phase.group-discussion" : {
+      "localizations" : { "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "专家正在依次发言" } } }
+    },
+    "consultation.phase.group-moderation" : {
+      "localizations" : { "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "WillDeep 正在主持本轮归纳" } } }
+    },
+    "consultation.phase.group-opening" : {
+      "localizations" : { "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "WillDeep 正在主持开场" } } }
+    },
+    "consultation.phase.independent" : {
+      "localizations" : { "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "专家正在独立评审" } } }
+    },
+    "consultation.phase.peer" : {
+      "localizations" : { "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "专家正在进行第二轮互评" } } }
+    },
+    "consultation.phase.preliminary" : {
+      "localizations" : { "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "WillDeep 正在归纳首轮意见" } } }
+    },
+    "consultation.progress" : {
+      "localizations" : { "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "%1$d/%2$d 位专家" } } }
+    },
+    "consultation.round-label" : {
+      "localizations" : { "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "第 %d 轮" } } }
+    },
+    "consultation.round-progress" : {
+      "localizations" : { "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "第 %1$d/%2$d 轮" } } }
+    },
+    "consultation.read-only" : {
+      "localizations" : { "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "外部专家只读" } } }
+    },
+    "consultation.role.claude" : {
+      "localizations" : { "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "架构、假设、边界条件、可维护性与安全性" } } }
+    },
+    "consultation.role.codex" : {
+      "localizations" : { "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "实现正确性、仓库证据、测试与回归风险" } } }
+    },
+    "consultation.role.cursor" : {
+      "localizations" : { "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "替代方案、产品易用性、集成成本与交付" } } }
+    },
+    "consultation.section.final" : {
+      "localizations" : { "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "最终结论" } } }
+    },
+    "consultation.section.first-round" : {
+      "localizations" : { "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "独立评审" } } }
+    },
+    "consultation.section.initial-draft" : {
+      "localizations" : { "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "WillDeep 初版方案" } } }
+    },
+    "consultation.section.peer-round" : {
+      "localizations" : { "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "第二轮互评" } } }
+    },
+    "consultation.section.preliminary" : {
+      "localizations" : { "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "主持人阶段性归纳" } } }
+    },
+    "consultation.setup-description" : {
+      "localizations" : { "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "WillDeep 先出初版；所选专家独立评审、再相互质询一轮，最后由 WillDeep 汇总定稿。所有外部评审均为只读。" } } }
+    },
+    "consultation.setup-overview" : {
+      "localizations" : { "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "选择讨论方式和至少两位本机专家；所有外部专家发言均为只读。" } } }
+    },
+    "consultation.setup-title" : {
+      "localizations" : { "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "多专家会诊" } } }
+    },
+    "consultation.start" : {
+      "localizations" : { "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "开始会诊" } } }
+    },
+    "consultation.start-group-chat" : {
+      "localizations" : { "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "开始群聊" } } }
+    },
+    "consultation.status.cancelled" : {
+      "localizations" : { "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "已取消" } } }
+    },
+    "consultation.status.completed" : {
+      "localizations" : { "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "已完成" } } }
+    },
+    "consultation.status.failed" : {
+      "localizations" : { "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "失败" } } }
+    },
+    "consultation.status.pending" : {
+      "localizations" : { "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "等待中" } } }
+    },
+    "consultation.status.reviewing" : {
+      "localizations" : { "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "会诊中" } } }
+    },
+    "consultation.stop" : {
+      "localizations" : { "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "停止" } } }
+    },
+    "consultation.task-label" : {
+      "localizations" : { "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "会诊议题" } } }
+    },
+    "consultation.title" : {
+      "localizations" : { "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "多专家会诊" } } }
+    },
     "" : {
 
     },

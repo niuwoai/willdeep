@@ -275,6 +275,10 @@ final class AppState: ObservableObject {
     /// for the lifecycle contract.
     let agentSubagentRegistry = AgentSubagentRegistry()
 
+    /// In-flight multi-expert consultations. Keyed by the transcript report
+    /// id so the specialized card can stop exactly its own orchestration.
+    var agentConsultationTasks: [UUID: Task<Void, Never>] = [:]
+
     /// rc1 scaffold for v1.49's concurrent runtimes. One entry per
     /// session that the user has touched this launch. AppState still
     /// owns every `@Published agent*` field for now — rc2 starts

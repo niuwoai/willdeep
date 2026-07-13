@@ -1256,7 +1256,7 @@ extension WillDeepTests {
             id: UUID(),
             modelID: nil,
             providerID: "some-im",
-            providerDisplayName: "some.im (Rocky's relay)",
+            providerDisplayName: "some.im",
             createdAt: now,
             updatedAt: now,
             messages: [assistant(100)],
@@ -1279,9 +1279,10 @@ extension WillDeepTests {
         let unknownRow = rows.first { $0.modelID == "unknown-model" }
         #expect(managedRow != nil)
         #expect(managedRow?.messageCount == 1)
-        #expect(managedRow?.providerName == "some.im (Rocky's relay)")
+        #expect(managedRow?.providerName == "some.im")
         #expect(unknownRow != nil)
         #expect(unknownRow?.messageCount == 1)
+        #expect(unknownRow?.providerName == "some.im")
     }
 
     @Test("AgentUsageStats current streak counts contiguous days ending today")

@@ -1406,11 +1406,11 @@ struct AgentProviderPreset: Identifiable, Equatable {
             supportsModelFetch: true,
             modelHints: []
         ),
-        // Rocky's personal relay. No public default model — every
-        // account has its own routing config.
+        // some.im managed relay. Every account can have its own routing
+        // config, but the product-facing provider name stays canonical.
         AgentProviderPreset(
             id: "some-im",
-            displayName: "some.im (Rocky's relay)",
+            displayName: "some.im",
             baseURL: "https://some.im/v1",
             defaultModel: "deepseek-v4-flash",
             defaultProModel: "deepseek-v4-pro",
@@ -1438,6 +1438,21 @@ struct AgentProviderPreset: Identifiable, Equatable {
 
     static func preset(id: String) -> AgentProviderPreset? {
         all.first { $0.id == id }
+    }
+
+    static func normalizedDisplayName(providerID: String?, storedDisplayName: String?) -> String? {
+        let normalizedID = providerID?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        let display = storedDisplayName?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        if normalizedID == someIMID || display == "some.im (Rocky's relay)" {
+            return preset(id: someIMID)?.displayName ?? "some.im"
+        }
+        if !display.isEmpty {
+            return display
+        }
+        if !normalizedID.isEmpty {
+            return preset(id: normalizedID)?.displayName ?? normalizedID
+        }
+        return nil
     }
 
     static func matchingBaseURL(_ baseURL: String) -> AgentProviderPreset? {

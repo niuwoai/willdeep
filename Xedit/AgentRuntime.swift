@@ -48,6 +48,7 @@ final class AgentRuntime: ObservableObject, Identifiable {
     @Published var contextSummaryThroughMessageID: AgentMessage.ID?
     @Published var patchProposals: [AgentPatchProposal] = []
     @Published var toolCalls: [AgentToolCall] = []
+    @Published var latestComputerUseActivity: AgentComputerUseActivity?
 
     // MARK: - Composer state (per-session draft — switching tabs preserves)
 
@@ -198,7 +199,8 @@ final class AgentRuntime: ObservableObject, Identifiable {
         self.workspaceLocation = session.workspaceLocation
 
         // Seed live state from persisted session.
-        self.messages = session.messages
+        self.messages = session.messages.map(Self.normalizingInterruptedConsultation)
+        self.latestComputerUseActivity = AgentComputerUseActivity.latest(in: self.messages)
         self.contextSummary = session.contextSummary
         self.contextSummaryThroughMessageID = session.contextSummaryThroughMessageID
         self.didEditFiles = session.didEditFiles
@@ -218,6 +220,25 @@ final class AgentRuntime: ObservableObject, Identifiable {
         self.redactSensitiveAttachmentContent = session.redactSensitiveAttachmentContent
         self.sidePanelState = session.sidePanelState
         self.managedRouting = session.managedRouting
+    }
+
+    private static func normalizingInterruptedConsultation(_ message: AgentMessage) -> AgentMessage {
+        guard message.role == .workflowReport,
+              var report = message.workflowReport,
+              report.consultation != nil,
+              report.status == .planning || report.status == .running else {
+            return message
+        }
+        var normalized = message
+        report.status = .cancelled
+        report.finishedAt = report.finishedAt ?? Date()
+        report.summary = report.summary.isEmpty ? L10n.Consultation.interrupted : report.summary
+        if var consultation = report.consultation {
+            consultation.phase = .cancelled
+            report.consultation = consultation
+        }
+        normalized.workflowReport = report
+        return normalized
     }
 
     /// Move an idle/new session to another workspace. Used by the

@@ -417,8 +417,22 @@ struct AgentProviderLibraryTests {
     func someIMPresetDefaultsToDeepSeekChatModels() {
         let preset = AgentProviderPreset.preset(id: "some-im")
 
+        #expect(preset?.displayName == "some.im")
         #expect(preset?.defaultModel == "deepseek-v4-flash")
         #expect(preset?.defaultProModel == "deepseek-v4-pro")
+    }
+
+    @Test
+    func someIMProviderEntryNormalizesLegacyDisplayName() {
+        let entry = AgentProviderEntry(
+            providerID: "some-im",
+            displayName: "some.im (Rocky's relay)",
+            baseURL: "https://some.im/v1",
+            flashPrimary: "deepseek-v4-flash",
+            proPrimary: "deepseek-v4-pro"
+        )
+
+        #expect(entry.displayName == "some.im")
     }
 
     @MainActor

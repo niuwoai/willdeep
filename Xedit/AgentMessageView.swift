@@ -84,7 +84,11 @@ struct AgentModeMessageView: View {
         case .tool: EmptyView()
         case .workflowReport:
             if let report = message.workflowReport {
-                AgentWorkflowCardView(report: report)
+                if report.consultation != nil {
+                    AgentConsultationCardView(report: report)
+                } else {
+                    AgentWorkflowCardView(report: report)
+                }
             } else {
                 EmptyView()
             }

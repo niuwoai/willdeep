@@ -9,6 +9,7 @@
 //
 
 import SwiftUI
+import AppKit
 
 struct AgentChatHeader: View {
     @EnvironmentObject var appState: AppState
@@ -98,27 +99,23 @@ struct AgentChatHeader: View {
     private func sidePanelShortcutButton(for item: AgentSidePanelKind) -> some View {
         let isSelected = sidePanel == item
         let palette = appState.editorSettings.interfaceSkin.palette
-        return Button {
-            sidePanel = isSelected ? nil : item
-        } label: {
-            Image(systemName: item.systemImage)
-                .font(.system(size: 12, weight: isSelected ? .semibold : .regular))
-                .frame(width: 24, height: 22)
-                .contentShape(Rectangle())
+        return AgentSidePanelShortcutControl(
+            systemImage: item.systemImage,
+            title: sidePanelTitle(for: item),
+            isSelected: isSelected,
+            selectedColor: NSColor(palette.accent),
+            normalColor: NSColor(palette.secondaryText)
+        ) {
+            toggleSidePanel(item)
         }
-        .buttonStyle(.plain)
-        .focusable(false)
-        .foregroundStyle(isSelected ? palette.accent : palette.secondaryText)
-        .help(sidePanelTitle(for: item))
-        .accessibilityLabel(Text(sidePanelTitle(for: item)))
+        .frame(width: 28, height: 24)
     }
 
     private var sidePanelMenu: some View {
         Menu {
             ForEach(sidePanelMenuKinds) { item in
                 Button {
-                    // 再点同一项就关闭——和 Claude Code 那个菜单一致。
-                    sidePanel = (sidePanel == item) ? nil : item
+                    toggleSidePanel(item)
                 } label: {
                     Label(sidePanelTitle(for: item), systemImage: item.systemImage)
                 }
@@ -248,6 +245,15 @@ struct AgentChatHeader: View {
         return kind.title
     }
 
+    private func toggleSidePanel(_ item: AgentSidePanelKind) {
+        if sidePanel == item {
+            sidePanel = nil
+            return
+        }
+        sidePanel = item
+        appState.agentSidePanelRequest = AgentSidePanelOpenRequest(kind: item)
+    }
+
     private func clippedBadgeCount(_ count: Int) -> String {
         count > 99 ? "99+" : "\(count)"
     }
@@ -258,5 +264,57 @@ struct AgentChatHeader: View {
             return L10n.Header.newChat
         }
         return session.title
+    }
+}
+
+private struct AgentSidePanelShortcutControl: NSViewRepresentable {
+    let systemImage: String
+    let title: String
+    let isSelected: Bool
+    let selectedColor: NSColor
+    let normalColor: NSColor
+    let action: () -> Void
+
+    func makeCoordinator() -> Coordinator {
+        Coordinator(action: action)
+    }
+
+    func makeNSView(context: Context) -> NSButton {
+        let button = NSButton(frame: .zero)
+        button.isBordered = false
+        button.imagePosition = .imageOnly
+        button.focusRingType = .none
+        button.setButtonType(.momentaryPushIn)
+        button.target = context.coordinator
+        button.action = #selector(Coordinator.performAction)
+        configure(button)
+        return button
+    }
+
+    func updateNSView(_ button: NSButton, context: Context) {
+        context.coordinator.action = action
+        configure(button)
+    }
+
+    private func configure(_ button: NSButton) {
+        let weight: NSFont.Weight = isSelected ? .semibold : .regular
+        let configuration = NSImage.SymbolConfiguration(pointSize: 12, weight: weight)
+        button.image = NSImage(systemSymbolName: systemImage, accessibilityDescription: title)?
+            .withSymbolConfiguration(configuration)
+        button.contentTintColor = isSelected ? selectedColor : normalColor
+        button.toolTip = title
+        button.setAccessibilityLabel(title)
+    }
+
+    final class Coordinator: NSObject {
+        var action: () -> Void
+
+        init(action: @escaping () -> Void) {
+            self.action = action
+        }
+
+        @objc func performAction() {
+            action()
+        }
     }
 }

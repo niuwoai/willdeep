@@ -184,10 +184,15 @@ struct EditorTerminalSurfaceView: NSViewRepresentable {
 
     func makeNSView(context: Context) -> AgentLocalProcessTerminalView {
         DispatchQueue.main.async {
+            terminalView.refreshVisibleTerminalDisplay()
             terminalView.window?.makeFirstResponder(terminalView)
         }
         return terminalView
     }
 
-    func updateNSView(_ nsView: AgentLocalProcessTerminalView, context: Context) {}
+    func updateNSView(_ nsView: AgentLocalProcessTerminalView, context: Context) {
+        DispatchQueue.main.async {
+            nsView.refreshVisibleTerminalDisplay()
+        }
+    }
 }

@@ -121,7 +121,7 @@ enum AgentToolRegistry {
         ),
         AgentToolDescriptor(
             name: "terminal_snapshot",
-            description: "Read only the latest live visible screen of the active Agent Terminal side-panel tab (a real terminal the user is watching — local shell by default, or SSH). It does not include scrollback/history by default. Read-only; redacts common secrets. Use it to read back what your terminal_send_command produced, or to inspect the current prompt, banner, newest command output, and whether the active terminal appears to be local or SSH'd into a server.",
+            description: "Read the latest live visible screen of the active Agent Terminal side-panel tab, plus cursor row/column and the exact current cursor line. The returned screen marks the cursor line with `=>`; treat that line as the best current prompt/input indicator, and treat lines above it as prior visible output that may come from an earlier local shell before SSH or before directory changes. Local tabs can contain a nested manual SSH session, so verify host/cwd from the cursor line or explicit commands such as hostname/pwd before making machine-specific claims. Read-only; redacts common secrets.",
             risk: .read,
             parameters: [
                 AgentToolParameter(name: "max_characters", type: .integer, description: "Maximum characters from the latest visible screen to return. Defaults to 6000, capped at 12000.", required: false)
