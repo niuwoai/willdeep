@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.146.0-rc3 - 2026-07-13
+
+### Fixed
+
+- **Workflow watchdog 真正按时返回** —— `/code-review` 等 workflow 的超时兜底改为非结构化竞速实现；当子 agent/provider stream 卡在不响应取消的网络读取里时，卡片会按 watchdog 转为失败并显示原因，不再被卡死子任务拖住。
+
+### Changed
+
+- 版本号从 **1.146.0-rc2** 递增为 **1.146.0-rc3**。
+
 ## 1.146.0-rc2 - 2026-07-13
 
 ### Fixed

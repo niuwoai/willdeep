@@ -70,4 +70,33 @@ extension WillDeepTests {
         // inserted 标志:7 个 url 里有 4 个唯一,所以应该有 4 个 true。
         #expect(insertedFlags.filter { $0 }.count == 4)
     }
+
+    @MainActor
+    @Test("Workflow watchdog times out without waiting for a stuck operation")
+    func workflowWatchdogDoesNotWaitForUncancellableOperation() async {
+        let startedAt = Date()
+        var didTimeout = false
+
+        do {
+            _ = try await AppState.runWorkflowWithWatchdog(seconds: 0.05) {
+                await withCheckedContinuation { continuation in
+                    Task.detached {
+                        try? await Task.sleep(nanoseconds: 900_000_000)
+                        continuation.resume()
+                    }
+                }
+                return "late result"
+            }
+            #expect(Bool(false), "watchdog should time out before the operation completes")
+        } catch {
+            if case WorkflowError.timedOut = error {
+                didTimeout = true
+            } else {
+                #expect(Bool(false), "expected WorkflowError.timedOut, got \(error)")
+            }
+        }
+
+        #expect(didTimeout)
+        #expect(Date().timeIntervalSince(startedAt) < 0.5)
+    }
 }

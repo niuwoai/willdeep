@@ -133,26 +133,56 @@ extension AppState {
     static let workflowWatchdogSeconds: Double = 360
 
     /// 让 `operation` 和一个截止时间赛跑；截止时间先到就抛
-    /// `WorkflowError.timedOut`。范式对齐 `AgentTerminalTools` 的
-    /// `withTerminalSnapshotTimeout`。注意：输的那个分支会被 `cancelAll` 取消，
-    /// 但若子任务卡在不响应取消的网络请求里，它会继续跑到自身请求超时才真正结束
-    /// —— 这里只保证调用方（卡片）立即拿到失败结果、不再挂死。
+    /// `WorkflowError.timedOut`。不能用 `withThrowingTaskGroup` 实现这里：
+    /// task group 退出前会等待所有子任务真正结束，如果 provider stream
+    /// 卡在不响应 cancellation 的网络读取里，workflow 卡片仍会一直空转。
+    /// 这里用非结构化任务守住 UI 反馈边界：超时后立即恢复调用方，同时
+    /// 尝试取消仍在跑的 operation。
     static func runWorkflowWithWatchdog<T: Sendable>(
         seconds: Double,
         operation: @escaping @Sendable () async throws -> T
     ) async throws -> T {
-        try await withThrowingTaskGroup(of: T.self) { group in
-            group.addTask { try await operation() }
-            group.addTask {
-                try await Task.sleep(nanoseconds: UInt64(seconds * 1_000_000_000))
-                throw WorkflowError.timedOut(seconds: seconds)
-            }
-            defer { group.cancelAll() }
-            guard let first = try await group.next() else {
-                throw WorkflowError.timedOut(seconds: seconds)
-            }
-            return first
+        let race = WorkflowWatchdogRace<T>()
+        let operationTask = Task {
+            try await operation()
         }
+        let timeoutTask = Task {
+            do {
+                try await Task.sleep(nanoseconds: workflowWatchdogNanoseconds(for: seconds))
+                operationTask.cancel()
+                race.resume(.failure(WorkflowError.timedOut(seconds: seconds)))
+            } catch {
+                operationTask.cancel()
+                race.resume(.failure(error))
+            }
+        }
+        let relayTask = Task {
+            do {
+                let value = try await operationTask.value
+                timeoutTask.cancel()
+                race.resume(.success(value))
+            } catch {
+                timeoutTask.cancel()
+                race.resume(.failure(error))
+            }
+        }
+
+        return try await withTaskCancellationHandler {
+            try await withCheckedThrowingContinuation { continuation in
+                race.install(continuation)
+            }
+        } onCancel: {
+            operationTask.cancel()
+            timeoutTask.cancel()
+            relayTask.cancel()
+            race.resume(.failure(CancellationError()))
+        }
+    }
+
+    private static func workflowWatchdogNanoseconds(for seconds: Double) -> UInt64 {
+        guard seconds.isFinite, seconds > 0 else { return 0 }
+        let maxSeconds = Double(UInt64.max) / 1_000_000_000
+        return UInt64(min(seconds, maxSeconds) * 1_000_000_000)
     }
 
     /// Engine 内部调。找到目标 runtime 里持有这个 report 的 message，
@@ -171,5 +201,50 @@ extension AppState {
         mutation(&report)
         msg.workflowReport = report
         runtime.messages[idx] = msg
+    }
+}
+
+private final class WorkflowWatchdogRace<T: Sendable>: @unchecked Sendable {
+    private let lock = NSLock()
+    private var continuation: CheckedContinuation<T, Error>?
+    private var pendingResult: Result<T, Error>?
+    private var completed = false
+
+    func install(_ continuation: CheckedContinuation<T, Error>) {
+        let resultToResume: Result<T, Error>?
+        lock.lock()
+        if completed {
+            resultToResume = nil
+        } else if let pendingResult {
+            completed = true
+            self.pendingResult = nil
+            resultToResume = pendingResult
+        } else {
+            self.continuation = continuation
+            resultToResume = nil
+        }
+        lock.unlock()
+
+        if let resultToResume {
+            continuation.resume(with: resultToResume)
+        }
+    }
+
+    func resume(_ result: Result<T, Error>) {
+        let continuationToResume: CheckedContinuation<T, Error>?
+        lock.lock()
+        if completed {
+            continuationToResume = nil
+        } else if let continuation {
+            completed = true
+            self.continuation = nil
+            continuationToResume = continuation
+        } else {
+            pendingResult = result
+            continuationToResume = nil
+        }
+        lock.unlock()
+
+        continuationToResume?.resume(with: result)
     }
 }
