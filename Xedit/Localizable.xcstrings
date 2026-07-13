@@ -36,6 +36,7 @@
     "desktop-pet.status.needs-attention" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Needs your attention" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "需要你的处理" } } } },
     "desktop-pet.status.ready" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Reply ready" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "回复已就绪" } } } },
     "desktop-pet.status.thinking" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Thinking" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "思考中" } } } },
+    "desktop-pet.status.typing" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Typing with you" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "陪你敲字中" } } } },
     "desktop-pet.status.working" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Working" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "执行中" } } } },
     "desktop-pet.toggle-help" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Show or hide the desktop pet" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "显示或隐藏桌面宠物" } } } },
     "computer-use-preview.close" : {

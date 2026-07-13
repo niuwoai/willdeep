@@ -35,6 +35,7 @@ extension L10n {
         static let statusNeedsAttention = String(localized: "desktop-pet.status.needs-attention", defaultValue: "Needs your attention")
         static let statusReady = String(localized: "desktop-pet.status.ready", defaultValue: "Reply ready")
         static let statusThinking = String(localized: "desktop-pet.status.thinking", defaultValue: "Thinking")
+        static let statusTyping = String(localized: "desktop-pet.status.typing", defaultValue: "Typing with you")
         static let statusWorking = String(localized: "desktop-pet.status.working", defaultValue: "Working")
         static let settingsAppearance = String(localized: "desktop-pet.settings.appearance", defaultValue: "Pet appearance")
         static let settingsDescription = String(localized: "desktop-pet.settings.description", defaultValue: "Choose a companion. Your choice is saved locally and takes effect immediately.")

@@ -14,6 +14,7 @@ import SwiftUI
 enum DesktopPetMood: Equatable {
     case idle
     case walking
+    case typing
     case jumping
     case spinning
     case attention
@@ -143,6 +144,7 @@ final class DesktopPetWindowManager: ObservableObject {
     @Published private(set) var presentation = DesktopPetPresentation.empty
     @Published private(set) var isEnabled: Bool
     @Published private(set) var appearance: DesktopPetAppearance
+    @Published private(set) var isDraggingPet = false
 
     private weak var appState: AppState?
     private var window: NSPanel?
@@ -194,6 +196,10 @@ final class DesktopPetWindowManager: ObservableObject {
         EditorSettingsNavigation.shared.open(.pet, appState: appState)
     }
 
+    func beginDraggingPet() {
+        isDraggingPet = true
+    }
+
     /// 按增量位移拖动宠物窗口。SwiftUI 的 y 轴向下、AppKit 向上,
     /// 所以纵向取反。
     func moveWindow(by delta: CGSize) {
@@ -202,6 +208,11 @@ final class DesktopPetWindowManager: ObservableObject {
         origin.x += delta.width
         origin.y -= delta.height
         window.setFrameOrigin(origin)
+    }
+
+    func finishDraggingPet() {
+        defer { isDraggingPet = false }
+        persistWindowPosition()
     }
 
     /// 拖动结束后把当前位置写回 UserDefaults,下次显示时恢复。
@@ -244,10 +255,14 @@ final class DesktopPetWindowManager: ObservableObject {
         let latestMessage = runtime?.messages.reversed().first(where: Self.isVisibleConversationMessage)
         let latestContent = latestMessage.map { DesktopPetMessageFormatter.makePreview($0.content) }
         let hasCelebration = celebrationEndsAt.map { $0 > Date() } ?? false
+        let isUserTyping = !appState.agentInput.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
 
         let mood: DesktopPetMood
         let status: String
-        if needsAttention {
+        if isUserTyping {
+            mood = .typing
+            status = L10n.DesktopPet.statusTyping
+        } else if needsAttention {
             mood = .attention
             status = L10n.DesktopPet.statusNeedsAttention
         } else if isBusy, isRunningTool {
@@ -355,18 +370,23 @@ final class DesktopPetWindowManager: ObservableObject {
             height: size.height
         )
     }
+
 }
 
 private struct DesktopPetOverlayView: View {
     @ObservedObject var manager: DesktopPetWindowManager
+    @State private var lastDragTranslation: CGSize = .zero
+
+    private var displayMood: DesktopPetMood {
+        manager.isDraggingPet ? .walking : manager.presentation.mood
+    }
 
     /// DragGesture 报告的是自手势开始起的累计位移;这里缓存上一帧的
     /// 累计值,每帧只把「增量」喂给窗口,实现跟手拖动。
-    @State private var lastDragTranslation: CGSize = .zero
-
     private var dragGesture: some Gesture {
         DragGesture(minimumDistance: 2)
             .onChanged { value in
+                manager.beginDraggingPet()
                 let delta = CGSize(
                     width: value.translation.width - lastDragTranslation.width,
                     height: value.translation.height - lastDragTranslation.height
@@ -376,14 +396,14 @@ private struct DesktopPetOverlayView: View {
             }
             .onEnded { _ in
                 lastDragTranslation = .zero
-                manager.persistWindowPosition()
+                manager.finishDraggingPet()
             }
     }
 
     var body: some View {
         TimelineView(.animation) { context in
             let animation = DesktopPetAnimationValues(
-                mood: manager.presentation.mood,
+                mood: displayMood,
                 date: context.date
             )
 
@@ -394,7 +414,7 @@ private struct DesktopPetOverlayView: View {
                 .buttonStyle(.plain)
                 .disabled(manager.presentation.sessionID == nil)
 
-                petImage(animation: animation)
+                petScene(animation: animation)
                     .accessibilityLabel(L10n.DesktopPet.accessibilityLabel)
             }
             .frame(width: 360, height: 190, alignment: .bottomTrailing)
@@ -450,23 +470,61 @@ private struct DesktopPetOverlayView: View {
         .shadow(color: .black.opacity(0.18), radius: 18, y: 8)
     }
 
-    private func petImage(animation: DesktopPetAnimationValues) -> some View {
-        Image(manager.appearance.assetName)
+    private func petScene(animation: DesktopPetAnimationValues) -> some View {
+        ZStack(alignment: .bottom) {
+            Image(manager.appearance.assetName)
+                .resizable()
+                .interpolation(.none)
+                .scaledToFit()
+                .frame(width: 132, height: 132)
+                .scaleEffect(x: animation.facesRight ? 1 : -1, y: animation.scale)
+                .rotationEffect(.degrees(animation.rotation))
+                .offset(
+                    x: animation.horizontalOffset,
+                    y: animation.verticalOffset - animation.typingPetLift
+                )
+                .shadow(color: .black.opacity(0.24), radius: 7, y: 5)
+
+            if animation.showsLaptop {
+                typingLaptop(animation: animation)
+                typingHands(animation: animation)
+            }
+        }
+        .frame(width: 140, height: 148, alignment: .bottom)
+        .contentShape(Rectangle())
+    }
+
+    private func typingLaptop(animation: DesktopPetAnimationValues) -> some View {
+        Image("DesktopPetLaptop")
             .resizable()
             .interpolation(.none)
             .scaledToFit()
-            .frame(width: 132, height: 132)
-            .scaleEffect(x: animation.facesRight ? 1 : -1, y: animation.scale)
-            .rotationEffect(.degrees(animation.rotation))
-            .offset(x: animation.horizontalOffset, y: animation.verticalOffset)
-            .shadow(color: .black.opacity(0.24), radius: 7, y: 5)
+            .frame(width: 100, height: 94)
+            .saturation(0.88 + animation.typingPulse * 0.12)
+            .brightness(animation.typingPulse * 0.04)
+            .offset(x: -3, y: 3)
+            .shadow(color: .cyan.opacity(0.22 + animation.typingPulse * 0.18), radius: 7, y: 2)
+    }
+
+    private func typingHands(animation: DesktopPetAnimationValues) -> some View {
+        HStack(spacing: 33) {
+            Capsule()
+                .fill(.white.opacity(0.72))
+                .frame(width: 18, height: 8)
+                .offset(y: animation.typingHandOffset)
+            Capsule()
+                .fill(.white.opacity(0.72))
+                .frame(width: 18, height: 8)
+                .offset(y: -animation.typingHandOffset)
+        }
+        .offset(x: -3, y: -26)
     }
 
     private var statusColor: Color {
-        switch manager.presentation.mood {
+        switch displayMood {
         case .attention:
             return .orange
-        case .walking, .jumping:
+        case .walking, .typing, .jumping:
             return .mint
         case .celebrating, .spinning:
             return .cyan
@@ -476,12 +534,16 @@ private struct DesktopPetOverlayView: View {
     }
 }
 
-private struct DesktopPetAnimationValues {
+struct DesktopPetAnimationValues {
     let horizontalOffset: CGFloat
     let verticalOffset: CGFloat
     let rotation: Double
     let scale: CGFloat
     let facesRight: Bool
+    let showsLaptop: Bool
+    let typingHandOffset: CGFloat
+    let typingPetLift: CGFloat
+    let typingPulse: CGFloat
 
     init(mood: DesktopPetMood, date: Date) {
         let t = date.timeIntervalSinceReferenceDate
@@ -492,36 +554,71 @@ private struct DesktopPetAnimationValues {
             rotation = CGFloat(sin(t * 1.4)) * 1.5
             scale = 1
             facesRight = true
+            showsLaptop = false
+            typingHandOffset = 0
+            typingPetLift = 0
+            typingPulse = 0
         case .walking:
             horizontalOffset = CGFloat(sin(t * 2.0)) * 11
             verticalOffset = CGFloat(abs(sin(t * 5.6))) * 4
             rotation = CGFloat(sin(t * 5.6)) * 3
             scale = 1
             facesRight = sin(t * 2.0) >= 0
+            showsLaptop = false
+            typingHandOffset = 0
+            typingPetLift = 0
+            typingPulse = 0
+        case .typing:
+            let keystroke = CGFloat(sin(t * 11.5))
+            horizontalOffset = keystroke * 1.5
+            verticalOffset = abs(keystroke) * 1.8
+            rotation = keystroke * 1.2
+            scale = 1
+            facesRight = true
+            showsLaptop = true
+            typingHandOffset = keystroke * 4
+            typingPetLift = 16
+            typingPulse = (keystroke + 1) / 2
         case .jumping:
             horizontalOffset = CGFloat(sin(t * 1.3)) * 4
             verticalOffset = CGFloat(abs(sin(t * 3.5))) * 18
             rotation = CGFloat(sin(t * 3.5)) * 7
             scale = 1
             facesRight = true
+            showsLaptop = false
+            typingHandOffset = 0
+            typingPetLift = 0
+            typingPulse = 0
         case .spinning:
             horizontalOffset = 0
             verticalOffset = CGFloat(sin(t * 2.4)) * 3
             rotation = (t * 135).truncatingRemainder(dividingBy: 360)
             scale = 0.96 + CGFloat(sin(t * 4.8)) * 0.04
             facesRight = true
+            showsLaptop = false
+            typingHandOffset = 0
+            typingPetLift = 0
+            typingPulse = 0
         case .attention:
             horizontalOffset = CGFloat(sin(t * 12)) * 5
             verticalOffset = 0
             rotation = CGFloat(sin(t * 12)) * 4
             scale = 1
             facesRight = true
+            showsLaptop = false
+            typingHandOffset = 0
+            typingPetLift = 0
+            typingPulse = 0
         case .celebrating:
             horizontalOffset = CGFloat(sin(t * 7)) * 9
             verticalOffset = CGFloat(abs(sin(t * 3.8))) * 14
             rotation = CGFloat(sin(t * 7)) * 10
             scale = 1.04
             facesRight = true
+            showsLaptop = false
+            typingHandOffset = 0
+            typingPetLift = 0
+            typingPulse = 0
         }
     }
 }

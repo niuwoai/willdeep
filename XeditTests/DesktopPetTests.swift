@@ -30,4 +30,28 @@ struct DesktopPetTests {
         #expect(DesktopPetAppearance.cloudForge.assetName == "DesktopPetCloudForge")
         #expect(DesktopPetAppearance.allCases.count == 22)
     }
+
+    @Test
+    func typingAnimationShowsLaptopAndKeystrokes() {
+        let animation = DesktopPetAnimationValues(
+            mood: .typing,
+            date: Date(timeIntervalSinceReferenceDate: 123)
+        )
+
+        #expect(animation.showsLaptop)
+        #expect(animation.typingPetLift > 0)
+        #expect(animation.typingPulse >= 0)
+        #expect(animation.typingPulse <= 1)
+    }
+
+    @Test
+    func walkingAnimationDoesNotShowLaptop() {
+        let animation = DesktopPetAnimationValues(
+            mood: .walking,
+            date: Date(timeIntervalSinceReferenceDate: 123)
+        )
+
+        #expect(!animation.showsLaptop)
+        #expect(animation.typingPetLift == 0)
+    }
 }
