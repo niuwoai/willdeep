@@ -1,0 +1,37 @@
+import Foundation
+
+extension L10n {
+    enum DesktopPet {
+        static let accessibilityLabel = String(localized: "desktop-pet.accessibility-label", defaultValue: "WillDeep desktop pet")
+        static let appearanceBearGirl = String(localized: "desktop-pet.appearance.bear-girl", defaultValue: "Bear hoodie friend")
+        static let appearanceApeCommander = String(localized: "desktop-pet.appearance.ape-commander", defaultValue: "Ape commander")
+        static let appearanceCyberDrifter = String(localized: "desktop-pet.appearance.cyber-drifter", defaultValue: "Cyber drifter")
+        static let appearanceDesertOracle = String(localized: "desktop-pet.appearance.desert-oracle", defaultValue: "Desert oracle")
+        static let appearanceFluffyBear = String(localized: "desktop-pet.appearance.fluffy-bear", defaultValue: "Fluffy bear")
+        static let appearanceKungFuPanda = String(localized: "desktop-pet.appearance.kung-fu-panda", defaultValue: "Kung fu panda")
+        static let appearancePenguin = String(localized: "desktop-pet.appearance.penguin", defaultValue: "Penguin")
+        static let appearanceNeonDetective = String(localized: "desktop-pet.appearance.neon-detective", defaultValue: "Neon detective")
+        static let appearanceParanormalTech = String(localized: "desktop-pet.appearance.paranormal-tech", defaultValue: "Paranormal technician")
+        static let appearanceRelicExplorer = String(localized: "desktop-pet.appearance.relic-explorer", defaultValue: "Relic explorer")
+        static let appearanceRobotFox = String(localized: "desktop-pet.appearance.robot-fox", defaultValue: "Robot fox")
+        static let appearanceSeaSinger = String(localized: "desktop-pet.appearance.sea-singer", defaultValue: "Deep sea singer")
+        static let appearanceSpaceSage = String(localized: "desktop-pet.appearance.space-sage", defaultValue: "Woodland sage")
+        static let appearanceStarRaccoon = String(localized: "desktop-pet.appearance.star-raccoon", defaultValue: "Starship raccoon")
+        static let appearanceWebInventor = String(localized: "desktop-pet.appearance.web-inventor", defaultValue: "Web inventor")
+        static let appearanceWhistleCaptain = String(localized: "desktop-pet.appearance.whistle-captain", defaultValue: "Whistle captain")
+        static let emptyMessage = String(localized: "desktop-pet.empty-message", defaultValue: "Start a conversation and I will keep you posted here.")
+        static let emptySessionTitle = String(localized: "desktop-pet.empty-session-title", defaultValue: "No active conversation")
+        static let hideAction = String(localized: "desktop-pet.hide-action", defaultValue: "Hide desktop pet")
+        static let statusComplete = String(localized: "desktop-pet.status.complete", defaultValue: "Task complete")
+        static let statusIdle = String(localized: "desktop-pet.status.idle", defaultValue: "Keeping watch")
+        static let statusNeedsAttention = String(localized: "desktop-pet.status.needs-attention", defaultValue: "Needs your attention")
+        static let statusReady = String(localized: "desktop-pet.status.ready", defaultValue: "Reply ready")
+        static let statusThinking = String(localized: "desktop-pet.status.thinking", defaultValue: "Thinking")
+        static let statusWorking = String(localized: "desktop-pet.status.working", defaultValue: "Working")
+        static let settingsAppearance = String(localized: "desktop-pet.settings.appearance", defaultValue: "Pet appearance")
+        static let settingsDescription = String(localized: "desktop-pet.settings.description", defaultValue: "Choose a companion. Your choice is saved locally and takes effect immediately.")
+        static let settingsEnabled = String(localized: "desktop-pet.settings.enabled", defaultValue: "Show desktop pet")
+        static let settingsSectionTitle = String(localized: "desktop-pet.settings.section-title", defaultValue: "Desktop pet")
+        static let toggleHelp = String(localized: "desktop-pet.toggle-help", defaultValue: "Show or hide the desktop pet")
+    }
+}

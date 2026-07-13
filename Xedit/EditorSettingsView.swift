@@ -385,6 +385,10 @@ struct EditorSettingsView: View {
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
+
+            Section(L10n.DesktopPet.settingsSectionTitle) {
+                DesktopPetSettingsSection()
+            }
         }
         .formStyle(.grouped)
         .onAppear {

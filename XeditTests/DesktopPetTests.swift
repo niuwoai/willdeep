@@ -1,0 +1,32 @@
+import Testing
+@testable import WillDeep
+
+struct DesktopPetTests {
+    @Test
+    func messagePreviewCollapsesWhitespace() {
+        let preview = DesktopPetMessageFormatter.makePreview("  First line\n\nsecond\tline  ")
+
+        #expect(preview == "First line second line")
+    }
+
+    @Test
+    func messagePreviewTruncatesLongMessages() {
+        let source = String(repeating: "a", count: DesktopPetMessageFormatter.maximumCharacters + 1)
+        let preview = DesktopPetMessageFormatter.makePreview(source)
+
+        #expect(preview.count == DesktopPetMessageFormatter.maximumCharacters + 1)
+        #expect(preview.hasSuffix("…"))
+    }
+
+    @Test
+    func petAppearancesHaveStableAssetNames() {
+        #expect(DesktopPetAppearance.robotFox.assetName == "DesktopPet")
+        #expect(DesktopPetAppearance.penguin.assetName == "DesktopPetPenguin")
+        #expect(DesktopPetAppearance.bearGirl.assetName == "DesktopPetBearGirl")
+        #expect(DesktopPetAppearance.starRaccoon.assetName == "DesktopPetStarRaccoon")
+        #expect(DesktopPetAppearance.paranormalTech.assetName == "DesktopPetParanormalTech")
+        #expect(DesktopPetAppearance.cyberDrifter.assetName == "DesktopPetCyberDrifter")
+        #expect(DesktopPetAppearance.whistleCaptain.assetName == "DesktopPetWhistleCaptain")
+        #expect(DesktopPetAppearance.allCases.count == 16)
+    }
+}

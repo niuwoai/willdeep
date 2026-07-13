@@ -214,6 +214,7 @@ struct AgentModeView: View {
                 .environmentObject(appState)
         }
         .onAppear {
+            DesktopPetWindowManager.shared.attach(to: appState)
             let snapshot = currentTaskMonitorSnapshot
             lastTaskMonitorSnapshot = snapshot
             didObserveAgentTaskMonitorActivity = snapshot.hasAutoOpenMonitorContent

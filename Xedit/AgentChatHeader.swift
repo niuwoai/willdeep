@@ -14,6 +14,7 @@ import AppKit
 struct AgentChatHeader: View {
     @EnvironmentObject var appState: AppState
     @Environment(\.openWindow) private var openWindow
+    @ObservedObject private var desktopPet = DesktopPetWindowManager.shared
     @Binding var sidePanel: AgentSidePanelKind?
     @Binding var sessionsSidebarVisible: Bool
     @Binding var isSessionSearchPresented: Bool
@@ -40,6 +41,7 @@ struct AgentChatHeader: View {
 
             sidePanelShortcutStrip
             sidePanelMenu
+            desktopPetToggle
             editorModeSeparator
 
             Button {
@@ -160,6 +162,27 @@ struct AgentChatHeader: View {
             .fill(appState.editorSettings.interfaceSkin.palette.hairline.opacity(0.9))
             .frame(width: 1, height: 18)
             .padding(.horizontal, 3)
+    }
+
+    private var desktopPetToggle: some View {
+        Button {
+            desktopPet.attach(to: appState)
+            desktopPet.toggle()
+        } label: {
+            Image(systemName: desktopPet.isEnabled ? "pawprint.fill" : "pawprint")
+                .font(.system(size: 12, weight: .semibold))
+                .frame(width: 24, height: 22)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .focusable(false)
+        .foregroundStyle(
+            desktopPet.isEnabled
+                ? appState.editorSettings.interfaceSkin.palette.accent
+                : appState.editorSettings.interfaceSkin.palette.secondaryText
+        )
+        .help(L10n.DesktopPet.toggleHelp)
+        .accessibilityLabel(Text(L10n.DesktopPet.toggleHelp))
     }
 
     private var frequentSidePanelKinds: [AgentSidePanelKind] {
