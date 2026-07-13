@@ -210,6 +210,14 @@ private final class WorkflowWatchdogRace<T: Sendable>: @unchecked Sendable {
     private var pendingResult: Result<T, Error>?
     private var completed = false
 
+    // Explicit (empty) deinit on purpose. Swift 6.3.1 crashes in the
+    // SIL EarlyPerfInliner while inlining this generic class's *synthesized*
+    // deallocating deinit under Release optimization (`-O -enable-default-cmo`),
+    // intermittently breaking release archives. Providing an explicit deinit
+    // body changes how the destructor is emitted and sidesteps the inliner bug.
+    // Do not remove without re-testing a Release archive on the pinned toolchain.
+    deinit {}
+
     func install(_ continuation: CheckedContinuation<T, Error>) {
         let resultToResume: Result<T, Error>?
         lock.lock()

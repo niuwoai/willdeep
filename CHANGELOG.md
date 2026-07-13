@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.150.0-rc1 - 2026-07-13
+
+### Fixed
+
+- **Release archive 编译器崩溃规避** —— `WorkflowWatchdogRace` 新增显式空析构函数，绕开 Swift 6.3.1 在 Release 优化时对泛型类合成析构路径的 `SIL EarlyPerfInliner` 偶发崩溃；该修复需随工具链升级重新验证。
+
+### Changed
+
+- 版本号从 **1.150.0** 递增为 **1.150.0-rc1**；Xcode App、Go agent、Help bundle、Computer Use Helper、移动网关响应头契约与产品文档同步。
+
 ## 1.150.0 - 2026-07-13
 
 ### Added

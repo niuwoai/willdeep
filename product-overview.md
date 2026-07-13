@@ -1,6 +1,6 @@
 # WillDeep Product Overview
 
-> Last updated: 2026-07-13 | Current version: v1.150.0
+> Last updated: 2026-07-13 | Current version: v1.150.0-rc1
 
 ## Positioning
 
@@ -13,6 +13,7 @@ WillDeep is configured for non-App-Store distribution without App Sandbox so it 
 ## 架构概览
 
 - **桌面宠物输入节拍（1.150.0）** —— Agent 输入框有内容时，宠物切换为“陪你敲字中”：抬身面对打包的像素笔记本，双手、键盘和屏幕光按节拍动作。保留 1.149.0 的默认开启、拖动走路、位置记忆、右键直达设置与任何壁纸下的文字对比度。
+- **Release 编译器析构规避（1.150.0-rc1）** —— `WorkflowWatchdogRace` 显式声明空析构函数，避开固定 Swift 6.3.1 工具链在 Release 优化 (`-O -enable-default-cmo`) 下对泛型合成析构函数进行 EarlyPerfInliner 时偶发崩溃的问题；每次升级工具链后应重新验证 Release archive。
 
 - **Composer 技能面板本地化补齐（1.148.0-rc1）** —— `AgentSkillLocalization` 这套 skill 中英文展示/多语言召回设施此前只接了设置页、`list_skills` 工具和移动网关，composer 的 `$` 搜索技能面板漏接。现在面板每行说明走 `displayDescription` 按用户语言显示，搜索走 `searchableText`；且 `searchableText` 改为同时纳入英文和中文两张翻译表（name/description/别名），实现双向多语言召回——中文关键词能命中英文原文 skill，反之亦然。skill 的 `$identifier` 调用名保持原样不翻译。
 
