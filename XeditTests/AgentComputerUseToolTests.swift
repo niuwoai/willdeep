@@ -11,6 +11,62 @@ import Testing
 @MainActor
 struct AgentComputerUseToolTests {
     @Test
+    func latestComputerUseActivityUsesNewestMatchingToolScreenshot() throws {
+        let first = try AgentImageAttachment.fileBacked(
+            data: Data([0x01]),
+            mimeType: "image/jpeg",
+            createdAt: Date(timeIntervalSince1970: 10)
+        )
+        let second = try AgentImageAttachment.fileBacked(
+            data: Data([0x02]),
+            mimeType: "image/jpeg",
+            createdAt: Date(timeIntervalSince1970: 20)
+        )
+        defer {
+            first.removeStoredFileIfNeeded()
+            second.removeStoredFileIfNeeded()
+        }
+
+        let messages = [
+            AgentMessage(
+                role: .assistant,
+                content: "",
+                toolCalls: [
+                    AgentMessageToolCall(externalID: "cu-1", toolName: "computer_use_get_app_state", argumentsJSON: "{}"),
+                    AgentMessageToolCall(externalID: "other", toolName: "capture_screenshot", argumentsJSON: "{}"),
+                    AgentMessageToolCall(externalID: "cu-2", toolName: "computer_use_click", argumentsJSON: "{}")
+                ]
+            ),
+            AgentMessage(role: .tool, content: "first", images: [first], toolCallID: "cu-1"),
+            AgentMessage(role: .tool, content: "other", images: [first], toolCallID: "other"),
+            AgentMessage(role: .tool, content: "second", images: [second], toolCallID: "cu-2")
+        ]
+
+        let activity = try #require(AgentComputerUseActivity.latest(in: messages))
+        #expect(activity.image.id == second.id)
+        #expect(activity.toolName == "computer_use_click")
+        #expect(activity.capturedAt == Date(timeIntervalSince1970: 20))
+    }
+
+    @Test
+    func latestComputerUseActivityIgnoresUnrelatedImages() throws {
+        let image = try AgentImageAttachment.fileBacked(data: Data([0x01]), mimeType: "image/jpeg")
+        defer { image.removeStoredFileIfNeeded() }
+        let messages = [
+            AgentMessage(
+                role: .assistant,
+                content: "",
+                toolCalls: [
+                    AgentMessageToolCall(externalID: "capture-1", toolName: "capture_screenshot", argumentsJSON: "{}")
+                ]
+            ),
+            AgentMessage(role: .tool, content: "capture", images: [image], toolCallID: "capture-1")
+        ]
+
+        #expect(AgentComputerUseActivity.latest(in: messages) == nil)
+    }
+
+    @Test
     func computerUseToolRiskBoundariesAreExplicit() throws {
         let permissions = try #require(AgentToolRegistry.descriptor(for: "computer_use_permissions"))
         let apps = try #require(AgentToolRegistry.descriptor(for: "computer_use_list_apps"))

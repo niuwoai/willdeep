@@ -90,6 +90,11 @@ nonisolated enum L10n {
         static let quoteHelp = String(localized: "agent-generated-image.quote-help", defaultValue: "Reference this generated image in your next reply without uploading it again.")
     }
 
+    enum ComputerUsePreview {
+        static let close = String(localized: "computer-use-preview.close", defaultValue: "Close Computer Use preview")
+        static let open = String(localized: "computer-use-preview.open", defaultValue: "Open latest Computer Use screenshot")
+    }
+
     enum AgentSelection {
         static let addToConversation = String(localized: "agent-selection.add-to-conversation", defaultValue: "Add to Conversation")
         static let addToTask = String(localized: "agent-selection.add-to-task", defaultValue: "Add to Task")
@@ -1010,12 +1015,23 @@ nonisolated enum L10n {
         static let manageSSHHosts = String(localized: "agent-terminal.manage-ssh-hosts", defaultValue: "Manage SSH Hosts...")
         static let localShellTooltip = String(localized: "agent-terminal.local-shell-tooltip", defaultValue: "Local shell")
         static let openedByThisSession = String(localized: "agent-terminal.opened-by-this-session", defaultValue: "Opened by this chat session")
+        static let recording = String(localized: "agent-terminal.recording", defaultValue: "Recording")
+        static let startRecording = String(localized: "agent-terminal.start-recording", defaultValue: "Start recording")
+        static let stopRecording = String(localized: "agent-terminal.stop-recording", defaultValue: "Stop recording")
+        static let noShortcuts = String(localized: "agent-terminal.no-shortcuts", defaultValue: "No recordings yet")
+        static let sessionLocal = String(localized: "agent-terminal.session.local", defaultValue: "Local tab")
+        static let sessionSSH = String(localized: "agent-terminal.session.ssh", defaultValue: "SSH")
+        static let sessionRunning = String(localized: "agent-terminal.session.running", defaultValue: "Running")
+        static let sessionExited = String(localized: "agent-terminal.session.exited", defaultValue: "Exited")
+        static let localSessionCaution = String(localized: "agent-terminal.session.local-caution", defaultValue: "Manual SSH may be active; confirm with prompt or hostname")
         static let shortcutRunning = String(localized: "agent-terminal.shortcut.running", defaultValue: "Running")
         static let shortcutFinished = String(localized: "agent-terminal.shortcut.finished", defaultValue: "Finished")
         static let shortcutCancelled = String(localized: "agent-terminal.shortcut.cancelled", defaultValue: "Interrupted")
         static let shortcutDefaultTitle = String(localized: "agent-terminal.shortcut.default-title", defaultValue: "Terminal Shortcut")
         static let shortcutProtected = String(localized: "agent-terminal.shortcut.protected", defaultValue: "Contains protected input; replays only while terminal echo is off")
         static let shortcutReplay = String(localized: "agent-terminal.shortcut.replay", defaultValue: "Replay")
+        static let shortcutStopReplay = String(localized: "agent-terminal.shortcut.stop-replay", defaultValue: "Stop replay")
+        static let shortcutActions = String(localized: "agent-terminal.shortcut.actions", defaultValue: "Shortcut actions")
         static let shortcutEdit = String(localized: "agent-terminal.shortcut.edit", defaultValue: "Edit")
         static let shortcutRename = String(localized: "agent-terminal.shortcut.rename", defaultValue: "Rename...")
         static let shortcutDelete = String(localized: "agent-terminal.shortcut.delete", defaultValue: "Delete")

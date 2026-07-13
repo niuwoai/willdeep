@@ -435,6 +435,7 @@ private struct ComposerCard: View {
     /// can call back into it from SwiftUI callbacks.
     @State private var coordinatorRef = ComposerCoordinatorRef()
     @State private var isSecretSheetPresented = false
+    @State private var isConsultationSheetPresented = false
     /// A terminal recording may deliberately omit echo-off values so the
     /// agent can never see them. When that happens, surface a focused secure
     /// prompt instead of making the user hunt for the completed tool card.
@@ -701,6 +702,9 @@ private struct ComposerCard: View {
             HStack(spacing: 6) {
                 AttachButton(action: attachFilesFromPanel)
                 ComposerAdaptiveControlStrip()
+                ConsultationButton {
+                    isConsultationSheetPresented = true
+                }
                 Spacer(minLength: 0)
                 if !appState.agentQueuedMessages.isEmpty {
                     QueueBadge()
@@ -742,6 +746,24 @@ private struct ComposerCard: View {
                 onInsert: { secrets in
                     insertSecrets(secrets)
                     isSecretSheetPresented = false
+                    inputFocused = true
+                }
+            )
+        }
+        .sheet(isPresented: $isConsultationSheetPresented) {
+            AgentConsultationSetupSheet(
+                task: appState.agentInput,
+                onCancel: {
+                    isConsultationSheetPresented = false
+                    inputFocused = true
+                },
+                onStart: { taskText, configuration in
+                    if appState.startAgentConsultation(
+                        task: taskText,
+                        configuration: configuration
+                    ) {
+                        isConsultationSheetPresented = false
+                    }
                     inputFocused = true
                 }
             )
@@ -1030,6 +1052,29 @@ private struct ComposerCard: View {
         guard let tiff = image.tiffRepresentation,
               let rep = NSBitmapImageRep(data: tiff) else { return nil }
         return rep.representation(using: .png, properties: [:])
+    }
+}
+
+private struct ConsultationButton: View {
+    @EnvironmentObject private var appState: AppState
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            Image(systemName: "stethoscope")
+                .font(.system(size: 12, weight: .semibold))
+                .frame(width: 24, height: 24)
+        }
+        .buttonStyle(.plain)
+        .foregroundStyle(canStart ? Color.accentColor : Color.secondary)
+        .help(L10n.Consultation.buttonHelp)
+        .disabled(!canStart)
+    }
+
+    private var canStart: Bool {
+        !appState.agentInput.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            && !appState.isAgentResponding
+            && !appState.hasActiveAgentConsultation
     }
 }
 

@@ -81,6 +81,9 @@ nonisolated struct WorkflowReport: Codable, Equatable, Identifiable {
     /// Engine 跑完后的综合输出（synthesize 步骤的产物）。空字符串表示
     /// 还没到 synthesize / workflow 失败。供 agent 下回合 quote。
     var summary: String
+    /// Present only for the multi-expert consultation workflow. The generic
+    /// workflow fields remain intact so older cards and decoders stay valid.
+    var consultation: AgentConsultationReport?
 
     init(
         id: UUID = UUID(),
@@ -92,7 +95,8 @@ nonisolated struct WorkflowReport: Codable, Equatable, Identifiable {
         startedAt: Date = Date(),
         finishedAt: Date? = nil,
         totalUsageTokens: Int = 0,
-        summary: String = ""
+        summary: String = "",
+        consultation: AgentConsultationReport? = nil
     ) {
         self.id = id
         self.workflowName = workflowName
@@ -104,6 +108,7 @@ nonisolated struct WorkflowReport: Codable, Equatable, Identifiable {
         self.finishedAt = finishedAt
         self.totalUsageTokens = totalUsageTokens
         self.summary = summary
+        self.consultation = consultation
     }
 
     var elapsedSeconds: TimeInterval {

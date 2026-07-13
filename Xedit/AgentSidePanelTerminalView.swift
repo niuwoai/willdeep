@@ -58,6 +58,8 @@ private struct AgentSidePanelTerminalContentView: View {
             Divider().opacity(0.5)
             tabBar
             Divider().opacity(0.5)
+            sessionIdentityBar
+            Divider().opacity(0.35)
             terminalSurface
         }
         .onAppear {
@@ -92,17 +94,29 @@ private struct AgentSidePanelTerminalContentView: View {
                 recordButton
                     .layoutPriority(1)
 
+                if controller.isRecording {
+                    recordingStatusPill(now: timeline.date)
+                        .transition(.opacity)
+                }
+
                 ScrollView(.horizontal, showsIndicators: false) {
                     HStack(spacing: 6) {
-                        ForEach(controller.shortcuts) { shortcut in
-                            shortcutMenu(shortcut, now: timeline.date)
+                        if controller.shortcuts.isEmpty {
+                            Text(L10n.AgentTerminal.noShortcuts)
+                                .font(.system(size: 11, weight: .medium))
+                                .foregroundStyle(.secondary)
+                                .padding(.horizontal, 4)
+                        } else {
+                            ForEach(controller.shortcuts) { shortcut in
+                                shortcutControl(shortcut, now: timeline.date)
+                            }
                         }
                     }
                     .padding(.vertical, 4)
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
-            .frame(height: 34)
+            .frame(height: controller.isRecording ? 40 : 36)
             .padding(.horizontal, 8)
             .background(terminalBackground.opacity(0.92))
         }
@@ -116,64 +130,120 @@ private struct AgentSidePanelTerminalContentView: View {
                 controller.startRecordingActiveTab()
             }
         } label: {
-            Image(systemName: controller.isRecording ? "stop.fill" : "record.circle")
-                .font(.system(size: 12, weight: .semibold))
-                .foregroundStyle(controller.isRecording ? Color.white : Color.red)
-                .frame(width: 24, height: 24)
-                .background(
-                    Circle()
-                        .fill(controller.isRecording ? Color.red : Color.red.opacity(0.12))
-                )
+            HStack(spacing: 5) {
+                Image(systemName: controller.isRecording ? "stop.fill" : "record.circle")
+                    .font(.system(size: 11, weight: .bold))
+                Text(controller.isRecording ? L10n.AgentTerminal.stopRecording : L10n.AgentTerminal.startRecording)
+                    .font(.system(size: 11, weight: .semibold))
+                    .lineLimit(1)
+            }
+            .foregroundStyle(controller.isRecording ? Color.white : Color.red)
+            .padding(.horizontal, 8)
+            .frame(height: 26)
+            .background(
+                RoundedRectangle(cornerRadius: 7, style: .continuous)
+                    .fill(controller.isRecording ? Color.red : Color.red.opacity(0.12))
+            )
         }
         .buttonStyle(.plain)
         .disabled(controller.activeTab?.isRunning != true && !controller.isRecording)
-        .help(controller.isRecording ? "停止录制终端捷径" : "开始录制终端捷径")
+        .help(controller.isRecording ? L10n.AgentTerminal.stopRecording : L10n.AgentTerminal.startRecording)
     }
 
-    private func shortcutMenu(_ shortcut: TerminalShortcut, now: Date) -> some View {
+    private func recordingStatusPill(now: Date) -> some View {
+        let elapsed = controller.recordingStartedAt.map { now.timeIntervalSince($0) } ?? 0
+        return HStack(spacing: 5) {
+            Circle()
+                .fill(Color.red)
+                .frame(width: 6, height: 6)
+            Text(L10n.AgentTerminal.recording)
+                .font(.system(size: 11, weight: .semibold))
+            Text(formatElapsed(elapsed))
+                .font(.system(size: 11, weight: .medium, design: .monospaced))
+                .foregroundStyle(.secondary)
+        }
+        .padding(.horizontal, 8)
+        .frame(height: 26)
+        .background(
+            RoundedRectangle(cornerRadius: 7, style: .continuous)
+                .fill(Color.red.opacity(0.08))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 7, style: .continuous)
+                .stroke(Color.red.opacity(0.18), lineWidth: 1)
+        )
+    }
+
+    private func shortcutControl(_ shortcut: TerminalShortcut, now: Date) -> some View {
         let playbackState = playbackState(for: shortcut)
-        return Menu {
+        let isRunning = playbackState?.isRunning == true
+        return HStack(spacing: 0) {
             Button {
-                controller.playShortcut(shortcut)
+                if isRunning {
+                    controller.cancelActiveShortcutPlayback()
+                } else {
+                    controller.playShortcut(shortcut)
+                }
             } label: {
-                Label(L10n.AgentTerminal.shortcutReplay, systemImage: "play.fill")
+                Image(systemName: isRunning ? "stop.fill" : "play.fill")
+                    .font(.system(size: 9, weight: .bold))
+                    .frame(width: 22, height: 24)
             }
             .disabled(
-                controller.isRecording ||
+                (!isRunning && controller.isRecording) ||
                     controller.activeTab?.isRunning != true ||
-                    controller.activeTab?.isPlayingShortcut == true ||
+                    (!isRunning && controller.activeTab?.isPlayingShortcut == true) ||
                     shortcut.hasPendingProtectedInput
             )
+            .buttonStyle(.plain)
+            .help(isRunning ? L10n.AgentTerminal.shortcutStopReplay : L10n.AgentTerminal.shortcutReplay)
 
-            Button {
-                editShortcut(shortcut)
-            } label: {
-                Label(L10n.AgentTerminal.shortcutEdit, systemImage: "square.and.pencil")
-            }
-
-            Button {
-                renameDraft = TerminalShortcutRenameDraft(shortcut: shortcut)
-            } label: {
-                Label(L10n.AgentTerminal.shortcutRename, systemImage: "pencil")
-            }
-
-            Divider()
-
-            Button(role: .destructive) {
-                controller.deleteShortcut(id: shortcut.id)
-            } label: {
-                Label(L10n.AgentTerminal.shortcutDelete, systemImage: "trash")
-            }
-        } label: {
             TerminalShortcutChip(
                 shortcut: shortcut,
                 playbackState: playbackState,
                 now: now,
                 accent: skinAccent
             )
+            .padding(.trailing, 2)
+
+            Menu {
+                Button {
+                    editShortcut(shortcut)
+                } label: {
+                    Label(L10n.AgentTerminal.shortcutEdit, systemImage: "square.and.pencil")
+                }
+
+                Button {
+                    renameDraft = TerminalShortcutRenameDraft(shortcut: shortcut)
+                } label: {
+                    Label(L10n.AgentTerminal.shortcutRename, systemImage: "pencil")
+                }
+
+                Divider()
+
+                Button(role: .destructive) {
+                    controller.deleteShortcut(id: shortcut.id)
+                } label: {
+                    Label(L10n.AgentTerminal.shortcutDelete, systemImage: "trash")
+                }
+            } label: {
+                Image(systemName: "ellipsis")
+                    .font(.system(size: 11, weight: .semibold))
+                    .frame(width: 22, height: 24)
+            }
+            .menuStyle(.borderlessButton)
+            .menuIndicator(.hidden)
+            .help(L10n.AgentTerminal.shortcutActions)
         }
-        .menuStyle(.borderlessButton)
-        .menuIndicator(.hidden)
+        .padding(.leading, 2)
+        .background(
+            RoundedRectangle(cornerRadius: 7, style: .continuous)
+                .fill(playbackState?.isRunning == true ? skinAccent.opacity(0.14) : Color.primary.opacity(0.06))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 7, style: .continuous)
+                .stroke(playbackState?.isRunning == true ? skinAccent.opacity(0.38) : Color.primary.opacity(0.10), lineWidth: 1)
+        )
         .fixedSize()
         .help(shortcutTooltip(shortcut, playbackState: playbackState, now: now))
     }
@@ -297,6 +367,50 @@ private struct AgentSidePanelTerminalContentView: View {
         .help(L10n.AgentTerminal.newTab)
     }
 
+    private var sessionIdentityBar: some View {
+        HStack(spacing: 8) {
+            if let tab = controller.activeTab {
+                Image(systemName: tab.kind.isSSH ? "network" : "terminal")
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(tab.isRunning ? Color.green : Color.secondary)
+                    .frame(width: 18)
+                VStack(alignment: .leading, spacing: 1) {
+                    HStack(spacing: 5) {
+                        Text(sessionKindLabel(tab))
+                            .font(.system(size: 11, weight: .semibold))
+                        Text(sessionTargetLabel(tab))
+                            .font(.system(size: 11, weight: .medium))
+                            .lineLimit(1)
+                            .truncationMode(.middle)
+                    }
+                    Text(sessionDetailLabel(tab))
+                        .font(.system(size: 10, weight: .medium))
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                        .truncationMode(.tail)
+                }
+                Spacer(minLength: 6)
+                Text(tab.isRunning ? L10n.AgentTerminal.sessionRunning : L10n.AgentTerminal.sessionExited)
+                    .font(.system(size: 10, weight: .semibold))
+                    .foregroundStyle(tab.isRunning ? Color.green : Color.secondary)
+                    .padding(.horizontal, 7)
+                    .frame(height: 20)
+                    .background(
+                        Capsule(style: .continuous)
+                            .fill(tab.isRunning ? Color.green.opacity(0.11) : Color.primary.opacity(0.06))
+                    )
+            } else {
+                Text(L10n.AgentTerminal.disconnectedRuntime)
+                    .font(.system(size: 11, weight: .medium))
+                    .foregroundStyle(.secondary)
+                Spacer()
+            }
+        }
+        .frame(height: 38)
+        .padding(.horizontal, 10)
+        .background(terminalBackground.opacity(0.96))
+    }
+
     // MARK: Terminal surface
 
     @ViewBuilder
@@ -374,6 +488,28 @@ private struct AgentSidePanelTerminalContentView: View {
         return lines.joined(separator: " · ")
     }
 
+    private func sessionKindLabel(_ tab: AgentTerminalTab) -> String {
+        tab.kind.isSSH ? L10n.AgentTerminal.sessionSSH : L10n.AgentTerminal.sessionLocal
+    }
+
+    private func sessionTargetLabel(_ tab: AgentTerminalTab) -> String {
+        switch tab.kind {
+        case .localShell:
+            return tab.title
+        case .ssh(_, let displayName, let target):
+            return displayName.isEmpty ? target : displayName
+        }
+    }
+
+    private func sessionDetailLabel(_ tab: AgentTerminalTab) -> String {
+        switch tab.kind {
+        case .localShell:
+            return L10n.AgentTerminal.localSessionCaution
+        case .ssh(_, _, let target):
+            return target
+        }
+    }
+
     private func playbackState(for shortcut: TerminalShortcut) -> TerminalShortcutPlaybackState? {
         guard let state = controller.activeShortcutPlaybackState,
               state.shortcutID == shortcut.id else {
@@ -441,6 +577,13 @@ private struct AgentSidePanelTerminalContentView: View {
         let hours = minutes / 60
         let minuteRemainder = minutes % 60
         return minuteRemainder == 0 ? "\(hours)h" : "\(hours)h \(String(format: "%02dm", minuteRemainder))"
+    }
+
+    private func formatElapsed(_ interval: TimeInterval) -> String {
+        let seconds = max(0, Int(interval.rounded(.down)))
+        let minutes = seconds / 60
+        let remainder = seconds % 60
+        return "\(minutes):\(String(format: "%02d", remainder))"
     }
 
     private static let shortcutETAFormatter: DateFormatter = {
@@ -611,10 +754,15 @@ struct AgentTerminalViewRepresentable: NSViewRepresentable {
 
     func makeNSView(context: Context) -> AgentLocalProcessTerminalView {
         DispatchQueue.main.async {
+            terminalView.refreshVisibleTerminalDisplay()
             terminalView.window?.makeFirstResponder(terminalView)
         }
         return terminalView
     }
 
-    func updateNSView(_ nsView: AgentLocalProcessTerminalView, context: Context) {}
+    func updateNSView(_ nsView: AgentLocalProcessTerminalView, context: Context) {
+        DispatchQueue.main.async {
+            nsView.refreshVisibleTerminalDisplay()
+        }
+    }
 }

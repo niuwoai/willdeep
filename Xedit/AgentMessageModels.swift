@@ -487,7 +487,7 @@ nonisolated struct AgentMessage: Identifiable, Codable, Equatable {
     /// 后兼容）。
     var widget: AgentWidget?
     /// role == .scheduledTask 时挂载的定时任务快照。其它 role 一定 nil。
-    /// 与 widget/workflowReport 不同，此字段**进 CodingKeys 持久化**，
+    /// 与 widget 不同，此字段**进 CodingKeys 持久化**，
     /// 让"我在这里安排了一个定时任务"的记录随会话保留。
     var scheduledTask: AgentScheduledTaskCard?
     let createdAt: Date
@@ -557,7 +557,7 @@ nonisolated struct AgentMessage: Identifiable, Codable, Equatable {
         case cachedPromptTokens, cacheWritePromptTokens, reasoningTokens
         case elapsedSeconds
         case origin, originLabel, requestPrefixHash, requestStablePrefixCharacters
-        case managedRoute
+        case managedRoute, workflowReport
         case scheduledTask
         case createdAt
     }
@@ -586,6 +586,7 @@ nonisolated struct AgentMessage: Identifiable, Codable, Equatable {
         requestPrefixHash = try container.decodeIfPresent(String.self, forKey: .requestPrefixHash)
         requestStablePrefixCharacters = try container.decodeIfPresent(Int.self, forKey: .requestStablePrefixCharacters)
         managedRoute = try container.decodeIfPresent(AgentManagedRouteDecision.self, forKey: .managedRoute)
+        workflowReport = try container.decodeIfPresent(WorkflowReport.self, forKey: .workflowReport)
         scheduledTask = try container.decodeIfPresent(AgentScheduledTaskCard.self, forKey: .scheduledTask)
         createdAt = try container.decode(Date.self, forKey: .createdAt)
     }

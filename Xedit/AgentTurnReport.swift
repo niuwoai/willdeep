@@ -93,9 +93,10 @@ extension AgentTurnReport {
     }
 
     private static func reportProviderName(for runtime: AgentRuntime) -> String {
-        let provider = runtime.session.providerDisplayName?
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-        return provider?.isEmpty == false ? provider! : "default provider"
+        AgentProviderPreset.normalizedDisplayName(
+            providerID: runtime.session.providerID,
+            storedDisplayName: runtime.session.providerDisplayName
+        ) ?? "default provider"
     }
 
     private static func summedElapsedSeconds(from messages: [AgentMessage]) -> Double? {

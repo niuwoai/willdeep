@@ -27,6 +27,17 @@
 import Foundation
 import SwiftTerm
 
+struct AgentTerminalSnapshotCapture: Sendable {
+    let viewport: String
+    let markedViewport: String
+    let cursorLine: String
+    let cursorRow: Int
+    let cursorColumn: Int
+    let topVisibleRow: Int
+    let rows: Int
+    let cols: Int
+}
+
 final class AgentTerminalSnapshotMirror: @unchecked Sendable {
     /// Serial queue that exclusively owns `terminal`. Also the queue the
     /// owning `LocalProcess` delivers PTY bytes on, so feeds are ordered and
@@ -70,18 +81,65 @@ final class AgentTerminalSnapshotMirror: @unchecked Sendable {
     /// drain (bounded by one feed call — never by the main thread). This is
     /// the read the snapshot tool uses instead of the starved visible model.
     func captureViewport() -> String {
+        capture().viewport
+    }
+
+    /// Capture the visible viewport with cursor context. The cursor row is
+    /// authoritative for "where the shell is now"; other visible rows can be
+    /// old output or prompts from before an SSH hop.
+    func capture() -> AgentTerminalSnapshotCapture {
         queue.sync {
             let rows = terminal.rows
             let cols = terminal.cols
-            guard rows > 0, cols > 0 else { return "" }
+            guard rows > 0, cols > 0 else {
+                return AgentTerminalSnapshotCapture(
+                    viewport: "",
+                    markedViewport: "",
+                    cursorLine: "",
+                    cursorRow: 0,
+                    cursorColumn: 0,
+                    topVisibleRow: 0,
+                    rows: rows,
+                    cols: cols
+                )
+            }
             // `yDisp` is the absolute index of the top visible row inside the
             // scrollback line array; `getText` indexes that array directly.
             // Mirror the exact region the visible terminal would show.
             let startRow = terminal.buffer.yDisp
             let bottom = startRow + rows - 1
-            return terminal.getText(
+            let cursor = terminal.getCursorLocation()
+            let visibleCursorRow = min(max(cursor.y, 0), rows - 1)
+            let cursorColumn = min(max(cursor.x, 0), max(cols - 1, 0))
+            let absoluteCursorRow = startRow + visibleCursorRow
+            let viewport = terminal.getText(
                 start: Position(col: 0, row: startRow),
                 end: Position(col: cols - 1, row: bottom)
+            )
+            let cursorLine = terminal.getText(
+                start: Position(col: 0, row: absoluteCursorRow),
+                end: Position(col: cols - 1, row: absoluteCursorRow)
+            )
+            var markedRows: [String] = []
+            markedRows.reserveCapacity(rows)
+            for visibleRow in 0..<rows {
+                let absoluteRow = startRow + visibleRow
+                let line = terminal.getText(
+                    start: Position(col: 0, row: absoluteRow),
+                    end: Position(col: cols - 1, row: absoluteRow)
+                )
+                let marker = visibleRow == visibleCursorRow ? "=> " : "   "
+                markedRows.append("\(marker)\(line)")
+            }
+            return AgentTerminalSnapshotCapture(
+                viewport: viewport,
+                markedViewport: markedRows.joined(separator: "\n"),
+                cursorLine: cursorLine,
+                cursorRow: visibleCursorRow,
+                cursorColumn: cursorColumn,
+                topVisibleRow: startRow,
+                rows: rows,
+                cols: cols
             )
         }
     }

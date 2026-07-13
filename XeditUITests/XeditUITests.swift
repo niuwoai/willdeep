@@ -34,6 +34,21 @@ final class WillDeepUITests: XCTestCase {
     }
 
     @MainActor
+    func testAgentHeaderDiffShortcutOpensSidePanel() throws {
+        let app = XCUIApplication()
+        app.launch()
+
+        let diffShortcut = app.buttons["Diff"]
+        XCTAssertTrue(diffShortcut.waitForExistence(timeout: 5))
+        diffShortcut.click()
+
+        XCTAssertTrue(
+            app.staticTexts["Diff"].waitForExistence(timeout: 3),
+            "Clicking the Agent header Diff shortcut should reveal the side panel."
+        )
+    }
+
+    @MainActor
     func testLaunchPerformance() throws {
         // This measures how long it takes to launch your application.
         measure(metrics: [XCTApplicationLaunchMetric()]) {

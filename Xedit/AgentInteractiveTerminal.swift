@@ -933,6 +933,33 @@ final class AgentLocalProcessTerminalView: TerminalView, TerminalViewDelegate, L
         super.paste(sender)
     }
 
+    override func setFrameSize(_ newSize: NSSize) {
+        super.setFrameSize(newSize)
+        refreshVisibleTerminalDisplay()
+    }
+
+    override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        DispatchQueue.main.async { [weak self] in
+            self?.refreshVisibleTerminalDisplay()
+        }
+    }
+
+    func refreshVisibleTerminalDisplay() {
+        needsLayout = true
+        layoutSubtreeIfNeeded()
+        needsDisplay = true
+        setNeedsDisplay(bounds)
+        superview?.needsDisplay = true
+
+        // SwiftTerm renders its caret in a separate child view. AppKit
+        // invalidation redraws terminal cells but does not reposition that
+        // child, which can leave the cursor on an old prompt after remounting
+        // the terminal. An empty feed is side-effect free and schedules
+        // SwiftTerm's own display pass, including its cursor-position update.
+        feed(text: "")
+    }
+
     func prepareZModemPathSelection(_ selection: TerminalZModemPathSelection?) {
         zmodemBridge.preparePathSelection(selection)
     }
@@ -1002,6 +1029,7 @@ final class AgentLocalProcessTerminalView: TerminalView, TerminalViewDelegate, L
                 self.invalidateTerminalEchoCache()
             }
             self.feed(byteArray: bytes[...])
+            self.refreshVisibleTerminalDisplay()
         }
     }
 
@@ -1110,6 +1138,7 @@ final class AgentTerminalTab: ObservableObject, Identifiable, AgentTerminalProce
     private var lastBufferHash = 0
     private let maxRecentCommands = 20
     private var recorder: TerminalShortcutRecorder?
+    private var shortcutPlaybackTask: Task<Void, Never>?
 
     init(
         kind: AgentTerminalTabKind,
@@ -1211,6 +1240,8 @@ final class AgentTerminalTab: ObservableObject, Identifiable, AgentTerminalProce
     func terminate() {
         guard isRunning else { return }
         cancelRecording()
+        shortcutPlaybackTask?.cancel()
+        shortcutPlaybackTask = nil
         finishShortcutPlayback(status: .cancelled(reason: "terminal_stopped"))
         terminalView.terminate()
         isRunning = false
@@ -1249,6 +1280,7 @@ final class AgentTerminalTab: ObservableObject, Identifiable, AgentTerminalProce
         isPlayingShortcut = true
         let startedAt = Date()
         let totalDelay = shortcut.playbackDurationMilliseconds
+        shortcutPlaybackTask?.cancel()
         shortcutPlaybackState = TerminalShortcutPlaybackState(
             shortcutID: shortcut.id,
             title: shortcut.title,
@@ -1259,16 +1291,24 @@ final class AgentTerminalTab: ObservableObject, Identifiable, AgentTerminalProce
             totalDelayMilliseconds: totalDelay,
             status: .running
         )
-        Task { [weak self] in
+        shortcutPlaybackTask = Task { [weak self] in
             var protectedBytesCache: [String: [UInt8]] = [:]
             var completedNormally = true
             for (index, event) in shortcut.events.enumerated() {
+                guard !Task.isCancelled else {
+                    completedNormally = false
+                    break
+                }
                 await MainActor.run {
                     guard let self, self.isRunning else { return }
                     self.shortcutPlaybackState?.currentEventIndex = index + 1
                 }
                 if event.delayMilliseconds > 0 {
                     try? await Task.sleep(nanoseconds: UInt64(event.delayMilliseconds) * 1_000_000)
+                }
+                guard !Task.isCancelled else {
+                    completedNormally = false
+                    break
                 }
                 let shouldContinue = await MainActor.run {
                     guard let self, self.isRunning else { return false }
@@ -1300,8 +1340,16 @@ final class AgentTerminalTab: ObservableObject, Identifiable, AgentTerminalProce
         }
     }
 
+    func cancelShortcutPlayback() {
+        guard isPlayingShortcut else { return }
+        shortcutPlaybackTask?.cancel()
+        shortcutPlaybackTask = nil
+        finishShortcutPlayback(status: .cancelled(reason: "user_cancelled"))
+    }
+
     private func finishShortcutPlayback(status: TerminalShortcutPlaybackState.Status) {
         isPlayingShortcut = false
+        shortcutPlaybackTask = nil
         guard shortcutPlaybackState != nil else { return }
         shortcutPlaybackState?.status = status
         shortcutPlaybackState?.currentEventIndex = shortcutPlaybackState?.totalEvents ?? 0
@@ -1375,7 +1423,7 @@ final class AgentTerminalTab: ObservableObject, Identifiable, AgentTerminalProce
 
     var runtimeTarget: String {
         if case .ssh(_, _, let target) = kind { return target }
-        return "local"
+        return "local tab (may contain nested manual SSH)"
     }
 
     func idleSeconds(now: Date) -> TimeInterval {
@@ -1508,6 +1556,10 @@ final class AgentInteractiveTerminalController: ObservableObject {
         recordingTabID != nil
     }
 
+    var recordingStartedAt: Date? {
+        tabs.first(where: \.isRecording)?.activeRecordingStartedAt
+    }
+
     var activeShortcutPlaybackState: TerminalShortcutPlaybackState? {
         activeTab?.shortcutPlaybackState
     }
@@ -1624,6 +1676,10 @@ final class AgentInteractiveTerminalController: ObservableObject {
     func playShortcut(_ shortcut: TerminalShortcut) {
         guard !isRecording else { return }
         activeTab?.playShortcut(shortcut)
+    }
+
+    func cancelActiveShortcutPlayback() {
+        activeTab?.cancelShortcutPlayback()
     }
 
     func prepareShortcutsFileForEditing() {

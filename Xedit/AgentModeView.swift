@@ -200,6 +200,15 @@ struct AgentModeView: View {
                     .zIndex(10)
             }
         }
+        .overlay {
+            AgentComputerUsePresentationLayer(
+                activity: appState.activeRuntime?.latestComputerUseActivity,
+                isActive: appState.activeRuntime?.isResponding == true,
+                sessionID: appState.activeAgentSessionID,
+                turnStartedAt: appState.activeRuntime?.turnStartedAt,
+                thumbnailTrailingInset: activeSidePanel == nil ? 0 : CGFloat(panelWidth + 1)
+            )
+        }
         .sheet(isPresented: $isSessionSearchPresented) {
             AgentSessionSearchView()
                 .environmentObject(appState)

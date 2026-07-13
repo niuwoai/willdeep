@@ -109,6 +109,7 @@ extension AppState {
         runtime.errorMessage = nil
         runtime.errorDetails = nil
         runtime.errorRequiresSomeIMLogin = false
+        runtime.latestComputerUseActivity = nil
         runtime.isResponding = true
         runtime.turnStartedAt = Date()
         runtime.currentTurnAttachedSkills = attachedSkills
@@ -323,6 +324,7 @@ extension AppState {
         runtime.isAwaitingProviderSlot = false
         runtime.errorMessage = nil
         runtime.errorDetails = nil
+        runtime.latestComputerUseActivity = nil
         runtime.isResponding = true
         runtime.turnStartedAt = Date()
 
@@ -371,6 +373,7 @@ extension AppState {
         agentQueuedMessages.removeAll()
         agentPendingImages.removeAll()
         agentPendingTextAttachments.removeAll()
+        activeRuntime?.latestComputerUseActivity = nil
         agentErrorMessage = nil
         agentErrorDetails = nil
         agentToolDecisionWaiter?.resume(returning: .denied(reason: "Conversation cleared"))
@@ -1284,6 +1287,7 @@ extension AppState {
                             runtime.toolCalls[index].approvalSource = patchAutoApplySource
                         }
                     }
+                    runtime.recordComputerUseActivity(toolName: call.toolName, images: result.images)
                     if call.toolName == "terminal_create_shortcut",
                        !terminalShortcutResultRequiresChatPasswordCard(result) {
                         agentSidePanelRequest = AgentSidePanelOpenRequest(kind: .terminal)

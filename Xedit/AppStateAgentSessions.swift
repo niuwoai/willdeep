@@ -1584,8 +1584,10 @@ extension AppState {
         }
         let activeProvider = agentProviderLibrary.active
         runtime.session.providerID = activeProvider?.providerID ?? agentConfiguration.normalized.providerID
-        runtime.session.providerDisplayName = activeProvider?.displayName
-            ?? AgentProviderPreset.preset(id: runtime.session.providerID ?? "")?.displayName
+        runtime.session.providerDisplayName = AgentProviderPreset.normalizedDisplayName(
+            providerID: runtime.session.providerID,
+            storedDisplayName: activeProvider?.displayName
+        )
         runtime.persist(touchUpdatedAt: touchUpdatedAt)
         agentSessions[index] = runtime.session
         // `persist()` just stamped `updatedAt = now`, so this session is
