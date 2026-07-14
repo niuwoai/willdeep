@@ -44,7 +44,7 @@ import AppKit
 enum AgentChatHistoryRenderer {
     enum MarkdownSpacing {
         static let headerToBody: CGFloat = 10
-        static let bodyLine: CGFloat = 4
+        static let bodyLine = AgentChatHistoryLayoutMetrics.bodyLineSpacing
         static let assistantParagraph: CGFloat = 7
         static let userParagraph: CGFloat = 7
         static let tableLine: CGFloat = 2
@@ -258,6 +258,10 @@ enum AgentChatHistoryRenderer {
         let headerFont = NSFont.systemFont(ofSize: 11, weight: .semibold)
         let assistantStatusFont = NSFont.systemFont(ofSize: baseFontSize, weight: .medium)
         let bodyColor = NSColor.labelColor
+        let assistantStatusColor = NSColor.tertiaryLabelColor
+        let assistantStatusDividerColor = AgentChatHistoryLayoutMetrics.assistantStatusDividerColor(
+            isDark: isDark
+        )
         let secondaryColor = NSColor.secondaryLabelColor
         let codeBackgroundColor = NSColor.controlBackgroundColor
 
@@ -337,6 +341,8 @@ enum AgentChatHistoryRenderer {
                 to: result,
                 headerFont: headerFont,
                 assistantStatusFont: assistantStatusFont,
+                assistantStatusColor: assistantStatusColor,
+                assistantStatusDividerColor: assistantStatusDividerColor,
                 secondaryColor: secondaryColor
             )
 
@@ -358,7 +364,7 @@ enum AgentChatHistoryRenderer {
                 // Workflow 消息的 content 恒为空,状态/摘要都在 report 字段
                 // 上。运行中的卡片由 AgentChatTranscript 的 SwiftUI 工作态
                 // 表面渲染(不会进这里);进历史的已结束卡片烘焙成
-                // 状态行 + 最终报告 markdown。1.155.0-rc4 前这里走通用
+                // 状态行 + 最终报告 markdown。1.155.0-rc9 前这里走通用
                 // 空 body 分支,workflow 在 TextKit 历史里只剩一个光秃秃
                 // 的 WFL 头像行 —— 研究报告/失败原因整体不可见。
                 body = Self.workflowHistoryBody(for: report)

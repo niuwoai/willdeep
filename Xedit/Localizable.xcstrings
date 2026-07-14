@@ -3814,6 +3814,132 @@
         }
       }
     },
+    "agent-terminal.no-shortcuts" : {
+      "comment" : "Empty state below the terminal recording controls",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No recordings yet"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "还没有录制记录"
+          }
+        }
+      }
+    },
+    "agent-terminal.recent-recordings" : {
+      "comment" : "Header above recently recorded terminal shortcuts",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Recent recordings"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "最近录制"
+          }
+        }
+      }
+    },
+    "agent-terminal.recording" : {
+      "comment" : "Live terminal recording status",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Recording"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "正在录制"
+          }
+        }
+      }
+    },
+    "agent-terminal.recording-help" : {
+      "comment" : "Short explanation beside the terminal recording button",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Record terminal steps to replay later"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "录制终端操作，稍后可重复播放"
+          }
+        }
+      }
+    },
+    "agent-terminal.shortcut.duration-fallback" : {
+      "comment" : "Fallback duration label when DateComponentsFormatter cannot format seconds; %@ is the number of seconds",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@s"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ 秒"
+          }
+        }
+      }
+    },
+    "agent-terminal.start-recording" : {
+      "comment" : "Button that begins recording terminal actions",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Start recording"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "开始录制"
+          }
+        }
+      }
+    },
+    "agent-terminal.stop-recording" : {
+      "comment" : "Button that stops the active terminal recording",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Stop recording"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "停止录制"
+          }
+        }
+      }
+    },
     "agent-terminal.shortcut.cancelled" : {
       "extractionState" : "manual",
       "localizations" : {

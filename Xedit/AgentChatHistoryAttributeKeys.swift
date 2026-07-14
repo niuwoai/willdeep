@@ -10,6 +10,9 @@ import Foundation
 
 extension NSAttributedString.Key {
     static let agentChatHistoryBubbleKind = NSAttributedString.Key("AgentChatHistoryBubbleKind")
+    static let agentChatHistoryAssistantStatusDividerColor = NSAttributedString.Key(
+        "AgentChatHistoryAssistantStatusDividerColor"
+    )
     static let agentChatHistoryCodeBlockID = NSAttributedString.Key("AgentChatHistoryCodeBlockID")
     static let agentChatHistoryCodeBlockBodyID = NSAttributedString.Key("AgentChatHistoryCodeBlockBodyID")
     static let agentChatHistoryCodeCopyText = NSAttributedString.Key("AgentChatHistoryCodeCopyText")

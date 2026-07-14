@@ -165,7 +165,11 @@ enum DesktopPetMessageCardVisibility {
 /// A non-activating panel normally drops the first mouse-down delivered while
 /// its owning app is inactive. The desktop pet must stay non-activating so it
 /// does not steal focus, but it still needs that first event to begin a drag.
-final class DesktopPetFirstMouseHostingView<Content: View>: NSHostingView<Content> {
+///
+/// Deliberately non-generic: the generic `NSHostingView<Content>` subclass makes
+/// swift-frontend 6.3.1 segfault in the `EarlyPerfInliner` SIL pass while
+/// specializing the synthesized deinit for the Release x86_64 slice.
+private final class DesktopPetFirstMouseHostingView: NSHostingView<DesktopPetOverlayView> {
     override func acceptsFirstMouse(for event: NSEvent?) -> Bool {
         true
     }

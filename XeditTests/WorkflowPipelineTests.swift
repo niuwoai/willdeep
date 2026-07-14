@@ -100,7 +100,7 @@ extension WillDeepTests {
         #expect(Date().timeIntervalSince(startedAt) < 0.5)
     }
 
-    // MARK: - 省心托管 workflow 模型解析 (1.155.0-rc4)
+    // MARK: - 省心托管 workflow 模型解析 (1.155.0-rc9)
     //
     // 主循环每回合跑 routing judge,workflow 子 agent 之前直接拿静态
     // 配置模型、绕过托管路由。修复后:floor 与 high 取高者,按 workflow

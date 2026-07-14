@@ -942,8 +942,29 @@ enum AgentChatHistoryBubbleKind: Int {
 }
 
 enum AgentChatHistoryLayoutMetrics {
+    /// Shared body leading for live SwiftUI messages and TextKit history.
+    /// Five points keeps dense chat readable without making paragraphs float.
+    static let bodyLineSpacing: CGFloat = 5
     static let assistantContentHeadIndent: CGFloat = 32
     static let assistantContentTailInset: CGFloat = 18
+    /// Measured from the Codex reference at 1x: 9 pt from the status line
+    /// box to the divider, then 18 pt from the divider to the body line box.
+    static let assistantStatusDividerTopSpacing: CGFloat = 9
+    static let assistantStatusDividerBottomSpacing: CGFloat = 18
+    static let assistantStatusDividerThickness: CGFloat = 1
+    /// AppKit/SwiftUI compositing resolves this neutral overlay to #F0F0F0
+    /// on the white reference surface.
+    static let assistantStatusDividerOpacity: Double = 0.075
+
+    static func assistantStatusDividerColor(isDark: Bool) -> NSColor {
+        let white: CGFloat = isDark ? 1 : 0
+        return NSColor(
+            srgbRed: white,
+            green: white,
+            blue: white,
+            alpha: CGFloat(assistantStatusDividerOpacity)
+        )
+    }
     // Codex-style user input stays in a right-side column instead of
     // becoming a full-width strip. The body remains left-aligned inside
     // that column, while short and long messages share a stable wrap width.
@@ -953,6 +974,8 @@ enum AgentChatHistoryLayoutMetrics {
     static let defaultTranscriptWidth: CGFloat = 1040
     static let userBubbleHorizontalPadding: CGFloat = 12
     static let userBubbleVerticalPadding: CGFloat = 8
+    static let userBubbleCornerRadius: CGFloat = 14
+    static let userBubbleFillOpacity: Double = 0.026
     static let userTurnTopSpacing: CGFloat = 10
     static let userBodyTailIndent = -(userBubbleTrailingMargin + userBubbleHorizontalPadding)
     static let userFooterTrailingInset: CGFloat = 10
@@ -1041,11 +1064,45 @@ private final class AgentChatHistoryBubbleLayoutManager: NSLayoutManager {
     // char-wrap inside the card (see codeBlockParagraphStyle), so the whole
     // shifted-glyph drawing path was removed.
     override func drawBackground(forGlyphRange glyphsToShow: NSRange, at origin: NSPoint) {
+        drawAssistantStatusDividers(forGlyphRange: glyphsToShow, at: origin)
         drawAgentBubbles(forGlyphRange: glyphsToShow, at: origin)
         drawAgentTables(forGlyphRange: glyphsToShow, at: origin)
         drawAgentCodeBlocks(forGlyphRange: glyphsToShow, at: origin)
         drawInlineCodeChips(forGlyphRange: glyphsToShow, at: origin)
         super.drawBackground(forGlyphRange: glyphsToShow, at: origin)
+    }
+
+    private func drawAssistantStatusDividers(forGlyphRange glyphsToShow: NSRange, at origin: NSPoint) {
+        guard let textStorage, let textContainer = textContainers.first else { return }
+        let characterRange = self.characterRange(forGlyphRange: glyphsToShow, actualGlyphRange: nil)
+        textStorage.enumerateAttribute(
+            .agentChatHistoryAssistantStatusDividerColor,
+            in: characterRange,
+            options: []
+        ) { value, range, _ in
+            guard range.length > 0, let color = value as? NSColor else { return }
+            let dividerGlyphRange = glyphRange(forCharacterRange: range, actualCharacterRange: nil)
+            guard NSIntersectionRange(dividerGlyphRange, glyphsToShow).length > 0,
+                  dividerGlyphRange.location < numberOfGlyphs else { return }
+            let lineFragment = lineFragmentRect(
+                forGlyphAt: dividerGlyphRange.location,
+                effectiveRange: nil
+            )
+            let horizontalInset = AgentChatHistoryLayoutMetrics.assistantContentHeadIndent
+                + AgentChatHistoryLayoutMetrics.assistantContentTailInset
+            let width = max(0, textContainer.size.width - horizontalInset)
+            guard width > 0 else { return }
+            let rect = NSRect(
+                x: origin.x + AgentChatHistoryLayoutMetrics.assistantContentHeadIndent,
+                y: origin.y
+                    + lineFragment.minY
+                    + AgentChatHistoryLayoutMetrics.assistantStatusDividerTopSpacing,
+                width: width,
+                height: AgentChatHistoryLayoutMetrics.assistantStatusDividerThickness
+            )
+            color.setFill()
+            NSBezierPath(rect: rect).fill()
+        }
     }
 
     private func drawAgentBubbles(forGlyphRange glyphsToShow: NSRange, at origin: NSPoint) {
@@ -1072,7 +1129,14 @@ private final class AgentChatHistoryBubbleLayoutManager: NSLayoutManager {
             let rect = bubbleRect(forGlyphRange: bubbleGlyphRange, kind: kind, at: origin)
             guard !rect.isNull, !rect.isEmpty else { return }
             bubbleColor(for: kind).setFill()
-            NSBezierPath(roundedRect: rect, xRadius: 8, yRadius: 8).fill()
+            let cornerRadius = kind == .user
+                ? AgentChatHistoryLayoutMetrics.userBubbleCornerRadius
+                : 8
+            NSBezierPath(
+                roundedRect: rect,
+                xRadius: cornerRadius,
+                yRadius: cornerRadius
+            ).fill()
         }
     }
 
@@ -1285,7 +1349,9 @@ private final class AgentChatHistoryBubbleLayoutManager: NSLayoutManager {
         case .user:
             // Deliberately faint — the user's own messages don't need a
             // prominent fill, just enough to set them apart from assistant text.
-            return NSColor.quaternaryLabelColor.withAlphaComponent(0.045)
+            return NSColor.labelColor.withAlphaComponent(
+                CGFloat(AgentChatHistoryLayoutMetrics.userBubbleFillOpacity)
+            )
         case .assistant:
             return .clear
         case .system:

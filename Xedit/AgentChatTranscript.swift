@@ -292,7 +292,7 @@ struct AgentChatTranscript: View {
                         // 与 tool call group 同款「工作态表面」。结束后这条
                         // 消息折回上面的 TextKit 历史,由 formatter 烘焙
                         // 状态行 + 最终报告(见 AgentChatHistoryFormatter 的
-                        // workflowReport 分支)。1.155.0-rc4 之前这里没有任何
+                        // workflowReport 分支)。1.155.0-rc9 之前这里没有任何
                         // 挂载点:rc16 历史折进 NSTextView 后,AgentModeMessageView
                         // 的 .workflowReport 分支只剩流式 assistant 一个入口,
                         // workflow 卡片(进度、失败原因、研究报告)整体不可见。

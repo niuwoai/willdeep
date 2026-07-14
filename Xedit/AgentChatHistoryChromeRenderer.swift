@@ -15,6 +15,8 @@ extension AgentChatHistoryRenderer {
         to result: NSMutableAttributedString,
         headerFont: NSFont,
         assistantStatusFont: NSFont,
+        assistantStatusColor: NSColor,
+        assistantStatusDividerColor: NSColor,
         secondaryColor: NSColor
     ) {
         if message.role == .assistant, !isToolCallOnly {
@@ -23,13 +25,27 @@ extension AgentChatHistoryRenderer {
                 string: AgentChatMessageMetrics.assistantStatus(for: message, isStreaming: false) + "\n",
                 attributes: [
                     .font: assistantStatusFont,
-                    .foregroundColor: secondaryColor,
+                    .foregroundColor: assistantStatusColor,
                 ]
             ))
             result.addAttribute(
                 .paragraphStyle,
                 value: headerParagraphStyle(for: message.role),
                 range: NSRange(location: headerStart, length: result.length - headerStart)
+            )
+            let dividerStart = result.length
+            result.append(NSAttributedString(
+                string: "\n",
+                attributes: [
+                    .font: NSFont.systemFont(ofSize: AgentChatHistoryLayoutMetrics.assistantStatusDividerThickness),
+                    .foregroundColor: NSColor.clear,
+                    .agentChatHistoryAssistantStatusDividerColor: assistantStatusDividerColor,
+                ]
+            ))
+            result.addAttribute(
+                .paragraphStyle,
+                value: assistantStatusDividerParagraphStyle(),
+                range: NSRange(location: dividerStart, length: result.length - dividerStart)
             )
             return
         }
@@ -526,7 +542,9 @@ extension AgentChatHistoryRenderer {
     private static func headerParagraphStyle(for role: AgentRole) -> NSParagraphStyle {
         let style = NSMutableParagraphStyle()
         style.alignment = role == .user ? .right : .left
-        style.paragraphSpacing = role == .user ? 14 : MarkdownSpacing.headerToBody
+        style.paragraphSpacing = role == .user
+            ? 14
+            : (role == .assistant ? 0 : MarkdownSpacing.headerToBody)
         style.lineSpacing = 1
         style.headIndent = role == .user
             ? 150
@@ -535,6 +553,18 @@ extension AgentChatHistoryRenderer {
         style.tailIndent = role == .user
             ? -30
             : (role == .assistant ? -AgentChatHistoryLayoutMetrics.assistantContentTailInset : -16)
+        return style
+    }
+
+    private static func assistantStatusDividerParagraphStyle() -> NSParagraphStyle {
+        let style = NSMutableParagraphStyle()
+        style.minimumLineHeight = AgentChatHistoryLayoutMetrics.assistantStatusDividerThickness
+        style.maximumLineHeight = AgentChatHistoryLayoutMetrics.assistantStatusDividerThickness
+        style.paragraphSpacingBefore = AgentChatHistoryLayoutMetrics.assistantStatusDividerTopSpacing
+        style.paragraphSpacing = AgentChatHistoryLayoutMetrics.assistantStatusDividerBottomSpacing
+        style.headIndent = AgentChatHistoryLayoutMetrics.assistantContentHeadIndent
+        style.firstLineHeadIndent = AgentChatHistoryLayoutMetrics.assistantContentHeadIndent
+        style.tailIndent = -AgentChatHistoryLayoutMetrics.assistantContentTailInset
         return style
     }
 

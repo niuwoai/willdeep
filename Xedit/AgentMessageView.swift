@@ -72,6 +72,7 @@ struct AgentModeMessageView: View {
     var baseFontSize: CGFloat = NSFont.systemFontSize
     var onReferenceGeneratedImage: (String) -> Void = { _ in }
     @State private var isHoveringUserMessage = false
+    @Environment(\.colorScheme) private var colorScheme
 
     var body: some View {
         switch message.role {
@@ -172,6 +173,7 @@ struct AgentModeMessageView: View {
                         Text(AgentLongTokenBreaker.inject(into: split.visible))
                             .font(.system(size: baseFontSize))
                             .foregroundStyle(.primary)
+                            .lineSpacing(AgentChatHistoryLayoutMetrics.bodyLineSpacing)
                             .textSelection(.enabled)
                             .fixedSize(horizontal: false, vertical: true)
                     }
@@ -179,8 +181,11 @@ struct AgentModeMessageView: View {
                 .padding(.horizontal, AgentChatHistoryLayoutMetrics.userBubbleHorizontalPadding)
                 .padding(.vertical, AgentChatHistoryLayoutMetrics.userBubbleVerticalPadding)
                 .background(
-                    RoundedRectangle(cornerRadius: AgentDesign.cardCornerRadius, style: .continuous)
-                        .fill(Color.primary.opacity(0.035))
+                    RoundedRectangle(
+                        cornerRadius: AgentChatHistoryLayoutMetrics.userBubbleCornerRadius,
+                        style: .continuous
+                    )
+                        .fill(Color.primary.opacity(AgentChatHistoryLayoutMetrics.userBubbleFillOpacity))
                 )
                 .frame(
                     maxWidth: AgentDesign.chatMaxContentWidth * AgentDesign.userMessageMaxWidthRatio,
@@ -215,13 +220,25 @@ struct AgentModeMessageView: View {
     private var assistantContent: some View {
         Group {
             if !message.content.isEmpty || !message.images.isEmpty {
-                VStack(alignment: .leading, spacing: 8) {
+                VStack(alignment: .leading, spacing: 0) {
                     Text(AgentChatMessageMetrics.assistantStatus(
                         for: message,
                         isStreaming: isStreamingThisMessage
                     ))
                         .font(.system(size: baseFontSize, weight: .medium))
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(Color(nsColor: .tertiaryLabelColor))
+
+                    Rectangle()
+                        .fill(Color(nsColor: AgentChatHistoryLayoutMetrics.assistantStatusDividerColor(
+                            isDark: colorScheme == .dark
+                        )))
+                        .frame(
+                            maxWidth: .infinity,
+                            minHeight: AgentChatHistoryLayoutMetrics.assistantStatusDividerThickness,
+                            maxHeight: AgentChatHistoryLayoutMetrics.assistantStatusDividerThickness
+                        )
+                        .padding(.top, AgentChatHistoryLayoutMetrics.assistantStatusDividerTopSpacing)
+                        .padding(.bottom, AgentChatHistoryLayoutMetrics.assistantStatusDividerBottomSpacing)
 
                     VStack(alignment: .leading, spacing: 10) {
                         if !message.content.isEmpty {
@@ -238,7 +255,7 @@ struct AgentModeMessageView: View {
                             )
                         }
                     }
-                    .padding(.vertical, 8)
+                    .padding(.bottom, 8)
                     // Don't show the footer while the stream is still
                     // running — elapsedSeconds isn't stamped until
                     // `.finishedTurn`, so the row would briefly read
@@ -246,6 +263,7 @@ struct AgentModeMessageView: View {
                     // turn settles.
                     if !isStreamingThisMessage {
                         AgentMessageFooter(message: message, alignment: .leading)
+                            .padding(.top, 8)
                     }
                 }
                 .padding(.leading, AgentChatHistoryLayoutMetrics.assistantContentHeadIndent)
@@ -350,7 +368,7 @@ struct AgentAssistantMarkdownBody: View {
                 baseFontSize: baseFontSize
             ))
                 .textSelection(.enabled)
-                .lineSpacing(4)
+                .lineSpacing(AgentChatHistoryLayoutMetrics.bodyLineSpacing)
                 .fixedSize(horizontal: false, vertical: true)
         }
     }
@@ -372,7 +390,7 @@ private struct AgentAssistantStreamingBody: View {
             Text(AgentLongTokenBreaker.inject(into: AgentMarkdownNormalizer.normalizedForChatRendering(content)))
                 .font(.system(size: baseFontSize))
                 .foregroundStyle(.primary)
-                .lineSpacing(4)
+                .lineSpacing(AgentChatHistoryLayoutMetrics.bodyLineSpacing)
                 .fixedSize(horizontal: false, vertical: true)
             AgentStreamingCursor()
         }

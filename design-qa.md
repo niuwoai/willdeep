@@ -1,4 +1,92 @@
-# Computer Use Preview Design QA
+# Terminal Recording Toolbar Design QA
+
+- selected visual direction: option 2, `/Users/rocky/.codex/generated_images/019f61dd-70dd-7610-a9f0-b0b2f8ebfde4/exec-fcaaab9a-a1ee-4a1f-a990-532a7c2842a0.png`
+- implementation screenshot: `build/visual-qa/terminal-recording/implementation-rc7.png`
+- viewport: source `2084 x 754`; implementation `1246 x 768`, terminal side panel approximately `480 pt` wide
+- state: light app appearance, dark terminal scheme, two persisted recordings, inactive recording and playback
+- final result: passed
+
+**Full-View Comparison Evidence**
+
+The selected option and the live Debug build were inspected together in one comparison pass. The implementation preserves the selected two-layer hierarchy: a dark recording-control strip followed by a light, flat recent-recordings list. The terminal tabs and terminal content remain visually separate below it, so the recording area no longer reads as a capsule inside another capsule.
+
+**Focused Region Comparison Evidence**
+
+- The record control uses a red semantic icon while its label uses a high-contrast terminal foreground color; the helper text remains readable but subordinate.
+- “最近录制” is a stable section label rather than part of a recording chip.
+- Each recording is one flat row with a circular play control, name, localized duration, input count, optional protected-input indicator, and trailing menu.
+- Two rows fit without increasing the panel beyond the selected compact direction; additional rows use the bounded vertical scroller.
+- The live `480 pt` side panel selects the wide single-line row variant. A narrower width falls back to the two-line metadata variant through `ViewThatFits`.
+
+**Required Fidelity Surfaces**
+
+- Fonts and typography: native macOS system typography is retained; hierarchy comes from weight and semantic foreground colors rather than red/green body text.
+- Spacing and layout rhythm: the control row, section header, and two `42 pt` history rows form three distinct bands with single-pixel separators.
+- Colors and visual tokens: red is limited to recording affordance; green/orange remain limited to small status icons. Terminal-scheme foreground colors prevent black-on-black labels.
+- Image quality and asset fidelity: all controls use native SF Symbols and remain sharp at the captured scale; no bitmap placeholder is used in the implementation.
+- Copy and content: start/stop labels, helper copy, section label, duration, input-count metadata, menus, and accessibility descriptions all use localized resources.
+
+**Primary Interactions Checked**
+
+- Open the terminal panel with two persisted recordings: passed in the ad-hoc-signed Debug build.
+- Recording rows expose play controls and trailing action menus: passed through the live accessibility tree.
+- Protected-input recording exposes its security indicator without turning the entire row into a status pill: passed.
+- Narrow-width fallback is present in implementation and compiled; the live screenshot covers the standard side-panel width.
+
+**Findings**
+
+No open P0, P1, or P2 visual findings. The production Swift sources and string catalog compile successfully. The selected terminal tests also compile, but the local XCTest runner cannot launch because two installed Apple Development identities make the repository's signing phase ambiguous; this does not affect the live Debug visual result.
+
+**Comparison History**
+
+- Iteration 1: the previous production UI used dark text on a dark surface, colored whole labels red/green, and nested recording capsules.
+- Iteration 2: option 2 established the two-layer structure and flat list-row language.
+- Iteration 3: the live Debug build confirmed readable contrast, Chinese duration localization, two visible rows, native menus, and removal of nested cards. Final result passed.
+
+---
+
+# Assistant Status Divider Design QA
+
+- source visual truth: `/var/folders/np/rjc0y5w52x324x21pv6g33440000gp/T/codex-clipboard-ae1c8da7-65a7-484e-b03b-44dc425db09b.png`
+- implementation screenshot: `/tmp/willdeep-assistant-divider-rc6.png`
+- combined comparison: `/tmp/willdeep-assistant-divider-comparison-rc6.png`
+- viewport: source `797 x 102 @1x`; implementation `797 x 106 pt @2x`
+- state: light appearance, completed assistant turn, 14 pt base font
+- final result: passed
+
+**Full-View Comparison Evidence**
+
+The Codex reference and the actual WillDeep TextKit rendering were normalized to the same 797-point width and stacked in one comparison image. The status, divider, and first body line retain the same hierarchy and low-contrast rhythm. The implementation screenshot comes from `AgentChatHistoryNSTextView`, not a redrawn mock.
+
+**Focused Region Comparison Evidence**
+
+- Reference divider center: source row `43`; sampled center color `RGB(240, 240, 240)` / `#F0F0F0`.
+- Implementation divider: physical rows `54-55` at `@2x`; sampled color on both rows `RGB(240, 240, 240)` / `#F0F0F0`.
+- Reference status-ink bottom to divider center: `13 px`; implementation: `12.75 pt` after SF-font ink calibration.
+- Reference divider center to body-ink top: `21 px`; implementation: `21.25 pt`. The remaining quarter-point is raster antialiasing, not a layout-token mismatch.
+- Shared layout tokens are `9 pt` above, `18 pt` below, and `1 pt` line thickness; the same values drive SwiftUI streaming and TextKit history rendering.
+
+**Required Fidelity Surfaces**
+
+- Fonts and typography: existing 14 pt medium-weight SF status and 14 pt body typography are preserved; this change does not alter font, wrapping, or line height.
+- Spacing and layout rhythm: measured visible-ink distances match the source within `0.25 pt`; horizontal alignment follows the existing assistant content column.
+- Colors and visual tokens: the neutral overlay is calibrated to render exactly `#F0F0F0` on the white reference surface and reverses to a light neutral overlay in dark appearance.
+- Image quality and asset fidelity: no image asset is part of this component; the source screenshot and actual native rendering were compared without placeholder reconstruction.
+- Copy and content: the localized “处理中 / 已处理 Ns” behavior is unchanged; the QA state uses the same completed-duration meaning as the source.
+
+**Findings**
+
+No open P0, P1, or P2 visual findings. The implementation matches the requested line color exactly and matches the requested vertical distances within native text-rasterization tolerance.
+
+**Comparison History**
+
+- Iteration 1: the shared semantic label overlay rendered as `#F3F3F3`, and the 10 pt top token put the line about `0.75 pt` too far from the visible SF glyph edge.
+- Fix: changed the neutral overlay to `7.5%` so AppKit / SwiftUI compositing resolves to `#F0F0F0`, and calibrated the top token to `9 pt`; the bottom token remains `18 pt`.
+- Iteration 2: the combined reference/implementation image and direct pixel sampling confirmed exact line color, `12.75 pt` upper visible distance, and `21.25 pt` lower visible distance. Final result passed.
+
+---
+
+# Previous QA Record: Computer Use Preview
 
 - source visual truth: `/Users/rocky/Desktop/截屏2026-07-13 11.38.55.png`
 - implementation thumbnail: `build/visual-qa/computer-use/implementation-thumbnail.jpeg`

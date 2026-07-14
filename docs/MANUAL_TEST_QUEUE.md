@@ -1432,7 +1432,7 @@ CI 只能保编译/单测过。一系列改 UI、改窗口、改 SwiftUI 状态�
 
 ---
 
-## 1.155.0-rc4 — Workflow 卡片重新可见 + 省心托管子 agent 路由
+## 1.155.0-rc9 — Workflow 卡片重新可见 + 省心托管子 agent 路由
 
 - ⏳ Composer 输 `/research 随便一个问题` 回车 → transcript 里立刻出现
   **完整的 Workflow 卡片**（标题 + Workflow badge + 转圈进度 +
