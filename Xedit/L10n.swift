@@ -71,9 +71,13 @@ nonisolated enum L10n {
     /// some.im "省心托管" managed-routing composer entries.
     enum AgentManagedRouting {
         static let title = String(localized: "agent-managed-routing.title", defaultValue: "Managed")
-        static let titleHigh = String(localized: "agent-managed-routing.title-high", defaultValue: "Managed · High")
+        static let titleFlash = String(localized: "agent-managed-routing.title-flash", defaultValue: "Managed · Flash")
+        static let titleHigh = String(localized: "agent-managed-routing.title-high", defaultValue: "Managed · Pro")
         static let titlePremium = String(localized: "agent-managed-routing.title-premium", defaultValue: "Managed · Premium")
-        static let reset = String(localized: "agent-managed-routing.reset", defaultValue: "Reset managed tier")
+        static let tierMenu = String(localized: "agent-managed-routing.tier-menu", defaultValue: "Managed tier")
+        static let tierFlash = String(localized: "agent-managed-routing.tier-flash", defaultValue: "Flash")
+        static let tierPro = String(localized: "agent-managed-routing.tier-pro", defaultValue: "Pro")
+        static let tierPremium = String(localized: "agent-managed-routing.tier-premium", defaultValue: "Premium")
         static let footerPrefix = String(localized: "agent-managed-routing.footer-prefix", defaultValue: "Managed")
         static func generalFooter(_ level: String) -> String {
             let template = String(localized: "agent-managed-routing.footer-general", defaultValue: "Managed-General-%@")
@@ -236,6 +240,7 @@ nonisolated enum L10n {
             let template = String(localized: "expert.picker-label.active", defaultValue: "Experts %@")
             return String(format: template, a1)
         }
+        static let lockedNotice = String(localized: "expert.locked-notice", defaultValue: "After an expert joins the conversation, it cannot be turned off for this session.")
         static let shortDrama = String(localized: "expert.short-drama", defaultValue: "Short Drama")
         static let shortDramaSummary = String(localized: "expert.short-drama.summary", defaultValue: "Enable short-drama planning, storyboard, media task, and production-package tools.")
         static let browserOps = String(localized: "expert.browser-ops", defaultValue: "Browser Ops")

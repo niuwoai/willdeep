@@ -11,6 +11,7 @@
 #   - xcodebuild.log        原始日志
 #   - complexity_report.*   复杂度守门报告
 #   - version_report.*      版本一致性报告
+#   - project_build_guard_report.* 项目级构建排队/缓存报告
 #   - short_drama_media_report.* 短剧媒体制作包/manifest/Ruby 模板契约报告
 #   - widget_side_panel_report.* 网页组件侧栏/聊天接力契约报告
 #   - image_edit_report.* 图片蒙版编辑/聊天接力契约报告
@@ -37,8 +38,6 @@ REPORT_MD="${OUT_DIR}/report.md"
 REPORT_JSON="${OUT_DIR}/report.json"
 
 mkdir -p "${OUT_DIR}"
-# xcodebuild 拒绝复用同名 result bundle，每次重跑前清掉
-rm -rf "${XCRESULT}"
 
 ruby "${ROOT_DIR}/scripts/complexity_guard.rb" "${OUT_DIR}/complexity_report.md" "${OUT_DIR}/complexity_report.json"
 ruby "${ROOT_DIR}/scripts/version_consistency.rb" "${OUT_DIR}/version_report.md" "${OUT_DIR}/version_report.json"
@@ -61,20 +60,32 @@ if [ ${#EXTRA_ARGS[@]} -eq 0 ]; then
 fi
 
 echo "▶ xcodebuild test  ${EXTRA_ARGS[*]}"
-ruby "${ROOT_DIR}/scripts/xcodebuild_ci.rb" \
-  --log "${LOG}" \
-  --pass-grace 180 \
+ruby "${ROOT_DIR}/scripts/project_build_guard.rb" \
+  --workspace "${ROOT_DIR}" \
+  --name xedit-tests \
+  --kind xcode-test \
+  --artifact "${XCRESULT}" \
+  --fingerprint-file "Xedit.xcodeproj/project.pbxproj" \
+  --fingerprint-file "Xedit.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved" \
+  --fingerprint-file "scripts/xcodebuild_ci.rb" \
+  --json-report "${OUT_DIR}/project_build_guard_report.json" \
+  --markdown-report "${OUT_DIR}/project_build_guard_report.md" \
+  --replace-artifacts \
   -- \
-  xcodebuild test \
-    -project "${ROOT_DIR}/Xedit.xcodeproj" \
-    -scheme Xedit \
-    -destination 'platform=macOS' \
-    -resultBundlePath "${XCRESULT}" \
-    -derivedDataPath "${OUT_DIR}/DerivedData" \
-    CODE_SIGNING_ALLOWED=NO \
-    CODE_SIGNING_REQUIRED=NO \
-    CODE_SIGN_IDENTITY="" \
-    "${EXTRA_ARGS[@]}"
+  ruby "${ROOT_DIR}/scripts/xcodebuild_ci.rb" \
+    --log "${LOG}" \
+    --pass-grace 180 \
+    -- \
+    xcodebuild test \
+      -project "${ROOT_DIR}/Xedit.xcodeproj" \
+      -scheme Xedit \
+      -destination 'platform=macOS' \
+      -resultBundlePath "${XCRESULT}" \
+      -derivedDataPath "${OUT_DIR}/DerivedData" \
+      CODE_SIGNING_ALLOWED=NO \
+      CODE_SIGNING_REQUIRED=NO \
+      CODE_SIGN_IDENTITY="" \
+      "${EXTRA_ARGS[@]}"
 TEST_EXIT=$?
 
 echo "▶ generating report → ${REPORT_MD}, ${REPORT_JSON}"

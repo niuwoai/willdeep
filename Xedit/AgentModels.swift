@@ -301,8 +301,9 @@ nonisolated struct AgentSession: Identifiable, Codable, Equatable {
 /// Capability floor for a some.im managed-routing session. The floor only
 /// ever rises within a session ("只升不降"): once a turn proves it needs
 /// `.high` / `.premium`, later turns cannot be dropped back to a weaker tier
-/// by the lightweight judge — only an explicit user reset / model switch /
-/// new session lowers it. See SOME_IM_MANAGED_ROUTING_DESIGN.md.
+/// by the lightweight judge. The user can still explicitly choose Flash / Pro /
+/// Premium, switch model, or start a new session. See
+/// SOME_IM_MANAGED_ROUTING_DESIGN.md.
 nonisolated enum AgentManagedCapabilityTier: String, Codable, Equatable, Comparable {
     case low
     case high
@@ -325,8 +326,8 @@ nonisolated enum AgentManagedCapabilityTier: String, Codable, Equatable, Compara
 /// `AgentSession` (additively decoded — absent on legacy sessions → nil,
 /// i.e. "not a managed session").
 nonisolated struct AgentManagedRoutingState: Codable, Equatable {
-    /// Lowest capability tier this session may use for the rest of its life
-    /// (until user reset / new session). Starts at `.low`.
+    /// Lowest capability tier this session may use until the user chooses a
+    /// different managed tier, switches model, or starts a new session.
     var minimumTier: AgentManagedCapabilityTier
     /// Last main-call model the router resolved to. Diagnostic only.
     var lastSelectedModel: String?

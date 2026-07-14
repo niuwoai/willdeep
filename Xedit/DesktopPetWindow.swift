@@ -102,10 +102,21 @@ enum DesktopPetAppearance: String, CaseIterable, Identifiable {
     }
 }
 
+struct DesktopPetMessagePreview: Identifiable, Equatable {
+    let sessionID: AgentSession.ID
+    let sessionTitle: String
+    let message: String
+    let updatedAt: Date
+
+    var id: AgentSession.ID { sessionID }
+}
+
 struct DesktopPetPresentation: Equatable {
     let sessionID: AgentSession.ID?
     let sessionTitle: String
     let message: String
+    let messagePreviews: [DesktopPetMessagePreview]
+    let outputSessionCount: Int
     let status: String
     let mood: DesktopPetMood
 
@@ -113,6 +124,8 @@ struct DesktopPetPresentation: Equatable {
         sessionID: nil,
         sessionTitle: L10n.DesktopPet.emptySessionTitle,
         message: L10n.DesktopPet.emptyMessage,
+        messagePreviews: [],
+        outputSessionCount: 0,
         status: L10n.DesktopPet.statusIdle,
         mood: .idle
     )
@@ -127,6 +140,14 @@ enum DesktopPetMessageFormatter {
             .joined(separator: " ")
         guard compact.count > maximumCharacters else { return compact }
         return String(compact.prefix(maximumCharacters)) + "…"
+    }
+}
+
+enum DesktopPetOutputFreshness {
+    nonisolated static let maximumAge: TimeInterval = 60
+
+    nonisolated static func isFresh(updatedAt: Date, now: Date) -> Bool {
+        now.timeIntervalSince(updatedAt) <= maximumAge
     }
 }
 
@@ -145,12 +166,14 @@ final class DesktopPetWindowManager: ObservableObject {
     @Published private(set) var isEnabled: Bool
     @Published private(set) var appearance: DesktopPetAppearance
     @Published private(set) var isDraggingPet = false
+    @Published private(set) var isMessageBubbleCollapsed = false
 
     private weak var appState: AppState?
     private var window: NSPanel?
     private var pollingTimer: Timer?
     private var wasBusy = false
     private var celebrationEndsAt: Date?
+    private var manualJumpEndsAt: Date?
 
     private init() {
         // 默认开启桌面宠物:首次启动即陪伴,用户可随时在右键菜单 /
@@ -187,13 +210,30 @@ final class DesktopPetWindowManager: ObservableObject {
     }
 
     func openCurrentSession() {
-        guard let sessionID = presentation.sessionID else { return }
+        guard let sessionID = presentation.messagePreviews.first?.sessionID ?? presentation.sessionID else { return }
         AgentNotificationResponder.reveal(runtimeID: sessionID)
+    }
+
+    func openSession(_ sessionID: AgentSession.ID) {
+        AgentNotificationResponder.reveal(runtimeID: sessionID)
+    }
+
+    func collapseMessageBubble() {
+        isMessageBubbleCollapsed = true
+    }
+
+    func expandMessageBubble() {
+        isMessageBubbleCollapsed = false
     }
 
     /// 打开设置窗口并跳到「桌面宠物」标签(右键菜单入口)。
     func openSettings() {
         EditorSettingsNavigation.shared.open(.pet, appState: appState)
+    }
+
+    func jumpOnce() {
+        manualJumpEndsAt = Date().addingTimeInterval(0.9)
+        refresh()
     }
 
     func beginDraggingPet() {
@@ -237,74 +277,135 @@ final class DesktopPetWindowManager: ObservableObject {
     private func refresh() {
         guard isEnabled else { return }
         showIfNeeded()
+        let now = Date()
+        let isManualJumping = manualJumpIsActive(at: now)
 
         guard let appState else {
-            presentation = .empty
+            presentation = DesktopPetPresentation(
+                sessionID: nil,
+                sessionTitle: DesktopPetPresentation.empty.sessionTitle,
+                message: DesktopPetPresentation.empty.message,
+                messagePreviews: [],
+                outputSessionCount: 0,
+                status: DesktopPetPresentation.empty.status,
+                mood: isManualJumping ? .jumping : .idle
+            )
             return
         }
 
+        let runtimes = Array(appState.agentRuntimes.values)
         let runtime = appState.activeRuntime
-        let isBusy = runtime?.isResponding == true || runtime?.isAwaitingProviderSlot == true
+        let isBusy = runtimes.contains { $0.isResponding || $0.isAwaitingProviderSlot }
         if wasBusy && !isBusy {
-            celebrationEndsAt = Date().addingTimeInterval(6)
+            celebrationEndsAt = now.addingTimeInterval(6)
         }
         wasBusy = isBusy
 
-        let needsAttention = runtime?.toolCalls.contains { $0.status.isBlockingForUserDecision } == true
-        let isRunningTool = runtime?.toolCalls.contains { $0.status == .running } == true
-        let latestMessage = runtime?.messages.reversed().first(where: Self.isVisibleConversationMessage)
-        let latestContent = latestMessage.map { DesktopPetMessageFormatter.makePreview($0.content) }
-        let hasCelebration = celebrationEndsAt.map { $0 > Date() } ?? false
+        let needsAttention = runtimes.contains { runtime in
+            runtime.toolCalls.contains { $0.status.isBlockingForUserDecision }
+        }
+        let isRunningTool = runtimes.contains { runtime in
+            runtime.toolCalls.contains { $0.status == .running }
+        }
+        let outputPreviews = Self.outputPreviews(from: appState, now: now)
+        let visiblePreviews = Array(outputPreviews.prefix(Self.maximumVisibleOutputPreviews))
+        let latestPreview = visiblePreviews.first
+        let hasCelebration = celebrationEndsAt.map { $0 > now } ?? false
         let isUserTyping = !appState.agentInput.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
 
-        let mood: DesktopPetMood
+        let baseMood: DesktopPetMood
         let status: String
         if isUserTyping {
-            mood = .typing
+            baseMood = .typing
             status = L10n.DesktopPet.statusTyping
         } else if needsAttention {
-            mood = .attention
+            baseMood = .attention
             status = L10n.DesktopPet.statusNeedsAttention
         } else if isBusy, isRunningTool {
-            mood = .walking
+            baseMood = .walking
             status = L10n.DesktopPet.statusWorking
         } else if isBusy {
-            mood = .jumping
+            baseMood = .jumping
             status = L10n.DesktopPet.statusThinking
         } else if hasCelebration {
-            mood = .celebrating
+            baseMood = .celebrating
             status = L10n.DesktopPet.statusComplete
-        } else if latestMessage?.role == .assistant {
-            mood = .spinning
+        } else if latestPreview != nil {
+            baseMood = .spinning
             status = L10n.DesktopPet.statusReady
         } else {
-            mood = .idle
+            baseMood = .idle
             status = L10n.DesktopPet.statusIdle
         }
 
         presentation = DesktopPetPresentation(
-            sessionID: runtime?.id,
-            sessionTitle: runtime?.session.title ?? L10n.DesktopPet.emptySessionTitle,
-            message: latestContent?.isEmpty == false ? latestContent! : L10n.DesktopPet.emptyMessage,
+            sessionID: latestPreview?.sessionID ?? runtime?.id,
+            sessionTitle: latestPreview?.sessionTitle ?? runtime?.session.title ?? L10n.DesktopPet.emptySessionTitle,
+            message: latestPreview?.message ?? L10n.DesktopPet.emptyMessage,
+            messagePreviews: visiblePreviews,
+            outputSessionCount: outputPreviews.count,
             status: status,
-            mood: mood
+            mood: isManualJumping ? .jumping : baseMood
         )
     }
 
-    private static func isVisibleConversationMessage(_ message: AgentMessage) -> Bool {
-        guard !DesktopPetMessageFormatter.makePreview(message.content).isEmpty else { return false }
-        switch message.role {
-        case .user, .assistant:
-            return true
-        default:
-            return false
+    private func manualJumpIsActive(at date: Date) -> Bool {
+        guard let manualJumpEndsAt else { return false }
+        if manualJumpEndsAt > date { return true }
+        self.manualJumpEndsAt = nil
+        return false
+    }
+
+    private static let maximumVisibleOutputPreviews = 3
+
+    private static func outputPreviews(from appState: AppState, now: Date) -> [DesktopPetMessagePreview] {
+        var previewsByID: [AgentSession.ID: DesktopPetMessagePreview] = [:]
+
+        for runtime in appState.agentRuntimes.values {
+            if let preview = outputPreview(session: runtime.session, messages: runtime.messages) {
+                previewsByID[runtime.id] = preview
+            }
         }
+
+        for session in appState.agentSessions where previewsByID[session.id] == nil {
+            if let preview = outputPreview(session: session, messages: session.messages) {
+                previewsByID[session.id] = preview
+            }
+        }
+
+        return previewsByID.values.filter { preview in
+            DesktopPetOutputFreshness.isFresh(updatedAt: preview.updatedAt, now: now)
+        }.sorted { lhs, rhs in
+            lhs.updatedAt > rhs.updatedAt
+        }
+    }
+
+    private static func outputPreview(
+        session: AgentSession,
+        messages: [AgentMessage]
+    ) -> DesktopPetMessagePreview? {
+        guard session.archivedAt == nil,
+              let latestOutput = messages.reversed().first(where: isVisibleOutputMessage) else {
+            return nil
+        }
+        let message = DesktopPetMessageFormatter.makePreview(latestOutput.content)
+        guard !message.isEmpty else { return nil }
+        return DesktopPetMessagePreview(
+            sessionID: session.id,
+            sessionTitle: session.title,
+            message: message,
+            updatedAt: latestOutput.createdAt
+        )
+    }
+
+    private static func isVisibleOutputMessage(_ message: AgentMessage) -> Bool {
+        message.role == .assistant && !DesktopPetMessageFormatter.makePreview(message.content).isEmpty
     }
 
     private func showIfNeeded() {
         guard window == nil else { return }
 
-        let size = NSSize(width: 360, height: 190)
+        let size = NSSize(width: 360, height: 260)
         let host = NSHostingView(rootView: DesktopPetOverlayView(manager: self))
         host.frame = NSRect(origin: .zero, size: size)
 
@@ -408,16 +509,17 @@ private struct DesktopPetOverlayView: View {
             )
 
             HStack(alignment: .bottom, spacing: -4) {
-                Button(action: manager.openCurrentSession) {
+                if manager.isMessageBubbleCollapsed {
+                    collapsedMessageIndicator
+                        .offset(x: 4, y: -82)
+                } else {
                     messageBubble
                 }
-                .buttonStyle(.plain)
-                .disabled(manager.presentation.sessionID == nil)
 
                 petScene(animation: animation)
                     .accessibilityLabel(L10n.DesktopPet.accessibilityLabel)
             }
-            .frame(width: 360, height: 190, alignment: .bottomTrailing)
+            .frame(width: 360, height: 260, alignment: .bottomTrailing)
             .contentShape(Rectangle())
             .gesture(dragGesture)
             .contextMenu {
@@ -441,18 +543,40 @@ private struct DesktopPetOverlayView: View {
                     .font(.system(size: 11, weight: .semibold))
                     .foregroundStyle(.secondary)
                 Spacer(minLength: 0)
+                Button(action: manager.collapseMessageBubble) {
+                    Image(systemName: "chevron.right.circle.fill")
+                        .font(.system(size: 14, weight: .semibold))
+                        .symbolRenderingMode(.hierarchical)
+                        .foregroundStyle(.secondary)
+                }
+                .buttonStyle(.plain)
+                .help(L10n.DesktopPet.collapseMessages)
+                .accessibilityLabel(L10n.DesktopPet.collapseMessages)
             }
 
-            Text(manager.presentation.message)
-                .font(.system(size: 13, weight: .medium))
-                .foregroundStyle(.primary)
-                .lineLimit(3)
-                .multilineTextAlignment(.leading)
-
-            Text(manager.presentation.sessionTitle)
-                .font(.system(size: 10, weight: .medium))
-                .foregroundStyle(.secondary)
-                .lineLimit(1)
+            if manager.presentation.messagePreviews.isEmpty {
+                Button(action: manager.openCurrentSession) {
+                    messageRow(
+                        title: manager.presentation.sessionTitle,
+                        message: manager.presentation.message
+                    )
+                }
+                .buttonStyle(.plain)
+                .disabled(manager.presentation.sessionID == nil)
+            } else {
+                ForEach(Array(manager.presentation.messagePreviews.enumerated()), id: \.element.id) { index, preview in
+                    if index > 0 {
+                        Divider()
+                            .opacity(0.45)
+                    }
+                    Button {
+                        manager.openSession(preview.sessionID)
+                    } label: {
+                        messageRow(title: preview.sessionTitle, message: preview.message)
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
         }
         .padding(.horizontal, 13)
         .padding(.vertical, 11)
@@ -470,6 +594,49 @@ private struct DesktopPetOverlayView: View {
         .shadow(color: .black.opacity(0.18), radius: 18, y: 8)
     }
 
+    private var collapsedMessageIndicator: some View {
+        Button(action: manager.expandMessageBubble) {
+            ZStack {
+                Circle()
+                    .fill(.regularMaterial)
+                    .overlay {
+                        Circle()
+                            .strokeBorder(.white.opacity(0.32), lineWidth: 1)
+                    }
+                    .shadow(color: .black.opacity(0.16), radius: 12, y: 5)
+
+                Text("\(manager.presentation.outputSessionCount)")
+                    .font(.system(size: 15, weight: .bold, design: .rounded))
+                    .monospacedDigit()
+                    .foregroundStyle(.primary)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.72)
+            }
+            .frame(width: 38, height: 38)
+            .contentShape(Circle())
+        }
+        .buttonStyle(.plain)
+        .help(L10n.DesktopPet.expandMessages)
+        .accessibilityLabel(L10n.DesktopPet.expandMessages)
+    }
+
+    private func messageRow(title: String, message: String) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(message)
+                .font(.system(size: 12, weight: .medium))
+                .foregroundStyle(.primary)
+                .lineLimit(2)
+                .multilineTextAlignment(.leading)
+
+            Text(title)
+                .font(.system(size: 10, weight: .medium))
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .contentShape(Rectangle())
+    }
+
     private func petScene(animation: DesktopPetAnimationValues) -> some View {
         ZStack(alignment: .bottom) {
             Image(manager.appearance.assetName)
@@ -479,45 +646,23 @@ private struct DesktopPetOverlayView: View {
                 .frame(width: 132, height: 132)
                 .scaleEffect(x: animation.facesRight ? 1 : -1, y: animation.scale)
                 .rotationEffect(.degrees(animation.rotation))
+                .rotation3DEffect(
+                    .degrees(animation.yawRotation),
+                    axis: (x: 0, y: 1, z: 0),
+                    perspective: 0.35
+                )
                 .offset(
                     x: animation.horizontalOffset,
-                    y: animation.verticalOffset - animation.typingPetLift
+                    y: animation.verticalOffset
                 )
                 .shadow(color: .black.opacity(0.24), radius: 7, y: 5)
-
-            if animation.showsLaptop {
-                typingLaptop(animation: animation)
-                typingHands(animation: animation)
-            }
         }
         .frame(width: 140, height: 148, alignment: .bottom)
         .contentShape(Rectangle())
-    }
-
-    private func typingLaptop(animation: DesktopPetAnimationValues) -> some View {
-        Image("DesktopPetLaptop")
-            .resizable()
-            .interpolation(.none)
-            .scaledToFit()
-            .frame(width: 100, height: 94)
-            .saturation(0.88 + animation.typingPulse * 0.12)
-            .brightness(animation.typingPulse * 0.04)
-            .offset(x: -3, y: 3)
-            .shadow(color: .cyan.opacity(0.22 + animation.typingPulse * 0.18), radius: 7, y: 2)
-    }
-
-    private func typingHands(animation: DesktopPetAnimationValues) -> some View {
-        HStack(spacing: 33) {
-            Capsule()
-                .fill(.white.opacity(0.72))
-                .frame(width: 18, height: 8)
-                .offset(y: animation.typingHandOffset)
-            Capsule()
-                .fill(.white.opacity(0.72))
-                .frame(width: 18, height: 8)
-                .offset(y: -animation.typingHandOffset)
-        }
-        .offset(x: -3, y: -26)
+        .simultaneousGesture(
+            TapGesture(count: 2)
+                .onEnded { manager.jumpOnce() }
+        )
     }
 
     private var statusColor: Color {
@@ -535,15 +680,15 @@ private struct DesktopPetOverlayView: View {
 }
 
 struct DesktopPetAnimationValues {
+    private static let walkingSwayRate = 0.85
+    private static let walkingStepRate = 2.2
+
     let horizontalOffset: CGFloat
     let verticalOffset: CGFloat
     let rotation: Double
+    let yawRotation: Double
     let scale: CGFloat
     let facesRight: Bool
-    let showsLaptop: Bool
-    let typingHandOffset: CGFloat
-    let typingPetLift: CGFloat
-    let typingPulse: CGFloat
 
     init(mood: DesktopPetMood, date: Date) {
         let t = date.timeIntervalSinceReferenceDate
@@ -552,73 +697,52 @@ struct DesktopPetAnimationValues {
             horizontalOffset = 0
             verticalOffset = CGFloat(sin(t * 2.1)) * 2
             rotation = CGFloat(sin(t * 1.4)) * 1.5
+            yawRotation = 0
             scale = 1
             facesRight = true
-            showsLaptop = false
-            typingHandOffset = 0
-            typingPetLift = 0
-            typingPulse = 0
         case .walking:
-            horizontalOffset = CGFloat(sin(t * 2.0)) * 11
-            verticalOffset = CGFloat(abs(sin(t * 5.6))) * 4
-            rotation = CGFloat(sin(t * 5.6)) * 3
+            horizontalOffset = CGFloat(sin(t * Self.walkingSwayRate)) * 11
+            verticalOffset = CGFloat(abs(sin(t * Self.walkingStepRate))) * 4
+            rotation = CGFloat(sin(t * Self.walkingStepRate)) * 3
+            yawRotation = 0
             scale = 1
-            facesRight = sin(t * 2.0) >= 0
-            showsLaptop = false
-            typingHandOffset = 0
-            typingPetLift = 0
-            typingPulse = 0
+            facesRight = sin(t * Self.walkingSwayRate) >= 0
         case .typing:
             let keystroke = CGFloat(sin(t * 11.5))
-            horizontalOffset = keystroke * 1.5
-            verticalOffset = abs(keystroke) * 1.8
+            horizontalOffset = keystroke * 1.2
+            verticalOffset = abs(keystroke) * 2
             rotation = keystroke * 1.2
+            yawRotation = 0
             scale = 1
             facesRight = true
-            showsLaptop = true
-            typingHandOffset = keystroke * 4
-            typingPetLift = 16
-            typingPulse = (keystroke + 1) / 2
         case .jumping:
             horizontalOffset = CGFloat(sin(t * 1.3)) * 4
             verticalOffset = CGFloat(abs(sin(t * 3.5))) * 18
             rotation = CGFloat(sin(t * 3.5)) * 7
+            yawRotation = 0
             scale = 1
             facesRight = true
-            showsLaptop = false
-            typingHandOffset = 0
-            typingPetLift = 0
-            typingPulse = 0
         case .spinning:
             horizontalOffset = 0
             verticalOffset = CGFloat(sin(t * 2.4)) * 3
-            rotation = (t * 135).truncatingRemainder(dividingBy: 360)
+            rotation = 0
+            yawRotation = (t * 135).truncatingRemainder(dividingBy: 360)
             scale = 0.96 + CGFloat(sin(t * 4.8)) * 0.04
             facesRight = true
-            showsLaptop = false
-            typingHandOffset = 0
-            typingPetLift = 0
-            typingPulse = 0
         case .attention:
             horizontalOffset = CGFloat(sin(t * 12)) * 5
             verticalOffset = 0
             rotation = CGFloat(sin(t * 12)) * 4
+            yawRotation = 0
             scale = 1
             facesRight = true
-            showsLaptop = false
-            typingHandOffset = 0
-            typingPetLift = 0
-            typingPulse = 0
         case .celebrating:
             horizontalOffset = CGFloat(sin(t * 7)) * 9
             verticalOffset = CGFloat(abs(sin(t * 3.8))) * 14
             rotation = CGFloat(sin(t * 7)) * 10
+            yawRotation = 0
             scale = 1.04
             facesRight = true
-            showsLaptop = false
-            typingHandOffset = 0
-            typingPetLift = 0
-            typingPulse = 0
         }
     }
 }

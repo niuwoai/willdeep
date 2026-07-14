@@ -2,6 +2,7 @@
 DerivedData/
 build/
 .codex-build/
+.codex/worktrees/
 Xedit/Generated/
 *.profraw
 

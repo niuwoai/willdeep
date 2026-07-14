@@ -34,12 +34,21 @@ enum AgentArtifactFileActions {
         NSWorkspace.shared.open(fileURL)
     }
 
-    static func revealInFinder(_ fileURL: URL) {
-        guard FileManager.default.fileExists(atPath: fileURL.path) else {
+    static func openInFinder(_ fileURL: URL) {
+        var isDirectory: ObjCBool = false
+        guard FileManager.default.fileExists(atPath: fileURL.path, isDirectory: &isDirectory) else {
             NSSound.beep()
             return
         }
-        NSWorkspace.shared.activateFileViewerSelecting([fileURL])
+        if isDirectory.boolValue {
+            NSWorkspace.shared.open(fileURL)
+        } else {
+            NSWorkspace.shared.activateFileViewerSelecting([fileURL])
+        }
+    }
+
+    static func revealInFinder(_ fileURL: URL) {
+        openInFinder(fileURL)
     }
 
     static func open(_ fileURL: URL, with applicationURL: URL) {

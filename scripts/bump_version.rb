@@ -13,6 +13,7 @@ plain_files = [
   "Xedit.xcodeproj/project.pbxproj",
   "willdeep-agent/internal/agent/version.go",
   "Help/WillDeep.help/Contents/Info.plist",
+  "ComputerUseHelper/Info.plist",
   "docs/MOBILE_GATEWAY_REQUIREMENTS.md",
   "docs/AGENT_HARNESS_IMPROVEMENT_PRIORITIES.md",
 ]

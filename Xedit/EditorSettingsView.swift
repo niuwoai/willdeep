@@ -65,47 +65,77 @@ struct EditorSettingsView: View {
     @State private var planSilentlyApprovedForWorkspace: Bool = false
 
     var body: some View {
-        TabView(selection: groupSelection) {
-            ForEach(SettingsGroup.allCases) { group in
-                settingsGroupContainer(group)
-                    .tag(group)
-                    .tabItem {
-                        Label(group.title, systemImage: group.icon)
-                    }
-            }
+        HStack(spacing: 0) {
+            settingsSidebar
+            Divider()
+            settingsContent
         }
-        .padding(20)
         .frame(
-            minWidth: 560,
-            idealWidth: 760,
+            minWidth: 760,
+            idealWidth: 920,
             maxWidth: .infinity,
-            minHeight: 520,
-            idealHeight: 680,
+            minHeight: 560,
+            idealHeight: 700,
             maxHeight: .infinity
         )
         .background(SettingsKeyboardShortcutHandler())
         .background(SettingsWindowResizableEnforcer())
+        .settingsFocusDisabled()
         .onAppear {
             refreshCLIState()
             refreshLocalAgentDiscovery()
         }
     }
 
-    // MARK: Grouped tab navigation
-
-    /// Drives the top-level TabView. Reads the group of whatever pane is
-    /// selected; switching groups jumps to that group's first pane. Keeps the
-    /// 16 underlying `EditorSettingsTab` cases (and their deep-links) intact.
-    private var groupSelection: Binding<SettingsGroup> {
-        Binding(
-            get: { settingsNavigation.selectedTab.group },
-            set: { newGroup in
-                if settingsNavigation.selectedTab.group != newGroup {
-                    settingsNavigation.selectedTab = newGroup.tabs.first ?? settingsNavigation.selectedTab
+    private var settingsSidebar: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            ForEach(SettingsGroup.allCases) { group in
+                Button {
+                    settingsNavigation.selectedTab = group.tabs.first ?? settingsNavigation.selectedTab
+                } label: {
+                    let isSelected = settingsNavigation.selectedTab.group == group
+                    Label(group.title, systemImage: group.icon)
+                        .font(.system(size: 13, weight: isSelected ? .semibold : .regular))
+                        .foregroundStyle(isSelected ? Color.primary : Color.secondary)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 8)
+                        .background {
+                            if isSelected {
+                                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                                    .fill(Color.accentColor.opacity(0.16))
+                            }
+                        }
                 }
+                .buttonStyle(.plain)
+                .settingsFocusDisabled()
+                .help(group.title)
             }
-        )
+
+            Spacer(minLength: 0)
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 16)
+        .frame(width: 190)
+        .frame(maxHeight: .infinity, alignment: .topLeading)
+        .background(.regularMaterial)
+        .settingsFocusDisabled()
     }
+
+    private var settingsContent: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            Text(settingsNavigation.selectedTab.group.title)
+                .font(.title3.weight(.semibold))
+
+            settingsGroupContainer(settingsNavigation.selectedTab.group)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+        }
+        .padding(20)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        .settingsFocusDisabled()
+    }
+
+    // MARK: Sidebar tab navigation
 
     @ViewBuilder
     private func settingsGroupContainer(_ group: SettingsGroup) -> some View {
@@ -118,10 +148,13 @@ struct EditorSettingsView: View {
                 }
                 .pickerStyle(.segmented)
                 .labelsHidden()
+                .settingsFocusDisabled()
             }
             settingsPage(for: resolvedTab(in: group))
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .settingsFocusDisabled()
         }
+        .settingsFocusDisabled()
     }
 
     /// Second-level segmented-picker binding, scoped to one group.

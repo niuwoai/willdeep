@@ -32,26 +32,45 @@ struct DesktopPetTests {
     }
 
     @Test
-    func typingAnimationShowsLaptopAndKeystrokes() {
+    func typingAnimationKeepsPetOnlyPose() {
         let animation = DesktopPetAnimationValues(
             mood: .typing,
             date: Date(timeIntervalSinceReferenceDate: 123)
         )
 
-        #expect(animation.showsLaptop)
-        #expect(animation.typingPetLift > 0)
-        #expect(animation.typingPulse >= 0)
-        #expect(animation.typingPulse <= 1)
+        #expect(animation.scale == 1)
+        #expect(animation.facesRight)
+        #expect(animation.yawRotation == 0)
     }
 
     @Test
-    func walkingAnimationDoesNotShowLaptop() {
+    func walkingAnimationKeepsPetOnlyPose() {
         let animation = DesktopPetAnimationValues(
             mood: .walking,
             date: Date(timeIntervalSinceReferenceDate: 123)
         )
 
-        #expect(!animation.showsLaptop)
-        #expect(animation.typingPetLift == 0)
+        #expect(animation.scale == 1)
+        #expect(animation.yawRotation == 0)
+    }
+
+    @Test
+    func spinningAnimationTurnsAroundVerticalAxis() {
+        let animation = DesktopPetAnimationValues(
+            mood: .spinning,
+            date: Date(timeIntervalSinceReferenceDate: 123)
+        )
+
+        #expect(animation.rotation == 0)
+        #expect(animation.yawRotation != 0)
+    }
+
+    @Test
+    func outputFreshnessKeepsOnlyRecentAssistantOutput() {
+        let now = Date(timeIntervalSinceReferenceDate: 1_000)
+
+        #expect(DesktopPetOutputFreshness.isFresh(updatedAt: now.addingTimeInterval(-59), now: now))
+        #expect(DesktopPetOutputFreshness.isFresh(updatedAt: now.addingTimeInterval(-60), now: now))
+        #expect(!DesktopPetOutputFreshness.isFresh(updatedAt: now.addingTimeInterval(-61), now: now))
     }
 }

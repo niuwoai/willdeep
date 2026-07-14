@@ -28,6 +28,46 @@ private struct SidebarWorkspaceGroup: Identifiable {
     let sessions: [AgentSession]
 }
 
+enum AgentSidebarSessionVisibility {
+    static func visibleSessions(
+        from sessions: [AgentSession],
+        activeID: AgentSession.ID?
+    ) -> [AgentSession] {
+        var workspaceKeysWithHistory: Set<String> = []
+        for session in sessions where hasUserMessage(session) {
+            workspaceKeysWithHistory.insert(session.workspaceSidebarGroupKey)
+        }
+
+        var fallbackPlaceholderIDs: Set<AgentSession.ID> = []
+        var placeholderWorkspaceKeys: Set<String> = []
+        if let activeID,
+           let activeSession = sessions.first(where: { $0.id == activeID }),
+           !hasUserMessage(activeSession) {
+            placeholderWorkspaceKeys.insert(activeSession.workspaceSidebarGroupKey)
+        }
+        for session in sessions {
+            if session.id == activeID || hasUserMessage(session) { continue }
+            let key = session.workspaceSidebarGroupKey
+            if workspaceKeysWithHistory.contains(key) { continue }
+            guard placeholderWorkspaceKeys.insert(key).inserted else { continue }
+            fallbackPlaceholderIDs.insert(session.id)
+        }
+
+        return sessions.filter { session in
+            session.id == activeID
+                || hasUserMessage(session)
+                || fallbackPlaceholderIDs.contains(session.id)
+        }
+    }
+
+    private static func hasUserMessage(_ session: AgentSession) -> Bool {
+        if AgentSessionStore.isMetadataOnly(session.id) {
+            return AgentSessionStore.metadataOnlySessionHasUserMessage(session.id)
+        }
+        return session.messages.contains { $0.role == .user }
+    }
+}
+
 struct AgentSessionsSidebar: View {
     @EnvironmentObject var appState: AppState
     @State private var expandedWorkspaces = AgentSidebarWorkspaceStateStore.load(.expandedWorkspaces)
@@ -226,7 +266,10 @@ struct AgentSessionsSidebar: View {
     }
 
     private var sidebarHeader: some View {
-        HStack {
+        HStack(spacing: 7) {
+            Image(systemName: "bubble.left.and.bubble.right.fill")
+                .font(.system(size: 10, weight: .semibold))
+                .foregroundStyle(appState.editorSettings.interfaceSkin.palette.accent)
             Text(L10n.Sidebar.chatsHeader)
                 .font(.system(size: 12, weight: .semibold))
                 .foregroundStyle(.secondary)
@@ -235,6 +278,7 @@ struct AgentSessionsSidebar: View {
         }
         .padding(.horizontal, 14)
         .frame(height: 28)
+        .background(appState.editorSettings.interfaceSkin.palette.panelFill.opacity(0.16))
     }
 
     /// One-line status pill showing which library entry is currently
@@ -744,15 +788,13 @@ struct AgentSessionsSidebar: View {
         // message just clutter the sidebar with a wall of identical
         // placeholders (see screenshot). The active session is always kept
         // visible even when empty, because it's the one the user is about
-        // to type into; hiding it would make the highlight disappear.
-        let activeID = appState.activeAgentSessionID
-        let visibleSessions = appState.agentSessions.filter { session in
-            if session.id == activeID { return true }
-            if AgentSessionStore.isMetadataOnly(session.id) {
-                return AgentSessionStore.metadataOnlySessionHasUserMessage(session.id)
-            }
-            return session.messages.contains(where: { $0.role == .user })
-        }
+        // to type into; hiding it would make the highlight disappear. If a
+        // workspace has no real chat yet, keep one empty placeholder so an
+        // added project does not vanish the moment the next project is added.
+        let visibleSessions = AgentSidebarSessionVisibility.visibleSessions(
+            from: appState.agentSessions,
+            activeID: appState.activeAgentSessionID
+        )
         let groups = Dictionary(grouping: visibleSessions) { session in
             session.workspaceSidebarGroupKey
         }

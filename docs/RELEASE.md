@@ -1,4 +1,4 @@
-# VeilWriter 发布手册（Developer ID + 公证 + DMG）
+# WillDeep 发布手册（Developer ID + 公证 + DMG）
 
 > 一句话：用 `scripts/release.sh` 一键打包并公证；首次使用前需要完成两步前置准备（证书 + 公证密码）。
 
@@ -33,7 +33,7 @@ security find-identity -v -p codesigning
 2. 用**绑定到 Apple Developer 账户的同一个 Apple ID** 登录。
 3. 在「登录与安全」（Sign-In and Security）面板里，找到「**专用密码**」（App-Specific Passwords）—— 如果你没找到这个入口，意味着这个 Apple ID 还没开两步验证（2FA），先开 2FA。
 4. 点「**生成专用密码**」(Generate an app-specific password)。
-5. 给它取个标签，例如 `notarytool-veilwriter`。
+5. 给它取个标签，例如 `notarytool-willdeep`。
 6. 屏幕会显示一串形如 `xxxx-xxxx-xxxx-xxxx` 的密码 —— **现在抄下来**，关掉之后再也看不到原文。
 
 ### 3. 把公证密码存进 Keychain
@@ -41,20 +41,20 @@ security find-identity -v -p codesigning
 不要把密码直接放在脚本里。`notarytool` 提供了 `store-credentials` 子命令，把上面那串密码加密存到 macOS Keychain，以后脚本只引用 profile 名：
 
 ```bash
-xcrun notarytool store-credentials veilwriter-notary \
+xcrun notarytool store-credentials willdeep-notary \
   --apple-id "你的 Apple ID 邮箱" \
   --team-id "ZH2S7D6PL6" \
   --password "刚才生成的 xxxx-xxxx-xxxx-xxxx"
 ```
 
-- `veilwriter-notary` 是 profile 名 —— 必须和 `scripts/release.sh` 里 `NOTARY_PROFILE` 的值一致。
-- `--team-id` 是你的 Developer Team ID（VeilWriter 是 `ZH2S7D6PL6`）。
+- `willdeep-notary` 是 profile 名 —— 必须和 `scripts/release.sh` 里 `NOTARY_PROFILE` 的值一致。
+- `--team-id` 是你的 Developer Team ID（WillDeep 是 `ZH2S7D6PL6`）。
 - 成功会输出 `This process stores your credentials securely in the Keychain.`
 
 验证一下：
 
 ```bash
-xcrun notarytool history --keychain-profile veilwriter-notary
+xcrun notarytool history --keychain-profile willdeep-notary
 ```
 
 能列出历史（哪怕是空的）就说明配置好了。
@@ -79,7 +79,7 @@ scripts/release.sh
 scripts/release.sh --skip-notarize
 ```
 
-产物路径：`build/release/VeilWriter-<版本号>.dmg`。
+产物路径：`build/release/WillDeep-<版本号>.dmg`。
 
 发布前的检查清单：
 
@@ -109,7 +109,7 @@ scripts/release.sh --skip-notarize
 ### 公证失败：`Invalid` / `code object is not signed at all`
 - `ENABLE_HARDENED_RUNTIME` 必须是 YES（项目里已设）。
 - 第三方动态库（如果将来引入）必须每个都签名 + hardened runtime。
-- 排查：`xcrun notarytool log <submission-id> --keychain-profile veilwriter-notary` 拿到 JSON 报告，里面会指出具体哪个二进制有问题。
+- 排查：`xcrun notarytool log <submission-id> --keychain-profile willdeep-notary` 拿到 JSON 报告，里面会指出具体哪个二进制有问题。
 
 ### `errSecInternalComponent` / 签名时报 Keychain 错
 - 多半是钥匙串解锁状态丢了。终端执行 `security unlock-keychain ~/Library/Keychains/login.keychain-db` 再重跑。
@@ -117,7 +117,7 @@ scripts/release.sh --skip-notarize
 
 ### `notarytool` 一直 `In Progress`
 - 现在偶尔会卡，但极少超过 30 分钟。脚本会一直等。
-- 真要提前看状态：`xcrun notarytool history --keychain-profile veilwriter-notary`。
+- 真要提前看状态：`xcrun notarytool history --keychain-profile willdeep-notary`。
 
 ### App-Specific Password 找不到入口
 - 必须开 2FA。开了之后入口才会出现在 https://account.apple.com → 登录与安全。
@@ -154,7 +154,7 @@ build/release-history/<版本号>/
 scripts/release.sh --list-backups
 
 # 直接装上一个旧版本（开发机）
-open build/release-history/1.54.0/VeilWriter-1.54.0.dmg
+open build/release-history/1.54.0/WillDeep-1.54.0.dmg
 ```
 
 线上分发的真正 source of truth 仍然是 **GitHub Releases**。本地这份只是给开发机一份"还没 push 上去就先回滚"的兜底；正式回滚动作要把旧 dmg 重新放回下载页。

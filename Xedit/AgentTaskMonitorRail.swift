@@ -160,11 +160,11 @@ struct AgentTaskMonitorRail: View {
                     ForEach(artifacts) { artifact in
                         AgentRailFileButton(
                             title: artifact.fileName,
-                            subtitle: artifact.displayPath,
+                            subtitle: artifact.subtitle,
                             systemImage: artifact.systemImage,
                             tint: artifact.tint
                         ) {
-                            appState.openAgentReferencedFile(artifact.url.path)
+                            AgentArtifactFileActions.openInFinder(artifact.url)
                         }
                     }
                 }
@@ -539,13 +539,13 @@ struct AgentTaskMonitorRail: View {
             for relativePath in runtime.agentArtifactPaths.sorted() {
                 let url = workspaceURL.appendingPathComponent(relativePath).standardizedFileURL
                 var isDirectory: ObjCBool = false
-                guard FileManager.default.fileExists(atPath: url.path, isDirectory: &isDirectory),
-                      !isDirectory.boolValue else {
+                guard FileManager.default.fileExists(atPath: url.path, isDirectory: &isDirectory) else {
                     continue
                 }
                 artifactsByPath[url.path] = AgentRailArtifact(
                     url: url,
-                    displayPath: relativePath
+                    displayPath: relativePath,
+                    isDirectory: isDirectory.boolValue
                 )
             }
         }
@@ -555,14 +555,16 @@ struct AgentTaskMonitorRail: View {
             .sorted { $0.updatedAt > $1.updatedAt }
         for artifact in mediaTasks.flatMap(\.artifacts) {
             let url = URL(fileURLWithPath: artifact.filePath).standardizedFileURL
-            guard FileManager.default.fileExists(atPath: url.path) else { continue }
+            var isDirectory: ObjCBool = false
+            guard FileManager.default.fileExists(atPath: url.path, isDirectory: &isDirectory) else { continue }
             artifactsByPath[url.path] = AgentRailArtifact(
                 url: url,
-                displayPath: artifact.filePath
+                displayPath: artifact.filePath,
+                isDirectory: isDirectory.boolValue
             )
         }
 
-        return artifactsByPath.values.sorted { lhs, rhs in
+        return AgentRailArtifact.collapsedForDisplay(Array(artifactsByPath.values)).sorted { lhs, rhs in
             lhs.displayPath.localizedStandardCompare(rhs.displayPath) == .orderedAscending
         }
     }
@@ -752,14 +754,25 @@ private struct AgentRailDirectoryGroup: Identifiable {
     var preview: [String]
 }
 
-private struct AgentRailArtifact: Identifiable {
+struct AgentRailArtifact: Identifiable {
     let url: URL
     let displayPath: String
+    let isDirectory: Bool
+    var itemCount: Int = 1
 
     var id: String { url.path }
     var fileName: String { url.lastPathComponent }
+    var subtitle: String {
+        if isDirectory, itemCount > 1 {
+            return "\(displayPath) · \(itemCount) 个产物"
+        }
+        return displayPath
+    }
 
     var systemImage: String {
+        if isDirectory {
+            return "folder"
+        }
         switch url.pathExtension.lowercased() {
         case "png", "jpg", "jpeg", "gif", "webp", "heic", "svg":
             return "photo"
@@ -775,6 +788,9 @@ private struct AgentRailArtifact: Identifiable {
     }
 
     var tint: Color {
+        if isDirectory {
+            return .accentColor
+        }
         switch url.pathExtension.lowercased() {
         case "png", "jpg", "jpeg", "gif", "webp", "heic", "svg":
             return .blue
@@ -785,6 +801,82 @@ private struct AgentRailArtifact: Identifiable {
         default:
             return .accentColor
         }
+    }
+
+    static func collapsedForDisplay(_ artifacts: [AgentRailArtifact]) -> [AgentRailArtifact] {
+        let directoryArtifacts = artifacts.filter { $0.isDirectory }
+        let visibleArtifacts = artifacts.filter { artifact in
+            guard !artifact.isDirectory else { return true }
+            return !directoryArtifacts.contains { directory in
+                artifact.url.path.hasPrefix(directory.childPathPrefix)
+            }
+        }
+        let grouped = Dictionary(grouping: visibleArtifacts) { artifact in
+            artifact.directoryCollapseKey ?? "file:\(artifact.url.path)"
+        }
+        return grouped.values.compactMap { items in
+            guard items.count > 1 else { return items.first }
+            if let directory = items.first(where: \.isDirectory) {
+                var collapsed = directory
+                collapsed.itemCount = items.count
+                return collapsed
+            }
+            guard var collapsed = items.first?.directorySummaryArtifact else {
+                return items.sorted { lhs, rhs in
+                    lhs.displayPath.localizedStandardCompare(rhs.displayPath) == .orderedAscending
+                }.first
+            }
+            collapsed.itemCount = items.count
+            return collapsed
+        }
+    }
+
+    private var directoryCollapseKey: String? {
+        if isDirectory {
+            return displayPath.hasPrefix("/") ? "abs:\(url.path)" : "rel:\(displayPath)"
+        }
+        if displayPath.hasPrefix("/") {
+            return "abs:\(url.deletingLastPathComponent().path)"
+        }
+        let components = displayPath.split(separator: "/").map(String.init)
+        guard components.count > 1 else { return nil }
+        return "rel:\(components[0])"
+    }
+
+    private var directorySummaryArtifact: AgentRailArtifact? {
+        if isDirectory {
+            return self
+        }
+        if displayPath.hasPrefix("/") {
+            let directoryURL = url.deletingLastPathComponent().standardizedFileURL
+            return AgentRailArtifact(
+                url: directoryURL,
+                displayPath: directoryURL.path,
+                isDirectory: true
+            )
+        }
+        let components = displayPath.split(separator: "/").map(String.init)
+        guard components.count > 1 else { return nil }
+        let directoryName = components[0]
+        return AgentRailArtifact(
+            url: url.deletingLastPathComponents(components.count - 1).standardizedFileURL,
+            displayPath: directoryName,
+            isDirectory: true
+        )
+    }
+
+    private var childPathPrefix: String {
+        url.path.hasSuffix("/") ? url.path : url.path + "/"
+    }
+}
+
+private extension URL {
+    func deletingLastPathComponents(_ count: Int) -> URL {
+        var result = self
+        for _ in 0..<max(0, count) {
+            result.deleteLastPathComponent()
+        }
+        return result
     }
 }
 
@@ -1042,17 +1134,21 @@ private struct AgentRailJobRow: View {
 }
 
 private struct AgentRailSection<Content: View>: View {
+    @EnvironmentObject var appState: AppState
     let title: String
     let systemImage: String
     @ViewBuilder var content: Content
 
     var body: some View {
+        let palette = appState.editorSettings.interfaceSkin.palette
         VStack(alignment: .leading, spacing: 10) {
             HStack(spacing: 7) {
                 Image(systemName: systemImage)
                     .font(.system(size: 12, weight: .semibold))
-                    .foregroundStyle(.secondary)
-                    .frame(width: 16)
+                    .foregroundStyle(palette.accent)
+                    .frame(width: 22, height: 22)
+                    .background(palette.accent.opacity(0.10))
+                    .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
                 Text(title)
                     .font(.system(size: 13, weight: .semibold))
                     .foregroundStyle(.primary)
@@ -1060,7 +1156,14 @@ private struct AgentRailSection<Content: View>: View {
             }
             content
         }
-        .padding(.bottom, 2)
+        .padding(11)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(palette.controlFill.opacity(0.38))
+        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .stroke(palette.hairline.opacity(0.7), lineWidth: 1)
+        )
     }
 }
 

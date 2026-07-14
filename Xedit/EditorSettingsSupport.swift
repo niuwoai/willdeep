@@ -43,6 +43,11 @@ extension View {
     ) -> some View {
         modifier(CompatibleChangeModifier(value: value, action: action))
     }
+
+    func settingsFocusDisabled() -> some View {
+        focusable(false)
+            .focusEffectDisabledCompat()
+    }
 }
 
 private struct CompatibleChangeModifier<Value: Equatable>: ViewModifier {
@@ -137,6 +142,7 @@ extension EditorSettingsTab {
 /// groups with more than one pane render a second-level segmented picker.
 enum SettingsGroup: Hashable, CaseIterable, Identifiable {
     case editor
+    case pet
     case ai
     case someIM
     case mobileGateway
@@ -144,7 +150,6 @@ enum SettingsGroup: Hashable, CaseIterable, Identifiable {
     case integrations
     case terminal
     case voice
-    case pet
 
     var id: Self { self }
 
@@ -153,6 +158,7 @@ enum SettingsGroup: Hashable, CaseIterable, Identifiable {
     var tabs: [EditorSettingsTab] {
         switch self {
         case .editor: return [.typography, .appearance, .workspace]
+        case .pet: return [.pet]
         case .ai: return [.agent, .memory, .rules, .skills, .mcp, .tools]
         case .someIM: return [.someIM]
         case .mobileGateway: return [.mobileGateway]
@@ -160,37 +166,34 @@ enum SettingsGroup: Hashable, CaseIterable, Identifiable {
         case .integrations: return [.replicate, .connectors]
         case .terminal: return [.terminal]
         case .voice: return [.voice]
-        case .pet: return [.pet]
         }
     }
 
     var title: String {
         switch self {
         case .editor: return String(localized: "settings.group.editor", defaultValue: "Editor")
+        case .pet: return L10n.DesktopPet.settingsTabTitle
         case .ai: return String(localized: "settings.group.ai", defaultValue: "AI Agents")
         case .someIM: return L10n.Settings.tabSomeIM
         case .mobileGateway: return L10n.Settings.tabMobileGateway
         case .runtimes: return String(localized: "settings.group.runtimes", defaultValue: "Runtimes")
-        case .mobileGateway: return L10n.Settings.tabMobileGateway
         case .integrations: return String(localized: "settings.group.integrations", defaultValue: "Integrations")
         case .terminal: return String(localized: "settings.group.terminal", defaultValue: "Terminal")
         case .voice: return String(localized: "settings.group.voice", defaultValue: "Voice")
-        case .pet: return L10n.DesktopPet.settingsTabTitle
         }
     }
 
     var icon: String {
         switch self {
         case .editor: return "textformat"
+        case .pet: return "pawprint.fill"
         case .ai: return "sparkles"
         case .someIM: return "person.crop.circle.badge.checkmark"
         case .mobileGateway: return "iphone.radiowaves.left.and.right"
         case .runtimes: return "network"
-        case .mobileGateway: return "iphone.gen3.radiowaves.left.and.right"
         case .integrations: return "puzzlepiece.extension"
         case .terminal: return "rectangle.bottomthird.inset.filled"
         case .voice: return "waveform"
-        case .pet: return "pawprint.fill"
         }
     }
 }
@@ -207,7 +210,7 @@ final class EditorSettingsNavigation: ObservableObject {
 
     func open(_ tab: EditorSettingsTab, appState: AppState? = nil) {
         selectedTab = tab
-        openWindow(appState: appState)
+        openFallbackSettingsWindow(appState: appState)
         DispatchQueue.main.async { [weak self] in
             self?.selectedTab = tab
         }
@@ -255,8 +258,8 @@ final class EditorSettingsNavigation: ObservableObject {
         let window = NSWindow(contentViewController: NSHostingController(rootView: content))
         window.title = L10n.Settings.windowTitle
         window.styleMask = [.titled, .closable, .miniaturizable, .resizable]
-        window.contentMinSize = NSSize(width: 560, height: 520)
-        window.setContentSize(NSSize(width: 760, height: 680))
+        window.contentMinSize = NSSize(width: 760, height: 560)
+        window.setContentSize(NSSize(width: 920, height: 700))
         window.center()
         window.isReleasedWhenClosed = false
 
@@ -395,7 +398,7 @@ struct SettingsWindowResizableEnforcer: NSViewRepresentable {
         mask.insert(.closable)
         mask.insert(.titled)
         window.styleMask = mask
-        window.contentMinSize = NSSize(width: 560, height: 520)
+        window.contentMinSize = NSSize(width: 760, height: 560)
         window.contentMaxSize = NSSize(width: CGFloat.greatestFiniteMagnitude,
                                        height: CGFloat.greatestFiniteMagnitude)
         window.isMovableByWindowBackground = false

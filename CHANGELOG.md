@@ -1,5 +1,236 @@
 # Changelog
 
+## 1.152.0-rc17 - 2026-07-14
+
+### Changed
+
+- **Agent 模型选择大面板** —— Composer 模型入口从小型菜单升级为弹出配置面板：未绑定 some.im 时只展示用户自己配置的 Flash / Pro 模型；已绑定 some.im 时展示省心托管、Coding Plan 订阅入口、Plan Low/High 快捷选择和重点推荐模型。
+- **some.im 模型推荐与购买引导** —— 面板突出 deepseek-v4-flash/pro、glm / glm-5.1 / glm-5.2、grok-4.5 的适用场景，并提供 `https://some.im/customer/plan` 订阅链接；不熟悉模型选择的用户可直接选「省心托管」。
+- 版本号从 **1.152.0-rc16** 递增为 **1.152.0-rc17**；Xcode App、Go agent、Help bundle、Computer Use Helper、README badge、移动网关响应头契约与产品文档同步。
+
+## 1.152.0-rc16 - 2026-07-14
+
+### Fixed
+
+- **专家介入锁定提示** —— 专家工具包在会话未产生用户消息前可以关闭；一旦专家已参与对话，专家弹窗顶部会显示提示条说明本会话内不能再关闭，避免用户面对禁用开关时不明所以。
+
+### Changed
+
+- 版本号从 **1.152.0-rc15** 递增为 **1.152.0-rc16**；Xcode App、Go agent、Help bundle、Computer Use Helper、README badge、移动网关响应头契约与产品文档同步。
+
+## 1.152.0-rc15 - 2026-07-14
+
+### Added
+
+- **Workspace 会话查询工具** —— 新增 `list_workspace_sessions` 只读工具，可列出当前 workspace 分组下的会话标题、活跃/置顶/归档状态、模式、排队消息数与 provider 等候状态。
+- **Flash 标题建议工具** —— 新增 `suggest_session_title`，复用 WillDeep 标题总结 flash 配置，为当前会话基于最新输入生成短标题候选；Agent 可随后调用 `rename_session` 发起改名。
+
+### Changed
+
+- **新输入后的会话改名策略** —— 系统提示要求每次新用户输入后检查当前会话名是否仍匹配任务；普通模式下 `rename_session` 继续走用户确认卡，Goal 模式下 `rename_session` 自动通过且不再打断目标执行，`change_workspace` 在 Goal 模式仍禁用。
+- 版本号从 **1.152.0-rc14** 递增为 **1.152.0-rc15**；Xcode App、Go agent、Help bundle、Computer Use Helper、README badge、移动网关响应头契约与产品文档同步。
+
+## 1.152.0-rc14 - 2026-07-14
+
+### Added
+
+- **当前会话排队任务工具** —— 新增 `list_queued_tasks` 只读工具，汇总当前会话排队用户消息、provider 槽位等待、后台 job、媒体任务和 `.codex-build/queue` 项目构建队列，并返回 `defer_heavy_actions_recommended`，让 Agent 在用户未明确要求时可先推迟完整编译、发布或上线等重操作。
+
+### Fixed
+
+- **同会话后续请求待办刷新** —— Plan 模式下已完成的计划不再继续解锁后续写操作；同一会话里用户提出新要求时，系统提示会重新要求生成 `plan`，最新助手消息里的新 `plan` 块会替换旧计划并刷新右侧待办。
+
+### Changed
+
+- **重操作前队列感知提示词** —— 系统提示要求 Agent 在非显式要求的 compile/test/archive/release/deploy 前先调用 `list_queued_tasks`；若当前会话还有排队用户任务，则优先简短回复并把重操作留到后续确认。
+- 版本号从 **1.152.0-rc13** 递增为 **1.152.0-rc14**；Xcode App、Go agent、Help bundle、Computer Use Helper、README badge、移动网关响应头契约与产品文档同步。
+
+## 1.152.0-rc13 - 2026-07-14
+
+### Changed
+
+- **Agent 主界面视觉排版优化** —— 聊天区增加横向留白与更稳定的顶部承托，侧边栏标题增强识别度，右侧任务监控模块改为卡片化分区，整体层次更清楚。
+- **工具审核卡重设计** —— 待审核/高风险确认卡增加独立标题区、风险徽标和三行内滚动命令预览，长命令不再把审核框撑高；卡内新增“查看解释与解决建议”入口。
+- **审核解释模型路由** —— some.im 已绑定且有 Coding Plan 订阅时优先使用 `someim-coding-plan-low/flow`；无订阅时使用 `someim-auto-flash`；未绑定 some.im 时回退当前 provider 的默认 flash 模型。
+- 版本号从 **1.152.0-rc12** 递增为 **1.152.0-rc13**；Xcode App、Go agent、Help bundle、Computer Use Helper、README badge、移动网关响应头契约与产品文档同步。
+
+## 1.152.0-rc12 - 2026-07-14
+
+### Changed
+
+- **省心托管档位菜单** —— 模型菜单在启用「省心托管」后显示「托管档位」子菜单，提供 Flash / Pro / Premium 三档并勾选当前档位；用户可直接把当前会话的托管最低档切到任意档，不再使用单独的“降回基础托管档”按钮。
+- 版本号从 **1.152.0-rc11** 递增为 **1.152.0-rc12**；Xcode App、Go agent、Help bundle、Computer Use Helper、README badge、移动网关响应头契约与产品文档同步。
+
+## 1.152.0-rc11 - 2026-07-14
+
+### Added
+
+- **项目级构建守卫** —— 新增 `scripts/project_build_guard.rb`，按 workspace 串行化 Xcode/项目级构建任务，后续会话进入本地队列；相同 fingerprint 且产物存在时可复用上次成功结果，并输出 JSON 与 Markdown 报告。
+
+### Changed
+
+- **Xedit 构建入口接入队列** —— `scripts/run_tests.sh` 的 XeditTests 与 `scripts/release.sh` 的测试、dry-run build、archive 阶段接入项目构建守卫，避免多会话同时抢占 DerivedData、SwiftPM resolve 和 `.xcresult`。
+- 版本号从 **1.152.0-rc10** 递增为 **1.152.0-rc11**；Xcode App、Go agent、Help bundle、Computer Use Helper、移动网关响应头契约与产品文档同步。
+
+## 1.152.0-rc10 - 2026-07-14
+
+### Fixed
+
+- **Agent 模型菜单勾选与分组文案** —— 路由默认值、省心托管和具体模型不再同时显示勾选；只有显式选中的具体模型才在模型行显示勾。模型尾部分组从“最近获取”改为“所有模型”，省心托管升档后的降档操作改为更直白的“降回基础托管档”。
+
+### Changed
+
+- 版本号从 **1.152.0-rc9** 递增为 **1.152.0-rc10**；Xcode App、Go agent、Help bundle、Computer Use Helper、移动网关响应头契约与产品文档同步。
+
+## 1.152.0-rc9 - 2026-07-14
+
+### Fixed
+
+- **Agent 产物区目录聚合与 Finder 打开** —— 同目录下的多个文件产物会折叠成目录项展示，产物区点击文件会在 Finder 中显示，点击目录会在 Finder 中打开目录，避免长产物列表逐文件刷屏。
+
+### Changed
+
+- 版本号从 **1.152.0-rc8** 递增为 **1.152.0-rc9**；Xcode App、Go agent、Help bundle、Computer Use Helper、移动网关响应头契约与产品文档同步。
+
+## 1.152.0-rc8 - 2026-07-14
+
+### Fixed
+
+- **桌面宠物输入电脑道具移除** —— Agent 输入时不再在桌宠前方显示像素笔记本和敲键盘手部叠层，只保留桌宠本体的轻微晃动反馈。
+
+### Changed
+
+- 版本号从 **1.152.0-rc7** 递增为 **1.152.0-rc8**；Xcode App、Go agent、Help bundle、Computer Use Helper、移动网关响应头契约与产品文档同步。
+
+## 1.152.0-rc7 - 2026-07-14
+
+### Fixed
+
+- **桌面宠物输出卡片新鲜度** —— 左侧对话卡片只列出最近 1 分钟内仍有助手输出的会话，超过 1 分钟的旧输出不再继续展示或计入收起数字。
+
+### Changed
+
+- 版本号从 **1.152.0-rc6** 递增为 **1.152.0-rc7**；Xcode App、Go agent、Help bundle、Computer Use Helper、移动网关响应头契约与产品文档同步。
+
+## 1.152.0-rc6 - 2026-07-14
+
+### Fixed
+
+- **工作区空项目保留** —— Agent 侧边栏添加多个项目时，即使前一个项目还没有任何用户对话，也会保留该项目的一条空新对话占位，避免添加第二个项目后第一个项目看起来被替换。
+
+### Changed
+
+- 版本号从 **1.152.0-rc5** 递增为 **1.152.0-rc6**；Xcode App、Go agent、Help bundle、Computer Use Helper、移动网关响应头契约与产品文档同步。
+
+## 1.152.0-rc5 - 2026-07-14
+
+### Fixed
+
+- **桌面宠物原地转圈轴向** —— 回复就绪后的转圈动画改为绕竖直轴原地转身，避免角色整张图在平面内翻滚到头朝下。
+
+### Changed
+
+- 版本号从 **1.152.0-rc4** 递增为 **1.152.0-rc5**；Xcode App、Go agent、Help bundle、Computer Use Helper、移动网关响应头契约与产品文档同步。
+
+## 1.152.0-rc4 - 2026-07-14
+
+### Fixed
+
+- **桌面宠物拖动动画再降速** —— 拖动桌面宠物时的行走摆动与步态起伏频率继续降低，让拖动反馈更从容。
+
+### Changed
+
+- 版本号从 **1.152.0-rc3** 递增为 **1.152.0-rc4**；Xcode App、Go agent、Help bundle、Computer Use Helper、移动网关响应头契约与产品文档同步。
+
+## 1.152.0-rc3 - 2026-07-14
+
+### Fixed
+
+- **设置窗口焦点框禁用** —— 设置窗口根视图、左侧分类标签、二级分段标签与内容容器统一使用 `focusable(false)`，避免 tab 标签和设置内容出现键盘焦点高亮框。
+
+### Changed
+
+- 版本号从 **1.152.0-rc2** 递增为 **1.152.0-rc3**；Xcode App、Go agent、Help bundle、Computer Use Helper、移动网关响应头契约与产品文档同步。
+
+## 1.152.0-rc2 - 2026-07-14
+
+### Fixed
+
+- **桌面宠物拖动动画节奏** —— 拖动桌面宠物时的行走摆动与步态频率放慢，保留拖动反馈但减少快速抖动感。
+
+### Changed
+
+- 版本号从 **1.152.0-rc1** 递增为 **1.152.0-rc2**；Xcode App、Go agent、Help bundle、Computer Use Helper、移动网关响应头契约与产品文档同步。
+
+## 1.152.0-rc1 - 2026-07-14
+
+### Fixed
+
+- **some.im 浏览器登录 Keychain 兜底** —— 浏览器登录拿到 some.im app API key 后，若共享 Keychain access group 写入失败，WillDeep 会退回本 App 私有 Keychain 保存并读回验证，避免网页已登录但客户端提示“已返回凭据但保存失败”后无法继续使用；只有共享 Keychain 与私有兜底都失败时才显示本地保存失败。
+
+### Changed
+
+- 版本号从 **1.152.0** 递增为 **1.152.0-rc1**；Xcode App、Go agent、Help bundle、Computer Use Helper、移动网关响应头契约与产品文档同步。
+
+## 1.152.0 - 2026-07-14
+
+### Added
+
+- **桌面宠物多会话输出卡片** —— 桌面宠物旁的文字卡片现在最多展示 3 个最新有助手输出的会话，每条可点击回到对应会话；卡片右上角新增收起按钮，收起后在宠物旁显示带输出会话数的圆形入口，点击数字或圆圈即可展开。
+
+### Fixed
+
+- **暂时停用 AIPipe 上报** —— `AIPipeBootstrap` 当前直接跳过初始化，不再读取或使用 `AIPIPE_API_KEY` / `AIPipeAPIKey` 发起 AIPipe 上报；保留 SDK 接入代码，后续需要时可重新打开开关。
+
+### Changed
+
+- 版本号从 **1.151.0-rc1** 提升为 **1.152.0**；Xcode App、Go agent、Help bundle、Computer Use Helper、移动网关响应头契约与产品文档同步。
+
+## 1.151.0-rc1 - 2026-07-14
+
+### Fixed
+
+- **some.im 浏览器登录保存失败诊断** —— WillDeep 现在区分“some.im 没有返回凭据”和“some.im 已返回凭据但本地 Keychain/共享 session 保存失败”；后者会显示本地保存失败提示，不再误导为 web 端没有回传。
+- **some.im 当前返回结构覆盖测试** —— 补充 `status=connected`、`api_key`、`token` 与 `account` 的浏览器登录状态测试，覆盖当前 some.im 线上 payload。
+- **发布包签名前置自检** —— `scripts/release.sh` 导出 `.app` 后会立即校验 app 签名，并拒绝包含 `AIPipeAPIKey` 或 some.im 客户端登录密钥的 `Info.plist`；DMG 的 Gatekeeper 自检失败也会中止发布，不再被 `|| true` 吞掉。
+
+### Changed
+
+- 版本号从 **1.151.0** 递增为 **1.151.0-rc1**；Xcode App、Go agent、Help bundle、Computer Use Helper、移动网关响应头契约与产品文档同步。
+
+## 1.151.0 - 2026-07-14
+
+### Added
+
+- **桌面宠物双击跳跃** —— 双击桌面宠物本体会触发一次短跳动画；气泡点击继续用于打开当前会话，拖动摆放不受影响。
+
+### Changed
+
+- 版本号从 **1.150.0-rc3** 提升为 **1.151.0**；Xcode App、Go agent、Help bundle、Computer Use Helper、移动网关响应头契约与产品文档同步。
+
+## 1.150.0-rc3 - 2026-07-14
+
+### Fixed
+
+- **桌面宠物右键菜单本地化与设置直达** —— 补齐「桌面宠物设置…」和「桌面宠物」标签的 `xcstrings` 中英文资源；右键入口改走稳定的设置 fallback 窗口并强制选中宠物设置，避免打开设置后停在上一次标签。
+- **Developer ID 证书选择约束** —— `scripts/release.sh` 不再依赖整段固定证书名，而是在钥匙串中强制解析唯一的 `Developer ID Application`、名称包含 `Beijing Alibaba`、Team ID 为 `ZH2S7D6PL6` 的证书；未找到或匹配多个都会停止发布。
+
+### Changed
+
+- **设置窗口左侧栏化** —— 设置窗口改为左侧一等分类、右侧内容页的两栏结构；桌面宠物提升到左侧独立入口，编辑器 / AI / 运行时 / 集成等分类继续保留二级分段切换。
+- **发布手册对齐 WillDeep** —— `docs/RELEASE.md` 的标题、产物路径和 notarytool profile 示例统一为 WillDeep / `willdeep-notary`。
+- 版本号从 **1.150.0-rc2** 递增为 **1.150.0-rc3**；Xcode App、Go agent、Help bundle、Computer Use Helper、移动网关响应头契约与产品文档同步。
+
+## 1.150.0-rc2 - 2026-07-13
+
+### Fixed
+
+- **Release helper 构建耗时可观测性** —— `Build WillDeep Computer Use Helper` Run Script 现在按阶段输出 `START` / `DONE` / `FAILED` 和秒级耗时，覆盖 bundle 准备、arm64/x86_64 编译、lipo、codesign 与 verify；签名失败时会补充 bundle 结构和 `codesign --display` 诊断，避免 release archive 十几分钟后只剩一个 `errSecInternalComponent`。
+
+### Changed
+
+- 版本号从 **1.150.0-rc1** 递增为 **1.150.0-rc2**；Xcode App、Go agent、Help bundle、Computer Use Helper、移动网关响应头契约与产品文档同步。
+
 ## 1.150.0-rc1 - 2026-07-13
 
 ### Fixed
