@@ -627,7 +627,7 @@ struct AgentChatHistoryRendererTests {
 
         #expect(rendered.string.contains("hello"))
         #expect(!rendered.string.contains("You"))
-        #expect(rendered.string.contains("\(L10n.MessageFooter.processedDuration("8s"))\ndone"))
+        #expect(rendered.string.contains("\(L10n.MessageFooter.processedDuration("8s"))\n\ndone"))
         #expect(!rendered.string.contains("Assistant"))
         #expect(!rendered.string.contains("YOU"))
         #expect(rendered.string.contains("  1.2k/2.3k  ↻"))
@@ -643,6 +643,11 @@ struct AgentChatHistoryRendererTests {
             at: processedRange.location,
             effectiveRange: nil
         ) as? NSFont
+        let processedColor = rendered.attribute(
+            .foregroundColor,
+            at: processedRange.location,
+            effectiveRange: nil
+        ) as? NSColor
 
         let assistantCopyRange = try #require(firstAttributeRange(
             .agentChatHistoryMessageCopyText,
@@ -667,7 +672,40 @@ struct AgentChatHistoryRendererTests {
         #expect(bodyFont.pointSize == 14)
         #expect(processedFont?.pointSize == bodyFont.pointSize)
         #expect(processedFont?.pointSize == AgentSettingsStore.chatBaseFontSizeDefault)
-        #expect(bodyParagraphStyle.lineSpacing == 4)
+        #expect(processedColor == NSColor.tertiaryLabelColor)
+        #expect(bodyParagraphStyle.lineSpacing == AgentChatHistoryLayoutMetrics.bodyLineSpacing)
+        #expect(bodyParagraphStyle.lineSpacing == 5)
+        let dividerLocation = NSMaxRange(processedRange) + 1
+        let dividerColor = try #require(rendered.attribute(
+            .agentChatHistoryAssistantStatusDividerColor,
+            at: dividerLocation,
+            effectiveRange: nil
+        ) as? NSColor)
+        let dividerParagraphStyle = try #require(rendered.attribute(
+            .paragraphStyle,
+            at: dividerLocation,
+            effectiveRange: nil
+        ) as? NSParagraphStyle)
+        #expect(dividerColor.alphaComponent
+            == CGFloat(AgentChatHistoryLayoutMetrics.assistantStatusDividerOpacity))
+        let dividerSRGB = try #require(dividerColor.usingColorSpace(.sRGB))
+        #expect(dividerSRGB.redComponent == 0)
+        #expect(dividerSRGB.greenComponent == 0)
+        #expect(dividerSRGB.blueComponent == 0)
+        #expect(dividerParagraphStyle.minimumLineHeight
+            == AgentChatHistoryLayoutMetrics.assistantStatusDividerThickness)
+        #expect(dividerParagraphStyle.maximumLineHeight
+            == AgentChatHistoryLayoutMetrics.assistantStatusDividerThickness)
+        #expect(dividerParagraphStyle.paragraphSpacingBefore
+            == AgentChatHistoryLayoutMetrics.assistantStatusDividerTopSpacing)
+        #expect(dividerParagraphStyle.paragraphSpacing
+            == AgentChatHistoryLayoutMetrics.assistantStatusDividerBottomSpacing)
+        #expect(dividerParagraphStyle.headIndent == AgentChatHistoryLayoutMetrics.assistantContentHeadIndent)
+        #expect(dividerParagraphStyle.tailIndent == -AgentChatHistoryLayoutMetrics.assistantContentTailInset)
+        #expect(AgentChatHistoryLayoutMetrics.assistantStatusDividerTopSpacing == 9)
+        #expect(AgentChatHistoryLayoutMetrics.assistantStatusDividerBottomSpacing == 18)
+        #expect(AgentChatHistoryLayoutMetrics.assistantStatusDividerThickness == 1)
+        #expect(AgentChatHistoryLayoutMetrics.assistantStatusDividerOpacity == 0.075)
         let copyFont = try #require(rendered.attribute(
             .font,
             at: assistantCopyLocation,
@@ -924,6 +962,8 @@ struct AgentChatHistoryRendererTests {
         #expect(bodyStyle.headIndent - bubbleLeadingEdge == AgentChatHistoryLayoutMetrics.userBubbleHorizontalPadding)
         #expect(-bodyStyle.tailIndent - AgentChatHistoryLayoutMetrics.userBubbleTrailingMargin
             == AgentChatHistoryLayoutMetrics.userBubbleHorizontalPadding)
+        #expect(AgentChatHistoryLayoutMetrics.userBubbleCornerRadius == 14)
+        #expect(AgentChatHistoryLayoutMetrics.userBubbleFillOpacity == 0.026)
 
         let separatorStyle = try #require(rendered.attribute(
             .paragraphStyle,
@@ -978,6 +1018,77 @@ struct AgentChatHistoryRendererTests {
         let usedHeight = layoutManager.usedRect(for: textContainer).height
 
         #expect(view.intrinsicContentSize.height >= ceil(usedHeight + AgentChatHistoryLayoutMetrics.bubbleDrawingVerticalOverscan))
+    }
+
+    @Test
+    @MainActor
+    func assistantStatusDividerRenderingMatchesReferenceMetrics() throws {
+        let assistant = AgentMessage(
+            role: .assistant,
+            content: "正文排版校验",
+            elapsedSeconds: 67
+        )
+        let view = AgentChatHistoryNSTextView()
+        view.drawsBackground = true
+        view.backgroundColor = .white
+        view.textContainerInset = .zero
+        view.frame = NSRect(x: 0, y: 0, width: 797, height: 1)
+        view.textContainer?.size = NSSize(width: 797, height: CGFloat.greatestFiniteMagnitude)
+        view.applyMessages([assistant], isDark: false, baseFontSize: 14)
+
+        let layoutManager = try #require(view.layoutManager)
+        let textContainer = try #require(view.textContainer)
+        layoutManager.ensureLayout(for: textContainer)
+        let processedRange = (view.string as NSString).range(
+            of: L10n.MessageFooter.processedDuration("1m 7s")
+        )
+        let bodyRange = (view.string as NSString).range(of: "正文排版校验")
+        #expect(processedRange.location != NSNotFound)
+        #expect(bodyRange.location != NSNotFound)
+        let dividerRange = NSRange(location: NSMaxRange(processedRange) + 1, length: 1)
+
+        let processedGlyphRange = layoutManager.glyphRange(
+            forCharacterRange: processedRange,
+            actualCharacterRange: nil
+        )
+        let dividerGlyphRange = layoutManager.glyphRange(
+            forCharacterRange: dividerRange,
+            actualCharacterRange: nil
+        )
+        let bodyGlyphRange = layoutManager.glyphRange(
+            forCharacterRange: bodyRange,
+            actualCharacterRange: nil
+        )
+        let processedLineRect = layoutManager.lineFragmentRect(
+            forGlyphAt: processedGlyphRange.location,
+            effectiveRange: nil
+        )
+        let dividerLineRect = layoutManager.lineFragmentRect(
+            forGlyphAt: dividerGlyphRange.location,
+            effectiveRange: nil
+        )
+        let bodyLineRect = layoutManager.lineFragmentRect(
+            forGlyphAt: bodyGlyphRange.location,
+            effectiveRange: nil
+        )
+        let dividerY = dividerLineRect.minY
+            + AgentChatHistoryLayoutMetrics.assistantStatusDividerTopSpacing
+        let dividerBottomY = dividerY
+            + AgentChatHistoryLayoutMetrics.assistantStatusDividerThickness
+        #expect(dividerY - processedLineRect.maxY
+            == AgentChatHistoryLayoutMetrics.assistantStatusDividerTopSpacing)
+        #expect(bodyLineRect.minY - dividerBottomY
+            == AgentChatHistoryLayoutMetrics.assistantStatusDividerBottomSpacing)
+
+        if let outputPath = ProcessInfo.processInfo.environment["WILLDEEP_DESIGN_QA_OUTPUT"] {
+            let renderedHeight = ceil(view.intrinsicContentSize.height)
+            view.frame = NSRect(x: 0, y: 0, width: 797, height: renderedHeight)
+            view.layoutSubtreeIfNeeded()
+            let bitmap = try #require(view.bitmapImageRepForCachingDisplay(in: view.bounds))
+            view.cacheDisplay(in: view.bounds, to: bitmap)
+            let png = try #require(bitmap.representation(using: .png, properties: [:]))
+            try png.write(to: URL(fileURLWithPath: outputPath), options: .atomic)
+        }
     }
 
     @Test

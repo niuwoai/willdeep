@@ -1,6 +1,54 @@
 # Changelog
 
+## 1.155.0-rc8 - 2026-07-15
+
+### Fixed
+
+- **修复 Release 归档在 x86_64 切片上的编译器崩溃。** `DesktopPetFirstMouseHostingView` 原为 `NSHostingView<Content>` 泛型子类，swift-frontend 6.3.1 的 `EarlyPerfInliner` SIL 优化 pass 在特化其合成 deinit 时段错误，导致 `xcodebuild archive` 失败（仅 `-O` Release 触发，Debug 与 arm64 不受影响）。改为固定 `NSHostingView<DesktopPetOverlayView>` 非泛型子类绕开编译器 bug，运行时行为不变。
+
+## 1.155.0-rc7 - 2026-07-15
+
+### Fixed
+
+- **终端录制区改为双层信息架构。** 顶层只保留开始/停止录制和简短说明，最近录制在独立列表中展示播放、名称、时长、输入段数、回放状态与更多操作；移除“外框套胶囊”的嵌套结构，并让窄侧栏自动把元数据折到第二行。
+- **修复深色录制栏的文字对比度。** 录制按钮文字与状态信息统一使用终端前景色，红色只保留给录制图标/活动状态，绿色与橙色只用于完成/中断的小图标，不再整段染色。
+
+### Changed
+
+- 录制区新增“录制说明 / 最近录制”等中英文资源，时长改用系统本地化格式；版本号从 **1.155.0-rc6** 递增为 **1.155.0-rc7**，Xcode App、Go agent、Help bundle、Computer Use Helper、README badge、移动网关响应头契约与产品文档同步。
+
+---
+
+## 1.155.0-rc6 - 2026-07-15
+
+### Changed
+
+- **处理状态分隔线精确对齐 Codex。** 在“处理中 / 已处理 Ns”与回复正文之间新增 1 pt 细线；按参考截图与 SF 字体墨迹边界校准为线上 9 pt、线下 18 pt，并以 7.5% 动态中性色绘制（经 AppKit / SwiftUI 合成后，白色表面为 `#F0F0F0`）。实时 SwiftUI 与 TextKit 历史消息共享同一组布局和颜色常量。
+- 版本号从 **1.155.0-rc5** 递增为 **1.155.0-rc6**；Xcode App、Go agent、Help bundle、Computer Use Helper、README badge、移动网关响应头契约与产品文档同步。
+
+---
+
+## 1.155.0-rc5 - 2026-07-15
+
+### Changed
+
+- **用户消息气泡更接近 Codex。** 用户输入区域改用专用 14 pt 连续圆角，替代此前 8 pt 卡片圆角；背景填充透明度从约 3.5% 降至 2.6%，视觉更柔和。实时 SwiftUI、TextKit 历史记录与紧凑侧栏统一，工具卡片及系统消息保持原样。
+- 版本号从 **1.155.0-rc4** 递增为 **1.155.0-rc5**；Xcode App、Go agent、Help bundle、Computer Use Helper、README badge、移动网关响应头契约与产品文档同步。
+
+---
+
+## 1.155.0-rc4 - 2026-07-15
+
+### Changed
+
+- **处理耗时状态进一步降低对比度。** “处理中 / 已处理 Ns”从 secondary label 调整为更浅的 tertiary label，实时 SwiftUI 消息与 TextKit 历史消息保持一致；字号、字重和正文行距不变。
+- 版本号从 **1.155.0-rc3** 递增为 **1.155.0-rc4**；Xcode App、Go agent、Help bundle、Computer Use Helper、README badge、移动网关响应头契约与产品文档同步。
+
+---
+
 ## 1.155.0-rc3 - 2026-07-15
+
+> 本条目合并了两条并行分支各自发布的 1.155.0-rc3（聊天排版分支与 Files 侧栏修复分支），内容均已进入 main。
 
 ### Fixed
 
@@ -14,7 +62,10 @@
 
 ### Changed
 
+- **聊天正文行距小幅放宽。** 用户输入与 AI 正文的行距从 4 pt 调整为 5 pt，实时 SwiftUI 消息、流式输出与 TextKit 历史消息共用同一排版常量，长段落更容易扫读，同时保持当前紧凑密度。
 - 版本号从 **1.155.0-rc2** 递增为 **1.155.0-rc3**；Xcode App、Go agent、Help bundle、Computer Use Helper、README badge、移动网关响应头契约与产品文档同步。
+
+---
 
 ## 1.155.0-rc2 - 2026-07-15
 

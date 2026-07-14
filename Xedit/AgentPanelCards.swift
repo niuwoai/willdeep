@@ -354,6 +354,7 @@ struct AgentMessageBubble: View {
                     if !displayContent.isEmpty {
                         Text(displayContent)
                             .font(.system(size: 13))
+                            .lineSpacing(AgentChatHistoryLayoutMetrics.bodyLineSpacing)
                             .textSelection(.enabled)
                             .frame(maxWidth: .infinity, alignment: .leading)
                     }
@@ -375,7 +376,7 @@ struct AgentMessageBubble: View {
                 }
                 .padding(9)
                 .background(backgroundColor)
-                .clipShape(RoundedRectangle(cornerRadius: 7))
+                .clipShape(RoundedRectangle(cornerRadius: bubbleCornerRadius, style: .continuous))
             }
             if shouldShowFooter {
                 footer
@@ -496,11 +497,15 @@ struct AgentMessageBubble: View {
         case .system:
             return Color(nsColor: .controlBackgroundColor).opacity(0.45)
         case .user:
-            return Color.primary.opacity(0.035)
+            return Color.primary.opacity(AgentChatHistoryLayoutMetrics.userBubbleFillOpacity)
         case .assistant:
             return .clear
         case .tool, .workflowReport, .widget, .scheduledTask:
             return Color(nsColor: .controlBackgroundColor).opacity(0.4)
         }
+    }
+
+    private var bubbleCornerRadius: CGFloat {
+        message.role == .user ? AgentChatHistoryLayoutMetrics.userBubbleCornerRadius : 7
     }
 }

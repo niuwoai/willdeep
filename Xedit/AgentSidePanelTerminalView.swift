@@ -19,6 +19,17 @@ private enum SessionIdentityMetrics {
     static let hostnameCommand = "hostname"
 }
 
+private enum TerminalRecordingMetrics {
+    static let controlRowHeight: CGFloat = 42
+    static let recordButtonHeight: CGFloat = 28
+    static let historyHeaderHeight: CGFloat = 26
+    static let historyRowHeight: CGFloat = 42
+    static let emptyHistoryHeight: CGFloat = 34
+    static let visibleHistoryRows = 2
+    static let playButtonSize: CGFloat = 28
+    static let horizontalPadding: CGFloat = 8
+}
+
 struct AgentSidePanelTerminalView: View {
     @EnvironmentObject var appState: AppState
 
@@ -54,6 +65,13 @@ private struct AgentSidePanelTerminalContentView: View {
             return Color(nsColor: skin.background)
         }
         return Color(nsColor: settings.colorScheme.background)
+    }
+
+    private var terminalForeground: Color {
+        if settings.followsInterfaceSkin, let skin = skinColors {
+            return Color(nsColor: skin.foreground)
+        }
+        return Color(nsColor: settings.colorScheme.foreground)
     }
 
     /// Accent pulled from the active interface skin so the tab chips match the
@@ -105,40 +123,77 @@ private struct AgentSidePanelTerminalContentView: View {
         }
     }
 
-    // MARK: Tab bar
+    // MARK: Recording bar
 
     private var shortcutsBar: some View {
         TimelineView(.periodic(from: .now, by: 1)) { timeline in
-            HStack(spacing: 6) {
-                recordButton
-                    .layoutPriority(1)
+            VStack(spacing: 0) {
+                recordingControlRow(now: timeline.date)
 
-                if controller.isRecording {
-                    recordingStatusPill(now: timeline.date)
-                        .transition(.opacity)
-                }
+                Divider()
+                    .opacity(0.45)
 
-                ScrollView(.horizontal, showsIndicators: false) {
-                    HStack(spacing: 6) {
-                        if controller.shortcuts.isEmpty {
+                VStack(spacing: 0) {
+                    HStack {
+                        Text(L10n.AgentTerminal.recentRecordings)
+                            .font(.system(size: 10, weight: .semibold))
+                            .foregroundStyle(interfacePalette.secondaryText)
+                        Spacer(minLength: 0)
+                    }
+                    .frame(height: TerminalRecordingMetrics.historyHeaderHeight)
+                    .padding(.horizontal, TerminalRecordingMetrics.horizontalPadding + 2)
+
+                    if controller.shortcuts.isEmpty {
+                        HStack {
                             Text(L10n.AgentTerminal.noShortcuts)
                                 .font(.system(size: 11, weight: .medium))
-                                .foregroundStyle(.secondary)
-                                .padding(.horizontal, 4)
-                        } else {
-                            ForEach(controller.shortcuts) { shortcut in
-                                shortcutControl(shortcut, now: timeline.date)
+                                .foregroundStyle(interfacePalette.secondaryText)
+                            Spacer(minLength: 0)
+                        }
+                        .frame(height: TerminalRecordingMetrics.emptyHistoryHeight)
+                        .padding(.horizontal, TerminalRecordingMetrics.horizontalPadding + 2)
+                    } else {
+                        ScrollView(.vertical, showsIndicators: controller.shortcuts.count > TerminalRecordingMetrics.visibleHistoryRows) {
+                            LazyVStack(spacing: 0) {
+                                ForEach(Array(controller.shortcuts.enumerated()), id: \.element.id) { index, shortcut in
+                                    shortcutControl(shortcut, now: timeline.date)
+
+                                    if index < controller.shortcuts.count - 1 {
+                                        Divider()
+                                            .padding(.leading, TerminalRecordingMetrics.horizontalPadding + TerminalRecordingMetrics.playButtonSize + 10)
+                                    }
+                                }
                             }
                         }
+                        .frame(height: shortcutHistoryHeight)
                     }
-                    .padding(.vertical, 4)
                 }
-                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(interfacePalette.panelFill.opacity(0.96))
             }
-            .frame(height: controller.isRecording ? 40 : 36)
-            .padding(.horizontal, 8)
-            .background(terminalBackground.opacity(0.92))
         }
+    }
+
+    private func recordingControlRow(now: Date) -> some View {
+        HStack(spacing: 10) {
+            recordButton
+                .layoutPriority(1)
+
+            if controller.isRecording {
+                recordingStatus(now: now)
+                    .transition(.opacity)
+            } else {
+                Text(L10n.AgentTerminal.recordingHelp)
+                    .font(.system(size: 11, weight: .medium))
+                    .foregroundStyle(terminalForeground.opacity(0.64))
+                    .lineLimit(1)
+                    .truncationMode(.tail)
+            }
+
+            Spacer(minLength: 0)
+        }
+        .frame(height: TerminalRecordingMetrics.controlRowHeight)
+        .padding(.horizontal, TerminalRecordingMetrics.horizontalPadding)
+        .background(terminalBackground.opacity(0.96))
     }
 
     private var recordButton: some View {
@@ -152,16 +207,24 @@ private struct AgentSidePanelTerminalContentView: View {
             HStack(spacing: 5) {
                 Image(systemName: controller.isRecording ? "stop.fill" : "record.circle")
                     .font(.system(size: 11, weight: .bold))
+                    .foregroundStyle(Color.red)
                 Text(controller.isRecording ? L10n.AgentTerminal.stopRecording : L10n.AgentTerminal.startRecording)
                     .font(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(terminalForeground)
                     .lineLimit(1)
             }
-            .foregroundStyle(controller.isRecording ? Color.white : Color.red)
             .padding(.horizontal, 8)
-            .frame(height: 26)
+            .frame(height: TerminalRecordingMetrics.recordButtonHeight)
             .background(
                 RoundedRectangle(cornerRadius: 7, style: .continuous)
-                    .fill(controller.isRecording ? Color.red : Color.red.opacity(0.12))
+                    .fill(controller.isRecording ? Color.red.opacity(0.18) : terminalForeground.opacity(0.08))
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 7, style: .continuous)
+                    .stroke(
+                        controller.isRecording ? Color.red.opacity(0.46) : terminalForeground.opacity(0.16),
+                        lineWidth: 1
+                    )
             )
         }
         .buttonStyle(.plain)
@@ -169,7 +232,7 @@ private struct AgentSidePanelTerminalContentView: View {
         .help(controller.isRecording ? L10n.AgentTerminal.stopRecording : L10n.AgentTerminal.startRecording)
     }
 
-    private func recordingStatusPill(now: Date) -> some View {
+    private func recordingStatus(now: Date) -> some View {
         let elapsed = controller.recordingStartedAt.map { now.timeIntervalSince($0) } ?? 0
         return HStack(spacing: 5) {
             Circle()
@@ -177,26 +240,18 @@ private struct AgentSidePanelTerminalContentView: View {
                 .frame(width: 6, height: 6)
             Text(L10n.AgentTerminal.recording)
                 .font(.system(size: 11, weight: .semibold))
+                .foregroundStyle(terminalForeground.opacity(0.84))
             Text(formatElapsed(elapsed))
                 .font(.system(size: 11, weight: .medium, design: .monospaced))
-                .foregroundStyle(.secondary)
+                .foregroundStyle(terminalForeground.opacity(0.64))
         }
-        .padding(.horizontal, 8)
-        .frame(height: 26)
-        .background(
-            RoundedRectangle(cornerRadius: 7, style: .continuous)
-                .fill(Color.red.opacity(0.08))
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: 7, style: .continuous)
-                .stroke(Color.red.opacity(0.18), lineWidth: 1)
-        )
+        .lineLimit(1)
     }
 
     private func shortcutControl(_ shortcut: TerminalShortcut, now: Date) -> some View {
         let playbackState = playbackState(for: shortcut)
         let isRunning = playbackState?.isRunning == true
-        return HStack(spacing: 0) {
+        return HStack(spacing: 10) {
             Button {
                 if isRunning {
                     controller.cancelActiveShortcutPlayback()
@@ -206,7 +261,19 @@ private struct AgentSidePanelTerminalContentView: View {
             } label: {
                 Image(systemName: isRunning ? "stop.fill" : "play.fill")
                     .font(.system(size: 9, weight: .bold))
-                    .frame(width: 22, height: 24)
+                    .foregroundStyle(isRunning ? skinAccent : interfacePalette.primaryText)
+                    .frame(
+                        width: TerminalRecordingMetrics.playButtonSize,
+                        height: TerminalRecordingMetrics.playButtonSize
+                    )
+                    .background(
+                        Circle()
+                            .fill(isRunning ? skinAccent.opacity(0.16) : interfacePalette.controlFill.opacity(0.74))
+                    )
+                    .overlay(
+                        Circle()
+                            .stroke(isRunning ? skinAccent.opacity(0.4) : interfacePalette.hairline, lineWidth: 1)
+                    )
             }
             .disabled(
                 (!isRunning && controller.isRecording) ||
@@ -217,13 +284,8 @@ private struct AgentSidePanelTerminalContentView: View {
             .buttonStyle(.plain)
             .help(isRunning ? L10n.AgentTerminal.shortcutStopReplay : L10n.AgentTerminal.shortcutReplay)
 
-            TerminalShortcutChip(
-                shortcut: shortcut,
-                playbackState: playbackState,
-                now: now,
-                accent: skinAccent
-            )
-            .padding(.trailing, 2)
+            shortcutDetails(shortcut, playbackState: playbackState, now: now)
+                .frame(maxWidth: .infinity, alignment: .leading)
 
             Menu {
                 Button {
@@ -248,23 +310,113 @@ private struct AgentSidePanelTerminalContentView: View {
             } label: {
                 Image(systemName: "ellipsis")
                     .font(.system(size: 11, weight: .semibold))
-                    .frame(width: 22, height: 24)
+                    .foregroundStyle(interfacePalette.secondaryText)
+                    .frame(width: 24, height: 28)
             }
             .menuStyle(.borderlessButton)
             .menuIndicator(.hidden)
             .help(L10n.AgentTerminal.shortcutActions)
         }
-        .padding(.leading, 2)
-        .background(
-            RoundedRectangle(cornerRadius: 7, style: .continuous)
-                .fill(playbackState?.isRunning == true ? skinAccent.opacity(0.14) : Color.primary.opacity(0.06))
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: 7, style: .continuous)
-                .stroke(playbackState?.isRunning == true ? skinAccent.opacity(0.38) : Color.primary.opacity(0.10), lineWidth: 1)
-        )
-        .fixedSize()
+        .frame(height: TerminalRecordingMetrics.historyRowHeight)
+        .padding(.horizontal, TerminalRecordingMetrics.horizontalPadding)
+        .background(playbackState?.isRunning == true ? skinAccent.opacity(0.08) : Color.clear)
+        .contentShape(Rectangle())
         .help(shortcutTooltip(shortcut, playbackState: playbackState, now: now))
+    }
+
+    @ViewBuilder
+    private func shortcutDetails(
+        _ shortcut: TerminalShortcut,
+        playbackState: TerminalShortcutPlaybackState?,
+        now: Date
+    ) -> some View {
+        ViewThatFits(in: .horizontal) {
+            HStack(spacing: 10) {
+                shortcutTitle(shortcut)
+                Spacer(minLength: 6)
+                shortcutMetadata(shortcut, playbackState: playbackState, now: now)
+            }
+
+            VStack(alignment: .leading, spacing: 2) {
+                shortcutTitle(shortcut)
+                shortcutMetadata(shortcut, playbackState: playbackState, now: now)
+            }
+        }
+    }
+
+    private func shortcutTitle(_ shortcut: TerminalShortcut) -> some View {
+        HStack(spacing: 5) {
+            Text(shortcut.title)
+                .font(.system(size: 11, weight: .semibold))
+                .foregroundStyle(interfacePalette.primaryText)
+                .lineLimit(1)
+                .truncationMode(.tail)
+
+            if shortcut.hasProtectedInput {
+                Image(systemName: "lock.shield")
+                    .font(.system(size: 9, weight: .semibold))
+                    .foregroundStyle(interfacePalette.secondaryText)
+            }
+        }
+    }
+
+    private func shortcutMetadata(
+        _ shortcut: TerminalShortcut,
+        playbackState: TerminalShortcutPlaybackState?,
+        now: Date
+    ) -> some View {
+        HStack(spacing: 6) {
+            Text(
+                L10n.AgentTerminal.shortcutMeta(
+                    formatShortcutDuration(shortcut.durationMilliseconds),
+                    "\(shortcut.eventCount)"
+                )
+            )
+            .font(.system(size: 10, weight: .medium))
+            .foregroundStyle(interfacePalette.secondaryText)
+            .lineLimit(1)
+
+            if let playbackState {
+                shortcutStatus(playbackState, now: now)
+            }
+        }
+    }
+
+    private func shortcutStatus(_ playbackState: TerminalShortcutPlaybackState, now: Date) -> some View {
+        let presentation = shortcutStatusPresentation(playbackState, now: now)
+        return HStack(spacing: 4) {
+            Image(systemName: presentation.icon)
+                .font(.system(size: 9, weight: .semibold))
+                .foregroundStyle(presentation.color)
+            Text(presentation.text)
+                .font(.system(size: 10, weight: .medium))
+                .foregroundStyle(interfacePalette.secondaryText)
+                .lineLimit(1)
+        }
+    }
+
+    private func shortcutStatusPresentation(
+        _ playbackState: TerminalShortcutPlaybackState,
+        now: Date
+    ) -> (icon: String, text: String, color: Color) {
+        switch playbackState.status {
+        case .running:
+            let remaining = formatShortcutDuration(playbackState.remainingMilliseconds(now: now))
+            let progress = L10n.AgentTerminal.shortcutProgress(
+                "\(playbackState.currentEventIndex)",
+                "\(playbackState.totalEvents)"
+            )
+            return ("play.circle.fill", "\(remaining) · \(progress)", skinAccent)
+        case .finished:
+            return ("checkmark.circle", L10n.AgentTerminal.shortcutFinished, .green)
+        case .cancelled:
+            return ("exclamationmark.circle", L10n.AgentTerminal.shortcutCancelled, .orange)
+        }
+    }
+
+    private var shortcutHistoryHeight: CGFloat {
+        let visibleRows = min(controller.shortcuts.count, TerminalRecordingMetrics.visibleHistoryRows)
+        return CGFloat(visibleRows) * TerminalRecordingMetrics.historyRowHeight
     }
 
     private func editShortcut(_ shortcut: TerminalShortcut) {
@@ -703,17 +855,8 @@ private struct AgentSidePanelTerminalContentView: View {
 
     private func formatShortcutDuration(_ milliseconds: Int) -> String {
         let seconds = max(0, Int(ceil(Double(milliseconds) / 1000)))
-        if seconds < 60 {
-            return "\(seconds)s"
-        }
-        let minutes = seconds / 60
-        let remainder = seconds % 60
-        if minutes < 60 {
-            return remainder == 0 ? "\(minutes)m" : "\(minutes)m \(String(format: "%02ds", remainder))"
-        }
-        let hours = minutes / 60
-        let minuteRemainder = minutes % 60
-        return minuteRemainder == 0 ? "\(hours)h" : "\(hours)h \(String(format: "%02dm", minuteRemainder))"
+        return Self.shortcutDurationFormatter.string(from: TimeInterval(seconds))
+            ?? L10n.AgentTerminal.shortcutDurationFallback("\(seconds)")
     }
 
     private func formatElapsed(_ interval: TimeInterval) -> String {
@@ -728,6 +871,15 @@ private struct AgentSidePanelTerminalContentView: View {
         formatter.dateFormat = "HH:mm:ss"
         return formatter
     }()
+
+    private static let shortcutDurationFormatter: DateComponentsFormatter = {
+        let formatter = DateComponentsFormatter()
+        formatter.allowedUnits = [.hour, .minute, .second]
+        formatter.unitsStyle = .abbreviated
+        formatter.maximumUnitCount = 2
+        formatter.zeroFormattingBehavior = .dropLeading
+        return formatter
+    }()
 }
 
 private struct TerminalShortcutRenameDraft: Identifiable {
@@ -738,112 +890,6 @@ private struct TerminalShortcutRenameDraft: Identifiable {
     init(shortcut: TerminalShortcut) {
         self.shortcutID = shortcut.id
         self.title = shortcut.title
-    }
-}
-
-private struct TerminalShortcutChip: View {
-    let shortcut: TerminalShortcut
-    let playbackState: TerminalShortcutPlaybackState?
-    let now: Date
-    let accent: Color
-
-    var body: some View {
-        HStack(spacing: 5) {
-            Image(systemName: statusIcon)
-                .font(.system(size: 8, weight: .bold))
-                .foregroundStyle(statusColor)
-            Text(shortcut.title)
-                .font(.system(size: 11, weight: .medium))
-                .lineLimit(1)
-                .truncationMode(.tail)
-                .frame(maxWidth: 124)
-            Text(statusText)
-                .font(.system(size: 10, weight: .medium))
-                .foregroundStyle(statusColor)
-                .monospacedDigit()
-                .lineLimit(1)
-            if shortcut.hasProtectedInput {
-                Image(systemName: "lock.shield")
-                    .font(.system(size: 9, weight: .semibold))
-                    .foregroundStyle(.secondary)
-            }
-        }
-        .padding(.horizontal, 8)
-        .padding(.vertical, 5)
-        .background(
-            Capsule(style: .continuous)
-                .fill(backgroundColor)
-        )
-        .overlay(
-            Capsule(style: .continuous)
-                .stroke(borderColor, lineWidth: 1)
-        )
-    }
-
-    private var statusIcon: String {
-        guard let playbackState else { return "play.fill" }
-        switch playbackState.status {
-        case .running:
-            return "play.circle.fill"
-        case .finished:
-            return "checkmark.circle.fill"
-        case .cancelled:
-            return "exclamationmark.circle.fill"
-        }
-    }
-
-    private var statusText: String {
-        guard let playbackState else {
-            return formatDuration(shortcut.durationMilliseconds)
-        }
-        switch playbackState.status {
-        case .running:
-            let remaining = formatDuration(playbackState.remainingMilliseconds(now: now))
-            let progress = L10n.AgentTerminal.shortcutProgress(
-                "\(playbackState.currentEventIndex)",
-                "\(playbackState.totalEvents)"
-            )
-            return "\(remaining) · \(progress)"
-        case .finished:
-            return L10n.AgentTerminal.shortcutFinished
-        case .cancelled:
-            return L10n.AgentTerminal.shortcutCancelled
-        }
-    }
-
-    private var statusColor: Color {
-        guard let playbackState else { return .secondary }
-        switch playbackState.status {
-        case .running:
-            return accent
-        case .finished:
-            return .green
-        case .cancelled:
-            return .orange
-        }
-    }
-
-    private var backgroundColor: Color {
-        playbackState?.isRunning == true ? accent.opacity(0.16) : Color.primary.opacity(0.07)
-    }
-
-    private var borderColor: Color {
-        playbackState?.isRunning == true ? accent.opacity(0.45) : Color.primary.opacity(0.10)
-    }
-
-    private func formatDuration(_ milliseconds: Int) -> String {
-        let seconds = max(0, Int(ceil(Double(milliseconds) / 1000)))
-        if seconds < 60 {
-            return "\(seconds)s"
-        }
-        let minutes = seconds / 60
-        let remainder = seconds % 60
-        if minutes < 60 {
-            return remainder == 0 ? "\(minutes)m" : "\(minutes)m \(String(format: "%02ds", remainder))"
-        }
-        let hours = minutes / 60
-        let minuteRemainder = minutes % 60
-        return minuteRemainder == 0 ? "\(hours)h" : "\(hours)h \(String(format: "%02dm", minuteRemainder))"
     }
 }
 
