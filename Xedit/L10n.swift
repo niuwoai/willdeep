@@ -935,6 +935,8 @@ nonisolated enum L10n {
         static let recording = String(localized: "agent-terminal.recording", defaultValue: "Recording")
         static let startRecording = String(localized: "agent-terminal.start-recording", defaultValue: "Start recording")
         static let stopRecording = String(localized: "agent-terminal.stop-recording", defaultValue: "Stop recording")
+        static let recordingHelp = String(localized: "agent-terminal.recording-help", defaultValue: "Record terminal steps to replay later")
+        static let recentRecordings = String(localized: "agent-terminal.recent-recordings", defaultValue: "Recent recordings")
         static let noShortcuts = String(localized: "agent-terminal.no-shortcuts", defaultValue: "No recordings yet")
         static let sessionLocal = String(localized: "agent-terminal.session.local", defaultValue: "Local Shell")
         static let sessionSSH = String(localized: "agent-terminal.session.ssh", defaultValue: "SSH")
@@ -977,6 +979,10 @@ nonisolated enum L10n {
         static func shortcutMeta(_ a1: String, _ a2: String) -> String {
             let template = String(localized: "agent-terminal.shortcut.meta", defaultValue: "%1$@ · %2$@ events")
             return String(format: template, a1, a2)
+        }
+        static func shortcutDurationFallback(_ a1: String) -> String {
+            let template = String(localized: "agent-terminal.shortcut.duration-fallback", defaultValue: "%@s")
+            return String(format: template, a1)
         }
         static func shortcutReplayWait(_ a1: String) -> String {
             let template = String(localized: "agent-terminal.shortcut.replay-wait", defaultValue: "Replay wait: %@")

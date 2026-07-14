@@ -44,7 +44,7 @@ import AppKit
 enum AgentChatHistoryRenderer {
     enum MarkdownSpacing {
         static let headerToBody: CGFloat = 10
-        static let bodyLine: CGFloat = 4
+        static let bodyLine = AgentChatHistoryLayoutMetrics.bodyLineSpacing
         static let assistantParagraph: CGFloat = 7
         static let userParagraph: CGFloat = 7
         static let tableLine: CGFloat = 2
@@ -240,6 +240,10 @@ enum AgentChatHistoryRenderer {
         let headerFont = NSFont.systemFont(ofSize: 11, weight: .semibold)
         let assistantStatusFont = NSFont.systemFont(ofSize: baseFontSize, weight: .medium)
         let bodyColor = NSColor.labelColor
+        let assistantStatusColor = NSColor.tertiaryLabelColor
+        let assistantStatusDividerColor = AgentChatHistoryLayoutMetrics.assistantStatusDividerColor(
+            isDark: isDark
+        )
         let secondaryColor = NSColor.secondaryLabelColor
         let codeBackgroundColor = NSColor.controlBackgroundColor
 
@@ -319,6 +323,8 @@ enum AgentChatHistoryRenderer {
                 to: result,
                 headerFont: headerFont,
                 assistantStatusFont: assistantStatusFont,
+                assistantStatusColor: assistantStatusColor,
+                assistantStatusDividerColor: assistantStatusDividerColor,
                 secondaryColor: secondaryColor
             )
 
