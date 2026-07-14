@@ -24,13 +24,17 @@
     "desktop-pet.appearance.star-raccoon" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Starship raccoon" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "星舰浣熊技师" } } } },
     "desktop-pet.appearance.web-inventor" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Web inventor" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "网丝发明家" } } } },
     "desktop-pet.appearance.whistle-captain" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Whistle captain" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "蓝皮哨箭船长" } } } },
+    "desktop-pet.collapse-messages" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Collapse desktop pet messages" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "收起桌面宠物消息" } } } },
     "desktop-pet.empty-message" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Start a conversation and I will keep you posted here." } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "开始一段对话后，我会在这里同步最新进展。" } } } },
     "desktop-pet.empty-session-title" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "No active conversation" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "暂无活跃对话" } } } },
+    "desktop-pet.expand-messages" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Expand desktop pet messages" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "展开桌面宠物消息" } } } },
     "desktop-pet.hide-action" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Hide desktop pet" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "隐藏桌面宠物" } } } },
+    "desktop-pet.settings-action" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Desktop pet settings…" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "桌面宠物设置…" } } } },
     "desktop-pet.settings.appearance" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Pet appearance" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "宠物形象" } } } },
     "desktop-pet.settings.description" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Choose a companion. Your choice is saved locally and takes effect immediately." } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "选择一个陪伴形象；偏好会保存在本机并立即生效。" } } } },
     "desktop-pet.settings.enabled" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Show desktop pet" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "显示桌面宠物" } } } },
     "desktop-pet.settings.section-title" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Desktop pet" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "桌面宠物" } } } },
+    "desktop-pet.settings.tab-title" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Desktop Pet" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "桌面宠物" } } } },
     "desktop-pet.status.complete" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Task complete" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "任务完成" } } } },
     "desktop-pet.status.idle" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Keeping watch" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "守望中" } } } },
     "desktop-pet.status.needs-attention" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Needs your attention" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "需要你的处理" } } } },
@@ -4178,20 +4182,38 @@
         }
       }
     },
-    "agent-managed-routing.title-high" : {
-      "comment" : "some.im managed-routing pill label once the session floor has escalated to high",
+    "agent-managed-routing.title-flash" : {
+      "comment" : "some.im managed-routing pill label when the session floor is flash/low",
       "extractionState" : "manual",
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Managed · High"
+            "value" : "Managed · Flash"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "省心托管 · High"
+            "value" : "省心托管 · Flash"
+          }
+        }
+      }
+    },
+    "agent-managed-routing.title-high" : {
+      "comment" : "some.im managed-routing pill label once the session floor has escalated to pro/high",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Managed · Pro"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "省心托管 · Pro"
           }
         }
       }
@@ -4214,20 +4236,84 @@
         }
       }
     },
-    "agent-managed-routing.reset" : {
-      "comment" : "some.im managed-routing menu item that resets the only-goes-up capability floor back to low",
+    "agent-managed-routing.tier-menu" : {
+      "comment" : "some.im managed-routing submenu title for choosing the session capability floor",
       "extractionState" : "manual",
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Reset managed tier"
+            "value" : "Managed tier"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "重置托管档位"
+            "value" : "托管档位"
+          }
+        }
+      }
+    },
+    "agent-managed-routing.tier-flash" : {
+      "comment" : "some.im managed-routing floor option matching the low tier",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Flash"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Flash"
+          }
+        }
+      }
+    },
+    "agent-managed-routing.tier-pro" : {
+      "comment" : "some.im managed-routing floor option matching the high/pro tier",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Pro"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Pro"
+          }
+        }
+      }
+    },
+    "agent-managed-routing.tier-premium" : {
+      "comment" : "some.im managed-routing floor option matching the premium tier",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Premium"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Premium"
+          }
+        }
+      }
+    },
+    "All models" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "所有模型"
           }
         }
       }
@@ -9514,6 +9600,24 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "专家 %@"
+          }
+        }
+      }
+    },
+    "expert.locked-notice" : {
+      "comment" : "Notice shown when active experts can no longer be turned off after conversation starts",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "After an expert joins the conversation, it cannot be turned off for this session."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "专家介入对话后，本会话内就不能再关闭。"
           }
         }
       }

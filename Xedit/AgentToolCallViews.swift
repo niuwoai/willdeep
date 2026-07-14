@@ -348,6 +348,9 @@ struct AgentToolCallCard: View {
     @State private var answerInput = ""
     @State private var selectedOptions: Set<String> = []
     @State private var protectedInputValues: [String: String] = [:]
+    @State private var approvalExplanation: AgentApprovalExplanationResult?
+    @State private var approvalExplanationError: String?
+    @State private var isLoadingApprovalExplanation = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: isInteractive ? 6 : 3) {
@@ -364,7 +367,7 @@ struct AgentToolCallCard: View {
                 Text(argumentsSummary)
                     .font(.caption2)
                     .foregroundStyle(.secondary)
-                    .lineLimit(1)
+                    .lineLimit(isInteractive ? 2 : 1)
                     .truncationMode(.middle)
                     .frame(maxWidth: .infinity, alignment: .leading)
                 Text(statusText)
@@ -427,8 +430,15 @@ struct AgentToolCallCard: View {
             }
 
             if call.status == .pendingApproval {
-                VStack(alignment: .leading, spacing: 6) {
+                VStack(alignment: .leading, spacing: 9) {
+                    approvalReviewHeader(
+                        title: "等待你审核",
+                        subtitle: "这一步需要你的允许后才会继续执行。",
+                        tint: appState.editorSettings.interfaceSkin.palette.accent,
+                        systemImage: "shield.lefthalf.filled"
+                    )
                     approvalCommandBlock
+                    approvalExplanationSection
                     if decisionAlreadySubmitted {
                         submittedDecisionNotice
                     } else {
@@ -452,11 +462,15 @@ struct AgentToolCallCard: View {
                     }
                 }
             } else if call.status == .awaitingConfirm {
-                VStack(alignment: .leading, spacing: 6) {
+                VStack(alignment: .leading, spacing: 9) {
+                    approvalReviewHeader(
+                        title: "高风险确认",
+                        subtitle: L10n.ToolCard.destructiveWarning,
+                        tint: destructiveAccentColor,
+                        systemImage: "exclamationmark.shield.fill"
+                    )
                     approvalCommandBlock
-                    Text(L10n.ToolCard.destructiveWarning)
-                        .font(.caption2)
-                        .foregroundStyle(destructiveAccentColor)
+                    approvalExplanationSection
                     if decisionAlreadySubmitted {
                         submittedDecisionNotice
                     } else {
@@ -521,10 +535,19 @@ struct AgentToolCallCard: View {
     @ViewBuilder
     private var approvalCommandBlock: some View {
         if let detail = approvalDetail {
-            VStack(alignment: .leading, spacing: 3) {
-                Text(detail.title)
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
+            VStack(alignment: .leading, spacing: 5) {
+                HStack(spacing: 6) {
+                    Image(systemName: "terminal")
+                        .font(.system(size: 10, weight: .semibold))
+                        .foregroundStyle(.secondary)
+                    Text(detail.title)
+                        .font(.caption2.weight(.semibold))
+                        .foregroundStyle(.secondary)
+                    Spacer(minLength: 0)
+                    Text("最多显示 3 行，超出可滚动")
+                        .font(.system(size: 9, weight: .medium))
+                        .foregroundStyle(.tertiary)
+                }
                 ScrollView([.horizontal, .vertical]) {
                     Text(detail.body)
                         .font(.system(size: 12, design: .monospaced))
@@ -535,9 +558,143 @@ struct AgentToolCallCard: View {
                 }
                 // 默认最多约 3 行(12pt 行高 ~16pt × 3 + 上下内边距),更长的
                 // 命令在框内纵向/横向滚动查看全部,不再把整张卡撑得老高。
-                .frame(maxHeight: 62)
-                .background(Color(nsColor: .textBackgroundColor))
-                .clipShape(RoundedRectangle(cornerRadius: 5))
+                .frame(minHeight: 42, maxHeight: 62)
+                .background(
+                    LinearGradient(
+                        colors: [
+                            Color(nsColor: .textBackgroundColor),
+                            appState.editorSettings.interfaceSkin.palette.controlFill.opacity(0.45)
+                        ],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    )
+                )
+                .clipShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 7, style: .continuous)
+                        .stroke(Color.primary.opacity(0.08), lineWidth: 1)
+                )
+            }
+            .padding(9)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(approvalSurfaceBackground)
+            .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+        }
+    }
+
+    private func approvalReviewHeader(
+        title: String,
+        subtitle: String,
+        tint: Color,
+        systemImage: String
+    ) -> some View {
+        HStack(alignment: .top, spacing: 9) {
+            ZStack {
+                Circle()
+                    .fill(tint.opacity(0.14))
+                Image(systemName: systemImage)
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(tint)
+            }
+            .frame(width: 28, height: 28)
+
+            VStack(alignment: .leading, spacing: 3) {
+                Text(title)
+                    .font(.system(size: 12, weight: .semibold))
+                Text(subtitle)
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            Spacer(minLength: 0)
+            Text(riskBadge)
+                .font(.system(size: 9, weight: .bold))
+                .padding(.horizontal, 6)
+                .padding(.vertical, 3)
+                .foregroundStyle(tint)
+                .background(tint.opacity(0.10))
+                .clipShape(Capsule())
+        }
+        .padding(.horizontal, 9)
+        .padding(.vertical, 8)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(approvalSurfaceBackground)
+        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+    }
+
+    @ViewBuilder
+    private var approvalExplanationSection: some View {
+        VStack(alignment: .leading, spacing: 7) {
+            HStack(spacing: 8) {
+                Button {
+                    loadApprovalExplanation()
+                } label: {
+                    if isLoadingApprovalExplanation {
+                        HStack(spacing: 6) {
+                            ProgressView()
+                                .controlSize(.small)
+                                .scaleEffect(0.62)
+                                .frame(width: 12, height: 12)
+                            Text("正在查看解释")
+                        }
+                    } else {
+                        Label(approvalExplanation == nil ? "查看解释与解决建议" : "重新解释", systemImage: "lightbulb")
+                    }
+                }
+                .buttonStyle(.borderless)
+                .font(.caption2.weight(.semibold))
+                .disabled(isLoadingApprovalExplanation)
+                .help("用轻量模型解释这次审核项，并给出允许/拒绝/改方案建议。")
+                Spacer(minLength: 0)
+                if let model = approvalExplanation?.model {
+                    Text(model)
+                        .font(.system(size: 9, weight: .medium))
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                }
+            }
+
+            if let text = approvalExplanation?.text {
+                Text(text)
+                    .font(.system(size: 11))
+                    .foregroundStyle(.primary)
+                    .textSelection(.enabled)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .padding(9)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(appState.editorSettings.interfaceSkin.palette.controlFill.opacity(0.42))
+                    .clipShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
+            } else if let error = approvalExplanationError {
+                Text(error)
+                    .font(.caption2)
+                    .foregroundStyle(.orange)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+        .padding(.horizontal, 9)
+        .padding(.vertical, 8)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(approvalSurfaceBackground)
+        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+    }
+
+    private func loadApprovalExplanation() {
+        guard !isLoadingApprovalExplanation else { return }
+        isLoadingApprovalExplanation = true
+        approvalExplanationError = nil
+        Task {
+            do {
+                let result = try await appState.explainAgentToolApproval(call)
+                await MainActor.run {
+                    approvalExplanation = result
+                    isLoadingApprovalExplanation = false
+                }
+            } catch {
+                await MainActor.run {
+                    approvalExplanationError = "解释失败：\(error.localizedDescription)"
+                    isLoadingApprovalExplanation = false
+                }
             }
         }
     }
@@ -1047,6 +1204,10 @@ struct AgentToolCallCard: View {
             return appState.editorSettings.interfaceSkin.palette.controlFill.opacity(0.72)
         }
         return appState.editorSettings.interfaceSkin.palette.controlFill.opacity(0.38)
+    }
+
+    private var approvalSurfaceBackground: Color {
+        appState.editorSettings.interfaceSkin.palette.panelFill.opacity(0.58)
     }
 
     private var statusText: String {

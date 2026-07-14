@@ -111,6 +111,42 @@ struct AgentSessionStoreTests {
         #expect(count == 1)
     }
 
+    @Test
+    func sidebarKeepsOneEmptyPlaceholderPerNewWorkspace() {
+        let firstWorkspace = "/tmp/willdeep-sidebar-project-a"
+        let secondWorkspace = "/tmp/willdeep-sidebar-project-b"
+        let firstEmpty = AgentSession(workspaceRootPath: firstWorkspace)
+        let secondEmpty = AgentSession(workspaceRootPath: secondWorkspace)
+        let staleSecondEmpty = AgentSession(workspaceRootPath: secondWorkspace)
+
+        let visible = AgentSidebarSessionVisibility.visibleSessions(
+            from: [secondEmpty, staleSecondEmpty, firstEmpty],
+            activeID: secondEmpty.id
+        )
+
+        #expect(visible.map(\.id).contains(firstEmpty.id))
+        #expect(visible.map(\.id).contains(secondEmpty.id))
+        #expect(!visible.map(\.id).contains(staleSecondEmpty.id))
+    }
+
+    @Test
+    func sidebarHidesEmptyPlaceholderWhenWorkspaceAlreadyHasHistory() {
+        let workspace = "/tmp/willdeep-sidebar-history"
+        let empty = AgentSession(workspaceRootPath: workspace)
+        let chatted = AgentSession(
+            title: "Real chat",
+            workspaceRootPath: workspace,
+            messages: [AgentMessage(role: .user, content: "ship it")]
+        )
+
+        let visible = AgentSidebarSessionVisibility.visibleSessions(
+            from: [empty, chatted],
+            activeID: nil
+        )
+
+        #expect(visible.map(\.id) == [chatted.id])
+    }
+
     /// Skip non-user roles when picking the title source.
     @Test
     func deriveTitleUsesFirstUserMessageNotAssistant() {

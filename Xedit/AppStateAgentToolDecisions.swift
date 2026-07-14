@@ -120,8 +120,13 @@ extension AppState {
         guard risk == .write else { return nil }
 
         // Conversation identity and workspace binding are user-facing host
-        // state. They always stay behind an explicit per-call approval card,
-        // including Goal mode and any smart/allowlist approval setting.
+        // state. Normal sessions keep them behind an explicit per-call
+        // approval card. Goal mode is the exception for rename_session only:
+        // a title change should not pause an autonomous goal run, while
+        // workspace rebinding remains unavailable in Goal mode elsewhere.
+        if toolName == "rename_session", interactionMode == .goal {
+            return .goalMode
+        }
         if toolName == "rename_session" || toolName == "change_workspace" {
             return nil
         }

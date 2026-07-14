@@ -66,6 +66,14 @@ add_check.call(
   expected_count: 1
 )
 
+computer_use_helper_plist = read_file(repo_root, "ComputerUseHelper/Info.plist")
+add_check.call(
+  "Computer Use Helper CFBundleShortVersionString",
+  "ComputerUseHelper/Info.plist",
+  computer_use_helper_plist[/<key>CFBundleShortVersionString<\/key>\s*<string>([^<]+)<\/string>/m, 1],
+  expected_count: 1
+)
+
 readme = read_file(repo_root, "README.md")
 add_check.call(
   "README version badges",

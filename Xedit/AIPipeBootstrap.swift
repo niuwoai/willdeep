@@ -49,11 +49,14 @@ final class WillDeepAppDelegate: NSObject, NSApplicationDelegate {
 
 enum AIPipeBootstrap {
     private static let defaultEndpoint = "https://17push.com/api/v1"
+    private static let reportingEnabled = false
 
     static func initialize(
         environment: [String: String] = ProcessInfo.processInfo.environment,
         infoDictionary: [String: Any] = Bundle.main.infoDictionary ?? [:]
     ) {
+        guard reportingEnabled else { return }
+
         guard let apiKey = firstNonEmpty(
             environment["AIPIPE_API_KEY"],
             infoDictionary["AIPipeAPIKey"] as? String
@@ -83,10 +86,14 @@ enum AIPipeBootstrap {
     private static func firstNonEmpty(_ values: String?...) -> String? {
         for value in values {
             let trimmed = value?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-            if !trimmed.isEmpty {
+            if !trimmed.isEmpty, !isUnexpandedBuildSetting(trimmed) {
                 return trimmed
             }
         }
         return nil
+    }
+
+    private static func isUnexpandedBuildSetting(_ value: String) -> Bool {
+        value.hasPrefix("$(") && value.hasSuffix(")")
     }
 }

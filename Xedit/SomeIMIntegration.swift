@@ -175,8 +175,9 @@ enum SomeIMIntegrationStore {
     private static let settingsKey = "com.willdeep.someIM.integrationSettings.v1"
     private static let accountKey = "com.willdeep.someIM.account.v1"
     private static let codingPlanStatusKey = "com.willdeep.someIM.codingPlanStatus.v1"
-    // Legacy per-app Keychain accounts. Read only for the one-time migration
-    // into the shared store; never written after that.
+    // Per-app Keychain accounts. They were originally legacy migration inputs;
+    // now they also act as the local fallback when the shared access group is
+    // unavailable or the user's Keychain ACL rejects the shared write.
     private static let legacyAPIKeyAccount = "some-im/api-key"
     private static let legacySessionTokenAccount = "some-im/customer-session"
     private static let migrationDoneKey = "com.willdeep.someIM.sharedSessionMigration.v1"
@@ -187,6 +188,8 @@ enum SomeIMIntegrationStore {
     #if DEBUG
     private nonisolated(unsafe) static var testSharedSessionOverrideEnabled = false
     private nonisolated(unsafe) static var testSharedSessionOverride: SomeIMSharedSession?
+    private nonisolated(unsafe) static var testSharedSessionPersistFailureEnabled = false
+    private nonisolated(unsafe) static var testPrivateFallbackPersistFailureEnabled = false
     #endif
 
     /// Call once at app launch (before any credential access). Wires the shared
@@ -263,7 +266,7 @@ enum SomeIMIntegrationStore {
     static func loadAPIKey() -> String {
         #if DEBUG
         if testSharedSessionOverrideEnabled {
-            return testSharedSessionOverride?.apiKey ?? ""
+            return currentSharedSession()?.apiKey ?? ""
         }
         #endif
         migrateLegacyIfNeeded()
@@ -297,7 +300,7 @@ enum SomeIMIntegrationStore {
     static func loadSessionToken() -> String {
         #if DEBUG
         if testSharedSessionOverrideEnabled {
-            return testSharedSessionOverride?.sessionToken ?? ""
+            return currentSharedSession()?.sessionToken ?? ""
         }
         #endif
         migrateLegacyIfNeeded()
@@ -349,6 +352,8 @@ enum SomeIMIntegrationStore {
         #else
         SomeIMSharedSessionStore.shared.logout()
         #endif
+        AgentCredentialStore.save("", account: legacyAPIKeyAccount)
+        AgentCredentialStore.save("", account: legacySessionTokenAccount)
         UserDefaults.standard.removeObject(forKey: accountKey)
         UserDefaults.standard.removeObject(forKey: codingPlanStatusKey)
         var settings = loadSettings()
@@ -413,28 +418,73 @@ enum SomeIMIntegrationStore {
     private static func currentSharedSession() -> SomeIMSharedSession? {
         #if DEBUG
         if testSharedSessionOverrideEnabled {
-            return testSharedSessionOverride
+            return testSharedSessionOverride ?? privateKeychainFallbackSession()
         }
         #endif
-        return SomeIMSharedSessionStore.shared.current()
+        return SomeIMSharedSessionStore.shared.current() ?? privateKeychainFallbackSession()
     }
 
     @discardableResult
     private static func persistSharedSession(_ session: SomeIMSharedSession) -> Bool {
         #if DEBUG
+        if testSharedSessionPersistFailureEnabled {
+            return persistPrivateKeychainFallbackSession(session)
+        }
         if testSharedSessionOverrideEnabled {
             testSharedSessionOverride = session
             NotificationCenter.default.post(name: sessionDidChangeNotification, object: nil)
             return true
         }
         #endif
-        return SomeIMSharedSessionStore.shared.login(session)
+        if SomeIMSharedSessionStore.shared.login(session) {
+            return true
+        }
+        return persistPrivateKeychainFallbackSession(session)
+    }
+
+    private static func privateKeychainFallbackSession() -> SomeIMSharedSession? {
+        let apiKey = AgentCredentialStore.load(account: legacyAPIKeyAccount)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !apiKey.isEmpty else { return nil }
+        let token = AgentCredentialStore.load(account: legacySessionTokenAccount)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        let account = loadAccount()
+        return SomeIMSharedSession(
+            apiKey: apiKey,
+            sessionToken: token,
+            email: account?.email ?? "",
+            tenantID: account?.tenantID,
+            baseURL: loadSettings().baseURL
+        )
+    }
+
+    @discardableResult
+    private static func persistPrivateKeychainFallbackSession(_ session: SomeIMSharedSession) -> Bool {
+        #if DEBUG
+        if testPrivateFallbackPersistFailureEnabled {
+            return false
+        }
+        #endif
+        let apiKey = session.apiKey.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !apiKey.isEmpty else { return false }
+        AgentCredentialStore.save(apiKey, account: legacyAPIKeyAccount)
+        AgentCredentialStore.save(session.sessionToken, account: legacySessionTokenAccount)
+        return AgentCredentialStore.load(account: legacyAPIKeyAccount)
+            .trimmingCharacters(in: .whitespacesAndNewlines) == apiKey
     }
 
     #if DEBUG
     static func _setTestSharedSessionOverride(enabled: Bool, session: SomeIMSharedSession? = nil) {
         testSharedSessionOverrideEnabled = enabled
         testSharedSessionOverride = session
+    }
+
+    static func _setTestSharedSessionPersistFailure(_ enabled: Bool) {
+        testSharedSessionPersistFailureEnabled = enabled
+    }
+
+    static func _setTestPrivateFallbackPersistFailure(_ enabled: Bool) {
+        testPrivateFallbackPersistFailureEnabled = enabled
     }
     #endif
 
@@ -444,6 +494,9 @@ enum SomeIMIntegrationStore {
     /// back — so an unsigned dev build that can't reach the access group keeps
     /// the legacy items and retries on the next signed launch.
     private static func migrateLegacyIfNeeded() {
+        #if DEBUG
+        if testSharedSessionOverrideEnabled { return }
+        #endif
         migrationLock.lock()
         defer { migrationLock.unlock() }
         if migrationAttempted { return }
@@ -554,6 +607,7 @@ struct SomeIMBrowserLoginStatus: Equatable {
     enum State: String {
         case pending
         case connected
+        case credentialSaveFailed
         case expired
         case unknown
     }
@@ -726,7 +780,7 @@ enum SomeIMClient {
             account: account,
             settings: nextSettings
         ) else {
-            return SomeIMBrowserLoginStatus(state: .connected, account: nil)
+            return SomeIMBrowserLoginStatus(state: .credentialSaveFailed, account: nil)
         }
         SomeIMIntegrationStore.saveSettings(nextSettings)
         SomeIMIntegrationStore.saveAccount(account)
@@ -1989,6 +2043,14 @@ struct SomeIMIntegrationSettingsView: View {
                             browserLoginRequest = nil
                             isWatchingBrowserLogin = false
                             status = L10n.Settings.SomeIM.browserLoginConnected
+                        }
+                        return
+                    }
+                    if result.state == .credentialSaveFailed {
+                        await MainActor.run {
+                            browserLoginRequest = nil
+                            isWatchingBrowserLogin = false
+                            status = L10n.Settings.SomeIM.browserLoginCredentialSaveFailed
                         }
                         return
                     }

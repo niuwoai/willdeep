@@ -74,6 +74,15 @@ struct AgentChatHeader: View {
         .padding(.leading, 18 + leadingWindowChromeInset)
         .padding(.trailing, 18)
         .frame(height: AgentDesign.headerHeight)
+        .background(
+            appState.editorSettings.interfaceSkin.palette.panelFill
+                .opacity(0.72)
+                .overlay(alignment: .bottom) {
+                    Rectangle()
+                        .fill(appState.editorSettings.interfaceSkin.palette.hairline.opacity(0.55))
+                        .frame(height: 1)
+                }
+        )
     }
 
     private var sessionSearchButton: some View {

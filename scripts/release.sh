@@ -41,7 +41,9 @@ PROJECT_FILE="Xedit.xcodeproj"
 PRODUCT_NAME="WillDeep"                               # 最终 .app / .dmg 文件名
 BUNDLE_ID="com.willdeep.app"
 TEAM_ID="ZH2S7D6PL6"                                    # Developer Team ID
-SIGNING_IDENTITY="Developer ID Application: Beijing Alibaba information Technology Co., Ltd. (ZH2S7D6PL6)"
+SIGNING_IDENTITY_TYPE="Developer ID Application"
+SIGNING_IDENTITY_NAME_SUBSTRING="Beijing Alibaba"
+SIGNING_IDENTITY=""                                      # 启动时从钥匙串按上面规则解析
 NOTARY_PROFILE="willdeep-notary"                      # store-credentials 时取的名字
 DMG_VOLUME_NAME="WillDeep"
 TEST_BUNDLE="XeditTests"                                # 跑哪个测试 target；UI 测试单独，不在这里跑
@@ -75,6 +77,39 @@ create_dmg_volume_icon() {
   sips -s format tiff "${APP_ICONSET_DIR}/icon_1024x1024.png" --out "$DMG_VOLUME_TIFF" >/dev/null
   tiff2icns "$DMG_VOLUME_TIFF" "$DMG_VOLUME_ICON"
   echo "  · DMG 卷图标：${DMG_VOLUME_ICON}"
+}
+
+resolve_signing_identity() {
+  local identities matches count resolved
+  identities="$(security find-identity -v -p codesigning 2>/dev/null || true)"
+  matches="$(printf '%s\n' "$identities" \
+    | grep -F "${SIGNING_IDENTITY_TYPE}:" \
+    | grep -F "${SIGNING_IDENTITY_NAME_SUBSTRING}" \
+    | grep -F "(${TEAM_ID})" || true)"
+  count="$(printf '%s\n' "$matches" | sed '/^[[:space:]]*$/d' | wc -l | tr -d ' ')"
+
+  if [[ "$count" == "0" ]]; then
+    echo "❌ 钥匙串里找不到符合要求的 Developer ID 证书："
+    echo "    类型: ${SIGNING_IDENTITY_TYPE}"
+    echo "    名称包含: ${SIGNING_IDENTITY_NAME_SUBSTRING}"
+    echo "    Team ID: ${TEAM_ID}"
+    echo "  请到 Apple Developer → Certificates 下载 .cer 后双击导入"
+    exit 1
+  fi
+
+  if [[ "$count" != "1" ]]; then
+    echo "❌ 找到多个符合要求的 Developer ID 证书，请清理钥匙串或收窄匹配规则："
+    printf '%s\n' "$matches" | sed 's/^/    /'
+    exit 1
+  fi
+
+  resolved="$(printf '%s\n' "$matches" | sed -E 's/^[[:space:]]*[0-9]+\)[[:space:]]+[A-Fa-f0-9]+[[:space:]]+"([^"]+)".*$/\1/')"
+  if [[ -z "$resolved" || "$resolved" == "$matches" ]]; then
+    echo "❌ 无法解析 Developer ID 证书名称："
+    printf '%s\n' "$matches" | sed 's/^/    /'
+    exit 1
+  fi
+  SIGNING_IDENTITY="$resolved"
 }
 
 # ----- 解析参数 -------------------------------------------------------------
@@ -146,7 +181,7 @@ HEAD_SUBJECT="$(git -C "$ROOT_DIR" log -1 --pretty=%s)"
 echo "========================================="
 echo "  ${PRODUCT_NAME} v${VERSION} Release"
 echo "  Team:        ${TEAM_ID}"
-echo "  Identity:    ${SIGNING_IDENTITY}"
+echo "  Identity:    ${SIGNING_IDENTITY_TYPE} + name contains '${SIGNING_IDENTITY_NAME_SUBSTRING}'"
 echo "  Notarize:    $([[ $SKIP_NOTARIZE == 1 ]] && echo skip || echo yes)"
 echo "  Tests:       $([[ $SKIP_TESTS == 1 ]] && echo skip || echo yes)"
 echo "  Dry-run:     $([[ $DRY_RUN == 1 ]] && echo yes || echo no)"
@@ -158,12 +193,8 @@ echo "========================================="
 
 # ----- 检查证书 -------------------------------------------------------------
 if [[ $DRY_RUN == 0 ]]; then
-  if ! security find-identity -v -p codesigning | grep -q "$SIGNING_IDENTITY"; then
-    echo "❌ 钥匙串里找不到 Developer ID 证书："
-    echo "    ${SIGNING_IDENTITY}"
-    echo "  请到 Apple Developer → Certificates 下载 .cer 后双击导入"
-    exit 1
-  fi
+  resolve_signing_identity
+  echo "  Selected identity: ${SIGNING_IDENTITY}"
 else
   echo "⚠️  dry-run：跳过证书检查 / 公证 / staple / spctl，仅保证 build 通过"
 fi
@@ -181,14 +212,31 @@ else
   echo ""
   echo "[0/8] xcodebuild test (${TEST_BUNDLE}) ..."
   # 直接看 xcodebuild 退出码。日志同步进 build/test.log 便于失败时排查。
+  # 通过 project_build_guard 串行化项目级 Xcode 构建，避免多个 Agent
+  # 会话同时抢 DerivedData / SwiftPM / xcresult。
   set +e
-  xcodebuild test \
-    -project "${ROOT_DIR}/${PROJECT_FILE}" \
-    -scheme "$SCHEME" \
-    -destination 'platform=macOS' \
-    -only-testing:"$TEST_BUNDLE" \
-    -resultBundlePath "${BUILD_DIR}/test-results.xcresult" \
-    > "${BUILD_DIR}/test.log" 2>&1
+  ruby "${ROOT_DIR}/scripts/project_build_guard.rb" \
+    --workspace "${ROOT_DIR}" \
+    --name xedit-release-tests \
+    --kind xcode-test \
+    --artifact "${BUILD_DIR}/test-results.xcresult" \
+    --fingerprint-file "Xedit.xcodeproj/project.pbxproj" \
+    --fingerprint-file "Xedit.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved" \
+    --fingerprint-file "scripts/xcodebuild_ci.rb" \
+    --json-report "${BUILD_DIR}/project_build_guard_test_report.json" \
+    --markdown-report "${BUILD_DIR}/project_build_guard_test_report.md" \
+    --replace-artifacts \
+    -- \
+    ruby "${ROOT_DIR}/scripts/xcodebuild_ci.rb" \
+      --log "${BUILD_DIR}/test.log" \
+      --pass-grace 180 \
+      -- \
+      xcodebuild test \
+        -project "${ROOT_DIR}/${PROJECT_FILE}" \
+        -scheme "$SCHEME" \
+        -destination 'platform=macOS' \
+        -only-testing:"$TEST_BUNDLE" \
+        -resultBundlePath "${BUILD_DIR}/test-results.xcresult"
   TEST_RC=$?
   set -e
   if [[ $TEST_RC -ne 0 ]]; then
@@ -207,45 +255,74 @@ echo ""
 echo "[1/8] xcodebuild archive ..."
 if [[ $DRY_RUN == 1 ]]; then
   # dry-run 只校验 build 能过，不出 archive；签名身份在 dry-run 时换成 - 让 xcodebuild 不要去钥匙串找证书。
-  xcodebuild \
-    -project "${ROOT_DIR}/${PROJECT_FILE}" \
-    -scheme "$SCHEME" \
-    -configuration "$CONFIGURATION" \
-    -destination "generic/platform=macOS" \
-    CODE_SIGNING_ALLOWED=NO \
-    build
+  ruby "${ROOT_DIR}/scripts/project_build_guard.rb" \
+    --workspace "${ROOT_DIR}" \
+    --name xedit-release-dry-run-build \
+    --kind xcode-build \
+    --fingerprint-file "Xedit.xcodeproj/project.pbxproj" \
+    --fingerprint-file "Xedit.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved" \
+    --no-cache \
+    -- \
+    xcodebuild \
+      -project "${ROOT_DIR}/${PROJECT_FILE}" \
+      -scheme "$SCHEME" \
+      -configuration "$CONFIGURATION" \
+      -destination "generic/platform=macOS" \
+      CODE_SIGNING_ALLOWED=NO \
+      build
   echo ""
   echo "✅ dry-run 完成：测试 ✅ + Release build ✅"
   echo "   未生成 archive / dmg；真实 release 请去掉 --dry-run"
   exit 0
 fi
 
-xcodebuild \
-  -project "${ROOT_DIR}/${PROJECT_FILE}" \
-  -scheme "$SCHEME" \
-  -configuration "$CONFIGURATION" \
-  -destination "generic/platform=macOS" \
-  -archivePath "$ARCHIVE_PATH" \
-  CODE_SIGN_STYLE=Manual \
-  CODE_SIGN_IDENTITY="$SIGNING_IDENTITY" \
-  DEVELOPMENT_TEAM="$TEAM_ID" \
-  archive
+ruby "${ROOT_DIR}/scripts/project_build_guard.rb" \
+  --workspace "${ROOT_DIR}" \
+  --name xedit-release-archive \
+  --kind xcode-archive \
+  --artifact "$ARCHIVE_PATH" \
+  --fingerprint-file "Xedit.xcodeproj/project.pbxproj" \
+  --fingerprint-file "Xedit.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved" \
+  --replace-artifacts \
+  -- \
+  xcodebuild \
+    -project "${ROOT_DIR}/${PROJECT_FILE}" \
+    -scheme "$SCHEME" \
+    -configuration "$CONFIGURATION" \
+    -destination "generic/platform=macOS" \
+    -archivePath "$ARCHIVE_PATH" \
+    CODE_SIGN_STYLE=Manual \
+    CODE_SIGN_IDENTITY="$SIGNING_IDENTITY" \
+    DEVELOPMENT_TEAM="$TEAM_ID" \
+    archive
 
 # ----- Step 2: 导出 .app（developer-id distribution） -----------------------
 echo ""
 echo "[2/8] xcodebuild -exportArchive ..."
-cat > "$EXPORT_OPTIONS_PLIST" <<EOF
-<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<plist version="1.0">
-<dict>
-  <key>method</key><string>developer-id</string>
-  <key>teamID</key><string>${TEAM_ID}</string>
-  <key>signingStyle</key><string>manual</string>
-  <key>signingCertificate</key><string>Developer ID Application</string>
-</dict>
-</plist>
-EOF
+ruby -e '
+  path, team_id, signing_identity = ARGV
+  escape = ->(value) {
+    value.to_s
+      .gsub("&", "&amp;")
+      .gsub("<", "&lt;")
+      .gsub(">", "&gt;")
+      .gsub("\"", "&quot;")
+      .gsub("'\''", "&apos;")
+  }
+  lines = [
+    "<?xml version=\"1.0\" encoding=\"UTF-8\"?>",
+    "<!DOCTYPE plist PUBLIC \"-//Apple//DTD PLIST 1.0//EN\" \"http://www.apple.com/DTDs/PropertyList-1.0.dtd\">",
+    "<plist version=\"1.0\">",
+    "<dict>",
+    "  <key>method</key><string>developer-id</string>",
+    "  <key>teamID</key><string>#{escape.call(team_id)}</string>",
+    "  <key>signingStyle</key><string>manual</string>",
+    "  <key>signingCertificate</key><string>#{escape.call(signing_identity)}</string>",
+    "</dict>",
+    "</plist>"
+  ]
+  File.write(path, "#{lines.join("\n")}\n")
+' "$EXPORT_OPTIONS_PLIST" "$TEAM_ID" "$SIGNING_IDENTITY"
 
 xcodebuild \
   -exportArchive \
@@ -257,6 +334,29 @@ if [[ ! -d "$APP_PATH" ]]; then
   echo "❌ 导出失败，找不到 $APP_PATH"
   exit 1
 fi
+
+echo ""
+echo "[2.5/8] exported app 签名与敏感 Info.plist 自检 ..."
+if AIPIPE_PLIST_KEY=$(/usr/libexec/PlistBuddy -c "Print :AIPipeAPIKey" "${APP_PATH}/Contents/Info.plist" 2>/dev/null); then
+  if [[ -z "${AIPIPE_API_KEY:-}" ]]; then
+    echo "❌ 导出的 app Info.plist 含 AIPipeAPIKey，但当前发布环境未设置 AIPIPE_API_KEY"
+    echo "   请在 archive 前设置 AIPIPE_API_KEY，让 Info.plist 在签名前展开；不要在签名后改包。"
+    exit 1
+  fi
+  if [[ "$AIPIPE_PLIST_KEY" != "$AIPIPE_API_KEY" ]]; then
+    echo "❌ 导出的 app Info.plist 中 AIPipeAPIKey 与当前 AIPIPE_API_KEY 不一致"
+    echo "   这通常说明 key 不是从本次发布环境展开，或 app 包被签名后改过。"
+    exit 1
+  fi
+  echo "  · AIPipeAPIKey 已由当前发布环境注入 Info.plist（不打印值）"
+fi
+if /usr/libexec/PlistBuddy -c "Print :WillDeepSomeIMClientLoginSecret" "${APP_PATH}/Contents/Info.plist" >/dev/null 2>&1; then
+  echo "❌ 导出的 app Info.plist 含 WillDeepSomeIMClientLoginSecret，拒绝继续打包"
+  echo "   some.im 客户端登录密钥应由构建期 Swift 常量注入，不允许写进 Info.plist。"
+  exit 1
+fi
+codesign --verify --deep --strict --verbose=4 "$APP_PATH"
+codesign -d --entitlements :- "$APP_PATH" >/dev/null
 
 # ----- Step 3: 打包 DMG -----------------------------------------------------
 echo ""
@@ -332,7 +432,7 @@ if [[ $SKIP_STAPLE == 0 ]]; then
   # ----- Step 7: Gatekeeper 自检 --------------------------------------------
   echo ""
   echo "[7/8] spctl 自检 ..."
-  spctl --assess --type open --context context:primary-signature --verbose "$DMG_PATH" || true
+  spctl --assess --type open --context context:primary-signature --verbose "$DMG_PATH"
 fi
 
 # ----- Step 7.5: 备份发布产物 ------------------------------------------------
@@ -348,7 +448,7 @@ mkdir -p "${BACKUP_ROOT}/${VERSION}"
 # 用 ditto 拷 .app（保留扩展属性与签名结构），cp -p 拷 .dmg（普通文件）。
 ditto "$APP_PATH" "${BACKUP_ROOT}/${VERSION}/${PRODUCT_NAME}.app"
 cp -p "$DMG_PATH" "${BACKUP_ROOT}/${VERSION}/"
-echo "$VERSION" > "${BACKUP_ROOT}/latest.txt"
+ruby -e 'File.write(ARGV[0], "#{ARGV[1]}\n")' "${BACKUP_ROOT}/latest.txt" "$VERSION"
 echo "  ✅ 已备份 .app + .dmg → ${BACKUP_ROOT}/${VERSION}/"
 
 # ----- Step 8: 交互确认是否打 tag/push --------------------------------------

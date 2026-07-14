@@ -1,6 +1,6 @@
 # WillDeep Product Overview
 
-> Last updated: 2026-07-13 | Current version: v1.150.0-rc1
+> Last updated: 2026-07-14 | Current version: v1.152.0-rc17
 
 ## Positioning
 
@@ -12,6 +12,32 @@ WillDeep is configured for non-App-Store distribution without App Sandbox so it 
 
 ## 架构概览
 
+- **Agent 模型选择大面板（1.152.0-rc17）** —— Composer 模型选择入口改为宽面板配置：未绑定 some.im 时仅显示用户自配 Flash / Pro；已绑定 some.im 时展示省心托管、Coding Plan 订阅购买入口、`someim-coding-plan-low/high` 快捷选择，以及 deepseek-v4、glm、grok-4.5 等重点推荐模型。不熟悉模型差异的用户可直接选「省心托管」，由 WillDeep 按任务路由。
+- **专家介入锁定提示（1.152.0-rc16）** —— Agent 专家弹窗现在区分“只打开过”和“已经对话过”：空会话里误开的专家可以关闭；一旦会话已有用户消息，已启用专家会保持锁定，并在专家区顶部显示提示条说明“专家介入对话后，本会话内就不能再关闭”。
+- **Workspace 会话查询与自动改名（1.152.0-rc15）** —— Agent 新增 `list_workspace_sessions` 只读工具查看当前 workspace 分组下的会话列表，并新增 `suggest_session_title` 通过标题总结 flash 模型生成当前会话短标题候选；系统提示会在新用户输入后检查会话名是否仍贴合任务，普通模式通过 `rename_session` 询问用户确认，Goal 模式下 `rename_session` 自动通过且不打断目标执行，`change_workspace` 仍在 Goal 模式禁用。
+- **同会话后续请求待办刷新（1.152.0-rc14）** —— Plan 模式中已完成计划会重新进入计划门，后续同一会话的新需求必须先生成新 `plan`；捕获逻辑现在优先识别最新助手消息里的 `plan` 块并替换旧计划，右侧待办随新需求刷新。
+- **当前会话排队任务工具（1.152.0-rc14）** —— Agent 新增 `list_queued_tasks` 只读工具，可查看当前会话排队用户消息、provider dispatch 等候、后台 job、媒体任务和 `.codex-build/queue` 项目构建队列；系统提示要求在用户未明确要求时，完整编译、测试、归档、发布、上线等重操作前先查队列，若还有后续用户任务则优先推迟重操作。
+- **Agent 主界面与审核框重排（1.152.0-rc13）** —— Agent 窗口的聊天区、左侧会话栏和右侧任务监控做了更清晰的视觉层次；工具审核卡独立展示风险、命令预览和操作按钮，长命令限制在约 3 行内滚动，并提供“查看解释与解决建议”。解释模型按 some.im Coding Plan 订阅优先 `someim-coding-plan-low/flow`，无订阅回退 `someim-auto-flash`，未绑定 some.im 则使用当前 provider 的 flash 模型。
+- **省心托管档位菜单（1.152.0-rc12）** —— 模型菜单在当前会话启用「省心托管」后显示「托管档位」子菜单，支持 Flash / Pro / Premium 三档互切并勾选当前档位；会话标签也展示 `省心托管 · Flash/Pro/Premium`，避免用户看不出托管最低档。
+- **项目级构建守卫（1.152.0-rc11）** —— 仓库新增 `scripts/project_build_guard.rb`，以 `.codex-build/` 维护 workspace 级队列、锁、manifest 与报告；Xedit 的测试和 release 打包入口已接入该守卫，多个 Agent 会话同时触发 `xcodebuild` 时会排队执行，且相同 fingerprint 的成功产物可直接复用。
+- **Agent 模型菜单勾选与分组文案（1.152.0-rc10）** —— 模型选择菜单里路由默认值、省心托管与具体模型的勾选态互斥；具体模型只在用户显式选择后显示勾选。尾部“最近获取”分组改为“所有模型”，省心托管升档后的重置操作改称“降回基础托管档”。
+- **Agent 产物区目录聚合与 Finder 打开（1.152.0-rc9）** —— 产物区会把同目录下的多文件产物折叠为目录项，点击文件或目录时直接在 Finder 中显示或打开，减少长列表噪音。
+- **桌面宠物输入电脑道具移除（1.152.0-rc8）** —— 输入时不再显示像素笔记本和敲键盘手部叠层，只保留桌宠本体的轻微输入状态晃动。
+- **桌面宠物输出卡片新鲜度（1.152.0-rc7）** —— 桌面宠物左侧对话卡片只展示最近 1 分钟内有助手输出的会话，旧输出自动从卡片列表和收起计数里消失。
+- **工作区空项目保留（1.152.0-rc6）** —— Agent 侧边栏添加多个项目时，每个尚无真实对话的项目都会保留一条空新对话占位；同一项目里重复创建的旧空占位仍会隐藏，避免列表堆满“新对话”。
+- **桌面宠物原地转圈轴向修正（1.152.0-rc5）** —— `spinning` 情绪改为绕竖直 Y 轴转身，平面旋转归零，避免角色像整个人头朝下翻滚。
+- **桌面宠物拖动动画再降速（1.152.0-rc4）** —— 拖动宠物时的 walking 摆动与步态起伏频率再次降低，保持位置移动反馈但让动作更慢、更稳。
+- **设置窗口焦点框禁用（1.152.0-rc3）** —— 设置窗口根视图、左侧分类标签、二级分段标签与内容容器统一关闭 SwiftUI focusable/focus effect，避免 tab 标签和内容区域出现紫色键盘焦点框。
+- **桌面宠物拖动动画降速（1.152.0-rc2）** —— 拖动宠物时仍切换为行走状态，但横向摆动与步态起伏频率降低，减少快速抖动感，让移动位置时更稳。
+- **some.im 浏览器登录 Keychain 兜底（1.152.0-rc1）** —— 浏览器登录拿到 some.im app API key 后，若共享 Keychain access group 写入失败，WillDeep 会退回本 App 私有 Keychain 保存并读回验证；只有共享 Keychain 与私有兜底都失败时才显示本地保存失败，降低签名/钥匙串 ACL 异常导致的登录断点。
+- **AIPipe 上报暂时停用（1.152.0）** —— `AIPipeBootstrap` 当前短路初始化，不读取或使用 `AIPIPE_API_KEY` / `AIPipeAPIKey` 发起上报；SDK 接入保留，后续需要时可重新打开。
+- **桌面宠物多会话输出卡片（1.152.0）** —— 桌面宠物旁的文字卡片最多展示 3 个最新有助手输出的会话；每条消息可点击回到对应会话，右上角可收起为贴近宠物的圆形计数入口，点击数字或圆圈即可展开。
+- **some.im 浏览器登录保存失败诊断（1.151.0-rc1）** —— 浏览器登录状态轮询现在区分“some.im 未返回 WillDeep 凭据”和“已返回凭据但本机 Keychain/共享 session 保存失败”，避免把本地保存问题误提示成 web 端没有回传。
+- **发布包签名前置自检（1.151.0-rc1）** —— Release 脚本在导出 `.app` 后先做严格 codesign 校验，并阻止 some.im 客户端登录密钥进入 `Info.plist`；DMG Gatekeeper 自检失败会直接停止发布。
+- **桌面宠物双击跳跃（1.151.0）** —— 双击桌面宠物图像会触发一次短跳动画，作为轻量互动反馈；气泡点击仍负责跳回当前会话，拖动手势仍负责移动宠物位置。
+- **设置左侧栏与桌面宠物一等入口（1.150.0-rc3）** —— 设置窗口改为左侧分类、右侧内容的两栏结构：桌面宠物作为独立分类常驻左侧，编辑器 / AI / 运行时 / 集成等多页分类继续在右侧顶部使用分段切换。桌面宠物右键菜单补齐中英文资源，点击「桌面宠物设置…」会稳定打开设置窗口并直达宠物页。
+- **发布证书约束（1.150.0-rc3）** —— `scripts/release.sh` 发布/公证链路要求钥匙串里存在唯一匹配的 `Developer ID Application` 证书，证书名称必须包含 `Beijing Alibaba` 且 Team ID 为 `ZH2S7D6PL6`；脚本会把解析出的证书用于 archive 与 DMG 签名，避免误用个人 Apple Development 或其他团队证书。
+- **Release helper 构建耗时日志（1.150.0-rc2）** —— `WillDeepComputerUseHelper.app` 的 Xcode Run Script 现在按 bundle 准备、双架构 `swiftc`、`lipo`、签名和验证输出秒级耗时；签名失败会打印 bundle 结构和 codesign 诊断，便于判断 release archive 是源码编译慢、双架构慢，还是卡在钥匙串/签名环节。
 - **桌面宠物输入节拍（1.150.0）** —— Agent 输入框有内容时，宠物切换为“陪你敲字中”：抬身面对打包的像素笔记本，双手、键盘和屏幕光按节拍动作。保留 1.149.0 的默认开启、拖动走路、位置记忆、右键直达设置与任何壁纸下的文字对比度。
 - **Release 编译器析构规避（1.150.0-rc1）** —— `WorkflowWatchdogRace` 显式声明空析构函数，避开固定 Swift 6.3.1 工具链在 Release 优化 (`-O -enable-default-cmo`) 下对泛型合成析构函数进行 EarlyPerfInliner 时偶发崩溃的问题；每次升级工具链后应重新验证 Release archive。
 
@@ -952,7 +978,7 @@ WillDeep 是 SwiftUI + AppKit 桥接的 macOS 应用，单进程多窗口。代�
 - **bugfix**（含文档、release 流程改进）：只递增 `rcN`。
 - **feature 新增**：可提升 `PATCH` / `MINOR`，rc 归位 `rc1`。
 - 前后端版本号必须一致——这里"后端"指 `AgentClient` 出站请求的 `X-App-Version` header（值从 `Bundle.main.CFBundleShortVersionString` 取，等价 pbxproj `MARKETING_VERSION`）。
-- 12 处需同步更新：`Xedit.xcodeproj/project.pbxproj` 里 6 个 `MARKETING_VERSION` 块（debug / release × 三个 target）、`willdeep-agent/internal/agent/version.go`、`Help/WillDeep.help/Contents/Info.plist`、README version badge、本文件顶部 `Current version`、`docs/MOBILE_GATEWAY_REQUIREMENTS.md` 与 `docs/AGENT_HARNESS_IMPROVEMENT_PRIORITIES.md` 一并同步。
+- 版本同步位点：`Xedit.xcodeproj/project.pbxproj` 里 6 个 `MARKETING_VERSION` 块（debug / release × 三个 target）、`willdeep-agent/internal/agent/version.go`、`Help/WillDeep.help/Contents/Info.plist`、`ComputerUseHelper/Info.plist`、README version badge、本文件顶部 `Current version`、`docs/MOBILE_GATEWAY_REQUIREMENTS.md` 与 `docs/AGENT_HARNESS_IMPROVEMENT_PRIORITIES.md` 一并同步。
 - 每次版本变更必须同步在 `CHANGELOG.md` 顶部写一节、更新本文件头部的 `Current version` 字段。
 - git commit 后建议打 `v{版本号}` tag 并推送 origin（`scripts/release.sh` 公证完成后会交互确认是否打 tag/push）。
 

@@ -161,7 +161,12 @@ struct AgentModeView: View {
             // 的唯一可压缩列;压不下的内容按 `.leading` 靠左,在右缘被
             // `.clipped()` 裁掉,不再外溢盖住左右邻居。
             .frame(minWidth: 0, maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
-            .background(skin.windowBackground)
+            .background(
+                skin.windowBackground
+                    .overlay(
+                        skin.palette.panelFill.opacity(0.18)
+                    )
+            )
             .clipped()
 
             if activeSidePanel != nil {
@@ -589,11 +594,11 @@ enum AgentDesign {
 
     // Paddings & sizes.
     static let chatMaxContentWidth: CGFloat = 1040
-    static let chatHorizontalInset: CGFloat = 18
+    static let chatHorizontalInset: CGFloat = 26
     static let userMessageMaxWidthRatio: CGFloat = 0.95
-    static let messageVerticalSpacing: CGFloat = 18
+    static let messageVerticalSpacing: CGFloat = 20
     static let composerHeight: CGFloat = 124
-    static let headerHeight: CGFloat = 42
+    static let headerHeight: CGFloat = 44
     static let statusBarHeight: CGFloat = 26
     static let sidebarRowHeight: CGFloat = 26
     static let sidebarTodoRowHeight: CGFloat = 42

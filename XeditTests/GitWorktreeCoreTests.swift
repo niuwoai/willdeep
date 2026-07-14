@@ -282,6 +282,61 @@ struct GitWorktreeCoreTests {
         #expect(Set(signatures.keys) == Set(["exports/result.pdf"]))
     }
 
+    @Test("agent rail artifacts collapse sibling deliverables into directory rows")
+    func testAgentRailArtifactDirectoryCollapse() {
+        let root = URL(fileURLWithPath: "/tmp/willdeep-artifact-rail")
+        let mediaRoot = URL(fileURLWithPath: "/tmp/willdeep-media")
+        let artifacts = [
+            AgentRailArtifact(
+                url: root.appendingPathComponent("exports/result.pdf"),
+                displayPath: "exports/result.pdf",
+                isDirectory: false
+            ),
+            AgentRailArtifact(
+                url: root.appendingPathComponent("exports/summary.md"),
+                displayPath: "exports/summary.md",
+                isDirectory: false
+            ),
+            AgentRailArtifact(
+                url: root.appendingPathComponent("README.md"),
+                displayPath: "README.md",
+                isDirectory: false
+            ),
+            AgentRailArtifact(
+                url: mediaRoot.appendingPathComponent("shot-1.png"),
+                displayPath: mediaRoot.appendingPathComponent("shot-1.png").path,
+                isDirectory: false
+            ),
+            AgentRailArtifact(
+                url: mediaRoot.appendingPathComponent("shot-2.png"),
+                displayPath: mediaRoot.appendingPathComponent("shot-2.png").path,
+                isDirectory: false
+            ),
+            AgentRailArtifact(
+                url: root.appendingPathComponent("bundle"),
+                displayPath: "bundle",
+                isDirectory: true
+            ),
+            AgentRailArtifact(
+                url: root.appendingPathComponent("bundle/index.html"),
+                displayPath: "bundle/index.html",
+                isDirectory: false
+            ),
+        ]
+
+        let collapsed = AgentRailArtifact.collapsedForDisplay(artifacts)
+        let byDisplayPath = Dictionary(uniqueKeysWithValues: collapsed.map { ($0.displayPath, $0) })
+
+        #expect(collapsed.count == 4)
+        #expect(byDisplayPath["exports"]?.isDirectory == true)
+        #expect(byDisplayPath["exports"]?.itemCount == 2)
+        #expect(byDisplayPath[mediaRoot.path]?.isDirectory == true)
+        #expect(byDisplayPath[mediaRoot.path]?.itemCount == 2)
+        #expect(byDisplayPath["README.md"]?.isDirectory == false)
+        #expect(byDisplayPath["bundle"]?.isDirectory == true)
+        #expect(byDisplayPath["bundle/index.html"] == nil)
+    }
+
     @Test("agent worktree diff preview is limited to attributed files")
     func testWorktreeDiffPreviewLimitsTrackedDiffToAttributedFiles() throws {
         let repository = FileManager.default.temporaryDirectory

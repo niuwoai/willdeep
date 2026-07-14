@@ -10,7 +10,7 @@
 //   - `ModelPickerPill`: provider/model selector. Flat Section per
 //     provider with Flash and Pro models as direct rows (nested Menus
 //     on macOS dismiss on the slightest hover drift). Has
-//     "Recently used", "Hot", "New", and "Recently fetched" tail
+//     "Recently used", "Hot", "New", and "All models" tail
 //     menus for ad-hoc model IDs not in the library entries.
 //   - `AgentExecutionPickerPill`: WillDeep / Claude Code / Codex
 //     execution backend selector for the next composer turn.
@@ -510,14 +510,43 @@ struct AgentExpertActivationList: View {
                 .font(.system(size: 11, weight: .semibold))
                 .foregroundStyle(.secondary)
 
+            if shouldShowLockedNotice {
+                HStack(alignment: .top, spacing: 7) {
+                    Image(systemName: "info.circle.fill")
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundStyle(Color.accentColor)
+                    Text(L10n.Expert.lockedNotice)
+                        .font(.system(size: 10))
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                .padding(.horizontal, 10)
+                .padding(.vertical, 8)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(
+                    RoundedRectangle(cornerRadius: 8)
+                        .fill(Color.accentColor.opacity(0.10))
+                )
+                .overlay(
+                    RoundedRectangle(cornerRadius: 8)
+                        .stroke(Color.accentColor.opacity(0.22), lineWidth: 1)
+                )
+                .accessibilityElement(children: .combine)
+            }
+
             ForEach(AgentExpert.allCases) { expert in
                 expertRow(expert)
             }
         }
     }
 
+    private var shouldShowLockedNotice: Bool {
+        !appState.agentActiveExperts.isEmpty && !appState.canDeactivateAgentExperts()
+    }
+
     private func expertRow(_ expert: AgentExpert) -> some View {
         let isActive = appState.agentActiveExperts.contains(expert)
+        let canDeactivate = appState.canDeactivateAgentExperts()
         return HStack(alignment: .center, spacing: 10) {
             Image(systemName: expert.symbol)
                 .font(.system(size: 13, weight: .semibold))
@@ -541,13 +570,15 @@ struct AgentExpertActivationList: View {
                 set: { newValue in
                     if newValue {
                         appState.activateAgentExpert(expert)
+                    } else {
+                        appState.deactivateAgentExpert(expert)
                     }
                 }
             ))
             .labelsHidden()
             .toggleStyle(.switch)
             .focusable(false)
-            .disabled(isActive)
+            .disabled(isActive && !canDeactivate)
         }
         .focusable(false)
         .padding(.horizontal, 10)
@@ -562,8 +593,11 @@ struct AgentExpertActivationList: View {
         )
         .contentShape(RoundedRectangle(cornerRadius: 8))
         .onTapGesture {
-            guard !isActive else { return }
-            appState.activateAgentExpert(expert)
+            if isActive {
+                appState.deactivateAgentExpert(expert)
+            } else {
+                appState.activateAgentExpert(expert)
+            }
         }
         .focusable(false)
     }
@@ -700,114 +734,14 @@ struct AgentPluginPickerPill: View {
 
 struct ModelPickerPill: View {
     @EnvironmentObject var appState: AppState
+    @Environment(\.openURL) private var openURL
     @State private var menuSnapshot = ModelPickerMenuSnapshot.empty
+    @State private var isModelPanelPresented = false
 
     var body: some View {
-        Menu {
-            // First entry: keep the "use the route's natural pick"
-            // shortcut so the user can drop a session override.
-            if !menuSnapshot.configuredModel.isEmpty {
-                Button {
-                    appState.recordRecentlyUsedAgentModel(menuSnapshot.configuredModel)
-                    appState.setAgentSessionModel(nil)
-                } label: {
-                    HStack {
-                        Text("Use route default: \(menuSnapshot.configuredModel)")
-                        if menuSnapshot.sessionOverride == nil {
-                            Image(systemName: "checkmark")
-                        }
-                    }
-                }
-                Divider()
-            }
-
-            // some.im "省心托管" — session-level managed routing. Only offered
-            // when some.im is the active provider. Selecting it clears any
-            // explicit override; once the session has escalated, a reset entry
-            // appears to drop the only-goes-up floor back to low.
-            if menuSnapshot.isSomeIMActive {
-                Button {
-                    appState.selectSomeIMManagedRouting()
-                    refreshMenuSnapshot()
-                } label: {
-                    HStack {
-                        Text(L10n.AgentManagedRouting.title)
-                        if menuSnapshot.managedActive {
-                            Image(systemName: "checkmark")
-                        }
-                    }
-                }
-                if menuSnapshot.managedActive,
-                   let floor = menuSnapshot.managedFloor, floor > .low {
-                    Button {
-                        appState.resetManagedRoutingFloor()
-                        refreshMenuSnapshot()
-                    } label: {
-                        Text(L10n.AgentManagedRouting.reset)
-                    }
-                }
-                Divider()
-            }
-
-            // Library entries — one Section per provider, models
-            // listed flat under it. Previously this was a nested
-            // Menu-in-Menu but SwiftUI's macOS implementation
-            // dismisses the inner Menu on the slightest hover drift,
-            // so the user would click a provider and only see a
-            // brief flash. Sectioned flat layout sidesteps that
-            // entirely; the provider name renders as a non-clickable
-            // header above its model rows.
-            ForEach(menuSnapshot.providerEntries) { entry in
-                providerSection(
-                    entry: entry,
-                    activeProviderID: menuSnapshot.activeProviderID,
-                    override: menuSnapshot.sessionOverride,
-                    routed: menuSnapshot.configuredModel
-                )
-            }
-
-            if menuSnapshot.providerEntries.isEmpty {
-                Text("No providers configured. Open Settings → Agent.")
-            }
-
-            // Tail: ad-hoc models that don't belong to any library
-            // entry's primary/alternates list. Recently used comes
-            // first, then provider-supplied catalog highlights, then
-            // older fetched-only ids.
-            if !menuSnapshot.recentlyUsedModels.isEmpty ||
-                !menuSnapshot.hotModels.isEmpty ||
-                !menuSnapshot.newModels.isEmpty ||
-                !menuSnapshot.fetchedModels.isEmpty {
-                Divider()
-            }
-            if !menuSnapshot.recentlyUsedModels.isEmpty {
-                Menu("Recently used") {
-                    ForEach(menuSnapshot.recentlyUsedModels, id: \.self) { model in
-                        adHocModelButton(model)
-                    }
-                }
-            }
-            if !menuSnapshot.hotModels.isEmpty {
-                Menu("Hot") {
-                    ForEach(menuSnapshot.hotModels, id: \.self) { model in
-                        adHocModelButton(model)
-                    }
-                }
-            }
-            if !menuSnapshot.newModels.isEmpty {
-                Menu("New") {
-                    ForEach(menuSnapshot.newModels, id: \.self) { model in
-                        adHocModelButton(model)
-                    }
-                }
-            }
-            if !menuSnapshot.fetchedModels.isEmpty {
-                Menu("Recently fetched") {
-                    ForEach(menuSnapshot.fetchedModels, id: \.self) { model in
-                        adHocModelButton(model)
-                    }
-                }
-            }
+        Button {
+            refreshMenuSnapshot()
+            isModelPanelPresented.toggle()
         } label: {
             HStack(spacing: 3) {
                 Text(menuSnapshot.currentModelLabel.isEmpty ? "Select model" : menuSnapshot.currentModelLabel)
@@ -823,11 +757,14 @@ struct ModelPickerPill: View {
             .background(appState.editorSettings.interfaceSkin.palette.controlFill.opacity(0.72))
             .clipShape(RoundedRectangle(cornerRadius: AgentDesign.pillCornerRadius))
         }
-        .menuStyle(.borderlessButton)
-        .menuIndicator(.hidden)
+        .buttonStyle(.plain)
         .focusable(false)
         .fixedSize()
         .help("Pick provider + model for this chat. The active provider also drives Auto/Flash/Pro routing.")
+        .popover(isPresented: $isModelPanelPresented, arrowEdge: .bottom) {
+            modelSelectionPanel
+                .frame(width: 560, height: 640)
+        }
         .onAppear(perform: refreshMenuSnapshot)
         .onReceive(appState.$agentProviderLibrary) { _ in
             refreshMenuSnapshot()
@@ -852,6 +789,505 @@ struct ModelPickerPill: View {
         }
     }
 
+    @ViewBuilder
+    private var modelSelectionPanel: some View {
+        let palette = appState.editorSettings.interfaceSkin.palette
+        VStack(alignment: .leading, spacing: 0) {
+            HStack(alignment: .center, spacing: 10) {
+                Image(systemName: "slider.horizontal.3")
+                    .font(.system(size: 18, weight: .semibold))
+                    .foregroundStyle(.teal)
+                    .frame(width: 30, height: 30)
+                    .background(palette.controlFill.opacity(0.9))
+                    .clipShape(RoundedRectangle(cornerRadius: 8))
+                VStack(alignment: .leading, spacing: 3) {
+                    Text("选择模型与托管方式")
+                        .font(.system(size: 15, weight: .semibold))
+                    Text(menuSnapshot.isSomeIMAuthenticated
+                         ? "已连接 some.im，可使用省心托管、Coding Plan 和推荐模型。"
+                         : "未连接 some.im，仅显示你自己配置的 Flash / Pro 模型。")
+                        .font(.system(size: 11))
+                        .foregroundStyle(.secondary)
+                        .lineLimit(2)
+                }
+                Spacer()
+                Button {
+                    isModelPanelPresented = false
+                } label: {
+                    Image(systemName: "xmark")
+                        .font(.system(size: 11, weight: .bold))
+                        .frame(width: 24, height: 24)
+                }
+                .buttonStyle(.plain)
+                .foregroundStyle(.secondary)
+            }
+            .padding(.horizontal, 16)
+            .padding(.vertical, 14)
+
+            Divider()
+
+            ScrollView {
+                LazyVStack(alignment: .leading, spacing: 12) {
+                    currentRouteSection
+
+                    if menuSnapshot.isSomeIMAuthenticated {
+                        managedRoutingHero
+                        codingPlanSection
+                        recommendedModelsSection
+                    } else {
+                        someIMLockedSection
+                    }
+
+                    configuredProvidersSection
+
+                    if menuSnapshot.isSomeIMAuthenticated {
+                        catalogSection
+                    }
+                }
+                .padding(16)
+            }
+        }
+        .background(palette.panelFill.opacity(0.98))
+    }
+
+    @ViewBuilder
+    private var currentRouteSection: some View {
+        modelPanelSection(title: "当前选择", systemImage: "location") {
+            if !menuSnapshot.configuredModel.isEmpty {
+                modelActionRow(
+                    title: "使用路由默认值",
+                    subtitle: menuSnapshot.configuredModel,
+                    badge: "Default",
+                    systemImage: "arrow.triangle.2.circlepath",
+                    checked: menuSnapshot.sessionOverride == nil && !menuSnapshot.managedActive
+                ) {
+                    appState.recordRecentlyUsedAgentModel(menuSnapshot.configuredModel)
+                    appState.setAgentSessionModel(nil)
+                    closeModelPanel()
+                }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var managedRoutingHero: some View {
+        modelPanelSection(title: "最省心", systemImage: "sparkles") {
+            Button {
+                chooseManagedRouting(tier: .low)
+            } label: {
+                HStack(alignment: .top, spacing: 12) {
+                    Image(systemName: "wand.and.stars")
+                        .font(.system(size: 20, weight: .semibold))
+                        .foregroundStyle(.white)
+                        .frame(width: 38, height: 38)
+                        .background(LinearGradient(colors: [.teal, .blue], startPoint: .topLeading, endPoint: .bottomTrailing))
+                        .clipShape(RoundedRectangle(cornerRadius: 9))
+                    VStack(alignment: .leading, spacing: 5) {
+                        HStack(spacing: 8) {
+                            Text("省心托管")
+                                .font(.system(size: 14, weight: .semibold))
+                            Text("不懂就选这个")
+                                .font(.system(size: 10, weight: .bold))
+                                .foregroundStyle(.teal)
+                                .padding(.horizontal, 7)
+                                .padding(.vertical, 2)
+                                .background(.teal.opacity(0.13))
+                                .clipShape(Capsule())
+                        }
+                        Text("WillDeep 按任务自动在通用、编码和高能力模型间路由；需要绑定 some.im。")
+                            .font(.system(size: 11))
+                            .foregroundStyle(.secondary)
+                            .lineLimit(2)
+                    }
+                    Spacer()
+                    if menuSnapshot.managedActive {
+                        Image(systemName: "checkmark.circle.fill")
+                            .foregroundStyle(.teal)
+                    }
+                }
+                .padding(12)
+                .background(modelRowBackground(checked: menuSnapshot.managedActive))
+            }
+            .buttonStyle(.plain)
+
+            HStack(spacing: 8) {
+                managedTierChip(.low)
+                managedTierChip(.high)
+                managedTierChip(.premium)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var codingPlanSection: some View {
+        modelPanelSection(title: "订阅套餐", systemImage: "creditcard") {
+            VStack(alignment: .leading, spacing: 10) {
+                HStack(alignment: .top, spacing: 10) {
+                    Image(systemName: "bolt.badge.checkmark")
+                        .foregroundStyle(.teal)
+                        .frame(width: 22)
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("订阅 Coding Plan 后，优先选择 someim-coding-plan-low / high。")
+                            .font(.system(size: 12, weight: .medium))
+                        Text("低档适合日常开发，高档适合复杂重构、多文件推理和疑难调试。")
+                            .font(.system(size: 11))
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                HStack(spacing: 8) {
+                    modelMiniButton("Plan Low") { chooseSomeIMModel(SomeIMManagedModel.codingPlanLow) }
+                    modelMiniButton("Plan High") { chooseSomeIMModel(SomeIMManagedModel.codingPlanHigh) }
+                    Spacer()
+                    Button {
+                        openURL(URL(string: "https://some.im/customer/plan")!)
+                    } label: {
+                        Label("购买套餐", systemImage: "arrow.up.right.square")
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .controlSize(.small)
+                }
+            }
+            .padding(12)
+            .background(appState.editorSettings.interfaceSkin.palette.controlFill.opacity(0.48))
+            .clipShape(RoundedRectangle(cornerRadius: 8))
+        }
+    }
+
+    @ViewBuilder
+    private var recommendedModelsSection: some View {
+        modelPanelSection(title: "重点推荐", systemImage: "star") {
+            ForEach(Self.recommendedSomeIMModels) { item in
+                modelActionRow(
+                    title: item.title,
+                    subtitle: "\(item.model) · \(item.note)",
+                    badge: item.badge,
+                    systemImage: item.systemImage,
+                    checked: isCurrent(model: item.model, override: menuSnapshot.sessionOverride, isActive: menuSnapshot.isSomeIMActive)
+                ) {
+                    chooseSomeIMModel(item.model)
+                }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var someIMLockedSection: some View {
+        modelPanelSection(title: "some.im", systemImage: "lock") {
+            VStack(alignment: .leading, spacing: 8) {
+                Text("绑定 some.im 后可解锁省心托管、推荐模型列表和 Coding Plan。")
+                    .font(.system(size: 11))
+                    .foregroundStyle(.secondary)
+                Button {
+                    openURL(URL(string: "https://some.im/customer/plan")!)
+                } label: {
+                    Label("查看 some.im 套餐", systemImage: "arrow.up.right.square")
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.small)
+            }
+            .padding(12)
+            .background(appState.editorSettings.interfaceSkin.palette.controlFill.opacity(0.42))
+            .clipShape(RoundedRectangle(cornerRadius: 8))
+        }
+    }
+
+    @ViewBuilder
+    private var configuredProvidersSection: some View {
+        modelPanelSection(title: "用户配置", systemImage: "person.crop.circle.badge.checkmark") {
+            let entries = selectableProviderEntries
+            if entries.isEmpty {
+                Text("还没有可用的用户模型配置。请先到 Settings → Agent 添加服务商。")
+                    .font(.system(size: 11))
+                    .foregroundStyle(.secondary)
+                    .padding(12)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(appState.editorSettings.interfaceSkin.palette.controlFill.opacity(0.42))
+                    .clipShape(RoundedRectangle(cornerRadius: 8))
+            } else {
+                ForEach(entries) { entry in
+                    providerModelCard(entry)
+                }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var catalogSection: some View {
+        let models = combinedCatalogModels
+        if !models.isEmpty {
+            modelPanelSection(title: "更多模型", systemImage: "list.bullet") {
+                ForEach(models, id: \.self) { model in
+                    modelActionRow(
+                        title: model,
+                        subtitle: "来自最近使用 / 热门 / 新模型 / 已获取列表",
+                        badge: nil,
+                        systemImage: "circle.grid.2x2",
+                        checked: appState.agentSessionModelOverride == model
+                    ) {
+                        appState.setAgentSessionModel(model)
+                        closeModelPanel()
+                    }
+                }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func providerModelCard(_ entry: AgentProviderEntry) -> some View {
+        let isActive = menuSnapshot.activeProviderID == entry.id
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 8) {
+                Text(entry.displayName)
+                    .font(.system(size: 12, weight: .semibold))
+                if isActive {
+                    Text("当前服务商")
+                        .font(.system(size: 10, weight: .bold))
+                        .foregroundStyle(.teal)
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 2)
+                        .background(.teal.opacity(0.12))
+                        .clipShape(Capsule())
+                }
+                Spacer()
+            }
+            if !entry.flashPrimary.isEmpty {
+                providerModelButton(entry: entry, model: entry.flashPrimary, label: "Flash")
+            }
+            if menuSnapshot.isSomeIMAuthenticated {
+                ForEach(entry.flashAlternates, id: \.self) { model in
+                    providerModelButton(entry: entry, model: model, label: "Flash")
+                }
+            }
+            if !entry.proPrimary.isEmpty {
+                providerModelButton(entry: entry, model: entry.proPrimary, label: "Pro")
+            }
+            if menuSnapshot.isSomeIMAuthenticated {
+                ForEach(entry.proAlternates, id: \.self) { model in
+                    providerModelButton(entry: entry, model: model, label: "Pro")
+                }
+            }
+        }
+        .padding(12)
+        .background(appState.editorSettings.interfaceSkin.palette.controlFill.opacity(0.42))
+        .clipShape(RoundedRectangle(cornerRadius: 8))
+    }
+
+    @ViewBuilder
+    private func providerModelButton(entry: AgentProviderEntry, model: String, label: String) -> some View {
+        modelActionRow(
+            title: "\(label) · \(model)",
+            subtitle: "选择后本次对话固定使用这个模型。",
+            badge: label,
+            systemImage: label == "Pro" ? "speedometer" : "bolt",
+            checked: isCurrent(
+                model: model,
+                override: menuSnapshot.sessionOverride,
+                isActive: menuSnapshot.activeProviderID == entry.id
+            )
+        ) {
+            pick(entry: entry, model: model)
+            closeModelPanel()
+        }
+    }
+
+    @ViewBuilder
+    private func managedTierChip(_ tier: AgentManagedCapabilityTier) -> some View {
+        Button {
+            chooseManagedRouting(tier: tier)
+        } label: {
+            HStack(spacing: 5) {
+                if menuSnapshot.managedActive, menuSnapshot.managedFloor == tier {
+                    Image(systemName: "checkmark.circle.fill")
+                }
+                Text(managedTierLabel(tier))
+            }
+            .font(.system(size: 11, weight: .semibold))
+            .foregroundStyle(menuSnapshot.managedActive && menuSnapshot.managedFloor == tier ? Color.teal : Color.secondary)
+            .padding(.horizontal, 10)
+            .padding(.vertical, 6)
+            .frame(maxWidth: .infinity)
+            .background(modelRowBackground(checked: menuSnapshot.managedActive && menuSnapshot.managedFloor == tier))
+        }
+        .buttonStyle(.plain)
+    }
+
+    @ViewBuilder
+    private func modelMiniButton(_ title: String, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Text(title)
+                .font(.system(size: 11, weight: .semibold))
+                .padding(.horizontal, 10)
+                .padding(.vertical, 5)
+        }
+        .buttonStyle(.bordered)
+        .controlSize(.small)
+    }
+
+    @ViewBuilder
+    private func modelPanelSection<Content: View>(
+        title: String,
+        systemImage: String,
+        @ViewBuilder content: () -> Content
+    ) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 6) {
+                Image(systemName: systemImage)
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(.teal)
+                Text(title)
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(.secondary)
+                Spacer()
+            }
+            content()
+        }
+    }
+
+    @ViewBuilder
+    private func modelActionRow(
+        title: String,
+        subtitle: String,
+        badge: String?,
+        systemImage: String,
+        checked: Bool,
+        action: @escaping () -> Void
+    ) -> some View {
+        Button(action: action) {
+            HStack(alignment: .center, spacing: 10) {
+                Image(systemName: systemImage)
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(checked ? Color.teal : Color.secondary)
+                    .frame(width: 24, height: 24)
+                    .background(appState.editorSettings.interfaceSkin.palette.controlFill.opacity(0.72))
+                    .clipShape(RoundedRectangle(cornerRadius: 6))
+                VStack(alignment: .leading, spacing: 3) {
+                    HStack(spacing: 7) {
+                        Text(title)
+                            .font(.system(size: 12, weight: .semibold))
+                            .foregroundStyle(.primary)
+                            .lineLimit(1)
+                            .truncationMode(.middle)
+                        if let badge {
+                            Text(badge)
+                                .font(.system(size: 9, weight: .bold))
+                                .foregroundStyle(.secondary)
+                                .padding(.horizontal, 6)
+                                .padding(.vertical, 2)
+                                .background(appState.editorSettings.interfaceSkin.palette.controlFill.opacity(0.8))
+                                .clipShape(Capsule())
+                        }
+                    }
+                    Text(subtitle)
+                        .font(.system(size: 10))
+                        .foregroundStyle(.secondary)
+                        .lineLimit(2)
+                }
+                Spacer(minLength: 8)
+                if checked {
+                    Image(systemName: "checkmark.circle.fill")
+                        .foregroundStyle(.teal)
+                }
+            }
+            .padding(10)
+            .background(modelRowBackground(checked: checked))
+        }
+        .buttonStyle(.plain)
+    }
+
+    private func modelRowBackground(checked: Bool) -> AnyShapeStyle {
+        if checked {
+            return AnyShapeStyle(.teal.opacity(0.13))
+        }
+        return AnyShapeStyle(appState.editorSettings.interfaceSkin.palette.controlFill.opacity(0.42))
+    }
+
+    private func chooseManagedRouting(tier: AgentManagedCapabilityTier) {
+        appState.selectSomeIMManagedRouting()
+        appState.setManagedRoutingFloor(tier)
+        closeModelPanel()
+    }
+
+    private func chooseSomeIMModel(_ model: String) {
+        if let entry = menuSnapshot.providerEntries.first(where: { $0.providerID == AgentProviderPreset.someIMID }) {
+            appState.selectAgentEntryAndModel(entryID: entry.id, model: model)
+        } else {
+            appState.setAgentSessionModel(model)
+        }
+        closeModelPanel()
+    }
+
+    private func closeModelPanel() {
+        refreshMenuSnapshot()
+        isModelPanelPresented = false
+    }
+
+    private var selectableProviderEntries: [AgentProviderEntry] {
+        if menuSnapshot.isSomeIMAuthenticated {
+            return menuSnapshot.providerEntries
+        }
+        return menuSnapshot.providerEntries.filter { $0.providerID != AgentProviderPreset.someIMID }
+    }
+
+    private var combinedCatalogModels: [String] {
+        var seen = Set<String>()
+        return (
+            menuSnapshot.recentlyUsedModels +
+            menuSnapshot.hotModels +
+            menuSnapshot.newModels +
+            menuSnapshot.fetchedModels
+        ).compactMap { raw -> String? in
+            let model = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+            let key = model.lowercased()
+            guard !model.isEmpty, seen.insert(key).inserted else { return nil }
+            return model
+        }
+    }
+
+    private static let recommendedSomeIMModels: [ModelRecommendation] = [
+        ModelRecommendation(
+            title: "DeepSeek V4 Flash",
+            model: "deepseek-v4-flash",
+            note: "通用任务快、稳、省。",
+            badge: "通用",
+            systemImage: "bolt.fill"
+        ),
+        ModelRecommendation(
+            title: "DeepSeek V4 Pro",
+            model: "deepseek-v4-pro",
+            note: "更适合复杂一点的通用任务。",
+            badge: "通用 Pro",
+            systemImage: "speedometer"
+        ),
+        ModelRecommendation(
+            title: "GLM",
+            model: "glm",
+            note: "中文和代码日常任务性价比好。",
+            badge: "编码",
+            systemImage: "chevron.left.forwardslash.chevron.right"
+        ),
+        ModelRecommendation(
+            title: "GLM 5.1",
+            model: "glm-5.1",
+            note: "编码效果好，适合仓库内实现和修复。",
+            badge: "编码",
+            systemImage: "chevron.left.forwardslash.chevron.right"
+        ),
+        ModelRecommendation(
+            title: "GLM 5.2",
+            model: "glm-5.2",
+            note: "更便宜，写码表现仍然不错。",
+            badge: "便宜",
+            systemImage: "dollarsign.circle"
+        ),
+        ModelRecommendation(
+            title: "Grok 4.5",
+            model: "grok-4.5",
+            note: "推理接近 GPT-5.5 / Opus 4.8，但响应很快。",
+            badge: "快推理",
+            systemImage: "timer"
+        )
+    ]
+
     /// Flat-section layout for one library entry. The provider name
     /// becomes the Section header (rendered as a non-clickable group
     /// label in NSMenu) and every Flash/Pro model — primary first,
@@ -863,8 +1299,7 @@ struct ModelPickerPill: View {
     private func providerSection(
         entry: AgentProviderEntry,
         activeProviderID: UUID?,
-        override: String?,
-        routed: String
+        override: String?
     ) -> some View {
         let isActive = activeProviderID == entry.id
 
@@ -872,25 +1307,25 @@ struct ModelPickerPill: View {
             if !entry.flashPrimary.isEmpty {
                 Button { pick(entry: entry, model: entry.flashPrimary) } label: {
                     modelRow(label: "Flash · \(entry.flashPrimary)",
-                             checked: isCurrent(model: entry.flashPrimary, override: override, isActive: isActive, routed: routed))
+                             checked: isCurrent(model: entry.flashPrimary, override: override, isActive: isActive))
                 }
             }
             ForEach(entry.flashAlternates, id: \.self) { m in
                 Button { pick(entry: entry, model: m) } label: {
                     modelRow(label: "Flash · \(m)",
-                             checked: isCurrent(model: m, override: override, isActive: isActive, routed: routed))
+                             checked: isCurrent(model: m, override: override, isActive: isActive))
                 }
             }
             if !entry.proPrimary.isEmpty {
                 Button { pick(entry: entry, model: entry.proPrimary) } label: {
                     modelRow(label: "Pro · \(entry.proPrimary)",
-                             checked: isCurrent(model: entry.proPrimary, override: override, isActive: isActive, routed: routed))
+                             checked: isCurrent(model: entry.proPrimary, override: override, isActive: isActive))
                 }
             }
             ForEach(entry.proAlternates, id: \.self) { m in
                 Button { pick(entry: entry, model: m) } label: {
                     modelRow(label: "Pro · \(m)",
-                             checked: isCurrent(model: m, override: override, isActive: isActive, routed: routed))
+                             checked: isCurrent(model: m, override: override, isActive: isActive))
                 }
             }
         }
@@ -912,15 +1347,33 @@ struct ModelPickerPill: View {
         }
     }
 
-    /// Effective (entry, model) for the current chat is:
-    ///   - the active library entry, AND
-    ///   - the session override if set, otherwise the route's natural pick.
-    private func isCurrent(model: String, override: String?, isActive: Bool, routed: String) -> Bool {
-        guard isActive else { return false }
-        if let override, !override.isEmpty {
-            return override == model
+    @ViewBuilder
+    private func managedTierButton(_ tier: AgentManagedCapabilityTier) -> some View {
+        Button {
+            appState.setManagedRoutingFloor(tier)
+            refreshMenuSnapshot()
+        } label: {
+            modelRow(
+                label: managedTierLabel(tier),
+                checked: menuSnapshot.managedFloor == tier
+            )
         }
-        return model == routed
+    }
+
+    private func managedTierLabel(_ tier: AgentManagedCapabilityTier) -> String {
+        switch tier {
+        case .low: return L10n.AgentManagedRouting.tierFlash
+        case .high: return L10n.AgentManagedRouting.tierPro
+        case .premium: return L10n.AgentManagedRouting.tierPremium
+        }
+    }
+
+    /// Concrete model rows only check when the user explicitly picked that
+    /// model. Route defaults and managed routing are separate menu states.
+    private func isCurrent(model: String, override: String?, isActive: Bool) -> Bool {
+        guard isActive else { return false }
+        guard let override, !override.isEmpty else { return false }
+        return override == model
     }
 
     private func pick(entry: AgentProviderEntry, model: String) {
@@ -1011,6 +1464,7 @@ struct ModelPickerPill: View {
             fetchedModels: fetched,
             currentModelLabel: currentModelLabel,
             isSomeIMActive: library.active?.providerID == AgentProviderPreset.someIMID,
+            isSomeIMAuthenticated: SomeIMIntegrationStore.hasAuthenticatedSessionForAutomaticDefaults(),
             managedActive: appState.activeRuntime?.managedRouting != nil,
             managedFloor: appState.activeRuntime?.managedRouting?.minimumTier
         )
@@ -1026,7 +1480,7 @@ struct ModelPickerPill: View {
         if let managed = appState.activeRuntime?.managedRouting {
             let core: String
             switch managed.minimumTier {
-            case .low: core = L10n.AgentManagedRouting.title
+            case .low: core = L10n.AgentManagedRouting.titleFlash
             case .high: core = L10n.AgentManagedRouting.titleHigh
             case .premium: core = L10n.AgentManagedRouting.titlePremium
             }
@@ -1057,6 +1511,7 @@ struct ModelPickerPill: View {
         let fetchedModels: [String]
         let currentModelLabel: String
         let isSomeIMActive: Bool
+        let isSomeIMAuthenticated: Bool
         let managedActive: Bool
         let managedFloor: AgentManagedCapabilityTier?
 
@@ -1071,9 +1526,19 @@ struct ModelPickerPill: View {
             fetchedModels: [],
             currentModelLabel: "",
             isSomeIMActive: false,
+            isSomeIMAuthenticated: false,
             managedActive: false,
             managedFloor: nil
         )
+    }
+
+    private struct ModelRecommendation: Identifiable, Equatable {
+        var id: String { model }
+        let title: String
+        let model: String
+        let note: String
+        let badge: String
+        let systemImage: String
     }
 }
 

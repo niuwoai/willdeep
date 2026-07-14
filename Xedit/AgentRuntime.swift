@@ -350,9 +350,9 @@ final class AgentRuntime: ObservableObject, Identifiable {
 
     // MARK: - Managed routing ("省心托管") floor
 
-    /// Raise the managed-routing capability floor. Only-goes-up: a tier at or
-    /// below the current floor is ignored. Returns true if the floor rose.
-    /// Callers persist afterwards.
+    /// Raise the managed-routing capability floor. Router-driven changes are
+    /// only-goes-up: a tier at or below the current floor is ignored. Returns
+    /// true if the floor rose. Callers persist afterwards.
     @discardableResult
     func raiseManagedFloor(to tier: AgentManagedCapabilityTier, reason: String?) -> Bool {
         guard var state = managedRouting else { return false }
@@ -373,11 +373,26 @@ final class AgentRuntime: ObservableObject, Identifiable {
         managedRouting = state
     }
 
-    /// Reset the managed floor to `.low` (user "重置托管档位"). No-op when the
-    /// session is not managed.
+    /// User-selected managed-routing floor. Unlike router escalation, this can
+    /// move both up and down. No-op when the session is not managed.
+    func setManagedFloor(to tier: AgentManagedCapabilityTier) {
+        guard var state = managedRouting else { return }
+        guard state.minimumTier != tier else { return }
+        state.minimumTier = tier
+        if tier == .low {
+            state.lastEscalatedAt = nil
+            state.lastEscalationReason = nil
+        } else {
+            state.lastEscalatedAt = Date()
+            state.lastEscalationReason = "user_selected_\(tier.rawValue)"
+        }
+        managedRouting = state
+    }
+
+    /// Reset the managed floor to `.low`. No-op when the session is not
+    /// managed.
     func resetManagedFloor() {
-        guard managedRouting != nil else { return }
-        managedRouting = AgentManagedRoutingState()
+        setManagedFloor(to: .low)
     }
 
     /// True if this session has no real user messages yet.
