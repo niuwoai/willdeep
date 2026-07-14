@@ -93,7 +93,12 @@ struct DesktopPetTests {
 
     @Test @MainActor
     func desktopPetAcceptsTheFirstMouseEventWhileAppIsInactive() {
-        let host = DesktopPetFirstMouseHostingView(rootView: EmptyView())
+        // rc8 为绕开 swiftc 泛型 NSHostingView 崩溃把宿主类改成了固定
+        // rootView 类型,这里跟着用真实 overlay view 构造(manager 的
+        // init 只读 UserDefaults,无窗口副作用)。
+        let host = DesktopPetFirstMouseHostingView(
+            rootView: DesktopPetOverlayView(manager: .shared)
+        )
 
         #expect(host.acceptsFirstMouse(for: nil))
     }

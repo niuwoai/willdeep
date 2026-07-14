@@ -169,7 +169,9 @@ enum DesktopPetMessageCardVisibility {
 /// Deliberately non-generic: the generic `NSHostingView<Content>` subclass makes
 /// swift-frontend 6.3.1 segfault in the `EarlyPerfInliner` SIL pass while
 /// specializing the synthesized deinit for the Release x86_64 slice.
-private final class DesktopPetFirstMouseHostingView: NSHostingView<DesktopPetOverlayView> {
+/// internal(非 private):DesktopPetTests 直接构造它回归 acceptsFirstMouse
+/// —— 去泛型时忘了同步测试,曾把整个测试 target 编译搞挂。
+final class DesktopPetFirstMouseHostingView: NSHostingView<DesktopPetOverlayView> {
     override func acceptsFirstMouse(for event: NSEvent?) -> Bool {
         true
     }
@@ -519,9 +521,15 @@ final class DesktopPetWindowManager: ObservableObject {
 
 }
 
-private struct DesktopPetOverlayView: View {
+struct DesktopPetOverlayView: View {
     @ObservedObject var manager: DesktopPetWindowManager
     @State private var lastDragTranslation: CGSize = .zero
+
+    // 显式 init:私有的 @State 存储会把 memberwise init 降级成
+    // private,跨文件(单测)构造需要这个。
+    init(manager: DesktopPetWindowManager) {
+        self.manager = manager
+    }
 
     private var displayMood: DesktopPetMood {
         manager.isDraggingPet ? .walking : manager.presentation.mood
