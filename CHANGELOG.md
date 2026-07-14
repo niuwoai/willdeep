@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.152.0-rc18 - 2026-07-14
+
+### Fixed
+
+- **桌面宠物前台消息卡片隐藏** —— WillDeep 位于前台时，小桌面宠物只保留宠物本体，不再展示最近 3 个会话输出卡片或折叠计数；App 切到后台后继续显示最近输出提醒。
+- 版本号从 **1.152.0-rc17** 递增为 **1.152.0-rc18**；Xcode App、Go agent、Help bundle、Computer Use Helper、README badge、移动网关响应头契约与产品文档同步。
+
 ## 1.152.0-rc17 - 2026-07-14
 
 ### Changed

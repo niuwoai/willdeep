@@ -73,4 +73,10 @@ struct DesktopPetTests {
         #expect(DesktopPetOutputFreshness.isFresh(updatedAt: now.addingTimeInterval(-60), now: now))
         #expect(!DesktopPetOutputFreshness.isFresh(updatedAt: now.addingTimeInterval(-61), now: now))
     }
+
+    @Test
+    func messageCardsHideWhileAppIsForeground() {
+        #expect(!DesktopPetMessageCardVisibility.shouldShowMessageCards(appIsActive: true))
+        #expect(DesktopPetMessageCardVisibility.shouldShowMessageCards(appIsActive: false))
+    }
 }

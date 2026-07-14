@@ -117,6 +117,7 @@ struct DesktopPetPresentation: Equatable {
     let message: String
     let messagePreviews: [DesktopPetMessagePreview]
     let outputSessionCount: Int
+    let isMessageBubbleVisible: Bool
     let status: String
     let mood: DesktopPetMood
 
@@ -126,6 +127,7 @@ struct DesktopPetPresentation: Equatable {
         message: L10n.DesktopPet.emptyMessage,
         messagePreviews: [],
         outputSessionCount: 0,
+        isMessageBubbleVisible: false,
         status: L10n.DesktopPet.statusIdle,
         mood: .idle
     )
@@ -148,6 +150,12 @@ enum DesktopPetOutputFreshness {
 
     nonisolated static func isFresh(updatedAt: Date, now: Date) -> Bool {
         now.timeIntervalSince(updatedAt) <= maximumAge
+    }
+}
+
+enum DesktopPetMessageCardVisibility {
+    nonisolated static func shouldShowMessageCards(appIsActive: Bool) -> Bool {
+        !appIsActive
     }
 }
 
@@ -287,6 +295,7 @@ final class DesktopPetWindowManager: ObservableObject {
                 message: DesktopPetPresentation.empty.message,
                 messagePreviews: [],
                 outputSessionCount: 0,
+                isMessageBubbleVisible: false,
                 status: DesktopPetPresentation.empty.status,
                 mood: isManualJumping ? .jumping : .idle
             )
@@ -307,7 +316,10 @@ final class DesktopPetWindowManager: ObservableObject {
         let isRunningTool = runtimes.contains { runtime in
             runtime.toolCalls.contains { $0.status == .running }
         }
-        let outputPreviews = Self.outputPreviews(from: appState, now: now)
+        let shouldShowMessageCards = DesktopPetMessageCardVisibility.shouldShowMessageCards(
+            appIsActive: NSApplication.shared.isActive
+        )
+        let outputPreviews = shouldShowMessageCards ? Self.outputPreviews(from: appState, now: now) : []
         let visiblePreviews = Array(outputPreviews.prefix(Self.maximumVisibleOutputPreviews))
         let latestPreview = visiblePreviews.first
         let hasCelebration = celebrationEndsAt.map { $0 > now } ?? false
@@ -344,6 +356,7 @@ final class DesktopPetWindowManager: ObservableObject {
             message: latestPreview?.message ?? L10n.DesktopPet.emptyMessage,
             messagePreviews: visiblePreviews,
             outputSessionCount: outputPreviews.count,
+            isMessageBubbleVisible: shouldShowMessageCards,
             status: status,
             mood: isManualJumping ? .jumping : baseMood
         )
@@ -509,11 +522,13 @@ private struct DesktopPetOverlayView: View {
             )
 
             HStack(alignment: .bottom, spacing: -4) {
-                if manager.isMessageBubbleCollapsed {
-                    collapsedMessageIndicator
-                        .offset(x: 4, y: -82)
-                } else {
-                    messageBubble
+                if manager.presentation.isMessageBubbleVisible {
+                    if manager.isMessageBubbleCollapsed {
+                        collapsedMessageIndicator
+                            .offset(x: 4, y: -82)
+                    } else {
+                        messageBubble
+                    }
                 }
 
                 petScene(animation: animation)
