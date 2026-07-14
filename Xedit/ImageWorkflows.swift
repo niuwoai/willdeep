@@ -461,6 +461,7 @@ struct ScreenshotToCodeWorkflow: WorkflowDefinition {
     var argsPlaceholder: String { "<path> [framework=react] [context=\"where this screen lives\"]" }
     var maxAgents: Int { 2 }
     var allowsEmptyArgs: Bool { false }
+    var managedDomain: SomeIMManagedDomain { .coding }
 
     func run(engine: WorkflowEngine, args: String) async throws -> String {
         let parsed = IWS.parse(args)

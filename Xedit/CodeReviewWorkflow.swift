@@ -17,6 +17,7 @@ struct CodeReviewWorkflow: WorkflowDefinition {
     var argsPlaceholder: String { "(optional) --pr <#> or focus hint" }
     var maxAgents: Int { 4 }
     var allowsEmptyArgs: Bool { true }
+    var managedDomain: SomeIMManagedDomain { .coding }
 
     private let dimensions: [(label: String, lens: String, detail: String)] = [
         ("correctness", "correctness & logic bugs",

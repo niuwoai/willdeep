@@ -55,9 +55,10 @@ extension AgentChatHistoryRenderer {
             avatar = "OUT"
             color = NSColor.systemGreen
         case .workflowReport:
-            // History NSTextView 不渲染 workflow card —— 卡片是 SwiftUI
-            // 单独绘的（见 AgentMessageView 里的 .workflowReport 分支）。
-            // 但 chrome renderer 需要可消解这条消息，所以给它个最少配置。
+            // 运行中的 workflow 卡片由 SwiftUI 工作态表面渲染（见
+            // AgentChatTranscript 的 activeWorkflowMessages 挂载点）；进
+            // 历史的已结束卡片在这个头像行下面由 formatter 烘焙
+            // 状态行 + 最终报告（AgentChatHistoryRenderer.workflowHistoryBody）。
             label = "Workflow"
             avatar = "WFL"
             color = NSColor.systemBlue
@@ -302,7 +303,11 @@ extension AgentChatHistoryRenderer {
             return !body.isEmpty || !message.textAttachments.isEmpty || !message.images.isEmpty
         case .assistant:
             return !body.isEmpty || !message.images.isEmpty
-        case .system, .tool, .workflowReport, .widget, .scheduledTask:
+        case .workflowReport:
+            // 已结束的 workflow 卡片带最终报告(summary)时给 copy 按钮 ——
+            // 研究报告/评审结论是用户最想带走的产物。
+            return !message.copyableContent.isEmpty
+        case .system, .tool, .widget, .scheduledTask:
             return false
         }
     }

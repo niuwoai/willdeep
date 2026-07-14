@@ -271,7 +271,9 @@ final class WorkflowEngine {
     func displayWidget(_ widget: AgentWidget) async {
         await MainActor.run {
             guard let appState = appState else { return }
-            guard let runtime = appState.agentRuntimes[runtimeID] else { return }
+            // `runtime(for:)` 兜底:会话被 idle-runtime 驱逐时重新物化,
+            // 裸 `agentRuntimes[...]` 会把 widget 静默丢掉。
+            guard let runtime = appState.runtime(for: runtimeID) else { return }
             runtime.messages.append(AgentMessage(role: .widget, content: "", widget: widget))
         }
     }

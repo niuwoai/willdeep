@@ -16,6 +16,7 @@ struct BugHuntWorkflow: WorkflowDefinition {
     var argsPlaceholder: String { "(optional) area hint, e.g. \"auth and session handling\"" }
     var maxAgents: Int { 8 }
     var allowsEmptyArgs: Bool { true }
+    var managedDomain: SomeIMManagedDomain { .coding }
 
     private let maxFilesToHunt = 6
 

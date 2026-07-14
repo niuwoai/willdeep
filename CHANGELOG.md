@@ -1,5 +1,18 @@
 # Changelog
 
+## 1.155.0-rc4 - 2026-07-15
+
+### Fixed
+
+- **Workflow 卡片重新可见：`/research` 等 slash workflow 不再"发出去就没了"** —— rc16 聊天历史折进单个 NSTextView 后，workflow 卡片的 SwiftUI 挂载点只剩「流式 assistant 消息」一个入口，`.workflowReport` 消息在 TextKit 历史里只画一个光秃秃的 WFL 头像行：进度、失败原因、最终研究报告全部不可见（跑成功了结果也无处显示）。现在运行中的卡片走 SwiftUI「工作态表面」（与 tool call group 同款，进度/子 agent 状态实时刷新），结束后由 formatter 把状态行 + 最终报告 markdown 烘进 TextKit 历史，并带 copy 按钮（复制 report.summary）。
+- **TextKit 渲染缓存对 workflow report 变更失效** —— `messageHash` 此前不含 `workflowReport` 字段，report 从 running 变 done、summary 填入后 render cache 仍命中旧渲染；现已纳入 hash，新增回归单测锁定。
+- **省心托管会话的 workflow 子 agent 接入托管模型解析** —— 主循环每回合跑 routing judge 解析 some.im 虚拟模型，workflow 子 agent 之前直接拿原始配置里的静态模型、完全绕过托管路由（与 5dd9273a 修的 someIMContext 缺失同族）。现在按「会话 floor 与 high 取高者 + workflow 声明的任务域（code-review / bug-hunt / pr-review / screenshot-to-code 为 coding，其余 general）」解析为具体虚拟模型，coding plan 生效时走 coding-plan 梯子；纯函数 `AppState.managedWorkflowModel` 单测覆盖。
+- **workflow 状态更新与 displayWidget 改用 `runtime(for:)` 兜底** —— 裸 `agentRuntimes[...]` 查找在会话被 idle-runtime 驱逐后会让所有状态更新静默 no-op（卡片永久冻结）/ widget 静默丢失；与后台作业回调同款兜底。
+
+### Changed
+
+- 版本号从 **1.155.0-rc3** 递增为 **1.155.0-rc4**；Xcode App、Go agent、Help bundle、Computer Use Helper、README badge、移动网关响应头契约与产品文档同步。
+
 ## 1.155.0-rc3 - 2026-07-15
 
 ### Fixed

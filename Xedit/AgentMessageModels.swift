@@ -610,6 +610,11 @@ extension AgentMessage {
     /// Clipboard-friendly full text for copy buttons and standalone
     /// readers: visible text first, then pasted-text attachments.
     nonisolated var copyableContent: String {
+        // Workflow 卡片消息 content 恒为空,可复制的正文是 engine
+        // synthesize 出的最终报告(report.summary)。
+        if role == .workflowReport, let report = workflowReport {
+            return report.summary
+        }
         let visibleContent: String
         if role == .user {
             let display = AgentAttachedPromptDisplay.transform(content)
