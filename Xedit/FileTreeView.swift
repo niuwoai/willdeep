@@ -21,7 +21,12 @@ struct FileTreeView: View {
     /// A binding to the currently selected file URL (writes into AppState).
     @Binding var selectedURL: URL?
     @Binding var selectedFolderURL: URL?
+    /// 「明确要在编辑器里打开这个文件」的回调：右键菜单 Open in Editor
+    /// 和（未定制双击时的）双击走它。单击只做选中，不触发它。
     var onOpenFile: ((URL) -> Void)? = nil
+    /// 双击的定制行为（如 Agent 侧栏的「在 Finder 中显示」）。
+    /// 为 nil 时双击退回 `onOpenFile` 的打开语义。
+    var onDoubleClickFile: ((URL) -> Void)? = nil
 
     private let treeContentLeadingPadding: CGFloat = 10
 
@@ -33,6 +38,7 @@ struct FileTreeView: View {
                     selectedURL: $selectedURL,
                     selectedFolderURL: $selectedFolderURL,
                     onOpenFile: onOpenFile,
+                    onDoubleClickFile: onDoubleClickFile,
                     level: 0
                 )
             }
@@ -58,6 +64,7 @@ private struct FileNodeRow: View {
     @Binding var selectedURL: URL?
     @Binding var selectedFolderURL: URL?
     let onOpenFile: ((URL) -> Void)?
+    let onDoubleClickFile: ((URL) -> Void)?
     let level: Int
 
     var body: some View {
@@ -106,6 +113,7 @@ private struct FileNodeRow: View {
                                 selectedURL: $selectedURL,
                                 selectedFolderURL: $selectedFolderURL,
                                 onOpenFile: onOpenFile,
+                                onDoubleClickFile: onDoubleClickFile,
                                 level: level + 1
                             )
                         }
@@ -185,11 +193,14 @@ private struct FileNodeRow: View {
 
         appState.closeImagePreview()
         selectedURL = node.url
-        onOpenFile?(node.url)
     }
 
     private func openFileFromDoubleClick() {
         appState.selectedSidebarFileURL = node.url
+        if let onDoubleClickFile {
+            onDoubleClickFile(node.url)
+            return
+        }
         if AppState.isImageFile(at: node.url) {
             appState.openImagePreview(node.url)
         } else {

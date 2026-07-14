@@ -863,14 +863,6 @@ final class AppState: ObservableObject {
         editorNavigationRequest = EditorNavigationRequest(line: line, revision: nextRevision)
     }
 
-    func openRecentFile(_ url: URL) {
-        openEditorFile(url)
-    }
-
-    func openRecentFolder(_ url: URL, openInNewWindow: ((URL) -> Void)? = nil) {
-        openFolderURL(url, openInNewWindow: openInNewWindow)
-    }
-
     func openExternalURL(_ url: URL, createsMissingFileIfNeeded: Bool = false) {
         let fileURL = url.isFileURL ? url : URL(fileURLWithPath: url.path)
         var isDirectory: ObjCBool = false

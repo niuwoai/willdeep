@@ -1530,7 +1530,8 @@ struct AgentSidePanelFilesView: View {
                     root: root,
                     selectedURL: $selectedFile,
                     selectedFolderURL: $selectedFolderURL,
-                    onOpenFile: openFileInEditor
+                    onOpenFile: openFileInEditor,
+                    onDoubleClickFile: { appState.revealInFinder($0) }
                 )
             } else {
                 placeholderNoWorkspace
@@ -1595,10 +1596,22 @@ struct AgentSidePanelFilesView: View {
     }
 
     private func openFileInEditor(_ url: URL) {
-        let fallbackURL = appState.openedFileURL
-        guard appState.openEditorFile(url, fallbackURL: fallbackURL) else { return }
-        if !appState.showEditor() {
-            openWindow(id: EditorWindowID.value)
+        // 二进制文件编辑器渲染不了，openEditorFile 内部也是转 Finder；
+        // 提前拦下，免得下面 openWindow(value:) 白开一个空窗口。
+        if AppState.isBinaryFile(at: url) {
+            appState.revealInFinder(url)
+            return
+        }
+        // 有真实 editor 窗口时：把文件装进它的 AppState 并聚焦。
+        // 没有时（agent 窗口跟随的是 headless orphan）必须走 URL-backed
+        // WindowGroup —— 新窗口自带全新 AppState，openWindow(id:) 那条路
+        // 造出来的空白窗口根本不含这里 openEditorFile 装载的文件。
+        if EditorAppStateRegistry.shared.focusCurrentEditorWindow() {
+            let fallbackURL = appState.openedFileURL
+            guard appState.openEditorFile(url, fallbackURL: fallbackURL) else { return }
+            appState.showEditor()
+        } else {
+            openWindow(value: url)
         }
     }
 }
