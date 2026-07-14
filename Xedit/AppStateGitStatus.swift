@@ -292,8 +292,12 @@ extension AppState {
         timeoutWorkItem.cancel()
         stdoutPipe.fileHandleForReading.readabilityHandler = nil
         stderrPipe.fileHandleForReading.readabilityHandler = nil
-        stdoutCollector.append(stdoutPipe.fileHandleForReading.availableData)
-        stderrCollector.append(stderrPipe.fileHandleForReading.availableData)
+        if let tail = try? stdoutPipe.fileHandleForReading.readToEnd() {
+            stdoutCollector.append(tail)
+        }
+        if let tail = try? stderrPipe.fileHandleForReading.readToEnd() {
+            stderrCollector.append(tail)
+        }
 
         return GitCommandResult(
             status: process.terminationStatus,

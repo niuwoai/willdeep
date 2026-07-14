@@ -1,6 +1,6 @@
 # WillDeep Product Overview
 
-> Last updated: 2026-07-14 | Current version: v1.152.0-rc18
+> Last updated: 2026-07-14 | Current version: v1.152.0-rc19
 
 ## Positioning
 
@@ -12,6 +12,7 @@ WillDeep is configured for non-App-Store distribution without App Sandbox so it 
 
 ## 架构概览
 
+- **Git/远程命令尾部输出读取更可靠（1.152.0-rc19）** —— Git 状态命令与远程 SSH 命令在子进程退出后会继续读到 EOF，减少 stdout/stderr 尾部输出因异步 readability 事件竞态而丢失的概率。
 - **桌面宠物前台消息卡片隐藏（1.152.0-rc18）** —— WillDeep App 在前台时，桌面宠物不再展示最近 3 个会话输出卡片或收起计数，避免用户已经看着主窗口时重复弹消息；切到后台后仍保留最近输出提醒。
 - **Agent 模型选择大面板（1.152.0-rc17）** —— Composer 模型选择入口改为宽面板配置：未绑定 some.im 时仅显示用户自配 Flash / Pro；已绑定 some.im 时展示省心托管、Coding Plan 订阅购买入口、`someim-coding-plan-low/high` 快捷选择，以及 deepseek-v4、glm、grok-4.5 等重点推荐模型。不熟悉模型差异的用户可直接选「省心托管」，由 WillDeep 按任务路由。
 - **专家介入锁定提示（1.152.0-rc16）** —— Agent 专家弹窗现在区分“只打开过”和“已经对话过”：空会话里误开的专家可以关闭；一旦会话已有用户消息，已启用专家会保持锁定，并在专家区顶部显示提示条说明“专家介入对话后，本会话内就不能再关闭”。

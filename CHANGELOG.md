@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.152.0-rc19 - 2026-07-14
+
+### Fixed
+
+- **Git/远程命令尾部输出读取更可靠** —— Git 状态命令与远程 SSH 命令在子进程退出后改用 EOF drain 读取 stdout/stderr 尾部数据，避免 `readabilityHandler` 事件尚未派发时被置空导致输出偶发丢失。
+- 版本号从 **1.152.0-rc18** 递增为 **1.152.0-rc19**；Xcode App、Go agent、Help bundle、Computer Use Helper、README badge、移动网关响应头契约与产品文档同步。
+
 ## 1.152.0-rc18 - 2026-07-14
 
 ### Fixed
