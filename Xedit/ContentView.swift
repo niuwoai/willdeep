@@ -364,7 +364,7 @@ struct ContentView: View {
                             .environmentObject(appState)
                     }
                 } else {
-                    // 1.153.0-rc3：「未打开文件夹」欢迎页（EmptyWorkspaceView）
+                    // 1.155.0-rc3：「未打开文件夹」欢迎页（EmptyWorkspaceView）
                     // 整体移除 —— 纯启动直接进 Agent 窗口，新开的 editor
                     // 窗口由 WindowRootView 自动建一个空白 untitled tab，
                     // 不再需要 hero 式欢迎屏。这里只剩「有 tab 全关掉」
@@ -525,7 +525,7 @@ struct ContentView: View {
 
 // `EmptyProjectEditorView` / `EmptyWorkspaceButtonStyle` live in
 // `EmptyStateViews.swift` since rc39. (`EmptyWorkspaceView` and its
-// hero / recent-section pieces were removed in 1.153.0-rc3 — plain
+// hero / recent-section pieces were removed in 1.155.0-rc3 — plain
 // launches go straight to the Agent window now.)
 
 private struct CommandPalettePanel: View {

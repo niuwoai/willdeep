@@ -1410,7 +1410,7 @@ CI 只能保编译/单测过。一系列改 UI、改窗口、改 SwiftUI 状态�
 
 ---
 
-## 1.153.0-rc3 — Files 双击转 Finder + 欢迎页删除 + registry 回退
+## 1.155.0-rc3 — Files 双击转 Finder + 欢迎页删除 + registry 回退
 
 - ⏳ 只开 Agent 窗口（无编辑器窗口），侧栏 Files 双击一个文本文件
   → Finder 弹出并选中该文件；**不再**出现「未打开文件夹」欢迎窗，

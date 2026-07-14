@@ -360,12 +360,20 @@ struct AgentChatTranscript: View {
                     // 直到某个槽空出来 drain 才「又开始输出」。参照侧栏
                     // AgentPanelView 的同款提示。
                     if appState.activeRuntime?.isAwaitingProviderSlot == true {
-                        AgentInlineStatusDivider(text: "正在排队，等待空闲的并发槽位…")
+                        AgentInlineStatusDivider(
+                            text: L10n.AgentPanel.queueWaiting,
+                            systemImage: "clock",
+                            leadingInset: AgentChatHistoryLayoutMetrics.assistantContentHeadIndent,
+                            trailingInset: AgentChatHistoryLayoutMetrics.assistantContentTailInset
+                        )
                             .frame(maxWidth: AgentDesign.chatMaxContentWidth)
                     }
 
                     if appState.shouldShowAgentThinkingIndicator {
-                        AgentThinkingDivider()
+                        AgentThinkingDivider(
+                            leadingInset: AgentChatHistoryLayoutMetrics.assistantContentHeadIndent,
+                            trailingInset: AgentChatHistoryLayoutMetrics.assistantContentTailInset
+                        )
                             .frame(maxWidth: AgentDesign.chatMaxContentWidth)
                     }
 
@@ -383,14 +391,17 @@ struct AgentChatTranscript: View {
                                 detail: appState.agentRunningTaskSummary
                             )
                                 .frame(maxWidth: AgentDesign.chatMaxContentWidth, alignment: .leading)
-                        } else if appState.isAgentResponding {
+                        } else if appState.isAgentResponding && !appState.shouldShowAgentThinkingIndicator {
                             AgentBreathingIndicator()
                                 .frame(maxWidth: AgentDesign.chatMaxContentWidth)
                         }
                     }
 
                     if appState.isCompressingAgentContext {
-                        AgentContextCompressionDivider()
+                        AgentContextCompressionDivider(
+                            leadingInset: AgentChatHistoryLayoutMetrics.assistantContentHeadIndent,
+                            trailingInset: AgentChatHistoryLayoutMetrics.assistantContentTailInset
+                        )
                             .frame(maxWidth: AgentDesign.chatMaxContentWidth)
                     }
 

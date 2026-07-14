@@ -683,7 +683,7 @@ nonisolated enum L10n {
     }
 
     enum EmptyState {
-        // 1.153.0-rc3：EmptyWorkspaceView 欢迎页删除后，agent-mode /
+        // 1.155.0-rc3：EmptyWorkspaceView 欢迎页删除后，agent-mode /
         // no-folder-open / open-folder / recent-files / recent-folders
         // 一组 key 随之移除（xcstrings 里的历史词条保留无害）。
         static func hero(_ a1: String) -> String {
@@ -1020,9 +1020,13 @@ nonisolated enum L10n {
 
     enum AgentPanel {
         static let activeFileIncludedHint = String(localized: "agent-panel.active-file-included-hint", defaultValue: "Active file included · Tools available")
+        static let contextCompressing = String(localized: "agent-panel.context-compressing", defaultValue: "Compressing context")
         static let openFolderHint = String(localized: "agent-panel.open-folder-hint", defaultValue: "Open a folder to enable tools")
+        static let queueWaiting = String(localized: "agent-panel.queue-waiting", defaultValue: "Queued, waiting for an available concurrency slot…")
         static let selectionIncludedHint = String(localized: "agent-panel.selection-included-hint", defaultValue: "Selection included · Tools available")
         static let sessionSaveFailed = String(localized: "agent-panel.session-save-failed", defaultValue: "Failed to save this conversation to disk — recent messages may be lost after quitting. Check free disk space and folder permissions.")
+        static let thinking = String(localized: "agent-panel.thinking", defaultValue: "Thinking")
+        static let thinkingPreviewAccessibility = String(localized: "agent-panel.thinking-preview-accessibility", defaultValue: "Live thinking preview")
     }
 
     enum HeatmapCell {
@@ -1094,6 +1098,12 @@ nonisolated enum L10n {
         static let copied = String(localized: "message-footer.copied", defaultValue: "Copied")
         static let copy = String(localized: "message-footer.copy", defaultValue: "Copy message")
         static let copyAccessibility = String(localized: "message-footer.copy-accessibility", defaultValue: "Copy message")
+        static let processing = String(localized: "message-footer.processing", defaultValue: "Processing")
+        static let processed = String(localized: "message-footer.processed", defaultValue: "Processed")
+        static func processedDuration(_ duration: String) -> String {
+            let template = String(localized: "message-footer.processed-duration", defaultValue: "Processed %@")
+            return String(format: template, duration)
+        }
     }
 
     enum ModelUsage {
@@ -1791,7 +1801,7 @@ nonisolated enum L10n {
             static let toolApprovalDescription = String(localized: "settings.agent-behavior.tool-approval-description", defaultValue: "Read-only shell commands in the built-in allowlist (cat, head, tail, ls, find without -delete/-exec, git diff/log/status/show, rg, grep, wc, file, stat, which, pwd, echo, …) run without asking. Commands outside the allowlist are passed to a one-shot LLM judge running on the active provider's **Flash** model (cheap & fast — never Pro), and only YES verdicts auto-run. Destructive patterns (rm, sudo, git push --force, git reset --hard, …) still require typing \"confirm\".")
             static let concurrencyDescription = String(localized: "settings.agent-behavior.concurrency-description", defaultValue: "Cap on simultaneous Agent turns per provider. Each provider has its own quota — running 3 DashScope sessions doesn't block OpenAI sessions. When the cap is hit, new dispatches queue (FIFO) and drain as turns finish. Raising the cap immediately promotes queued work; lowering it just stops promoting new ones (running turns are never aborted). Default 3 is conservative — bump up if your provider's rate limit comfortably allows.")
             static func agentAppearanceDescription(_ a1: String, _ a2: String) -> String {
-                let template = String(localized: "settings.agent-behavior.appearance-description", defaultValue: "Base size (pt) for Agent chat message body and rendered Markdown blocks (paragraphs, lists, quotes, fenced code, tables). Tool-call summaries, footers, message headers, and composer chrome keep their fixed sizes — this knob is about reading the conversation, not resizing the whole UI. Default is 13 pt; range %1$@ – %2$@ pt.")
+                let template = String(localized: "settings.agent-behavior.appearance-description", defaultValue: "Base size (pt) for Agent chat message body and rendered Markdown blocks (paragraphs, lists, quotes, fenced code, tables). Tool-call summaries, footers, message headers, and composer chrome keep their fixed sizes — this knob is about reading the conversation, not resizing the whole UI. Default is 14 pt; range %1$@ – %2$@ pt.")
                 return String(format: template, a1, a2)
             }
         }

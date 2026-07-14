@@ -5,7 +5,7 @@
 //  "There's nothing to edit yet" screens, split out of ContentView.swift
 //  in rc39.
 //
-//  1.153.0-rc3: `EmptyWorkspaceView` (the "no folder open" welcome
+//  1.155.0-rc3: `EmptyWorkspaceView` (the "no folder open" welcome
 //  hero with Recent Folders / Recent Files) was removed. Plain app
 //  launches go straight to the Agent window, and a fresh editor
 //  window auto-creates an empty untitled tab — the welcome screen no

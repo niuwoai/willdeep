@@ -40,7 +40,7 @@ final class EditorAppStateRegistry: ObservableObject {
     private var activeEditors: [ObjectIdentifier: AppState] = [:]
 
     /// 冷启动时 `ensureHeadlessFallback()` mint 的 headless AppState。
-    /// 1.153.0-rc3：单独强引用留着 —— 用户在 agent-only 工作流里临时
+    /// 1.155.0-rc3：单独强引用留着 —— 用户在 agent-only 工作流里临时
     /// 开了个 editor 窗口又关掉时，`unregister` 把 current 切回这里,
     /// agent 窗口回到之前正聊着的会话，而不是停在刚关掉那个窗口的
     /// 空 AppState 上（表现为「聊天被清空成新聊天」）。
@@ -118,7 +118,7 @@ final class EditorAppStateRegistry: ObservableObject {
             if let next = activeEditors.values.first {
                 current = next
             } else if let headlessFallback, headlessFallback !== appState {
-                // 1.153.0-rc3:最后一个 editor 窗口关闭时,如果 agent
+                // 1.155.0-rc3:最后一个 editor 窗口关闭时,如果 agent
                 // 冷启动 mint 过 headless AppState,回退到它 —— 用户
                 // 的 agent 会话都在那上面,停在刚关掉窗口的 AppState
                 // 会让 agent 窗口看起来被重置成了新聊天。

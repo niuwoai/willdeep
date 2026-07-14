@@ -44,9 +44,9 @@ import AppKit
 enum AgentChatHistoryRenderer {
     enum MarkdownSpacing {
         static let headerToBody: CGFloat = 10
-        static let bodyLine: CGFloat = 2.5
-        static let assistantParagraph: CGFloat = 4
-        static let userParagraph: CGFloat = 6
+        static let bodyLine: CGFloat = 4
+        static let assistantParagraph: CGFloat = 7
+        static let userParagraph: CGFloat = 7
         static let tableLine: CGFloat = 2
         /// Inline table 的"下 margin"——段落结束后到下一块的间距。
         static let tableParagraph: CGFloat = 10
@@ -97,6 +97,7 @@ enum AgentChatHistoryRenderer {
         let countAndHash: Int
         let isDark: Bool
         let baseFontSize: CGFloat
+        let layoutWidth: CGFloat
     }
 
     /// Full per-message hash used to build the render cache key. We
@@ -160,9 +161,11 @@ enum AgentChatHistoryRenderer {
         expandedToolGroupIDs: Set<String> = [],
         hoveredUserMessageID: UUID? = nil,
         baseFontSize: CGFloat = NSFont.systemFontSize,
+        layoutWidth: CGFloat = AgentChatHistoryLayoutMetrics.defaultTranscriptWidth,
         latestTurnReportToolCount: Int? = nil
     ) -> NSAttributedString {
         let clampedSize = AgentSettingsStore.clampChatBaseFontSize(baseFontSize)
+        let resolvedLayoutWidth = AgentChatHistoryLayoutMetrics.resolvedLayoutWidth(layoutWidth)
         var hasher = Hasher()
         hasher.combine(messages.count)
         hasher.combine(expandedToolGroupIDs.sorted())
@@ -174,7 +177,8 @@ enum AgentChatHistoryRenderer {
         let key = CacheKey(
             countAndHash: hasher.finalize(),
             isDark: isDark,
-            baseFontSize: clampedSize
+            baseFontSize: clampedSize,
+            layoutWidth: resolvedLayoutWidth
         )
         // Critical section #1: lookup. Lock has to cover the read
         // because Swift Dictionary's internal `_Variant.lookup(_:)`
@@ -194,6 +198,7 @@ enum AgentChatHistoryRenderer {
             expandedToolGroupIDs: expandedToolGroupIDs,
             hoveredUserMessageID: hoveredUserMessageID,
             baseFontSize: clampedSize,
+            layoutWidth: resolvedLayoutWidth,
             latestTurnReportToolCount: latestTurnReportToolCount
         )
 
@@ -220,6 +225,7 @@ enum AgentChatHistoryRenderer {
         expandedToolGroupIDs: Set<String>,
         hoveredUserMessageID: UUID?,
         baseFontSize: CGFloat,
+        layoutWidth: CGFloat,
         latestTurnReportToolCount: Int?
     ) -> NSAttributedString {
         let result = NSMutableAttributedString()
@@ -232,6 +238,7 @@ enum AgentChatHistoryRenderer {
         let monoFont = NSFont.monospacedSystemFont(ofSize: baseFontSize, weight: .regular)
         let chromeMonoFont = NSFont.monospacedSystemFont(ofSize: NSFont.systemFontSize, weight: .regular)
         let headerFont = NSFont.systemFont(ofSize: 11, weight: .semibold)
+        let assistantStatusFont = NSFont.systemFont(ofSize: baseFontSize, weight: .medium)
         let bodyColor = NSColor.labelColor
         let secondaryColor = NSColor.secondaryLabelColor
         let codeBackgroundColor = NSColor.controlBackgroundColor
@@ -289,7 +296,19 @@ enum AgentChatHistoryRenderer {
             }
 
             if result.length > 0 {
+                let separatorStart = result.length
                 result.append(NSAttributedString(string: "\n\n"))
+                if message.role == .user {
+                    let style = NSMutableParagraphStyle()
+                    style.paragraphSpacing = AgentChatHistoryLayoutMetrics.userTurnTopSpacing
+                    result.addAttributes(
+                        [
+                            .font: bodyFont,
+                            .paragraphStyle: style,
+                        ],
+                        range: NSRange(location: separatorStart + 1, length: 1)
+                    )
+                }
             }
 
             // Role header.
@@ -299,13 +318,13 @@ enum AgentChatHistoryRenderer {
                 isToolCallOnly: isToolCallOnly,
                 to: result,
                 headerFont: headerFont,
+                assistantStatusFont: assistantStatusFont,
                 secondaryColor: secondaryColor
             )
 
             // Body.
+            let userMessageContentStart = result.length
             let isHoveredUserMessage = message.role == .user && message.id == hoveredUserMessageID
-            let messageBubbleStart = result.length
-            var hasMessageBubbleContent = false
             let useMono = (message.role == .tool)
             // User 消息如果是 composeAttachedPrompt 拼出来的 prelude(skill /
             // 文件 / workspace 注入),只在 UI 渲染时折叠成短 tag。原始
@@ -325,6 +344,40 @@ enum AgentChatHistoryRenderer {
                 body = displaySourceContent
             }
 
+            let hasUserTextBubbleContent = message.role == .user
+                && (!message.textAttachments.isEmpty || !body.isEmpty)
+            if message.role == .user, !message.images.isEmpty {
+                let imageStyle = userImageParagraphStyle(layoutWidth: layoutWidth)
+                let imageStart = result.length
+                appendImageAttachments(
+                    message.images,
+                    to: result,
+                    font: bodyFont,
+                    secondaryColor: secondaryColor
+                )
+                let imageRange = NSRange(location: imageStart, length: result.length - imageStart)
+                result.addAttributes(
+                    [
+                        .paragraphStyle: imageStyle,
+                        .agentChatHistoryUserMessageID: message.id.uuidString,
+                    ],
+                    range: imageRange
+                )
+                if hasUserTextBubbleContent {
+                    result.append(NSAttributedString(
+                        string: "\n",
+                        attributes: [
+                            .font: bodyFont,
+                            .paragraphStyle: imageStyle,
+                            .agentChatHistoryUserMessageID: message.id.uuidString,
+                        ]
+                    ))
+                }
+            }
+
+            let messageBubbleStart = result.length
+            var hasMessageBubbleContent = false
+
             if message.role == .user, !message.textAttachments.isEmpty {
                 let attachmentStart = result.length
                 appendTextAttachments(
@@ -338,30 +391,7 @@ enum AgentChatHistoryRenderer {
                     kind: bubbleKind(for: message.role),
                     to: result,
                     range: attachmentRange,
-                    paragraphStyle: bodyParagraphStyle(for: message.role),
-                    userMessageID: message.id,
-                    foregroundColor: nil
-                )
-                hasMessageBubbleContent = true
-            }
-
-            if message.role == .user, !message.images.isEmpty {
-                if hasMessageBubbleContent {
-                    result.append(NSAttributedString(string: "\n", attributes: [.font: bodyFont]))
-                }
-                let imageStart = result.length
-                appendImageAttachments(
-                    message.images,
-                    to: result,
-                    font: bodyFont,
-                    secondaryColor: secondaryColor
-                )
-                let imageRange = NSRange(location: imageStart, length: result.length - imageStart)
-                applyBubbleChrome(
-                    kind: bubbleKind(for: message.role),
-                    to: result,
-                    range: imageRange,
-                    paragraphStyle: bodyParagraphStyle(for: message.role),
+                    paragraphStyle: bodyParagraphStyle(for: message.role, layoutWidth: layoutWidth),
                     userMessageID: message.id,
                     foregroundColor: nil
                 )
@@ -400,7 +430,7 @@ enum AgentChatHistoryRenderer {
                     kind: bubbleKind(for: message.role),
                     to: result,
                     range: bodyRange,
-                    paragraphStyle: bodyParagraphStyle(for: message.role),
+                    paragraphStyle: bodyParagraphStyle(for: message.role, layoutWidth: layoutWidth),
                     userMessageID: message.role == .user ? message.id : nil,
                     foregroundColor: nil
                 )
@@ -423,7 +453,7 @@ enum AgentChatHistoryRenderer {
                     kind: bubbleKind(for: message.role),
                     to: result,
                     range: imageRange,
-                    paragraphStyle: bodyParagraphStyle(for: message.role),
+                    paragraphStyle: bodyParagraphStyle(for: message.role, layoutWidth: layoutWidth),
                     foregroundColor: nil
                 )
                 hasMessageBubbleContent = true
@@ -483,6 +513,7 @@ enum AgentChatHistoryRenderer {
                     isLatestAssistant: message.id == latestAssistantMessageID,
                     isVisible: message.role != .user || isHoveredUserMessage,
                     turnReportToolCount: latestTurnReportToolCount,
+                    layoutWidth: layoutWidth,
                     to: result
                 )
                 if hasMessageBubbleContent && inlineToolCalls.isEmpty {
@@ -497,22 +528,25 @@ enum AgentChatHistoryRenderer {
                         kind: bubbleKind(for: message.role),
                         to: result,
                         range: messageRange,
-                        paragraphStyle: bodyParagraphStyle(for: message.role),
+                        paragraphStyle: bodyParagraphStyle(for: message.role, layoutWidth: layoutWidth),
                         userMessageID: message.role == .user ? message.id : nil,
                         foregroundColor: nil
                     )
                     let footerRange = NSRange(location: footerStart, length: result.length - footerStart)
-                    if message.role == .user {
-                        result.addAttribute(
-                            .agentChatHistoryUserMessageID,
-                            value: message.id.uuidString,
-                            range: NSRange(location: messageBubbleStart, length: result.length - messageBubbleStart)
-                        )
-                    }
                     result.addAttribute(
                         .paragraphStyle,
-                        value: footerParagraphStyle(for: message.role),
+                        value: footerParagraphStyle(for: message.role, layoutWidth: layoutWidth),
                         range: footerRange
+                    )
+                }
+                if message.role == .user {
+                    result.addAttribute(
+                        .agentChatHistoryUserMessageID,
+                        value: message.id.uuidString,
+                        range: NSRange(
+                            location: userMessageContentStart,
+                            length: result.length - userMessageContentStart
+                        )
                     )
                 }
             }

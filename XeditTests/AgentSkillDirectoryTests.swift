@@ -50,6 +50,86 @@ struct AgentSkillDirectoryTests {
     }
 
     @Test
+    func bundledFigmaSwiftUISkillSupportsAutomaticMCPFallback() throws {
+        AgentSkillSettingsStore.setSkillEnabled(identifier: "figma-swiftui", enabled: true)
+        let skill = try #require(AgentSkillDirectory.bundledSkill(identifier: "figma-swiftui"))
+        let body = try #require(AgentSkillDirectory.loadBody(for: skill))
+        let references = skill.url.deletingLastPathComponent().appendingPathComponent("references")
+
+        #expect(skill.source == .bundled)
+        #expect(body.contains("list_mcp_servers"))
+        #expect(body.contains("resource: references/design-to-code.md"))
+        #expect(body.contains("resource: references/code-to-design.md"))
+        #expect(FileManager.default.fileExists(atPath: references.appendingPathComponent("design-to-code.md").path))
+        #expect(FileManager.default.fileExists(atPath: references.appendingPathComponent("code-to-design.md").path))
+
+        let reference = try AgentSkillCatalog.readSkill(arguments: [
+            "name": .string("figma-swiftui"),
+            "resource": .string("references/design-to-code.md"),
+        ])
+        #expect(reference.payload.contains("Figma → SwiftUI"))
+        #expect(reference.payload.contains("Map design structure to native SwiftUI"))
+
+        #expect(throws: AgentToolError.self) {
+            try AgentSkillCatalog.readSkill(arguments: [
+                "name": .string("figma-swiftui"),
+                "resource": .string("../../CHANGELOG.md"),
+            ])
+        }
+    }
+
+    @Test
+    func automaticFigmaSwiftUIActivationRespectsDisabledSetting() {
+        AgentSkillSettingsStore.setSkillEnabled(identifier: "figma-swiftui", enabled: false)
+        defer {
+            AgentSkillSettingsStore.setSkillEnabled(identifier: "figma-swiftui", enabled: true)
+        }
+
+        let skills = AgentSkillAutoActivation.mergedSkills(
+            userText: "请使用 $figma-swiftui 把这个设计稿实现成 SwiftUI",
+            workspaceRootPath: nil,
+            manuallySelectedSkills: []
+        )
+
+        #expect(skills.isEmpty)
+    }
+
+    @Test
+    func bundledDesignToCodeSkillIsDiscoverableAndReadable() throws {
+        AgentSkillSettingsStore.setSkillEnabled(identifier: "design-to-code", enabled: true)
+        let skill = try #require(AgentSkillDirectory.bundledSkill(identifier: "design-to-code"))
+        let body = try #require(AgentSkillDirectory.loadBody(for: skill))
+
+        #expect(skill.source == .bundled)
+        #expect(body.contains("references/implementation-workflow.md"))
+        #expect(body.contains("references/design-qa.md"))
+
+        let workflow = try AgentSkillCatalog.readSkill(arguments: [
+            "name": .string("design-to-code"),
+            "resource": .string("references/implementation-workflow.md"),
+        ])
+        #expect(workflow.payload.contains("Design-to-Code Implementation Workflow"))
+        #expect(workflow.payload.contains("Compare and iterate"))
+    }
+
+    @Test
+    func automaticDesignToCodeActivationRespectsDisabledSetting() {
+        AgentSkillSettingsStore.setSkillEnabled(identifier: "design-to-code", enabled: false)
+        defer {
+            AgentSkillSettingsStore.setSkillEnabled(identifier: "design-to-code", enabled: true)
+        }
+
+        let skills = AgentSkillAutoActivation.mergedSkills(
+            userText: "照这个做成前端",
+            workspaceRootPath: nil,
+            manuallySelectedSkills: [],
+            hasVisualTargetAttachment: true
+        )
+
+        #expect(skills.isEmpty)
+    }
+
+    @Test
     func disabledSkillIsHiddenFromAgentListButVisibleInSettingsList() {
         AgentSkillSettingsStore.setSkillEnabled(identifier: "browser", enabled: false)
         defer {

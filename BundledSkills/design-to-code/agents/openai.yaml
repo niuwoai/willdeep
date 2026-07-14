@@ -1,0 +1,6 @@
+interface:
+  display_name: "Design to Code"
+  short_description: "Turn a selected visual design into a verified frontend"
+  default_prompt: "Use $design-to-code to recreate this selected design as a responsive, interactive frontend."
+policy:
+  allow_implicit_invocation: true

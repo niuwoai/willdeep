@@ -136,7 +136,10 @@ struct AgentPanelView: View {
                     // 「排队中」提示 —— 否则用户只看到自己的消息、没有
                     // 任何「在处理」反馈,容易以为又没发出去。
                     if appState.activeRuntime?.isAwaitingProviderSlot == true {
-                        AgentInlineStatusDivider(text: "正在排队，等待空闲的并发槽位…")
+                        AgentInlineStatusDivider(
+                            text: L10n.AgentPanel.queueWaiting,
+                            systemImage: "clock"
+                        )
                     }
 
                     if appState.shouldShowAgentThinkingIndicator {
@@ -156,7 +159,7 @@ struct AgentPanelView: View {
                             ) {
                                 isJobsDrawerOpen = true
                             }
-                        } else if appState.isAgentResponding {
+                        } else if appState.isAgentResponding && !appState.shouldShowAgentThinkingIndicator {
                             AgentBreathingIndicator()
                         }
                     }
@@ -333,13 +336,23 @@ struct AgentPanelView: View {
 }
 
 struct AgentContextCompressionDivider: View {
+    var leadingInset: CGFloat = 0
+    var trailingInset: CGFloat = 0
+
     var body: some View {
-        AgentInlineStatusDivider(text: "正在自动压缩上下文")
+        AgentInlineStatusDivider(
+            text: L10n.AgentPanel.contextCompressing,
+            systemImage: "rectangle.compress.vertical",
+            leadingInset: leadingInset,
+            trailingInset: trailingInset
+        )
     }
 }
 
 struct AgentThinkingDivider: View {
     @EnvironmentObject var appState: AppState
+    var leadingInset: CGFloat = 0
+    var trailingInset: CGFloat = 0
 
     var body: some View {
         VStack(spacing: 0) {
@@ -350,14 +363,20 @@ struct AgentThinkingDivider: View {
             if let startedAt = appState.agentTurnStartedAt {
                 TimelineView(.periodic(from: startedAt, by: 1)) { context in
                     AgentInlineStatusDivider(
-                        text: "正在思考",
+                        text: L10n.AgentPanel.thinking,
                         trailing: formatThinkingElapsed(
                             context.date.timeIntervalSince(startedAt)
-                        )
+                        ),
+                        leadingInset: leadingInset,
+                        trailingInset: trailingInset
                     )
                 }
             } else {
-                AgentInlineStatusDivider(text: "正在思考")
+                AgentInlineStatusDivider(
+                    text: L10n.AgentPanel.thinking,
+                    leadingInset: leadingInset,
+                    trailingInset: trailingInset
+                )
             }
 
             // 两行实时预览：reasoning 流到哪里就显示到哪里的尾部。
@@ -367,13 +386,15 @@ struct AgentThinkingDivider: View {
             if let reasoning = appState.agentLiveThinkingPreview {
                 Text(AppState.agentThinkingPreviewTail(reasoning))
                     .font(.caption)
-                    .foregroundStyle(.secondary.opacity(0.72))
+                    .foregroundStyle(.secondary.opacity(0.62))
                     .lineLimit(2, reservesSpace: true)
                     .truncationMode(.head)
                     .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.leading, leadingInset)
+                    .padding(.trailing, trailingInset)
                     .padding(.top, 2)
                     .padding(.bottom, 4)
-                    .accessibilityLabel("思考内容实时预览")
+                    .accessibilityLabel(L10n.AgentPanel.thinkingPreviewAccessibility)
             }
         }
     }
@@ -402,40 +423,56 @@ struct AgentInlineStatusDivider: View {
     /// Optional trailing caption rendered next to the label — used by the
     /// thinking divider to show live elapsed seconds.
     var trailing: String? = nil
+    var systemImage: String? = nil
+    var leadingInset: CGFloat = 0
+    var trailingInset: CGFloat = 0
 
     var body: some View {
-        HStack(spacing: 10) {
+        VStack(alignment: .leading, spacing: AgentInlineStatusLayout.ruleToLabelSpacing) {
             Rectangle()
-                .fill(Color.secondary.opacity(0.22))
+                .fill(Color.secondary.opacity(AgentInlineStatusLayout.separatorOpacity))
                 .frame(height: 1)
-            HStack(spacing: 5) {
-                ProgressView()
-                    .controlSize(.mini)
-                    .scaleEffect(0.62)
-                    .frame(width: 10, height: 10)
+            HStack(spacing: AgentInlineStatusLayout.labelSpacing) {
+                if let systemImage {
+                    Image(systemName: systemImage)
+                        .font(.caption.weight(.medium))
+                        .frame(
+                            width: AgentInlineStatusLayout.iconSize,
+                            height: AgentInlineStatusLayout.iconSize
+                        )
+                }
                 Text(text)
                     .font(.caption)
-                    .foregroundStyle(.secondary)
                     .lineLimit(1)
                 if let trailing {
                     Text("·")
                         .font(.caption)
-                        .foregroundStyle(.secondary.opacity(0.55))
+                        .opacity(0.7)
                     Text(trailing)
                         .font(.caption.monospacedDigit())
-                        .foregroundStyle(.secondary)
                         .lineLimit(1)
                 }
+                Spacer(minLength: 0)
             }
-            .fixedSize()
-            Rectangle()
-                .fill(Color.secondary.opacity(0.22))
-                .frame(height: 1)
+            .foregroundStyle(Color.secondary.opacity(AgentInlineStatusLayout.foregroundOpacity))
         }
         .frame(maxWidth: .infinity)
-        .padding(.vertical, 6)
+        .padding(.leading, leadingInset)
+        .padding(.trailing, trailingInset)
+        .padding(.top, AgentInlineStatusLayout.topPadding)
+        .padding(.bottom, AgentInlineStatusLayout.bottomPadding)
         .accessibilityLabel(trailing.map { "\(text) · \($0)" } ?? text)
     }
+}
+
+private enum AgentInlineStatusLayout {
+    static let ruleToLabelSpacing: CGFloat = 12
+    static let labelSpacing: CGFloat = 6
+    static let iconSize: CGFloat = 14
+    static let topPadding: CGFloat = 4
+    static let bottomPadding: CGFloat = 8
+    static let separatorOpacity = 0.24
+    static let foregroundOpacity = 0.72
 }
 
 struct AgentWorktreeChangeCard: View {

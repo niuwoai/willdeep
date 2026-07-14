@@ -372,7 +372,7 @@ private struct WindowRootView: View {
                     didHandleInitialExternalURL = true
                     handleExternalURL(initialExternalURL)
                 }
-                // 1.153.0-rc3：没有初始 URL 的纯 editor 窗口（⌘N /
+                // 1.155.0-rc3：没有初始 URL 的纯 editor 窗口（⌘N /
                 // 菜单「显示编辑器」）直接给一个空白 untitled tab ——
                 // 老的「未打开文件夹」欢迎页已删除，editor 窗口要么
                 // 加载指定文件，要么就是一个可以立刻打字的空编辑器。
