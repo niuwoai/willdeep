@@ -331,11 +331,48 @@ struct AgentImageDescriptionDisclosure: View {
 
 // MARK: - Message footer
 
+enum AgentChatMessageMetrics {
+    static func assistantStatus(for message: AgentMessage, isStreaming: Bool) -> String {
+        if isStreaming {
+            return L10n.MessageFooter.processing
+        }
+        guard let elapsed = message.elapsedSeconds, elapsed > 0 else {
+            return L10n.MessageFooter.processed
+        }
+        return L10n.MessageFooter.processedDuration(formatElapsed(elapsed))
+    }
+
+    static func tokenSummary(for message: AgentMessage) -> String? {
+        if let prompt = message.promptTokens, let completion = message.completionTokens {
+            return "\(formatTokens(prompt))/\(formatTokens(completion))"
+        }
+        if let total = message.usageTokens, total > 0 {
+            return formatTokens(total)
+        }
+        return nil
+    }
+
+    static func formatElapsed(_ seconds: Double) -> String {
+        if seconds < 60 {
+            return "\(max(1, Int(seconds.rounded())))s"
+        }
+        let minutes = Int(seconds) / 60
+        let remainder = Int(seconds) % 60
+        return "\(minutes)m \(remainder)s"
+    }
+
+    private static func formatTokens(_ count: Int) -> String {
+        if count >= 1_000 {
+            return String(format: "%.1fk", Double(count) / 1_000.0)
+        }
+        return String(count)
+    }
+}
+
 /// Tiny caption row that sits directly under a chat bubble. Renders a
-/// copy-to-clipboard button, plus — for assistant messages — the wall
-/// clock elapsed seconds for the turn and the prompt/completion token
-/// breakdown. User messages only show the copy button (timing and
-/// tokens belong to the model side of the exchange).
+/// copy-to-clipboard button plus the compact prompt/completion token
+/// summary for assistant messages. Elapsed time lives in the leading
+/// "Processed" divider above the message body.
 struct AgentMessageFooter: View {
     let message: AgentMessage
     /// `.leading` for assistant rows (left-aligned column), `.trailing`
@@ -367,12 +404,10 @@ struct AgentMessageFooter: View {
             .help(didJustCopy ? L10n.MessageFooter.copied : L10n.MessageFooter.copy)
             .accessibilityLabel(L10n.MessageFooter.copyAccessibility)
 
-            if message.role == .assistant, let elapsed = message.elapsedSeconds, elapsed > 0 {
-                footerMetric(icon: "clock", text: formatElapsed(elapsed))
-            }
-
-            if message.role == .assistant, let tokenSummary = tokenSummary {
-                footerMetric(icon: "number", text: tokenSummary)
+            if message.role == .assistant, let tokenSummary = AgentChatMessageMetrics.tokenSummary(for: message) {
+                Text(tokenSummary)
+                    .font(footerTextFont)
+                    .foregroundStyle(.secondary)
             }
 
             if message.role == .assistant, let route = message.managedRoute {
@@ -406,35 +441,10 @@ struct AgentMessageFooter: View {
         .foregroundStyle(.secondary)
     }
 
-    private var tokenSummary: String? {
-        if let prompt = message.promptTokens, let completion = message.completionTokens {
-            return "in \(formatTokens(prompt)) · out \(formatTokens(completion))"
-        }
-        if let total = message.usageTokens, total > 0 {
-            return "\(formatTokens(total)) tok"
-        }
-        return nil
-    }
-
-    private func formatElapsed(_ seconds: Double) -> String {
-        if seconds < 10 { return String(format: "%.1fs", seconds) }
-        if seconds < 60 { return String(format: "%.0fs", seconds) }
-        let minutes = Int(seconds) / 60
-        let remainder = Int(seconds) % 60
-        return "\(minutes)m \(remainder)s"
-    }
-
     private func formatTimestamp(_ date: Date) -> String {
         let calendar = Calendar.autoupdatingCurrent
         let dateStyle: DateFormatter.Style = calendar.isDateInToday(date) ? .none : .short
         return DateFormatter.localizedString(from: date, dateStyle: dateStyle, timeStyle: .short)
-    }
-
-    private func formatTokens(_ count: Int) -> String {
-        if count >= 1000 {
-            return String(format: "%.1fk", Double(count) / 1000.0)
-        }
-        return String(count)
     }
 
     private func copyToClipboard() {

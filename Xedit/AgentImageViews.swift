@@ -236,6 +236,37 @@ struct AgentImageThumbnail: View {
     }
 }
 
+struct AgentUserImageStrip: View {
+    let images: [AgentImageAttachment]
+    var thumbnailSize: CGFloat = 96
+
+    var body: some View {
+        ViewThatFits(in: .horizontal) {
+            thumbnails
+                .fixedSize(horizontal: true, vertical: false)
+
+            ScrollView(.horizontal, showsIndicators: false) {
+                thumbnails
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .trailing)
+    }
+
+    private var thumbnails: some View {
+        HStack(spacing: 6) {
+            ForEach(images) { image in
+                AgentImageThumbnail(
+                    image: image,
+                    size: thumbnailSize,
+                    allowsRemoval: false,
+                    onRemove: nil,
+                    onPreview: { AgentImagePreviewWindowRegistry.shared.open(image: image) }
+                )
+            }
+        }
+    }
+}
+
 @MainActor
 final class AgentImagePreviewWindowRegistry {
     static let shared = AgentImagePreviewWindowRegistry()

@@ -23,7 +23,12 @@ extension AppState {
             (try? image.diskBackedCopy()) ?? image
         }
         let textAttachments = runtime.pendingTextAttachments
-        let skills = runtime.pendingSkills
+        let skills = AgentSkillAutoActivation.mergedSkills(
+            userText: userText,
+            workspaceRootPath: runtime.workspaceRootPath ?? rootDirectory?.standardizedFileURL.path,
+            manuallySelectedSkills: runtime.pendingSkills,
+            hasVisualTargetAttachment: !images.isEmpty
+        )
         let pendingFiles = runtime.pendingFiles
         let files = mergedAgentDocumentContextFiles(
             sessionDocuments: runtime.documentAttachments,

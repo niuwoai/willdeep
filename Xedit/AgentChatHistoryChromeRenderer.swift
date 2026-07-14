@@ -14,8 +14,26 @@ extension AgentChatHistoryRenderer {
         isToolCallOnly: Bool,
         to result: NSMutableAttributedString,
         headerFont: NSFont,
+        assistantStatusFont: NSFont,
         secondaryColor: NSColor
     ) {
+        if message.role == .assistant, !isToolCallOnly {
+            let headerStart = result.length
+            result.append(NSAttributedString(
+                string: AgentChatMessageMetrics.assistantStatus(for: message, isStreaming: false) + "\n",
+                attributes: [
+                    .font: assistantStatusFont,
+                    .foregroundColor: secondaryColor,
+                ]
+            ))
+            result.addAttribute(
+                .paragraphStyle,
+                value: headerParagraphStyle(for: message.role),
+                range: NSRange(location: headerStart, length: result.length - headerStart)
+            )
+            return
+        }
+
         let label: String
         let avatar: String
         let color: NSColor
@@ -29,9 +47,9 @@ extension AgentChatHistoryRenderer {
             // surface; a repeated "You" label only adds visual noise.
             return
         case .assistant:
-            label = isToolCallOnly ? "Tool calls" : "Assistant"
-            avatar = isToolCallOnly ? "TL" : "AI"
-            color = isToolCallOnly ? NSColor.secondaryLabelColor : NSColor.tertiaryLabelColor
+            label = "Tool calls"
+            avatar = "TL"
+            color = NSColor.secondaryLabelColor
         case .tool:
             label = message.toolCallID.map { "Tool output · \($0)" } ?? "Tool output"
             avatar = "OUT"
@@ -58,15 +76,6 @@ extension AgentChatHistoryRenderer {
         case .user:
             result.append(NSAttributedString(
                 string: label + "\n",
-                attributes: [
-                    .font: headerFont,
-                    .foregroundColor: secondaryColor,
-                ]
-            ))
-        case .assistant where !isToolCallOnly:
-            result.append(starToken(color: color, font: headerFont))
-            result.append(NSAttributedString(
-                string: " " + label + "\n",
                 attributes: [
                     .font: headerFont,
                     .foregroundColor: secondaryColor,
@@ -109,43 +118,67 @@ extension AgentChatHistoryRenderer {
         }
     }
 
-    static func bodyParagraphStyle(for role: AgentRole) -> NSParagraphStyle {
+    static func bodyParagraphStyle(
+        for role: AgentRole,
+        layoutWidth: CGFloat = AgentChatHistoryLayoutMetrics.defaultTranscriptWidth
+    ) -> NSParagraphStyle {
         let style = NSMutableParagraphStyle()
         style.alignment = .left
         style.lineSpacing = MarkdownSpacing.bodyLine
         style.paragraphSpacing = role == .user ? MarkdownSpacing.userParagraph : MarkdownSpacing.assistantParagraph
         switch role {
         case .user:
-            style.headIndent = AgentChatHistoryLayoutMetrics.userBodyHeadIndent
-            style.firstLineHeadIndent = AgentChatHistoryLayoutMetrics.userBodyHeadIndent
+            let headIndent = AgentChatHistoryLayoutMetrics.userBodyHeadIndent(for: layoutWidth)
+            style.headIndent = headIndent
+            style.firstLineHeadIndent = headIndent
             style.tailIndent = AgentChatHistoryLayoutMetrics.userBodyTailIndent
         case .assistant, .system, .tool, .workflowReport, .widget, .scheduledTask:
-            style.headIndent = 32
-            style.firstLineHeadIndent = 32
-            style.tailIndent = -18
+            style.headIndent = AgentChatHistoryLayoutMetrics.assistantContentHeadIndent
+            style.firstLineHeadIndent = AgentChatHistoryLayoutMetrics.assistantContentHeadIndent
+            style.tailIndent = -AgentChatHistoryLayoutMetrics.assistantContentTailInset
         }
         return style
     }
 
-    static func footerParagraphStyle(for role: AgentRole) -> NSParagraphStyle {
+    static func footerParagraphStyle(
+        for role: AgentRole,
+        layoutWidth: CGFloat = AgentChatHistoryLayoutMetrics.defaultTranscriptWidth
+    ) -> NSParagraphStyle {
         let style = NSMutableParagraphStyle()
         style.alignment = role == .user ? .right : .left
         style.lineSpacing = 1
-        style.paragraphSpacing = 0
+        style.paragraphSpacing = role == .user
+            ? AgentChatHistoryLayoutMetrics.userFooterBottomSpacing
+            : 0
         switch role {
         case .user:
-            style.headIndent = AgentChatHistoryLayoutMetrics.userBodyHeadIndent
-            style.firstLineHeadIndent = AgentChatHistoryLayoutMetrics.userBodyHeadIndent
+            let headIndent = AgentChatHistoryLayoutMetrics.userBodyHeadIndent(for: layoutWidth)
+            style.headIndent = headIndent
+            style.firstLineHeadIndent = headIndent
             style.tailIndent = AgentChatHistoryLayoutMetrics.userBodyTailIndent
+                - AgentChatHistoryLayoutMetrics.userFooterTrailingInset
+            style.paragraphSpacingBefore = AgentChatHistoryLayoutMetrics.userFooterTopSpacing
         case .assistant:
-            style.headIndent = 32
-            style.firstLineHeadIndent = 32
-            style.tailIndent = -18
+            style.headIndent = AgentChatHistoryLayoutMetrics.assistantContentHeadIndent
+            style.firstLineHeadIndent = AgentChatHistoryLayoutMetrics.assistantContentHeadIndent
+            style.tailIndent = -AgentChatHistoryLayoutMetrics.assistantContentTailInset
         case .system, .tool, .workflowReport, .widget, .scheduledTask:
-            style.headIndent = 32
-            style.firstLineHeadIndent = 32
-            style.tailIndent = -18
+            style.headIndent = AgentChatHistoryLayoutMetrics.assistantContentHeadIndent
+            style.firstLineHeadIndent = AgentChatHistoryLayoutMetrics.assistantContentHeadIndent
+            style.tailIndent = -AgentChatHistoryLayoutMetrics.assistantContentTailInset
         }
+        return style
+    }
+
+    static func userImageParagraphStyle(
+        layoutWidth: CGFloat = AgentChatHistoryLayoutMetrics.defaultTranscriptWidth
+    ) -> NSParagraphStyle {
+        let style = NSMutableParagraphStyle()
+        style.alignment = .right
+        style.headIndent = AgentChatHistoryLayoutMetrics.userBubbleLeadingEdge(for: layoutWidth)
+        style.firstLineHeadIndent = style.headIndent
+        style.tailIndent = -AgentChatHistoryLayoutMetrics.userBubbleTrailingMargin
+        style.paragraphSpacing = AgentChatHistoryLayoutMetrics.userImageToBubbleSpacing
         return style
     }
 
@@ -379,6 +412,7 @@ extension AgentChatHistoryRenderer {
         isLatestAssistant: Bool,
         isVisible: Bool = true,
         turnReportToolCount: Int? = nil,
+        layoutWidth: CGFloat = AgentChatHistoryLayoutMetrics.defaultTranscriptWidth,
         to result: NSMutableAttributedString
     ) {
         let start = result.length
@@ -397,11 +431,7 @@ extension AgentChatHistoryRenderer {
         ))
 
         if message.role == .assistant {
-            if let elapsed = message.elapsedSeconds, elapsed > 0 {
-                result.append(AgentChatHistoryFooterChrome.separator)
-                result.append(AgentChatHistoryFooterChrome.elapsedLabel(formatElapsed(elapsed)))
-            }
-            if let summary = tokenSummary(for: message) {
+            if let summary = AgentChatMessageMetrics.tokenSummary(for: message) {
                 result.append(AgentChatHistoryFooterChrome.separator)
                 result.append(AgentChatHistoryFooterChrome.label(summary))
             }
@@ -410,7 +440,7 @@ extension AgentChatHistoryRenderer {
                 result.append(AgentChatHistoryFooterChrome.label(route.footerChipText))
             }
             // 1.103.0-rc11: turn-report 图标(原 AgentTurnPostStrip 左侧)
-            // 折进 footer,跟 copy/clock/tokens/retry 同一行;只挂在最后一条
+            // 折进 footer,跟 copy/tokens/retry 同一行;只挂在最后一条
             // assistant 上,无工具调用的轮(toolCount==0)与历史轮都不显示。
             if isLatestAssistant, let count = turnReportToolCount, count > 0 {
                 result.append(AgentChatHistoryFooterChrome.separator)
@@ -432,18 +462,8 @@ extension AgentChatHistoryRenderer {
 
         result.addAttribute(
             .paragraphStyle,
-            value: footerParagraphStyle(for: message.role),
+            value: footerParagraphStyle(for: message.role, layoutWidth: layoutWidth),
             range: NSRange(location: start, length: result.length - start)
-        )
-    }
-
-    private static func starToken(color: NSColor, font: NSFont) -> NSAttributedString {
-        NSAttributedString(
-            string: "✦",
-            attributes: [
-                .font: NSFont.systemFont(ofSize: font.pointSize + 4, weight: .semibold),
-                .foregroundColor: color,
-            ]
         )
     }
 
@@ -503,9 +523,13 @@ extension AgentChatHistoryRenderer {
         style.alignment = role == .user ? .right : .left
         style.paragraphSpacing = role == .user ? 14 : MarkdownSpacing.headerToBody
         style.lineSpacing = 1
-        style.headIndent = role == .user ? 150 : 0
+        style.headIndent = role == .user
+            ? 150
+            : (role == .assistant ? AgentChatHistoryLayoutMetrics.assistantContentHeadIndent : 0)
         style.firstLineHeadIndent = style.headIndent
-        style.tailIndent = role == .user ? -30 : -16
+        style.tailIndent = role == .user
+            ? -30
+            : (role == .assistant ? -AgentChatHistoryLayoutMetrics.assistantContentTailInset : -16)
         return style
     }
 
@@ -594,32 +618,4 @@ extension AgentChatHistoryRenderer {
         return DateFormatter.localizedString(from: date, dateStyle: dateStyle, timeStyle: .short)
     }
 
-    private static func tokenSummary(for message: AgentMessage) -> String? {
-        if let prompt = message.promptTokens, let completion = message.completionTokens {
-            return "in \(formatTokens(prompt)) · out \(formatTokens(completion))"
-        }
-        if let total = message.usageTokens, total > 0 {
-            return "\(formatTokens(total)) tok"
-        }
-        return nil
-    }
-
-    private static func formatElapsed(_ seconds: Double) -> String {
-        if seconds < 10 {
-            return String(format: "%.1fs", seconds)
-        }
-        if seconds < 60 {
-            return String(format: "%.0fs", seconds)
-        }
-        let minutes = Int(seconds) / 60
-        let remainder = Int(seconds) % 60
-        return "\(minutes)m \(remainder)s"
-    }
-
-    private static func formatTokens(_ count: Int) -> String {
-        if count >= 1_000 {
-            return String(format: "%.1fk", Double(count) / 1_000.0)
-        }
-        return String(count)
-    }
 }

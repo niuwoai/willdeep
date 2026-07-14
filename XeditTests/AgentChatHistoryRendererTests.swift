@@ -108,7 +108,8 @@ struct AgentChatHistoryRendererTests {
 
         let rendered = AgentChatHistoryRenderer.render(messages: [message], isDark: false)
 
-        #expect(rendered.string.contains("Assistant"))
+        #expect(rendered.string.contains(L10n.MessageFooter.processed))
+        #expect(!rendered.string.contains("Assistant"))
         #expect(rendered.string.contains("Title"))
         #expect(rendered.string.contains("bold"))
         #expect(rendered.string.contains("code"))
@@ -199,6 +200,32 @@ struct AgentChatHistoryRendererTests {
         ))
         if let imageRange {
             #expect(rendered.attribute(.cursor, at: imageRange.location, effectiveRange: nil) as? NSCursor == NSCursor.arrow)
+            let bodyRange = (rendered.string as NSString).range(of: "识别一下这张图")
+            #expect(bodyRange.location != NSNotFound)
+            #expect(imageRange.location < bodyRange.location)
+            #expect(rendered.attribute(
+                .agentChatHistoryBubbleKind,
+                at: imageRange.location,
+                effectiveRange: nil
+            ) == nil)
+            #expect(
+                rendered.attribute(
+                    .agentChatHistoryBubbleKind,
+                    at: bodyRange.location,
+                    effectiveRange: nil
+                ) as? NSNumber
+                    == NSNumber(value: AgentChatHistoryBubbleKind.user.rawValue)
+            )
+            let imageParagraphStyle = try? #require(rendered.attribute(
+                .paragraphStyle,
+                at: imageRange.location,
+                effectiveRange: nil
+            ) as? NSParagraphStyle)
+            #expect(imageParagraphStyle?.alignment == .right)
+            #expect(
+                imageParagraphStyle?.paragraphSpacing
+                    == AgentChatHistoryLayoutMetrics.userImageToBubbleSpacing
+            )
         }
         #expect(!rendered.string.contains("[Image description generated"))
         #expect(!rendered.string.contains("internal VL-only"))
@@ -220,7 +247,8 @@ struct AgentChatHistoryRendererTests {
         let rendered = AgentChatHistoryRenderer.render(messages: [message], isDark: false)
         let marker = image.generatedReferenceMarker
 
-        #expect(rendered.string.contains("Assistant"))
+        #expect(rendered.string.contains(L10n.MessageFooter.processed))
+        #expect(!rendered.string.contains("Assistant"))
         #expect(rendered.string.contains("生成好了。"))
         #expect(rendered.string.contains("\u{fffc}") || rendered.string.contains("Image attachment"))
         #expect(marker != nil)
@@ -591,14 +619,30 @@ struct AgentChatHistoryRendererTests {
             elapsedSeconds: 8.4
         )
 
-        let rendered = AgentChatHistoryRenderer.render(messages: [user, assistant], isDark: false)
+        let rendered = AgentChatHistoryRenderer.render(
+            messages: [user, assistant],
+            isDark: false,
+            baseFontSize: AgentSettingsStore.chatBaseFontSizeDefault
+        )
 
         #expect(rendered.string.contains("hello"))
         #expect(!rendered.string.contains("You"))
-        #expect(rendered.string.contains("✦ Assistant\ndone"))
+        #expect(rendered.string.contains("\(L10n.MessageFooter.processedDuration("8s"))\ndone"))
+        #expect(!rendered.string.contains("Assistant"))
         #expect(!rendered.string.contains("YOU"))
-        #expect(rendered.string.contains("  ◷ 8.4s  in 1.2k · out 2.3k  ↻"))
+        #expect(rendered.string.contains("  1.2k/2.3k  ↻"))
+        #expect(!rendered.string.contains("in 1.2k"))
+        #expect(!rendered.string.contains("out 2.3k"))
         #expect(firstAttributeRange(.agentChatHistoryMessageCopyText, value: "hello", in: rendered) == nil)
+
+        let processedRange = (rendered.string as NSString).range(
+            of: L10n.MessageFooter.processedDuration("8s")
+        )
+        let processedFont = rendered.attribute(
+            .font,
+            at: processedRange.location,
+            effectiveRange: nil
+        ) as? NSFont
 
         let assistantCopyRange = try #require(firstAttributeRange(
             .agentChatHistoryMessageCopyText,
@@ -610,6 +654,20 @@ struct AgentChatHistoryRendererTests {
         let doneRange = (rendered.string as NSString).range(of: "done")
         #expect(doneRange.location != NSNotFound)
         #expect(assistantCopyLocation > doneRange.location)
+        let bodyFont = try #require(rendered.attribute(
+            .font,
+            at: doneRange.location,
+            effectiveRange: nil
+        ) as? NSFont)
+        let bodyParagraphStyle = try #require(rendered.attribute(
+            .paragraphStyle,
+            at: doneRange.location,
+            effectiveRange: nil
+        ) as? NSParagraphStyle)
+        #expect(bodyFont.pointSize == 14)
+        #expect(processedFont?.pointSize == bodyFont.pointSize)
+        #expect(processedFont?.pointSize == AgentSettingsStore.chatBaseFontSizeDefault)
+        #expect(bodyParagraphStyle.lineSpacing == 4)
         let copyFont = try #require(rendered.attribute(
             .font,
             at: assistantCopyLocation,
@@ -617,15 +675,7 @@ struct AgentChatHistoryRendererTests {
         ) as? NSFont)
         #expect(copyFont.pointSize >= 16)
 
-        let elapsedIconRange = (rendered.string as NSString).range(of: "◷")
-        let elapsedIconFont = try #require(rendered.attribute(
-            .font,
-            at: elapsedIconRange.location,
-            effectiveRange: nil
-        ) as? NSFont)
-        #expect(elapsedIconFont.pointSize >= 16)
-
-        let tokenRange = (rendered.string as NSString).range(of: "in 1.2k")
+        let tokenRange = (rendered.string as NSString).range(of: "1.2k/2.3k")
         let tokenFont = try #require(rendered.attribute(
             .font,
             at: tokenRange.location,
@@ -641,6 +691,30 @@ struct AgentChatHistoryRendererTests {
         ) as? NSFont)
         #expect(retryFont.pointSize >= 13)
         #expect(retryFont.pointSize < copyFont.pointSize)
+
+        let copiedButton = AgentChatHistoryFooterChrome.copyButton(
+            copied: true,
+            message: "done",
+            paragraphStyle: rendered.attribute(
+                .paragraphStyle,
+                at: assistantCopyLocation,
+                effectiveRange: nil
+            ) as? NSParagraphStyle
+        )
+        #expect(copiedButton.length == assistantCopyRange.length)
+        let copiedParagraphStyle = try #require(copiedButton.attribute(
+            .paragraphStyle,
+            at: 0,
+            effectiveRange: nil
+        ) as? NSParagraphStyle)
+        #expect(
+            copiedParagraphStyle.headIndent
+                == AgentChatHistoryLayoutMetrics.assistantContentHeadIndent
+        )
+        #expect(
+            copiedParagraphStyle.tailIndent
+                == -AgentChatHistoryLayoutMetrics.assistantContentTailInset
+        )
     }
 
     @Test
@@ -813,9 +887,77 @@ struct AgentChatHistoryRendererTests {
             effectiveRange: nil
         ) as? NSColor)
         #expect(visibleTimestampColor.alphaComponent > 0)
+        let visibleFooterStyle = try #require(hovered.attribute(
+            .paragraphStyle,
+            at: visibleCopyRange.location,
+            effectiveRange: nil
+        ) as? NSParagraphStyle)
+        #expect(visibleFooterStyle.paragraphSpacingBefore == AgentChatHistoryLayoutMetrics.userFooterTopSpacing)
+        #expect(visibleFooterStyle.paragraphSpacing == AgentChatHistoryLayoutMetrics.userFooterBottomSpacing)
+        #expect(visibleFooterStyle.tailIndent == AgentChatHistoryLayoutMetrics.userBodyTailIndent
+            - AgentChatHistoryLayoutMetrics.userFooterTrailingInset)
 
         #expect(!AgentChatHistoryBubbleKind.assistant.drawsRoundedBackground)
         #expect(AgentChatHistoryBubbleKind.user.drawsRoundedBackground)
+    }
+
+    @Test
+    func userBubbleInsetsAndTurnSpacingTrackNarrowLayoutWidth() throws {
+        let layoutWidth: CGFloat = 640
+        let assistant = AgentMessage(role: .assistant, content: "before")
+        let user = AgentMessage(role: .user, content: "after")
+        let rendered = AgentChatHistoryRenderer.render(
+            messages: [assistant, user],
+            isDark: false,
+            layoutWidth: layoutWidth
+        )
+
+        let userRange = (rendered.string as NSString).range(of: "after")
+        #expect(userRange.location != NSNotFound)
+        let bodyStyle = try #require(rendered.attribute(
+            .paragraphStyle,
+            at: userRange.location,
+            effectiveRange: nil
+        ) as? NSParagraphStyle)
+        let bubbleLeadingEdge = AgentChatHistoryLayoutMetrics.userBubbleLeadingEdge(for: layoutWidth)
+        #expect(bodyStyle.headIndent == AgentChatHistoryLayoutMetrics.userBodyHeadIndent(for: layoutWidth))
+        #expect(bodyStyle.headIndent - bubbleLeadingEdge == AgentChatHistoryLayoutMetrics.userBubbleHorizontalPadding)
+        #expect(-bodyStyle.tailIndent - AgentChatHistoryLayoutMetrics.userBubbleTrailingMargin
+            == AgentChatHistoryLayoutMetrics.userBubbleHorizontalPadding)
+
+        let separatorStyle = try #require(rendered.attribute(
+            .paragraphStyle,
+            at: userRange.location - 1,
+            effectiveRange: nil
+        ) as? NSParagraphStyle)
+        #expect(separatorStyle.paragraphSpacing == AgentChatHistoryLayoutMetrics.userTurnTopSpacing)
+    }
+
+    @Test
+    @MainActor
+    func textViewReflowsUserBodyIndentWhenItsWidthChanges() throws {
+        let user = AgentMessage(role: .user, content: "responsive inset")
+        let view = AgentChatHistoryNSTextView()
+        view.setFrameSize(NSSize(width: 640, height: 1))
+        view.applyMessages([user], isDark: false)
+
+        let narrowRange = (view.string as NSString).range(of: "responsive inset")
+        let narrowStyle = try #require(view.textStorage?.attribute(
+            .paragraphStyle,
+            at: narrowRange.location,
+            effectiveRange: nil
+        ) as? NSParagraphStyle)
+        #expect(narrowStyle.headIndent == AgentChatHistoryLayoutMetrics.userBodyHeadIndent(for: 640))
+
+        view.setFrameSize(NSSize(width: 900, height: 1))
+        let wideRange = (view.string as NSString).range(of: "responsive inset")
+        let wideStyle = try #require(view.textStorage?.attribute(
+            .paragraphStyle,
+            at: wideRange.location,
+            effectiveRange: nil
+        ) as? NSParagraphStyle)
+        #expect(wideStyle.headIndent == AgentChatHistoryLayoutMetrics.userBodyHeadIndent(for: 900))
+        #expect(wideStyle.headIndent > narrowStyle.headIndent)
     }
 
     @Test

@@ -327,41 +327,56 @@ struct AgentMessageBubble: View {
     @State private var isHoveringUserMessage = false
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            VStack(alignment: .leading, spacing: 4) {
-                if message.role != .user {
-                    Text(title)
-                        .font(.caption2)
-                        .foregroundStyle(.secondary)
-                }
-                if !message.textAttachments.isEmpty {
-                    AgentTextAttachmentBubbleStrip(attachments: message.textAttachments)
-                }
-                if !displayContent.isEmpty {
-                    Text(displayContent)
-                        .font(.system(size: 13))
-                        .textSelection(.enabled)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                }
-                if !message.images.isEmpty {
-                    ScrollView(.horizontal, showsIndicators: false) {
-                        HStack(spacing: 6) {
-                            ForEach(message.images) { image in
-                                AgentImageThumbnail(
-                                    image: image,
-                                    size: 96,
-                                    allowsRemoval: false,
-                                    onRemove: nil,
-                                    onPreview: { AgentImagePreviewWindowRegistry.shared.open(image: image) }
-                                )
+        VStack(
+            alignment: .leading,
+            spacing: AgentChatHistoryLayoutMetrics.userMessageElementSpacing
+        ) {
+            if message.role == .user, !message.images.isEmpty {
+                AgentUserImageStrip(images: message.images)
+                    .padding(
+                        .bottom,
+                        hasBubbleContent
+                            ? AgentChatHistoryLayoutMetrics.userImageToBubbleSpacing
+                                - AgentChatHistoryLayoutMetrics.userMessageElementSpacing
+                            : 0
+                    )
+            }
+            if hasBubbleContent {
+                VStack(alignment: .leading, spacing: 4) {
+                    if message.role != .user {
+                        Text(title)
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                    }
+                    if !message.textAttachments.isEmpty {
+                        AgentTextAttachmentBubbleStrip(attachments: message.textAttachments)
+                    }
+                    if !displayContent.isEmpty {
+                        Text(displayContent)
+                            .font(.system(size: 13))
+                            .textSelection(.enabled)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                    }
+                    if message.role != .user, !message.images.isEmpty {
+                        ScrollView(.horizontal, showsIndicators: false) {
+                            HStack(spacing: 6) {
+                                ForEach(message.images) { image in
+                                    AgentImageThumbnail(
+                                        image: image,
+                                        size: 96,
+                                        allowsRemoval: false,
+                                        onRemove: nil,
+                                        onPreview: { AgentImagePreviewWindowRegistry.shared.open(image: image) }
+                                    )
+                                }
                             }
                         }
                     }
                 }
+                .padding(9)
+                .background(backgroundColor)
+                .clipShape(RoundedRectangle(cornerRadius: 7))
             }
-            .padding(9)
-            .background(backgroundColor)
-            .clipShape(RoundedRectangle(cornerRadius: 7))
             if shouldShowFooter {
                 footer
                     .opacity(message.role == .user && !isHoveringUserMessage ? 0 : 1)
@@ -372,6 +387,12 @@ struct AgentMessageBubble: View {
         .contentShape(Rectangle())
         .onHover { isHoveringUserMessage = $0 }
         .animation(.easeOut(duration: 0.12), value: isHoveringUserMessage)
+    }
+
+    private var hasBubbleContent: Bool {
+        message.role != .user
+            || !message.textAttachments.isEmpty
+            || !displayContent.isEmpty
     }
 
     private var shouldShowFooter: Bool {
@@ -409,10 +430,10 @@ struct AgentMessageBubble: View {
 
     private var tokenSummary: String? {
         if let prompt = message.promptTokens, let completion = message.completionTokens {
-            return "\(formatTokens(prompt))→\(formatTokens(completion))"
+            return "\(formatTokens(prompt))/\(formatTokens(completion))"
         }
         if let total = message.usageTokens, total > 0 {
-            return "\(formatTokens(total))t"
+            return formatTokens(total)
         }
         return nil
     }

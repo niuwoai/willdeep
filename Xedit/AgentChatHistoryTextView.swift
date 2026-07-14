@@ -146,6 +146,7 @@ final class AgentChatHistoryNSTextView: NSTextView {
     private var currentIsDark = false
     private var currentBaseFontSize: CGFloat = NSFont.systemFontSize
     private var currentLatestTurnReportToolCount: Int? = nil
+    private var currentLayoutWidth = AgentChatHistoryLayoutMetrics.defaultTranscriptWidth
     private var currentBaseAttributedString = NSAttributedString()
     private var currentSearchQuery = ""
     private var currentActiveSearchMatchIndex: Int?
@@ -197,6 +198,16 @@ final class AgentChatHistoryNSTextView: NSTextView {
         let used = layoutManager.usedRect(for: textContainer).size
         let drawingHeight = used.height + AgentChatHistoryLayoutMetrics.bubbleDrawingVerticalOverscan
         return NSSize(width: NSView.noIntrinsicMetric, height: ceil(drawingHeight))
+    }
+
+    override func setFrameSize(_ newSize: NSSize) {
+        super.setFrameSize(newSize)
+        guard newSize.width > 0 else { return }
+        let resolvedWidth = AgentChatHistoryLayoutMetrics.resolvedLayoutWidth(newSize.width)
+        guard abs(resolvedWidth - currentLayoutWidth) >= 1 else { return }
+        currentLayoutWidth = resolvedWidth
+        guard !currentMessages.isEmpty else { return }
+        renderCurrentMessages()
     }
 
     override func layout() {
@@ -478,6 +489,7 @@ final class AgentChatHistoryNSTextView: NSTextView {
             expandedToolGroupIDs: expandedToolGroupIDs,
             hoveredUserMessageID: hoveredUserMessageID,
             baseFontSize: currentBaseFontSize,
+            layoutWidth: currentLayoutWidth,
             latestTurnReportToolCount: currentLatestTurnReportToolCount
         )
         var hasher = Hasher()
@@ -485,6 +497,7 @@ final class AgentChatHistoryNSTextView: NSTextView {
         hasher.combine(attr.length)
         hasher.combine(currentIsDark)
         hasher.combine(currentBaseFontSize)
+        hasher.combine(currentLayoutWidth)
         hasher.combine(expandedToolGroupIDs.sorted())
         hasher.combine(hoveredUserMessageID)
         let hash = hasher.finalize()
@@ -884,7 +897,12 @@ extension AgentChatHistoryNSTextView: NSTextViewDelegate {
         pendingFooterCopyRestores[restoreKey] = nil
         guard let textStorage,
               NSMaxRange(range) <= textStorage.length,
-              textStorage.attributedSubstring(from: range).string == AgentChatHistoryFooterChrome.copyCopiedLabel else {
+              textStorage.attribute(
+                  .agentChatHistoryMessageCopyText,
+                  at: range.location,
+                  effectiveRange: nil
+              ) as? String == message,
+              textStorage.attribute(.link, at: range.location, effectiveRange: nil) == nil else {
             return
         }
         replaceFooterCopyButton(in: range, copied: false, message: message)
@@ -892,7 +910,16 @@ extension AgentChatHistoryNSTextView: NSTextViewDelegate {
 
     private func replaceFooterCopyButton(in range: NSRange, copied: Bool, message: String) {
         guard let textStorage else { return }
-        let replacement = AgentChatHistoryFooterChrome.copyButton(copied: copied, message: message)
+        let paragraphStyle = textStorage.attribute(
+            .paragraphStyle,
+            at: range.location,
+            effectiveRange: nil
+        ) as? NSParagraphStyle
+        let replacement = AgentChatHistoryFooterChrome.copyButton(
+            copied: copied,
+            message: message,
+            paragraphStyle: paragraphStyle
+        )
         textStorage.beginEditing()
         textStorage.replaceCharacters(in: range, with: replacement)
         textStorage.endEditing()
@@ -915,20 +942,51 @@ enum AgentChatHistoryBubbleKind: Int {
 }
 
 enum AgentChatHistoryLayoutMetrics {
+    static let assistantContentHeadIndent: CGFloat = 32
+    static let assistantContentTailInset: CGFloat = 18
     // Codex-style user input stays in a right-side column instead of
     // becoming a full-width strip. The body remains left-aligned inside
     // that column, while short and long messages share a stable wrap width.
     static let userBubbleMinWidth: CGFloat = 260
     static let userBubbleMaxWidthRatio: CGFloat = 0.78
     static let userBubbleTrailingMargin: CGFloat = 30
-    /// Matches the leading edge of the 78% user column at the normal
-    /// 1040pt transcript width while still leaving usable space when narrow.
-    static let userBodyHeadIndent: CGFloat = 240
-    static let userBodyTailIndent: CGFloat = -46
+    static let defaultTranscriptWidth: CGFloat = 1040
+    static let userBubbleHorizontalPadding: CGFloat = 12
+    static let userBubbleVerticalPadding: CGFloat = 8
+    static let userTurnTopSpacing: CGFloat = 10
+    static let userBodyTailIndent = -(userBubbleTrailingMargin + userBubbleHorizontalPadding)
+    static let userFooterTrailingInset: CGFloat = 10
+    static let userFooterTopSpacing: CGFloat = 8
+    static let userFooterBottomSpacing: CGFloat = 8
+    static let userImageToBubbleSpacing: CGFloat = 8
+    static let userMessageElementSpacing: CGFloat = 4
     /// Bubble backgrounds are drawn outside TextKit's glyph usedRect.
     /// Without this bottom slack the final user bubble can have its lower
     /// rounded corners clipped by the hosting SwiftUI layout.
     static let bubbleDrawingVerticalOverscan: CGFloat = 14
+
+    static func resolvedLayoutWidth(_ width: CGFloat) -> CGFloat {
+        guard width.isFinite, width > 0 else { return defaultTranscriptWidth }
+        return floor(width)
+    }
+
+    static func userBubbleWidth(for layoutWidth: CGFloat) -> CGFloat {
+        let width = resolvedLayoutWidth(layoutWidth)
+        let availableWidth = max(0, width - userBubbleTrailingMargin)
+        return min(
+            availableWidth,
+            max(userBubbleMinWidth, width * userBubbleMaxWidthRatio)
+        )
+    }
+
+    static func userBubbleLeadingEdge(for layoutWidth: CGFloat) -> CGFloat {
+        let width = resolvedLayoutWidth(layoutWidth)
+        return width - userBubbleWidth(for: width) - userBubbleTrailingMargin
+    }
+
+    static func userBodyHeadIndent(for layoutWidth: CGFloat) -> CGFloat {
+        userBubbleLeadingEdge(for: layoutWidth) + userBubbleHorizontalPadding
+    }
 }
 
 enum AgentChatHistoryTableLink {
@@ -1064,7 +1122,7 @@ private final class AgentChatHistoryBubbleLayoutManager: NSLayoutManager {
         let verticalInset: CGFloat
         switch kind {
         case .user:
-            verticalInset = 13
+            verticalInset = AgentChatHistoryLayoutMetrics.userBubbleVerticalPadding
         case .toolSummary:
             // Keep this snug — when a tool summary sits directly under
             // an assistant body the two bubbles share an edge, and any
@@ -1081,15 +1139,8 @@ private final class AgentChatHistoryBubbleLayoutManager: NSLayoutManager {
         case .user:
             // Keep user input in a restrained right-side surface. The footer
             // is intentionally outside this rect and retains its own row.
-            let availableWidth = max(0, containerWidth - AgentChatHistoryLayoutMetrics.userBubbleTrailingMargin)
-            let width = min(
-                availableWidth,
-                max(
-                    AgentChatHistoryLayoutMetrics.userBubbleMinWidth,
-                    containerWidth * AgentChatHistoryLayoutMetrics.userBubbleMaxWidthRatio
-                )
-            )
-            rect.origin.x = origin.x + containerWidth - width - AgentChatHistoryLayoutMetrics.userBubbleTrailingMargin
+            let width = AgentChatHistoryLayoutMetrics.userBubbleWidth(for: containerWidth)
+            rect.origin.x = origin.x + AgentChatHistoryLayoutMetrics.userBubbleLeadingEdge(for: containerWidth)
             rect.size.width = width
         case .assistant, .system, .tool:
             rect.origin.x = origin.x + 20

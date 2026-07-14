@@ -111,6 +111,16 @@ enum AgentSkillLocalization {
             description: "Find, organize, move, rename, compress, and clean up files on the user's computer.",
             aliases: ["files", "finder", "organize"]
         ),
+        "design-to-code": .init(
+            name: "Design to Code",
+            description: "Turn a selected screenshot, mockup, or Figma frame into a faithful, responsive, verified web frontend.",
+            aliases: ["image to code", "screenshot to code", "mockup to React", "frontend recreation"]
+        ),
+        "figma-swiftui": .init(
+            name: "Figma ↔ SwiftUI",
+            description: "Translate Figma designs and native SwiftUI screens in either direction, with safe MCP fallback behavior.",
+            aliases: ["Figma to SwiftUI", "SwiftUI to Figma", "iOS design", "design to code"]
+        ),
         "image-gen": .init(
             name: "image-gen",
             description: "Generate or edit images with AI, including photos, avatars, backgrounds, and logos.",
@@ -258,8 +268,10 @@ enum AgentSkillLocalization {
         "computer-use": .init(name: "电脑操作", description: "控制 macOS 原生应用:点击、输入、快捷键、滚动、拖拽和截图。", aliases: ["桌面自动化", "Mac 应用", "辅助功能"]),
         "daily-report": .init(name: "工作日报", description: "生成按项目、决策、提及和版本分组的每日或每周工作日志。", aliases: ["日报", "复盘", "工作总结"]),
         "discord": .init(name: "Discord", description: "与 Discord 频道交互并管理 Discord 机器人集成。", aliases: ["机器人", "频道", "服务器"]),
+        "design-to-code": .init(name: "Design to Code", description: "把选中的截图、视觉稿或 Figma 画面还原成高保真、响应式且经过验证的 Web 前端。", aliases: ["截图转代码", "设计转代码", "界面复刻", "视觉稿转前端"]),
         "example-translate": .init(name: "翻译示例", description: "内置声明式 workflow 示例,用 /translate-cn 把文本翻译成简体中文。", aliases: ["翻译", "工作流示例"]),
         "file-manager": .init(name: "文件管理", description: "查找、整理、移动、重命名、压缩和清理用户电脑上的文件。", aliases: ["文件", "访达", "整理"]),
+        "figma-swiftui": .init(name: "Figma ↔ SwiftUI", description: "在 Figma 设计与原生 SwiftUI 界面之间双向转换，并在缺少 MCP 能力时安全降级。", aliases: ["设计稿转 SwiftUI", "SwiftUI 转 Figma", "iOS 设计还原", "设计转代码"]),
         "image-gen": .init(name: "图像生成", description: "用 AI 生成或编辑图片,包括照片、头像、背景和 Logo。", aliases: ["画图", "图片", "照片"]),
         "memory-management": .init(name: "记忆管理", description: "搜索和管理记忆、历史对话、偏好与个人事实。", aliases: ["记住", "历史", "召回"]),
         "music-gen": .init(name: "音乐生成", description: "根据提示生成原创歌曲、歌词、人声或纯音乐。", aliases: ["歌曲", "音频", "作曲"]),

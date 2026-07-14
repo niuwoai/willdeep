@@ -59,7 +59,7 @@ enum AgentSettingsStore {
     /// constants in AgentDesign.
     static let chatBaseFontSizeMin: CGFloat = 11
     static let chatBaseFontSizeMax: CGFloat = 20
-    static let chatBaseFontSizeDefault: CGFloat = 13
+    static let chatBaseFontSizeDefault: CGFloat = 14
     /// JSON-encoded `AgentProviderLibrary` minus the API keys, which
     /// live in Keychain under the entry's UUID.
     private static let providerLibraryKey = "com.willdeep.agentSettings.providerLibrary.v1"

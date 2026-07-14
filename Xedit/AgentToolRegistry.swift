@@ -236,10 +236,11 @@ enum AgentToolRegistry {
         ),
         AgentToolDescriptor(
             name: "read_skill",
-            description: "Read one installed Codex skill's SKILL.md by skill name or identifier. Use after list_skills when a skill matches the task. Read-only.",
+            description: "Read one installed Codex skill's SKILL.md or a referenced file inside that skill directory. Use after list_skills when a skill matches the task, and follow SKILL.md references with the optional resource path. Read-only; rejects paths outside the selected skill.",
             risk: .read,
             parameters: [
-                AgentToolParameter(name: "name", type: .string, description: "Skill name or identifier returned by list_skills.", required: true)
+                AgentToolParameter(name: "name", type: .string, description: "Skill name or identifier returned by list_skills.", required: true),
+                AgentToolParameter(name: "resource", type: .string, description: "Optional skill-relative file such as references/design-to-code.md. Defaults to SKILL.md.", required: false)
             ]
         ),
         AgentToolDescriptor(

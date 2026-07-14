@@ -1,0 +1,11 @@
+interface:
+  display_name: "Figma ↔ SwiftUI"
+  short_description: "Translate designs and native SwiftUI screens in either direction."
+  default_prompt: "Use $figma-swiftui to translate this Figma design and SwiftUI project in the requested direction."
+dependencies:
+  tools:
+    - type: "mcp"
+      value: "figma"
+      description: "Configured Figma MCP server for reading designs and optional write-back."
+policy:
+  allow_implicit_invocation: true

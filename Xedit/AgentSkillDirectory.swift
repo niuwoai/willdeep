@@ -47,16 +47,40 @@ enum AgentSkillCatalog {
             throw AgentToolError.notFound(rawName)
         }
 
-        guard let data = try? Data(contentsOf: record.url),
+        let resource = arguments["resource"]?.stringValue()?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let resourceURL = try resolvedResourceURL(for: record, resource: resource)
+        guard let data = try? Data(contentsOf: resourceURL),
               let text = String(data: data, encoding: .utf8) else {
-            throw AgentToolError.notFound(record.url.path)
+            throw AgentToolError.notFound(resourceURL.path)
         }
 
         let limited = limit(text.trimmingCharacters(in: .whitespacesAndNewlines), to: 48_000)
-        return AgentToolResult(
-            summary: record.name,
-            payload: "Skill: \(record.identifier)\nPath: \(record.url.path)\n\n\(limited)"
+        let relativePath = resourceURL.path.replacingOccurrences(
+            of: record.url.deletingLastPathComponent().path + "/",
+            with: ""
         )
+        return AgentToolResult(
+            summary: resource == nil || resource?.isEmpty == true ? record.name : "\(record.name): \(relativePath)",
+            payload: "Skill: \(record.identifier)\nResource: \(relativePath)\nPath: \(resourceURL.path)\n\n\(limited)"
+        )
+    }
+
+    private static func resolvedResourceURL(
+        for record: AgentSkillEntry,
+        resource: String?
+    ) throws -> URL {
+        guard let resource, !resource.isEmpty else { return record.url }
+        let skillRoot = record.url.deletingLastPathComponent().resolvingSymlinksInPath()
+        let candidate = skillRoot
+            .appendingPathComponent(resource, isDirectory: false)
+            .standardizedFileURL
+            .resolvingSymlinksInPath()
+        let allowedPrefix = skillRoot.path.hasSuffix("/") ? skillRoot.path : skillRoot.path + "/"
+        guard candidate.path.hasPrefix(allowedPrefix),
+              (try? candidate.resourceValues(forKeys: [.isRegularFileKey]).isRegularFile) == true else {
+            throw AgentToolError.notFound(resource)
+        }
+        return candidate
     }
 
     private static func limit(_ text: String, to maxCharacters: Int) -> String {
@@ -119,6 +143,39 @@ nonisolated enum AgentSkillDirectory {
 
     static var userSkillsRoot: URL {
         AgentSkillFileManager.userSkillsRoot
+    }
+
+    /// Resolves one top-level bundled skill without enumerating user/plugin
+    /// roots. Auto-activation runs on the send path, so it must stay bounded.
+    static func bundledSkill(identifier: String, includeDisabled: Bool = false) -> AgentSkillEntry? {
+        let trimmed = identifier.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard trimmed.range(of: #"^[a-z0-9][a-z0-9-]{0,63}$"#, options: .regularExpression) != nil else {
+            return nil
+        }
+
+        let settings = AgentSkillSettingsStore.load()
+        let isEnabled = settings.isEnabled(identifier: trimmed)
+        guard includeDisabled || isEnabled else { return nil }
+
+        for root in bundledSkillRoots() {
+            let url = root
+                .appendingPathComponent(trimmed, isDirectory: true)
+                .appendingPathComponent("SKILL.md", isDirectory: false)
+            guard let data = try? Data(contentsOf: url),
+                  let text = String(data: data, encoding: .utf8) else {
+                continue
+            }
+            let metadata = parseMetadata(from: text)
+            return AgentSkillEntry(
+                identifier: trimmed,
+                name: metadata.name.isEmpty ? trimmed : metadata.name,
+                description: metadata.description.isEmpty ? "(no description)" : metadata.description,
+                url: url,
+                source: .bundled,
+                isEnabled: isEnabled
+            )
+        }
+        return nil
     }
 
     private static func skillRoots() -> [SkillRoot] {

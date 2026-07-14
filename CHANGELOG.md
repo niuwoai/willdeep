@@ -1,5 +1,99 @@
 # Changelog
 
+## 1.155.0-rc2 - 2026-07-15
+
+### Changed
+
+- **“处理中 / 已处理 Ns”恢复正文基准字号。** Agent 回复上方的处理状态不再固定为 11 pt，而是与 AI 输出、用户输入共同跟随聊天正文基准字号；实时 SwiftUI 消息与 TextKit 历史消息统一，保留次级灰色和中等字重。
+
+### Fixed
+
+- 为 TextKit 历史渲染补充状态字体与正文同字号的回归断言，避免后续再次把处理状态降成辅助小字。
+- 版本号从 **1.155.0-rc1** 递增为 **1.155.0-rc2**；Xcode App、Go agent、Help bundle、Computer Use Helper、README badge、移动网关响应头契约与产品文档同步。
+
+---
+
+## 1.155.0-rc1 - 2026-07-15
+
+### Added
+
+- **内置 Design to Code Skill** —— 新增 WillDeep 兼容的 `design-to-code` 内置技能，可将选中的截图、视觉稿、Figma frame 或生成式设计还原为高保真、响应式、可交互的 Web 前端；在新项目中优先 React + TypeScript，在既有项目中遵循原技术栈、组件库、设计 token 与 i18n 约定。
+- **视觉稿自动路由** —— 发送消息时综合判断视觉附件、Figma URL、实现意图与工作区技术栈：Web/React 任务自动附加 `design-to-code`，Swift/Xcode 工程中的视觉实现任务优先附加 `figma-swiftui`；显式选择技能时不再被竞争技能覆盖，禁用技能后不会自动加载。
+- **设计还原 QA 门禁** —— 内置实现工作流与 Design QA 引用资源，要求对源视觉和浏览器渲染结果进行同视口、同状态比较，检查布局、字体、颜色、素材、文案、交互、响应式与无障碍，并用 `design-qa.md` 记录 `passed` 或 `blocked`。
+
+### Changed
+
+- 版本号从 **1.154.0-rc2** 提升为 **1.155.0-rc1**；Xcode App、Go agent、Help bundle、Computer Use Helper、README badge、移动网关响应头契约与产品文档同步。
+
+---
+
+## 1.154.0-rc2 - 2026-07-15
+
+### Fixed
+
+- 用户消息包含图片时，图片缩略图改为独立的无背景右对齐行，文字和文本附件另起一行进入浅色气泡，不再把图片包进整块用户消息背景。
+- 实时 SwiftUI 消息、TextKit 历史消息和紧凑侧栏统一采用图片在上、文字在下的结构；图片仍可点击预览，并继续参与整条用户消息的 hover 操作。
+
+### Changed
+
+- 版本号从 **1.154.0-rc1** 递增为 **1.154.0-rc2**；Xcode App、Go agent、Help bundle、Computer Use Helper、README badge、移动网关响应头契约与产品文档同步。
+
+---
+
+## 1.154.0-rc1 - 2026-07-15
+
+### Added
+
+- **内置 Figma ↔ SwiftUI Skill** —— 新增 WillDeep 兼容的 `figma-swiftui` 内置技能，覆盖 Figma 设计转 SwiftUI 与 SwiftUI 回写 Figma 两个方向；优先使用已配置的 Figma MCP，缺少读取能力时可基于用户附件安全降级，缺少写入能力时不会伪报已修改 Figma。
+- **必要场景自动触发** —— 发送消息前会轻量识别“Figma/设计稿 + SwiftUI/iOS/Xcode 语境 + 实现/转换意图”，自动附加该技能；显式 `$figma-swiftui` 始终触发，纯 Swift 问题、概念比较或 React 设计任务不会误触发，用户在技能设置中禁用后也不会自动加载。
+- **Skill 引用资源读取** —— `read_skill` 新增安全的 `resource` 参数，可继续读取选中 Skill 内的 `references/...` 文件，并拒绝目录穿越与 Skill 目录外文件。
+
+### Changed
+
+- 版本号从 **1.153.0-rc4** 提升为 **1.154.0-rc1**；Xcode App、Go agent、Help bundle、Computer Use Helper、README badge、移动网关响应头契约与产品文档同步。
+
+---
+
+## 1.153.0-rc4 - 2026-07-15
+
+### Fixed
+
+- “正在思考”“正在自动压缩上下文”和并发排队提示改为与 AI 正文左边缘一致的轻量状态组，上方使用低对比度分隔线，文字和图标使用更克制的灰色，不再居中夹在两段横线之间。
+- 思考阶段不再同时渲染居中的呼吸动画，避免同一过程出现两套相互争抢视觉焦点的反馈；压缩状态改用静态语义图标，思考计时继续保留。
+
+### Changed
+
+- 过程状态文案接入现有 String Catalog，补齐英文与简体中文资源。
+- 版本号从 **1.153.0-rc3** 递增为 **1.153.0-rc4**；Xcode App、Go agent、Help bundle、Computer Use Helper、README badge、移动网关响应头契约与产品文档同步。
+
+---
+
+## 1.153.0-rc3 - 2026-07-15
+
+### Fixed
+
+- 用户消息正文缩进改为随实际聊天容器宽度和气泡边缘动态计算，窄窗口下不再出现过大的左侧空白，窗口宽度变化时同步重排。
+- 用户气泡上下内边距由 13 pt 收紧为 8 pt，并为上一轮输出到用户输入、悬浮时间/复制尾栏到下一条输入分别保留稳定间距，避免内容和操作图标贴边。
+
+### Changed
+
+- 版本号从 **1.153.0-rc2** 递增为 **1.153.0-rc3**；Xcode App、Go agent、Help bundle、Computer Use Helper、README badge、移动网关响应头契约与产品文档同步。
+
+---
+
+## 1.153.0-rc2 - 2026-07-15
+
+### Changed
+
+- **助手输出改用处理耗时分隔** —— 历史与流式消息移除重复的 `✦ Assistant` 标题，改为灰色“处理中 / 已处理耗时”开头；耗时不再重复占用消息底栏。
+- **token 统计与正文排版更紧凑** —— 输入/输出 token 从 `in 54.2k · out 59` 精简为 `54.2k/59`；聊天默认正文字号从 13 pt 调整为 14 pt，并放松正文行高和段间距以贴近 Codex 默认阅读密度。
+
+### Fixed
+
+- **复制状态图标不再跳到左边缘** —— TextKit 在复制图标切换为打勾、再恢复时会保留原 footer 段落缩进；复制与打勾统一使用固定尺寸 SF Symbol，占位与基线不再变化。
+- **用户消息 hover 信息远离气泡边界** —— 时间和复制图标增加顶部间隔与右侧内缩，不再压在浅色背景方框边界上，SwiftUI 流式路径与 TextKit 历史路径同步。
+- 版本号从 **1.153.0-rc1** 递增为 **1.153.0-rc2**；Xcode App、Go agent、Help bundle、Computer Use Helper、README badge、移动网关响应头契约与产品文档同步。
+
 ## 1.153.0-rc1 - 2026-07-14
 
 ### Added

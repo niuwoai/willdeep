@@ -9,7 +9,7 @@
 //
 //   - `AgentModeMessageView`: the per-message bubble. User on the right
 //     with a soft card (hover reveals copy + timestamp), assistant
-//     on the left with a sparkle avatar and the markdown body card. Takes
+//     on the left with a compact processing-time divider and Markdown body. Takes
 //     `isStreamingThisMessage` as a plain Bool prop — derived from AppState
 //     in the parent — because reading AppState here would pull every
 //     bubble into the invalidation graph (77% CPU in `AG::Subgraph::update`
@@ -121,6 +121,7 @@ struct AgentModeMessageView: View {
             ? preludeDisplay.visibleContent
             : message.content
         let split = AgentUserContentSplitter.split(displaySource)
+        let hasTextBubbleContent = !message.textAttachments.isEmpty || !split.visible.isEmpty
         // rc13: collapsed the previous HStack { Spacer; VStack { VStack
         // {...}.frame(maxWidth:); footer } }.frame(maxWidth:) chain.
         // Two nested .frame(maxWidth:) plus an HStack Spacer is a
@@ -136,55 +137,63 @@ struct AgentModeMessageView: View {
         // alignment: .trailing) once at the end, and the inner card
         // is sized by its content (capped via .frame on the bubble
         // itself, not on its inner padding chrome).
-        return VStack(alignment: .trailing, spacing: 4) {
-            VStack(alignment: .leading, spacing: 8) {
-                if !message.textAttachments.isEmpty {
-                    AgentTextAttachmentBubbleStrip(attachments: message.textAttachments)
-                }
-                if !split.visible.isEmpty {
-                    // Inject zero-width break points into any
-                    // unbreakable run >30 chars (see
-                    // AgentLongTokenBreaker). Without this a
-                    // user paste like a pnpm-store listing
-                    // (150-char hash file names per line) sends
-                    // SwiftUI's line-breaker into a freeze that
-                    // takes the whole chat pane down on scroll.
-                    // Real text restored.
-                    Text(AgentLongTokenBreaker.inject(into: split.visible))
-                        .font(.system(size: baseFontSize))
-                        .foregroundStyle(.primary)
-                        .textSelection(.enabled)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-                if !message.images.isEmpty {
-                    ScrollView(.horizontal, showsIndicators: false) {
-                        HStack(spacing: 6) {
-                            ForEach(message.images) { image in
-                                AgentImageThumbnail(
-                                    image: image,
-                                    size: 96,
-                                    allowsRemoval: false,
-                                    onRemove: nil,
-                                    onPreview: { AgentImagePreviewWindowRegistry.shared.open(image: image) }
-                                )
-                            }
-                        }
+        return VStack(
+            alignment: .trailing,
+            spacing: AgentChatHistoryLayoutMetrics.userMessageElementSpacing
+        ) {
+            if !message.images.isEmpty {
+                AgentUserImageStrip(images: message.images)
+                    .frame(
+                        maxWidth: AgentDesign.chatMaxContentWidth * AgentDesign.userMessageMaxWidthRatio,
+                        alignment: .trailing
+                    )
+                    .padding(
+                        .bottom,
+                        hasTextBubbleContent
+                            ? AgentChatHistoryLayoutMetrics.userImageToBubbleSpacing
+                                - AgentChatHistoryLayoutMetrics.userMessageElementSpacing
+                            : 0
+                    )
+            }
+            if hasTextBubbleContent {
+                VStack(alignment: .leading, spacing: 8) {
+                    if !message.textAttachments.isEmpty {
+                        AgentTextAttachmentBubbleStrip(attachments: message.textAttachments)
+                    }
+                    if !split.visible.isEmpty {
+                        // Inject zero-width break points into any
+                        // unbreakable run >30 chars (see
+                        // AgentLongTokenBreaker). Without this a
+                        // user paste like a pnpm-store listing
+                        // (150-char hash file names per line) sends
+                        // SwiftUI's line-breaker into a freeze that
+                        // takes the whole chat pane down on scroll.
+                        // Real text restored.
+                        Text(AgentLongTokenBreaker.inject(into: split.visible))
+                            .font(.system(size: baseFontSize))
+                            .foregroundStyle(.primary)
+                            .textSelection(.enabled)
+                            .fixedSize(horizontal: false, vertical: true)
                     }
                 }
+                .padding(.horizontal, AgentChatHistoryLayoutMetrics.userBubbleHorizontalPadding)
+                .padding(.vertical, AgentChatHistoryLayoutMetrics.userBubbleVerticalPadding)
+                .background(
+                    RoundedRectangle(cornerRadius: AgentDesign.cardCornerRadius, style: .continuous)
+                        .fill(Color.primary.opacity(0.035))
+                )
+                .frame(
+                    maxWidth: AgentDesign.chatMaxContentWidth * AgentDesign.userMessageMaxWidthRatio,
+                    alignment: .trailing
+                )
             }
-            .padding(.horizontal, 14)
-            .padding(.vertical, 10)
-            .background(
-                RoundedRectangle(cornerRadius: AgentDesign.cardCornerRadius, style: .continuous)
-                    .fill(Color.primary.opacity(0.035))
-            )
-            .frame(maxWidth: AgentDesign.chatMaxContentWidth * AgentDesign.userMessageMaxWidthRatio, alignment: .trailing)
             if !message.content.isEmpty || !message.textAttachments.isEmpty || !message.images.isEmpty {
                 // Keep the row below the input in layout so the transcript
                 // never jumps; only its metadata and actions fade in.
                 AgentMessageFooter(message: message, alignment: .trailing, showsUserTimestamp: true)
-                    .padding(.top, 2)
-                    .padding(.trailing, 8)
+                    .padding(.top, AgentChatHistoryLayoutMetrics.userFooterTopSpacing)
+                    .padding(.trailing, AgentChatHistoryLayoutMetrics.userBubbleHorizontalPadding)
+                    .padding(.bottom, AgentChatHistoryLayoutMetrics.userFooterBottomSpacing)
                     .opacity(isHoveringUserMessage ? 1 : 0)
                     .allowsHitTesting(isHoveringUserMessage)
                     .accessibilityHidden(!isHoveringUserMessage)
@@ -204,14 +213,16 @@ struct AgentModeMessageView: View {
     // an unterminated ``` block at EOF, so streaming code blocks show up
     // correctly while still being typed.
     private var assistantContent: some View {
-        HStack(alignment: .top, spacing: 10) {
-            Image(systemName: "sparkles")
-                .font(.system(size: 15, weight: .semibold))
-                .foregroundStyle(Color.secondary.opacity(0.78))
-                .frame(width: 18, height: 20, alignment: .center)
-                .padding(.top, 10)
+        Group {
             if !message.content.isEmpty || !message.images.isEmpty {
-                VStack(alignment: .leading, spacing: 4) {
+                VStack(alignment: .leading, spacing: 8) {
+                    Text(AgentChatMessageMetrics.assistantStatus(
+                        for: message,
+                        isStreaming: isStreamingThisMessage
+                    ))
+                        .font(.system(size: baseFontSize, weight: .medium))
+                        .foregroundStyle(.secondary)
+
                     VStack(alignment: .leading, spacing: 10) {
                         if !message.content.isEmpty {
                             AgentAssistantMarkdownBody(
@@ -237,6 +248,7 @@ struct AgentModeMessageView: View {
                         AgentMessageFooter(message: message, alignment: .leading)
                     }
                 }
+                .padding(.leading, AgentChatHistoryLayoutMetrics.assistantContentHeadIndent)
             }
         }
         .frame(maxWidth: AgentDesign.chatMaxContentWidth, alignment: .leading)
@@ -338,7 +350,7 @@ struct AgentAssistantMarkdownBody: View {
                 baseFontSize: baseFontSize
             ))
                 .textSelection(.enabled)
-                .lineSpacing(3)
+                .lineSpacing(4)
                 .fixedSize(horizontal: false, vertical: true)
         }
     }
@@ -360,7 +372,7 @@ private struct AgentAssistantStreamingBody: View {
             Text(AgentLongTokenBreaker.inject(into: AgentMarkdownNormalizer.normalizedForChatRendering(content)))
                 .font(.system(size: baseFontSize))
                 .foregroundStyle(.primary)
-                .lineSpacing(3)
+                .lineSpacing(4)
                 .fixedSize(horizontal: false, vertical: true)
             AgentStreamingCursor()
         }

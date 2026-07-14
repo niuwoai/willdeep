@@ -55,7 +55,6 @@ enum AgentChatHistoryCodeCopyChrome {
 }
 
 enum AgentChatHistoryFooterChrome {
-    static let copyCopiedLabel = "✓"
     static let retryLabel = "↻"
     static let copyLinkValue = "agent-chat-history-copy-message"
     static let retryLinkValue = "agent-chat-history-retry-last-turn"
@@ -86,20 +85,24 @@ enum AgentChatHistoryFooterChrome {
     static func copyButton(
         copied: Bool,
         message: String,
-        isVisible: Bool = true
+        isVisible: Bool = true,
+        paragraphStyle: NSParagraphStyle? = nil
     ) -> NSAttributedString {
         let idleColor = isVisible ? NSColor.secondaryLabelColor : NSColor.clear
         var attributes = copyLinkAttributes(color: copied ? NSColor.systemGreen : idleColor)
         attributes[.agentChatHistoryMessageCopyText] = message
-        if copied {
-            return NSAttributedString(string: copyCopiedLabel, attributes: attributes)
+        if let paragraphStyle {
+            attributes[.paragraphStyle] = paragraphStyle
         }
 
-        attributes[.link] = copyLinkValue
-        let result = NSMutableAttributedString(attributedString: copySymbolString(
-            pointSize: 13,
-            color: idleColor
-        ))
+        let symbol: NSAttributedString
+        if copied {
+            symbol = checkmarkSymbolString(pointSize: 13, color: NSColor.systemGreen)
+        } else {
+            attributes[.link] = copyLinkValue
+            symbol = copySymbolString(pointSize: 13, color: idleColor)
+        }
+        let result = NSMutableAttributedString(attributedString: symbol)
         result.addAttributes(attributes, range: NSRange(location: 0, length: result.length))
         return result
     }
@@ -178,6 +181,10 @@ enum AgentChatHistoryFooterChrome {
 
 private func copySymbolString(pointSize: CGFloat, color: NSColor) -> NSAttributedString {
     symbolAttachmentString(named: "square.on.square", fallback: "⧉", pointSize: pointSize, color: color)
+}
+
+private func checkmarkSymbolString(pointSize: CGFloat, color: NSColor) -> NSAttributedString {
+    symbolAttachmentString(named: "checkmark", fallback: "✓", pointSize: pointSize, color: color)
 }
 
 /// Same `doc.text` 图标语义,跟 `AgentTurnPostStrip` 原来的

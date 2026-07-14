@@ -2348,6 +2348,24 @@
         }
       }
     },
+    "agent-panel.context-compressing" : {
+      "comment" : "status shown while the agent automatically compresses conversation context",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Compressing context"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "正在自动压缩上下文"
+          }
+        }
+      }
+    },
     "agent-panel.open-folder-hint" : {
       "comment" : "composer context hint when no workspace is open",
       "extractionState" : "manual",
@@ -2362,6 +2380,24 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "打开文件夹后可启用工具"
+          }
+        }
+      }
+    },
+    "agent-panel.queue-waiting" : {
+      "comment" : "status shown while an agent turn waits for an available provider concurrency slot",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Queued, waiting for an available concurrency slot…"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "正在排队，等待空闲的并发槽位…"
           }
         }
       }
@@ -2398,6 +2434,42 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "会话保存到磁盘失败——退出后最近的消息可能丢失。请检查磁盘剩余空间和目录权限。"
+          }
+        }
+      }
+    },
+    "agent-panel.thinking" : {
+      "comment" : "status shown while the agent is thinking before producing visible output",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Thinking"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "正在思考"
+          }
+        }
+      }
+    },
+    "agent-panel.thinking-preview-accessibility" : {
+      "comment" : "accessibility label for the live reasoning preview beneath the thinking status",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Live thinking preview"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "思考内容实时预览"
           }
         }
       }
@@ -11507,6 +11579,60 @@
         }
       }
     },
+    "message-footer.processed" : {
+      "comment" : "assistant message divider when elapsed duration is unavailable",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Processed"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已处理"
+          }
+        }
+      }
+    },
+    "message-footer.processed-duration" : {
+      "comment" : "assistant message divider; %@ is elapsed duration",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Processed %@"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已处理 %@"
+          }
+        }
+      }
+    },
+    "message-footer.processing" : {
+      "comment" : "assistant message divider while output is streaming",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Processing"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "处理中"
+          }
+        }
+      }
+    },
     "Mic button in composer is enabled. Press and hold to record, release to transcribe. Tip: hold the Fn key anywhere in the app for the same push-to-talk." : {
       "extractionState" : "stale",
       "localizations" : {
@@ -14211,13 +14337,13 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Base size (pt) for Agent chat message body and rendered Markdown blocks (paragraphs, lists, quotes, fenced code, tables). Tool-call summaries, footers, message headers, and composer chrome keep their fixed sizes — this knob is about reading the conversation, not resizing the whole UI. Default is 13 pt; range %1$@ – %2$@ pt."
+            "value" : "Base size (pt) for Agent chat message body and rendered Markdown blocks (paragraphs, lists, quotes, fenced code, tables). Tool-call summaries, footers, message headers, and composer chrome keep their fixed sizes — this knob is about reading the conversation, not resizing the whole UI. Default is 14 pt; range %1$@ – %2$@ pt."
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Agent 聊天正文和 Markdown 块（段落、列表、引用、代码块、表格）的基础字号（pt）。工具卡片摘要、底栏、消息头、输入框工具栏会保持固定字号 — 这个旋钮只管「读对话」，不会缩放整个 UI。默认 13 pt；范围 %1$@ – %2$@ pt。"
+            "value" : "Agent 聊天正文和 Markdown 块（段落、列表、引用、代码块、表格）的基础字号（pt）。工具卡片摘要、底栏、消息头、输入框工具栏会保持固定字号 — 这个旋钮只管「读对话」，不会缩放整个 UI。默认 14 pt；范围 %1$@ – %2$@ pt。"
           }
         }
       }
@@ -32053,9 +32179,6 @@
 
     },
     "当前筛选暂无任务" : {
-
-    },
-    "思考内容实时预览" : {
 
     },
     "打开 Replicate 设置" : {
