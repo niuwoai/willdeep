@@ -737,10 +737,21 @@ struct ModelPickerPill: View {
     @Environment(\.openURL) private var openURL
     @State private var menuSnapshot = ModelPickerMenuSnapshot.empty
     @State private var isModelPanelPresented = false
+    @State private var selectedModelProviderID: UUID?
+    @State private var selectedModelSourceIsManaged = false
+    @State private var isRefreshingCodingPlan = false
 
     var body: some View {
         Button {
             refreshMenuSnapshot()
+            selectedModelSourceIsManaged = appState.activeRuntime?.managedRouting != nil
+                && SomeIMIntegrationStore.hasAuthenticatedSessionForAutomaticDefaults()
+            selectedModelProviderID = appState.agentProviderLibrary.activeID
+                ?? appState.agentProviderLibrary.entries.first?.id
+            if !isModelPanelPresented,
+               SomeIMIntegrationStore.hasAuthenticatedSessionForAutomaticDefaults() {
+                refreshCodingPlanStatus()
+            }
             isModelPanelPresented.toggle()
         } label: {
             HStack(spacing: 3) {
@@ -763,7 +774,7 @@ struct ModelPickerPill: View {
         .help("Pick provider + model for this chat. The active provider also drives Auto/Flash/Pro routing.")
         .popover(isPresented: $isModelPanelPresented, arrowEdge: .bottom) {
             modelSelectionPanel
-                .frame(width: 560, height: 640)
+                .frame(width: 680, height: 520)
         }
         .onAppear(perform: refreshMenuSnapshot)
         .onReceive(appState.$agentProviderLibrary) { _ in
@@ -819,6 +830,7 @@ struct ModelPickerPill: View {
                         .frame(width: 24, height: 24)
                 }
                 .buttonStyle(.plain)
+                .focusable(false)
                 .foregroundStyle(.secondary)
             }
             .padding(.horizontal, 16)
@@ -826,28 +838,362 @@ struct ModelPickerPill: View {
 
             Divider()
 
-            ScrollView {
-                LazyVStack(alignment: .leading, spacing: 12) {
-                    currentRouteSection
+            HStack(alignment: .top, spacing: 0) {
+                providerSelectionColumn
+                    .frame(width: 214)
+                    .padding(12)
+                    .focusable(false)
 
-                    if menuSnapshot.isSomeIMAuthenticated {
-                        managedRoutingHero
-                        codingPlanSection
-                        recommendedModelsSection
-                    } else {
-                        someIMLockedSection
-                    }
+                Divider()
 
-                    configuredProvidersSection
-
-                    if menuSnapshot.isSomeIMAuthenticated {
-                        catalogSection
-                    }
-                }
-                .padding(16)
+                modelDetailColumn
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+                    .focusable(false)
             }
+            .focusable(false)
         }
         .background(palette.panelFill.opacity(0.98))
+        .focusable(false)
+    }
+
+    @ViewBuilder
+    private var providerSelectionColumn: some View {
+        let entries = selectableProviderEntries
+        VStack(alignment: .leading, spacing: 8) {
+            Text("Provider")
+                .font(.system(size: 11, weight: .bold))
+                .foregroundStyle(.secondary)
+                .padding(.horizontal, 4)
+
+            if menuSnapshot.isSomeIMAuthenticated {
+                providerSourceButton(
+                    title: "省心托管",
+                    subtitle: "some.im 自动路由",
+                    systemImage: "wand.and.stars",
+                    checked: selectedModelSourceIsManaged
+                ) {
+                    selectedModelSourceIsManaged = true
+                    selectedModelProviderID = entries.first(where: { $0.providerID == AgentProviderPreset.someIMID })?.id
+                }
+            }
+
+            ForEach(entries) { entry in
+                providerSourceButton(
+                    title: entry.displayName,
+                    subtitle: providerSubtitle(entry),
+                    systemImage: providerIcon(entry),
+                    checked: !selectedModelSourceIsManaged && selectedProviderEntry?.id == entry.id
+                ) {
+                    selectedModelSourceIsManaged = false
+                    selectedModelProviderID = entry.id
+                }
+            }
+
+            if !menuSnapshot.isSomeIMAuthenticated {
+                Divider()
+                    .padding(.vertical, 4)
+                VStack(alignment: .leading, spacing: 8) {
+                    Label("some.im 未连接", systemImage: "lock")
+                        .font(.system(size: 11, weight: .semibold))
+                    Text("连接后可使用省心托管、Coding Plan 和推荐模型。")
+                        .font(.system(size: 10))
+                        .foregroundStyle(.secondary)
+                    Button {
+                        openURL(URL(string: "https://some.im/customer/plan")!)
+                    } label: {
+                        Label("查看套餐", systemImage: "arrow.up.right.square")
+                    }
+                    .buttonStyle(.bordered)
+                    .controlSize(.small)
+                    .focusable(false)
+                }
+                .padding(10)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(appState.editorSettings.interfaceSkin.palette.controlFill.opacity(0.38))
+                .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+            }
+
+            Spacer(minLength: 0)
+        }
+        .focusable(false)
+    }
+
+    @ViewBuilder
+    private var modelDetailColumn: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 12) {
+                if selectedModelSourceIsManaged, menuSnapshot.isSomeIMAuthenticated {
+                    managedRoutingDetail
+                } else if let entry = selectedProviderEntry {
+                    providerModelDetail(entry)
+                } else {
+                    emptyProviderDetail
+                }
+            }
+            .padding(16)
+            .focusable(false)
+        }
+        .focusable(false)
+    }
+
+    @ViewBuilder
+    private var managedRoutingDetail: some View {
+        detailHeader(
+            title: "省心托管",
+            subtitle: "some.im 根据任务自动在通用、编码和高能力模型间路由。",
+            systemImage: "wand.and.stars",
+            checked: menuSnapshot.managedActive
+        )
+
+        modelPanelSection(title: "托管档位", systemImage: "slider.horizontal.3") {
+            Button {
+                chooseManagedRouting(tier: menuSnapshot.managedFloor ?? .low)
+            } label: {
+                HStack(spacing: 10) {
+                    Image(systemName: "sparkles")
+                        .font(.system(size: 14, weight: .semibold))
+                        .foregroundStyle(.white)
+                        .frame(width: 28, height: 28)
+                        .background(LinearGradient(colors: [.teal, .blue], startPoint: .topLeading, endPoint: .bottomTrailing))
+                        .clipShape(RoundedRectangle(cornerRadius: 7))
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text("启用省心托管")
+                            .font(.system(size: 12, weight: .semibold))
+                        Text("不确定选哪个模型时，优先用这个。")
+                            .font(.system(size: 10))
+                            .foregroundStyle(.secondary)
+                    }
+                    Spacer()
+                    if menuSnapshot.managedActive {
+                        Image(systemName: "checkmark.circle.fill")
+                            .foregroundStyle(.teal)
+                    }
+                }
+                .padding(10)
+                .background(modelRowBackground(checked: menuSnapshot.managedActive))
+            }
+            .buttonStyle(.plain)
+            .focusable(false)
+
+            HStack(spacing: 8) {
+                managedTierChip(.low)
+                managedTierChip(.high)
+                managedTierChip(.premium)
+            }
+        }
+
+        codingPlanSection
+        recommendedModelsSection
+    }
+
+    @ViewBuilder
+    private func providerModelDetail(_ entry: AgentProviderEntry) -> some View {
+        let isActive = menuSnapshot.activeProviderID == entry.id
+        detailHeader(
+            title: entry.displayName,
+            subtitle: isActive ? "当前 provider；选择下方模型可切换本会话用量。" : "先选中这个 provider，再从右侧选择模型。",
+            systemImage: providerIcon(entry),
+            checked: isActive
+        )
+
+        modelPanelSection(title: "路由默认", systemImage: "location") {
+            let defaultModel = entry.makeConfiguration().normalized.model(for: .interactive)
+            modelActionRow(
+                title: "使用 \(entry.displayName) 默认路由",
+                subtitle: defaultModel,
+                badge: "Default",
+                systemImage: "arrow.triangle.2.circlepath",
+                checked: isActive && menuSnapshot.sessionOverride == nil && !menuSnapshot.managedActive
+            ) {
+                pick(entry: entry, model: defaultModel)
+                closeModelPanel()
+            }
+        }
+
+        if !entry.allFlashModels.isEmpty {
+            modelPanelSection(title: "Flash", systemImage: "bolt") {
+                ForEach(entry.allFlashModels, id: \.self) { model in
+                    providerModelButton(entry: entry, model: model, label: "Flash")
+                }
+            }
+        }
+
+        if !entry.allProModels.isEmpty {
+            modelPanelSection(title: "Pro", systemImage: "speedometer") {
+                ForEach(entry.allProModels, id: \.self) { model in
+                    providerModelButton(entry: entry, model: model, label: "Pro")
+                }
+            }
+        }
+
+        if entry.providerID == AgentProviderPreset.someIMID, menuSnapshot.isSomeIMAuthenticated {
+            codingPlanSection
+            recommendedModelsSection
+        }
+
+        let extraModels = catalogModels(for: entry)
+        if !extraModels.isEmpty {
+            modelPanelSection(title: "更多模型", systemImage: "list.bullet") {
+                ForEach(extraModels, id: \.self) { model in
+                    modelActionRow(
+                        title: model,
+                        subtitle: "来自最近使用 / 热门 / 新模型 / 已获取列表",
+                        badge: nil,
+                        systemImage: "circle.grid.2x2",
+                        checked: isCurrent(model: model, override: menuSnapshot.sessionOverride, isActive: isActive)
+                    ) {
+                        pick(entry: entry, model: model)
+                        closeModelPanel()
+                    }
+                }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var emptyProviderDetail: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Label("还没有可用 provider", systemImage: "exclamationmark.circle")
+                .font(.system(size: 13, weight: .semibold))
+            Text("请先到 Settings → Agent 添加模型服务商。")
+                .font(.system(size: 11))
+                .foregroundStyle(.secondary)
+        }
+        .padding(14)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(appState.editorSettings.interfaceSkin.palette.controlFill.opacity(0.42))
+        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+    }
+
+    @ViewBuilder
+    private func providerSourceButton(
+        title: String,
+        subtitle: String,
+        systemImage: String,
+        checked: Bool,
+        action: @escaping () -> Void
+    ) -> some View {
+        Button(action: action) {
+            HStack(spacing: 9) {
+                Image(systemName: systemImage)
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(checked ? Color.teal : Color.secondary)
+                    .frame(width: 18)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(title)
+                        .font(.system(size: 12, weight: checked ? .semibold : .medium))
+                        .foregroundStyle(.primary)
+                        .lineLimit(1)
+                    Text(subtitle)
+                        .font(.system(size: 10))
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                }
+                Spacer(minLength: 0)
+                if checked {
+                    Image(systemName: "checkmark.circle.fill")
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundStyle(.teal)
+                }
+            }
+            .padding(.horizontal, 10)
+            .padding(.vertical, 9)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(modelRowBackground(checked: checked))
+            .contentShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+        }
+        .buttonStyle(.plain)
+        .focusable(false)
+    }
+
+    @ViewBuilder
+    private func detailHeader(
+        title: String,
+        subtitle: String,
+        systemImage: String,
+        checked: Bool
+    ) -> some View {
+        HStack(alignment: .top, spacing: 12) {
+            Image(systemName: systemImage)
+                .font(.system(size: 17, weight: .semibold))
+                .foregroundStyle(checked ? Color.teal : Color.secondary)
+                .frame(width: 34, height: 34)
+                .background(appState.editorSettings.interfaceSkin.palette.controlFill.opacity(0.72))
+                .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+            VStack(alignment: .leading, spacing: 4) {
+                HStack(spacing: 8) {
+                    Text(title)
+                        .font(.system(size: 15, weight: .semibold))
+                    if checked {
+                        Text("当前")
+                            .font(.system(size: 10, weight: .bold))
+                            .foregroundStyle(.teal)
+                            .padding(.horizontal, 7)
+                            .padding(.vertical, 2)
+                            .background(.teal.opacity(0.13))
+                            .clipShape(Capsule())
+                    }
+                }
+                Text(subtitle)
+                    .font(.system(size: 11))
+                    .foregroundStyle(.secondary)
+                    .lineLimit(2)
+            }
+            Spacer(minLength: 0)
+        }
+        .padding(12)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(appState.editorSettings.interfaceSkin.palette.controlFill.opacity(0.40))
+        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+        .focusable(false)
+    }
+
+    private var selectedProviderEntry: AgentProviderEntry? {
+        let entries = selectableProviderEntries
+        if let selectedModelProviderID,
+           let selected = entries.first(where: { $0.id == selectedModelProviderID }) {
+            return selected
+        }
+        if let activeID = menuSnapshot.activeProviderID,
+           let active = entries.first(where: { $0.id == activeID }) {
+            return active
+        }
+        return entries.first
+    }
+
+    private func providerSubtitle(_ entry: AgentProviderEntry) -> String {
+        if menuSnapshot.activeProviderID == entry.id {
+            return menuSnapshot.managedActive ? "当前 · 托管中" : "当前 provider"
+        }
+        let model = entry.makeConfiguration().normalized.model(for: .interactive)
+        return model.isEmpty ? "未设置默认模型" : model
+    }
+
+    private func providerIcon(_ entry: AgentProviderEntry) -> String {
+        switch entry.providerID {
+        case AgentProviderPreset.someIMID: return "sparkles"
+        case "openai": return "circle.hexagongrid"
+        case "anthropic": return "a.circle"
+        case "google": return "g.circle"
+        case "dashscope": return "cloud"
+        default: return "server.rack"
+        }
+    }
+
+    private func catalogModels(for entry: AgentProviderEntry) -> [String] {
+        let libraryModels = Set((entry.allFlashModels + entry.allProModels).map {
+            $0.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        })
+        return combinedCatalogModels.filter { model in
+            let trimmed = model.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !libraryModels.contains(trimmed.lowercased()) else { return false }
+            guard let preset = AgentProviderPreset.preset(id: entry.providerID),
+                  preset.id != AgentProviderPreset.customID else {
+                return true
+            }
+            return preset.recognizesModelID(trimmed)
+        }
     }
 
     @ViewBuilder
@@ -909,6 +1255,7 @@ struct ModelPickerPill: View {
                 .background(modelRowBackground(checked: menuSnapshot.managedActive))
             }
             .buttonStyle(.plain)
+            .focusable(false)
 
             HStack(spacing: 8) {
                 managedTierChip(.low)
@@ -920,36 +1267,95 @@ struct ModelPickerPill: View {
 
     @ViewBuilder
     private var codingPlanSection: some View {
-        modelPanelSection(title: "订阅套餐", systemImage: "creditcard") {
+        let status = appState.someIMCodingPlanStatus
+        let isInitialRefresh = isRefreshingCodingPlan && status.checkedAt == .distantPast
+        modelPanelSection(title: "Coding Plan 套餐", systemImage: "creditcard") {
             VStack(alignment: .leading, spacing: 10) {
                 HStack(alignment: .top, spacing: 10) {
-                    Image(systemName: "bolt.badge.checkmark")
-                        .foregroundStyle(.teal)
+                    Image(systemName: status.isActiveNow ? "checkmark.seal.fill" : "bolt.badge.checkmark")
+                        .foregroundStyle(status.isActiveNow ? Color.green : Color.teal)
                         .frame(width: 22)
                     VStack(alignment: .leading, spacing: 4) {
-                        Text("订阅 Coding Plan 后，优先选择 someim-coding-plan-low / high。")
-                            .font(.system(size: 12, weight: .medium))
-                        Text("低档适合日常开发，高档适合复杂重构、多文件推理和疑难调试。")
-                            .font(.system(size: 11))
-                            .foregroundStyle(.secondary)
+                        if status.isActiveNow {
+                            HStack(spacing: 6) {
+                                Text(status.planName ?? "Coding Plan")
+                                    .font(.system(size: 12, weight: .semibold))
+                                Text("已订阅")
+                                    .font(.system(size: 10, weight: .bold))
+                                    .foregroundStyle(.green)
+                                    .padding(.horizontal, 6)
+                                    .padding(.vertical, 2)
+                                    .background(.green.opacity(0.12))
+                                    .clipShape(Capsule())
+                            }
+                            Text(codingPlanValidityText(status))
+                                .font(.system(size: 11))
+                                .foregroundStyle(.secondary)
+                        } else if isInitialRefresh {
+                            HStack(spacing: 7) {
+                                ProgressView()
+                                    .controlSize(.small)
+                                Text("正在查询 Coding Plan 套餐状态…")
+                                    .font(.system(size: 12, weight: .medium))
+                            }
+                            Text("查询完成后会显示套餐名称和有效期。")
+                                .font(.system(size: 11))
+                                .foregroundStyle(.secondary)
+                        } else {
+                            Text("订阅 Coding Plan 后，优先选择 someim-coding-plan-low / high。")
+                                .font(.system(size: 12, weight: .medium))
+                            Text("低档适合日常开发，高档适合复杂重构、多文件推理和疑难调试。")
+                                .font(.system(size: 11))
+                                .foregroundStyle(.secondary)
+                        }
                     }
                 }
                 HStack(spacing: 8) {
                     modelMiniButton("Plan Low") { chooseSomeIMModel(SomeIMManagedModel.codingPlanLow) }
                     modelMiniButton("Plan High") { chooseSomeIMModel(SomeIMManagedModel.codingPlanHigh) }
                     Spacer()
-                    Button {
-                        openURL(URL(string: "https://some.im/customer/plan")!)
-                    } label: {
-                        Label("购买套餐", systemImage: "arrow.up.right.square")
+                    if status.isActiveNow {
+                        Button {
+                            openURL(URL(string: "https://some.im/customer/plan")!)
+                        } label: {
+                            Label("管理套餐", systemImage: "arrow.up.right.square")
+                        }
+                        .buttonStyle(.bordered)
+                        .controlSize(.small)
+                        .focusable(false)
+                    } else {
+                        Button {
+                            openURL(URL(string: "https://some.im/customer/plan")!)
+                        } label: {
+                            Label(isInitialRefresh ? "查看套餐" : "购买套餐", systemImage: "arrow.up.right.square")
+                        }
+                        .buttonStyle(.borderedProminent)
+                        .controlSize(.small)
+                        .focusable(false)
                     }
-                    .buttonStyle(.borderedProminent)
-                    .controlSize(.small)
                 }
             }
             .padding(12)
-            .background(appState.editorSettings.interfaceSkin.palette.controlFill.opacity(0.48))
+            .background(status.isActiveNow
+                ? Color.green.opacity(0.07)
+                : appState.editorSettings.interfaceSkin.palette.controlFill.opacity(0.48))
             .clipShape(RoundedRectangle(cornerRadius: 8))
+        }
+    }
+
+    private func codingPlanValidityText(_ status: SomeIMCodingPlanStatus) -> String {
+        guard let periodEnd = status.periodEnd else {
+            return "套餐权益当前有效；省心托管会优先使用 Coding Plan 模型。"
+        }
+        return "有效期至 \(periodEnd.formatted(date: .abbreviated, time: .shortened))；省心托管会优先使用 Coding Plan 模型。"
+    }
+
+    private func refreshCodingPlanStatus() {
+        guard !isRefreshingCodingPlan else { return }
+        isRefreshingCodingPlan = true
+        Task { @MainActor in
+            _ = await appState.refreshedSomeIMCodingPlanStatusIfNeeded(force: true)
+            isRefreshingCodingPlan = false
         }
     }
 
@@ -984,6 +1390,7 @@ struct ModelPickerPill: View {
                 }
                 .buttonStyle(.bordered)
                 .controlSize(.small)
+                .focusable(false)
             }
             .padding(12)
             .background(appState.editorSettings.interfaceSkin.palette.controlFill.opacity(0.42))
@@ -1109,6 +1516,7 @@ struct ModelPickerPill: View {
             .background(modelRowBackground(checked: menuSnapshot.managedActive && menuSnapshot.managedFloor == tier))
         }
         .buttonStyle(.plain)
+        .focusable(false)
     }
 
     @ViewBuilder
@@ -1121,6 +1529,7 @@ struct ModelPickerPill: View {
         }
         .buttonStyle(.bordered)
         .controlSize(.small)
+        .focusable(false)
     }
 
     @ViewBuilder
@@ -1192,6 +1601,7 @@ struct ModelPickerPill: View {
             .background(modelRowBackground(checked: checked))
         }
         .buttonStyle(.plain)
+        .focusable(false)
     }
 
     private func modelRowBackground(checked: Bool) -> AnyShapeStyle {
@@ -1309,24 +1719,28 @@ struct ModelPickerPill: View {
                     modelRow(label: "Flash · \(entry.flashPrimary)",
                              checked: isCurrent(model: entry.flashPrimary, override: override, isActive: isActive))
                 }
+                .focusable(false)
             }
             ForEach(entry.flashAlternates, id: \.self) { m in
                 Button { pick(entry: entry, model: m) } label: {
                     modelRow(label: "Flash · \(m)",
                              checked: isCurrent(model: m, override: override, isActive: isActive))
                 }
+                .focusable(false)
             }
             if !entry.proPrimary.isEmpty {
                 Button { pick(entry: entry, model: entry.proPrimary) } label: {
                     modelRow(label: "Pro · \(entry.proPrimary)",
                              checked: isCurrent(model: entry.proPrimary, override: override, isActive: isActive))
                 }
+                .focusable(false)
             }
             ForEach(entry.proAlternates, id: \.self) { m in
                 Button { pick(entry: entry, model: m) } label: {
                     modelRow(label: "Pro · \(m)",
                              checked: isCurrent(model: m, override: override, isActive: isActive))
                 }
+                .focusable(false)
             }
         }
     }
@@ -1358,6 +1772,7 @@ struct ModelPickerPill: View {
                 checked: menuSnapshot.managedFloor == tier
             )
         }
+        .focusable(false)
     }
 
     private func managedTierLabel(_ tier: AgentManagedCapabilityTier) -> String {
@@ -1394,6 +1809,7 @@ struct ModelPickerPill: View {
                 }
             }
         }
+        .focusable(false)
     }
 
     /// Set of every model id that lives somewhere in the library —

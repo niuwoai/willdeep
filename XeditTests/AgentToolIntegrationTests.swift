@@ -760,6 +760,7 @@ struct SomeIMBrowserLoginStatusTests {
         #expect(status.isActiveNow)
         #expect(status.planID == "plan-pro")
         #expect(status.planName == "Coding Pro")
+        #expect(status.periodEnd != nil)
     }
 
     @Test("coding plan subscription fetch treats null subscription as no plan")

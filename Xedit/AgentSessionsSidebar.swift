@@ -159,9 +159,9 @@ struct AgentSessionsSidebar: View {
                     openSomeIMSettings()
                 } label: {
                     HStack(spacing: 8) {
-                        someIMAvatar(title: account.email, isAnonymous: false)
+                        someIMAvatar(title: account.displayName, avatarURL: account.avatarURL, isAnonymous: false)
                         VStack(alignment: .leading, spacing: 1) {
-                            Text(L10n.Sidebar.someIMAccountTitle)
+                            Text(account.displayName)
                                 .font(.system(size: 11, weight: .semibold))
                                 .foregroundStyle(.primary)
                                 .lineLimit(1)
@@ -208,7 +208,7 @@ struct AgentSessionsSidebar: View {
                     openSomeIMSettings(autogenerateBrowserLogin: true)
                 } label: {
                     HStack(spacing: 8) {
-                        someIMAvatar(title: "", isAnonymous: true)
+                        someIMAvatar(title: "", avatarURL: nil, isAnonymous: true)
                         VStack(alignment: .leading, spacing: 1) {
                             Text(L10n.Sidebar.someIMAccountTitle)
                                 .font(.system(size: 11, weight: .semibold))
@@ -248,11 +248,27 @@ struct AgentSessionsSidebar: View {
         }
     }
 
-    private func someIMAvatar(title: String, isAnonymous: Bool) -> some View {
+    private func someIMAvatar(title: String, avatarURL: String?, isAnonymous: Bool) -> some View {
         ZStack {
             Circle()
                 .fill(isAnonymous ? Color.secondary.opacity(0.16) : appState.editorSettings.interfaceSkin.palette.accent.opacity(0.22))
-            if isAnonymous {
+            if let avatarURL,
+               let url = URL(string: avatarURL),
+               ["http", "https"].contains(url.scheme?.lowercased() ?? "") {
+                AsyncImage(url: url) { phase in
+                    switch phase {
+                    case .success(let image):
+                        image
+                            .resizable()
+                            .scaledToFill()
+                    default:
+                        Text(someIMAvatarInitials(from: title))
+                            .font(.system(size: 10, weight: .bold))
+                            .foregroundStyle(appState.editorSettings.interfaceSkin.palette.accent)
+                    }
+                }
+                .clipShape(Circle())
+            } else if isAnonymous {
                 Image(systemName: "person.crop.circle")
                     .font(.system(size: 17, weight: .semibold))
                     .foregroundStyle(.secondary)
@@ -263,6 +279,7 @@ struct AgentSessionsSidebar: View {
             }
         }
         .frame(width: 28, height: 28)
+        .clipShape(Circle())
     }
 
     private var sidebarHeader: some View {

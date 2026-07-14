@@ -218,12 +218,26 @@ final class DesktopPetWindowManager: ObservableObject {
     }
 
     func openCurrentSession() {
-        guard let sessionID = presentation.messagePreviews.first?.sessionID ?? presentation.sessionID else { return }
+        guard let sessionID = presentation.messagePreviews.first?.sessionID ?? presentation.sessionID else {
+            openNewChat()
+            return
+        }
         AgentNotificationResponder.reveal(runtimeID: sessionID)
     }
 
     func openSession(_ sessionID: AgentSession.ID) {
         AgentNotificationResponder.reveal(runtimeID: sessionID)
+    }
+
+    func openNewChat() {
+        let registry = EditorAppStateRegistry.shared
+        let target = appState ?? registry.current ?? AppState()
+        registry.register(target)
+        registry.setCurrent(target)
+        target.setAppMode(.agent)
+        target.startNewAgentSession()
+        NSApp.activate(ignoringOtherApps: true)
+        NotificationCenter.default.post(name: .willDeepRevealAgentSession, object: nil)
     }
 
     func collapseMessageBubble() {
@@ -577,7 +591,7 @@ private struct DesktopPetOverlayView: View {
                     )
                 }
                 .buttonStyle(.plain)
-                .disabled(manager.presentation.sessionID == nil)
+                .focusable(false)
             } else {
                 ForEach(Array(manager.presentation.messagePreviews.enumerated()), id: \.element.id) { index, preview in
                     if index > 0 {
@@ -590,6 +604,7 @@ private struct DesktopPetOverlayView: View {
                         messageRow(title: preview.sessionTitle, message: preview.message)
                     }
                     .buttonStyle(.plain)
+                    .focusable(false)
                 }
             }
         }
@@ -631,6 +646,7 @@ private struct DesktopPetOverlayView: View {
             .contentShape(Circle())
         }
         .buttonStyle(.plain)
+        .focusable(false)
         .help(L10n.DesktopPet.expandMessages)
         .accessibilityLabel(L10n.DesktopPet.expandMessages)
     }

@@ -94,12 +94,18 @@ struct EditorSettingsView: View {
                     settingsNavigation.selectedTab = group.tabs.first ?? settingsNavigation.selectedTab
                 } label: {
                     let isSelected = settingsNavigation.selectedTab.group == group
-                    Label(group.title, systemImage: group.icon)
+                    HStack(spacing: 8) {
+                        Image(systemName: group.icon)
+                            .frame(width: 16, alignment: .center)
+                        Text(group.title)
+                        Spacer(minLength: 0)
+                    }
                         .font(.system(size: 13, weight: isSelected ? .semibold : .regular))
                         .foregroundStyle(isSelected ? Color.primary : Color.secondary)
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .padding(.horizontal, 10)
                         .padding(.vertical, 8)
+                        .contentShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
                         .background {
                             if isSelected {
                                 RoundedRectangle(cornerRadius: 8, style: .continuous)
@@ -108,6 +114,8 @@ struct EditorSettingsView: View {
                         }
                 }
                 .buttonStyle(.plain)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .contentShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
                 .settingsFocusDisabled()
                 .help(group.title)
             }

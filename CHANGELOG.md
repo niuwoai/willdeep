@@ -1,5 +1,32 @@
 # Changelog
 
+## 1.152.0-rc22 - 2026-07-14
+
+### Fixed
+
+- **任务监控文件可在 Finder 中定位** —— 右侧栏“产物”与“工作文件”统一使用整行点击区域；单个工作文件会在 Finder 中选中，同目录多文件分组会直接打开对应目录，已删除文件则回退到其所在目录。
+- **Finder 目标回归覆盖** —— 新增单文件、多文件分组与已删除文件的目标解析测试。
+- **some.im 账号展示同步头像与昵称** —— WillDeep 读取 some.im 返回的 `nickname` 与 `avatar_url`，侧栏、设置页和 onboarding 优先显示客户昵称；侧栏头像有图片时显示圆形头像，无图时回退首字母。
+- 版本号从 **1.152.0-rc21** 递增为 **1.152.0-rc22**；Xcode App、Go agent、Help bundle、Computer Use Helper、README badge、移动网关响应头契约与产品文档同步。
+
+## 1.152.0-rc21 - 2026-07-14
+
+### Fixed
+
+- **Coding Plan 已购状态提示** —— Agent 模型面板打开时主动刷新 some.im 套餐状态；已购用户展示套餐名称、“已订阅”和有效期，并把“购买套餐”改为“管理套餐”；首次查询期间显示加载态，避免已购用户看到误导性购买入口。
+- **复用现有套餐接口** —— 继续使用 `/api/v1/customer/plan/subscription` 返回的 `plan_display_name`、`period_end` 和 `status`，无需扩展 `/api/v1/customer/me`。
+- 版本号从 **1.152.0-rc20** 递增为 **1.152.0-rc21**；Xcode App、Go agent、Help bundle、Computer Use Helper、README badge、移动网关响应头契约与产品文档同步。
+
+## 1.152.0-rc20 - 2026-07-14
+
+### Fixed
+
+- **模型选择面板全部禁用焦点抢占** —— 模型与托管方式弹窗里的关闭、托管、套餐、模型行和滚动内容统一补齐 `.focusable(false)`，避免 SwiftUI popover 内控件进入键盘焦点链后出现焦点框或抢焦点。
+- **模型选择面板改为先选 Provider 再选模型** —— 面板从单列长列表重排为左侧 provider/托管来源、右侧模型详情的两栏结构；用户先选服务商或省心托管，再在右侧选择路由默认、Flash、Pro、Coding Plan、推荐或更多模型。
+- **设置侧边栏整行可点击** —— 设置窗口左侧 tab 行改为显式撑满宽度，文字后面的空白区域也能切换 tab，不再只有图标和文字附近响应。
+- **桌面宠物空状态卡片可进入新聊天** —— 没有活跃对话时，点击桌面宠物的“守望中 / 暂无活跃对话”卡片会打开 Agent 窗口并进入新聊天状态。
+- 版本号从 **1.152.0-rc19** 递增为 **1.152.0-rc20**；Xcode App、Go agent、Help bundle、Computer Use Helper、README badge、移动网关响应头契约与产品文档同步。
+
 ## 1.152.0-rc19 - 2026-07-14
 
 ### Fixed

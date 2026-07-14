@@ -337,6 +337,32 @@ struct GitWorktreeCoreTests {
         #expect(byDisplayPath["bundle/index.html"] == nil)
     }
 
+    @Test("agent rail work file Finder target selects one file and opens grouped directory")
+    func testAgentRailWorkFileFinderTarget() {
+        let root = URL(fileURLWithPath: "/tmp/willdeep-work-file-rail", isDirectory: true)
+
+        let singleFile = AgentRailWorkFileFinderTarget.resolve(
+            repositoryRoot: root,
+            relativePaths: ["scripts/debug_install_mac_apps.rb"],
+            fileExists: { $0.hasSuffix("debug_install_mac_apps.rb") }
+        )
+        #expect(singleFile == root.appendingPathComponent("scripts/debug_install_mac_apps.rb").standardizedFileURL)
+
+        let groupedDirectory = AgentRailWorkFileFinderTarget.resolve(
+            repositoryRoot: root,
+            relativePaths: ["scripts/a.rb", "scripts/b.rb"],
+            fileExists: { _ in true }
+        )
+        #expect(groupedDirectory == root.appendingPathComponent("scripts", isDirectory: true).standardizedFileURL)
+
+        let deletedFileDirectory = AgentRailWorkFileFinderTarget.resolve(
+            repositoryRoot: root,
+            relativePaths: ["docs/deleted.md"],
+            fileExists: { _ in false }
+        )
+        #expect(deletedFileDirectory == root.appendingPathComponent("docs", isDirectory: true).standardizedFileURL)
+    }
+
     @Test("agent worktree diff preview is limited to attributed files")
     func testWorktreeDiffPreviewLimitsTrackedDiffToAttributedFiles() throws {
         let repository = FileManager.default.temporaryDirectory

@@ -327,7 +327,7 @@ struct OnboardingView: View {
                         VStack(alignment: .leading, spacing: 4) {
                             Text(L10n.Settings.SomeIM.browserLoginConnectedTitle)
                                 .font(.headline)
-                            Text(L10n.Settings.SomeIM.accountSummary(account.email, account.displayCredits))
+                            Text(L10n.Settings.SomeIM.accountSummary(account.displayName, account.displayCredits))
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
                         }
@@ -486,7 +486,7 @@ struct OnboardingView: View {
                             appState.syncSomeIMImageUnderstanding(apiKey: someIMAPIKey)
                             someIMBrowserLoginRequest = nil
                             isWatchingSomeIMBrowserLogin = false
-                            someIMStatus = L10n.Settings.SomeIM.accountSummary(account.email, account.displayCredits)
+                            someIMStatus = L10n.Settings.SomeIM.accountSummary(account.displayName, account.displayCredits)
                         }
                         return
                     }

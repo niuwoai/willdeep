@@ -1,6 +1,6 @@
 # WillDeep Product Overview
 
-> Last updated: 2026-07-14 | Current version: v1.152.0-rc19
+> Last updated: 2026-07-14 | Current version: v1.152.0-rc22
 
 ## Positioning
 
@@ -12,6 +12,13 @@ WillDeep is configured for non-App-Store distribution without App Sandbox so it 
 
 ## 架构概览
 
+- **任务监控文件 Finder 定位（1.152.0-rc22）** —— 右侧栏“产物”和“工作文件”的行内容都可整行点击；单文件在 Finder 中直接选中，多文件分组打开对应目录，已删除文件回退打开其所在目录。
+- **some.im 头像与昵称同步（1.152.0-rc22）** —— WillDeep 解析 some.im 客户资料中的 `nickname` 与 `avatar_url`，侧栏 some.im 账号区、设置页和 onboarding 优先展示昵称；头像 URL 存在时以圆形远程头像显示，缺失时继续回退首字母。
+- **Coding Plan 已购状态提示（1.152.0-rc21）** —— Agent 模型面板会在打开时刷新 some.im 套餐状态；已购用户直接看到套餐名称、“已订阅”和有效期，入口改为“管理套餐”，首次查询期间不再误显示“购买套餐”。
+- **模型选择面板全部禁用焦点抢占（1.152.0-rc20）** —— Agent 的“选择模型与托管方式”弹窗里，关闭按钮、托管卡片、套餐按钮、模型行和滚动区域统一设为 `.focusable(false)`，避免 popover 内控件抢占键盘焦点。
+- **模型选择面板先 Provider 后模型（1.152.0-rc20）** —— Agent 模型弹窗改为左侧选择 provider/省心托管来源、右侧选择具体模型或路由默认，降低推荐模型、套餐与用户配置混在一起的认知负担。
+- **设置侧边栏整行命中（1.152.0-rc20）** —— 设置窗口左侧 tab 行显式撑满宽度，点击文字后面的空白区域也会切换对应设置页。
+- **桌面宠物空状态进入新聊天（1.152.0-rc20）** —— 桌面宠物没有活跃对话时，点击“守望中 / 暂无活跃对话”卡片会打开 Agent 窗口并创建新聊天。
 - **Git/远程命令尾部输出读取更可靠（1.152.0-rc19）** —— Git 状态命令与远程 SSH 命令在子进程退出后会继续读到 EOF，减少 stdout/stderr 尾部输出因异步 readability 事件竞态而丢失的概率。
 - **桌面宠物前台消息卡片隐藏（1.152.0-rc18）** —— WillDeep App 在前台时，桌面宠物不再展示最近 3 个会话输出卡片或收起计数，避免用户已经看着主窗口时重复弹消息；切到后台后仍保留最近输出提醒。
 - **Agent 模型选择大面板（1.152.0-rc17）** —— Composer 模型选择入口改为宽面板配置：未绑定 some.im 时仅显示用户自配 Flash / Pro；已绑定 some.im 时展示省心托管、Coding Plan 订阅购买入口、`someim-coding-plan-low/high` 快捷选择，以及 deepseek-v4、glm、grok-4.5 等重点推荐模型。不熟悉模型差异的用户可直接选「省心托管」，由 WillDeep 按任务路由。

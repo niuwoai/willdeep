@@ -183,7 +183,9 @@ struct AgentTaskMonitorRail: View {
             } else {
                 VStack(alignment: .leading, spacing: 8) {
                     ForEach(groups) { group in
-                        AgentRailDirectoryRow(group: group)
+                        AgentRailDirectoryRow(group: group) {
+                            AgentArtifactFileActions.openInFinder(group.finderURL)
+                        }
                     }
                     if files.count > groups.reduce(0, { $0 + $1.count }) {
                         Text(L10n.AgentWorktreeSummary.moreFiles(files.count - groups.reduce(0, { $0 + $1.count })))
@@ -570,6 +572,10 @@ struct AgentTaskMonitorRail: View {
     }
 
     private var workFileGroups: [AgentRailDirectoryGroup] {
+        guard let repositoryRoot = appState.agentWorktreeChanges.repositoryRoot
+            ?? (try? appState.activeRuntime?.localWorkspaceURLForOptimisticUse()) else {
+            return []
+        }
         let groups = Dictionary(grouping: sessionWorkFiles) { change in
             let parts = change.path.split(separator: "/")
             return parts.count > 1 ? String(parts[0]) : "根目录"
@@ -580,7 +586,11 @@ struct AgentTaskMonitorRail: View {
                     id: key,
                     name: key,
                     count: files.count,
-                    preview: files.prefix(2).map(\.fileName)
+                    preview: files.prefix(2).map(\.fileName),
+                    finderURL: AgentRailWorkFileFinderTarget.resolve(
+                        repositoryRoot: repositoryRoot,
+                        relativePaths: files.map(\.path)
+                    )
                 )
             }
             .sorted { lhs, rhs in
@@ -752,6 +762,30 @@ private struct AgentRailDirectoryGroup: Identifiable {
     var name: String
     var count: Int
     var preview: [String]
+    var finderURL: URL
+}
+
+enum AgentRailWorkFileFinderTarget {
+    nonisolated static func resolve(
+        repositoryRoot: URL,
+        relativePaths: [String],
+        fileExists: (String) -> Bool = FileManager.default.fileExists(atPath:)
+    ) -> URL {
+        let root = repositoryRoot.standardizedFileURL
+        let paths = relativePaths
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+
+        guard let firstPath = paths.first else { return root }
+        let fileURL = root.appendingPathComponent(firstPath).standardizedFileURL
+        if paths.count == 1, fileExists(fileURL.path) {
+            return fileURL
+        }
+
+        let components = firstPath.split(separator: "/", omittingEmptySubsequences: true)
+        guard components.count > 1 else { return root }
+        return root.appendingPathComponent(String(components[0]), isDirectory: true).standardizedFileURL
+    }
 }
 
 struct AgentRailArtifact: Identifiable {
@@ -1235,40 +1269,49 @@ private struct AgentRailFileButton: View {
                 Spacer(minLength: 0)
             }
             .contentShape(Rectangle())
+            .frame(maxWidth: .infinity, alignment: .leading)
         }
         .buttonStyle(.plain)
+        .focusable(false)
         .help(subtitle)
     }
 }
 
 private struct AgentRailDirectoryRow: View {
     let group: AgentRailDirectoryGroup
+    let action: () -> Void
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            HStack(spacing: 8) {
-                Image(systemName: "folder")
-                    .font(.system(size: 12, weight: .semibold))
-                    .foregroundStyle(.secondary)
-                Text(group.name)
-                    .font(.system(size: 12, weight: .semibold, design: .monospaced))
-                    .foregroundStyle(.primary)
-                    .lineLimit(1)
-                Text("(\(group.count))")
-                    .font(.system(size: 11, weight: .medium, design: .monospaced))
-                    .foregroundStyle(.secondary)
-                Spacer(minLength: 0)
-                Image(systemName: "chevron.right")
-                    .font(.system(size: 9, weight: .semibold))
-                    .foregroundStyle(.tertiary)
+        Button(action: action) {
+            VStack(alignment: .leading, spacing: 4) {
+                HStack(spacing: 8) {
+                    Image(systemName: "folder")
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundStyle(.secondary)
+                    Text(group.name)
+                        .font(.system(size: 12, weight: .semibold, design: .monospaced))
+                        .foregroundStyle(.primary)
+                        .lineLimit(1)
+                    Text("(\(group.count))")
+                        .font(.system(size: 11, weight: .medium, design: .monospaced))
+                        .foregroundStyle(.secondary)
+                    Spacer(minLength: 0)
+                    Image(systemName: "chevron.right")
+                        .font(.system(size: 9, weight: .semibold))
+                        .foregroundStyle(.tertiary)
+                }
+                if !group.preview.isEmpty {
+                    Text(group.preview.joined(separator: " · "))
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                }
             }
-            if !group.preview.isEmpty {
-                Text(group.preview.joined(separator: " · "))
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
-            }
+            .contentShape(Rectangle())
+            .frame(maxWidth: .infinity, alignment: .leading)
         }
+        .buttonStyle(.plain)
+        .focusable(false)
     }
 }
 

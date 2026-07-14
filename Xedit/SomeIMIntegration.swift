@@ -555,6 +555,8 @@ enum SomeIMIntegrationStore {
 
 struct SomeIMAccount: Codable, Equatable {
     var email: String
+    var nickname: String?
+    var avatarURL: String?
     var tenantID: String?
     var balanceUSD: String
     var credits: String
@@ -565,6 +567,11 @@ struct SomeIMAccount: Codable, Equatable {
     nonisolated var displayCredits: String {
         guard let value = Int64(credits) else { return credits }
         return NumberFormatter.localizedString(from: NSNumber(value: value), number: .decimal)
+    }
+
+    nonisolated var displayName: String {
+        let trimmed = nickname?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        return trimmed.isEmpty ? email : trimmed
     }
 
     nonisolated var compactDisplayCredits: String {
@@ -887,10 +894,17 @@ enum SomeIMClient {
         let data = try await send(request, session: session)
         let decoded = try JSONDecoder().decode(AccountBalanceData.self, from: data)
         let previous = SomeIMIntegrationStore.loadAccount()
+        let profile = try? await fetchCustomerProfile(
+            settings: settings,
+            sessionToken: SomeIMIntegrationStore.loadSessionToken(),
+            session: session
+        )
         let balance = decoded.balance.trimmingCharacters(in: .whitespacesAndNewlines)
         let account = SomeIMAccount(
-            email: previous?.email ?? "",
-            tenantID: decoded.tenant_id.nonEmpty ?? previous?.tenantID,
+            email: profile?.account.email?.trimmingCharacters(in: .whitespacesAndNewlines).nonEmpty ?? previous?.email ?? "",
+            nickname: profile?.account.nickname?.trimmingCharacters(in: .whitespacesAndNewlines).nonEmpty ?? previous?.nickname,
+            avatarURL: profile?.account.avatar_url?.trimmingCharacters(in: .whitespacesAndNewlines).nonEmpty ?? previous?.avatarURL,
+            tenantID: decoded.tenant_id.nonEmpty ?? profile?.tenantID ?? previous?.tenantID,
             balanceUSD: balance,
             credits: credits(fromUSD: balance),
             creditsPerUSD: 100000,
@@ -899,6 +913,26 @@ enum SomeIMClient {
         )
         SomeIMIntegrationStore.saveAccount(account)
         return account
+    }
+
+    private static func fetchCustomerProfile(
+        settings: SomeIMIntegrationSettings,
+        sessionToken: String,
+        session: URLSession
+    ) async throws -> (account: AccountData, tenantID: String?) {
+        let token = sessionToken.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !token.isEmpty else { throw URLError(.userAuthenticationRequired) }
+        let endpoint = try publicAPIEndpoint(from: settings.normalized.baseURL, suffix: "customer/me")
+        var request = URLRequest(url: endpoint)
+        request.httpMethod = "GET"
+        request.timeoutInterval = 12
+        request.setValue("application/json", forHTTPHeaderField: "Accept")
+        request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        AgentNetworkSupport.applyStandardHeaders(to: &request)
+        let data = try await send(request, session: session)
+        let decoded = try decodeEnvelope(CustomerMeData.self, from: data)
+        guard let account = decoded.user else { throw AgentClientError.invalidResponse }
+        return (account, decoded.tenant?.id)
     }
 
     static func fetchHandoffLoginURL() async throws -> URL {
@@ -1488,6 +1522,8 @@ enum SomeIMClient {
 
     fileprivate struct AccountData: Decodable {
         let email: String?
+        let nickname: String?
+        let avatar_url: String?
         let tenant_id: String?
         let balance_usd: String?
         let credits: String?
@@ -1500,6 +1536,12 @@ enum SomeIMClient {
             case customerEmailCamel = "customerEmail"
             case userEmail = "user_email"
             case userEmailCamel = "userEmail"
+            case nickname
+            case nickName = "nick_name"
+            case displayName = "display_name"
+            case avatarURL = "avatar_url"
+            case avatarURLCamel = "avatarURL"
+            case avatarUrlCamel = "avatarUrl"
             case tenantID = "tenant_id"
             case tenantIDCamel = "tenantID"
             case tenantIdCamel = "tenantId"
@@ -1520,6 +1562,8 @@ enum SomeIMClient {
         init(from decoder: Decoder) throws {
             let container = try decoder.container(keyedBy: CodingKeys.self)
             email = try container.decodeFirstString(for: [.email, .customerEmail, .customerEmailCamel, .userEmail, .userEmailCamel])
+            nickname = try container.decodeFirstString(for: [.nickname, .nickName, .displayName])
+            avatar_url = try container.decodeFirstString(for: [.avatarURL, .avatarURLCamel, .avatarUrlCamel])
             tenant_id = try container.decodeFirstString(for: [.tenantID, .tenantIDCamel, .tenantIdCamel])
             balance_usd = try container.decodeFirstString(for: [.balanceUSD, .balanceUSDCamel, .balanceUSDCamelAlt, .balance])
             credits = try container.decodeFirstString(for: [.credits, .creditBalance, .creditBalanceCamel])
@@ -1529,6 +1573,8 @@ enum SomeIMClient {
 
         static let empty = AccountData(
             email: nil,
+            nickname: nil,
+            avatarURL: nil,
             tenantID: nil,
             balanceUSD: nil,
             credits: nil,
@@ -1538,6 +1584,8 @@ enum SomeIMClient {
 
         init(
             email: String?,
+            nickname: String?,
+            avatarURL: String?,
             tenantID: String?,
             balanceUSD: String?,
             credits: String?,
@@ -1545,6 +1593,8 @@ enum SomeIMClient {
             defaultModel: String?
         ) {
             self.email = email
+            self.nickname = nickname
+            self.avatar_url = avatarURL
             self.tenant_id = tenantID
             self.balance_usd = balanceUSD
             self.credits = credits
@@ -1553,7 +1603,7 @@ enum SomeIMClient {
         }
 
         var hasAnyAccountInfo: Bool {
-            [email, tenant_id, balance_usd, credits, default_model].contains { value in
+            [email, nickname, avatar_url, tenant_id, balance_usd, credits, default_model].contains { value in
                 !(value?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ?? true)
             } || credits_per_usd != nil
         }
@@ -1562,6 +1612,8 @@ enum SomeIMClient {
             let balance = balance_usd?.trimmingCharacters(in: .whitespacesAndNewlines).nonEmpty ?? "0"
             return SomeIMAccount(
                 email: email?.trimmingCharacters(in: .whitespacesAndNewlines).nonEmpty ?? fallbackEmail.trimmingCharacters(in: .whitespacesAndNewlines),
+                nickname: nickname?.trimmingCharacters(in: .whitespacesAndNewlines).nonEmpty,
+                avatarURL: avatar_url?.trimmingCharacters(in: .whitespacesAndNewlines).nonEmpty,
                 tenantID: tenant_id?.trimmingCharacters(in: .whitespacesAndNewlines).nonEmpty,
                 balanceUSD: balance,
                 credits: credits?.trimmingCharacters(in: .whitespacesAndNewlines).nonEmpty ?? SomeIMClient.credits(fromUSD: balance),
@@ -1570,6 +1622,15 @@ enum SomeIMClient {
                 lastUpdatedAt: Date()
             )
         }
+    }
+
+    fileprivate struct CustomerMeData: Decodable {
+        let user: AccountData?
+        let tenant: CustomerMeTenantData?
+    }
+
+    fileprivate struct CustomerMeTenantData: Decodable {
+        let id: String?
     }
 
     fileprivate struct BrowserLoginCredentials: Decodable {
@@ -1735,7 +1796,7 @@ struct SomeIMIntegrationSettingsView: View {
                         ConnectorUnavailablePlaceholder(
                             title: L10n.Settings.SomeIM.browserLoginConnectedTitle,
                             systemImage: "checkmark.circle",
-                            description: L10n.Settings.SomeIM.browserLoginConnectedDescription(account.email)
+                            description: L10n.Settings.SomeIM.browserLoginConnectedDescription(account.displayName)
                         )
                         .frame(maxWidth: .infinity, alignment: .leading)
                     } else {
@@ -1777,7 +1838,7 @@ struct SomeIMIntegrationSettingsView: View {
             Section(L10n.Settings.SomeIM.accountSection) {
                 if let account {
                     LabeledContent(L10n.Settings.SomeIM.accountConnected) {
-                        Text(L10n.Settings.SomeIM.accountSummary(account.email, account.compactDisplayCredits))
+                        Text(L10n.Settings.SomeIM.accountSummary(account.displayName, account.compactDisplayCredits))
                             .foregroundStyle(.secondary)
                     }
                     LabeledContent(L10n.Settings.SomeIM.defaultModelLabel) {
