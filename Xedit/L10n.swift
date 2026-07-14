@@ -683,28 +683,21 @@ nonisolated enum L10n {
     }
 
     enum EmptyState {
-        static let agentMode = String(localized: "empty-state.agent-mode", defaultValue: "Agent Mode")
-        static let agentModeAccessibilityLabel = String(localized: "empty-state.agent-mode.accessibility-label", defaultValue: "Enter Agent Mode")
-        static let agentModeHelp = String(localized: "empty-state.agent-mode.help", defaultValue: "Enter Agent mode (⌘⇧A)")
+        // 1.155.0-rc3：EmptyWorkspaceView 欢迎页删除后，agent-mode /
+        // no-folder-open / open-folder / recent-files / recent-folders
+        // 一组 key 随之移除（xcstrings 里的历史词条保留无害）。
         static func hero(_ a1: String) -> String {
             let template = String(localized: "empty-state.hero", defaultValue: "What's up next")
             return String(format: template, a1)
         }
         static let noFileOpenSubtitle = String(localized: "empty-state.no-file-open.subtitle", defaultValue: "Select a file from the sidebar to start editing.")
         static let noFileOpenTitle = String(localized: "empty-state.no-file-open.title", defaultValue: "No File Open")
-        static let noFolderOpenSubtitle = String(localized: "empty-state.no-folder-open.subtitle", defaultValue: "Choose a file or folder to start editing — or jump straight into Agent mode for a workspace-free chat.")
-        static let noFolderOpenTitle = String(localized: "empty-state.no-folder-open.title", defaultValue: "No Folder Open")
         static let openFile = String(localized: "empty-state.open-file", defaultValue: "Open File")
         static let openFileAccessibilityLabel = String(localized: "empty-state.open-file.accessibility-label", defaultValue: "Open File")
         static let openFileHelp = String(localized: "empty-state.open-file.help", defaultValue: "Open File")
-        static let openFolder = String(localized: "empty-state.open-folder", defaultValue: "Open Folder")
-        static let openFolderAccessibilityLabel = String(localized: "empty-state.open-folder.accessibility-label", defaultValue: "Open Folder")
-        static let openFolderHelp = String(localized: "empty-state.open-folder.help", defaultValue: "Open Folder")
         static let quickOpen = String(localized: "empty-state.quick-open", defaultValue: "Quick Open")
         static let quickOpenAccessibilityLabel = String(localized: "empty-state.quick-open.accessibility-label", defaultValue: "Quick Open")
         static let quickOpenHelp = String(localized: "empty-state.quick-open.help", defaultValue: "Quick Open")
-        static let recentFiles = String(localized: "empty-state.recent-files", defaultValue: "Recent Files")
-        static let recentFolders = String(localized: "empty-state.recent-folders", defaultValue: "Recent Folders")
         static let subtitleNoFolder = String(localized: "empty-state.subtitle.no-folder", defaultValue: "Open a folder from the menu to chat about a project.")
         static func subtitleWithFolder(_ a1: String) -> String {
             let template = String(localized: "empty-state.subtitle.with-folder", defaultValue: "Paste images switch models queue follow-ups.")

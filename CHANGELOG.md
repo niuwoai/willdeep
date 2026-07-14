@@ -1,5 +1,21 @@
 # Changelog
 
+## 1.155.0-rc3 - 2026-07-15
+
+### Fixed
+
+- **Agent 侧栏 Files 双击改为「在 Finder 中显示」** —— 之前双击（乃至单击）会把文件装进 agent 跟随的无窗口 AppState、再 `openWindow(id:)` 拉起一个空白 AppState 的编辑器窗口，表现为莫名弹出「未打开文件夹」欢迎窗。现在双击直接 `revealInFinder`，单击只做选中/预览。
+- **右键「在编辑器中打开」不再弹空白窗口** —— 已有编辑器窗口时聚焦它并装载文件；没有时改走 URL-backed WindowGroup（新窗口自己加载该文件）；二进制文件直接转 Finder 定位。
+- **关闭临时编辑器窗口后 Agent 窗口不再被重置成「新聊天」** —— `EditorAppStateRegistry` 现在保留冷启动 mint 的 headless AppState，最后一个编辑器窗口关闭时 `current` 回退到它，agent 会话原样恢复。
+
+### Removed
+
+- **「未打开文件夹」欢迎页（EmptyWorkspaceView）整体删除** —— 纯启动已直接进 Agent 窗口；新开的纯编辑器窗口（⌘N / 菜单「显示编辑器」）现在自动带一个空白 untitled tab，可立即输入。附带删除 hero / Recent Folders / Recent Files 子视图、`openRecentFile` / `openRecentFolder` 帮手与对应 i18n key。
+
+### Changed
+
+- 版本号从 **1.155.0-rc2** 递增为 **1.155.0-rc3**；Xcode App、Go agent、Help bundle、Computer Use Helper、README badge、移动网关响应头契约与产品文档同步。
+
 ## 1.155.0-rc2 - 2026-07-15
 
 ### Changed
