@@ -66,6 +66,46 @@ struct AgentToolDescriptor: Equatable {
     let parameters: [AgentToolParameter]
 }
 
+struct AgentQueuedDispatchSnapshot: Equatable {
+    let userMessageID: AgentMessage.ID
+    let text: String
+    let imageCount: Int
+    let textAttachmentCount: Int
+    let skillCount: Int
+    let providerID: String
+    let enqueuedAt: Date
+}
+
+struct AgentSessionQueueSnapshot: Equatable {
+    let queuedMessages: [AgentQueuedMessage]
+    let pendingDispatches: [AgentQueuedDispatchSnapshot]
+}
+
+struct AgentWorkspaceSessionSnapshot: Equatable {
+    let id: AgentSession.ID
+    let title: String
+    let workspaceRootPath: String?
+    let workspaceDisplayName: String
+    let isActive: Bool
+    let isPinned: Bool
+    let isArchived: Bool
+    let isResponding: Bool
+    let isAwaitingProviderSlot: Bool
+    let queuedMessageCount: Int
+    let updatedAt: Date
+    let lastActivityAt: Date
+    let interactionMode: AgentInteractionMode
+    let approvalMode: AgentApprovalMode
+    let executionAgent: AgentExecutionAgent
+    let titleIsUserSet: Bool
+}
+
+struct AgentSessionTitleSuggestionSnapshot: Equatable {
+    let currentTitle: String
+    let suggestedTitle: String?
+    let modelID: String?
+}
+
 struct AgentToolContext {
     /// Workspace root. All filesystem tools must refuse paths outside this.
     let rootDirectory: URL?
@@ -92,6 +132,17 @@ struct AgentToolContext {
     /// it to organize projects, episodes, shots, characters, scenes, and
     /// generated media artifact paths outside the transient chat log.
     let shortDramaStore: AgentShortDramaStore?
+    /// Current-session queued user work, plus provider-dispatch entries
+    /// waiting for a concurrency slot. Used by read-only queue inspection
+    /// tools so the model can decide whether to defer heavy compile/release
+    /// work until later queued user messages have been handled.
+    let sessionQueueSnapshotProvider: (@MainActor () -> AgentSessionQueueSnapshot)?
+    /// Current-workspace session list for read-only session discovery tools.
+    let workspaceSessionsSnapshotProvider: (@MainActor () -> [AgentWorkspaceSessionSnapshot])?
+    /// Flash/title-summary-model backed title suggestion for the current
+    /// session. The model can ask for a cheap candidate, then use
+    /// rename_session when the title is stale.
+    let sessionTitleSuggestionProvider: (@MainActor () async -> AgentSessionTitleSuggestionSnapshot)?
     /// Effective sandbox mode chosen by the AppState approval gateway.
     /// Read-only tools and auto-approved commands get a scrubbed local
     /// environment; user-approved write/network/credential commands run
@@ -133,6 +184,9 @@ struct AgentToolContext {
         jobRegistry: AgentJobRegistry? = nil,
         mediaTaskRegistry: AgentMediaTaskRegistry? = nil,
         shortDramaStore: AgentShortDramaStore? = nil,
+        sessionQueueSnapshotProvider: (@MainActor () -> AgentSessionQueueSnapshot)? = nil,
+        workspaceSessionsSnapshotProvider: (@MainActor () -> [AgentWorkspaceSessionSnapshot])? = nil,
+        sessionTitleSuggestionProvider: (@MainActor () async -> AgentSessionTitleSuggestionSnapshot)? = nil,
         sandboxMode: AgentSandboxMode = .readOnly,
         patchProposalSink: (@MainActor (String?, String, Bool) async throws -> AgentPatchProposal)? = nil,
         editableContentProvider: (@MainActor (URL) throws -> String)? = nil,
@@ -149,6 +203,9 @@ struct AgentToolContext {
         self.jobRegistry = jobRegistry
         self.mediaTaskRegistry = mediaTaskRegistry
         self.shortDramaStore = shortDramaStore
+        self.sessionQueueSnapshotProvider = sessionQueueSnapshotProvider
+        self.workspaceSessionsSnapshotProvider = workspaceSessionsSnapshotProvider
+        self.sessionTitleSuggestionProvider = sessionTitleSuggestionProvider
         self.sandboxMode = sandboxMode
         self.patchProposalSink = patchProposalSink
         self.editableContentProvider = editableContentProvider
@@ -192,6 +249,9 @@ struct AgentToolContext {
             jobRegistry: jobRegistry,
             mediaTaskRegistry: mediaTaskRegistry,
             shortDramaStore: shortDramaStore,
+            sessionQueueSnapshotProvider: sessionQueueSnapshotProvider,
+            workspaceSessionsSnapshotProvider: workspaceSessionsSnapshotProvider,
+            sessionTitleSuggestionProvider: sessionTitleSuggestionProvider,
             sandboxMode: sandboxMode,
             patchProposalSink: patchProposalSink,
             editableContentProvider: editableContentProvider,

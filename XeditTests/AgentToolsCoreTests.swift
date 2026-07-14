@@ -62,7 +62,7 @@ struct AgentToolsCoreTests {
         let goalToolNames = Set(AgentToolRegistry.tools(activeExperts: [], interactionMode: .goal).map(\.name))
         #expect(normalToolNames.contains("rename_session"))
         #expect(normalToolNames.contains("change_workspace"))
-        #expect(!goalToolNames.contains("rename_session"))
+        #expect(goalToolNames.contains("rename_session"))
         #expect(!goalToolNames.contains("change_workspace"))
 
         var renamedTitle: String?
@@ -96,16 +96,23 @@ struct AgentToolsCoreTests {
         #expect(workspaceResult.payload.contains("Stop"))
 
         let appState = AppState()
-        for toolName in ["rename_session", "change_workspace"] {
-            let autoApproval = await appState.autoApprovalSource(
-                toolName: toolName,
-                arguments: [:],
-                risk: .write,
-                rootDirectory: nil,
-                interactionMode: .goal
-            )
-            #expect(autoApproval == nil)
-        }
+        let renameAutoApproval = await appState.autoApprovalSource(
+            toolName: "rename_session",
+            arguments: [:],
+            risk: .write,
+            rootDirectory: nil,
+            interactionMode: .goal
+        )
+        #expect(renameAutoApproval == .goalMode)
+
+        let workspaceAutoApproval = await appState.autoApprovalSource(
+            toolName: "change_workspace",
+            arguments: [:],
+            risk: .write,
+            rootDirectory: nil,
+            interactionMode: .goal
+        )
+        #expect(workspaceAutoApproval == nil)
     }
 
     @Test("terminal protected-input payload exposes only prompts, never values")

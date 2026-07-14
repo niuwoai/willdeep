@@ -678,6 +678,8 @@ extension AppState {
                 approvalMode: runtime.approvalMode,
                 currentPlan: runtime.currentPlan,
                 currentGoal: runtime.currentGoal,
+                currentSessionTitle: runtime.session.title,
+                currentSessionTitleIsLocked: runtime.session.titleIsUserSet,
                 activeExperts: activeExperts,
                 promptProfile: promptProfile
             )
@@ -989,11 +991,13 @@ extension AppState {
                     }
                 }
 
-                // Goal mode must stay autonomous. These confirmation-bound
-                // host actions are not advertised there; this is the final
-                // guard for stale provider schemas or hallucinated calls.
+                // Goal mode must stay autonomous. Workspace rebinding is not
+                // advertised there; this is the final guard for stale
+                // provider schemas or hallucinated calls. Session rename is
+                // allowed and auto-approved below so the chat title can keep
+                // up with a long-running goal without pausing it.
                 if runtime.interactionMode == .goal,
-                   AgentToolRegistry.isSessionMutationTool(call.toolName) {
+                   call.toolName == "change_workspace" {
                     let blocked = AgentToolCall(
                         messageID: assistantID,
                         externalID: call.externalID,
@@ -1009,7 +1013,7 @@ extension AppState {
                         appendToolMessage(
                             for: runtime,
                             toolCallID: call.externalID,
-                            payload: "Unavailable in Goal mode: session rename and workspace change are suppressed so the active goal cannot be paused. Continue working in the current session and workspace.",
+                            payload: "Unavailable in Goal mode: workspace change is suppressed so the active goal cannot be paused. Continue working in the current workspace.",
                             source: .systemNotice,
                             outcomeStatus: .denied,
                             errorMessage: record.errorMessage
@@ -1249,6 +1253,30 @@ extension AppState {
                     jobRegistry: agentJobRegistry,
                     mediaTaskRegistry: agentMediaTaskRegistry,
                     shortDramaStore: agentShortDramaStore,
+                    sessionQueueSnapshotProvider: {
+                        AgentSessionQueueSnapshot(
+                            queuedMessages: runtime.queuedMessages,
+                            pendingDispatches: self.pendingDispatchQueue
+                                .filter { $0.runtimeID == runtime.id }
+                                .map { entry in
+                                    AgentQueuedDispatchSnapshot(
+                                        userMessageID: entry.userMessageID,
+                                        text: entry.text,
+                                        imageCount: entry.images.count,
+                                        textAttachmentCount: entry.textAttachments.count,
+                                        skillCount: entry.attachedSkills.count,
+                                        providerID: entry.providerID,
+                                        enqueuedAt: entry.enqueuedAt
+                                    )
+                                }
+                        )
+                    },
+                    workspaceSessionsSnapshotProvider: {
+                        self.workspaceSessionSnapshots(for: runtime)
+                    },
+                    sessionTitleSuggestionProvider: {
+                        await self.sessionTitleSuggestionSnapshot(for: runtime)
+                    },
                     sandboxMode: sandboxModeForToolExecution(
                         risk: risk,
                         approvalSource: autoApproval,

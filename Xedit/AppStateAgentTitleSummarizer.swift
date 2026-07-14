@@ -135,10 +135,43 @@ extension AppState {
         AgentSessionStore.saveAsync(runtime.session)
     }
 
+    @MainActor
+    func sessionTitleSuggestionSnapshot(for runtime: AgentRuntime) async -> AgentSessionTitleSuggestionSnapshot {
+        let currentTitle = runtime.session.title
+        let configuration = agentConfiguration.normalized
+        let modelID = configuration.titleSummaryModel()
+        guard !modelID.isEmpty else {
+            return AgentSessionTitleSuggestionSnapshot(currentTitle: currentTitle, suggestedTitle: nil, modelID: nil)
+        }
+        let configurations = titleSummaryConfigurationCandidates(remoteModelID: modelID)
+        guard !configurations.isEmpty else {
+            return AgentSessionTitleSuggestionSnapshot(currentTitle: currentTitle, suggestedTitle: nil, modelID: modelID)
+        }
+
+        let messages = runtime.messages.filter { !$0.content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+        guard let latestUserIndex = messages.lastIndex(where: { $0.role == .user }) else {
+            return AgentSessionTitleSuggestionSnapshot(currentTitle: currentTitle, suggestedTitle: nil, modelID: modelID)
+        }
+        let latestUser = messages[latestUserIndex].content
+        let nearbyAssistant = messages[..<latestUserIndex]
+            .last(where: { $0.role == .assistant })?
+            .content ?? messages.last(where: { $0.role == .assistant })?.content ?? ""
+        let title = await Self.requestTitleSummary(
+            configurations: configurations,
+            firstUser: latestUser,
+            firstAssistant: nearbyAssistant
+        )
+        return AgentSessionTitleSuggestionSnapshot(
+            currentTitle: currentTitle,
+            suggestedTitle: title,
+            modelID: modelID
+        )
+    }
+
     /// Fire one non-streaming-flavored chat completion against the
     /// configured title model and return a cleaned-up short title, or
     /// nil if the request failed / model declined / produced garbage.
-    nonisolated private static func requestTitleSummary(
+    nonisolated static func requestTitleSummary(
         configurations: [AgentConfiguration],
         firstUser: String,
         firstAssistant: String

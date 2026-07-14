@@ -275,6 +275,15 @@ struct WillDeepTests {
         appState.activateAgentExpert(.shortDrama)
         #expect(appState.agentActiveExperts == [.shortDrama])
         #expect(appState.activeRuntime?.session.activeExperts == [.shortDrama])
+        #expect(appState.canDeactivateAgentExperts())
+        #expect(appState.deactivateAgentExpert(.shortDrama))
+        #expect(appState.agentActiveExperts.isEmpty)
+
+        appState.activateAgentExpert(.browserOps)
+        appState.activeRuntime?.messages.append(AgentMessage(role: .user, content: "Use the browser expert."))
+        #expect(!appState.canDeactivateAgentExperts())
+        #expect(!appState.deactivateAgentExpert(.browserOps))
+        #expect(appState.agentActiveExperts == [.browserOps])
     }
 
     @Test("terminal shortcut recorder coalesces per-character password input into one protected event")
@@ -1467,19 +1476,24 @@ struct WillDeepTests {
         )
         #expect(normalApproval == nil)
 
-        // 会话标题与 workspace 归属永远要求当次人工确认，Goal 模式也不能绕过。
-        for toolName in ["rename_session", "change_workspace"] {
-            let sessionMutationApproval = await appState.autoApprovalSource(
-                toolName: toolName,
-                arguments: toolName == "rename_session"
-                    ? ["title": .string("New title")]
-                    : ["path": .string("/tmp/another-workspace")],
-                risk: .write,
-                rootDirectory: root,
-                interactionMode: .goal
-            )
-            #expect(sessionMutationApproval == nil)
-        }
+        // Goal 模式下允许自动改名，但 workspace 归属仍不能绕过人工确认。
+        let titleApproval = await appState.autoApprovalSource(
+            toolName: "rename_session",
+            arguments: ["title": .string("New title")],
+            risk: .write,
+            rootDirectory: root,
+            interactionMode: .goal
+        )
+        #expect(titleApproval == .goalMode)
+
+        let workspaceApproval = await appState.autoApprovalSource(
+            toolName: "change_workspace",
+            arguments: ["path": .string("/tmp/another-workspace")],
+            risk: .write,
+            rootDirectory: root,
+            interactionMode: .goal
+        )
+        #expect(workspaceApproval == nil)
     }
 
     @Test("smart approval sends non-confirmation network ops to safety judge")

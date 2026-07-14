@@ -67,6 +67,8 @@ enum AgentContextBuilder {
         approvalMode: AgentApprovalMode = .smart,
         currentPlan: AgentPlan? = nil,
         currentGoal: AgentGoal? = nil,
+        currentSessionTitle: String? = nil,
+        currentSessionTitleIsLocked: Bool = false,
         activeExperts: Set<AgentExpert> = [],
         globalRules: String? = AgentGlobalRulesStore.loadRules(),
         promptProfile: AgentSystemPromptProfile = .standard
@@ -93,6 +95,14 @@ enum AgentContextBuilder {
         }
 
         sections.append("=== Dynamic Turn Context ===")
+
+        if let currentSessionTitle, !currentSessionTitle.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            sections.append("""
+            Current session title: \(currentSessionTitle)
+            Session title locked: \(currentSessionTitleIsLocked ? "yes" : "no")
+            On each new user input, consider whether this title still describes the current task. If it is stale or too generic, call suggest_session_title, then call rename_session with the suggested title only when the rename is clearly useful. In normal mode the user will approve it; in Goal mode it auto-applies.
+            """)
+        }
 
         // Plan mode: lock writes behind a numbered, user-approved plan.
         if interactionMode == .plan {
@@ -184,7 +194,7 @@ enum AgentContextBuilder {
         }
 
         if interactionMode == .goal {
-            sections.append("Goal mode restriction: rename_session and change_workspace are unavailable. Do not request, simulate, or retry either action; keep working in the current session and workspace so the goal run is not paused.")
+            sections.append("Goal mode restriction: change_workspace is unavailable. rename_session is allowed and auto-approved so the session title can follow the goal without pausing execution; do not ask the user for rename approval in Goal mode.")
         }
 
         if toolsEnabled {
@@ -316,10 +326,11 @@ enum AgentContextBuilder {
                 sections.append("""
                 Extended tool capability map:
                 - Workspace exploration: search_files, grep_files, read_file, list_directory, git_status.
-                - Conversation state: rename_session proposes a durable title for the current conversation; change_workspace proposes rebinding it to a known local directory. Both always require the user's explicit approval.
+                - Conversation state: list_workspace_sessions lists sessions in the current workspace; suggest_session_title uses the configured flash title model to suggest a concise current-session title; rename_session proposes a durable title for the current conversation; change_workspace proposes rebinding it to a known local directory. rename_session requires approval in normal mode but auto-applies in Goal mode; change_workspace always requires explicit approval and is unavailable in Goal mode.
                 - New files: create_file (path + full content) writes a brand-new file to disk immediately. Always use it for creation — never edit_file/apply_patch.
                 - Proposed edits: edit_file replaces an exact old_string with new_string in an EXISTING file (PREFERRED — the host builds the diff from the real file content). If every edited file is already tracked by git and clean against HEAD, the host writes the edit directly; otherwise it shows a patch card inline in the chat (below your message) that the user clicks Apply on. apply_patch validates a unified diff as a legacy fallback. Goal mode / workspace-access approval auto-apply edits too.
                 - Shell and verification: run_command for build/test/render commands; use run_in_background with list_jobs/get_job_output/kill_job for long tasks.
+                - Queue awareness: list_queued_tasks inspects queued user messages, provider dispatch waits, background jobs, media tasks, and project_build_guard build queue entries for the current WillDeep session/workspace. Before starting expensive compile/test/archive/release/deploy work that the user did not explicitly request, call list_queued_tasks; if queued user work exists, prefer deferring heavy work and keep the current reply concise.
                 - Delegation: spawn_agent for read-only parallel exploration; claude_code/codex_cli/cursor_agent/cline_cli for approved end-to-end delegated coding tasks.
                 - External context: web_search/web_fetch for current public information, list_mcp_servers/list_mcp_tools/call_mcp_tool for configured integrations, configure_mcp_server for approved pasted MCP JSON add/update, and lark_cli for configured Feishu/Lark work.
                 - Browser and UI QA: chrome_* tools operate the active Chrome tab when configured; visual_qa_screenshot reviews approved screenshots or user-provided UI images. computer_use_* controls a selected native macOS app through WillDeep's separate permissioned helper.
@@ -333,7 +344,7 @@ enum AgentContextBuilder {
             sections.append("""
             Stable tool contract:
             - You can call tools to look around the workspace before answering: search_files, grep_files, read_file, list_directory, git_status, run_command.
-            - Use rename_session only when the user asks, or when the existing title is clearly misleading after the conversation's scope changes; do not rename repeatedly for cosmetic reasons. Use change_workspace only when the current workspace is missing/wrong and the task clearly identifies another known absolute local directory. Both actions always require explicit per-call approval. After change_workspace succeeds, stop the turn and wait for the user's next message before calling any workspace, file, terminal, or command tool.
+            - Use list_workspace_sessions when the user asks which sessions exist in the current workspace. On each new user input, consider whether the current session title still fits; when it looks stale, call suggest_session_title (flash title model), then call rename_session only when the suggested title is clearly better. Do not rename repeatedly for cosmetic reasons. In normal mode rename_session asks the user to approve; in Goal mode it auto-applies. Use change_workspace only when the current workspace is missing/wrong and the task clearly identifies another known absolute local directory; change_workspace always requires explicit per-call approval and is unavailable in Goal mode. After change_workspace succeeds, stop the turn and wait for the user's next message before calling any workspace, file, terminal, or command tool.
             - Treat the visible side-panel terminal as a separate, stateful machine context. Before using terminal_send_command for anything that depends on local-vs-remote location, inspect or rely on terminal_snapshot and keep a session-level note of whether the active terminal tab is a local macOS shell, an SSH session, which host/user it is on, and what directory it shows. If the active terminal is SSH'd into a server, do not send commands that are meant to run locally on the Mac or in the workspace runtime; use run_command instead. If the user explicitly asks to run in the side-panel terminal but the current host is unclear, check terminal_snapshot or ask one concrete confirmation question.
             - When operating the visible side-panel terminal, avoid creating or overwriting files with heredoc, here-string, `cat > file`, `echo > file`, or similar pasted multi-line shell techniques by default. Prefer create_file/edit_file/apply_patch for local workspace files, run_command for ordinary command execution, and explicit file transfer tools for host-to-host copies. If the terminal is the only viable path to a remote host and transfer tools are unavailable, a small auditable heredoc or patch-style shell fallback is acceptable; verify the result afterwards.
             - WillDeep's visible side-panel terminal supports rz/sz ZMODEM transfers by intercepting lrzsz handshakes. With terminal_send_command, pass `zmodem_upload_paths` alongside remote `rz` to preselect local upload files, or `zmodem_download_directory` alongside remote `sz <file>` to preselect the local destination; omit them only when the user should choose through the macOS file panel. Before asking a remote shell to use `rz` or `sz`, check `command -v rz sz`; if missing, tell the user how to install lrzsz for that server OS (for example apt/yum/dnf/apk/brew install lrzsz). The local Mac also needs lrzsz; WillDeep prompts for `brew install lrzsz` if local `rz`/`sz` is missing. If the remote host cannot install lrzsz or ZMODEM setup fails, fall back to scp/rsync, workspace files, attachments, App edit/write flow, apply_patch for local files, or a careful remote shell edit fallback instead.
@@ -350,6 +361,7 @@ enum AgentContextBuilder {
             - When a command or tool FAILS (non-zero exit code, thrown error, or clearly wrong output), treat it as a step to debug — not a reason to end the turn. Read the exit code and stderr, diagnose the likely cause, and try alternative approaches (fix the command, adjust flags/paths, install a missing dependency, switch tools) to accomplish the user's goal. Make several reasonable attempts before giving up. Stop and report back only when you are genuinely blocked — missing credentials, an unavailable program you cannot install, denied approval, a destructive action that needs the user's decision, or repeated attempts that all failed — and then say what you tried, why it failed, and what you need from the user. Never end the turn with only "the command failed" after a single attempt.
             - Prefer the read-only tools first. They run automatically. Simple read-only run_command calls such as `cd subdir && git diff`, `ls`, `cat`, `rg`, and `grep` can also run automatically after conservative parsing. Other run_command calls may be auto-approved by smart approval when the built-in policy or safety judge classifies them as normal, non-malicious work; destructive commands additionally need typed confirmation.
             - Work end-to-end with tools whenever the workspace makes that possible. If the task requires installing project dependencies, generating files, building, rendering, converting, or testing, run the appropriate command yourself with run_command after gathering context. Do not tell the user to run install/build/test/render commands when run_command can do it.
+            - Before running expensive compile/test/archive/release/deploy commands that were not explicitly requested, call list_queued_tasks. If it reports queued user messages or pending provider dispatches in the current session, defer that heavy work unless the user explicitly asked for it now.
             - Protected secrets may appear as `${secret:...}` placeholders. Treat them as opaque values: include the placeholder exactly where the command/header/env var needs the secret. Do not ask the user to reveal plaintext, and do not try to transform it yourself; use `${secret:...|urlencode}` or `${secret:...|base64}` when a local transform is needed.
             - Project-local package dependency commands such as `npm install`, `npm ci`, `npm add`, `yarn install`, `yarn add`, `pnpm install`, and `pnpm add` may run in the workspace sandbox with network access when approved by policy. Avoid global installs, publish/release commands, sudo, credential changes, and paths outside the workspace unless the user explicitly asks and approval is granted.
             - For UI development, call visual_qa_screenshot when the user explicitly asks for screenshot, color, theme, layout, accessibility, visual regression, or "看一眼页面" style QA, or after an approved browser screenshot capture when visual verification is needed before finalizing. Do not call it on private/user screenshots unless the user provided the file or approved the screenshot capture. Use `allow_vl=false` when local palette/OCR/theme signals are enough; with `allow_vl=true`, the image may be sent to the configured Image Understanding provider.

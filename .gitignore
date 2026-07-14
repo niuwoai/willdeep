@@ -1,6 +1,7 @@
 .alma-snapshots
 DerivedData/
 build/
+.codex-build/
 Xedit/Generated/
 *.profraw
 

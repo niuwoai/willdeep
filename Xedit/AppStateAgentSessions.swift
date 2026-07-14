@@ -307,13 +307,30 @@ extension AppState {
 
     /// Activate an optional expert pack for the active session. Experts widen
     /// the model-facing tool surface and add a small domain contract once
-    /// enabled; activation is intentionally one-way for the session.
+    /// enabled.
     func activateAgentExpert(_ expert: AgentExpert) {
         var experts = agentActiveExperts
         guard !experts.contains(expert) else { return }
         experts.insert(expert)
         agentActiveExperts = experts
         persistActiveAgentSession()
+    }
+
+    /// Expert activation can still be undone before the first real user turn.
+    /// Once the conversation has started, keep the expert surface stable so
+    /// follow-up turns cannot silently lose tools or prompt contracts.
+    func canDeactivateAgentExperts() -> Bool {
+        activeRuntime?.isEmpty ?? true
+    }
+
+    @discardableResult
+    func deactivateAgentExpert(_ expert: AgentExpert) -> Bool {
+        guard canDeactivateAgentExperts() else { return false }
+        var experts = agentActiveExperts
+        guard experts.remove(expert) != nil else { return false }
+        agentActiveExperts = experts
+        persistActiveAgentSession()
+        return true
     }
 
     /// User clicks Approve on the proposed plan — flips it to approved
@@ -1574,6 +1591,34 @@ extension AppState {
         summarizeAgentSessionTitleIfNeeded(runtime: runtime, force: true)
     }
 
+    func workspaceSessionSnapshots(for runtime: AgentRuntime) -> [AgentWorkspaceSessionSnapshot] {
+        let workspaceKey = runtime.session.workspaceSidebarGroupKey
+        return agentSessions
+            .filter { $0.workspaceSidebarGroupKey == workspaceKey }
+            .map { session in
+                let live = agentRuntimes[session.id]
+                let source = live?.session ?? session
+                return AgentWorkspaceSessionSnapshot(
+                    id: source.id,
+                    title: source.title,
+                    workspaceRootPath: source.workspaceLocation?.localPath ?? source.workspaceRootPath,
+                    workspaceDisplayName: source.workspaceName,
+                    isActive: source.id == runtime.id,
+                    isPinned: source.isPinned,
+                    isArchived: source.isArchived,
+                    isResponding: live?.isResponding ?? false,
+                    isAwaitingProviderSlot: live?.isAwaitingProviderSlot ?? false,
+                    queuedMessageCount: live?.queuedMessages.count ?? 0,
+                    updatedAt: source.updatedAt,
+                    lastActivityAt: source.lastActivityAt,
+                    interactionMode: live?.interactionMode ?? source.interactionMode,
+                    approvalMode: live?.approvalMode ?? source.approvalMode,
+                    executionAgent: live?.executionAgent ?? source.executionAgent,
+                    titleIsUserSet: source.titleIsUserSet
+                )
+            }
+    }
+
     /// Write the active session back to disk. No-op if no session is
     /// active (Editor-mode chats aren't persisted). Convenience wrapper
     /// that targets `activeRuntime`; concurrent code paths that need to
@@ -1773,10 +1818,16 @@ extension AppState {
         persistActiveAgentSession()
     }
 
-    /// User tapped "重置托管档位" — drop the only-goes-up floor back to `.low`.
-    func resetManagedRoutingFloor() {
+    /// User selected a managed-routing floor in the composer menu.
+    func setManagedRoutingFloor(_ tier: AgentManagedCapabilityTier) {
         guard let runtime = activeRuntime else { return }
-        runtime.resetManagedFloor()
+        guard runtime.managedRouting != nil else { return }
+        runtime.setManagedFloor(to: tier)
         persistActiveAgentSession()
+    }
+
+    /// User selected the base managed tier.
+    func resetManagedRoutingFloor() {
+        setManagedRoutingFloor(.low)
     }
 }

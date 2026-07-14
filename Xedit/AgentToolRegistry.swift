@@ -66,8 +66,23 @@ enum AgentToolRegistry {
             parameters: []
         ),
         AgentToolDescriptor(
+            name: "list_workspace_sessions",
+            description: "List WillDeep Agent sessions that belong to the CURRENT workspace group, including title, mode, activity time, running/queued state, and whether the title is locked. Read-only. Use this when the user asks what sessions exist in this workspace, or before deciding whether a new user input belongs in the current session or should be renamed.",
+            risk: .read,
+            parameters: [
+                AgentToolParameter(name: "include_archived", type: .boolean, description: "When true, include archived sessions in this workspace. Defaults to false.", required: false),
+                AgentToolParameter(name: "limit", type: .integer, description: "Maximum sessions to return. Defaults to 20, capped at 100.", required: false)
+            ]
+        ),
+        AgentToolDescriptor(
+            name: "suggest_session_title",
+            description: "Use WillDeep's configured title-summary flash model to suggest a concise title for the CURRENT session from the latest conversation context. Read-only. On a new user input, call this when the current session title looks stale or too generic; then call rename_session with the suggestion when appropriate. In normal mode rename_session asks the user to approve; in Goal mode rename_session auto-applies.",
+            risk: .read,
+            parameters: []
+        ),
+        AgentToolDescriptor(
             name: "rename_session",
-            description: "Propose a concise new title for the CURRENT conversation. Use sparingly: when the user asks for a rename, or when the existing title is clearly misleading after the task's scope changed. Never churn titles for cosmetic reasons. Always shows the user an approval card before changing session state.",
+            description: "Propose a concise new title for the CURRENT conversation. Use sparingly: when the user asks for a rename, or when the existing title is clearly misleading after the task's scope changed. Prefer calling suggest_session_title first so the candidate comes from the configured flash title model. Never churn titles for cosmetic reasons. In normal mode this shows the user an approval card; in Goal mode it auto-applies without pausing the goal.",
             risk: .write,
             parameters: [
                 AgentToolParameter(name: "title", type: .string, description: "Concise single-line conversation title, at most 120 characters.", required: true)
@@ -89,6 +104,14 @@ enum AgentToolRegistry {
                 AgentToolParameter(name: "command", type: .string, description: "Shell command line. Runs through /bin/sh -c.", required: true),
                 AgentToolParameter(name: "timeout_seconds", type: .integer, description: "Hard timeout in seconds. Foreground default 20s (max 120). Background default unlimited (max 21600 = 6h).", required: false),
                 AgentToolParameter(name: "run_in_background", type: .boolean, description: "When true, do not block on the command. Returns a job handle (job_xxxxxx); the host injects a system message when the job finishes. Use for tasks expected to take more than ~30 seconds. Defaults to false.", required: false)
+            ]
+        ),
+        AgentToolDescriptor(
+            name: "list_queued_tasks",
+            description: "Inspect queued work for the CURRENT WillDeep agent session and workspace: queued user messages, provider-dispatch waits, running background jobs, active media tasks, and project_build_guard build queue entries. Read-only. Before starting expensive compile/test/archive/release/deploy work that the user did not explicitly request, call this tool; if it reports queued user messages or dispatch waits, prefer deferring heavy work and answer concisely.",
+            risk: .read,
+            parameters: [
+                AgentToolParameter(name: "include_finished", type: .boolean, description: "When true, include recently finished background jobs and media tasks as context. Defaults to false.", required: false)
             ]
         ),
         AgentToolDescriptor(
@@ -1534,7 +1557,7 @@ enum AgentToolRegistry {
         interactionMode: AgentInteractionMode = .normal
     ) -> [AgentToolDescriptor] {
         all.filter { descriptor in
-            if interactionMode == .goal, isSessionMutationTool(descriptor.name) {
+            if interactionMode == .goal, descriptor.name == "change_workspace" {
                 return false
             }
             if descriptor.name.hasPrefix("short_drama_") {

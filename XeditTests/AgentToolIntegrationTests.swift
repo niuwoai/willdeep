@@ -19,6 +19,158 @@ struct AgentContextBuilderPromptTests {
         #expect(prompt.contains("For small datasets (about 6 items or fewer), avoid Markdown tables"))
         #expect(prompt.contains("unless the user explicitly asks for a table"))
     }
+
+    @Test("stable prompt requires queue inspection before optional heavy work")
+    func testStablePromptRequiresQueueInspectionBeforeOptionalHeavyWork() {
+        let prompt = AgentContextBuilder.stableSystemPromptPrefix(toolsEnabled: true, promptProfile: .extended)
+
+        #expect(prompt.contains("list_queued_tasks"))
+        #expect(prompt.contains("Before running expensive compile/test/archive/release/deploy commands"))
+        #expect(prompt.contains("defer that heavy work unless the user explicitly asked for it now"))
+    }
+}
+
+@Suite(.serialized)
+struct AgentQueuedTaskToolTests {
+    @Test("list_queued_tasks reports session queue and project build guard queue")
+    @MainActor
+    func testListQueuedTasksReportsSessionAndBuildQueues() async throws {
+        let workspace = FileManager.default.temporaryDirectory
+            .appendingPathComponent("WillDeepQueuedTaskToolTests-\(UUID().uuidString)", isDirectory: true)
+        let queueDirectory = workspace.appendingPathComponent(".codex-build/queue", isDirectory: true)
+        try FileManager.default.createDirectory(at: queueDirectory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: workspace) }
+
+        let buildEntry: [String: Any] = [
+            "id": "queued-build-1",
+            "pid": Int(ProcessInfo.processInfo.processIdentifier),
+            "name": "xedit-tests",
+            "kind": "xcode-test",
+            "fingerprint": "abcdef1234567890",
+            "command": ["xcodebuild", "test", "-scheme", "Xedit"],
+            "created_at": Date().timeIntervalSince1970,
+            "created_at_iso": ISO8601DateFormatter().string(from: Date())
+        ]
+        let buildData = try JSONSerialization.data(withJSONObject: buildEntry, options: [.prettyPrinted])
+        try buildData.write(to: queueDirectory.appendingPathComponent("queued-build-1.json"))
+
+        let runtimeID = UUID()
+        let mediaRegistry = AgentMediaTaskRegistry(
+            fileURL: workspace.appendingPathComponent("media-tasks.json", isDirectory: false)
+        )
+        let mediaTask = mediaRegistry.create(
+            provider: .someIM,
+            kind: .imageGeneration,
+            title: "Queued illustration",
+            runtimeID: runtimeID,
+            status: .processing
+        )
+        let queuedMessage = AgentQueuedMessage(text: "用户后续还要继续修发布文案")
+        let queuedDispatch = AgentQueuedDispatchSnapshot(
+            userMessageID: UUID(),
+            text: "provider slot 等待中的下一步",
+            imageCount: 0,
+            textAttachmentCount: 1,
+            skillCount: 0,
+            providerID: "some.im",
+            enqueuedAt: Date().addingTimeInterval(-12)
+        )
+        let context = AgentToolContext(
+            rootDirectory: workspace,
+            runtimeID: runtimeID,
+            mediaTaskRegistry: mediaRegistry,
+            sessionQueueSnapshotProvider: {
+                AgentSessionQueueSnapshot(
+                    queuedMessages: [queuedMessage],
+                    pendingDispatches: [queuedDispatch]
+                )
+            }
+        )
+
+        let result = try await AgentToolRunner.run(
+            name: "list_queued_tasks",
+            arguments: [:],
+            context: context
+        )
+
+        #expect(result.summary.contains("queued user work: 1"))
+        #expect(result.payload.contains("defer_heavy_actions_recommended: true"))
+        #expect(result.payload.contains("用户后续还要继续修发布文案"))
+        #expect(result.payload.contains("provider=some.im"))
+        #expect(result.payload.contains(mediaTask.displayHandle))
+        #expect(result.payload.contains("xedit-tests"))
+        #expect(result.payload.contains("\"project_build_guard_queue\""))
+    }
+
+    @Test("list_workspace_sessions returns current workspace session snapshots")
+    @MainActor
+    func testListWorkspaceSessionsReturnsSnapshots() async throws {
+        let sessionID = UUID()
+        let context = AgentToolContext(
+            rootDirectory: nil,
+            workspaceSessionsSnapshotProvider: {
+                [
+                    AgentWorkspaceSessionSnapshot(
+                        id: sessionID,
+                        title: "修复登录流程",
+                        workspaceRootPath: "/tmp/WillDeepProject",
+                        workspaceDisplayName: "WillDeepProject",
+                        isActive: true,
+                        isPinned: true,
+                        isArchived: false,
+                        isResponding: false,
+                        isAwaitingProviderSlot: true,
+                        queuedMessageCount: 2,
+                        updatedAt: Date(timeIntervalSince1970: 1_800),
+                        lastActivityAt: Date(timeIntervalSince1970: 1_700),
+                        interactionMode: .goal,
+                        approvalMode: .smart,
+                        executionAgent: .willDeep,
+                        titleIsUserSet: true
+                    )
+                ]
+            }
+        )
+
+        let result = try await AgentToolRunner.run(
+            name: "list_workspace_sessions",
+            arguments: [:],
+            context: context
+        )
+
+        #expect(result.summary == "1 workspace session")
+        #expect(result.payload.contains("修复登录流程"))
+        #expect(result.payload.contains("provider-queued"))
+        #expect(result.payload.contains("queued_messages=2"))
+        #expect(result.payload.contains("\"interaction_mode\":\"goal\""))
+    }
+
+    @Test("suggest_session_title returns flash-backed suggestion snapshot")
+    @MainActor
+    func testSuggestSessionTitleReturnsSnapshot() async throws {
+        let context = AgentToolContext(
+            rootDirectory: nil,
+            sessionTitleSuggestionProvider: {
+                AgentSessionTitleSuggestionSnapshot(
+                    currentTitle: "旧标题",
+                    suggestedTitle: "整理发布队列",
+                    modelID: "someim-auto-flash"
+                )
+            }
+        )
+
+        let result = try await AgentToolRunner.run(
+            name: "suggest_session_title",
+            arguments: [:],
+            context: context
+        )
+
+        #expect(result.summary.contains("整理发布队列"))
+        #expect(result.payload.contains("\"current_title\":\"旧标题\""))
+        #expect(result.payload.contains("\"suggested_title\":\"整理发布队列\""))
+        #expect(result.payload.contains("\"rename_recommended\":true"))
+        #expect(result.payload.contains("someim-auto-flash"))
+    }
 }
 
 @Suite
@@ -199,6 +351,71 @@ struct SomeIMBrowserLoginStatusTests {
         #expect(SomeIMIntegrationStore.loadAPIKey() == "sk-test-completed")
     }
 
+    @Test("browser login status accepts current some.im connected payload")
+    @MainActor
+    func testBrowserLoginStatusAcceptsCurrentSomeIMConnectedPayload() async throws {
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.protocolClasses = [SomeIMBrowserLoginMockURLProtocol.self]
+        let session = URLSession(configuration: configuration)
+        configureWritableSomeIMSessionStoreForTest()
+        SomeIMIntegrationStore.logout()
+        defer {
+            session.invalidateAndCancel()
+            SomeIMBrowserLoginMockURLProtocol.handler = nil
+            SomeIMIntegrationStore.logout()
+            restoreSomeIMSessionStoreAfterTest()
+        }
+
+        let pairToken = String(repeating: "f", count: 64)
+        SomeIMBrowserLoginMockURLProtocol.handler = { request in
+            #expect(request.value(forHTTPHeaderField: "Authorization") == "Bearer \(pairToken)")
+            let response = HTTPURLResponse(
+                url: request.url!,
+                statusCode: 200,
+                httpVersion: nil,
+                headerFields: ["Content-Type": "application/json"]
+            )!
+            let body = """
+            {
+              "code": 0,
+              "data": {
+                "status": "connected",
+                "api_key": "sk-test-current-payload",
+                "token": "session-test-current-payload",
+                "default_model": "gpt-5",
+                "account": {
+                  "email": "current@example.com",
+                  "tenant_id": "tenant-current",
+                  "credits": "123456",
+                  "credits_per_usd": "100000"
+                }
+              }
+            }
+            """.data(using: .utf8)!
+            return (response, body)
+        }
+
+        let request = SomeIMBrowserLoginRequest(
+            code: "WD-TEST-0006",
+            pairToken: pairToken,
+            url: URL(string: "https://some.im/customer/login")!,
+            createdAt: Date()
+        )
+        let result = try await SomeIMClient.checkBrowserLoginStatus(
+            request: request,
+            settings: SomeIMIntegrationSettings(baseURL: "https://some.im/v1"),
+            session: session
+        )
+
+        #expect(result.state == .connected)
+        #expect(result.account?.email == "current@example.com")
+        #expect(result.account?.tenantID == "tenant-current")
+        #expect(result.account?.credits == "123456")
+        #expect(result.account?.defaultModel == "gpt-5")
+        #expect(SomeIMIntegrationStore.loadAPIKey() == "sk-test-current-payload")
+        #expect(SomeIMIntegrationStore.loadSessionToken() == "session-test-current-payload")
+    }
+
     @Test("browser login status accepts flat credentials without nested account")
     @MainActor
     func testBrowserLoginStatusAcceptsFlatCredentialsWithoutNestedAccount() async throws {
@@ -315,6 +532,129 @@ struct SomeIMBrowserLoginStatusTests {
         #expect(result.state == .connected)
         #expect(result.account == nil)
         #expect(SomeIMIntegrationStore.loadAPIKey().isEmpty)
+    }
+
+    @Test("browser login reports local credential save failure separately")
+    @MainActor
+    func testBrowserLoginReportsCredentialSaveFailureSeparately() async throws {
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.protocolClasses = [SomeIMBrowserLoginMockURLProtocol.self]
+        let session = URLSession(configuration: configuration)
+        configureWritableSomeIMSessionStoreForTest()
+        SomeIMIntegrationStore.logout()
+        SomeIMIntegrationStore._setTestSharedSessionPersistFailure(true)
+        SomeIMIntegrationStore._setTestPrivateFallbackPersistFailure(true)
+        defer {
+            session.invalidateAndCancel()
+            SomeIMBrowserLoginMockURLProtocol.handler = nil
+            SomeIMIntegrationStore._setTestSharedSessionPersistFailure(false)
+            SomeIMIntegrationStore._setTestPrivateFallbackPersistFailure(false)
+            SomeIMIntegrationStore.logout()
+            restoreSomeIMSessionStoreAfterTest()
+        }
+
+        let pairToken = String(repeating: "g", count: 64)
+        SomeIMBrowserLoginMockURLProtocol.handler = { request in
+            #expect(request.value(forHTTPHeaderField: "Authorization") == "Bearer \(pairToken)")
+            let response = HTTPURLResponse(
+                url: request.url!,
+                statusCode: 200,
+                httpVersion: nil,
+                headerFields: ["Content-Type": "application/json"]
+            )!
+            let body = """
+            {
+              "code": 0,
+              "data": {
+                "status": "connected",
+                "api_key": "sk-test-save-failure",
+                "token": "session-test-save-failure",
+                "account": {
+                  "email": "save-failure@example.com"
+                }
+              }
+            }
+            """.data(using: .utf8)!
+            return (response, body)
+        }
+
+        let request = SomeIMBrowserLoginRequest(
+            code: "WD-TEST-0007",
+            pairToken: pairToken,
+            url: URL(string: "https://some.im/customer/login")!,
+            createdAt: Date()
+        )
+        let result = try await SomeIMClient.checkBrowserLoginStatus(
+            request: request,
+            settings: SomeIMIntegrationSettings(baseURL: "https://some.im/v1"),
+            session: session
+        )
+
+        #expect(result.state == .credentialSaveFailed)
+        #expect(result.account == nil)
+        #expect(SomeIMIntegrationStore.loadAccount() == nil)
+        #expect(SomeIMIntegrationStore.loadAPIKey().isEmpty)
+    }
+
+    @Test("browser login falls back to app keychain when shared session write fails")
+    @MainActor
+    func testBrowserLoginFallsBackToPrivateKeychainWhenSharedSessionWriteFails() async throws {
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.protocolClasses = [SomeIMBrowserLoginMockURLProtocol.self]
+        let session = URLSession(configuration: configuration)
+        configureWritableSomeIMSessionStoreForTest()
+        SomeIMIntegrationStore.logout()
+        SomeIMIntegrationStore._setTestSharedSessionPersistFailure(true)
+        defer {
+            session.invalidateAndCancel()
+            SomeIMBrowserLoginMockURLProtocol.handler = nil
+            SomeIMIntegrationStore._setTestSharedSessionPersistFailure(false)
+            SomeIMIntegrationStore.logout()
+            restoreSomeIMSessionStoreAfterTest()
+        }
+
+        let pairToken = String(repeating: "h", count: 64)
+        SomeIMBrowserLoginMockURLProtocol.handler = { request in
+            #expect(request.value(forHTTPHeaderField: "Authorization") == "Bearer \(pairToken)")
+            let response = HTTPURLResponse(
+                url: request.url!,
+                statusCode: 200,
+                httpVersion: nil,
+                headerFields: ["Content-Type": "application/json"]
+            )!
+            let body = """
+            {
+              "code": 0,
+              "data": {
+                "status": "connected",
+                "api_key": "sk-test-private-fallback",
+                "token": "session-test-private-fallback",
+                "account": {
+                  "email": "fallback@example.com",
+                  "tenant_id": "tenant-fallback"
+                }
+              }
+            }
+            """.data(using: .utf8)!
+            return (response, body)
+        }
+
+        let request = SomeIMBrowserLoginRequest(
+            code: "WD-TEST-0008",
+            pairToken: pairToken,
+            url: URL(string: "https://some.im/customer/login")!,
+            createdAt: Date()
+        )
+        let result = try await SomeIMClient.checkBrowserLoginStatus(
+            request: request,
+            settings: SomeIMIntegrationSettings(baseURL: "https://some.im/v1"),
+            session: session
+        )
+
+        #expect(result.state == .connected)
+        #expect(result.account?.email == "fallback@example.com")
+        #expect(SomeIMIntegrationStore.loadAPIKey() == "sk-test-private-fallback")
+        #expect(SomeIMIntegrationStore.loadSessionToken() == "session-test-private-fallback")
     }
 
     @Test("browser login does not mark account connected without api key")

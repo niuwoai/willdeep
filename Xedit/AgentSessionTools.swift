@@ -10,6 +10,110 @@ import Foundation
 enum AgentSessionTools {
     private static let maximumTitleCharacters = 120
 
+    static func listWorkspaceSessions(
+        arguments: [String: AgentJSONValue],
+        context: AgentToolContext
+    ) async throws -> AgentToolResult {
+        guard let provider = context.workspaceSessionsSnapshotProvider else {
+            return AgentToolResult(
+                summary: "no workspace sessions",
+                payload: "Workspace session snapshot is not available in this context."
+            )
+        }
+        let includeArchived = arguments["include_archived"]?.boolValue() ?? false
+        let rawLimit = arguments["limit"]?.intValue() ?? 20
+        let limit = max(1, min(rawLimit, 100))
+        let snapshots = await MainActor.run { provider() }
+            .filter { includeArchived || !$0.isArchived }
+            .sorted {
+                if $0.isActive != $1.isActive { return $0.isActive && !$1.isActive }
+                if $0.isPinned != $1.isPinned { return $0.isPinned && !$1.isPinned }
+                return $0.lastActivityAt > $1.lastActivityAt
+            }
+            .prefix(limit)
+
+        guard !snapshots.isEmpty else {
+            return AgentToolResult(
+                summary: "no sessions",
+                payload: includeArchived
+                    ? "No sessions found for the current workspace."
+                    : "No non-archived sessions found for the current workspace."
+            )
+        }
+
+        var lines: [String] = [
+            "workspace_sessions: \(snapshots.count)",
+            "include_archived: \(includeArchived)"
+        ]
+        for (offset, session) in snapshots.enumerated() {
+            var flags: [String] = []
+            if session.isActive { flags.append("active") }
+            if session.isPinned { flags.append("pinned") }
+            if session.isArchived { flags.append("archived") }
+            if session.isResponding { flags.append("responding") }
+            if session.isAwaitingProviderSlot { flags.append("provider-queued") }
+            if session.queuedMessageCount > 0 { flags.append("queued_messages=\(session.queuedMessageCount)") }
+            if session.titleIsUserSet { flags.append("title_locked") }
+            let flagText = flags.isEmpty ? "normal" : flags.joined(separator: ",")
+            lines.append("- #\(offset + 1) \(session.title) [\(flagText)] id=\(session.id.uuidString) updated=\(isoString(session.updatedAt)) mode=\(session.interactionMode.rawValue)")
+        }
+
+        let jsonObject: [String: Any] = [
+            "sessions": snapshots.map { session in
+                [
+                    "id": session.id.uuidString,
+                    "title": session.title,
+                    "workspace_root_path": session.workspaceRootPath ?? NSNull(),
+                    "workspace_display_name": session.workspaceDisplayName,
+                    "is_active": session.isActive,
+                    "is_pinned": session.isPinned,
+                    "is_archived": session.isArchived,
+                    "is_responding": session.isResponding,
+                    "is_awaiting_provider_slot": session.isAwaitingProviderSlot,
+                    "queued_message_count": session.queuedMessageCount,
+                    "updated_at": isoString(session.updatedAt),
+                    "last_activity_at": isoString(session.lastActivityAt),
+                    "interaction_mode": session.interactionMode.rawValue,
+                    "approval_mode": session.approvalMode.rawValue,
+                    "execution_agent": session.executionAgent.rawValue,
+                    "title_is_user_set": session.titleIsUserSet
+                ] as [String: Any]
+            }
+        ]
+        if let json = jsonPayload(jsonObject) {
+            lines.append("json:")
+            lines.append(json)
+        }
+
+        return AgentToolResult(
+            summary: "\(snapshots.count) workspace session\(snapshots.count == 1 ? "" : "s")",
+            payload: lines.joined(separator: "\n")
+        )
+    }
+
+    static func suggestSessionTitle(
+        context: AgentToolContext
+    ) async throws -> AgentToolResult {
+        guard let provider = context.sessionTitleSuggestionProvider else {
+            return AgentToolResult(
+                summary: "no title suggestion",
+                payload: "Session title suggestion is not available in this context."
+            )
+        }
+        let snapshot = await provider()
+        let title = snapshot.suggestedTitle?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        let jsonObject: [String: Any] = [
+            "current_title": snapshot.currentTitle,
+            "suggested_title": title.isEmpty ? NSNull() : title,
+            "model": snapshot.modelID ?? NSNull(),
+            "rename_recommended": !title.isEmpty && title != snapshot.currentTitle
+        ]
+        return AgentToolResult(
+            summary: title.isEmpty ? "no title suggestion" : "suggested title: \(title)",
+            payload: jsonPayload(jsonObject) ?? "{}"
+        )
+    }
+
     static func renameSession(
         arguments: [String: AgentJSONValue],
         context: AgentToolContext
@@ -70,12 +174,20 @@ enum AgentSessionTools {
         )
     }
 
-    private static func jsonPayload(_ object: [String: String]) -> String {
+    private static func jsonPayload(_ object: [String: Any]) -> String? {
         guard JSONSerialization.isValidJSONObject(object),
               let data = try? JSONSerialization.data(withJSONObject: object, options: [.sortedKeys]),
               let value = String(data: data, encoding: .utf8) else {
-            return "{}"
+            return nil
         }
         return value
+    }
+
+    private static func jsonPayload(_ object: [String: String]) -> String {
+        jsonPayload(object as [String: Any]) ?? "{}"
+    }
+
+    private static func isoString(_ date: Date) -> String {
+        ISO8601DateFormatter().string(from: date)
     }
 }
