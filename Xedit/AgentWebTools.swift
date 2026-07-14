@@ -3,8 +3,8 @@
 //  WillDeep
 //
 //  Built-in network tools: `web_search` (configured Exa / Brave
-//  provider) and `web_fetch` (GET a public URL, reduce HTML to readable
-//  text).
+//  provider, with some.im managed fallback) and `web_fetch` (GET a
+//  public URL, reduce HTML to readable text).
 //
 //  Risk posture mirrors the run_command classifier's stance on
 //  curl/wget (both are flagged dangerous there): arbitrary fetching is
@@ -156,8 +156,17 @@ enum AgentWebTools {
 
         let provider = resolveSearchProvider()
         guard let provider else {
+            if canUseSomeIMManagedSearch() {
+                do {
+                    return try await performSomeIMManagedSearch(query: query, count: count)
+                } catch {
+                    throw AgentToolError.invalidArgument(
+                        "some.im managed web search is unavailable (\(error.localizedDescription)). Ask the user to add an Exa API key or a Brave Search API key in Settings → Agent → Web tools."
+                    )
+                }
+            }
             throw AgentToolError.invalidArgument(
-                "No web search API key configured. Ask the user to add an Exa API key in Settings → Agent → Web tools, or choose Brave and add a Brave Search API key."
+                "No web search API key configured. Ask the user to sign in to some.im for managed search, or add an Exa API key / Brave Search API key in Settings → Agent → Web tools."
             )
         }
 
@@ -189,6 +198,11 @@ enum AgentWebTools {
             if !braveKey.isEmpty { return .brave(apiKey: braveKey) }
             return nil
         }
+    }
+
+    private static func canUseSomeIMManagedSearch() -> Bool {
+        SomeIMIntegrationStore.loadSettings().enabled
+            && !SomeIMIntegrationStore.loadAPIKey().trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 
     private static func performExaSearch(query: String, count: Int, apiKey: String) async throws -> AgentToolResult {
@@ -285,6 +299,42 @@ enum AgentWebTools {
         }
 
         return try formatBraveResults(data: data, query: query)
+    }
+
+    private static func performSomeIMManagedSearch(query: String, count: Int) async throws -> AgentToolResult {
+        let settings = SomeIMIntegrationStore.loadSettings().normalized
+        let apiKey = SomeIMIntegrationStore.loadAPIKey().trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !apiKey.isEmpty else { throw AgentClientError.missingAPIKey }
+        let endpoint = try someIMPublicAPIEndpoint(from: settings.baseURL, suffix: "customer/web-search")
+        let body = SomeIMSearchRequest(query: query, count: count, provider: "auto")
+        let encodedBody: Data
+        do {
+            encodedBody = try JSONEncoder().encode(body)
+        } catch {
+            throw AgentToolError.invalidArgument("Could not encode some.im web search request: \(error.localizedDescription)")
+        }
+
+        var request = URLRequest(url: endpoint)
+        request.httpMethod = "POST"
+        request.timeoutInterval = fetchTimeout
+        request.httpBody = encodedBody
+        request.setValue("application/json", forHTTPHeaderField: "Accept")
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
+        AgentNetworkSupport.applyStandardHeaders(to: &request)
+
+        let session = makeSession()
+        defer { session.finishTasksAndInvalidate() }
+        let (data, response) = try await session.data(for: request)
+
+        guard let http = response as? HTTPURLResponse else {
+            throw AgentToolError.invalidArgument("Non-HTTP response from some.im managed web search.")
+        }
+        guard (200..<300).contains(http.statusCode) else {
+            let body = String(data: data.prefix(400), encoding: .utf8) ?? ""
+            throw AgentToolError.httpFailed(http.statusCode, "some.im managed web search: \(body)")
+        }
+        return try formatSomeIMManagedResults(data: data, query: query)
     }
 
     // MARK: - Exa response parsing (split out for tests)
@@ -393,6 +443,101 @@ enum AgentWebTools {
         }
         var web: WebSection?
         var news: NewsSection?
+    }
+
+    // MARK: - some.im managed response parsing
+
+    private struct SomeIMSearchRequest: Encodable {
+        var query: String
+        var count: Int
+        var provider: String
+    }
+
+    private struct SomeIMEnvelope<T: Decodable>: Decodable {
+        var data: T
+    }
+
+    private struct SomeIMSearchResponse: Decodable {
+        struct Item: Decodable {
+            var title: String?
+            var url: String?
+            var snippet: String?
+            var publishedDate: String?
+            var author: String?
+
+            enum CodingKeys: String, CodingKey {
+                case title
+                case url
+                case snippet
+                case publishedDate = "published_date"
+                case author
+            }
+        }
+
+        var query: String?
+        var provider: String?
+        var resultCount: Int?
+        var results: [Item]
+
+        enum CodingKeys: String, CodingKey {
+            case query
+            case provider
+            case resultCount = "result_count"
+            case results
+        }
+    }
+
+    static func formatSomeIMManagedResults(data: Data, query: String) throws -> AgentToolResult {
+        let decoded: SomeIMSearchResponse
+        do {
+            if let envelope = try? JSONDecoder().decode(SomeIMEnvelope<SomeIMSearchResponse>.self, from: data) {
+                decoded = envelope.data
+            } else {
+                decoded = try JSONDecoder().decode(SomeIMSearchResponse.self, from: data)
+            }
+        } catch {
+            throw AgentToolError.invalidArgument("Could not parse some.im managed web search response: \(error.localizedDescription)")
+        }
+
+        guard !decoded.results.isEmpty else {
+            return AgentToolResult(
+                summary: "No some.im managed results for “\(query)”",
+                payload: "some.im managed web search for \"\(query)\" returned no results. Try different keywords."
+            )
+        }
+
+        let trimmedProvider = decoded.provider?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let provider = trimmedProvider.flatMap { $0.isEmpty ? nil : $0 } ?? "some.im"
+        var lines: [String] = ["Web search results for \"\(query)\" (some.im managed / \(provider)):", ""]
+        var references: [AgentSourceReference] = []
+        for (index, item) in decoded.results.enumerated() {
+            let title = condenseWhitespace(decodeHTMLEntities(stripTags(item.title ?? "")))
+            let snippet = condenseWhitespace(decodeHTMLEntities(stripTags(item.snippet ?? "")))
+            lines.append("\(index + 1). \(title.isEmpty ? "(untitled)" : title)")
+            lines.append("   \(item.url ?? "")")
+            if let reference = sourceReference(title: title, rawURL: item.url, toolName: "web_search") {
+                references.append(reference)
+            }
+            var metadata: [String] = []
+            if let publishedDate = item.publishedDate, !publishedDate.isEmpty {
+                metadata.append("published: \(publishedDate)")
+            }
+            if let author = item.author, !author.isEmpty {
+                metadata.append("author: \(condenseWhitespace(author))")
+            }
+            if !metadata.isEmpty {
+                lines.append("   \(metadata.joined(separator: " | "))")
+            }
+            if !snippet.isEmpty {
+                lines.append("   \(snippet)")
+            }
+            lines.append("")
+        }
+        return AgentToolResult(
+            summary: "\(decoded.results.count) some.im managed result\(decoded.results.count == 1 ? "" : "s") for “\(query)”",
+            payload: lines.joined(separator: "\n").trimmingCharacters(in: .whitespacesAndNewlines),
+            references: references
+        )
     }
 
     static func formatBraveResults(data: Data, query: String) throws -> AgentToolResult {
@@ -623,6 +768,17 @@ enum AgentWebTools {
         configuration.httpCookieAcceptPolicy = .never
         configuration.httpShouldSetCookies = false
         return URLSession(configuration: configuration)
+    }
+
+    private static func someIMPublicAPIEndpoint(from baseURL: String, suffix: String) throws -> URL {
+        guard var components = URLComponents(string: baseURL.trimmingCharacters(in: .whitespacesAndNewlines)) else {
+            throw AgentClientError.invalidResponse
+        }
+        let cleaned = suffix.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+        components.path = "/api/v1/\(cleaned)"
+        components.query = nil
+        guard let url = components.url else { throw AgentClientError.invalidResponse }
+        return url
     }
 
     private static func redacted(_ url: URL) -> String {

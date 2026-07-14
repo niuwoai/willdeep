@@ -10,6 +10,15 @@
 import AppKit
 import SwiftUI
 
+private enum SessionIdentityMetrics {
+    static let barHeight: CGFloat = 42
+    static let controlHeight: CGFloat = 22
+    static let dividerHeight: CGFloat = 18
+    static let dividerPadding: CGFloat = 8
+    static let popoverWidth: CGFloat = 330
+    static let hostnameCommand = "hostname"
+}
+
 struct AgentSidePanelTerminalView: View {
     @EnvironmentObject var appState: AppState
 
@@ -24,6 +33,8 @@ private struct AgentSidePanelTerminalContentView: View {
     @ObservedObject var controller: AgentInteractiveTerminalController
     @State private var renameDraft: TerminalShortcutRenameDraft?
     @State private var bootstrapTask: Task<Void, Never>?
+    @State private var showsHostVerificationPopover = false
+    @State private var hostnameCommandCopied = false
 
     private var settings: EditorTerminalSettings {
         appState.editorTerminalSettings.normalized()
@@ -50,6 +61,10 @@ private struct AgentSidePanelTerminalContentView: View {
     /// off-theme purple regardless of the chosen skin).
     private var skinAccent: Color {
         appState.editorSettings.interfaceSkin.palette.accent
+    }
+
+    private var interfacePalette: EditorInterfaceSkinPalette {
+        appState.editorSettings.interfaceSkin.palette
     }
 
     var body: some View {
@@ -83,6 +98,10 @@ private struct AgentSidePanelTerminalContentView: View {
             // Live-apply font / color / cursor changes (e.g. switching to a
             // Nerd Font or the skin palette) to already-open tabs.
             controller.applyAppearanceToAll(settings, skin: skinColors)
+        }
+        .onCompatibleChange(of: controller.activeTabID) { _, _ in
+            showsHostVerificationPopover = false
+            hostnameCommandCopied = false
         }
     }
 
@@ -281,6 +300,7 @@ private struct AgentSidePanelTerminalContentView: View {
         }
         .frame(height: 30)
         .padding(.trailing, 6)
+        .background(interfacePalette.panelFill.opacity(0.72))
     }
 
     private func tabChip(_ tab: AgentTerminalTab) -> some View {
@@ -288,11 +308,12 @@ private struct AgentSidePanelTerminalContentView: View {
         return HStack(spacing: 5) {
             Image(systemName: tab.kind.isSSH ? "network" : "terminal")
                 .font(.system(size: 9))
-                .foregroundStyle(tab.isRunning ? Color.green : Color.secondary)
+                .foregroundStyle(tab.isRunning ? interfacePalette.accent : interfacePalette.secondaryText)
             Text(tab.title)
                 .font(.system(size: 11))
                 .lineLimit(1)
                 .truncationMode(.middle)
+                .foregroundStyle(isActive ? interfacePalette.primaryText : interfacePalette.secondaryText)
                 // 标题封顶,避免 `rocky@host:/` 这种长 OSC 标题把
                 // 整个 chip 撑得占满侧栏、把 `+` 顶出去。
                 .frame(maxWidth: 130)
@@ -303,17 +324,17 @@ private struct AgentSidePanelTerminalContentView: View {
                     .font(.system(size: 8, weight: .semibold))
             }
             .buttonStyle(.plain)
-            .foregroundStyle(.secondary)
+            .foregroundStyle(interfacePalette.secondaryText)
         }
         .padding(.horizontal, 8)
         .padding(.vertical, 4)
         .background(
             RoundedRectangle(cornerRadius: 6, style: .continuous)
-                .fill(isActive ? skinAccent.opacity(0.18) : Color.primary.opacity(0.05))
+                .fill(isActive ? interfacePalette.selectionFill : interfacePalette.controlFill.opacity(0.42))
         )
         .overlay(
             RoundedRectangle(cornerRadius: 6, style: .continuous)
-                .stroke(originBadgeColor(tab), lineWidth: isOpenedByCurrentSession(tab) ? 1 : 0)
+                .stroke(tabBorderColor(tab, isActive: isActive), lineWidth: 1)
         )
         .help(tabTooltip(tab))
         .contentShape(Rectangle())
@@ -368,47 +389,160 @@ private struct AgentSidePanelTerminalContentView: View {
     }
 
     private var sessionIdentityBar: some View {
-        HStack(spacing: 8) {
+        HStack(spacing: 0) {
             if let tab = controller.activeTab {
-                Image(systemName: tab.kind.isSSH ? "network" : "terminal")
-                    .font(.system(size: 11, weight: .semibold))
-                    .foregroundStyle(tab.isRunning ? Color.green : Color.secondary)
-                    .frame(width: 18)
-                VStack(alignment: .leading, spacing: 1) {
-                    HStack(spacing: 5) {
-                        Text(sessionKindLabel(tab))
-                            .font(.system(size: 11, weight: .semibold))
-                        Text(sessionTargetLabel(tab))
-                            .font(.system(size: 11, weight: .medium))
-                            .lineLimit(1)
-                            .truncationMode(.middle)
-                    }
-                    Text(sessionDetailLabel(tab))
-                        .font(.system(size: 10, weight: .medium))
-                        .foregroundStyle(.secondary)
-                        .lineLimit(1)
-                        .truncationMode(.tail)
+                HStack(spacing: 6) {
+                    Image(systemName: tab.kind.isSSH ? "network" : "terminal")
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundStyle(tab.isRunning ? interfacePalette.accent : interfacePalette.secondaryText)
+                    Text(sessionKindLabel(tab))
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundStyle(interfacePalette.primaryText)
                 }
-                Spacer(minLength: 6)
-                Text(tab.isRunning ? L10n.AgentTerminal.sessionRunning : L10n.AgentTerminal.sessionExited)
-                    .font(.system(size: 10, weight: .semibold))
-                    .foregroundStyle(tab.isRunning ? Color.green : Color.secondary)
-                    .padding(.horizontal, 7)
-                    .frame(height: 20)
-                    .background(
-                        Capsule(style: .continuous)
-                            .fill(tab.isRunning ? Color.green.opacity(0.11) : Color.primary.opacity(0.06))
-                    )
+                .fixedSize()
+
+                sessionIdentityDivider
+
+                Text(sessionTargetLabel(tab))
+                    .font(.system(size: 11, weight: .medium))
+                    .foregroundStyle(interfacePalette.secondaryText)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+                    .help(sessionDetailLabel(tab))
+
+                Spacer(minLength: 8)
+
+                sessionStatusPill(tab)
+
+                if !tab.kind.isSSH {
+                    sessionIdentityDivider
+                    hostVerificationButton
+                }
             } else {
                 Text(L10n.AgentTerminal.disconnectedRuntime)
                     .font(.system(size: 11, weight: .medium))
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(interfacePalette.secondaryText)
                 Spacer()
             }
         }
-        .frame(height: 38)
+        .frame(height: SessionIdentityMetrics.barHeight)
         .padding(.horizontal, 10)
-        .background(terminalBackground.opacity(0.96))
+        .background(interfacePalette.panelFill.opacity(0.96))
+    }
+
+    private var sessionIdentityDivider: some View {
+        Rectangle()
+            .fill(interfacePalette.hairline)
+            .frame(width: 1, height: SessionIdentityMetrics.dividerHeight)
+            .padding(.horizontal, SessionIdentityMetrics.dividerPadding)
+    }
+
+    private func sessionStatusPill(_ tab: AgentTerminalTab) -> some View {
+        let color = tab.isRunning ? interfacePalette.accent : interfacePalette.secondaryText
+        return Text(tab.isRunning ? L10n.AgentTerminal.sessionRunning : L10n.AgentTerminal.sessionExited)
+            .font(.system(size: 10, weight: .semibold))
+            .foregroundStyle(color)
+            .padding(.horizontal, 8)
+            .frame(height: SessionIdentityMetrics.controlHeight)
+            .background(
+                Capsule(style: .continuous)
+                    .fill(color.opacity(0.11))
+            )
+            .overlay(
+                Capsule(style: .continuous)
+                    .stroke(color.opacity(0.22), lineWidth: 1)
+            )
+    }
+
+    private var hostVerificationButton: some View {
+        Button {
+            hostnameCommandCopied = false
+            showsHostVerificationPopover.toggle()
+        } label: {
+            HStack(spacing: 5) {
+                Image(systemName: "shield")
+                    .font(.system(size: 10, weight: .semibold))
+                Text(L10n.AgentTerminal.sessionVerifyHost)
+                    .font(.system(size: 10, weight: .semibold))
+                Image(systemName: "chevron.down")
+                    .font(.system(size: 7, weight: .bold))
+                    .rotationEffect(.degrees(showsHostVerificationPopover ? 180 : 0))
+            }
+            .foregroundStyle(interfacePalette.secondaryAccent)
+            .padding(.horizontal, 8)
+            .frame(height: SessionIdentityMetrics.controlHeight)
+            .background(
+                Capsule(style: .continuous)
+                    .fill(interfacePalette.secondaryAccent.opacity(0.08))
+            )
+            .overlay(
+                Capsule(style: .continuous)
+                    .stroke(interfacePalette.secondaryAccent.opacity(0.22), lineWidth: 1)
+            )
+        }
+        .buttonStyle(.plain)
+        .help(L10n.AgentTerminal.localSessionCaution)
+        .popover(isPresented: $showsHostVerificationPopover, arrowEdge: .bottom) {
+            hostVerificationPopover
+        }
+    }
+
+    private var hostVerificationPopover: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(spacing: 8) {
+                Image(systemName: "shield")
+                    .font(.system(size: 16, weight: .semibold))
+                    .foregroundStyle(interfacePalette.secondaryAccent)
+                Text(L10n.AgentTerminal.sessionVerifyHostTitle)
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(interfacePalette.primaryText)
+            }
+
+            Text(L10n.AgentTerminal.localSessionCaution)
+                .font(.system(size: 12, weight: .regular))
+                .foregroundStyle(interfacePalette.primaryText)
+                .fixedSize(horizontal: false, vertical: true)
+
+            Rectangle()
+                .fill(interfacePalette.hairline)
+                .frame(height: 1)
+
+            Button(action: copyHostnameCommand) {
+                HStack(spacing: 7) {
+                    Image(systemName: hostnameCommandCopied ? "checkmark" : "doc.on.doc")
+                        .font(.system(size: 11, weight: .semibold))
+                    Text(
+                        hostnameCommandCopied
+                            ? L10n.AgentTerminal.sessionHostnameCommandCopied
+                            : L10n.AgentTerminal.sessionCopyHostnameCommand
+                    )
+                    .font(.system(size: 11, weight: .semibold))
+                    Spacer(minLength: 0)
+                }
+                .foregroundStyle(interfacePalette.primaryText)
+                .padding(.horizontal, 10)
+                .frame(height: 30)
+                .background(
+                    RoundedRectangle(cornerRadius: 7, style: .continuous)
+                        .fill(interfacePalette.controlFill)
+                )
+                .overlay(
+                    RoundedRectangle(cornerRadius: 7, style: .continuous)
+                        .stroke(interfacePalette.hairline, lineWidth: 1)
+                )
+            }
+            .buttonStyle(.plain)
+        }
+        .padding(14)
+        .frame(width: SessionIdentityMetrics.popoverWidth)
+        .background(interfacePalette.panelFill)
+    }
+
+    private func copyHostnameCommand() {
+        let pasteboard = NSPasteboard.general
+        pasteboard.clearContents()
+        pasteboard.setString(SessionIdentityMetrics.hostnameCommand, forType: .string)
+        hostnameCommandCopied = true
     }
 
     // MARK: Terminal surface
@@ -470,8 +604,11 @@ private struct AgentSidePanelTerminalContentView: View {
         return origin == active
     }
 
-    private func originBadgeColor(_ tab: AgentTerminalTab) -> Color {
-        isOpenedByCurrentSession(tab) ? skinAccent.opacity(0.55) : Color.clear
+    private func tabBorderColor(_ tab: AgentTerminalTab, isActive: Bool) -> Color {
+        if isOpenedByCurrentSession(tab) {
+            return interfacePalette.accent.opacity(0.55)
+        }
+        return isActive ? interfacePalette.hairline.opacity(0.92) : interfacePalette.hairline.opacity(0.56)
     }
 
     private func tabTooltip(_ tab: AgentTerminalTab) -> String {

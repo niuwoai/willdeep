@@ -63,4 +63,27 @@ struct AppUpdateCheckerTests {
         #expect(meta.version == "1.63.0")
         #expect(meta.downloadURL.absoluteString == "https://meta.niuwoai.com/willdeep/WillDeep.dmg")
     }
+
+    @Test
+    func updateMetaDecodesSomeIMEnvelope() throws {
+        let data = try #require("""
+        {
+          "code": 0,
+          "data": {
+            "update_available": true,
+            "item": {
+              "latest_version": "1.64.0-rc1",
+              "download_url": "https://some.im/downloads/WillDeep.dmg",
+              "release_notes": "Managed update"
+            }
+          }
+        }
+        """.data(using: .utf8))
+
+        let meta = try AppUpdateChecker.decodeUpdateMeta(from: data)
+
+        #expect(meta.version == "1.64.0-rc1")
+        #expect(meta.downloadURL.absoluteString == "https://some.im/downloads/WillDeep.dmg")
+        #expect(meta.notes == "Managed update")
+    }
 }

@@ -31,8 +31,25 @@ nonisolated enum L10n {
 
     enum AppUpdate {
         static let download = String(localized: "app-update.download", defaultValue: "Download")
+        static let downloadFailedTitle = String(localized: "app-update.download-failed-title", defaultValue: "Download Failed")
+        static func downloadedMessage(_ a1: String) -> String {
+            let template = String(localized: "app-update.downloaded-message", defaultValue: "%@ has been downloaded. Quit WillDeep and open the installer now?")
+            return String(format: template, a1)
+        }
+        static func downloadedTitle(_ a1: String) -> String {
+            let template = String(localized: "app-update.downloaded-title", defaultValue: "WillDeep %@ is ready")
+            return String(format: template, a1)
+        }
         static let later = String(localized: "app-update.later", defaultValue: "Later")
+        static let quitAndInstall = String(localized: "app-update.quit-and-install", defaultValue: "Quit and Update")
         static let releaseNotes = String(localized: "app-update.release-notes", defaultValue: "Release Notes")
+        static let sidebarAction = String(localized: "app-update.sidebar-action", defaultValue: "Update")
+        static let sidebarActionHelp = String(localized: "app-update.sidebar-action-help", defaultValue: "Download the latest WillDeep release.")
+        static let sidebarSubtitle = String(localized: "app-update.sidebar-subtitle", defaultValue: "A newer build is available.")
+        static func sidebarTitle(_ a1: String) -> String {
+            let template = String(localized: "app-update.sidebar-title", defaultValue: "Update %@")
+            return String(format: template, a1)
+        }
         static func message(_ a1: String, _ a2: String) -> String {
             let template = String(localized: "app-update.message", defaultValue: "Current version: %@\nLatest version: %@")
             return String(format: template, a1, a2)
@@ -108,111 +125,6 @@ nonisolated enum L10n {
         static let filenamePrefix = String(localized: "agent-selection.filename-prefix", defaultValue: "Selection")
         static let selectionAttachedHint = String(localized: "agent-selection.selection-attached-hint", defaultValue: "Selection attached · Tools available")
         static let untitledFile = String(localized: "agent-selection.untitled-file", defaultValue: "Untitled")
-    }
-
-    enum AgentImageEditor {
-        static let brushModeAdd = String(localized: "agent-image-editor.brush-mode.add", defaultValue: "Add")
-        static let brushModeEraser = String(localized: "agent-image-editor.brush-mode.eraser", defaultValue: "Eraser")
-        static let brushModePicker = String(localized: "agent-image-editor.brush-mode-picker", defaultValue: "Brush Mode")
-        static let chatContextLead = String(localized: "agent-image-editor.chat-context-lead", defaultValue: "Continue collaborating based on the current image mask editor panel.")
-        static let chatSubmittedLead = String(localized: "agent-image-editor.chat-submitted-lead", defaultValue: "Submitted an image mask edit task; track progress in the media tasks sidebar.")
-        static let clearHelp = String(localized: "agent-image-editor.clear-help", defaultValue: "Clear all selections and strokes")
-        static let contextAsset = String(localized: "agent-image-editor.context.asset", defaultValue: "Asset")
-        static let contextAssetKind = String(localized: "agent-image-editor.context.asset-kind", defaultValue: "Asset Kind")
-        static let contextCardAnchors = String(localized: "agent-image-editor.context-card.anchors", defaultValue: "Production Anchors")
-        static let contextCardGeneric = String(localized: "agent-image-editor.context-card.generic", defaultValue: "Edit Handoff")
-        static let contextEpisode = String(localized: "agent-image-editor.context.episode", defaultValue: "Episode")
-        static let contextProject = String(localized: "agent-image-editor.context.project", defaultValue: "Project")
-        static let contextReviewItem = String(localized: "agent-image-editor.context.review-item", defaultValue: "Review Item")
-        static let contextShot = String(localized: "agent-image-editor.context.shot", defaultValue: "Shot")
-        static let emptySubtitle = String(localized: "agent-image-editor.empty-subtitle", defaultValue: "Click the mask button on an image output in Media Tasks to send it here for editing.")
-        static let emptyTitle = String(localized: "agent-image-editor.empty-title", defaultValue: "Select an image")
-        static func exportFailed(_ a1: String) -> String {
-            let template = String(localized: "agent-image-editor.export-failed", defaultValue: "Export failed: %@")
-            return String(format: template, a1)
-        }
-        static let exportHelp = String(localized: "agent-image-editor.export-help", defaultValue: "Export mask")
-        static func exportedEraseSuffix(_ a1: String) -> String {
-            let template = String(localized: "agent-image-editor.exported.erase-suffix", defaultValue: ", %@ eraser strokes")
-            return String(format: template, a1)
-        }
-        static func exportedMask(_ a1: String, _ a2: String, _ a3: String) -> String {
-            let template = String(localized: "agent-image-editor.exported.mask", defaultValue: "Exported mask (%@ selections/strokes%@): %@")
-            return String(format: template, a1, a2, a3)
-        }
-        static func exportedMaskInverted(_ a1: String, _ a2: String, _ a3: String) -> String {
-            let template = String(localized: "agent-image-editor.exported.mask-inverted", defaultValue: "Exported inverted mask (%@ selections/strokes%@): %@")
-            return String(format: template, a1, a2, a3)
-        }
-        static let exportedSeedSuffix = String(localized: "agent-image-editor.exported.seed-suffix", defaultValue: ", with the previous mask base")
-        static let genericEditHint = String(localized: "agent-image-editor.generic-edit-hint", defaultValue: "Generic image editing. Sending to chat exports the mask first when a selection exists and attaches edit_image_with_mask parameters.")
-        static let invertHelp = String(localized: "agent-image-editor.invert-help", defaultValue: "When on, the white edit region becomes everything outside the selection — good for keeping the subject and repainting the background.")
-        static let invertToggle = String(localized: "agent-image-editor.invert-toggle", defaultValue: "Invert Mask")
-        static let maskToolBrush = String(localized: "agent-image-editor.mask-tool.brush", defaultValue: "Brush")
-        static let maskToolBrushHelp = String(localized: "agent-image-editor.mask-tool.brush-help", defaultValue: "Paint over the areas to erase or repaint. Switch between add and eraser to refine mask edges, then export a same-size PNG mask. White areas become the edit region.")
-        static let maskToolPicker = String(localized: "agent-image-editor.mask-tool-picker", defaultValue: "Mask Tool")
-        static let maskToolRectangle = String(localized: "agent-image-editor.mask-tool.rectangle", defaultValue: "Rectangle")
-        static let maskToolRectangleHelp = String(localized: "agent-image-editor.mask-tool.rectangle-help", defaultValue: "Drag to select the areas to erase or repaint. You can select multiple areas, then export a same-size PNG mask. White areas become the edit region.")
-        static let needMaskFirst = String(localized: "agent-image-editor.need-mask-first", defaultValue: "Select an area and export a mask first.")
-        static let openReplicateSettings = String(localized: "agent-image-editor.open-replicate-settings", defaultValue: "Open Replicate Settings")
-        static let operationErase = String(localized: "agent-image-editor.operation.erase", defaultValue: "Erase")
-        static let operationInpaint = String(localized: "agent-image-editor.operation.inpaint", defaultValue: "Inpaint")
-        static let operationMissingPromptErase = String(localized: "agent-image-editor.operation.missing-prompt-erase", defaultValue: "Enter an erase prompt, or leave it empty to use the default erase prompt.")
-        static let operationMissingPromptInpaint = String(localized: "agent-image-editor.operation.missing-prompt-inpaint", defaultValue: "Enter an inpaint prompt.")
-        static let operationPicker = String(localized: "agent-image-editor.operation-picker", defaultValue: "Mode")
-        static let operationPromptPlaceholderErase = String(localized: "agent-image-editor.operation.prompt-placeholder-erase", defaultValue: "Prompt (optional): describe what to erase or clean up")
-        static let operationPromptPlaceholderInpaint = String(localized: "agent-image-editor.operation.prompt-placeholder-inpaint", defaultValue: "Prompt: describe what to paint into the selection")
-        static let operationSubmitErase = String(localized: "agent-image-editor.operation.submit-erase", defaultValue: "Submit Erase")
-        static let operationSubmitInpaint = String(localized: "agent-image-editor.operation.submit-inpaint", defaultValue: "Submit Inpaint")
-        static let panelTitle = String(localized: "agent-image-editor.panel-title", defaultValue: "Image Mask")
-        static let providerPicker = String(localized: "agent-image-editor.provider-picker", defaultValue: "Provider")
-        static let replicateHelpErase = String(localized: "agent-image-editor.replicate.help-erase", defaultValue: "Replicate prefers the version entered here; when empty, the image-erase version from Settings → Integrations → Replicate is used. Erase can run without a prompt — a basic background-repair prompt is added automatically on submit.")
-        static let replicateHelpInpaint = String(localized: "agent-image-editor.replicate.help-inpaint", defaultValue: "Replicate prefers the version entered here; when empty, the mask-inpaint version from Settings → Integrations → Replicate is used. The model must accept image, mask, and prompt inputs.")
-        static let replicateNeedEraseVersion = String(localized: "agent-image-editor.replicate.need-erase-version", defaultValue: "Enter a Replicate version hash, or configure a default image-erase version in Settings.")
-        static let replicateNeedInpaintVersion = String(localized: "agent-image-editor.replicate.need-inpaint-version", defaultValue: "Enter a Replicate version hash, or configure a default mask-inpaint version in Settings.")
-        static let replicateNeedToken = String(localized: "agent-image-editor.replicate.need-token", defaultValue: "Configure a Replicate API token first, or set the REPLICATE_API_TOKEN environment variable.")
-        static let replicateVersionPlaceholderErase = String(localized: "agent-image-editor.replicate.version-placeholder-erase", defaultValue: "Replicate version hash; leave empty for the default erase version")
-        static let replicateVersionPlaceholderInpaint = String(localized: "agent-image-editor.replicate.version-placeholder-inpaint", defaultValue: "Replicate version hash; leave empty for the default mask-inpaint version")
-        static let seedMaskHelp = String(localized: "agent-image-editor.seed-mask-help", defaultValue: "Loaded the previous mask as a base. Exports will keep it and overlay new selections and strokes.")
-        static let sendToChat = String(localized: "agent-image-editor.send-to-chat", defaultValue: "Send to Chat")
-        static let sendToChatHelp = String(localized: "agent-image-editor.send-to-chat-help", defaultValue: "Send the current image and mask path to the chat")
-        static let someIMEndpointPlaceholder = String(localized: "agent-image-editor.someim.endpoint-placeholder", defaultValue: "some.im endpoint, e.g. images/edits")
-        static let someIMHelp = String(localized: "agent-image-editor.someim.help", defaultValue: "some.im submits with the image, mask, and prompt fields; adjust the endpoint to match your relay service routing. Erase mode automatically uses a basic erase prompt when no prompt is given.")
-        static let someIMModelPlaceholder = String(localized: "agent-image-editor.someim.model-placeholder", defaultValue: "some.im model; leave empty to use the default image model")
-        static func submitFailed(_ a1: String) -> String {
-            let template = String(localized: "agent-image-editor.submit-failed", defaultValue: "Submission failed: %@")
-            return String(format: template, a1)
-        }
-        static let submitSectionTitle = String(localized: "agent-image-editor.submit-section-title", defaultValue: "Submit Mask Edit")
-        static func submittedReplicate(_ a1: String) -> String {
-            let template = String(localized: "agent-image-editor.submitted-replicate", defaultValue: "Submitted Replicate task: %@")
-            return String(format: template, a1)
-        }
-        static func submittedSomeIM(_ a1: String) -> String {
-            let template = String(localized: "agent-image-editor.submitted-someim", defaultValue: "Submitted some.im task: %@")
-            return String(format: template, a1)
-        }
-        static let submitting = String(localized: "agent-image-editor.submitting", defaultValue: "Submitting")
-        static func submittingStatus(_ a1: String) -> String {
-            let template = String(localized: "agent-image-editor.submitting-status", defaultValue: "Submitting %@ task...")
-            return String(format: template, a1)
-        }
-        static func summaryFull(_ a1: String, _ a2: String, _ a3: String, _ a4: String, _ a5: String, _ a6: String, _ a7: String, _ a8: String) -> String {
-            let template = String(localized: "agent-image-editor.summary.full", defaultValue: "Selection: %@%@ rectangles, %@ brush strokes, %@ eraser strokes, rectangles ≈ %@ px, strokes ≈ %@ px, eraser ≈ %@ px%@")
-            return String(format: template, a1, a2, a3, a4, a5, a6, a7, a8)
-        }
-        static let summaryInvertedBackgroundSuffix = String(localized: "agent-image-editor.summary.inverted-background-suffix", defaultValue: ", background inverted")
-        static let summaryInvertedSuffix = String(localized: "agent-image-editor.summary.inverted-suffix", defaultValue: ", inverted")
-        static func summaryRect(_ a1: String, _ a2: String, _ a3: String, _ a4: String, _ a5: String) -> String {
-            let template = String(localized: "agent-image-editor.summary.rect", defaultValue: "Selection: x %@, y %@, w %@, h %@%@")
-            return String(format: template, a1, a2, a3, a4, a5)
-        }
-        static func summarySeedOnly(_ a1: String) -> String {
-            let template = String(localized: "agent-image-editor.summary.seed-only", defaultValue: "Selection: previous mask base%@")
-            return String(format: template, a1)
-        }
-        static let summarySeedPrefix = String(localized: "agent-image-editor.summary.seed-prefix", defaultValue: "previous mask + ")
-        static let undoHelp = String(localized: "agent-image-editor.undo-help", defaultValue: "Undo the current or last selection/stroke")
     }
 
     enum InteractionMode {
@@ -1024,11 +936,15 @@ nonisolated enum L10n {
         static let startRecording = String(localized: "agent-terminal.start-recording", defaultValue: "Start recording")
         static let stopRecording = String(localized: "agent-terminal.stop-recording", defaultValue: "Stop recording")
         static let noShortcuts = String(localized: "agent-terminal.no-shortcuts", defaultValue: "No recordings yet")
-        static let sessionLocal = String(localized: "agent-terminal.session.local", defaultValue: "Local tab")
+        static let sessionLocal = String(localized: "agent-terminal.session.local", defaultValue: "Local Shell")
         static let sessionSSH = String(localized: "agent-terminal.session.ssh", defaultValue: "SSH")
         static let sessionRunning = String(localized: "agent-terminal.session.running", defaultValue: "Running")
         static let sessionExited = String(localized: "agent-terminal.session.exited", defaultValue: "Exited")
-        static let localSessionCaution = String(localized: "agent-terminal.session.local-caution", defaultValue: "Manual SSH may be active; confirm with prompt or hostname")
+        static let localSessionCaution = String(localized: "agent-terminal.session.local-caution", defaultValue: "A local tab can contain a manual SSH session. Check the prompt or run hostname before remote actions.")
+        static let sessionVerifyHost = String(localized: "agent-terminal.session.verify-host", defaultValue: "Verify host")
+        static let sessionVerifyHostTitle = String(localized: "agent-terminal.session.verify-host-title", defaultValue: "Host identity")
+        static let sessionCopyHostnameCommand = String(localized: "agent-terminal.session.copy-hostname-command", defaultValue: "Copy hostname command")
+        static let sessionHostnameCommandCopied = String(localized: "agent-terminal.session.hostname-command-copied", defaultValue: "Copied")
         static let shortcutRunning = String(localized: "agent-terminal.shortcut.running", defaultValue: "Running")
         static let shortcutFinished = String(localized: "agent-terminal.shortcut.finished", defaultValue: "Finished")
         static let shortcutCancelled = String(localized: "agent-terminal.shortcut.cancelled", defaultValue: "Interrupted")
@@ -1132,6 +1048,11 @@ nonisolated enum L10n {
     enum ImagePreview {
         static let cannotPreview = String(localized: "image-preview.cannot-preview", defaultValue: "Cannot Preview Image")
         static let closeButton = String(localized: "image-preview.close-button", defaultValue: "Close Preview")
+        static let fitButton = String(localized: "image-preview.fit-button", defaultValue: "Fit")
+        static let openButton = String(localized: "image-preview.open-button", defaultValue: "Open Image Preview")
+        static let windowTitle = String(localized: "image-preview.window-title", defaultValue: "Image Preview")
+        static let zoomIn = String(localized: "image-preview.zoom-in", defaultValue: "Zoom In")
+        static let zoomOut = String(localized: "image-preview.zoom-out", defaultValue: "Zoom Out")
     }
 
     enum Inspector {
@@ -1702,7 +1623,7 @@ nonisolated enum L10n {
             static let providerBrave = String(localized: "settings.web-tools.provider.brave", defaultValue: "Brave")
             static let exaKeyLabel = String(localized: "settings.web-tools.exa-api-key", defaultValue: "Exa API Key")
             static let braveKeyLabel = String(localized: "settings.web-tools.brave-api-key", defaultValue: "Brave Search API Key")
-            static let description = String(localized: "settings.web-tools.description", defaultValue: "Enables the built-in web_search tool. Auto tries Exa first, then Brave. API keys are stored in the macOS Keychain. web_fetch needs no key and asks for approval per domain.")
+            static let description = String(localized: "settings.web-tools.description", defaultValue: "Enables the built-in web_search tool. Auto tries local Exa first, then Brave; if both keys are empty and some.im is signed in, it uses some.im managed search. API keys are stored in the macOS Keychain. web_fetch needs no key and asks for approval per domain.")
 
             static func providerName(_ provider: AgentWebSearchProvider) -> String {
                 switch provider {

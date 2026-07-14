@@ -25,6 +25,7 @@ struct AgentWebToolsTests {
         #expect(search.parameters.contains { $0.name == "query" && $0.required })
         #expect(search.description.contains("Exa"))
         #expect(search.description.contains("Brave"))
+        #expect(search.description.contains("some.im managed search"))
 
         let fetch = try #require(AgentToolRegistry.descriptor(for: "web_fetch"))
         #expect(fetch.risk == .write)
@@ -254,6 +255,52 @@ struct AgentWebToolsTests {
     func malformedBraveResponseThrows() {
         #expect(throws: AgentToolError.self) {
             _ = try AgentWebTools.formatBraveResults(
+                data: Data("not json".utf8),
+                query: "x"
+            )
+        }
+    }
+
+    // MARK: - some.im managed response formatting
+
+    private let someIMManagedFixture = """
+    {
+      "code": 0,
+      "data": {
+        "query": "swift language",
+        "provider": "exa",
+        "result_count": 1,
+        "results": [
+          {
+            "title": "Swift.org - <strong>Welcome</strong>",
+            "url": "https://swift.org/",
+            "snippet": "Swift is a <strong>general-purpose</strong> language &amp; more.",
+            "published_date": "2026-01-02",
+            "author": "Swift Team"
+          }
+        ]
+      }
+    }
+    """
+
+    @Test
+    func formatsSomeIMManagedResults() throws {
+        let result = try AgentWebTools.formatSomeIMManagedResults(
+            data: Data(someIMManagedFixture.utf8),
+            query: "swift language"
+        )
+        #expect(result.summary.contains("some.im managed"))
+        #expect(result.payload.contains("some.im managed / exa"))
+        #expect(result.payload.contains("Swift.org - Welcome"))
+        #expect(result.payload.contains("general-purpose language & more"))
+        #expect(result.payload.contains("published: 2026-01-02"))
+        #expect(result.references.map(\.url) == ["https://swift.org/"])
+    }
+
+    @Test
+    func malformedSomeIMManagedResponseThrows() {
+        #expect(throws: AgentToolError.self) {
+            _ = try AgentWebTools.formatSomeIMManagedResults(
                 data: Data("not json".utf8),
                 query: "x"
             )

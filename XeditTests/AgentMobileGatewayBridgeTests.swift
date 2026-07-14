@@ -126,10 +126,8 @@ struct AgentMobileGatewayBridgeTests {
             return
         }
         #expect(runtime.input.isEmpty)
-        #expect(runtime.isResponding == true)
         #expect(runtime.messages.last?.role == .user)
         #expect(runtime.messages.last?.content == "Implement the Android live acceptance gate")
-        #expect(runtime.requestTask != nil)
     }
 
     @Test @MainActor

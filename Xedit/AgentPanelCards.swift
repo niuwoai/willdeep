@@ -324,44 +324,61 @@ struct AgentMessageBubble: View {
     let message: AgentMessage
 
     @State private var didJustCopy = false
+    @State private var isHoveringUserMessage = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
-            Text(title)
-                .font(.caption2)
-                .foregroundStyle(.secondary)
-            if !message.textAttachments.isEmpty {
-                AgentTextAttachmentBubbleStrip(attachments: message.textAttachments)
-            }
-            if !displayContent.isEmpty {
-                Text(displayContent)
-                    .font(.system(size: 13))
-                    .textSelection(.enabled)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-            }
-            if !message.images.isEmpty {
-                ScrollView(.horizontal, showsIndicators: false) {
-                    HStack(spacing: 6) {
-                        ForEach(message.images) { image in
-                            AgentImageThumbnail(image: image, size: 96, allowsRemoval: false, onRemove: nil)
+            VStack(alignment: .leading, spacing: 4) {
+                if message.role != .user {
+                    Text(title)
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                }
+                if !message.textAttachments.isEmpty {
+                    AgentTextAttachmentBubbleStrip(attachments: message.textAttachments)
+                }
+                if !displayContent.isEmpty {
+                    Text(displayContent)
+                        .font(.system(size: 13))
+                        .textSelection(.enabled)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
+                if !message.images.isEmpty {
+                    ScrollView(.horizontal, showsIndicators: false) {
+                        HStack(spacing: 6) {
+                            ForEach(message.images) { image in
+                                AgentImageThumbnail(
+                                    image: image,
+                                    size: 96,
+                                    allowsRemoval: false,
+                                    onRemove: nil,
+                                    onPreview: { AgentImagePreviewWindowRegistry.shared.open(image: image) }
+                                )
+                            }
                         }
                     }
                 }
             }
+            .padding(9)
+            .background(backgroundColor)
+            .clipShape(RoundedRectangle(cornerRadius: 7))
             if shouldShowFooter {
                 footer
+                    .opacity(message.role == .user && !isHoveringUserMessage ? 0 : 1)
+                    .allowsHitTesting(message.role != .user || isHoveringUserMessage)
+                    .accessibilityHidden(message.role == .user && !isHoveringUserMessage)
             }
         }
-        .padding(9)
-        .background(backgroundColor)
-        .clipShape(RoundedRectangle(cornerRadius: 7))
+        .contentShape(Rectangle())
+        .onHover { isHoveringUserMessage = $0 }
+        .animation(.easeOut(duration: 0.12), value: isHoveringUserMessage)
     }
 
     private var shouldShowFooter: Bool {
         switch message.role {
         case .system, .tool, .workflowReport, .widget, .scheduledTask: return false
         case .user, .assistant:
-            return !message.content.isEmpty || !message.textAttachments.isEmpty
+            return !message.content.isEmpty || !message.textAttachments.isEmpty || !message.images.isEmpty
         }
     }
 
@@ -458,9 +475,9 @@ struct AgentMessageBubble: View {
         case .system:
             return Color(nsColor: .controlBackgroundColor).opacity(0.45)
         case .user:
-            return Color.accentColor.opacity(0.12)
+            return Color.primary.opacity(0.035)
         case .assistant:
-            return Color(nsColor: .controlBackgroundColor).opacity(0.75)
+            return .clear
         case .tool, .workflowReport, .widget, .scheduledTask:
             return Color(nsColor: .controlBackgroundColor).opacity(0.4)
         }

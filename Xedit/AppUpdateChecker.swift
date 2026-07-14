@@ -20,6 +20,7 @@ struct AppUpdateMeta: Decodable {
 
     enum CodingKeys: String, CodingKey {
         case version
+        case latest_version
         case downloadURL
         case downloadUrl
         case download_url
@@ -28,6 +29,7 @@ struct AppUpdateMeta: Decodable {
         case release_notes_url
         case title
         case notes
+        case release_notes
         case minimumSystemVersion
         case minimum_system_version
     }
@@ -50,7 +52,8 @@ struct AppUpdateMeta: Decodable {
 
     nonisolated init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
-        version = try container.decode(String.self, forKey: .version)
+        version = try container.decodeIfPresent(String.self, forKey: .version)
+            ?? container.decode(String.self, forKey: .latest_version)
         downloadURL = try Self.decodeURL(
             from: container,
             keys: [.downloadURL, .downloadUrl, .download_url],
@@ -62,6 +65,7 @@ struct AppUpdateMeta: Decodable {
         )
         title = try container.decodeIfPresent(String.self, forKey: .title)
         notes = try container.decodeIfPresent(String.self, forKey: .notes)
+            ?? container.decodeIfPresent(String.self, forKey: .release_notes)
         minimumSystemVersion = try container.decodeIfPresent(String.self, forKey: .minimumSystemVersion)
             ?? container.decodeIfPresent(String.self, forKey: .minimum_system_version)
     }
@@ -210,7 +214,9 @@ struct AppVersion: Comparable, Equatable {
 }
 
 enum AppUpdateChecker {
-    nonisolated static let defaultMetaURL = URL(string: "https://meta.niuwoai.com/willdeep/meta.json")!
+    nonisolated static let defaultAppID = "willdeep"
+    nonisolated static let defaultPlatform = "macos"
+    nonisolated static let defaultChannel = "stable"
 
     static func checkForUpdatesOnLaunch() {
         Task {
@@ -219,31 +225,42 @@ enum AppUpdateChecker {
     }
 
     nonisolated static func checkForUpdates(
-        metaURL: URL = defaultMetaURL,
+        metaURL: URL? = nil,
         currentVersion: String = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "",
         session: URLSession = .shared
     ) async {
-        guard let current = AppVersion(currentVersion) else {
-            return
-        }
-
         do {
-            let request = makeRequest(url: metaURL)
-            let (data, response) = try await session.data(for: request)
-            guard let httpResponse = response as? HTTPURLResponse,
-                  (200..<300).contains(httpResponse.statusCode) else {
-                return
-            }
-            let meta = try JSONDecoder().decode(AppUpdateMeta.self, from: data)
-            guard let latest = AppVersion(meta.version), latest > current else {
-                return
-            }
+            guard let meta = try await fetchAvailableUpdate(metaURL: metaURL, currentVersion: currentVersion, session: session) else { return }
             await presentUpdate(meta: meta, currentVersion: currentVersion)
         } catch {
             #if DEBUG
             NSLog("[WillDeep] update check failed: %@", error.localizedDescription)
             #endif
         }
+    }
+
+    static func fetchAvailableUpdate(
+        metaURL: URL? = nil,
+        currentVersion: String = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "",
+        session: URLSession = .shared
+    ) async throws -> AppUpdateMeta? {
+        guard let current = AppVersion(currentVersion) else {
+            return nil
+        }
+        guard let url = metaURL ?? managedUpdateURL(currentVersion: currentVersion) else {
+            return nil
+        }
+        let request = makeRequest(url: url)
+        let (data, response) = try await session.data(for: request)
+        guard let httpResponse = response as? HTTPURLResponse,
+              (200..<300).contains(httpResponse.statusCode) else {
+            return nil
+        }
+        let decoded = try decodeUpdateMeta(from: data)
+        guard let latest = AppVersion(decoded.version), latest > current else {
+            return nil
+        }
+        return decoded
     }
 
     nonisolated static func makeRequest(url: URL) -> URLRequest {
@@ -255,6 +272,83 @@ enum AppUpdateChecker {
         request.setValue("WillDeep/\(appVersion) (macOS)", forHTTPHeaderField: "User-Agent")
         request.setValue(appVersion, forHTTPHeaderField: "X-App-Version")
         return request
+    }
+
+    static func managedUpdateURL(currentVersion: String) -> URL? {
+        managedUpdateURL(
+            currentVersion: currentVersion,
+            settings: SomeIMIntegrationStore.loadSettings()
+        )
+    }
+
+    static func managedUpdateURL(currentVersion: String, settings: SomeIMIntegrationSettings) -> URL? {
+        guard var components = URLComponents(string: settings.normalized.baseURL.trimmingCharacters(in: .whitespacesAndNewlines)) else {
+            return nil
+        }
+        components.path = "/api/v1/public/app-updates/latest"
+        components.queryItems = [
+            URLQueryItem(name: "app_id", value: defaultAppID),
+            URLQueryItem(name: "platform", value: defaultPlatform),
+            URLQueryItem(name: "channel", value: defaultChannel),
+            URLQueryItem(name: "current_version", value: currentVersion),
+        ]
+        return components.url
+    }
+
+    nonisolated static func decodeUpdateMeta(from data: Data) throws -> AppUpdateMeta {
+        let decoder = JSONDecoder()
+        if let envelope = try? decoder.decode(SomeIMAppUpdateEnvelope.self, from: data),
+           envelope.code == 0,
+           envelope.data.updateAvailable,
+           let item = envelope.data.item {
+            return item
+        }
+        if let payload = try? decoder.decode(SomeIMAppUpdatePayload.self, from: data),
+           payload.updateAvailable,
+           let item = payload.item {
+            return item
+        }
+        return try decoder.decode(AppUpdateMeta.self, from: data)
+    }
+
+    nonisolated static func download(meta: AppUpdateMeta, session: URLSession = .shared) async throws -> URL {
+        let request = makeRequest(url: meta.downloadURL)
+        let (temporaryURL, response) = try await session.download(for: request)
+        guard let httpResponse = response as? HTTPURLResponse,
+              (200..<300).contains(httpResponse.statusCode) else {
+            throw URLError(.badServerResponse)
+        }
+        let fileManager = FileManager.default
+        let downloads = fileManager.urls(for: .downloadsDirectory, in: .userDomainMask).first ?? fileManager.temporaryDirectory
+        let name = downloadFileName(for: meta)
+        let destination = downloads.appendingPathComponent(name, isDirectory: false)
+        if fileManager.fileExists(atPath: destination.path) {
+            try fileManager.removeItem(at: destination)
+        }
+        try fileManager.moveItem(at: temporaryURL, to: destination)
+        return destination
+    }
+
+    @MainActor
+    static func presentDownloadedUpdate(fileURL: URL, meta: AppUpdateMeta) {
+        let alert = NSAlert()
+        alert.messageText = L10n.AppUpdate.downloadedTitle(meta.version)
+        alert.informativeText = L10n.AppUpdate.downloadedMessage(fileURL.lastPathComponent)
+        alert.alertStyle = .informational
+        alert.addButton(withTitle: L10n.AppUpdate.quitAndInstall)
+        alert.addButton(withTitle: L10n.AppUpdate.later)
+        if alert.runModal() == .alertFirstButtonReturn {
+            NSWorkspace.shared.open(fileURL)
+            NSApplication.shared.terminate(nil)
+        }
+    }
+
+    private nonisolated static func downloadFileName(for meta: AppUpdateMeta) -> String {
+        let lastPath = meta.downloadURL.lastPathComponent.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !lastPath.isEmpty, lastPath != "/" {
+            return lastPath
+        }
+        return "WillDeep-\(meta.version).dmg"
     }
 
     @MainActor
@@ -293,5 +387,40 @@ enum AppUpdateChecker {
             lines.append(notes)
         }
         return lines.joined(separator: "\n")
+    }
+}
+
+private struct SomeIMAppUpdateEnvelope: Decodable {
+    let code: Int
+    let data: SomeIMAppUpdatePayload
+
+    private enum CodingKeys: String, CodingKey {
+        case code
+        case data
+    }
+
+    nonisolated init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        code = try container.decode(Int.self, forKey: .code)
+        data = try container.decode(SomeIMAppUpdatePayload.self, forKey: .data)
+    }
+}
+
+private struct SomeIMAppUpdatePayload: Decodable {
+    let updateAvailable: Bool
+    let item: AppUpdateMeta?
+
+    enum CodingKeys: String, CodingKey {
+        case updateAvailable
+        case update_available
+        case item
+    }
+
+    nonisolated init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        updateAvailable = try container.decodeIfPresent(Bool.self, forKey: .updateAvailable)
+            ?? container.decodeIfPresent(Bool.self, forKey: .update_available)
+            ?? false
+        item = try container.decodeIfPresent(AppUpdateMeta.self, forKey: .item)
     }
 }

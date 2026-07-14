@@ -8,13 +8,13 @@
 import Combine
 import Foundation
 
-enum AgentLearningReviewDecision: String, Codable, Equatable, CaseIterable {
+nonisolated enum AgentLearningReviewDecision: String, Codable, Equatable, CaseIterable, Sendable {
     case pending
     case reviewed
     case dismissed
 }
 
-struct AgentLearningReviewItem: Identifiable, Codable, Equatable {
+nonisolated struct AgentLearningReviewItem: Identifiable, Codable, Equatable, Sendable {
     var id: UUID
     var event: AgentLearningEvent
     var decision: AgentLearningReviewDecision
@@ -42,7 +42,7 @@ struct AgentLearningReviewItem: Identifiable, Codable, Equatable {
     }
 }
 
-enum AgentLearningReviewStore {
+nonisolated enum AgentLearningReviewStore {
     private static let itemsKey = "com.willdeep.agentLearningReview.items.v1"
     private static let maxItems = 200
 
@@ -62,6 +62,12 @@ enum AgentLearningReviewStore {
             return []
         }
         return clean(items)
+    }
+
+    static func loadAsync() async -> [AgentLearningReviewItem] {
+        await Task.detached(priority: .userInitiated) {
+            load()
+        }.value
     }
 
     static func save(_ items: [AgentLearningReviewItem]) {
@@ -204,6 +210,12 @@ final class AgentLearningReviewState: ObservableObject {
 
     func refresh() {
         items = AgentLearningReviewStore.load()
+    }
+
+    func reloadFromStore() async {
+        let loadedItems = await AgentLearningReviewStore.loadAsync()
+        guard !Task.isCancelled else { return }
+        items = loadedItems
     }
 
     func markReviewed(id: UUID) {

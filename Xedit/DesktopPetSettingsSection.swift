@@ -9,29 +9,41 @@ struct DesktopPetSettingsSection: View {
     @ObservedObject private var manager = DesktopPetWindowManager.shared
 
     private enum Layout {
-        static let previewSize: CGFloat = 58
-        static let previewCornerRadius: CGFloat = 10
-        static let previewSpacing: CGFloat = 10
+        static let previewHeight: CGFloat = 78
+        static let cardMinimumWidth: CGFloat = 104
+        static let cardMaximumWidth: CGFloat = 132
+        static let cardMinimumHeight: CGFloat = 118
+        static let cardCornerRadius: CGFloat = 12
+        static let gridSpacing: CGFloat = 12
+    }
+
+    private var columns: [GridItem] {
+        [
+            GridItem(
+                .adaptive(
+                    minimum: Layout.cardMinimumWidth,
+                    maximum: Layout.cardMaximumWidth
+                ),
+                spacing: Layout.gridSpacing,
+                alignment: .top
+            )
+        ]
     }
 
     var body: some View {
         Toggle(L10n.DesktopPet.settingsEnabled, isOn: enabledBinding)
 
-        Picker(L10n.DesktopPet.settingsAppearance, selection: appearanceBinding) {
-            ForEach(DesktopPetAppearance.allCases) { appearance in
-                Text(appearance.displayName).tag(appearance)
-            }
-        }
+        VStack(alignment: .leading, spacing: Layout.gridSpacing) {
+            Text(L10n.DesktopPet.settingsAppearance)
+                .font(.subheadline.weight(.semibold))
 
-        ScrollView(.horizontal) {
-            LazyHStack(spacing: Layout.previewSpacing) {
+            LazyVGrid(columns: columns, alignment: .leading, spacing: Layout.gridSpacing) {
                 ForEach(DesktopPetAppearance.allCases) { appearance in
                     appearanceButton(for: appearance)
                 }
             }
-            .padding(.vertical, 4)
         }
-        .scrollIndicators(.hidden)
+        .frame(maxWidth: .infinity, alignment: .leading)
 
         Text(L10n.DesktopPet.settingsDescription)
             .font(.caption)
@@ -45,32 +57,48 @@ struct DesktopPetSettingsSection: View {
         )
     }
 
-    private var appearanceBinding: Binding<DesktopPetAppearance> {
-        Binding(
-            get: { manager.appearance },
-            set: { manager.selectAppearance($0) }
-        )
-    }
-
     private func appearanceButton(for appearance: DesktopPetAppearance) -> some View {
-        Button {
+        let isSelected = appearance == manager.appearance
+        return Button {
             manager.selectAppearance(appearance)
         } label: {
-            Image(appearance.assetName)
-                .resizable()
-                .interpolation(.none)
-                .scaledToFit()
-                .padding(4)
-                .frame(width: Layout.previewSize, height: Layout.previewSize)
-                .background(selectionBackground(for: appearance), in: RoundedRectangle(cornerRadius: Layout.previewCornerRadius, style: .continuous))
-                .overlay {
-                    RoundedRectangle(cornerRadius: Layout.previewCornerRadius, style: .continuous)
-                        .strokeBorder(selectionBorderColor(for: appearance), lineWidth: 2)
+            VStack(spacing: 8) {
+                Image(appearance.assetName)
+                    .resizable()
+                    .interpolation(.none)
+                    .scaledToFit()
+                    .frame(maxWidth: .infinity)
+                    .frame(height: Layout.previewHeight)
+
+                Text(appearance.displayName)
+                    .font(.caption.weight(isSelected ? .semibold : .regular))
+                    .foregroundStyle(isSelected ? Color.accentColor : Color.primary)
+                    .multilineTextAlignment(.center)
+                    .lineLimit(2)
+                    .minimumScaleFactor(0.82)
+                    .frame(maxWidth: .infinity, minHeight: 30, alignment: .top)
+            }
+            .padding(10)
+            .frame(maxWidth: .infinity, minHeight: Layout.cardMinimumHeight, alignment: .top)
+            .background(selectionBackground(for: appearance), in: RoundedRectangle(cornerRadius: Layout.cardCornerRadius, style: .continuous))
+            .overlay {
+                RoundedRectangle(cornerRadius: Layout.cardCornerRadius, style: .continuous)
+                    .strokeBorder(selectionBorderColor(for: appearance), lineWidth: isSelected ? 2 : 1)
+            }
+            .overlay(alignment: .topTrailing) {
+                if isSelected {
+                    Image(systemName: "checkmark.circle.fill")
+                        .font(.system(size: 15, weight: .semibold))
+                        .foregroundStyle(.white, Color.accentColor)
+                        .padding(7)
                 }
+            }
+            .contentShape(RoundedRectangle(cornerRadius: Layout.cardCornerRadius, style: .continuous))
         }
         .buttonStyle(.plain)
         .accessibilityLabel(appearance.displayName)
-        .accessibilityAddTraits(appearance == manager.appearance ? .isSelected : [])
+        .accessibilityAddTraits(isSelected ? .isSelected : [])
+        .help(appearance.displayName)
     }
 
     private func selectionBackground(for appearance: DesktopPetAppearance) -> Color {
@@ -78,6 +106,6 @@ struct DesktopPetSettingsSection: View {
     }
 
     private func selectionBorderColor(for appearance: DesktopPetAppearance) -> Color {
-        appearance == manager.appearance ? .accentColor : .clear
+        appearance == manager.appearance ? .accentColor : .secondary.opacity(0.12)
     }
 }

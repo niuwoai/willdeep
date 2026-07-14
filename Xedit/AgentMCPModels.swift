@@ -8,7 +8,7 @@
 
 import Foundation
 
-enum AgentMCPTransport: String, Codable, CaseIterable, Identifiable, Sendable {
+nonisolated enum AgentMCPTransport: String, Codable, CaseIterable, Identifiable, Sendable {
     case stdio
     case streamableHTTP = "streamable-http"
 
@@ -24,7 +24,7 @@ enum AgentMCPTransport: String, Codable, CaseIterable, Identifiable, Sendable {
     }
 }
 
-enum AgentMCPServerSource: String, Codable, CaseIterable, Identifiable, Sendable {
+nonisolated enum AgentMCPServerSource: String, Codable, CaseIterable, Identifiable, Sendable {
     case user
     case cursor
     case codex
@@ -43,7 +43,7 @@ enum AgentMCPServerSource: String, Codable, CaseIterable, Identifiable, Sendable
     }
 }
 
-struct AgentMCPServerConfig: Identifiable, Codable, Equatable, Sendable {
+nonisolated struct AgentMCPServerConfig: Identifiable, Codable, Equatable, Sendable {
     var id: String
     var name: String
     var source: AgentMCPServerSource
@@ -141,13 +141,13 @@ struct AgentMCPServerConfig: Identifiable, Codable, Equatable, Sendable {
 /// - `standard`: the default; read-style calls auto-run (name
 ///   heuristic / LLM judge), writes gate on the user.
 /// - `untrusted`: everything gates, Always-Allow pins are ignored.
-enum AgentMCPServerTrustLevel: String, Codable {
+nonisolated enum AgentMCPServerTrustLevel: String, Codable, Sendable {
     case fullyTrusted
     case standard
     case untrusted
 }
 
-struct AgentMCPSettings: Codable, Equatable {
+nonisolated struct AgentMCPSettings: Codable, Equatable, Sendable {
     var disabledServerIDs: [String]
     var userServers: [AgentMCPServerConfig]
     /// Server IDs the user marked as untrusted. The server is still
@@ -207,7 +207,7 @@ struct AgentMCPSettings: Codable, Equatable {
     }
 }
 
-struct AgentMCPServerPreset: Identifiable, Equatable, Sendable {
+nonisolated struct AgentMCPServerPreset: Identifiable, Equatable, Sendable {
     var id: String
     var title: String
     var detail: String
@@ -236,7 +236,7 @@ struct AgentMCPServerPreset: Identifiable, Equatable, Sendable {
 }
 
 extension AgentMCPServerConfig {
-    static func playwrightMCP(env: [String: String] = [:]) -> AgentMCPServerConfig {
+    nonisolated static func playwrightMCP(env: [String: String] = [:]) -> AgentMCPServerConfig {
         AgentMCPServerConfig(
             name: "playwright",
             source: .user,

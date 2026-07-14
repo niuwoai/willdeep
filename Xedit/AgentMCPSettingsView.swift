@@ -47,8 +47,8 @@ final class AgentMCPServerCreationCoordinator: ObservableObject {
 
 struct AgentMCPSettingsView: View {
     @ObservedObject private var creationCoordinator = AgentMCPServerCreationCoordinator.shared
-    @State private var settings = AgentMCPSettingsStore.load()
-    @State private var servers = AgentMCPServerDirectory.list(includeDisabled: true)
+    @State private var settings = AgentMCPSettings.default
+    @State private var servers: [AgentMCPServerConfig] = []
     @State private var toolCounts: [String: Int] = [:]
     @State private var serverMessages: [String: String] = [:]
     @State private var serverMessageIsError: Set<String> = []
@@ -59,6 +59,8 @@ struct AgentMCPSettingsView: View {
     // 触发 @Published 通知 → 父 body 标脏 → 再次重算的死循环。
     @State private var pendingDraft: AgentLearningMCPDraft?
     @State private var statusMessage = L10n.Settings.allChangesSaved
+    @State private var isLoadingServers = false
+    @State private var needsServerReload = false
 
     private var enabledCount: Int {
         servers.filter(\.isEnabled).count
@@ -81,6 +83,7 @@ struct AgentMCPSettingsView: View {
                     } label: {
                         Label(L10n.Settings.MCP.refresh, systemImage: "arrow.clockwise")
                     }
+                    .disabled(isLoadingServers)
 
                     Button {
                         openCursorConfig()
@@ -139,6 +142,16 @@ struct AgentMCPSettingsView: View {
                 pendingDraft = creationCoordinator.consumeDraft()
                 isCreatingServer = true
             }
+        }
+        .overlay {
+            if isLoadingServers && servers.isEmpty {
+                ProgressView()
+                    .controlSize(.small)
+                    .allowsHitTesting(false)
+            }
+        }
+        .task {
+            await reloadServers()
         }
     }
 
@@ -364,10 +377,12 @@ struct AgentMCPSettingsView: View {
 
     private func installPreset(_ preset: AgentMCPServerPreset) {
         AgentMCPSettingsStore.upsertUserServer(preset.server)
-        refreshServers()
         statusMessage = L10n.Settings.MCP.createdServer(preset.server.name)
-        if let server = servers.first(where: { $0.id == "user:\(preset.server.name)" }) {
-            refreshTools(for: server)
+        Task {
+            await reloadServers()
+            if let server = servers.first(where: { $0.id == "user:\(preset.server.name)" }) {
+                refreshTools(for: server)
+            }
         }
     }
 
@@ -415,10 +430,32 @@ struct AgentMCPSettingsView: View {
     }
 
     private func refreshServers() {
-        settings = AgentMCPSettingsStore.load()
-        servers = AgentMCPServerDirectory.list(includeDisabled: true)
-        toolCounts = toolCounts.filter { id, _ in servers.contains { $0.id == id } }
-        serverMessages = serverMessages.filter { id, _ in servers.contains { $0.id == id } }
+        Task {
+            await reloadServers()
+        }
+    }
+
+    @MainActor
+    private func reloadServers() async {
+        if isLoadingServers {
+            needsServerReload = true
+            return
+        }
+
+        repeat {
+            isLoadingServers = true
+            needsServerReload = false
+
+            let loadedServers = await AgentMCPServerDirectory.listAsync(includeDisabled: true)
+            guard !Task.isCancelled else { return }
+
+            settings = AgentMCPSettingsStore.load()
+            servers = loadedServers
+            toolCounts = toolCounts.filter { id, _ in servers.contains { $0.id == id } }
+            serverMessages = serverMessages.filter { id, _ in servers.contains { $0.id == id } }
+        } while needsServerReload
+
+        isLoadingServers = false
     }
 
     private func openCursorConfig() {

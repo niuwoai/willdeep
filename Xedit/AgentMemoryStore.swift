@@ -8,7 +8,7 @@
 import Combine
 import Foundation
 
-struct AgentMemorySettings: Codable, Equatable {
+nonisolated struct AgentMemorySettings: Codable, Equatable, Sendable {
     var isMemoryEnabled: Bool
     var autoRetrievalEnabled: Bool
     var queryRewriteEnabled: Bool
@@ -60,7 +60,7 @@ struct AgentMemorySettings: Codable, Equatable {
     }
 }
 
-struct AgentMemoryMaintenanceRun: Codable, Equatable {
+nonisolated struct AgentMemoryMaintenanceRun: Codable, Equatable, Sendable {
     var ranAt: Date
     var status: AgentMemoryMaintenanceStatus
     var inspectedCount: Int
@@ -71,12 +71,12 @@ struct AgentMemoryMaintenanceRun: Codable, Equatable {
     var outputTokens: Int
 }
 
-enum AgentMemoryMaintenanceStatus: String, Codable {
+nonisolated enum AgentMemoryMaintenanceStatus: String, Codable, Sendable {
     case completed
     case preview
 }
 
-struct AgentMemoryRecord: Identifiable, Codable, Equatable {
+nonisolated struct AgentMemoryRecord: Identifiable, Codable, Equatable, Sendable {
     var id: UUID
     var content: String
     var source: AgentMemorySource
@@ -215,7 +215,7 @@ struct AgentMemoryRecord: Identifiable, Codable, Equatable {
     }
 }
 
-enum AgentMemorySource: String, CaseIterable, Codable, Identifiable {
+nonisolated enum AgentMemorySource: String, CaseIterable, Codable, Identifiable, Sendable {
     case automatic
     case manual
 
@@ -231,7 +231,7 @@ enum AgentMemorySource: String, CaseIterable, Codable, Identifiable {
     }
 }
 
-enum AgentMemoryLifetime: String, CaseIterable, Codable, Identifiable {
+nonisolated enum AgentMemoryLifetime: String, CaseIterable, Codable, Identifiable, Sendable {
     case transient
     case longTerm
 
@@ -247,7 +247,7 @@ enum AgentMemoryLifetime: String, CaseIterable, Codable, Identifiable {
     }
 }
 
-enum AgentMemoryScope: String, CaseIterable, Codable, Identifiable {
+nonisolated enum AgentMemoryScope: String, CaseIterable, Codable, Identifiable, Sendable {
     case global
     case project
 
@@ -263,13 +263,13 @@ enum AgentMemoryScope: String, CaseIterable, Codable, Identifiable {
     }
 }
 
-struct AgentMemoryRetrievalResult: Equatable {
+nonisolated struct AgentMemoryRetrievalResult: Equatable, Sendable {
     var record: AgentMemoryRecord
     var score: Double
     var reasons: [String]
 }
 
-enum AgentMemoryKeywordExtractor {
+nonisolated enum AgentMemoryKeywordExtractor {
     private static let stopWords: Set<String> = [
         "the", "and", "for", "with", "that", "this", "from", "into", "your", "you",
         "are", "was", "were", "will", "can", "should", "must", "not", "but", "about",
@@ -302,7 +302,7 @@ enum AgentMemoryKeywordExtractor {
     }
 }
 
-enum AgentMemorySanitizer {
+nonisolated enum AgentMemorySanitizer {
     private static let patterns: [String] = [
         #"(?i)\bBearer\s+[A-Za-z0-9._~+/=-]{12,}"#,
         #"(?i)\b(sk|ak|pk|rk)-[A-Za-z0-9_\-]{16,}"#,
@@ -329,7 +329,7 @@ enum AgentMemorySanitizer {
     }
 }
 
-enum AgentMemoryEngine {
+nonisolated enum AgentMemoryEngine {
     static func projectFingerprint(for rootDirectory: URL?) -> String? {
         guard let path = rootDirectory?.standardizedFileURL.path, !path.isEmpty else { return nil }
         return fnv1a64(path)
@@ -590,7 +590,7 @@ enum AgentMemoryEngine {
     }
 }
 
-enum AgentMemorySettingsStore {
+nonisolated enum AgentMemorySettingsStore {
     private static let settingsKey = "com.willdeep.agentMemory.settings.v1"
     private static let recordsKey = "com.willdeep.agentMemory.records.v1"
 
@@ -637,12 +637,20 @@ enum AgentMemorySettingsStore {
 
 @MainActor
 final class AgentMemoryState: ObservableObject {
+    private var isRestoringPersistedState = false
+
     @Published var settings: AgentMemorySettings {
-        didSet { AgentMemorySettingsStore.saveSettings(settings.normalized) }
+        didSet {
+            guard !isRestoringPersistedState else { return }
+            AgentMemorySettingsStore.saveSettings(settings.normalized)
+        }
     }
 
     @Published var memories: [AgentMemoryRecord] {
-        didSet { AgentMemorySettingsStore.saveRecords(memories) }
+        didSet {
+            guard !isRestoringPersistedState else { return }
+            AgentMemorySettingsStore.saveRecords(memories)
+        }
     }
 
     init(
@@ -651,6 +659,21 @@ final class AgentMemoryState: ObservableObject {
     ) {
         self.settings = (settings ?? AgentMemorySettingsStore.loadSettings()).normalized
         self.memories = memories ?? AgentMemorySettingsStore.loadRecords()
+    }
+
+    func reloadFromStore() async {
+        let snapshot = await Task.detached(priority: .userInitiated) {
+            (
+                settings: AgentMemorySettingsStore.loadSettings(),
+                memories: AgentMemorySettingsStore.loadRecords()
+            )
+        }.value
+        guard !Task.isCancelled else { return }
+
+        isRestoringPersistedState = true
+        settings = snapshot.settings
+        memories = snapshot.memories
+        isRestoringPersistedState = false
     }
 
     var activeMemories: [AgentMemoryRecord] {

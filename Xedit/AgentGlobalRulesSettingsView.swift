@@ -9,9 +9,10 @@ import AppKit
 import SwiftUI
 
 struct AgentGlobalRulesSettingsView: View {
-    @State private var settings = AgentGlobalRulesStore.loadSettings()
+    @State private var settings = AgentGlobalRulesSettings.default
     @State private var rulesText = ""
     @State private var statusMessage = ""
+    @State private var isLoadingRules = false
 
     var body: some View {
         Form {
@@ -39,6 +40,7 @@ struct AgentGlobalRulesSettingsView: View {
                         Button(L10n.Settings.GlobalRules.reloadButton) {
                             loadRulesText()
                         }
+                        .disabled(isLoadingRules)
                     }
                 }
 
@@ -64,6 +66,7 @@ struct AgentGlobalRulesSettingsView: View {
                     Button(L10n.Settings.buttonRevert) {
                         loadRulesText()
                     }
+                    .disabled(isLoadingRules)
 
                     if !statusMessage.isEmpty {
                         Text(statusMessage)
@@ -79,8 +82,15 @@ struct AgentGlobalRulesSettingsView: View {
             }
         }
         .formStyle(.grouped)
-        .onAppear {
-            loadRulesText()
+        .overlay {
+            if isLoadingRules && rulesText.isEmpty {
+                ProgressView()
+                    .controlSize(.small)
+                    .allowsHitTesting(false)
+            }
+        }
+        .task {
+            await reloadRulesText(loadStoredSettings: true)
         }
     }
 
@@ -91,12 +101,28 @@ struct AgentGlobalRulesSettingsView: View {
 
     private func loadRulesText() {
         saveSettings()
-        AgentGlobalRulesStore.ensureDefaultRulesFileIfNeeded(settings: settings)
-        let url = AgentGlobalRulesStore.resolvedURL(for: settings.filePath)
-        rulesText = AgentGlobalRulesStore.readRulesFileText(at: url) ?? ""
+        Task {
+            await reloadRulesText(loadStoredSettings: false)
+        }
+    }
+
+    @MainActor
+    private func reloadRulesText(loadStoredSettings: Bool) async {
+        guard !isLoadingRules else { return }
+        isLoadingRules = true
+
+        let snapshot = await AgentGlobalRulesStore.loadEditorSnapshot(
+            settings: loadStoredSettings ? nil : settings
+        )
+        guard !Task.isCancelled else { return }
+
+        settings = snapshot.settings
+        rulesText = snapshot.text
+        let displayPath = AgentGlobalRulesStore.displayPath(for: snapshot.url)
         statusMessage = rulesText.isEmpty
-            ? L10n.Settings.GlobalRules.noFileStatus(AgentGlobalRulesStore.displayPath(for: url))
-            : L10n.Settings.GlobalRules.loadedStatus(AgentGlobalRulesStore.displayPath(for: url))
+            ? L10n.Settings.GlobalRules.noFileStatus(displayPath)
+            : L10n.Settings.GlobalRules.loadedStatus(displayPath)
+        isLoadingRules = false
     }
 
     private func saveRulesText() {

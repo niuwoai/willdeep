@@ -595,7 +595,7 @@ enum AgentDesign {
     // Paddings & sizes.
     static let chatMaxContentWidth: CGFloat = 1040
     static let chatHorizontalInset: CGFloat = 26
-    static let userMessageMaxWidthRatio: CGFloat = 0.95
+    static let userMessageMaxWidthRatio: CGFloat = 0.78
     static let messageVerticalSpacing: CGFloat = 20
     static let composerHeight: CGFloat = 124
     static let headerHeight: CGFloat = 44

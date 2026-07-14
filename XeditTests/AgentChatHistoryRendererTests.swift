@@ -16,6 +16,11 @@ struct AgentChatHistoryRendererTests {
     private static let tinyPNGBase64 = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADElEQVR4nGP4z8AAAAMBAQDJ/pLvAAAAAElFTkSuQmCC"
 
     @Test
+    func userInputMinimapWaitsUntilConversationHasSeveralUserTurns() {
+        #expect(AgentTranscriptUserMinimap.minimumVisibleTurnCount == 6)
+    }
+
+    @Test
     func longMessagePreviewKeepsHeadAndTail() {
         let content = String(repeating: "A", count: 120)
             + "MIDDLE_SHOULD_BE_OMITTED"
@@ -174,9 +179,27 @@ struct AgentChatHistoryRendererTests {
 
         let rendered = AgentChatHistoryRenderer.render(messages: [message], isDark: false)
 
-        #expect(rendered.string.contains("You"))
+        #expect(!rendered.string.contains("You"))
         #expect(rendered.string.contains("识别一下这张图"))
         #expect(rendered.string.contains("\u{fffc}") || rendered.string.contains("Image attachment"))
+        #expect(firstAttributeRange(
+            .agentChatHistoryImageID,
+            value: image.id.uuidString,
+            in: rendered
+        ) != nil)
+        #expect(firstAttributeRange(
+            .link,
+            value: AgentChatHistoryImageLink.value,
+            in: rendered
+        ) != nil)
+        let imageRange = try? #require(firstAttributeRange(
+            .agentChatHistoryImageID,
+            value: image.id.uuidString,
+            in: rendered
+        ))
+        if let imageRange {
+            #expect(rendered.attribute(.cursor, at: imageRange.location, effectiveRange: nil) as? NSCursor == NSCursor.arrow)
+        }
         #expect(!rendered.string.contains("[Image description generated"))
         #expect(!rendered.string.contains("internal VL-only"))
         #expect(!message.copyableContent.contains("internal VL-only"))
@@ -570,7 +593,8 @@ struct AgentChatHistoryRendererTests {
 
         let rendered = AgentChatHistoryRenderer.render(messages: [user, assistant], isDark: false)
 
-        #expect(rendered.string.contains("You\nhello"))
+        #expect(rendered.string.contains("hello"))
+        #expect(!rendered.string.contains("You"))
         #expect(rendered.string.contains("✦ Assistant\ndone"))
         #expect(!rendered.string.contains("YOU"))
         #expect(rendered.string.contains("  ◷ 8.4s  in 1.2k · out 2.3k  ↻"))
@@ -733,9 +757,10 @@ struct AgentChatHistoryRendererTests {
         )
 
         let plain = AgentChatHistoryRenderer.render(messages: [user], isDark: false)
-        #expect(plain.string.contains("You\nhello"))
+        #expect(plain.string.contains("hello"))
+        #expect(!plain.string.contains("You"))
         let hiddenCopyRange = try #require(firstCopyIconRange(in: plain))
-        #expect(plain.attribute(.agentChatHistoryBubbleKind, at: hiddenCopyRange.location, effectiveRange: nil) != nil)
+        #expect(plain.attribute(.agentChatHistoryUserMessageID, at: hiddenCopyRange.location, effectiveRange: nil) as? String == id.uuidString)
         #expect(plain.attribute(.link, at: hiddenCopyRange.location, effectiveRange: nil) == nil)
         #expect(plain.attribute(
             NSAttributedString.Key("AgentChatHistoryMessageCopyText"),
@@ -748,19 +773,28 @@ struct AgentChatHistoryRendererTests {
             effectiveRange: nil
         ) as? NSColor)
         #expect(hiddenColor.alphaComponent == 0)
+        let plainBodyRange = (plain.string as NSString).range(of: "hello")
+        let hiddenFooterStart = NSMaxRange(plainBodyRange) + 1
+        let hiddenTimestampColor = try #require(plain.attribute(
+            .foregroundColor,
+            at: hiddenFooterStart,
+            effectiveRange: nil
+        ) as? NSColor)
+        #expect(hiddenTimestampColor.alphaComponent == 0)
 
         let hovered = AgentChatHistoryRenderer.render(
             messages: [user],
             isDark: false,
             hoveredUserMessageID: id
         )
-        #expect(hovered.string.contains("You\nhello"))
+        #expect(hovered.string.contains("hello"))
+        #expect(!hovered.string.contains("You"))
         let visibleCopyRange = try #require(firstAttributeRange(
             .agentChatHistoryMessageCopyText,
             value: "hello",
             in: hovered
         ))
-        #expect(hovered.attribute(.agentChatHistoryBubbleKind, at: visibleCopyRange.location, effectiveRange: nil) != nil)
+        #expect(hovered.attribute(.agentChatHistoryUserMessageID, at: visibleCopyRange.location, effectiveRange: nil) as? String == id.uuidString)
         #expect(hovered.attribute(.link, at: visibleCopyRange.location, effectiveRange: nil) != nil)
         #expect(hovered.attribute(
             NSAttributedString.Key("AgentChatHistoryMessageCopyText"),
@@ -773,6 +807,15 @@ struct AgentChatHistoryRendererTests {
             effectiveRange: nil
         ) as? NSColor)
         #expect(visibleColor.alphaComponent > 0)
+        let visibleTimestampColor = try #require(hovered.attribute(
+            .foregroundColor,
+            at: hiddenFooterStart,
+            effectiveRange: nil
+        ) as? NSColor)
+        #expect(visibleTimestampColor.alphaComponent > 0)
+
+        #expect(!AgentChatHistoryBubbleKind.assistant.drawsRoundedBackground)
+        #expect(AgentChatHistoryBubbleKind.user.drawsRoundedBackground)
     }
 
     @Test

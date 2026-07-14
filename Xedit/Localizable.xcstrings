@@ -3584,6 +3584,164 @@
         }
       }
     },
+    "agent-terminal.session.copy-hostname-command" : {
+      "comment" : "Button that copies the hostname verification command from the local terminal identity popover",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Copy hostname command"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "复制 hostname 命令"
+          }
+        }
+      }
+    },
+    "agent-terminal.session.exited" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Exited"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已退出"
+          }
+        }
+      }
+    },
+    "agent-terminal.session.hostname-command-copied" : {
+      "comment" : "Confirmation shown after copying the hostname verification command",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Copied"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已复制"
+          }
+        }
+      }
+    },
+    "agent-terminal.session.local" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Local Shell"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "本地 Shell"
+          }
+        }
+      }
+    },
+    "agent-terminal.session.local-caution" : {
+      "comment" : "Explains why a local terminal tab may not prove the actual host identity",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "A local tab can contain a manual SSH session. Check the prompt or run hostname before remote actions."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "本地标签页中可能包含手动 SSH 会话。执行远程操作前，请检查提示符或运行 hostname 确认主机。"
+          }
+        }
+      }
+    },
+    "agent-terminal.session.running" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Running"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "运行中"
+          }
+        }
+      }
+    },
+    "agent-terminal.session.ssh" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "SSH"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "SSH"
+          }
+        }
+      }
+    },
+    "agent-terminal.session.verify-host" : {
+      "comment" : "Disclosure button for local terminal host identity guidance",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Verify host"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "验证主机"
+          }
+        }
+      }
+    },
+    "agent-terminal.session.verify-host-title" : {
+      "comment" : "Title of the local terminal host identity guidance popover",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Host identity"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "主机身份"
+          }
+        }
+      }
+    },
     "agent-terminal.shortcut.cancelled" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -4750,6 +4908,57 @@
         }
       }
     },
+    "app-update.download-failed-title" : {
+      "comment" : "Title for app update download failures",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Download Failed"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "下载失败"
+          }
+        }
+      }
+    },
+    "app-update.downloaded-message" : {
+      "comment" : "App update downloaded prompt. Placeholder 1 is the downloaded file name.",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ has been downloaded. Quit WillDeep and open the installer now?"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ 已下载完成。现在退出 WillDeep 并打开安装包吗？"
+          }
+        }
+      }
+    },
+    "app-update.downloaded-title" : {
+      "comment" : "App update downloaded prompt title. Placeholder 1 is the latest version.",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "WillDeep %@ is ready"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "WillDeep %@ 已准备好"
+          }
+        }
+      }
+    },
     "app-update.later" : {
       "comment" : "Dismiss button in the app update alert",
       "localizations" : {
@@ -4767,6 +4976,23 @@
         }
       }
     },
+    "app-update.quit-and-install" : {
+      "comment" : "Button to quit WillDeep and open the downloaded installer",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Quit and Update"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "退出并更新"
+          }
+        }
+      }
+    },
     "app-update.message" : {
       "comment" : "App update alert body. Placeholder 1 is current version, placeholder 2 is latest version.",
       "localizations" : {
@@ -4780,6 +5006,74 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "当前版本：%1$@\n最新版本：%2$@"
+          }
+        }
+      }
+    },
+    "app-update.sidebar-action" : {
+      "comment" : "Sidebar app update action button",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Update"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "更新"
+          }
+        }
+      }
+    },
+    "app-update.sidebar-action-help" : {
+      "comment" : "Help text for sidebar app update action",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Download the latest WillDeep release."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "下载最新 WillDeep 版本。"
+          }
+        }
+      }
+    },
+    "app-update.sidebar-subtitle" : {
+      "comment" : "Sidebar app update subtitle",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "A newer build is available."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "有新版本可用。"
+          }
+        }
+      }
+    },
+    "app-update.sidebar-title" : {
+      "comment" : "Sidebar app update title. Placeholder 1 is the latest version.",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Update %@"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "更新到 %@"
           }
         }
       }
@@ -10337,6 +10631,96 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "关闭预览"
+          }
+        }
+      }
+    },
+    "image-preview.fit-button" : {
+      "comment" : "Button that resets the standalone image preview to fit the window",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Fit"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "适应窗口"
+          }
+        }
+      }
+    },
+    "image-preview.open-button" : {
+      "comment" : "Tooltip for a chat image thumbnail that opens the standalone image preview",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Open Image Preview"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "放大查看图片"
+          }
+        }
+      }
+    },
+    "image-preview.window-title" : {
+      "comment" : "Fallback title for a standalone chat image preview window",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Image Preview"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "图片预览"
+          }
+        }
+      }
+    },
+    "image-preview.zoom-in" : {
+      "comment" : "Button tooltip and accessibility label for zooming into an image preview",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Zoom In"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "放大"
+          }
+        }
+      }
+    },
+    "image-preview.zoom-out" : {
+      "comment" : "Button tooltip and accessibility label for zooming out of an image preview",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Zoom Out"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "缩小"
           }
         }
       }
@@ -26571,13 +26955,13 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Enables the built-in web_search tool. Auto tries Exa first, then Brave. API keys are stored in the macOS Keychain. web_fetch needs no key and asks for approval per domain."
+            "value" : "Enables the built-in web_search tool. Auto tries local Exa first, then Brave; if both keys are empty and some.im is signed in, it uses some.im managed search. API keys are stored in the macOS Keychain. web_fetch needs no key and asks for approval per domain."
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "用于启用内置 web_search 搜索工具。自动模式优先使用 Exa，然后回退到 Brave。密钥保存在 macOS 钥匙串中。web_fetch 抓取网页无需密钥，按域名逐次授权。"
+            "value" : "用于启用内置 web_search 搜索工具。自动模式优先使用本地 Exa，然后回退到 Brave；如果两个密钥都为空且已登录 some.im，则使用 some.im 托管搜索。密钥保存在 macOS 钥匙串中。web_fetch 抓取网页无需密钥，按域名逐次授权。"
           }
         }
       }

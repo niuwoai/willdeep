@@ -9,7 +9,7 @@ import AppKit
 import SwiftUI
 
 struct AgentLearningReviewSettingsSection: View {
-    @StateObject private var reviewState = AgentLearningReviewState()
+    @StateObject private var reviewState = AgentLearningReviewState(items: [])
     @State private var copiedItemID: AgentLearningReviewItem.ID?
     @State private var copiedSearchQueryItemID: AgentLearningReviewItem.ID?
     @State private var editedSkillItemID: AgentLearningReviewItem.ID?
@@ -101,8 +101,8 @@ struct AgentLearningReviewSettingsSection: View {
                 }
             )
         }
-        .onAppear {
-            reviewState.refresh()
+        .task {
+            await reviewState.reloadFromStore()
         }
     }
 

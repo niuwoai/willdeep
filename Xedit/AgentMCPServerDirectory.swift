@@ -8,7 +8,7 @@
 
 import Foundation
 
-enum AgentMCPSettingsStore {
+nonisolated enum AgentMCPSettingsStore {
     private static let settingsKey = "com.willdeep.agentMCPSettings.v1"
 
     /// Test-only override, mirroring AgentSettingsStore: redirect every
@@ -207,7 +207,7 @@ enum AgentMCPSettingsStore {
     }
 }
 
-enum AgentMCPServerDirectory {
+nonisolated enum AgentMCPServerDirectory {
     static var cursorConfigURL: URL {
         FileManager.default.homeDirectoryForCurrentUser
             .appendingPathComponent(".cursor/mcp.json")
@@ -241,6 +241,14 @@ enum AgentMCPServerDirectory {
             if lhs.source == rhs.source { return lhs.name < rhs.name }
             return sourceRank(lhs.source) < sourceRank(rhs.source)
         }
+    }
+
+    /// Cursor and Codex configuration files may live on slow or busy disks.
+    /// Parse them away from the main actor when presenting Settings.
+    static func listAsync(includeDisabled: Bool = false) async -> [AgentMCPServerConfig] {
+        await Task.detached(priority: .userInitiated) {
+            list(includeDisabled: includeDisabled)
+        }.value
     }
 
     static func server(named name: String) throws -> AgentMCPServerConfig {

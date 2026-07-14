@@ -325,7 +325,7 @@ enum AgentToolRegistry {
         ),
         AgentToolDescriptor(
             name: "web_search",
-            description: "Search the web with the configured provider (Auto / Exa / Brave) and return result titles, URLs, snippets, and available metadata. Use for current events, library/API documentation, error messages, or anything not answerable from the workspace. Requires an Exa or Brave Search API key configured in Settings → Agent → Web tools. Read-only.",
+            description: "Search the web with the configured provider (Auto / Exa / Brave) and return result titles, URLs, snippets, and available metadata. Use for current events, library/API documentation, error messages, or anything not answerable from the workspace. Uses local Exa / Brave keys from Settings → Agent → Web tools first; when both are missing and the user is signed in to some.im, falls back to some.im managed search. Read-only.",
             risk: .read,
             parameters: [
                 AgentToolParameter(name: "query", type: .string, description: "Search query. Keep it keyword-style; quote exact phrases.", required: true),

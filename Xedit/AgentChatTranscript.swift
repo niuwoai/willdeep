@@ -542,7 +542,7 @@ struct AgentChatTranscript: View {
         }
         .overlay(alignment: .leading) {
             let turns = userInputMinimapTurns
-            if turns.count > 1 {
+            if turns.count >= AgentTranscriptUserMinimap.minimumVisibleTurnCount {
                 AgentTranscriptUserMinimap(turns: turns) { userMessageID in
                     minimapScrollUserMessageID = userMessageID
                     minimapScrollToken += 1
