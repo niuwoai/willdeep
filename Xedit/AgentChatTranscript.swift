@@ -287,6 +287,25 @@ struct AgentChatTranscript: View {
                                 }
                         }
 
+                        // 运行中(planning/running)的 workflow 卡片走 SwiftUI
+                        // —— 进度条/子 agent 状态要随 report mutate 实时刷新,
+                        // 与 tool call group 同款「工作态表面」。结束后这条
+                        // 消息折回上面的 TextKit 历史,由 formatter 烘焙
+                        // 状态行 + 最终报告(见 AgentChatHistoryFormatter 的
+                        // workflowReport 分支)。1.155.0-rc9 之前这里没有任何
+                        // 挂载点:rc16 历史折进 NSTextView 后,AgentModeMessageView
+                        // 的 .workflowReport 分支只剩流式 assistant 一个入口,
+                        // workflow 卡片(进度、失败原因、研究报告)整体不可见。
+                        ForEach(activeWorkflowMessages(in: rendered)) { message in
+                            AgentModeMessageView(
+                                message: message,
+                                isStreamingThisMessage: false,
+                                baseFontSize: appState.agentChatBaseFontSize
+                            )
+                                .id(message.id)
+                                .frame(maxWidth: AgentDesign.chatMaxContentWidth, alignment: .leading)
+                        }
+
                         // Render the active streaming message — and
                         // only it — through the SwiftUI bubble path
                         // so markdown formatting + the streaming
@@ -752,8 +771,25 @@ struct AgentChatTranscript: View {
     /// assistant message (that one is rendered as its own SwiftUI
     /// bubble so markdown + streaming cursor stay live).
     private func historyMessages(rendered: [AgentMessage], streamingID: AgentMessage.ID?) -> [AgentMessage] {
-        guard let streamingID else { return rendered }
-        return rendered.filter { $0.id != streamingID }
+        rendered.filter { message in
+            if message.id == streamingID { return false }
+            // 运行中的 workflow 卡片由下方的 SwiftUI 工作态表面渲染,
+            // 不进 TextKit 历史(避免同一条消息出现两次)。
+            if isActiveWorkflowMessage(message) { return false }
+            return true
+        }
+    }
+
+    /// planning/running 状态的 workflow 消息 —— 需要实时进度的那部分。
+    /// done/failed/cancelled 走 TextKit 历史烘焙。
+    private func isActiveWorkflowMessage(_ message: AgentMessage) -> Bool {
+        guard message.role == .workflowReport,
+              let status = message.workflowReport?.status else { return false }
+        return status == .planning || status == .running
+    }
+
+    private func activeWorkflowMessages(in rendered: [AgentMessage]) -> [AgentMessage] {
+        rendered.filter(isActiveWorkflowMessage)
     }
 
     /// Show detailed, expandable SwiftUI tool cards only while they are

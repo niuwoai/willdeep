@@ -1432,6 +1432,27 @@ CI 只能保编译/单测过。一系列改 UI、改窗口、改 SwiftUI 状态�
 
 ---
 
+## 1.155.0-rc9 — Workflow 卡片重新可见 + 省心托管子 agent 路由
+
+- ⏳ Composer 输 `/research 随便一个问题` 回车 → transcript 里立刻出现
+  **完整的 Workflow 卡片**（标题 + Workflow badge + 转圈进度 +
+  「n / m agents」+ 计时），不再是一个光秃秃的 WFL 头像行
+- ⏳ 卡片运行中点 chevron 展开 → 能看到每个子 agent（scope /
+  search:* / fetch:* / verify:* / synthesize）的实时状态与 token 数
+- ⏳ workflow 跑完 → 卡片折进历史：WFL 头像行下面有「Deep Research ·
+  Done · n / m agents · x tokens」状态行 + 用户的原始问题 + 完整
+  研究报告 markdown（标题/列表/链接正常渲染），下方有 copy 按钮，
+  复制内容是完整报告
+- ⏳ workflow 失败（如断网跑 /research）→ 卡片变红 Failed 且失败原因
+  可见；360s 看门狗超时也一样落成可见的 Failed 卡片
+- ⏳ 省心托管（some.im）会话跑 `/research` → 子 agent 请求用的模型是
+  someim-auto-pro（或 floor 更高时对应档位）；`/code-review` →
+  someim-code-high；coding plan 生效时走 coding-plan 梯子（可在
+  some.im 后台/审计日志确认，不再是原始配置里的静态模型）
+- ⏳ 具体模型（非托管）会话跑 workflow → 行为与之前一致，模型不被改写
+
+---
+
 ## 怎么用这个文档
 
 - 每次发新版要补 smoke 项时：在最下面加新 H2 section

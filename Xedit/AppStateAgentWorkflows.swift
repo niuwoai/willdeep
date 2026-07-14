@@ -60,6 +60,16 @@ extension AppState {
         let runtimeID = runtime.id
         let workspaceURL = rootDirectory
         let configuration = agentConfiguration
+        // 省心托管:主循环每回合跑 routing judge 解析具体虚拟模型
+        // (AppStateAgentLoop),workflow 之前直接拿原始配置里的静态模型,
+        // 完全绕过托管路由 —— 与 5dd9273a 修的 someIMContext 缺失同族,
+        // some.im 托管会话的子 agent 请求与主循环行为不一致。workflow
+        // 是多 agent 编排,天然复杂任务,不必再问 judge:floor 与 high
+        // 取高者直接解析。非托管/非 some.im 会话为 nil,不动配置。
+        let managedFloor: AgentManagedCapabilityTier? =
+            configuration.providerID == AgentProviderPreset.someIMID
+                ? runtime.managedRouting?.minimumTier
+                : nil
         // some.im session/workspace context headers, built exactly like the main
         // loop (AppStateAgentLoop). Every subagent request needs these on a
         // some.im-gated provider — without them some.im stalls the call and the
@@ -81,11 +91,21 @@ extension AppState {
                 }
             }
 
+            var workflowConfiguration = configuration
+            if let managedFloor {
+                let hasCodingPlan = await self.refreshedSomeIMCodingPlanStatusIfNeeded().isActiveNow
+                workflowConfiguration.model = Self.managedWorkflowModel(
+                    floor: managedFloor,
+                    domain: workflow.managedDomain,
+                    hasCodingPlan: hasCodingPlan
+                )
+            }
+
             let engine = WorkflowEngine(
                 reportID: report.id,
                 runtimeID: runtimeID,
                 workspaceURL: workspaceURL,
-                configuration: configuration,
+                configuration: workflowConfiguration,
                 someIMContext: someIMContext,
                 appState: self
             )
@@ -124,6 +144,21 @@ extension AppState {
         }
 
         return true
+    }
+
+    /// 省心托管会话里 workflow 子 agent 的主模型解析:floor 与 high 取
+    /// 高者(workflow 天然是复杂任务,不再走每回合 judge),按任务域映射
+    /// 到 some.im 虚拟模型。纯函数,单测覆盖。
+    static func managedWorkflowModel(
+        floor: AgentManagedCapabilityTier,
+        domain: SomeIMManagedDomain,
+        hasCodingPlan: Bool
+    ) -> String {
+        SomeIMManagedModel.resolve(
+            domain: domain,
+            tier: max(floor, .high),
+            hasCodingPlan: hasCodingPlan
+        )
     }
 
     /// 单次 workflow 运行的看门狗时限。某个子 agent 的 provider 请求 stall（例如
@@ -192,7 +227,11 @@ extension AppState {
         runtimeID: UUID,
         mutation: (inout WorkflowReport) -> Void
     ) {
-        guard let runtime = agentRuntimes[runtimeID] else { return }
+        // `runtime(for:)` 而非裸 `agentRuntimes[...]`:workflow 跑到一半
+        // 会话被 idle-runtime 驱逐的话,裸查找会让后续所有状态更新静默
+        // no-op,卡片永远冻结 —— 与后台作业回调同款兜底(见 AppState
+        // onJobFinished 的注释)。
+        guard let runtime = runtime(for: runtimeID) else { return }
         guard let idx = runtime.messages.firstIndex(where: {
             $0.role == .workflowReport && $0.workflowReport?.id == id
         }) else { return }

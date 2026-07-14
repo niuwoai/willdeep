@@ -25,8 +25,17 @@ protocol WorkflowDefinition: Sendable {
     /// deep-research 必须有 query。
     var allowsEmptyArgs: Bool { get }
 
+    /// 省心托管（some.im managed routing）会话里，workflow 子 agent 的
+    /// 任务域 —— 决定解析到 auto*（general）还是 code*（coding）虚拟模型。
+    /// 默认 general；读代码/diff 的 workflow 覆写成 coding。
+    var managedDomain: SomeIMManagedDomain { get }
+
     /// 入口。Engine 提供 DSL 原语；workflow 自己组织 agent / parallel
     /// 调用，最后返回 synthesize 出的 markdown 总结，会被 engine 写到
     /// report.summary。`args` 是用户在 slash 命令后输入的原文。
     func run(engine: WorkflowEngine, args: String) async throws -> String
+}
+
+extension WorkflowDefinition {
+    var managedDomain: SomeIMManagedDomain { .general }
 }

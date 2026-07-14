@@ -152,6 +152,24 @@ enum AgentChatHistoryRenderer {
             hasher.combine(call.toolName)
             hasher.combine(call.argumentsJSON)
         }
+        // Workflow 卡片消息的 content 恒为空,全部展示数据挂在
+        // workflowReport 上。不进 hash 的话 engine mutate report
+        // (running → done、summary 填入)后 cache 直接命中旧渲染,
+        // 卡片永远停在初始状态。
+        if let report = m.workflowReport {
+            hasher.combine(report.id)
+            hasher.combine(report.status.rawValue)
+            hasher.combine(report.displayTitle)
+            hasher.combine(report.args)
+            hasher.combine(report.summary)
+            hasher.combine(report.totalUsageTokens)
+            hasher.combine(report.finishedAt)
+            hasher.combine(report.subAgents.count)
+            for sub in report.subAgents {
+                hasher.combine(sub.status.rawValue)
+                hasher.combine(sub.label)
+            }
+        }
         return hasher.finalize()
     }
 
@@ -342,7 +360,15 @@ enum AgentChatHistoryRenderer {
                 return AgentUserContentSplitter.split(source).visible
             }()
             let body: String
-            if useMono, message.content.count > toolBodyLimit {
+            if message.role == .workflowReport, let report = message.workflowReport {
+                // Workflow 消息的 content 恒为空,状态/摘要都在 report 字段
+                // 上。运行中的卡片由 AgentChatTranscript 的 SwiftUI 工作态
+                // 表面渲染(不会进这里);进历史的已结束卡片烘焙成
+                // 状态行 + 最终报告 markdown。1.155.0-rc9 前这里走通用
+                // 空 body 分支,workflow 在 TextKit 历史里只剩一个光秃秃
+                // 的 WFL 头像行 —— 研究报告/失败原因整体不可见。
+                body = Self.workflowHistoryBody(for: report)
+            } else if useMono, message.content.count > toolBodyLimit {
                 let head = String(message.content.prefix(toolBodyLimit))
                 let omitted = message.content.count - toolBodyLimit
                 body = head + "\n\n…[truncated \(omitted) characters from this tool output — open the message reader for the full body]"
@@ -579,6 +605,41 @@ enum AgentChatHistoryRenderer {
         init(inlineMessageID: UUID, calls: [AgentMessageToolCall]) {
             id = "inline:" + inlineMessageID.uuidString
             self.calls = calls
+        }
+    }
+
+    /// 已结束 workflow 卡片的 TextKit 历史正文:一行状态摘要(标题·状态·
+    /// agent 数·token),空一段接用户 args,再接 engine synthesize 出的
+    /// 最终报告 markdown。internal 而非 private —— 单测直接验证渲染内容。
+    static func workflowHistoryBody(for report: WorkflowReport) -> String {
+        var statusParts: [String] = ["**\(report.displayTitle)**", workflowStatusLabel(report.status)]
+        if !report.subAgents.isEmpty {
+            statusParts.append(
+                L10n.WorkflowCard.agentsLabel(done: report.completedAgentCount, total: report.subAgents.count)
+            )
+        }
+        if report.totalUsageTokens > 0 {
+            statusParts.append(L10n.WorkflowCard.totalTokens(report.totalUsageTokens))
+        }
+        var blocks: [String] = [statusParts.joined(separator: " · ")]
+        let args = report.args.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !args.isEmpty {
+            blocks.append(args)
+        }
+        let summary = report.summary.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !summary.isEmpty {
+            blocks.append(summary)
+        }
+        return blocks.joined(separator: "\n\n")
+    }
+
+    private static func workflowStatusLabel(_ status: WorkflowReport.Status) -> String {
+        switch status {
+        case .planning: return L10n.WorkflowCard.statusPlanning
+        case .running: return L10n.WorkflowCard.statusRunning
+        case .done: return L10n.WorkflowCard.statusDone
+        case .failed: return L10n.WorkflowCard.statusFailed
+        case .cancelled: return L10n.WorkflowCard.statusCancelled
         }
     }
 

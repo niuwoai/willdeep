@@ -99,4 +99,44 @@ extension WillDeepTests {
         #expect(didTimeout)
         #expect(Date().timeIntervalSince(startedAt) < 0.5)
     }
+
+    // MARK: - 省心托管 workflow 模型解析 (1.155.0-rc9)
+    //
+    // 主循环每回合跑 routing judge,workflow 子 agent 之前直接拿静态
+    // 配置模型、绕过托管路由。修复后:floor 与 high 取高者,按 workflow
+    // 声明的任务域解析成 some.im 虚拟模型。
+
+    @MainActor
+    @Test("省心托管:workflow 模型 floor 与 high 取高者、按域映射")
+    func managedWorkflowModelResolvesFloorAndDomain() {
+        // 默认 floor(.low)抬到 high。
+        #expect(
+            AppState.managedWorkflowModel(floor: .low, domain: .general, hasCodingPlan: false)
+                == SomeIMManagedModel.autoPro
+        )
+        // 会话 floor 已升到 premium 时不降档。
+        #expect(
+            AppState.managedWorkflowModel(floor: .premium, domain: .general, hasCodingPlan: false)
+                == SomeIMManagedModel.autoPremium
+        )
+        // coding 域走 code* 梯子。
+        #expect(
+            AppState.managedWorkflowModel(floor: .low, domain: .coding, hasCodingPlan: false)
+                == SomeIMManagedModel.codeHigh
+        )
+        // coding plan 生效时统一走 coding-plan 梯子。
+        #expect(
+            AppState.managedWorkflowModel(floor: .low, domain: .general, hasCodingPlan: true)
+                == SomeIMManagedModel.codingPlanHigh
+        )
+    }
+
+    @MainActor
+    @Test("workflow 任务域声明:读代码的 coding,其余默认 general")
+    func workflowManagedDomainDeclarations() {
+        #expect(CodeReviewWorkflow().managedDomain == .coding)
+        #expect(BugHuntWorkflow().managedDomain == .coding)
+        #expect(PRReviewWorkflow().managedDomain == .coding)
+        #expect(DeepResearchWorkflow().managedDomain == .general)
+    }
 }

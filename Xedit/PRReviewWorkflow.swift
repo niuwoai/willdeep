@@ -18,6 +18,7 @@ struct PRReviewWorkflow: WorkflowDefinition {
     var argsPlaceholder: String { "PR number, e.g. 123" }
     var maxAgents: Int { 6 }
     var allowsEmptyArgs: Bool { false }
+    var managedDomain: SomeIMManagedDomain { .coding }
 
     func run(engine: WorkflowEngine, args: String) async throws -> String {
         let trimmed = args.trimmingCharacters(in: .whitespacesAndNewlines)
