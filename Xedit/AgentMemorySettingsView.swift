@@ -11,7 +11,8 @@ import UniformTypeIdentifiers
 
 struct AgentMemorySettingsView: View {
     @EnvironmentObject var appState: AppState
-    @StateObject private var memoryState = AgentMemoryState()
+    @StateObject private var memoryState = AgentMemoryState(settings: .default, memories: [])
+    @State private var isLoadingMemory = true
 
     @State private var newMemoryContent = ""
     @State private var newMemoryLifetime: AgentMemoryLifetime = .longTerm
@@ -82,6 +83,24 @@ struct AgentMemorySettingsView: View {
     }
 
     var body: some View {
+        Group {
+            if isLoadingMemory {
+                ProgressView()
+                    .controlSize(.small)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+            } else {
+                memoryForm
+            }
+        }
+        .task {
+            await memoryState.reloadFromStore()
+            guard !Task.isCancelled else { return }
+            memoryState.backfillProjectPaths(rootDirectory: appState.rootDirectory)
+            isLoadingMemory = false
+        }
+    }
+
+    private var memoryForm: some View {
         Form {
             AgentLearningReviewSettingsSection()
 
@@ -347,12 +366,6 @@ struct AgentMemorySettingsView: View {
             }
         }
         .formStyle(.grouped)
-        .onAppear {
-            // Legacy project memories only carry the fingerprint; when the
-            // matching workspace is open, write its readable path back so
-            // rows can show where each memory is mounted.
-            memoryState.backfillProjectPaths(rootDirectory: appState.rootDirectory)
-        }
     }
 
     private var maintenanceHeader: some View {

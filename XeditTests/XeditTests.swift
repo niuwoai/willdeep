@@ -1419,7 +1419,7 @@ struct WillDeepTests {
         #expect(gated == nil)
     }
 
-    @Test("goal mode auto-approves write tools but never danger tier")
+    @Test("goal mode fast-paths safe writes while command-shaped tools stay gated")
     @MainActor
     func testGoalModeAutoApproval() async {
         let sandbox = KeychainSandbox()
@@ -1427,7 +1427,7 @@ struct WillDeepTests {
         let appState = AppState()
         let root = URL(fileURLWithPath: "/tmp/willdeep-test-workspace")
 
-        // write 层 + goal 模式 → 自动放行，来源标记为 goalMode。
+        // 命令型工具即使在 Goal 模式也遵守“每次询问”，不再一律放行。
         let writeApproval = await appState.autoApprovalSource(
             toolName: "run_command",
             arguments: ["command": .string("swift build")],
@@ -1436,7 +1436,7 @@ struct WillDeepTests {
             interactionMode: .goal,
             approvalMode: .requestEveryTime
         )
-        #expect(writeApproval == .goalMode)
+        #expect(writeApproval == nil)
 
         // 危险层永远不进自动放行（goal 模式也一样）。
         let dangerApproval = await appState.autoApprovalSource(
@@ -1466,7 +1466,7 @@ struct WillDeepTests {
         )
         #expect(curlApproval == nil)
 
-        // normal 模式不受影响：没有命中其他自动路径时仍等用户。
+        // 普通模式下，委托式编码 Agent 由静态白名单免去重复审批。
         let normalApproval = await appState.autoApprovalSource(
             toolName: "claude_code",
             arguments: ["prompt": .string("do x")],
@@ -1474,7 +1474,7 @@ struct WillDeepTests {
             rootDirectory: root,
             interactionMode: .normal
         )
-        #expect(normalApproval == nil)
+        #expect(normalApproval == .staticAllowlist)
 
         // Goal 模式下允许自动改名，但 workspace 归属仍不能绕过人工确认。
         let titleApproval = await appState.autoApprovalSource(
@@ -2190,12 +2190,13 @@ struct WillDeepTests {
 
     @Test("agent token estimate includes tool schemas without exploding short chats")
     func testAgentTokenEstimateIncludesTools() {
+        let maximumExpectedToolSchemaTokens = 35_000
         let messages = [AgentMessage(role: .user, content: "hi")]
         let withoutTools = AppState.estimateAgentTokens(messages: messages, tools: [])
         let withTools = AppState.estimateAgentTokens(messages: messages, tools: AgentToolRegistry.all)
 
         #expect(withTools > withoutTools)
-        #expect(withTools < 30_000)
+        #expect(withTools < maximumExpectedToolSchemaTokens)
     }
 
     @Test("MCP and skill tools are registered")

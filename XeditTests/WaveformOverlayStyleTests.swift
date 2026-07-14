@@ -12,7 +12,8 @@ struct WaveformOverlayStyleTests {
     }
 
     @Test func colorPresetsKeepFastvPaletteShape() {
-        #expect(WaveformOverlayWindowColorStyle.allCases.count == 21)
+        let expectedColorPresetCount = 33
+        #expect(WaveformOverlayWindowColorStyle.allCases.count == expectedColorPresetCount)
 
         let fastvDefault = WaveformOverlayWindowColorStyle.darkGrayBlue.colorConfig(for: .dark)
         #expect(fastvDefault.useMaterial == false)

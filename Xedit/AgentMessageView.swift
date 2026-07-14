@@ -71,10 +71,7 @@ struct AgentModeMessageView: View {
     /// callers that don't pass it keep working.
     var baseFontSize: CGFloat = NSFont.systemFontSize
     var onReferenceGeneratedImage: (String) -> Void = { _ in }
-    // rc10: 之前 hover / 非 hover 用两套 opacity (0.028/0.022 vs
-    // 0.038/0.032),非 hover 状态下气泡边线弱到看不见,用户感觉
-    // 时间戳和复制 icon 像「漂在外面」(rc9 截图反馈)。统一改用
-    // hover 那档,默认就把 footer 显式包进圆角矩形里。
+    @State private var isHoveringUserMessage = false
 
     var body: some View {
         switch message.role {
@@ -163,36 +160,44 @@ struct AgentModeMessageView: View {
                     ScrollView(.horizontal, showsIndicators: false) {
                         HStack(spacing: 6) {
                             ForEach(message.images) { image in
-                                AgentImageThumbnail(image: image, size: 96, allowsRemoval: false, onRemove: nil)
+                                AgentImageThumbnail(
+                                    image: image,
+                                    size: 96,
+                                    allowsRemoval: false,
+                                    onRemove: nil,
+                                    onPreview: { AgentImagePreviewWindowRegistry.shared.open(image: image) }
+                                )
                             }
                         }
                     }
                 }
-                if !message.content.isEmpty || !message.textAttachments.isEmpty {
-                    // Footer (timestamp + copy) is always shown — no longer
-                    // hover-gated — so the send time is visible at rest.
-                    AgentMessageFooter(message: message, alignment: .trailing, showsUserTimestamp: true)
-                        .padding(.top, 2)
-                }
             }
             .padding(.horizontal, 14)
-            .padding(.top, 10)
-            .padding(.bottom, 14)
+            .padding(.vertical, 10)
             .background(
                 RoundedRectangle(cornerRadius: AgentDesign.cardCornerRadius, style: .continuous)
-                    .fill(Color.primary.opacity(0.038))
-            )
-            .overlay(
-                RoundedRectangle(cornerRadius: AgentDesign.cardCornerRadius, style: .continuous)
-                    .stroke(Color.primary.opacity(0.032), lineWidth: 1)
+                    .fill(Color.primary.opacity(0.035))
             )
             .frame(maxWidth: AgentDesign.chatMaxContentWidth * AgentDesign.userMessageMaxWidthRatio, alignment: .trailing)
+            if !message.content.isEmpty || !message.textAttachments.isEmpty || !message.images.isEmpty {
+                // Keep the row below the input in layout so the transcript
+                // never jumps; only its metadata and actions fade in.
+                AgentMessageFooter(message: message, alignment: .trailing, showsUserTimestamp: true)
+                    .padding(.top, 2)
+                    .padding(.trailing, 8)
+                    .opacity(isHoveringUserMessage ? 1 : 0)
+                    .allowsHitTesting(isHoveringUserMessage)
+                    .accessibilityHidden(!isHoveringUserMessage)
+            }
         }
         .frame(maxWidth: .infinity, alignment: .trailing)
+        .contentShape(Rectangle())
+        .onHover { isHoveringUserMessage = $0 }
+        .animation(.easeOut(duration: 0.12), value: isHoveringUserMessage)
     }
 
-    // Assistant messages: left-aligned, wrapped in a soft card so the
-    // boundary of one model turn is obvious. Body renders through the
+    // Assistant messages: left-aligned on the conversation surface without
+    // a surrounding card. Body renders through the
     // existing MarkdownPreview pipeline (also used by the editor's
     // Markdown side preview) — headings, lists, quotes, dividers, inline
     // formatting, and fenced code blocks all render. The parser flushes
@@ -222,17 +227,7 @@ struct AgentModeMessageView: View {
                             )
                         }
                     }
-                    .padding(.horizontal, 14)
-                    .padding(.top, 14)
-                    .padding(.bottom, 10)
-                    .background(
-                        RoundedRectangle(cornerRadius: AgentDesign.cardCornerRadius, style: .continuous)
-                            .fill(Color.primary.opacity(0.035))
-                    )
-                    .overlay(
-                        RoundedRectangle(cornerRadius: AgentDesign.cardCornerRadius, style: .continuous)
-                            .stroke(Color.primary.opacity(0.035), lineWidth: 1)
-                    )
+                    .padding(.vertical, 8)
                     // Don't show the footer while the stream is still
                     // running — elapsedSeconds isn't stamped until
                     // `.finishedTurn`, so the row would briefly read
@@ -240,7 +235,6 @@ struct AgentModeMessageView: View {
                     // turn settles.
                     if !isStreamingThisMessage {
                         AgentMessageFooter(message: message, alignment: .leading)
-                            .padding(.leading, 14)
                     }
                 }
             }
@@ -270,7 +264,8 @@ struct AgentGeneratedImageStrip: View {
             image: image,
             size: 144,
             allowsRemoval: false,
-            onRemove: nil
+            onRemove: nil,
+            onPreview: { AgentImagePreviewWindowRegistry.shared.open(image: image) }
         )
         if let marker = image.generatedReferenceMarker {
             thumbnail

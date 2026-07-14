@@ -7,7 +7,7 @@
 
 import Foundation
 
-struct AgentGlobalRulesSettings: Codable, Equatable {
+nonisolated struct AgentGlobalRulesSettings: Codable, Equatable, Sendable {
     var isEnabled: Bool
     var filePath: String
 
@@ -27,7 +27,7 @@ struct AgentGlobalRulesSettings: Codable, Equatable {
     }
 }
 
-enum AgentGlobalRulesStore {
+nonisolated enum AgentGlobalRulesStore {
     private static let settingsKey = "com.willdeep.agentGlobalRules.settings.v1"
     static let maxRulesCharacters = 8_000
     static let defaultRulesTemplate = """
@@ -236,6 +236,17 @@ enum AgentGlobalRulesStore {
             return nil
         }
         return text
+    }
+
+    static func loadEditorSnapshot(
+        settings override: AgentGlobalRulesSettings? = nil
+    ) async -> (settings: AgentGlobalRulesSettings, text: String, url: URL) {
+        await Task.detached(priority: .userInitiated) {
+            let settings = (override ?? loadSettings()).normalized
+            ensureDefaultRulesFileIfNeeded(settings: settings)
+            let url = resolvedURL(for: settings.filePath)
+            return (settings, readRulesFileText(at: url) ?? "", url)
+        }.value
     }
 
     static func saveRules(_ text: String, settings: AgentGlobalRulesSettings = loadSettings()) throws {

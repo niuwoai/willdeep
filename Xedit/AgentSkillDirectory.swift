@@ -70,7 +70,7 @@ enum AgentSkillCatalog {
 /// composer popover). Mirrors `AgentSkillCatalog.SkillRecord` but exposed
 /// outside the private enum so views and AppState helpers can list and
 /// inline skills without going through the LLM tool-call round-trip.
-struct AgentSkillEntry: Identifiable, Equatable {
+nonisolated struct AgentSkillEntry: Identifiable, Equatable, Sendable {
     let identifier: String
     let name: String
     let description: String
@@ -81,7 +81,7 @@ struct AgentSkillEntry: Identifiable, Equatable {
     var id: String { identifier }
 }
 
-enum AgentSkillDirectory {
+nonisolated enum AgentSkillDirectory {
     private struct SkillRoot {
         let url: URL
         let source: AgentSkillSource
@@ -107,6 +107,14 @@ enum AgentSkillDirectory {
             }
             return lhs.identifier < rhs.identifier
         }
+    }
+
+    /// Settings panes are created on the main actor. Keep directory walking
+    /// and SKILL.md parsing off that actor so switching panes stays responsive.
+    static func listAsync(includeDisabled: Bool = false) async -> [AgentSkillEntry] {
+        await Task.detached(priority: .userInitiated) {
+            list(includeDisabled: includeDisabled)
+        }.value
     }
 
     static var userSkillsRoot: URL {

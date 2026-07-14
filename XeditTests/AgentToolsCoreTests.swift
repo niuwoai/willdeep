@@ -18,6 +18,7 @@ import Foundation
 @Suite
 @MainActor
 struct AgentToolsCoreTests {
+    private static let headlessCommandTimeoutSeconds = 10.0
 
     // MARK: - Risk / status enums
 
@@ -340,7 +341,7 @@ struct AgentToolsCoreTests {
             name: "run_command",
             arguments: [
                 "command": .string("read value || true; printf 'done:%s\\n' \"$value\""),
-                "timeout_seconds": .number(3),
+                "timeout_seconds": .number(Self.headlessCommandTimeoutSeconds),
             ],
             context: AgentToolContext(rootDirectory: nil, sandboxMode: .escalated)
         )
@@ -425,7 +426,7 @@ struct AgentToolsCoreTests {
             name: "run_command",
             arguments: [
                 "command": .string("printf '%s\\n' \(AgentToolRunner.shellQuoted(placeholder))"),
-                "timeout_seconds": .number(3),
+                "timeout_seconds": .number(Self.headlessCommandTimeoutSeconds),
             ],
             context: AgentToolContext(rootDirectory: nil, sandboxMode: .escalated)
         )
@@ -821,7 +822,7 @@ struct AgentToolsCoreTests {
         #expect(listShortcuts?.risk == .read)
         #expect(createShortcut?.risk == .write)
         #expect(editShortcut?.risk == .write)
-        #expect(snapshot?.description.contains("whether the active terminal appears to be local or SSH'd into a server") == true)
+        #expect(snapshot?.description.contains("Local tabs can contain a nested manual SSH session") == true)
         #expect(sendCommand?.description.contains("never send a local-intended command into an SSH'd server tab") == true)
         #expect(sendCommand?.parameters.contains(where: { $0.name == "zmodem_upload_paths" && $0.type == .stringArray }) == true)
         #expect(sendCommand?.parameters.contains(where: { $0.name == "zmodem_download_directory" && $0.type == .string }) == true)

@@ -154,8 +154,20 @@ enum DesktopPetOutputFreshness {
 }
 
 enum DesktopPetMessageCardVisibility {
-    nonisolated static func shouldShowMessageCards(appIsActive: Bool) -> Bool {
-        !appIsActive
+    nonisolated static func shouldShowMessageCards(
+        appIsActive: Bool,
+        outputSessionCount: Int
+    ) -> Bool {
+        !appIsActive && outputSessionCount > 0
+    }
+}
+
+/// A non-activating panel normally drops the first mouse-down delivered while
+/// its owning app is inactive. The desktop pet must stay non-activating so it
+/// does not steal focus, but it still needs that first event to begin a drag.
+final class DesktopPetFirstMouseHostingView<Content: View>: NSHostingView<Content> {
+    override func acceptsFirstMouse(for event: NSEvent?) -> Bool {
+        true
     }
 }
 
@@ -330,10 +342,12 @@ final class DesktopPetWindowManager: ObservableObject {
         let isRunningTool = runtimes.contains { runtime in
             runtime.toolCalls.contains { $0.status == .running }
         }
+        let appIsActive = NSApplication.shared.isActive
+        let outputPreviews = appIsActive ? [] : Self.outputPreviews(from: appState, now: now)
         let shouldShowMessageCards = DesktopPetMessageCardVisibility.shouldShowMessageCards(
-            appIsActive: NSApplication.shared.isActive
+            appIsActive: appIsActive,
+            outputSessionCount: outputPreviews.count
         )
-        let outputPreviews = shouldShowMessageCards ? Self.outputPreviews(from: appState, now: now) : []
         let visiblePreviews = Array(outputPreviews.prefix(Self.maximumVisibleOutputPreviews))
         let latestPreview = visiblePreviews.first
         let hasCelebration = celebrationEndsAt.map { $0 > now } ?? false
@@ -433,7 +447,7 @@ final class DesktopPetWindowManager: ObservableObject {
         guard window == nil else { return }
 
         let size = NSSize(width: 360, height: 260)
-        let host = NSHostingView(rootView: DesktopPetOverlayView(manager: self))
+        let host = DesktopPetFirstMouseHostingView(rootView: DesktopPetOverlayView(manager: self))
         host.frame = NSRect(origin: .zero, size: size)
 
         let panel = NSPanel(

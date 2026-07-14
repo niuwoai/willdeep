@@ -83,8 +83,13 @@ enum AgentChatHistoryFooterChrome {
         return result
     }
 
-    static func copyButton(copied: Bool, message: String) -> NSAttributedString {
-        var attributes = copyLinkAttributes(color: copied ? NSColor.systemGreen : NSColor.secondaryLabelColor)
+    static func copyButton(
+        copied: Bool,
+        message: String,
+        isVisible: Bool = true
+    ) -> NSAttributedString {
+        let idleColor = isVisible ? NSColor.secondaryLabelColor : NSColor.clear
+        var attributes = copyLinkAttributes(color: copied ? NSColor.systemGreen : idleColor)
         attributes[.agentChatHistoryMessageCopyText] = message
         if copied {
             return NSAttributedString(string: copyCopiedLabel, attributes: attributes)
@@ -93,7 +98,7 @@ enum AgentChatHistoryFooterChrome {
         attributes[.link] = copyLinkValue
         let result = NSMutableAttributedString(attributedString: copySymbolString(
             pointSize: 13,
-            color: NSColor.secondaryLabelColor
+            color: idleColor
         ))
         result.addAttributes(attributes, range: NSRange(location: 0, length: result.length))
         return result

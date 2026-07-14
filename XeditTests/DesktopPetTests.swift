@@ -1,4 +1,5 @@
 import Testing
+import SwiftUI
 @testable import WillDeep
 
 struct DesktopPetTests {
@@ -75,8 +76,25 @@ struct DesktopPetTests {
     }
 
     @Test
-    func messageCardsHideWhileAppIsForeground() {
-        #expect(!DesktopPetMessageCardVisibility.shouldShowMessageCards(appIsActive: true))
-        #expect(DesktopPetMessageCardVisibility.shouldShowMessageCards(appIsActive: false))
+    func messageCardsRequireBackgroundOutputSessions() {
+        #expect(!DesktopPetMessageCardVisibility.shouldShowMessageCards(
+            appIsActive: true,
+            outputSessionCount: 1
+        ))
+        #expect(!DesktopPetMessageCardVisibility.shouldShowMessageCards(
+            appIsActive: false,
+            outputSessionCount: 0
+        ))
+        #expect(DesktopPetMessageCardVisibility.shouldShowMessageCards(
+            appIsActive: false,
+            outputSessionCount: 1
+        ))
+    }
+
+    @Test @MainActor
+    func desktopPetAcceptsTheFirstMouseEventWhileAppIsInactive() {
+        let host = DesktopPetFirstMouseHostingView(rootView: EmptyView())
+
+        #expect(host.acceptsFirstMouse(for: nil))
     }
 }

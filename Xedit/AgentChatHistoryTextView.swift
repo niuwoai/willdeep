@@ -120,7 +120,7 @@ struct AgentChatHistoryTextView: NSViewRepresentable {
         view.autoresizingMask = [.width]
         view.linkTextAttributes = [
             .underlineStyle: 0,
-            .cursor: NSCursor.pointingHand,
+            .cursor: NSCursor.arrow,
         ]
     }
 }
@@ -798,6 +798,17 @@ extension AgentChatHistoryNSTextView: NSTextViewDelegate {
             return true
         }
 
+        if let imageIDString = textStorage.attribute(
+            .agentChatHistoryImageID,
+            at: charIndex,
+            effectiveRange: nil
+        ) as? String,
+           let imageID = UUID(uuidString: imageIDString),
+           let image = currentMessages.lazy.flatMap(\.images).first(where: { $0.id == imageID }) {
+            AgentImagePreviewWindowRegistry.shared.open(image: image)
+            return true
+        }
+
         if let citation = textStorage.attribute(
             .agentChatHistoryAttachmentCitation,
             at: charIndex,
@@ -836,6 +847,7 @@ extension AgentChatHistoryNSTextView: NSTextViewDelegate {
             AgentChatHistoryFooterChrome.reportLinkValue,
             AgentChatHistoryTableLink.value,
             AgentChatHistoryTextAttachmentLink.value,
+            AgentChatHistoryImageLink.value,
             AgentChatHistoryFilePathLink.value,
             AgentChatHistoryAttachmentCitationLink.value,
             "agent-chat-history-tool-group",
@@ -896,18 +908,22 @@ enum AgentChatHistoryBubbleKind: Int {
     case system
     case tool
     case toolSummary
+
+    var drawsRoundedBackground: Bool {
+        self != .assistant
+    }
 }
 
 enum AgentChatHistoryLayoutMetrics {
-    // 1.130.0-rc3：用户气泡从「固定 82% 宽、文字左缩进 172」改成
-    // 几乎撑满内容列 —— 左侧只留约一个字宽。旧版在窄窗口里用户输入
-    // 左边空出一大块（截图反馈），信息密度太低。
+    // Codex-style user input stays in a right-side column instead of
+    // becoming a full-width strip. The body remains left-aligned inside
+    // that column, while short and long messages share a stable wrap width.
     static let userBubbleMinWidth: CGFloat = 260
+    static let userBubbleMaxWidthRatio: CGFloat = 0.78
     static let userBubbleTrailingMargin: CGFloat = 30
-    /// 气泡背景矩形距内容列左缘的留白（正文缩进 16 − 气泡内衬 12）。
-    static let userBubbleLeadingMargin: CGFloat = 4
-    /// 用户正文左缩进：约一个汉字宽。
-    static let userBodyHeadIndent: CGFloat = 16
+    /// Matches the leading edge of the 78% user column at the normal
+    /// 1040pt transcript width while still leaving usable space when narrow.
+    static let userBodyHeadIndent: CGFloat = 240
     static let userBodyTailIndent: CGFloat = -46
     /// Bubble backgrounds are drawn outside TextKit's glyph usedRect.
     /// Without this bottom slack the final user bubble can have its lower
@@ -921,6 +937,10 @@ enum AgentChatHistoryTableLink {
 
 enum AgentChatHistoryTextAttachmentLink {
     static let value = "agent-chat-history-text-attachment"
+}
+
+enum AgentChatHistoryImageLink {
+    static let value = "agent-chat-history-image"
 }
 
 enum AgentChatHistoryFilePathLink {
@@ -985,6 +1005,7 @@ private final class AgentChatHistoryBubbleLayoutManager: NSLayoutManager {
                 in: fullStorageRange
             )
             guard let kind = bubbleKind(from: effectiveValue) else { return }
+            guard kind.drawsRoundedBackground else { return }
             let drawKey = "\(fullEffectiveRange.location)-\(fullEffectiveRange.length)-\(kind.rawValue)"
             guard drawnRanges.insert(drawKey).inserted else { return }
             let bubbleGlyphRange = glyphRange(forCharacterRange: fullEffectiveRange, actualCharacterRange: nil)
@@ -1058,14 +1079,15 @@ private final class AgentChatHistoryBubbleLayoutManager: NSLayoutManager {
 
         switch kind {
         case .user:
-            // 几乎撑满内容列：左缘只留 userBubbleLeadingMargin（正文缩进
-            // 16 − 气泡内衬 12 = 4），右缘保持 trailing margin。窄到极限
-            // 时退回 minWidth 右对齐，避免气泡比正文还窄。
-            let width = max(
-                AgentChatHistoryLayoutMetrics.userBubbleMinWidth,
-                containerWidth
-                    - AgentChatHistoryLayoutMetrics.userBubbleTrailingMargin
-                    - AgentChatHistoryLayoutMetrics.userBubbleLeadingMargin
+            // Keep user input in a restrained right-side surface. The footer
+            // is intentionally outside this rect and retains its own row.
+            let availableWidth = max(0, containerWidth - AgentChatHistoryLayoutMetrics.userBubbleTrailingMargin)
+            let width = min(
+                availableWidth,
+                max(
+                    AgentChatHistoryLayoutMetrics.userBubbleMinWidth,
+                    containerWidth * AgentChatHistoryLayoutMetrics.userBubbleMaxWidthRatio
+                )
             )
             rect.origin.x = origin.x + containerWidth - width - AgentChatHistoryLayoutMetrics.userBubbleTrailingMargin
             rect.size.width = width
@@ -1214,7 +1236,7 @@ private final class AgentChatHistoryBubbleLayoutManager: NSLayoutManager {
             // prominent fill, just enough to set them apart from assistant text.
             return NSColor.quaternaryLabelColor.withAlphaComponent(0.045)
         case .assistant:
-            return NSColor.quaternaryLabelColor.withAlphaComponent(0.06)
+            return .clear
         case .system:
             return NSColor.systemPurple.withAlphaComponent(0.12)
         case .tool:

@@ -7,7 +7,7 @@
 
 import Foundation
 
-struct AgentSkillSettings: Codable, Equatable {
+nonisolated struct AgentSkillSettings: Codable, Equatable, Sendable {
     var autoExtractionEnabled: Bool
     var minimumToolCallCount: Int
     var disabledSkillIdentifiers: [String]
@@ -30,7 +30,7 @@ struct AgentSkillSettings: Codable, Equatable {
     }
 }
 
-enum AgentSkillSettingsStore {
+nonisolated enum AgentSkillSettingsStore {
     private static let settingsKey = "com.willdeep.agentSkillSettings.v1"
     private static let defaultThresholdMigrationKey = "com.willdeep.agentSkillSettings.defaultThreshold.rc85"
 
@@ -72,7 +72,7 @@ enum AgentSkillSettingsStore {
     }
 }
 
-enum AgentSkillSource: String, Codable, CaseIterable, Identifiable {
+nonisolated enum AgentSkillSource: String, Codable, CaseIterable, Identifiable, Sendable {
     case bundled
     case user
     case plugin
@@ -91,7 +91,7 @@ enum AgentSkillSource: String, Codable, CaseIterable, Identifiable {
     }
 }
 
-enum AgentSkillFileManager {
+nonisolated enum AgentSkillFileManager {
     /// 用户自定义 skill 的主目录。1.85.0-rc5 起从 `~/.codex/skills/` 迁
     /// 到 `~/.willdeep/skills/` —— `.codex` 是借来的旧名，正式品牌叫
     /// WillDeep。新增 skill 默认写到 willdeep 目录;旧 codex 目录仍然

@@ -180,6 +180,7 @@ struct AgentImageThumbnail: View {
     let size: CGFloat
     let allowsRemoval: Bool
     let onRemove: (() -> Void)?
+    var onPreview: (() -> Void)? = nil
     @State private var decodedImage: NSImage?
 
     var body: some View {
@@ -227,6 +228,207 @@ struct AgentImageThumbnail: View {
                 .help("Remove image")
             }
         }
+        .contentShape(RoundedRectangle(cornerRadius: 6))
+        .onTapGesture {
+            onPreview?()
+        }
+        .help(onPreview == nil ? "" : L10n.ImagePreview.openButton)
+    }
+}
+
+@MainActor
+final class AgentImagePreviewWindowRegistry {
+    static let shared = AgentImagePreviewWindowRegistry()
+
+    private var windows: [UUID: AgentImagePreviewWindowController] = [:]
+
+    func open(image: AgentImageAttachment) {
+        if let existing = windows[image.id] {
+            existing.showWindow(nil)
+            existing.window?.makeKeyAndOrderFront(nil)
+            return
+        }
+
+        let controller = AgentImagePreviewWindowController(image: image)
+        controller.onClose = { [weak self] imageID in
+            self?.windows.removeValue(forKey: imageID)
+        }
+        windows[image.id] = controller
+        controller.showWindow(nil)
+        controller.window?.makeKeyAndOrderFront(nil)
+    }
+}
+
+@MainActor
+private final class AgentImagePreviewWindowController: NSWindowController, NSWindowDelegate {
+    var onClose: ((UUID) -> Void)?
+
+    private let imageID: UUID
+    private var keyMonitor: Any?
+
+    init(image attachment: AgentImageAttachment) {
+        imageID = attachment.id
+        let image = Self.previewImage(for: attachment)
+        let title = Self.windowTitle(for: attachment)
+        let content = AgentImagePreviewWindowContent(image: image, title: title)
+        let hostingView = NSHostingView(rootView: content)
+
+        let window = NSWindow(
+            contentRect: NSRect(x: 0, y: 0, width: 960, height: 720),
+            styleMask: [.titled, .closable, .miniaturizable, .resizable],
+            backing: .buffered,
+            defer: false
+        )
+        window.title = title
+        window.contentView = hostingView
+        window.center()
+        window.isReleasedWhenClosed = false
+        window.minSize = NSSize(width: 420, height: 320)
+
+        super.init(window: window)
+        window.delegate = self
+        keyMonitor = AuxiliaryWindowCloseShortcut.install(on: window, closesOnEscape: true)
+    }
+
+    required init?(coder: NSCoder) {
+        nil
+    }
+
+    func windowWillClose(_ notification: Notification) {
+        if let keyMonitor {
+            NSEvent.removeMonitor(keyMonitor)
+            self.keyMonitor = nil
+        }
+        onClose?(imageID)
+    }
+
+    private static func previewImage(for attachment: AgentImageAttachment) -> NSImage? {
+        if let fileURL = attachment.fileURL,
+           let image = NSImage(contentsOf: fileURL) {
+            return image
+        }
+        guard !attachment.dataBase64.isEmpty,
+              let data = Data(base64Encoded: attachment.dataBase64) else {
+            return nil
+        }
+        return NSImage(data: data)
+    }
+
+    private static func windowTitle(for attachment: AgentImageAttachment) -> String {
+        if let fileURL = attachment.fileURL, !fileURL.lastPathComponent.isEmpty {
+            return fileURL.lastPathComponent
+        }
+        return L10n.ImagePreview.windowTitle
+    }
+}
+
+private struct AgentImagePreviewWindowContent: View {
+    private enum Metrics {
+        static let minimumZoom: CGFloat = 0.25
+        static let maximumZoom: CGFloat = 4
+        static let zoomStep: CGFloat = 0.25
+        static let imagePadding: CGFloat = 24
+    }
+
+    let image: NSImage?
+    let title: String
+    @State private var zoom: CGFloat = 1
+
+    var body: some View {
+        VStack(spacing: 0) {
+            toolbar
+            Divider()
+            preview
+        }
+        .background(Color(nsColor: .textBackgroundColor))
+    }
+
+    private var toolbar: some View {
+        HStack(spacing: 10) {
+            Image(systemName: "photo")
+                .foregroundStyle(.secondary)
+            Text(title)
+                .font(.system(size: 13, weight: .semibold))
+                .lineLimit(1)
+                .truncationMode(.middle)
+            if let image {
+                Text("\(Int(image.size.width.rounded())) × \(Int(image.size.height.rounded()))")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            Spacer(minLength: 12)
+            zoomButton(systemName: "minus.magnifyingglass", label: L10n.ImagePreview.zoomOut) {
+                zoom = max(Metrics.minimumZoom, zoom - Metrics.zoomStep)
+            }
+            Text("\(Int((zoom * 100).rounded()))%")
+                .font(.system(size: 11, weight: .medium, design: .monospaced))
+                .foregroundStyle(.secondary)
+                .frame(width: 48)
+            zoomButton(systemName: "plus.magnifyingglass", label: L10n.ImagePreview.zoomIn) {
+                zoom = min(Metrics.maximumZoom, zoom + Metrics.zoomStep)
+            }
+            Button(L10n.ImagePreview.fitButton) {
+                zoom = 1
+            }
+            .buttonStyle(.borderless)
+            .help(L10n.ImagePreview.fitButton)
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 10)
+        .background(Color(nsColor: .windowBackgroundColor))
+    }
+
+    @ViewBuilder
+    private var preview: some View {
+        if let image {
+            GeometryReader { geometry in
+                let fittedSize = fitSize(image.size, in: geometry.size)
+                ScrollView([.horizontal, .vertical]) {
+                    Image(nsImage: image)
+                        .resizable()
+                        .interpolation(.high)
+                        .frame(
+                            width: fittedSize.width * zoom,
+                            height: fittedSize.height * zoom
+                        )
+                        .padding(Metrics.imagePadding)
+                        .frame(
+                            minWidth: geometry.size.width,
+                            minHeight: geometry.size.height
+                        )
+                        .contentShape(Rectangle())
+                        .onTapGesture(count: 2) {
+                            zoom = zoom > 1 ? 1 : 2
+                        }
+                }
+            }
+        } else {
+            VStack(spacing: 10) {
+                Image(systemName: "exclamationmark.triangle")
+                    .font(.system(size: 28))
+                Text(L10n.ImagePreview.cannotPreview)
+                    .font(.headline)
+            }
+            .foregroundStyle(.secondary)
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+        }
+    }
+
+    private func zoomButton(systemName: String, label: String, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Image(systemName: systemName)
+        }
+        .buttonStyle(.borderless)
+        .help(label)
+        .accessibilityLabel(label)
+    }
+
+    private func fitSize(_ imageSize: NSSize, in viewport: CGSize) -> CGSize {
+        guard imageSize.width > 0, imageSize.height > 0 else { return .zero }
+        let availableWidth = max(1, viewport.width - Metrics.imagePadding * 2)
+        let availableHeight = max(1, viewport.height - Metrics.imagePadding * 2)
+        let scale = min(availableWidth / imageSize.width, availableHeight / imageSize.height)
+        return CGSize(width: imageSize.width * scale, height: imageSize.height * scale)
     }
 }
 

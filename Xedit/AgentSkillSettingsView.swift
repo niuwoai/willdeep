@@ -9,12 +9,14 @@ import SwiftUI
 import AppKit
 
 struct AgentSkillSettingsView: View {
-    @State private var settings = AgentSkillSettingsStore.load()
-    @State private var skills: [AgentSkillEntry] = AgentSkillDirectory.list(includeDisabled: true)
-    @State private var marketplaceEntries = AgentSkillMarketplaceStore.entries()
+    @State private var settings = AgentSkillSettings.default
+    @State private var skills: [AgentSkillEntry] = []
+    @State private var marketplaceEntries: [AgentSkillMarketplaceEntry] = []
     @State private var marketplaceCredentialInputs: [String: String] = [:]
     @State private var searchQuery = ""
     @State private var isCreatingSkill = false
+    @State private var isLoadingSkills = false
+    @State private var needsSkillReload = false
     @State private var statusMessage = L10n.Settings.allChangesSaved
     @State private var expandedSkillIdentifiers: Set<String> = []
 
@@ -89,6 +91,7 @@ struct AgentSkillSettingsView: View {
                     } label: {
                         Label(L10n.Settings.Skill.refresh, systemImage: "arrow.clockwise")
                     }
+                    .disabled(isLoadingSkills)
 
                     Button {
                         openUserSkillsFolder()
@@ -132,6 +135,16 @@ struct AgentSkillSettingsView: View {
             } onCancel: {
                 isCreatingSkill = false
             }
+        }
+        .overlay {
+            if isLoadingSkills && skills.isEmpty {
+                ProgressView()
+                    .controlSize(.small)
+                    .allowsHitTesting(false)
+            }
+        }
+        .task {
+            await reloadSkills()
         }
     }
 
@@ -511,9 +524,31 @@ struct AgentSkillSettingsView: View {
     }
 
     private func refreshSkills() {
-        settings = AgentSkillSettingsStore.load()
-        marketplaceEntries = AgentSkillMarketplaceStore.entries()
-        skills = AgentSkillDirectory.list(includeDisabled: true)
+        Task {
+            await reloadSkills()
+        }
+    }
+
+    @MainActor
+    private func reloadSkills() async {
+        if isLoadingSkills {
+            needsSkillReload = true
+            return
+        }
+
+        repeat {
+            isLoadingSkills = true
+            needsSkillReload = false
+
+            let loadedSkills = await AgentSkillDirectory.listAsync(includeDisabled: true)
+            guard !Task.isCancelled else { return }
+
+            settings = AgentSkillSettingsStore.load()
+            marketplaceEntries = AgentSkillMarketplaceStore.entries()
+            skills = loadedSkills
+        } while needsSkillReload
+
+        isLoadingSkills = false
     }
 
     private func installOrUpdateMarketplaceEntry(_ entry: AgentSkillMarketplaceEntry, status: AgentSkillMarketplaceStatus) {

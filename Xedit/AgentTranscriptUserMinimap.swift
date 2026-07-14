@@ -2,11 +2,12 @@
 //  AgentTranscriptUserMinimap.swift
 //  WillDeep
 //
-//  Left-edge "user input" minimap for the Agent transcript: one equal-sized,
-//  evenly-spaced tick per user turn, vertically centered. Hovering a tick grows
-//  it and floats a small card summarizing that turn (what the user said, what
-//  the AI replied, which files changed). Clicking scrolls the transcript to that
-//  user message (via AgentChatHistoryNSTextView.scrollToUserMessage).
+//  Left-edge "user input" minimap for the Agent transcript: one short tick per
+//  user turn, vertically centered, with the resting ticks gently darkening from
+//  top to bottom. Hovering a tick grows it and floats a small card summarizing
+//  that turn (what the user said, what the AI replied, which files changed).
+//  Clicking scrolls the transcript to that user message (via
+//  AgentChatHistoryNSTextView.scrollToUserMessage).
 //
 
 import SwiftUI
@@ -77,6 +78,8 @@ struct AgentTranscriptTurnSummary: Identifiable, Equatable {
 }
 
 struct AgentTranscriptUserMinimap: View {
+    static let minimumVisibleTurnCount = 6
+
     let turns: [AgentTranscriptTurnSummary]
     let onSelect: (UUID) -> Void
 
@@ -84,9 +87,13 @@ struct AgentTranscriptUserMinimap: View {
 
     private let rowHeight: CGFloat = 12
     private let tickHeight: CGFloat = 2
-    private let tickWidth: CGFloat = 11
-    private let tickHoverWidth: CGFloat = 22
-    private let stripWidth: CGFloat = 26
+    private let tickWidth: CGFloat = 6
+    private let tickHoverWidth: CGFloat = 12
+    private let stripWidth: CGFloat = 20
+    private let restingRampLength: CGFloat = 8
+    private let restingTopOpacity: CGFloat = 0.18
+    private let restingBottomOpacity: CGFloat = 0.48
+    private let hoverOpacityBoost: CGFloat = 0.22
     /// Fisheye reach: how many ticks on each side of the hovered one still
     /// grow/darken. The focused tick has weight 1 (longest, darkest); the
     /// weight falls off linearly to 0 at `hoverRadius`, so a tick this far
@@ -109,7 +116,7 @@ struct AgentTranscriptUserMinimap: View {
         let weight = hoverWeight(for: index)
         let width = tickWidth + (tickHoverWidth - tickWidth) * weight
         return RoundedRectangle(cornerRadius: 1, style: .continuous)
-            .fill(tickColor(weight: weight))
+            .fill(tickFill(index: index, weight: weight))
             .frame(width: width, height: tickHeight)
             .frame(width: stripWidth, height: rowHeight, alignment: .leading)
             .contentShape(Rectangle())
@@ -124,7 +131,7 @@ struct AgentTranscriptUserMinimap: View {
             .overlay(alignment: .leading) {
                 if focused {
                     card(for: turn)
-                        .offset(x: tickHoverWidth + 14)
+                        .offset(x: tickHoverWidth + 12)
                         .allowsHitTesting(false)
                         .fixedSize()
                         // Appear directly (no slide). Switching between ticks
@@ -150,12 +157,30 @@ struct AgentTranscriptUserMinimap: View {
         return 1 - CGFloat(distance) / CGFloat(hoverRadius)
     }
 
-    /// Graduated tick color: the focused tick is the accent color at full
-    /// strength (darkest), fading outward through lighter accent tints to the
-    /// resting secondary tint once the fisheye weight reaches 0.
-    private func tickColor(weight: CGFloat) -> Color {
-        guard weight > 0 else { return Color.secondary.opacity(0.4) }
-        return Color.accentColor.opacity(0.4 + 0.6 * weight)
+    /// Resting ticks gently darken down the rail, then clamp, matching Codex's
+    /// subtle "more history below" cue without turning into a full scrollbar.
+    private func restingDepth(for index: Int) -> CGFloat {
+        min(CGFloat(index) / restingRampLength, 1)
+    }
+
+    private func tickOpacity(index: Int, weight: CGFloat) -> CGFloat {
+        let base = restingTopOpacity
+            + (restingBottomOpacity - restingTopOpacity) * restingDepth(for: index)
+        return min(base + hoverOpacityBoost * weight, 0.68)
+    }
+
+    private func tickFill(index: Int, weight: CGFloat) -> LinearGradient {
+        let opacity = tickOpacity(index: index, weight: weight)
+        let topOpacity = max(opacity - 0.05, 0.08)
+        let bottomOpacity = min(opacity + 0.04, 0.72)
+        return LinearGradient(
+            colors: [
+                Color.primary.opacity(topOpacity),
+                Color.primary.opacity(bottomOpacity)
+            ],
+            startPoint: .top,
+            endPoint: .bottom
+        )
     }
 
     private func card(for turn: AgentTranscriptTurnSummary) -> some View {

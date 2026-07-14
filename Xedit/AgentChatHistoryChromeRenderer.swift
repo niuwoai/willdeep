@@ -25,9 +25,9 @@ extension AgentChatHistoryRenderer {
             avatar = "SYS"
             color = NSColor.systemPurple
         case .user:
-            label = "You"
-            avatar = "YOU"
-            color = NSColor.controlAccentColor
+            // User messages are identified by their right-aligned, faint
+            // surface; a repeated "You" label only adds visual noise.
+            return
         case .assistant:
             label = isToolCallOnly ? "Tool calls" : "Assistant"
             avatar = isToolCallOnly ? "TL" : "AI"
@@ -328,9 +328,14 @@ extension AgentChatHistoryRenderer {
                     ]
                 ))
             }
+            let imageRange = NSRange(location: attachmentStart, length: result.length - attachmentStart)
+            result.addAttributes([
+                .link: AgentChatHistoryImageLink.value,
+                .agentChatHistoryImageID: image.id.uuidString,
+                .cursor: NSCursor.arrow,
+            ], range: imageRange)
             if let marker = image.generatedReferenceMarker {
-                let range = NSRange(location: attachmentStart, length: result.length - attachmentStart)
-                result.addAttribute(.agentChatHistoryImageReferenceMarker, value: marker, range: range)
+                result.addAttribute(.agentChatHistoryImageReferenceMarker, value: marker, range: imageRange)
             }
         }
     }
@@ -377,16 +382,19 @@ extension AgentChatHistoryRenderer {
         to result: NSMutableAttributedString
     ) {
         let start = result.length
-        // For user messages the timestamp is always visible (it's a cheap,
-        // useful anchor); only the interactive chrome below is hover-gated.
-        // `hideStart` marks where the hover-gated region begins.
-        var hideStart = start
+        // Keep the complete footer in the attributed string so its height is
+        // reserved at rest. User metadata and actions are made transparent
+        // together until hover.
+        let hideStart = start
         if message.role == .user {
             result.append(AgentChatHistoryFooterChrome.label(formatTimestamp(message.createdAt)))
-            hideStart = result.length
             result.append(AgentChatHistoryFooterChrome.separator)
         }
-        result.append(AgentChatHistoryFooterChrome.copyButton(copied: false, message: message.copyableContent))
+        result.append(AgentChatHistoryFooterChrome.copyButton(
+            copied: false,
+            message: message.copyableContent,
+            isVisible: isVisible
+        ))
 
         if message.role == .assistant {
             if let elapsed = message.elapsedSeconds, elapsed > 0 {

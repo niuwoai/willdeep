@@ -1,0 +1,4 @@
+interface:
+  display_name: "some.im Client Services"
+  short_description: "Integrate WillDeep client services with some.im APIs."
+  default_prompt: "Use this skill when wiring WillDeep client features to some.im backend/admin/public APIs."

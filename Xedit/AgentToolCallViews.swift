@@ -165,6 +165,7 @@ struct AgentToolCallGroup: View {
             .buttonStyle(.plain)
             .disabled(!canToggleDetails)
             .help(detailsVisible ? L10n.ToolCard.collapse : L10n.ToolCard.expand)
+            .cursor(.arrow)
 
             if detailsVisible {
                 VStack(alignment: .leading, spacing: 4) {
@@ -448,14 +449,17 @@ struct AgentToolCallCard: View {
                             // 拒绝:空心(描边)按钮;允许:实心(高亮)主操作。
                             Button(L10n.ToolCard.deny) { appState.denyAgentToolCall(id: call.id) }
                                 .buttonStyle(.bordered)
+                                .cursor(.arrow)
                             Spacer(minLength: 0)
                             if let signature = alwaysAllowSignature {
                                 Button(L10n.ToolCard.alwaysAllow) { appState.alwaysAllowAgentToolCall(id: call.id) }
                                     .buttonStyle(.bordered)
                                     .help(L10n.ToolCard.alwaysAllowHelp(signature))
+                                    .cursor(.arrow)
                             }
                             Button(L10n.ToolCard.allow) { appState.approveAgentToolCall(id: call.id) }
                                 .buttonStyle(.borderedProminent)
+                                .cursor(.arrow)
                         }
                         .font(.caption)
                         .controlSize(.small)
@@ -494,6 +498,7 @@ struct AgentToolCallCard: View {
                                     .contentShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
                             }
                             .buttonStyle(.plain)
+                            .cursor(.arrow)
                             Spacer(minLength: 0)
                             Button {
                                 _ = appState.confirmAgentToolCall(id: call.id, typedConfirmation: "confirm")
@@ -511,6 +516,7 @@ struct AgentToolCallCard: View {
                                     .contentShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
                             }
                             .buttonStyle(.plain)
+                            .cursor(.arrow)
                         }
                     }
                 }
@@ -544,9 +550,6 @@ struct AgentToolCallCard: View {
                         .font(.caption2.weight(.semibold))
                         .foregroundStyle(.secondary)
                     Spacer(minLength: 0)
-                    Text("最多显示 3 行，超出可滚动")
-                        .font(.system(size: 9, weight: .medium))
-                        .foregroundStyle(.tertiary)
                 }
                 ScrollView([.horizontal, .vertical]) {
                     Text(detail.body)
@@ -645,6 +648,7 @@ struct AgentToolCallCard: View {
                 .font(.caption2.weight(.semibold))
                 .disabled(isLoadingApprovalExplanation)
                 .help("用轻量模型解释这次审核项，并给出允许/拒绝/改方案建议。")
+                .cursor(.arrow)
                 Spacer(minLength: 0)
                 if let model = approvalExplanation?.model {
                     Text(model)
@@ -758,11 +762,13 @@ struct AgentToolCallCard: View {
                         appState.denyAgentToolCall(id: call.id)
                         resetAskUserInputs()
                     }
+                    .cursor(.arrow)
                     Spacer(minLength: 0)
                     Button(L10n.ToolCard.askUserSend) {
                         submitAnswer(options: options, isMultiSelect: isMultiSelect)
                     }
                     .disabled(!canSubmitAskUser(isMultiSelect: isMultiSelect))
+                    .cursor(.arrow)
                 }
                 .font(.caption)
             }
@@ -870,6 +876,7 @@ struct AgentToolCallCard: View {
                     }
                     .buttonStyle(.borderedProminent)
                     .disabled(!canSaveProtectedInputs(promptSet))
+                    .cursor(.arrow)
                 }
                 .font(.caption)
             }
@@ -928,6 +935,7 @@ struct AgentToolCallCard: View {
                     .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
                 }
                 .buttonStyle(.plain)
+                .cursor(.arrow)
             }
         }
     }
@@ -957,6 +965,7 @@ struct AgentToolCallCard: View {
                         .stroke(selectedOptions.contains(option) ? askUserAccentColor.opacity(0.32) : appState.editorSettings.interfaceSkin.palette.hairline, lineWidth: 1)
                 )
                 .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
+                .cursor(.arrow)
             }
         }
     }

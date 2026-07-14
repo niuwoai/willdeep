@@ -430,6 +430,9 @@ final class AppState: ObservableObject {
     private var someIMSessionSubscription: AnyCancellable?
     var someIMCodingPlanRefreshTimer: Timer?
     var someIMCodingPlanRefreshTask: Task<Void, Never>?
+    @Published var availableAppUpdate: AppUpdateMeta?
+    @Published var isDownloadingAppUpdate = false
+    var appUpdateCheckTask: Task<Void, Never>?
     /// Desktop peer for the LAN Mobile Gateway. The Go gateway handles
     /// pairing/device auth; this bridge translates authorized mobile
     /// commands back into normal AppState Agent operations.
@@ -583,6 +586,7 @@ final class AppState: ObservableObject {
         }
         startSomeIMCodingPlanRefreshTimer()
         refreshSomeIMCodingPlanStatus(force: false)
+        startAppUpdateChecks()
         agentMediaTaskRegistry.shortDramaStore = agentShortDramaStore
         agentMediaTaskPoller.start(registry: agentMediaTaskRegistry)
         // Terminals are high-frequency UI surfaces: user typing, title
@@ -675,6 +679,7 @@ final class AppState: ObservableObject {
         sessionSaveFailureSubscription?.cancel()
         someIMCodingPlanRefreshTask?.cancel()
         someIMCodingPlanRefreshTimer?.invalidate()
+        appUpdateCheckTask?.cancel()
         agentSidePanelResourceReaperTimer?.invalidate()
         Task { @MainActor [poller = agentMediaTaskPoller] in
             poller.stop()

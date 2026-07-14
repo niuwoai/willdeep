@@ -475,6 +475,7 @@ enum AgentChatHistoryRenderer {
             }
 
             if shouldShowFooter(for: message, body: body) {
+                let messageBodyEnd = result.length
                 result.append(NSAttributedString(string: "\n", attributes: [.font: bodyFont]))
                 let footerStart = result.length
                 appendMessageFooter(
@@ -485,15 +486,13 @@ enum AgentChatHistoryRenderer {
                     to: result
                 )
                 if hasMessageBubbleContent && inlineToolCalls.isEmpty {
-                    let messageRange = NSRange(location: messageBubbleStart, length: result.length - messageBubbleStart)
-                    // Always draw the bubble across body + footer so the
-                    // rounded rect wraps the timestamp/copy row and the
-                    // bubble is the SAME size at rest as on hover — only the
-                    // copy/clock chrome's *visibility* is hover-gated (via
-                    // `isVisible` on appendMessageFooter above). Previously
-                    // the rest state used applyBodyChrome (no bubbleKind on
-                    // the footer range), so the footer fell outside the
-                    // rounded rect and the bubble grew on hover.
+                    let bubbleEnd = message.role == .user ? messageBodyEnd : result.length
+                    let messageRange = NSRange(location: messageBubbleStart, length: bubbleEnd - messageBubbleStart)
+                    // Codex-style user input keeps the faint rounded surface
+                    // around the input itself. The reserved metadata/action
+                    // row lives underneath it and only changes opacity on
+                    // hover, so neither the bubble nor surrounding messages
+                    // jump when the footer appears.
                     applyBubbleChrome(
                         kind: bubbleKind(for: message.role),
                         to: result,
@@ -503,6 +502,13 @@ enum AgentChatHistoryRenderer {
                         foregroundColor: nil
                     )
                     let footerRange = NSRange(location: footerStart, length: result.length - footerStart)
+                    if message.role == .user {
+                        result.addAttribute(
+                            .agentChatHistoryUserMessageID,
+                            value: message.id.uuidString,
+                            range: NSRange(location: messageBubbleStart, length: result.length - messageBubbleStart)
+                        )
+                    }
                     result.addAttribute(
                         .paragraphStyle,
                         value: footerParagraphStyle(for: message.role),
@@ -947,7 +953,7 @@ enum AgentChatHistoryRenderer {
                             result.addAttributes(
                                 [
                                     .link: AgentChatHistoryTableLink.value,
-                                    .cursor: NSCursor.pointingHand,
+                                    .cursor: NSCursor.arrow,
                                     .agentChatHistoryTablePayload: AgentMarkdownTablePayload(headers: headers, rows: rows),
                                     .toolTip: String(
                                         localized: "agent.markdown-table.open-link",
