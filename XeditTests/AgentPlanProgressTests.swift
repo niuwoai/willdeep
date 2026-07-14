@@ -138,6 +138,66 @@ struct AgentPlanProgressTests {
         #expect(AgentPlanParser.applyProgress(to: plan, from: reply) == nil)
     }
 
+    @MainActor
+    @Test("completed plan mode requires a fresh plan before later writes")
+    func completedPlanModeRequiresFreshPlan() {
+        let plan = AgentPlan(
+            status: .done,
+            steps: [AgentPlan.Step(text: "Ship previous request", status: .done)],
+            summary: ""
+        )
+        let runtime = AgentRuntime(session: AgentSession(title: "Done plan"))
+        runtime.interactionMode = .plan
+        runtime.currentPlan = plan
+
+        #expect(runtime.isPlanGateActive == true)
+
+        let prompt = AgentContextBuilder.systemPrompt(
+            rootDirectory: nil,
+            openedFileURL: nil,
+            fileContent: "",
+            selectedText: "",
+            language: nil,
+            interactionMode: .plan,
+            currentPlan: plan
+        )
+        #expect(prompt.contains("=== PLAN MODE — ACTIVE ==="))
+        #expect(prompt.contains("Before ANY tool call"))
+    }
+
+    @MainActor
+    @Test("same session later plan block replaces completed plan")
+    func laterPlanBlockReplacesCompletedPlan() {
+        let appState = AppState()
+        appState.startNewAgentSession()
+        appState.agentInteractionMode = .plan
+        appState.agentCurrentPlan = AgentPlan(
+            status: .done,
+            steps: [AgentPlan.Step(text: "Finish the first request", status: .done)],
+            summary: ""
+        )
+        appState.agentMessages = [
+            AgentMessage(role: .user, content: "Now do another thing"),
+            AgentMessage(
+                role: .assistant,
+                content: """
+                ```plan
+                1. Inspect the follow-up request
+                2. Patch the follow-up behavior
+                ```
+                """
+            )
+        ]
+
+        appState.captureAgentPlanFromLatestMessage()
+
+        #expect(appState.agentCurrentPlan?.status == .proposed)
+        #expect(appState.agentCurrentPlan?.steps.map(\.text) == [
+            "Inspect the follow-up request",
+            "Patch the follow-up behavior"
+        ])
+    }
+
     /// Accepts a variety of separator + status token forms — the agent
     /// shouldn't have to be pedantic.
     @Test

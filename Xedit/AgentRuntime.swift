@@ -181,13 +181,12 @@ final class AgentRuntime: ObservableObject, Identifiable {
 
     // MARK: - Plan gate
 
-    /// True when Plan mode is on AND no plan exists yet OR the existing
-    /// plan hasn't been approved. While true, all write/exec tools and
-    /// patch application are blocked.
+    /// True when Plan mode is on AND no active approved/executing plan exists.
+    /// Completed plans require a fresh approval before later write-tier work.
     var isPlanGateActive: Bool {
         guard interactionMode == .plan else { return false }
         guard let plan = currentPlan else { return true }
-        return plan.status != .approved && plan.status != .executing && plan.status != .done
+        return plan.status != .approved && plan.status != .executing
     }
 
     // MARK: - Init

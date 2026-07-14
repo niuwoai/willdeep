@@ -415,16 +415,18 @@ extension AppState {
 
     func captureAgentPlanFromLatestMessage(for runtime: AgentRuntime) {
         guard runtime.interactionMode == .plan else { return }
+        guard let last = runtime.messages.last(where: { $0.role == .assistant && !$0.content.isEmpty }) else {
+            return
+        }
+        if let parsed = AgentPlanParser.extract(from: last.content) {
+            runtime.currentPlan = parsed
+            return
+        }
         if let existing = runtime.currentPlan,
            existing.status == .approved || existing.status == .executing || existing.status == .done {
             applyAgentPlanProgressFromLatestMessage(for: runtime, existingPlan: existing)
             return
         }
-        guard let last = runtime.messages.last(where: { $0.role == .assistant && !$0.content.isEmpty }),
-              let parsed = AgentPlanParser.extract(from: last.content) else {
-            return
-        }
-        runtime.currentPlan = parsed
     }
 
     func applyAgentPlanProgressFromLatestMessage(for runtime: AgentRuntime, existingPlan: AgentPlan) {

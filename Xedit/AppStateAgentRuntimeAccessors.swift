@@ -195,8 +195,8 @@ extension AppState {
         return runtime.learningEvents.filter { $0.createdAt >= latestUser.createdAt }
     }
 
-    /// True when Plan mode is on and no approved plan exists. While true,
-    /// all write/exec tools and patch application are blocked.
+    /// True when Plan mode is on and no active approved/executing plan exists.
+    /// Completed plans require a fresh plan before the next write-tier turn.
     var isPlanGateActive: Bool {
         activeRuntime?.isPlanGateActive ?? false
     }

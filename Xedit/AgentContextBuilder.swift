@@ -96,7 +96,7 @@ enum AgentContextBuilder {
 
         // Plan mode: lock writes behind a numbered, user-approved plan.
         if interactionMode == .plan {
-            if currentPlan == nil || currentPlan?.status == .proposed || currentPlan?.status == .rejected {
+            if currentPlan == nil || currentPlan?.status == .proposed || currentPlan?.status == .rejected || currentPlan?.status == .done {
                 sections.append("""
                 === PLAN MODE — ACTIVE ===
                 You are in plan-first mode. Before ANY tool call that writes, edits, or runs commands, you MUST first emit a numbered plan in a single fenced block tagged `plan`:
