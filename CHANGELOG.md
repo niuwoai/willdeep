@@ -1,5 +1,17 @@
 # Changelog
 
+## 1.162.0-rc2 - 2026-07-15
+
+### Fixed
+
+- **Composer 的 `@文件名` 恢复当前工作区检查与附件挂载。** `@` 文件候选不再复用 Editor 的 Quick Open 根目录，而是异步扫描当前 Agent 会话绑定的本地工作区；按文件名或相对路径搜索后可用 Enter/Tab 或点击候选挂载为附件。搜索尚未完成时 Enter/Tab 会保留在附件选择流程，不再把裸 `@文件名` 误发为普通消息；依赖目录、构建目录和隐藏文件继续跳过。
+
+### Changed
+
+- 版本号从 **1.162.0-rc1** 递增为 **1.162.0-rc2**；Xcode App、Go agent、Help bundle、Computer Use Helper、Chrome 扩展、README badge、移动网关响应头契约与产品文档同步。
+
+---
+
 ## 1.162.0-rc1 - 2026-07-15
 
 ### Added

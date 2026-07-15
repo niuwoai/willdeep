@@ -378,7 +378,12 @@ struct ComposerTextEditor: NSViewRepresentable {
                     return true
                 case #selector(NSResponder.insertNewline(_:)),
                      #selector(NSResponder.insertTab(_:)):
-                    if onAtCommit() { return true }
+                    // `@` denotes an attachment operation, so Return/Tab must
+                    // never fall through and send the raw token merely because
+                    // the background workspace search has not returned yet.
+                    // Escape remains the explicit way to keep literal `@text`.
+                    _ = onAtCommit()
+                    return true
                 case #selector(NSResponder.cancelOperation(_:)):
                     onAtCancel()
                     return true
