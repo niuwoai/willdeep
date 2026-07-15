@@ -516,6 +516,9 @@ private struct ComposerCard: View {
     @State private var atMenuVisible: Bool = false
     @State private var atMenuSelection: Int = 0
     @State private var atMenuQuery: String = ""
+    @State private var atWorkspaceFiles: [URL] = []
+    @State private var atWorkspaceRootPath: String?
+    @State private var atWorkspaceSearchTask: Task<Void, Never>?
     @State private var skillMenuVisible: Bool = false
     @State private var skillMenuSelection: Int = 0
     @State private var skillMenuQuery: String = ""
@@ -541,9 +544,10 @@ private struct ComposerCard: View {
         )
     }
 
-    /// Unified entries for the `@` picker — workspace shortcut + project
-    /// files (from the already-cached Quick Open list, which honors the
-    /// project file cache). `$` owns skills.
+    /// Unified entries for the `@` picker — workspace shortcut + files found
+    /// directly under the active Agent workspace. The editor's Quick Open
+    /// cache cannot be the source of truth here because the editor and Agent
+    /// session deliberately keep independent workspace roots.
     private var filteredAtEntries: [AtPickerEntry] {
         let q = atMenuQuery.lowercased()
         var entries: [AtPickerEntry] = []
@@ -555,23 +559,24 @@ private struct ComposerCard: View {
             entries.append(.workspace)
         }
 
-        // Project files — limit to 30 matches so the popover stays
-        // navigable. Match by last path component first, then full
-        // relative path. Files already attached are filtered out so
-        // the user can't double-add.
+        // Project files are already ranked and capped by the background
+        // workspace scan. Files already attached are filtered out so the
+        // user can't double-add.
         let alreadyAttached = Set(appState.agentPendingFiles.map(\.url.standardizedFileURL.path))
-        if let root = appState.activeRuntime?.workspaceLocation?.localPath {
-            let files = appState.quickOpenFiles.lazy
+        if let rootPath = appState.activeRuntime?.workspaceLocation?.localPath {
+            let root = URL(fileURLWithPath: rootPath).standardizedFileURL.path
+            let files = atWorkspaceFiles.lazy
                 .filter { !alreadyAttached.contains($0.standardizedFileURL.path) }
                 .filter { url in
-                    if q.isEmpty { return true }
-                    let name = url.lastPathComponent.lowercased()
-                    if name.hasPrefix(q) || name.contains(q) { return true }
-                    let rel = String(url.standardizedFileURL.path
-                        .dropFirst(root.count))
+                    guard !q.isEmpty else { return true }
+                    let filename = url.lastPathComponent.lowercased()
+                    if filename.contains(q) { return true }
+                    let path = url.standardizedFileURL.path
+                    guard path == root || path.hasPrefix(root + "/") else { return false }
+                    let relativePath = String(path.dropFirst(root.count))
                         .trimmingCharacters(in: CharacterSet(charactersIn: "/"))
                         .lowercased()
-                    return rel.contains(q)
+                    return relativePath.contains(q)
                 }
                 .prefix(30)
                 .map { url -> AtPickerEntry in
@@ -830,6 +835,10 @@ private struct ComposerCard: View {
         .onCompatibleChange(of: appState.agentComposerFocusRevision) { _, _ in
             inputFocused = true
         }
+        .onDisappear {
+            atWorkspaceSearchTask?.cancel()
+            atWorkspaceSearchTask = nil
+        }
         .onCompatibleChange(of: appState.agentToolCalls) { _, _ in
             presentPendingTerminalProtectedInputIfNeeded()
         }
@@ -936,9 +945,59 @@ private struct ComposerCard: View {
                 closeSkillMenu()
             }
             atMenuQuery = q
+            refreshAtWorkspaceFiles(query: q)
         } else {
             atMenuQuery = ""
             atMenuVisible = false
+            atWorkspaceSearchTask?.cancel()
+            atWorkspaceSearchTask = nil
+        }
+    }
+
+    private func refreshAtWorkspaceFiles(query: String) {
+        guard let rootPath = appState.activeRuntime?.workspaceLocation?.localPath,
+              !rootPath.isEmpty else {
+            atWorkspaceFiles = []
+            atWorkspaceRootPath = nil
+            return
+        }
+
+        let root = URL(fileURLWithPath: rootPath).standardizedFileURL
+        let normalizedRootPath = root.path
+        atWorkspaceSearchTask?.cancel()
+
+        // If Quick Open happens to represent this same workspace, use it as
+        // an immediate seed while the authoritative workspace scan runs.
+        if appState.rootDirectory?.standardizedFileURL.path == normalizedRootPath {
+            atWorkspaceFiles = appState.quickOpenFiles
+        } else if atWorkspaceRootPath != normalizedRootPath {
+            atWorkspaceFiles = []
+        }
+        atWorkspaceRootPath = normalizedRootPath
+
+        atWorkspaceSearchTask = Task { @MainActor in
+            do {
+                try await Task.sleep(for: .milliseconds(80))
+            } catch {
+                return
+            }
+            guard !Task.isCancelled else { return }
+            let worker = Task.detached(priority: .userInitiated) {
+                AgentWorkspaceFileSearch.search(root: root, query: query)
+            }
+            let results = await withTaskCancellationHandler(
+                operation: { await worker.value },
+                onCancel: { worker.cancel() }
+            )
+            guard !Task.isCancelled,
+                  appState.activeRuntime?.workspaceLocation?.localPath.map({
+                      URL(fileURLWithPath: $0).standardizedFileURL.path
+                  }) == normalizedRootPath,
+                  atMenuQuery == query else {
+                return
+            }
+            atWorkspaceFiles = results
+            atMenuSelection = 0
         }
     }
 
@@ -1003,6 +1062,8 @@ private struct ComposerCard: View {
     }
 
     private func closeAtMenu() {
+        atWorkspaceSearchTask?.cancel()
+        atWorkspaceSearchTask = nil
         atMenuVisible = false
         atMenuSelection = 0
         atMenuQuery = ""

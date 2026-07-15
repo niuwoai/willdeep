@@ -1,6 +1,6 @@
 # WillDeep Product Overview
 
-> Last updated: 2026-07-15 | Current version: v1.163.0-rc1
+> Last updated: 2026-07-15 | Current version: v1.163.0-rc2
 
 ## Positioning
 
@@ -12,6 +12,7 @@ WillDeep is configured for non-App-Store distribution without App Sandbox so it 
 
 ## 架构概览
 
+- **Composer 当前工作区 `@文件` 引用（1.162.0-rc2）** —— 在输入框键入 `@` 后，WillDeep 会针对当前 Agent 会话绑定的本地工作区异步检查文件，而不是借用 Editor 可能指向另一目录的 Quick Open 缓存；文件名、部分文件名和相对路径都可召回，精确文件名优先。选中候选后文件以附件 chip 挂载并进入既有本地解析/检索链路；扫描跳过隐藏、依赖和构建目录，并设置遍历上限保护大型仓库。
 - **侧边栏委托任务跨 Shell 启动（1.161.0-rc5）** —— Claude Code、Codex CLI、Cursor Agent 与 Cline CLI 不再把完整 prompt 和 zsh 包装语法直接输入用户配置的交互式 Shell；宿主改为生成权限 `0600` 的临时 POSIX runner，只向侧边栏发送短 `/bin/sh <runner>` 命令，兼容 fish、zsh、bash 与 sh，并规避超长 PTY 单行阻塞。runner 以独立启动标记和输出冲刷后的最终状态文件回报生命周期；15 秒内未真正启动会明确失败，结束后统一清理 prompt、日志和状态临时文件。
 - **当前 worktree 一键安装 Debug App（1.163.0-rc1）** —— 仓库根目录的 `dev_install.rb` 只从本 worktree 的 `.env.local` 读取 `WILLDEEP_CLIENT_LOGIN_SECRET`，以隐藏值的子进程环境完成 Debug 编译和 Apple Development 签名；安装前后校验版本、签名与 Debug dylib 密钥注入，并通过临时 App 路径原子替换 `/Applications/WillDeep.app`。支持 `--dry-run`、自定义 DerivedData、签名 Team 和安装目录。
 - **Composer 完整模型选择与省心托管升档（1.163.0-rc1）** —— 输入区将模型选择与托管升档拆成两个清晰动作：点击模型胶囊打开支持全局搜索、供应商切换、完整目录、编程推荐与最近使用的模型面板；省心托管会话可用独立升档按钮从 Flash 升至 Pro / Premium，并在自动升档时给出轻量反馈。Coding Plan 只作用于编程任务，通用任务始终路由到 `someim-auto-*`。
