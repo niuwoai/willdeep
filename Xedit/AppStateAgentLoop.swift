@@ -647,6 +647,14 @@ extension AppState {
                 )
             }
 
+            // Bind every model request to the exact local Git state it was
+            // allowed to reason about. A later guarded Git mutation compares
+            // against this revision after approval and while holding the
+            // repository lease. This is intentionally per model round, not
+            // per user turn: edits from earlier tools in the same turn become
+            // the next round's legitimate baseline.
+            let roundWorkspaceRevision = await AgentWorkspaceRevisionCapture.capture(for: workspaceURL)
+
             let assistantMessage = AgentMessage(
                 role: .assistant,
                 content: "",
@@ -1354,12 +1362,72 @@ extension AppState {
                         return appliedPath
                     }
                 )
+                let guardedMutation: AgentGuardedGitMutation? = {
+                    guard call.toolName == "run_command",
+                          let command = argsDict["command"]?.stringValue() else {
+                        return nil
+                    }
+                    return AgentWorkspaceMutationPolicy.guardedMutation(in: command)
+                }()
+                var workspaceMutationLease: AgentWorkspaceMutationLease?
                 do {
+                    if let guardedMutation, let workspaceURL {
+                        if guardedMutation.actions.count > 1 {
+                            throw AgentWorkspaceMutationGuardError.multipleGitMutations(guardedMutation.actions)
+                        }
+                        if argsDict["run_in_background"]?.boolValue() == true {
+                            throw AgentWorkspaceMutationGuardError.backgroundGitMutation(guardedMutation.displayName)
+                        }
+
+                        // Capture once before waiting for the lease only to
+                        // discover the common repository identity. The second
+                        // capture, after acquisition, is the authoritative CAS
+                        // comparison and closes races between WillDeep sessions.
+                        let preLeaseRevision = await AgentWorkspaceRevisionCapture.capture(for: workspaceURL)
+                        let leaseIdentity = roundWorkspaceRevision?.repositoryCommonDirectoryPath
+                            ?? preLeaseRevision?.repositoryCommonDirectoryPath
+                            ?? workspaceURL.standardizedFileURL.path
+                        workspaceMutationLease = try await AgentWorkspaceMutationLease.acquire(
+                            repositoryIdentity: leaseIdentity
+                        )
+
+                        let liveRevision = await AgentWorkspaceRevisionCapture.capture(for: workspaceURL)
+                        guard let expectedRevision = roundWorkspaceRevision,
+                              let liveRevision else {
+                            throw AgentWorkspaceMutationGuardError.workspaceChanged(
+                                action: guardedMutation.displayName,
+                                details: ["WillDeep could not capture a stable Git revision for this workspace"],
+                                activeSessions: []
+                            )
+                        }
+                        guard liveRevision == expectedRevision else {
+                            let details: [String]
+                            details = liveRevision.difference(from: expectedRevision).summaryLines
+                            let activeSessionTitles = workspaceSessionSnapshots(for: runtime)
+                                .filter {
+                                    !$0.isActive
+                                        && ($0.isResponding
+                                            || $0.isAwaitingProviderSlot
+                                            || $0.queuedMessageCount > 0)
+                                }
+                                .map(\.title)
+                            throw AgentWorkspaceMutationGuardError.workspaceChanged(
+                                action: guardedMutation.displayName,
+                                details: details.isEmpty ? ["repository revision changed"] : details,
+                                activeSessions: activeSessionTitles
+                            )
+                        }
+                    }
+
                     let result = try await AgentToolRunner.run(
                         name: call.toolName,
                         arguments: argsDict,
                         context: context
                     )
+                    withExtendedLifetime(workspaceMutationLease) {}
+                    // Release before doing UI bookkeeping; only the verified
+                    // mutation itself belongs inside the repository lease.
+                    workspaceMutationLease = nil
                     if let index = runtime.toolCalls.firstIndex(where: { $0.id == recordID }) {
                         runtime.toolCalls[index].status = .succeeded
                         runtime.toolCalls[index].result = result
@@ -1398,6 +1466,9 @@ extension AppState {
                         outcomeStatus: .succeeded
                     )
                 } catch {
+                    // Deinit unlocks and closes the cross-process flock.
+                    // This is a no-op for ordinary, unguarded tools.
+                    workspaceMutationLease = nil
                     let workspaceIssue = diagnoseLocalWorkspaceIfNeeded(
                         after: error,
                         runtime: runtime,

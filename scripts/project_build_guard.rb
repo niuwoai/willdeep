@@ -135,6 +135,7 @@ def write_report(markdown_path, json_path, report)
   md << "- Name: #{report.fetch("name")}\n"
   md << "- Kind: #{report.fetch("kind")}\n"
   md << "- Fingerprint: `#{report.fetch("fingerprint")}`\n"
+  md << "- Fingerprint refreshed after wait: #{report.fetch("fingerprint_refreshed_after_wait", false)}\n"
   md << "- Workspace: `#{report.fetch("workspace")}`\n"
   md << "- Waited: #{report.fetch("waited_seconds")}s\n"
   md << "- Exit status: #{report.fetch("exit_status", "n/a")}\n"
@@ -213,28 +214,33 @@ artifact_paths = options[:artifacts].map { |path| File.expand_path(path, workspa
 fingerprint_paths = options[:fingerprint_files].map { |path| File.expand_path(path, workspace) }
 redacted = redacted_command(command)
 
-fingerprint_input = {
-  "workspace" => workspace,
-  "name" => name,
-  "kind" => kind,
-  "command_sha256" => sha256(command.join("\0")),
-  "git_head" => git_value(workspace, "rev-parse", "HEAD"),
-  "git_status_sha256" => sha256(git_value(workspace, "status", "--porcelain=v1") || ""),
-  "git_diff_sha256" => sha256([
-    git_value(workspace, "diff", "--binary"),
-    git_value(workspace, "diff", "--cached", "--binary")
-  ].compact.join("\n")),
-  "xcodebuild_version" => command.include?("xcodebuild") ? command_output("xcodebuild", "-version", chdir: workspace) : nil,
-  "fingerprint_strings" => options[:fingerprint_strings],
-  "fingerprint_files" => fingerprint_paths.map do |path|
-    {
-      "path" => path.delete_prefix("#{workspace}/"),
-      "sha256" => path_digest(path),
-      "exists" => File.exist?(path)
-    }
-  end
-}
-fingerprint = sha256(JSON.generate(fingerprint_input))
+capture_fingerprint = lambda do
+  input = {
+    "workspace" => workspace,
+    "name" => name,
+    "kind" => kind,
+    "command_sha256" => sha256(command.join("\0")),
+    "git_head" => git_value(workspace, "rev-parse", "HEAD"),
+    "git_status_sha256" => sha256(git_value(workspace, "status", "--porcelain=v1") || ""),
+    "git_diff_sha256" => sha256([
+      git_value(workspace, "diff", "--binary"),
+      git_value(workspace, "diff", "--cached", "--binary")
+    ].compact.join("\n")),
+    "xcodebuild_version" => command.include?("xcodebuild") ? command_output("xcodebuild", "-version", chdir: workspace) : nil,
+    "fingerprint_strings" => options[:fingerprint_strings],
+    "fingerprint_files" => fingerprint_paths.map do |path|
+      {
+        "path" => path.delete_prefix("#{workspace}/"),
+        "sha256" => path_digest(path),
+        "exists" => File.exist?(path)
+      }
+    end
+  }
+  [input, sha256(JSON.generate(input))]
+end
+
+fingerprint_input, fingerprint = capture_fingerprint.call
+initial_fingerprint = fingerprint
 report_stamp = Time.now.utc.strftime("%Y%m%dT%H%M%SZ")
 json_report = File.expand_path(options[:json_report] || File.join(reports_dir, "#{name}-#{report_stamp}.json"), workspace)
 markdown_report = File.expand_path(options[:markdown_report] || File.join(reports_dir, "#{name}-#{report_stamp}.md"), workspace)
@@ -254,27 +260,6 @@ cache_status = lambda do
 end
 
 started_at = iso_now
-if !options[:no_cache] && (entry = cache_status.call)
-  report = {
-    "status" => "cache-hit",
-    "name" => name,
-    "kind" => kind,
-    "workspace" => workspace,
-    "fingerprint" => fingerprint,
-    "fingerprint_input" => fingerprint_input,
-    "artifacts" => artifact_paths,
-    "command" => redacted,
-    "waited_seconds" => 0,
-    "exit_status" => 0,
-    "started_at" => started_at,
-    "finished_at" => iso_now,
-    "reused_from" => entry["finished_at"]
-  }
-  write_report(markdown_report, json_report, report)
-  puts "[project_build_guard] cache hit: #{name} #{fingerprint}"
-  puts "[project_build_guard] report: #{markdown_report}"
-  exit 0
-end
 
 job_id = "#{Time.now.to_f}-#{Process.pid}-#{SecureRandom.hex(4)}"
 job_path = File.join(queue_dir, "#{job_id}.json")
@@ -301,7 +286,7 @@ loop do
     FileUtils.rm_f(path)
   end
 
-  jobs = Dir.glob(File.join(queue_dir, "*.json")).filter_map { |path| read_json(path, nil) }
+  jobs = Dir.glob(File.join(queue_dir, "*.json")).map { |path| read_json(path, nil) }.compact
     .sort_by { |queued| [queued["created_at"].to_f, queued["id"].to_s] }
   position = jobs.index { |queued| queued["id"] == job_id }
   abort "[project_build_guard] queue entry disappeared: #{job_id}" unless position
@@ -319,6 +304,8 @@ begin
   lock_file.flock(File::LOCK_EX)
   waited_seconds = (Time.now - wait_started).round(3)
   FileUtils.rm_f(job_path)
+  fingerprint_input, fingerprint = capture_fingerprint.call
+  fingerprint_refreshed = fingerprint != initial_fingerprint
 
   if !options[:no_cache] && (entry = cache_status.call)
     report = {
@@ -327,6 +314,8 @@ begin
       "kind" => kind,
       "workspace" => workspace,
       "fingerprint" => fingerprint,
+      "initial_fingerprint" => initial_fingerprint,
+      "fingerprint_refreshed_after_wait" => fingerprint_refreshed,
       "fingerprint_input" => fingerprint_input,
       "artifacts" => artifact_paths,
       "command" => redacted,
@@ -361,6 +350,8 @@ begin
     "kind" => kind,
     "workspace" => workspace,
     "fingerprint" => fingerprint,
+    "initial_fingerprint" => initial_fingerprint,
+    "fingerprint_refreshed_after_wait" => fingerprint_refreshed,
     "fingerprint_input" => fingerprint_input,
     "artifacts" => artifact_paths,
     "command" => redacted,
@@ -378,6 +369,8 @@ begin
     "kind" => kind,
     "workspace" => workspace,
     "fingerprint" => fingerprint,
+    "initial_fingerprint" => initial_fingerprint,
+    "fingerprint_refreshed_after_wait" => fingerprint_refreshed,
     "fingerprint_input" => fingerprint_input,
     "artifacts" => artifact_paths,
     "command" => redacted,

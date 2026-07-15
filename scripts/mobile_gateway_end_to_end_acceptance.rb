@@ -85,7 +85,7 @@ def evidence_status(report)
 end
 
 def parse_adb_devices(output)
-  output.lines.drop(1).filter_map do |line|
+  output.lines.drop(1).map do |line|
     serial, state = line.strip.split(/\s+/, 2)
     next if serial.to_s.empty?
 
@@ -93,7 +93,7 @@ def parse_adb_devices(output)
       "serial" => serial,
       "state" => state.to_s,
     }
-  end
+  end.compact
 end
 
 def android_preflight
