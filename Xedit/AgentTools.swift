@@ -215,10 +215,25 @@ enum AgentToolRunner {
             process.waitUntilExit()
             timeoutWorkItem.cancel()
 
+            // Drain the tail. `availableData` is non-blocking and on CI
+            // VMs (macos-26 GHA runner) intermittently returned empty
+            // even though the child had already written + exited — the
+            // readability dispatch event hadn't surfaced yet, the
+            // handler we just nil'd ate the pending callback, and the
+            // non-blocking read raced the kernel. `readToEnd()` issues
+            // a blocking `read(2)` until EOF; EOF is guaranteed here
+            // because the child closed its write end at exit. Net
+            // effect: bytes the streaming handler already consumed
+            // stay in the collector, anything still in the pipe gets
+            // picked up — no more empty-stdout flakes.
             stdoutPipe.fileHandleForReading.readabilityHandler = nil
             stderrPipe.fileHandleForReading.readabilityHandler = nil
-            stdoutCollector.append(stdoutPipe.fileHandleForReading.availableData)
-            stderrCollector.append(stderrPipe.fileHandleForReading.availableData)
+            if let tail = try? stdoutPipe.fileHandleForReading.readToEnd() {
+                stdoutCollector.append(tail)
+            }
+            if let tail = try? stderrPipe.fileHandleForReading.readToEnd() {
+                stderrCollector.append(tail)
+            }
 
             return CommandOutcome(
                 exitStatus: process.terminationStatus,

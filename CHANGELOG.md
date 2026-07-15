@@ -1,5 +1,20 @@
 # Changelog
 
+## 1.85.0-rc19 - 2026-06-18
+
+### Fixed
+
+- **`run_command` 工具在 CI 上偶发 stdout 空白**(GitHub Actions macos-26 runner,rc15 / rc18 各被坑过一次,`gh run rerun --failed` 后就过的那种)。根因:[AgentTools.runCommand](Xedit/AgentTools.swift) 用 `readabilityHandler` 在 dispatch queue 上异步收集 stdout,`process.waitUntilExit()` 返回后立即把 handler 置 nil,再用一次 **非阻塞** 的 `availableData` 兜底。VM 调度紧时,子进程已 exit、写端已关,但 readability 事件还没派发出来 ——
+  - 我们 nil 掉 handler 把那次还没跑的 callback 一起干掉了;
+  - 紧跟着的 `availableData` 拿到 0 字节;
+  - 于是 payload 里出现 `--- stdout ---\n\n`,exit=0 但 stdout 段空白,断言 `result.payload.contains(home)` 直接挂。
+- 改成 `readToEnd()`:这是阻塞 `read(2)` 直到 EOF,而 EOF 在子进程退出时已由内核给到我们(写端已关),所以这次读必然能拿到所有还在管道里的字节。已读过的字节在 collector 里不会重复;还没读的兜底捞回。
+- 本地把 `testRunCommandUsesHomeDirectoryWithoutWorkspace` / `testRunCommandUsesSupplementalShellPath` / `testRunCommandDrainsLargeOutput` 三条连跑 5 次:5/5 绿。
+
+### 版本
+
+- 纯 bugfix,只 bump rc:1.85.0-rc18 → **1.85.0-rc19**。pbxproj×6 / Go agent / Help Info.plist / README badge / docs / product-overview 同步。
+
 ## 1.85.0-rc18 - 2026-06-18
 
 ### Added
