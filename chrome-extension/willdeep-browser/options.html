@@ -1,0 +1,98 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title></title>
+    <link rel="stylesheet" href="options.css">
+  </head>
+  <body>
+    <main class="page-shell">
+      <header class="page-header">
+        <img class="app-icon" src="icons/icon128.png" alt="">
+        <div>
+          <p class="eyebrow" data-i18n="optionsEyebrow"></p>
+          <h1 data-i18n="optionsTitle"></h1>
+          <p class="subtitle" data-i18n="optionsSubtitle"></p>
+        </div>
+      </header>
+
+      <section class="card update-card" aria-live="polite">
+        <div class="card-heading-row">
+          <div>
+            <p class="card-kicker" data-i18n="updateSectionKicker"></p>
+            <h2 data-i18n="updateSectionTitle"></h2>
+          </div>
+          <span id="update-badge" class="status-badge" data-i18n="updateStatusChecking"></span>
+        </div>
+        <p id="update-summary" class="card-copy" data-i18n="updateStatusCheckingDetail"></p>
+        <dl class="version-grid">
+          <div>
+            <dt data-i18n="currentVersionLabel"></dt>
+            <dd id="current-version"></dd>
+          </div>
+          <div>
+            <dt data-i18n="latestVersionLabel"></dt>
+            <dd id="latest-version">—</dd>
+          </div>
+          <div>
+            <dt data-i18n="lastCheckedLabel"></dt>
+            <dd id="last-checked">—</dd>
+          </div>
+        </dl>
+        <div class="button-row">
+          <button id="check-update" class="button secondary" type="button" data-i18n="checkNowButton"></button>
+          <button id="open-download" class="button primary" type="button" data-i18n="openDownloadButton" hidden></button>
+        </div>
+        <p class="manual-update-note" data-i18n="manualUpdateNote"></p>
+      </section>
+
+      <section class="card">
+        <div class="card-heading-row">
+          <div>
+            <p class="card-kicker" data-i18n="preferencesKicker"></p>
+            <h2 data-i18n="preferencesTitle"></h2>
+          </div>
+        </div>
+        <label class="setting-row">
+          <span>
+            <strong data-i18n="autoCheckLabel"></strong>
+            <small data-i18n="autoCheckDescription"></small>
+          </span>
+          <input id="auto-check" type="checkbox">
+        </label>
+        <label class="setting-row">
+          <span>
+            <strong data-i18n="notificationLabel"></strong>
+            <small data-i18n="notificationDescription"></small>
+          </span>
+          <input id="notifications" type="checkbox">
+        </label>
+        <label class="setting-row channel-row">
+          <span>
+            <strong data-i18n="channelLabel"></strong>
+            <small data-i18n="channelDescription"></small>
+          </span>
+          <select id="update-channel">
+            <option value="stable" data-i18n="channelStable"></option>
+            <option value="beta" data-i18n="channelBeta"></option>
+          </select>
+        </label>
+      </section>
+
+      <section class="card compact-card">
+        <div>
+          <p class="card-kicker" data-i18n="connectionKicker"></p>
+          <h2 data-i18n="connectionTitle"></h2>
+          <p id="host-status" class="card-copy" data-i18n="statusChecking"></p>
+        </div>
+        <button id="open-help" class="text-button" type="button" data-i18n="openHelpButton"></button>
+      </section>
+
+      <footer>
+        <p data-i18n="optionsSecurityNote"></p>
+      </footer>
+    </main>
+    <script src="options.js" type="module"></script>
+  </body>
+</html>

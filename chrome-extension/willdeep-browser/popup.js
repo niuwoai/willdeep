@@ -33,8 +33,22 @@ async function checkHost() {
   }
 }
 
+async function checkUpdateStatus() {
+  try {
+    const response = await request("update.status");
+    const state = response?.state;
+    if (state?.status === "available") {
+      document.getElementById("update-version").textContent = state.latestVersion;
+      document.getElementById("update-banner").hidden = false;
+    }
+  } catch {
+    document.getElementById("update-banner").hidden = true;
+  }
+}
+
 localize();
 checkHost();
+checkUpdateStatus();
 
 document.getElementById("read-page").addEventListener("click", async () => {
   showResult(await request("page.read"));
@@ -46,4 +60,12 @@ document.getElementById("read-selection").addEventListener("click", async () => 
 
 document.getElementById("capture-tab").addEventListener("click", async () => {
   showResult(await request("tab.capture"));
+});
+
+document.getElementById("update-banner").addEventListener("click", () => {
+  request("update.open-download-page");
+});
+
+document.getElementById("open-options").addEventListener("click", () => {
+  chrome.runtime.openOptionsPage();
 });

@@ -2,7 +2,8 @@
   "manifest_version": 3,
   "name": "__MSG_extensionName__",
   "description": "__MSG_extensionDescription__",
-  "version": "1.90.0.4",
+  "version": "1.157.0.1",
+  "version_name": "1.157.0-rc1",
   "default_locale": "en",
   "action": {
     "default_popup": "popup.html",
@@ -12,10 +13,13 @@
     "service_worker": "service_worker.js",
     "type": "module"
   },
+  "options_page": "options.html",
   "permissions": [
     "activeTab",
+    "alarms",
     "debugger",
     "nativeMessaging",
+    "notifications",
     "scripting",
     "storage",
     "tabs"
@@ -24,9 +28,9 @@
     "<all_urls>"
   ],
   "icons": {
-    "16": "icons/icon16.svg",
-    "32": "icons/icon32.svg",
-    "48": "icons/icon48.svg",
-    "128": "icons/icon128.svg"
+    "16": "icons/icon16.png",
+    "32": "icons/icon32.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
   }
 }

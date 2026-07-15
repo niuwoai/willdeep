@@ -34,5 +34,122 @@
   },
   "permissionNote": {
     "message": "只把这个扩展授权给你希望 WillDeep 检查或操作的页面。"
+  },
+  "openOptions": {
+    "message": "设置与更新"
+  },
+  "popupUpdateAvailable": {
+    "message": "发现新版本"
+  },
+  "optionsEyebrow": {
+    "message": "WillDeep 浏览器伴侣"
+  },
+  "optionsTitle": {
+    "message": "浏览器扩展设置"
+  },
+  "optionsSubtitle": {
+    "message": "查看连接状态、some.im 托管更新检测和发布频道偏好。"
+  },
+  "updateSectionKicker": {
+    "message": "由 some.im 管理"
+  },
+  "updateSectionTitle": {
+    "message": "扩展更新"
+  },
+  "updateStatusChecking": {
+    "message": "正在检查"
+  },
+  "updateStatusCheckingDetail": {
+    "message": "正在从 some.im 查询最新的 WillDeep 浏览器扩展。"
+  },
+  "updateStatusAvailable": {
+    "message": "发现新版本"
+  },
+  "updateAvailableDetail": {
+    "message": "$VERSION$ 已可下载。请打开下载页并手动覆盖已解压的扩展目录。",
+    "placeholders": {
+      "version": { "content": "$1" }
+    }
+  },
+  "updateStatusCurrent": {
+    "message": "已是最新"
+  },
+  "updateCurrentDetail": {
+    "message": "当前频道没有比已安装版本更新的发布。"
+  },
+  "updateStatusError": {
+    "message": "检查失败"
+  },
+  "updateErrorDetail": {
+    "message": "暂时无法连接 some.im。已安装扩展仍可继续使用，请稍后重试。"
+  },
+  "currentVersionLabel": {
+    "message": "已安装"
+  },
+  "latestVersionLabel": {
+    "message": "最新版"
+  },
+  "lastCheckedLabel": {
+    "message": "检查时间"
+  },
+  "checkNowButton": {
+    "message": "立即检查"
+  },
+  "openDownloadButton": {
+    "message": "打开下载页"
+  },
+  "manualUpdateNote": {
+    "message": "Chrome 不允许未上架的解压扩展静默自更新。WillDeep 会检测并提醒，由你确认后手动替换。"
+  },
+  "preferencesKicker": {
+    "message": "偏好"
+  },
+  "preferencesTitle": {
+    "message": "更新行为"
+  },
+  "autoCheckLabel": {
+    "message": "自动检查更新"
+  },
+  "autoCheckDescription": {
+    "message": "Chrome 启动后稍候检查，并每六小时检查一次。"
+  },
+  "notificationLabel": {
+    "message": "新版本通知"
+  },
+  "notificationDescription": {
+    "message": "每个新检测到的版本只显示一次 Chrome 通知。"
+  },
+  "channelLabel": {
+    "message": "发布频道"
+  },
+  "channelDescription": {
+    "message": "推荐稳定版；测试版可能提前收到预览构建。"
+  },
+  "channelStable": {
+    "message": "稳定版"
+  },
+  "channelBeta": {
+    "message": "测试版"
+  },
+  "connectionKicker": {
+    "message": "本地桥接"
+  },
+  "connectionTitle": {
+    "message": "WillDeep 本地 Host"
+  },
+  "openHelpButton": {
+    "message": "安装帮助"
+  },
+  "optionsSecurityNote": {
+    "message": "扩展只能访问你在 Chrome 中明确授权的页面；写操作仍应在 WillDeep 中可见并经过审批。"
+  },
+  "updateNotificationTitle": {
+    "message": "WillDeep 浏览器扩展有新版本"
+  },
+  "updateNotificationMessage": {
+    "message": "$VERSION$ 已在 some.im 发布。点击查看下载和安装步骤。",
+    "placeholders": {
+      "version": { "content": "$1" }
+    }
   }
 }

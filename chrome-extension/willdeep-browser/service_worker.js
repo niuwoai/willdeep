@@ -1,3 +1,13 @@
+import {
+  UPDATE_ALARM_NAME,
+  UPDATE_CHECK_INTERVAL_MINUTES,
+  UPDATE_DOWNLOAD_PAGE,
+  checkForManagedUpdate,
+  loadUpdatePreferences,
+  loadUpdateState,
+  saveUpdatePreferences
+} from "./update_checker.js";
+
 const HOST_NAME = "com.willdeep.browser_bridge";
 const CONTENT_SCRIPT = "content.js";
 
@@ -7,10 +17,25 @@ const pendingNative = new Map();
 
 chrome.runtime.onInstalled.addListener(() => {
   connectNativeHost();
+  void initializeUpdateChecks(true);
 });
 
 chrome.runtime.onStartup.addListener(() => {
   connectNativeHost();
+  void initializeUpdateChecks(false);
+});
+
+chrome.alarms.onAlarm.addListener((alarm) => {
+  if (alarm.name === UPDATE_ALARM_NAME) {
+    void runManagedUpdateCheck({ notify: true });
+  }
+});
+
+chrome.notifications.onClicked.addListener((notificationId) => {
+  if (notificationId.startsWith("willdeep-browser-update:")) {
+    void chrome.tabs.create({ url: UPDATE_DOWNLOAD_PAGE });
+    chrome.notifications.clear(notificationId);
+  }
 });
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
@@ -56,9 +81,70 @@ async function handleRuntimeMessage(message) {
       return captureActiveTab();
     case "debugger.command":
       return withActiveTab((tab) => debuggerCommand(tab.id, message.payload));
+    case "update.status":
+      return {
+        ok: true,
+        state: await loadUpdateState(),
+        preferences: await loadUpdatePreferences()
+      };
+    case "update.check":
+      return { ok: true, state: await runManagedUpdateCheck({ notify: false }) };
+    case "update.preferences": {
+      const preferences = await saveUpdatePreferences(message.payload || {});
+      await scheduleUpdateAlarm(preferences.autoCheckEnabled);
+      return { ok: true, preferences };
+    }
+    case "update.open-download-page":
+      await chrome.tabs.create({ url: UPDATE_DOWNLOAD_PAGE });
+      return { ok: true };
     default:
       return { ok: false, error: `unknown message type: ${message?.type || ""}` };
   }
+}
+
+async function initializeUpdateChecks(checkNow) {
+  const preferences = await loadUpdatePreferences();
+  await scheduleUpdateAlarm(preferences.autoCheckEnabled);
+  const state = checkNow ? await runManagedUpdateCheck({ notify: false }) : await loadUpdateState();
+  await updateActionBadge(state);
+}
+
+async function scheduleUpdateAlarm(enabled) {
+  await chrome.alarms.clear(UPDATE_ALARM_NAME);
+  if (enabled) {
+    chrome.alarms.create(UPDATE_ALARM_NAME, {
+      delayInMinutes: 2,
+      periodInMinutes: UPDATE_CHECK_INTERVAL_MINUTES
+    });
+  }
+}
+
+async function runManagedUpdateCheck({ notify }) {
+  const previous = await loadUpdateState();
+  const state = await checkForManagedUpdate();
+  await updateActionBadge(state);
+  if (notify && state.status === "available" && state.latestVersion !== previous?.latestVersion) {
+    const preferences = await loadUpdatePreferences();
+    if (preferences.notificationsEnabled) {
+      const notificationId = `willdeep-browser-update:${state.latestVersion}`;
+      chrome.notifications.create(notificationId, {
+        type: "basic",
+        iconUrl: "icons/icon128.png",
+        title: chrome.i18n.getMessage("updateNotificationTitle"),
+        message: chrome.i18n.getMessage("updateNotificationMessage", [state.latestVersion])
+      });
+    }
+  }
+  return state;
+}
+
+async function updateActionBadge(state) {
+  if (state?.status === "available") {
+    await chrome.action.setBadgeBackgroundColor({ color: "#1677ff" });
+    await chrome.action.setBadgeText({ text: "NEW" });
+    return;
+  }
+  await chrome.action.setBadgeText({ text: "" });
 }
 
 async function nativePing() {

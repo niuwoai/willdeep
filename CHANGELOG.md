@@ -6,11 +6,13 @@
 
 - **Agent 输入框上方新增运行上下文栏。** 新对话与既有会话都会清楚展示当前项目、运行位置和 Git 分支；运行位置可在本地主工作区与新建 worktree 之间切换，分支信息始终按当前 Agent 会话的真实工作目录刷新，不再借用 Editor 的仓库状态。
 - **Claude Code / Codex 委派任务改为侧边栏终端可见执行。** 发起任务时会打开并绑定当前对话专属的本地终端标签，用户可实时查看命令和输出；长时间无输出的执行标签不会被闲置回收，也不能在任务完成前误关。
+- **账户状态菜单与帮助入口。** Agent 左下角新增可点击账户状态栏，支持余额/用量、设置、退出登录子菜单，以及独立问号帮助入口；中英文文案统一走本地化资源。
+- **WillDeep Browser 扩展更新链路。** 扩展新增 Options 页面、some.im 公开更新计划轮询、NEW 角标和版本通知；发布器输出无 macOS 资源叉的干净 ZIP，并补齐契约与版本比较测试。
 
 ### Changed
 
 - **终端工具改为精确多标签路由。** `terminal_snapshot`、`terminal_send_command` 与 `terminal_send_control` 优先使用显式 `terminal_tab_id`，否则只使用当前会话绑定的标签；不存在绑定时创建该会话自己的本地标签，严禁回退到任意 active 标签。标签切换会显式更新当前会话绑定，并新增跨会话和显式标签覆盖的回归测试。
-- 版本号从 **1.156.0-rc4** 提升为功能版本 **1.157.0**，Xcode App、Go agent、Help bundle、Computer Use Helper、README badge、移动网关响应头契约与产品文档同步。
+- 版本号从 **1.156.0-rc4** 提升为功能版本 **1.157.0**，并同步 Xcode App、Go agent、Help bundle、Computer Use Helper、README badge、移动网关响应头契约与产品文档；本次合并补齐账户菜单与 Chrome 扩展管理能力。
 
 ---
 

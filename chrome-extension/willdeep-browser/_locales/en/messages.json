@@ -34,5 +34,122 @@
   },
   "permissionNote": {
     "message": "Only grant this extension to pages you want WillDeep to inspect or operate."
+  },
+  "openOptions": {
+    "message": "Settings and updates"
+  },
+  "popupUpdateAvailable": {
+    "message": "Update available"
+  },
+  "optionsEyebrow": {
+    "message": "WillDeep companion"
+  },
+  "optionsTitle": {
+    "message": "Browser extension settings"
+  },
+  "optionsSubtitle": {
+    "message": "Connection status, managed update checks, and release channel preferences."
+  },
+  "updateSectionKicker": {
+    "message": "Managed by some.im"
+  },
+  "updateSectionTitle": {
+    "message": "Extension updates"
+  },
+  "updateStatusChecking": {
+    "message": "Checking"
+  },
+  "updateStatusCheckingDetail": {
+    "message": "Looking for the latest WillDeep Browser release on some.im."
+  },
+  "updateStatusAvailable": {
+    "message": "Update available"
+  },
+  "updateAvailableDetail": {
+    "message": "Version $VERSION$ is ready. Open the download page to replace your unpacked extension.",
+    "placeholders": {
+      "version": { "content": "$1" }
+    }
+  },
+  "updateStatusCurrent": {
+    "message": "Up to date"
+  },
+  "updateCurrentDetail": {
+    "message": "You already have the latest release for this channel."
+  },
+  "updateStatusError": {
+    "message": "Check failed"
+  },
+  "updateErrorDetail": {
+    "message": "some.im could not be reached. Your installed extension keeps working; try again later."
+  },
+  "currentVersionLabel": {
+    "message": "Installed"
+  },
+  "latestVersionLabel": {
+    "message": "Latest"
+  },
+  "lastCheckedLabel": {
+    "message": "Last checked"
+  },
+  "checkNowButton": {
+    "message": "Check now"
+  },
+  "openDownloadButton": {
+    "message": "Open download page"
+  },
+  "manualUpdateNote": {
+    "message": "Chrome does not silently update unpacked extensions. WillDeep detects releases and guides you through a deliberate manual replacement."
+  },
+  "preferencesKicker": {
+    "message": "Preferences"
+  },
+  "preferencesTitle": {
+    "message": "Update behavior"
+  },
+  "autoCheckLabel": {
+    "message": "Check automatically"
+  },
+  "autoCheckDescription": {
+    "message": "Check shortly after Chrome starts and every six hours."
+  },
+  "notificationLabel": {
+    "message": "Notify me about releases"
+  },
+  "notificationDescription": {
+    "message": "Show one Chrome notification for each newly detected version."
+  },
+  "channelLabel": {
+    "message": "Release channel"
+  },
+  "channelDescription": {
+    "message": "Stable is recommended. Beta may receive preview builds."
+  },
+  "channelStable": {
+    "message": "Stable"
+  },
+  "channelBeta": {
+    "message": "Beta"
+  },
+  "connectionKicker": {
+    "message": "Local bridge"
+  },
+  "connectionTitle": {
+    "message": "WillDeep native host"
+  },
+  "openHelpButton": {
+    "message": "Installation help"
+  },
+  "optionsSecurityNote": {
+    "message": "The extension can access pages only under Chrome permissions you approve. Keep write actions visible and approval-gated in WillDeep."
+  },
+  "updateNotificationTitle": {
+    "message": "WillDeep Browser update available"
+  },
+  "updateNotificationMessage": {
+    "message": "Version $VERSION$ is ready on some.im. Click to view the download and install steps.",
+    "placeholders": {
+      "version": { "content": "$1" }
+    }
   }
 }

@@ -1,0 +1,282 @@
+:root {
+  color-scheme: light dark;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --accent: #1677ff;
+  --page: #f4f7fb;
+  --panel: #ffffff;
+  --text: #17212b;
+  --muted: #687688;
+  --line: rgba(61, 82, 101, 0.16);
+  --soft: rgba(22, 119, 255, 0.08);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  min-width: 520px;
+  margin: 0;
+  color: var(--text);
+  background: var(--page);
+}
+
+.page-shell {
+  width: min(760px, calc(100% - 40px));
+  margin: 0 auto;
+  padding: 42px 0 36px;
+}
+
+.page-header {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  margin-bottom: 24px;
+}
+
+.app-icon {
+  width: 64px;
+  height: 64px;
+  border-radius: 16px;
+  box-shadow: 0 14px 34px rgba(19, 48, 74, 0.18);
+}
+
+.eyebrow,
+.card-kicker {
+  margin: 0 0 5px;
+  color: var(--accent);
+  font-size: 11px;
+  font-weight: 750;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+h1,
+h2,
+p {
+  margin-top: 0;
+}
+
+h1 {
+  margin-bottom: 6px;
+  font-size: 28px;
+  letter-spacing: -0.025em;
+}
+
+h2 {
+  margin-bottom: 0;
+  font-size: 17px;
+}
+
+.subtitle,
+.card-copy,
+footer p,
+.manual-update-note {
+  color: var(--muted);
+  line-height: 1.55;
+}
+
+.subtitle {
+  margin-bottom: 0;
+  font-size: 14px;
+}
+
+.card {
+  margin-top: 14px;
+  padding: 22px;
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  background: var(--panel);
+  box-shadow: 0 18px 50px rgba(20, 45, 70, 0.07);
+}
+
+.update-card {
+  border-color: rgba(22, 119, 255, 0.2);
+}
+
+.card-heading-row,
+.compact-card {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 18px;
+}
+
+.status-badge {
+  padding: 6px 10px;
+  border-radius: 999px;
+  color: #5d6978;
+  background: rgba(104, 118, 136, 0.12);
+  font-size: 11px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.status-badge.available {
+  color: #075dbd;
+  background: rgba(22, 119, 255, 0.13);
+}
+
+.status-badge.current {
+  color: #167043;
+  background: rgba(22, 163, 74, 0.12);
+}
+
+.status-badge.error {
+  color: #b42318;
+  background: rgba(220, 38, 38, 0.11);
+}
+
+.card-copy {
+  margin: 14px 0 0;
+  font-size: 13px;
+}
+
+.version-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+  margin: 18px 0;
+}
+
+.version-grid div {
+  padding: 12px;
+  border-radius: 12px;
+  background: var(--soft);
+}
+
+dt {
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 650;
+}
+
+dd {
+  margin: 5px 0 0;
+  overflow: hidden;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 12px;
+  font-weight: 650;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.button-row {
+  display: flex;
+  gap: 10px;
+}
+
+.button,
+.text-button {
+  border: 0;
+  font: inherit;
+  cursor: pointer;
+}
+
+.button {
+  min-height: 38px;
+  padding: 0 15px;
+  border-radius: 10px;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.button.primary {
+  color: #ffffff;
+  background: var(--accent);
+}
+
+.button.secondary {
+  color: var(--text);
+  border: 1px solid var(--line);
+  background: var(--panel);
+}
+
+.button:disabled {
+  cursor: wait;
+  opacity: 0.58;
+}
+
+.manual-update-note {
+  margin: 12px 0 0;
+  font-size: 11px;
+}
+
+.setting-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  padding: 15px 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.setting-row:last-child {
+  padding-bottom: 0;
+  border-bottom: 0;
+}
+
+.setting-row strong,
+.setting-row small {
+  display: block;
+}
+
+.setting-row strong {
+  font-size: 13px;
+}
+
+.setting-row small {
+  margin-top: 4px;
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+input[type="checkbox"] {
+  width: 18px;
+  height: 18px;
+  accent-color: var(--accent);
+}
+
+select {
+  min-width: 116px;
+  height: 34px;
+  padding: 0 30px 0 10px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  color: var(--text);
+  background: var(--panel);
+}
+
+.compact-card {
+  align-items: center;
+}
+
+.text-button {
+  flex: 0 0 auto;
+  padding: 8px 0;
+  color: var(--accent);
+  background: transparent;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+footer {
+  padding: 18px 8px 0;
+}
+
+footer p {
+  margin: 0;
+  font-size: 11px;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --page: #0c1118;
+    --panel: #151d27;
+    --text: #ecf3fb;
+    --muted: #9cabbc;
+    --line: rgba(214, 228, 242, 0.14);
+    --soft: rgba(62, 143, 255, 0.12);
+  }
+}
