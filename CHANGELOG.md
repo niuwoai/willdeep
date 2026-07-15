@@ -1,11 +1,22 @@
 # Changelog
 
+## 1.162.0-rc3 - 2026-07-15
+
+### Fixed
+
+- **修复 CI complexity guard 红：拆分超长的 `L10n.swift`。** `Xedit/L10n.swift` 长期累积到 3015 行，超出 complexity guard 的 3000 行硬限，导致该步骤失败、后续 version consistency / XeditTests / Go 测试全被跳过、汇总步骤 `cat` 不到 `version_report.md` 报错。将其中的 `AgentTerminal` 文案枚举按既有 `L10n+DesktopPet.swift` 模式拆到新文件 `Xedit/L10n+AgentTerminal.swift`（保留 `nonisolated` 隔离语义，纯移动不改逻辑），`L10n.swift` 降至 2890 行，本地 complexity guard 恢复 `hard=0`，编译通过。
+
+### Changed
+
+- 版本号从 **1.162.0-rc2** 递增为 **1.162.0-rc3**；Xcode App、Go agent、Help bundle、Computer Use Helper、Chrome 扩展、README badge、移动网关响应头契约与产品文档同步。
+
+---
+
 ## 1.162.0-rc2 - 2026-07-15
 
 ### Fixed
 
 - **Composer 的 `@文件名` 恢复当前工作区检查与附件挂载。** `@` 文件候选不再复用 Editor 的 Quick Open 根目录，而是异步扫描当前 Agent 会话绑定的本地工作区；按文件名或相对路径搜索后可用 Enter/Tab 或点击候选挂载为附件。搜索尚未完成时 Enter/Tab 会保留在附件选择流程，不再把裸 `@文件名` 误发为普通消息；依赖目录、构建目录和隐藏文件继续跳过。
-- **修复 CI complexity guard 红：拆分超长的 `L10n.swift`。** `Xedit/L10n.swift` 长期累积到 3015 行，超出 complexity guard 的 3000 行硬限，导致该步骤失败、后续 version consistency / XeditTests / Go 测试全被跳过、汇总步骤 `cat` 不到 `version_report.md` 报错。将其中的 `AgentTerminal` 文案枚举按既有 `L10n+DesktopPet.swift` 模式拆到新文件 `Xedit/L10n+AgentTerminal.swift`（保留 `nonisolated` 隔离语义，纯移动不改逻辑），`L10n.swift` 降至 2890 行，本地 complexity guard 恢复 `hard=0`，编译通过。
 
 ### Changed
 
