@@ -1,6 +1,6 @@
 # WillDeep Product Overview
 
-> Last updated: 2026-07-15 | Current version: v1.160.0-rc2
+> Last updated: 2026-07-15 | Current version: v1.160.0-rc3
 
 ## Positioning
 
@@ -12,6 +12,7 @@ WillDeep is configured for non-App-Store distribution without App Sandbox so it 
 
 ## 架构概览
 
+- **Agent 本地路径弱化链接样式（1.160.0-rc3）** —— 历史消息内可点击的本地目录和文件路径使用正文黑灰色、中等字重及细下划线表达交互，不再继承高饱和系统蓝色或行内代码圆角背景；连续路径之间通过仅影响排版、不写入复制文本的尾部字偶距保持清晰间隔，并继续支持点击打开文件。
 - **工作区 Go 构建缓存命令自动审批（1.160.0-rc2）** —— Agent 命令策略能够识别前置环境变量和精确的 `$(pwd)` 工作区路径；`GOCACHE` / `GOMODCACHE` 位于工作区内时可自动批准构建写入，敏感变量、命令替换、凭据路径和工作区外路径仍保持升级确认。
 - **Chrome Native Messaging 自动注册（1.160.0-rc1）** —— WillDeep 每次启动会使用 App 内置 `willdeep-agent` 创建或修复当前用户的 Chrome Native Messaging launcher/manifest；扩展通过公开 manifest key 固定 ID，解压路径变化不再让 `allowed_origins` 失效。Service Worker 会消费预期的 `runtime.lastError`，宿主暂未就绪时只显示可诊断的断开状态。
 - **some.im credits 版本化刷新（1.159.0-rc1）** —— WillDeep 左侧会话栏底部持续展示 some.im 剩余 credits，低于 1000 万时使用随深浅外观适配的低饱和赭石棕提醒。AI 请求响应会读取服务端余额快照 header；credits 与账本/预占变更的 Unix 微秒时间点必须成对出现，客户端仅接受严格更新的时间点，避免并发响应或旧边缘快照覆盖新余额。无 AI 请求时以 4–7 分钟随机周期兜底刷新账户余额。
