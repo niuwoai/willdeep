@@ -1243,13 +1243,14 @@ plan_import_contract = {
     media_tasks_source.include?("clean(task.cancelEndpointSuffix)") &&
     media_tools_source.include?("existingTask?.statusEndpointSuffix") &&
     media_tools_source.include?("existingTask?.cancelEndpointSuffix"),
-  "media task side panel menu shows active or failed badge counts" =>
+  "media task side panel shortcut exposes active or failed counts" =>
     chat_header_source.include?("private var visibleMediaTasks: [AgentMediaTask]") &&
     chat_header_source.include?("private var mediaTaskCounts: (active: Int, failed: Int)") &&
-    chat_header_source.include?("private var mediaTaskMenuBadge: (text: String, color: Color, accessibilityLabel: String)?") &&
+    chat_header_source.include?("AgentSidePanelShortcutControl(") &&
     chat_header_source.include?("counts.failed > 0") &&
     chat_header_source.include?("counts.active > 0") &&
     chat_header_source.include?("sidePanelTitle(for: item)") &&
+    chat_header_source.include?("button.toolTip = title") && chat_header_source.include?("button.setAccessibilityLabel(title)") &&
     chat_header_source.include?("需处理") &&
     chat_header_source.include?("运行中"),
   "task monitor rail shows media task status summary" =>
@@ -2147,7 +2148,7 @@ plan_import_contract = {
     tools_source.include?("mediaSubmissionFollowUp(task: updated, action: \"short_drama_generate_shot_media_follow_up\")") &&
     tools_source.include?("mediaSubmissionFollowUp(task: updated, action: \"short_drama_generate_asset_media_follow_up\")") &&
     tools_source.include?("Short-drama media task dry-run.") &&
-    tools_source.include?("Reference image attached: \\(body[\"image\"] == nil ? \"false\" : \"true\")") &&
+    tools_source.include?("Reference image attached to some.im: \\(body[\"image\"] == nil ? \"false\" : \"true\")") &&
     registry_source.include?("validate the shot, prompt, model, endpoint, and optional video reference image without submitting a provider job") &&
     tools_source.include?("Short-drama asset reference media task dry-run.") &&
     tools_source.include?("submit_arguments: \\(submitArguments)") &&
@@ -2386,7 +2387,7 @@ plan_import_contract = {
     image_tools_source.include?("kind: .imageUpscale"),
   "short drama batch media tool is registered and implemented" =>
     registry_source.include?('name: "short_drama_generate_batch_media"') &&
-    registry_source.include?("stable batch path behind storyboard buttons") &&
+    batch_tools_source.include?("AgentVideoGenerationEngine.parse(arguments: arguments)") && batch_tools_source.include?("video_engine=\\(videoEngine.rawValue)") &&
     registry_source.include?('name: "target_filter"') &&
     registry_source.include?('AgentToolParameter(name: "shot_ids"') &&
     registry_source.include?("When missing, image_generation only targets shots without a selected main image") &&
@@ -2685,7 +2686,7 @@ plan_import_contract = {
     registry_source.include?('AgentToolParameter(name: "asset_kind"') &&
     registry_source.include?('AgentToolParameter(name: "asset_id"') &&
     registry_source.include?('name: "generate_video_from_image"') &&
-    registry_source.include?("Submit a some.im image-to-video task from a local image path") &&
+    media_tools_source.include?("let engine = AgentVideoGenerationEngine.parse(arguments: arguments)") && media_tools_source.include?("return klingVideoFromImageHandoff(") &&
     registry_source.include?("Optional short-drama review/fix item UUID this video task is intended to resolve") &&
     dispatch_source.include?('case "generate_video_from_image"') &&
     dispatch_source.include?("AgentMediaTools.generateVideoFromImage") &&
