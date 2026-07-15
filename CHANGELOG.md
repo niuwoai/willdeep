@@ -1,5 +1,22 @@
 # Changelog
 
+## 1.160.0-rc1 - 2026-07-15
+
+### Added
+
+- **Chrome Native Messaging 宿主自动注册。** WillDeep 启动时会使用 App 内置 `willdeep-agent` 创建或修复当前用户的 Chrome Native Messaging launcher 与 manifest；扩展通过公开 manifest key 固定 ID，移动或替换解压目录后不会再让 `allowed_origins` 失效。
+
+### Fixed
+
+- **Chrome 扩展断连不再累积未处理异常。** Service Worker 会读取 native port 断开时的 `runtime.lastError`，宿主尚未安装或 App 正在升级时返回可诊断状态，不再产生 `Unchecked runtime.lastError`。
+
+### Changed
+
+- README 将产品定位更新为围绕任务、工作区、会话和可验证交付物组织的原生 Agent 工作台；新增 Xomo 接入 some.im 生图能力的设计草案。
+- 版本号从 **1.159.0-rc1** 提升为 **1.160.0-rc1**；Xcode App、Go agent、Help bundle、Computer Use Helper、Chrome 扩展、README badge、移动网关响应头契约与产品文档同步。
+
+---
+
 ## 1.159.0-rc1 - 2026-07-15
 
 ### Added

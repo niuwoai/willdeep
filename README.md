@@ -10,7 +10,7 @@
 
 [![macOS](https://img.shields.io/badge/macOS-13.7%2B-black?logo=apple)](https://www.apple.com/macos/)
 [![Swift](https://img.shields.io/badge/Swift-SwiftUI-orange?logo=swift)](https://developer.apple.com/swift/)
-[![Version](https://img.shields.io/badge/version-1.159.0--rc1-blue)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-1.160.0--rc1-blue)](CHANGELOG.md)
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue)](LICENSE)
 
 *它不只是坐在编辑器旁边回答问题。它会看现场、做事情、留下证据，也知道什么时候该停下来问你。*
@@ -156,7 +156,7 @@ willdeep path/to/file.go
 
 ## 项目状态
 
-WillDeep 当前在 `1.158.x` 上活跃迭代。Agent 工作台是主产品界面，原生编辑器作为文件查看、轻量编辑和 Agent 协作能力继续维护。
+WillDeep 当前在 `1.160.x` 上活跃迭代。Agent 工作台是主产品界面，原生编辑器作为文件查看、轻量编辑和 Agent 协作能力继续维护。
 
 每次发布的具体变化见 [CHANGELOG.md](CHANGELOG.md)，完整能力矩阵与未决问题见 [product-overview.md](product-overview.md)。Release Candidate tag 使用 `vMAJOR.MINOR.PATCH-rcN` 格式。
 
@@ -205,7 +205,7 @@ WillDeep 采用 [Apache License 2.0](LICENSE) + [Open Core](OPEN_CORE.md) 模式
 
 [![macOS](https://img.shields.io/badge/macOS-13.7%2B-black?logo=apple)](https://www.apple.com/macos/)
 [![Swift](https://img.shields.io/badge/Swift-SwiftUI-orange?logo=swift)](https://developer.apple.com/swift/)
-[![Version](https://img.shields.io/badge/version-1.159.0--rc1-blue)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-1.160.0--rc1-blue)](CHANGELOG.md)
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue)](LICENSE)
 
 *It does not merely answer questions beside an editor. It inspects the work, takes action, leaves evidence, and knows when to stop and ask.*
@@ -351,7 +351,7 @@ willdeep path/to/file.go
 
 ## Status
 
-WillDeep is in active `1.158.x` development. The agent workspace is the primary product surface; the native editor continues as a maintained capability for file inspection, lightweight editing, and agent collaboration.
+WillDeep is in active `1.160.x` development. The agent workspace is the primary product surface; the native editor continues as a maintained capability for file inspection, lightweight editing, and agent collaboration.
 
 See [CHANGELOG.md](CHANGELOG.md) for release details and [product-overview.md](product-overview.md) for the full capability matrix and open questions. Release Candidate tags follow `vMAJOR.MINOR.PATCH-rcN`.
 
