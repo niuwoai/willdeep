@@ -116,6 +116,7 @@ final class AppState: ObservableObject {
     private(set) var selectedText = ""
     @Published var hasExternalFileChanges = false
     @Published var gitStatus = GitRepositoryStatus()
+    @Published var agentWorkspaceGitStatus = GitRepositoryStatus()
     @Published var agentGitWorktrees: [AgentGitWorktree] = []
     @Published var isAgentPanelVisible = false
     @Published var agentComposerFocusRevision = 0
@@ -596,15 +597,17 @@ final class AppState: ObservableObject {
         // Let the terminal tools open a local shell on demand (rooted at
         // the active session's workspace) when the agent wants to drive
         // the terminal but the user hasn't opened a tab yet.
-        agentTerminalController.defaultLocalTabProvider = { [weak self] in
+        agentTerminalController.defaultLocalTabProvider = { [weak self] requestedSessionID in
             guard let self else { return nil }
             let settings = self.editorTerminalSettings.normalized()
-            let workingDirectory = self.activeRuntime?.workspaceRootPath
+            let requestedRuntime = requestedSessionID.flatMap { self.runtime(for: $0) }
+            let workingDirectory = requestedRuntime?.workspaceLocation?.localPath
+                ?? requestedRuntime?.workspaceRootPath
                 ?? self.rootDirectory?.standardizedFileURL.path
             let skin = settings.followsInterfaceSkin
                 ? TerminalSkinColors.from(palette: self.editorSettings.interfaceSkin.palette)
                 : nil
-            return (settings, workingDirectory, self.activeAgentSessionID, skin)
+            return (settings, workingDirectory, requestedSessionID ?? self.activeAgentSessionID, skin)
         }
         agentJobRegistry.onJobFinished = { [weak self] job in
             guard let self else { return }

@@ -822,8 +822,8 @@ struct AgentToolsCoreTests {
         #expect(listShortcuts?.risk == .read)
         #expect(createShortcut?.risk == .write)
         #expect(editShortcut?.risk == .write)
-        #expect(snapshot?.description.contains("Local tabs can contain a nested manual SSH session") == true)
-        #expect(sendCommand?.description.contains("never send a local-intended command into an SSH'd server tab") == true)
+        #expect(snapshot?.description.contains("current conversation's bound Agent Terminal tab") == true)
+        #expect(sendCommand?.description.contains("never send a local-intended command into an SSH tab") == true)
         #expect(sendCommand?.parameters.contains(where: { $0.name == "zmodem_upload_paths" && $0.type == .stringArray }) == true)
         #expect(sendCommand?.parameters.contains(where: { $0.name == "zmodem_download_directory" && $0.type == .string }) == true)
 
@@ -1007,14 +1007,25 @@ struct AgentToolsCoreTests {
     }
 
     @Test
-    func composerDelegatedAgentsDefaultToBackgroundJobs() {
+    func composerDelegatedAgentsUseVisibleBoundTerminal() {
         let arguments = AppState.delegatedAgentArguments(
             prompt: "delegate this task",
             executionAgent: .codexCLI
         )
 
-        #expect(arguments["run_in_background"]?.boolValue() == true)
+        #expect(arguments["run_in_background"]?.boolValue() == false)
+        #expect(arguments["use_visible_terminal"]?.boolValue() == true)
+        #expect(arguments["visible_terminal_label"]?.stringValue() == "Codex")
         #expect(arguments["permission_mode"]?.stringValue() == AgentExecutionAgent.codexCLI.defaultPermissionMode)
+    }
+
+    @Test
+    func terminalToolsExposeExactTabTargeting() {
+        for toolName in ["terminal_snapshot", "terminal_send_command", "terminal_send_control"] {
+            let descriptor = AgentToolRegistry.descriptor(for: toolName)
+            #expect(descriptor?.parameters.contains(where: { $0.name == "terminal_tab_id" }) == true)
+            #expect(descriptor?.description.contains("Never guesses") == true)
+        }
     }
 
     @Test

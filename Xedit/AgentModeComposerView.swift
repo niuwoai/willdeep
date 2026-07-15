@@ -97,9 +97,11 @@ struct AgentChatComposer: View {
         }
         .onAppear {
             appState.refreshActiveAgentWorktreeChanges()
+            appState.refreshAgentGitWorktrees()
         }
         .onCompatibleChange(of: appState.activeAgentSessionID) { _, _ in
             appState.refreshActiveAgentWorktreeChanges()
+            appState.refreshAgentGitWorktrees()
             // 切 session 后重置 banner 状态：新 session 的 plan 该弹照弹。
             dismissedPlanFingerprint = nil
         }
@@ -538,6 +540,8 @@ private struct ComposerCard: View {
             || !appState.agentSessionDocuments.isEmpty
             || !appState.agentKnowledgeFolders.isEmpty
         VStack(alignment: .leading, spacing: 8) {
+            AgentComposerRunContextBar()
+
             if !appState.agentPendingImages.isEmpty {
                 AgentComposerImageStrip(images: appState.agentPendingImages) { id in
                     appState.removeAgentImage(id: id)
@@ -1301,7 +1305,7 @@ struct AgentChatStatusBar: View {
     var body: some View {
         let palette = appState.editorSettings.interfaceSkin.palette
         HStack(spacing: 14) {
-            if activeRemoteWorkspaceLabel == nil, let branch = appState.gitStatus.branchName {
+            if activeRemoteWorkspaceLabel == nil, let branch = appState.agentWorkspaceGitStatus.branchName {
                 HStack(spacing: 4) {
                     Image(systemName: "arrow.triangle.branch")
                         .font(.system(size: 9))

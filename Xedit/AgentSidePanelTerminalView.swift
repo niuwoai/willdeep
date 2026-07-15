@@ -122,6 +122,9 @@ private struct AgentSidePanelTerminalContentView: View {
             // Nerd Font or the skin palette) to already-open tabs.
             controller.applyAppearanceToAll(settings, skin: skinColors)
         }
+        .onCompatibleChange(of: appState.activeAgentSessionID) { _, _ in
+            scheduleTerminalBootstrap()
+        }
         .onCompatibleChange(of: controller.activeTabID) { _, _ in
             showsHostVerificationPopover = false
             hostnameCommandCopied = false
@@ -468,6 +471,7 @@ private struct AgentSidePanelTerminalContentView: View {
 
     private func tabChip(_ tab: AgentTerminalTab) -> some View {
         let isActive = controller.activeTabID == tab.id
+        let isBound = controller.isTab(tab.id, boundTo: appState.activeAgentSessionID)
         return HStack(spacing: 5) {
             Image(systemName: tab.kind.isSSH ? "network" : "terminal")
                 .font(.system(size: 9))
@@ -480,6 +484,11 @@ private struct AgentSidePanelTerminalContentView: View {
                 // 标题封顶,避免 `rocky@host:/` 这种长 OSC 标题把
                 // 整个 chip 撑得占满侧栏、把 `+` 顶出去。
                 .frame(maxWidth: 130)
+            if isBound {
+                Image(systemName: "link")
+                    .font(.system(size: 8, weight: .semibold))
+                    .foregroundStyle(interfacePalette.accent)
+            }
             Button {
                 controller.closeTab(id: tab.id)
             } label: {
@@ -487,6 +496,7 @@ private struct AgentSidePanelTerminalContentView: View {
                     .font(.system(size: 8, weight: .semibold))
             }
             .buttonStyle(.plain)
+            .disabled(tab.isAutomationBusy)
             .focusable(false)
             .foregroundStyle(interfacePalette.secondaryText)
         }
@@ -503,7 +513,7 @@ private struct AgentSidePanelTerminalContentView: View {
         .help(tabTooltip(tab))
         .contentShape(Rectangle())
         .onTapGesture {
-            controller.activeTabID = tab.id
+            controller.activateTab(id: tab.id, bindingTo: appState.activeAgentSessionID)
         }
     }
 
@@ -720,6 +730,7 @@ private struct AgentSidePanelTerminalContentView: View {
                 settings: terminalSettings,
                 skin: colors
             )
+            controller.activateBoundTab(for: originAgentSessionID)
             controller.applyAppearanceToAll(terminalSettings, skin: colors)
         }
     }

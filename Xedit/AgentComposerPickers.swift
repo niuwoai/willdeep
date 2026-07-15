@@ -141,7 +141,7 @@ struct WorkspacePickerPill: View {
                 } label: {
                     Label(L10n.ComposerWorkspace.copyPath, systemImage: "doc.on.doc")
                 }
-                if let branch = appState.gitStatus.branchName, !branch.isEmpty {
+                if let branch = appState.agentWorkspaceGitStatus.branchName, !branch.isEmpty {
                     Button {
                         let pb = NSPasteboard.general
                         pb.clearContents()
@@ -154,7 +154,7 @@ struct WorkspacePickerPill: View {
             Divider()
         }
 
-        if appState.gitStatus.isRepository {
+        if appState.agentWorkspaceGitStatus.isRepository {
             Section(L10n.ComposerWorkspace.gitWorktrees) {
                 Button {
                     appState.createAgentGitWorktreeFromActiveWorkspace()
@@ -349,6 +349,105 @@ struct WorkspacePickerPill: View {
     }
 }
 
+// MARK: - Composer run context
+
+struct AgentComposerRunContextBar: View {
+    @EnvironmentObject var appState: AppState
+
+    var body: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 8) {
+                WorkspacePickerPill()
+                AgentRunLocationPickerPill()
+                branchPill
+            }
+            .padding(.horizontal, 1)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .focusable(false)
+    }
+
+    private var branchPill: some View {
+        HStack(spacing: 4) {
+            Image(systemName: "arrow.triangle.branch")
+                .font(.system(size: 10, weight: .semibold))
+            Text(appState.agentWorkspaceGitStatus.branchName ?? L10n.ComposerWorkspace.noBranch)
+                .font(AgentDesign.secondaryFont)
+                .lineLimit(1)
+                .truncationMode(.middle)
+        }
+        .foregroundStyle(.secondary)
+        .padding(.horizontal, 8)
+        .padding(.vertical, 4)
+        .background(appState.editorSettings.interfaceSkin.palette.controlFill.opacity(0.72))
+        .clipShape(RoundedRectangle(cornerRadius: AgentDesign.pillCornerRadius))
+        .help(L10n.ComposerWorkspace.currentBranch)
+        .fixedSize()
+    }
+}
+
+struct AgentRunLocationPickerPill: View {
+    @EnvironmentObject var appState: AppState
+
+    var body: some View {
+        Menu {
+            Button {
+                guard let primary = appState.agentGitWorktrees.first(where: \.isPrimary) else { return }
+                appState.moveActiveAgentSessionToWorkspace(at: primary.path)
+            } label: {
+                Label(L10n.ComposerWorkspace.localRun, systemImage: "laptopcomputer")
+            }
+            .disabled(primaryWorktree == nil || isPrimaryWorkspace)
+
+            Button {
+                appState.createAgentGitWorktreeFromActiveWorkspace()
+            } label: {
+                Label(L10n.ComposerWorkspace.newWorktreeRun, systemImage: "arrow.triangle.branch")
+            }
+            .disabled(!appState.agentWorkspaceGitStatus.isRepository)
+        } label: {
+            HStack(spacing: 4) {
+                Image(systemName: isPrimaryWorkspace ? "laptopcomputer" : "arrow.triangle.branch")
+                    .font(.system(size: 10, weight: .semibold))
+                Text(isPrimaryWorkspace
+                    ? L10n.ComposerWorkspace.localRun
+                    : L10n.ComposerWorkspace.newWorktreeRun)
+                    .font(AgentDesign.secondaryFont)
+                Image(systemName: "chevron.down")
+                    .font(.system(size: 8, weight: .semibold))
+            }
+            .foregroundStyle(.secondary)
+            .padding(.horizontal, 8)
+            .padding(.vertical, 4)
+            .background(appState.editorSettings.interfaceSkin.palette.controlFill.opacity(0.72))
+            .clipShape(RoundedRectangle(cornerRadius: AgentDesign.pillCornerRadius))
+        }
+        .menuStyle(.borderlessButton)
+        .menuIndicator(.hidden)
+        .focusable(false)
+        .fixedSize()
+        .help(isPrimaryWorkspace
+            ? L10n.ComposerWorkspace.localRunHelp
+            : L10n.ComposerWorkspace.newWorktreeRunHelp)
+    }
+
+    private var primaryWorktree: AgentGitWorktree? {
+        appState.agentGitWorktrees.first(where: \.isPrimary)
+    }
+
+    private var activeWorkspacePath: String? {
+        appState.activeRuntime?.workspaceLocation?.localPath.map {
+            URL(fileURLWithPath: $0).standardizedFileURL.path
+        }
+    }
+
+    private var isPrimaryWorkspace: Bool {
+        guard let activeWorkspacePath,
+              let primaryWorktree else { return true }
+        return activeWorkspacePath == primaryWorktree.url.path
+    }
+}
+
 // MARK: - Approval mode picker
 
 struct AgentApprovalModePickerPill: View {
@@ -436,7 +535,6 @@ struct ComposerAdaptiveControlStrip: View {
     // 专家）固定收进「更多 …」弹层。布局不再随宽度变化，每次重建只建一套。
     var body: some View {
         HStack(spacing: 6) {
-            WorkspacePickerPill()
             ModelPickerPill()
             AgentModePickerPill()
             ComposerOverflowPill(controls: [.approval, .executor, .plugins, .experts])

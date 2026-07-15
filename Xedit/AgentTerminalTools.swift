@@ -80,6 +80,7 @@ enum AgentTerminalTools {
             throw AgentToolError.invalidArgument("Agent Terminal is not available in this context.")
         }
         let maxCharacters = min(max(arguments["max_characters"]?.intValue() ?? 6_000, 500), 12_000)
+        let targetTabID = try terminalTabID(arguments)
 
         let snapshot: RedactedTerminalSnapshot
         do {
@@ -88,7 +89,12 @@ enum AgentTerminalTools {
                 // only. No screen text is read on the main thread, so a busy
                 // main thread can't make the snapshot stale — it can at worst
                 // delay this tiny metadata hop, which the timeout still guards.
-                let raw = try await MainActor.run { try controller.rawSnapshot() }
+                let raw = try await MainActor.run {
+                    try controller.rawSnapshot(
+                        targetTabID: targetTabID,
+                        sessionID: context.runtimeID
+                    )
+                }
                 // Square the mirror to the visible grid, then read the screen
                 // and redact/trim — ALL off the main actor. The mirror is fed
                 // on its own queue, so this reflects the latest PTY output even
@@ -101,6 +107,7 @@ enum AgentTerminalTools {
                 let trimmed = String(redactedOutput.suffix(max(1, maxCharacters)))
                 let trimmedMarked = String(redactedMarkedOutput.suffix(max(1, maxCharacters)))
                 return RedactedTerminalSnapshot(
+                    tabID: raw.tabID,
                     isRunning: raw.isRunning,
                     runtimeName: raw.runtimeName,
                     runtimeTarget: raw.runtimeTarget,
@@ -123,9 +130,9 @@ enum AgentTerminalTools {
         let statusLine: String
         if snapshot.isRunning {
             let target = snapshot.runtimeTarget.isEmpty ? "" : " (\(snapshot.runtimeTarget))"
-            statusLine = "Agent Terminal: connected\nRuntime: \(snapshot.runtimeName)\(target)"
+            statusLine = "Agent Terminal: connected\nTab ID: \(snapshot.tabID.uuidString)\nRuntime: \(snapshot.runtimeName)\(target)"
         } else {
-            statusLine = "Agent Terminal: process has exited (showing its final visible screen)\nRuntime: \(snapshot.runtimeName)"
+            statusLine = "Agent Terminal: process has exited (showing its final visible screen)\nTab ID: \(snapshot.tabID.uuidString)\nRuntime: \(snapshot.runtimeName)"
         }
         let recent = snapshot.recentCommands.isEmpty
             ? "none"
@@ -170,6 +177,7 @@ enum AgentTerminalTools {
     /// Redacted, trimmed capture ready for the tool payload. Built off the
     /// main actor from `AgentTerminalRawSnapshot`.
     private struct RedactedTerminalSnapshot: Sendable {
+        let tabID: UUID
         let isRunning: Bool
         let runtimeName: String
         let runtimeTarget: String
@@ -215,9 +223,12 @@ enum AgentTerminalTools {
             throw AgentToolError.missingArgument("command")
         }
         let pathSelection = try zmodemPathSelection(arguments: arguments, rootDirectory: context.rootDirectory)
+        let targetTabID = try terminalTabID(arguments)
         return try await MainActor.run {
             try controller.sendApprovedCommand(
                 command,
+                targetTabID: targetTabID,
+                sessionID: context.runtimeID,
                 zmodemPathSelection: pathSelection,
                 secretRedactionValues: context.secretRedactionValues
             )
@@ -305,9 +316,25 @@ enum AgentTerminalTools {
               let control = AgentTerminalControl(rawValue: raw) else {
             throw AgentToolError.invalidArgument("control must be one of: \(AgentTerminalControl.allCases.map(\.rawValue).joined(separator: ", ")).")
         }
+        let targetTabID = try terminalTabID(arguments)
         return try await MainActor.run {
-            try controller.sendApprovedControl(control)
+            try controller.sendApprovedControl(
+                control,
+                targetTabID: targetTabID,
+                sessionID: context.runtimeID
+            )
         }
+    }
+
+    private static func terminalTabID(_ arguments: [String: AgentJSONValue]) throws -> UUID? {
+        guard let raw = arguments["terminal_tab_id"]?.stringValue()?
+            .trimmingCharacters(in: .whitespacesAndNewlines), !raw.isEmpty else {
+            return nil
+        }
+        guard let id = UUID(uuidString: raw) else {
+            throw AgentToolError.invalidArgument("terminal_tab_id must be a terminal tab UUID.")
+        }
+        return id
     }
 
     private static func parseCreateEvents(_ arguments: [String: AgentJSONValue]) throws -> [TerminalShortcutCreateEvent] {

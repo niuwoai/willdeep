@@ -8572,6 +8572,24 @@
         }
       }
     },
+    "composer.workspace.current-branch" : {
+      "comment" : "Composer run context branch label help text",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Current branch"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "当前分支"
+          }
+        }
+      }
+    },
     "composer.workspace.git-worktrees" : {
       "comment" : "Composer workspace picker section title",
       "extractionState" : "manual",
@@ -8586,6 +8604,42 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Git worktree"
+          }
+        }
+      }
+    },
+    "composer.workspace.local-run" : {
+      "comment" : "Composer run location option",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Local"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "本地处理"
+          }
+        }
+      }
+    },
+    "composer.workspace.local-run.help" : {
+      "comment" : "Composer local run location help text",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Run this conversation in the primary local workspace"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "在主本地工作区中运行此对话"
           }
         }
       }
@@ -8608,6 +8662,60 @@
         }
       }
     },
+    "composer.workspace.new-worktree-run" : {
+      "comment" : "Composer run location option",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "New worktree"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "新工作树"
+          }
+        }
+      }
+    },
+    "composer.workspace.new-worktree-run.help" : {
+      "comment" : "Composer new worktree run location help text",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Create an isolated Git worktree and move this conversation there"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "创建隔离的 Git 工作树并将此对话移入其中"
+          }
+        }
+      }
+    },
+    "composer.workspace.no-branch" : {
+      "comment" : "Composer branch label when the workspace has no Git branch",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No branch"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "无分支"
+          }
+        }
+      }
+    },
     "composer.workspace.pick-folder" : {
       "comment" : "Composer workspace picker button label when no workspace is selected",
       "extractionState" : "manual",
@@ -8622,6 +8730,24 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "选择文件夹"
+          }
+        }
+      }
+    },
+    "composer.workspace.run-location" : {
+      "comment" : "Composer run location control label",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Run location"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "运行位置"
           }
         }
       }

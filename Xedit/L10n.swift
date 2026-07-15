@@ -426,6 +426,13 @@ nonisolated enum L10n {
         static let copyBranchName = String(localized: "composer.workspace.copy-branch-name", defaultValue: "Copy branch name")
         static let copyPath = String(localized: "composer.workspace.copy-path", defaultValue: "Copy path")
         static let gitWorktrees = String(localized: "composer.workspace.git-worktrees", defaultValue: "Git worktrees")
+        static let localRun = String(localized: "composer.workspace.local-run", defaultValue: "Local")
+        static let localRunHelp = String(localized: "composer.workspace.local-run.help", defaultValue: "Run this conversation in the primary local workspace")
+        static let runLocation = String(localized: "composer.workspace.run-location", defaultValue: "Run location")
+        static let newWorktreeRun = String(localized: "composer.workspace.new-worktree-run", defaultValue: "New worktree")
+        static let newWorktreeRunHelp = String(localized: "composer.workspace.new-worktree-run.help", defaultValue: "Create an isolated Git worktree and move this conversation there")
+        static let currentBranch = String(localized: "composer.workspace.current-branch", defaultValue: "Current branch")
+        static let noBranch = String(localized: "composer.workspace.no-branch", defaultValue: "No branch")
         static let newWorktree = String(localized: "composer.workspace.new-worktree", defaultValue: "New worktree…")
         static let pickFolder = String(localized: "composer.workspace.pick-folder", defaultValue: "Pick folder")
         static let pruneStaleWorktrees = String(localized: "composer.workspace.prune-stale-worktrees", defaultValue: "Prune stale worktrees")
@@ -2984,12 +2991,6 @@ nonisolated enum L10n {
         static let reviewHelp = String(localized: "agent-worktree-summary.review-help", defaultValue: "View the current uncommitted diff")
         static func moreFiles(_ n: Int) -> String {
             String(format: String(localized: "agent-worktree-summary.more-files", defaultValue: "%d more files"), n)
-        }
-    }
-
-    enum AgentTaskMonitor {
-        static func moreBackgroundJobs(_ n: Int) -> String {
-            String(format: String(localized: "agent-task-monitor.more-background-jobs", defaultValue: "%d more background tasks"), n)
         }
     }
 
