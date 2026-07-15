@@ -672,7 +672,7 @@ private struct ComposerCard: View {
                     onPasteImage: handlePastedImage,
                     onPasteText: handlePastedText,
                     historyProvider: { appState.agentMessages
-                        .filter { $0.role == .user }
+                        .filter(\.isOperatorInput)
                         .map(\.content)
                         .filter { !$0.isEmpty }
                     },

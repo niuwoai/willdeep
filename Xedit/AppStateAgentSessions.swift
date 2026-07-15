@@ -375,10 +375,17 @@ extension AppState {
         """
         guard let runtime = activeRuntime else { return }
         if runtime.isResponding {
-            runtime.queuedMessages.append(AgentQueuedMessage(text: prompt, images: []))
+            runtime.queuedMessages.append(
+                AgentQueuedMessage(text: prompt, images: [], source: .hostInstruction)
+            )
             return
         }
-        dispatchAgentMessage(for: runtime, text: prompt, images: [])
+        dispatchAgentMessage(
+            for: runtime,
+            text: prompt,
+            images: [],
+            source: .hostInstruction
+        )
     }
 
     /// Manually retire an approved plan (e.g. after the agent reported done).

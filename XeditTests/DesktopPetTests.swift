@@ -36,7 +36,7 @@ struct DesktopPetTests {
     }
 
     @Test
-    func typingAnimationShowsDetailedLaptopAndKeystrokePose() {
+    func typingAnimationKeepsPetOnlyPose() {
         let animation = DesktopPetAnimationValues(
             mood: .typing,
             date: Date(timeIntervalSinceReferenceDate: 123)
@@ -46,8 +46,6 @@ struct DesktopPetTests {
         #expect(animation.facesRight)
         #expect(animation.yawRotation == 0)
         #expect(animation.verticalOffset < 0)
-        #expect(animation.laptopOpacity == 1)
-        #expect(animation.laptopGlowOpacity > 0.5)
     }
 
     @Test
@@ -64,7 +62,6 @@ struct DesktopPetTests {
         #expect(quietAnimation.cuteEffectOpacity == 0)
         #expect(cuteAnimation.cuteEffectOpacity > 0.99)
         #expect(cuteAnimation.verticalOffset < quietAnimation.verticalOffset)
-        #expect(cuteAnimation.laptopOpacity == 0)
     }
 
     @Test

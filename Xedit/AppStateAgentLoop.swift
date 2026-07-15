@@ -36,7 +36,8 @@ extension AppState {
         images: [AgentImageAttachment],
         textAttachments: [AgentTextAttachment] = [],
         attachedSkills: [AgentSkillEntry] = [],
-        existingUserMessageID: AgentMessage.ID? = nil
+        existingUserMessageID: AgentMessage.ID? = nil,
+        source: AgentMessageSource = .operatorInput
     ) {
         resolvePendingAgentPatchProposalsBeforeNewMessage(for: runtime)
 
@@ -61,7 +62,8 @@ extension AppState {
                 role: .user,
                 content: text,
                 images: images,
-                textAttachments: textAttachments
+                textAttachments: textAttachments,
+                source: source
             )
             runtime.messages.append(userMessage)
             runtime.latestTurnRecall = nil
@@ -283,7 +285,8 @@ extension AppState {
             text: next.text,
             images: next.images,
             textAttachments: next.textAttachments,
-            attachedSkills: next.attachedSkills
+            attachedSkills: next.attachedSkills,
+            source: next.source
         )
     }
 
