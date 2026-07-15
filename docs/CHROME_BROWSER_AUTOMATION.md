@@ -1,6 +1,6 @@
 # Chrome Browser Automation
 
-> Last updated: 2026-06-20 | Current version: v1.93.0-rc4
+> Last updated: 2026-07-15 | Current version: v1.158.0-rc2
 
 WillDeep supports two Chrome automation modes:
 
@@ -41,10 +41,15 @@ Chrome starts a native host process through a registered manifest:
 ~/Library/Application Support/Google/Chrome/NativeMessagingHosts/com.willdeep.browser_bridge.json
 ```
 
-The manifest points to a wrapper script:
+WillDeep creates or repairs this manifest whenever the app launches. The Chrome
+extension includes a stable public manifest key, so unpacked installs always use
+extension ID `cokjjphgiflfnemlgjaeiicclgkijnia` and the manifest can safely use
+a concrete `allowed_origins` entry.
+
+The manifest points to a generated wrapper script:
 
 ```text
-chrome-extension/willdeep-browser/native-host/willdeep-chrome-native-host
+~/Library/Application Support/WillDeep/ChromeNativeHost/willdeep-chrome-native-host
 ```
 
 The wrapper runs:

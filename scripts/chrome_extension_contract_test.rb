@@ -2,6 +2,8 @@
 # frozen_string_literal: true
 
 require "json"
+require "base64"
+require "digest"
 require "pathname"
 require "set"
 
@@ -22,6 +24,22 @@ manifest = JSON.parse(EXTENSION.join("manifest.json").read)
 record.call("manifest-v3", manifest["manifest_version"] == 3, "manifest_version=#{manifest["manifest_version"]}")
 record.call("semantic-version-name", manifest["version_name"].to_s.match?(/^\d+\.\d+\.\d+(?:-[a-z]+\d+)?$/), manifest["version_name"].to_s)
 record.call("options-page", manifest["options_page"] == "options.html", manifest["options_page"].to_s)
+
+extension_key = Base64.strict_decode64(manifest.fetch("key"))
+extension_id = Digest::SHA256.hexdigest(extension_key)[0, 32]
+  .tr("0123456789abcdef", "abcdefghijklmnop")
+record.call(
+  "stable-extension-id",
+  extension_id == "cokjjphgiflfnemlgjaeiicclgkijnia",
+  "extension_id=#{extension_id}"
+)
+
+installer_source = ROOT.join("Xedit", "ChromeNativeHostInstaller.swift").read
+record.call(
+  "native-host-auto-registration",
+  installer_source.include?(extension_id) && installer_source.include?("NativeMessagingHosts"),
+  "WillDeep registers #{extension_id}"
+)
 
 required_permissions = Set.new(%w[alarms notifications storage])
 permissions = Set.new(Array(manifest["permissions"]))
@@ -58,6 +76,13 @@ record.call("html-i18n", missing_translations.empty?, "missing=#{missing_transla
 checker_source = EXTENSION.join("update_checker.js").read
 record.call("managed-endpoint", checker_source.include?("https://some.im/api/v1/public/app-updates/latest"), "some.im public app-update endpoint")
 record.call("managed-app-id", checker_source.include?("willdeep-browser-extension"), "app_id=willdeep-browser-extension")
+
+worker_source = EXTENSION.join("service_worker.js").read
+record.call(
+  "native-last-error-handled",
+  worker_source.include?("chrome.runtime.lastError?.message"),
+  "native disconnect consumes runtime.lastError"
+)
 
 status = checks.all? { |check| check[:ok] } ? "pass" : "fail"
 payload = {

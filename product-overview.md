@@ -1,6 +1,6 @@
 # WillDeep Product Overview
 
-> Last updated: 2026-07-15 | Current version: v1.158.0-rc1
+> Last updated: 2026-07-15 | Current version: v1.158.0-rc2
 
 ## Positioning
 
@@ -12,6 +12,7 @@ WillDeep is configured for non-App-Store distribution without App Sandbox so it 
 
 ## 架构概览
 
+- **Chrome Native Messaging 自动注册与错误修复（1.158.0-rc2）** —— WillDeep 每次启动会使用 App 内置 `willdeep-agent` 创建或修复当前用户的 Chrome Native Messaging launcher/manifest；扩展通过公开 manifest key 固定 ID，解压路径变化不再让 `allowed_origins` 失效。Service Worker 会消费预期的 `runtime.lastError`，宿主暂未就绪时只显示断开状态，不再污染 Chrome 扩展错误页。
 - **Agent 运行上下文与会话级终端路由（1.157.0）** —— Composer 顶部持续显示当前项目、本地主工作区或新 worktree 运行位置及真实 Git 分支，并可直接创建隔离 worktree。Claude Code / Codex 委派任务默认在侧边栏终端中可见执行；每个对话维护独立的终端标签绑定，工具可用 `terminal_tab_id` 精确指定标签，未指定时也只访问当前会话绑定标签，绝不拿任意 active 标签顶包。执行中的标签受关闭和闲置回收保护，用户切换标签时会显式更新会话绑定。
 - **Agent 账户状态与帮助入口（1.158.0-rc1）** —— 左下角账户状态栏可展开余额/用量、设置和退出登录子菜单；问号按钮打开帮助入口，账户状态和菜单文案支持中英文切换。
 - **WillDeep Browser 扩展更新链路（1.158.0-rc1）** —— Chrome 扩展通过 some.im App 更新计划自动检测版本，Options 页面显示版本状态，Service Worker 以 NEW 角标和通知提示用户手动替换解压目录；发布脚本生成无 `__MACOSX` 资源叉的 ZIP。

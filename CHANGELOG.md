@@ -1,5 +1,18 @@
 # Changelog
 
+## 1.158.0-rc2 - 2026-07-15
+
+### Fixed
+
+- **Chrome 扩展不再报 Native Messaging host 未找到**：WillDeep 启动时自动创建或修复当前用户的 Native Messaging launcher 与 manifest，直接复用 App 内置 `willdeep-agent`；Chrome 扩展增加稳定 manifest key，解压或替换目录后扩展 ID 与 `allowed_origins` 仍保持一致。
+- **Chrome 扩展错误页不再累积未处理异常**：Service Worker 在 native port 断开回调中读取 `runtime.lastError`，宿主尚未安装或 App 正在升级时返回可诊断的断开状态，不再产生 `Unchecked runtime.lastError`。
+
+### Changed
+
+- 同步 Xedit App、Computer Use Helper、Help bundle、willdeep-agent、Chrome 扩展与产品文档版本到 `1.158.0-rc2`（bugfix 仅递增 rc）。
+
+---
+
 ## 1.158.0-rc1 - 2026-07-15
 
 ### Added

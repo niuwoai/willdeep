@@ -13,6 +13,7 @@ const CONTENT_SCRIPT = "content.js";
 
 let nativePort = null;
 let nativeReady = false;
+let nativeConnectionError = null;
 const pendingNative = new Map();
 
 chrome.runtime.onInstalled.addListener(() => {
@@ -49,8 +50,13 @@ function connectNativeHost() {
   try {
     nativePort = chrome.runtime.connectNative(HOST_NAME);
     nativeReady = true;
+    nativeConnectionError = null;
     nativePort.onMessage.addListener(handleNativeMessage);
     nativePort.onDisconnect.addListener(() => {
+      // Reading lastError inside the callback marks the expected connection
+      // failure as handled, so Chrome does not report an unchecked runtime
+      // error while WillDeep is still installing or upgrading the host.
+      nativeConnectionError = chrome.runtime.lastError?.message || "native host disconnected";
       nativeReady = false;
       nativePort = null;
       for (const [id, pending] of pendingNative) {
@@ -152,7 +158,7 @@ async function nativePing() {
     connectNativeHost();
   }
   if (!nativePort) {
-    return { ok: false, connected: false };
+    return { ok: false, connected: false, error: nativeConnectionError };
   }
   const response = await postNative("ping", {});
   return { ok: Boolean(response?.ok), connected: nativeReady, native: response };

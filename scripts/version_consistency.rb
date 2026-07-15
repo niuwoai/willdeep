@@ -105,6 +105,24 @@ add_check.call(
   expected_count: 1
 )
 
+chrome_extension_manifest = JSON.parse(
+  read_file(repo_root, "chrome-extension/willdeep-browser/manifest.json")
+)
+add_check.call(
+  "Chrome extension version_name",
+  "chrome-extension/willdeep-browser/manifest.json",
+  chrome_extension_manifest["version_name"],
+  expected_count: 1
+)
+
+chrome_extension_readme = read_file(repo_root, "chrome-extension/willdeep-browser/README.md")
+add_check.call(
+  "Chrome extension README version",
+  "chrome-extension/willdeep-browser/README.md",
+  chrome_extension_readme[/^> Version:\s*(#{version_pattern})$/m, 1],
+  expected_count: 1
+)
+
 changelog = read_file(repo_root, "CHANGELOG.md")
 add_check.call(
   "CHANGELOG top entry",
