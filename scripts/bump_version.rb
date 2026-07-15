@@ -3,6 +3,7 @@
 # 用法: ruby scripts/bump_version.rb <old> <new>
 #   ruby scripts/bump_version.rb 1.108.0-rc25 1.108.0-rc26
 require "fileutils"
+require "json"
 
 old = ARGV[0] or abort "need <old>"
 new = ARGV[1] or abort "need <new>"
@@ -55,6 +56,33 @@ if po_count.positive?
   total += po_count
   puts "product-overview.md: #{po_count} 处 (仅 Current version 行)"
 end
+
+chrome_manifest_path = File.join(root, "chrome-extension/willdeep-browser/manifest.json")
+chrome_manifest = JSON.parse(File.read(chrome_manifest_path, encoding: "UTF-8"))
+unless chrome_manifest["version_name"] == old
+  abort "Chrome extension version_name is #{chrome_manifest["version_name"].inspect}, expected #{old.inspect}"
+end
+new_match = new.match(/\A(\d+)\.(\d+)\.(\d+)(?:-rc(\d+))?\z/)
+abort "invalid semantic version for Chrome manifest: #{new}" unless new_match
+
+chrome_manifest["version"] = [
+  new_match[1],
+  new_match[2],
+  new_match[3],
+  new_match[4] || "0"
+].join(".")
+chrome_manifest["version_name"] = new
+File.write(chrome_manifest_path, JSON.pretty_generate(chrome_manifest) + "\n")
+total += 2
+puts "chrome-extension/willdeep-browser/manifest.json: 2 处"
+
+chrome_readme_path = File.join(root, "chrome-extension/willdeep-browser/README.md")
+chrome_readme = File.read(chrome_readme_path, encoding: "UTF-8")
+chrome_readme_count = chrome_readme.scan(old).size
+abort "Chrome extension README does not contain #{old}" if chrome_readme_count.zero?
+File.write(chrome_readme_path, chrome_readme.gsub(old, new))
+total += chrome_readme_count
+puts "chrome-extension/willdeep-browser/README.md: #{chrome_readme_count} 处"
 
 readme = File.join(root, "README.md")
 rtext = File.read(readme, encoding: "UTF-8")
