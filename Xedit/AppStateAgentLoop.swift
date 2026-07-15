@@ -553,6 +553,8 @@ extension AppState {
         // Managed-routing output quality caps its escalation at one retry per
         // user turn (design doc §"重试限制").
         var didQualityRetry = false
+        var planAutomaticContinuationCount = 0
+        var consecutivePlanRepliesWithoutProgress = 0
 
         for _ in 0..<Self.maxAgentToolRounds {
             // Background-job completion notices. Pulled at the top of
@@ -942,6 +944,43 @@ extension AppState {
                         ),
                         for: runtime
                     )
+                    return
+                }
+
+                let planStatusesBeforeReply = runtime.currentPlan?.steps.map(\.status)
+                captureAgentPlanFromLatestMessage(for: runtime)
+                let planStatusesAfterReply = runtime.currentPlan?.steps.map(\.status)
+                if planStatusesBeforeReply != planStatusesAfterReply {
+                    consecutivePlanRepliesWithoutProgress = 0
+                } else {
+                    consecutivePlanRepliesWithoutProgress += 1
+                }
+
+                switch AgentPlanAutoContinuationPolicy.decision(
+                    for: runtime.currentPlan,
+                    automaticContinuationCount: planAutomaticContinuationCount,
+                    consecutiveNoProgressReplies: consecutivePlanRepliesWithoutProgress,
+                    hasQueuedUserMessages: !runtime.queuedMessages.isEmpty
+                ) {
+                case .continueExecution:
+                    planAutomaticContinuationCount += 1
+                    runtime.messages.append(
+                        AgentMessage(
+                            role: .system,
+                            content: AgentPlanAutoContinuationPolicy.continuationNotice(
+                                finishReason: finishReason
+                            )
+                        )
+                    )
+                    continue
+                case .pauseAfterNoProgress:
+                    runtime.errorMessage = "Plan 自动续跑已暂停：连续两轮没有检测到步骤进展。请检查计划，或补充说明后继续。"
+                    runtime.errorDetails = nil
+                case .pauseAfterLimit:
+                    runtime.errorMessage = "Plan 自动续跑已达到 8 轮安全上限。请检查当前产物与步骤状态后继续。"
+                    runtime.errorDetails = nil
+                case .stop:
+                    break
                 }
                 return
             }
