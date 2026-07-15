@@ -591,8 +591,6 @@ private struct ComposerCard: View {
     /// prompt instead of making the user hunt for the completed tool card.
     @State private var pendingTerminalProtectedInput: TerminalShortcutProtectedPromptSet?
     @State private var lastAutoPresentedTerminalShortcutID: UUID?
-    @State private var attachmentNotice: String?
-    @State private var pendingUnknownAttachment: PendingUnknownAttachmentConfirmation?
 
     private var filteredSlashCommands: [SlashCommand] {
         SlashCommand.filter(
@@ -669,28 +667,6 @@ private struct ComposerCard: View {
             || !appState.agentSessionDocuments.isEmpty
             || !appState.agentKnowledgeFolders.isEmpty
         VStack(alignment: .leading, spacing: 8) {
-            if let attachmentNotice {
-                HStack(alignment: .top, spacing: 8) {
-                    Image(systemName: "exclamationmark.triangle.fill")
-                        .foregroundStyle(.orange)
-                    Text(attachmentNotice)
-                        .font(.system(size: 11, weight: .medium))
-                        .fixedSize(horizontal: false, vertical: true)
-                    Spacer(minLength: 4)
-                    Button {
-                        self.attachmentNotice = nil
-                    } label: {
-                        Image(systemName: "xmark")
-                    }
-                    .buttonStyle(.plain)
-                    .help(L10n.Composer.dismissAttachmentNotice)
-                }
-                .padding(.horizontal, 10)
-                .padding(.vertical, 8)
-                .background(Color.orange.opacity(0.10))
-                .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
-            }
-
             AgentComposerRunContextBar()
 
             if !appState.agentPendingImages.isEmpty {
@@ -957,19 +933,6 @@ private struct ComposerCard: View {
                 inputFocused = true
             }
         }
-        .alert(item: $pendingUnknownAttachment) { pending in
-            Alert(
-                title: Text(L10n.Composer.unknownAttachmentConfirmationTitle(pending.url.lastPathComponent)),
-                message: Text(L10n.Composer.unknownAttachmentConfirmationMessage(
-                    pending.url.lastPathComponent,
-                    ByteCountFormatter.string(fromByteCount: Int64(pending.byteCount), countStyle: .file)
-                )),
-                primaryButton: .default(Text(L10n.Composer.attachUnknownFile)) {
-                    attachFile(pending.url, userConfirmedUnknownText: true)
-                },
-                secondaryButton: .cancel(Text(L10n.Composer.cancelUnknownFile))
-            )
-        }
     }
 
     /// Runs the currently-highlighted slash command. Returns true when a
@@ -1184,7 +1147,7 @@ private struct ComposerCard: View {
                 appState.toggleAgentWorkspaceOverview()
             }
         case .file(let url, _):
-            attachFile(url)
+            appState.attachAgentFile(url: url)
         }
         closeAtMenu()
         return true
@@ -1267,50 +1230,29 @@ private struct ComposerCard: View {
         }
     }
 
-    private func attachFile(_ url: URL, userConfirmedUnknownText: Bool = false) {
+    private func attachFile(_ url: URL) {
         var isDirectory: ObjCBool = false
         if FileManager.default.fileExists(atPath: url.path, isDirectory: &isDirectory),
            isDirectory.boolValue {
-            attachmentNotice = nil
             appState.addAgentKnowledgeFolder(url: url)
             return
         }
 
         if let mime = AgentImagePasteboardHelper.mimeType(forPath: url.path),
            let data = try? Data(contentsOf: url) {
-            attachmentNotice = nil
             ingest(data: data, mimeType: mime)
             return
         }
 
-        switch AgentComposerAttachmentSupport.selectionPolicy(for: url) {
-        case .supported:
-            guard !AgentComposerAttachmentSupport.documentExceedsSizeLimit(url) else {
-                attachmentNotice = L10n.Composer.attachmentTooLarge(url.lastPathComponent)
-                return
-            }
-            attachmentNotice = nil
-            appState.attachAgentFile(url: url)
-
-        case .unknownNeedsConfirmation(let byteCount):
-            if userConfirmedUnknownText {
-                attachmentNotice = nil
-                appState.attachAgentFile(url: url, treatsUnknownTypeAsText: true)
-            } else {
-                pendingUnknownAttachment = PendingUnknownAttachmentConfirmation(
-                    url: url,
-                    byteCount: byteCount
-                )
-            }
-
-        case .unknownTooLarge:
-            pendingUnknownAttachment = nil
-            attachmentNotice = L10n.Composer.unknownAttachmentTooLarge(url.lastPathComponent)
-
-        case .unknownUnreadable:
-            pendingUnknownAttachment = nil
-            attachmentNotice = L10n.Composer.unknownAttachmentUnreadable(url.lastPathComponent)
+        guard AgentComposerAttachmentSupport.isSupportedDocument(url) else {
+            appState.agentErrorMessage = L10n.Composer.unsupportedAttachment(url.lastPathComponent)
+            return
         }
+        guard !AgentComposerAttachmentSupport.documentExceedsSizeLimit(url) else {
+            appState.agentErrorMessage = L10n.Composer.attachmentTooLarge(url.lastPathComponent)
+            return
+        }
+        appState.attachAgentFile(url: url)
     }
 
     private func ingest(data: Data, mimeType: String) {
@@ -1323,12 +1265,6 @@ private struct ComposerCard: View {
               let rep = NSBitmapImageRep(data: tiff) else { return nil }
         return rep.representation(using: .png, properties: [:])
     }
-}
-
-private struct PendingUnknownAttachmentConfirmation: Identifiable {
-    let id = UUID()
-    let url: URL
-    let byteCount: Int
 }
 
 private struct ConsultationButton: View {
