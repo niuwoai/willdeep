@@ -31,6 +31,8 @@ extension L10n {
         static let emptyMessage = String(localized: "desktop-pet.empty-message", defaultValue: "Start a conversation and I will keep you posted here.")
         static let emptySessionTitle = String(localized: "desktop-pet.empty-session-title", defaultValue: "No active conversation")
         static let expandMessages = String(localized: "desktop-pet.expand-messages", defaultValue: "Expand desktop pet messages")
+        static let hibernateAction = String(localized: "desktop-pet.hibernate-action", defaultValue: "Hibernate for 5 minutes")
+        static let hibernateUntilTomorrowAction = String(localized: "desktop-pet.hibernate-until-tomorrow-action", defaultValue: "Hibernate until tomorrow")
         static let hideAction = String(localized: "desktop-pet.hide-action", defaultValue: "Hide desktop pet")
         static let settingsAction = String(localized: "desktop-pet.settings-action", defaultValue: "Desktop pet settings…")
         static let settingsTabTitle = String(localized: "desktop-pet.settings.tab-title", defaultValue: "Desktop Pet")

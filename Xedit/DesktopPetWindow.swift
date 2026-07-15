@@ -159,6 +159,32 @@ enum DesktopPetOutputFreshness {
     }
 }
 
+enum DesktopPetHibernation {
+    nonisolated static let duration: TimeInterval = 5 * 60
+    /// 「冬眠到明天」醒来的钟点(明早 9:00)。
+    nonisolated static let wakeUpHour = 9
+
+    nonisolated static func isActive(endsAt: Date?, now: Date) -> Bool {
+        guard let endsAt else { return false }
+        return endsAt > now
+    }
+
+    /// 明天早上 `wakeUpHour` 点的时间戳。日历算不出时(理论上不会发生)
+    /// 退回「24 小时后」兜底,保证一定会醒。
+    nonisolated static func nextMorning(after now: Date, calendar: Calendar = .current) -> Date {
+        guard let tomorrow = calendar.date(byAdding: .day, value: 1, to: now),
+              let wakeUp = calendar.date(
+                  bySettingHour: wakeUpHour,
+                  minute: 0,
+                  second: 0,
+                  of: tomorrow
+              ) else {
+            return now.addingTimeInterval(24 * 60 * 60)
+        }
+        return wakeUp
+    }
+}
+
 enum DesktopPetMessageCardVisibility {
     nonisolated static func shouldShowMessageCards(
         appIsActive: Bool,
@@ -210,6 +236,7 @@ final class DesktopPetWindowManager: ObservableObject {
     private var wasBusy = false
     private var celebrationEndsAt: Date?
     private var manualJumpEndsAt: Date?
+    private var hibernationEndsAt: Date?
 
     private init() {
         // 默认开启桌面宠物:首次启动即陪伴,用户可随时在右键菜单 /
@@ -230,6 +257,8 @@ final class DesktopPetWindowManager: ObservableObject {
     }
 
     func setEnabled(_ enabled: Bool) {
+        // 显式开关视为提前结束冬眠,避免"重新打开却看不见宠物"。
+        hibernationEndsAt = nil
         isEnabled = enabled
         UserDefaults.standard.set(enabled, forKey: DefaultsKey.isEnabled)
         if enabled {
@@ -286,6 +315,23 @@ final class DesktopPetWindowManager: ObservableObject {
         refresh()
     }
 
+    /// 冬眠 5 分钟。
+    func hibernate() {
+        hibernate(until: Date().addingTimeInterval(DesktopPetHibernation.duration))
+    }
+
+    /// 冬眠到明天早上。
+    func hibernateUntilTomorrow() {
+        hibernate(until: DesktopPetHibernation.nextMorning(after: Date()))
+    }
+
+    /// 冬眠:窗口暂时隐藏,轮询照常跑,到点由下一次 refresh 自动唤醒。
+    /// 与 `setEnabled(false)` 不同,不写 UserDefaults,重启 App 即恢复。
+    private func hibernate(until endsAt: Date) {
+        hibernationEndsAt = endsAt
+        window?.orderOut(nil)
+    }
+
     func beginDraggingPet() {
         isDraggingPet = true
     }
@@ -326,8 +372,13 @@ final class DesktopPetWindowManager: ObservableObject {
 
     private func refresh() {
         guard isEnabled else { return }
-        showIfNeeded()
         let now = Date()
+        if let hibernationEndsAt {
+            guard !DesktopPetHibernation.isActive(endsAt: hibernationEndsAt, now: now) else { return }
+            self.hibernationEndsAt = nil
+            window?.orderFrontRegardless()
+        }
+        showIfNeeded()
         let isManualJumping = manualJumpIsActive(at: now)
 
         guard let appState else {
@@ -590,6 +641,12 @@ struct DesktopPetOverlayView: View {
             .contextMenu {
                 Button(L10n.DesktopPet.settingsAction) {
                     manager.openSettings()
+                }
+                Button(L10n.DesktopPet.hibernateAction) {
+                    manager.hibernate()
+                }
+                Button(L10n.DesktopPet.hibernateUntilTomorrowAction) {
+                    manager.hibernateUntilTomorrow()
                 }
                 Button(L10n.DesktopPet.hideAction) {
                     manager.setEnabled(false)

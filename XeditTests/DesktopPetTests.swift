@@ -96,6 +96,35 @@ struct DesktopPetTests {
     }
 
     @Test
+    func hibernationEndsExactlyAtDeadline() {
+        let now = Date(timeIntervalSinceReferenceDate: 1_000)
+
+        #expect(DesktopPetHibernation.duration == 5 * 60)
+        #expect(!DesktopPetHibernation.isActive(endsAt: nil, now: now))
+        #expect(DesktopPetHibernation.isActive(endsAt: now.addingTimeInterval(1), now: now))
+        #expect(!DesktopPetHibernation.isActive(endsAt: now, now: now))
+        #expect(!DesktopPetHibernation.isActive(endsAt: now.addingTimeInterval(-1), now: now))
+    }
+
+    @Test
+    func nextMorningWakesUpAtNineTomorrow() {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(identifier: "UTC")!
+        let now = calendar.date(from: DateComponents(year: 2026, month: 7, day: 15, hour: 22, minute: 30))!
+
+        let wakeUp = DesktopPetHibernation.nextMorning(after: now, calendar: calendar)
+
+        let components = calendar.dateComponents([.year, .month, .day, .hour, .minute, .second], from: wakeUp)
+        #expect(components.year == 2026)
+        #expect(components.month == 7)
+        #expect(components.day == 16)
+        #expect(components.hour == DesktopPetHibernation.wakeUpHour)
+        #expect(components.minute == 0)
+        #expect(components.second == 0)
+        #expect(wakeUp > now)
+    }
+
+    @Test
     func messageCardsRequireBackgroundOutputSessions() {
         #expect(!DesktopPetMessageCardVisibility.shouldShowMessageCards(
             appIsActive: true,
