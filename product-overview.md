@@ -1,6 +1,6 @@
 # WillDeep Product Overview
 
-> Last updated: 2026-07-15 | Current version: v1.161.0-rc4
+> Last updated: 2026-07-15 | Current version: v1.161.0-rc5
 
 ## Positioning
 
@@ -12,6 +12,7 @@ WillDeep is configured for non-App-Store distribution without App Sandbox so it 
 
 ## 架构概览
 
+- **侧边栏委托任务跨 Shell 启动（1.161.0-rc5）** —— Claude Code、Codex CLI、Cursor Agent 与 Cline CLI 不再把完整 prompt 和 zsh 包装语法直接输入用户配置的交互式 Shell；宿主改为生成权限 `0600` 的临时 POSIX runner，只向侧边栏发送短 `/bin/sh <runner>` 命令，兼容 fish、zsh、bash 与 sh，并规避超长 PTY 单行阻塞。runner 以独立启动标记和输出冲刷后的最终状态文件回报生命周期；15 秒内未真正启动会明确失败，结束后统一清理 prompt、日志和状态临时文件。
 - **some.im 客户中心直达（1.161.0-rc4）** —— 设置页已连接账户区域的 some.im 入口直接通过系统默认浏览器打开 `https://some.im/customer`，不再先请求一次性 handoff-link，避免网络接口异常导致点击后没有动作。
 - **账户弹出菜单退出键盘焦点链（1.161.0-rc3）** —— 剩余点数、桌面宠物、设置和退出登录四个操作共用不可聚焦的菜单行，打开弹窗时不会再自动选中首项或绘制紫色焦点框；鼠标悬停、点击与辅助功能标签保持原有行为。
 - **思考状态行降噪（1.161.0-rc2）** —— 全屏对话和紧凑侧栏中的“正在思考”状态不再绘制上方横向分隔线；计时与两行实时 reasoning 预览保持不变，排队和上下文压缩等其他状态仍保留原有分隔提示。
