@@ -214,7 +214,9 @@ enum AgentSandboxPolicy {
             )
         }
 
-        let policyCommand = commandWithHeredocBodiesRemoved(trimmed)
+        let policyCommand = commandByReplacingSafeShellExpansions(
+            commandWithHeredocBodiesRemoved(trimmed)
+        )
         if containsUnsafeShellExpansion(policyCommand) {
             return AgentSandboxDecision(
                 mode: .escalated,
@@ -244,12 +246,38 @@ enum AgentSandboxPolicy {
         var workingDirectory = rootDirectory?.standardizedFileURL
 
         for segment in segments {
-            guard let tokens = AgentCommandAuthorization.shellTokens(from: segment),
-                  let head = tokens.first?.lowercased() else {
+            guard let rawTokens = AgentCommandAuthorization.shellTokens(from: segment),
+                  let invocation = shellInvocation(from: rawTokens) else {
                 needsEscalation = true
                 needsConfirmation = true
                 reasons.append("Unable to parse command segment safely.")
                 continue
+            }
+            let tokens = invocation.commandTokens
+            let head = invocation.head
+            let assignmentValues = invocation.environmentAssignments.map(environmentAssignmentValue)
+
+            if invocation.environmentAssignments.contains(where: environmentAssignmentKeyLooksSensitive) {
+                needsEscalation = true
+                needsConfirmation = true
+                reasons.append("Environment assignment uses a credential-like variable name.")
+            }
+
+            if assignmentValues.contains(where: referencesSensitivePath) {
+                needsEscalation = true
+                needsConfirmation = true
+                reasons.append("Environment assignment references a sensitive path or credential-like value.")
+            }
+
+            if assignmentValues.contains(where: { token in
+                guard looksLikePath(token),
+                      let resolved = resolvePath(token, workingDirectory: workingDirectory, rootDirectory: rootDirectory) else {
+                    return false
+                }
+                return !isInsideWorkspace(resolved, rootDirectory: rootDirectory)
+            }) {
+                needsWorkspaceWrite = true
+                reasons.append("Environment assignment references a path outside the workspace.")
             }
 
             if forcefulGitMutation(tokens) {
@@ -394,7 +422,9 @@ enum AgentSandboxPolicy {
         }
 
         let trimmed = command.trimmingCharacters(in: .whitespacesAndNewlines)
-        let policyCommand = commandWithHeredocBodiesRemoved(trimmed)
+        let policyCommand = commandByReplacingSafeShellExpansions(
+            commandWithHeredocBodiesRemoved(trimmed)
+        )
         guard !containsUnsafeShellExpansion(policyCommand),
               let segments = splitCommandSegments(policyCommand),
               !segments.isEmpty else {
@@ -405,8 +435,15 @@ enum AgentSandboxPolicy {
         var workingDirectory: URL? = root
 
         for segment in segments {
-            guard let tokens = AgentCommandAuthorization.shellTokens(from: segment),
-                  let head = tokens.first?.lowercased() else {
+            guard let rawTokens = AgentCommandAuthorization.shellTokens(from: segment),
+                  let invocation = shellInvocation(from: rawTokens) else {
+                return false
+            }
+            let tokens = invocation.commandTokens
+            let head = invocation.head
+            let assignmentValues = invocation.environmentAssignments.map(environmentAssignmentValue)
+
+            if invocation.environmentAssignments.contains(where: environmentAssignmentKeyLooksSensitive) {
                 return false
             }
 
@@ -448,7 +485,7 @@ enum AgentSandboxPolicy {
                 continue
             }
 
-            for token in localPathCheckTokens(for: tokens, head: head) {
+            for token in Array(localPathCheckTokens(for: tokens, head: head)) + assignmentValues {
                 if referencesSensitivePath(token) {
                     return false
                 }
@@ -553,6 +590,52 @@ enum AgentSandboxPolicy {
             .replacingOccurrences(of: "\\", with: "\\\\")
             .replacingOccurrences(of: "\"", with: "\\\"")
         return "\"\(escaped)\""
+    }
+
+    private struct ShellInvocation {
+        let environmentAssignments: [String]
+        let commandTokens: [String]
+        let head: String
+    }
+
+    nonisolated private static func shellInvocation(from tokens: [String]) -> ShellInvocation? {
+        var index = 0
+        while index < tokens.count, isEnvironmentAssignment(tokens[index]) {
+            index += 1
+        }
+        guard index < tokens.count else { return nil }
+        return ShellInvocation(
+            environmentAssignments: Array(tokens.prefix(index)),
+            commandTokens: Array(tokens.suffix(from: index)),
+            head: tokens[index].lowercased()
+        )
+    }
+
+    nonisolated private static func isEnvironmentAssignment(_ token: String) -> Bool {
+        guard let equalsIndex = token.firstIndex(of: "="),
+              equalsIndex != token.startIndex else {
+            return false
+        }
+        let name = token[..<equalsIndex]
+        guard let first = name.first,
+              first == "_" || first.isLetter else {
+            return false
+        }
+        return name.allSatisfy { $0 == "_" || $0.isLetter || $0.isNumber }
+    }
+
+    nonisolated private static func environmentAssignmentValue(_ assignment: String) -> String {
+        guard let equalsIndex = assignment.firstIndex(of: "=") else { return "" }
+        return String(assignment[assignment.index(after: equalsIndex)...])
+    }
+
+    nonisolated private static func environmentAssignmentKeyLooksSensitive(_ assignment: String) -> Bool {
+        guard let equalsIndex = assignment.firstIndex(of: "=") else { return false }
+        return keyLooksSensitive(String(assignment[..<equalsIndex]))
+    }
+
+    nonisolated private static func commandByReplacingSafeShellExpansions(_ command: String) -> String {
+        command.replacingOccurrences(of: "$(pwd)", with: ".")
     }
 
     nonisolated private static func containsUnsafeShellExpansion(_ command: String) -> Bool {

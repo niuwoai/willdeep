@@ -32,15 +32,16 @@ nonisolated enum SafeCommand {
     static func classify(command: String) -> CommandSafety {
         let trimmed = command.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return .alwaysDangerous }
+        let policyCommand = commandByReplacingSafeShellExpansions(trimmed)
 
         // Strict: redirections and command substitution are too easy to
         // weaponize. `>`, `>>`, `<(`, `$(`, backticks → not safe.
-        if containsAny(of: [">", ">>", "<(", "$(", "`"], in: trimmed) {
+        if containsAny(of: [">", ">>", "<(", "$(", "`"], in: policyCommand) {
             // Allow `2>&1`, `2>/dev/null` patterns through only as part
             // of an otherwise-safe-segment check by stripping known
             // benign stderr redirections before scanning. Conservative
             // baseline: refuse anything with `>`/`>>` to a file.
-            if !onlyContainsHarmlessRedirections(in: trimmed) {
+            if !onlyContainsHarmlessRedirections(in: policyCommand) {
                 return .alwaysDangerous
             }
         }
@@ -50,12 +51,12 @@ nonisolated enum SafeCommand {
         // pattern — splitPipeline would shred them into harmless-looking
         // fragments. Scan dangerousSubstrings against the un-split
         // command FIRST so those shapes can't sneak through.
-        let lowerTrimmed = trimmed.lowercased()
+        let lowerTrimmed = policyCommand.lowercased()
         for needle in dangerousSubstrings where lowerTrimmed.contains(needle) {
             return .alwaysDangerous
         }
 
-        let segments = splitPipeline(trimmed)
+        let segments = splitPipeline(policyCommand)
         guard !segments.isEmpty else { return .alwaysDangerous }
 
         var hasJudgmentSegment = false
@@ -267,8 +268,8 @@ nonisolated enum SafeCommand {
             return .alwaysDangerous
         }
 
-        let tokens = tokenize(segment)
-        guard let head = tokens.first else { return .alwaysDangerous }
+        let tokens = commandTokensSkippingEnvironmentAssignments(tokenize(segment))
+        guard let head = tokens.first else { return .alwaysSafe }
 
         // Walk every token (not just the head). Catches
         // `<safe_head> ... rm <args>` and pipeline tails like
@@ -557,6 +558,31 @@ nonisolated enum SafeCommand {
             return true
         }
         return false
+    }
+
+    private static func commandTokensSkippingEnvironmentAssignments(_ tokens: [String]) -> [String] {
+        var index = 0
+        while index < tokens.count, isEnvironmentAssignment(tokens[index]) {
+            index += 1
+        }
+        return Array(tokens.suffix(from: index))
+    }
+
+    private static func isEnvironmentAssignment(_ token: String) -> Bool {
+        guard let equalsIndex = token.firstIndex(of: "="),
+              equalsIndex != token.startIndex else {
+            return false
+        }
+        let name = token[..<equalsIndex]
+        guard let first = name.first,
+              first == "_" || first.isLetter else {
+            return false
+        }
+        return name.allSatisfy { $0 == "_" || $0.isLetter || $0.isNumber }
+    }
+
+    private static func commandByReplacingSafeShellExpansions(_ command: String) -> String {
+        command.replacingOccurrences(of: "$(pwd)", with: ".")
     }
 
     /// Strip `2>&1`, `2>/dev/null`, and `1>/dev/null` from the line and
