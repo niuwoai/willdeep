@@ -118,7 +118,7 @@ def todo_evidence_labels(kind)
 end
 
 def todo_evidence_paths(kind, evidence_by_label)
-  todo_evidence_labels(kind).filter_map do |label|
+  todo_evidence_labels(kind).map do |label|
     path = evidence_by_label[label].to_s
     next if path.empty?
 
@@ -127,7 +127,7 @@ def todo_evidence_paths(kind, evidence_by_label)
       "path" => path,
       "relative_path" => relative_path(path)
     }
-  end
+  end.compact
 end
 
 def todo_payload(kind, title:, detail:, items:, evidence_by_label:)
@@ -255,12 +255,12 @@ missing_evidence_labels = required_evidence_labels.reject do |label|
   !path.empty? && File.exist?(path)
 end
 
-handoff_files = required_evidence_labels.filter_map do |label|
+handoff_files = required_evidence_labels.map do |label|
   path = evidence_by_label[label].to_s
   next if path.empty?
 
   handoff_file_metadata(label, path)
-end
+end.compact
 
 blocking_items = []
 unless machine_passed

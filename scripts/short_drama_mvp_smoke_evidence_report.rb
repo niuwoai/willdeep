@@ -75,7 +75,7 @@ end
 def sensitive_findings_for_step(file_path, step, index)
   label = label_for(step)
   collect_string_values(step, "steps[#{index}]").flat_map do |field, value|
-    SENSITIVE_VALUE_PATTERNS.filter_map do |kind, pattern|
+    SENSITIVE_VALUE_PATTERNS.map do |kind, pattern|
       next unless value.match?(pattern)
 
       {
@@ -85,7 +85,7 @@ def sensitive_findings_for_step(file_path, step, index)
         "kind" => kind,
         "preview" => "#{kind} detected in #{field}; value redacted"
       }
-    end
+    end.compact
   end
 end
 
