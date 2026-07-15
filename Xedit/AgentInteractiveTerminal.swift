@@ -2190,34 +2190,49 @@ final class AgentInteractiveTerminalController: ObservableObject {
         }
 
         activeTabID = tab.id
-        let token = UUID().uuidString.replacingOccurrences(of: "-", with: "")
-        let directory = FileManager.default.temporaryDirectory
-        let outputURL = directory.appendingPathComponent("willdeep-terminal-\(token).log")
-        let statusURL = directory.appendingPathComponent("willdeep-terminal-\(token).status")
-        let quotedCommand = Self.shellQuoted(command)
-        let quotedOutput = Self.shellQuoted(outputURL.path)
-        let quotedStatus = Self.shellQuoted(statusURL.path)
-        let wrapper = "{ /bin/zsh -lc \(quotedCommand); __willdeep_exit=$?; printf '%s' \"$__willdeep_exit\" > \(quotedStatus); } 2>&1 | tee \(quotedOutput)"
-
-        try tab.sendAutomationCommand(wrapper, displayCommand: displayCommand)
-        defer {
-            tab.finishAutomationCommand()
-            try? FileManager.default.removeItem(at: outputURL)
-            try? FileManager.default.removeItem(at: statusURL)
+        let artifacts: AgentDelegatedTerminalArtifacts
+        do {
+            artifacts = try AgentDelegatedTerminalRunner.create(command: command)
+        } catch {
+            throw AgentToolError.commandFailed(
+                1,
+                "Failed to prepare the private delegated-agent runner: \(error.localizedDescription)"
+            )
         }
 
+        var ownsAutomation = false
+        defer {
+            if ownsAutomation {
+                tab.finishAutomationCommand()
+            }
+            artifacts.removeAll()
+        }
+        try tab.sendAutomationCommand(artifacts.invocation, displayCommand: displayCommand)
+        ownsAutomation = true
+
         let deadline = Date().addingTimeInterval(max(timeout, 1))
+        let startupDeadline = Date().addingTimeInterval(15)
+        var didStart = false
         while Date() < deadline {
             if Task.isCancelled {
                 _ = try? tab.sendApprovedControl(.ctrlC)
                 throw CancellationError()
             }
-            if FileManager.default.fileExists(atPath: statusURL.path) {
+            if !didStart {
+                didStart = FileManager.default.fileExists(atPath: artifacts.startedURL.path)
+                if !didStart, Date() >= startupDeadline {
+                    _ = try? tab.sendApprovedControl(.ctrlC)
+                    throw AgentToolError.invalidArgument(
+                        "The delegated-agent runner did not start within 15 seconds. Make sure the bound terminal is at an interactive shell prompt, then retry."
+                    )
+                }
+            }
+            if FileManager.default.fileExists(atPath: artifacts.statusURL.path) {
                 try? await Task.sleep(nanoseconds: 100_000_000)
-                let statusText = (try? String(contentsOf: statusURL, encoding: .utf8))?
+                let statusText = (try? String(contentsOf: artifacts.statusURL, encoding: .utf8))?
                     .trimmingCharacters(in: .whitespacesAndNewlines) ?? "1"
                 let exitCode = Int(statusText) ?? 1
-                let output = (try? String(contentsOf: outputURL, encoding: .utf8)) ?? ""
+                let output = (try? String(contentsOf: artifacts.outputURL, encoding: .utf8)) ?? ""
                 let redacted = AgentSecretStore.redact(output, secretValues: secretRedactionValues)
                 let payload = """
                 exit=\(exitCode)
@@ -2239,10 +2254,6 @@ final class AgentInteractiveTerminalController: ObservableObject {
         throw AgentToolError.invalidArgument(
             "Command in Agent Terminal tab \(tab.id.uuidString) timed out after \(Int(timeout)) seconds."
         )
-    }
-
-    private nonisolated static func shellQuoted(_ value: String) -> String {
-        "'" + value.replacingOccurrences(of: "'", with: "'\\''") + "'"
     }
 }
 

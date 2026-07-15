@@ -1,5 +1,19 @@
 # Changelog
 
+## 1.161.0-rc5 - 2026-07-15
+
+### Fixed
+
+- **侧边栏委托任务不再被用户 Shell 语法卡住。** Claude Code、Codex CLI、Cursor Agent 与 Cline CLI 改由权限为 `0600` 的临时 `/bin/sh` runner 执行；侧边栏只接收短启动命令，不再让 fish、zsh 或 bash 解析完整 prompt、zsh 分组语法与状态包装器，同时消除超长 PTY 单行阻塞风险。
+- **未启动的委托任务不再长时间假运行。** runner 会先写入独立启动标记，并在 `tee` 完整冲刷输出后发布最终退出状态；15 秒内没有真正启动会返回明确错误，任务结束、取消或失败后统一清理 runner、日志和状态文件。
+
+### Changed
+
+- 新增跨 Shell 与超长 prompt 回归测试，实际覆盖 sh、bash、zsh、本机 fish，以及中文、单引号、反引号、命令替换文本、换行和约 12 万字节输入。
+- 版本号从 **1.161.0-rc4** 递增为 **1.161.0-rc5**；Xcode App、Go agent、Help bundle、Computer Use Helper、Chrome 扩展、README badge、移动网关响应头契约与产品文档同步。
+
+---
+
 ## 1.161.0-rc4 - 2026-07-15
 
 ### Fixed
