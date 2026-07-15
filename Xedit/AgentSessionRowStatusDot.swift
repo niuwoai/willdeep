@@ -2,9 +2,10 @@
 //  AgentSessionRowStatusDot.swift
 //  WillDeep
 //
-//  Small 5pt circle that lives at the left edge of each Agent-mode
-//  sidebar session row. Shows whether that session is the active one,
-//  running a turn in the background, or waiting for a tool decision.
+//  Small 5pt circle that lives at the trailing edge of each Agent-mode
+//  sidebar session row. It stays hidden for ordinary idle rows and shows
+//  whether a session is active, running in the background, or waiting for
+//  a tool decision.
 //
 //  Design constraint: this MUST observe its runtime directly rather
 //  than ride AppState's republish chain. Pre-hotfix rc4 forwarded
@@ -26,12 +27,13 @@ struct AgentSessionRowStatusDot: View {
     /// they always render as idle and skip the @ObservedObject path.
     let runtime: AgentRuntime?
     let isActive: Bool
+    let accentColor: Color
 
     var body: some View {
         if let runtime {
-            ObservedDot(runtime: runtime, isActive: isActive)
+            ObservedDot(runtime: runtime, isActive: isActive, accentColor: accentColor)
         } else {
-            IdleDot(isActive: isActive)
+            IdleDot(isActive: isActive, accentColor: accentColor)
         }
     }
 }
@@ -42,6 +44,7 @@ struct AgentSessionRowStatusDot: View {
 private struct ObservedDot: View {
     @ObservedObject var runtime: AgentRuntime
     let isActive: Bool
+    let accentColor: Color
 
     var body: some View {
         // 脉动必须走 symbolEffect（渲染服务器驱动），禁用
@@ -50,6 +53,7 @@ private struct ObservedDot: View {
         // 见 AgentBreathingIndicator 注释（1.58.0-rc9 CPU 修复）。
         dotImage
             .frame(width: 5, height: 5)
+            .opacity(shouldShow ? 1 : 0)
     }
 
     @ViewBuilder
@@ -70,6 +74,10 @@ private struct ObservedDot: View {
         runtime.isResponding
     }
 
+    private var shouldShow: Bool {
+        isActive || runtime.isResponding || runtime.toolDecisionWaiter != nil
+    }
+
     private var color: Color {
         // toolDecisionWaiter is non-Published — we can read it for
         // color tinting but can't drive the pulse off it (SwiftUI
@@ -78,8 +86,8 @@ private struct ObservedDot: View {
         // settles correctly on the next isResponding flip.
         if runtime.toolDecisionWaiter != nil { return .orange }
         if runtime.isResponding { return .green }
-        if isActive { return .accentColor }
-        return Color.secondary.opacity(0.4)
+        if isActive { return accentColor }
+        return Color.clear
     }
 }
 
@@ -87,10 +95,11 @@ private struct ObservedDot: View {
 /// animation, no observer overhead.
 private struct IdleDot: View {
     let isActive: Bool
+    let accentColor: Color
 
     var body: some View {
         Circle()
-            .fill(isActive ? Color.accentColor : Color.secondary.opacity(0.4))
+            .fill(isActive ? accentColor : Color.clear)
             .frame(width: 5, height: 5)
     }
 }

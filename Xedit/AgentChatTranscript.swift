@@ -250,6 +250,8 @@ struct AgentChatTranscript: View {
                         if !history.isEmpty {
                             AgentChatHistoryTextView(
                                 messages: history,
+                                assistantTurnContextMessages: appState.agentMessages,
+                                isAssistantTurnActive: appState.isAgentResponding,
                                 baseFontSize: appState.agentChatBaseFontSize,
                                 onRetryLastTurn: appState.retryLastAgentTurn,
                                 latestTurnReportToolCount: appState.agentLatestTurnReport?.toolSummary.total,
@@ -314,9 +316,11 @@ struct AgentChatTranscript: View {
                            let streamingMessage = rendered.first(where: { $0.id == streamingID }),
                            shouldShowMessageBubble(streamingMessage) {
                             let display = truncatedForBubble(streamingMessage)
+                            let turnPresentation = currentAssistantTurnPresentation(for: streamingID)
                             AgentModeMessageView(
                                 message: display.rendered,
                                 isStreamingThisMessage: true,
+                                assistantTurnPresentation: turnPresentation,
                                 baseFontSize: appState.agentChatBaseFontSize,
                                 onReferenceGeneratedImage: appState.appendGeneratedImageReferenceToAgentInput
                             )
@@ -719,6 +723,18 @@ struct AgentChatTranscript: View {
     private var currentStreamingMessageID: AgentMessage.ID? {
         guard appState.isAgentResponding else { return nil }
         return appState.agentMessages.last(where: { $0.role == .assistant })?.id
+    }
+
+    private func currentAssistantTurnPresentation(
+        for messageID: AgentMessage.ID
+    ) -> AgentAssistantTurnPresentation? {
+        let messages = appState.agentMessages
+        let startIndex = messages.lastIndex(where: { $0.role == .user }) ?? messages.startIndex
+        return AgentAssistantTurnGrouping.presentation(
+            for: messageID,
+            in: Array(messages[startIndex...]),
+            aggregatesCopyContent: false
+        )
     }
 
     /// How many messages the in-pane transcript renders at once.

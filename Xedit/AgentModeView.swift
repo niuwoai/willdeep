@@ -600,8 +600,25 @@ enum AgentDesign {
     static let composerHeight: CGFloat = 124
     static let headerHeight: CGFloat = 44
     static let statusBarHeight: CGFloat = 26
-    static let sidebarRowHeight: CGFloat = 26
-    static let sidebarTodoRowHeight: CGFloat = 42
+    // Codex sidebar reference: 14 pt SF text on a stable 31 pt vertical
+    // rhythm. Keep the geometry as named tokens so workspace rows,
+    // conversation rows, hover surfaces, and visual regression tests do
+    // not drift independently.
+    static let sidebarRowFontSize: CGFloat = 14
+    static let sidebarRowHeight: CGFloat = 31
+    static let sidebarTodoRowHeight: CGFloat = 47
+    static let sidebarWorkspaceHorizontalInset: CGFloat = 18
+    static let sidebarWorkspaceIconSize: CGFloat = 14
+    static let sidebarWorkspaceIconToTitleSpacing: CGFloat = 8
+    static let sidebarSelectionHorizontalInset: CGFloat = 8
+    static let sidebarSessionContentHorizontalInset: CGFloat = 32
+    static let sidebarSelectionCornerRadius: CGFloat = 10
+    static let sidebarWorkspaceGroupSpacing: CGFloat = 6
+    static let sidebarPrimaryTextOpacity: Double = 0.86
+    // Automations are first-class sidebar content, not caption metadata.
+    // Keep every user-visible automation label on the same regular text
+    // scale as workspace and conversation rows.
+    static let sidebarAutomationFontSize: CGFloat = sidebarRowFontSize
 
     // Typography.
     static let titleFont = Font.system(size: 13, weight: .semibold)
@@ -609,5 +626,7 @@ enum AgentDesign {
     static let secondaryFont = Font.system(size: 11)
     static let captionFont = Font.system(size: 10)
     static let sidebarSectionFont = Font.system(size: 11, weight: .semibold)
-    static let sidebarRowFont = Font.system(size: 12)
+    static let sidebarRowFont = Font.system(size: sidebarRowFontSize)
+    static let sidebarWorkspaceFont = Font.system(size: sidebarRowFontSize)
+    static let sidebarAutomationFont = Font.system(size: sidebarAutomationFontSize)
 }

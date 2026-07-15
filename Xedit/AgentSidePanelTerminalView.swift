@@ -95,6 +95,11 @@ private struct AgentSidePanelTerminalContentView: View {
             Divider().opacity(0.35)
             terminalSurface
         }
+        // Buttons and menus in the side-panel chrome opt out individually;
+        // the container does as well so it can never become a fallback focus
+        // target. The embedded terminal remains an intentional text-input
+        // surface and manages its own AppKit first responder.
+        .focusable(false)
         .onAppear {
             scheduleTerminalBootstrap()
         }
@@ -228,6 +233,7 @@ private struct AgentSidePanelTerminalContentView: View {
             )
         }
         .buttonStyle(.plain)
+        .focusable(false)
         .disabled(controller.activeTab?.isRunning != true && !controller.isRecording)
         .help(controller.isRecording ? L10n.AgentTerminal.stopRecording : L10n.AgentTerminal.startRecording)
     }
@@ -282,6 +288,7 @@ private struct AgentSidePanelTerminalContentView: View {
                     shortcut.hasPendingProtectedInput
             )
             .buttonStyle(.plain)
+            .focusable(false)
             .help(isRunning ? L10n.AgentTerminal.shortcutStopReplay : L10n.AgentTerminal.shortcutReplay)
 
             shortcutDetails(shortcut, playbackState: playbackState, now: now)
@@ -293,12 +300,14 @@ private struct AgentSidePanelTerminalContentView: View {
                 } label: {
                     Label(L10n.AgentTerminal.shortcutEdit, systemImage: "square.and.pencil")
                 }
+                .focusable(false)
 
                 Button {
                     renameDraft = TerminalShortcutRenameDraft(shortcut: shortcut)
                 } label: {
                     Label(L10n.AgentTerminal.shortcutRename, systemImage: "pencil")
                 }
+                .focusable(false)
 
                 Divider()
 
@@ -307,6 +316,7 @@ private struct AgentSidePanelTerminalContentView: View {
                 } label: {
                     Label(L10n.AgentTerminal.shortcutDelete, systemImage: "trash")
                 }
+                .focusable(false)
             } label: {
                 Image(systemName: "ellipsis")
                     .font(.system(size: 11, weight: .semibold))
@@ -315,6 +325,7 @@ private struct AgentSidePanelTerminalContentView: View {
             }
             .menuStyle(.borderlessButton)
             .menuIndicator(.hidden)
+            .focusable(false)
             .help(L10n.AgentTerminal.shortcutActions)
         }
         .frame(height: TerminalRecordingMetrics.historyRowHeight)
@@ -476,6 +487,7 @@ private struct AgentSidePanelTerminalContentView: View {
                     .font(.system(size: 8, weight: .semibold))
             }
             .buttonStyle(.plain)
+            .focusable(false)
             .foregroundStyle(interfacePalette.secondaryText)
         }
         .padding(.horizontal, 8)
@@ -507,6 +519,7 @@ private struct AgentSidePanelTerminalContentView: View {
             } label: {
                 Label(L10n.AgentTerminal.newLocalTab, systemImage: "terminal")
             }
+            .focusable(false)
             Divider()
             Text(L10n.AgentTerminal.sshHostsSection)
             if controller.runtimeOptions.isEmpty {
@@ -524,6 +537,7 @@ private struct AgentSidePanelTerminalContentView: View {
                     } label: {
                         Label(L10n.AgentTerminal.newSSHTab(runtime.displayName), systemImage: "network")
                     }
+                    .focusable(false)
                 }
             }
             Button {
@@ -531,11 +545,13 @@ private struct AgentSidePanelTerminalContentView: View {
             } label: {
                 Label(L10n.AgentTerminal.manageSSHHosts, systemImage: "gearshape")
             }
+            .focusable(false)
         } label: {
             Image(systemName: "plus")
         }
         .menuStyle(.borderlessButton)
         .menuIndicator(.hidden)
+        .focusable(false)
         .fixedSize()
         .help(L10n.AgentTerminal.newTab)
     }
@@ -633,6 +649,7 @@ private struct AgentSidePanelTerminalContentView: View {
             )
         }
         .buttonStyle(.plain)
+        .focusable(false)
         .help(L10n.AgentTerminal.localSessionCaution)
         .popover(isPresented: $showsHostVerificationPopover, arrowEdge: .bottom) {
             hostVerificationPopover
@@ -640,54 +657,11 @@ private struct AgentSidePanelTerminalContentView: View {
     }
 
     private var hostVerificationPopover: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack(spacing: 8) {
-                Image(systemName: "shield")
-                    .font(.system(size: 16, weight: .semibold))
-                    .foregroundStyle(interfacePalette.secondaryAccent)
-                Text(L10n.AgentTerminal.sessionVerifyHostTitle)
-                    .font(.system(size: 13, weight: .semibold))
-                    .foregroundStyle(interfacePalette.primaryText)
-            }
-
-            Text(L10n.AgentTerminal.localSessionCaution)
-                .font(.system(size: 12, weight: .regular))
-                .foregroundStyle(interfacePalette.primaryText)
-                .fixedSize(horizontal: false, vertical: true)
-
-            Rectangle()
-                .fill(interfacePalette.hairline)
-                .frame(height: 1)
-
-            Button(action: copyHostnameCommand) {
-                HStack(spacing: 7) {
-                    Image(systemName: hostnameCommandCopied ? "checkmark" : "doc.on.doc")
-                        .font(.system(size: 11, weight: .semibold))
-                    Text(
-                        hostnameCommandCopied
-                            ? L10n.AgentTerminal.sessionHostnameCommandCopied
-                            : L10n.AgentTerminal.sessionCopyHostnameCommand
-                    )
-                    .font(.system(size: 11, weight: .semibold))
-                    Spacer(minLength: 0)
-                }
-                .foregroundStyle(interfacePalette.primaryText)
-                .padding(.horizontal, 10)
-                .frame(height: 30)
-                .background(
-                    RoundedRectangle(cornerRadius: 7, style: .continuous)
-                        .fill(interfacePalette.controlFill)
-                )
-                .overlay(
-                    RoundedRectangle(cornerRadius: 7, style: .continuous)
-                        .stroke(interfacePalette.hairline, lineWidth: 1)
-                )
-            }
-            .buttonStyle(.plain)
-        }
-        .padding(14)
-        .frame(width: SessionIdentityMetrics.popoverWidth)
-        .background(interfacePalette.panelFill)
+        AgentHostVerificationPopover(
+            hostnameCommandCopied: hostnameCommandCopied,
+            palette: interfacePalette,
+            copyAction: copyHostnameCommand
+        )
     }
 
     private func copyHostnameCommand() {
@@ -882,6 +856,65 @@ private struct AgentSidePanelTerminalContentView: View {
     }()
 }
 
+struct AgentHostVerificationPopover: View {
+    let hostnameCommandCopied: Bool
+    let palette: EditorInterfaceSkinPalette
+    let copyAction: () -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(spacing: 8) {
+                Image(systemName: "shield")
+                    .font(.system(size: 16, weight: .semibold))
+                    .foregroundStyle(palette.secondaryAccent)
+                Text(L10n.AgentTerminal.sessionVerifyHostTitle)
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(palette.primaryText)
+            }
+
+            Text(L10n.AgentTerminal.localSessionCaution)
+                .font(.system(size: 12, weight: .regular))
+                .foregroundStyle(palette.primaryText)
+                .fixedSize(horizontal: false, vertical: true)
+
+            Rectangle()
+                .fill(palette.hairline)
+                .frame(height: 1)
+
+            Button(action: copyAction) {
+                HStack(spacing: 7) {
+                    Image(systemName: hostnameCommandCopied ? "checkmark" : "doc.on.doc")
+                        .font(.system(size: 11, weight: .semibold))
+                    Text(
+                        hostnameCommandCopied
+                            ? L10n.AgentTerminal.sessionHostnameCommandCopied
+                            : L10n.AgentTerminal.sessionCopyHostnameCommand
+                    )
+                    .font(.system(size: 11, weight: .semibold))
+                    Spacer(minLength: 0)
+                }
+                .foregroundStyle(palette.primaryText)
+                .padding(.horizontal, 10)
+                .frame(height: 30)
+                .background(
+                    RoundedRectangle(cornerRadius: 7, style: .continuous)
+                        .fill(palette.controlFill)
+                )
+                .overlay(
+                    RoundedRectangle(cornerRadius: 7, style: .continuous)
+                        .stroke(palette.hairline, lineWidth: 1)
+                )
+            }
+            .buttonStyle(.plain)
+            .focusable(false)
+        }
+        .padding(14)
+        .frame(width: SessionIdentityMetrics.popoverWidth)
+        .background(palette.panelFill)
+        .focusable(false)
+    }
+}
+
 private struct TerminalShortcutRenameDraft: Identifiable {
     let id = UUID()
     let shortcutID: UUID
@@ -918,9 +951,11 @@ private struct TerminalShortcutRenameSheet: View {
             HStack {
                 Spacer()
                 Button(L10n.AgentTerminal.shortcutRenameCancel, action: onCancel)
+                    .focusable(false)
                 Button(L10n.AgentTerminal.shortcutRenameSave) {
                     onSave(title)
                 }
+                .focusable(false)
                 .keyboardShortcut(.defaultAction)
                 .disabled(title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
             }

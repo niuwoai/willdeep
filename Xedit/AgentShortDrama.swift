@@ -1161,6 +1161,7 @@ struct AgentShortDramaPanel: View {
                 Image(systemName: "doc.badge.plus")
             }
             .buttonStyle(.borderless)
+            .focusable(false)
             .help("生成短剧规划 JSON 模板")
 
             Button {
@@ -1169,6 +1170,7 @@ struct AgentShortDramaPanel: View {
                 Image(systemName: "checklist")
             }
             .buttonStyle(.borderless)
+            .focusable(false)
             .help("预检短剧规划 JSON")
 
             Button {
@@ -1177,6 +1179,7 @@ struct AgentShortDramaPanel: View {
                 Image(systemName: "tray.and.arrow.down")
             }
             .buttonStyle(.borderless)
+            .focusable(false)
             .help("导入短剧规划 JSON")
 
             Button {
@@ -1185,6 +1188,7 @@ struct AgentShortDramaPanel: View {
                 Image(systemName: "square.and.arrow.down")
             }
             .buttonStyle(.borderless)
+            .focusable(false)
             .disabled(store.activeProject == nil)
             .help("导出短剧制作包")
 
@@ -1194,6 +1198,7 @@ struct AgentShortDramaPanel: View {
                 Image(systemName: "rectangle.grid.2x2")
             }
             .buttonStyle(.borderless)
+            .focusable(false)
             .disabled(store.activeProject == nil || appState.activeRuntime == nil)
             .help(appState.activeRuntime == nil ? "请先创建 Agent 会话" : "生成网页分镜板")
 
@@ -1203,6 +1208,7 @@ struct AgentShortDramaPanel: View {
                 Image(systemName: "plus")
             }
             .buttonStyle(.borderless)
+            .focusable(false)
             .help("新建短剧项目")
         }
     }
@@ -1245,6 +1251,7 @@ struct AgentShortDramaPanel: View {
                     Image(systemName: "text.bubble")
                 }
                 .buttonStyle(.borderless)
+                .focusable(false)
                 .help("发送项目结构到聊天")
                 if store.activeProjectID == project.id {
                     Image(systemName: "checkmark.circle.fill")
@@ -1268,6 +1275,7 @@ struct AgentShortDramaPanel: View {
                         .font(.caption2)
                 }
                 .buttonStyle(.borderless)
+                .focusable(false)
                 .help("查看全剧媒体任务")
                 if missingAssetReferenceCount(project) > 0 {
                     Button {
@@ -1277,6 +1285,7 @@ struct AgentShortDramaPanel: View {
                             .font(.caption2)
                     }
                     .buttonStyle(.borderless)
+                    .focusable(false)
                     .disabled(isGeneratingMissingAssetReferences(project))
                     .help("补齐缺失的人物/场景参考图")
                 }
@@ -1714,6 +1723,7 @@ struct AgentShortDramaPanel: View {
                         .font(.caption2)
                 }
                 .buttonStyle(.borderless)
+                .focusable(false)
                 .help("查看本集媒体任务")
                 Button {
                     appendEpisodeContextToChat(project: project, episode: episode)
@@ -1722,6 +1732,7 @@ struct AgentShortDramaPanel: View {
                         .font(.caption2)
                 }
                 .buttonStyle(.borderless)
+                .focusable(false)
                 .help("发送本集结构到聊天")
 
                 Button {
@@ -1731,6 +1742,7 @@ struct AgentShortDramaPanel: View {
                         .font(.caption2)
                 }
                 .buttonStyle(.borderless)
+                .focusable(false)
                 .disabled(episode.shots.isEmpty || isGenerating(episode: episode, kind: .imageGeneration))
                 .help("批量生成本集分镜图片")
 
@@ -1741,6 +1753,7 @@ struct AgentShortDramaPanel: View {
                         .font(.caption2)
                 }
                 .buttonStyle(.borderless)
+                .focusable(false)
                 .disabled(episode.shots.isEmpty || isGenerating(episode: episode, kind: .videoGeneration))
                 .help("批量生成本集分镜视频")
 
@@ -1751,6 +1764,7 @@ struct AgentShortDramaPanel: View {
                         .font(.caption2)
                 }
                 .buttonStyle(.borderless)
+                .focusable(false)
                 .disabled(episode.shots.isEmpty)
                 .help("导出本集制作包")
 
@@ -1761,6 +1775,7 @@ struct AgentShortDramaPanel: View {
                         .font(.caption2)
                 }
                 .buttonStyle(.borderless)
+                .focusable(false)
                 .disabled(episode.shots.isEmpty || appState.activeRuntime == nil)
                 .help(appState.activeRuntime == nil ? "请先创建 Agent 会话" : "生成本集网页分镜板")
             }
@@ -1820,6 +1835,7 @@ struct AgentShortDramaPanel: View {
                         .font(.caption2)
                 }
                 .buttonStyle(.borderless)
+                .focusable(false)
                 .help("查看本分镜媒体任务")
                 Button {
                     appendShotContextToChat(project: project, episode: episode, shot: shot)
@@ -1828,6 +1844,7 @@ struct AgentShortDramaPanel: View {
                         .font(.caption2)
                 }
                 .buttonStyle(.borderless)
+                .focusable(false)
                 .help("发送分镜结构到聊天")
 
                 Button {
@@ -1837,6 +1854,7 @@ struct AgentShortDramaPanel: View {
                         .font(.caption2)
                 }
                 .buttonStyle(.borderless)
+                .focusable(false)
                 .disabled(isGenerating(shot: shot, kind: .imageGeneration))
                 .help("用 some.im 生成分镜图片")
 
@@ -1847,6 +1865,7 @@ struct AgentShortDramaPanel: View {
                         .font(.caption2)
                 }
                 .buttonStyle(.borderless)
+                .focusable(false)
                 .disabled(isGenerating(shot: shot, kind: .videoGeneration))
                 .help("用 some.im 生成分镜视频")
 
@@ -1858,6 +1877,7 @@ struct AgentShortDramaPanel: View {
                             .font(.caption2)
                     }
                     .buttonStyle(.borderless)
+                    .focusable(false)
                     .disabled(appState.activeRuntime == nil)
                     .help(appState.activeRuntime == nil ? "请先创建 Agent 会话" : "在聊天中选择主图")
                 }
@@ -1925,6 +1945,7 @@ struct AgentShortDramaPanel: View {
                                     .font(.system(size: 9, weight: .semibold))
                             }
                             .buttonStyle(.borderless)
+                            .focusable(false)
                             .help("查看这个检查项的媒体任务")
                             Button {
                                 handleReviewItemAction(project: project, episode: episode, shot: shot, item: item)
@@ -1933,6 +1954,7 @@ struct AgentShortDramaPanel: View {
                                     .font(.system(size: 9, weight: .semibold))
                             }
                             .buttonStyle(.borderless)
+                            .focusable(false)
                             .disabled(isReviewActionRunning(item))
                             .help(reviewItemActionHelp(item.kind))
                             Button {
@@ -1942,6 +1964,7 @@ struct AgentShortDramaPanel: View {
                                     .font(.system(size: 9, weight: .semibold))
                             }
                             .buttonStyle(.borderless)
+                            .focusable(false)
                             .help("标记为已解决")
                         }
                     }

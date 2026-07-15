@@ -8,7 +8,7 @@
 import Foundation
 
 extension AppState {
-    func sendAgentMessage() {
+    func sendAgentMessage(allowPlanModeSuggestion: Bool = true) {
         // The UI's send button always targets whatever session is on
         // screen — that's the active runtime by definition. If there
         // isn't one, lazily create one so a brand-new install can fire
@@ -43,6 +43,27 @@ extension AppState {
                 || !skills.isEmpty
                 || !pendingFiles.isEmpty
                 || includeWorkspaceOverview else { return }
+
+        if allowPlanModeSuggestion,
+           runtime.interactionMode == .normal,
+           !runtime.isResponding {
+            // While the prompt is visible, only its two explicit actions may
+            // resolve the parked send. Repeated Return presses must not sneak
+            // past the preflight and dispatch in Normal mode.
+            if runtime.pendingPlanModeSuggestion != nil {
+                return
+            }
+            if AgentPlanModeSuggestionPolicy.shouldSuggest(
+                userText: userText,
+                attachmentCount: images.count + textAttachments.count + pendingFiles.count + skills.count,
+                includesWorkspaceOverview: includeWorkspaceOverview
+            ) {
+                runtime.pendingPlanModeSuggestion = AgentPlanModeSuggestion()
+                scheduleAgentPlanModeSuggestionAutoResolution(for: runtime)
+                return
+            }
+        }
+        clearAgentPlanModeSuggestion(for: runtime)
 
         let prompt = composeAttachedPrompt(
             userText: userText,
@@ -85,6 +106,41 @@ extension AppState {
             textAttachments: textAttachments,
             attachedSkills: skills
         )
+    }
+
+    func resolveAgentPlanModeSuggestion(enterPlanMode: Bool) {
+        guard let runtime = activeRuntime,
+              runtime.pendingPlanModeSuggestion != nil else { return }
+        clearAgentPlanModeSuggestion(for: runtime)
+        if enterPlanMode {
+            setAgentInteractionMode(.plan)
+        }
+        sendAgentMessage(allowPlanModeSuggestion: false)
+    }
+
+    func cancelAgentPlanModeSuggestion() {
+        guard let runtime = activeRuntime else { return }
+        clearAgentPlanModeSuggestion(for: runtime)
+    }
+
+    private func scheduleAgentPlanModeSuggestionAutoResolution(for runtime: AgentRuntime) {
+        runtime.planModeSuggestionAutoResolveTask?.cancel()
+        let delay = UInt64(AgentPlanModeSuggestionPolicy.autoResolutionSeconds) * 1_000_000_000
+        runtime.planModeSuggestionAutoResolveTask = Task { [weak self, weak runtime] in
+            try? await Task.sleep(nanoseconds: delay)
+            guard !Task.isCancelled,
+                  let self,
+                  let runtime,
+                  self.activeRuntime === runtime,
+                  runtime.pendingPlanModeSuggestion != nil else { return }
+            self.resolveAgentPlanModeSuggestion(enterPlanMode: true)
+        }
+    }
+
+    private func clearAgentPlanModeSuggestion(for runtime: AgentRuntime) {
+        runtime.planModeSuggestionAutoResolveTask?.cancel()
+        runtime.planModeSuggestionAutoResolveTask = nil
+        runtime.pendingPlanModeSuggestion = nil
     }
 
     func dispatchAgentMessageUsingSelectedExecutor(

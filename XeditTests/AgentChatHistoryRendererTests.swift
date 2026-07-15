@@ -756,6 +756,219 @@ struct AgentChatHistoryRendererTests {
     }
 
     @Test
+    func groupsRepeatedAssistantOutputsIntoOneUserTurnChrome() throws {
+        let startedAt = Date(timeIntervalSince1970: 1_000)
+        let user = AgentMessage(role: .user, content: "do the work", createdAt: startedAt)
+        let first = AgentMessage(
+            role: .assistant,
+            content: "first update",
+            promptTokens: 100,
+            completionTokens: 20,
+            elapsedSeconds: 4,
+            createdAt: startedAt.addingTimeInterval(2)
+        )
+        let toolLoop = AgentMessage(
+            role: .assistant,
+            content: "",
+            toolCalls: [AgentMessageToolCall(
+                externalID: "read-1",
+                toolName: "read_file",
+                argumentsJSON: #"{"path":"README.md"}"#
+            )],
+            promptTokens: 50,
+            completionTokens: 10,
+            elapsedSeconds: 3,
+            createdAt: startedAt.addingTimeInterval(6)
+        )
+        let final = AgentMessage(
+            role: .assistant,
+            content: "final answer",
+            promptTokens: 150,
+            completionTokens: 30,
+            elapsedSeconds: 6,
+            createdAt: startedAt.addingTimeInterval(12)
+        )
+
+        let rendered = AgentChatHistoryRenderer.render(
+            messages: [user, first, final],
+            isDark: false,
+            assistantTurnContextMessages: [user, first, toolLoop, final]
+        )
+
+        #expect(occurrences(of: L10n.MessageFooter.processedDuration("18s"), in: rendered.string) == 1)
+        #expect(attributeCount(.agentChatHistoryAssistantStatusDividerColor, in: rendered) == 1)
+        #expect(occurrences(of: "300/60", in: rendered.string) == 1)
+        #expect(firstAttributeRange(
+            .agentChatHistoryMessageCopyText,
+            value: "first update\n\nfinal answer",
+            in: rendered
+        ) != nil)
+        #expect(firstAttributeRange(
+            .agentChatHistoryMessageCopyText,
+            value: "first update",
+            in: rendered
+        ) == nil)
+    }
+
+    @Test
+    func activeAssistantTurnKeepsOneProcessingHeaderAndNoPrematureFooter() {
+        let startedAt = Date(timeIntervalSince1970: 2_000)
+        let user = AgentMessage(role: .user, content: "continue", createdAt: startedAt)
+        let first = AgentMessage(
+            role: .assistant,
+            content: "working update",
+            promptTokens: 100,
+            completionTokens: 20,
+            elapsedSeconds: 4,
+            createdAt: startedAt.addingTimeInterval(1)
+        )
+        let toolLoop = AgentMessage(
+            role: .assistant,
+            content: "",
+            toolCalls: [AgentMessageToolCall(
+                externalID: "terminal-1",
+                toolName: "terminal_send_command",
+                argumentsJSON: #"{"command":"true"}"#
+            )],
+            promptTokens: 50,
+            completionTokens: 10,
+            elapsedSeconds: 2,
+            createdAt: startedAt.addingTimeInterval(6)
+        )
+
+        let rendered = AgentChatHistoryRenderer.render(
+            messages: [user, first],
+            isDark: false,
+            assistantTurnContextMessages: [user, first, toolLoop],
+            isAssistantTurnActive: true
+        )
+
+        #expect(occurrences(of: L10n.MessageFooter.processing, in: rendered.string) == 1)
+        #expect(attributeCount(.agentChatHistoryAssistantStatusDividerColor, in: rendered) == 1)
+        #expect(!rendered.string.contains("150/30"))
+        #expect(firstAttributeRange(
+            .agentChatHistoryMessageCopyText,
+            value: "working update",
+            in: rendered
+        ) == nil)
+    }
+
+    @Test
+    func nextUserInputStartsANewAssistantTurnChrome() {
+        let startedAt = Date(timeIntervalSince1970: 2_500)
+        let firstUser = AgentMessage(role: .user, content: "first", createdAt: startedAt)
+        let firstUpdate = AgentMessage(
+            role: .assistant,
+            content: "first update",
+            promptTokens: 100,
+            completionTokens: 20,
+            elapsedSeconds: 2,
+            createdAt: startedAt.addingTimeInterval(1)
+        )
+        let firstFinal = AgentMessage(
+            role: .assistant,
+            content: "first final",
+            promptTokens: 200,
+            completionTokens: 40,
+            elapsedSeconds: 3,
+            createdAt: startedAt.addingTimeInterval(5)
+        )
+        let secondUser = AgentMessage(
+            role: .user,
+            content: "second",
+            createdAt: startedAt.addingTimeInterval(10)
+        )
+        let secondFinal = AgentMessage(
+            role: .assistant,
+            content: "second final",
+            promptTokens: 400,
+            completionTokens: 80,
+            elapsedSeconds: 4,
+            createdAt: startedAt.addingTimeInterval(11)
+        )
+        let messages = [firstUser, firstUpdate, firstFinal, secondUser, secondFinal]
+
+        let rendered = AgentChatHistoryRenderer.render(
+            messages: messages,
+            isDark: false,
+            assistantTurnContextMessages: messages
+        )
+
+        #expect(attributeCount(.agentChatHistoryAssistantStatusDividerColor, in: rendered) == 2)
+        #expect(occurrences(of: "300/60", in: rendered.string) == 1)
+        #expect(occurrences(of: "400/80", in: rendered.string) == 1)
+    }
+
+    @Test
+    @MainActor
+    func rendersGroupedAssistantTurnForDesignQA() throws {
+        let startedAt = Date(timeIntervalSince1970: 3_000)
+        let user = AgentMessage(role: .user, content: "继续啊", createdAt: startedAt)
+        let first = AgentMessage(
+            role: .assistant,
+            content: "正在检查消息分组逻辑。",
+            promptTokens: 18_400,
+            completionTokens: 72,
+            elapsedSeconds: 4,
+            createdAt: startedAt.addingTimeInterval(1)
+        )
+        let toolLoop = AgentMessage(
+            role: .assistant,
+            content: "",
+            toolCalls: [AgentMessageToolCall(
+                externalID: "edit-1",
+                toolName: "apply_patch",
+                argumentsJSON: #"{"path":"AgentChatHistoryFormatter.swift"}"#
+            )],
+            promptTokens: 15_600,
+            completionTokens: 84,
+            elapsedSeconds: 3,
+            createdAt: startedAt.addingTimeInterval(6)
+        )
+        let final = AgentMessage(
+            role: .assistant,
+            content: "已完成：同一轮只保留一组处理状态和统计。",
+            promptTokens: 15_600,
+            completionTokens: 210,
+            elapsedSeconds: 6,
+            createdAt: startedAt.addingTimeInterval(12)
+        )
+        let visibleMessages = [user, first, final]
+        let contextMessages = [user, first, toolLoop, final]
+        let view = AgentChatHistoryNSTextView()
+        view.drawsBackground = true
+        view.backgroundColor = .white
+        view.textContainerInset = NSSize(width: 16, height: 16)
+        view.frame = NSRect(x: 0, y: 0, width: 636, height: 499)
+        view.textContainer?.size = NSSize(width: 604, height: CGFloat.greatestFiniteMagnitude)
+        view.applyMessages(
+            visibleMessages,
+            isDark: false,
+            assistantTurnContextMessages: contextMessages,
+            baseFontSize: 14
+        )
+
+        #expect(occurrences(of: L10n.MessageFooter.processedDuration("18s"), in: view.string) == 1)
+        #expect(occurrences(of: "49.6k/366", in: view.string) == 1)
+
+        let defaultOutputURL = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .appendingPathComponent("build/visual-qa/assistant-turn-grouping/implementation-rc10.png")
+        let outputPath = ProcessInfo.processInfo.environment[
+            "WILLDEEP_TURN_GROUP_DESIGN_QA_OUTPUT"
+        ] ?? defaultOutputURL.path
+        guard FileManager.default.fileExists(
+            atPath: URL(fileURLWithPath: outputPath).deletingLastPathComponent().path
+        ) else { return }
+        view.layoutSubtreeIfNeeded()
+        let bitmap = try #require(view.bitmapImageRepForCachingDisplay(in: view.bounds))
+        view.cacheDisplay(in: view.bounds, to: bitmap)
+        let png = try #require(bitmap.representation(using: .png, properties: [:]))
+        try png.write(to: URL(fileURLWithPath: outputPath), options: .atomic)
+    }
+
+    @Test
     func marksMarkdownTablesForTextKitTableChrome() throws {
         let message = AgentMessage(
             role: .assistant,
@@ -1178,6 +1391,25 @@ struct AgentChatHistoryRendererTests {
             stop.pointee = true
         }
         return found.location == NSNotFound ? nil : found
+    }
+
+    private func attributeCount(
+        _ key: NSAttributedString.Key,
+        in attributed: NSAttributedString
+    ) -> Int {
+        var count = 0
+        attributed.enumerateAttribute(
+            key,
+            in: NSRange(location: 0, length: attributed.length)
+        ) { value, _, _ in
+            if value != nil { count += 1 }
+        }
+        return count
+    }
+
+    private func occurrences(of needle: String, in haystack: String) -> Int {
+        guard !needle.isEmpty else { return 0 }
+        return haystack.components(separatedBy: needle).count - 1
     }
 
     private func firstAttributeRange(

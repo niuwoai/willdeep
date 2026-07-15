@@ -1,3 +1,4 @@
+import AppKit
 import Testing
 import SwiftUI
 @testable import WillDeep
@@ -29,11 +30,13 @@ struct DesktopPetTests {
         #expect(DesktopPetAppearance.cyberDrifter.assetName == "DesktopPetCyberDrifter")
         #expect(DesktopPetAppearance.whistleCaptain.assetName == "DesktopPetWhistleCaptain")
         #expect(DesktopPetAppearance.cloudForge.assetName == "DesktopPetCloudForge")
-        #expect(DesktopPetAppearance.allCases.count == 22)
+        #expect(DesktopPetAppearance.codeShiba.assetName == "DesktopPetCodeShiba")
+        #expect(DesktopPetAppearance.moonRabbit.assetName == "DesktopPetMoonRabbit")
+        #expect(DesktopPetAppearance.allCases.count == 24)
     }
 
     @Test
-    func typingAnimationKeepsPetOnlyPose() {
+    func typingAnimationShowsDetailedLaptopAndKeystrokePose() {
         let animation = DesktopPetAnimationValues(
             mood: .typing,
             date: Date(timeIntervalSinceReferenceDate: 123)
@@ -42,6 +45,26 @@ struct DesktopPetTests {
         #expect(animation.scale == 1)
         #expect(animation.facesRight)
         #expect(animation.yawRotation == 0)
+        #expect(animation.verticalOffset < 0)
+        #expect(animation.laptopOpacity == 1)
+        #expect(animation.laptopGlowOpacity > 0.5)
+    }
+
+    @Test
+    func idleAnimationPeriodicallyPerformsCuteAction() {
+        let quietAnimation = DesktopPetAnimationValues(
+            mood: .idle,
+            date: Date(timeIntervalSinceReferenceDate: 2)
+        )
+        let cuteAnimation = DesktopPetAnimationValues(
+            mood: .idle,
+            date: Date(timeIntervalSinceReferenceDate: 7.5)
+        )
+
+        #expect(quietAnimation.cuteEffectOpacity == 0)
+        #expect(cuteAnimation.cuteEffectOpacity > 0.99)
+        #expect(cuteAnimation.verticalOffset < quietAnimation.verticalOffset)
+        #expect(cuteAnimation.laptopOpacity == 0)
     }
 
     @Test
@@ -93,13 +116,112 @@ struct DesktopPetTests {
 
     @Test @MainActor
     func desktopPetAcceptsTheFirstMouseEventWhileAppIsInactive() {
-        // rc8 为绕开 swiftc 泛型 NSHostingView 崩溃把宿主类改成了固定
-        // rootView 类型,这里跟着用真实 overlay view 构造(manager 的
-        // init 只读 UserDefaults,无窗口副作用)。
-        let host = DesktopPetFirstMouseHostingView(
-            rootView: DesktopPetOverlayView(manager: .shared)
-        )
+        #expect(DesktopPetFirstMousePolicy.accepts(nil))
+    }
 
-        #expect(host.acceptsFirstMouse(for: nil))
+    @Test
+    func desktopPetSettingsUseReadableBodyTypography() {
+        #expect(DesktopPetSettingsDesign.bodyFontSize == 14)
+        #expect(DesktopPetSettingsDesign.appearanceNameMinimumHeight >= 36)
+    }
+
+    @Test @MainActor
+    func renderDesktopPetSettingsForDesignQA() throws {
+        let outputPath = ProcessInfo.processInfo.environment["WILLDEEP_DESKTOP_PET_QA_OUTPUT"]
+            ?? "/tmp/Xedit-desktop-pet-settings-design-qa.png"
+        let manager = DesktopPetWindowManager.shared
+        let originalEnabled = manager.isEnabled
+        let originalAppearance = manager.appearance
+        defer {
+            manager.selectAppearance(originalAppearance)
+            manager.setEnabled(originalEnabled)
+        }
+        manager.setEnabled(false)
+        manager.selectAppearance(.robotFox)
+
+        let size = NSSize(width: 806, height: 848)
+        let root = ZStack(alignment: .topLeading) {
+            Color(nsColor: .windowBackgroundColor)
+
+            VStack(alignment: .leading, spacing: 14) {
+                Text(SettingsGroup.pet.title)
+                    .font(.title3.weight(.semibold))
+
+                DesktopPetSettingsPage()
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+            }
+            .padding(20)
+        }
+            .frame(width: size.width, height: size.height)
+            .preferredColorScheme(.light)
+        let hostingView = NSHostingView(rootView: root)
+        hostingView.frame = NSRect(origin: .zero, size: size)
+        hostingView.layoutSubtreeIfNeeded()
+
+        let bitmap = try #require(hostingView.bitmapImageRepForCachingDisplay(in: hostingView.bounds))
+        hostingView.cacheDisplay(in: hostingView.bounds, to: bitmap)
+        let png = try #require(bitmap.representation(using: .png, properties: [:]))
+        try png.write(to: URL(fileURLWithPath: outputPath), options: .atomic)
+    }
+
+    @Test @MainActor
+    func renderDesktopPetAnimationShowcaseForDesignQA() throws {
+        let outputPath = ProcessInfo.processInfo.environment["WILLDEEP_DESKTOP_PET_ANIMATION_QA_OUTPUT"]
+            ?? "/tmp/Xedit-desktop-pet-animation-design-qa.png"
+        let size = NSSize(width: 580, height: 260)
+        let root = HStack(alignment: .top, spacing: 26) {
+            animationPreview(
+                title: L10n.DesktopPet.statusTyping,
+                appearance: .codeShiba,
+                mood: .typing,
+                time: 123
+            )
+            animationPreview(
+                title: L10n.DesktopPet.statusTyping,
+                appearance: .moonRabbit,
+                mood: .typing,
+                time: 123.08
+            )
+            animationPreview(
+                title: L10n.DesktopPet.statusIdle,
+                appearance: .robotFox,
+                mood: .idle,
+                time: 7.5
+            )
+        }
+        .padding(24)
+        .frame(width: size.width, height: size.height, alignment: .top)
+        .background(Color(nsColor: .windowBackgroundColor))
+        .preferredColorScheme(.light)
+        let hostingView = NSHostingView(rootView: root)
+        hostingView.frame = NSRect(origin: .zero, size: size)
+        hostingView.layoutSubtreeIfNeeded()
+
+        let bitmap = try #require(hostingView.bitmapImageRepForCachingDisplay(in: hostingView.bounds))
+        hostingView.cacheDisplay(in: hostingView.bounds, to: bitmap)
+        let png = try #require(bitmap.representation(using: .png, properties: [:]))
+        try png.write(to: URL(fileURLWithPath: outputPath), options: .atomic)
+    }
+
+    @MainActor
+    private func animationPreview(
+        title: String,
+        appearance: DesktopPetAppearance,
+        mood: DesktopPetMood,
+        time: TimeInterval
+    ) -> some View {
+        VStack(spacing: 8) {
+            DesktopPetSceneView(
+                appearance: appearance,
+                animation: DesktopPetAnimationValues(
+                    mood: mood,
+                    date: Date(timeIntervalSinceReferenceDate: time)
+                )
+            )
+
+            Text(title)
+                .font(.system(size: 14, weight: .medium))
+                .foregroundStyle(.secondary)
+        }
     }
 }

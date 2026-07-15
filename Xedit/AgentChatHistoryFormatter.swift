@@ -173,9 +173,37 @@ enum AgentChatHistoryRenderer {
         return hasher.finalize()
     }
 
+    private static func hashAssistantTurnContext(
+        _ messages: [AgentMessage],
+        includesCopyContent: Bool,
+        into hasher: inout Hasher
+    ) {
+        for message in messages where message.role == .user || message.role == .assistant {
+            hasher.combine(message.id)
+            hasher.combine(message.role.rawValue)
+            hasher.combine(message.createdAt)
+            hasher.combine(message.usageTokens)
+            hasher.combine(message.promptTokens)
+            hasher.combine(message.completionTokens)
+            hasher.combine(message.cachedPromptTokens)
+            hasher.combine(message.cacheWritePromptTokens)
+            hasher.combine(message.reasoningTokens)
+            hasher.combine(message.elapsedSeconds)
+            hasher.combine(message.managedRoute?.selectedModel)
+            hasher.combine(message.managedRoute?.tier.rawValue)
+            hasher.combine(message.managedRoute?.didEscalate)
+            hasher.combine(message.managedRoute?.didFallback)
+            if includesCopyContent, message.role == .assistant {
+                hasher.combine(message.copyableContent)
+            }
+        }
+    }
+
     static func render(
         messages: [AgentMessage],
         isDark: Bool,
+        assistantTurnContextMessages: [AgentMessage]? = nil,
+        isAssistantTurnActive: Bool = false,
         expandedToolGroupIDs: Set<String> = [],
         hoveredUserMessageID: UUID? = nil,
         baseFontSize: CGFloat = NSFont.systemFontSize,
@@ -184,14 +212,21 @@ enum AgentChatHistoryRenderer {
     ) -> NSAttributedString {
         let clampedSize = AgentSettingsStore.clampChatBaseFontSize(baseFontSize)
         let resolvedLayoutWidth = AgentChatHistoryLayoutMetrics.resolvedLayoutWidth(layoutWidth)
+        let turnContextMessages = assistantTurnContextMessages ?? messages
         var hasher = Hasher()
         hasher.combine(messages.count)
+        hasher.combine(isAssistantTurnActive)
         hasher.combine(expandedToolGroupIDs.sorted())
         hasher.combine(hoveredUserMessageID)
         hasher.combine(latestTurnReportToolCount ?? -1)
         for m in messages {
             hasher.combine(messageHash(m))
         }
+        hashAssistantTurnContext(
+            turnContextMessages,
+            includesCopyContent: !isAssistantTurnActive,
+            into: &hasher
+        )
         let key = CacheKey(
             countAndHash: hasher.finalize(),
             isDark: isDark,
@@ -213,6 +248,8 @@ enum AgentChatHistoryRenderer {
         let result = makeAttributedString(
             messages: messages,
             isDark: isDark,
+            assistantTurnContextMessages: turnContextMessages,
+            isAssistantTurnActive: isAssistantTurnActive,
             expandedToolGroupIDs: expandedToolGroupIDs,
             hoveredUserMessageID: hoveredUserMessageID,
             baseFontSize: clampedSize,
@@ -240,6 +277,8 @@ enum AgentChatHistoryRenderer {
     private static func makeAttributedString(
         messages: [AgentMessage],
         isDark: Bool,
+        assistantTurnContextMessages: [AgentMessage],
+        isAssistantTurnActive: Bool,
         expandedToolGroupIDs: Set<String>,
         hoveredUserMessageID: UUID?,
         baseFontSize: CGFloat,
@@ -274,6 +313,12 @@ enum AgentChatHistoryRenderer {
         let latestAssistantTerminalSummaryMessageID = messages.reversed().first {
             $0.role == .assistant && (!$0.content.isEmpty || !$0.toolCalls.isEmpty)
         }?.id
+        let assistantTurnPresentations = AgentAssistantTurnGrouping.presentations(
+            in: assistantTurnContextMessages
+        )
+        let activeUserMessageID = isAssistantTurnActive
+            ? assistantTurnContextMessages.reversed().first(where: { $0.role == .user })?.id
+            : nil
 
         var index = 0
         while index < messages.count {
@@ -335,16 +380,25 @@ enum AgentChatHistoryRenderer {
 
             // Role header.
             let isToolCallOnly = message.role == .assistant && message.content.isEmpty && !message.toolCalls.isEmpty
-            appendHeader(
-                for: message,
-                isToolCallOnly: isToolCallOnly,
-                to: result,
-                headerFont: headerFont,
-                assistantStatusFont: assistantStatusFont,
-                assistantStatusColor: assistantStatusColor,
-                assistantStatusDividerColor: assistantStatusDividerColor,
-                secondaryColor: secondaryColor
-            )
+            let turnPresentation = assistantTurnPresentations[message.id]
+            let isActiveAssistantTurn = message.role == .assistant
+                && isAssistantTurnActive
+                && turnPresentation?.userMessageID == activeUserMessageID
+            if message.role != .assistant
+                || turnPresentation == nil
+                || turnPresentation?.isFirstVisibleMessage(message) == true {
+                appendHeader(
+                    for: turnPresentation?.summaryMessage ?? message,
+                    isToolCallOnly: isToolCallOnly,
+                    isStreamingAssistantTurn: isActiveAssistantTurn,
+                    to: result,
+                    headerFont: headerFont,
+                    assistantStatusFont: assistantStatusFont,
+                    assistantStatusColor: assistantStatusColor,
+                    assistantStatusDividerColor: assistantStatusDividerColor,
+                    secondaryColor: secondaryColor
+                )
+            }
 
             // Body.
             let userMessageContentStart = result.length
@@ -536,12 +590,17 @@ enum AgentChatHistoryRenderer {
                 )
             }
 
-            if shouldShowFooter(for: message, body: body) {
+            let isAssistantTurnFooter = message.role != .assistant
+                || turnPresentation == nil
+                || turnPresentation?.isLastVisibleMessage(message) == true
+            if isAssistantTurnFooter,
+               !isActiveAssistantTurn,
+               shouldShowFooter(for: message, body: body) {
                 let messageBodyEnd = result.length
                 result.append(NSAttributedString(string: "\n", attributes: [.font: bodyFont]))
                 let footerStart = result.length
                 appendMessageFooter(
-                    for: message,
+                    for: turnPresentation?.summaryMessage ?? message,
                     isLatestAssistant: message.id == latestAssistantMessageID,
                     isVisible: message.role != .user || isHoveredUserMessage,
                     turnReportToolCount: latestTurnReportToolCount,

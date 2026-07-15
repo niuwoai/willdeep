@@ -640,6 +640,144 @@ extension AgentMessage {
     }
 }
 
+/// Presentation metadata for every visible assistant message produced after
+/// one user input. Provider tool loops can emit several assistant messages,
+/// but the transcript presents them as one user-facing turn.
+nonisolated struct AgentAssistantTurnPresentation {
+    let userMessageID: AgentMessage.ID?
+    let firstVisibleAssistantMessageID: AgentMessage.ID
+    let lastVisibleAssistantMessageID: AgentMessage.ID
+    let summaryMessage: AgentMessage
+
+    func isFirstVisibleMessage(_ message: AgentMessage) -> Bool {
+        message.id == firstVisibleAssistantMessageID
+    }
+
+    func isLastVisibleMessage(_ message: AgentMessage) -> Bool {
+        message.id == lastVisibleAssistantMessageID
+    }
+}
+
+nonisolated enum AgentAssistantTurnGrouping {
+    static func presentations(
+        in messages: [AgentMessage],
+        aggregatesCopyContent: Bool = true
+    ) -> [AgentMessage.ID: AgentAssistantTurnPresentation] {
+        var result: [AgentMessage.ID: AgentAssistantTurnPresentation] = [:]
+        var userMessage: AgentMessage?
+        var assistantMessages: [AgentMessage] = []
+
+        for message in messages {
+            if message.role == .user {
+                appendPresentation(
+                    userMessage: userMessage,
+                    assistantMessages: assistantMessages,
+                    aggregatesCopyContent: aggregatesCopyContent,
+                    to: &result
+                )
+                userMessage = message
+                assistantMessages.removeAll(keepingCapacity: true)
+            } else if message.role == .assistant {
+                assistantMessages.append(message)
+            }
+        }
+        appendPresentation(
+            userMessage: userMessage,
+            assistantMessages: assistantMessages,
+            aggregatesCopyContent: aggregatesCopyContent,
+            to: &result
+        )
+        return result
+    }
+
+    static func presentation(
+        for messageID: AgentMessage.ID,
+        in messages: [AgentMessage],
+        aggregatesCopyContent: Bool = false
+    ) -> AgentAssistantTurnPresentation? {
+        presentations(in: messages, aggregatesCopyContent: aggregatesCopyContent)[messageID]
+    }
+
+    private static func appendPresentation(
+        userMessage: AgentMessage?,
+        assistantMessages: [AgentMessage],
+        aggregatesCopyContent: Bool,
+        to result: inout [AgentMessage.ID: AgentAssistantTurnPresentation]
+    ) {
+        let visibleMessages = assistantMessages.filter(isVisibleAssistantMessage)
+        guard let first = visibleMessages.first, let last = visibleMessages.last else { return }
+        let presentation = AgentAssistantTurnPresentation(
+            userMessageID: userMessage?.id,
+            firstVisibleAssistantMessageID: first.id,
+            lastVisibleAssistantMessageID: last.id,
+            summaryMessage: summaryMessage(
+                userMessage: userMessage,
+                assistantMessages: assistantMessages,
+                visibleMessages: visibleMessages,
+                aggregatesCopyContent: aggregatesCopyContent
+            )
+        )
+        for message in visibleMessages {
+            result[message.id] = presentation
+        }
+    }
+
+    private static func isVisibleAssistantMessage(_ message: AgentMessage) -> Bool {
+        !message.content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            || !message.images.isEmpty
+    }
+
+    private static func summaryMessage(
+        userMessage: AgentMessage?,
+        assistantMessages: [AgentMessage],
+        visibleMessages: [AgentMessage],
+        aggregatesCopyContent: Bool
+    ) -> AgentMessage {
+        var summary = visibleMessages[visibleMessages.count - 1]
+        if aggregatesCopyContent {
+            summary.content = visibleMessages
+                .map(\.copyableContent)
+                .filter { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+                .joined(separator: "\n\n")
+        }
+        summary.usageTokens = sum(assistantMessages, \.usageTokens)
+        summary.promptTokens = sum(assistantMessages, \.promptTokens)
+        summary.completionTokens = sum(assistantMessages, \.completionTokens)
+        summary.cachedPromptTokens = sum(assistantMessages, \.cachedPromptTokens)
+        summary.cacheWritePromptTokens = sum(assistantMessages, \.cacheWritePromptTokens)
+        summary.reasoningTokens = sum(assistantMessages, \.reasoningTokens)
+        summary.elapsedSeconds = totalElapsedSeconds(
+            userMessage: userMessage,
+            assistantMessages: assistantMessages
+        )
+        summary.managedRoute = assistantMessages.reversed().compactMap(\.managedRoute).first
+        return summary
+    }
+
+    private static func sum(
+        _ messages: [AgentMessage],
+        _ keyPath: KeyPath<AgentMessage, Int?>
+    ) -> Int? {
+        let values = messages.compactMap { $0[keyPath: keyPath] }
+        return values.isEmpty ? nil : values.reduce(0, +)
+    }
+
+    private static func totalElapsedSeconds(
+        userMessage: AgentMessage?,
+        assistantMessages: [AgentMessage]
+    ) -> Double? {
+        guard let first = assistantMessages.first else { return nil }
+        let startedAt = userMessage?.createdAt ?? first.createdAt
+        let providerElapsed = assistantMessages.compactMap(\.elapsedSeconds).filter { $0 > 0 }
+        let completedAt = assistantMessages
+            .map { $0.createdAt.addingTimeInterval(max(0, $0.elapsedSeconds ?? 0)) }
+            .max() ?? first.createdAt
+        let wallClockElapsed = completedAt.timeIntervalSince(startedAt)
+        guard wallClockElapsed > 0 || !providerElapsed.isEmpty else { return nil }
+        return max(wallClockElapsed, providerElapsed.reduce(0, +))
+    }
+}
+
 /// A message the user queued while the agent was busy. Consumed FIFO
 /// once the current response completes (or is stopped).
 struct AgentQueuedMessage: Identifiable, Equatable {
