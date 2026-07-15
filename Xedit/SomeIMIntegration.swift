@@ -757,6 +757,7 @@ struct SomeIMGeneratedImage: Equatable, Sendable {
 
 enum SomeIMClient {
     static let willDeepClientID = "willdeep"
+    static let customerPortalURL = URL(string: "https://some.im/customer")!
     private static let browserControlOrigin = "https://some.im"
     private static let someIMClientLocationEndpoint = URL(string: "https://some.im/api/v1/public/client-location")!
     private static let ipipClientLocationEndpoint = URL(string: "https://myip.ipip.net")!
@@ -1045,36 +1046,6 @@ enum SomeIMClient {
         let decoded = try decodeEnvelope(CustomerMeData.self, from: data)
         guard let account = decoded.user else { throw AgentClientError.invalidResponse }
         return (account, decoded.tenant?.id)
-    }
-
-    static func fetchHandoffLoginURL() async throws -> URL {
-        try await fetchHandoffLoginURL(
-            settings: SomeIMIntegrationStore.loadSettings(),
-            sessionToken: SomeIMIntegrationStore.loadSessionToken(),
-            session: AgentNetworkSupport.defaultSession()
-        )
-    }
-
-    static func fetchHandoffLoginURL(
-        settings: SomeIMIntegrationSettings,
-        sessionToken: String,
-        session: URLSession
-    ) async throws -> URL {
-        let token = sessionToken.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !token.isEmpty else {
-            throw AgentToolError.invalidArgument("some.im session token is missing. Reconnect your account.")
-        }
-        let endpoint = try publicAPIEndpoint(from: settings.normalized.baseURL, suffix: "public/client-login/handoff-link")
-        var request = jsonRequest(url: endpoint, method: "POST")
-        request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
-        applyClientLoginSecret(to: &request)
-        request.httpBody = try JSONSerialization.data(withJSONObject: ["next": "/customer"], options: [.sortedKeys])
-        let data = try await send(request, session: session)
-        let decoded = try decodeEnvelope(HandoffLinkData.self, from: data)
-        guard let url = URL(string: decoded.login_url), ["http", "https"].contains(url.scheme?.lowercased() ?? "") else {
-            throw AgentToolError.invalidArgument("some.im returned an invalid login URL.")
-        }
-        return url
     }
 
     static func fetchCodingPlanStatus() async throws -> SomeIMCodingPlanStatus {
@@ -1815,10 +1786,6 @@ enum SomeIMClient {
         let balance_updated_at_unix_micros: String?
     }
 
-    private struct HandoffLinkData: Decodable {
-        let login_url: String
-        let expires_in: Int?
-    }
 }
 
 private extension KeyedDecodingContainer {
@@ -2308,18 +2275,7 @@ struct SomeIMIntegrationSettingsView: View {
     }
 
     private func openSomeIM() {
-        Task {
-            do {
-                let url = try await SomeIMClient.fetchHandoffLoginURL()
-                await MainActor.run {
-                    _ = NSWorkspace.shared.open(url)
-                }
-            } catch {
-                await MainActor.run {
-                    status = error.localizedDescription
-                }
-            }
-        }
+        _ = NSWorkspace.shared.open(SomeIMClient.customerPortalURL)
     }
 
     private func fetchModels() {

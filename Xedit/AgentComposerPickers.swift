@@ -161,6 +161,7 @@ struct WorkspacePickerPill: View {
                 } label: {
                     Label(L10n.ComposerWorkspace.newWorktree, systemImage: "arrow.triangle.branch")
                 }
+                .disabled(appState.agentGitWorktreeCreation != nil)
 
                 ForEach(appState.agentGitWorktrees) { worktree in
                     Button {
@@ -404,7 +405,7 @@ struct AgentRunLocationPickerPill: View {
             } label: {
                 Label(L10n.ComposerWorkspace.newWorktreeRun, systemImage: "arrow.triangle.branch")
             }
-            .disabled(!appState.agentWorkspaceGitStatus.isRepository)
+            .disabled(!appState.agentWorkspaceGitStatus.isRepository || appState.agentGitWorktreeCreation != nil)
         } label: {
             HStack(spacing: 4) {
                 Image(systemName: isPrimaryWorkspace ? "laptopcomputer" : "arrow.triangle.branch")

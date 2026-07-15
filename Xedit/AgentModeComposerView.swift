@@ -27,6 +27,12 @@ struct AgentChatComposer: View {
     var body: some View {
         VStack(spacing: 0) {
             VStack(spacing: 6) {
+                if let creation = appState.agentGitWorktreeCreation,
+                   creation.sessionID == appState.activeAgentSessionID {
+                    AgentComposerWorktreeCreationCard(creation: creation)
+                        .frame(maxWidth: AgentDesign.chatMaxContentWidth)
+                }
+
                 if !appState.agentWorktreeChanges.isEmpty {
                     AgentComposerWorktreeSummaryBar()
                         .frame(maxWidth: AgentDesign.chatMaxContentWidth)
@@ -167,6 +173,67 @@ struct AgentChatComposer: View {
             hash = ((hash << 5) &+ hash) &+ UInt64(byte)
         }
         return String(hash, radix: 16)
+    }
+}
+
+private struct AgentComposerWorktreeCreationCard: View {
+    @EnvironmentObject var appState: AppState
+    let creation: AgentGitWorktreeCreation
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 9) {
+            HStack(spacing: 7) {
+                ProgressView()
+                    .controlSize(.small)
+                Text(creation.isCancelling
+                    ? L10n.GitWorktreeCreation.cancelling
+                    : L10n.GitWorktreeCreation.title)
+                    .font(.system(size: 12, weight: .semibold))
+                Text(creation.branchName)
+                    .font(.system(size: 11).monospaced())
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+                Spacer(minLength: 8)
+                Button(L10n.GitWorktreeCreation.cancel) {
+                    appState.cancelAgentGitWorktreeCreation()
+                }
+                .buttonStyle(.plain)
+                .font(.system(size: 12, weight: .medium))
+                .disabled(creation.isCancelling)
+            }
+
+            if let progress = creation.progress {
+                ProgressView(value: progress)
+                    .progressViewStyle(.linear)
+            }
+
+            ScrollView(.vertical) {
+                Text(visibleOutput)
+                    .font(.system(size: 11, design: .monospaced))
+                    .foregroundStyle(.secondary)
+                    .textSelection(.enabled)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .frame(maxHeight: 82)
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 10)
+        .background(
+            RoundedRectangle(cornerRadius: 10)
+                .fill(appState.editorSettings.interfaceSkin.palette.controlFill.opacity(0.58))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 10)
+                .stroke(Color.secondary.opacity(0.18), lineWidth: 1)
+        )
+    }
+
+    private var visibleOutput: String {
+        let lines = creation.output
+            .components(separatedBy: .newlines)
+            .filter { !$0.isEmpty }
+        return lines.suffix(8).joined(separator: "\n")
     }
 }
 

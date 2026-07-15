@@ -387,6 +387,7 @@ private struct AgentSidebarAccountMenuRow: View {
             .contentShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
         }
         .buttonStyle(.plain)
+        .focusable(false)
         .onHover { isHovered = $0 }
     }
 }

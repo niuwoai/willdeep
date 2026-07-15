@@ -219,6 +219,11 @@ struct SlashCommandInteractionTests {
 
 @Suite(.serialized)
 struct SomeIMBrowserLoginStatusTests {
+    @Test("connected account portal opens the some.im customer page")
+    func testCustomerPortalURL() {
+        #expect(SomeIMClient.customerPortalURL.absoluteString == "https://some.im/customer")
+    }
+
     @Test("browser login request always opens some.im control plane")
     func testBrowserLoginRequestUsesSomeIMControlPlane() throws {
         let request = try SomeIMClient.makeBrowserLoginRequest(
@@ -1251,6 +1256,34 @@ extension WillDeepTests {
         #expect(segments[0].kind == .terminalOperation)
         #expect(segments[0].count == 3)
         #expect(segments[0].title == "已执行 3 次终端操作")
+    }
+
+    @Test("successful terminal operations hide the duplicate live detail card")
+    func testSuccessfulTerminalOperationsHideFromLivePresentation() {
+        let calls = [
+            makeCall("terminal_send_command"),
+            makeCall("terminal_snapshot")
+        ]
+
+        #expect(AgentToolCallGrouping.livePresentationSegments(calls).isEmpty)
+    }
+
+    @Test("non-successful terminal operations keep the live detail card")
+    func testUnsettledOrFailedTerminalOperationsStayInLivePresentation() {
+        for status in [
+            AgentToolCallStatus.running,
+            .pendingApproval,
+            .awaitingConfirm,
+            .awaitingUserAnswer,
+            .failed,
+            .denied
+        ] {
+            let segments = AgentToolCallGrouping.livePresentationSegments([
+                makeCall("terminal_send_command", status: status)
+            ])
+            #expect(segments.count == 1)
+            #expect(segments[0].kind == .terminalOperation)
+        }
     }
 
     @Test("AgentToolCallGrouping splits when kind changes")

@@ -1,6 +1,6 @@
 # WillDeep Product Overview
 
-> Last updated: 2026-07-15 | Current version: v1.160.0-rc3
+> Last updated: 2026-07-15 | Current version: v1.161.0-rc4
 
 ## Positioning
 
@@ -12,6 +12,10 @@ WillDeep is configured for non-App-Store distribution without App Sandbox so it 
 
 ## 架构概览
 
+- **some.im 客户中心直达（1.161.0-rc4）** —— 设置页已连接账户区域的 some.im 入口直接通过系统默认浏览器打开 `https://some.im/customer`，不再先请求一次性 handoff-link，避免网络接口异常导致点击后没有动作。
+- **账户弹出菜单退出键盘焦点链（1.161.0-rc3）** —— 剩余点数、桌面宠物、设置和退出登录四个操作共用不可聚焦的菜单行，打开弹窗时不会再自动选中首项或绘制紫色焦点框；鼠标悬停、点击与辅助功能标签保持原有行为。
+- **思考状态行降噪（1.161.0-rc2）** —— 全屏对话和紧凑侧栏中的“正在思考”状态不再绘制上方横向分隔线；计时与两行实时 reasoning 预览保持不变，排队和上下文压缩等其他状态仍保留原有分隔提示。
+- **Git 工作树一键创建与实时反馈（1.161.0-rc1）** —— Composer 的工作树入口无需再确认分支名：优先从会话标题生成 `xedit-<语义名>-<短标识>`，无法提炼语义时使用易读随机名；创建期间持续展示 Git 输出、检出百分比与取消操作，取消后清理未完成的工作树和临时分支。终端工具在成功时只保留一次紧凑摘要，只有运行中、等待交互或失败状态继续显示详细卡片。
 - **Agent 本地路径弱化链接样式（1.160.0-rc3）** —— 历史消息内可点击的本地目录和文件路径使用正文黑灰色、中等字重及细下划线表达交互，不再继承高饱和系统蓝色或行内代码圆角背景；连续路径之间通过仅影响排版、不写入复制文本的尾部字偶距保持清晰间隔，并继续支持点击打开文件。
 - **工作区 Go 构建缓存命令自动审批（1.160.0-rc2）** —— Agent 命令策略能够识别前置环境变量和精确的 `$(pwd)` 工作区路径；`GOCACHE` / `GOMODCACHE` 位于工作区内时可自动批准构建写入，敏感变量、命令替换、凭据路径和工作区外路径仍保持升级确认。
 - **Chrome Native Messaging 自动注册（1.160.0-rc1）** —— WillDeep 每次启动会使用 App 内置 `willdeep-agent` 创建或修复当前用户的 Chrome Native Messaging launcher/manifest；扩展通过公开 manifest key 固定 ID，解压路径变化不再让 `allowed_origins` 失效。Service Worker 会消费预期的 `runtime.lastError`，宿主暂未就绪时只显示可诊断的断开状态。

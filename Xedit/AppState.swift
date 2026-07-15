@@ -118,6 +118,9 @@ final class AppState: ObservableObject {
     @Published var gitStatus = GitRepositoryStatus()
     @Published var agentWorkspaceGitStatus = GitRepositoryStatus()
     @Published var agentGitWorktrees: [AgentGitWorktree] = []
+    @Published var agentGitWorktreeCreation: AgentGitWorktreeCreation?
+    var agentGitWorktreeCreationTask: Task<Void, Never>?
+    var agentGitWorktreeProcessController: AgentGitWorktreeProcessController?
     @Published var isAgentPanelVisible = false
     @Published var agentComposerFocusRevision = 0
     @Published var agentConfiguration: AgentConfiguration {

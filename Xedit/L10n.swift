@@ -442,6 +442,24 @@ nonisolated enum L10n {
         static let switchWorkspace = String(localized: "composer.workspace.switch-workspace", defaultValue: "Switch workspace")
     }
 
+    enum GitWorktreeCreation {
+        static let title = String(localized: "git-worktree.creation.title", defaultValue: "Creating worktree")
+        static let cancel = String(localized: "git-worktree.creation.cancel", defaultValue: "Cancel")
+        static let cancelling = String(localized: "git-worktree.creation.cancelling", defaultValue: "Cancelling…")
+        static func starting(_ branchName: String) -> String {
+            String(
+                format: String(localized: "git-worktree.creation.starting", defaultValue: "[info] Creating branch %@"),
+                branchName
+            )
+        }
+        static func failed(_ details: String) -> String {
+            String(
+                format: String(localized: "git-worktree.creation.failed", defaultValue: "Could not create Git worktree: %@"),
+                details
+            )
+        }
+    }
+
     enum Command {
         static let closeTabShortcut = String(localized: "command.close-tab.shortcut", defaultValue: "⌘W")
         static let closeTabSubtitle = String(localized: "command.close-tab.subtitle", defaultValue: "Close the active tab")

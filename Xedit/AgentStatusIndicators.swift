@@ -733,8 +733,8 @@ struct PlanStatusPill: View {
 ///     服务器播放，主线程零参与；repeatForever 隐式动画则每帧产生
 ///     一次 SwiftUI 图事务，曾联手 App 顶层 @FocusedObject 把空闲
 ///     CPU 钉到 98%（1.58.0-rc9 修复，本文件所有脉动同此约束）。
-///   - 不显示文案。"正在思考"分割线已经在等首 token 那段时间承担解释职责，
-///     真的开始流式输出后那块分割线会自动让位，呼吸 icon 接力到底。
+///   - 不显示文案。"正在思考"状态行已经在等首 token 那段时间承担解释职责，
+///     真的开始流式输出后状态行会自动让位，呼吸 icon 接力到底。
 struct AgentBreathingIndicator: View {
     var body: some View {
         icon

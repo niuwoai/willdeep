@@ -191,6 +191,19 @@ enum AgentToolCallGrouping {
         flush()
         return result
     }
+
+    /// The live transcript already shows a compact inline summary for a
+    /// completed terminal interaction. Keeping the full-width working card
+    /// below it repeats the same information while the Agent continues
+    /// thinking. Terminal cards therefore disappear once every operation in
+    /// that segment succeeds, but remain visible for running, interactive,
+    /// failed, or denied states where the details still matter.
+    static func livePresentationSegments(_ calls: [AgentToolCall]) -> [AgentToolCallSegment] {
+        group(calls).filter { segment in
+            guard segment.kind == .terminalOperation else { return true }
+            return segment.calls.contains { $0.status != .succeeded }
+        }
+    }
 }
 
 nonisolated struct AgentToolActivitySummary: Equatable {

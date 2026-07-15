@@ -27,6 +27,24 @@ struct AgentSidebarAccountFooterTests {
         #expect(english.path == "/en/products/willdeep")
     }
 
+    @Test("account popover actions stay out of the keyboard focus chain")
+    func accountPopoverActionsAreNotFocusable() throws {
+        let repositoryRoot = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+        let sourceURL = repositoryRoot
+            .appendingPathComponent("Xedit", isDirectory: true)
+            .appendingPathComponent("AgentSidebarAccountFooter.swift")
+        let source = try String(contentsOf: sourceURL, encoding: .utf8)
+        let menuRow = try #require(source.range(of: "private struct AgentSidebarAccountMenuRow"))
+        let trailingSource = source[menuRow.lowerBound...]
+        let buttonStyle = try #require(trailingSource.range(of: ".buttonStyle(.plain)"))
+        let focusPolicy = try #require(trailingSource.range(of: ".focusable(false)"))
+
+        #expect(focusPolicy.lowerBound > buttonStyle.lowerBound)
+        #expect(trailingSource.distance(from: buttonStyle.lowerBound, to: focusPolicy.lowerBound) < 80)
+    }
+
     @Test("render account menu and footer for design QA")
     @MainActor
     func renderAccountChromeForDesignQA() throws {

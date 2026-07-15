@@ -8698,6 +8698,96 @@
         }
       }
     },
+    "git-worktree.creation.cancel" : {
+      "comment" : "Cancel an in-progress Git worktree creation",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Cancel"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "取消"
+          }
+        }
+      }
+    },
+    "git-worktree.creation.cancelling" : {
+      "comment" : "Git worktree cancellation status",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Cancelling…"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "正在取消…"
+          }
+        }
+      }
+    },
+    "git-worktree.creation.failed" : {
+      "comment" : "Git worktree creation failure with details",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Could not create Git worktree: %@"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "创建 Git 工作树失败：%@"
+          }
+        }
+      }
+    },
+    "git-worktree.creation.starting" : {
+      "comment" : "Initial Git worktree creation log line with branch name",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "[info] Creating branch %@"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "[信息] 正在创建分支 %@"
+          }
+        }
+      }
+    },
+    "git-worktree.creation.title" : {
+      "comment" : "Title of the in-progress Git worktree creation card",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Creating worktree"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "正在创建工作树"
+          }
+        }
+      }
+    },
     "composer.workspace.no-branch" : {
       "comment" : "Composer branch label when the workspace has no Git branch",
       "extractionState" : "manual",

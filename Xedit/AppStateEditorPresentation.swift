@@ -46,7 +46,7 @@ extension AppState {
         }
     }
 
-    /// 「正在思考」分割线下方的两行实时预览：当前流式 assistant 占位
+    /// 「正在思考」状态行下方的两行实时预览：当前流式 assistant 占位
     /// 消息正在累积的 reasoningContent。生命周期与指示器完全一致——
     /// 首个正文 token / 工具调用到达后指示器消失，预览随之消失。
     /// 不单独输出 reasoning 流的服务商（未开 thinking 的 Claude 等）

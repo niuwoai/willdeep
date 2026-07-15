@@ -492,8 +492,25 @@ struct GitWorktreeCoreTests {
         defer { try? FileManager.default.removeItem(at: root.deletingLastPathComponent()) }
 
         #expect(AppState.sanitizedGitWorktreeName(" feature/name ! ") == "feature-name")
+        #expect(AppState.defaultGitWorktreeBranchName(
+            sessionTitle: "Fix Login Flow",
+            fallbackStem: "quiet-orbit",
+            uniqueness: "A3F9"
+        ) == "xedit-fix-login-flow-a3f9")
+        #expect(AppState.defaultGitWorktreeBranchName(
+            sessionTitle: "新对话",
+            fallbackStem: "quiet-orbit",
+            uniqueness: "B7C2"
+        ) == "xedit-quiet-orbit-b7c2")
         let next = AppState.defaultGitWorktreeURL(repositoryRoot: root, branchName: "feature/name !")
         #expect(next.lastPathComponent == "Repo-feature-name-2")
+    }
+
+    @Test("git worktree checkout progress reads the latest percentage")
+    func testGitWorktreeProgressParsing() {
+        let output = "Preparing worktree\rUpdating files: 12% (12/100)\rUpdating files: 67% (67/100)"
+        #expect(AppState.gitWorktreeCheckoutProgress(from: output) == 0.67)
+        #expect(AppState.gitWorktreeCheckoutProgress(from: "Preparing worktree") == nil)
     }
 
     @Test("git worktree creation lists and detects worktree git-file roots")

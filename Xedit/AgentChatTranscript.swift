@@ -16,7 +16,7 @@
 //     `AgentChatHistoryTextView` from rc16), while the currently-streaming
 //     assistant message stays a SwiftUI bubble so Markdown formatting and
 //     the streaming cursor remain live. Tool call groups, queued messages,
-//     thinking divider, error / patch / worktree banners, and the bottom
+//     thinking status, error / patch / worktree banners, and the bottom
 //     scroll sentinel all live above and below those two surfaces in the
 //     same non-lazy VStack.
 //
@@ -346,32 +346,24 @@ struct AgentChatTranscript: View {
                         ForEach(toolCallGroupMessageIDs(in: rendered), id: \.self) { messageID in
                             let calls = toolCalls(for: messageID)
                             if !calls.isEmpty {
-                                let segments = AgentToolCallGrouping.group(calls)
-                                VStack(alignment: .leading, spacing: 8) {
-                                    AgentTurnFileActivityCard(
-                                        calls: calls,
-                                        showsToolActivity: false,
-                                        showsEditingActivity: false
-                                    )
-                                    ForEach(segments) { segment in
-                                        AgentToolCallGroup(
-                                            calls: segment.calls,
-                                            headline: segment.title,
-                                            headlineIcon: segment.kind.groupIcon
-                                        )
+                                let segments = AgentToolCallGrouping.livePresentationSegments(calls)
+                                if !segments.isEmpty {
+                                    VStack(alignment: .leading, spacing: 8) {
+                                        ForEach(segments) { segment in
+                                            AgentToolCallGroup(
+                                                calls: segment.calls,
+                                                headline: segment.title,
+                                                headlineIcon: segment.kind.groupIcon
+                                            )
+                                        }
                                     }
+                                    .id(toolGroupScrollID(for: messageID))
+                                    // Keep detailed working/error cards visually
+                                    // separate from the compact inline summary.
+                                    .padding(.top, 28)
+                                    .padding(.bottom, 6)
+                                    .frame(maxWidth: AgentDesign.chatMaxContentWidth, alignment: .leading)
                                 }
-                                .id(toolGroupScrollID(for: messageID))
-                                // rc2: bumped from 16→28 because in the TextKit
-                                // history path the assistant text view has no
-                                // intrinsic bottom inset, so the tool card sat
-                                // visually flush against the footer line
-                                // ("◷ 1m 9s ↑ 13.5k ↓ out 495"). Plus the
-                                // parent VStack's 18pt spacing the visible
-                                // gap is ~46pt — comfortably separated.
-                                .padding(.top, 28)
-                                .padding(.bottom, 6)
-                                .frame(maxWidth: AgentDesign.chatMaxContentWidth, alignment: .leading)
                             }
                         }
                     }

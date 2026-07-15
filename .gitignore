@@ -1,6 +1,7 @@
 .alma-snapshots
 DerivedData/
 build/
+.build/
 .codex-build/
 .codex/worktrees/
 Xedit/Generated/

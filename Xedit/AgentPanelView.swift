@@ -392,6 +392,7 @@ struct AgentThinkingDivider: View {
                         trailing: formatThinkingElapsed(
                             context.date.timeIntervalSince(startedAt)
                         ),
+                        showsSeparator: false,
                         leadingInset: leadingInset,
                         trailingInset: trailingInset
                     )
@@ -399,6 +400,7 @@ struct AgentThinkingDivider: View {
             } else {
                 AgentInlineStatusDivider(
                     text: L10n.AgentPanel.thinking,
+                    showsSeparator: false,
                     leadingInset: leadingInset,
                     trailingInset: trailingInset
                 )
@@ -446,17 +448,23 @@ private func formatThinkingElapsed(_ seconds: TimeInterval) -> String {
 struct AgentInlineStatusDivider: View {
     let text: String
     /// Optional trailing caption rendered next to the label — used by the
-    /// thinking divider to show live elapsed seconds.
+    /// thinking status to show live elapsed seconds.
     var trailing: String? = nil
     var systemImage: String? = nil
+    var showsSeparator = true
     var leadingInset: CGFloat = 0
     var trailingInset: CGFloat = 0
 
     var body: some View {
-        VStack(alignment: .leading, spacing: AgentInlineStatusLayout.ruleToLabelSpacing) {
-            Rectangle()
-                .fill(Color.secondary.opacity(AgentInlineStatusLayout.separatorOpacity))
-                .frame(height: 1)
+        VStack(
+            alignment: .leading,
+            spacing: showsSeparator ? AgentInlineStatusLayout.ruleToLabelSpacing : 0
+        ) {
+            if showsSeparator {
+                Rectangle()
+                    .fill(Color.secondary.opacity(AgentInlineStatusLayout.separatorOpacity))
+                    .frame(height: 1)
+            }
             HStack(spacing: AgentInlineStatusLayout.labelSpacing) {
                 if let systemImage {
                     Image(systemName: systemImage)

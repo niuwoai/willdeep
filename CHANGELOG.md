@@ -1,5 +1,57 @@
 # Changelog
 
+## 1.161.0-rc4 - 2026-07-15
+
+### Fixed
+
+- **some.im 账户入口恢复浏览器跳转。** 设置页已连接账户区域的 “Open some.im / 在浏览器打开” 不再依赖额外的 handoff-link 网络请求；点击后立即通过系统默认浏览器打开 `https://some.im/customer`。
+
+### Changed
+
+- 版本号从 **1.161.0-rc3** 递增为 **1.161.0-rc4**；Xcode App、Go agent、Help bundle、Computer Use Helper、Chrome 扩展、README badge、移动网关响应头契约与产品文档同步。
+
+---
+
+## 1.161.0-rc3 - 2026-07-15
+
+### Fixed
+
+- **账户弹出菜单不再自动获得键盘焦点。** 剩余点数、桌面宠物、设置和退出登录共用的菜单按钮退出焦点链，打开菜单时不再给首项绘制紫色焦点框，鼠标悬停与点击行为保持不变。
+
+### Changed
+
+- 版本号从 **1.161.0-rc2** 递增为 **1.161.0-rc3**；Xcode App、Go agent、Help bundle、Computer Use Helper、Chrome 扩展、README badge、移动网关响应头契约与产品文档同步。
+
+---
+
+## 1.161.0-rc2 - 2026-07-15
+
+### Fixed
+
+- **“正在思考”状态不再显示上方细线。** 全屏对话与紧凑侧栏共用无分隔线的思考状态样式，保留耗时计数和实时 reasoning 预览；排队、上下文压缩等其他状态提示不受影响。
+
+### Changed
+
+- 版本号从 **1.161.0-rc1** 递增为 **1.161.0-rc2**；Xcode App、Go agent、Help bundle、Computer Use Helper、Chrome 扩展、README badge、移动网关响应头契约与产品文档同步。
+
+---
+
+## 1.161.0-rc1 - 2026-07-15
+
+### Added
+
+- **Git 工作树改为一键创建并展示实时进度。** 创建入口不再要求手动确认分支名；WillDeep 会优先根据当前会话生成 `xedit-<语义名>-<短标识>`，标题不具备语义时使用易读的随机名称。创建期间在 Composer 上方持续显示 Git 输出、检出百分比与取消入口，取消后会清理未完成的工作树和临时分支。
+
+### Fixed
+
+- **成功的终端操作不再重复展示第二张详情卡。** 对话正文保留首次紧凑摘要；只有仍在运行、等待授权/确认、执行失败或被拒绝的终端操作才继续显示详细状态卡，且不会留下空白占位。
+
+### Changed
+
+- 版本号从 **1.160.0-rc3** 提升为 **1.161.0-rc1**；Xcode App、Go agent、Help bundle、Computer Use Helper、Chrome 扩展、README badge、移动网关响应头契约与产品文档同步。
+
+---
+
 ## 1.160.0-rc3 - 2026-07-15
 
 ### Fixed

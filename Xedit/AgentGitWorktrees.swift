@@ -45,6 +45,88 @@ struct AgentGitWorktreeCreateResult: Equatable {
 
 struct AgentGitWorktreeFailure: Error, Equatable {
     var message: String
+    var wasCancelled = false
+}
+
+struct AgentGitWorktreeCreation: Identifiable, Equatable {
+    let id: UUID
+    let sessionID: AgentSession.ID
+    let branchName: String
+    let startedAt: Date
+    var output: String
+    var progress: Double?
+    var isCancelling: Bool
+}
+
+nonisolated final class AgentGitWorktreeProcessController: @unchecked Sendable {
+    private let lock = NSLock()
+    private var process: Process?
+    private var cancelled = false
+
+    func attach(_ process: Process) {
+        lock.lock()
+        self.process = process
+        let shouldCancel = cancelled
+        lock.unlock()
+        if shouldCancel, process.isRunning {
+            process.terminate()
+        }
+    }
+
+    func cancel() {
+        lock.lock()
+        cancelled = true
+        let activeProcess = process
+        lock.unlock()
+        if let activeProcess, activeProcess.isRunning {
+            activeProcess.terminate()
+        }
+    }
+
+    var isCancelled: Bool {
+        lock.lock()
+        let value = cancelled
+        lock.unlock()
+        return value
+    }
+}
+
+nonisolated private final class AgentGitWorktreeOutputCollector: @unchecked Sendable {
+    private let limit: Int
+    private let onUpdate: @Sendable (String) -> Void
+    private let lock = NSLock()
+    private var data = Data()
+
+    init(limit: Int, onUpdate: @escaping @Sendable (String) -> Void) {
+        self.limit = limit
+        self.onUpdate = onUpdate
+    }
+
+    func append(_ chunk: Data) {
+        guard !chunk.isEmpty else { return }
+        lock.lock()
+        let remaining = max(0, limit - data.count)
+        if remaining > 0 {
+            data.append(chunk.prefix(remaining))
+        }
+        let snapshot = data
+        lock.unlock()
+        onUpdate(Self.visibleText(from: snapshot))
+    }
+
+    var stringValue: String {
+        lock.lock()
+        let snapshot = data
+        lock.unlock()
+        return Self.visibleText(from: snapshot)
+    }
+
+    private static func visibleText(from data: Data) -> String {
+        let decoded = String(data: data, encoding: .utf8) ?? AppState.decodeText(from: data)
+        return decoded
+            .replacingOccurrences(of: "\r\n", with: "\n")
+            .replacingOccurrences(of: "\r", with: "\n")
+    }
 }
 
 extension AppState {
@@ -140,13 +222,52 @@ extension AppState {
         return trimmed.isEmpty ? "worktree" : trimmed
     }
 
-    nonisolated static func defaultGitWorktreeBranchName(now: Date = Date()) -> String {
-        let formatter = DateFormatter()
-        formatter.calendar = Calendar(identifier: .gregorian)
-        formatter.locale = Locale(identifier: "en_US_POSIX")
-        formatter.timeZone = .current
-        formatter.dateFormat = "yyyyMMdd-HHmmss"
-        return "codex-worktree-\(formatter.string(from: now))"
+    nonisolated static func defaultGitWorktreeBranchName(
+        sessionTitle: String?,
+        fallbackStem: String? = nil,
+        uniqueness: String? = nil
+    ) -> String {
+        let semanticStem = semanticGitWorktreeStem(from: sessionTitle)
+        let randomStem = fallbackStem ?? randomGitWorktreeStem()
+        let stem = semanticStem ?? sanitizedGitWorktreeName(randomStem)
+        let token = sanitizedGitWorktreeName(
+            uniqueness ?? String(UUID().uuidString.prefix(4)).lowercased()
+        ).lowercased()
+        return "xedit-\(String(stem.prefix(40)))-\(token)"
+    }
+
+    nonisolated static func semanticGitWorktreeStem(from title: String?) -> String? {
+        guard let title else { return nil }
+        let trimmed = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return nil }
+        let placeholderTitles = ["new chat", "new conversation", "untitled", "新对话", "新会话", "未命名"]
+        guard !placeholderTitles.contains(trimmed.lowercased()) else { return nil }
+
+        let latin = trimmed.applyingTransform(.toLatin, reverse: false) ?? trimmed
+        let folded = latin.folding(options: [.diacriticInsensitive, .caseInsensitive], locale: Locale(identifier: "en_US_POSIX"))
+        let slug = sanitizedGitWorktreeName(folded).lowercased()
+        guard slug != "worktree", slug.count >= 2 else { return nil }
+        return slug
+    }
+
+    nonisolated static func randomGitWorktreeStem() -> String {
+        let adjectives = ["bright", "calm", "clever", "nimble", "quiet", "swift"]
+        let nouns = ["comet", "harbor", "maple", "orbit", "river", "sparrow"]
+        return "\(adjectives.randomElement() ?? "swift")-\(nouns.randomElement() ?? "orbit")"
+    }
+
+    nonisolated static func gitWorktreeCheckoutProgress(from output: String) -> Double? {
+        let pattern = #"Updating files:\s*([0-9]{1,3})%"#
+        guard let expression = try? NSRegularExpression(pattern: pattern, options: [.caseInsensitive]) else {
+            return nil
+        }
+        let range = NSRange(output.startIndex..<output.endIndex, in: output)
+        guard let match = expression.matches(in: output, range: range).last,
+              let valueRange = Range(match.range(at: 1), in: output),
+              let percentage = Double(output[valueRange]) else {
+            return nil
+        }
+        return min(1, max(0, percentage / 100))
     }
 
     nonisolated static func defaultGitWorktreeURL(
@@ -217,6 +338,120 @@ extension AppState {
         ))
     }
 
+    nonisolated static func createGitWorktreeStreaming(
+        from directoryURL: URL,
+        branchName rawBranchName: String,
+        controller: AgentGitWorktreeProcessController,
+        onOutput: @escaping @Sendable (String) -> Void
+    ) -> Result<AgentGitWorktreeCreateResult, AgentGitWorktreeFailure> {
+        guard let repositoryRoot = findGitRepositoryRoot(startingAt: directoryURL) else {
+            return .failure(AgentGitWorktreeFailure(message: "当前 workspace 不是 Git 仓库。"))
+        }
+
+        let branchName = sanitizedGitWorktreeName(rawBranchName)
+        let worktreeURL = defaultGitWorktreeURL(repositoryRoot: repositoryRoot, branchName: branchName)
+        let existingBranch = runGitCommand(
+            arguments: ["show-ref", "--verify", "--quiet", "refs/heads/\(branchName)"],
+            in: repositoryRoot,
+            allowedExitStatuses: [0, 1]
+        )
+        guard existingBranch.succeeded else {
+            return .failure(AgentGitWorktreeFailure(message: existingBranch.userMessage))
+        }
+        let createdNewBranch = existingBranch.status != 0
+        let arguments = createdNewBranch
+            ? ["worktree", "add", "-b", branchName, worktreeURL.path, "HEAD"]
+            : ["worktree", "add", worktreeURL.path, branchName]
+
+        if controller.isCancelled {
+            return .failure(AgentGitWorktreeFailure(message: "cancelled", wasCancelled: true))
+        }
+
+        let process = Process()
+        let outputPipe = Pipe()
+        let collector = AgentGitWorktreeOutputCollector(limit: maxGitOutputBytes, onUpdate: onOutput)
+        process.executableURL = URL(fileURLWithPath: "/usr/bin/script")
+        process.arguments = [
+            "-q", "-e", "-F", "/dev/null",
+            "/usr/bin/git", "-c", "core.quotePath=false"
+        ] + arguments
+        process.currentDirectoryURL = repositoryRoot
+        process.environment = ProcessInfo.processInfo.environment.merging([
+            "GIT_OPTIONAL_LOCKS": "0",
+            "GIT_TERMINAL_PROMPT": "0",
+            "GIT_PROGRESS_DELAY": "0",
+            "LC_ALL": "C"
+        ]) { current, _ in current }
+        process.standardOutput = outputPipe
+        process.standardError = outputPipe
+        outputPipe.fileHandleForReading.readabilityHandler = { handle in
+            collector.append(handle.availableData)
+        }
+
+        do {
+            try process.run()
+            controller.attach(process)
+        } catch {
+            outputPipe.fileHandleForReading.readabilityHandler = nil
+            return .failure(AgentGitWorktreeFailure(message: error.localizedDescription))
+        }
+
+        process.waitUntilExit()
+        outputPipe.fileHandleForReading.readabilityHandler = nil
+        if let tail = try? outputPipe.fileHandleForReading.readToEnd() {
+            collector.append(tail)
+        }
+        let output = collector.stringValue
+
+        guard !controller.isCancelled else {
+            cleanupCancelledGitWorktree(
+                worktreeURL: worktreeURL,
+                branchName: branchName,
+                createdNewBranch: createdNewBranch,
+                repositoryRoot: repositoryRoot
+            )
+            return .failure(AgentGitWorktreeFailure(message: "cancelled", wasCancelled: true))
+        }
+        guard process.terminationStatus == 0 else {
+            let details = output.trimmingCharacters(in: .whitespacesAndNewlines)
+            return .failure(AgentGitWorktreeFailure(
+                message: details.isEmpty ? "git exited with status \(process.terminationStatus)" : details
+            ))
+        }
+
+        let worktrees = listGitWorktrees(for: repositoryRoot)
+        let created = worktrees.first(where: { $0.url == worktreeURL }) ?? AgentGitWorktree(
+            path: worktreeURL.path,
+            head: nil,
+            branch: branchName,
+            isBare: false,
+            isDetached: false,
+            isPrunable: false,
+            pruneReason: nil,
+            isPrimary: false
+        )
+        return .success(AgentGitWorktreeCreateResult(worktree: created, output: output))
+    }
+
+    nonisolated private static func cleanupCancelledGitWorktree(
+        worktreeURL: URL,
+        branchName: String,
+        createdNewBranch: Bool,
+        repositoryRoot: URL
+    ) {
+        _ = runGitCommand(
+            arguments: ["worktree", "remove", "--force", worktreeURL.path],
+            in: repositoryRoot
+        )
+        if FileManager.default.fileExists(atPath: worktreeURL.path) {
+            try? FileManager.default.removeItem(at: worktreeURL)
+        }
+        _ = runGitCommand(arguments: ["worktree", "prune"], in: repositoryRoot)
+        if createdNewBranch {
+            _ = runGitCommand(arguments: ["branch", "-D", branchName], in: repositoryRoot)
+        }
+    }
+
     nonisolated static func removeGitWorktree(
         at worktreeURL: URL,
         from directoryURL: URL
@@ -265,41 +500,70 @@ extension AppState {
     }
 
     func createAgentGitWorktreeFromActiveWorkspace() {
-        guard activeAgentLocalWorkspaceURL != nil else {
-            showFileOperationError("先选择一个 Git workspace。")
-            return
-        }
-        promptForName(
-            title: "New Worktree",
-            message: "Enter a branch name. Xedit will create a sibling Git worktree and start an Agent session there.",
-            placeholder: Self.defaultGitWorktreeBranchName()
-        ) { [weak self] branchName in
-            self?.createAgentGitWorktree(branchName: branchName)
-        }
-    }
-
-    func createAgentGitWorktree(branchName: String) {
         guard let source = activeAgentLocalWorkspaceURL else {
             showFileOperationError("先选择一个 Git workspace。")
             return
         }
-        Task { [weak self] in
+        guard agentGitWorktreeCreation == nil else { return }
+        let branchName = Self.defaultGitWorktreeBranchName(sessionTitle: activeRuntime?.session.title)
+        createAgentGitWorktree(from: source, branchName: branchName)
+    }
+
+    func createAgentGitWorktree(from source: URL, branchName: String) {
+        guard let sessionID = activeAgentSessionID else { return }
+        let controller = AgentGitWorktreeProcessController()
+        agentGitWorktreeProcessController = controller
+        agentGitWorktreeCreation = AgentGitWorktreeCreation(
+            id: UUID(),
+            sessionID: sessionID,
+            branchName: branchName,
+            startedAt: Date(),
+            output: L10n.GitWorktreeCreation.starting(branchName),
+            progress: nil,
+            isCancelling: false
+        )
+
+        agentGitWorktreeCreationTask = Task { [weak self] in
             let result = await Task.detached(priority: .userInitiated) {
-                Self.createGitWorktree(from: source, branchName: branchName)
+                Self.createGitWorktreeStreaming(
+                    from: source,
+                    branchName: branchName,
+                    controller: controller
+                ) { output in
+                    Task { @MainActor [weak self] in
+                        guard let self,
+                              self.agentGitWorktreeCreation?.sessionID == sessionID else { return }
+                        self.agentGitWorktreeCreation?.output = output
+                        self.agentGitWorktreeCreation?.progress = Self.gitWorktreeCheckoutProgress(from: output)
+                    }
+                }
             }.value
 
             await MainActor.run {
                 guard let self else { return }
+                self.agentGitWorktreeCreationTask = nil
+                self.agentGitWorktreeProcessController = nil
+                self.agentGitWorktreeCreation = nil
                 switch result {
                 case .success(let created):
                     self.agentGitWorktrees = Self.listGitWorktrees(for: created.worktree.url)
-                    _ = self.moveActiveAgentSessionToWorkspace(at: created.worktree.path)
+                    if self.activeAgentSessionID == sessionID {
+                        _ = self.moveActiveAgentSessionToWorkspace(at: created.worktree.path)
+                    }
                     self.refreshAgentGitWorktrees()
                 case .failure(let failure):
-                    self.showFileOperationError("创建 Git worktree 失败：\(failure.message)")
+                    if !failure.wasCancelled {
+                        self.showFileOperationError(L10n.GitWorktreeCreation.failed(failure.message))
+                    }
                 }
             }
         }
+    }
+
+    func cancelAgentGitWorktreeCreation() {
+        guard agentGitWorktreeCreation != nil else { return }
+        agentGitWorktreeCreation?.isCancelling = true
+        agentGitWorktreeProcessController?.cancel()
     }
 
     func removeAgentGitWorktree(_ worktree: AgentGitWorktree) {
