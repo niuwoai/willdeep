@@ -85,6 +85,41 @@ struct AgentPlanProgressTests {
         #expect(next?.steps[1].status == .done)
     }
 
+    /// Some providers emit one progress block around every large section.
+    /// The parser must fold the whole reply, with later statuses winning.
+    @Test
+    func multipleProgressBlocksAreMergedInOrder() {
+        let plan = AgentPlan(
+            status: .approved,
+            steps: [
+                AgentPlan.Step(text: "Draft"),
+                AgentPlan.Step(text: "Write"),
+                AgentPlan.Step(text: "Verify")
+            ],
+            summary: ""
+        )
+        let reply = """
+        ```progress
+        1: in_progress
+        ```
+        Drafting is complete.
+        ```progress
+        1: done
+        2: in_progress
+        ```
+        Writing and verification are complete.
+        ```progress
+        2: done
+        3: done
+        ```
+        """
+
+        let next = AgentPlanParser.applyProgress(to: plan, from: reply)
+
+        #expect(next?.status == .done)
+        #expect(next?.steps.map(\.status) == [.done, .done, .done])
+    }
+
     /// Unknown status tokens are dropped — the rest of the block still applies.
     @Test
     func unknownStatusTokensIgnored() {
@@ -225,5 +260,114 @@ struct AgentPlanProgressTests {
         #expect(next?.steps[1].status == .inProgress)
         #expect(next?.steps[2].status == .failed)
         #expect(next?.steps[3].status == .skipped)
+    }
+
+    @Test("approved plan with unfinished work continues automatically")
+    func unfinishedApprovedPlanContinuesAutomatically() {
+        let plan = AgentPlan(
+            status: .executing,
+            steps: [
+                AgentPlan.Step(text: "A", status: .done),
+                AgentPlan.Step(text: "B", status: .inProgress)
+            ],
+            summary: ""
+        )
+
+        let decision = AgentPlanAutoContinuationPolicy.decision(
+            for: plan,
+            automaticContinuationCount: 0,
+            consecutiveNoProgressReplies: 0,
+            hasQueuedUserMessages: false
+        )
+
+        #expect(decision == .continueExecution)
+    }
+
+    @Test("automatic continuation yields to queued user input")
+    func automaticContinuationYieldsToQueuedUserInput() {
+        let plan = AgentPlan(
+            status: .executing,
+            steps: [AgentPlan.Step(text: "A", status: .inProgress)],
+            summary: ""
+        )
+
+        let decision = AgentPlanAutoContinuationPolicy.decision(
+            for: plan,
+            automaticContinuationCount: 0,
+            consecutiveNoProgressReplies: 0,
+            hasQueuedUserMessages: true
+        )
+
+        #expect(decision == .stop)
+    }
+
+    @Test("automatic continuation stops for terminal plans")
+    func automaticContinuationStopsForTerminalPlans() {
+        let plan = AgentPlan(
+            status: .done,
+            steps: [AgentPlan.Step(text: "A", status: .done)],
+            summary: ""
+        )
+
+        let decision = AgentPlanAutoContinuationPolicy.decision(
+            for: plan,
+            automaticContinuationCount: 0,
+            consecutiveNoProgressReplies: 0,
+            hasQueuedUserMessages: false
+        )
+
+        #expect(decision == .stop)
+    }
+
+    @Test("automatic continuation pauses after repeated no-progress replies")
+    func automaticContinuationPausesAfterRepeatedNoProgress() {
+        let plan = AgentPlan(
+            status: .executing,
+            steps: [AgentPlan.Step(text: "A", status: .inProgress)],
+            summary: ""
+        )
+
+        let decision = AgentPlanAutoContinuationPolicy.decision(
+            for: plan,
+            automaticContinuationCount: 1,
+            consecutiveNoProgressReplies: 2,
+            hasQueuedUserMessages: false
+        )
+
+        #expect(decision == .pauseAfterNoProgress)
+    }
+
+    @Test("automatic continuation has a hard safety limit")
+    func automaticContinuationHasHardSafetyLimit() {
+        let plan = AgentPlan(
+            status: .executing,
+            steps: [AgentPlan.Step(text: "A", status: .inProgress)],
+            summary: ""
+        )
+
+        let decision = AgentPlanAutoContinuationPolicy.decision(
+            for: plan,
+            automaticContinuationCount: AgentPlanAutoContinuationPolicy.maximumAutomaticContinuations,
+            consecutiveNoProgressReplies: 0,
+            hasQueuedUserMessages: false
+        )
+
+        #expect(decision == .pauseAfterLimit)
+    }
+
+    @Test("plan prompt requires complete deliverable coverage")
+    func planPromptRequiresCompleteDeliverableCoverage() {
+        let prompt = AgentContextBuilder.systemPrompt(
+            rootDirectory: nil,
+            openedFileURL: nil,
+            fileContent: "",
+            selectedText: "",
+            language: nil,
+            interactionMode: .plan,
+            currentPlan: nil
+        )
+
+        #expect(prompt.contains("complete delivery contract"))
+        #expect(prompt.contains("not just an outline, sample, first chapter"))
     }
 }

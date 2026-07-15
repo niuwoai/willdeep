@@ -366,9 +366,11 @@ extension AppState {
         persistActiveAgentSession()
 
         let prompt = """
-        Plan approved. Please proceed with executing the plan step by step. \
-        Emit a ```progress fenced block to mark each step as in_progress / done / failed as you go, \
-        and stop when every step has reached a terminal state.
+        Plan approved. Execute the complete plan step by step. Do not treat an outline, sample, first file, \
+        or first chapter as completion when an approved step promises the full deliverable. At the end of \
+        each reply, emit exactly one ```progress fenced block with the latest status of every step touched. \
+        If the response budget forces a pause, leave the current step in_progress so WillDeep can continue \
+        automatically. Stop only when every step has reached a terminal state.
         """
         guard let runtime = activeRuntime else { return }
         if runtime.isResponding {
