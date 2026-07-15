@@ -1,5 +1,18 @@
 # Changelog
 
+## 1.160.0-rc2 - 2026-07-15
+
+### Fixed
+
+- **工作区内 Go 构建缓存命令可安全自动审批。** 命令授权会先识别前置环境变量，并仅把精确的 `$(pwd)` 替换为当前工作区路径用于策略判断；`GOCACHE` / `GOMODCACHE` 指向工作区时可走 workspace-write 自动审批，包含命令替换、敏感变量名、凭据路径或工作区外路径时仍会升级确认。
+
+### Changed
+
+- 将剩余 5 个本地分支全部纳入 `main` 历史；对已经由主线更新实现覆盖的桌面宠物、移动端 workspace workflow、任务监控本地化和 CI 测试改动保留主线版本，避免旧代码倒灌，并补回 Android live acceptance 记录。
+- 版本号从 **1.160.0-rc1** 递增为 **1.160.0-rc2**；Xcode App、Go agent、Help bundle、Computer Use Helper、Chrome 扩展、README badge、移动网关响应头契约与产品文档同步。
+
+---
+
 ## 1.160.0-rc1 - 2026-07-15
 
 ### Added

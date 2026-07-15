@@ -1,6 +1,6 @@
 # WillDeep Product Overview
 
-> Last updated: 2026-07-15 | Current version: v1.160.0-rc1
+> Last updated: 2026-07-15 | Current version: v1.160.0-rc2
 
 ## Positioning
 
@@ -12,6 +12,7 @@ WillDeep is configured for non-App-Store distribution without App Sandbox so it 
 
 ## 架构概览
 
+- **工作区 Go 构建缓存命令自动审批（1.160.0-rc2）** —— Agent 命令策略能够识别前置环境变量和精确的 `$(pwd)` 工作区路径；`GOCACHE` / `GOMODCACHE` 位于工作区内时可自动批准构建写入，敏感变量、命令替换、凭据路径和工作区外路径仍保持升级确认。
 - **Chrome Native Messaging 自动注册（1.160.0-rc1）** —— WillDeep 每次启动会使用 App 内置 `willdeep-agent` 创建或修复当前用户的 Chrome Native Messaging launcher/manifest；扩展通过公开 manifest key 固定 ID，解压路径变化不再让 `allowed_origins` 失效。Service Worker 会消费预期的 `runtime.lastError`，宿主暂未就绪时只显示可诊断的断开状态。
 - **some.im credits 版本化刷新（1.159.0-rc1）** —— WillDeep 左侧会话栏底部持续展示 some.im 剩余 credits，低于 1000 万时使用随深浅外观适配的低饱和赭石棕提醒。AI 请求响应会读取服务端余额快照 header；credits 与账本/预占变更的 Unix 微秒时间点必须成对出现，客户端仅接受严格更新的时间点，避免并发响应或旧边缘快照覆盖新余额。无 AI 请求时以 4–7 分钟随机周期兜底刷新账户余额。
 - **Agent 对话滚动意图与消息来源（1.158.0-rc5）** —— 主对话与紧凑侧栏共同跟踪操作人是否仍在底部：处于底部时，流式文本和任务状态持续吸底；回看历史后，助手、工具及任务更新不再抢走当前位置；操作人主动发送消息会明确回到底部。宿主自动生成的计划执行指令带独立来源标记，只进入模型上下文，不再进入用户气泡、输入历史、对话缩略导航或移动端消息摘要；旧会话中的同类提示也会兼容隐藏。
