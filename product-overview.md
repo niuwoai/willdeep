@@ -1,6 +1,6 @@
 # WillDeep Product Overview
 
-> Last updated: 2026-07-15 | Current version: v1.156.0-rc3
+> Last updated: 2026-07-15 | Current version: v1.157.0-rc1
 
 ## Positioning
 
@@ -11,6 +11,9 @@ Official product domain: [willdeep.com](https://willdeep.com).
 WillDeep is configured for non-App-Store distribution without App Sandbox so it can access local project files with fewer permission interruptions.
 
 ## 架构概览
+
+- **Agent 账户状态与帮助入口（1.157.0-rc1）** —— 左下角账户状态栏可展开余额/用量、设置和退出登录子菜单；问号按钮打开帮助入口，账户状态和菜单文案支持中英文切换。
+- **WillDeep Browser 扩展更新链路（1.157.0-rc1）** —— Chrome 扩展通过 some.im App 更新计划自动检测版本，Options 页面显示版本状态，Service Worker 以 NEW 角标和通知提示用户手动替换解压目录；发布脚本生成无 `__MACOSX` 资源叉的 ZIP。
 
 - **Agent 顶栏直接展示全部侧栏入口（1.156.0-rc3）** —— 移除右侧“回到 Editor”高亮按钮及其分隔线，Editor 仅保留在应用菜单中；任务监控、媒体任务、网页组件、图片编辑等所有当前可用侧栏改为直接平铺图标，不再收进省略号二级菜单。Finder/外部 URL 打开和编辑文本文件的 Editor 能力保持不变。
 - **桌面宠物扩充至 24 种并升级情境动画（1.156.0-rc1）** —— 新增代码柴犬与月兔工程师两套透明像素画素材；工作/输入状态会在宠物前方显示带完整屏幕代码和键盘细节的电脑，并通过身体前倾、交替敲击、轻微压缩与屏幕辉光形成连续动作。待机状态每隔约 11 秒自动表演一次歪头、弹跳、爱心与闪光卖萌，庆祝状态复用更强的情绪特效。

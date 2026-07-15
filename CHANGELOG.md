@@ -1,5 +1,16 @@
 # Changelog
 
+## 1.157.0-rc1 - 2026-07-15
+
+### Added
+
+- **账户状态菜单与帮助入口**：Agent 左下角新增可点击账户状态栏，支持余额/用量、设置、退出登录子菜单，以及独立问号帮助入口；中英文文案统一走本地化资源。
+- **WillDeep Browser 扩展更新链路**：扩展新增 Options 页面、some.im 公开更新计划轮询、NEW 角标和版本通知；发布器输出无 macOS 资源叉的干净 ZIP，并补齐契约与版本比较测试。
+
+### Changed
+
+- 同步 Xedit App、Computer Use Helper、Help bundle、willdeep-agent 与产品文档版本到 `1.157.0-rc1`（新增账户菜单与 Chrome 扩展管理能力，提升功能版本）。
+
 ## 1.156.0-rc3 - 2026-07-15
 
 ### Changed
