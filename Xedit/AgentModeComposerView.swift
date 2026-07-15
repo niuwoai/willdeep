@@ -33,6 +33,11 @@ struct AgentChatComposer: View {
                         .frame(maxWidth: AgentDesign.chatMaxContentWidth)
                 }
 
+                if !appState.agentWorkspaceCollision.isEmpty {
+                    AgentComposerWorkspaceCollisionCard()
+                        .frame(maxWidth: AgentDesign.chatMaxContentWidth)
+                }
+
                 if !appState.agentWorktreeChanges.isEmpty {
                     AgentComposerWorktreeSummaryBar()
                         .frame(maxWidth: AgentDesign.chatMaxContentWidth)
@@ -104,10 +109,12 @@ struct AgentChatComposer: View {
         .onAppear {
             appState.refreshActiveAgentWorktreeChanges()
             appState.refreshAgentGitWorktrees()
+            appState.refreshAgentWorkspaceCollision()
         }
         .onCompatibleChange(of: appState.activeAgentSessionID) { _, _ in
             appState.refreshActiveAgentWorktreeChanges()
             appState.refreshAgentGitWorktrees()
+            appState.refreshAgentWorkspaceCollision()
             // 切 session 后重置 banner 状态：新 session 的 plan 该弹照弹。
             dismissedPlanFingerprint = nil
         }
@@ -234,6 +241,54 @@ private struct AgentComposerWorktreeCreationCard: View {
             .components(separatedBy: .newlines)
             .filter { !$0.isEmpty }
         return lines.suffix(8).joined(separator: "\n")
+    }
+}
+
+/// Soft warning shown when another session is running a turn in this
+/// session's exact local checkout. Non-blocking: it explains the clobber
+/// risk and, when the workspace is a Git repo, offers one-click worktree
+/// isolation. Not a git repo → warning only (no worktree escape hatch).
+private struct AgentComposerWorkspaceCollisionCard: View {
+    @EnvironmentObject var appState: AppState
+
+    var body: some View {
+        HStack(spacing: 8) {
+            Image(systemName: "exclamationmark.triangle.fill")
+                .font(.system(size: 12))
+                .foregroundStyle(.orange)
+
+            Text(L10n.AgentWorkspaceCollision.warning(appState.agentWorkspaceCollision.otherActiveSessionCount))
+                .font(.system(size: 12, weight: .medium))
+                .foregroundStyle(.primary)
+                .lineLimit(2)
+                .fixedSize(horizontal: false, vertical: true)
+
+            Spacer(minLength: 8)
+
+            if appState.agentWorkspaceGitStatus.isRepository {
+                Button {
+                    appState.createAgentGitWorktreeFromActiveWorkspace()
+                } label: {
+                    Text(L10n.AgentWorkspaceCollision.isolate)
+                        .font(.system(size: 12, weight: .semibold))
+                }
+                .buttonStyle(.plain)
+                .focusable(false)
+                .foregroundStyle(.orange)
+                .disabled(appState.agentGitWorktreeCreation != nil)
+                .help(L10n.AgentWorkspaceCollision.isolateHelp)
+            }
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 7)
+        .background(
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .fill(Color.orange.opacity(0.12))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .strokeBorder(Color.orange.opacity(0.35), lineWidth: 1)
+        )
     }
 }
 
@@ -536,6 +591,8 @@ private struct ComposerCard: View {
     /// prompt instead of making the user hunt for the completed tool card.
     @State private var pendingTerminalProtectedInput: TerminalShortcutProtectedPromptSet?
     @State private var lastAutoPresentedTerminalShortcutID: UUID?
+    @State private var attachmentNotice: String?
+    @State private var pendingUnknownAttachment: PendingUnknownAttachmentConfirmation?
 
     private var filteredSlashCommands: [SlashCommand] {
         SlashCommand.filter(
@@ -612,6 +669,28 @@ private struct ComposerCard: View {
             || !appState.agentSessionDocuments.isEmpty
             || !appState.agentKnowledgeFolders.isEmpty
         VStack(alignment: .leading, spacing: 8) {
+            if let attachmentNotice {
+                HStack(alignment: .top, spacing: 8) {
+                    Image(systemName: "exclamationmark.triangle.fill")
+                        .foregroundStyle(.orange)
+                    Text(attachmentNotice)
+                        .font(.system(size: 11, weight: .medium))
+                        .fixedSize(horizontal: false, vertical: true)
+                    Spacer(minLength: 4)
+                    Button {
+                        self.attachmentNotice = nil
+                    } label: {
+                        Image(systemName: "xmark")
+                    }
+                    .buttonStyle(.plain)
+                    .help(L10n.Composer.dismissAttachmentNotice)
+                }
+                .padding(.horizontal, 10)
+                .padding(.vertical, 8)
+                .background(Color.orange.opacity(0.10))
+                .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+            }
+
             AgentComposerRunContextBar()
 
             if !appState.agentPendingImages.isEmpty {
@@ -878,6 +957,19 @@ private struct ComposerCard: View {
                 inputFocused = true
             }
         }
+        .alert(item: $pendingUnknownAttachment) { pending in
+            Alert(
+                title: Text(L10n.Composer.unknownAttachmentConfirmationTitle(pending.url.lastPathComponent)),
+                message: Text(L10n.Composer.unknownAttachmentConfirmationMessage(
+                    pending.url.lastPathComponent,
+                    ByteCountFormatter.string(fromByteCount: Int64(pending.byteCount), countStyle: .file)
+                )),
+                primaryButton: .default(Text(L10n.Composer.attachUnknownFile)) {
+                    attachFile(pending.url, userConfirmedUnknownText: true)
+                },
+                secondaryButton: .cancel(Text(L10n.Composer.cancelUnknownFile))
+            )
+        }
     }
 
     /// Runs the currently-highlighted slash command. Returns true when a
@@ -1092,7 +1184,7 @@ private struct ComposerCard: View {
                 appState.toggleAgentWorkspaceOverview()
             }
         case .file(let url, _):
-            appState.attachAgentFile(url: url)
+            attachFile(url)
         }
         closeAtMenu()
         return true
@@ -1175,29 +1267,50 @@ private struct ComposerCard: View {
         }
     }
 
-    private func attachFile(_ url: URL) {
+    private func attachFile(_ url: URL, userConfirmedUnknownText: Bool = false) {
         var isDirectory: ObjCBool = false
         if FileManager.default.fileExists(atPath: url.path, isDirectory: &isDirectory),
            isDirectory.boolValue {
+            attachmentNotice = nil
             appState.addAgentKnowledgeFolder(url: url)
             return
         }
 
         if let mime = AgentImagePasteboardHelper.mimeType(forPath: url.path),
            let data = try? Data(contentsOf: url) {
+            attachmentNotice = nil
             ingest(data: data, mimeType: mime)
             return
         }
 
-        guard AgentComposerAttachmentSupport.isSupportedDocument(url) else {
-            appState.agentErrorMessage = L10n.Composer.unsupportedAttachment(url.lastPathComponent)
-            return
+        switch AgentComposerAttachmentSupport.selectionPolicy(for: url) {
+        case .supported:
+            guard !AgentComposerAttachmentSupport.documentExceedsSizeLimit(url) else {
+                attachmentNotice = L10n.Composer.attachmentTooLarge(url.lastPathComponent)
+                return
+            }
+            attachmentNotice = nil
+            appState.attachAgentFile(url: url)
+
+        case .unknownNeedsConfirmation(let byteCount):
+            if userConfirmedUnknownText {
+                attachmentNotice = nil
+                appState.attachAgentFile(url: url, treatsUnknownTypeAsText: true)
+            } else {
+                pendingUnknownAttachment = PendingUnknownAttachmentConfirmation(
+                    url: url,
+                    byteCount: byteCount
+                )
+            }
+
+        case .unknownTooLarge:
+            pendingUnknownAttachment = nil
+            attachmentNotice = L10n.Composer.unknownAttachmentTooLarge(url.lastPathComponent)
+
+        case .unknownUnreadable:
+            pendingUnknownAttachment = nil
+            attachmentNotice = L10n.Composer.unknownAttachmentUnreadable(url.lastPathComponent)
         }
-        guard !AgentComposerAttachmentSupport.documentExceedsSizeLimit(url) else {
-            appState.agentErrorMessage = L10n.Composer.attachmentTooLarge(url.lastPathComponent)
-            return
-        }
-        appState.attachAgentFile(url: url)
     }
 
     private func ingest(data: Data, mimeType: String) {
@@ -1210,6 +1323,12 @@ private struct ComposerCard: View {
               let rep = NSBitmapImageRep(data: tiff) else { return nil }
         return rep.representation(using: .png, properties: [:])
     }
+}
+
+private struct PendingUnknownAttachmentConfirmation: Identifiable {
+    let id = UUID()
+    let url: URL
+    let byteCount: Int
 }
 
 private struct ConsultationButton: View {

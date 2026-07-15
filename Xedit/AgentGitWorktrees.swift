@@ -43,6 +43,35 @@ struct AgentGitWorktreeCreateResult: Equatable {
     var output: String
 }
 
+/// Snapshot of "other sessions are also live in my exact working
+/// directory right now". Drives the composer's soft collision warning:
+/// concurrent sessions on the same checkout can silently clobber each
+/// other's edits, and a Git worktree is the escape hatch. Deliberately
+/// scoped to *currently-responding* runtimes so the hint stays quiet
+/// (it does NOT flag every past chat that ever touched the folder).
+struct AgentWorkspaceCollision: Equatable {
+    /// Absolute, standardized path of the active session's local checkout.
+    var workspacePath: String?
+    /// How many *other* runtimes are streaming a turn in that same path.
+    var otherActiveSessionCount: Int
+
+    init(workspacePath: String? = nil, otherActiveSessionCount: Int = 0) {
+        self.workspacePath = workspacePath
+        self.otherActiveSessionCount = otherActiveSessionCount
+    }
+
+    var isEmpty: Bool { otherActiveSessionCount <= 0 }
+}
+
+/// One runtime's inputs to the same-checkout collision count. Extracted
+/// so the counting rule is a pure function that unit tests can drive
+/// without standing up a MainActor `AppState` and live runtimes.
+struct AgentWorkspaceCollisionCandidate: Equatable {
+    var id: UUID
+    var isResponding: Bool
+    var localPath: String?
+}
+
 struct AgentGitWorktreeFailure: Error, Equatable {
     var message: String
     var wasCancelled = false
@@ -629,5 +658,62 @@ extension AppState {
             return URL(fileURLWithPath: path).standardizedFileURL
         }
         return nil
+    }
+
+    /// Recompute the same-checkout collision hint for the active session.
+    ///
+    /// Cheap and synchronous — it only walks the in-memory runtimes and
+    /// compares standardized paths, no git or filesystem calls — so it's
+    /// safe to fire from the hot agent-loop start/end and on every session
+    /// switch. Only *responding* runtimes count, and a runtime must be
+    /// alive to be responding, so iterating `agentRuntimes` catches every
+    /// concurrent worker. Equality-guarded to avoid redundant @Published
+    /// notifications (same-value writes still notify).
+    func refreshAgentWorkspaceCollision() {
+        guard let activeID = activeAgentSessionID,
+              let activePath = activeAgentLocalWorkspaceURL?.path else {
+            if !agentWorkspaceCollision.isEmpty || agentWorkspaceCollision.workspacePath != nil {
+                agentWorkspaceCollision = AgentWorkspaceCollision()
+            }
+            return
+        }
+
+        let candidates = agentRuntimes.map { id, runtime in
+            AgentWorkspaceCollisionCandidate(
+                id: id,
+                isResponding: runtime.isResponding,
+                localPath: runtime.localWorkspacePath
+            )
+        }
+        let count = Self.concurrentSessionCount(
+            activeID: activeID,
+            activePath: activePath,
+            among: candidates
+        )
+
+        let next = AgentWorkspaceCollision(workspacePath: activePath, otherActiveSessionCount: count)
+        if next != agentWorkspaceCollision {
+            agentWorkspaceCollision = next
+        }
+    }
+
+    /// Pure counting rule: how many *other* candidate runtimes are
+    /// currently responding in the same standardized local checkout as
+    /// the active session. Path comparison is standardized on both sides
+    /// so `/foo` and `/foo/` (or symlink-y forms) collapse to one dir.
+    nonisolated static func concurrentSessionCount(
+        activeID: UUID,
+        activePath: String,
+        among candidates: [AgentWorkspaceCollisionCandidate]
+    ) -> Int {
+        let normalizedActive = URL(fileURLWithPath: activePath).standardizedFileURL.path
+        var count = 0
+        for candidate in candidates where candidate.id != activeID {
+            guard candidate.isResponding, let path = candidate.localPath, !path.isEmpty else { continue }
+            if URL(fileURLWithPath: path).standardizedFileURL.path == normalizedActive {
+                count += 1
+            }
+        }
+        return count
     }
 }

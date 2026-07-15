@@ -321,6 +321,9 @@ nonisolated enum L10n {
         static let addSecretHelp = String(localized: "composer.add-secret.help", defaultValue: "Add another protected secret, up to three total")
         static let attachFileHelp = String(localized: "composer.attach-file.help", defaultValue: "Attach images or documents")
         static let attachFilePanelTitle = String(localized: "composer.attach-file.panel-title", defaultValue: "Attach Files or Knowledge Folders")
+        static let attachUnknownFile = String(localized: "composer.attach-file.unknown.confirm", defaultValue: "Attach as Text")
+        static let cancelUnknownFile = String(localized: "composer.attach-file.unknown.cancel", defaultValue: "Cancel")
+        static let dismissAttachmentNotice = String(localized: "composer.attach-file.notice.dismiss", defaultValue: "Dismiss attachment notice")
         static let attachmentInjectionWarning = String(localized: "composer.attachment.injection-warning", defaultValue: "Suspicious instructions detected")
         static let attachmentOCRUsed = String(localized: "composer.attachment.ocr-used", defaultValue: "Local OCR used")
         static let attachmentParseFailed = String(localized: "composer.attachment.parse-failed", defaultValue: "Could not parse this attachment")
@@ -373,6 +376,22 @@ nonisolated enum L10n {
         }
         static func unsupportedAttachment(_ a1: String) -> String {
             let template = String(localized: "composer.attach-file.unsupported", defaultValue: "%@ is not a supported attachment type.")
+            return String(format: template, a1)
+        }
+        static func unknownAttachmentConfirmationTitle(_ a1: String) -> String {
+            let template = String(localized: "composer.attach-file.unknown.title", defaultValue: "Attach %@ as text?")
+            return String(format: template, a1)
+        }
+        static func unknownAttachmentConfirmationMessage(_ a1: String, _ a2: String) -> String {
+            let template = String(localized: "composer.attach-file.unknown.message", defaultValue: "%@ has an unknown file type but is only %@. If you continue, WillDeep will decode and send it as plain text.")
+            return String(format: template, a1, a2)
+        }
+        static func unknownAttachmentTooLarge(_ a1: String) -> String {
+            let template = String(localized: "composer.attach-file.unknown.too-large", defaultValue: "%@ has an unknown file type and is larger than 8 KB, so it was not attached.")
+            return String(format: template, a1)
+        }
+        static func unknownAttachmentUnreadable(_ a1: String) -> String {
+            let template = String(localized: "composer.attach-file.unknown.unreadable", defaultValue: "%@ has an unknown file type and its size could not be read, so it was not attached.")
             return String(format: template, a1)
         }
         static let insertSecretAction = String(localized: "composer.insert-secret.action", defaultValue: "Insert")
@@ -2885,6 +2904,26 @@ nonisolated enum L10n {
         static func moreFiles(_ n: Int) -> String {
             String(format: String(localized: "agent-worktree-summary.more-files", defaultValue: "%d more files"), n)
         }
+    }
+
+    enum AgentWorkspaceCollision {
+        static func warning(_ n: Int) -> String {
+            String(
+                format: String(
+                    localized: "agent-workspace-collision.warning",
+                    defaultValue: "Another %d session(s) are working in this same folder — edits may overwrite each other."
+                ),
+                n
+            )
+        }
+        static let isolate = String(
+            localized: "agent-workspace-collision.isolate",
+            defaultValue: "Isolate in worktree"
+        )
+        static let isolateHelp = String(
+            localized: "agent-workspace-collision.isolate.help",
+            defaultValue: "Create a separate Git worktree and move this conversation there so it no longer shares the checkout"
+        )
     }
 
 }

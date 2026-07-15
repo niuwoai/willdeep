@@ -297,6 +297,18 @@ final class AgentRuntime: ObservableObject, Identifiable {
         return availability
     }
 
+    /// The runtime's current local checkout path, if it's bound to one.
+    /// Mirrors the resolution order of the workspace-availability helpers
+    /// but never throws or diagnoses — purely a read for lightweight UI
+    /// signals like the same-directory collision hint. `nil` for remote
+    /// runtimes or an unbound session.
+    var localWorkspacePath: String? {
+        guard let path = workspaceLocation?.localPath ?? workspaceRootPath, !path.isEmpty else {
+            return nil
+        }
+        return path
+    }
+
     // MARK: - Persistence
 
     /// Push the runtime's persisted-shape state back onto `session`

@@ -407,12 +407,18 @@ extension AppState {
 
     @MainActor
     func runAgentLoop(for runtime: AgentRuntime, configuration: AgentConfiguration) async {
+        // This turn just went live (isResponding was set true by the caller).
+        // Refresh the same-checkout collision hint so the foreground composer
+        // reflects a background session now working in its directory.
+        refreshAgentWorkspaceCollision()
         defer {
             let shouldConsumeQueueAfterStop = runtime.shouldConsumeQueueAfterStop
             runtime.isResponding = false
             runtime.turnStartedAt = nil
             runtime.requestTask = nil
             runtime.shouldConsumeQueueAfterStop = false
+            // Turn finished — one fewer concurrent worker on this checkout.
+            refreshAgentWorkspaceCollision()
             captureAgentPlanFromLatestMessage(for: runtime)
             captureAgentGoalDefinitionFromLatestMessage(for: runtime)
             captureAgentGoalEvaluationFromLatestMessage(for: runtime)
