@@ -28,3 +28,4 @@ xcuserdata/
 *.log
 .tmp/
 .gocache/
+/dist/chrome-extension/

@@ -1,6 +1,6 @@
 # WillDeep Browser Extension
 
-> Version: 1.102.0-rc3
+> Version: 1.157.0-rc1
 
 This extension is the default Chrome profile bridge for WillDeep. It is meant
 for workflows where the user wants WillDeep to operate already-signed-in pages,
@@ -33,6 +33,27 @@ such as Feishu, DingTalk, GitHub, CMS, dashboards, and internal tools.
    ```text
    willdeep-agent chrome-native-host
    ```
+
+## Install From some.im
+
+1. Open `https://some.im/products/willdeep/browser-extension`.
+2. Download and unzip the current release.
+3. Open `chrome://extensions`, enable Developer Mode, and choose **Load unpacked**.
+4. Select the unzipped `WillDeep-Browser` directory.
+5. Finish the native host setup shown on the download page.
+
+This extension is not distributed through Chrome Web Store. Chrome therefore
+does not permit a silent in-place update. The Options page checks the managed
+some.im release plan after it opens, shortly after Chrome starts, and every six
+hours. When a newer version is available, it shows a badge/notification and
+opens the download page for an explicit manual replacement.
+
+The managed release target is:
+
+- `app_id`: `willdeep-browser-extension`
+- `platform`: `chrome`
+- `channel`: `stable` or `beta`
+- public feed: `GET /api/v1/public/app-updates/latest`
 
 For packaged releases, WillDeep should generate the native host manifest after
 the extension ID is known.

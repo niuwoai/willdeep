@@ -151,176 +151,27 @@ struct AgentSessionsSidebar: View {
 
     @ViewBuilder
     private var someIMAccountFooter: some View {
-        Divider()
-        VStack(spacing: 0) {
-            if let update = appState.availableAppUpdate {
-                appUpdateBanner(update)
+        AgentSidebarAccountFooter(
+            account: someIMAccount,
+            isRefreshingAccount: isRefreshingSomeIMAccount,
+            accountStatus: someIMAccountStatus,
+            onOpenAccount: { openSomeIMSettings() },
+            onOpenLogin: { openSomeIMSettings(autogenerateBrowserLogin: true) },
+            onRefreshAccount: refreshSomeIMAccount,
+            onOpenSettings: {
+                EditorSettingsNavigation.shared.open(.typography, appState: appState)
+            },
+            onLogOut: {
+                SomeIMIntegrationStore.logout()
+                appState.clearSomeIMProvider()
+                someIMAccount = nil
+                someIMAccountStatus = ""
+            },
+            onOpenHelp: {
+                NSWorkspace.shared.open(AgentSidebarAccountLinks.helpURL())
             }
-            HStack(spacing: 8) {
-                if let account = someIMAccount {
-                    Button {
-                        // Logged in -> open the some.im tab in Settings (not the browser).
-                        openSomeIMSettings()
-                    } label: {
-                        HStack(spacing: 8) {
-                            someIMAvatar(title: account.displayName, avatarURL: account.avatarURL, isAnonymous: false)
-                            VStack(alignment: .leading, spacing: 1) {
-                                Text(account.displayName)
-                                    .font(.system(size: 11, weight: .semibold))
-                                    .foregroundStyle(.primary)
-                                    .lineLimit(1)
-                                Text(L10n.Sidebar.someIMCredits(account.compactDisplayCredits))
-                                    .font(.system(size: 10, weight: .medium))
-                                    .foregroundStyle(.secondary)
-                                    .monospacedDigit()
-                                    .lineLimit(1)
-                            }
-                            Spacer(minLength: 0)
-                            Image(systemName: "gearshape")
-                                .font(.system(size: 10, weight: .semibold))
-                                .foregroundStyle(.tertiary)
-                        }
-                        .padding(.horizontal, 10)
-                        .frame(height: 42)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .contentShape(Rectangle())
-                    }
-                    .buttonStyle(.plain)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .help(someIMAccountStatus.isEmpty ? L10n.Sidebar.someIMSettingsTooltip : someIMAccountStatus)
-
-                    Button {
-                        refreshSomeIMAccount()
-                    } label: {
-                        if isRefreshingSomeIMAccount {
-                            ProgressView()
-                                .controlSize(.small)
-                                .scaleEffect(0.7)
-                                .frame(width: 22, height: 22)
-                        } else {
-                            Image(systemName: "arrow.clockwise")
-                                .font(.system(size: 11, weight: .semibold))
-                                .foregroundStyle(.secondary)
-                                .frame(width: 22, height: 22)
-                        }
-                    }
-                    .buttonStyle(.plain)
-                    .disabled(isRefreshingSomeIMAccount)
-                    .help(L10n.Sidebar.someIMRefreshTooltip)
-                } else {
-                    Button {
-                        openSomeIMSettings(autogenerateBrowserLogin: true)
-                    } label: {
-                        HStack(spacing: 8) {
-                            someIMAvatar(title: "", avatarURL: nil, isAnonymous: true)
-                            VStack(alignment: .leading, spacing: 1) {
-                                Text(L10n.Sidebar.someIMAccountTitle)
-                                    .font(.system(size: 11, weight: .semibold))
-                                    .foregroundStyle(.primary)
-                                    .lineLimit(1)
-                                Text(L10n.Sidebar.someIMNotLoggedIn)
-                                    .font(.system(size: 10, weight: .medium))
-                                    .foregroundStyle(.secondary)
-                                    .lineLimit(1)
-                            }
-                            Spacer(minLength: 0)
-                            Image(systemName: "gearshape")
-                                .font(.system(size: 10, weight: .semibold))
-                                .foregroundStyle(.tertiary)
-                        }
-                        .padding(.horizontal, 10)
-                        .frame(height: 42)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .contentShape(Rectangle())
-                    }
-                    .buttonStyle(.plain)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .simultaneousGesture(TapGesture().onEnded {
-                        openSomeIMSettings(autogenerateBrowserLogin: true)
-                    })
-                    .help(L10n.Sidebar.someIMNotLoggedInTooltip)
-                }
-            }
-        }
-        .padding(.horizontal, 8)
-        .padding(.vertical, 7)
-        .background(appState.editorSettings.interfaceSkin.palette.controlFill.opacity(0.48))
-        .contentShape(Rectangle())
-    }
-
-    private func appUpdateBanner(_ update: AppUpdateMeta) -> some View {
-        HStack(spacing: 8) {
-            Image(systemName: "arrow.down.circle.fill")
-                .font(.system(size: 15, weight: .semibold))
-                .foregroundStyle(appState.editorSettings.interfaceSkin.palette.accent)
-            VStack(alignment: .leading, spacing: 1) {
-                Text(L10n.AppUpdate.sidebarTitle(update.version))
-                    .font(.system(size: 11, weight: .semibold))
-                    .foregroundStyle(.primary)
-                    .lineLimit(1)
-                Text(L10n.AppUpdate.sidebarSubtitle)
-                    .font(.system(size: 10, weight: .medium))
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
-            }
-            Spacer(minLength: 0)
-            Button {
-                appState.downloadAvailableAppUpdate()
-            } label: {
-                if appState.isDownloadingAppUpdate {
-                    ProgressView()
-                        .controlSize(.small)
-                        .scaleEffect(0.7)
-                } else {
-                    Text(L10n.AppUpdate.sidebarAction)
-                        .font(.system(size: 10, weight: .semibold))
-                }
-            }
-            .buttonStyle(.borderless)
-            .disabled(appState.isDownloadingAppUpdate)
-            .help(L10n.AppUpdate.sidebarActionHelp)
-        }
-        .padding(.horizontal, 10)
-        .padding(.vertical, 8)
-        .background(
-            RoundedRectangle(cornerRadius: 8)
-                .fill(appState.editorSettings.interfaceSkin.palette.accent.opacity(0.12))
         )
-        .padding(.bottom, 6)
-    }
-
-    private func someIMAvatar(title: String, avatarURL: String?, isAnonymous: Bool) -> some View {
-        ZStack {
-            Circle()
-                .fill(isAnonymous ? Color.secondary.opacity(0.16) : appState.editorSettings.interfaceSkin.palette.accent.opacity(0.22))
-            if let avatarURL,
-               let url = URL(string: avatarURL),
-               ["http", "https"].contains(url.scheme?.lowercased() ?? "") {
-                AsyncImage(url: url) { phase in
-                    switch phase {
-                    case .success(let image):
-                        image
-                            .resizable()
-                            .scaledToFill()
-                    default:
-                        Text(someIMAvatarInitials(from: title))
-                            .font(.system(size: 10, weight: .bold))
-                            .foregroundStyle(appState.editorSettings.interfaceSkin.palette.accent)
-                    }
-                }
-                .clipShape(Circle())
-            } else if isAnonymous {
-                Image(systemName: "person.crop.circle")
-                    .font(.system(size: 17, weight: .semibold))
-                    .foregroundStyle(.secondary)
-            } else {
-                Text(someIMAvatarInitials(from: title))
-                    .font(.system(size: 10, weight: .bold))
-                    .foregroundStyle(appState.editorSettings.interfaceSkin.palette.accent)
-            }
-        }
-        .frame(width: 28, height: 28)
-        .clipShape(Circle())
+        .environmentObject(appState)
     }
 
     private var primaryActions: some View {
@@ -908,12 +759,6 @@ struct AgentSessionsSidebar: View {
             autogenerateBrowserLogin: autogenerateBrowserLogin,
             appState: appState
         )
-    }
-
-    private func someIMAvatarInitials(from value: String) -> String {
-        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard let first = trimmed.first else { return "S" }
-        return String(first).uppercased()
     }
 
     private func workspaceDisplayName(
