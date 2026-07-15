@@ -12,6 +12,7 @@ struct AgentPanelView: View {
     @EnvironmentObject var appState: AppState
     @FocusState private var inputFocused: Bool
     @State private var isJobsDrawerOpen = false
+    @State private var isFollowingTranscriptBottom = true
     private static let bottomScrollID = "agent-panel-transcript-bottom"
 
     var body: some View {
@@ -183,16 +184,31 @@ struct AgentPanelView: View {
                         .id(Self.bottomScrollID)
                 }
                 .padding(10)
+                .background {
+                    AgentTranscriptScrollObserver(
+                        isFollowingBottom: $isFollowingTranscriptBottom
+                    )
+                    .frame(width: 0, height: 0)
+                }
             }
             // Watch count, not the array — token-by-token streaming
             // mutates `messages[i].content`, and observing the whole
             // array fires `scrollTo` on every token. See the longer
             // comment in AgentChatTranscript.
-            .onCompatibleChange(of: appState.agentMessages.count) { _, _ in
-                proxy.scrollTo(Self.bottomScrollID, anchor: .bottom)
+            .onCompatibleChange(of: appState.agentMessages.count) { oldCount, newCount in
+                let appendedMessage = newCount > oldCount ? appState.agentMessages.last : nil
+                guard AgentTranscriptScrollPolicy.shouldScrollAfterAppending(
+                    appendedMessage,
+                    isFollowingBottom: isFollowingTranscriptBottom
+                ) else { return }
+                if appendedMessage?.isOperatorInput == true {
+                    isFollowingTranscriptBottom = true
+                }
+                scrollToBottom(using: proxy)
             }
             .onCompatibleChange(of: appState.agentToolCalls.count) { _, _ in
-                proxy.scrollTo(Self.bottomScrollID, anchor: .bottom)
+                guard isFollowingTranscriptBottom else { return }
+                scrollToBottom(using: proxy)
             }
         }
     }
@@ -205,7 +221,16 @@ struct AgentPanelView: View {
             // bubbles (the right-side jobs drawer is the UI for
             // them). Any other `.system` message in history is
             // also internal plumbing, so filter the whole role.
-            message.role != .tool && message.role != .system && !isEmptyThinkingPlaceholder(message)
+            message.role != .tool
+                && message.role != .system
+                && !message.isHostInstruction
+                && !isEmptyThinkingPlaceholder(message)
+        }
+    }
+
+    private func scrollToBottom(using proxy: ScrollViewProxy) {
+        DispatchQueue.main.async {
+            proxy.scrollTo(Self.bottomScrollID, anchor: .bottom)
         }
     }
 

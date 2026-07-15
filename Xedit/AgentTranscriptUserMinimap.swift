@@ -30,7 +30,7 @@ struct AgentTranscriptTurnSummary: Identifiable, Equatable {
         toolCalls: [AgentToolCall]
     ) -> [AgentTranscriptTurnSummary] {
         var result: [AgentTranscriptTurnSummary] = []
-        for (index, message) in messages.enumerated() where message.role == .user {
+        for (index, message) in messages.enumerated() where message.isOperatorInput {
             var assistantText = ""
             var files: [String] = []
             var cursor = index + 1

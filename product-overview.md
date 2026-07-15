@@ -1,6 +1,6 @@
 # WillDeep Product Overview
 
-> Last updated: 2026-07-15 | Current version: v1.158.0-rc4
+> Last updated: 2026-07-15 | Current version: v1.158.0-rc5
 
 ## Positioning
 
@@ -12,6 +12,7 @@ WillDeep is configured for non-App-Store distribution without App Sandbox so it 
 
 ## 架构概览
 
+- **Agent 对话滚动意图与消息来源（1.158.0-rc5）** —— 主对话与紧凑侧栏共同跟踪操作人是否仍在底部：处于底部时，流式文本和任务状态持续吸底；回看历史后，助手、工具及任务更新不再抢走当前位置；操作人主动发送消息会明确回到底部。宿主自动生成的计划执行指令带独立来源标记，只进入模型上下文，不再进入用户气泡、输入历史、对话缩略导航或移动端消息摘要；旧会话中的同类提示也会兼容隐藏。
 - **桌面宠物输入动画回归纯宠物表现（1.158.0-rc4）** —— 输入状态移除像素电脑、屏幕辉光和电脑浮动，只保留宠物本体的前倾、敲击节奏与轻微压缩回弹；待机卖萌、庆祝特效和 24 种宠物形象保持不变。
 - **Agent 工作区乐观并发保护（1.158.0-rc3）** —— 每次模型调用前都会生成包含仓库/worktree 身份、HEAD、分支、暂存区、合并状态和变更文件内容的 revision；执行 `git add`、`commit`、`merge`、`push` 等高风险 Git 变更前，宿主在 `~/.willdeep/locks/workspace-mutations` 的跨进程仓库锁内执行 compare-and-swap。发现人类编辑或其他会话写入后会阻止操作、报告变化路径和相关会话，并要求重新检查与测试；一次命令只允许一个 Git 变更，后台 Git 变更不予执行。项目构建守卫也会在排队取得 workspace 锁后刷新源码指纹，确保缓存与产物绑定实际开始构建时的代码。
 - **Agent 运行上下文与会话级终端路由（1.157.0）** —— Composer 顶部持续显示当前项目、本地主工作区或新 worktree 运行位置及真实 Git 分支，并可直接创建隔离 worktree。Claude Code / Codex 委派任务默认在侧边栏终端中可见执行；每个对话维护独立的终端标签绑定，工具可用 `terminal_tab_id` 精确指定标签，未指定时也只访问当前会话绑定标签，绝不拿任意 active 标签顶包。执行中的标签受关闭和闲置回收保护，用户切换标签时会显式更新会话绑定。

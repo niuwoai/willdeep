@@ -111,15 +111,17 @@ extension AppState: AgentMobileGatewayControlling {
 
     var mobileGatewayQueuedMessages: [AgentMobileGatewayQueuedMessageSnapshot] {
         mobileGatewayLiveRuntimes.flatMap { runtime in
-            runtime.queuedMessages.map { message in
-                AgentMobileGatewayQueuedMessageSnapshot(
-                    id: message.id,
-                    textPreview: Self.mobileGatewayQueuedTextPreview(message),
-                    imageCount: message.images.count,
-                    textAttachmentCount: message.textAttachments.count,
-                    sessionID: runtime.id
-                )
-            }
+            runtime.queuedMessages
+                .filter { $0.source == .operatorInput }
+                .map { message in
+                    AgentMobileGatewayQueuedMessageSnapshot(
+                        id: message.id,
+                        textPreview: Self.mobileGatewayQueuedTextPreview(message),
+                        imageCount: message.images.count,
+                        textAttachmentCount: message.textAttachments.count,
+                        sessionID: runtime.id
+                    )
+                }
         }
     }
 
@@ -127,7 +129,7 @@ extension AppState: AgentMobileGatewayControlling {
         mobileGatewayLiveRuntimes.flatMap { runtime in
             runtime.messages
                 .filter { message in
-                    message.role == .user ||
+                    message.isOperatorInput ||
                     message.role == .assistant ||
                     message.role == .system
                 }

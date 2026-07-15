@@ -183,6 +183,7 @@ struct AgentChatTranscript: View {
     @State private var conversationSearchQuery = ""
     @State private var conversationSearchMatchCount = 0
     @State private var conversationSearchActiveIndex = 0
+    @State private var isFollowingTranscriptBottom = true
 
     var body: some View {
         ZStack(alignment: .topTrailing) {
@@ -493,6 +494,12 @@ struct AgentChatTranscript: View {
                 .padding(.horizontal, AgentDesign.chatHorizontalInset)
                 .padding(.vertical, 20)
                 .frame(maxWidth: .infinity, alignment: .leading)
+                .background {
+                    AgentTranscriptScrollObserver(
+                        isFollowingBottom: $isFollowingTranscriptBottom
+                    )
+                    .frame(width: 0, height: 0)
+                }
             }
             // CRITICAL: only react to count, not the whole array.
             // Pre-fix this watched `appState.agentMessages` (the full
@@ -509,34 +516,39 @@ struct AgentChatTranscript: View {
             // message is appended. The target is a stable bottom
             // sentinel because historical messages are folded into
             // one NSTextView and no longer expose per-message ids.
-                .onCompatibleChange(of: appState.agentMessages.count) { _, _ in
+                .onCompatibleChange(of: appState.agentMessages.count) { oldCount, newCount in
                     guard !isConversationSearchActive else { return }
-                    proxy.scrollTo(Self.bottomScrollID, anchor: .bottom)
+                    let appendedMessage = newCount > oldCount ? appState.agentMessages.last : nil
+                    guard AgentTranscriptScrollPolicy.shouldScrollAfterAppending(
+                        appendedMessage,
+                        isFollowingBottom: isFollowingTranscriptBottom
+                    ) else { return }
+                    if appendedMessage?.isOperatorInput == true {
+                        isFollowingTranscriptBottom = true
+                    }
+                    scrollToBottom(using: proxy)
                 }
                 .onCompatibleChange(of: appState.agentToolCalls.count) { _, _ in
-                    guard !isConversationSearchActive else { return }
-                    proxy.scrollTo(Self.bottomScrollID, anchor: .bottom)
+                    guard !isConversationSearchActive, isFollowingTranscriptBottom else { return }
+                    scrollToBottom(using: proxy)
                 }
                 .onCompatibleChange(of: appState.agentLearningEvents.count) { _, _ in
-                    guard !isConversationSearchActive else { return }
-                    proxy.scrollTo(Self.bottomScrollID, anchor: .bottom)
+                    guard !isConversationSearchActive, isFollowingTranscriptBottom else { return }
+                    scrollToBottom(using: proxy)
                 }
                 .onCompatibleChange(of: appState.agentQueuedMessages.count) { _, _ in
-                    guard !isConversationSearchActive else { return }
-                    proxy.scrollTo(Self.bottomScrollID, anchor: .bottom)
+                    guard !isConversationSearchActive, isFollowingTranscriptBottom else { return }
+                    scrollToBottom(using: proxy)
                 }
-            // 1.130.0-rc4：回合结束补一次到底滚动。流式期间只按「条数
-            // 变化」滚动（见上方 CRITICAL 注释——逐 token 滚动会把主线
-            // 程钉死在布局里），但 assistant 消息是流式开始时就 append
-            // 的：滚动发生在它还近乎空白的那一刻，之后内容在视口下方
-            // 持续长高、条数不变、再无滚动，长回复结束时视口停在答案
-            // 中段。这里watch isAgentResponding 的 true→false 翻转，
-            // 等一帧让 TextKit 历史折叠与布局落定后一次性滚到底。
+            // AppKit observer 会在操作人仍跟随底部时吸收流式内容增长，
+            // 避免逐 token 触发 SwiftUI scrollTo。回合结束后仍补一次稳定
+            // 锚点滚动，用于收敛 TextKit 历史折叠造成的最后一帧高度变化；
+            // 操作人已上滚回看时则保持当前位置不动。
                 .onCompatibleChange(of: appState.isAgentResponding) { _, nowResponding in
-                    guard !nowResponding, !isConversationSearchActive else { return }
-                    DispatchQueue.main.async {
-                        proxy.scrollTo(Self.bottomScrollID, anchor: .bottom)
-                    }
+                    guard !nowResponding,
+                          !isConversationSearchActive,
+                          isFollowingTranscriptBottom else { return }
+                    scrollToBottom(using: proxy)
                 }
 
             // 切走 app 再切回来时,SwiftUI 会重新布局 ScrollView,默认
@@ -548,12 +560,13 @@ struct AgentChatTranscript: View {
                     // 偶尔会落空(目标还没拿到最终高度)。
                     DispatchQueue.main.async {
                         guard !isConversationSearchActive else { return }
+                        isFollowingTranscriptBottom = true
                         proxy.scrollTo(Self.bottomScrollID, anchor: .bottom)
                     }
                 }
                 .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
                     DispatchQueue.main.async {
-                        guard !isConversationSearchActive else { return }
+                        guard !isConversationSearchActive, isFollowingTranscriptBottom else { return }
                         proxy.scrollTo(Self.bottomScrollID, anchor: .bottom)
                     }
                 }
@@ -659,11 +672,18 @@ struct AgentChatTranscript: View {
             if message.role == .scheduledTask { return message }
             guard message.role != .tool,
                   message.role != .system,
+                  !message.isHostInstruction,
                   !isEmptyThinkingPlaceholder(message),
                   !isSettledToolCallOnlyMessage(message) else {
                 return nil
             }
             return resultPresentationMessage(message)
+        }
+    }
+
+    private func scrollToBottom(using proxy: ScrollViewProxy) {
+        DispatchQueue.main.async {
+            proxy.scrollTo(Self.bottomScrollID, anchor: .bottom)
         }
     }
 

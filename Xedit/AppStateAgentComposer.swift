@@ -104,7 +104,8 @@ extension AppState {
             text: prompt,
             images: images,
             textAttachments: textAttachments,
-            attachedSkills: skills
+            attachedSkills: skills,
+            source: .operatorInput
         )
     }
 
@@ -149,7 +150,8 @@ extension AppState {
         text: String,
         images: [AgentImageAttachment],
         textAttachments: [AgentTextAttachment] = [],
-        attachedSkills: [AgentSkillEntry] = []
+        attachedSkills: [AgentSkillEntry] = [],
+        source: AgentMessageSource = .operatorInput
     ) {
         switch executionAgent {
         case .willDeep:
@@ -158,7 +160,8 @@ extension AppState {
                 text: text,
                 images: images,
                 textAttachments: textAttachments,
-                attachedSkills: attachedSkills
+                attachedSkills: attachedSkills,
+                source: source
             )
         case .claudeCode, .codexCLI:
             dispatchDelegatedAgentMessage(
@@ -167,7 +170,8 @@ extension AppState {
                 images: images,
                 textAttachments: textAttachments,
                 attachedSkills: attachedSkills,
-                executionAgent: executionAgent
+                executionAgent: executionAgent,
+                source: source
             )
         }
     }
@@ -178,7 +182,8 @@ extension AppState {
         images: [AgentImageAttachment],
         textAttachments: [AgentTextAttachment] = [],
         attachedSkills: [AgentSkillEntry] = [],
-        executionAgent: AgentExecutionAgent
+        executionAgent: AgentExecutionAgent,
+        source: AgentMessageSource = .operatorInput
     ) {
         guard let toolName = executionAgent.toolName else {
             dispatchAgentMessage(
@@ -186,7 +191,8 @@ extension AppState {
                 text: text,
                 images: images,
                 textAttachments: textAttachments,
-                attachedSkills: attachedSkills
+                attachedSkills: attachedSkills,
+                source: source
             )
             return
         }
@@ -204,7 +210,8 @@ extension AppState {
             role: .user,
             content: text,
             images: images,
-            textAttachments: textAttachments
+            textAttachments: textAttachments,
+            source: source
         )
         runtime.messages.append(userMessage)
         runtime.latestTurnRecall = nil
