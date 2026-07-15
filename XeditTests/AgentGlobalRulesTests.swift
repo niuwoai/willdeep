@@ -157,8 +157,8 @@ struct AgentGlobalRulesTests {
 
         #expect(prompt.contains("Treat the visible side-panel terminal as a separate, stateful machine context."))
         #expect(prompt.contains("local macOS shell, an SSH session"))
-        #expect(prompt.contains("do not send commands that are meant to run locally on the Mac"))
-        #expect(prompt.contains("If the active terminal is SSH'd into a server"))
+        #expect(prompt.contains("do not send commands meant for the local Mac"))
+        #expect(prompt.contains("If the bound tab is SSH'd into a server"))
         #expect(prompt.contains("avoid creating or overwriting files with heredoc"))
         #expect(prompt.contains("WillDeep's visible side-panel terminal supports rz/sz ZMODEM transfers"))
         #expect(prompt.contains("zmodem_upload_paths"))
