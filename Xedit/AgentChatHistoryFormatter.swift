@@ -1244,6 +1244,8 @@ enum AgentChatHistoryRenderer {
     private static let pathChipRegex = try? NSRegularExpression(
         pattern: #"(?<![\w@/])(?:(?:\.{1,2}/|~/|/)[A-Za-z0-9_.$@+~()-]+(?:/[A-Za-z0-9_.$@+~()-]+)*|(?:[A-Za-z0-9_.$@+~()-]+/)*[A-Za-z0-9_.$@+~()-]+\.(?:swift|go|ts|tsx|js|jsx|vue|md|markdown|json|yaml|yml|toml|rb|py|java|kt|rs|html|css|scss|sql|sh|zsh|txt))(?:\:\d+(?:\:\d+)?)?"#
     )
+    private static let pathLinkCharacterSpacing: CGFloat = 0.12
+    private static let pathLinkTrailingSpacing: CGFloat = 1.5
 
     private static func applyPathChipAttributes(
         to attributed: NSMutableAttributedString,
@@ -1255,28 +1257,32 @@ enum AgentChatHistoryRenderer {
             return
         }
         let string = attributed.string as NSString
-        let linkColor = Self.webLinkColor(base: color)
         regex.enumerateMatches(in: attributed.string, range: fullRange) { match, _, _ in
             guard let range = match?.range, range.length > 0 else { return }
             if attributed.attribute(.link, at: range.location, effectiveRange: nil) != nil { return }
             let rawPath = string.substring(with: range)
-            // 之前用 `.backgroundColor` 画了一个 controlBackgroundColor 矩
-            // 形,在不同皮肤下都不贴(rc8 用户反馈:padding / 圆角 /
-            // 配色全不对)。TextKit 的 `.backgroundColor` 是平直矩形,
-            // 没法加 padding 或圆角,加大色块只会更别扭。改用「轻底
-            // 色 + 下划线 + 适度 kern」的链接观感:背景用 link 色 ×8%
-            // 跟随当前皮肤+深浅色,下划线是真正的「这是可点的文件」
-            // 信号,kern 把 mono 字符稍微撑开避免挤成一坨。
+            // 本地路径属于正文中的次要操作,不应该借系统链接蓝色和
+            // 胶囊底抢走阅读焦点。路径即使来自 Markdown 行内代码,
+            // 也移除两套背景属性,改用正文色 + 中等字重 + 细下划线。
+            // 末字符额外增加一点字偶距,连续出现多个路径时保留清楚
+            // 的视觉缝隙,但不向可复制的正文中插入空格。
             attributed.addAttributes([
-                .font: NSFont.monospacedSystemFont(ofSize: baseFont.pointSize, weight: .regular),
-                .foregroundColor: linkColor,
-                .backgroundColor: linkColor.withAlphaComponent(0.08),
-                .underlineColor: linkColor.withAlphaComponent(0.42),
+                .font: NSFont.monospacedSystemFont(ofSize: baseFont.pointSize, weight: .medium),
+                .foregroundColor: color,
+                .underlineColor: color.withAlphaComponent(0.38),
                 .underlineStyle: NSUnderlineStyle.single.rawValue,
-                .kern: NSNumber(value: 0.3),
+                .kern: NSNumber(value: Double(Self.pathLinkCharacterSpacing)),
                 .link: AgentChatHistoryFilePathLink.value,
                 .agentChatHistoryFilePath: rawPath,
             ], range: range)
+            attributed.addAttribute(
+                .kern,
+                value: NSNumber(value: Double(Self.pathLinkTrailingSpacing)),
+                range: NSRange(location: NSMaxRange(range) - 1, length: 1)
+            )
+            attributed.removeAttribute(.backgroundColor, range: range)
+            attributed.removeAttribute(swiftUIBackgroundColorKey, range: range)
+            attributed.removeAttribute(.agentChatHistoryInlineCodeChipColor, range: range)
         }
     }
 

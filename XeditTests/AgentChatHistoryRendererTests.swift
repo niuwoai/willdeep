@@ -1570,6 +1570,48 @@ struct AgentChatHistoryRendererTests {
     }
 
     @Test
+    func localPathLinksUseQuietTextStylingWithoutChipBackgrounds() throws {
+        let rendered = AgentChatHistoryRenderer.render(
+            messages: [
+                AgentMessage(
+                    role: .assistant,
+                    content: "项目目录例如 `~/Sites`、`~/a3-ui`、`~/WorkBuddy`。"
+                )
+            ],
+            isDark: false
+        )
+        let pathRange = try #require(firstAttributeRange(
+            .agentChatHistoryFilePath,
+            containing: "~/Sites",
+            in: rendered
+        ))
+
+        #expect(rendered.attribute(.backgroundColor, at: pathRange.location, effectiveRange: nil) == nil)
+        #expect(rendered.attribute(
+            .agentChatHistoryInlineCodeChipColor,
+            at: pathRange.location,
+            effectiveRange: nil
+        ) == nil)
+        #expect(
+            rendered.attribute(.underlineStyle, at: pathRange.location, effectiveRange: nil) as? Int
+                == NSUnderlineStyle.single.rawValue
+        )
+        #expect(
+            rendered.attribute(
+                .foregroundColor,
+                at: pathRange.location,
+                effectiveRange: nil
+            ) as? NSColor == NSColor.labelColor
+        )
+        let trailingKern = try #require(rendered.attribute(
+            .kern,
+            at: NSMaxRange(pathRange) - 1,
+            effectiveRange: nil
+        ) as? NSNumber)
+        #expect(trailingKern.doubleValue > 1)
+    }
+
+    @Test
     func attachmentSourceMarkersBecomePreciseCitationLinks() throws {
         let rendered = AgentChatHistoryRenderer.render(
             messages: [
