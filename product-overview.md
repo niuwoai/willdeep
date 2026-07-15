@@ -4,7 +4,7 @@
 
 ## Positioning
 
-WillDeep is a lightweight macOS editor focused on quick project browsing, fast text loading, simple saving, and syntax-highlighted editing without the weight of a full IDE.
+WillDeep is a native macOS agent workspace organized around tasks, workspaces, sessions, and verifiable deliverables. Its primary experience is an agent that can inspect local or remote projects, use tools, operate terminals and browsers, coordinate plans and goals, and continue until work is ready to review. The built-in lightweight editor remains a maintained capability for file inspection, focused edits, diff review, and collaboration with the agent; it is no longer the product's defining surface.
 
 Official product domain: [willdeep.com](https://willdeep.com).
 
