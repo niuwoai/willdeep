@@ -30,6 +30,11 @@ import SwiftUI
 /// wrapper out as a regular block view.
 struct AgentChatHistoryTextView: NSViewRepresentable {
     let messages: [AgentMessage]
+    /// Raw user/assistant/tool-loop messages used only to recover user-turn
+    /// boundaries and aggregate metrics. The visible TextKit body still uses
+    /// `messages`, so internal tool results never leak into the transcript.
+    var assistantTurnContextMessages: [AgentMessage]? = nil
+    var isAssistantTurnActive = false
     /// User-controlled base size for the transcript body, threaded
     /// from `AppState.agentChatBaseFontSize`. Tool summaries and
     /// chrome stay on fixed sizes inside the renderer.
@@ -69,6 +74,8 @@ struct AgentChatHistoryTextView: NSViewRepresentable {
         view.applyMessages(
             messages,
             isDark: colorScheme == .dark,
+            assistantTurnContextMessages: assistantTurnContextMessages,
+            isAssistantTurnActive: isAssistantTurnActive,
             baseFontSize: baseFontSize,
             latestTurnReportToolCount: latestTurnReportToolCount
         )
@@ -91,6 +98,8 @@ struct AgentChatHistoryTextView: NSViewRepresentable {
         nsView.applyMessages(
             messages,
             isDark: colorScheme == .dark,
+            assistantTurnContextMessages: assistantTurnContextMessages,
+            isAssistantTurnActive: isAssistantTurnActive,
             baseFontSize: baseFontSize,
             latestTurnReportToolCount: latestTurnReportToolCount
         )
@@ -143,6 +152,8 @@ final class AgentChatHistoryNSTextView: NSTextView {
     /// 95%+ on conversations with multi-KB tool outputs.
     private var lastInputFingerprint: Int?
     private var currentMessages: [AgentMessage] = []
+    private var currentAssistantTurnContextMessages: [AgentMessage] = []
+    private var currentIsAssistantTurnActive = false
     private var currentIsDark = false
     private var currentBaseFontSize: CGFloat = NSFont.systemFontSize
     private var currentLatestTurnReportToolCount: Int? = nil
@@ -405,11 +416,16 @@ final class AgentChatHistoryNSTextView: NSTextView {
     func applyMessages(
         _ messages: [AgentMessage],
         isDark: Bool,
+        assistantTurnContextMessages: [AgentMessage]? = nil,
+        isAssistantTurnActive: Bool = false,
         baseFontSize: CGFloat = NSFont.systemFontSize,
         latestTurnReportToolCount: Int? = nil
     ) {
+        let turnContextMessages = assistantTurnContextMessages ?? messages
         let fp = Self.inputFingerprint(
             messages: messages,
+            assistantTurnContextMessages: turnContextMessages,
+            isAssistantTurnActive: isAssistantTurnActive,
             isDark: isDark,
             baseFontSize: baseFontSize,
             latestTurnReportToolCount: latestTurnReportToolCount
@@ -420,6 +436,8 @@ final class AgentChatHistoryNSTextView: NSTextView {
         dismissSelectionAction()
         lastInputFingerprint = fp
         currentMessages = messages
+        currentAssistantTurnContextMessages = turnContextMessages
+        currentIsAssistantTurnActive = isAssistantTurnActive
         currentIsDark = isDark
         currentBaseFontSize = baseFontSize
         currentLatestTurnReportToolCount = latestTurnReportToolCount
@@ -435,6 +453,8 @@ final class AgentChatHistoryNSTextView: NSTextView {
     /// length.
     private static func inputFingerprint(
         messages: [AgentMessage],
+        assistantTurnContextMessages: [AgentMessage],
+        isAssistantTurnActive: Bool,
         isDark: Bool,
         baseFontSize: CGFloat,
         latestTurnReportToolCount: Int?
@@ -443,6 +463,7 @@ final class AgentChatHistoryNSTextView: NSTextView {
         hasher.combine(isDark)
         hasher.combine(baseFontSize)
         hasher.combine(messages.count)
+        hasher.combine(isAssistantTurnActive)
         hasher.combine(latestTurnReportToolCount ?? -1)
         for m in messages {
             hasher.combine(m.id)
@@ -479,6 +500,23 @@ final class AgentChatHistoryNSTextView: NSTextView {
                 hasher.combine(tc.argumentsJSON.count)
             }
         }
+        for message in assistantTurnContextMessages
+            where message.role == .user || message.role == .assistant {
+            hasher.combine(message.id)
+            hasher.combine(message.role.rawValue)
+            hasher.combine(message.createdAt)
+            hasher.combine(message.usageTokens)
+            hasher.combine(message.promptTokens)
+            hasher.combine(message.completionTokens)
+            hasher.combine(message.cachedPromptTokens)
+            hasher.combine(message.cacheWritePromptTokens)
+            hasher.combine(message.reasoningTokens)
+            hasher.combine(message.elapsedSeconds)
+            hasher.combine(message.managedRoute?.selectedModel)
+            hasher.combine(message.managedRoute?.tier.rawValue)
+            hasher.combine(message.managedRoute?.didEscalate)
+            hasher.combine(message.managedRoute?.didFallback)
+        }
         return hasher.finalize()
     }
 
@@ -486,6 +524,8 @@ final class AgentChatHistoryNSTextView: NSTextView {
         let attr = AgentChatHistoryRenderer.render(
             messages: currentMessages,
             isDark: currentIsDark,
+            assistantTurnContextMessages: currentAssistantTurnContextMessages,
+            isAssistantTurnActive: currentIsAssistantTurnActive,
             expandedToolGroupIDs: expandedToolGroupIDs,
             hoveredUserMessageID: hoveredUserMessageID,
             baseFontSize: currentBaseFontSize,

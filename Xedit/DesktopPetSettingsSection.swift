@@ -5,6 +5,29 @@
 
 import SwiftUI
 
+enum DesktopPetSettingsDesign {
+    static let bodyFontSize: CGFloat = 14
+    static let appearanceNameMinimumHeight: CGFloat = 36
+
+    static let bodyFont = Font.system(size: bodyFontSize)
+    static let emphasizedBodyFont = Font.system(size: bodyFontSize, weight: .semibold)
+}
+
+struct DesktopPetSettingsPage: View {
+    var body: some View {
+        Form {
+            Section {
+                DesktopPetSettingsSection()
+            } header: {
+                Text(L10n.DesktopPet.settingsSectionTitle)
+                    .font(DesktopPetSettingsDesign.emphasizedBodyFont)
+                    .textCase(nil)
+            }
+        }
+        .formStyle(.grouped)
+    }
+}
+
 struct DesktopPetSettingsSection: View {
     @ObservedObject private var manager = DesktopPetWindowManager.shared
 
@@ -32,10 +55,11 @@ struct DesktopPetSettingsSection: View {
 
     var body: some View {
         Toggle(L10n.DesktopPet.settingsEnabled, isOn: enabledBinding)
+            .font(DesktopPetSettingsDesign.bodyFont)
 
         VStack(alignment: .leading, spacing: Layout.gridSpacing) {
             Text(L10n.DesktopPet.settingsAppearance)
-                .font(.subheadline.weight(.semibold))
+                .font(DesktopPetSettingsDesign.emphasizedBodyFont)
 
             LazyVGrid(columns: columns, alignment: .leading, spacing: Layout.gridSpacing) {
                 ForEach(DesktopPetAppearance.allCases) { appearance in
@@ -46,7 +70,7 @@ struct DesktopPetSettingsSection: View {
         .frame(maxWidth: .infinity, alignment: .leading)
 
         Text(L10n.DesktopPet.settingsDescription)
-            .font(.caption)
+            .font(DesktopPetSettingsDesign.bodyFont)
             .foregroundStyle(.secondary)
     }
 
@@ -71,12 +95,18 @@ struct DesktopPetSettingsSection: View {
                     .frame(height: Layout.previewHeight)
 
                 Text(appearance.displayName)
-                    .font(.caption.weight(isSelected ? .semibold : .regular))
+                    .font(.system(
+                        size: DesktopPetSettingsDesign.bodyFontSize,
+                        weight: isSelected ? .semibold : .regular
+                    ))
                     .foregroundStyle(isSelected ? Color.accentColor : Color.primary)
                     .multilineTextAlignment(.center)
                     .lineLimit(2)
-                    .minimumScaleFactor(0.82)
-                    .frame(maxWidth: .infinity, minHeight: 30, alignment: .top)
+                    .frame(
+                        maxWidth: .infinity,
+                        minHeight: DesktopPetSettingsDesign.appearanceNameMinimumHeight,
+                        alignment: .top
+                    )
             }
             .padding(10)
             .frame(maxWidth: .infinity, minHeight: Layout.cardMinimumHeight, alignment: .top)

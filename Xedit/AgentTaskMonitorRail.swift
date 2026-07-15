@@ -968,6 +968,7 @@ private struct AgentRailMediaTaskRow: View {
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
+            .focusable(false)
             VStack(spacing: 4) {
                 if task.isActive {
                     Button {
@@ -979,6 +980,7 @@ private struct AgentRailMediaTaskRow: View {
                             .frame(width: 20, height: 20)
                     }
                     .buttonStyle(.plain)
+                    .focusable(false)
                     .help("立即刷新这个媒体任务")
                     Button {
                         cancelTask()
@@ -989,6 +991,7 @@ private struct AgentRailMediaTaskRow: View {
                             .frame(width: 20, height: 20)
                     }
                     .buttonStyle(.plain)
+                    .focusable(false)
                     .help("取消这个媒体任务")
                 }
                 Button {
@@ -1000,6 +1003,7 @@ private struct AgentRailMediaTaskRow: View {
                         .frame(width: 20, height: 20)
                 }
                 .buttonStyle(.plain)
+                .focusable(false)
                 .help("发送任务上下文到聊天")
             }
         }
@@ -1104,6 +1108,7 @@ private struct AgentRailJobRow: View {
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
+            .focusable(false)
             .help(L10n.AgentJobs.inspectOutputHelp)
 
             VStack(spacing: 0) {
@@ -1113,6 +1118,7 @@ private struct AgentRailJobRow: View {
                             .foregroundStyle(.red)
                     }
                     .buttonStyle(.borderless)
+                    .focusable(false)
                     .help(L10n.AgentJobs.kill)
                 }
             }

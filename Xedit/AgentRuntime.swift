@@ -90,6 +90,10 @@ final class AgentRuntime: ObservableObject, Identifiable {
     @Published var executionAgent: AgentExecutionAgent = .willDeep
     @Published var activeExperts: Set<AgentExpert> = []
     @Published var currentPlan: AgentPlan?
+    /// Runtime-only pre-dispatch prompt for complex Normal-mode tasks.
+    /// Keeping it per session prevents one chat's countdown from appearing
+    /// after the user switches to another conversation.
+    @Published var pendingPlanModeSuggestion: AgentPlanModeSuggestion?
     @Published var currentGoal: AgentGoal?
     /// Runtime-only guard for mid-turn manual goal edits. If the user edits
     /// the goal while an old request is already in flight, that older reply's
@@ -156,6 +160,10 @@ final class AgentRuntime: ObservableObject, Identifiable {
     /// when idle. Cancelled when the session is closed or the user
     /// stops the response.
     var requestTask: Task<Void, Never>?
+    /// Runtime-side fallback for the Plan suggestion countdown. The banner
+    /// also renders its own per-second progress, but auto-resolution must not
+    /// depend on the composer currently being mounted on screen.
+    var planModeSuggestionAutoResolveTask: Task<Void, Never>?
     /// Skills that were explicitly attached to the in-flight user turn.
     /// They are cleared/overwritten on the next dispatch and used only
     /// to explain turn recall in reports.

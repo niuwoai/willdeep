@@ -57,6 +57,7 @@ struct AgentImageEditPanel: View {
             content
         }
         .frame(width: width)
+        .focusable(false)
         .onAppear(perform: reload)
         .onCompatibleChange(of: appState.agentImageEditorImageURL) { _, _ in
             reload()
@@ -99,6 +100,7 @@ struct AgentImageEditPanel: View {
                 Image(systemName: "arrow.uturn.backward")
             }
             .buttonStyle(.borderless)
+            .focusable(false)
             .disabled(selectionRect == nil && activeStroke == nil && maskRects.isEmpty && maskStrokes.isEmpty && maskEraseStrokes.isEmpty && seedMaskInfo == nil)
             .help(L10n.AgentImageEditor.undoHelp)
             Button {
@@ -115,6 +117,7 @@ struct AgentImageEditPanel: View {
                 Image(systemName: "trash")
             }
             .buttonStyle(.borderless)
+            .focusable(false)
             .disabled(selectionRect == nil && activeStroke == nil && maskRects.isEmpty && maskStrokes.isEmpty && maskEraseStrokes.isEmpty && seedMaskInfo == nil)
             .help(L10n.AgentImageEditor.clearHelp)
             Button {
@@ -123,6 +126,7 @@ struct AgentImageEditPanel: View {
                 Image(systemName: "square.and.arrow.down")
             }
             .buttonStyle(.borderless)
+            .focusable(false)
             .disabled(imageInfo == nil || !hasMaskSelection)
             .help(L10n.AgentImageEditor.exportHelp)
         }
@@ -201,6 +205,7 @@ struct AgentImageEditPanel: View {
                             }
                         }
                         .pickerStyle(.segmented)
+                        .focusable(false)
                         .onChange(of: maskTool) { _ in
                             selectionRect = nil
                             activeStroke = nil
@@ -214,6 +219,7 @@ struct AgentImageEditPanel: View {
                                 }
                             }
                             .pickerStyle(.segmented)
+                            .focusable(false)
                             .onChange(of: brushPaintMode) { _ in
                                 activeStroke = nil
                                 dragStart = nil
@@ -225,6 +231,7 @@ struct AgentImageEditPanel: View {
                                     .foregroundStyle(brushPaintMode.tint.opacity(0.7))
                                     .frame(width: 22, height: 22)
                                 Slider(value: $brushSize, in: 6...96, step: 2)
+                                    .focusable(false)
                                 Text("\(Int(brushSize))")
                                     .font(.caption.monospacedDigit())
                                     .foregroundStyle(.secondary)
@@ -240,6 +247,7 @@ struct AgentImageEditPanel: View {
                             .fixedSize(horizontal: false, vertical: true)
                         Toggle(L10n.AgentImageEditor.invertToggle, isOn: $invertMask)
                             .font(.caption)
+                            .focusable(false)
                             .help(L10n.AgentImageEditor.invertHelp)
                             .onChange(of: invertMask) { _ in
                                 lastMaskURL = nil
@@ -287,6 +295,7 @@ struct AgentImageEditPanel: View {
                         .font(.caption2)
                 }
                 .buttonStyle(.borderless)
+                .focusable(false)
                 .help(L10n.AgentImageEditor.sendToChatHelp)
             }
             if rows.isEmpty {
@@ -434,6 +443,7 @@ struct AgentImageEditPanel: View {
                 }
             }
             .pickerStyle(.segmented)
+            .focusable(false)
 
             Picker(L10n.AgentImageEditor.providerPicker, selection: $submitProvider) {
                 ForEach(ImageEditSubmitProvider.allCases) { provider in
@@ -441,6 +451,7 @@ struct AgentImageEditPanel: View {
                 }
             }
             .pickerStyle(.segmented)
+            .focusable(false)
 
             TextField(editOperation.promptPlaceholder, text: $editPrompt, axis: .vertical)
                 .textFieldStyle(.roundedBorder)
@@ -465,6 +476,7 @@ struct AgentImageEditPanel: View {
                         Label(L10n.AgentImageEditor.openReplicateSettings, systemImage: "gearshape")
                     }
                     .buttonStyle(.borderless)
+                    .focusable(false)
                     .font(.caption)
                 }
                 .padding(.vertical, 2)
@@ -476,6 +488,7 @@ struct AgentImageEditPanel: View {
                 } label: {
                     Label(isSubmitting ? L10n.AgentImageEditor.submitting : editOperation.submitTitle, systemImage: "wand.and.stars")
                 }
+                .focusable(false)
                 .disabled(!canSubmitImageEdit || isSubmitting)
 
                 if let lastMaskURL {

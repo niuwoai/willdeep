@@ -103,11 +103,11 @@ struct AgentSessionsSidebar: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            // Spacer reserves space for the traffic lights; the "CHATS"
-            // header drops to the row below them so it stays visible.
+            // Keep the traffic-light safe area, but let the real navigation
+            // start immediately below it. The former "Chats" / provider
+            // strip duplicated information available elsewhere and consumed
+            // valuable vertical space in the sidebar.
             Color.clear.frame(height: trafficLightReserve)
-            sidebarHeader
-            providerStatusBar
             TimelineView(.periodic(from: .now, by: 60)) { timeline in
                 ScrollView {
                     VStack(alignment: .leading, spacing: 0) {
@@ -323,73 +323,6 @@ struct AgentSessionsSidebar: View {
         .clipShape(Circle())
     }
 
-    private var sidebarHeader: some View {
-        HStack(spacing: 7) {
-            Image(systemName: "bubble.left.and.bubble.right.fill")
-                .font(.system(size: 10, weight: .semibold))
-                .foregroundStyle(appState.editorSettings.interfaceSkin.palette.accent)
-            Text(L10n.Sidebar.chatsHeader)
-                .font(.system(size: 12, weight: .semibold))
-                .foregroundStyle(.secondary)
-                .textCase(.uppercase)
-            Spacer(minLength: 0)
-        }
-        .padding(.horizontal, 14)
-        .frame(height: 28)
-        .background(appState.editorSettings.interfaceSkin.palette.panelFill.opacity(0.16))
-    }
-
-    /// One-line status pill showing which library entry is currently
-    /// active, with a click-to-switch menu. Hidden when only one entry
-    /// exists — no point in a picker that has nothing to pick.
-    @ViewBuilder
-    private var providerStatusBar: some View {
-        if appState.agentProviderLibrary.entries.count > 1 {
-            Menu {
-                ForEach(appState.agentProviderLibrary.entries) { entry in
-                    Button {
-                        appState.setActiveProviderLibraryEntry(id: entry.id)
-                    } label: {
-                        HStack {
-                            Text(entry.displayName)
-                            if appState.agentProviderLibrary.activeID == entry.id {
-                                Image(systemName: "checkmark")
-                            }
-                        }
-                    }
-                }
-            } label: {
-                let palette = appState.editorSettings.interfaceSkin.palette
-                HStack(spacing: 5) {
-                    Image(systemName: "sparkle")
-                        .font(.system(size: 10))
-                        .foregroundStyle(palette.accent)
-                    Text(activeProviderLabel)
-                        .font(.system(size: 11, weight: .medium))
-                        .lineLimit(1)
-                        .truncationMode(.tail)
-                    Spacer(minLength: 0)
-                    Image(systemName: "chevron.down")
-                        .font(.system(size: 8, weight: .semibold))
-                        .foregroundStyle(.secondary)
-                }
-                .padding(.horizontal, 8)
-                .padding(.vertical, 5)
-                .background(palette.controlFill.opacity(0.72))
-                .clipShape(RoundedRectangle(cornerRadius: 6))
-            }
-            .menuStyle(.borderlessButton)
-            .menuIndicator(.hidden)
-            .padding(.horizontal, 10)
-            .padding(.bottom, 6)
-            .help(L10n.ProviderStatus.help)
-        }
-    }
-
-    private var activeProviderLabel: String {
-        appState.agentProviderLibrary.active?.displayName ?? "No provider"
-    }
-
     private var primaryActions: some View {
         // Automations / Customize used to live here as dimmed
         // placeholders — they had no behavior and just took up real
@@ -438,6 +371,7 @@ struct AgentSessionsSidebar: View {
 
     @ViewBuilder
     private func workspaceGroup(_ group: SidebarWorkspaceGroup, now: Date) -> some View {
+        let palette = appState.editorSettings.interfaceSkin.palette
         let workspace = group.id
         let sessions = group.sessions
         let activeSessions = sessions.filter { !$0.isArchived }
@@ -452,7 +386,7 @@ struct AgentSessionsSidebar: View {
         let isWorkspaceHovered = hoveredWorkspaceGroup == workspace
 
         VStack(alignment: .leading, spacing: 0) {
-            HStack(spacing: 6) {
+            HStack(spacing: AgentDesign.sidebarWorkspaceIconToTitleSpacing) {
                 // Clicking the workspace identity collapses / expands the
                 // whole group. Using `folder` vs `folder.fill` as the visual
                 // affordance — filled means "closed, stuff hidden behind
@@ -462,15 +396,21 @@ struct AgentSessionsSidebar: View {
                         setWorkspaceCollapsed(workspace, collapsed: !isCollapsed)
                     }
                 } label: {
-                    HStack(spacing: 6) {
+                    HStack(spacing: AgentDesign.sidebarWorkspaceIconToTitleSpacing) {
                         Image(systemName: remoteWorkspace == nil
                             ? (isCollapsed ? "folder.fill" : "folder")
                             : WorkspacePresentation.remoteSymbolName(for: remoteRuntime))
-                            .font(.system(size: 11))
-                            .foregroundStyle(remoteWorkspace == nil ? Color.secondary : WorkspacePresentation.remoteTint(for: remoteRuntime))
-                            .frame(width: 14, height: 14)
+                            .font(.system(size: AgentDesign.sidebarWorkspaceIconSize))
+                            .foregroundStyle(remoteWorkspace == nil
+                                ? palette.primaryText.opacity(AgentDesign.sidebarPrimaryTextOpacity)
+                                : WorkspacePresentation.remoteTint(for: remoteRuntime))
+                            .frame(
+                                width: AgentDesign.sidebarWorkspaceIconSize,
+                                height: AgentDesign.sidebarWorkspaceIconSize
+                            )
                         Text(group.displayName)
-                            .font(.system(size: 12, weight: .semibold))
+                            .font(AgentDesign.sidebarWorkspaceFont)
+                            .foregroundStyle(palette.primaryText.opacity(AgentDesign.sidebarPrimaryTextOpacity))
                             .lineLimit(1)
                             .truncationMode(.middle)
                         if remoteWorkspace != nil {
@@ -503,8 +443,8 @@ struct AgentSessionsSidebar: View {
                 .accessibilityHidden(!isWorkspaceHovered)
                 .help(L10n.Sidebar.workspaceMenuNewChat)
             }
-            .padding(.horizontal, 14)
-            .padding(.vertical, 4)
+            .padding(.horizontal, AgentDesign.sidebarWorkspaceHorizontalInset)
+            .frame(height: AgentDesign.sidebarRowHeight)
             .contentShape(Rectangle())
             .contextMenu {
                 Button(L10n.Sidebar.workspaceMenuNewChat) {
@@ -530,10 +470,10 @@ struct AgentSessionsSidebar: View {
                         setWorkspaceExpanded(workspace, expanded: !isExpanded)
                     } label: {
                         Text(isExpanded ? L10n.Sidebar.sessionListShowLess : L10n.Sidebar.sessionListSeeMore)
-                            .font(AgentDesign.secondaryFont)
-                            .foregroundStyle(.secondary)
-                            .padding(.horizontal, 34)
-                            .padding(.vertical, 3)
+                            .font(AgentDesign.sidebarRowFont)
+                            .foregroundStyle(palette.secondaryText)
+                            .padding(.horizontal, AgentDesign.sidebarSelectionHorizontalInset + AgentDesign.sidebarSessionContentHorizontalInset)
+                            .frame(height: AgentDesign.sidebarRowHeight)
                     }
                     .buttonStyle(.plain)
                 }
@@ -548,7 +488,7 @@ struct AgentSessionsSidebar: View {
                 }
             }
 
-            Spacer().frame(height: 10)
+            Spacer().frame(height: AgentDesign.sidebarWorkspaceGroupSpacing)
         }
         .onHover { hovering in
             if hovering {
@@ -581,12 +521,12 @@ struct AgentSessionsSidebar: View {
                     .font(.system(size: 10))
                     .foregroundStyle(.secondary)
                 Text(L10n.Sidebar.archivedSessionsHeader(String(sessions.count)))
-                    .font(AgentDesign.secondaryFont)
-                    .foregroundStyle(.secondary)
+                    .font(AgentDesign.sidebarRowFont)
+                    .foregroundStyle(appState.editorSettings.interfaceSkin.palette.secondaryText)
                 Spacer(minLength: 0)
             }
-            .padding(.horizontal, 28)
-            .padding(.vertical, 3)
+            .padding(.horizontal, AgentDesign.sidebarSessionContentHorizontalInset)
+            .frame(height: AgentDesign.sidebarRowHeight)
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
@@ -600,6 +540,7 @@ struct AgentSessionsSidebar: View {
 
     @ViewBuilder
     private func sessionRow(_ session: AgentSession, now: Date) -> some View {
+        let palette = appState.editorSettings.interfaceSkin.palette
         let isActive = appState.activeAgentSessionID == session.id
         let isHovered = (hoveredSessionID == session.id)
         let observedRuntime = appState.agentRuntimes[session.id]
@@ -611,29 +552,17 @@ struct AgentSessionsSidebar: View {
         } label: {
             VStack(alignment: .leading, spacing: 2) {
                 HStack(spacing: 6) {
-                    // The status dot has three lives:
-                    //   • active session       → accent color (no animation)
-                    //   • runtime mid-turn     → green pulse (background runner)
-                    //   • runtime awaits user  → amber pulse (needs your eyes)
-                    //   • idle / cold          → default grey
-                    // Pulled out to its own view because we need to observe
-                    // the per-session runtime (if there is one); a static
-                    // expression here would only refresh when the row's
-                    // session changes, not when the runtime's `isResponding`
-                    // flips mid-stream.
                     if activeScheduledTaskCount(for: session) > 0 {
                         Image(systemName: "clock.fill")
                             .font(.system(size: 9, weight: .semibold))
-                            .foregroundStyle(Color.accentColor)
+                            .foregroundStyle(palette.accent)
                             .help(L10n.Sidebar.hasActiveScheduledTasksTooltip)
                     }
-                    AgentSessionRowStatusDot(
-                        runtime: observedRuntime,
-                        isActive: isActive
-                    )
                     Text(session.title)
                         .font(AgentDesign.sidebarRowFont)
-                        .foregroundStyle(isActive ? .primary : .secondary)
+                        .foregroundStyle(palette.primaryText.opacity(
+                            isActive ? 1 : AgentDesign.sidebarPrimaryTextOpacity
+                        ))
                         .lineLimit(1)
                         .truncationMode(.tail)
                         // sidebar 收窄时:title 优先保留(给它 priority 1),
@@ -652,7 +581,16 @@ struct AgentSessionsSidebar: View {
                     )
                     Spacer(minLength: 0)
                     AgentSessionModeBadges(session: displaySession)
-                    sessionUpdatedLabel(session, now: now)
+                    // Codex keeps ordinary rows visually quiet: no leading
+                    // bullet and no always-on timestamp. Runtime state moves
+                    // to the trailing edge, where it only becomes visible for
+                    // the active/running/waiting session.
+                    AgentSessionRowStatusDot(
+                        runtime: observedRuntime,
+                        isActive: isActive,
+                        accentColor: palette.accent
+                    )
+                    .opacity(isHovered ? 0 : 1)
                     sessionRowTrailingActions(session: session, isHovered: isHovered)
                 }
                 if let todoSummary {
@@ -663,10 +601,21 @@ struct AgentSessionsSidebar: View {
                     )
                 }
             }
-            .padding(.horizontal, 28)
+            .padding(.horizontal, AgentDesign.sidebarSessionContentHorizontalInset)
             .frame(height: todoSummary == nil ? AgentDesign.sidebarRowHeight : AgentDesign.sidebarTodoRowHeight)
             .contentShape(Rectangle())
-            .background(isActive ? Color.accentColor.opacity(0.12) : Color.clear)
+            .background(
+                RoundedRectangle(
+                    cornerRadius: AgentDesign.sidebarSelectionCornerRadius,
+                    style: .continuous
+                )
+                .fill(isActive ? palette.selectionFill : (isHovered ? palette.hoverFill : Color.clear))
+            )
+            .clipShape(RoundedRectangle(
+                cornerRadius: AgentDesign.sidebarSelectionCornerRadius,
+                style: .continuous
+            ))
+            .padding(.horizontal, AgentDesign.sidebarSelectionHorizontalInset)
         }
         .buttonStyle(.plain)
         .onHover { hovering in
@@ -776,20 +725,6 @@ struct AgentSessionsSidebar: View {
         let response = alert.runModal()
         guard response == .alertFirstButtonReturn else { return }
         appState.renameAgentSession(id: session.id, to: input.stringValue)
-    }
-
-    private func sessionUpdatedLabel(_ session: AgentSession, now: Date) -> some View {
-        let label = AgentRelativeTimestamp.compactString(
-            since: session.lastActivityAt,
-            now: now
-        )
-        return Text(label)
-            .font(.system(size: 10, weight: .semibold, design: .monospaced))
-            .foregroundStyle(.tertiary)
-            .monospacedDigit()
-            .lineLimit(1)
-            .frame(minWidth: 22, alignment: .trailing)
-            .help(L10n.Sidebar.sessionUpdatedTooltip(label))
     }
 
     /// Trailing icon cluster on each session row — pin & archive
@@ -1160,7 +1095,7 @@ struct SidebarActionRow: View {
                 }
             }
             .padding(.horizontal, 14)
-            .frame(height: 28)
+            .frame(height: AgentDesign.sidebarRowHeight)
             .contentShape(Rectangle())
             .background(isHovered ? appState.editorSettings.interfaceSkin.palette.hoverFill : Color.clear)
         }

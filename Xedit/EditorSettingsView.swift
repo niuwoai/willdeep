@@ -204,12 +204,7 @@ struct EditorSettingsView: View {
     }
 
     private var petSettings: some View {
-        Form {
-            Section(L10n.DesktopPet.settingsSectionTitle) {
-                DesktopPetSettingsSection()
-            }
-        }
-        .formStyle(.grouped)
+        DesktopPetSettingsPage()
     }
 
     private var agentSettings: some View {

@@ -1053,6 +1053,7 @@ struct AgentMediaTasksPanel: View {
             }
             .pickerStyle(.segmented)
             .labelsHidden()
+            .focusable(false)
             .help("按任务状态筛选")
 
             AgentMediaMetaRow(label: "当前显示", value: "\(tasks.count)")
@@ -1087,6 +1088,7 @@ struct AgentMediaTasksPanel: View {
                     .font(.caption)
                 }
                 .buttonStyle(.borderless)
+                .focusable(false)
                 .disabled(isRefreshingVisible)
                 .help("立即刷新当前筛选范围内长时间未更新的运行中任务")
             }
@@ -1101,6 +1103,7 @@ struct AgentMediaTasksPanel: View {
                     .font(.caption)
                 }
                 .buttonStyle(.borderless)
+                .focusable(false)
                 .disabled(isRefreshingVisible)
                 .help("立即刷新当前筛选范围内的运行中任务")
             }
@@ -1112,6 +1115,7 @@ struct AgentMediaTasksPanel: View {
                         .font(.caption)
                 }
                 .buttonStyle(.borderless)
+                .focusable(false)
                 .help("把当前筛选范围内的媒体任务状态摘要发送到聊天")
             }
             if scope != nil, !retryableScopedTasks.isEmpty {
@@ -1122,6 +1126,7 @@ struct AgentMediaTasksPanel: View {
                         .font(.caption)
                 }
                 .buttonStyle(.borderless)
+                .focusable(false)
                 .help("把当前筛选范围内失败任务的批量重试请求发送到聊天")
             }
         }
@@ -1378,6 +1383,7 @@ struct AgentMediaTasksPanel: View {
                         .font(.caption)
                 }
                 .buttonStyle(.borderless)
+                .focusable(false)
                 .help("清除任务状态筛选")
             }
             Spacer(minLength: 32)

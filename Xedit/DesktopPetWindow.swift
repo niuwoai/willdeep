@@ -44,6 +44,8 @@ enum DesktopPetAppearance: String, CaseIterable, Identifiable {
     case plantRobot
     case cloudForge
     case helpdeskHero
+    case codeShiba
+    case moonRabbit
 
     var id: String { rawValue }
 
@@ -71,6 +73,8 @@ enum DesktopPetAppearance: String, CaseIterable, Identifiable {
         case .plantRobot: "DesktopPetPlantRobot"
         case .cloudForge: "DesktopPetCloudForge"
         case .helpdeskHero: "DesktopPetHelpdesk"
+        case .codeShiba: "DesktopPetCodeShiba"
+        case .moonRabbit: "DesktopPetMoonRabbit"
         }
     }
 
@@ -98,6 +102,8 @@ enum DesktopPetAppearance: String, CaseIterable, Identifiable {
         case .plantRobot: L10n.DesktopPet.appearancePlantRobot
         case .cloudForge: L10n.DesktopPet.appearanceCloudForge
         case .helpdeskHero: L10n.DesktopPet.appearanceHelpdeskHero
+        case .codeShiba: L10n.DesktopPet.appearanceCodeShiba
+        case .moonRabbit: L10n.DesktopPet.appearanceMoonRabbit
         }
     }
 }
@@ -169,11 +175,15 @@ enum DesktopPetMessageCardVisibility {
 /// Deliberately non-generic: the generic `NSHostingView<Content>` subclass makes
 /// swift-frontend 6.3.1 segfault in the `EarlyPerfInliner` SIL pass while
 /// specializing the synthesized deinit for the Release x86_64 slice.
-/// internal(非 private):DesktopPetTests 直接构造它回归 acceptsFirstMouse
-/// —— 去泛型时忘了同步测试,曾把整个测试 target 编译搞挂。
-final class DesktopPetFirstMouseHostingView: NSHostingView<DesktopPetOverlayView> {
-    override func acceptsFirstMouse(for event: NSEvent?) -> Bool {
+enum DesktopPetFirstMousePolicy {
+    nonisolated static func accepts(_ event: NSEvent?) -> Bool {
         true
+    }
+}
+
+private final class DesktopPetFirstMouseHostingView: NSHostingView<DesktopPetOverlayView> {
+    override func acceptsFirstMouse(for event: NSEvent?) -> Bool {
+        DesktopPetFirstMousePolicy.accepts(event)
     }
 }
 
@@ -695,26 +705,10 @@ struct DesktopPetOverlayView: View {
     }
 
     private func petScene(animation: DesktopPetAnimationValues) -> some View {
-        ZStack(alignment: .bottom) {
-            Image(manager.appearance.assetName)
-                .resizable()
-                .interpolation(.none)
-                .scaledToFit()
-                .frame(width: 132, height: 132)
-                .scaleEffect(x: animation.facesRight ? 1 : -1, y: animation.scale)
-                .rotationEffect(.degrees(animation.rotation))
-                .rotation3DEffect(
-                    .degrees(animation.yawRotation),
-                    axis: (x: 0, y: 1, z: 0),
-                    perspective: 0.35
-                )
-                .offset(
-                    x: animation.horizontalOffset,
-                    y: animation.verticalOffset
-                )
-                .shadow(color: .black.opacity(0.24), radius: 7, y: 5)
-        }
-        .frame(width: 140, height: 148, alignment: .bottom)
+        DesktopPetSceneView(
+            appearance: manager.appearance,
+            animation: animation
+        )
         .contentShape(Rectangle())
         .simultaneousGesture(
             TapGesture(count: 2)
@@ -736,70 +730,218 @@ struct DesktopPetOverlayView: View {
     }
 }
 
+struct DesktopPetSceneView: View {
+    private enum Layout {
+        static let sceneWidth: CGFloat = 140
+        static let sceneHeight: CGFloat = 148
+        static let petSize: CGFloat = 132
+        static let laptopWidth: CGFloat = 96
+        static let laptopHeight: CGFloat = 90
+        static let laptopHorizontalOffset: CGFloat = 10
+        static let laptopBaseVerticalOffset: CGFloat = 9
+        static let heartHorizontalOffset: CGFloat = -45
+        static let heartVerticalOffset: CGFloat = -94
+        static let sparkleHorizontalOffset: CGFloat = 45
+        static let sparkleVerticalOffset: CGFloat = -83
+    }
+
+    let appearance: DesktopPetAppearance
+    let animation: DesktopPetAnimationValues
+
+    var body: some View {
+        ZStack(alignment: .bottom) {
+            cuteEffectLayer
+
+            Image(appearance.assetName)
+                .resizable()
+                .interpolation(.none)
+                .scaledToFit()
+                .frame(width: Layout.petSize, height: Layout.petSize)
+                .scaleEffect(
+                    x: (animation.facesRight ? 1 : -1) * animation.scale * animation.horizontalScale,
+                    y: animation.scale * animation.verticalScale
+                )
+                .rotationEffect(.degrees(animation.rotation))
+                .rotation3DEffect(
+                    .degrees(animation.yawRotation),
+                    axis: (x: 0, y: 1, z: 0),
+                    perspective: 0.35
+                )
+                .offset(
+                    x: animation.horizontalOffset,
+                    y: animation.verticalOffset
+                )
+                .shadow(color: .black.opacity(0.24), radius: 7, y: 5)
+
+            Image("DesktopPetLaptop")
+                .resizable()
+                .interpolation(.none)
+                .scaledToFit()
+                .frame(width: Layout.laptopWidth, height: Layout.laptopHeight)
+                .rotationEffect(.degrees(animation.laptopRotation))
+                .offset(
+                    x: Layout.laptopHorizontalOffset,
+                    y: Layout.laptopBaseVerticalOffset + animation.laptopVerticalOffset
+                )
+                .shadow(
+                    color: .cyan.opacity(animation.laptopGlowOpacity),
+                    radius: 7,
+                    y: 2
+                )
+                .opacity(animation.laptopOpacity)
+                .accessibilityHidden(animation.laptopOpacity < 0.01)
+        }
+        .frame(
+            width: Layout.sceneWidth,
+            height: Layout.sceneHeight,
+            alignment: .bottom
+        )
+    }
+
+    private var cuteEffectLayer: some View {
+        ZStack {
+            Image(systemName: "heart.fill")
+                .font(.system(size: 19, weight: .bold))
+                .symbolRenderingMode(.palette)
+                .foregroundStyle(.pink, .white)
+                .offset(
+                    x: Layout.heartHorizontalOffset,
+                    y: Layout.heartVerticalOffset + animation.cuteEffectVerticalOffset
+                )
+
+            Image(systemName: "sparkles")
+                .font(.system(size: 24, weight: .bold))
+                .symbolRenderingMode(.palette)
+                .foregroundStyle(.yellow, .mint)
+                .rotationEffect(.degrees(animation.cuteEffectRotation))
+                .offset(
+                    x: Layout.sparkleHorizontalOffset,
+                    y: Layout.sparkleVerticalOffset + animation.cuteEffectVerticalOffset
+                )
+        }
+        .opacity(animation.cuteEffectOpacity)
+        .accessibilityHidden(true)
+    }
+}
+
 struct DesktopPetAnimationValues {
     private static let walkingSwayRate = 0.85
     private static let walkingStepRate = 2.2
+    private static let idleCuteCycleDuration = 11.0
+    private static let idleCuteStart = 6.0
+    private static let idleCuteDuration = 3.0
+    private static let typingStrokeRate = 13.2
 
     let horizontalOffset: CGFloat
     let verticalOffset: CGFloat
     let rotation: Double
     let yawRotation: Double
     let scale: CGFloat
+    let horizontalScale: CGFloat
+    let verticalScale: CGFloat
     let facesRight: Bool
+    let laptopOpacity: Double
+    let laptopVerticalOffset: CGFloat
+    let laptopRotation: Double
+    let laptopGlowOpacity: Double
+    let cuteEffectOpacity: Double
+    let cuteEffectVerticalOffset: CGFloat
+    let cuteEffectRotation: Double
 
     init(mood: DesktopPetMood, date: Date) {
         let t = date.timeIntervalSinceReferenceDate
+        var horizontalOffset: CGFloat = 0
+        var verticalOffset: CGFloat = 0
+        var rotation = 0.0
+        var yawRotation = 0.0
+        var scale: CGFloat = 1
+        var horizontalScale: CGFloat = 1
+        var verticalScale: CGFloat = 1
+        var facesRight = true
+        var laptopOpacity = 0.0
+        var laptopVerticalOffset: CGFloat = 0
+        var laptopRotation = 0.0
+        var laptopGlowOpacity = 0.0
+        var cuteEffectOpacity = 0.0
+        var cuteEffectVerticalOffset: CGFloat = 0
+        var cuteEffectRotation = 0.0
+
         switch mood {
         case .idle:
-            horizontalOffset = 0
-            verticalOffset = CGFloat(sin(t * 2.1)) * 2
-            rotation = CGFloat(sin(t * 1.4)) * 1.5
-            yawRotation = 0
-            scale = 1
-            facesRight = true
+            let breathing = CGFloat(sin(t * 2.1))
+            let cycleTime = t.truncatingRemainder(dividingBy: Self.idleCuteCycleDuration)
+            let isPerformingCuteAction = cycleTime >= Self.idleCuteStart
+                && cycleTime <= Self.idleCuteStart + Self.idleCuteDuration
+            let cuteProgress = isPerformingCuteAction
+                ? (cycleTime - Self.idleCuteStart) / Self.idleCuteDuration
+                : 0
+            let cuteEnvelope = CGFloat(sin(cuteProgress * .pi))
+            let cuteWiggle = CGFloat(sin(cuteProgress * .pi * 4))
+
+            horizontalOffset = cuteEnvelope * cuteWiggle * 3
+            verticalOffset = breathing * 2 - cuteEnvelope * (3 + abs(cuteWiggle) * 3)
+            rotation = Double(breathing * 1.5 + cuteEnvelope * (4 + cuteWiggle * 3))
+            horizontalScale = 1 + cuteEnvelope * 0.035
+            verticalScale = 1 - cuteEnvelope * 0.025
+            cuteEffectOpacity = Double(cuteEnvelope)
+            cuteEffectVerticalOffset = -cuteEnvelope * 8
+            cuteEffectRotation = Double(cuteWiggle * 10)
         case .walking:
             horizontalOffset = CGFloat(sin(t * Self.walkingSwayRate)) * 11
-            verticalOffset = CGFloat(abs(sin(t * Self.walkingStepRate))) * 4
-            rotation = CGFloat(sin(t * Self.walkingStepRate)) * 3
-            yawRotation = 0
-            scale = 1
+            verticalOffset = -CGFloat(abs(sin(t * Self.walkingStepRate))) * 4
+            rotation = sin(t * Self.walkingStepRate) * 3
             facesRight = sin(t * Self.walkingSwayRate) >= 0
         case .typing:
-            let keystroke = CGFloat(sin(t * 11.5))
-            horizontalOffset = keystroke * 1.2
-            verticalOffset = abs(keystroke) * 2
-            rotation = keystroke * 1.2
-            yawRotation = 0
-            scale = 1
-            facesRight = true
+            let leftStroke = CGFloat(sin(t * Self.typingStrokeRate))
+            let rightStroke = CGFloat(sin(t * Self.typingStrokeRate + .pi))
+            let bodyRhythm = CGFloat(sin(t * Self.typingStrokeRate / 2))
+            horizontalOffset = -7 + bodyRhythm * 1.8
+            verticalOffset = -11 - abs(leftStroke) * 1.8
+            rotation = Double(bodyRhythm * 1.7)
+            horizontalScale = 1 + abs(rightStroke) * 0.018
+            verticalScale = 1 - abs(leftStroke) * 0.014
+            laptopOpacity = 1
+            laptopVerticalOffset = -abs(rightStroke) * 1.5
+            laptopRotation = sin(t * 4.6) * 0.8
+            laptopGlowOpacity = 0.58 + (sin(t * 3.2) + 1) * 0.12
         case .jumping:
             horizontalOffset = CGFloat(sin(t * 1.3)) * 4
-            verticalOffset = CGFloat(abs(sin(t * 3.5))) * 18
-            rotation = CGFloat(sin(t * 3.5)) * 7
-            yawRotation = 0
-            scale = 1
-            facesRight = true
+            let jump = CGFloat(abs(sin(t * 3.5)))
+            verticalOffset = -jump * 18
+            rotation = sin(t * 3.5) * 7
+            horizontalScale = 1 + jump * 0.04
+            verticalScale = 1 - jump * 0.03
         case .spinning:
-            horizontalOffset = 0
             verticalOffset = CGFloat(sin(t * 2.4)) * 3
-            rotation = 0
             yawRotation = (t * 135).truncatingRemainder(dividingBy: 360)
             scale = 0.96 + CGFloat(sin(t * 4.8)) * 0.04
-            facesRight = true
         case .attention:
             horizontalOffset = CGFloat(sin(t * 12)) * 5
-            verticalOffset = 0
-            rotation = CGFloat(sin(t * 12)) * 4
-            yawRotation = 0
-            scale = 1
-            facesRight = true
+            rotation = sin(t * 12) * 4
         case .celebrating:
             horizontalOffset = CGFloat(sin(t * 7)) * 9
-            verticalOffset = CGFloat(abs(sin(t * 3.8))) * 14
-            rotation = CGFloat(sin(t * 7)) * 10
-            yawRotation = 0
+            verticalOffset = -CGFloat(abs(sin(t * 3.8))) * 14
+            rotation = sin(t * 7) * 10
             scale = 1.04
-            facesRight = true
+            cuteEffectOpacity = 1
+            cuteEffectVerticalOffset = CGFloat(sin(t * 4.2)) * -5
+            cuteEffectRotation = sin(t * 6) * 12
         }
+
+        self.horizontalOffset = horizontalOffset
+        self.verticalOffset = verticalOffset
+        self.rotation = rotation
+        self.yawRotation = yawRotation
+        self.scale = scale
+        self.horizontalScale = horizontalScale
+        self.verticalScale = verticalScale
+        self.facesRight = facesRight
+        self.laptopOpacity = laptopOpacity
+        self.laptopVerticalOffset = laptopVerticalOffset
+        self.laptopRotation = laptopRotation
+        self.laptopGlowOpacity = laptopGlowOpacity
+        self.cuteEffectOpacity = cuteEffectOpacity
+        self.cuteEffectVerticalOffset = cuteEffectVerticalOffset
+        self.cuteEffectRotation = cuteEffectRotation
     }
 }

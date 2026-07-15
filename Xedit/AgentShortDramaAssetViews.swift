@@ -61,6 +61,7 @@ extension AgentShortDramaPanel {
                                 .font(.system(size: 9, weight: .semibold))
                         }
                         .buttonStyle(.borderless)
+                        .focusable(false)
                         .help("发送资产结构到聊天")
 
                         Button {
@@ -70,6 +71,7 @@ extension AgentShortDramaPanel {
                                 .font(.system(size: 9, weight: .semibold))
                         }
                         .buttonStyle(.borderless)
+                        .focusable(false)
                         .disabled(isGeneratingReference(item))
                         .help("生成参考图")
                     }

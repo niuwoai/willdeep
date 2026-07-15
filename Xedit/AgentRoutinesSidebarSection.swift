@@ -96,7 +96,7 @@ struct AgentRoutinesSidebarSection: View {
     private var header: some View {
         HStack(spacing: 6) {
             Text(L10n.Automation.header)
-                .font(.system(size: 11, weight: .semibold))
+                .font(AgentDesign.sidebarSectionFont)
                 .foregroundStyle(.secondary)
                 .textCase(.uppercase)
             Spacer(minLength: 0)
@@ -124,7 +124,7 @@ struct AgentRoutinesSidebarSection: View {
                     .foregroundStyle(.secondary)
                     .frame(width: 20)
                 Text(L10n.Automation.emptyState)
-                    .font(.system(size: 11, weight: .medium))
+                    .font(AgentDesign.sidebarAutomationFont)
                     .foregroundStyle(.secondary)
                     .lineLimit(2)
             }
@@ -150,7 +150,7 @@ struct AgentRoutinesSidebarSection: View {
                     .foregroundStyle(.secondary)
                     .frame(width: 13)
                 Text(template.name)
-                    .font(.system(size: 11))
+                    .font(AgentDesign.sidebarAutomationFont)
                     .lineLimit(1)
                 Spacer(minLength: 0)
             }
@@ -178,12 +178,12 @@ struct AgentRoutinesSidebarSection: View {
 
                 VStack(alignment: .leading, spacing: 1) {
                     Text(routine.name)
-                        .font(.system(size: 12))
+                        .font(AgentDesign.sidebarAutomationFont)
                         .foregroundStyle(isEnabled ? .primary : .secondary)
                         .lineLimit(1)
                         .truncationMode(.tail)
                     Text(routine.schedule.summary)
-                        .font(.system(size: 10))
+                        .font(AgentDesign.sidebarAutomationFont)
                         .foregroundStyle(.secondary)
                         .lineLimit(1)
                 }

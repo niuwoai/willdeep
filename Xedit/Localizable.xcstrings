@@ -1,8 +1,14 @@
 {
   "sourceLanguage" : "en",
   "strings" : {
+    "plan-mode-suggestion.continue-normally" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Continue normally" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "直接执行" } } } },
+    "plan-mode-suggestion.countdown-hint" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Entering Plan mode in %ds…" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "%d 秒后自动进入 Plan 模式…" } } } },
+    "plan-mode-suggestion.enter-plan" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Enter Plan" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "进入 Plan" } } } },
+    "plan-mode-suggestion.subtitle" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Switch to Plan mode before starting?" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "是否先进入 Plan 模式梳理步骤？" } } } },
+    "plan-mode-suggestion.title" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "This task looks complex" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "这个任务看起来比较复杂" } } } },
     "desktop-pet.appearance.antenna-botanist" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Antenna botanist" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "天线植物学家" } } } },
     "desktop-pet.appearance.cloud-forge" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Cloud-forge engineer" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "云锻工程师" } } } },
+    "desktop-pet.appearance.code-shiba" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Code Shiba" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "代码柴犬" } } } },
     "desktop-pet.appearance.cosmic-scholar" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Cosmic scholar" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "宇宙学者" } } } },
     "desktop-pet.appearance.feral-mechanic" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Feral mechanic" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "爪痕硬汉" } } } },
     "desktop-pet.appearance.helpdesk-hero" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Helpdesk hero" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "红帽客服英雄" } } } },
@@ -14,6 +20,7 @@
     "desktop-pet.appearance.desert-oracle" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Desert oracle" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "沙海先知" } } } },
     "desktop-pet.appearance.fluffy-bear" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Fluffy bear" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "肥肥熊" } } } },
     "desktop-pet.appearance.kung-fu-panda" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Kung fu panda" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "功夫熊猫风" } } } },
+    "desktop-pet.appearance.moon-rabbit" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Moon rabbit engineer" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "月兔工程师" } } } },
     "desktop-pet.appearance.neon-detective" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Neon detective" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "霓虹侦探" } } } },
     "desktop-pet.appearance.paranormal-tech" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Paranormal technician" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "灵异设备员" } } } },
     "desktop-pet.appearance.penguin" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Penguin" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "企鹅" } } } },
@@ -10629,23 +10636,6 @@
         }
       }
     },
-    "header.open-side-panel" : {
-      "extractionState" : "extracted_with_value",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "new",
-            "value" : "Open Side Panel"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "打开侧边栏"
-          }
-        }
-      }
-    },
     "header.search-sessions" : {
       "extractionState" : "extracted_with_value",
       "localizations" : {
@@ -10693,24 +10683,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "加宽窗口以显示侧栏"
-          }
-        }
-      }
-    },
-    "header.switch-to-editor" : {
-      "comment" : "button tooltip",
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Switch to Editor Mode"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "切换到编辑器模式"
           }
         }
       }

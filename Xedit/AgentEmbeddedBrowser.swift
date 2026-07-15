@@ -1363,6 +1363,7 @@ struct AgentEmbeddedBrowserPanel: View {
             footer
         }
         .frame(width: width)
+        .focusable(false)
     }
 
     private var toolbar: some View {
@@ -1374,6 +1375,7 @@ struct AgentEmbeddedBrowserPanel: View {
                     .frame(width: 22, height: 22)
             }
             .buttonStyle(.plain)
+            .focusable(false)
             .disabled(!controller.canGoBack)
             .help(L10n.AgentEmbeddedBrowser.back)
 
@@ -1384,6 +1386,7 @@ struct AgentEmbeddedBrowserPanel: View {
                     .frame(width: 22, height: 22)
             }
             .buttonStyle(.plain)
+            .focusable(false)
             .disabled(!controller.canGoForward)
             .help(L10n.AgentEmbeddedBrowser.forward)
 
@@ -1394,6 +1397,7 @@ struct AgentEmbeddedBrowserPanel: View {
                     .frame(width: 22, height: 22)
             }
             .buttonStyle(.plain)
+            .focusable(false)
             .help(L10n.AgentEmbeddedBrowser.reload)
 
             TextField(L10n.AgentEmbeddedBrowser.addressPlaceholder, text: $controller.address)
@@ -1410,6 +1414,7 @@ struct AgentEmbeddedBrowserPanel: View {
                     .frame(width: 22, height: 22)
             }
             .buttonStyle(.plain)
+            .focusable(false)
             .help(L10n.AgentEmbeddedBrowser.go)
 
             Button {
@@ -1419,6 +1424,7 @@ struct AgentEmbeddedBrowserPanel: View {
                     .frame(width: 22, height: 22)
             }
             .buttonStyle(.plain)
+            .focusable(false)
             .help(L10n.AgentEmbeddedBrowser.capture)
         }
         .padding(.horizontal, 10)

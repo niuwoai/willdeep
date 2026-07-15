@@ -65,6 +65,10 @@ import SwiftUI
 struct AgentModeMessageView: View {
     let message: AgentMessage
     let isStreamingThisMessage: Bool
+    /// User-turn chrome shared by all assistant messages after one user input.
+    /// Only the first visible message renders the status divider and only the
+    /// last visible message renders the aggregate footer.
+    var assistantTurnPresentation: AgentAssistantTurnPresentation? = nil
     /// User-chosen Agent chat base font size (pt). Drives the prose
     /// font in the user bubble and the inline Markdown body for the
     /// streaming assistant message. Defaults to system body so existing
@@ -221,24 +225,26 @@ struct AgentModeMessageView: View {
         Group {
             if !message.content.isEmpty || !message.images.isEmpty {
                 VStack(alignment: .leading, spacing: 0) {
-                    Text(AgentChatMessageMetrics.assistantStatus(
-                        for: message,
-                        isStreaming: isStreamingThisMessage
-                    ))
-                        .font(.system(size: baseFontSize, weight: .medium))
-                        .foregroundStyle(Color(nsColor: .tertiaryLabelColor))
+                    if showsAssistantTurnHeader {
+                        Text(AgentChatMessageMetrics.assistantStatus(
+                            for: assistantTurnPresentation?.summaryMessage ?? message,
+                            isStreaming: isStreamingThisMessage
+                        ))
+                            .font(.system(size: baseFontSize, weight: .medium))
+                            .foregroundStyle(Color(nsColor: .tertiaryLabelColor))
 
-                    Rectangle()
-                        .fill(Color(nsColor: AgentChatHistoryLayoutMetrics.assistantStatusDividerColor(
-                            isDark: colorScheme == .dark
-                        )))
-                        .frame(
-                            maxWidth: .infinity,
-                            minHeight: AgentChatHistoryLayoutMetrics.assistantStatusDividerThickness,
-                            maxHeight: AgentChatHistoryLayoutMetrics.assistantStatusDividerThickness
-                        )
-                        .padding(.top, AgentChatHistoryLayoutMetrics.assistantStatusDividerTopSpacing)
-                        .padding(.bottom, AgentChatHistoryLayoutMetrics.assistantStatusDividerBottomSpacing)
+                        Rectangle()
+                            .fill(Color(nsColor: AgentChatHistoryLayoutMetrics.assistantStatusDividerColor(
+                                isDark: colorScheme == .dark
+                            )))
+                            .frame(
+                                maxWidth: .infinity,
+                                minHeight: AgentChatHistoryLayoutMetrics.assistantStatusDividerThickness,
+                                maxHeight: AgentChatHistoryLayoutMetrics.assistantStatusDividerThickness
+                            )
+                            .padding(.top, AgentChatHistoryLayoutMetrics.assistantStatusDividerTopSpacing)
+                            .padding(.bottom, AgentChatHistoryLayoutMetrics.assistantStatusDividerBottomSpacing)
+                    }
 
                     VStack(alignment: .leading, spacing: 10) {
                         if !message.content.isEmpty {
@@ -261,8 +267,11 @@ struct AgentModeMessageView: View {
                     // `.finishedTurn`, so the row would briefly read
                     // "copy · — · —" and then update. Wait until the
                     // turn settles.
-                    if !isStreamingThisMessage {
-                        AgentMessageFooter(message: message, alignment: .leading)
+                    if !isStreamingThisMessage && showsAssistantTurnFooter {
+                        AgentMessageFooter(
+                            message: assistantTurnPresentation?.summaryMessage ?? message,
+                            alignment: .leading
+                        )
                             .padding(.top, 8)
                     }
                 }
@@ -270,6 +279,14 @@ struct AgentModeMessageView: View {
             }
         }
         .frame(maxWidth: AgentDesign.chatMaxContentWidth, alignment: .leading)
+    }
+
+    private var showsAssistantTurnHeader: Bool {
+        assistantTurnPresentation?.isFirstVisibleMessage(message) ?? true
+    }
+
+    private var showsAssistantTurnFooter: Bool {
+        assistantTurnPresentation?.isLastVisibleMessage(message) ?? true
     }
 }
 

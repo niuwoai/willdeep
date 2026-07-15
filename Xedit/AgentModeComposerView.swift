@@ -42,6 +42,20 @@ struct AgentChatComposer: View {
                         .frame(maxWidth: AgentDesign.chatMaxContentWidth)
                 }
 
+                if let suggestion = planModeSuggestion() {
+                    AgentPlanModeSuggestionBanner(
+                        onEnterPlan: {
+                            appState.resolveAgentPlanModeSuggestion(enterPlanMode: true)
+                        },
+                        onContinueNormally: {
+                            appState.resolveAgentPlanModeSuggestion(enterPlanMode: false)
+                        }
+                    )
+                    .frame(maxWidth: AgentDesign.chatMaxContentWidth)
+                    .id(suggestion.id)
+                    .transition(.opacity.combined(with: .move(edge: .bottom)))
+                }
+
                 if let plan = bannerPlan() {
                     AgentPlanAutoExecutionBanner(
                         plan: plan,
@@ -61,6 +75,10 @@ struct AgentChatComposer: View {
                 }
 
                 ComposerCard(onUserEdit: { oldValue, newValue in
+                    if appState.agentPendingPlanModeSuggestion != nil,
+                       newValue != oldValue {
+                        appState.cancelAgentPlanModeSuggestion()
+                    }
                     // 用户在 composer 继续打字（输入框字数变多）→ 视作"我有
                     // 补充，留在 Plan 模式"，立刻 dismiss banner。**只在 banner
                     // 还显示时记 fingerprint**，否则任何普通输入都会无意义地写
@@ -110,6 +128,11 @@ struct AgentChatComposer: View {
             return nil
         }
         return plan
+    }
+
+    private func planModeSuggestion() -> AgentPlanModeSuggestion? {
+        guard appState.agentInteractionMode == .normal else { return nil }
+        return appState.agentPendingPlanModeSuggestion
     }
 
     private func currentProposedPlanIfBannerVisible() -> AgentPlan? {

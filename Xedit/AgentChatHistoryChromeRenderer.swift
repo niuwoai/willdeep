@@ -12,6 +12,7 @@ extension AgentChatHistoryRenderer {
     static func appendHeader(
         for message: AgentMessage,
         isToolCallOnly: Bool,
+        isStreamingAssistantTurn: Bool,
         to result: NSMutableAttributedString,
         headerFont: NSFont,
         assistantStatusFont: NSFont,
@@ -22,7 +23,10 @@ extension AgentChatHistoryRenderer {
         if message.role == .assistant, !isToolCallOnly {
             let headerStart = result.length
             result.append(NSAttributedString(
-                string: AgentChatMessageMetrics.assistantStatus(for: message, isStreaming: false) + "\n",
+                string: AgentChatMessageMetrics.assistantStatus(
+                    for: message,
+                    isStreaming: isStreamingAssistantTurn
+                ) + "\n",
                 attributes: [
                     .font: assistantStatusFont,
                     .foregroundColor: assistantStatusColor,

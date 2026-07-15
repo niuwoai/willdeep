@@ -150,6 +150,10 @@ struct AgentSidePanelHost: View {
         .frame(width: width, alignment: .trailing)
         .clipped()
         .background(palette.panelFill)
+        // The side-panel shell is mouse-driven chrome. Keeping the shell out
+        // of the keyboard focus chain also prevents popovers from painting an
+        // automatic focus ring around their first action.
+        .focusable(false)
         .onAppear {
             rememberTerminalMountIfNeeded(kind)
         }
@@ -380,6 +384,7 @@ struct AgentSidePanelWidgetView: View {
                             )
                         }
                         .buttonStyle(.plain)
+                        .focusable(false)
                         .help("查看网页组件：\(widget.title)")
                     }
                 }
@@ -403,6 +408,7 @@ struct AgentSidePanelWidgetView: View {
                             .font(.caption)
                     }
                     .buttonStyle(.borderless)
+                    .focusable(false)
                     .help("把当前网页组件的推荐动作发送到聊天")
                 }
                 Button {
@@ -412,6 +418,7 @@ struct AgentSidePanelWidgetView: View {
                         .font(.caption)
                 }
                 .buttonStyle(.borderless)
+                .focusable(false)
                 .help("把当前网页组件上下文发送到聊天")
             }
             Text("\(max(1, widget.byteCount / 1024)) KB · \(Self.dateFormatter.string(from: widget.createdAt))")
@@ -1836,6 +1843,7 @@ struct AgentSidePanelPreviewView: View {
                 pickFile()
             }
             .controlSize(.small)
+            .focusable(false)
             Spacer()
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)

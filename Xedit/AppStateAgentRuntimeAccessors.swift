@@ -171,6 +171,11 @@ extension AppState {
         set { activeRuntime?.currentPlan = newValue }
     }
 
+    var agentPendingPlanModeSuggestion: AgentPlanModeSuggestion? {
+        get { activeRuntime?.pendingPlanModeSuggestion }
+        set { activeRuntime?.pendingPlanModeSuggestion = newValue }
+    }
+
     /// Currently-pinned goal for Goal mode.
     var agentCurrentGoal: AgentGoal? {
         get { activeRuntime?.currentGoal }

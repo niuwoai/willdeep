@@ -279,6 +279,7 @@ extension AppState {
     /// session pick-up starts clean.
     func setAgentInteractionMode(_ mode: AgentInteractionMode) {
         guard agentInteractionMode != mode else { return }
+        cancelAgentPlanModeSuggestion()
         agentInteractionMode = mode
         if mode != .plan { agentCurrentPlan = nil }
         if mode != .goal { agentCurrentGoal = nil }

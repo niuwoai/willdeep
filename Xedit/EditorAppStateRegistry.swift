@@ -46,8 +46,8 @@ final class EditorAppStateRegistry: ObservableObject {
     /// 空 AppState 上（表现为「聊天被清空成新聊天」）。
     private var headlessFallback: AppState?
 
-    /// 每个 editor 窗口的 NSWindow 弱引用。AgentChatHeader 的"切回
-    /// editor"按钮用这个找到当前 current 对应的窗口、激活到前台。
+    /// 每个 editor 窗口的 NSWindow 弱引用。“显示编辑器”菜单命令及
+    /// Agent 文件打开动作通过它找到 current 对应的窗口、激活到前台。
     /// 弱引用避免持有 NSWindow 阻止系统正常释放。
     private var windows: [ObjectIdentifier: WeakWindow] = [:]
 
@@ -175,10 +175,10 @@ final class EditorAppStateRegistry: ObservableObject {
         return (best.appState, best.sessionID)
     }
 
-    /// 把当前 current 对应的 editor 窗口激活到前台。Agent 窗口的
-    /// header 「切回 editor」按钮用。返回 false 表示当前只有 orphan
-    /// AppState 或窗口弱引用已失效,调用方应通过 SwiftUI `openWindow`
-    /// 创建/显示主 editor 窗口。
+    /// 把当前 current 对应的 editor 窗口激活到前台，供菜单命令和文件
+    /// 打开动作复用。返回 false 表示当前只有 orphan AppState 或窗口弱
+    /// 引用已失效，调用方应通过 SwiftUI `openWindow` 创建/显示主 editor
+    /// 窗口。
     @discardableResult
     func focusCurrentEditorWindow() -> Bool {
         guard let appState = current,
