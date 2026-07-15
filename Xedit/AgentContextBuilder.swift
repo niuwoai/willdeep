@@ -117,6 +117,8 @@ enum AgentContextBuilder {
                 ...
                 ```
 
+                Treat the plan as the complete delivery contract for the user's request. Cover the requested end state, not just an outline, sample, first chapter, first file, or first phase unless the user explicitly asked for a partial delivery. Before emitting the plan, compare every requested deliverable against the numbered steps and add any missing work.
+
                 Then STOP and wait for the user to click Approve. Do not call any tool yet. Read-only tools (search_files, grep_files, read_file, list_directory, git_status) are still allowed if you need them BEFORE drafting the plan — but once you've drafted, stop and wait.
                 If the user revises and re-prompts after a Reject, emit a new ```plan block.
                 """)
@@ -140,7 +142,7 @@ enum AgentContextBuilder {
                 2: in_progress
                 ```
 
-                Steps you didn't touch this turn can be omitted. Mark a step `in_progress` before you start its tool calls; flip it to `done` (or `failed`) once finished. Once every step is `done`/`skipped`/`failed`, summarize what was accomplished.
+                Steps you didn't touch this turn can be omitted. Mark a step `in_progress` before you start its tool calls; flip it to `done` (or `failed`) once finished. Never mark a partial/sample deliverable as `done` when the approved step promises the complete artifact. If the response budget forces a pause, leave the current step `in_progress`; WillDeep can continue it automatically. Once every step is `done`/`skipped`/`failed`, summarize what was accomplished.
                 """)
             }
         }
@@ -520,21 +522,26 @@ enum AgentPlanParser {
     /// keys are ignored so a sloppy agent reply can't corrupt the
     /// whole plan. Returns nil when no progress block is present.
     static func applyProgress(to plan: AgentPlan, from content: String) -> AgentPlan? {
-        guard let body = fencedBody(in: content, tag: "progress") else { return nil }
+        let bodies = fencedBodies(in: content, tag: "progress")
+        guard !bodies.isEmpty else { return nil }
         var updates: [Int: AgentPlan.StepStatus] = [:]
-        for raw in body.components(separatedBy: .newlines) {
-            let trimmed = raw.trimmingCharacters(in: .whitespaces)
-            guard !trimmed.isEmpty else { continue }
-            // Accept "1: done", "1) done", "step 1: done", "- 1. done"
-            // Walk to the first run of digits, then to the separator.
-            guard let (index, after) = leadingNumber(in: trimmed),
-                  index >= 1, index <= plan.steps.count else { continue }
-            // Skip a single separator char (: . ) -) after the number.
-            let rest = trimmed[after...].drop { $0 == ":" || $0 == "." || $0 == ")" || $0 == "-" || $0 == " " || $0 == "\t" }
-            let token = rest.split(separator: " ", maxSplits: 1).first.map(String.init)?
-                .lowercased() ?? ""
-            if let parsed = parseStepStatus(token) {
-                updates[index - 1] = parsed
+        for body in bodies {
+            for raw in body.components(separatedBy: .newlines) {
+                let trimmed = raw.trimmingCharacters(in: .whitespaces)
+                guard !trimmed.isEmpty else { continue }
+                // Accept "1: done", "1) done", "step 1: done", "- 1. done"
+                // Walk to the first run of digits, then to the separator.
+                guard let (index, after) = leadingNumber(in: trimmed),
+                      index >= 1, index <= plan.steps.count else { continue }
+                // Skip a single separator char (: . ) -) after the number.
+                let rest = trimmed[after...].drop { $0 == ":" || $0 == "." || $0 == ")" || $0 == "-" || $0 == " " || $0 == "\t" }
+                let token = rest.split(separator: " ", maxSplits: 1).first.map(String.init)?
+                    .lowercased() ?? ""
+                if let parsed = parseStepStatus(token) {
+                    // Models sometimes emit one progress block per section.
+                    // Apply every block in order so the latest status wins.
+                    updates[index - 1] = parsed
+                }
             }
         }
         guard !updates.isEmpty else { return nil }
@@ -553,25 +560,43 @@ enum AgentPlanParser {
     }
 
     fileprivate static func fencedBody(in content: String, tag: String) -> String? {
+        fencedBodies(in: content, tag: tag).first
+    }
+
+    private static func fencedBodies(in content: String, tag: String) -> [String] {
         let lines = content.components(separatedBy: .newlines)
         let wanted = tag.lowercased()
         var inBlock = false
-        var body: [String] = []
+        var currentBody: [String] = []
+        var bodies: [String] = []
         for line in lines {
             let trimmed = line.trimmingCharacters(in: .whitespaces)
             if !inBlock {
                 if trimmed.hasPrefix("```") {
                     let info = String(trimmed.dropFirst(3)).trimmingCharacters(in: .whitespaces).lowercased()
-                    if info == wanted { inBlock = true }
+                    if info == wanted {
+                        inBlock = true
+                        currentBody = []
+                    }
                 }
                 continue
             }
-            if trimmed.hasPrefix("```") { return body.joined(separator: "\n") }
-            body.append(line)
+            if trimmed.hasPrefix("```") {
+                if !currentBody.isEmpty {
+                    bodies.append(currentBody.joined(separator: "\n"))
+                }
+                inBlock = false
+                currentBody = []
+                continue
+            }
+            currentBody.append(line)
         }
         // Streaming case: ``` not yet closed — still return what we have
         // so the plan card can render mid-stream.
-        return inBlock && !body.isEmpty ? body.joined(separator: "\n") : nil
+        if inBlock, !currentBody.isEmpty {
+            bodies.append(currentBody.joined(separator: "\n"))
+        }
+        return bodies
     }
 
     private static func numberedStep(from line: String) -> String? {
@@ -622,6 +647,49 @@ enum AgentPlanParser {
             return nil
         }
     }
+}
+
+nonisolated enum AgentPlanAutoContinuationDecision: Equatable {
+    case stop
+    case continueExecution
+    case pauseAfterNoProgress
+    case pauseAfterLimit
+}
+
+nonisolated enum AgentPlanAutoContinuationPolicy {
+    static let maximumAutomaticContinuations = 8
+    static let maximumConsecutiveNoProgressReplies = 1
+
+    static func decision(
+        for plan: AgentPlan?,
+        automaticContinuationCount: Int,
+        consecutiveNoProgressReplies: Int,
+        hasQueuedUserMessages: Bool
+    ) -> AgentPlanAutoContinuationDecision {
+        guard !hasQueuedUserMessages,
+              let plan,
+              plan.status == .approved || plan.status == .executing,
+              plan.steps.contains(where: { !terminalStatuses.contains($0.status) }) else {
+            return .stop
+        }
+        guard automaticContinuationCount < maximumAutomaticContinuations else {
+            return .pauseAfterLimit
+        }
+        guard consecutiveNoProgressReplies <= maximumConsecutiveNoProgressReplies else {
+            return .pauseAfterNoProgress
+        }
+        return .continueExecution
+    }
+
+    static func continuationNotice(finishReason: String?) -> String {
+        let reason = finishReason.map { " The provider ended the previous reply with finish reason '\($0)'." } ?? ""
+        return """
+        Automatic Plan continuation: the approved plan still has non-terminal steps.\(reason)
+        Continue from the current step statuses without restating completed work. Do not stop after a partial or sample deliverable. If the response budget forces another pause, leave the current step in_progress. If genuinely blocked, mark the step failed and explain why. End the reply with exactly one progress block containing the latest statuses touched in that reply.
+        """
+    }
+
+    private static let terminalStatuses: Set<AgentPlan.StepStatus> = [.done, .skipped, .failed]
 }
 
 // MARK: - Goal checklist evaluation parser
