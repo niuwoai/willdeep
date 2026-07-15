@@ -65,6 +65,7 @@ struct OpenAIChatAdapter {
         guard let httpResponse = response as? HTTPURLResponse else {
             throw AgentClientError.invalidResponse
         }
+        SomeIMCreditsResponseObserver.capture(httpResponse, providerID: configuration.providerID)
         guard (200..<300).contains(httpResponse.statusCode) else {
             let responseBody = try await AgentNetworkSupport.collectBody(from: bytes)
             throw AgentClientError.serverStatus(
@@ -210,6 +211,7 @@ struct OpenAIChatAdapter {
             guard let http = response as? HTTPURLResponse else {
                 return .unavailable("no http response")
             }
+            SomeIMCreditsResponseObserver.capture(http, providerID: configuration.providerID)
             guard (200..<300).contains(http.statusCode) else {
                 return .unavailable("http \(http.statusCode)")
             }
@@ -269,7 +271,11 @@ struct OpenAIChatAdapter {
 
         do {
             let (data, response) = try await session.data(for: request)
-            guard let http = response as? HTTPURLResponse, (200..<300).contains(http.statusCode) else {
+            guard let http = response as? HTTPURLResponse else {
+                return nil
+            }
+            SomeIMCreditsResponseObserver.capture(http, providerID: configuration.providerID)
+            guard (200..<300).contains(http.statusCode) else {
                 return nil
             }
             guard let decoded = try? JSONDecoder().decode(JudgmentResponse.self, from: data),

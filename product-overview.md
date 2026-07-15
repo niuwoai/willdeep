@@ -1,6 +1,6 @@
 # WillDeep Product Overview
 
-> Last updated: 2026-07-15 | Current version: v1.158.0-rc3
+> Last updated: 2026-07-15 | Current version: v1.159.0-rc2
 
 ## Positioning
 
@@ -12,6 +12,7 @@ WillDeep is configured for non-App-Store distribution without App Sandbox so it 
 
 ## 架构概览
 
+- **some.im credits 版本化刷新（1.159.0-rc2）** —— WillDeep 左侧会话栏底部持续展示 some.im 剩余 credits，低于 1000 万时使用随深浅外观适配的低饱和暖棕色提醒。AI 请求响应会读取服务端余额快照 header；credits 与账本/预占变更的 Unix 微秒时间点必须成对出现，客户端仅接受严格更新的时间点，避免并发响应或旧边缘快照覆盖新余额。无 AI 请求时以 4–7 分钟随机周期兜底刷新账户余额。
 - **Agent 工作区乐观并发保护（1.158.0-rc3）** —— 每次模型调用前都会生成包含仓库/worktree 身份、HEAD、分支、暂存区、合并状态和变更文件内容的 revision；执行 `git add`、`commit`、`merge`、`push` 等高风险 Git 变更前，宿主在 `~/.willdeep/locks/workspace-mutations` 的跨进程仓库锁内执行 compare-and-swap。发现人类编辑或其他会话写入后会阻止操作、报告变化路径和相关会话，并要求重新检查与测试；一次命令只允许一个 Git 变更，后台 Git 变更不予执行。项目构建守卫也会在排队取得 workspace 锁后刷新源码指纹，确保缓存与产物绑定实际开始构建时的代码。
 - **Agent 运行上下文与会话级终端路由（1.157.0）** —— Composer 顶部持续显示当前项目、本地主工作区或新 worktree 运行位置及真实 Git 分支，并可直接创建隔离 worktree。Claude Code / Codex 委派任务默认在侧边栏终端中可见执行；每个对话维护独立的终端标签绑定，工具可用 `terminal_tab_id` 精确指定标签，未指定时也只访问当前会话绑定标签，绝不拿任意 active 标签顶包。执行中的标签受关闭和闲置回收保护，用户切换标签时会显式更新会话绑定。
 - **Agent 账户状态与帮助入口（1.158.0-rc1）** —— 左下角账户状态栏可展开余额/用量、设置和退出登录子菜单；问号按钮打开帮助入口，账户状态和菜单文案支持中英文切换。

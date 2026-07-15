@@ -1,5 +1,30 @@
 # Changelog
 
+## 1.159.0-rc2 - 2026-07-15
+
+### Fixed
+
+- **低余额提示降低视觉刺激。** 左侧账户区 credits 低于阈值时由高饱和红色改为 macOS 动态系统暖棕色，在浅色、深色及不同界面皮肤中保持提醒语义，同时不再抢夺昵称和主操作的视觉焦点。
+
+### Changed
+
+- 同步 Xcode App、Go agent、Help bundle、Computer Use Helper、README badge、移动网关响应头契约与产品文档版本到 `1.159.0-rc2`（视觉修复仅递增 rc）。
+
+---
+
+## 1.159.0-rc1 - 2026-07-15
+
+### Added
+
+- **some.im credits 自动刷新与低余额提示。** 左侧会话栏底部账户区直接展示剩余 credits，低于 1000 万时标红；AI 请求可从响应 header 即时吸收余额快照，无请求时以 4–7 分钟随机周期兜底刷新。
+- **余额快照防旧值倒灌。** credits header 必须与服务端账本/预占变更的 Unix 微秒时间点成对出现；客户端仅接受严格更新的时间点，手动刷新、并发 AI 响应和边缘旧快照都不能覆盖更新余额。
+
+### Changed
+
+- 版本号从 **1.158.0-rc3** 提升为 **1.159.0-rc1**；Xcode App、Go agent、Help bundle、Computer Use Helper、README badge、移动网关响应头契约与产品文档同步。
+
+---
+
 ## 1.158.0-rc3 - 2026-07-15
 
 ### Fixed

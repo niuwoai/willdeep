@@ -19,6 +19,14 @@ enum AgentSidebarAccountMetrics {
     static let menuWidth: CGFloat = 344
     static let menuHeaderHeight: CGFloat = 34
     static let menuRowHeight: CGFloat = 34
+    /// 低余额是温和提醒而非错误。浅色外观使用低饱和赭石棕保证小字号对比度，
+    /// 深色外观提升亮度；两者都比系统红更安静。
+    static let lowCreditsTextColor = Color(nsColor: NSColor(name: nil) { appearance in
+        if appearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua {
+            return NSColor(srgbRed: 0.86, green: 0.66, blue: 0.32, alpha: 1)
+        }
+        return NSColor(srgbRed: 0.49, green: 0.32, blue: 0.10, alpha: 1)
+    })
 }
 
 enum AgentSidebarAccountLinks {
@@ -78,10 +86,17 @@ struct AgentSidebarAccountFooter: View {
             } label: {
                 HStack(spacing: 8) {
                     accountAvatar(account)
-                    Text(account.displayName)
-                        .font(.system(size: 12, weight: .semibold))
-                        .foregroundStyle(.primary)
-                        .lineLimit(1)
+                    VStack(alignment: .leading, spacing: 1) {
+                        Text(account.displayName)
+                            .font(.system(size: 11, weight: .semibold))
+                            .foregroundStyle(.primary)
+                            .lineLimit(1)
+                        Text(L10n.Sidebar.someIMCredits(account.compactDisplayCredits))
+                            .font(.system(size: 9, weight: .medium))
+                            .foregroundStyle(account.isLowOnCredits ? AgentSidebarAccountMetrics.lowCreditsTextColor : Color.secondary)
+                            .monospacedDigit()
+                            .lineLimit(1)
+                    }
                     Spacer(minLength: 0)
                 }
                 .padding(.horizontal, 8)

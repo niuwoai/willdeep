@@ -147,6 +147,9 @@ struct AgentSessionsSidebar: View {
         .onReceive(NotificationCenter.default.publisher(for: SomeIMIntegrationStore.accountDidChangeNotification)) { _ in
             someIMAccount = SomeIMIntegrationStore.loadAccount()
         }
+        .task(id: someIMAccount?.email) {
+            await runAutomaticSomeIMAccountRefreshLoop()
+        }
     }
 
     @ViewBuilder
@@ -730,25 +733,39 @@ struct AgentSessionsSidebar: View {
     }
 
     private func refreshSomeIMAccount() {
+        Task {
+            await refreshSomeIMAccountNow()
+        }
+    }
+
+    @MainActor
+    private func refreshSomeIMAccountNow() async {
         guard !isRefreshingSomeIMAccount else { return }
         isRefreshingSomeIMAccount = true
         someIMAccountStatus = ""
-        Task {
-            let result: Result<SomeIMAccount, Error>
+        defer { isRefreshingSomeIMAccount = false }
+        do {
+            someIMAccount = try await SomeIMClient.fetchAccountBalance()
+        } catch {
+            someIMAccountStatus = error.localizedDescription
+        }
+    }
+
+    @MainActor
+    private func runAutomaticSomeIMAccountRefreshLoop() async {
+        guard someIMAccount != nil else { return }
+        if SomeIMAccountRefreshPolicy.shouldRefresh(someIMAccount) {
+            await refreshSomeIMAccountNow()
+        }
+        while !Task.isCancelled, someIMAccount != nil {
+            let delay = SomeIMAccountRefreshPolicy.nextDelay()
             do {
-                result = .success(try await SomeIMClient.fetchAccountBalance())
+                try await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000))
             } catch {
-                result = .failure(error)
+                return
             }
-            await MainActor.run {
-                isRefreshingSomeIMAccount = false
-                switch result {
-                case .success(let account):
-                    someIMAccount = account
-                case .failure(let error):
-                    someIMAccountStatus = error.localizedDescription
-                }
-            }
+            guard !Task.isCancelled else { return }
+            await refreshSomeIMAccountNow()
         }
     }
 

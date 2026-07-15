@@ -261,6 +261,46 @@ enum SomeIMIntegrationStore {
         NotificationCenter.default.post(name: accountDidChangeNotification, object: nil)
     }
 
+    /// 合并 AI 响应头携带的余额快照。严格要求服务端时间点递增；同一时间或旧时间
+    /// 都不落盘，从根上阻止并发响应、边缘旧快照把新 credits 覆盖掉。
+    @discardableResult
+    static func applyCreditsSnapshot(_ snapshot: SomeIMCreditsSnapshot) -> Bool {
+        guard let current = loadAccount(),
+              let updated = snapshot.applying(to: current) else {
+            return false
+        }
+        saveAccount(updated)
+        return true
+    }
+
+    /// 手动/兜底刷新也走同一时间顺序。新服务端会返回版本；旧服务端没有版本时，
+    /// 若本地已经持有版本化快照，只更新身份字段并保留较新的 credits。
+    @discardableResult
+    static func saveRefreshedAccount(_ incoming: SomeIMAccount) -> SomeIMAccount {
+        guard let current = loadAccount() else {
+            saveAccount(incoming)
+            return incoming
+        }
+        let merged = mergedRefreshedAccount(incoming, current: current)
+        saveAccount(merged)
+        return merged
+    }
+
+    nonisolated static func mergedRefreshedAccount(_ incoming: SomeIMAccount, current: SomeIMAccount) -> SomeIMAccount {
+        guard let currentVersion = current.creditsUpdatedAtMicros else {
+            return incoming
+        }
+        if let incomingVersion = incoming.creditsUpdatedAtMicros, incomingVersion > currentVersion {
+            return incoming
+        }
+        var merged = incoming
+        merged.balanceUSD = current.balanceUSD
+        merged.credits = current.credits
+        merged.creditsPerUSD = current.creditsPerUSD
+        merged.creditsUpdatedAtMicros = currentVersion
+        return merged
+    }
+
     // MARK: - Secrets (shared Keychain access group is the source of truth)
 
     static func loadAPIKey() -> String {
@@ -563,6 +603,9 @@ struct SomeIMAccount: Codable, Equatable {
     var creditsPerUSD: Int
     var defaultModel: String
     var lastUpdatedAt: Date
+    /// 服务端余额快照的账本/预占变更时间（Unix 微秒）。只用于余额合并排序，
+    /// 与本机抓取时间 `lastUpdatedAt` 分离，避免客户端时钟偏差造成新旧误判。
+    var creditsUpdatedAtMicros: Int64? = nil
 
     nonisolated var displayCredits: String {
         guard let value = Int64(credits) else { return credits }
@@ -576,6 +619,11 @@ struct SomeIMAccount: Codable, Equatable {
 
     nonisolated var compactDisplayCredits: String {
         Self.compactCredits(credits) ?? displayCredits
+    }
+
+    nonisolated var isLowOnCredits: Bool {
+        guard let value = Int64(credits) else { return false }
+        return value < SomeIMCreditsSnapshot.lowCreditsThreshold
     }
 
     nonisolated static func compactCredits(_ credits: String) -> String? {
@@ -600,6 +648,70 @@ struct SomeIMAccount: Codable, Equatable {
         let scaled = value / unit.divisor
         let rendered = formatter.string(from: NSNumber(value: scaled)) ?? String(format: "%.2f", scaled)
         return rendered + unit.suffix
+    }
+}
+
+struct SomeIMCreditsSnapshot: Equatable, Sendable {
+    nonisolated static let remainingHeader = "X-SomeIM-Credits-Remaining"
+    nonisolated static let updatedAtHeader = "X-SomeIM-Credits-Updated-At"
+    nonisolated static let creditsPerUSDHeader = "X-SomeIM-Credits-Per-USD"
+    nonisolated static let sourceHeader = "X-SomeIM-Credits-Source"
+    nonisolated static let lowCreditsThreshold: Int64 = 10_000_000
+
+    let credits: String
+    let updatedAtMicros: Int64
+    let creditsPerUSD: Int
+    let source: String?
+
+    nonisolated static func responseSnapshot(from response: HTTPURLResponse) -> SomeIMCreditsSnapshot? {
+        guard let rawCredits = response.value(forHTTPHeaderField: remainingHeader)?.trimmingCharacters(in: .whitespacesAndNewlines),
+              let creditsValue = Int64(rawCredits), creditsValue >= 0,
+              let rawUpdatedAt = response.value(forHTTPHeaderField: updatedAtHeader)?.trimmingCharacters(in: .whitespacesAndNewlines),
+              let updatedAtMicros = Int64(rawUpdatedAt), updatedAtMicros > 0 else {
+            return nil
+        }
+        let rawRate = response.value(forHTTPHeaderField: creditsPerUSDHeader)?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let rate = rawRate.flatMap(Int.init) ?? 100_000
+        guard rate > 0 else { return nil }
+        let rawSource = response.value(forHTTPHeaderField: sourceHeader)?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        let source = rawSource?.isEmpty == false ? rawSource : nil
+        return SomeIMCreditsSnapshot(
+            credits: String(creditsValue),
+            updatedAtMicros: updatedAtMicros,
+            creditsPerUSD: rate,
+            source: source
+        )
+    }
+
+    nonisolated func applying(to account: SomeIMAccount) -> SomeIMAccount? {
+        if let currentVersion = account.creditsUpdatedAtMicros,
+           updatedAtMicros <= currentVersion {
+            return nil
+        }
+        var updated = account
+        updated.credits = credits
+        updated.creditsPerUSD = creditsPerUSD
+        if let creditsValue = Decimal(string: credits, locale: Locale(identifier: "en_US_POSIX")) {
+            updated.balanceUSD = NSDecimalNumber(decimal: creditsValue / Decimal(creditsPerUSD)).stringValue
+        }
+        updated.creditsUpdatedAtMicros = updatedAtMicros
+        updated.lastUpdatedAt = Date()
+        return updated
+    }
+}
+
+enum SomeIMCreditsResponseObserver {
+    nonisolated private static let someIMProviderID = "some-im"
+
+    nonisolated static func capture(_ response: HTTPURLResponse, providerID: String) {
+        guard providerID == someIMProviderID,
+              let snapshot = SomeIMCreditsSnapshot.responseSnapshot(from: response) else {
+            return
+        }
+        Task { @MainActor in
+            SomeIMIntegrationStore.applyCreditsSnapshot(snapshot)
+        }
     }
 }
 
@@ -909,10 +1021,10 @@ enum SomeIMClient {
             credits: credits(fromUSD: balance),
             creditsPerUSD: 100000,
             defaultModel: previous?.defaultModel ?? SomeIMIntegrationSettings.defaultTextModel,
-            lastUpdatedAt: Date()
+            lastUpdatedAt: Date(),
+            creditsUpdatedAtMicros: decoded.balance_updated_at_unix_micros.flatMap(Int64.init)
         )
-        SomeIMIntegrationStore.saveAccount(account)
-        return account
+        return SomeIMIntegrationStore.saveRefreshedAccount(account)
     }
 
     private static func fetchCustomerProfile(
@@ -1700,6 +1812,7 @@ enum SomeIMClient {
         let tenant_id: String
         let currency: String
         let balance: String
+        let balance_updated_at_unix_micros: String?
     }
 
     private struct HandoffLinkData: Decodable {
