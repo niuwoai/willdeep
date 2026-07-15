@@ -13,13 +13,14 @@ concurrency:
 jobs:
   unit-tests:
     name: XeditTests (macOS)
-    # rc10: 升到 macos-26 runner —— 项目 MACOSX_DEPLOYMENT_TARGET = 26.4
-    # （Tahoe），之前的 macos-15 runner（macOS 15.7.x + Xcode 16）xcodebuild
-    # 直接拒绝："My Mac's macOS 15.7.x doesn't match XeditTests's macOS 26.4
-    # deployment target."，CI 从 rc1 起就一直红着。macos-26 runner 2026-02
-    # 已 GA，默认 Xcode 26.4.1，正好匹配部署目标。runner image manifest 见
-    # actions/runner-images / images/macos/macos-26-arm64-Readme.md。
-    runs-on: macos-26
+    # 2026-07-16: 从 GitHub 托管的 macos-26 runner 迁到自托管 macOS runner
+    # （label: self-hosted + macOS）。前提:这台 runner 装了匹配
+    # MACOSX_DEPLOYMENT_TARGET 26.4 的 Xcode（下面 Select Xcode 优先锁
+    # 26.4.1，缺失回退 /Applications/Xcode.app），且 runner 账户有免密
+    # sudo（Select Xcode 用到 sudo xcode-select）。历史:之前 macos-15
+    # runner（macOS 15.7.x + Xcode 16）xcodebuild 因部署目标不匹配从 rc1
+    # 起一直红，rc10 升 macos-26 修好,现改自托管以省 GitHub 分钟数/提速。
+    runs-on: [self-hosted, macOS]
     timeout-minutes: 30
 
     steps:
