@@ -10,7 +10,7 @@
 
 [![macOS](https://img.shields.io/badge/macOS-13.7%2B-black?logo=apple)](https://www.apple.com/macos/)
 [![Swift](https://img.shields.io/badge/Swift-SwiftUI-orange?logo=swift)](https://developer.apple.com/swift/)
-[![Version](https://img.shields.io/badge/version-1.162.0--rc1-blue)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-1.163.0--rc1-blue)](CHANGELOG.md)
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue)](LICENSE)
 
 *它不只是坐在编辑器旁边回答问题。它会看现场、做事情、留下证据，也知道什么时候该停下来问你。*
@@ -105,6 +105,21 @@ open Xedit.xcodeproj
 
 需要 Xcode 和 macOS 13.7+。产物名为 **WillDeep.app**。
 
+要把当前 worktree 的 Debug 版本直接装进 `/Applications`，先在不会提交的 `.env.local` 中配置登录密钥：
+
+```dotenv
+WILLDEEP_CLIENT_LOGIN_SECRET=你的本地开发密钥
+```
+
+然后执行：
+
+```bash
+ruby dev_install.rb --dry-run
+ruby dev_install.rb
+```
+
+脚本不会输出密钥；它会完成干净构建、签名、原子安装，以及版本、签名和密钥注入校验。已经运行的 WillDeep 不会自动重载覆盖后的 App，请彻底退出后重新打开。
+
 ### 第一个任务
 
 1. 打开 WillDeep，创建一个新对话。
@@ -156,7 +171,7 @@ willdeep path/to/file.go
 
 ## 项目状态
 
-WillDeep 当前在 `1.160.x` 上活跃迭代。Agent 工作台是主产品界面，原生编辑器作为文件查看、轻量编辑和 Agent 协作能力继续维护。
+WillDeep 当前在 `1.163.x` 上活跃迭代。Agent 工作台是主产品界面，原生编辑器作为文件查看、轻量编辑和 Agent 协作能力继续维护。
 
 每次发布的具体变化见 [CHANGELOG.md](CHANGELOG.md)，完整能力矩阵与未决问题见 [product-overview.md](product-overview.md)。Release Candidate tag 使用 `vMAJOR.MINOR.PATCH-rcN` 格式。
 
@@ -205,7 +220,7 @@ WillDeep 采用 [Apache License 2.0](LICENSE) + [Open Core](OPEN_CORE.md) 模式
 
 [![macOS](https://img.shields.io/badge/macOS-13.7%2B-black?logo=apple)](https://www.apple.com/macos/)
 [![Swift](https://img.shields.io/badge/Swift-SwiftUI-orange?logo=swift)](https://developer.apple.com/swift/)
-[![Version](https://img.shields.io/badge/version-1.162.0--rc1-blue)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-1.163.0--rc1-blue)](CHANGELOG.md)
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue)](LICENSE)
 
 *It does not merely answer questions beside an editor. It inspects the work, takes action, leaves evidence, and knows when to stop and ask.*
@@ -300,6 +315,21 @@ open Xedit.xcodeproj
 
 Requires Xcode and macOS 13.7+. The product builds as **WillDeep.app**.
 
+To install the current worktree's Debug build directly into `/Applications`, put the local development credential in the ignored `.env.local` file:
+
+```dotenv
+WILLDEEP_CLIENT_LOGIN_SECRET=your-local-development-secret
+```
+
+Then run:
+
+```bash
+ruby dev_install.rb --dry-run
+ruby dev_install.rb
+```
+
+The script never prints the secret. It performs a clean build, signing, atomic installation, and version/signature/injection verification. Fully quit and relaunch WillDeep after replacing a running build.
+
 ### Run your first task
 
 1. Open WillDeep and create a new conversation.
@@ -351,7 +381,7 @@ willdeep path/to/file.go
 
 ## Status
 
-WillDeep is in active `1.160.x` development. The agent workspace is the primary product surface; the native editor continues as a maintained capability for file inspection, lightweight editing, and agent collaboration.
+WillDeep is in active `1.163.x` development. The agent workspace is the primary product surface; the native editor continues as a maintained capability for file inspection, lightweight editing, and agent collaboration.
 
 See [CHANGELOG.md](CHANGELOG.md) for release details and [product-overview.md](product-overview.md) for the full capability matrix and open questions. Release Candidate tags follow `vMAJOR.MINOR.PATCH-rcN`.
 

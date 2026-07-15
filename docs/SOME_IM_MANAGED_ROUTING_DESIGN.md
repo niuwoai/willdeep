@@ -1,7 +1,7 @@
 # some.im 省心托管路由设计
 
-> Last updated: 2026-07-09
-> Status: Phase 1 + 1.5 + 2 + 3 + coding-plan entitlement 已实现 (v1.136.0-rc37) — 客户端裁判 someim-judge 动态路由、coding plan 权益缓存、会话只升不降、composer 入口、x-willdeep-session-id + 本机随机 x-willdeep-workspace-id、输出质检(本地重复/空检测 + 裁判复核)+ 单次升档重试、per-message route 决策元数据 + footer 档位标记。待办：真机端到端验证；可选:turn-report 卡片细节 + usage-stats 派生计数(元数据已就位,后续廉价)
+> Last updated: 2026-07-15
+> Status: 已实现 (v1.162.0-rc1) — 客户端裁判 someim-judge 动态路由、coding plan 权益缓存、会话只升不降、composer 完整模型目录与手动升档入口、x-willdeep-session-id + 本机随机 x-willdeep-workspace-id、输出质检(本地重复/空检测 + 裁判复核)+ 单次升档重试、per-message route 决策元数据 + footer 档位标记。待办：真机端到端验证；可选:turn-report 卡片细节 + usage-stats 派生计数(元数据已就位,后续廉价)
 > Scope: WillDeep macOS App 的 Agent composer 模型选择与 some.im provider 请求链路
 > Revision: r2 — 结合 some.im 服务端实配（failover 链 / someim-judge / 按需 upstream header / coding 档准入）修订
 
@@ -14,9 +14,9 @@
 - 只对 `some-im` provider 生效，不改变 OpenAI、DeepSeek、DashScope、Custom 等其他 provider 的行为。
 - 在 composer 模型菜单里提供“省心托管”入口，让用户不必手动理解 Flash / Pro / coding / general 档位。
 - 对每轮用户输入进行动态路由：
-  - 有 coding plan 时，low / high / premium 全部使用 `someim-coding-plan-*`。
-  - 没有 coding plan 且裁判域为 coding 时，使用 `someim-code-low/high/premium`。
-  - 没有 coding plan 且裁判域为 general 时，使用 `someim-auto-flash/pro/premium`。
+  - 裁判域为 coding 且有 Coding Plan 时，使用 `someim-coding-plan-*`。
+  - 裁判域为 coding 且没有 Coding Plan 时，使用 `someim-code-low/high/premium`。
+  - 裁判域为 general 时，无论是否有 Coding Plan，都使用 `someim-auto-flash/pro/premium`。
 - 向 some.im provider 请求附加稳定上下文 headers：
   - `x-willdeep-session-id: <local-session-id>`
   - `x-willdeep-workspace-id: <local-workspace-id>`
@@ -101,9 +101,12 @@ composer pill 可以展示：
 
 | coding plan | 任务域 | 档位 | 模型 |
 | --- | --- | --- | --- |
-| 有 | coding/general | low | `someim-coding-plan-low` |
-| 有 | coding/general | high | `someim-coding-plan-high` |
-| 有 | coding/general | premium | `someim-coding-plan-premium` |
+| 有 | coding | low | `someim-coding-plan-low` |
+| 有 | coding | high | `someim-coding-plan-high` |
+| 有 | coding | premium | `someim-coding-plan-premium` |
+| 有 | general | low | `someim-auto-flash` |
+| 有 | general | high | `someim-auto-pro` |
+| 有 | general | premium | `someim-auto-premium` |
 | 无 | coding | low | `someim-code-low` |
 | 无 | coding | high | `someim-code-high` |
 | 无 | coding | premium | `someim-code-premium` |
@@ -157,9 +160,12 @@ enum AgentManagedCapabilityTier: String, Codable, Equatable {
 
 | Coding Plan | Judge 任务域 | Judge 复杂度 | 会话最低档 | 实际模型 |
 | --- | --- | --- | --- | --- |
-| 有 | coding/general | low | low | `someim-coding-plan-low` |
-| 有 | coding/general | low | high | `someim-coding-plan-high` |
-| 有 | coding/general | low | premium | `someim-coding-plan-premium` |
+| 有 | coding | low | low | `someim-coding-plan-low` |
+| 有 | coding | low | high | `someim-coding-plan-high` |
+| 有 | coding | low | premium | `someim-coding-plan-premium` |
+| 有 | general | low | low | `someim-auto-flash` |
+| 有 | general | low | high | `someim-auto-pro` |
+| 有 | general | low | premium | `someim-auto-premium` |
 | 无 | coding | low | low | `someim-code-low` |
 | 无 | coding | low | high | `someim-code-high` |
 | 无 | coding | low | premium | `someim-code-premium` |
@@ -433,7 +439,7 @@ WillDeep 必须本地验证 judge 输出：
 ```text
 若 latest_user_message 或上下文显然涉及代码/仓库/文件修改 -> domain=coding, tier=high
 否则 -> domain=general, tier=low
-最终模型仍由 hasCodingPlan 决定：有 plan 走 coding-plan；无 plan 时 coding 走 code、general 走 auto。
+最终模型由任务域先分流：general 始终走 auto；只有 coding 再由 hasCodingPlan 决定走 coding-plan 或 code。
 ```
 
 如果想更省钱，也可以代码任务默认 low 档，但复杂任务误判成本更高。这个策略需要产品取舍。
@@ -966,7 +972,7 @@ some.im 需要提供：
 1. 配置 some.im provider。
 2. 在 composer 选“省心托管”。
 3. 有 coding plan 时输入简单代码问题，确认实际模型为 `someim-coding-plan-low`。
-4. 有 coding plan 时输入通用闲聊，确认实际模型仍为 `someim-coding-plan-low`。
+4. 有 coding plan 时输入通用闲聊，确认实际模型仍为 `someim-auto-flash`。
 5. 无 coding plan 时输入复杂仓库修改任务，确认实际模型为 `someim-code-high` 或更高。
 6. 无 coding plan 时输入通用闲聊，确认实际模型为 `someim-auto-flash`。
 7. 让 mock 模型输出重复循环，确认自动升档重试。

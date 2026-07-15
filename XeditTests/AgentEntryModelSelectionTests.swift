@@ -258,6 +258,28 @@ struct AgentEntryModelSelectionTests {
         #expect(managedSession.modelID == nil)
         #expect(managedSession.managedRouting != nil)
     }
+
+    @Test
+    func selectingManagedRoutingSwitchesFromAnotherProviderToSomeIM() {
+        let _sandbox = installKeychainSandbox(); _ = _sandbox
+        let (app, openAI, _) = makeAppStateWithTwoEntries()
+        SomeIMIntegrationStore._setTestSharedSessionOverride(enabled: true)
+        defer { SomeIMIntegrationStore._setTestSharedSessionOverride(enabled: false) }
+        #expect(SomeIMIntegrationStore.saveAPIKey("test-fixture-someim-key"))
+        app.syncSomeIMProvider(
+            settings: SomeIMIntegrationSettings(enabled: true),
+            apiKey: "test-fixture-someim-key",
+            activate: false
+        )
+        app.setActiveProviderLibraryEntry(id: openAI.id)
+
+        app.selectSomeIMManagedRouting()
+
+        #expect(app.agentProviderLibrary.active?.providerID == AgentProviderPreset.someIMID)
+        #expect(app.agentConfiguration.providerID == AgentProviderPreset.someIMID)
+        #expect(app.activeRuntime?.managedRouting != nil)
+        #expect(app.agentSessionModelOverride == nil)
+    }
 }
 
 /// RAII handle that diverts `AgentSettingsStore` Keychain *and*

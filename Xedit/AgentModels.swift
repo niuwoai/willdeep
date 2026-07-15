@@ -320,6 +320,14 @@ nonisolated enum AgentManagedCapabilityTier: String, Codable, Equatable, Compara
     static func < (lhs: AgentManagedCapabilityTier, rhs: AgentManagedCapabilityTier) -> Bool {
         lhs.rank < rhs.rank
     }
+
+    var next: AgentManagedCapabilityTier? {
+        switch self {
+        case .low: return .high
+        case .high: return .premium
+        case .premium: return nil
+        }
+    }
 }
 
 /// Persisted per-session state for some.im managed routing. Stored on
@@ -412,10 +420,9 @@ nonisolated struct AgentManagedRouteDecision: Codable, Equatable {
         return text
     }
 
-    /// Footer family reflects the routing judge's task-domain verdict. The
-    /// selected virtual model cannot safely provide that meaning: Coding Plan
-    /// entitlement routes both general and coding verdicts through the shared
-    /// `someim-coding-plan-*` family.
+    /// Footer family reflects the routing judge's task-domain verdict. Coding
+    /// Plan only changes the model family for coding tasks; general tasks stay
+    /// on the `someim-auto-*` family.
     var footerFamily: AgentManagedRouteFamily {
         switch domain {
         case .general:
@@ -503,7 +510,7 @@ nonisolated enum SomeIMManagedModel {
         tier: AgentManagedCapabilityTier,
         hasCodingPlan: Bool
     ) -> String {
-        if hasCodingPlan {
+        if hasCodingPlan, domain == .coding {
             switch tier {
             case .low: return codingPlanLow
             case .high: return codingPlanHigh

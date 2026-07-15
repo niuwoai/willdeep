@@ -124,9 +124,14 @@ extension WillDeepTests {
             AppState.managedWorkflowModel(floor: .low, domain: .coding, hasCodingPlan: false)
                 == SomeIMManagedModel.codeHigh
         )
-        // coding plan 生效时统一走 coding-plan 梯子。
+        // coding plan 不改变 general 域，仍走 auto 梯子。
         #expect(
             AppState.managedWorkflowModel(floor: .low, domain: .general, hasCodingPlan: true)
+                == SomeIMManagedModel.autoPro
+        )
+        // coding plan 只接管 coding 域。
+        #expect(
+            AppState.managedWorkflowModel(floor: .low, domain: .coding, hasCodingPlan: true)
                 == SomeIMManagedModel.codingPlanHigh
         )
     }

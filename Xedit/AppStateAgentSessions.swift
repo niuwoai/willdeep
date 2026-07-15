@@ -1800,6 +1800,12 @@ extension AppState {
     /// states stay mutually exclusive.
     func selectSomeIMManagedRouting() {
         guard let runtime = activeRuntime else { return }
+        if agentProviderLibrary.active?.providerID != AgentProviderPreset.someIMID {
+            guard let someIMEntry = agentProviderLibrary.entries.first(where: {
+                $0.providerID == AgentProviderPreset.someIMID
+            }) else { return }
+            setActiveProviderLibraryEntry(id: someIMEntry.id)
+        }
         guard agentProviderLibrary.active?.providerID == AgentProviderPreset.someIMID else { return }
         runtime.sessionModelOverride = nil
         if runtime.managedRouting == nil {

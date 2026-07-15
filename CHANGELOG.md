@@ -1,5 +1,20 @@
 # Changelog
 
+## 1.163.0-rc1 - 2026-07-15
+
+### Added
+
+- **当前 worktree 可一键安装 Debug App。** 新增根目录 `dev_install.rb`，只从本 worktree 的 `.env.local` 读取 `WILLDEEP_CLIENT_LOGIN_SECRET`，以隐藏值完成 Debug 编译、Apple Development 签名和 `/Applications/WillDeep.app` 原子安装；安装前后会校验版本、签名与 Debug dylib 密钥注入，支持 `--dry-run` 和构建/安装路径覆盖。
+- **Composer 模型选择器升级为完整目录。** 点击输入区模型胶囊会打开双栏选择面板，支持全局搜索模型与供应商、切换任意已配置供应商、浏览完整模型目录、查看编程推荐和最近使用；目录异步加载、失败重试、无结果状态与当前会话选中态均有明确反馈。
+- **省心托管支持会话级手动升档。** 托管模型胶囊右侧提供独立升档按钮，可按 Flash → Pro → Premium 提升当前会话最低档；已经升无可升时按钮自动消失，裁判或质检触发自动升档时会显示轻量状态提示。
+
+### Changed
+
+- **Coding Plan 仅作用于编程任务。** 裁判判定为通用任务时，无论账户是否有 Coding Plan，都继续使用 `someim-auto-flash/pro/premium`；只有编程任务会按权益选择 `someim-coding-plan-*` 或 `someim-code-*`。
+- 版本号从 **1.162.0-rc1** 提升为 **1.163.0-rc1**；Xcode App、Go agent、Help bundle、Computer Use Helper、Chrome 扩展、README badge、移动网关响应头契约与产品文档同步。
+
+---
+
 ## 1.162.0-rc1 - 2026-07-15
 
 ### Added
