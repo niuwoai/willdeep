@@ -735,10 +735,6 @@ struct DesktopPetSceneView: View {
         static let sceneWidth: CGFloat = 140
         static let sceneHeight: CGFloat = 148
         static let petSize: CGFloat = 132
-        static let laptopWidth: CGFloat = 96
-        static let laptopHeight: CGFloat = 90
-        static let laptopHorizontalOffset: CGFloat = 10
-        static let laptopBaseVerticalOffset: CGFloat = 9
         static let heartHorizontalOffset: CGFloat = -45
         static let heartVerticalOffset: CGFloat = -94
         static let sparkleHorizontalOffset: CGFloat = 45
@@ -772,24 +768,6 @@ struct DesktopPetSceneView: View {
                     y: animation.verticalOffset
                 )
                 .shadow(color: .black.opacity(0.24), radius: 7, y: 5)
-
-            Image("DesktopPetLaptop")
-                .resizable()
-                .interpolation(.none)
-                .scaledToFit()
-                .frame(width: Layout.laptopWidth, height: Layout.laptopHeight)
-                .rotationEffect(.degrees(animation.laptopRotation))
-                .offset(
-                    x: Layout.laptopHorizontalOffset,
-                    y: Layout.laptopBaseVerticalOffset + animation.laptopVerticalOffset
-                )
-                .shadow(
-                    color: .cyan.opacity(animation.laptopGlowOpacity),
-                    radius: 7,
-                    y: 2
-                )
-                .opacity(animation.laptopOpacity)
-                .accessibilityHidden(animation.laptopOpacity < 0.01)
         }
         .frame(
             width: Layout.sceneWidth,
@@ -840,10 +818,6 @@ struct DesktopPetAnimationValues {
     let horizontalScale: CGFloat
     let verticalScale: CGFloat
     let facesRight: Bool
-    let laptopOpacity: Double
-    let laptopVerticalOffset: CGFloat
-    let laptopRotation: Double
-    let laptopGlowOpacity: Double
     let cuteEffectOpacity: Double
     let cuteEffectVerticalOffset: CGFloat
     let cuteEffectRotation: Double
@@ -858,10 +832,6 @@ struct DesktopPetAnimationValues {
         var horizontalScale: CGFloat = 1
         var verticalScale: CGFloat = 1
         var facesRight = true
-        var laptopOpacity = 0.0
-        var laptopVerticalOffset: CGFloat = 0
-        var laptopRotation = 0.0
-        var laptopGlowOpacity = 0.0
         var cuteEffectOpacity = 0.0
         var cuteEffectVerticalOffset: CGFloat = 0
         var cuteEffectRotation = 0.0
@@ -900,10 +870,6 @@ struct DesktopPetAnimationValues {
             rotation = Double(bodyRhythm * 1.7)
             horizontalScale = 1 + abs(rightStroke) * 0.018
             verticalScale = 1 - abs(leftStroke) * 0.014
-            laptopOpacity = 1
-            laptopVerticalOffset = -abs(rightStroke) * 1.5
-            laptopRotation = sin(t * 4.6) * 0.8
-            laptopGlowOpacity = 0.58 + (sin(t * 3.2) + 1) * 0.12
         case .jumping:
             horizontalOffset = CGFloat(sin(t * 1.3)) * 4
             let jump = CGFloat(abs(sin(t * 3.5)))
@@ -936,10 +902,6 @@ struct DesktopPetAnimationValues {
         self.horizontalScale = horizontalScale
         self.verticalScale = verticalScale
         self.facesRight = facesRight
-        self.laptopOpacity = laptopOpacity
-        self.laptopVerticalOffset = laptopVerticalOffset
-        self.laptopRotation = laptopRotation
-        self.laptopGlowOpacity = laptopGlowOpacity
         self.cuteEffectOpacity = cuteEffectOpacity
         self.cuteEffectVerticalOffset = cuteEffectVerticalOffset
         self.cuteEffectRotation = cuteEffectRotation
