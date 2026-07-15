@@ -410,6 +410,14 @@ extension AppState {
             runtime.toolCalls[index].approvalSource = approvalSource
         }
 
+        if arguments["use_visible_terminal"]?.boolValue() == true {
+            var sidePanelState = runtime.sidePanelState
+            sidePanelState.kind = .terminal
+            sidePanelState.lastViewedAt = Date()
+            runtime.sidePanelState = sidePanelState
+            persistAgentSidePanelState(runtime: runtime)
+        }
+
         let context = AgentToolContext(
             rootDirectory: workspaceURL,
             workspaceLocation: workspaceLocation,
@@ -422,7 +430,8 @@ extension AppState {
                 risk: risk,
                 approvalSource: approvalSource,
                 sandboxDecision: sandboxDecision
-            )
+            ),
+            terminalController: agentTerminalController
         )
 
         do {
@@ -914,7 +923,9 @@ extension AppState {
     ) -> [String: AgentJSONValue] {
         var arguments: [String: AgentJSONValue] = [
             "prompt": .string(prompt),
-            "run_in_background": .bool(true),
+            "run_in_background": .bool(false),
+            "use_visible_terminal": .bool(true),
+            "visible_terminal_label": .string(executionAgent.displayName),
         ]
         if let permissionMode = executionAgent.defaultPermissionMode {
             arguments["permission_mode"] = .string(permissionMode)

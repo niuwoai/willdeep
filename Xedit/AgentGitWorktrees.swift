@@ -240,29 +240,32 @@ extension AppState {
     }
 
     func refreshAgentGitWorktrees() {
-        guard let rootDirectory else {
+        guard let targetDirectory = activeAgentLocalWorkspaceURL ?? rootDirectory?.standardizedFileURL else {
             agentGitWorktrees = []
+            agentWorkspaceGitStatus = GitRepositoryStatus()
             return
         }
 
-        let targetDirectory = rootDirectory.standardizedFileURL
         Task { [weak self] in
-            let worktrees = await Task.detached(priority: .utility) {
-                Self.listGitWorktrees(for: targetDirectory)
+            let context = await Task.detached(priority: .utility) {
+                (
+                    worktrees: Self.listGitWorktrees(for: targetDirectory),
+                    status: Self.loadGitStatus(for: targetDirectory)
+                )
             }.value
 
             await MainActor.run {
-                guard let self,
-                      self.rootDirectory?.standardizedFileURL.path == targetDirectory.path else {
-                    return
-                }
-                self.agentGitWorktrees = worktrees
+                guard let self, self.activeAgentLocalWorkspaceURL?.path == targetDirectory.path
+                    || (self.activeAgentLocalWorkspaceURL == nil
+                        && self.rootDirectory?.standardizedFileURL.path == targetDirectory.path) else { return }
+                self.agentGitWorktrees = context.worktrees
+                self.agentWorkspaceGitStatus = context.status
             }
         }
     }
 
     func createAgentGitWorktreeFromActiveWorkspace() {
-        guard rootDirectory != nil else {
+        guard activeAgentLocalWorkspaceURL != nil else {
             showFileOperationError("先选择一个 Git workspace。")
             return
         }
@@ -276,11 +279,10 @@ extension AppState {
     }
 
     func createAgentGitWorktree(branchName: String) {
-        guard let rootDirectory else {
+        guard let source = activeAgentLocalWorkspaceURL else {
             showFileOperationError("先选择一个 Git workspace。")
             return
         }
-        let source = rootDirectory.standardizedFileURL
         Task { [weak self] in
             let result = await Task.detached(priority: .userInitiated) {
                 Self.createGitWorktree(from: source, branchName: branchName)
@@ -292,7 +294,7 @@ extension AppState {
                 case .success(let created):
                     self.agentGitWorktrees = Self.listGitWorktrees(for: created.worktree.url)
                     _ = self.moveActiveAgentSessionToWorkspace(at: created.worktree.path)
-                    self.refreshGitStatus()
+                    self.refreshAgentGitWorktrees()
                 case .failure(let failure):
                     self.showFileOperationError("创建 Git worktree 失败：\(failure.message)")
                 }
@@ -301,7 +303,7 @@ extension AppState {
     }
 
     func removeAgentGitWorktree(_ worktree: AgentGitWorktree) {
-        guard let rootDirectory else { return }
+        guard let source = activeAgentLocalWorkspaceURL else { return }
         guard !worktree.isPrimary else {
             showFileOperationError("主工作树不能从这里删除。")
             return
@@ -315,7 +317,6 @@ extension AppState {
         alert.alertStyle = .warning
         guard alert.runModal() == .alertFirstButtonReturn else { return }
 
-        let source = rootDirectory.standardizedFileURL
         Task { [weak self] in
             let result = await Task.detached(priority: .userInitiated) {
                 Self.removeGitWorktree(at: worktree.url, from: source)
@@ -325,12 +326,11 @@ extension AppState {
                 guard let self else { return }
                 switch result {
                 case .success:
-                    if self.rootDirectory?.standardizedFileURL.path == worktree.url.path,
+                    if self.activeAgentLocalWorkspaceURL?.path == worktree.url.path,
                        let primary = self.agentGitWorktrees.first(where: \.isPrimary) {
                         _ = self.moveActiveAgentSessionToWorkspace(at: primary.path)
                     }
                     self.refreshAgentGitWorktrees()
-                    self.refreshGitStatus()
                 case .failure(let failure):
                     self.showFileOperationError("删除 Git worktree 失败：\(failure.message)")
                 }
@@ -339,8 +339,7 @@ extension AppState {
     }
 
     func pruneAgentGitWorktrees() {
-        guard let rootDirectory else { return }
-        let source = rootDirectory.standardizedFileURL
+        guard let source = activeAgentLocalWorkspaceURL else { return }
         Task { [weak self] in
             let result = await Task.detached(priority: .utility) {
                 Self.pruneGitWorktrees(from: source)
@@ -356,5 +355,15 @@ extension AppState {
                 }
             }
         }
+    }
+
+    private var activeAgentLocalWorkspaceURL: URL? {
+        if let path = activeRuntime?.workspaceLocation?.localPath, !path.isEmpty {
+            return URL(fileURLWithPath: path).standardizedFileURL
+        }
+        if let path = activeRuntime?.workspaceRootPath, !path.isEmpty {
+            return URL(fileURLWithPath: path).standardizedFileURL
+        }
+        return nil
     }
 }

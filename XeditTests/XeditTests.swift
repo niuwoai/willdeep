@@ -681,6 +681,69 @@ struct WillDeepTests {
     }
 
     @MainActor
+    @Test("terminal tools route by conversation binding instead of active tab")
+    func testTerminalToolsRouteByConversationBinding() throws {
+        let controller = AgentInteractiveTerminalController()
+        let settings = EditorTerminalSettings.default
+        let sessionA = UUID()
+        let sessionB = UUID()
+        let tabA = controller.openLocalTab(
+            originAgentSessionID: sessionA,
+            workingDirectory: FileManager.default.temporaryDirectory.path,
+            settings: settings,
+            skin: nil
+        )
+        let tabB = controller.openLocalTab(
+            originAgentSessionID: sessionB,
+            workingDirectory: FileManager.default.temporaryDirectory.path,
+            settings: settings,
+            skin: nil
+        )
+        defer {
+            controller.closeTab(id: tabA.id)
+            controller.closeTab(id: tabB.id)
+        }
+
+        #expect(controller.activeTabID == tabB.id)
+        #expect(controller.boundTabID(for: sessionA) == tabA.id)
+        #expect(try controller.rawSnapshot(sessionID: sessionA).tabID == tabA.id)
+        #expect(try controller.rawSnapshot(sessionID: sessionB).tabID == tabB.id)
+
+        controller.activateTab(id: tabB.id, bindingTo: sessionA)
+        #expect(controller.boundTabID(for: sessionA) == tabB.id)
+        #expect(try controller.rawSnapshot(sessionID: sessionA).tabID == tabB.id)
+    }
+
+    @MainActor
+    @Test("explicit terminal tab id overrides conversation binding")
+    func testExplicitTerminalTabIDOverridesConversationBinding() throws {
+        let controller = AgentInteractiveTerminalController()
+        let settings = EditorTerminalSettings.default
+        let sessionID = UUID()
+        let bound = controller.openLocalTab(
+            originAgentSessionID: sessionID,
+            workingDirectory: FileManager.default.temporaryDirectory.path,
+            settings: settings,
+            skin: nil
+        )
+        let exact = controller.openLocalTab(
+            originAgentSessionID: UUID(),
+            workingDirectory: FileManager.default.temporaryDirectory.path,
+            settings: settings,
+            skin: nil
+        )
+        defer {
+            controller.closeTab(id: bound.id)
+            controller.closeTab(id: exact.id)
+        }
+
+        #expect(try controller.rawSnapshot(targetTabID: exact.id, sessionID: sessionID).tabID == exact.id)
+        #expect(throws: AgentToolError.self) {
+            _ = try controller.rawSnapshot(targetTabID: UUID(), sessionID: sessionID)
+        }
+    }
+
+    @MainActor
     @Test("terminal shortcut creation rejects protected dictated secrets")
     func testTerminalShortcutCreationRejectsProtectedDictatedSecrets() async throws {
         let controller = AgentInteractiveTerminalController()

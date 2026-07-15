@@ -925,6 +925,7 @@ extension AppState {
         agentCurrentGoal = nil
         AgentSessionStore.save(session)
         upsertAgentUsageSnapshot(for: session)
+        refreshAgentGitWorktrees()
         return session
     }
 
@@ -974,6 +975,7 @@ extension AppState {
         AgentSessionStore.save(session)
         upsertAgentUsageSnapshot(for: session)
         unhideWorkspace(key: session.workspaceSidebarGroupKey)
+        refreshAgentGitWorktrees()
         return session
     }
 
@@ -1031,10 +1033,13 @@ extension AppState {
             runtime.agentArtifactPaths = []
             persistAgentSession(runtime: runtime)
             unhideWorkspace(key: runtime.session.workspaceSidebarGroupKey)
+            refreshAgentGitWorktrees()
             return runtime.session
         }
 
-        return startNewAgentSession(inWorkspaceAt: url.path)
+        let session = startNewAgentSession(inWorkspaceAt: url.path)
+        refreshAgentGitWorktrees()
+        return session
     }
 
     /// Rebind the runtime that invoked the approved `change_workspace` tool.
@@ -1152,6 +1157,7 @@ extension AppState {
                 runtime.sessionModelOverride = session.modelID == routedModel ? nil : session.modelID
             }
             syncWorkspaceContext(for: session)
+            refreshAgentGitWorktrees()
             autoSummarizeTitleIfPlaceholder(runtime)
         }
     }

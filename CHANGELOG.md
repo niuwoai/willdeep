@@ -1,5 +1,19 @@
 # Changelog
 
+## 1.157.0 - 2026-07-15
+
+### Added
+
+- **Agent 输入框上方新增运行上下文栏。** 新对话与既有会话都会清楚展示当前项目、运行位置和 Git 分支；运行位置可在本地主工作区与新建 worktree 之间切换，分支信息始终按当前 Agent 会话的真实工作目录刷新，不再借用 Editor 的仓库状态。
+- **Claude Code / Codex 委派任务改为侧边栏终端可见执行。** 发起任务时会打开并绑定当前对话专属的本地终端标签，用户可实时查看命令和输出；长时间无输出的执行标签不会被闲置回收，也不能在任务完成前误关。
+
+### Changed
+
+- **终端工具改为精确多标签路由。** `terminal_snapshot`、`terminal_send_command` 与 `terminal_send_control` 优先使用显式 `terminal_tab_id`，否则只使用当前会话绑定的标签；不存在绑定时创建该会话自己的本地标签，严禁回退到任意 active 标签。标签切换会显式更新当前会话绑定，并新增跨会话和显式标签覆盖的回归测试。
+- 版本号从 **1.156.0-rc4** 提升为功能版本 **1.157.0**，Xcode App、Go agent、Help bundle、Computer Use Helper、README badge、移动网关响应头契约与产品文档同步。
+
+---
+
 ## 1.156.0-rc4 - 2026-07-15
 
 ### Fixed

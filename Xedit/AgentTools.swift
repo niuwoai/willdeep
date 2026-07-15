@@ -878,22 +878,7 @@ enum AgentToolRunner {
             model: arguments["model"]?.stringValue()
         )
 
-        // Claude Code tasks routinely run for minutes. Agent-initiated
-        // calls still default to background jobs, but Composer can force
-        // foreground and wait for the final response without inheriting
-        // the ordinary 120s shell-command ceiling.
-        var forwarded = delegatedAgentForwardedCommandArguments(
-            command: command,
-            sourceArguments: arguments
-        )
-        if context.daemonBackend != nil, forwarded["timeout_seconds"] == nil {
-            forwarded["timeout_seconds"] = .number(delegatedAgentForegroundTimeout)
-        }
-        return try await runCommand(
-            arguments: forwarded,
-            context: context,
-            foregroundMaxTimeout: delegatedAgentForegroundTimeout
-        )
+        return try await runDelegatedAgentCommand(command, arguments: arguments, context: context)
     }
 
     // MARK: codex_cli / cursor_agent / cline_cli
@@ -1182,6 +1167,24 @@ enum AgentToolRunner {
         arguments: [String: AgentJSONValue],
         context: AgentToolContext
     ) async throws -> AgentToolResult {
+        if arguments["use_visible_terminal"]?.boolValue() == true,
+           context.remoteBackend == nil,
+           let controller = context.terminalController,
+           let sessionID = context.runtimeID {
+            let timeout = arguments["timeout_seconds"]?.intValue()
+                .map(TimeInterval.init) ?? delegatedAgentForegroundTimeout
+            let label = arguments["visible_terminal_label"]?.stringValue()?
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            let displayCommand = label.flatMap { $0.isEmpty ? nil : "\($0) task" }
+                ?? "Delegated coding task"
+            return try await controller.runCommandInBoundTab(
+                command,
+                sessionID: sessionID,
+                displayCommand: displayCommand,
+                timeout: timeout,
+                secretRedactionValues: context.secretRedactionValues
+            )
+        }
         var forwarded = delegatedAgentForwardedCommandArguments(
             command: command,
             sourceArguments: arguments

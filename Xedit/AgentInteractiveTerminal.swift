@@ -11,8 +11,9 @@
 //  reaps tabs that sit idle for too long.
 //
 //  Agent tools (terminal_snapshot / terminal_send_command /
-//  terminal_send_control) operate on the active tab through the same
-//  controller surface as before.
+//  terminal_send_control) operate on an exact/session-bound tab. The
+//  selected UI tab is presentation state only; tool routing never guesses
+//  from whichever tab happens to be active.
 //
 
 import AppKit
@@ -80,6 +81,7 @@ struct RuntimeTerminalProfile: Codable, Equatable {
 /// depends on the (possibly starved) visible model being current. Redaction
 /// and trimming also run off the main actor (see `AgentTerminalTools.snapshot`).
 struct AgentTerminalRawSnapshot: Sendable {
+    let tabID: UUID
     let isRunning: Bool
     let runtimeName: String
     let runtimeTarget: String
@@ -1118,7 +1120,7 @@ final class AgentLocalProcessTerminalView: TerminalView, TerminalViewDelegate, L
 
 @MainActor
 final class AgentTerminalTab: ObservableObject, Identifiable, AgentTerminalProcessDelegate {
-    let id = UUID()
+    let id: UUID
     /// Which Agent session opened this tab. nil for tabs the user opened
     /// manually with no active session context.
     let originAgentSessionID: UUID?
@@ -1131,6 +1133,7 @@ final class AgentTerminalTab: ObservableObject, Identifiable, AgentTerminalProce
     @Published private(set) var activeRecordingStartedAt: Date?
     @Published private(set) var isPlayingShortcut = false
     @Published private(set) var shortcutPlaybackState: TerminalShortcutPlaybackState?
+    @Published private(set) var isAutomationBusy = false
 
     /// Last moment the tab saw user input or fresh process output. Drives
     /// the idle reaper. Not @Published — sampled by a timer, not the UI.
@@ -1141,11 +1144,13 @@ final class AgentTerminalTab: ObservableObject, Identifiable, AgentTerminalProce
     private var shortcutPlaybackTask: Task<Void, Never>?
 
     init(
+        id: UUID = UUID(),
         kind: AgentTerminalTabKind,
         originAgentSessionID: UUID?,
         title: String,
         settings: EditorTerminalSettings
     ) {
+        self.id = id
         self.kind = kind
         self.originAgentSessionID = originAgentSessionID
         self.title = title
@@ -1397,6 +1402,24 @@ final class AgentTerminalTab: ObservableObject, Identifiable, AgentTerminalProce
         return AgentToolResult(summary: "terminal: \(control.displayName)", payload: payload)
     }
 
+    func sendAutomationCommand(_ command: String, displayCommand: String) throws {
+        guard isRunning else {
+            throw AgentToolError.invalidArgument("The bound Agent Terminal tab is not running.")
+        }
+        guard !isAutomationBusy else {
+            throw AgentToolError.invalidArgument("The bound Agent Terminal tab is already running another delegated task.")
+        }
+        isAutomationBusy = true
+        recordCommand(displayCommand)
+        lastActivity = Date()
+        terminalView.send(txt: command + "\n")
+    }
+
+    func finishAutomationCommand() {
+        isAutomationBusy = false
+        lastActivity = Date()
+    }
+
     /// The off-main snapshot mirror plus the visible terminal's live grid
     /// size. The screen text itself is read from the mirror off the main
     /// actor by `AgentTerminalTools.snapshot`, so a busy main thread can no
@@ -1516,6 +1539,9 @@ final class AgentTerminalTab: ObservableObject, Identifiable, AgentTerminalProce
 final class AgentInteractiveTerminalController: ObservableObject {
     @Published private(set) var tabs: [AgentTerminalTab] = []
     @Published var activeTabID: UUID?
+    /// Stable routing table for terminal tools and delegated coding agents.
+    /// A session keeps its terminal binding while the user views another tab.
+    @Published private(set) var boundTabIDsBySession: [UUID: UUID] = [:]
     /// Default runtime for new SSH tabs.
     @Published var selectedRuntimeID: UUID?
     @Published private(set) var shortcuts: [TerminalShortcut] = TerminalShortcutStore.load()
@@ -1525,7 +1551,7 @@ final class AgentInteractiveTerminalController: ObservableObject {
     /// one yet. Wired by AppState so the controller can reach live
     /// terminal settings and the active session's workspace. Returns nil
     /// only if there's no AppState to ask.
-    var defaultLocalTabProvider: (() -> (settings: EditorTerminalSettings, workingDirectory: String?, originAgentSessionID: UUID?, skin: TerminalSkinColors?)?)?
+    var defaultLocalTabProvider: ((UUID?) -> (settings: EditorTerminalSettings, workingDirectory: String?, originAgentSessionID: UUID?, skin: TerminalSkinColors?)?)?
 
     /// Tabs idle longer than this are auto-terminated and removed. The
     /// currently-visible tab is exempt so we never close what the user is
@@ -1546,6 +1572,21 @@ final class AgentInteractiveTerminalController: ObservableObject {
     var activeTab: AgentTerminalTab? {
         guard let activeTabID else { return tabs.first }
         return tabs.first { $0.id == activeTabID } ?? tabs.first
+    }
+
+    func tab(id: UUID) -> AgentTerminalTab? {
+        tabs.first { $0.id == id }
+    }
+
+    func boundTabID(for sessionID: UUID?) -> UUID? {
+        guard let sessionID,
+              let tabID = boundTabIDsBySession[sessionID],
+              tab(id: tabID) != nil else { return nil }
+        return tabID
+    }
+
+    func isTab(_ tabID: UUID, boundTo sessionID: UUID?) -> Bool {
+        boundTabID(for: sessionID) == tabID
     }
 
     var recordingTabID: UUID? {
@@ -1627,6 +1668,22 @@ final class AgentInteractiveTerminalController: ObservableObject {
         tabSubscriptions[tab.id] = cancellable
         tabs.append(tab)
         activeTabID = tab.id
+        if let sessionID = tab.originAgentSessionID {
+            boundTabIDsBySession[sessionID] = tab.id
+        }
+    }
+
+    func activateTab(id: UUID, bindingTo sessionID: UUID?) {
+        guard tab(id: id) != nil else { return }
+        activeTabID = id
+        if let sessionID {
+            boundTabIDsBySession[sessionID] = id
+        }
+    }
+
+    func activateBoundTab(for sessionID: UUID?) {
+        guard let tabID = boundTabID(for: sessionID) else { return }
+        activeTabID = tabID
     }
 
     private func scheduleTabChangePublish() {
@@ -1641,10 +1698,25 @@ final class AgentInteractiveTerminalController: ObservableObject {
 
     func closeTab(id: UUID) {
         guard let index = tabs.firstIndex(where: { $0.id == id }) else { return }
+        // A delegated Claude/Codex task owns this tab until its wrapper reports
+        // a final status. Closing it early would detach the visible execution
+        // from the conversation and make a later tool call appear to "jump"
+        // to another tab.
+        guard !tabs[index].isAutomationBusy else { return }
         tabs[index].terminate()
         tabSubscriptions[id]?.cancel()
         tabSubscriptions[id] = nil
         tabs.remove(at: index)
+        let affectedSessions = boundTabIDsBySession.compactMap { sessionID, tabID in
+            tabID == id ? sessionID : nil
+        }
+        for sessionID in affectedSessions {
+            if let replacement = tabs.last(where: { $0.originAgentSessionID == sessionID }) {
+                boundTabIDsBySession[sessionID] = replacement.id
+            } else {
+                boundTabIDsBySession[sessionID] = nil
+            }
+        }
         if activeTabID == id {
             activeTabID = tabs.last?.id
         }
@@ -1989,8 +2061,10 @@ final class AgentInteractiveTerminalController: ObservableObject {
         var doomed: [UUID] = []
         for tab in tabs {
             tab.refreshActivityFromBuffer(now: now)
-            // Never reap the tab the user is currently viewing.
-            if tab.id == activeTabID { continue }
+            // Never reap the tab the user is currently viewing or a tab owned
+            // by a visible delegated execution. The latter can be quiet for
+            // several minutes while a coding agent is thinking.
+            if tab.id == activeTabID || tab.isAutomationBusy { continue }
             if tab.idleSeconds(now: now) > idleTimeout {
                 doomed.append(tab.id)
             }
@@ -2000,7 +2074,7 @@ final class AgentInteractiveTerminalController: ObservableObject {
         }
     }
 
-    // MARK: Agent-tool surface (operate on the active tab)
+    // MARK: Agent-tool surface (operate on an exact/session-bound tab)
 
     /// Cheap main-actor metadata for the `terminal_snapshot` tool, plus the
     /// off-main mirror the tool reads the actual screen from. Throws a clear,
@@ -2009,14 +2083,15 @@ final class AgentInteractiveTerminalController: ObservableObject {
     /// tell apart from a terminal that simply produced no output. The screen
     /// text, redaction and trimming all run off the main actor in
     /// `AgentTerminalTools.snapshot`.
-    func rawSnapshot() throws -> AgentTerminalRawSnapshot {
-        guard let tab = activeTab else {
-            throw AgentToolError.invalidArgument(
-                "No Agent Terminal tab is open, so there is nothing to read. Open the Agent Terminal side panel, or use the terminal send_command tool (it starts a shell automatically) before calling terminal_snapshot."
-            )
-        }
+    func rawSnapshot(targetTabID: UUID? = nil, sessionID: UUID? = nil) throws -> AgentTerminalRawSnapshot {
+        let tab = try tabForToolUse(
+            targetTabID: targetTabID,
+            sessionID: sessionID,
+            opensLocalTabIfNeeded: false
+        )
         let source = tab.snapshotSource()
         return AgentTerminalRawSnapshot(
+            tabID: tab.id,
             isRunning: tab.isRunning,
             runtimeName: tab.title,
             runtimeTarget: tab.runtimeTarget,
@@ -2029,10 +2104,16 @@ final class AgentInteractiveTerminalController: ObservableObject {
 
     func sendApprovedCommand(
         _ command: String,
+        targetTabID: UUID? = nil,
+        sessionID: UUID? = nil,
         zmodemPathSelection: TerminalZModemPathSelection? = nil,
         secretRedactionValues: [String] = []
     ) throws -> AgentToolResult {
-        let tab = try activeTabForToolUse()
+        let tab = try tabForToolUse(
+            targetTabID: targetTabID,
+            sessionID: sessionID,
+            opensLocalTabIfNeeded: true
+        )
         return try tab.sendApprovedCommand(
             command,
             zmodemPathSelection: zmodemPathSelection,
@@ -2040,27 +2121,128 @@ final class AgentInteractiveTerminalController: ObservableObject {
         )
     }
 
-    func sendApprovedControl(_ control: AgentTerminalControl) throws -> AgentToolResult {
-        let tab = try activeTabForToolUse()
+    func sendApprovedControl(
+        _ control: AgentTerminalControl,
+        targetTabID: UUID? = nil,
+        sessionID: UUID? = nil
+    ) throws -> AgentToolResult {
+        let tab = try tabForToolUse(
+            targetTabID: targetTabID,
+            sessionID: sessionID,
+            opensLocalTabIfNeeded: true
+        )
         return try tab.sendApprovedControl(control)
     }
 
-    /// The tab an agent tool should act on: the active one, or — if the
-    /// user hasn't opened the terminal yet — a freshly opened local shell
-    /// so the agent can drive the terminal without the user first
-    /// clicking around. Falls back to a clear error only when there's no
-    /// way to open one.
-    private func activeTabForToolUse() throws -> AgentTerminalTab {
-        if let tab = activeTab { return tab }
-        guard let config = defaultLocalTabProvider?() else {
-            throw AgentToolError.invalidArgument("Open the Agent Terminal side panel first so a shell is available.")
+    private func tabForToolUse(
+        targetTabID: UUID?,
+        sessionID: UUID?,
+        opensLocalTabIfNeeded: Bool
+    ) throws -> AgentTerminalTab {
+        if let targetTabID {
+            guard let exact = tab(id: targetTabID) else {
+                throw AgentToolError.invalidArgument("Unknown Agent Terminal tab id: \(targetTabID.uuidString).")
+            }
+            return exact
         }
-        return openLocalTab(
+        if let boundID = boundTabID(for: sessionID), let bound = tab(id: boundID) {
+            return bound
+        }
+        if let sessionID,
+           let originated = tabs.last(where: { $0.originAgentSessionID == sessionID }) {
+            boundTabIDsBySession[sessionID] = originated.id
+            return originated
+        }
+        guard opensLocalTabIfNeeded,
+              let config = defaultLocalTabProvider?(sessionID) else {
+            throw AgentToolError.invalidArgument(
+                "No terminal tab is bound to this conversation. Open or bind a tab in the Agent Terminal side panel first."
+            )
+        }
+        let created = openLocalTab(
             originAgentSessionID: config.originAgentSessionID,
             workingDirectory: config.workingDirectory,
             settings: config.settings,
             skin: config.skin
         )
+        if let sessionID {
+            boundTabIDsBySession[sessionID] = created.id
+        }
+        return created
+    }
+
+    func runCommandInBoundTab(
+        _ command: String,
+        sessionID: UUID,
+        displayCommand: String,
+        timeout: TimeInterval,
+        secretRedactionValues: [String]
+    ) async throws -> AgentToolResult {
+        let tab = try tabForToolUse(
+            targetTabID: nil,
+            sessionID: sessionID,
+            opensLocalTabIfNeeded: true
+        )
+        guard tab.kind == .localShell else {
+            throw AgentToolError.invalidArgument(
+                "Delegated local coding agents require a local terminal tab; this conversation is bound to an SSH tab."
+            )
+        }
+
+        activeTabID = tab.id
+        let token = UUID().uuidString.replacingOccurrences(of: "-", with: "")
+        let directory = FileManager.default.temporaryDirectory
+        let outputURL = directory.appendingPathComponent("willdeep-terminal-\(token).log")
+        let statusURL = directory.appendingPathComponent("willdeep-terminal-\(token).status")
+        let quotedCommand = Self.shellQuoted(command)
+        let quotedOutput = Self.shellQuoted(outputURL.path)
+        let quotedStatus = Self.shellQuoted(statusURL.path)
+        let wrapper = "{ /bin/zsh -lc \(quotedCommand); __willdeep_exit=$?; printf '%s' \"$__willdeep_exit\" > \(quotedStatus); } 2>&1 | tee \(quotedOutput)"
+
+        try tab.sendAutomationCommand(wrapper, displayCommand: displayCommand)
+        defer {
+            tab.finishAutomationCommand()
+            try? FileManager.default.removeItem(at: outputURL)
+            try? FileManager.default.removeItem(at: statusURL)
+        }
+
+        let deadline = Date().addingTimeInterval(max(timeout, 1))
+        while Date() < deadline {
+            if Task.isCancelled {
+                _ = try? tab.sendApprovedControl(.ctrlC)
+                throw CancellationError()
+            }
+            if FileManager.default.fileExists(atPath: statusURL.path) {
+                try? await Task.sleep(nanoseconds: 100_000_000)
+                let statusText = (try? String(contentsOf: statusURL, encoding: .utf8))?
+                    .trimmingCharacters(in: .whitespacesAndNewlines) ?? "1"
+                let exitCode = Int(statusText) ?? 1
+                let output = (try? String(contentsOf: outputURL, encoding: .utf8)) ?? ""
+                let redacted = AgentSecretStore.redact(output, secretValues: secretRedactionValues)
+                let payload = """
+                exit=\(exitCode)
+                terminal_tab_id=\(tab.id.uuidString)
+                --- stdout ---
+                \(redacted)
+                --- stderr ---
+
+                """
+                if exitCode != 0 {
+                    throw AgentToolError.commandFailed(Int32(exitCode), payload)
+                }
+                return AgentToolResult(summary: "terminal exit \(exitCode)", payload: payload)
+            }
+            try await Task.sleep(nanoseconds: 250_000_000)
+        }
+
+        _ = try? tab.sendApprovedControl(.ctrlC)
+        throw AgentToolError.invalidArgument(
+            "Command in Agent Terminal tab \(tab.id.uuidString) timed out after \(Int(timeout)) seconds."
+        )
+    }
+
+    private nonisolated static func shellQuoted(_ value: String) -> String {
+        "'" + value.replacingOccurrences(of: "'", with: "'\\''") + "'"
     }
 }
 
