@@ -26,13 +26,13 @@ struct SomeIMManagedModelMappingTests {
     }
 
     @Test
-    func resolvesEveryTierToCodingPlanWhenPlanIsActive() {
+    func codingPlanOnlyReplacesCodingModelsWhenPlanIsActive() {
         #expect(SomeIMManagedModel.resolve(domain: .coding, tier: .low, hasCodingPlan: true) == "someim-coding-plan-low")
         #expect(SomeIMManagedModel.resolve(domain: .coding, tier: .high, hasCodingPlan: true) == "someim-coding-plan-high")
         #expect(SomeIMManagedModel.resolve(domain: .coding, tier: .premium, hasCodingPlan: true) == "someim-coding-plan-premium")
-        #expect(SomeIMManagedModel.resolve(domain: .general, tier: .low, hasCodingPlan: true) == "someim-coding-plan-low")
-        #expect(SomeIMManagedModel.resolve(domain: .general, tier: .high, hasCodingPlan: true) == "someim-coding-plan-high")
-        #expect(SomeIMManagedModel.resolve(domain: .general, tier: .premium, hasCodingPlan: true) == "someim-coding-plan-premium")
+        #expect(SomeIMManagedModel.resolve(domain: .general, tier: .low, hasCodingPlan: true) == "someim-auto-flash")
+        #expect(SomeIMManagedModel.resolve(domain: .general, tier: .high, hasCodingPlan: true) == "someim-auto-pro")
+        #expect(SomeIMManagedModel.resolve(domain: .general, tier: .premium, hasCodingPlan: true) == "someim-auto-premium")
     }
 
     @Test
@@ -63,6 +63,9 @@ struct SomeIMManagedModelMappingTests {
         #expect(AgentManagedCapabilityTier.low < .high)
         #expect(AgentManagedCapabilityTier.high < .premium)
         #expect(max(AgentManagedCapabilityTier.high, .low) == .high)
+        #expect(AgentManagedCapabilityTier.low.next == .high)
+        #expect(AgentManagedCapabilityTier.high.next == .premium)
+        #expect(AgentManagedCapabilityTier.premium.next == nil)
     }
 }
 
@@ -229,7 +232,7 @@ struct SomeIMRouteResolutionTests {
     }
 
     @Test
-    func planUsesCodingPlanEvenForGeneralDomain() {
+    func planDoesNotReplaceGeneralAutoFamily() {
         let verdict = SomeIMRouteJudgeVerdict(domain: .general, complexity: .low, confidence: 0.9)
         let res = SomeIMManagedRouting.resolution(
             for: verdict,
@@ -237,7 +240,7 @@ struct SomeIMRouteResolutionTests {
             usedFallback: false,
             hasCodingPlan: true
         )
-        #expect(res.model == "someim-coding-plan-high")
+        #expect(res.model == "someim-auto-pro")
     }
 
     @Test
@@ -271,10 +274,20 @@ struct SomeIMRouteOrchestrationTests {
     }
 
     @Test
-    func activePlanRoutesJudgeVerdictToCodingPlanFamily() async {
+    func activePlanKeepsGeneralVerdictOnAutoFamily() async {
         let input = SomeIMRouteJudgeInput(latestUserMessage: "hi")
         let res = await SomeIMManagedRouting.route(input: input, floor: .low, hasCodingPlan: true) { _, _, _ in
             #"{"domain":"general","complexity":"high","confidence":0.9}"#
+        }
+        #expect(res.usedFallback == false)
+        #expect(res.model == "someim-auto-pro")
+    }
+
+    @Test
+    func activePlanRoutesCodingVerdictToCodingPlanFamily() async {
+        let input = SomeIMRouteJudgeInput(latestUserMessage: "重构这个模块")
+        let res = await SomeIMManagedRouting.route(input: input, floor: .low, hasCodingPlan: true) { _, _, _ in
+            #"{"domain":"coding","complexity":"high","confidence":0.9}"#
         }
         #expect(res.usedFallback == false)
         #expect(res.model == "someim-coding-plan-high")

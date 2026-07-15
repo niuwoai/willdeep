@@ -32,6 +32,7 @@
 //
 
 import AppKit
+import Combine
 import SwiftUI
 
 // MARK: - Workspace picker pill
@@ -839,43 +840,76 @@ struct ModelPickerPill: View {
     @State private var selectedModelProviderID: UUID?
     @State private var selectedModelSourceIsManaged = false
     @State private var isRefreshingCodingPlan = false
+    @State private var selectedSource: AgentModelPickerSource = .managed
+    @State private var selectedTierFilter: AgentModelPickerTierFilter = .all
+    @State private var searchText = ""
+    @State private var fetchedModelsByProvider: [UUID: [String]] = [:]
+    @State private var loadingProviderIDs: Set<UUID> = []
+    @State private var providerLoadFailures: Set<UUID> = []
+    @State private var observedManagedTier: AgentManagedCapabilityTier?
+    @State private var showsAutomaticUpgradeBadge = false
+    @State private var automaticUpgradeBadgeTask: Task<Void, Never>?
 
     var body: some View {
-        Button {
-            refreshMenuSnapshot()
-            selectedModelSourceIsManaged = appState.activeRuntime?.managedRouting != nil
-                && SomeIMIntegrationStore.hasAuthenticatedSessionForAutomaticDefaults()
-            selectedModelProviderID = appState.agentProviderLibrary.activeID
-                ?? appState.agentProviderLibrary.entries.first?.id
-            if !isModelPanelPresented,
-               SomeIMIntegrationStore.hasAuthenticatedSessionForAutomaticDefaults() {
-                refreshCodingPlanStatus()
+        HStack(spacing: 0) {
+            Button(action: toggleModelPanel) {
+                HStack(spacing: 5) {
+                    Image(systemName: menuSnapshot.managedActive ? "sparkles" : "server.rack")
+                        .font(.system(size: 10, weight: .semibold))
+                        .foregroundStyle(menuSnapshot.managedActive ? Color.teal : Color.secondary)
+                    Text(pillLabel)
+                        .font(AgentDesign.secondaryFont)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                    if showsAutomaticUpgradeBadge {
+                        Text(L10n.AgentModelPicker.autoUpgrade)
+                            .font(.system(size: 8, weight: .bold))
+                            .foregroundStyle(.teal)
+                            .padding(.horizontal, 5)
+                            .padding(.vertical, 2)
+                            .background(.teal.opacity(0.12))
+                            .clipShape(Capsule())
+                    }
+                    Image(systemName: "chevron.down")
+                        .font(.system(size: 8, weight: .semibold))
+                }
+                .padding(.leading, 8)
+                .padding(.trailing, canUpgradeManagedTier ? 7 : 8)
+                .padding(.vertical, 4)
             }
-            isModelPanelPresented.toggle()
-        } label: {
-            HStack(spacing: 3) {
-                Text(menuSnapshot.currentModelLabel.isEmpty ? "Select model" : menuSnapshot.currentModelLabel)
-                    .font(AgentDesign.secondaryFont)
-                    .lineLimit(1)
-                    .truncationMode(.middle)
-                Image(systemName: "chevron.down")
-                    .font(.system(size: 8, weight: .semibold))
+            .buttonStyle(.plain)
+            .focusable(false)
+            .help(L10n.AgentModelPicker.chooseHelp)
+
+            if canUpgradeManagedTier {
+                Divider()
+                    .frame(height: 16)
+                Button(action: upgradeManagedTier) {
+                    Image(systemName: "arrow.up")
+                        .font(.system(size: 9, weight: .bold))
+                        .frame(width: 24, height: 24)
+                }
+                .buttonStyle(.plain)
+                .focusable(false)
+                .help(L10n.AgentModelPicker.upgradeTo(nextManagedTierLabel))
             }
-            .foregroundStyle(.secondary)
-            .padding(.horizontal, 8)
-            .padding(.vertical, 4)
-            .background(appState.editorSettings.interfaceSkin.palette.controlFill.opacity(0.72))
-            .clipShape(RoundedRectangle(cornerRadius: AgentDesign.pillCornerRadius))
         }
-        .buttonStyle(.plain)
-        .focusable(false)
+        .foregroundStyle(.secondary)
+        .background(appState.editorSettings.interfaceSkin.palette.controlFill.opacity(0.72))
+        .clipShape(RoundedRectangle(cornerRadius: AgentDesign.pillCornerRadius, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: AgentDesign.pillCornerRadius, style: .continuous)
+                .stroke(canUpgradeManagedTier ? Color.teal.opacity(0.24) : Color.clear, lineWidth: 1)
+        }
         .fixedSize()
-        .help("Pick provider + model for this chat. The active provider also drives Auto/Flash/Pro routing.")
         .popover(isPresented: $isModelPanelPresented, arrowEdge: .bottom) {
             modelSelectionPanel
-                .frame(width: 680, height: 520)
+                .frame(width: 820, height: 650)
         }
-        .onAppear(perform: refreshMenuSnapshot)
+        .onAppear {
+            refreshMenuSnapshot()
+            observedManagedTier = appState.activeRuntime?.managedRouting?.minimumTier
+        }
         .onReceive(appState.$agentProviderLibrary) { _ in
             refreshMenuSnapshot()
         }
@@ -893,9 +927,15 @@ struct ModelPickerPill: View {
         }
         .onReceive(appState.$activeAgentSessionID) { _ in
             refreshMenuSnapshot()
+            observedManagedTier = appState.activeRuntime?.managedRouting?.minimumTier
+            showsAutomaticUpgradeBadge = false
         }
         .onCompatibleChange(of: appState.agentSessionModelOverride ?? "") { _, _ in
             refreshMenuSnapshot()
+        }
+        .onReceive(managedRoutingPublisher, perform: handleManagedRoutingChange)
+        .onDisappear {
+            automaticUpgradeBadgeTask?.cancel()
         }
     }
 
@@ -903,24 +943,11 @@ struct ModelPickerPill: View {
     private var modelSelectionPanel: some View {
         let palette = appState.editorSettings.interfaceSkin.palette
         VStack(alignment: .leading, spacing: 0) {
-            HStack(alignment: .center, spacing: 10) {
-                Image(systemName: "slider.horizontal.3")
-                    .font(.system(size: 18, weight: .semibold))
-                    .foregroundStyle(.teal)
-                    .frame(width: 30, height: 30)
-                    .background(palette.controlFill.opacity(0.9))
-                    .clipShape(RoundedRectangle(cornerRadius: 8))
-                VStack(alignment: .leading, spacing: 3) {
-                    Text("选择模型与托管方式")
-                        .font(.system(size: 15, weight: .semibold))
-                    Text(menuSnapshot.isSomeIMAuthenticated
-                         ? "已连接 some.im，可使用省心托管、Coding Plan 和推荐模型。"
-                         : "未连接 some.im，仅显示你自己配置的 Flash / Pro 模型。")
-                        .font(.system(size: 11))
-                        .foregroundStyle(.secondary)
-                        .lineLimit(2)
-                }
-                Spacer()
+            HStack(spacing: 12) {
+                Text(L10n.AgentModelPicker.selectModel)
+                    .font(.system(size: 15, weight: .semibold))
+                    .frame(width: 164, alignment: .leading)
+                modelSearchField
                 Button {
                     isModelPanelPresented = false
                 } label: {
@@ -933,14 +960,14 @@ struct ModelPickerPill: View {
                 .foregroundStyle(.secondary)
             }
             .padding(.horizontal, 16)
-            .padding(.vertical, 14)
+            .padding(.vertical, 12)
 
             Divider()
 
             HStack(alignment: .top, spacing: 0) {
                 providerSelectionColumn
-                    .frame(width: 214)
-                    .padding(12)
+                    .frame(width: 190)
+                    .padding(10)
                     .focusable(false)
 
                 Divider()
@@ -950,6 +977,13 @@ struct ModelPickerPill: View {
                     .focusable(false)
             }
             .focusable(false)
+
+            Divider()
+            Text(L10n.AgentModelPicker.selectionFooter)
+                .font(.system(size: 10))
+                .foregroundStyle(.secondary)
+                .padding(.horizontal, 16)
+                .padding(.vertical, 8)
         }
         .background(palette.panelFill.opacity(0.98))
         .focusable(false)
@@ -958,33 +992,63 @@ struct ModelPickerPill: View {
     @ViewBuilder
     private var providerSelectionColumn: some View {
         let entries = selectableProviderEntries
-        VStack(alignment: .leading, spacing: 8) {
-            Text("Provider")
-                .font(.system(size: 11, weight: .bold))
-                .foregroundStyle(.secondary)
-                .padding(.horizontal, 4)
-
+        ScrollView {
+            VStack(alignment: .leading, spacing: 5) {
             if menuSnapshot.isSomeIMAuthenticated {
                 providerSourceButton(
-                    title: "省心托管",
-                    subtitle: "some.im 自动路由",
+                    title: L10n.AgentModelPicker.managed,
+                    subtitle: L10n.AgentModelPicker.managedSubtitle,
                     systemImage: "wand.and.stars",
-                    checked: selectedModelSourceIsManaged
+                    checked: selectedSource == .managed
                 ) {
-                    selectedModelSourceIsManaged = true
-                    selectedModelProviderID = entries.first(where: { $0.providerID == AgentProviderPreset.someIMID })?.id
+                    selectSource(.managed)
                 }
             }
+
+            providerSourceButton(
+                title: L10n.AgentModelPicker.allModels,
+                subtitle: L10n.AgentModelPicker.modelCount(allCatalogItems.count),
+                systemImage: "circle.grid.2x2",
+                checked: selectedSource == .allModels
+            ) {
+                selectSource(.allModels)
+            }
+
+            providerSourceButton(
+                title: L10n.AgentModelPicker.codingRecommended,
+                subtitle: L10n.AgentModelPicker.recommended,
+                systemImage: "wand.and.stars.inverse",
+                checked: selectedSource == .codingRecommended
+            ) {
+                selectSource(.codingRecommended)
+            }
+
+            providerSourceButton(
+                title: L10n.AgentModelPicker.recent,
+                subtitle: L10n.AgentModelPicker.modelCount(recentCatalogItems.count),
+                systemImage: "clock",
+                checked: selectedSource == .recent
+            ) {
+                selectSource(.recent)
+            }
+
+            Divider()
+                .padding(.vertical, 5)
+
+            Text(L10n.AgentModelPicker.providers)
+                .font(.system(size: 10, weight: .bold))
+                .foregroundStyle(.secondary)
+                .padding(.horizontal, 7)
 
             ForEach(entries) { entry in
                 providerSourceButton(
                     title: entry.displayName,
-                    subtitle: providerSubtitle(entry),
+                    subtitle: providerCatalogSubtitle(entry),
                     systemImage: providerIcon(entry),
-                    checked: !selectedModelSourceIsManaged && selectedProviderEntry?.id == entry.id
+                    checked: selectedSource == .provider(entry.id)
                 ) {
-                    selectedModelSourceIsManaged = false
-                    selectedModelProviderID = entry.id
+                    selectSource(.provider(entry.id))
+                    refreshProviderCatalog(entry)
                 }
             }
 
@@ -992,15 +1056,15 @@ struct ModelPickerPill: View {
                 Divider()
                     .padding(.vertical, 4)
                 VStack(alignment: .leading, spacing: 8) {
-                    Label("some.im 未连接", systemImage: "lock")
+                    Label(L10n.AgentModelPicker.someIMDisconnected, systemImage: "lock")
                         .font(.system(size: 11, weight: .semibold))
-                    Text("连接后可使用省心托管、Coding Plan 和推荐模型。")
+                    Text(L10n.AgentModelPicker.someIMConnectHint)
                         .font(.system(size: 10))
                         .foregroundStyle(.secondary)
                     Button {
                         openURL(URL(string: "https://some.im/customer/plan")!)
                     } label: {
-                        Label("查看套餐", systemImage: "arrow.up.right.square")
+                        Label(L10n.AgentModelPicker.viewPlans, systemImage: "arrow.up.right.square")
                     }
                     .buttonStyle(.bordered)
                     .controlSize(.small)
@@ -1012,26 +1076,418 @@ struct ModelPickerPill: View {
                 .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
             }
 
-            Spacer(minLength: 0)
+            }
         }
+        .scrollIndicators(.hidden)
         .focusable(false)
     }
 
     @ViewBuilder
     private var modelDetailColumn: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 12) {
-                if selectedModelSourceIsManaged, menuSnapshot.isSomeIMAuthenticated {
-                    managedRoutingDetail
-                } else if let entry = selectedProviderEntry {
-                    providerModelDetail(entry)
+            LazyVStack(alignment: .leading, spacing: 14) {
+                if normalizedSearchText.isEmpty {
+                    sourceDetail
                 } else {
-                    emptyProviderDetail
+                    searchResultsDetail
                 }
             }
-            .padding(16)
+            .padding(14)
             .focusable(false)
         }
+        .focusable(false)
+    }
+
+    private var modelSearchField: some View {
+        HStack(spacing: 7) {
+            Image(systemName: "magnifyingglass")
+                .font(.system(size: 11, weight: .medium))
+                .foregroundStyle(.secondary)
+            TextField(L10n.AgentModelPicker.searchPlaceholder, text: $searchText)
+                .textFieldStyle(.plain)
+                .font(.system(size: 12))
+                .onSubmit(selectFirstSearchResult)
+            if !searchText.isEmpty {
+                Button {
+                    searchText = ""
+                } label: {
+                    Image(systemName: "xmark.circle.fill")
+                        .font(.system(size: 11))
+                        .foregroundStyle(.tertiary)
+                }
+                .buttonStyle(.plain)
+                .focusable(false)
+            }
+        }
+        .padding(.horizontal, 9)
+        .padding(.vertical, 7)
+        .background(appState.editorSettings.interfaceSkin.palette.controlFill.opacity(0.54))
+        .clipShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 7, style: .continuous)
+                .stroke(Color.secondary.opacity(0.14), lineWidth: 1)
+        }
+    }
+
+    @ViewBuilder
+    private var sourceDetail: some View {
+        switch selectedSource {
+        case .managed:
+            managedCatalogOverview
+        case .allModels:
+            allModelsDetail
+        case .codingRecommended:
+            codingRecommendationsDetail
+        case .recent:
+            recentModelsDetail
+        case let .provider(entryID):
+            if let entry = selectableProviderEntries.first(where: { $0.id == entryID }) {
+                providerCatalogDetail(entry)
+            } else {
+                emptyProviderDetail
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var managedCatalogOverview: some View {
+        managedSummary
+        codingRecommendationsDetail
+        if !recentCatalogItems.isEmpty {
+            recentModelsDetail
+        }
+    }
+
+    private var managedSummary: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(alignment: .center, spacing: 10) {
+                Image(systemName: "sparkles")
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundStyle(.teal)
+                    .frame(width: 28, height: 28)
+                    .background(.teal.opacity(0.10))
+                    .clipShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
+                VStack(alignment: .leading, spacing: 2) {
+                    HStack(spacing: 6) {
+                        Text("\(L10n.AgentModelPicker.managed) · \(managedFamilyLabel)")
+                            .font(.system(size: 13, weight: .semibold))
+                        if menuSnapshot.managedActive {
+                            pickerTag(L10n.AgentModelPicker.current, tint: .teal)
+                        }
+                    }
+                    Text("\(managedTaskLabel) · \(managedActualModelID)")
+                        .font(.system(size: 10))
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                }
+                Spacer(minLength: 8)
+                HStack(spacing: 6) {
+                    catalogManagedTierButton(.low)
+                    catalogManagedTierButton(.high)
+                    catalogManagedTierButton(.premium)
+                }
+            }
+
+            HStack(spacing: 8) {
+                Text(L10n.AgentModelPicker.managedRule)
+                    .font(.system(size: 10))
+                    .foregroundStyle(.secondary)
+                Spacer()
+                if menuSnapshot.managedActive, menuSnapshot.managedFloor != .low {
+                    Button(L10n.AgentModelPicker.resetToFlash) {
+                        appState.resetManagedRoutingFloor()
+                        refreshMenuSnapshot()
+                    }
+                    .buttonStyle(.plain)
+                    .focusable(false)
+                    .font(.system(size: 10, weight: .medium))
+                    .foregroundStyle(.teal)
+                }
+            }
+        }
+        .padding(.bottom, 4)
+    }
+
+    @ViewBuilder
+    private var allModelsDetail: some View {
+        catalogSectionHeader(
+            title: L10n.AgentModelPicker.allModels,
+            subtitle: L10n.AgentModelPicker.modelCount(allCatalogItems.count)
+        )
+        if allCatalogItems.isEmpty {
+            catalogEmptyState(L10n.AgentModelPicker.noModels, clearable: false)
+        } else {
+            ForEach(selectableProviderEntries) { entry in
+                let items = catalogItems(for: entry)
+                if !items.isEmpty {
+                    catalogSectionHeader(
+                        title: entry.displayName,
+                        subtitle: L10n.AgentModelPicker.modelCount(items.count)
+                    )
+                    catalogRows(items)
+                }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var codingRecommendationsDetail: some View {
+        catalogSectionHeader(
+            title: L10n.AgentModelPicker.codingPicks,
+            subtitle: L10n.AgentModelPicker.recommended
+        )
+        let recommendations = resolvedCodingRecommendations
+        if recommendations.isEmpty {
+            catalogEmptyState(L10n.AgentModelPicker.noModels, clearable: false)
+        } else {
+            ForEach(recommendations) { recommendation in
+                catalogModelRow(
+                    recommendation.item,
+                    title: recommendation.title,
+                    note: recommendation.note,
+                    tags: recommendation.tags,
+                    recommended: true
+                )
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var recentModelsDetail: some View {
+        catalogSectionHeader(
+            title: L10n.AgentModelPicker.recent,
+            subtitle: L10n.AgentModelPicker.modelCount(recentCatalogItems.count)
+        )
+        if recentCatalogItems.isEmpty {
+            catalogEmptyState(L10n.AgentModelPicker.noModels, clearable: false)
+        } else {
+            catalogRows(recentCatalogItems)
+        }
+    }
+
+    @ViewBuilder
+    private func providerCatalogDetail(_ entry: AgentProviderEntry) -> some View {
+        HStack(spacing: 10) {
+            Image(systemName: providerIcon(entry))
+                .font(.system(size: 15, weight: .semibold))
+                .foregroundStyle(.teal)
+            VStack(alignment: .leading, spacing: 2) {
+                HStack(spacing: 6) {
+                    Text(entry.displayName)
+                        .font(.system(size: 14, weight: .semibold))
+                    if menuSnapshot.activeProviderID == entry.id {
+                        pickerTag(L10n.AgentModelPicker.current, tint: .teal)
+                    }
+                }
+                Text(L10n.AgentModelPicker.modelCount(catalogItems(for: entry).count))
+                    .font(.system(size: 10))
+                    .foregroundStyle(.secondary)
+            }
+            Spacer()
+            providerTierFilters
+        }
+
+        let items = AgentModelPickerCatalog.filtered(catalogItems(for: entry), by: selectedTierFilter)
+        if loadingProviderIDs.contains(entry.id), items.isEmpty {
+            HStack(spacing: 8) {
+                ProgressView().controlSize(.small)
+                Text(L10n.AgentModelPicker.loadingModels)
+                    .font(.system(size: 11))
+                    .foregroundStyle(.secondary)
+            }
+            .padding(.vertical, 18)
+        } else if items.isEmpty {
+            catalogEmptyState(L10n.AgentModelPicker.noModels, clearable: false)
+        } else {
+            catalogRows(items)
+        }
+
+        if providerLoadFailures.contains(entry.id) {
+            Button {
+                refreshProviderCatalog(entry, force: true)
+            } label: {
+                Label(L10n.AgentModelPicker.retryCatalog, systemImage: "arrow.clockwise")
+                    .font(.system(size: 10, weight: .medium))
+            }
+            .buttonStyle(.plain)
+            .focusable(false)
+            .foregroundStyle(.teal)
+        }
+    }
+
+    private var providerTierFilters: some View {
+        HStack(spacing: 5) {
+            ForEach(AgentModelPickerTierFilter.allCases) { filter in
+                Button {
+                    selectedTierFilter = filter
+                } label: {
+                    Text(tierFilterLabel(filter))
+                        .font(.system(size: 10, weight: .medium))
+                        .foregroundStyle(selectedTierFilter == filter ? Color.teal : Color.secondary)
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 4)
+                        .background(selectedTierFilter == filter ? Color.teal.opacity(0.12) : Color.clear)
+                        .clipShape(Capsule())
+                }
+                .buttonStyle(.plain)
+                .focusable(false)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var searchResultsDetail: some View {
+        catalogSectionHeader(
+            title: L10n.AgentModelPicker.resultCount(searchResults.count),
+            subtitle: searchText
+        )
+        if searchResults.isEmpty {
+            catalogEmptyState(L10n.AgentModelPicker.noResults, clearable: true)
+        } else {
+            ForEach(selectableProviderEntries) { entry in
+                let providerResults = searchResults.filter { $0.providerEntryID == entry.id }
+                if !providerResults.isEmpty {
+                    catalogSectionHeader(
+                        title: entry.displayName,
+                        subtitle: L10n.AgentModelPicker.modelCount(providerResults.count)
+                    )
+                    catalogRows(providerResults)
+                }
+            }
+        }
+    }
+
+    private func catalogSectionHeader(title: String, subtitle: String?) -> some View {
+        HStack(alignment: .firstTextBaseline, spacing: 8) {
+            Text(title)
+                .font(.system(size: 11, weight: .semibold))
+                .foregroundStyle(.secondary)
+            if let subtitle, !subtitle.isEmpty {
+                Text(subtitle)
+                    .font(.system(size: 9))
+                    .foregroundStyle(.tertiary)
+            }
+            Spacer()
+        }
+        .padding(.top, 2)
+    }
+
+    @ViewBuilder
+    private func catalogRows(_ items: [AgentModelCatalogItem]) -> some View {
+        VStack(alignment: .leading, spacing: 0) {
+            ForEach(items) { item in
+                catalogModelRow(
+                    item,
+                    title: modelDisplayTitle(item.modelID),
+                    note: modelDescription(item),
+                    tags: catalogTags(item),
+                    recommended: false
+                )
+                if item.id != items.last?.id {
+                    Divider().padding(.leading, 32)
+                }
+            }
+        }
+    }
+
+    private func catalogModelRow(
+        _ item: AgentModelCatalogItem,
+        title: String,
+        note: String,
+        tags: [String],
+        recommended: Bool
+    ) -> some View {
+        Button {
+            selectCatalogItem(item)
+        } label: {
+            HStack(alignment: .center, spacing: 9) {
+                Image(systemName: modelIcon(item))
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(isCatalogItemCurrent(item) ? Color.teal : Color.secondary)
+                    .frame(width: 22)
+                VStack(alignment: .leading, spacing: 3) {
+                    HStack(spacing: 6) {
+                        Text(title)
+                            .font(.system(size: 12, weight: .semibold))
+                            .foregroundStyle(.primary)
+                            .lineLimit(1)
+                            .truncationMode(.middle)
+                        pickerTag(item.providerName, tint: .secondary)
+                        ForEach(tags, id: \.self) { tag in
+                            pickerTag(tag, tint: .secondary)
+                        }
+                        if recommended {
+                            pickerTag(L10n.AgentModelPicker.recommended, tint: .teal)
+                        }
+                    }
+                    Text(note)
+                        .font(.system(size: 10))
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                }
+                Spacer(minLength: 8)
+                if isCatalogItemCurrent(item) {
+                    Image(systemName: "checkmark.circle.fill")
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundStyle(.teal)
+                } else {
+                    Image(systemName: "chevron.right")
+                        .font(.system(size: 8, weight: .semibold))
+                        .foregroundStyle(.tertiary)
+                }
+            }
+            .padding(.horizontal, 6)
+            .padding(.vertical, 8)
+            .background(isCatalogItemCurrent(item) ? Color.teal.opacity(0.10) : Color.clear)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .focusable(false)
+    }
+
+    private func pickerTag(_ title: String, tint: Color) -> some View {
+        Text(title)
+            .font(.system(size: 8, weight: .semibold))
+            .foregroundStyle(tint)
+            .padding(.horizontal, 5)
+            .padding(.vertical, 2)
+            .background(tint.opacity(0.10))
+            .clipShape(Capsule())
+    }
+
+    private func catalogEmptyState(_ title: String, clearable: Bool) -> some View {
+        VStack(spacing: 10) {
+            Image(systemName: "magnifyingglass")
+                .font(.system(size: 22, weight: .light))
+                .foregroundStyle(.secondary)
+            Text(title)
+                .font(.system(size: 12, weight: .semibold))
+            if clearable {
+                Button(L10n.AgentModelPicker.clearSearch) {
+                    searchText = ""
+                }
+                .buttonStyle(.borderedProminent)
+                .controlSize(.small)
+                .focusable(false)
+            }
+        }
+        .frame(maxWidth: .infinity, minHeight: 180)
+    }
+
+    private func catalogManagedTierButton(_ tier: AgentManagedCapabilityTier) -> some View {
+        let checked = menuSnapshot.managedActive && menuSnapshot.managedFloor == tier
+        return Button {
+            activateManagedTier(tier)
+        } label: {
+            Text(managedTierLabel(tier))
+                .font(.system(size: 10, weight: .semibold))
+                .foregroundStyle(checked ? Color.white : Color.secondary)
+                .frame(minWidth: 50)
+                .padding(.vertical, 6)
+                .background(checked ? Color.teal : appState.editorSettings.interfaceSkin.palette.controlFill.opacity(0.58))
+                .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
+        }
+        .buttonStyle(.plain)
         .focusable(false)
     }
 
@@ -1710,6 +2166,311 @@ struct ModelPickerPill: View {
         return AnyShapeStyle(appState.editorSettings.interfaceSkin.palette.controlFill.opacity(0.42))
     }
 
+    private var normalizedSearchText: String {
+        searchText.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private var effectiveFetchedModelsByProvider: [UUID: [String]] {
+        var catalogs = fetchedModelsByProvider
+        for recommendation in Self.codingRecommendations {
+            guard let entry = selectableProviderEntries.first(where: {
+                $0.providerID == recommendation.providerID
+            }) else { continue }
+            catalogs[entry.id, default: []].append(recommendation.model)
+        }
+        return catalogs
+    }
+
+    private var allCatalogItems: [AgentModelCatalogItem] {
+        AgentModelPickerCatalog.items(
+            entries: selectableProviderEntries,
+            fetchedByProvider: effectiveFetchedModelsByProvider,
+            fallbackKnownModels: combinedCatalogModels,
+            activeProviderID: menuSnapshot.activeProviderID
+        )
+    }
+
+    private var searchResults: [AgentModelCatalogItem] {
+        AgentModelPickerCatalog.search(allCatalogItems, query: normalizedSearchText)
+            .sorted { lhs, rhs in
+                if lhs.providerName == rhs.providerName {
+                    return lhs.modelID.localizedCaseInsensitiveCompare(rhs.modelID) == .orderedAscending
+                }
+                return lhs.providerName.localizedCaseInsensitiveCompare(rhs.providerName) == .orderedAscending
+            }
+    }
+
+    private var recentCatalogItems: [AgentModelCatalogItem] {
+        var usedIDs = Set<String>()
+        return menuSnapshot.recentlyUsedModels.compactMap { model in
+            let matches = allCatalogItems.filter {
+                $0.modelID.caseInsensitiveCompare(model) == .orderedSame
+            }
+            let preferred = matches.first(where: { $0.providerEntryID == menuSnapshot.activeProviderID })
+                ?? matches.first
+            guard let preferred, usedIDs.insert(preferred.id).inserted else { return nil }
+            return preferred
+        }
+    }
+
+    private var resolvedCodingRecommendations: [ResolvedCodingRecommendation] {
+        Self.codingRecommendations.compactMap { recommendation in
+            guard let entry = selectableProviderEntries.first(where: {
+                $0.providerID == recommendation.providerID
+            }) else { return nil }
+            let item = AgentModelCatalogItem(
+                providerEntryID: entry.id,
+                providerID: entry.providerID,
+                providerName: entry.displayName,
+                modelID: recommendation.model,
+                tier: recommendation.tier
+            )
+            return ResolvedCodingRecommendation(
+                item: item,
+                title: recommendation.title,
+                note: recommendation.note,
+                tags: recommendation.tags
+            )
+        }
+    }
+
+    private func catalogItems(for entry: AgentProviderEntry) -> [AgentModelCatalogItem] {
+        allCatalogItems.filter { $0.providerEntryID == entry.id }
+    }
+
+    private func providerCatalogSubtitle(_ entry: AgentProviderEntry) -> String {
+        L10n.AgentModelPicker.modelCount(catalogItems(for: entry).count)
+    }
+
+    private func selectSource(_ source: AgentModelPickerSource) {
+        selectedSource = source
+        selectedTierFilter = .all
+        switch source {
+        case .managed:
+            selectedModelSourceIsManaged = true
+            selectedModelProviderID = selectableProviderEntries.first(where: {
+                $0.providerID == AgentProviderPreset.someIMID
+            })?.id
+        case let .provider(entryID):
+            selectedModelSourceIsManaged = false
+            selectedModelProviderID = entryID
+        case .allModels, .codingRecommended, .recent:
+            selectedModelSourceIsManaged = false
+        }
+    }
+
+    private func toggleModelPanel() {
+        if isModelPanelPresented {
+            isModelPanelPresented = false
+            return
+        }
+        prepareModelPanel()
+        isModelPanelPresented = true
+    }
+
+    private func prepareModelPanel() {
+        refreshMenuSnapshot()
+        searchText = ""
+        selectedTierFilter = .all
+        if menuSnapshot.managedActive, menuSnapshot.isSomeIMAuthenticated {
+            selectSource(.managed)
+        } else if let activeID = menuSnapshot.activeProviderID {
+            selectSource(.provider(activeID))
+        } else {
+            selectSource(.allModels)
+        }
+        if menuSnapshot.isSomeIMAuthenticated {
+            refreshCodingPlanStatus()
+        }
+        selectableProviderEntries.forEach { entry in
+            refreshProviderCatalog(entry)
+        }
+    }
+
+    private func refreshProviderCatalog(_ entry: AgentProviderEntry, force: Bool = false) {
+        guard force || fetchedModelsByProvider[entry.id] == nil else { return }
+        guard !loadingProviderIDs.contains(entry.id) else { return }
+        loadingProviderIDs.insert(entry.id)
+        providerLoadFailures.remove(entry.id)
+        appState.materializeProviderLibraryEntryAPIKey(id: entry.id)
+        let resolvedEntry = appState.agentProviderLibrary.entries.first(where: { $0.id == entry.id }) ?? entry
+        Task { @MainActor in
+            defer { loadingProviderIDs.remove(entry.id) }
+            do {
+                let models = try await AgentClient(configuration: resolvedEntry.makeConfiguration()).fetchModels()
+                fetchedModelsByProvider[entry.id] = models
+                appState.recordFetchedAgentModels(models)
+            } catch {
+                fetchedModelsByProvider[entry.id] = []
+                providerLoadFailures.insert(entry.id)
+            }
+        }
+    }
+
+    private func selectFirstSearchResult() {
+        guard let first = searchResults.first else { return }
+        selectCatalogItem(first)
+    }
+
+    private func selectCatalogItem(_ item: AgentModelCatalogItem) {
+        guard let entry = selectableProviderEntries.first(where: {
+            $0.id == item.providerEntryID
+        }) else { return }
+        pick(entry: entry, model: item.modelID)
+        closeModelPanel()
+    }
+
+    private func activateManagedTier(_ tier: AgentManagedCapabilityTier) {
+        appState.selectSomeIMManagedRouting()
+        appState.setManagedRoutingFloor(tier)
+        selectSource(.managed)
+        refreshMenuSnapshot()
+    }
+
+    private func upgradeManagedTier() {
+        guard let current = appState.activeRuntime?.managedRouting?.minimumTier,
+              let next = current.next else { return }
+        appState.setManagedRoutingFloor(next)
+        refreshMenuSnapshot()
+    }
+
+    private var canUpgradeManagedTier: Bool {
+        appState.activeRuntime?.managedRouting?.minimumTier.next != nil
+    }
+
+    private var nextManagedTierLabel: String {
+        guard let next = appState.activeRuntime?.managedRouting?.minimumTier.next else { return "" }
+        return managedTierLabel(next)
+    }
+
+    private var managedRoutingPublisher: AnyPublisher<AgentManagedRoutingState?, Never> {
+        guard let runtime = appState.activeRuntime else {
+            return Just(nil).eraseToAnyPublisher()
+        }
+        return runtime.$managedRouting.eraseToAnyPublisher()
+    }
+
+    private func handleManagedRoutingChange(_ state: AgentManagedRoutingState?) {
+        let previousTier = observedManagedTier
+        observedManagedTier = state?.minimumTier
+        refreshMenuSnapshot()
+        guard let previousTier,
+              let state,
+              state.minimumTier > previousTier,
+              state.lastEscalationReason?.hasPrefix("user_selected_") != true else {
+            return
+        }
+        automaticUpgradeBadgeTask?.cancel()
+        showsAutomaticUpgradeBadge = true
+        automaticUpgradeBadgeTask = Task { @MainActor in
+            try? await Task.sleep(nanoseconds: 4_000_000_000)
+            guard !Task.isCancelled else { return }
+            showsAutomaticUpgradeBadge = false
+        }
+    }
+
+    private var pillLabel: String {
+        if menuSnapshot.managedActive {
+            return "\(L10n.AgentModelPicker.managed) · \(managedFamilyLabel)"
+        }
+        return menuSnapshot.currentModelLabel.isEmpty
+            ? L10n.AgentModelPicker.selectModel
+            : menuSnapshot.currentModelLabel
+    }
+
+    private var managedActualModelID: String {
+        if let selected = appState.activeRuntime?.managedRouting?.lastSelectedModel,
+           !selected.isEmpty {
+            return selected
+        }
+        switch appState.activeRuntime?.managedRouting?.minimumTier ?? .low {
+        case .low: return SomeIMManagedModel.autoFlash
+        case .high: return SomeIMManagedModel.autoPro
+        case .premium: return SomeIMManagedModel.autoPremium
+        }
+    }
+
+    private var managedFamilyLabel: String {
+        let tier = SomeIMManagedModel.tier(of: managedActualModelID)
+            ?? appState.activeRuntime?.managedRouting?.minimumTier
+            ?? .low
+        let family: String
+        if managedActualModelID.hasPrefix("someim-coding-plan-") {
+            family = "Plan"
+        } else if managedActualModelID.hasPrefix("someim-code-") {
+            family = "Code"
+        } else {
+            family = "Auto"
+        }
+        return "\(family) \(managedTierLabel(tier))"
+    }
+
+    private var managedTaskLabel: String {
+        let modelID = managedActualModelID.lowercased()
+        if modelID.contains("coding-plan") || modelID.hasPrefix("someim-code-") {
+            return L10n.AgentModelPicker.codingTask
+        }
+        return L10n.AgentModelPicker.generalTask
+    }
+
+    private func isCatalogItemCurrent(_ item: AgentModelCatalogItem) -> Bool {
+        guard menuSnapshot.activeProviderID == item.providerEntryID,
+              !menuSnapshot.managedActive else { return false }
+        if let override = menuSnapshot.sessionOverride, !override.isEmpty {
+            return override.caseInsensitiveCompare(item.modelID) == .orderedSame
+        }
+        return menuSnapshot.configuredModel.caseInsensitiveCompare(item.modelID) == .orderedSame
+    }
+
+    private func tierFilterLabel(_ filter: AgentModelPickerTierFilter) -> String {
+        switch filter {
+        case .all: return L10n.AgentModelPicker.all
+        case .flash: return L10n.AgentModelPicker.flash
+        case .pro: return L10n.AgentModelPicker.pro
+        }
+    }
+
+    private func modelDisplayTitle(_ model: String) -> String {
+        Self.codingRecommendations.first(where: {
+            $0.model.caseInsensitiveCompare(model) == .orderedSame
+        })?.title ?? model
+    }
+
+    private func modelDescription(_ item: AgentModelCatalogItem) -> String {
+        if let recommendation = Self.codingRecommendations.first(where: {
+            $0.providerID == item.providerID
+                && $0.model.caseInsensitiveCompare(item.modelID) == .orderedSame
+        }) {
+            return recommendation.note
+        }
+        return item.modelID
+    }
+
+    private func catalogTags(_ item: AgentModelCatalogItem) -> [String] {
+        if let recommendation = Self.codingRecommendations.first(where: {
+            $0.providerID == item.providerID
+                && $0.model.caseInsensitiveCompare(item.modelID) == .orderedSame
+        }) {
+            return recommendation.tags
+        }
+        switch item.tier {
+        case .some(.flash): return [L10n.AgentModelPicker.flash]
+        case .some(.pro): return [L10n.AgentModelPicker.pro]
+        case .some(.all), .none: return []
+        }
+    }
+
+    private func modelIcon(_ item: AgentModelCatalogItem) -> String {
+        if catalogTags(item).contains(L10n.AgentModelPicker.coding) {
+            return "chevron.left.forwardslash.chevron.right"
+        }
+        switch item.tier {
+        case .some(.flash): return "bolt"
+        case .some(.pro): return "speedometer"
+        case .some(.all), .none: return "circle.grid.2x2"
+        }
+    }
+
     private func chooseManagedRouting(tier: AgentManagedCapabilityTier) {
         appState.selectSomeIMManagedRouting()
         appState.setManagedRoutingFloor(tier)
@@ -2047,6 +2808,59 @@ struct ModelPickerPill: View {
         )
     }
 
+    private struct CodingRecommendation: Identifiable {
+        var id: String { "\(providerID)::\(model)" }
+        let providerID: String
+        let title: String
+        let model: String
+        let note: String
+        let tags: [String]
+        let tier: AgentModelPickerTierFilter?
+    }
+
+    private struct ResolvedCodingRecommendation: Identifiable {
+        var id: String { item.id }
+        let item: AgentModelCatalogItem
+        let title: String
+        let note: String
+        let tags: [String]
+    }
+
+    private static let codingRecommendations: [CodingRecommendation] = [
+        CodingRecommendation(
+            providerID: AgentProviderPreset.someIMID,
+            title: "DeepSeek V4 Pro",
+            model: "deepseek-v4-pro",
+            note: L10n.AgentModelPicker.complexCodingNote,
+            tags: [L10n.AgentModelPicker.coding, L10n.AgentModelPicker.pro],
+            tier: .pro
+        ),
+        CodingRecommendation(
+            providerID: AgentProviderPreset.someIMID,
+            title: "GLM 5.1",
+            model: "glm-5.1",
+            note: L10n.AgentModelPicker.repositoryCodingNote,
+            tags: [L10n.AgentModelPicker.coding],
+            tier: nil
+        ),
+        CodingRecommendation(
+            providerID: AgentProviderPreset.someIMID,
+            title: "GLM 5.2",
+            model: "glm-5.2",
+            note: L10n.AgentModelPicker.dailyCodingNote,
+            tags: [L10n.AgentModelPicker.coding, L10n.AgentModelPicker.affordable],
+            tier: nil
+        ),
+        CodingRecommendation(
+            providerID: AgentProviderPreset.deepSeekID,
+            title: "DeepSeek V4 Flash",
+            model: "deepseek-v4-flash",
+            note: L10n.AgentModelPicker.fastCodingNote,
+            tags: [L10n.AgentModelPicker.coding, L10n.AgentModelPicker.fast],
+            tier: .flash
+        )
+    ]
+
     private struct ModelRecommendation: Identifiable, Equatable {
         var id: String { model }
         let title: String
@@ -2059,200 +2873,4 @@ struct ModelPickerPill: View {
 
 extension String {
     fileprivate var nilIfEmpty: String? { isEmpty ? nil : self }
-}
-
-// MARK: - Execution picker (WillDeep / external coding agents)
-
-struct AgentExecutionPickerPill: View {
-    @EnvironmentObject var appState: AppState
-
-    var body: some View {
-        Menu {
-            ForEach(AgentExecutionAgent.allCases) { agent in
-                Button {
-                    appState.setAgentExecutionAgent(agent)
-                } label: {
-                    HStack(alignment: .firstTextBaseline, spacing: 8) {
-                        Image(systemName: agent.symbol)
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text(agent.displayName)
-                            Text(agent.summary)
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                        }
-                        if appState.agentExecutionAgent == agent {
-                            Image(systemName: "checkmark")
-                        }
-                    }
-                }
-            }
-        } label: {
-            HStack(spacing: 4) {
-                Image(systemName: appState.agentExecutionAgent.symbol)
-                    .font(.system(size: 10, weight: .semibold))
-                Text(appState.agentExecutionAgent.displayName)
-                    .font(.system(size: 11, weight: .medium))
-                    .lineLimit(1)
-                Image(systemName: "chevron.down")
-                    .font(.system(size: 8, weight: .bold))
-            }
-            .padding(.horizontal, 8)
-            .padding(.vertical, 3)
-            .foregroundStyle(pillForeground)
-            .background(Capsule(style: .continuous).fill(pillBackground))
-            .overlay(Capsule(style: .continuous).stroke(pillBorder, lineWidth: 1))
-        }
-        .menuStyle(.borderlessButton)
-        .menuIndicator(.hidden)
-        .focusable(false)
-        .fixedSize()
-        .help("选择这一轮由 WillDeep 自己执行，还是委托给本机 Claude Code / Codex CLI。")
-    }
-
-    private var pillForeground: Color {
-        appState.agentExecutionAgent == .willDeep ? Color.secondary : Color.white
-    }
-
-    private var pillBackground: Color {
-        switch appState.agentExecutionAgent {
-        case .willDeep: return Color.secondary.opacity(0.10)
-        case .claudeCode: return Color.purple
-        case .codexCLI: return Color.accentColor
-        }
-    }
-
-    private var pillBorder: Color {
-        appState.agentExecutionAgent == .willDeep
-            ? Color.secondary.opacity(0.25)
-            : Color.clear
-    }
-}
-
-// MARK: - Mode picker (Normal / Plan / Goal)
-
-struct AgentModePickerPill: View {
-    @EnvironmentObject var appState: AppState
-
-    var body: some View {
-        Menu {
-            ForEach(AgentInteractionMode.allCases) { mode in
-                Button {
-                    appState.setAgentInteractionMode(mode)
-                } label: {
-                    Label(mode.displayName, systemImage: mode.symbol)
-                }
-            }
-        } label: {
-            HStack(spacing: 4) {
-                Image(systemName: appState.agentInteractionMode.symbol)
-                    .font(.system(size: 10, weight: .semibold))
-                Text(appState.agentInteractionMode.displayName)
-                    .font(.system(size: 11, weight: .medium))
-                Image(systemName: "chevron.down")
-                    .font(.system(size: 8, weight: .bold))
-            }
-            .padding(.horizontal, 8)
-            .padding(.vertical, 3)
-            .foregroundStyle(pillForeground)
-            .background(Capsule(style: .continuous).fill(pillBackground))
-            .overlay(Capsule(style: .continuous).stroke(pillBorder, lineWidth: 1))
-        }
-        .menuStyle(.borderlessButton)
-        .menuIndicator(.hidden)
-        .focusable(false)
-        .fixedSize()
-        .help("Conversation mode — Plan locks writes until you approve; Goal pins an objective to every reply.")
-    }
-
-    private var pillForeground: Color {
-        appState.agentInteractionMode == .normal ? Color.secondary : Color.white
-    }
-
-    private var pillBackground: Color {
-        switch appState.agentInteractionMode {
-        case .normal: return Color.secondary.opacity(0.10)
-        case .plan: return Color.orange
-        case .goal: return Color.accentColor
-        }
-    }
-
-    private var pillBorder: Color {
-        appState.agentInteractionMode == .normal ? Color.secondary.opacity(0.25) : Color.clear
-    }
-}
-
-/// Overflow「⋯」for composer controls that do not currently fit inline.
-/// `ComposerAdaptiveControlStrip` progressively moves executor, plugins,
-/// and experts out of this popover as the composer gets wider.
-struct ComposerOverflowPill: View {
-    @EnvironmentObject var appState: AppState
-    let controls: [ComposerOverflowControl]
-    @State private var isPresented = false
-
-    init(controls: [ComposerOverflowControl] = [.executor, .plugins, .experts]) {
-        self.controls = controls
-    }
-
-    var body: some View {
-        Button {
-            isPresented.toggle()
-        } label: {
-            HStack(spacing: 3) {
-                Image(systemName: "ellipsis")
-                    .font(.system(size: 11, weight: .semibold))
-                Image(systemName: "chevron.down")
-                    .font(.system(size: 8, weight: .semibold))
-            }
-            .foregroundStyle(.secondary)
-            .padding(.horizontal, 8)
-            .padding(.vertical, 4)
-            .background(appState.editorSettings.interfaceSkin.palette.controlFill.opacity(0.72))
-            .clipShape(RoundedRectangle(cornerRadius: AgentDesign.pillCornerRadius))
-        }
-        .buttonStyle(.plain)
-        .focusable(false)
-        .fixedSize()
-        .help(L10n.Composer.overflowHelp)
-        .popover(isPresented: $isPresented, arrowEdge: .bottom) {
-            VStack(alignment: .leading, spacing: 12) {
-                Text(L10n.Composer.overflowTitle)
-                    .font(.system(size: 11, weight: .semibold))
-                    .foregroundStyle(.secondary)
-                if controls.contains(.approval) {
-                    overflowRow(L10n.Composer.overflowApproval) { AgentApprovalModePickerPill() }
-                }
-                if controls.contains(.executor) {
-                    overflowRow(L10n.Composer.overflowExecutor) { AgentExecutionPickerPill() }
-                }
-                if controls.contains(.plugins) {
-                    overflowRow(L10n.Composer.overflowPlugins) { AgentPluginPickerPill() }
-                }
-                if controls.contains(.experts) {
-                    AgentExpertActivationList()
-                        .focusable(false)
-                }
-            }
-            .padding(14)
-            .frame(width: controls.contains(.experts) ? 340 : 300, alignment: .leading)
-            .focusable(false)
-            .environmentObject(appState)
-        }
-    }
-
-    @ViewBuilder
-    private func overflowRow<Pill: View>(
-        _ title: String,
-        @ViewBuilder pill: () -> Pill
-    ) -> some View {
-        HStack(spacing: 10) {
-            Text(title)
-                .font(.system(size: 12))
-                .foregroundStyle(.primary)
-                .frame(width: 64, alignment: .leading)
-            Spacer(minLength: 0)
-            pill()
-                .focusable(false)
-        }
-        .focusable(false)
-    }
 }

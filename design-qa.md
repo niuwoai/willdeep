@@ -405,3 +405,37 @@ No open P0, P1, or P2 visual findings.
 - Iteration 2: a deterministic Debug-only fixture rendered the thumbnail and overlay; visual inspection found that Escape did not close because focus stayed in the composer.
 - Iteration 3: overlay focus and aspect-fit were added; Escape passed, but the side-by-side comparison showed the dimmer covered only the chat column.
 - Iteration 4: the presentation layer moved to the complete Agent window while retaining a chat-relative thumbnail inset. Full-window dimming, X, Escape, and backdrop close all passed. The fixture was then removed from production source.
+
+---
+
+# Design QA — Composer 模型选择器
+
+- 日期：2026-07-15
+- 设计源：`/Users/rocky/.codex/generated_images/019f649e-89c4-7df3-80be-9d715c940c84/exec-33165530-2290-407a-8edf-3a2382ae3f66.png`
+- 实现截图（仅保留模型面板）：`artifacts/design-qa/model-picker-implementation-search.png`
+- 视口：1196 × 768，macOS 浅色模式
+- 验收状态：some.im 未登录；当前会话供应商为 DeepSeek；模型面板切换至 some.im 后搜索 `glm`
+
+## 对照证据
+
+- 全视图对照：`artifacts/design-qa/model-picker-full-comparison.png`
+- 搜索状态聚焦对照：`artifacts/design-qa/model-picker-search-comparison.png`
+- 搜索空状态：`artifacts/design-qa/model-picker-implementation-empty.png`
+
+## 核对结果
+
+- 结构：输入区保持轻量胶囊入口；完整面板包含搜索、场景入口、供应商导航、模型列表与固定说明栏。
+- 交互：已实际验证打开面板、切换供应商、搜索 `glm`、无结果状态和清除搜索入口。
+- 多供应商：搜索结果按供应商分组；当前验收环境仅配置 DeepSeek 与 some.im，因此不会伪造 OpenAI 或自定义供应商。
+- 推荐与筛选：编程推荐、最近使用、Flash / Pro 筛选和完整目录均可从面板访问。
+- 视觉：字体层级、8–12pt 主要间距、浅青选中态、分隔线、圆角和 SF Symbols 与设计源及应用现有视觉语言一致。
+- 可访问性：模型入口、供应商、模型、关闭、清除搜索均暴露为可读按钮；搜索框可聚焦且有本地化占位文案。
+- 文案：新增可见文案全部进入 String Catalog，包含简体中文与英文。
+
+## 比较记录
+
+1. 第一轮真机对照发现 P2：搜索结果虽能跨供应商查询，但列表是扁平结构，供应商归属主要依赖小标签。
+2. 在 `Xedit/AgentComposerPickers.swift` 中改为按已配置供应商分组渲染，并重新编译、重启应用和复拍。
+3. 第二轮对照确认分组标题、模型数量、行标签、搜索空状态和左侧供应商选中态均可见；未发现剩余 P0、P1 或 P2 问题。
+
+final result: passed
