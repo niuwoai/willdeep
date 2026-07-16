@@ -903,6 +903,27 @@ extension AppState {
         agentUsageSnapshots.sort { $0.updatedAt > $1.updatedAt }
     }
 
+    /// Analytics are intentionally absent from the launch path. The stats
+    /// dashboard calls this on first appearance; live in-memory snapshots
+    /// win over disk so a turn saved while the scan runs cannot regress.
+    func loadAgentUsageSnapshotsIfNeeded() async {
+        guard !hasLoadedAgentUsageSnapshots, !isLoadingAgentUsageSnapshots else { return }
+        isLoadingAgentUsageSnapshots = true
+        defer { isLoadingAgentUsageSnapshots = false }
+
+        let persisted = await Task.detached(priority: .utility) {
+            AgentSessionStore.loadUsageSnapshots()
+        }.value
+        guard !Task.isCancelled else { return }
+
+        var snapshotsByID = Dictionary(uniqueKeysWithValues: persisted.map { ($0.id, $0) })
+        for snapshot in agentUsageSnapshots {
+            snapshotsByID[snapshot.id] = snapshot
+        }
+        agentUsageSnapshots = snapshotsByID.values.sorted { $0.updatedAt > $1.updatedAt }
+        hasLoadedAgentUsageSnapshots = true
+    }
+
     private func removeAgentUsageSnapshot(id: AgentSession.ID) {
         agentUsageSnapshots.removeAll { $0.id == id }
     }

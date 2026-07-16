@@ -1003,6 +1003,18 @@ enum AgentChatHistoryLayoutMetrics {
     /// one-glyph chip such as `/` cannot paint over the preceding text.
     static let inlineCodeChipHorizontalPadding: CGFloat = 2
     static let inlineCodeChipVerticalPadding: CGFloat = 1.5
+    /// Code/table text is inset from the assistant paragraph. Their rounded
+    /// background extends another 10 points around that text, so the right
+    /// edge always covers the line-break boundary instead of ending early.
+    static let richBlockTextInset: CGFloat = 8
+    static let richBlockBackgroundPadding: CGFloat = 10
+    static let richBlockMinimumWidth: CGFloat = 220
+    static var richBlockBackgroundLeadingInset: CGFloat {
+        assistantContentHeadIndent + richBlockTextInset - richBlockBackgroundPadding
+    }
+    static var richBlockBackgroundTrailingInset: CGFloat {
+        assistantContentTailInset + richBlockTextInset - richBlockBackgroundPadding
+    }
 
     static func inlineCodeChipRect(for glyphRect: NSRect, at origin: NSPoint) -> NSRect {
         glyphRect
@@ -1365,8 +1377,13 @@ private final class AgentChatHistoryBubbleLayoutManager: NSLayoutManager {
         guard !union.isNull else { return union }
         var rect = union.insetBy(dx: -10, dy: -6)
         if containerWidth > 0 {
-            rect.origin.x = origin.x + 30
-            rect.size.width = max(220, containerWidth - 68)
+            rect.origin.x = origin.x + AgentChatHistoryLayoutMetrics.richBlockBackgroundLeadingInset
+            rect.size.width = max(
+                AgentChatHistoryLayoutMetrics.richBlockMinimumWidth,
+                containerWidth
+                    - AgentChatHistoryLayoutMetrics.richBlockBackgroundLeadingInset
+                    - AgentChatHistoryLayoutMetrics.richBlockBackgroundTrailingInset
+            )
         }
         return rect.integral
     }
@@ -1386,8 +1403,13 @@ private final class AgentChatHistoryBubbleLayoutManager: NSLayoutManager {
         guard !union.isNull else { return union }
         var rect = union.insetBy(dx: -10, dy: -7)
         if containerWidth > 0 {
-            rect.origin.x = origin.x + 30
-            rect.size.width = max(220, containerWidth - 68)
+            rect.origin.x = origin.x + AgentChatHistoryLayoutMetrics.richBlockBackgroundLeadingInset
+            rect.size.width = max(
+                AgentChatHistoryLayoutMetrics.richBlockMinimumWidth,
+                containerWidth
+                    - AgentChatHistoryLayoutMetrics.richBlockBackgroundLeadingInset
+                    - AgentChatHistoryLayoutMetrics.richBlockBackgroundTrailingInset
+            )
         }
         return rect.integral
     }

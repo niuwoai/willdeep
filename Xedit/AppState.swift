@@ -247,10 +247,11 @@ final class AppState: ObservableObject {
     /// materialized from disk. The row is deliberately retained so a
     /// recovered JSON file can reconnect without losing its visible title.
     @Published var agentSessionLoadFailure: AgentSessionLoadFailure?
-    /// Lightweight usage snapshots decoded from persisted sessions. This
-    /// keeps the stats dashboard accurate while `agentSessions` may hold
-    /// metadata-only rows at launch for memory reasons.
+    /// Lightweight usage snapshots decoded only when the stats dashboard is
+    /// shown. Launch no longer scans every full conversation for analytics.
     @Published var agentUsageSnapshots: [AgentUsageSessionSnapshot] = []
+    @Published var hasLoadedAgentUsageSnapshots = false
+    @Published var isLoadingAgentUsageSnapshots = false
     /// Sidebar group keys the user has removed from view. Removal only
     /// hides the workspace — its sessions stay on disk, so re-adding the
     /// same folder restores the full chat list. Persisted across launches.
@@ -680,20 +681,16 @@ final class AppState: ObservableObject {
             }
         startAgentSidePanelResourceReaper()
         Task { @MainActor [weak self] in
-            let catalog = await Task.detached(priority: .utility) {
-                AgentSessionStore.loadCatalog()
+            let persistedSessions = await Task.detached(priority: .utility) {
+                AgentSessionStore.loadAll()
             }.value
             guard let self, !Task.isCancelled else { return }
 
             // A user can create a session while the disk index is loading.
             // In-memory state is newer and therefore wins on ID collisions.
-            var sessionsByID = Dictionary(uniqueKeysWithValues: catalog.sessions.map { ($0.id, $0) })
+            var sessionsByID = Dictionary(uniqueKeysWithValues: persistedSessions.map { ($0.id, $0) })
             for session in self.agentSessions { sessionsByID[session.id] = session }
             self.agentSessions = sessionsByID.values.sorted { $0.updatedAt > $1.updatedAt }
-
-            var usageByID = Dictionary(uniqueKeysWithValues: catalog.usageSnapshots.map { ($0.id, $0) })
-            for snapshot in self.agentUsageSnapshots { usageByID[snapshot.id] = snapshot }
-            self.agentUsageSnapshots = usageByID.values.sorted { $0.updatedAt > $1.updatedAt }
 
             // Empty placeholders are filtered by sidebar visibility instead
             // of being deleted from disk. Automatic deletion previously made

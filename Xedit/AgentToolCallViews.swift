@@ -137,16 +137,171 @@ private extension View {
 }
 
 /// Layout contract for the calm, skin-aware command confirmation surface.
-/// The viewport intentionally exposes about three wrapped command lines;
+/// The viewport intentionally exposes about two wrapped command lines;
 /// longer content stays available through vertical scrolling.
 nonisolated enum AgentConfirmationReviewMetrics {
     static let contentPadding: CGFloat = 18
     static let sectionSpacing: CGFloat = 12
-    static let decisionColumnWidth: CGFloat = 190
-    static let horizontalMinimumWidth: CGFloat = 590
-    static let commandViewportHeight: CGFloat = 68
-    static let commandVisibleLineCount = 3
+    static let dividerThickness: CGFloat = 1
+    static let decisionColumnWidth: CGFloat = 260
+    static let horizontalMinimumWidth: CGFloat = 680
+    static let commandViewportHeight: CGFloat = 56
+    static let commandVisibleLineCount = 2
     static let showsKeyboardShortcutHint = false
+
+    static func usesHorizontalLayout(availableWidth: CGFloat) -> Bool {
+        availableWidth >= horizontalMinimumWidth
+    }
+}
+
+/// `ViewThatFits` measures the command's ideal width, so a long shell command
+/// can incorrectly force the confirmation card into a vertical layout even
+/// when the card itself is wide enough. This layout responds only to the
+/// actual proposed card width and gives the decision column a stable width.
+private struct AgentConfirmationReviewLayout: Layout {
+    private struct Measurements {
+        let isHorizontal: Bool
+        let width: CGFloat
+        let reviewSize: CGSize
+        let decisionSize: CGSize
+
+        var size: CGSize {
+            if isHorizontal {
+                return CGSize(
+                    width: width,
+                    height: max(reviewSize.height, decisionSize.height)
+                )
+            }
+            return CGSize(
+                width: width,
+                height: reviewSize.height
+                    + AgentConfirmationReviewMetrics.dividerThickness
+                    + decisionSize.height
+            )
+        }
+    }
+
+    func sizeThatFits(
+        proposal: ProposedViewSize,
+        subviews: Subviews,
+        cache: inout ()
+    ) -> CGSize {
+        measurements(proposal: proposal, subviews: subviews).size
+    }
+
+    func placeSubviews(
+        in bounds: CGRect,
+        proposal: ProposedViewSize,
+        subviews: Subviews,
+        cache: inout ()
+    ) {
+        guard subviews.count == 3 else { return }
+        let measured = measurements(
+            proposal: ProposedViewSize(width: bounds.width, height: proposal.height),
+            subviews: subviews
+        )
+
+        if measured.isHorizontal {
+            let reviewWidth = max(
+                0,
+                bounds.width
+                    - AgentConfirmationReviewMetrics.dividerThickness
+                    - AgentConfirmationReviewMetrics.decisionColumnWidth
+            )
+            subviews[0].place(
+                at: bounds.origin,
+                anchor: .topLeading,
+                proposal: ProposedViewSize(width: reviewWidth, height: bounds.height)
+            )
+            subviews[1].place(
+                at: CGPoint(x: bounds.minX + reviewWidth, y: bounds.minY),
+                anchor: .topLeading,
+                proposal: ProposedViewSize(
+                    width: AgentConfirmationReviewMetrics.dividerThickness,
+                    height: bounds.height
+                )
+            )
+            subviews[2].place(
+                at: CGPoint(
+                    x: bounds.maxX - AgentConfirmationReviewMetrics.decisionColumnWidth,
+                    y: bounds.minY
+                ),
+                anchor: .topLeading,
+                proposal: ProposedViewSize(
+                    width: AgentConfirmationReviewMetrics.decisionColumnWidth,
+                    height: bounds.height
+                )
+            )
+            return
+        }
+
+        subviews[0].place(
+            at: bounds.origin,
+            anchor: .topLeading,
+            proposal: ProposedViewSize(width: bounds.width, height: measured.reviewSize.height)
+        )
+        subviews[1].place(
+            at: CGPoint(x: bounds.minX, y: bounds.minY + measured.reviewSize.height),
+            anchor: .topLeading,
+            proposal: ProposedViewSize(
+                width: bounds.width,
+                height: AgentConfirmationReviewMetrics.dividerThickness
+            )
+        )
+        subviews[2].place(
+            at: CGPoint(
+                x: bounds.minX,
+                y: bounds.minY
+                    + measured.reviewSize.height
+                    + AgentConfirmationReviewMetrics.dividerThickness
+            ),
+            anchor: .topLeading,
+            proposal: ProposedViewSize(width: bounds.width, height: measured.decisionSize.height)
+        )
+    }
+
+    private func measurements(
+        proposal: ProposedViewSize,
+        subviews: Subviews
+    ) -> Measurements {
+        guard subviews.count == 3 else {
+            return Measurements(
+                isHorizontal: false,
+                width: proposal.width ?? 0,
+                reviewSize: .zero,
+                decisionSize: .zero
+            )
+        }
+
+        let proposedWidth = proposal.width ?? AgentConfirmationReviewMetrics.horizontalMinimumWidth
+        let isHorizontal = AgentConfirmationReviewMetrics.usesHorizontalLayout(
+            availableWidth: proposedWidth
+        )
+        let reviewWidth = isHorizontal
+            ? max(
+                0,
+                proposedWidth
+                    - AgentConfirmationReviewMetrics.dividerThickness
+                    - AgentConfirmationReviewMetrics.decisionColumnWidth
+            )
+            : proposedWidth
+        let decisionWidth = isHorizontal
+            ? AgentConfirmationReviewMetrics.decisionColumnWidth
+            : proposedWidth
+        let reviewSize = subviews[0].sizeThatFits(
+            ProposedViewSize(width: reviewWidth, height: nil)
+        )
+        let decisionSize = subviews[2].sizeThatFits(
+            ProposedViewSize(width: decisionWidth, height: nil)
+        )
+
+        return Measurements(
+            isHorizontal: isHorizontal,
+            width: proposedWidth,
+            reviewSize: reviewSize,
+            decisionSize: decisionSize
+        )
+    }
 }
 
 struct AgentToolCallGroup: View {
@@ -474,30 +629,16 @@ struct AgentToolCallCard: View {
     }
 
     private var awaitingConfirmationBody: some View {
-        ViewThatFits(in: .horizontal) {
-            HStack(spacing: 0) {
-                confirmationReviewColumn
-                    .frame(minWidth: 390, maxWidth: .infinity)
-                confirmationDivider
-                confirmationDecisionColumn
-                    .frame(width: AgentConfirmationReviewMetrics.decisionColumnWidth)
-            }
-            .frame(minWidth: AgentConfirmationReviewMetrics.horizontalMinimumWidth)
-
-            VStack(spacing: 0) {
-                confirmationReviewColumn
-                Rectangle()
-                    .fill(appState.editorSettings.interfaceSkin.palette.hairline)
-                    .frame(height: 1)
-                confirmationDecisionColumn
-            }
+        AgentConfirmationReviewLayout {
+            confirmationReviewColumn
+            confirmationDivider
+            confirmationDecisionColumn
         }
     }
 
     private var confirmationDivider: some View {
         Rectangle()
             .fill(appState.editorSettings.interfaceSkin.palette.hairline)
-            .frame(width: 1)
     }
 
     private var confirmationReviewColumn: some View {
@@ -657,25 +798,27 @@ struct AgentToolCallCard: View {
             if decisionAlreadySubmitted {
                 submittedDecisionNotice
             } else {
-                Button {
-                    _ = appState.confirmAgentToolCall(id: call.id, typedConfirmation: "confirm")
-                } label: {
-                    confirmationActionLabel("允许执行")
-                }
-                .buttonStyle(.borderedProminent)
-                .approvalButtonBorderShape(cornerRadius: AgentApprovalActionMetrics.cornerRadius)
-                .tint(palette.accent)
-                .cursor(.arrow)
+                HStack(spacing: AgentApprovalActionMetrics.spacing) {
+                    Button {
+                        appState.denyAgentToolCall(id: call.id)
+                    } label: {
+                        confirmationActionLabel(L10n.ToolCard.deny)
+                    }
+                    .buttonStyle(.bordered)
+                    .approvalButtonBorderShape(cornerRadius: AgentApprovalActionMetrics.cornerRadius)
+                    .tint(palette.accent)
+                    .cursor(.arrow)
 
-                Button {
-                    appState.denyAgentToolCall(id: call.id)
-                } label: {
-                    confirmationActionLabel(L10n.ToolCard.deny)
+                    Button {
+                        _ = appState.confirmAgentToolCall(id: call.id, typedConfirmation: "confirm")
+                    } label: {
+                        confirmationActionLabel(L10n.ToolCard.allow)
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .approvalButtonBorderShape(cornerRadius: AgentApprovalActionMetrics.cornerRadius)
+                    .tint(palette.accent)
+                    .cursor(.arrow)
                 }
-                .buttonStyle(.bordered)
-                .approvalButtonBorderShape(cornerRadius: AgentApprovalActionMetrics.cornerRadius)
-                .tint(palette.accent)
-                .cursor(.arrow)
             }
         }
         .controlSize(.large)
@@ -1264,7 +1407,7 @@ struct AgentToolCallCard: View {
     }
 
     /// 审批时给用户看的「这次到底要做什么」明细块。命令类工具显示
-    /// 完整命令(默认约 3 行高,超出滚动查看);控制键工具显示展开后的
+    /// 完整命令(默认约 2 行高,超出滚动查看);控制键工具显示展开后的
     /// 友好按键说明,而不是裸的 `ctrl_c`。
     private var approvalDetail: (title: String, body: String)? {
         if let command = fullCommand {

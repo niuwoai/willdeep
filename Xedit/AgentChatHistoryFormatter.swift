@@ -554,7 +554,7 @@ enum AgentChatHistoryRenderer {
             // *alongside* its own prose). Rendered through the same
             // collapsible header as the standalone tool-call group so
             // the bubble defaults to a one-line activity summary such
-            // as "▸ 已读取 2 个文件 · 已运行 1 条命令"; clicking flips
+            // as "已读取 2 个文件 · 已运行 1 条命令"; clicking flips
             // the chevron and reveals the full per-call summary below.
             // Some providers place the first tool calls on the prose message
             // and then emit subsequent calls as tool-call-only assistant

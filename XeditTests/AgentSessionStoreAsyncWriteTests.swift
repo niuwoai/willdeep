@@ -105,6 +105,55 @@ struct AgentSessionStoreAsyncWriteTests {
         #expect(AgentSessionStore.load(id: id)?.messages.count == 1)
     }
 
+    @Test("session saves maintain a lightweight launch catalog sidecar")
+    func saveMaintainsLightweightCatalogSidecar() throws {
+        var session = AgentSession(title: "catalog-sidecar-probe", workspaceRootPath: nil)
+        let id = session.id
+        defer { AgentSessionStore.delete(id: id) }
+
+        session.messages = [
+            AgentMessage(role: .user, content: String(repeating: "large transcript payload ", count: 2_000))
+        ]
+        #expect(AgentSessionStore.save(session))
+
+        let fullURL = AgentSessionStore.directory.appendingPathComponent("\(id.uuidString).json")
+        let catalogURL = AgentSessionStore.catalogURL(for: id)
+        let fullSize = try Data(contentsOf: fullURL).count
+        let catalogSize = try Data(contentsOf: catalogURL).count
+
+        #expect(catalogSize < fullSize)
+        let listed = AgentSessionStore.loadAll().first(where: { $0.id == id })
+        #expect(listed?.title == "catalog-sidecar-probe")
+        #expect(listed?.messages.isEmpty == true)
+        #expect(AgentSessionStore.isMetadataOnly(id))
+        #expect(AgentSessionStore.metadataOnlySessionHasUserMessage(id))
+    }
+
+    @Test("a stale catalog sidecar falls back to the conversation and repairs itself")
+    func staleCatalogFallsBackAndRepairs() throws {
+        var session = AgentSession(title: "catalog-before", workspaceRootPath: nil)
+        let id = session.id
+        defer { AgentSessionStore.delete(id: id) }
+        session.messages = [AgentMessage(role: .user, content: "history")]
+        #expect(AgentSessionStore.save(session))
+
+        session.title = "catalog-after-with-a-different-file-size"
+        let encoder = JSONEncoder()
+        encoder.dateEncodingStrategy = .iso8601
+        encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+        let fullURL = AgentSessionStore.directory.appendingPathComponent("\(id.uuidString).json")
+        try encoder.encode(session).write(to: fullURL, options: .atomic)
+
+        let listed = AgentSessionStore.loadAll().first(where: { $0.id == id })
+        #expect(listed?.title == "catalog-after-with-a-different-file-size")
+
+        // A second read must now be served by the repaired sidecar and keep
+        // the same metadata. This also catches repair writes targeting the
+        // wrong UUID/path.
+        let listedAgain = AgentSessionStore.loadAll().first(where: { $0.id == id })
+        #expect(listedAgain?.title == "catalog-after-with-a-different-file-size")
+    }
+
     @Test("starting a new chat hides old empty placeholders without deleting their files")
     func startingNewChatKeepsOlderEmptySessionOnDisk() throws {
         let appState = AppState(rootDirectory: nil)

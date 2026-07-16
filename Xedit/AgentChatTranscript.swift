@@ -358,6 +358,11 @@ struct AgentChatTranscript: View {
                                     // separate from the compact inline summary.
                                     .padding(.top, 28)
                                     .padding(.bottom, 6)
+                                    // Tool activity belongs to the assistant turn.
+                                    // Align its card edge with the assistant body
+                                    // instead of the transcript viewport edge.
+                                    .padding(.leading, AgentChatHistoryLayoutMetrics.assistantContentHeadIndent)
+                                    .padding(.trailing, AgentChatHistoryLayoutMetrics.assistantContentTailInset)
                                     .frame(maxWidth: AgentDesign.chatMaxContentWidth, alignment: .leading)
                                 }
                             }

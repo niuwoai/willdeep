@@ -70,6 +70,7 @@ struct AgentSidePanelFocusPolicyTests {
 
         #expect(source.contains("AgentActivityCardDismissButton"))
         #expect(source.contains("Image(systemName: \"xmark\")"))
+        #expect(!source.contains("Image(systemName: \"chevron.right\")"))
         #expect(source.contains(".help(\"关闭摘要\")"))
         #expect(source.contains("borderColor = Color(nsColor: .separatorColor)"))
         #expect(source.contains("dismissedCardKeys.insert"))

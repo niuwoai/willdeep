@@ -183,6 +183,7 @@ nonisolated enum AgentSessionStore {
                 let url = directory.appendingPathComponent("\(id.uuidString).json")
                 let data = try encoder.encode(payload.externalizingAttachmentContent())
                 try coordinatedWrite(data, to: url)
+                writeCatalogEntryBestEffort(for: payload, sourceURL: url)
             } catch {
                 print("AgentSessionStore: failed to save session \(id): \(error)")
                 // Keep the unwritten snapshot around as an in-memory
@@ -313,6 +314,36 @@ nonisolated enum AgentSessionStore {
                 titleIsUserSet: titleIsUserSet
             )
         }
+    }
+
+    /// Small, independently persisted sidebar record. The source signature
+    /// makes this a cache rather than a second source of truth: if an older
+    /// app, another process, or a manual restore changes the conversation
+    /// JSON without updating this sidecar, launch falls back to that JSON and
+    /// repairs the sidecar automatically.
+    private struct CatalogEntry: Codable {
+        static let currentSchemaVersion = 1
+
+        let schemaVersion: Int
+        let session: AgentSession
+        let hasUserMessage: Bool
+        let sourceSignature: SourceSignature
+
+        init(session: AgentSession, hasUserMessage: Bool, sourceSignature: SourceSignature) {
+            schemaVersion = Self.currentSchemaVersion
+            self.session = session
+            self.hasUserMessage = hasUserMessage
+            self.sourceSignature = sourceSignature
+        }
+
+        var isCurrentSchema: Bool {
+            schemaVersion == Self.currentSchemaVersion
+        }
+    }
+
+    private struct SourceSignature: Codable, Equatable {
+        let fileSize: UInt64
+        let modificationTime: TimeInterval
     }
 
     private struct UsageImageIndex: Decodable {
@@ -534,6 +565,17 @@ nonisolated enum AgentSessionStore {
             .appendingPathComponent("agent-sessions", isDirectory: true)
     }
 
+    /// Lightweight launch index. Keeping it in a child directory prevents
+    /// its JSON files from being mistaken for full conversation files by
+    /// legacy builds that enumerate `agent-sessions/*.json`.
+    static var catalogDirectory: URL {
+        directory.appendingPathComponent("catalog-v1", isDirectory: true)
+    }
+
+    static func catalogURL(for id: UUID) -> URL {
+        catalogDirectory.appendingPathComponent("\(id.uuidString).json")
+    }
+
     private static let encoder: JSONEncoder = {
         let encoder = JSONEncoder()
         encoder.dateEncodingStrategy = .iso8601
@@ -547,76 +589,96 @@ nonisolated enum AgentSessionStore {
         return decoder
     }()
 
-    struct Catalog {
-        let sessions: [AgentSession]
-        let usageSnapshots: [AgentUsageSessionSnapshot]
+    private static func loadOrRebuildCatalogEntry(for sourceURL: URL) -> CatalogEntry? {
+        if let id = UUID(uuidString: sourceURL.deletingPathExtension().lastPathComponent),
+           let signature = sourceSignature(for: sourceURL),
+           let data = try? Data(contentsOf: catalogURL(for: id)),
+           let entry = try? decoder.decode(CatalogEntry.self, from: data),
+           entry.isCurrentSchema,
+           entry.session.id == id,
+           entry.sourceSignature == signature {
+            return entry
+        }
+
+        // Coordinate the fallback read with other WillDeep processes. The
+        // signature is captured inside the same read slot, so a writer that
+        // lands immediately afterwards merely makes this rebuilt sidecar
+        // stale; it can never make stale metadata look current.
+        var rebuilt: CatalogEntry?
+        var readError: Error?
+        coordinatedRead(at: sourceURL) { readURL in
+            do {
+                let data = try Data(contentsOf: readURL)
+                let index = try decoder.decode(SessionIndex.self, from: data)
+                guard let signature = sourceSignature(for: readURL) else { return }
+                rebuilt = CatalogEntry(
+                    session: index.session,
+                    hasUserMessage: index.hasUserMessage,
+                    sourceSignature: signature
+                )
+            } catch {
+                readError = error
+            }
+        }
+
+        guard let rebuilt else {
+            if let readError {
+                print("AgentSessionStore: skipping unreadable session at \(sourceURL.lastPathComponent): \(readError)")
+            }
+            return nil
+        }
+        writeCatalogEntryBestEffort(rebuilt)
+        return rebuilt
     }
 
-    /// Reads each persisted session file once and derives both sidebar and
-    /// usage indexes from that buffer. Callers should run this off the main
-    /// actor: historical messages can make individual JSON files several MiB.
-    static func loadCatalog() -> Catalog {
-        var sessions: [AgentSession] = []
-        var snapshots: [AgentUsageSessionSnapshot] = []
-        var metadataOnlyIDs: Set<UUID> = []
-        var metadataOnlyUserMessageIDs: Set<UUID> = []
-        let pendingSnapshot = pendingWrites.allPending()
-
-        let dir = directory
-        var isDir: ObjCBool = false
-        if FileManager.default.fileExists(atPath: dir.path, isDirectory: &isDir), isDir.boolValue,
-           let entries = try? FileManager.default.contentsOfDirectory(
-               at: dir,
-               includingPropertiesForKeys: nil,
-               options: [.skipsHiddenFiles]
-           ) {
-            for url in entries where url.pathExtension == "json" {
-                guard let data = try? Data(contentsOf: url) else { continue }
-                do {
-                    let index = try decoder.decode(SessionIndex.self, from: data)
-                    let session = index.session
-                    metadataOnlyIDs.insert(session.id)
-                    if index.hasUserMessage { metadataOnlyUserMessageIDs.insert(session.id) }
-                    sessions.append(session)
-                } catch {
-                    print("AgentSessionStore: skipping unreadable session at \(url.lastPathComponent): \(error)")
-                }
-                do {
-                    snapshots.append(try decoder.decode(UsageSessionIndex.self, from: data).snapshot)
-                } catch {
-                    print("AgentSessionStore: skipping unreadable usage snapshot at \(url.lastPathComponent): \(error)")
-                }
-            }
-        }
-
-        for (id, snapshot) in pendingSnapshot {
-            metadataOnlyIDs.remove(id)
-            metadataOnlyUserMessageIDs.remove(id)
-            if let index = sessions.firstIndex(where: { $0.id == id }) {
-                sessions[index] = snapshot
-            } else {
-                sessions.append(snapshot)
-            }
-            let usage = AgentUsageSessionSnapshot(session: snapshot)
-            if let index = snapshots.firstIndex(where: { $0.id == id }) {
-                snapshots[index] = usage
-            } else {
-                snapshots.append(usage)
-            }
-        }
-
-        metadataOnlySessions.replace(with: metadataOnlyIDs, userMessageIDs: metadataOnlyUserMessageIDs)
-        return Catalog(
-            sessions: sessions.sorted { $0.updatedAt > $1.updatedAt },
-            usageSnapshots: snapshots.sorted { $0.updatedAt > $1.updatedAt }
+    private static func writeCatalogEntryBestEffort(for session: AgentSession, sourceURL: URL) {
+        guard let signature = sourceSignature(for: sourceURL) else { return }
+        let entry = CatalogEntry(
+            session: metadataSession(from: session),
+            hasUserMessage: session.messages.contains { $0.role == .user },
+            sourceSignature: signature
         )
+        writeCatalogEntryBestEffort(entry)
     }
 
-    /// Loads a lightweight session index, newest-updated first. Message bodies
-    /// can contain pasted screenshots or generated media as base64, so keeping
-    /// every transcript resident at launch makes the app grow with historical
-    /// chat size. Full messages are materialized by `load(id:)` when the user
-    /// opens a session.
+    private static func writeCatalogEntryBestEffort(_ entry: CatalogEntry) {
+        do {
+            try ensureCatalogDirectory()
+            let data = try encoder.encode(entry)
+            try coordinatedWrite(data, to: catalogURL(for: entry.session.id))
+        } catch {
+            // Conversation persistence already succeeded. A missing sidecar
+            // costs one fallback decode on the next launch but does not lose
+            // user data, so keep this best-effort and self-healing.
+            print("AgentSessionStore: failed to update catalog for \(entry.session.id): \(error)")
+        }
+    }
+
+    private static func metadataSession(from session: AgentSession) -> AgentSession {
+        var copy = session
+        copy.messages = []
+        copy.contextSummary = nil
+        copy.contextSummaryThroughMessageID = nil
+        copy.documentAttachments = []
+        copy.knowledgeFolders = []
+        copy.sidePanelState = .empty
+        return copy
+    }
+
+    private static func sourceSignature(for url: URL) -> SourceSignature? {
+        guard let attributes = try? FileManager.default.attributesOfItem(atPath: url.path),
+              let size = (attributes[.size] as? NSNumber)?.uint64Value,
+              let date = attributes[.modificationDate] as? Date else {
+            return nil
+        }
+        return SourceSignature(fileSize: size, modificationTime: date.timeIntervalSince1970)
+    }
+
+    /// Loads the lightweight sidebar catalog, newest-updated first. Normal
+    /// launches read only small sidecars; a missing/stale sidecar triggers a
+    /// one-time full-session decode and is repaired for the next launch.
+    /// Full messages are materialized by `load(id:)` when the user opens a
+    /// session. Usage analytics are deliberately not loaded here.
     static func loadAll() -> [AgentSession] {
         var sessions: [AgentSession] = []
         var metadataOnlyIDs: Set<UUID> = []
@@ -638,18 +700,13 @@ nonisolated enum AgentSessionStore {
                options: [.skipsHiddenFiles]
            ) {
             for url in entries where url.pathExtension == "json" {
-                guard let data = try? Data(contentsOf: url) else { continue }
-                do {
-                    let index = try decoder.decode(SessionIndex.self, from: data)
-                    let session = index.session
-                    metadataOnlyIDs.insert(session.id)
-                    if index.hasUserMessage {
-                        metadataOnlyUserMessageIDs.insert(session.id)
-                    }
-                    sessions.append(session)
-                } catch {
-                    print("AgentSessionStore: skipping unreadable session at \(url.lastPathComponent): \(error)")
+                guard let entry = loadOrRebuildCatalogEntry(for: url) else { continue }
+                let session = entry.session
+                metadataOnlyIDs.insert(session.id)
+                if entry.hasUserMessage {
+                    metadataOnlyUserMessageIDs.insert(session.id)
                 }
+                sessions.append(session)
             }
         }
 
@@ -760,6 +817,7 @@ nonisolated enum AgentSessionStore {
                 let url = directory.appendingPathComponent("\(session.id.uuidString).json")
                 let data = try encoder.encode(session.externalizingAttachmentContent())
                 try coordinatedWrite(data, to: url)
+                writeCatalogEntryBestEffort(for: session, sourceURL: url)
                 return true
             } catch {
                 print("AgentSessionStore: failed to save session \(session.id): \(error)")
@@ -778,6 +836,7 @@ nonisolated enum AgentSessionStore {
             let url = directory.appendingPathComponent("\(id.uuidString).json")
             do {
                 try coordinatedRemove(at: url)
+                try coordinatedRemove(at: catalogURL(for: id))
                 metadataOnlySessions.remove(id)
                 return true
             } catch {
@@ -802,6 +861,14 @@ nonisolated enum AgentSessionStore {
         var isDir: ObjCBool = false
         if !FileManager.default.fileExists(atPath: dir.path, isDirectory: &isDir) {
             try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        }
+    }
+
+    private static func ensureCatalogDirectory() throws {
+        try ensureDirectory()
+        var isDirectory: ObjCBool = false
+        if !FileManager.default.fileExists(atPath: catalogDirectory.path, isDirectory: &isDirectory) {
+            try FileManager.default.createDirectory(at: catalogDirectory, withIntermediateDirectories: true)
         }
     }
 
