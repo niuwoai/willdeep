@@ -103,7 +103,7 @@ struct IssueTriageWorkflow: WorkflowDefinition {
             """),
         ]
 
-        let analysisResults = await engine.parallel(maxConcurrent: 3, analysisPrompts.map { item in
+        let analysisResults = try await engine.parallel(maxConcurrent: 3, analysisPrompts.map { item in
             { @Sendable in
                 try await engine.agent(item.prompt, label: "analyze:\(item.label)")
             }

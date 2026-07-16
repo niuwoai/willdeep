@@ -42,6 +42,30 @@ extension L10n {
             localized: "workflow-card.expand",
             defaultValue: "Show sub-agent list"
         )
+        static let stop = String(
+            localized: "workflow-card.stop",
+            defaultValue: "Stop"
+        )
+        static let stopHelp = String(
+            localized: "workflow-card.stop-help",
+            defaultValue: "Cancel this workflow and its running sub-agents"
+        )
+        static let cancelledByUser = String(
+            localized: "workflow-card.cancelled-by-user",
+            defaultValue: "Workflow cancelled by the user."
+        )
+        static let interrupted = String(
+            localized: "workflow-card.interrupted",
+            defaultValue: "Workflow was interrupted when the app closed."
+        )
+
+        static func failed(_ reason: String) -> String {
+            let template = String(
+                localized: "workflow-card.failed-reason",
+                defaultValue: "Workflow failed: %@"
+            )
+            return String(format: template, reason)
+        }
 
         static func agentsLabel(done: Int, total: Int) -> String {
             let template = String(

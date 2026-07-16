@@ -1,5 +1,23 @@
 # Changelog
 
+## 1.173.0-rc1 - 2026-07-16
+
+### Fixed
+
+- **Workflow 可取消生命周期与 Agent 结果闭环。** 运行卡片提供实时耗时与“停止”操作，`/stop` 同时取消当前模型轮次和活动工作流；工作流任务归属实际 Agent runtime，会话清空、删除、裁剪或闲置驱逐时同步取消。
+- **工作流运行上下文不再串会话。** `run_workflow` 按工具调用所在会话、工作区与远端 runtime 启动，缺少必要参数时返回真实拒绝；完成、失败或取消结果以一次性 system 通知进入模型上下文并触发后续处理。
+- **声明式并行步骤可控执行。** `workflow.yaml` 中连续的 `parallel: true` 步骤按 `max_agents` 并发执行，父任务取消会传播到所有子任务；未声明并行的工作流继续保持串行语义，重启后遗留运行态归一为 Cancelled。
+
+### Changed
+
+- 版本号从 **1.173.0** 递增为 **1.173.0-rc1**；Xcode App、Go agent、Help bundle、Computer Use Helper、Chrome 扩展、README badge、移动网关响应头契约与产品文档同步。
+
+### Tests
+
+- 新增工作流精确 runtime 路由、缺参数拒绝、取消生命周期、结果通知只消费一次、父任务取消传播、恢复中断状态，以及 declarative parallel 解析回归。
+
+---
+
 ## 1.173.0 - 2026-07-16
 
 ### Added

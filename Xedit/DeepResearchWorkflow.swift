@@ -66,7 +66,7 @@ struct DeepResearchWorkflow: WorkflowDefinition {
 
         // Phase 1 — Pipeline: per-angle search → URL-dedup → fetch+extract。
         // item-level 不 barrier,某个 angle search 慢 不挡其他 angle 进 fetch。
-        let perAngle = await engine.pipeline(
+        let perAngle = try await engine.pipeline(
             scope.angles,
             maxConcurrent: maxSearchConcurrency
         ) { angle, _ in
@@ -99,7 +99,7 @@ struct DeepResearchWorkflow: WorkflowDefinition {
             }
 
             // Stage 3: fetch+extract 每个 novel source(item 内部 parallel)。
-            let extracted = await engine.parallel(
+            let extracted = try await engine.parallel(
                 maxConcurrent: self.maxFetchConcurrency,
                 novel.map { source in
                     { @Sendable in
@@ -145,11 +145,11 @@ struct DeepResearchWorkflow: WorkflowDefinition {
             .sorted { Self.importanceRank($0.importance) < Self.importanceRank($1.importance) }
             .prefix(maxVerifyClaims)
 
-        let verified = await engine.parallel(
+        let verified = try await engine.parallel(
             maxConcurrent: maxVerifyConcurrency,
             ranked.map { claim in
                 { @Sendable in
-                    let verdicts = await engine.parallel(
+                    let verdicts = try await engine.parallel(
                         maxConcurrent: self.votesPerClaim,
                         (0..<self.votesPerClaim).map { voteIndex in
                             { @Sendable in

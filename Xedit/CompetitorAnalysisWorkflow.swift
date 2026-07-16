@@ -50,7 +50,7 @@ struct CompetitorAnalysisWorkflow: WorkflowDefinition {
             """
         }
 
-        let briefs = await engine.parallel(maxConcurrent: products.count, scoutPrompts.enumerated().map { idx, prompt in
+        let briefs = try await engine.parallel(maxConcurrent: products.count, scoutPrompts.enumerated().map { idx, prompt in
             { @Sendable in
                 try await engine.agent(prompt, label: "scout:\(products[products.index(products.startIndex, offsetBy: idx)])")
             }

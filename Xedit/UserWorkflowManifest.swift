@@ -22,6 +22,7 @@
 //    steps:
 //      - id: translate
 //        label: translate
+//        parallel: false
 //        prompt: |
 //          Translate the following to Simplified Chinese.
 //          Output only the translation.
@@ -69,6 +70,9 @@ struct UserWorkflowManifest: Equatable {
         var id: String
         var label: String
         var prompt: String
+        /// Consecutive steps marked `parallel: true` form one parallel batch.
+        /// They can only reference outputs produced before that batch.
+        var runsInParallel: Bool
     }
 }
 
@@ -156,10 +160,19 @@ enum UserWorkflowManifestParser {
                 throw UserWorkflowManifestError.invalidStep(reason: "step id 重复:\(stepID)")
             }
             let label = (m["label"]?.scalarString ?? stepID)
+            let runsInParallel: Bool = {
+                guard let value = m["parallel"]?.scalarString?.lowercased() else { return false }
+                return ["true", "yes", "1", "on"].contains(value)
+            }()
             guard let prompt = m["prompt"]?.scalarString, !prompt.isEmpty else {
                 throw UserWorkflowManifestError.invalidStep(reason: "step \(stepID) 缺少 prompt")
             }
-            steps.append(.init(id: stepID, label: label, prompt: prompt))
+            steps.append(.init(
+                id: stepID,
+                label: label,
+                prompt: prompt,
+                runsInParallel: runsInParallel
+            ))
         }
 
         let summary = optionalString("summary", fallback: defaultSummaryTemplate(steps: steps))

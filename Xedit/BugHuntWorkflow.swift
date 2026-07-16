@@ -71,7 +71,7 @@ struct BugHuntWorkflow: WorkflowDefinition {
             """
         }
 
-        let hunterResults = await engine.parallel(
+        let hunterResults = try await engine.parallel(
             maxConcurrent: Swift.min(self.maxAgents - 2, hunterPrompts.count),
             hunterPrompts.enumerated().map { idx, prompt in
                 { @Sendable in

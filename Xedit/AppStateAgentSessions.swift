@@ -758,11 +758,20 @@ extension AppState {
         }
     }
 
-    /// Cancel the in-flight response (if any). Queued messages are kept and
-    /// the next one is dispatched automatically. Use `clearAgentQueue` to
-    /// drop them explicitly.
+    /// Cancel the in-flight response and every active workflow owned by the
+    /// current session. Queued messages are kept and the next one is
+    /// dispatched automatically. Use `clearAgentQueue` to drop them.
     func stopAgentResponse() {
-        guard let runtime = activeRuntime, runtime.isResponding else { return }
+        guard let runtime = activeRuntime else { return }
+        let activeWorkflowIDs = runtime.messages.compactMap { message -> UUID? in
+            guard let report = message.workflowReport,
+                  report.status == .planning || report.status == .running else { return nil }
+            return report.id
+        }
+        for reportID in activeWorkflowIDs {
+            cancelWorkflow(reportID: reportID, runtimeID: runtime.id)
+        }
+        guard runtime.isResponding else { return }
         closeBlockingAgentToolDecision(for: runtime, reason: "Response stopped")
         runtime.shouldConsumeQueueAfterStop = !runtime.queuedMessages.isEmpty
         runtime.requestTask?.cancel()
@@ -1272,6 +1281,7 @@ extension AppState {
                 !protectedIDs.contains(runtime.id)
                     && !runtime.isResponding
                     && runtime.requestTask == nil
+                    && runtime.workflowTasks.isEmpty
                     && runtime.toolDecisionWaiter == nil
                     // A session waiting on background work is not idle:
                     // evicting it here would cancel its live subagents
@@ -1288,6 +1298,7 @@ extension AppState {
         guard idle.count > maximumIdleRuntimes else { return }
         for runtime in idle.dropFirst(maximumIdleRuntimes) {
             persistAgentSession(runtime: runtime)
+            cancelAllWorkflows(for: runtime)
             agentSubagentRegistry.cancelAll(forParentRuntime: runtime.id)
             cancelAgentKnowledgeFolderWatchers(sessionID: runtime.id)
             agentRuntimes.removeValue(forKey: runtime.id)
@@ -1302,6 +1313,7 @@ extension AppState {
         // cancellation propagates.
         if let doomed = agentRuntimes[id] {
             doomed.requestTask?.cancel()
+            cancelAllWorkflows(for: doomed)
             doomed.toolDecisionWaiter?.resume(returning: .denied(reason: "Session deleted"))
             doomed.toolDecisionWaiter = nil
             doomed.toolDecisionWaiterCallID = nil

@@ -160,6 +160,15 @@ final class AgentRuntime: ObservableObject, Identifiable {
     /// when idle. Cancelled when the session is closed or the user
     /// stops the response.
     var requestTask: Task<Void, Never>?
+    /// Live declarative/built-in workflow tasks keyed by WorkflowReport.id.
+    /// Keeping them on the owning runtime makes cancellation session-safe:
+    /// switching tabs never changes which task a card controls, and deleting
+    /// a session can stop every workflow that still belongs to it.
+    var workflowTasks: [UUID: Task<Void, Never>] = [:]
+    /// Finished workflows started through the `run_workflow` tool and not yet
+    /// delivered back to the parent model. The next agent-loop round consumes
+    /// these report ids into host-only system notices.
+    var pendingWorkflowCompletionReportIDs: [UUID] = []
     /// Runtime-side fallback for the Plan suggestion countdown. The banner
     /// also renders its own per-second progress, but auto-resolution must not
     /// depend on the composer currently being mounted on screen.
@@ -206,7 +215,7 @@ final class AgentRuntime: ObservableObject, Identifiable {
         self.workspaceLocation = session.workspaceLocation
 
         // Seed live state from persisted session.
-        self.messages = session.messages.map(Self.normalizingInterruptedConsultation)
+        self.messages = session.messages.map(Self.normalizingInterruptedWorkflow)
         self.latestComputerUseActivity = AgentComputerUseActivity.latest(in: self.messages)
         self.contextSummary = session.contextSummary
         self.contextSummaryThroughMessageID = session.contextSummaryThroughMessageID
@@ -229,17 +238,20 @@ final class AgentRuntime: ObservableObject, Identifiable {
         self.managedRouting = session.managedRouting
     }
 
-    private static func normalizingInterruptedConsultation(_ message: AgentMessage) -> AgentMessage {
+    private static func normalizingInterruptedWorkflow(_ message: AgentMessage) -> AgentMessage {
         guard message.role == .workflowReport,
               var report = message.workflowReport,
-              report.consultation != nil,
               report.status == .planning || report.status == .running else {
             return message
         }
         var normalized = message
         report.status = .cancelled
         report.finishedAt = report.finishedAt ?? Date()
-        report.summary = report.summary.isEmpty ? L10n.Consultation.interrupted : report.summary
+        if report.summary.isEmpty {
+            report.summary = report.consultation == nil
+                ? L10n.WorkflowCard.interrupted
+                : L10n.Consultation.interrupted
+        }
         if var consultation = report.consultation {
             consultation.phase = .cancelled
             report.consultation = consultation

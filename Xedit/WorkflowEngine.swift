@@ -26,6 +26,8 @@ final class WorkflowEngine {
     let reportID: UUID
     let runtimeID: UUID
     let workspaceURL: URL?
+    let workspaceLocation: WorkspaceLocation?
+    let runtimeDescriptor: RuntimeDescriptor?
     let configuration: AgentConfiguration
     /// rc40:some.im 会话/工作区上下文头。子 agent 的每个 provider 请求都要带上,
     /// 否则 some.im 收不到合法会话上下文 → 请求 stall,卡片永远空转。由
@@ -37,6 +39,8 @@ final class WorkflowEngine {
         reportID: UUID,
         runtimeID: UUID,
         workspaceURL: URL?,
+        workspaceLocation: WorkspaceLocation? = nil,
+        runtimeDescriptor: RuntimeDescriptor? = nil,
         configuration: AgentConfiguration,
         someIMContext: SomeIMRequestContext?,
         appState: AppState
@@ -44,6 +48,8 @@ final class WorkflowEngine {
         self.reportID = reportID
         self.runtimeID = runtimeID
         self.workspaceURL = workspaceURL
+        self.workspaceLocation = workspaceLocation
+        self.runtimeDescriptor = runtimeDescriptor
         self.configuration = configuration
         self.someIMContext = someIMContext
         self.appState = appState
@@ -72,6 +78,8 @@ final class WorkflowEngine {
                 prompt: prompt,
                 configuration: configuration,
                 workspaceURL: workspaceURL,
+                runtimeDescriptor: runtimeDescriptor,
+                workspaceLocation: workspaceLocation,
                 someIMContext: someIMContext
             )
         } catch is CancellationError {
@@ -142,6 +150,8 @@ final class WorkflowEngine {
                 prompt: prompt,
                 configuration: configuration,
                 workspaceURL: workspaceURL,
+                runtimeDescriptor: runtimeDescriptor,
+                workspaceLocation: workspaceLocation,
                 someIMContext: someIMContext,
                 outputSchema: schema
             )
@@ -205,27 +215,33 @@ final class WorkflowEngine {
     func parallel<T: Sendable>(
         maxConcurrent: Int,
         _ thunks: [@Sendable () async throws -> T]
-    ) async -> [T?] {
+    ) async throws -> [T?] {
+        try Task.checkCancellation()
         let cap = max(1, min(maxConcurrent, thunks.count))
         var results: [T?] = Array(repeating: nil, count: thunks.count)
 
         // 用 indices 块式滚动 + TaskGroup 控制并发窗口。
         var nextIndex = 0
         while nextIndex < thunks.count {
+            try Task.checkCancellation()
             let windowEnd = min(nextIndex + cap, thunks.count)
-            await withTaskGroup(of: (Int, T?).self) { group in
+            try await withThrowingTaskGroup(of: (Int, T?).self) { group in
                 for i in nextIndex..<windowEnd {
                     let thunk = thunks[i]
                     group.addTask {
                         do {
+                            try Task.checkCancellation()
                             let value = try await thunk()
+                            try Task.checkCancellation()
                             return (i, value)
+                        } catch is CancellationError {
+                            throw CancellationError()
                         } catch {
                             return (i, nil)
                         }
                     }
                 }
-                for await (idx, value) in group {
+                for try await (idx, value) in group {
                     results[idx] = value
                 }
             }
@@ -255,11 +271,11 @@ final class WorkflowEngine {
         _ items: [Item],
         maxConcurrent: Int,
         _ body: @Sendable @escaping (Item, Int) async throws -> Result
-    ) async -> [Result?] {
+    ) async throws -> [Result?] {
         let thunks: [@Sendable () async throws -> Result] = items.enumerated().map { offset, item in
             { try await body(item, offset) }
         }
-        return await parallel(maxConcurrent: maxConcurrent, thunks)
+        return try await parallel(maxConcurrent: maxConcurrent, thunks)
     }
 
     // MARK: - DSL: displayWidget

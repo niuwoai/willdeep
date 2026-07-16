@@ -17,6 +17,165 @@ import Testing
 
 extension WillDeepTests {
     @MainActor
+    @Test("workflow 启动绑定调用 runtime，缺参数不再假报 started")
+    func workflowStartTargetsExactRuntimeAndRejectsMissingArguments() async {
+        let appState = AppState()
+        let firstSession = appState.startNewAgentSession()
+        guard let firstRuntime = appState.runtime(for: firstSession.id) else {
+            Issue.record("first runtime should exist")
+            return
+        }
+        let secondSession = appState.startNewAgentSession()
+        guard let secondRuntime = appState.runtime(for: secondSession.id) else {
+            Issue.record("second runtime should exist")
+            return
+        }
+        #expect(appState.activeAgentSessionID == secondSession.id)
+
+        let rejected = appState.startWorkflow(
+            workflow: WorkflowLifecycleTestDefinition(requiresArgs: true, blocksUntilCancelled: false),
+            args: "",
+            runtimeID: firstSession.id,
+            notifyAgentOnCompletion: false
+        )
+        guard case .rejected = rejected else {
+            Issue.record("missing args should reject instead of reporting started")
+            return
+        }
+        #expect(firstRuntime.workflowTasks.isEmpty)
+        #expect(firstRuntime.messages.isEmpty)
+
+        let started = appState.startWorkflow(
+            workflow: WorkflowLifecycleTestDefinition(requiresArgs: false, blocksUntilCancelled: true),
+            args: "target first runtime",
+            runtimeID: firstSession.id,
+            notifyAgentOnCompletion: false
+        )
+        guard case .started(let reportID) = started else {
+            Issue.record("workflow should start")
+            return
+        }
+        #expect(firstRuntime.messages.contains(where: { $0.workflowReport?.id == reportID }))
+        #expect(!secondRuntime.messages.contains(where: { $0.workflowReport?.id == reportID }))
+        #expect(firstRuntime.workflowTasks[reportID] != nil)
+
+        appState.cancelWorkflow(reportID: reportID, runtimeID: firstSession.id)
+        for _ in 0..<50 {
+            if firstRuntime.workflowTasks[reportID] == nil { break }
+            try? await Task.sleep(nanoseconds: 10_000_000)
+        }
+        let report = firstRuntime.messages.first(where: { $0.workflowReport?.id == reportID })?.workflowReport
+        #expect(report?.status == .cancelled)
+        #expect(report?.finishedAt != nil)
+        #expect(firstRuntime.workflowTasks[reportID] == nil)
+
+        let activeStarted = appState.startWorkflow(
+            workflow: WorkflowLifecycleTestDefinition(requiresArgs: false, blocksUntilCancelled: true),
+            args: "stop through slash action",
+            runtimeID: secondSession.id,
+            notifyAgentOnCompletion: false
+        )
+        guard case .started(let activeReportID) = activeStarted else {
+            Issue.record("active runtime workflow should start")
+            return
+        }
+        appState.stopAgentResponse()
+        for _ in 0..<50 {
+            if secondRuntime.workflowTasks[activeReportID] == nil { break }
+            try? await Task.sleep(nanoseconds: 10_000_000)
+        }
+        let activeReport = secondRuntime.messages.first(where: {
+            $0.workflowReport?.id == activeReportID
+        })?.workflowReport
+        #expect(activeReport?.status == .cancelled)
+        #expect(secondRuntime.workflowTasks[activeReportID] == nil)
+    }
+
+    @MainActor
+    @Test("workflow 完成事件生成模型可见通知并只消费一次")
+    func workflowCompletionNoticeReturnsResultToAgentOnce() {
+        let appState = AppState()
+        let session = appState.startNewAgentSession()
+        guard let runtime = appState.runtime(for: session.id) else {
+            Issue.record("runtime should exist")
+            return
+        }
+        let report = WorkflowReport(
+            workflowName: "test-workflow",
+            displayTitle: "Test Workflow",
+            args: "question",
+            status: .done,
+            finishedAt: Date(),
+            summary: "Final synthesized answer"
+        )
+        runtime.messages.append(AgentMessage(role: .workflowReport, content: "", workflowReport: report))
+        runtime.pendingWorkflowCompletionReportIDs = [report.id]
+
+        let consumed = appState.consumePendingWorkflowCompletions(for: runtime)
+        #expect(consumed == [report])
+        #expect(appState.consumePendingWorkflowCompletions(for: runtime).isEmpty)
+
+        let notice = AppState.workflowCompletionNotice(for: report)
+        #expect(notice.contains("<workflow-completion>"))
+        #expect(notice.contains("status: done"))
+        #expect(notice.contains("Final synthesized answer"))
+        let providerReady = AgentClient.providerReadyMessages([
+            AgentMessage(role: .system, content: notice)
+        ])
+        #expect(providerReady.first?.content == notice)
+    }
+
+    @MainActor
+    @Test("workflow parallel 在父任务取消时传播 CancellationError")
+    func workflowParallelPropagatesCancellation() async {
+        let appState = AppState()
+        let session = appState.startNewAgentSession()
+        let engine = WorkflowEngine(
+            reportID: UUID(),
+            runtimeID: session.id,
+            workspaceURL: nil,
+            configuration: .default,
+            someIMContext: nil,
+            appState: appState
+        )
+        let task = Task {
+            try await engine.parallel(maxConcurrent: 2, [
+                { try await Task.sleep(nanoseconds: 10_000_000_000); return "a" },
+                { try await Task.sleep(nanoseconds: 10_000_000_000); return "b" },
+            ])
+        }
+        await Task.yield()
+        task.cancel()
+
+        do {
+            _ = try await task.value
+            Issue.record("cancelled parallel workflow should throw")
+        } catch is CancellationError {
+            // Expected: cancellation must not be swallowed into nil results.
+        } catch {
+            Issue.record("expected CancellationError, got \(error)")
+        }
+    }
+
+    @MainActor
+    @Test("重开会话时未完成的普通 workflow 自动归一为 cancelled")
+    func interruptedGenericWorkflowNormalizesToCancelled() {
+        let report = WorkflowReport(
+            workflowName: "interrupted",
+            displayTitle: "Interrupted",
+            args: "",
+            status: .running
+        )
+        let runtime = AgentRuntime(session: AgentSession(messages: [
+            AgentMessage(role: .workflowReport, content: "", workflowReport: report)
+        ]))
+
+        #expect(runtime.messages.first?.workflowReport?.status == .cancelled)
+        #expect(runtime.messages.first?.workflowReport?.finishedAt != nil)
+        #expect(runtime.messages.first?.workflowReport?.summary == L10n.WorkflowCard.interrupted)
+    }
+
+    @MainActor
     @Test("WorkflowState actor:并发 update 不丢任何值")
     func workflowStateActorAggregatesAllUpdatesUnderContention() async {
         let counter = WorkflowState(0)
@@ -143,5 +302,25 @@ extension WillDeepTests {
         #expect(BugHuntWorkflow().managedDomain == .coding)
         #expect(PRReviewWorkflow().managedDomain == .coding)
         #expect(DeepResearchWorkflow().managedDomain == .general)
+    }
+}
+
+private struct WorkflowLifecycleTestDefinition: WorkflowDefinition {
+    let requiresArgs: Bool
+    let blocksUntilCancelled: Bool
+
+    var name: String { "workflow-lifecycle-test" }
+    var displayTitle: String { "Workflow Lifecycle Test" }
+    var slashCommand: String { "/workflow-lifecycle-test" }
+    var shortDescription: String { "Test-only workflow" }
+    var argsPlaceholder: String { "<input>" }
+    var maxAgents: Int { 1 }
+    var allowsEmptyArgs: Bool { !requiresArgs }
+
+    func run(engine: WorkflowEngine, args: String) async throws -> String {
+        if blocksUntilCancelled {
+            try await Task.sleep(nanoseconds: 60_000_000_000)
+        }
+        return "done"
     }
 }

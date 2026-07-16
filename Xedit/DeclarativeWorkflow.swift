@@ -6,18 +6,19 @@
 //  让它能直接挂进 WorkflowRegistry,跟内置 workflow 走同一套
 //  WorkflowEngine 调度 / Card UI / Token 记账。
 //
-//  执行模型(MVP):
-//   - 按 steps 顺序串行跑每一步,每步一次 `engine.agent(prompt, label:)`
+//  执行模型:
+//   - 默认按 steps 顺序串行跑每一步,每步一次 `engine.agent(prompt, label:)`
+//   - 连续标记 `parallel: true` 的步骤组成并行批次,实际并发受
+//     manifest.max_agents 限制
 //   - 渲染 prompt 时替换占位符:
 //       `{{args}}` —— slash 后面用户输入的整段
 //       `{{steps.<id>.output}}` —— 之前已完成 step 的输出文本
 //   - 最终用同一套占位符渲染 summary 模板,返回给 engine 当 report.summary
 //
 //  暂时不支持的(留到后续 rc):
-//   - parallel block(可以加 `kind: parallel` + 子 steps)
+//   - 条件分支 / 失败重试 / 任意 DAG 依赖
 //   - widget 模板渲染(workflow.yaml 同目录有 widget.html 时,直接推
 //     widget 卡而不是 markdown summary)
-//   - 条件分支 / 失败重试
 //
 
 import Foundation
@@ -37,7 +38,41 @@ struct DeclarativeWorkflow: WorkflowDefinition {
         let trimmedArgs = args.trimmingCharacters(in: .whitespacesAndNewlines)
         var outputs: [String: String] = [:]
 
-        for step in manifest.steps {
+        var stepIndex = 0
+        while stepIndex < manifest.steps.count {
+            let step = manifest.steps[stepIndex]
+            if step.runsInParallel {
+                let batchEnd = manifest.steps[stepIndex...].firstIndex(where: { !$0.runsInParallel })
+                    ?? manifest.steps.endIndex
+                let batch = Array(manifest.steps[stepIndex..<batchEnd])
+                let completedOutputs = outputs
+                let tasks: [@Sendable () async throws -> StepOutput] = batch.map { parallelStep in
+                    let prompt = render(
+                        template: parallelStep.prompt,
+                        args: trimmedArgs,
+                        stepOutputs: completedOutputs
+                    )
+                    return { @Sendable in
+                        let output = try await engine.agent(prompt, label: parallelStep.label)
+                        return StepOutput(id: parallelStep.id, output: output)
+                    }
+                }
+                let results = try await engine.parallel(
+                    maxConcurrent: manifest.maxAgents,
+                    tasks
+                )
+                guard results.allSatisfy({ $0 != nil }) else {
+                    throw WorkflowError.allTasksFailed(
+                        reason: "One or more parallel workflow steps failed."
+                    )
+                }
+                for result in results.compactMap({ $0 }) {
+                    outputs[result.id] = result.output
+                }
+                stepIndex = batchEnd
+                continue
+            }
+
             let prompt = render(
                 template: step.prompt,
                 args: trimmedArgs,
@@ -51,6 +86,7 @@ struct DeclarativeWorkflow: WorkflowDefinition {
                 throw error
             }
             outputs[step.id] = result
+            stepIndex += 1
         }
 
         return render(
@@ -58,6 +94,11 @@ struct DeclarativeWorkflow: WorkflowDefinition {
             args: trimmedArgs,
             stepOutputs: outputs
         )
+    }
+
+    private struct StepOutput: Sendable {
+        let id: String
+        let output: String
     }
 
     /// 占位符替换。简单字符串替换,不解析表达式;故意不支持 HTML escape /

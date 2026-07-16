@@ -30,6 +30,7 @@ struct UserWorkflowManifestTests {
         steps:
           - id: first
             label: first-step
+            parallel: true
             prompt: |
               Echo: {{args}}
 
@@ -50,8 +51,23 @@ struct UserWorkflowManifestTests {
         #expect(m.steps.count == 1)
         #expect(m.steps[0].id == "first")
         #expect(m.steps[0].label == "first-step")
+        #expect(m.steps[0].runsInParallel)
         #expect(m.steps[0].prompt.contains("Echo: {{args}}"))
         #expect(m.summaryTemplate.contains("{{steps.first.output}}"))
+    }
+
+    @Test
+    func parallelDefaultsToFalse() throws {
+        let yaml = """
+        name: x
+        slash_command: /x
+        steps:
+          - id: a
+            prompt: |
+              p
+        """
+        let manifest = try UserWorkflowManifestParser.parse(yaml)
+        #expect(!manifest.steps[0].runsInParallel)
     }
 
     @Test

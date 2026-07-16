@@ -1428,14 +1428,17 @@ CI 只能保编译/单测过。一系列改 UI、改窗口、改 SwiftUI 状态�
 
 ---
 
-## 已知 phase 2（不算 bug，是延迟做的功能）
+## Workflow 生命周期回归（1.166.0-rc3）
 
-按 plan 留到后续版本：
+- ⏳ 启动 `/code-review` 或 `/research`，运行中卡片应每秒刷新耗时并显示红色“停止”；点击后子 Agent 尽快结束，卡片变为 Cancelled 且按钮消失。
+- ⏳ 工作流运行时执行 `/stop`，当前模型轮次与当前会话内所有活动工作流都应停止；其他会话的工作流不受影响。
+- ⏳ 让 Agent 调用 `run_workflow`：卡片必须出现在发起调用的会话而非当前前台会话；缺少必填参数时工具返回 rejected 且不创建卡片。
+- ⏳ 让 Agent 调用一个可快速完成的 workflow：完成摘要应通过隐藏的 workflow completion 通知进入下一轮，Agent 自动继续形成用户可见结论；同一结果不得重复续跑。
+- ⏳ 运行 workflow 后清空或删除会话：任务应被取消，之后不得出现迟到通知、重建会话或自动续跑。
+- ⏳ 在 `workflow.yaml` 中给连续两个步骤声明 `parallel: true` 且设置 `max_agents: 2`：两步应并行出现；后续未声明 parallel 的步骤等待该批次完成后再启动。
 
-- Workflow 中途 stop 按钮 —— 现在只能等完成或 Cmd+Q
-- 让 agent 主动派 workflow（`run_workflow` 工具）—— 现在只能用户 slash
-- 用户自定义 workflow（YAML/JSON 加进 ~/.willdeep/workflows/）
-- Workflow 卡片实时倒计时（当前秒数）
+## 已知后续项
+
 - Plan 自动执行的 token 估算显示
 - 多语言：workflow 内置 agent prompt 是英文写死的；UI 文案已走 L10n
 
