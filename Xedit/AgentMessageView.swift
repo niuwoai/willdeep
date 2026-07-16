@@ -363,11 +363,20 @@ struct AgentAssistantMarkdownBody: View {
     /// headings keep their relative hierarchy. Defaults to the system
     /// body size for callers that don't thread the user preference.
     var baseFontSize: CGFloat = NSFont.systemFontSize
+    /// The answer body uses an activity cursor. Live reasoning deliberately
+    /// disables it: adding/removing a separate cursor row changes the block
+    /// height and reads as flashing while the text itself is already enough
+    /// feedback that thinking is progressing.
+    var showsStreamingCursor = true
     @Environment(\.colorScheme) private var colorScheme
 
     var body: some View {
         if isStreaming {
-            AgentAssistantStreamingBody(content: content, baseFontSize: baseFontSize)
+            AgentAssistantStreamingBody(
+                content: content,
+                baseFontSize: baseFontSize,
+                showsCursor: showsStreamingCursor
+            )
         } else {
             renderedMarkdownBody
         }
@@ -394,6 +403,7 @@ struct AgentAssistantMarkdownBody: View {
 private struct AgentAssistantStreamingBody: View {
     let content: String
     let baseFontSize: CGFloat
+    let showsCursor: Bool
     @State private var showsStreamingCursor = true
 
     var body: some View {
@@ -410,7 +420,7 @@ private struct AgentAssistantStreamingBody: View {
                 .foregroundStyle(.primary)
                 .lineSpacing(AgentChatHistoryLayoutMetrics.bodyLineSpacing)
                 .fixedSize(horizontal: false, vertical: true)
-            if showsStreamingCursor {
+            if showsCursor && showsStreamingCursor {
                 AgentStreamingCursor()
             }
         }
@@ -418,6 +428,7 @@ private struct AgentAssistantStreamingBody: View {
         // long-message previews keep a fixed character count while their tail
         // still changes as new output arrives.
         .task(id: content) {
+            guard showsCursor else { return }
             let lastOutputAt = Date()
             showsStreamingCursor = true
 

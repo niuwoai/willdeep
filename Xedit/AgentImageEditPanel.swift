@@ -768,7 +768,6 @@ struct AgentImageEditPanel: View {
                 "prompt": prompt,
                 "image": try dataURL(for: imageInfo.url, fallbackMime: "image/png"),
                 "mask": try dataURL(for: maskURL, fallbackMime: "image/png"),
-                "response_format": "b64_json",
             ],
             settings: settings,
             apiKey: SomeIMIntegrationStore.loadAPIKey()

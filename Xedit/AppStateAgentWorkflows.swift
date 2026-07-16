@@ -243,7 +243,7 @@ extension AppState {
     }
 }
 
-private final class WorkflowWatchdogRace<T: Sendable>: @unchecked Sendable {
+nonisolated private final class WorkflowWatchdogRace<T: Sendable>: @unchecked Sendable {
     private let lock = NSLock()
     private var continuation: CheckedContinuation<T, Error>?
     private var pendingResult: Result<T, Error>?

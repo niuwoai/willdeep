@@ -483,9 +483,22 @@ nonisolated enum AgentWorkspaceRevisionCapture {
     }
 
     private static func fileDigest(at url: URL) throws -> String {
+        let fullHashBudget: UInt64 = 8 * 1_024 * 1_024
+        let sampleBytes = Int(fullHashBudget / 2)
         let handle = try FileHandle(forReadingFrom: url)
         defer { try? handle.close() }
         var hasher = SHA256()
+        let fileSize = try handle.seekToEnd()
+        try handle.seek(toOffset: 0)
+        if fileSize > fullHashBudget {
+            let prefix = try handle.read(upToCount: sampleBytes) ?? Data()
+            hasher.update(data: prefix)
+            try handle.seek(toOffset: fileSize - UInt64(sampleBytes))
+            let suffix = try handle.read(upToCount: sampleBytes) ?? Data()
+            hasher.update(data: suffix)
+            hasher.update(data: Data("sampled-size=\(fileSize)".utf8))
+            return "sampled:" + hexDigest(hasher.finalize())
+        }
         while true {
             let data = try handle.read(upToCount: 64 * 1024) ?? Data()
             if data.isEmpty { break }
@@ -503,7 +516,20 @@ nonisolated enum AgentWorkspaceRevisionCapture {
             return "unreadable"
         }
         let rootPath = directory.standardizedFileURL.path + "/"
-        let urls = enumerator.compactMap { $0 as? URL }.sorted { $0.path < $1.path }
+        let maximumTraversalNodes = 50_000
+        let maximumDigestEntries = 20_000
+        var urls: [URL] = []
+        var visited = 0
+        var wasTruncated = false
+        while let url = enumerator.nextObject() as? URL {
+            visited += 1
+            if visited > maximumTraversalNodes || urls.count >= maximumDigestEntries || Task.isCancelled {
+                wasTruncated = true
+                break
+            }
+            urls.append(url)
+        }
+        urls.sort { $0.path < $1.path }
         var hasher = SHA256()
         for url in urls {
             let values = try? url.resourceValues(forKeys: [.isDirectoryKey])
@@ -514,6 +540,9 @@ nonisolated enum AgentWorkspaceRevisionCapture {
             hasher.update(data: Data([0]))
             hasher.update(data: Data(pathState(at: url).utf8))
             hasher.update(data: Data([0]))
+        }
+        if wasTruncated {
+            hasher.update(data: Data("truncated-directory-digest".utf8))
         }
         return hexDigest(hasher.finalize())
     }

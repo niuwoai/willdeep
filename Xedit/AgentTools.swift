@@ -824,10 +824,17 @@ enum AgentToolRunner {
         executable: String,
         prompt: String,
         permissionMode: String,
-        model: String?
+        model: String?,
+        imagePaths: [String] = []
     ) -> String {
-        var parts = [
-            shellQuoted(executable),
+        var parts = [shellQuoted(executable)]
+        let imageDirectories = Array(Set(imagePaths.map {
+            URL(fileURLWithPath: $0).deletingLastPathComponent().path
+        })).sorted()
+        for directory in imageDirectories {
+            parts += ["--add-dir", shellQuoted(directory)]
+        }
+        parts += [
             "-p", shellQuoted(prompt),
             "--output-format", "text",
             "--permission-mode", permissionMode,
@@ -875,7 +882,8 @@ enum AgentToolRunner {
             executable: executable,
             prompt: prompt,
             permissionMode: permissionMode,
-            model: arguments["model"]?.stringValue()
+            model: arguments["model"]?.stringValue(),
+            imagePaths: delegatedImagePaths(arguments)
         )
 
         return try await runDelegatedAgentCommand(command, arguments: arguments, context: context)
@@ -977,7 +985,8 @@ enum AgentToolRunner {
         prompt: String,
         permissionMode: String,
         model: String?,
-        workspacePath: String?
+        workspacePath: String?,
+        imagePaths: [String] = []
     ) -> String {
         let sandbox = permissionMode == "plan" ? "read-only" : "workspace-write"
         var parts = [
@@ -993,6 +1002,11 @@ enum AgentToolRunner {
         }
         if let model, !model.isEmpty {
             parts += ["--model", shellQuoted(model)]
+        }
+        if !imagePaths.isEmpty {
+            parts.append("--image")
+            parts += imagePaths.map(shellQuoted)
+            parts.append("--")
         }
         parts.append(shellQuoted(prompt))
         return parts.joined(separator: " ")
@@ -1083,7 +1097,8 @@ enum AgentToolRunner {
             prompt: prompt,
             permissionMode: permissionMode,
             model: arguments["model"]?.stringValue(),
-            workspacePath: context.workspaceLocation?.path ?? context.rootDirectory?.standardizedFileURL.path
+            workspacePath: context.workspaceLocation?.path ?? context.rootDirectory?.standardizedFileURL.path,
+            imagePaths: delegatedImagePaths(arguments)
         )
         return try await runDelegatedAgentCommand(command, arguments: arguments, context: context)
     }
@@ -1161,6 +1176,23 @@ enum AgentToolRunner {
             throw AgentToolError.missingArgument("prompt")
         }
         return prompt
+    }
+
+    nonisolated static func delegatedImagePaths(
+        _ arguments: [String: AgentJSONValue],
+        fileManager: FileManager = .default
+    ) -> [String] {
+        guard let candidates = arguments["image_paths"]?.stringArrayValue() else { return [] }
+        return candidates.compactMap { path in
+            let url = URL(fileURLWithPath: path).standardizedFileURL
+            let directory = url.deletingLastPathComponent()
+            guard url.path.hasPrefix(FileManager.default.temporaryDirectory.standardizedFileURL.path + "/"),
+                  directory.lastPathComponent.hasPrefix(AgentDelegatedImageBundle.directoryPrefix),
+                  fileManager.fileExists(atPath: url.path) else {
+                return nil
+            }
+            return url.path
+        }
     }
 
     private static func runDelegatedAgentCommand(
@@ -1537,7 +1569,7 @@ enum AgentToolRunner {
         }
     }
 
-    private static func processAlive(pid: Int32) -> Bool {
+    nonisolated private static func processAlive(pid: Int32) -> Bool {
         Darwin.kill(pid, 0) == 0 || errno == EPERM
     }
 
@@ -1557,7 +1589,7 @@ enum AgentToolRunner {
         return String(singleLine.prefix(limit)) + "…"
     }
 
-    private static func isoString(_ date: Date) -> String {
+    nonisolated private static func isoString(_ date: Date) -> String {
         ISO8601DateFormatter().string(from: date)
     }
 

@@ -15,7 +15,7 @@ final class FileSystemNode: ObservableObject, Identifiable, Hashable {
     /// Per-directory child cap for the sidebar tree. A single generated folder
     /// can contain tens of thousands of entries; rendering all of them would
     /// balloon memory before the user can do anything useful.
-    private static let maxLoadedChildren = 1_000
+    nonisolated private static let maxLoadedChildren = 1_000
 
     // MARK: - Stored Properties
 
@@ -73,9 +73,13 @@ final class FileSystemNode: ObservableObject, Identifiable, Hashable {
     ///   and `isDirectory` is true.
     func loadChildren() {
         guard isDirectory, children == nil else { return }
-        let nodes = Self.scanChildren(of: url)
-        DispatchQueue.main.async { [weak self] in
-            self?.children = nodes
+        let directoryURL = url
+        Task { [weak self] in
+            let urls = await Task.detached(priority: .utility) {
+                Self.scanChildURLs(of: directoryURL)
+            }.value
+            guard let self, self.children == nil else { return }
+            self.children = urls.map { FileSystemNode(url: $0) }
         }
     }
 
@@ -85,7 +89,7 @@ final class FileSystemNode: ObservableObject, Identifiable, Hashable {
     /// a no-op once children are loaded.
     func loadChildrenSyncIfNeeded() {
         guard isDirectory, children == nil else { return }
-        children = Self.scanChildren(of: url)
+        children = Self.scanChildURLs(of: url).map { FileSystemNode(url: $0) }
     }
 
     /// Expand this subtree along the path toward `target`, loading each level
@@ -121,7 +125,7 @@ final class FileSystemNode: ObservableObject, Identifiable, Hashable {
     /// Directories first, then files, alphabetically; hidden files skipped;
     /// bounded by `maxLoadedChildren`. Returns `[]` on permission errors so the
     /// caller can cache the empty result and avoid re-scanning.
-    private static func scanChildren(of url: URL) -> [FileSystemNode] {
+    private nonisolated static func scanChildURLs(of url: URL) -> [URL] {
         let keys: [URLResourceKey] = [.isDirectoryKey]
         guard let enumerator = FileManager.default.enumerator(
             at: url,
@@ -146,13 +150,13 @@ final class FileSystemNode: ObservableObject, Identifiable, Hashable {
             }
         }
 
-        return contents
-            .map { FileSystemNode(url: $0) }
-            .sorted { a, b in
-                if a.isDirectory != b.isDirectory {
-                    return a.isDirectory
+        return contents.sorted { a, b in
+                let aIsDirectory = (try? a.resourceValues(forKeys: [.isDirectoryKey]).isDirectory) ?? false
+                let bIsDirectory = (try? b.resourceValues(forKeys: [.isDirectoryKey]).isDirectory) ?? false
+                if aIsDirectory != bIsDirectory {
+                    return aIsDirectory
                 }
-                return a.name.localizedStandardCompare(b.name) == .orderedAscending
+                return a.lastPathComponent.localizedStandardCompare(b.lastPathComponent) == .orderedAscending
             }
     }
 }

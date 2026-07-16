@@ -188,6 +188,11 @@ extension EditorSettings {
         EditorInterfaceSkin.byID(interfaceSkinID) ?? .system
     }
 
+    var hasConfiguredWorkspaceWallpaper: Bool {
+        guard let path = windowBackgroundImagePath else { return false }
+        return !path.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
     func editorFont() -> NSFont {
         fontChoice.font(size: CGFloat(fontSize))
     }
@@ -464,13 +469,13 @@ enum EditorBackgroundImageMode: String, Codable, CaseIterable, Identifiable {
     var displayName: String {
         switch self {
         case .fill:
-            return "Fill & Crop"
+            return L10n.Settings.backgroundImageModeFill
         case .fit:
-            return "Fit"
+            return L10n.Settings.backgroundImageModeFit
         case .stretch:
-            return "Stretch"
+            return L10n.Settings.backgroundImageModeStretch
         case .center:
-            return "Center"
+            return L10n.Settings.backgroundImageModeCenter
         }
     }
 }

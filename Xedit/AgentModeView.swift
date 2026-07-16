@@ -14,8 +14,6 @@ import UniformTypeIdentifiers
 struct AgentModeView: View {
     @EnvironmentObject var appState: AppState
     @State private var sidebarWidth: CGFloat = 230
-    @State private var lastTaskMonitorSnapshot: AgentTaskMonitorSnapshot?
-    @State private var didObserveAgentTaskMonitorActivity = false
     /// Whether the leftmost session list is shown. Toggled from the chat
     /// header (rc24) so a user who lives in one long conversation can
     /// reclaim the 230pt for the transcript. Persisted across relaunch.
@@ -112,8 +110,13 @@ struct AgentModeView: View {
         let committedPanelWidth = min(max(sidePanelWidth, sidePanelWidthRange.lowerBound), cap)
         let panelWidth = min(currentSidePanelWidth, cap)
         let isResizingPanel = liveSidePanelWidth != nil
+        let hasWallpaper = appState.editorSettings.hasConfiguredWorkspaceWallpaper
         let frozenChatWidth = max(totalWidth - occupiedSidebarWidth - 1 - CGFloat(committedPanelWidth), 0)
-        let activeSidePanel = appState.agentSidePanelKind
+        // `.backgroundTasks` remains decodable for persisted sessions, but it
+        // is never a renderable destination after the monitor rail redesign.
+        let activeSidePanel = appState.agentSidePanelKind == .backgroundTasks
+            ? nil
+            : appState.agentSidePanelKind
         HStack(spacing: 0) {
             if effectiveSidebarVisible {
                 AgentSessionsSidebar()
@@ -163,10 +166,17 @@ struct AgentModeView: View {
             .frame(minWidth: 0, maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
             .background(
                 skin.windowBackground
+                    .opacity(hasWallpaper ? AgentDesign.wallpaperChatSurfaceOpacity : 1)
                     .overlay(
-                        skin.palette.panelFill.opacity(0.18)
+                        skin.palette.panelFill.opacity(hasWallpaper ? 0.12 : 0.18)
                     )
             )
+            .overlay(alignment: .topTrailing) {
+                AgentConversationActivityOverlay()
+                    .padding(.top, AgentDesign.headerHeight + 12)
+                    .padding(.trailing, 14)
+                    .zIndex(20)
+            }
             .clipped()
 
             if activeSidePanel != nil {
@@ -204,7 +214,7 @@ struct AgentModeView: View {
         // 挡不住平铺工具 / 编程式 resize),HStack 溢出时不再默认居中
         // 把左栏推出窗体左缘 —— 靠左钉住,溢出只从右缘裁掉。
         .frame(minWidth: minimumContentWidth, maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
-        .background(skin.windowBackground)
+        .background(WorkspaceWallpaperBackground(settings: appState.editorSettings))
         .background(AgentWindowMinWidthSetter(minWidth: minimumContentWidth))
         .overlay(alignment: .leading) {
             if !effectiveSidebarVisible {
@@ -227,22 +237,30 @@ struct AgentModeView: View {
         }
         .onAppear {
             DesktopPetWindowManager.shared.attach(to: appState)
-            let snapshot = currentTaskMonitorSnapshot
-            lastTaskMonitorSnapshot = snapshot
-            didObserveAgentTaskMonitorActivity = snapshot.hasAutoOpenMonitorContent
+            // Keep decoding the legacy enum case for persisted sessions, but
+            // never resurrect the retired task-monitor rail.
+            if appState.agentSidePanelKind == .backgroundTasks {
+                appState.agentSidePanelKind = nil
+            }
         }
-        .onCompatibleChange(of: currentTaskMonitorSnapshot) { oldSnapshot, newSnapshot in
-            handleTaskMonitorSnapshotChange(from: oldSnapshot, to: newSnapshot)
-        }
-        .onCompatibleChange(of: appState.agentSidePanelKind) { oldPanel, newPanel in
+        .onCompatibleChange(of: appState.agentSidePanelKind) { _, newPanel in
+            if newPanel == .backgroundTasks {
+                appState.agentSidePanelKind = nil
+                appState.agentSidePanelRequest = nil
+                liveSidePanelWidth = nil
+                return
+            }
             if newPanel == nil {
                 liveSidePanelWidth = nil
             }
-            guard oldPanel == .backgroundTasks, newPanel == nil else { return }
-            lastTaskMonitorSnapshot = currentTaskMonitorSnapshot
         }
         .onCompatibleChange(of: appState.agentSidePanelRequest) { _, request in
             guard let request else { return }
+            guard request.kind != .backgroundTasks else {
+                appState.agentSidePanelRequest = nil
+                appState.agentSidePanelKind = nil
+                return
+            }
             guard request.kind.isAvailable(activeExperts: appState.agentActiveExperts) else {
                 appState.agentSidePanelRequest = nil
                 return
@@ -267,8 +285,14 @@ struct AgentModeView: View {
 
     private var sidePanelBinding: Binding<AgentSidePanelKind?> {
         Binding(
-            get: { appState.agentSidePanelKind },
-            set: { appState.agentSidePanelKind = $0 }
+            get: {
+                appState.agentSidePanelKind == .backgroundTasks
+                    ? nil
+                    : appState.agentSidePanelKind
+            },
+            set: { newPanel in
+                appState.agentSidePanelKind = newPanel == .backgroundTasks ? nil : newPanel
+            }
         )
     }
 
@@ -286,55 +310,6 @@ struct AgentModeView: View {
         )
     }
 
-    private var currentTaskMonitorSnapshot: AgentTaskMonitorSnapshot {
-        AgentTaskMonitorSnapshot.capture(from: appState)
-    }
-
-    private func handleTaskMonitorSnapshotChange(
-        from oldSnapshot: AgentTaskMonitorSnapshot,
-        to newSnapshot: AgentTaskMonitorSnapshot
-    ) {
-        if oldSnapshot.sessionID != newSnapshot.sessionID {
-            lastTaskMonitorSnapshot = newSnapshot
-            didObserveAgentTaskMonitorActivity = newSnapshot.hasAutoOpenMonitorContent
-            return
-        }
-
-        // 纯「思考中」开合:除 isAgentResponding 外其余字段全等,说明这次
-        // 快照变化只是 agent 在思考↔空闲之间翻转,没有任何实质监控内容
-        // 变动。此时不应自动改动右侧任务监控面板的开合状态 —— 否则用户
-        // 手动打开、当前无后台内容的面板,会因为一次 thinking 切换被下方
-        // `hasVisibleMonitorContent` 收起分支自动关掉。
-        var respondingNormalized = newSnapshot
-        respondingNormalized.isAgentResponding = oldSnapshot.isAgentResponding
-        if respondingNormalized == oldSnapshot {
-            if newSnapshot.hasAutoOpenMonitorContent {
-                didObserveAgentTaskMonitorActivity = true
-            }
-            lastTaskMonitorSnapshot = newSnapshot
-            return
-        }
-
-        if newSnapshot.hasAutoOpenMonitorContent {
-            didObserveAgentTaskMonitorActivity = true
-        }
-
-        let baseline = lastTaskMonitorSnapshot ?? oldSnapshot
-        let didAutoOpenContentChange = newSnapshot.autoOpenDigest != baseline.autoOpenDigest
-        defer { lastTaskMonitorSnapshot = newSnapshot }
-        if appState.agentSidePanelKind == .backgroundTasks, !newSnapshot.hasVisibleMonitorContent {
-            appState.agentSidePanelKind = nil
-            return
-        }
-
-        guard didObserveAgentTaskMonitorActivity,
-              newSnapshot.hasAutoOpenMonitorContent,
-              didAutoOpenContentChange,
-              appState.agentSidePanelKind == nil else {
-            return
-        }
-        appState.agentSidePanelKind = .backgroundTasks
-    }
 }
 
 /// Puts the Agent-session sidebar button in the native titlebar, immediately
@@ -615,6 +590,9 @@ enum AgentDesign {
     static let sidebarSelectionCornerRadius: CGFloat = 10
     static let sidebarWorkspaceGroupSpacing: CGFloat = 6
     static let sidebarPrimaryTextOpacity: Double = 0.86
+    // Keep the conversation readable while allowing the configured image to
+    // show through. Navigation and utility panels intentionally stay opaque.
+    static let wallpaperChatSurfaceOpacity: Double = 0.52
     // Automations are first-class sidebar content, not caption metadata.
     // Keep every user-visible automation label on the same regular text
     // scale as workspace and conversation rows.

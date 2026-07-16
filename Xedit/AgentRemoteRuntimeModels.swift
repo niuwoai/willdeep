@@ -265,8 +265,21 @@ struct RuntimeDescriptor: Identifiable, Codable, Equatable {
 }
 
 enum RemoteRuntimeSecretStore {
-    private static let service = "com.willdeep.agent"
+    private static let releaseService = "com.willdeep.agent"
+    private static let debugService = "com.willdeep.agent.debug"
     private static let daemonTokenPrefix = "remote-runtime-token-"
+
+    private static var service: String {
+        #if DEBUG
+        serviceName(debugBuild: true)
+        #else
+        serviceName(debugBuild: false)
+        #endif
+    }
+
+    static func serviceName(debugBuild: Bool) -> String {
+        debugBuild ? debugService : releaseService
+    }
 
     static func daemonToken(runtimeID: UUID) -> String {
         load(account: daemonTokenPrefix + runtimeID.uuidString)

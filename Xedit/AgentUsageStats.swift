@@ -171,7 +171,7 @@ struct AgentFailedToolCallReviewRow: Identifiable, Equatable {
     var id: String { "\(toolName)|\(occurredAt.timeIntervalSinceReferenceDate)|\(errorSummary)" }
 }
 
-struct AgentUsageSessionSnapshot: Identifiable, Equatable {
+nonisolated struct AgentUsageSessionSnapshot: Identifiable, Equatable {
     let id: UUID
     var modelID: String?
     var providerID: String?
@@ -250,7 +250,7 @@ struct AgentUsageSessionSnapshot: Identifiable, Equatable {
     }
 }
 
-struct AgentUsageMessageSnapshot: Equatable {
+nonisolated struct AgentUsageMessageSnapshot: Equatable {
     var role: AgentRole
     var contentCharacterCount: Int
     var reasoningCharacterCount: Int

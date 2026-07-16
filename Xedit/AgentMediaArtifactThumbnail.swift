@@ -62,103 +62,71 @@ struct AgentMediaArtifactThumbnail: View {
 
     @ViewBuilder
     private var artifactActionButtons: some View {
-        VStack(spacing: 4) {
-            if isImageArtifact {
-                if canSelectAsShotPrimary {
-                    Button {
-                        selectAsShotPrimary()
-                    } label: {
-                        Image(systemName: isSelectedShotPrimary ? "star.fill" : "star")
-                            .font(.caption2.weight(.semibold))
-                            .foregroundStyle(isSelectedShotPrimary ? Color.yellow : Color.primary)
-                            .padding(5)
-                            .background(.regularMaterial, in: Circle())
-                    }
-                    .buttonStyle(.borderless)
-                    .focusable(false)
-                    .help(isSelectedShotPrimary ? "当前分镜主图" : "设为分镜主图")
-                }
-
-                if canAttachAsAssetReference {
-                    Button {
-                        attachAsAssetReference()
-                    } label: {
-                        Image(systemName: isSelectedAssetReference ? "person.crop.rectangle.stack.fill" : "person.crop.rectangle.stack")
-                            .font(.caption2.weight(.semibold))
-                            .foregroundStyle(isSelectedAssetReference ? Color.accentColor : Color.primary)
-                            .padding(5)
-                            .background(.regularMaterial, in: Circle())
-                    }
-                    .buttonStyle(.borderless)
-                    .focusable(false)
-                    .help(isSelectedAssetReference ? "已是资产参考图" : "设为人物/场景参考图")
-                }
-
-                Button {
-                    attachImageToChat()
-                } label: {
-                    Image(systemName: "text.bubble")
-                        .font(.caption2.weight(.semibold))
-                        .foregroundStyle(.primary)
-                        .padding(5)
-                        .background(.regularMaterial, in: Circle())
-                }
-                .buttonStyle(.borderless)
-                .focusable(false)
-                .help("加入聊天附件")
-
-                Button {
-                    submitReplicateUpscale()
-                } label: {
-                    Image(systemName: "arrow.up.left.and.arrow.down.right")
-                        .font(.caption2.weight(.semibold))
-                        .foregroundStyle(.primary)
-                        .padding(5)
-                        .background(.regularMaterial, in: Circle())
-                }
-                .buttonStyle(.borderless)
-                .focusable(false)
-                .disabled(isSubmittingUpscale || replicateUpscaleVersion == nil)
-                .help(replicateUpscaleVersion == nil ? "请先在 Settings → Integrations → Replicate 配置图片放大 version" : "用 Replicate 放大")
-
-                if isEditableImageArtifact {
-                    Button {
-                        appState.agentImageEditorPreferredOperation = .inpaint
-                        appState.agentImageEditorContext = AgentImageEditorContext(
-                            projectID: sourceTask.projectID,
-                            episodeID: sourceTask.episodeID,
-                            shotID: sourceTask.shotID,
-                            assetKind: sourceTask.assetKind,
-                            assetID: sourceTask.assetID,
-                            reviewItemID: sourceTask.reviewItemID
-                        )
-                        appState.agentImageEditorImageURL = fileURL
-                        appState.agentSidePanelRequest = AgentSidePanelOpenRequest(kind: .imageEditor)
-                    } label: {
-                        Image(systemName: "paintbrush.pointed")
-                            .font(.caption2.weight(.semibold))
-                            .foregroundStyle(.primary)
-                            .padding(5)
-                            .background(.regularMaterial, in: Circle())
-                    }
-                    .buttonStyle(.borderless)
-                    .focusable(false)
-                    .help("打开蒙版编辑")
-                }
-            } else if canSendVideoArtifactToChat {
-                Button {
-                    appendVideoArtifactContextToChat()
-                } label: {
-                    Image(systemName: "text.bubble")
-                        .font(.caption2.weight(.semibold))
-                        .foregroundStyle(.primary)
-                        .padding(5)
-                        .background(.regularMaterial, in: Circle())
-                }
-                .buttonStyle(.borderless)
-                .focusable(false)
-                .help("把视频产物上下文发送到聊天")
+        HStack(spacing: 3) {
+            if isSelectedShotPrimary {
+                Image(systemName: "star.fill")
+                    .font(.caption2.weight(.semibold))
+                    .foregroundStyle(Color.yellow)
+                    .padding(5)
+                    .background(.regularMaterial, in: Circle())
+                    .help("当前分镜主图")
             }
+
+            Menu {
+                Button("打开产物") {
+                    openArtifact()
+                }
+                if isImageArtifact {
+                    Divider()
+                    if isEditableImageArtifact {
+                        Button("局部重绘") {
+                            openImageEditor(operation: .inpaint)
+                        }
+                        Button("擦除蒙版") {
+                            openImageEditor(operation: .erase)
+                        }
+                    }
+                    Button("加入聊天附件") {
+                        attachImageToChat()
+                    }
+                    Button("用 Replicate 放大") {
+                        submitReplicateUpscale()
+                    }
+                    .disabled(isSubmittingUpscale || replicateUpscaleVersion == nil)
+                    if canSelectAsShotPrimary {
+                        Divider()
+                        Button(isSelectedShotPrimary ? "当前分镜主图" : "设为分镜主图") {
+                            selectAsShotPrimary()
+                        }
+                        .disabled(isSelectedShotPrimary)
+                    }
+                    if canAttachAsAssetReference {
+                        Button(isSelectedAssetReference ? "已是资产参考图" : "设为人物/场景参考图") {
+                            attachAsAssetReference()
+                        }
+                        .disabled(isSelectedAssetReference)
+                    }
+                } else if canSendVideoArtifactToChat {
+                    Divider()
+                    Button("把视频产物上下文发送到聊天") {
+                        appendVideoArtifactContextToChat()
+                    }
+                }
+                Divider()
+                Button("在 Finder 中显示") {
+                    NSWorkspace.shared.activateFileViewerSelecting([fileURL])
+                }
+            } label: {
+                Image(systemName: "ellipsis")
+                    .font(.caption2.weight(.semibold))
+                    .foregroundStyle(.primary)
+                    .padding(5)
+                    .background(.regularMaterial, in: Circle())
+            }
+            .menuStyle(.borderlessButton)
+            .menuIndicator(.hidden)
+            .focusable(false)
+            .help(isImageArtifact ? "打开蒙版编辑、放大及更多操作" : "更多媒体操作")
         }
     }
 
@@ -289,6 +257,20 @@ struct AgentMediaArtifactThumbnail: View {
     private var replicateUpscaleVersion: String? {
         let version = ReplicateIntegrationStore.loadWorkflowSettings().upscaleVersion
         return version.isEmpty ? nil : version
+    }
+
+    private func openImageEditor(operation: AgentImageEditorOperationPreference) {
+        appState.agentImageEditorPreferredOperation = operation
+        appState.agentImageEditorContext = AgentImageEditorContext(
+            projectID: sourceTask.projectID,
+            episodeID: sourceTask.episodeID,
+            shotID: sourceTask.shotID,
+            assetKind: sourceTask.assetKind,
+            assetID: sourceTask.assetID,
+            reviewItemID: sourceTask.reviewItemID
+        )
+        appState.agentImageEditorImageURL = fileURL
+        appState.agentSidePanelRequest = AgentSidePanelOpenRequest(kind: .imageEditor)
     }
 
     private func openArtifact() {

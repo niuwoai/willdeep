@@ -363,6 +363,14 @@ private struct WindowRootView: View {
             .onOpenURL { url in
                 handleExternalURL(url)
             }
+            .onCompatibleChange(of: appState.tabs.count) { oldCount, newCount in
+                if EditorWindowLifecyclePolicy.shouldCloseAfterTabCountChange(
+                    from: oldCount,
+                    to: newCount
+                ) {
+                    windowFocus.closeWindowWhenReady()
+                }
+            }
             .onAppear {
                 // 注册到全局 registry —— 第一个 editor 窗口顺便会被
                 // 设为 current，后面 NSWindow becomeKey 通知再做精确
@@ -372,11 +380,10 @@ private struct WindowRootView: View {
                     didHandleInitialExternalURL = true
                     handleExternalURL(initialExternalURL)
                 }
-                // 1.155.0-rc3：没有初始 URL 的纯 editor 窗口（⌘N /
-                // 菜单「显示编辑器」）直接给一个空白 untitled tab ——
-                // 老的「未打开文件夹」欢迎页已删除，editor 窗口要么
-                // 加载指定文件，要么就是一个可以立刻打字的空编辑器。
-                if initialExternalURL == nil, appState.tabs.isEmpty, appState.rootDirectory == nil {
+                // Editor 窗口从不展示无标签空态。普通新窗口和只打开
+                // 文件夹的窗口都先获得一个可编辑的 Untitled 标签；后续
+                // 用户关闭最后一个标签时则关闭整个 Editor 窗口。
+                if appState.tabs.isEmpty {
                     appState.createNewTab()
                 }
                 onboarding.presentIfNeeded()
@@ -426,6 +433,12 @@ enum InitialLaunchPolicy {
     }
 }
 
+enum EditorWindowLifecyclePolicy {
+    static func shouldCloseAfterTabCountChange(from oldCount: Int, to newCount: Int) -> Bool {
+        oldCount > 0 && newCount == 0
+    }
+}
+
 /// SwiftUI ↔ AppKit 桥：从 view tree 拿到所在的 NSWindow，回调一次。
 /// 用 `.background(WindowAccessor { ... })` 挂在任意 view 上。
 private struct WindowAccessor: NSViewRepresentable {
@@ -456,9 +469,12 @@ private struct WindowAccessor: NSViewRepresentable {
 @MainActor
 private final class WindowFocusObserver: ObservableObject {
     private var observer: NSObjectProtocol?
+    private weak var window: NSWindow?
+    private var shouldCloseWhenAttached = false
 
     func attach(to window: NSWindow, appState: AppState) {
         detach()
+        self.window = window
         observer = NotificationCenter.default.addObserver(
             forName: NSWindow.didBecomeKeyNotification,
             object: window,
@@ -474,11 +490,25 @@ private final class WindowFocusObserver: ObservableObject {
         if window.isKeyWindow {
             EditorAppStateRegistry.shared.setCurrent(appState, window: window)
         }
+        if shouldCloseWhenAttached {
+            closeWindowWhenReady()
+        }
+    }
+
+    func closeWindowWhenReady() {
+        shouldCloseWhenAttached = true
+        guard let window else { return }
+        DispatchQueue.main.async { [weak self, weak window] in
+            guard let self, self.shouldCloseWhenAttached, let window else { return }
+            self.shouldCloseWhenAttached = false
+            window.performClose(nil)
+        }
     }
 
     func detach() {
         if let observer { NotificationCenter.default.removeObserver(observer) }
         observer = nil
+        window = nil
     }
 
     deinit {

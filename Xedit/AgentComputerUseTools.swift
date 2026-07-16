@@ -51,6 +51,7 @@ enum AgentComputerUseTools {
         return AgentToolResult(summary: "Restarted Computer Use helper", payload: jsonPayload(result))
     }
 
+    @MainActor
     private static func stateResult(summary: String, result: [String: Any]) throws -> AgentToolResult {
         let image = try result["screenshot"].flatMap { $0 as? [String: Any] }.flatMap(attachment)
         var payload = jsonPayload(result)

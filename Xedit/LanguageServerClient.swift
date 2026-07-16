@@ -52,11 +52,26 @@ nonisolated final class ProcessLanguageServerTransport: LanguageServerTransport 
 
         outputPipe.fileHandleForReading.readabilityHandler = { [weak self] handle in
             let data = handle.availableData
-            guard !data.isEmpty else { return }
+            guard !data.isEmpty else {
+                // EOF: nil the handler or it keeps firing with empty
+                // data in a tight loop until terminationHandler runs.
+                handle.readabilityHandler = nil
+                return
+            }
             self?.onData?(data)
+        }
+        // Drain and discard server stderr. Chatty servers (rust-analyzer,
+        // tsserver in verbose mode) otherwise fill the 64KB pipe buffer,
+        // block mid-write, and freeze the whole server without exiting —
+        // every pending request then hangs forever.
+        errorPipe.fileHandleForReading.readabilityHandler = { handle in
+            if handle.availableData.isEmpty {
+                handle.readabilityHandler = nil
+            }
         }
         process.terminationHandler = { [weak self] process in
             self?.outputPipe.fileHandleForReading.readabilityHandler = nil
+            self?.errorPipe.fileHandleForReading.readabilityHandler = nil
             self?.onTermination?(process.terminationStatus)
         }
 
@@ -73,6 +88,7 @@ nonisolated final class ProcessLanguageServerTransport: LanguageServerTransport 
 
     func stop() {
         outputPipe.fileHandleForReading.readabilityHandler = nil
+        errorPipe.fileHandleForReading.readabilityHandler = nil
         // Close our end of stdin first: well-behaved LSP servers treat
         // stdin EOF as a shutdown signal, so most exit before the SIGTERM
         // below even lands — and the write-side descriptor is reclaimed

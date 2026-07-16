@@ -54,7 +54,7 @@ struct AgentDocumentWorkflowTests {
     }
 
     @Test("Citation evidence exports locally as Markdown and PDF")
-    func localCitationExport() throws {
+    func localCitationExport() async throws {
         let root = FileManager.default.temporaryDirectory
             .appendingPathComponent("willdeep_export_test_\(UUID().uuidString)")
         defer { try? FileManager.default.removeItem(at: root) }
@@ -76,8 +76,8 @@ struct AgentDocumentWorkflowTests {
         let markdownURL = root.appendingPathComponent("citation.md")
         let pdfURL = root.appendingPathComponent("citation.pdf")
 
-        try AgentDocumentExportService.export(file: file, section: section, to: markdownURL)
-        try AgentDocumentExportService.export(file: file, section: section, to: pdfURL)
+        try await AgentDocumentExportService.export(file: file, section: section, to: markdownURL)
+        try await AgentDocumentExportService.export(file: file, section: section, to: pdfURL)
 
         let markdown = try String(contentsOf: markdownURL, encoding: .utf8)
         #expect(markdown.contains("page=2"))

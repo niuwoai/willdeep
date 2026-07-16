@@ -122,7 +122,7 @@ enum AgentStreamingCursorPolicy {
 ///
 /// This helper turns the spliced prompt back into something human-shaped:
 /// a one-line "📎 attached: ..." tag plus the user's prose.
-enum AgentAttachedPromptDisplay {
+nonisolated enum AgentAttachedPromptDisplay {
     /// Header emitted by `AppState.composeAttachedPrompt`. Keep in sync.
     static let preludeHeader = AgentAttachedPromptProtocol.preludeHeader
 
@@ -220,7 +220,7 @@ enum AgentAttachedPromptDisplay {
 /// Pulls the spliced-in image description block out of a user message so
 /// the bubble can render the user's own prose at full size and tuck the
 /// AI-generated wall of bullets behind a disclosure chip.
-enum AgentUserContentSplitter {
+nonisolated enum AgentUserContentSplitter {
     struct Split {
         let visible: String
         let description: String?

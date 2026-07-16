@@ -40,6 +40,7 @@ enum DesktopPetAppearance: String, CaseIterable, Identifiable {
     case whistleCaptain
     case antennaBotanist
     case cosmicScholar
+    case cosmicDownsizer
     case feralMechanic
     case plantRobot
     case cloudForge
@@ -69,6 +70,7 @@ enum DesktopPetAppearance: String, CaseIterable, Identifiable {
         case .whistleCaptain: "DesktopPetWhistleCaptain"
         case .antennaBotanist: "DesktopPetAntennaBotanist"
         case .cosmicScholar: "DesktopPetCosmicScholar"
+        case .cosmicDownsizer: "DesktopPetCosmicDownsizer"
         case .feralMechanic: "DesktopPetFeralMechanic"
         case .plantRobot: "DesktopPetPlantRobot"
         case .cloudForge: "DesktopPetCloudForge"
@@ -98,6 +100,7 @@ enum DesktopPetAppearance: String, CaseIterable, Identifiable {
         case .whistleCaptain: L10n.DesktopPet.appearanceWhistleCaptain
         case .antennaBotanist: L10n.DesktopPet.appearanceAntennaBotanist
         case .cosmicScholar: L10n.DesktopPet.appearanceCosmicScholar
+        case .cosmicDownsizer: L10n.DesktopPet.appearanceCosmicDownsizer
         case .feralMechanic: L10n.DesktopPet.appearanceFeralMechanic
         case .plantRobot: L10n.DesktopPet.appearancePlantRobot
         case .cloudForge: L10n.DesktopPet.appearanceCloudForge
@@ -445,7 +448,7 @@ final class DesktopPetWindowManager: ObservableObject {
             status = L10n.DesktopPet.statusIdle
         }
 
-        presentation = DesktopPetPresentation(
+        let next = DesktopPetPresentation(
             sessionID: latestPreview?.sessionID ?? runtime?.id,
             sessionTitle: latestPreview?.sessionTitle ?? runtime?.session.title ?? L10n.DesktopPet.emptySessionTitle,
             message: latestPreview?.message ?? L10n.DesktopPet.emptyMessage,
@@ -455,6 +458,12 @@ final class DesktopPetWindowManager: ObservableObject {
             status: status,
             mood: isManualJumping ? .jumping : baseMood
         )
+        // @Published notifies even on same-value writes; this runs on a
+        // 0.4s timer, so an unconditional write re-renders the overlay
+        // 2.5×/s even when nothing changed.
+        if next != presentation {
+            presentation = next
+        }
     }
 
     private func manualJumpIsActive(at date: Date) -> Bool {
@@ -470,44 +479,47 @@ final class DesktopPetWindowManager: ObservableObject {
         var previewsByID: [AgentSession.ID: DesktopPetMessagePreview] = [:]
 
         for runtime in appState.agentRuntimes.values {
-            if let preview = outputPreview(session: runtime.session, messages: runtime.messages) {
+            if let preview = outputPreview(session: runtime.session, messages: runtime.messages, now: now) {
                 previewsByID[runtime.id] = preview
             }
         }
 
         for session in appState.agentSessions where previewsByID[session.id] == nil {
-            if let preview = outputPreview(session: session, messages: session.messages) {
+            if let preview = outputPreview(session: session, messages: session.messages, now: now) {
                 previewsByID[session.id] = preview
             }
         }
 
-        return previewsByID.values.filter { preview in
-            DesktopPetOutputFreshness.isFresh(updatedAt: preview.updatedAt, now: now)
-        }.sorted { lhs, rhs in
+        return previewsByID.values.sorted { lhs, rhs in
             lhs.updatedAt > rhs.updatedAt
         }
     }
 
     private static func outputPreview(
         session: AgentSession,
-        messages: [AgentMessage]
+        messages: [AgentMessage],
+        now: Date
     ) -> DesktopPetMessagePreview? {
-        guard session.archivedAt == nil,
-              let latestOutput = messages.reversed().first(where: isVisibleOutputMessage) else {
-            return nil
+        guard session.archivedAt == nil else { return nil }
+        // Freshness gate BEFORE any content work: this runs on a 0.4s
+        // timer over every session, and makePreview splits the entire
+        // message body. A stale latest message means everything earlier
+        // is staler, so bail immediately.
+        for message in messages.reversed() {
+            guard message.role == .assistant else { continue }
+            guard DesktopPetOutputFreshness.isFresh(updatedAt: message.createdAt, now: now) else {
+                return nil
+            }
+            let preview = DesktopPetMessageFormatter.makePreview(message.content)
+            guard !preview.isEmpty else { continue }
+            return DesktopPetMessagePreview(
+                sessionID: session.id,
+                sessionTitle: session.title,
+                message: preview,
+                updatedAt: message.createdAt
+            )
         }
-        let message = DesktopPetMessageFormatter.makePreview(latestOutput.content)
-        guard !message.isEmpty else { return nil }
-        return DesktopPetMessagePreview(
-            sessionID: session.id,
-            sessionTitle: session.title,
-            message: message,
-            updatedAt: latestOutput.createdAt
-        )
-    }
-
-    private static func isVisibleOutputMessage(_ message: AgentMessage) -> Bool {
-        message.role == .assistant && !DesktopPetMessageFormatter.makePreview(message.content).isEmpty
+        return nil
     }
 
     private func showIfNeeded() {
@@ -796,6 +808,8 @@ struct DesktopPetSceneView: View {
         static let heartVerticalOffset: CGFloat = -94
         static let sparkleHorizontalOffset: CGFloat = 45
         static let sparkleVerticalOffset: CGFloat = -83
+        static let snapHorizontalOffset: CGFloat = -47
+        static let snapVerticalOffset: CGFloat = -92
     }
 
     let appearance: DesktopPetAppearance
@@ -829,6 +843,16 @@ struct DesktopPetSceneView: View {
     }
 
     private var cuteEffectLayer: some View {
+        Group {
+            if appearance == .cosmicDownsizer {
+                snapEffectLayer
+            } else {
+                standardCuteEffectLayer
+            }
+        }
+    }
+
+    private var standardCuteEffectLayer: some View {
         ZStack {
             Image(systemName: "mouth.fill")
                 .font(.system(size: 22, weight: .bold))
@@ -849,6 +873,28 @@ struct DesktopPetSceneView: View {
                     y: Layout.sparkleVerticalOffset + animation.cuteEffectVerticalOffset
                 )
         }
+        .opacity(animation.cuteEffectOpacity)
+        .accessibilityHidden(true)
+    }
+
+    private var snapEffectLayer: some View {
+        ZStack {
+            Circle()
+                .stroke(Color.purple.opacity(0.8), lineWidth: 2)
+                .frame(width: 34, height: 34)
+                .scaleEffect(0.55 + CGFloat(animation.cuteEffectOpacity) * 0.9)
+
+            Image(systemName: "sparkle")
+                .font(.system(size: 25, weight: .bold))
+                .symbolRenderingMode(.palette)
+                .foregroundStyle(.white, .purple)
+                .rotationEffect(.degrees(animation.cuteEffectRotation * 1.8))
+                .scaleEffect(0.72 + CGFloat(animation.cuteEffectOpacity) * 0.48)
+        }
+        .offset(
+            x: Layout.snapHorizontalOffset,
+            y: Layout.snapVerticalOffset + animation.cuteEffectVerticalOffset * 0.25
+        )
         .opacity(animation.cuteEffectOpacity)
         .accessibilityHidden(true)
     }

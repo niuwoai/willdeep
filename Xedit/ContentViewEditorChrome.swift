@@ -1235,6 +1235,7 @@ struct EditorTabBar: View {
                                 .font(.system(size: 9, weight: .semibold))
                         }
                         .buttonStyle(.plain)
+                        .focusable(false)
                         .foregroundColor(.secondary)
                         .accessibilityLabel(L10n.EditorTabBar.closeTab(tab.title))
                     }

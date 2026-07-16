@@ -759,7 +759,11 @@ extension AppState {
         }
 
         var signatures: [String: String] = [:]
+        var visitedNodes = 0
+        let maximumTraversalNodes = 50_000
         for case let fileURL as URL in enumerator {
+            visitedNodes += 1
+            if visitedNodes > maximumTraversalNodes || Task.isCancelled { break }
             let standardized = fileURL.standardizedFileURL
             guard standardized.path.hasPrefix(rootPrefix) else { continue }
             let relativePath = String(standardized.path.dropFirst(rootPrefix.count))

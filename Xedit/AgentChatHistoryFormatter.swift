@@ -122,7 +122,9 @@ enum AgentChatHistoryRenderer {
         for image in m.images {
             hasher.combine(image.id)
             hasher.combine(image.mimeType)
-            hasher.combine(image.dataBase64.count)
+            // byteCount, never dataBase64: for file-backed images the
+            // latter is a full disk read + base64 encode per call.
+            hasher.combine(image.byteCount ?? -1)
             hasher.combine(image.source?.rawValue)
             hasher.combine(image.filePath)
             hasher.combine(image.model)
@@ -554,9 +556,25 @@ enum AgentChatHistoryRenderer {
             // the bubble defaults to a one-line activity summary such
             // as "▸ 已读取 2 个文件 · 已运行 1 条命令"; clicking flips
             // the chevron and reveals the full per-call summary below.
+            // Some providers place the first tool calls on the prose message
+            // and then emit subsequent calls as tool-call-only assistant
+            // messages. Treat that wire-format split as one visual activity
+            // layer. Otherwise users see two consecutive collapsed rows for
+            // what is semantically one execution batch.
+            var absorbedToolOnlyMessages: [AgentMessage] = []
+            if !message.toolCalls.isEmpty {
+                var lookahead = index + 1
+                while lookahead < messages.count, Self.isToolCallOnly(messages[lookahead]) {
+                    absorbedToolOnlyMessages.append(messages[lookahead])
+                    lookahead += 1
+                }
+            }
+            let inlineToolMessages = [message] + absorbedToolOnlyMessages
             let inlineToolCalls = visibleToolCalls(
-                message.toolCalls,
-                keepTerminalCalls: message.id == latestAssistantTerminalSummaryMessageID
+                inlineToolMessages.flatMap(\.toolCalls),
+                keepTerminalCalls: inlineToolMessages.contains {
+                    $0.id == latestAssistantTerminalSummaryMessageID
+                }
             )
             if !inlineToolCalls.isEmpty {
                 if hasMessageBubbleContent {
@@ -581,7 +599,7 @@ enum AgentChatHistoryRenderer {
                     ))
                 }
                 let inlineGroup = ToolCallHistoryGroup(
-                    inlineMessageID: message.id,
+                    inlineMessageIDs: inlineToolMessages.map(\.id),
                     calls: inlineToolCalls
                 )
                 appendToolCallGroup(
@@ -593,9 +611,10 @@ enum AgentChatHistoryRenderer {
                 )
             }
 
+            let footerMessage = absorbedToolOnlyMessages.last ?? message
             let isAssistantTurnFooter = message.role != .assistant
                 || turnPresentation == nil
-                || turnPresentation?.isLastVisibleMessage(message) == true
+                || turnPresentation?.isLastVisibleMessage(footerMessage) == true
             if isAssistantTurnFooter,
                !isActiveAssistantTurn,
                shouldShowFooter(for: message, body: body) {
@@ -645,7 +664,7 @@ enum AgentChatHistoryRenderer {
                 }
             }
 
-            index += 1
+            index += 1 + absorbedToolOnlyMessages.count
         }
 
         return result
@@ -664,8 +683,8 @@ enum AgentChatHistoryRenderer {
         /// prose (not as a separate tool-call-only assistant turn).
         /// Keyed by the host message id so expand/collapse state is
         /// stable across re-renders of the same conversation.
-        init(inlineMessageID: UUID, calls: [AgentMessageToolCall]) {
-            id = "inline:" + inlineMessageID.uuidString
+        init(inlineMessageIDs: [UUID], calls: [AgentMessageToolCall]) {
+            id = "inline:" + inlineMessageIDs.map(\.uuidString).joined(separator: ":")
             self.calls = calls
         }
     }

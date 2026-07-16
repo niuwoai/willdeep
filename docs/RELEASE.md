@@ -1,6 +1,6 @@
-# WillDeep 发布手册（Developer ID + 公证 + DMG）
+# WillDeep 发布手册（Developer ID + 双重公证 + DMG + OSS）
 
-> 一句话：用 `scripts/release.sh` 一键打包并公证；首次使用前需要完成两步前置准备（证书 + 公证密码）。
+> 一句话：用 `ruby scripts/release_mac_app.rb` 完成 Release 编译、App 公证、DMG 公证和 OSS 上传；首次使用前需要准备 Developer ID 证书、Keychain 公证凭据和 `.env.local`。
 
 ---
 
@@ -41,20 +41,20 @@ security find-identity -v -p codesigning
 不要把密码直接放在脚本里。`notarytool` 提供了 `store-credentials` 子命令，把上面那串密码加密存到 macOS Keychain，以后脚本只引用 profile 名：
 
 ```bash
-xcrun notarytool store-credentials willdeep-notary \
+xcrun notarytool store-credentials veilwriter-notary \
   --apple-id "你的 Apple ID 邮箱" \
   --team-id "ZH2S7D6PL6" \
   --password "刚才生成的 xxxx-xxxx-xxxx-xxxx"
 ```
 
-- `willdeep-notary` 是 profile 名 —— 必须和 `scripts/release.sh` 里 `NOTARY_PROFILE` 的值一致。
+- `veilwriter-notary` 是默认 profile 名，可通过 `.env.local` 的 `NOTARY_PROFILE` 或命令行 `--notary-profile` 覆盖。
 - `--team-id` 是你的 Developer Team ID（WillDeep 是 `ZH2S7D6PL6`）。
 - 成功会输出 `This process stores your credentials securely in the Keychain.`
 
 验证一下：
 
 ```bash
-xcrun notarytool history --keychain-profile willdeep-notary
+xcrun notarytool history --keychain-profile veilwriter-notary
 ```
 
 能列出历史（哪怕是空的）就说明配置好了。
@@ -67,19 +67,38 @@ brew install create-dmg
 
 没装也能跑（脚本会回落到 `hdiutil` 出素面 dmg），装了能得到带 Applications 拖拽快捷方式的安装页。
 
+### 5. 准备 `.env.local`
+
+```bash
+cp .env.example .env.local
+```
+
+至少填写 `WILLDEEP_CLIENT_LOGIN_SECRET`。`AIPIPE_API_KEY` 会作为构建环境传入但不会写入日志；OSS 凭据既可以放在本机 `~/.ossutilconfig`，也可以使用 `.env.local` 中的 `OSS_ACCESS_KEY_ID`、`OSS_ACCESS_KEY_SECRET`、`OSS_ENDPOINT`。`.env.local` 已被 Git 忽略，禁止提交真实凭据。
+
 ---
 
 ## 二、日常发布
 
 ```bash
-# 完整流程：archive → 导出 → 打 dmg → 签名 → 公证 → stapler
-scripts/release.sh
+# 先做无副作用演练，只检查路径、版本和配置
+ruby scripts/release_mac_app.rb --dry-run
 
-# 只签名打包不公证（本地验证用，几分钟就出来）
-scripts/release.sh --skip-notarize
+# 完整流程：测试 → Release archive → App 公证 → DMG 公证 → OSS
+ruby scripts/release_mac_app.rb
+
+# 本地签名打包，不公证也不上传
+ruby scripts/release_mac_app.rb --skip-notarize --skip-upload
+
+# 已在其他流程跑完测试时跳过测试
+ruby scripts/release_mac_app.rb --skip-tests
 ```
 
-产物路径：`build/release/WillDeep-<版本号>.dmg`。
+产物路径：`build/mac-releases/veilwriter/WillDeep-<版本号>.dmg`。默认上传两个对象：
+
+- `oss://sz-trans/mac-apps/WillDeep-<版本号>.dmg`
+- `oss://sz-trans/mac-apps/latest/WillDeep.dmg`
+
+JSON 和 Markdown 发布报告位于同一构建目录。旧的 `scripts/release.sh` 仍保留给本地备份、tag/push 等历史工作流，但不负责 OSS 上传。
 
 发布前的检查清单：
 
@@ -94,13 +113,16 @@ scripts/release.sh --skip-notarize
 
 | 步 | 命令 | 干什么 |
 |---|---|---|
-| 1 | `xcodebuild archive` | Release 配置 + Developer ID 身份产出 `.xcarchive` |
-| 2 | `xcodebuild -exportArchive` | 用 `method=developer-id` 的 ExportOptions 导出 `.app`，自动把 hardened runtime 留着 |
-| 3 | `create-dmg` 或 `hdiutil` | 把 `.app` + Applications 快捷方式打成 `.dmg` |
-| 4 | `codesign --sign ... --timestamp dmg` | 给 dmg 自身也签名 —— 不签的话用户下载后 Gatekeeper 仍会拦 |
-| 5 | `xcrun notarytool submit --wait` | 提交公证并同步等待结果（一般 2–15 分钟） |
-| 6 | `xcrun stapler staple` | 把公证票"钉"到 dmg 上，离线也能验 |
-| 7 | `spctl --assess` | 用 Gatekeeper 实际检查一遍 |
+| 1 | `.env.local` 白名单加载 | 只加载发布需要的凭据键；敏感值从日志中统一脱敏 |
+| 2 | `xcodebuild test` | 默认先跑 `XeditTests`，失败立即停止 |
+| 3 | `xcodebuild archive` | 以 Release 配置产出 `.xcarchive` |
+| 4 | `xcodebuild -exportArchive` | 用 `method=developer-id` 导出 Developer ID 签名的 `.app` |
+| 5 | `notarytool submit App ZIP` | 单独公证 App，成功后把票据装订到 App |
+| 6 | `create-dmg` 或 `hdiutil` | 把已装订 App 与 Applications 快捷方式打成 DMG |
+| 7 | `codesign DMG` | 使用同一 Developer ID 身份签名最终 DMG |
+| 8 | `notarytool submit DMG` | 单独公证最终分发物，成功后装订 DMG 票据 |
+| 9 | `codesign` / `stapler` / `spctl` | 校验签名、公证票据和 Gatekeeper 状态 |
+| 10 | `ossutil cp` | 上传版本对象与 `latest` 对象，并通过 `ossutil stat` 复核 |
 
 ---
 
@@ -109,7 +131,7 @@ scripts/release.sh --skip-notarize
 ### 公证失败：`Invalid` / `code object is not signed at all`
 - `ENABLE_HARDENED_RUNTIME` 必须是 YES（项目里已设）。
 - 第三方动态库（如果将来引入）必须每个都签名 + hardened runtime。
-- 排查：`xcrun notarytool log <submission-id> --keychain-profile willdeep-notary` 拿到 JSON 报告，里面会指出具体哪个二进制有问题。
+- 排查：`xcrun notarytool log <submission-id> --keychain-profile veilwriter-notary` 拿到 JSON 报告，里面会指出具体哪个二进制有问题。
 
 ### `errSecInternalComponent` / 签名时报 Keychain 错
 - 多半是钥匙串解锁状态丢了。终端执行 `security unlock-keychain ~/Library/Keychains/login.keychain-db` 再重跑。
@@ -117,7 +139,7 @@ scripts/release.sh --skip-notarize
 
 ### `notarytool` 一直 `In Progress`
 - 现在偶尔会卡，但极少超过 30 分钟。脚本会一直等。
-- 真要提前看状态：`xcrun notarytool history --keychain-profile willdeep-notary`。
+- 真要提前看状态：`xcrun notarytool history --keychain-profile veilwriter-notary`。
 
 ### App-Specific Password 找不到入口
 - 必须开 2FA。开了之后入口才会出现在 https://account.apple.com → 登录与安全。

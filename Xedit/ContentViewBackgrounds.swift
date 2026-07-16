@@ -32,13 +32,14 @@ struct WorkspaceWindowBackground: View {
     }
 }
 
-/// Solid `windowBackgroundColor` plus an optional user-chosen image,
+/// Solid workspace color plus an optional user-chosen image,
 /// laid out per `EditorSettings.windowBackgroundImageMode` and
-/// `…Scale`. Lives inside a GeometryReader so the image's frame can
-/// match the editor area exactly (scaledToFill / Fit / stretch /
-/// center variants each need the surrounding pane's size).
-struct EditorAreaBackground: View {
+/// `…Scale`. Shared by the Editor detail area and the standalone Agent
+/// window so the same official wallpaper setting follows the user across
+/// WillDeep's two work surfaces.
+struct WorkspaceWallpaperBackground: View {
     let settings: EditorSettings
+    @State private var backgroundImage: NSImage?
 
     var body: some View {
         GeometryReader { proxy in
@@ -52,11 +53,16 @@ struct EditorAreaBackground: View {
             }
         }
         .clipped()
-    }
-
-    private var backgroundImage: NSImage? {
-        guard let path = settings.windowBackgroundImagePath else { return nil }
-        return NSImage(contentsOfFile: path)
+        .task(id: settings.windowBackgroundImagePath) {
+            backgroundImage = nil
+            guard let path = settings.windowBackgroundImagePath else { return }
+            guard let url = BuiltInWorkspaceWallpaper.resolvedImageURL(for: path) else { return }
+            let data = await Task.detached(priority: .utility) {
+                try? Data(contentsOf: url, options: [.mappedIfSafe])
+            }.value
+            guard !Task.isCancelled else { return }
+            backgroundImage = data.flatMap(NSImage.init(data:))
+        }
     }
 
     @ViewBuilder

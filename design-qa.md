@@ -1,10 +1,130 @@
+# 会话摘要卡与工作区 Dev Server Design QA
+
+- source visual truth: `/Users/rocky/.codex/generated_images/019f6afc-10b2-7dd2-9da0-6f66a655ff3f/exec-075edf4f-5ae5-4c88-8bc6-4cb5c5e02d09.png`
+- floating card screenshot: `/Users/rocky/Sites/Xedit/build/visual-qa/conversation-activity/floating-artifacts.png`
+- gray border + dismiss screenshot: `/Users/rocky/Sites/Xedit/build/visual-qa/conversation-activity/floating-artifacts-gray-dismiss.png`
+- artifact panel screenshot: `/Users/rocky/Sites/Xedit/build/visual-qa/conversation-activity/artifact-files-panel.png`
+- media panel screenshot: `/Users/rocky/Sites/Xedit/build/visual-qa/conversation-activity/media-panel.png`
+- combined comparison: `/Users/rocky/Sites/Xedit/build/visual-qa/conversation-activity/reference-vs-implementation.png`
+- state: macOS 浅色外观；已有会话包含 50 个文件产物；当前会话无媒体任务；旧会话持久化值为已废弃的任务监控侧栏
+- final result: passed
+
+**Full-View Comparison Evidence**
+
+概念图与生产 Debug App 已在同一张对比图中并排检查。生产界面沿用现有聊天字体、皮肤、窗口工具栏和 Composer，没有复制概念图里的示意壳层；核心关系保持一致：聊天区右上角只出现有内容的摘要卡，主聊天宽度不被常驻侧栏占用，点击摘要后才在右侧打开对应内容。
+
+**Primary Interactions Checked**
+
+- 新会话没有产物、媒体或 Dev Server 时不显示任何摘要卡：passed。
+- 含 23 个文件产物的旧会话只显示一张紧凑产物卡，标题、数量和两个代表文件完整可读：passed。
+- 点击产物卡打开“文件”侧栏，旧“任务监控”侧栏即使存在于历史持久化状态也不会复活：passed。
+- 点击顶栏媒体入口打开整合后的“会话媒体”侧栏，筛选、批量菜单、编辑/蒙版/放大提示和空状态层级清晰：passed。
+- 媒体完成逻辑不再自动抢开侧栏；当前会话卡只读取相同 runtime 的媒体任务：passed（单元测试与 Ruby 契约共同验证）。
+- Dev Server URL 解析支持任务输出 URL 与命令端口回退；任务集合按 workspace root 聚合跨会话任务：passed（单元测试验证）。
+- 产物、媒体与 Dev Server 卡片均使用系统自适应淡灰描边；选中态只增强灰色线宽与不透明度，不再使用强调色：passed。
+- 关闭按钮视觉为 9pt `xmark`，实际命中区保持 `22×42 pt`，辅助功能名称为“关闭摘要”：passed。
+- 点击关闭后产物卡立即隐藏，文件仍保留、会话仍继续运行；同一轮轮询不会让卡片反复出现，实质内容变化后可重新显示：passed（原生交互与单元测试共同验证）。
+
+**Findings**
+
+首轮原生截图发现从旧会话切换时，历史 `.backgroundTasks` 值仍可能短暂恢复旧任务监控侧栏。最终实现同时在状态变化、侧栏请求、渲染目的地和 Binding 四层归一化该 legacy case；重新编译并重启 Debug App 后复验通过。后续灰色描边与关闭按钮迭代在同一生产会话中复验，关闭按钮未挤压标题或副标题，命中区也未显得笨重。没有未解决的 P0、P1 或 P2 视觉问题。
+
+---
+
+# 实时工具组二次计数 Design QA
+
+- source visual truth: `/var/folders/np/rjc0y5w52x324x21pv6g33440000gp/T/codex-clipboard-35b9803f-6287-4f3a-8d0d-f33ec08ddc2a.png`
+- requested difference: 移除红框中的第二层“已运行 5 条命令”及图标，保留右侧具体命令摘要、执行状态和展开能力
+- implementation screenshot: blocked（当前工作区已有的非本次 UI 改动仍阻止 App 完成构建）
+- final result: blocked
+
+**Implemented Fidelity Surfaces**
+
+- 实时工具组标题不再渲染聚合命令数量和命令类型图标。
+- 折叠与展开状态都直接展示最多三条具体工具摘要，更多内容继续显示 `+N more`。
+- 待处理、运行中、失败、已拒绝、完成状态以及右侧折叠箭头保持原行为。
+
+**Blocking Evidence**
+
+- 生产 App 仍被工作区现有的 `ReleaseNotesWorkflow.swift:27` 等异步 preflight 调用缺少 `await` 的非本次编译错误中止，因此无法捕获修改后的同视口原生截图完成最终像素对照。
+
+---
+
+# 命令确认卡片 Design QA
+
+- source visual truth: `/Users/rocky/.codex/generated_images/019f6a2b-64f1-7fb1-abbe-ed82f69a39a6/exec-11c783fa-f354-40c7-b3d6-8339173024c8.png`
+- implementation screenshot: blocked（当前工作区已有的非本次 UI 改动导致 App 无法完成链接与启动）
+- intended viewport: macOS 聊天内容区，宽屏为命令审阅 / 授权操作双栏，窄屏自动改为上下堆叠
+- final result: blocked
+
+**Implemented Fidelity Surfaces**
+
+- 命令确认状态绕开工具组汇总标题与外层边框，只保留一层卡片边框。
+- 左侧命令视口固定约 3 行高度，长命令纵向滚动；复制、工作目录、文件修改提示和命令说明仍可用。
+- 右侧保留“允许执行 / 拒绝”两项真实操作，不展示未实现的 `⌘↩` 快捷键提示。
+- 背景、正文、次级文字、分隔线、状态点及按钮强调色均读取当前 `interfaceSkin.palette`。
+
+**Blocking Evidence**
+
+- `AgentToolCallViews.swift` 已进入并通过本轮 Swift 编译步骤，随后完整构建被工作区现有的 `DBExploreWorkflow.swift:31` 缺少 `await` 等非本次文件错误中止。
+- 因生产 App 无法完成构建，本轮不能捕获同一状态的原生实现截图，也不能按相同视口与参考图完成最终像素对照；解除现有编译错误后需补跑原生截图 QA。
+
+---
+
+# Composer 语义图标 Design QA
+
+- source visual truth: `/var/folders/np/rjc0y5w52x324x21pv6g33440000gp/T/codex-clipboard-258521fc-983f-45ab-b64d-d7dff7a4b4a6.png`
+- implementation screenshot: `/Users/rocky/Sites/Xedit/build/visual-qa/composer-semantic-icons-rc3/implementation.png`
+- aligned implementation: `/Users/rocky/Sites/Xedit/build/visual-qa/composer-semantic-icons-rc3/implementation-aligned.png`
+- combined comparison: `/Users/rocky/Sites/Xedit/build/visual-qa/composer-semantic-icons-rc3/comparison.png`
+- comparison viewport: 参考图与生产图均对齐到 `631 x 174 @1x`；生产 Composer 从原生 Debug App 窗口裁切为 `631 x 147 @1x` 后仅补齐画布高度，没有拉伸界面内容
+- state: macOS 浅色外观、空输入、DeepSeek 模型、普通模式、智能审批、执行器为“我们”
+- final result: passed
+
+**Full-View Comparison Evidence**
+
+参考 Composer 与生产 `AgentModeComposerView` 已在同一张对比图中按相同宽度并排检查。本次有意差异是把模型入口原来的服务器/柜子图标替换为 `brain.head.profile`，并把顶部“我们”执行器入口的装饰图标替换为 `person.fill`；工作区、运行位置、分支、输入区、模式、审批、更多、语音和发送按钮仍保持原有层级与位置。
+
+**Focused Region Comparison Evidence**
+
+- 模型入口继续显示当前供应商与模型名，前置图标改为语义明确的大脑图标；没有改变按钮高度、文本截断或下拉箭头。
+- 顶部“我们”继续位于上下文栏最右侧，前置 `person.fill` 清楚表达当前由本应用执行；窄窗口下文字与图标均完整可见。
+- “智能审批”仍紧跟“普通”模式选择器，未被图标变更挤出或移位；更多、专家、机密、麦克风和发送入口保持可见。
+- 原生辅助功能树确认“我们”菜单按钮的 SF Symbol ID 为 `person.fill`，模式按钮为 `bubble.left.and.bubble.right`，审批按钮为 `checkmark.shield`。
+
+**Required Fidelity Surfaces**
+
+- Fonts and typography: 沿用 Composer 现有原生 macOS 字体、字号和字重，没有新增或硬编码产品文案。
+- Spacing and layout rhythm: 两处仅替换同尺寸 SF Symbols；顶部与底部控制的基线、间距和点击区域没有改变。
+- Colors and visual tokens: 图标继续继承当前动态前景色与强调色，没有新增硬编码色值。
+- Image quality and asset fidelity: 使用系统 `brain.head.profile` 与 `person.fill`，在 `@1x` 原生截图下边缘清晰，没有位图缩放或近似绘制。
+- Copy and content: “我们”及其英文继续使用既有 i18n 资源；本次没有新增用户可见字符串。
+
+**Primary Interactions Checked**
+
+- 模型入口继续可点击并保留模型选择辅助功能说明：passed。
+- 顶部执行器入口继续可点击并保留“我们 / Claude Code / Codex”选择语义：passed。
+- 模式与审批入口顺序、可见性和辅助功能 ID：passed。
+- Debug App 原生窗口在 `631 pt` Composer 宽度下截图并与参考图合成检查：passed。
+
+**Findings**
+
+没有未解决的 P0、P1 或 P2 视觉问题。两处新图标在原生浅色界面中清晰可辨，且没有引发布局回归。
+
+**Comparison History**
+
+- Iteration 1: 以 `605 pt` Composer 宽度捕获初版截图，确认图标生效，但与参考图 `631 pt` 宽度不完全一致。
+- Final pass: 调整原生窗口，使生产 Composer 裁切宽度与参考图同为 `631 pt`；重新合成对比后，除用户指定的图标替换外未发现阻断级差异。Final result passed.
+
+---
+
 # Composer 执行器入口 Design QA
 
 - source visual truth: `/var/folders/np/rjc0y5w52x324x21pv6g33440000gp/T/codex-clipboard-e930db3d-5745-4a5a-95c3-3684a3262afe.png`
 - implementation screenshot: `/Users/rocky/Sites/Xedit/build/visual-qa/executor-picker-rc1/implementation-matched-full.png`
 - focused implementation: `/Users/rocky/Sites/Xedit/build/visual-qa/executor-picker-rc1/implementation-composer.png`
 - combined comparison: `/Users/rocky/Sites/Xedit/build/visual-qa/executor-picker-rc1/comparison.png`
-- comparison viewport: 参考 Composer 裁切为 `606 x 156 @1x`，生产 Composer 裁切为 `602 x 148 @1x`；通过缩放原生窗口将输入区宽度匹配到约 600 pt 后再裁切
+- comparison viewport: 参考 Composer 裁切为 `606 x 156 @1x`，生产 Composer 裁切为 `605 x 148 @1x`；通过缩放原生窗口将输入区宽度匹配到约 600 pt 后再裁切
 - state: macOS 浅色外观；参考图为 muchtoken / 本地处理 / detached，实现图为未选择工作区 / 本地处理 / 无分支；两者均为普通模式、空输入状态
 - final result: passed
 
@@ -16,7 +136,7 @@
 
 - 执行器胶囊与顶部上下文栏使用同一垂直基线，靠右固定且不会随左侧工作区信息横向滚动。
 - 空工作区与窄窗口状态下，左侧上下文栏可压缩，执行器入口仍完整显示“我们”与图标，没有截字或越界。
-- 底部“审批”紧跟普通、计划与目标模式选择器；“更多”帮助文本为“更多设置：插件、专家”，执行器不再在底部重复出现。
+- 底部“审批”紧跟普通、计划与目标模式选择器；“更多”帮助文本为“更多设置：插件、专家”，执行器不再在底部重复出现。审批菜单已实测展开“每次询问 / 智能审批 / Workspace 访问”三项。
 - 原生辅助功能树确认菜单包含“我们 / Claude Code / Codex”三项，入口帮助文案说明本轮可在当前会话执行或委托给本机 CLI。
 
 **Required Fidelity Surfaces**
@@ -31,7 +151,7 @@
 
 - 点击顶部执行器入口后显示“我们 / Claude Code / Codex”：passed。
 - 窄窗口约 600 pt Composer 宽度下入口保持右对齐且完整可见：passed。
-- 底部审批入口独立展示且更多菜单只保留插件与专家：passed。
+- 底部审批入口独立展示、菜单三项可正常展开，更多菜单只保留插件与专家：passed。
 - 原生 Debug App 启动、布局和辅助功能标签检查：passed。
 
 **Findings**
@@ -42,6 +162,7 @@
 
 - Iteration 1: 全宽窗口截图确认入口已在顶部右侧，但 Composer 宽度大于参考图，不满足同视口对照。
 - Iteration 2: 将原生窗口收窄，使生产 Composer 宽度从约 985 pt 调整到 602 pt，与参考裁切 606 pt 对齐；重新捕获并合成后未发现需继续修复的布局差异。Final result passed.
+- Iteration 3: 审批入口从更多菜单移至模式选择器后，重新编译并在 `605 pt` Composer 视口捕获；审批、更多和顶部执行器均完整可见，审批三项菜单交互通过。Final result passed.
 
 ---
 

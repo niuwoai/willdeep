@@ -46,6 +46,13 @@ extension WillDeepTests {
         ))
     }
 
+    @Test("closing the last editor tab closes the window instead of showing an empty state")
+    func testLastEditorTabClosesWindow() {
+        #expect(!EditorWindowLifecyclePolicy.shouldCloseAfterTabCountChange(from: 0, to: 1))
+        #expect(!EditorWindowLifecyclePolicy.shouldCloseAfterTabCountChange(from: 2, to: 1))
+        #expect(EditorWindowLifecyclePolicy.shouldCloseAfterTabCountChange(from: 1, to: 0))
+    }
+
     @MainActor
     @Test("external CLI open creates a missing file when the parent exists")
     func testOpenExternalURLCreatesMissingFile() throws {
@@ -202,7 +209,7 @@ extension WillDeepTests {
         try "initial content".write(to: fileURL, atomically: true, encoding: .utf8)
         defer { try? FileManager.default.removeItem(at: fileURL) }
 
-        let appState = AppState()
+        let appState = AppState(editorSettings: .default)
         appState.openedFileURL = fileURL
         appState.fileContent = "updated content!"
         appState.isEdited = true
@@ -234,7 +241,7 @@ extension WillDeepTests {
         let fileURL = tempDir.appendingPathComponent("willdeep_test_save_as_\(UUID().uuidString).txt")
         defer { try? FileManager.default.removeItem(at: fileURL) }
 
-        let appState = AppState()
+        let appState = AppState(editorSettings: .default)
         appState.fileContent = "saved through save as"
         appState.isEdited = true
 

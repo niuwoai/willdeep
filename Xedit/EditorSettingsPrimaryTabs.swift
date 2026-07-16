@@ -114,7 +114,26 @@ extension EditorSettingsView {
             .padding(.vertical, 4)
         }
 
-        Section(L10n.Settings.sectionEditorBackground) {
+        Section {
+            Text(L10n.Settings.builtInWallpapers)
+                .font(.subheadline.weight(.semibold))
+
+            LazyVGrid(
+                columns: [GridItem(.adaptive(minimum: 132, maximum: 180), spacing: 10)],
+                alignment: .leading,
+                spacing: 10
+            ) {
+                ForEach(BuiltInWorkspaceWallpaper.all) { wallpaper in
+                    BuiltInWorkspaceWallpaperCard(
+                        wallpaper: wallpaper,
+                        isSelected: appState.editorSettings.windowBackgroundImagePath == wallpaper.persistedPath
+                    ) {
+                        selectBuiltInWallpaper(wallpaper)
+                    }
+                }
+            }
+            .padding(.vertical, 2)
+
             LabeledContent(L10n.Settings.labelImage) {
                 HStack {
                     Text(backgroundImageLabel)
@@ -122,13 +141,21 @@ extension EditorSettingsView {
                         .truncationMode(.middle)
                         .foregroundStyle(appState.editorSettings.windowBackgroundImagePath == nil ? .secondary : .primary)
                     Spacer(minLength: 8)
+                    if isInstallingWorkspaceWallpaper {
+                        ProgressView()
+                            .controlSize(.small)
+                    }
                     Button(L10n.Settings.buttonChoose) {
                         chooseBackgroundImage()
                     }
+                    .disabled(isInstallingWorkspaceWallpaper)
                     Button(L10n.Settings.buttonClear) {
-                        update(\.windowBackgroundImagePath, nil)
+                        clearBackgroundImage()
                     }
-                    .disabled(appState.editorSettings.windowBackgroundImagePath == nil)
+                    .disabled(
+                        appState.editorSettings.windowBackgroundImagePath == nil
+                            || isInstallingWorkspaceWallpaper
+                    )
                 }
             }
 
@@ -157,6 +184,18 @@ extension EditorSettingsView {
                         .frame(width: 44, alignment: .trailing)
                 }
             }
+
+            Text(L10n.Settings.workspaceWallpaperHelp)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+
+            if !workspaceWallpaperErrorMessage.isEmpty {
+                Text(workspaceWallpaperErrorMessage)
+                    .font(.caption)
+                    .foregroundStyle(.red)
+            }
+        } header: {
+            Text(L10n.Settings.sectionWorkspaceWallpaper)
         }
 
         Section(L10n.Settings.sectionEditor) {
@@ -221,12 +260,24 @@ extension EditorSettingsView {
         guard let path = appState.editorSettings.windowBackgroundImagePath else {
             return L10n.Settings.noImageSelected
         }
-        return URL(fileURLWithPath: path).lastPathComponent
+        if let wallpaper = BuiltInWorkspaceWallpaper.wallpaper(forPersistedPath: path) {
+            return wallpaper.displayName
+        }
+        return WorkspaceWallpaperStore.displayName(for: path)
+    }
+
+    func selectBuiltInWallpaper(_ wallpaper: BuiltInWorkspaceWallpaper) {
+        let previousPath = appState.editorSettings.windowBackgroundImagePath
+        update(\.windowBackgroundImagePath, wallpaper.persistedPath)
+        if previousPath != wallpaper.persistedPath {
+            WorkspaceWallpaperStore.removeManagedWallpaper(at: previousPath)
+        }
+        workspaceWallpaperErrorMessage = ""
     }
 
     func chooseBackgroundImage() {
         let panel = NSOpenPanel()
-        panel.title = L10n.Settings.chooseBackgroundImageTitle
+        panel.title = L10n.Settings.chooseWorkspaceWallpaperTitle
         panel.allowedContentTypes = [.image]
         panel.allowsMultipleSelection = false
         panel.canChooseDirectories = false
@@ -239,13 +290,37 @@ extension EditorSettingsView {
         // window shut. begin/beginSheetModal keeps it open.
         let completion: (NSApplication.ModalResponse) -> Void = { response in
             guard response == .OK, let url = panel.url else { return }
-            self.update(\.windowBackgroundImagePath, url.path)
+            let previousPath = self.appState.editorSettings.windowBackgroundImagePath
+            self.isInstallingWorkspaceWallpaper = true
+            self.workspaceWallpaperErrorMessage = ""
+            Task {
+                let result = await Task.detached(priority: .utility) {
+                    Result { try WorkspaceWallpaperStore.install(from: url) }
+                }.value
+                self.isInstallingWorkspaceWallpaper = false
+                switch result {
+                case .success(let installedURL):
+                    self.update(\.windowBackgroundImagePath, installedURL.path)
+                    if previousPath != installedURL.path {
+                        WorkspaceWallpaperStore.removeManagedWallpaper(at: previousPath)
+                    }
+                case .failure:
+                    self.workspaceWallpaperErrorMessage = L10n.Settings.workspaceWallpaperInstallFailed
+                }
+            }
         }
         if let window = NSApp.keyWindow {
             panel.beginSheetModal(for: window, completionHandler: completion)
         } else {
             panel.begin(completionHandler: completion)
         }
+    }
+
+    func clearBackgroundImage() {
+        let path = appState.editorSettings.windowBackgroundImagePath
+        update(\.windowBackgroundImagePath, nil)
+        WorkspaceWallpaperStore.removeManagedWallpaper(at: path)
+        workspaceWallpaperErrorMessage = ""
     }
 
     func selectInterfaceSkin(_ skin: EditorInterfaceSkin) {

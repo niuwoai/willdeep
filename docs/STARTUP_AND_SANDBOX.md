@@ -28,18 +28,18 @@
 1. `EditorSettingsStore.load()` — 编辑器设置
 2. `AgentSettingsStore.loadProviderLibrary()` / `.load()` — provider 库 + legacy 配置
 3. `RecentItemsStore.loadFiles()/loadFolders()` — 最近项
-4. `AgentSessionStore.loadAll()` — **仅加载会话 metadata**（见下）
-5. `AgentSettingsStore.loadKnownModelIDs / …AlwaysAllowedCommands` 等
-6. `pruneEmptyAgentSessions()` — 清掉「⌘N 建了但没输入」的空草稿
-7. `AgentRoutineStore.loadAll()` + 启动调度器
+4. `AgentSettingsStore.loadKnownModelIDs / …AlwaysAllowedCommands` 等
+5. `AgentRoutineStore.loadAll()` + 启动调度器
+
+会话目录由后台 utility task 调用 `AgentSessionStore.loadCatalog()` 单次扫描，结果回到主线程后与启动期间新建的内存会话合并。空白草稿仅由侧边栏可见性规则隐藏，不再在启动或新建会话时自动删盘。
 
 随后挂订阅与钩子（非阻塞）：registry 的 `objectWillChange` 转发、media task 轮询、终端按需 provider、三条后台完成钩子（job / media / subagent）、会话保存失败通知、终端设置跨实例同步。
 
 ### 4. 会话是懒加载的
 
-`loadAll()` 只解析每个会话文件的**索引头**（标题、时间、是否有用户消息），`messages` 留空，按 `updatedAt` 倒序返回；`MetadataOnlySessionTracker` 记住谁还是「仅 metadata」。用户**点开某会话**时才 `load(id:)` 全量物化消息（[AppStateAgentSessions.swift](../Xedit/AppStateAgentSessions.swift) `materializeAgentSessionIfNeeded`）。因此侧栏有几百个会话也不拖慢启动。
+`loadCatalog()` 在后台单次读取每个会话文件，同时派生侧边栏索引和用量快照；侧边栏会话的 `messages` 留空，并由 `MetadataOnlySessionTracker` 记住谁还是「仅 metadata」。用户**点开某会话**时才 `load(id:)` 全量物化消息（[AppStateAgentSessions.swift](../Xedit/AppStateAgentSessions.swift)）。因此侧栏有几百个会话也不会把目录扫描压到主线程。
 
-> 写队列与 `loadAll` 的协调见 [会话异步写管线](#) —— `loadAll` 会先叠加尚未落盘的 pending 快照，防止第二个 `AppState`（Settings 窗口）在写窗口期把刚存的会话误判为空而被 prune 删除。详见 CHANGELOG rc30/rc32。
+> 写队列与目录索引会叠加尚未落盘及正在落盘的 pending 快照，避免第二个 `AppState`（如设置窗口）在写窗口期漏掉刚创建或刚更新的会话；自动删空会话逻辑已经移除。详见会话异步写管线与 CHANGELOG。
 
 ### 5. 冷启动设计原则（README「设计哲学」）
 

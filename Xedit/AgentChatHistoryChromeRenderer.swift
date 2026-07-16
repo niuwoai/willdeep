@@ -399,8 +399,11 @@ extension AgentChatHistoryRenderer {
     }
 
     private static func chatHistoryThumbnail(for image: AgentImageAttachment) -> NSImage? {
-        if !image.dataBase64.isEmpty,
-           let data = Data(base64Encoded: image.dataBase64),
+        // Never touch `dataBase64` here: for file-backed images it
+        // round-trips the whole file through a base64 String on every
+        // render. Inline bytes decode directly; file-backed images go
+        // through CGImageSourceCreateWithURL below.
+        if let data = image.inlineImageData,
            let source = CGImageSourceCreateWithData(data as CFData, nil) {
             return chatHistoryThumbnail(from: source)
         }

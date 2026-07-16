@@ -601,7 +601,6 @@ enum AgentShortDramaTools {
         var referencePathForDryRun: String?
         if kind == .imageGeneration {
             body["size"] = optionalString(arguments["size"]) ?? "1024x1024"
-            body["response_format"] = "b64_json"
         } else if kind == .videoGeneration {
             referencePathForDryRun = referencePath
             if videoEngine == .seedance,
@@ -780,7 +779,6 @@ enum AgentShortDramaTools {
             "model": model,
             "prompt": prompt,
             "size": size,
-            "response_format": "b64_json",
         ]
 
         let response = try await SomeIMAsyncMediaClient.submit(

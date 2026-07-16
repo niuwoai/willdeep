@@ -21,6 +21,29 @@ struct AgentChatHistoryRendererTests {
     }
 
     @Test
+    func transcriptReaderPaginationKeepsAttributedRenderBounded() {
+        #expect(AgentTranscriptPagination.messagesPerPage == 60)
+        #expect(AgentTranscriptPagination.pageCount(for: 0) == 1)
+        #expect(AgentTranscriptPagination.pageCount(for: 60) == 1)
+        #expect(AgentTranscriptPagination.pageCount(for: 61) == 2)
+        #expect(AgentTranscriptPagination.messageRange(messageCount: 145, pageIndex: 0) == 0..<60)
+        #expect(AgentTranscriptPagination.messageRange(messageCount: 145, pageIndex: 1) == 60..<120)
+        #expect(AgentTranscriptPagination.messageRange(messageCount: 145, pageIndex: 2) == 120..<145)
+        #expect(AgentTranscriptPagination.messageRange(messageCount: 145, pageIndex: 99) == 120..<145)
+    }
+
+    @Test
+    func transcriptLayoutWidthUsesStableEightPointBuckets() {
+        #expect(AgentChatHistoryLayoutMetrics.layoutWidthBucket == 8)
+        #expect(AgentChatHistoryLayoutMetrics.resolvedLayoutWidth(900) == 896)
+        #expect(AgentChatHistoryLayoutMetrics.resolvedLayoutWidth(903.9) == 896)
+        #expect(AgentChatHistoryLayoutMetrics.resolvedLayoutWidth(904) == 904)
+        #expect(AgentChatHistoryLayoutMetrics.resolvedLayoutWidth(7.9) == 7)
+        #expect(AgentChatHistoryLayoutMetrics.resolvedLayoutWidth(.infinity)
+            == AgentChatHistoryLayoutMetrics.defaultTranscriptWidth)
+    }
+
+    @Test
     func longMessagePreviewKeepsHeadAndTail() {
         let content = String(repeating: "A", count: 120)
             + "MIDDLE_SHOULD_BE_OMITTED"
@@ -250,6 +273,56 @@ struct AgentChatHistoryRendererTests {
     }
 
     @Test
+    func singleGlyphInlineCodeChipDoesNotOverlapPrecedingText() throws {
+        let text = NSMutableAttributedString(
+            string: "完成了。以下是 / 目录下的全部内容：",
+            attributes: [.font: NSFont.systemFont(ofSize: 14)]
+        )
+        let slashRange = (text.string as NSString).range(of: "/")
+        let precedingTextRange = (text.string as NSString).range(of: "是")
+        #expect(slashRange.location != NSNotFound)
+        #expect(precedingTextRange.location != NSNotFound)
+        text.addAttribute(
+            .font,
+            value: NSFont.monospacedSystemFont(ofSize: 14, weight: .regular),
+            range: slashRange
+        )
+
+        let storage = NSTextStorage(attributedString: text)
+        let layoutManager = NSLayoutManager()
+        let textContainer = NSTextContainer(size: NSSize(width: 600, height: 100))
+        textContainer.lineFragmentPadding = 0
+        storage.addLayoutManager(layoutManager)
+        layoutManager.addTextContainer(textContainer)
+        layoutManager.ensureLayout(for: textContainer)
+
+        let slashGlyphRange = layoutManager.glyphRange(
+            forCharacterRange: slashRange,
+            actualCharacterRange: nil
+        )
+        let precedingGlyphRange = layoutManager.glyphRange(
+            forCharacterRange: precedingTextRange,
+            actualCharacterRange: nil
+        )
+        let slashRect = layoutManager.boundingRect(
+            forGlyphRange: slashGlyphRange,
+            in: textContainer
+        )
+        let precedingRect = layoutManager.boundingRect(
+            forGlyphRange: precedingGlyphRange,
+            in: textContainer
+        )
+        let chipRect = AgentChatHistoryLayoutMetrics.inlineCodeChipRect(
+            for: slashRect,
+            at: .zero
+        )
+
+        #expect(chipRect.minX >= precedingRect.maxX)
+        #expect(chipRect.minX < slashRect.minX)
+        #expect(chipRect.maxX > slashRect.maxX)
+    }
+
+    @Test
     func rendersUserImageInsteadOfGeneratedImageDescriptionInHistory() {
         let content = AppState.contentByAppendingImageDescription(
             to: "识别一下这张图",
@@ -466,6 +539,75 @@ struct AgentChatHistoryRendererTests {
     }
 
     @Test
+    func collapsedToolSummaryDescribesCreatedFilesWithoutExposingTheirPaths() {
+        let message = AgentMessage(
+            role: .assistant,
+            content: "",
+            toolCalls: (16...18).map { episode in
+                AgentMessageToolCall(
+                    externalID: "create_\(episode)",
+                    toolName: "create_file",
+                    argumentsJSON: #"{"path":"剧本/第\#(episode)集.md","title":"内部标题"}"#
+                )
+            }
+        )
+
+        let rendered = AgentChatHistoryRenderer.render(messages: [message], isDark: false)
+
+        #expect(rendered.string.contains("▸ 生成了 3 个文件"))
+        #expect(!rendered.string.contains("第16集.md"))
+        #expect(!rendered.string.contains("create_file"))
+        #expect(!rendered.string.contains("内部标题"))
+    }
+
+    @Test
+    func collapsedToolSummaryRecognizesImageReads() {
+        let message = AgentMessage(
+            role: .assistant,
+            content: "",
+            toolCalls: [
+                AgentMessageToolCall(
+                    externalID: "read_image",
+                    toolName: "read_file",
+                    argumentsJSON: #"{"path":"artifacts/reference.png"}"#
+                )
+            ]
+        )
+
+        let rendered = AgentChatHistoryRenderer.render(messages: [message], isDark: false)
+
+        #expect(rendered.string.contains("▸ 读取了 1 张图片"))
+        #expect(!rendered.string.contains("reference.png"))
+    }
+
+    @Test
+    func collapsedToolSummaryFallsBackToCallCountWithoutToolDetails() {
+        let message = AgentMessage(
+            role: .assistant,
+            content: "",
+            toolCalls: [
+                AgentMessageToolCall(
+                    externalID: "custom_1",
+                    toolName: "private_custom_tool",
+                    argumentsJSON: #"{"secret_query":"not-for-collapsed-row"}"#
+                ),
+                AgentMessageToolCall(
+                    externalID: "custom_2",
+                    toolName: "another_custom_tool",
+                    argumentsJSON: #"{"private_path":"workspace/internal.txt"}"#
+                )
+            ]
+        )
+
+        let rendered = AgentChatHistoryRenderer.render(messages: [message], isDark: false)
+
+        #expect(rendered.string.contains("▸ 执行了 2 次工具调用"))
+        #expect(!rendered.string.contains("private_custom_tool"))
+        #expect(!rendered.string.contains("not-for-collapsed-row"))
+        #expect(!rendered.string.contains("workspace/internal.txt"))
+    }
+
+    @Test
     func collapsesAndExpandsConsecutiveToolCalls() {
         let firstID = UUID()
         let secondID = UUID()
@@ -509,6 +651,51 @@ struct AgentChatHistoryRendererTests {
         #expect(expanded.string.contains("▾ 已读取 1 个文件 · 已运行 1 条命令"))
         #expect(expanded.string.contains("tool  run_command  command: ls /Users/rocky/Sites/Teamify && git status --short"))
         #expect(expanded.string.contains("tool  read_file  path: /Users/rocky/Sites/Teamify/README.md"))
+    }
+
+    @Test
+    func mergesInlineAndFollowingToolOnlyCallsIntoOneActivityLayer() {
+        let proseID = UUID()
+        let followupID = UUID()
+        let messages = [
+            AgentMessage(
+                id: proseID,
+                role: .assistant,
+                content: "我先检查工程状态。",
+                toolCalls: [
+                    AgentMessageToolCall(
+                        externalID: "call_command",
+                        toolName: "run_command",
+                        argumentsJSON: #"{"command":"git status --short"}"#
+                    )
+                ]
+            ),
+            AgentMessage(
+                id: followupID,
+                role: .assistant,
+                content: "",
+                toolCalls: [
+                    AgentMessageToolCall(
+                        externalID: "call_read",
+                        toolName: "read_file",
+                        argumentsJSON: #"{"path":"README.md"}"#
+                    )
+                ]
+            )
+        ]
+
+        let collapsed = AgentChatHistoryRenderer.render(messages: messages, isDark: false)
+        #expect(collapsed.string.contains("▸ 已读取 1 个文件 · 已运行 1 条命令"))
+        #expect(collapsed.string.components(separatedBy: "▸ ").count - 1 == 1)
+
+        let groupID = "inline:\(proseID.uuidString):\(followupID.uuidString)"
+        let expanded = AgentChatHistoryRenderer.render(
+            messages: messages,
+            isDark: false,
+            expandedToolGroupIDs: [groupID]
+        )
+        #expect(expanded.string.contains("tool  run_command  command: git status --short"))
+        #expect(expanded.string.contains("tool  read_file  path: README.md"))
     }
 
     /// Short args fit fully in the inline preview → no "完整参数 X B"
@@ -1294,6 +1481,22 @@ struct AgentChatHistoryRendererTests {
         ) as? NSParagraphStyle)
         #expect(wideStyle.headIndent == AgentChatHistoryLayoutMetrics.userBodyHeadIndent(for: 900))
         #expect(wideStyle.headIndent > narrowStyle.headIndent)
+
+        view.setFrameSize(NSSize(width: 903, height: 1))
+        let sameBucketStyle = try #require(view.textStorage?.attribute(
+            .paragraphStyle,
+            at: wideRange.location,
+            effectiveRange: nil
+        ) as? NSParagraphStyle)
+        #expect(sameBucketStyle.headIndent == wideStyle.headIndent)
+
+        view.setFrameSize(NSSize(width: 904, height: 1))
+        let nextBucketStyle = try #require(view.textStorage?.attribute(
+            .paragraphStyle,
+            at: wideRange.location,
+            effectiveRange: nil
+        ) as? NSParagraphStyle)
+        #expect(nextBucketStyle.headIndent > sameBucketStyle.headIndent)
     }
 
     @Test

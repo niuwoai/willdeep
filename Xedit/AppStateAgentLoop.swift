@@ -119,8 +119,8 @@ extension AppState {
         // The user's message was already appended and persisted to disk
         // above, before the slot gate — so even if the turn hangs
         // (slow/flaky proxy) and the app is quit mid-flight, the on-disk
-        // session already holds it and `pruneEmptyAgentSessions` can't
-        // delete the row as "empty". No second persist needed here.
+        // session already holds it even if the app quits mid-flight.
+        // No second persist is needed here.
         let imageDescriptionConfiguration = agentConfiguration.normalized.imageDescription.agentConfiguration
 
         runtime.requestTask?.cancel()
@@ -610,14 +610,10 @@ extension AppState {
                     )
                 )
             }
-            if !finishedMediaTasks.isEmpty, activeRuntime === runtime {
-                let focusTask = finishedMediaTasks.first(where: \.needsAttention) ?? finishedMediaTasks.first
-                agentMediaTaskPanelScope = focusTask.flatMap(Self.mediaTaskPanelScope)
-                agentSidePanelRequest = AgentSidePanelOpenRequest(
-                    kind: .mediaTasks,
-                    mediaTaskScope: agentMediaTaskPanelScope
-                )
-            }
+            // Completion is surfaced by the conversation's media summary
+            // card. Do not steal the user's side panel while they are reading
+            // or editing something else; the card opens the focused media
+            // workspace on demand.
 
             // Background subagent reports ride the same channel as job
             // completions: queued by AgentSubagentRegistry, surfaced as

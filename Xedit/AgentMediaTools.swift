@@ -340,7 +340,6 @@ enum AgentMediaTools {
                 "prompt": prompt,
                 "image": try dataURL(for: imageURL),
                 "mask": try dataURL(for: maskURL),
-                "response_format": "b64_json",
             ],
             settings: settings,
             apiKey: SomeIMIntegrationStore.loadAPIKey()
@@ -1142,9 +1141,6 @@ enum AgentMediaTools {
         }
         if let size = cleanOptionalString(arguments["size"]), kind != .videoGeneration {
             body["size"] = size
-        }
-        if kind != .videoGeneration {
-            body["response_format"] = "b64_json"
         }
         return body
     }

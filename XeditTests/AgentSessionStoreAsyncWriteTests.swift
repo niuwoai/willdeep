@@ -105,16 +105,59 @@ struct AgentSessionStoreAsyncWriteTests {
         #expect(AgentSessionStore.load(id: id)?.messages.count == 1)
     }
 
+    @Test("starting a new chat hides old empty placeholders without deleting their files")
+    func startingNewChatKeepsOlderEmptySessionOnDisk() throws {
+        let appState = AppState(rootDirectory: nil)
+        let first = appState.startNewAgentSession()
+        AgentSessionStore.flushPendingWrites()
+        defer { AgentSessionStore.delete(id: first.id) }
+
+        let firstURL = AgentSessionStore.directory
+            .appendingPathComponent("\(first.id.uuidString).json")
+        try FileManager.default.setAttributes(
+            [.modificationDate: Date(timeIntervalSinceNow: -10 * 60)],
+            ofItemAtPath: firstURL.path
+        )
+
+        let second = appState.startNewAgentSession()
+        defer { AgentSessionStore.delete(id: second.id) }
+
+        #expect(AgentSessionStore.load(id: first.id) != nil)
+        #expect(appState.agentSessions.contains(where: { $0.id == first.id }))
+    }
+
+    @Test("missing history file reports a recoverable session-switch failure")
+    func missingHistoryFileDoesNotSilentlySwallowSessionSelection() {
+        let appState = AppState(rootDirectory: nil)
+        let active = appState.startNewAgentSession()
+        let stale = AgentSession(title: "Recoverable history")
+        AgentSessionStore.delete(id: stale.id)
+        AgentSessionStore.markMetadataOnlyForTesting(stale.id, hasUserMessage: true)
+        defer {
+            AgentSessionStore.clearMetadataOnlyForTesting(stale.id)
+            AgentSessionStore.delete(id: active.id)
+        }
+        appState.agentSessions.insert(stale, at: 0)
+
+        let selected = appState.selectAgentSession(id: stale.id)
+
+        #expect(!selected)
+        #expect(appState.activeAgentSessionID == active.id)
+        #expect(appState.agentSessionLoadFailure == AgentSessionLoadFailure(
+            id: stale.id,
+            title: stale.title
+        ))
+        #expect(appState.agentSessions.contains(where: { $0.id == stale.id }))
+
+        appState.dismissAgentSessionLoadFailure()
+        #expect(appState.agentSessionLoadFailure == nil)
+    }
+
     @Test("pin/archive survive the runtime's next persist")
     func pinAndArchiveSurviveRuntimePersist() throws {
         let appState = AppState(rootDirectory: nil)
-        let existingIDs = Set(appState.agentSessions.map(\.id))
         let session = appState.startNewAgentSession()
-        defer {
-            for id in appState.agentSessions.map(\.id) where !existingIDs.contains(id) {
-                AgentSessionStore.delete(id: id)
-            }
-        }
+        defer { AgentSessionStore.delete(id: session.id) }
 
         appState.agentMessages = [AgentMessage(role: .user, content: "pin me")]
         appState.toggleAgentSessionPinned(id: session.id)

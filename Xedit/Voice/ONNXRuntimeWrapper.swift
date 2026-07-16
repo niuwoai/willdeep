@@ -9,6 +9,7 @@
 //
 
 import Foundation
+import Darwin
 
 // 通过桥接头文件 ONNXRuntimeBridge.h 访问 C API
 // C API 类型和函数在桥接头文件中定义
@@ -230,32 +231,22 @@ nonisolated class ONNXRuntimeWrapper {
         
         // 4. 运行推理
         var outputTensor: OpaquePointer?
-        let inputNames = [inputNameStr]
-        let outputNames = [outputNameStr]
-        
-        // 创建 C 字符串指针数组
-        let inputNameCStrings = inputNames.map { $0.cString(using: .utf8)! }
-        let outputNameCStrings = outputNames.map { $0.cString(using: .utf8)! }
-        
-        // 需要构建指针数组
         let inputTensors = [inputTensor]
-        
-        // 使用 withExtendedLifetime 确保字符串在整个调用期间有效
-        let runStatus = withExtendedLifetime((inputNameCStrings, outputNameCStrings)) {
-            // 创建指向 C 字符串指针的指针数组
-            var inputNamePtrs: [UnsafePointer<CChar>?] = inputNameCStrings.map { UnsafePointer($0) }
-            var outputNamePtrs: [UnsafePointer<CChar>?] = outputNameCStrings.map { UnsafePointer($0) }
-            
-            return api.pointee.Run(
-                session,
-                nil, // run options
-                &inputNamePtrs,
-                inputTensors.withUnsafeBufferPointer { $0.baseAddress },
-                1, // input count
-                &outputNamePtrs,
-                1, // output count
-                &outputTensor
-            )
+        let runStatus = withOwnedCStringPointers([inputNameStr]) { inputNamePtrs in
+            withOwnedCStringPointers([outputNameStr]) { outputNamePtrs in
+                inputTensors.withUnsafeBufferPointer { inputTensorBuffer in
+                    api.pointee.Run(
+                        session,
+                        nil,
+                        inputNamePtrs,
+                        inputTensorBuffer.baseAddress,
+                        inputTensors.count,
+                        outputNamePtrs,
+                        1,
+                        &outputTensor
+                    )
+                }
+            }
         }
         
         if runStatus != nil {
@@ -584,16 +575,7 @@ nonisolated class ONNXRuntimeWrapper {
             }
         }
         
-        // 准备输入名称数组（C 字符串指针数组）
-        // 使用 withCString 确保字符串生命周期
         var currentStatus: OrtStatusPtr?
-        
-        // 为每个输入名称创建 C 字符串（使用 withCString 确保生命周期）
-        var inputNamePtrs: [UnsafePointer<CChar>?] = []
-        
-        // 使用 withExtendedLifetime 确保所有字符串在整个函数调用期间有效
-        let inputNameCStrings = inputNameStrings.map { $0.cString(using: .utf8)! }
-        inputNamePtrs = inputNameCStrings.map { UnsafePointer($0) }
         
         #if DEBUG
         // 验证输入顺序一致性
@@ -606,41 +588,25 @@ nonisolated class ONNXRuntimeWrapper {
         print("🔄 开始 ONNX 推理... (输入: \(sequenceLength) 帧，这可能需要一些时间)")
         let inferenceStartTime = CFAbsoluteTimeGetCurrent()
         
-        // 准备输出名称 C 字符串
-        let ctcLogitsCString = ctcLogitsOutputName.cString(using: .utf8)!
-        var outputNamePtrs: [UnsafePointer<CChar>?] = [UnsafePointer(ctcLogitsCString)]
-        var encoderOutLensCString: [CChar]? = nil
-        if let encoderOutLensName = encoderOutLensOutputName {
-            encoderOutLensCString = encoderOutLensName.cString(using: .utf8)!
-            outputNamePtrs.append(UnsafePointer(encoderOutLensCString!))
+        var outputNameStrings = [ctcLogitsOutputName]
+        if let encoderOutLensOutputName {
+            outputNameStrings.append(encoderOutLensOutputName)
         }
-        
-        // 运行推理（使用 withExtendedLifetime 确保字符串生命周期）
-        if let encoderOutLensCString = encoderOutLensCString {
-            withExtendedLifetime((inputNameCStrings, ctcLogitsCString, encoderOutLensCString)) {
-                currentStatus = api.pointee.Run(
-                    session,
-                    runOptions,
-                    &inputNamePtrs,
-                    inputTensors.withUnsafeBufferPointer { $0.baseAddress },
-                    inputTensors.count,
-                    &outputNamePtrs,
-                    outputNamePtrs.count,
-                    &outputValues
-                )
-            }
-        } else {
-            withExtendedLifetime((inputNameCStrings, ctcLogitsCString)) {
-                currentStatus = api.pointee.Run(
-                    session,
-                    runOptions,
-                    &inputNamePtrs,
-                    inputTensors.withUnsafeBufferPointer { $0.baseAddress },
-                    inputTensors.count,
-                    &outputNamePtrs,
-                    outputNamePtrs.count,
-                    &outputValues
-                )
+
+        currentStatus = withOwnedCStringPointers(inputNameStrings) { inputNamePtrs in
+            withOwnedCStringPointers(outputNameStrings) { outputNamePtrs in
+                inputTensors.withUnsafeBufferPointer { inputTensorBuffer in
+                    api.pointee.Run(
+                        session,
+                        runOptions,
+                        inputNamePtrs,
+                        inputTensorBuffer.baseAddress,
+                        inputTensors.count,
+                        outputNamePtrs,
+                        outputNameStrings.count,
+                        &outputValues
+                    )
+                }
             }
         }
         
@@ -693,6 +659,23 @@ nonisolated class ONNXRuntimeWrapper {
         }
 
         return tokenIDs
+    }
+
+    /// Owns every C string for the whole C API call. Building pointers from
+    /// temporary Swift `[CChar]` arrays produces dangling pointers even when
+    /// the arrays are wrapped in `withExtendedLifetime`.
+    private func withOwnedCStringPointers<Result>(
+        _ strings: [String],
+        _ body: (UnsafePointer<UnsafePointer<CChar>?>?) throws -> Result
+    ) rethrows -> Result {
+        let owned = strings.map { strdup($0) }
+        defer { owned.forEach { free($0) } }
+        let pointers = owned.map { pointer in
+            pointer.map { UnsafePointer<CChar>($0) }
+        }
+        return try pointers.withUnsafeBufferPointer { buffer in
+            try body(buffer.baseAddress)
+        }
     }
     
     /// 提取 encoder_out_lens（实际序列长度）

@@ -309,7 +309,7 @@ final class AgentLocalModelFileFinder: ObservableObject {
             let roots = searchRoots()
             var paths = Set<String>()
             for root in roots {
-                for path in try runFind(root: root, files: package.files) {
+                for path in try await runFind(root: root, files: package.files) {
                     paths.insert(path)
                 }
             }
@@ -358,7 +358,7 @@ final class AgentLocalModelFileFinder: ObservableObject {
         }
     }
 
-    private nonisolated static func runFind(root: URL, files: [AgentLocalModelPackageFile]) throws -> [String] {
+    private nonisolated static func runFind(root: URL, files: [AgentLocalModelPackageFile]) async throws -> [String] {
         let process = Process()
         process.executableURL = URL(fileURLWithPath: "/usr/bin/find")
         var arguments = [root.path, "-type", "f", "("]
@@ -371,25 +371,16 @@ final class AgentLocalModelFileFinder: ObservableObject {
         arguments.append(contentsOf: [")", "-print"])
         process.arguments = arguments
 
-        let output = Pipe()
-        process.standardOutput = output
-        try process.run()
-
-        let finished = DispatchSemaphore(value: 0)
-        DispatchQueue.global(qos: .utility).async {
-            process.waitUntilExit()
-            finished.signal()
-        }
-        if finished.wait(timeout: .now() + 25) == .timedOut {
-            process.terminate()
-            process.waitUntilExit()
-        }
-
-        let data = output.fileHandleForReading.readDataToEndOfFile()
-        guard let text = String(data: data, encoding: .utf8) else {
+        let result = try await AgentSubprocess.run(
+            process,
+            timeout: 25,
+            stdoutLimit: 8 * 1_024 * 1_024,
+            stderrLimit: 64 * 1_024
+        )
+        guard result.exitStatus == 0, !result.timedOut, !result.stdoutWasTruncated else {
             return []
         }
-        return text
+        return result.stdoutText
             .split(separator: "\n")
             .map { String($0) }
             .filter { !$0.isEmpty }
@@ -549,6 +540,29 @@ final class AgentLocalModelDownloader: ObservableObject {
         try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
             let completion = AgentLocalModelDownloadCompletion(continuation)
             let downloadTask = session.downloadTask(with: url) { [weak self] tempURL, _, error in
+                // URLSession may delete tempURL as soon as this handler
+                // returns, so the move MUST happen synchronously here —
+                // hopping to the main actor first races the deletion and
+                // intermittently throws "no such file" after a full
+                // download.
+                let result: Result<Void, Error>
+                if let error {
+                    result = .failure(error)
+                } else if let tempURL {
+                    do {
+                        try FileManager.default.createDirectory(
+                            at: destination.deletingLastPathComponent(),
+                            withIntermediateDirectories: true
+                        )
+                        try? FileManager.default.removeItem(at: destination)
+                        try FileManager.default.moveItem(at: tempURL, to: destination)
+                        result = .success(())
+                    } catch {
+                        result = .failure(error)
+                    }
+                } else {
+                    result = .failure(AgentLocalModelDownloadError.missingTemporaryFile)
+                }
                 let downloader = self
                 Task { @MainActor in
                     guard let downloader else {
@@ -557,25 +571,7 @@ final class AgentLocalModelDownloader: ObservableObject {
                     }
                     downloader.observer?.invalidate()
                     downloader.observer = nil
-                    if let error {
-                        completion.resume(.failure(error))
-                        return
-                    }
-                    guard let tempURL else {
-                        completion.resume(.failure(AgentLocalModelDownloadError.missingTemporaryFile))
-                        return
-                    }
-                    do {
-                        try FileManager.default.createDirectory(
-                            at: destination.deletingLastPathComponent(),
-                            withIntermediateDirectories: true
-                        )
-                        try? FileManager.default.removeItem(at: destination)
-                        try FileManager.default.moveItem(at: tempURL, to: destination)
-                        completion.resume(.success(()))
-                    } catch {
-                        completion.resume(.failure(error))
-                    }
+                    completion.resume(result)
                 }
             }
             self.task = downloadTask

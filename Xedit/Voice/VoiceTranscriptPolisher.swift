@@ -30,12 +30,13 @@ nonisolated enum VoiceTranscriptPolisher {
         )
 
         for configuration in configurations {
-            let client = await AgentClient(configuration: configuration.normalized)
+            let normalizedConfiguration = await MainActor.run { configuration.normalized }
+            let client = await AgentClient(configuration: normalizedConfiguration)
             let collector = CompressionSummaryCollector()
             let messages = AgentLocalModelPrompting.messagesWithLanguageInstruction(
                 systemPrompt: system.content,
                 userMessages: [payload],
-                configuration: configuration.normalized
+                configuration: normalizedConfiguration
             )
             do {
                 try await client.streamChat(messages: messages) { event in

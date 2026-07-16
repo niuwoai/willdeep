@@ -17,6 +17,7 @@ struct EditorDefinitionLocation: Equatable, Sendable {
 
 nonisolated enum EditorDefinitionResolver {
     private static let maxIndexedFiles = 4_000
+    private static let maxTraversalNodes = 50_000
     private static let maxFileBytes = 1_048_576
 
     private static let skippedDirectoryNames: Set<String> = [
@@ -106,7 +107,10 @@ nonisolated enum EditorDefinitionResolver {
         ) else { return [] }
 
         var urls: [URL] = []
+        var visited = 0
         for case let url as URL in enumerator {
+            visited += 1
+            if visited > maxTraversalNodes || Task.isCancelled { break }
             let name = url.lastPathComponent
             if skippedDirectoryNames.contains(name) {
                 enumerator.skipDescendants()
@@ -119,6 +123,7 @@ nonisolated enum EditorDefinitionResolver {
             guard (values.fileSize ?? 0) <= maxFileBytes else { continue }
             guard supports(url) else { continue }
             urls.append(url)
+            if urls.count >= maxIndexedFiles { break }
         }
         return urls.sorted { $0.path < $1.path }
     }

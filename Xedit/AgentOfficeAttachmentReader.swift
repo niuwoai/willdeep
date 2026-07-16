@@ -8,6 +8,7 @@
 
 import Foundation
 import PDFKit
+import Darwin
 
 nonisolated enum AgentOfficeAttachmentReader {
     private static let maxTextCharacters = 120_000
@@ -15,6 +16,9 @@ nonisolated enum AgentOfficeAttachmentReader {
     private static let maxWorkbookSheets = 8
     private static let maxSheetRows = 40
     private static let maxSheetColumns = 20
+    private static let maxArchiveEntryBytes = 16 * 1_024 * 1_024
+    private static let maxSharedStringCount = 100_000
+    private static let maxSharedStringCharacters = 2_000_000
 
     static func read(url: URL) -> String? {
         switch url.pathExtension.lowercased() {
@@ -32,10 +36,10 @@ nonisolated enum AgentOfficeAttachmentReader {
     static func extractDOCXText(url: URL) -> String? {
         guard let xml = unzipEntry("word/document.xml", from: url) else { return nil }
         let parser = XMLParser(data: xml)
-        let delegate = DOCXTextDelegate()
+        let delegate = DOCXTextDelegate(maxCharacters: maxTextCharacters)
         parser.delegate = delegate
-        guard parser.parse() else { return nil }
-        let text = delegate.text.trimmingCharacters(in: .whitespacesAndNewlines)
+        _ = parser.parse()
+        let text = delegate.extractedText.trimmingCharacters(in: .whitespacesAndNewlines)
         return text.isEmpty ? nil : text
     }
 
@@ -122,7 +126,10 @@ nonisolated enum AgentOfficeAttachmentReader {
 
     private static func parseSharedStrings(_ data: Data) -> [String] {
         let parser = XMLParser(data: data)
-        let delegate = SharedStringsDelegate()
+        let delegate = SharedStringsDelegate(
+            maxValues: maxSharedStringCount,
+            maxCharacters: maxSharedStringCharacters
+        )
         parser.delegate = delegate
         _ = parser.parse()
         return delegate.values
@@ -130,7 +137,11 @@ nonisolated enum AgentOfficeAttachmentReader {
 
     private static func parseWorksheetRows(_ data: Data, sharedStrings: [String]) -> [[String]] {
         let parser = XMLParser(data: data)
-        let delegate = WorksheetRowsDelegate(sharedStrings: sharedStrings)
+        let delegate = WorksheetRowsDelegate(
+            sharedStrings: sharedStrings,
+            maxRows: maxSheetRows,
+            maxColumns: maxSheetColumns
+        )
         parser.delegate = delegate
         _ = parser.parse()
         return delegate.rows
@@ -176,9 +187,39 @@ nonisolated enum AgentOfficeAttachmentReader {
             return nil
         }
 
-        let data = output.fileHandleForReading.readDataToEndOfFile()
+        let timeout = DispatchWorkItem {
+            if process.isRunning {
+                process.terminate()
+                let pid = process.processIdentifier
+                DispatchQueue.global(qos: .utility).asyncAfter(deadline: .now() + 2) {
+                    if process.isRunning { kill(pid, SIGKILL) }
+                }
+            }
+        }
+        DispatchQueue.global(qos: .utility).asyncAfter(deadline: .now() + 30, execute: timeout)
+
+        var data = Data()
+        data.reserveCapacity(min(maxArchiveEntryBytes, 512 * 1_024))
+        var exceededBudget = false
+        while true {
+            let chunk: Data
+            do {
+                guard let next = try output.fileHandleForReading.read(upToCount: 64 * 1_024), !next.isEmpty else { break }
+                chunk = next
+            } catch {
+                break
+            }
+            let remaining = maxArchiveEntryBytes - data.count
+            if remaining > 0 { data.append(chunk.prefix(remaining)) }
+            if chunk.count > remaining {
+                exceededBudget = true
+                process.terminate()
+                break
+            }
+        }
         process.waitUntilExit()
-        guard process.terminationStatus == 0 else { return nil }
+        timeout.cancel()
+        guard !exceededBudget, process.terminationStatus == 0 else { return nil }
         return data.isEmpty ? nil : data
     }
 
@@ -201,10 +242,21 @@ private nonisolated struct WorkbookSheet {
 }
 
 private nonisolated final class DOCXTextDelegate: NSObject, XMLParserDelegate {
+    private let maxCharacters: Int
     private var currentElement = ""
     private var buffer = ""
     private var paragraphStyle = ""
     private(set) var text = ""
+
+    var extractedText: String {
+        let trailingText = buffer.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trailingText.isEmpty else { return text }
+        return text.isEmpty ? trailingText : "\(text)\n\(trailingText)"
+    }
+
+    init(maxCharacters: Int) {
+        self.maxCharacters = maxCharacters
+    }
 
     func parser(_ parser: XMLParser, didStartElement elementName: String, namespaceURI: String?, qualifiedName qName: String?, attributes attributeDict: [String: String] = [:]) {
         currentElement = elementName
@@ -221,7 +273,9 @@ private nonisolated final class DOCXTextDelegate: NSObject, XMLParserDelegate {
 
     func parser(_ parser: XMLParser, foundCharacters string: String) {
         if currentElement == "w:t" || currentElement == "t" {
-            buffer += string
+            let remaining = max(0, maxCharacters - text.count - buffer.count)
+            if remaining > 0 { buffer += String(string.prefix(remaining)) }
+            if remaining == 0 || string.count > remaining { parser.abortParsing() }
         }
     }
 
@@ -276,10 +330,18 @@ private nonisolated final class WorkbookRelationshipsDelegate: NSObject, XMLPars
 }
 
 private nonisolated final class SharedStringsDelegate: NSObject, XMLParserDelegate {
+    private let maxValues: Int
+    private let maxCharacters: Int
     private var inStringItem = false
     private var inText = false
     private var buffer = ""
     private(set) var values: [String] = []
+    private var characterCount = 0
+
+    init(maxValues: Int, maxCharacters: Int) {
+        self.maxValues = maxValues
+        self.maxCharacters = maxCharacters
+    }
 
     func parser(_ parser: XMLParser, didStartElement elementName: String, namespaceURI: String?, qualifiedName qName: String?, attributes attributeDict: [String: String] = [:]) {
         if elementName == "si" {
@@ -291,7 +353,10 @@ private nonisolated final class SharedStringsDelegate: NSObject, XMLParserDelega
     }
 
     func parser(_ parser: XMLParser, foundCharacters string: String) {
-        if inText { buffer += string }
+        guard inText else { return }
+        let remaining = max(0, maxCharacters - characterCount - buffer.count)
+        if remaining > 0 { buffer += String(string.prefix(remaining)) }
+        if remaining == 0 || string.count > remaining { parser.abortParsing() }
     }
 
     func parser(_ parser: XMLParser, didEndElement elementName: String, namespaceURI: String?, qualifiedName qName: String?) {
@@ -299,14 +364,20 @@ private nonisolated final class SharedStringsDelegate: NSObject, XMLParserDelega
             inText = false
         } else if elementName == "si" {
             values.append(buffer)
+            characterCount += buffer.count
             buffer = ""
             inStringItem = false
+            if values.count >= maxValues || characterCount >= maxCharacters {
+                parser.abortParsing()
+            }
         }
     }
 }
 
 private nonisolated final class WorksheetRowsDelegate: NSObject, XMLParserDelegate {
     private let sharedStrings: [String]
+    private let maxRows: Int
+    private let maxColumns: Int
     private var currentCellReference = ""
     private var currentCellType = ""
     private var currentCellValue = ""
@@ -316,8 +387,10 @@ private nonisolated final class WorksheetRowsDelegate: NSObject, XMLParserDelega
     private var inFormula = false
     private(set) var rows: [[String]] = []
 
-    init(sharedStrings: [String]) {
+    init(sharedStrings: [String], maxRows: Int, maxColumns: Int) {
         self.sharedStrings = sharedStrings
+        self.maxRows = maxRows
+        self.maxColumns = maxColumns
     }
 
     func parser(_ parser: XMLParser, didStartElement elementName: String, namespaceURI: String?, qualifiedName qName: String?, attributes attributeDict: [String: String] = [:]) {
@@ -354,12 +427,15 @@ private nonisolated final class WorksheetRowsDelegate: NSObject, XMLParserDelega
             inFormula = false
         case "c":
             let index = columnIndex(from: currentCellReference)
-            currentRow[index] = resolvedCellValue()
+            if index < maxColumns {
+                currentRow[index] = String(resolvedCellValue().prefix(4_096))
+            }
         case "row":
             if !currentRow.isEmpty {
-                let maxIndex = currentRow.keys.max() ?? 0
+                let maxIndex = min(currentRow.keys.max() ?? 0, maxColumns - 1)
                 rows.append((0...maxIndex).map { currentRow[$0] ?? "" })
             }
+            if rows.count >= maxRows { parser.abortParsing() }
         default:
             break
         }

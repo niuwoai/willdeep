@@ -20,6 +20,8 @@ struct EditorSettingsView: View {
     @State private var fetchedImageModels: [String] = []
     @State private var isFetchingImageModels = false
     @State private var imageModelFetchMessage = ""
+    @State var isInstallingWorkspaceWallpaper = false
+    @State var workspaceWallpaperErrorMessage = ""
 
     // Local buffers for the Agent settings text fields. The previous
     // implementation bound directly to `appState.agentConfiguration`,

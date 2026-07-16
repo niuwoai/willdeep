@@ -112,15 +112,10 @@ struct VideoSpeedupWorkflow: WorkflowDefinition {
         let p = Process()
         p.launchPath = "/usr/bin/env"
         p.arguments = ["-S", "ffmpeg"] + arguments
-        p.standardOutput = Pipe()
-        let errPipe = Pipe()
-        p.standardError = errPipe
-        try p.run()
-        await AgentProcessSupport.waitUntilExit(p)
-        if p.terminationStatus != 0 {
-            let err = String(data: errPipe.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? ""
-            throw NSError(domain: "video-speedup", code: Int(p.terminationStatus), userInfo: [
-                NSLocalizedDescriptionKey: "ffmpeg exit \(p.terminationStatus): \(err.suffix(400))"
+        let result = try await AgentSubprocess.run(p)
+        if result.exitStatus != 0 {
+            throw NSError(domain: "video-speedup", code: Int(result.exitStatus), userInfo: [
+                NSLocalizedDescriptionKey: "ffmpeg exit \(result.exitStatus): \(result.stderrText.suffix(400))"
             ])
         }
     }

@@ -29,7 +29,7 @@ enum AgentCaptureTools {
 
     /// Extra locations appended to PATH so `adb` / `xcrun` resolve even when
     /// the host process was launched from Finder (no login shell PATH).
-    private static let extraPaths = [
+    nonisolated private static let extraPaths = [
         "/usr/bin",
         "/usr/sbin",
         "/bin",
@@ -178,13 +178,14 @@ enum AgentCaptureTools {
             environment["PATH"] = dedupedPath
             process.environment = environment
 
-            let stdoutPipe = Pipe()
-            let stderrPipe = Pipe()
-            process.standardOutput = stdoutPipe
-            process.standardError = stderrPipe
-
+            let result: AgentSubprocess.Output
             do {
-                try process.run()
+                result = try await AgentSubprocess.run(
+                    process,
+                    timeout: 30,
+                    stdoutLimit: stdoutToFile == nil ? 64 * 1_024 : 64 * 1_024 * 1_024,
+                    stderrLimit: 256 * 1_024
+                )
             } catch {
                 throw AgentToolError.commandFailed(
                     127,
@@ -192,18 +193,17 @@ enum AgentCaptureTools {
                 )
             }
 
-            let stdoutData = stdoutPipe.fileHandleForReading.readDataToEndOfFile()
-            let stderrData = stderrPipe.fileHandleForReading.readDataToEndOfFile()
-            process.waitUntilExit()
-
-            guard process.terminationStatus == 0 else {
-                let stderrText = String(data: stderrData, encoding: .utf8)?
-                    .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-                throw AgentToolError.commandFailed(process.terminationStatus, stderrText.isEmpty ? "screenshot command failed" : stderrText)
+            guard result.exitStatus == 0, !result.timedOut else {
+                let stderrText = result.stderrText.trimmingCharacters(in: .whitespacesAndNewlines)
+                let message = result.timedOut ? "screenshot command timed out" : (stderrText.isEmpty ? "screenshot command failed" : stderrText)
+                throw AgentToolError.commandFailed(result.exitStatus, message)
             }
 
             if let stdoutToFile {
-                try stdoutData.write(to: stdoutToFile)
+                guard !result.stdoutWasTruncated else {
+                    throw AgentToolError.commandFailed(1, "screenshot output exceeded the 64 MiB safety limit")
+                }
+                try result.stdout.write(to: stdoutToFile)
             }
         }.value
     }

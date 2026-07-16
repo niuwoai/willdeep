@@ -82,6 +82,7 @@
     "desktop-pet.appearance.cloud-forge" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Cloud-forge engineer" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "云锻工程师" } } } },
     "desktop-pet.appearance.code-shiba" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Code Shiba" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "代码柴犬" } } } },
     "desktop-pet.appearance.cosmic-scholar" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Cosmic scholar" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "宇宙学者" } } } },
+    "desktop-pet.appearance.cosmic-downsizer" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Cosmic snapper" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "宇宙响指官" } } } },
     "desktop-pet.appearance.feral-mechanic" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Feral mechanic" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "爪痕硬汉" } } } },
     "desktop-pet.appearance.helpdesk-hero" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Helpdesk hero" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "红帽客服英雄" } } } },
     "desktop-pet.appearance.plant-robot" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Plant robot" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "植能机器人" } } } },
@@ -3924,19 +3925,19 @@
       }
     },
     "agent-terminal.no-shortcuts" : {
-      "comment" : "Empty state below the terminal recording controls",
+      "comment" : "Empty state below the terminal shortcut controls",
       "extractionState" : "manual",
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "No recordings yet"
+            "value" : "No shortcuts yet"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "还没有录制记录"
+            "value" : "还没有终端捷径"
           }
         }
       }
@@ -3948,13 +3949,13 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Recent recordings"
+            "value" : "Recent shortcuts"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "最近录制"
+            "value" : "最近捷径"
           }
         }
       }
@@ -4078,7 +4079,7 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "终端录制"
+            "value" : "终端捷径"
           }
         }
       }
@@ -4300,6 +4301,40 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "还有 %@ 个密码占位待本地填写"
+          }
+        }
+      }
+    },
+    "agent-terminal.shortcut.clone" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Clone"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "克隆"
+          }
+        }
+      }
+    },
+    "agent-terminal.shortcut.copy-title" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@-Copy"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@-副本"
           }
         }
       }
@@ -10062,276 +10097,6 @@
         }
       }
     },
-    "empty-state.no-file-open.subtitle" : {
-      "comment" : "Text() in EmptyProjectEditorView, descriptive subtitle",
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Select a file from the sidebar to start editing."
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "从侧边栏选择文件开始编辑。"
-          }
-        }
-      }
-    },
-    "empty-state.no-file-open.title" : {
-      "comment" : "Text() in EmptyProjectEditorView, detail-pane empty state title",
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "No File Open"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "未打开文件"
-          }
-        }
-      }
-    },
-    "empty-state.no-folder-open.subtitle" : {
-      "comment" : "Text() in EmptyWorkspaceHero, descriptive subtitle",
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Choose a file or folder to start editing — or jump straight into Agent mode for a workspace-free chat."
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "选择文件或文件夹开始编辑 — 或直接进入 Agent 模式进行无工作区的聊天。"
-          }
-        }
-      }
-    },
-    "empty-state.no-folder-open.title" : {
-      "comment" : "Text() in EmptyWorkspaceHero, workspace-level empty state title",
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "No Folder Open"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "未打开文件夹"
-          }
-        }
-      }
-    },
-    "empty-state.open-file" : {
-      "comment" : "Label() button text in EmptyProjectEditorView and EmptyWorkspaceHero",
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Open File"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "打开文件"
-          }
-        }
-      }
-    },
-    "empty-state.open-file.accessibility-label" : {
-      "comment" : ".accessibilityLabel() for Open File button",
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Open File"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "打开文件"
-          }
-        }
-      }
-    },
-    "empty-state.open-file.help" : {
-      "comment" : ".help() tooltip for Open File button",
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Open File"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "打开文件"
-          }
-        }
-      }
-    },
-    "empty-state.open-folder" : {
-      "comment" : "Label() button text in EmptyWorkspaceHero",
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Open Folder"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "打开文件夹"
-          }
-        }
-      }
-    },
-    "empty-state.open-folder.accessibility-label" : {
-      "comment" : ".accessibilityLabel() for Open Folder button",
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Open Folder"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "打开文件夹"
-          }
-        }
-      }
-    },
-    "empty-state.open-folder.help" : {
-      "comment" : ".help() tooltip for Open Folder button",
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Open Folder"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "打开文件夹"
-          }
-        }
-      }
-    },
-    "empty-state.quick-open" : {
-      "comment" : "Label() button text in EmptyProjectEditorView",
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Quick Open"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "快速打开"
-          }
-        }
-      }
-    },
-    "empty-state.quick-open.accessibility-label" : {
-      "comment" : ".accessibilityLabel() for Quick Open button",
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Quick Open"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "快速打开"
-          }
-        }
-      }
-    },
-    "empty-state.quick-open.help" : {
-      "comment" : ".help() tooltip for Quick Open button",
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Quick Open"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "快速打开"
-          }
-        }
-      }
-    },
-    "empty-state.recent-files" : {
-      "comment" : "title parameter for EmptyWorkspaceRecentSection (section header)",
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Recent Files"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "最近的文件"
-          }
-        }
-      }
-    },
-    "empty-state.recent-folders" : {
-      "comment" : "title parameter for EmptyWorkspaceRecentSection (section header)",
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Recent Folders"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "最近的文件夹"
-          }
-        }
-      }
-    },
     "empty-state.subtitle.no-folder" : {
       "comment" : "subtitle text when no folder opened",
       "extractionState" : "manual",
@@ -14999,6 +14764,74 @@
         }
       }
     },
+    "settings.background-image-mode.center" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Center"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "居中"
+          }
+        }
+      }
+    },
+    "settings.background-image-mode.fill" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Fill & Crop"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "填充并裁剪"
+          }
+        }
+      }
+    },
+    "settings.background-image-mode.fit" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Fit"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "适应"
+          }
+        }
+      }
+    },
+    "settings.background-image-mode.stretch" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Stretch"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "拉伸"
+          }
+        }
+      }
+    },
     "settings.button.choose" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -15097,6 +14930,23 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "选择编辑器背景图片"
+          }
+        }
+      }
+    },
+    "settings.choose-workspace-wallpaper.title" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Choose Workspace Wallpaper"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "选择工作区壁纸"
           }
         }
       }
@@ -23460,6 +23310,23 @@
         }
       }
     },
+    "settings.section.workspace-wallpaper" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Workspace Wallpaper"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "工作区壁纸"
+          }
+        }
+      }
+    },
     "settings.section.editor-text" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -27998,6 +27865,193 @@
         }
       }
     },
+    "settings.workspace-wallpaper.built-in" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Built-in Wallpapers"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "内置壁纸"
+          }
+        }
+      }
+    },
+    "settings.workspace-wallpaper.help" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Choose a built-in wallpaper or your own image for both the Editor and Agent workspace. WillDeep keeps a private managed copy of custom images."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "选择内置壁纸或自己的图片，同时应用到编辑器和 Agent 工作区。WillDeep 会为自定义图片保存一份仅供本机使用的副本。"
+          }
+        }
+      }
+    },
+    "settings.workspace-wallpaper.install-failed" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "WillDeep couldn't use that image. Choose a valid image smaller than 64 MB and 80 megapixels."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "WillDeep 无法使用这张图片。请选择小于 64 MB、像素总量不超过 8000 万的有效图片。"
+          }
+        }
+      }
+    },
+    "settings.workspace-wallpaper.name.aurora-sanctuary" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Aurora Sanctuary"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "极光圣境"
+          }
+        }
+      }
+    },
+    "settings.workspace-wallpaper.name.coral-realm" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Coral Realm"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "珊瑚秘境"
+          }
+        }
+      }
+    },
+    "settings.workspace-wallpaper.name.emerald-steppe" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Emerald Steppe"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "碧野长河"
+          }
+        }
+      }
+    },
+    "settings.workspace-wallpaper.name.glacier-mirror" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Glacier Mirror"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "雪峰镜湖"
+          }
+        }
+      }
+    },
+    "settings.workspace-wallpaper.name.pastel-drift" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Pastel Drift"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "柔光流岚"
+          }
+        }
+      }
+    },
+    "settings.workspace-wallpaper.name.ringed-world" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ringed World"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "环星晨曦"
+          }
+        }
+      }
+    },
+    "settings.workspace-wallpaper.name.sky-garden" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sky Garden"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "天空花园"
+          }
+        }
+      }
+    },
+    "settings.workspace-wallpaper.name.spring-qipao" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Spring Qipao"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "春庭旗韵"
+          }
+        }
+      }
+    },
     "settings.window.title" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -28237,6 +28291,60 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "保存"
+          }
+        }
+      }
+    },
+    "sidebar.session-unavailable.alert-message" : {
+      "comment" : "Alert body shown when a sidebar session metadata row no longer has a readable history file; %@ is the session title",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "“%@” could not be opened because its local history file is missing. WillDeep kept the sidebar entry so you can restore the file from backup. No new data was written over it."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "“%@”的本地历史文件缺失。WillDeep 已保留侧边栏条目，便于你从备份恢复；不会用空会话覆盖原文件。"
+          }
+        }
+      }
+    },
+    "sidebar.session-unavailable.alert-title" : {
+      "comment" : "Alert title shown when a session history file is missing",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Conversation Unavailable"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "无法打开会话"
+          }
+        }
+      }
+    },
+    "sidebar.session-unavailable.confirm" : {
+      "comment" : "Dismiss button for the missing session history alert",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "OK"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "知道了"
           }
         }
       }

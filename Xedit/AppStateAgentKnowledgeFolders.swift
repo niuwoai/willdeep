@@ -78,6 +78,20 @@ extension AppState {
         for key in taskKeys {
             agentKnowledgeFolderReindexTasks.removeValue(forKey: key)?.cancel()
         }
+        let indexKeys = agentKnowledgeFolderIndexTasks.keys.filter { key in
+            if let folderID { return key == sessionPrefix + folderID }
+            return key.hasPrefix(sessionPrefix)
+        }
+        for key in indexKeys {
+            agentKnowledgeFolderIndexTasks.removeValue(forKey: key)?.cancel()
+        }
+        let discoveryKeys = agentKnowledgeFolderWatcherDiscoveryTasks.keys.filter { key in
+            if let folderID { return key == sessionPrefix + folderID }
+            return key.hasPrefix(sessionPrefix)
+        }
+        for key in discoveryKeys {
+            agentKnowledgeFolderWatcherDiscoveryTasks.removeValue(forKey: key)?.cancel()
+        }
     }
 
     private func indexAgentKnowledgeFolder(id: String, in runtime: AgentRuntime) {
@@ -87,13 +101,15 @@ extension AppState {
         runtime.knowledgeFolders[index].errorMessage = nil
         runtime.persist(touchUpdatedAt: false)
 
-        Task { [weak self, weak runtime] in
+        let taskKey = runtime.id.uuidString + "|" + id
+        agentKnowledgeFolderIndexTasks[taskKey]?.cancel()
+        agentKnowledgeFolderIndexTasks[taskKey] = Task { [weak self, weak runtime] in
             let result = await AgentKnowledgeFolderIndexer.index(
                 folderURL: folder.url,
                 existingDocuments: folder.documents,
                 excludedPatterns: folder.excludedPatterns
             )
-            guard let self, let runtime,
+            guard !Task.isCancelled, let self, let runtime,
                   let currentIndex = runtime.knowledgeFolders.firstIndex(where: { $0.id == id }) else { return }
             runtime.knowledgeFolders[currentIndex].documents = result.documents
             runtime.knowledgeFolders[currentIndex].skippedFileCount = result.skippedFileCount
@@ -105,6 +121,7 @@ extension AppState {
                 folder: runtime.knowledgeFolders[currentIndex],
                 runtime: runtime
             )
+            agentKnowledgeFolderIndexTasks[taskKey] = nil
         }
     }
 
@@ -112,24 +129,56 @@ extension AppState {
         folder: AgentKnowledgeFolder,
         runtime: AgentRuntime
     ) {
-        cancelAgentKnowledgeFolderWatchers(sessionID: runtime.id, folderID: folder.id)
-
-        var directoryURLs: [URL] = [folder.url]
-        if let enumerator = FileManager.default.enumerator(
-            at: folder.url,
-            includingPropertiesForKeys: [.isDirectoryKey],
-            options: [.skipsHiddenFiles, .skipsPackageDescendants]
-        ) {
-            while let url = enumerator.nextObject() as? URL, directoryURLs.count < 128 {
-                if (try? url.resourceValues(forKeys: [.isDirectoryKey]).isDirectory) == true {
-                    directoryURLs.append(url)
-                }
-            }
+        let watcherPrefix = runtime.id.uuidString + "|" + folder.id + "|"
+        let watcherKeys = agentKnowledgeFolderWatchers.keys.filter { $0.hasPrefix(watcherPrefix) }
+        for key in watcherKeys {
+            agentKnowledgeFolderWatchers.removeValue(forKey: key)?.cancel()
         }
 
-        for directoryURL in directoryURLs {
+        let discoveryKey = runtime.id.uuidString + "|" + folder.id
+        agentKnowledgeFolderWatcherDiscoveryTasks[discoveryKey]?.cancel()
+        agentKnowledgeFolderWatcherDiscoveryTasks[discoveryKey] = Task { [weak self, weak runtime] in
+            let directoryURLs = await Task.detached(priority: .utility) {
+                Self.knowledgeWatcherDirectories(root: folder.url)
+            }.value
+            guard !Task.isCancelled, let self, let runtime,
+                  runtime.knowledgeFolders.contains(where: { $0.id == folder.id }) else { return }
+            for directoryURL in directoryURLs {
+                installAgentKnowledgeFolderWatcher(
+                    directoryURL: directoryURL,
+                    folder: folder,
+                    runtime: runtime
+                )
+            }
+            agentKnowledgeFolderWatcherDiscoveryTasks[discoveryKey] = nil
+        }
+    }
+
+    private nonisolated static func knowledgeWatcherDirectories(root: URL) -> [URL] {
+        var directoryURLs: [URL] = [root]
+        guard let enumerator = FileManager.default.enumerator(
+            at: root,
+            includingPropertiesForKeys: [.isDirectoryKey],
+            options: [.skipsHiddenFiles, .skipsPackageDescendants]
+        ) else { return directoryURLs }
+        var visited = 0
+        while let url = enumerator.nextObject() as? URL, directoryURLs.count < 128, visited < 10_000 {
+            visited += 1
+            if Task.isCancelled { break }
+            if (try? url.resourceValues(forKeys: [.isDirectoryKey]).isDirectory) == true {
+                directoryURLs.append(url)
+            }
+        }
+        return directoryURLs
+    }
+
+    private func installAgentKnowledgeFolderWatcher(
+        directoryURL: URL,
+        folder: AgentKnowledgeFolder,
+        runtime: AgentRuntime
+    ) {
             let descriptor = open(directoryURL.path, O_EVTONLY)
-            guard descriptor >= 0 else { continue }
+            guard descriptor >= 0 else { return }
             let key = knowledgeFolderWatcherKey(
                 sessionID: runtime.id,
                 folderID: folder.id,
@@ -151,7 +200,6 @@ extension AppState {
             }
             agentKnowledgeFolderWatchers[key] = source
             source.resume()
-        }
     }
 
     private func scheduleAgentKnowledgeFolderReindex(folderID: String, runtime: AgentRuntime) {

@@ -68,14 +68,16 @@ enum VideoToolPreflight {
         let process = Process()
         process.launchPath = launchPath
         process.arguments = arguments
-        process.standardOutput = Pipe()
-        process.standardError = Pipe()
         do {
-            try process.run()
+            let output = try AgentSubprocess.runSynchronously(
+                process,
+                timeout: 10,
+                stdoutLimit: 64 * 1_024,
+                stderrLimit: 64 * 1_024
+            )
+            return RunResult(exitCode: output.exitStatus)
         } catch {
             return RunResult(exitCode: -1)
         }
-        process.waitUntilExit()
-        return RunResult(exitCode: process.terminationStatus)
     }
 }

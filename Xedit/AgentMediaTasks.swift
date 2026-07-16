@@ -627,7 +627,10 @@ final class AgentMediaTaskPoller {
         loopTask = Task { [weak self, weak registry] in
             while !Task.isCancelled {
                 try? await Task.sleep(nanoseconds: tickNanoseconds)
-                guard let self, let registry else { continue }
+                // return, not continue: once the poller or registry is
+                // gone this loop can never do work again, and `continue`
+                // would leave it ticking every 2s for the app's lifetime.
+                guard let self, let registry else { return }
                 self.pollDueTasks(in: registry)
             }
         }
@@ -1018,7 +1021,57 @@ struct AgentMediaTasksPanel: View {
         let finished = scopedTasks.filter { !$0.isActive && !$0.needsAttention }.count
         let completedImages = scopedTasks.filter(AgentMediaTaskChatHandoff.hasCompletedImageArtifact).count
         let completedVideos = scopedTasks.filter(AgentMediaTaskChatHandoff.hasCompletedVideoArtifact).count
-        return AgentMediaPanelSection(title: "媒体任务", systemImage: "photo.stack") {
+        return VStack(alignment: .leading, spacing: 10) {
+            HStack(spacing: 8) {
+                Image(systemName: "photo.stack")
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(Color.purple)
+                VStack(alignment: .leading, spacing: 1) {
+                    Text("会话媒体")
+                        .font(.system(size: 12, weight: .semibold))
+                    Text("预览、编辑、蒙版与任务状态集中处理")
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                }
+                Spacer(minLength: 4)
+                Menu {
+                    if !staleRefreshableScopedTasks.isEmpty {
+                        Button("刷新卡住的任务") {
+                            refreshStaleActiveTasks()
+                        }
+                        .disabled(isRefreshingVisible)
+                    }
+                    if !refreshableScopedTasks.isEmpty {
+                        Button("刷新运行中") {
+                            refreshVisibleActiveTasks()
+                        }
+                        .disabled(isRefreshingVisible)
+                        .help("立即刷新当前筛选范围内的运行中任务")
+                    }
+                    if !scopedTasks.isEmpty {
+                        Button("发送状态到聊天") {
+                            appendScopedStatusToChat()
+                        }
+                        .help("把当前筛选范围内的媒体任务状态摘要发送到聊天")
+                    }
+                    if scope != nil, !retryableScopedTasks.isEmpty {
+                        Divider()
+                        Button("重试失败任务") {
+                            appendScopedRetryToChat()
+                        }
+                    }
+                } label: {
+                    Image(systemName: "ellipsis.circle")
+                        .font(.system(size: 13, weight: .semibold))
+                        .frame(width: 22, height: 22)
+                }
+                .menuStyle(.borderlessButton)
+                .menuIndicator(.hidden)
+                .focusable(false)
+                .help("媒体任务批量操作")
+            }
+
             if let scope {
                 HStack(spacing: 6) {
                     Image(systemName: "line.3.horizontal.decrease.circle")
@@ -1056,80 +1109,61 @@ struct AgentMediaTasksPanel: View {
             .focusable(false)
             .help("按任务状态筛选")
 
-            AgentMediaMetaRow(label: "当前显示", value: "\(tasks.count)")
-            if scope != nil || statusFilter != .all {
-                AgentMediaMetaRow(label: "筛选前", value: "\(scopedTasks.count)")
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 6) {
+                    mediaMetricChip("显示", value: tasks.count, tint: .secondary)
+                    if active > 0 {
+                        mediaMetricChip("运行中", value: active, tint: .blue)
+                    }
+                    if stale > 0 {
+                        mediaMetricChip("卡住", value: stale, tint: .orange)
+                    }
+                    if failed > 0 {
+                        mediaMetricChip("需处理", value: failed, tint: .red)
+                    }
+                    if finished > 0 {
+                        mediaMetricChip("完成", value: finished, tint: .green)
+                    }
+                    if completedImages > 0 {
+                        mediaMetricChip("图片", value: completedImages, tint: .purple)
+                    }
+                    if completedVideos > 0 {
+                        mediaMetricChip("视频", value: completedVideos, tint: .indigo)
+                    }
+                }
             }
-            AgentMediaMetaRow(label: "运行中", value: "\(active)")
-            if stale > 0 {
-                AgentMediaMetaRow(label: "可能卡住", value: "\(stale)")
-            }
-            if failed > 0 {
-                AgentMediaMetaRow(label: "需要处理", value: "\(failed)")
-            }
-            if finished > 0 {
-                AgentMediaMetaRow(label: "已完成", value: "\(finished)")
-            }
-            if completedImages > 0 {
-                AgentMediaMetaRow(label: "完成图片", value: "\(completedImages)")
-            }
-            if completedVideos > 0 {
-                AgentMediaMetaRow(label: "完成视频", value: "\(completedVideos)")
-            }
+
             mediaTaskQuickFilters(active: active, stale: stale, failed: failed, finished: finished)
-            if !staleRefreshableScopedTasks.isEmpty {
-                Button {
-                    refreshStaleActiveTasks()
-                } label: {
-                    Label(
-                        isRefreshingVisible ? "刷新中" : "刷新卡住",
-                        systemImage: "clock.arrow.circlepath"
-                    )
-                    .font(.caption)
-                }
-                .buttonStyle(.borderless)
-                .focusable(false)
-                .disabled(isRefreshingVisible)
-                .help("立即刷新当前筛选范围内长时间未更新的运行中任务")
-            }
-            if !refreshableScopedTasks.isEmpty {
-                Button {
-                    refreshVisibleActiveTasks()
-                } label: {
-                    Label(
-                        isRefreshingVisible ? "刷新中" : "刷新运行中",
-                        systemImage: "arrow.clockwise"
-                    )
-                    .font(.caption)
-                }
-                .buttonStyle(.borderless)
-                .focusable(false)
-                .disabled(isRefreshingVisible)
-                .help("立即刷新当前筛选范围内的运行中任务")
-            }
-            if !scopedTasks.isEmpty {
-                Button {
-                    appendScopedStatusToChat()
-                } label: {
-                    Label("发送状态到聊天", systemImage: "text.bubble")
-                        .font(.caption)
-                }
-                .buttonStyle(.borderless)
-                .focusable(false)
-                .help("把当前筛选范围内的媒体任务状态摘要发送到聊天")
-            }
-            if scope != nil, !retryableScopedTasks.isEmpty {
-                Button {
-                    appendScopedRetryToChat()
-                } label: {
-                    Label("重试失败任务", systemImage: "arrow.counterclockwise.circle")
-                        .font(.caption)
-                }
-                .buttonStyle(.borderless)
-                .focusable(false)
-                .help("把当前筛选范围内失败任务的批量重试请求发送到聊天")
+
+            HStack(alignment: .top, spacing: 7) {
+                Image(systemName: "paintbrush.pointed")
+                    .font(.caption2)
+                    .foregroundStyle(Color.purple)
+                Text("点击缩略图打开产物；使用右上角“…”可局部重绘、擦除蒙版、放大、加入聊天或设为分镜主图。")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
             }
         }
+        .padding(10)
+        .background(RoundedRectangle(cornerRadius: 8).fill(Color.primary.opacity(0.035)))
+        .overlay {
+            RoundedRectangle(cornerRadius: 8)
+                .stroke(Color.purple.opacity(0.14), lineWidth: 1)
+        }
+    }
+
+    private func mediaMetricChip(_ label: String, value: Int, tint: Color) -> some View {
+        HStack(spacing: 4) {
+            Text(label)
+            Text("\(value)")
+                .fontWeight(.semibold)
+        }
+        .font(.caption2)
+        .foregroundStyle(tint)
+        .padding(.horizontal, 7)
+        .padding(.vertical, 4)
+        .background(Capsule().fill(tint.opacity(0.09)))
     }
 
     private func mediaTaskQuickFilters(active: Int, stale: Int, failed: Int, finished: Int) -> some View {

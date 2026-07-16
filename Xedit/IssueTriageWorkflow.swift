@@ -23,7 +23,7 @@ struct IssueTriageWorkflow: WorkflowDefinition {
 
     func run(engine: WorkflowEngine, args: String) async throws -> String {
         do {
-            try GitHubCLIPreflight.check(workspaceURL: engine.workspaceURL)
+            try await GitHubCLIPreflight.check(workspaceURL: engine.workspaceURL)
         } catch let failure as GitHubCLIPreflight.Failure {
             return failure.errorDescription ?? "GitHub CLI preflight failed."
         }

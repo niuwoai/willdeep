@@ -841,6 +841,8 @@ struct AgentPluginPickerPill: View {
 // MARK: - Model picker pill
 
 struct ModelPickerPill: View {
+    nonisolated static let modelSymbol = "brain.head.profile"
+
     @EnvironmentObject var appState: AppState
     @Environment(\.openURL) private var openURL
     @State private var menuSnapshot = ModelPickerMenuSnapshot.empty
@@ -862,7 +864,7 @@ struct ModelPickerPill: View {
         HStack(spacing: 0) {
             Button(action: toggleModelPanel) {
                 HStack(spacing: 5) {
-                    Image(systemName: menuSnapshot.managedActive ? "sparkles" : "server.rack")
+                    Image(systemName: Self.modelSymbol)
                         .font(.system(size: 10, weight: .semibold))
                         .foregroundStyle(menuSnapshot.managedActive ? Color.teal : Color.secondary)
                     Text(pillLabel)

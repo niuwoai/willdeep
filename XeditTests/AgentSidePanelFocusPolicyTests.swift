@@ -10,6 +10,7 @@ struct AgentSidePanelFocusPolicyTests {
         "AgentSidePanel.swift",
         "AgentSidePanelTerminalView.swift",
         "AgentTaskMonitorRail.swift",
+        "AgentConversationActivityOverlay.swift",
         "AgentMediaTasks.swift",
         "AgentMediaTaskRow.swift",
         "AgentDevServerPanel.swift",
@@ -50,6 +51,28 @@ struct AgentSidePanelFocusPolicyTests {
 
         #expect(focusPolicy.lowerBound > buttonStyle.lowerBound)
         #expect(trailingSource.distance(from: buttonStyle.lowerBound, to: focusPolicy.lowerBound) < 80)
+    }
+
+    @Test("Retired task monitor cannot return from persisted session state")
+    func retiredTaskMonitorIsNormalizedOnSessionChanges() throws {
+        let source = try Self.source(named: "AgentModeView.swift")
+
+        #expect(source.contains("if appState.agentSidePanelKind == .backgroundTasks"))
+        #expect(source.contains("if newPanel == .backgroundTasks"))
+        #expect(source.contains("guard request.kind != .backgroundTasks else"))
+        #expect(source.contains("let activeSidePanel = appState.agentSidePanelKind == .backgroundTasks"))
+        #expect(source.contains("newPanel == .backgroundTasks ? nil : newPanel"))
+    }
+
+    @Test("Activity cards use a light gray border and dismiss control")
+    func activityCardsExposeDismissControlAndGrayBorder() throws {
+        let source = try Self.source(named: "AgentConversationActivityOverlay.swift")
+
+        #expect(source.contains("AgentActivityCardDismissButton"))
+        #expect(source.contains("Image(systemName: \"xmark\")"))
+        #expect(source.contains(".help(\"关闭摘要\")"))
+        #expect(source.contains("borderColor = Color(nsColor: .separatorColor)"))
+        #expect(source.contains("dismissedCardKeys.insert"))
     }
 
     @Test("Render host-verification popover for design QA")

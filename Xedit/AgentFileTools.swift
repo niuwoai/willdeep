@@ -7,7 +7,11 @@
 
 import Foundation
 
-enum AgentFileTools {
+// nonisolated + Task.detached, not bare async: with
+// SWIFT_APPROACHABLE_CONCURRENCY a nonisolated async function still runs on
+// the caller's actor, and these tools were freezing the main thread for
+// seconds per grep/search on large workspaces.
+nonisolated enum AgentFileTools {
     private static let maxFileSizeForSearch: Int = 512 * 1024
     private static let maxSearchResults = 200
     private static let maxScannedFiles = 4_000
@@ -33,59 +37,61 @@ enum AgentFileTools {
         let rootPath = root.standardizedFileURL.path
         let needle = query.lowercased()
 
-        guard let enumerator = FileManager.default.enumerator(
-            at: root,
-            includingPropertiesForKeys: [.isDirectoryKey, .isRegularFileKey, .fileSizeKey],
-            options: [.skipsHiddenFiles, .skipsPackageDescendants]
-        ) else {
-            throw AgentToolError.notFound(rootPath)
-        }
-
-        var matches: [String] = []
-        var scanned = 0
-        var visited = 0
-
-        while let url = enumerator.nextObject() as? URL {
-            visited += 1
-            if visited > maxToolTraversalNodes { break }
-            guard let values = try? url.resourceValues(forKeys: [.isDirectoryKey, .isRegularFileKey, .fileSizeKey]) else {
-                continue
+        return try await Task.detached(priority: .userInitiated) {
+            guard let enumerator = FileManager.default.enumerator(
+                at: root,
+                includingPropertiesForKeys: [.isDirectoryKey, .isRegularFileKey, .fileSizeKey],
+                options: [.skipsHiddenFiles, .skipsPackageDescendants]
+            ) else {
+                throw AgentToolError.notFound(rootPath)
             }
-            if values.isDirectory == true {
-                if ProjectDirectoryExclusions.shouldSkip(url) {
-                    enumerator.skipDescendants()
+
+            var matches: [String] = []
+            var scanned = 0
+            var visited = 0
+
+            while let url = enumerator.nextObject() as? URL {
+                visited += 1
+                if visited > maxToolTraversalNodes { break }
+                guard let values = try? url.resourceValues(forKeys: [.isDirectoryKey, .isRegularFileKey, .fileSizeKey]) else {
+                    continue
                 }
-                continue
-            }
-            guard values.isRegularFile == true else { continue }
-            scanned += 1
-            if scanned > maxScannedFiles { break }
-            if let size = values.fileSize, size > maxFileSizeForSearch { continue }
-            if AppState.isBinaryFile(at: url) { continue }
-
-            guard let data = try? Data(contentsOf: url),
-                  let content = String(data: data, encoding: .utf8) else {
-                continue
-            }
-
-            let relativePath = relativePath(of: url, root: root)
-            var lineNumber = 0
-            for line in content.split(separator: "\n", omittingEmptySubsequences: false) {
-                lineNumber += 1
-                if line.lowercased().contains(needle) {
-                    let snippet = line.prefix(200)
-                    matches.append("\(relativePath):\(lineNumber): \(snippet)")
-                    if matches.count >= limit { break }
+                if values.isDirectory == true {
+                    if ProjectDirectoryExclusions.shouldSkip(url) {
+                        enumerator.skipDescendants()
+                    }
+                    continue
                 }
-            }
-            if matches.count >= limit { break }
-        }
+                guard values.isRegularFile == true else { continue }
+                scanned += 1
+                if scanned > maxScannedFiles { break }
+                if let size = values.fileSize, size > maxFileSizeForSearch { continue }
+                if AppState.isBinaryFile(at: url) { continue }
 
-        let summary = "\(matches.count) match\(matches.count == 1 ? "" : "es") for \"\(query)\""
-        let payload = matches.isEmpty
-            ? "No matches found for \"\(query)\"."
-            : matches.joined(separator: "\n")
-        return AgentToolResult(summary: summary, payload: payload)
+                guard let data = try? Data(contentsOf: url),
+                      let content = String(data: data, encoding: .utf8) else {
+                    continue
+                }
+
+                let relativePath = relativePath(of: url, root: root)
+                var lineNumber = 0
+                for line in content.split(separator: "\n", omittingEmptySubsequences: false) {
+                    lineNumber += 1
+                    if line.lowercased().contains(needle) {
+                        let snippet = line.prefix(200)
+                        matches.append("\(relativePath):\(lineNumber): \(snippet)")
+                        if matches.count >= limit { break }
+                    }
+                }
+                if matches.count >= limit { break }
+            }
+
+            let summary = "\(matches.count) match\(matches.count == 1 ? "" : "es") for \"\(query)\""
+            let payload = matches.isEmpty
+                ? "No matches found for \"\(query)\"."
+                : matches.joined(separator: "\n")
+            return AgentToolResult(summary: summary, payload: payload)
+        }.value
     }
 
     static func grepFiles(
@@ -101,91 +107,97 @@ enum AgentFileTools {
             throw AgentToolError.missingArgument("pattern")
         }
 
-        var options: NSRegularExpression.Options = []
-        if arguments["case_sensitive"]?.rawAny as? Bool != true {
-            options.insert(.caseInsensitive)
-        }
-
-        let regex: NSRegularExpression
-        do {
-            regex = try NSRegularExpression(pattern: pattern, options: options)
-        } catch {
-            throw AgentToolError.invalidRegex(error.localizedDescription)
-        }
-
-        let searchRoot: URL
-        if let raw = arguments["path"]?.stringValue(), !raw.isEmpty {
-            searchRoot = try resolveWorkspaceURL(raw, root: root)
-            var isDirectory: ObjCBool = false
-            guard FileManager.default.fileExists(atPath: searchRoot.path, isDirectory: &isDirectory) else {
-                throw AgentToolError.notFound(raw)
-            }
-            guard isDirectory.boolValue else {
-                throw AgentToolError.notRegular(raw)
-            }
-        } else {
-            searchRoot = root
-        }
-
+        let caseSensitive = arguments["case_sensitive"]?.rawAny as? Bool == true
+        let rawSearchPath = arguments["path"]?.stringValue()
         let limit = min(max(arguments["max_results"]?.intValue() ?? 60, 1), maxSearchResults)
         let includeGlob = arguments["include"]?.stringValue().flatMap { $0.isEmpty ? nil : $0 }
 
-        guard let enumerator = FileManager.default.enumerator(
-            at: searchRoot,
-            includingPropertiesForKeys: [.isDirectoryKey, .isRegularFileKey, .fileSizeKey],
-            options: [.skipsHiddenFiles, .skipsPackageDescendants]
-        ) else {
-            throw AgentToolError.notFound(searchRoot.path)
-        }
-
-        var matches: [String] = []
-        var scanned = 0
-        var visited = 0
-
-        while let url = enumerator.nextObject() as? URL {
-            visited += 1
-            if visited > maxToolTraversalNodes { break }
-            guard let values = try? url.resourceValues(forKeys: [.isDirectoryKey, .isRegularFileKey, .fileSizeKey]) else {
-                continue
+        // The regex is compiled inside the detached closure because
+        // NSRegularExpression is not Sendable.
+        return try await Task.detached(priority: .userInitiated) {
+            var options: NSRegularExpression.Options = []
+            if !caseSensitive {
+                options.insert(.caseInsensitive)
             }
-            if values.isDirectory == true {
-                if ProjectDirectoryExclusions.shouldSkip(url) {
-                    enumerator.skipDescendants()
+
+            let regex: NSRegularExpression
+            do {
+                regex = try NSRegularExpression(pattern: pattern, options: options)
+            } catch {
+                throw AgentToolError.invalidRegex(error.localizedDescription)
+            }
+
+            let searchRoot: URL
+            if let raw = rawSearchPath, !raw.isEmpty {
+                searchRoot = try resolveWorkspaceURL(raw, root: root)
+                var isDirectory: ObjCBool = false
+                guard FileManager.default.fileExists(atPath: searchRoot.path, isDirectory: &isDirectory) else {
+                    throw AgentToolError.notFound(raw)
                 }
-                continue
-            }
-            guard values.isRegularFile == true else { continue }
-            scanned += 1
-            if scanned > maxScannedFiles { break }
-            if let size = values.fileSize, size > maxFileSizeForSearch { continue }
-            if let includeGlob, !globMatches(includeGlob, name: url.lastPathComponent) { continue }
-            if AppState.isBinaryFile(at: url) { continue }
-
-            guard let data = try? Data(contentsOf: url),
-                  let content = String(data: data, encoding: .utf8) else {
-                continue
-            }
-
-            let relativePath = relativePath(of: url, root: root)
-            var lineNumber = 0
-            for line in content.split(separator: "\n", omittingEmptySubsequences: false) {
-                lineNumber += 1
-                let lineString = String(line)
-                let range = NSRange(lineString.startIndex..<lineString.endIndex, in: lineString)
-                if regex.firstMatch(in: lineString, options: [], range: range) != nil {
-                    let snippet = lineString.prefix(200)
-                    matches.append("\(relativePath):\(lineNumber): \(snippet)")
-                    if matches.count >= limit { break }
+                guard isDirectory.boolValue else {
+                    throw AgentToolError.notRegular(raw)
                 }
+            } else {
+                searchRoot = root
             }
-            if matches.count >= limit { break }
-        }
 
-        let summary = "\(matches.count) match\(matches.count == 1 ? "" : "es") for /\(pattern)/"
-        let payload = matches.isEmpty
-            ? "No matches found for /\(pattern)/."
-            : matches.joined(separator: "\n")
-        return AgentToolResult(summary: summary, payload: payload)
+            guard let enumerator = FileManager.default.enumerator(
+                at: searchRoot,
+                includingPropertiesForKeys: [.isDirectoryKey, .isRegularFileKey, .fileSizeKey],
+                options: [.skipsHiddenFiles, .skipsPackageDescendants]
+            ) else {
+                throw AgentToolError.notFound(searchRoot.path)
+            }
+
+            var matches: [String] = []
+            var scanned = 0
+            var visited = 0
+
+            while let url = enumerator.nextObject() as? URL {
+                visited += 1
+                if visited > maxToolTraversalNodes { break }
+                guard let values = try? url.resourceValues(forKeys: [.isDirectoryKey, .isRegularFileKey, .fileSizeKey]) else {
+                    continue
+                }
+                if values.isDirectory == true {
+                    if ProjectDirectoryExclusions.shouldSkip(url) {
+                        enumerator.skipDescendants()
+                    }
+                    continue
+                }
+                guard values.isRegularFile == true else { continue }
+                scanned += 1
+                if scanned > maxScannedFiles { break }
+                if let size = values.fileSize, size > maxFileSizeForSearch { continue }
+                if let includeGlob, !globMatches(includeGlob, name: url.lastPathComponent) { continue }
+                if AppState.isBinaryFile(at: url) { continue }
+
+                guard let data = try? Data(contentsOf: url),
+                      let content = String(data: data, encoding: .utf8) else {
+                    continue
+                }
+
+                let relativePath = relativePath(of: url, root: root)
+                var lineNumber = 0
+                for line in content.split(separator: "\n", omittingEmptySubsequences: false) {
+                    lineNumber += 1
+                    let lineString = String(line)
+                    let range = NSRange(lineString.startIndex..<lineString.endIndex, in: lineString)
+                    if regex.firstMatch(in: lineString, options: [], range: range) != nil {
+                        let snippet = lineString.prefix(200)
+                        matches.append("\(relativePath):\(lineNumber): \(snippet)")
+                        if matches.count >= limit { break }
+                    }
+                }
+                if matches.count >= limit { break }
+            }
+
+            let summary = "\(matches.count) match\(matches.count == 1 ? "" : "es") for /\(pattern)/"
+            let payload = matches.isEmpty
+                ? "No matches found for /\(pattern)/."
+                : matches.joined(separator: "\n")
+            return AgentToolResult(summary: summary, payload: payload)
+        }.value
     }
 
     static func readFile(
@@ -201,40 +213,42 @@ enum AgentFileTools {
             throw AgentToolError.missingArgument("path")
         }
 
-        let resolved = try resolveWorkspaceURL(path, root: root)
-        var isDirectory: ObjCBool = false
-        guard FileManager.default.fileExists(atPath: resolved.path, isDirectory: &isDirectory) else {
-            throw AgentToolError.notFound(path)
-        }
-        guard !isDirectory.boolValue else {
-            throw AgentToolError.notRegular(path)
-        }
-        if AppState.isBinaryFile(at: resolved) {
-            throw AgentToolError.binaryFile(path)
-        }
-
         let requested = arguments["max_bytes"]?.intValue() ?? defaultMaxReadBytes
         let limit = max(1, min(requested, absoluteMaxReadBytes))
 
-        let handle = try FileHandle(forReadingFrom: resolved)
-        defer { try? handle.close() }
-        let data = handle.readData(ofLength: limit + 1)
-        let truncated = data.count > limit
-        let usable = truncated ? data.prefix(limit) : data
-        let text = String(data: usable, encoding: .utf8) ?? AppState.decodeText(from: Data(usable))
+        return try await Task.detached(priority: .userInitiated) {
+            let resolved = try resolveWorkspaceURL(path, root: root)
+            var isDirectory: ObjCBool = false
+            guard FileManager.default.fileExists(atPath: resolved.path, isDirectory: &isDirectory) else {
+                throw AgentToolError.notFound(path)
+            }
+            guard !isDirectory.boolValue else {
+                throw AgentToolError.notRegular(path)
+            }
+            if AppState.isBinaryFile(at: resolved) {
+                throw AgentToolError.binaryFile(path)
+            }
 
-        var numbered: [String] = []
-        var lineNumber = 0
-        for line in text.split(separator: "\n", omittingEmptySubsequences: false) {
-            lineNumber += 1
-            numbered.append(String(format: "%5d  %@", lineNumber, String(line)))
-        }
-        if truncated {
-            numbered.append("...[truncated, read \(limit) bytes]")
-        }
+            let handle = try FileHandle(forReadingFrom: resolved)
+            defer { try? handle.close() }
+            let data = handle.readData(ofLength: limit + 1)
+            let truncated = data.count > limit
+            let usable = truncated ? data.prefix(limit) : data
+            let text = String(data: usable, encoding: .utf8) ?? AppState.decodeText(from: Data(usable))
 
-        let summary = "\(path) (\(lineNumber) line\(lineNumber == 1 ? "" : "s"))"
-        return AgentToolResult(summary: summary, payload: numbered.joined(separator: "\n"))
+            var numbered: [String] = []
+            var lineNumber = 0
+            for line in text.split(separator: "\n", omittingEmptySubsequences: false) {
+                lineNumber += 1
+                numbered.append(String(format: "%5d  %@", lineNumber, String(line)))
+            }
+            if truncated {
+                numbered.append("...[truncated, read \(limit) bytes]")
+            }
+
+            let summary = "\(path) (\(lineNumber) line\(lineNumber == 1 ? "" : "s"))"
+            return AgentToolResult(summary: summary, payload: numbered.joined(separator: "\n"))
+        }.value
     }
 
     static func listDirectory(
@@ -253,58 +267,60 @@ enum AgentFileTools {
             target = try resolveWorkspaceURL(rawPath, root: root)
         }
 
-        var isDirectory: ObjCBool = false
-        guard FileManager.default.fileExists(atPath: target.path, isDirectory: &isDirectory) else {
-            throw AgentToolError.notFound(rawPath.isEmpty ? "." : rawPath)
-        }
-        guard isDirectory.boolValue else {
-            throw AgentToolError.notRegular(rawPath)
-        }
+        return try await Task.detached(priority: .userInitiated) {
+            var isDirectory: ObjCBool = false
+            guard FileManager.default.fileExists(atPath: target.path, isDirectory: &isDirectory) else {
+                throw AgentToolError.notFound(rawPath.isEmpty ? "." : rawPath)
+            }
+            guard isDirectory.boolValue else {
+                throw AgentToolError.notRegular(rawPath)
+            }
 
-        guard let enumerator = FileManager.default.enumerator(
-            at: target,
-            includingPropertiesForKeys: [.isDirectoryKey, .fileSizeKey],
-            options: [.skipsHiddenFiles]
-        ) else {
-            throw AgentToolError.notFound(target.path)
-        }
+            guard let enumerator = FileManager.default.enumerator(
+                at: target,
+                includingPropertiesForKeys: [.isDirectoryKey, .fileSizeKey],
+                options: [.skipsHiddenFiles]
+            ) else {
+                throw AgentToolError.notFound(target.path)
+            }
 
-        var entries: [URL] = []
-        var truncated = false
-        while let url = enumerator.nextObject() as? URL {
-            let values = try? url.resourceValues(forKeys: [.isDirectoryKey])
-            if values?.isDirectory == true {
-                enumerator.skipDescendants()
-                if ProjectDirectoryExclusions.shouldSkip(url) {
-                    continue
+            var entries: [URL] = []
+            var truncated = false
+            while let url = enumerator.nextObject() as? URL {
+                let values = try? url.resourceValues(forKeys: [.isDirectoryKey])
+                if values?.isDirectory == true {
+                    enumerator.skipDescendants()
+                    if ProjectDirectoryExclusions.shouldSkip(url) {
+                        continue
+                    }
                 }
+                if entries.count >= maxDirectoryEntries {
+                    truncated = true
+                    break
+                }
+                entries.append(url)
             }
-            if entries.count >= maxDirectoryEntries {
-                truncated = true
-                break
+
+            let sorted = entries.sorted {
+                $0.lastPathComponent.localizedStandardCompare($1.lastPathComponent) == .orderedAscending
             }
-            entries.append(url)
-        }
 
-        let sorted = entries.sorted {
-            $0.lastPathComponent.localizedStandardCompare($1.lastPathComponent) == .orderedAscending
-        }
+            var lines: [String] = []
+            for url in sorted {
+                let values = try? url.resourceValues(forKeys: [.isDirectoryKey, .fileSizeKey])
+                let isDir = values?.isDirectory ?? false
+                let label = isDir ? "[dir]" : "[file]"
+                let size = values?.fileSize.map { " \($0)B" } ?? ""
+                lines.append("\(label) \(url.lastPathComponent)\(isDir ? "/" : size)")
+            }
+            if truncated {
+                lines.append("...[truncated, more entries omitted]")
+            }
 
-        var lines: [String] = []
-        for url in sorted {
-            let values = try? url.resourceValues(forKeys: [.isDirectoryKey, .fileSizeKey])
-            let isDir = values?.isDirectory ?? false
-            let label = isDir ? "[dir]" : "[file]"
-            let size = values?.fileSize.map { " \($0)B" } ?? ""
-            lines.append("\(label) \(url.lastPathComponent)\(isDir ? "/" : size)")
-        }
-        if truncated {
-            lines.append("...[truncated, more entries omitted]")
-        }
-
-        let countLabel = truncated ? "\(sorted.count)+" : "\(sorted.count)"
-        let summary = "\(rawPath.isEmpty ? "." : rawPath) (\(countLabel) entr\(sorted.count == 1 && !truncated ? "y" : "ies"))"
-        return AgentToolResult(summary: summary, payload: lines.isEmpty ? "(empty directory)" : lines.joined(separator: "\n"))
+            let countLabel = truncated ? "\(sorted.count)+" : "\(sorted.count)"
+            let summary = "\(rawPath.isEmpty ? "." : rawPath) (\(countLabel) entr\(sorted.count == 1 && !truncated ? "y" : "ies"))"
+            return AgentToolResult(summary: summary, payload: lines.isEmpty ? "(empty directory)" : lines.joined(separator: "\n"))
+        }.value
     }
 
     /// Compatibility alias for a `glob` tool some models hallucinate — they've
@@ -361,38 +377,40 @@ enum AgentFileTools {
         let nameGlob = trimmed.split(separator: "/").last.map(String.init) ?? trimmed
         let limit = min(max(arguments["max_results"]?.intValue() ?? 200, 1), maxDirectoryEntries)
 
-        guard let enumerator = FileManager.default.enumerator(
-            at: root,
-            includingPropertiesForKeys: [.isDirectoryKey, .isRegularFileKey],
-            options: [.skipsHiddenFiles, .skipsPackageDescendants]
-        ) else {
-            throw AgentToolError.notFound(rootPath)
-        }
-
-        var matches: [String] = []
-        var visited = 0
-        var truncated = false
-        while let url = enumerator.nextObject() as? URL {
-            visited += 1
-            if visited > maxToolTraversalNodes { break }
-            let values = try? url.resourceValues(forKeys: [.isDirectoryKey, .isRegularFileKey])
-            if values?.isDirectory == true {
-                if ProjectDirectoryExclusions.shouldSkip(url) { enumerator.skipDescendants() }
-                continue
+        return try await Task.detached(priority: .userInitiated) {
+            guard let enumerator = FileManager.default.enumerator(
+                at: root,
+                includingPropertiesForKeys: [.isDirectoryKey, .isRegularFileKey],
+                options: [.skipsHiddenFiles, .skipsPackageDescendants]
+            ) else {
+                throw AgentToolError.notFound(rootPath)
             }
-            guard values?.isRegularFile == true else { continue }
-            if globMatches(nameGlob, name: url.lastPathComponent) {
-                matches.append(relativePath(of: url, root: root))
-                if matches.count >= limit { truncated = true; break }
-            }
-        }
-        matches.sort()
 
-        let summary = "\(matches.count)\(truncated ? "+" : "") file\(matches.count == 1 && !truncated ? "" : "s") matching `\(nameGlob)`"
-        let payload = matches.isEmpty
-            ? "No files match `\(pattern)` in the workspace. (WillDeep has no native `glob`; this is a read-only alias over a workspace scan — `grep_files` / `list_directory` are the first-class tools.)"
-            : matches.joined(separator: "\n") + (truncated ? "\n...[truncated, refine the pattern]" : "")
-        return AgentToolResult(summary: summary, payload: payload)
+            var matches: [String] = []
+            var visited = 0
+            var truncated = false
+            while let url = enumerator.nextObject() as? URL {
+                visited += 1
+                if visited > maxToolTraversalNodes { break }
+                let values = try? url.resourceValues(forKeys: [.isDirectoryKey, .isRegularFileKey])
+                if values?.isDirectory == true {
+                    if ProjectDirectoryExclusions.shouldSkip(url) { enumerator.skipDescendants() }
+                    continue
+                }
+                guard values?.isRegularFile == true else { continue }
+                if globMatches(nameGlob, name: url.lastPathComponent) {
+                    matches.append(relativePath(of: url, root: root))
+                    if matches.count >= limit { truncated = true; break }
+                }
+            }
+            matches.sort()
+
+            let summary = "\(matches.count)\(truncated ? "+" : "") file\(matches.count == 1 && !truncated ? "" : "s") matching `\(nameGlob)`"
+            let payload = matches.isEmpty
+                ? "No files match `\(pattern)` in the workspace. (WillDeep has no native `glob`; this is a read-only alias over a workspace scan — `grep_files` / `list_directory` are the first-class tools.)"
+                : matches.joined(separator: "\n") + (truncated ? "\n...[truncated, refine the pattern]" : "")
+            return AgentToolResult(summary: summary, payload: payload)
+        }.value
     }
 
     /// The literal directory prefix of a glob pattern, up to the path segment
@@ -413,27 +431,29 @@ enum AgentFileTools {
             return try await backend.gitStatus()
         }
         guard let root = context.rootDirectory else { throw AgentToolError.noWorkspace }
-        let status = AppState.loadGitStatus(for: root.standardizedFileURL)
-        guard status.isRepository else {
-            return AgentToolResult(summary: "not a git repository", payload: "The workspace is not inside a git repository.")
-        }
+        return await Task.detached(priority: .userInitiated) {
+            let status = AppState.loadGitStatus(for: root.standardizedFileURL)
+            guard status.isRepository else {
+                return AgentToolResult(summary: "not a git repository", payload: "The workspace is not inside a git repository.")
+            }
 
-        let branch = status.branchName ?? "detached"
-        if status.entries.isEmpty {
+            let branch = status.branchName ?? "detached"
+            if status.entries.isEmpty {
+                return AgentToolResult(
+                    summary: "branch \(branch), clean",
+                    payload: "Branch: \(branch)\nWorking tree clean."
+                )
+            }
+
+            let lines = status.entries
+                .sorted { $0.key < $1.key }
+                .map { "\($0.value.rawValue) \($0.key)" }
+
             return AgentToolResult(
-                summary: "branch \(branch), clean",
-                payload: "Branch: \(branch)\nWorking tree clean."
+                summary: "branch \(branch), \(status.entries.count) change\(status.entries.count == 1 ? "" : "s")",
+                payload: "Branch: \(branch)\n\(lines.joined(separator: "\n"))"
             )
-        }
-
-        let lines = status.entries
-            .sorted { $0.key < $1.key }
-            .map { "\($0.value.rawValue) \($0.key)" }
-
-        return AgentToolResult(
-            summary: "branch \(branch), \(status.entries.count) change\(status.entries.count == 1 ? "" : "s")",
-            payload: "Branch: \(branch)\n\(lines.joined(separator: "\n"))"
-        )
+        }.value
     }
 
     /// Minimal shell-style glob matching against a single filename. Supports

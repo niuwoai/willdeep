@@ -25,27 +25,6 @@
 import AppKit
 import Foundation
 
-nonisolated private final class LanguageServiceWillSaveResultBox: @unchecked Sendable {
-    private let lock = NSLock()
-    private var value: String
-
-    init(_ value: String) {
-        self.value = value
-    }
-
-    func set(_ newValue: String) {
-        lock.lock()
-        defer { lock.unlock() }
-        value = newValue
-    }
-
-    func get() -> String {
-        lock.lock()
-        defer { lock.unlock() }
-        return value
-    }
-}
-
 extension AppState {
     // MARK: - Folder Opening
 
@@ -662,42 +641,24 @@ extension AppState {
     }
 
     private func contentByApplyingLanguageServiceWillSaveEdits(to text: String, url: URL) -> String {
-        guard EditorLanguageServiceRegistry.isFirstStageIDELanguage(effectiveLanguage) else {
-            return text
-        }
-
-        let manager = editorLanguageServiceManager
-        let language = effectiveLanguage
-        let root = rootDirectory
-        let fileURL = url.standardizedFileURL
-        let semaphore = DispatchSemaphore(value: 0)
-        let resultBox = LanguageServiceWillSaveResultBox(text)
-
-        Task.detached {
-            defer { semaphore.signal() }
-            do {
-                let edits = try await manager.willSaveWaitUntil(
-                    fileURL: fileURL,
-                    language: language,
-                    rootDirectory: root,
-                    text: text
-                )
-                guard let updated = EditorTextEditApplier.apply(edits: edits, to: text) else { return }
-                resultBox.set(updated)
-            } catch {
-                return
-            }
-        }
-
-        _ = semaphore.wait(timeout: .now() + 1.5)
-        return resultBox.get()
+        // Saving is a synchronous AppKit action. Waiting here for the async
+        // LSP request used to block the main thread for up to 1.5 seconds per
+        // save and could deadlock behind a stalled language server. The client
+        // still receives didSave below; willSaveWaitUntil edits are skipped
+        // until the save pipeline itself becomes async.
+        text
     }
 
     private func reloadTerminalShortcutsIfNeeded(savedURL: URL) {
-        guard TerminalShortcutStore.isStoreFile(savedURL),
-              !agentTerminalController.reloadShortcutsFromDisk() else {
+        let reloaded: Bool
+        if TerminalShortcutStore.isStoreFile(savedURL) {
+            reloaded = agentTerminalController.reloadShortcutsFromDisk()
+        } else if let shortcutID = TerminalShortcutStore.editableShortcutID(for: savedURL) {
+            reloaded = agentTerminalController.reloadShortcutFromEditFile(id: shortcutID, url: savedURL)
+        } else {
             return
         }
+        guard !reloaded else { return }
         showFileOperationError("终端捷径 JSON 已保存，但内容解析失败；捷径列表会继续使用保存前的可用版本。请检查 JSON 格式后再次保存。")
     }
 

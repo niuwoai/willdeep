@@ -551,6 +551,7 @@ enum TerminalShortcutStore {
     private static let key = "com.willdeep.terminalShortcuts.v1"
     private static let maxShortcuts = 24
     private static let fileName = "shortcuts.json"
+    private static let editableDirectoryName = "editable"
     private static var directoryOverride: URL?
 
     static var directory: URL {
@@ -563,6 +564,14 @@ enum TerminalShortcutStore {
 
     static var fileURL: URL {
         directory.appendingPathComponent(fileName)
+    }
+
+    private static var editableDirectory: URL {
+        directory.appendingPathComponent(editableDirectoryName, isDirectory: true)
+    }
+
+    static func editableFileURL(for shortcutID: UUID) -> URL {
+        editableDirectory.appendingPathComponent("\(shortcutID.uuidString).json")
     }
 
     private static let encoder: JSONEncoder = {
@@ -605,8 +614,39 @@ enum TerminalShortcutStore {
         return normalized(try decoder.decode([TerminalShortcut].self, from: data))
     }
 
+    @discardableResult
+    static func prepareEditableFile(for shortcut: TerminalShortcut) throws -> URL {
+        try ensureDirectory(editableDirectory)
+        let url = editableFileURL(for: shortcut.id)
+        let data = try encoder.encode(prepareForPersistence(shortcut))
+        try data.write(to: url, options: .atomic)
+        return url
+    }
+
+    static func loadEditableShortcut(from url: URL, expectedID: UUID) throws -> TerminalShortcut {
+        guard editableShortcutID(for: url) == expectedID else {
+            throw CocoaError(.fileReadInvalidFileName)
+        }
+        let data = try Data(contentsOf: url)
+        var shortcut = try decoder.decode(TerminalShortcut.self, from: data).normalized
+        guard shortcut.id == expectedID, shortcut.isPlayable else {
+            throw CocoaError(.fileReadCorruptFile)
+        }
+        shortcut.hasProtectedInput = shortcut.events.contains(where: \.requiresEchoOff)
+        return shortcut
+    }
+
     static func isStoreFile(_ url: URL) -> Bool {
         url.standardizedFileURL.path == fileURL.standardizedFileURL.path
+    }
+
+    static func editableShortcutID(for url: URL) -> UUID? {
+        let standardized = url.standardizedFileURL
+        guard standardized.deletingLastPathComponent().path == editableDirectory.standardizedFileURL.path,
+              standardized.pathExtension.lowercased() == "json" else {
+            return nil
+        }
+        return UUID(uuidString: standardized.deletingPathExtension().lastPathComponent)
     }
 
     static func lineNumber(for shortcutID: UUID, in text: String) -> Int? {
@@ -691,10 +731,11 @@ enum TerminalShortcutStore {
         return shortcuts
     }
 
-    private static func ensureDirectory() throws {
+    private static func ensureDirectory(_ targetDirectory: URL? = nil) throws {
+        let targetDirectory = targetDirectory ?? directory
         var isDir: ObjCBool = false
-        if !FileManager.default.fileExists(atPath: directory.path, isDirectory: &isDir) {
-            try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        if !FileManager.default.fileExists(atPath: targetDirectory.path, isDirectory: &isDir) {
+            try FileManager.default.createDirectory(at: targetDirectory, withIntermediateDirectories: true)
         }
     }
 
@@ -1796,8 +1837,14 @@ final class AgentInteractiveTerminalController: ObservableObject {
         activeTab?.cancelShortcutPlayback()
     }
 
-    func prepareShortcutsFileForEditing() {
-        TerminalShortcutStore.save(shortcuts)
+    func prepareShortcutFileForEditing(id: UUID) -> URL? {
+        guard let shortcut = shortcuts.first(where: { $0.id == id }) else { return nil }
+        do {
+            return try TerminalShortcutStore.prepareEditableFile(for: shortcut)
+        } catch {
+            print("AgentInteractiveTerminalController: failed to prepare shortcut edit file: \(error)")
+            return nil
+        }
     }
 
     @discardableResult
@@ -1811,6 +1858,23 @@ final class AgentInteractiveTerminalController: ObservableObject {
         }
     }
 
+    @discardableResult
+    func reloadShortcutFromEditFile(id: UUID, url: URL) -> Bool {
+        do {
+            guard let index = shortcuts.firstIndex(where: { $0.id == id }) else {
+                throw CocoaError(.fileNoSuchFile)
+            }
+            var edited = try TerminalShortcutStore.loadEditableShortcut(from: url, expectedID: id)
+            edited.updatedAt = Date()
+            shortcuts[index] = edited
+            persistShortcuts()
+            return true
+        } catch {
+            print("AgentInteractiveTerminalController: failed to reload edited shortcut: \(error)")
+            return false
+        }
+    }
+
     func renameShortcut(id: UUID, title: String) {
         guard let index = shortcuts.firstIndex(where: { $0.id == id }) else { return }
         var shortcut = shortcuts[index]
@@ -1818,6 +1882,31 @@ final class AgentInteractiveTerminalController: ObservableObject {
         shortcut.updatedAt = Date()
         shortcuts[index] = shortcut.normalized
         persistShortcuts()
+    }
+
+    @discardableResult
+    func cloneShortcut(id: UUID, title: String, now: Date = Date()) -> TerminalShortcut? {
+        guard let source = shortcuts.first(where: { $0.id == id }) else { return nil }
+        let clonedEvents = source.events.map { sourceEvent in
+            var event = sourceEvent
+            event.id = UUID()
+            guard event.requiresEchoOff else { return event }
+            event.transientProtectedBytes = sourceEvent.resolvedBytes()
+            event.protectedBytesReference = nil
+            return event
+        }
+        let clone = TerminalShortcut(
+            id: UUID(),
+            title: title,
+            createdAt: now,
+            updatedAt: now,
+            durationMilliseconds: source.durationMilliseconds,
+            events: clonedEvents,
+            hasProtectedInput: clonedEvents.contains(where: \.requiresEchoOff)
+        ).normalized
+        shortcuts.insert(clone, at: 0)
+        persistShortcuts()
+        return shortcuts.first(where: { $0.id == clone.id })
     }
 
     @discardableResult
@@ -2059,22 +2148,34 @@ final class AgentInteractiveTerminalController: ObservableObject {
         return String(decoding: event.bytes, as: UTF8.self)
     }
 
-    /// Make sure the panel always has at least one live tab to show; opens
-    /// a local shell rooted at `workingDirectory` if there are none.
+    /// Make sure the current conversation has a live terminal binding. A
+    /// different conversation's existing tab must not become the implicit
+    /// fallback, otherwise opening the panel leaks that tab's screen and SSH
+    /// state into a fresh conversation.
     func ensureAtLeastOneTab(
         originAgentSessionID: UUID?,
         workingDirectory: String?,
         settings: EditorTerminalSettings,
         skin: TerminalSkinColors?
     ) {
-        if tabs.isEmpty {
-            openLocalTab(
-                originAgentSessionID: originAgentSessionID,
-                workingDirectory: workingDirectory,
-                settings: settings,
-                skin: skin
-            )
+        if let originAgentSessionID {
+            if boundTabID(for: originAgentSessionID) != nil {
+                return
+            }
+            if let originated = tabs.last(where: { $0.originAgentSessionID == originAgentSessionID }) {
+                boundTabIDsBySession[originAgentSessionID] = originated.id
+                return
+            }
+        } else if !tabs.isEmpty {
+            return
         }
+
+        openLocalTab(
+            originAgentSessionID: originAgentSessionID,
+            workingDirectory: workingDirectory,
+            settings: settings,
+            skin: skin
+        )
     }
 
     func applyAppearanceToAll(_ settings: EditorTerminalSettings, skin: TerminalSkinColors?) {
@@ -2185,6 +2286,14 @@ final class AgentInteractiveTerminalController: ObservableObject {
             guard let exact = tab(id: targetTabID) else {
                 throw AgentToolError.invalidArgument("Unknown Agent Terminal tab id: \(targetTabID.uuidString).")
             }
+            // A user-confirmed explicit tab becomes the conversation's bound
+            // tab when it has none yet, so follow-up calls that omit
+            // terminal_tab_id keep hitting the confirmed tab instead of
+            // silently opening a fresh local shell. An existing binding is
+            // never moved by an explicit one-off read of another tab.
+            if let sessionID, boundTabID(for: sessionID) == nil {
+                boundTabIDsBySession[sessionID] = exact.id
+            }
             return exact
         }
         if let boundID = boundTabID(for: sessionID), let bound = tab(id: boundID) {
@@ -2197,9 +2306,7 @@ final class AgentInteractiveTerminalController: ObservableObject {
         }
         guard opensLocalTabIfNeeded,
               let config = defaultLocalTabProvider?(sessionID) else {
-            throw AgentToolError.invalidArgument(
-                "No terminal tab is bound to this conversation. Open or bind a tab in the Agent Terminal side panel first."
-            )
+            throw AgentToolError.invalidArgument(unboundTabGuidance())
         }
         let created = openLocalTab(
             originAgentSessionID: config.originAgentSessionID,
@@ -2211,6 +2318,27 @@ final class AgentInteractiveTerminalController: ObservableObject {
             boundTabIDsBySession[sessionID] = created.id
         }
         return created
+    }
+
+    /// Guidance for the model when a conversation has no bound terminal tab.
+    /// The side panel being open with someone else's tab used to surface as a
+    /// bare "no tab is bound" error, which agents relayed as "the side panel
+    /// is not open" — gaslighting users who could see it right there. Instead,
+    /// enumerate the open tabs so the agent can ask the user one concrete
+    /// confirmation question and retry with terminal_tab_id.
+    private func unboundTabGuidance() -> String {
+        guard !tabs.isEmpty else {
+            return "No terminal tab is bound to this conversation and the Agent Terminal side panel has no open tabs. Open a tab in the side panel, or use terminal_send_command which opens a local shell for this conversation automatically."
+        }
+        let tabLines = tabs.map { tab -> String in
+            let visibleMark = tab.id == activeTabID ? " [currently visible to the user]" : ""
+            return "- terminal_tab_id \(tab.id.uuidString): \"\(tab.title)\", \(tab.runtimeTarget)\(visibleMark)"
+        }
+        return """
+        No terminal tab is bound to this conversation yet, but the Agent Terminal side panel is open with \(tabs.count) tab(s):
+        \(tabLines.joined(separator: "\n"))
+        Do NOT tell the user the side panel or terminal is closed. Ask the user one concrete confirmation question — usually whether to use the currently visible tab — then retry with that terminal_tab_id. Explicitly targeting a tab also binds it to this conversation while it has no binding, so later calls may omit terminal_tab_id.
+        """
     }
 
     func runCommandInDelegatedShellTab(

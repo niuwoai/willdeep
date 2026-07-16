@@ -177,15 +177,12 @@ struct VideoSummaryWorkflow: WorkflowDefinition {
         let p = Process()
         p.launchPath = launchPath
         p.arguments = arguments
-        let outPipe = Pipe(); let errPipe = Pipe()
-        p.standardOutput = outPipe; p.standardError = errPipe
-        do { try p.run() } catch {
+        do {
+            let result = try await AgentSubprocess.run(p)
+            return RunResult(exitCode: result.exitStatus, stdout: result.stdoutText, stderr: result.stderrText)
+        } catch {
             return RunResult(exitCode: -1, stdout: "", stderr: error.localizedDescription)
         }
-        await AgentProcessSupport.waitUntilExit(p)
-        let out = String(data: outPipe.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? ""
-        let err = String(data: errPipe.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? ""
-        return RunResult(exitCode: p.terminationStatus, stdout: out, stderr: err)
     }
 
     private func formatDuration(_ seconds: Double) -> String {

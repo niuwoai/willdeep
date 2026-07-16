@@ -15,7 +15,7 @@
 //    - stopAgentResponse / clearAgentQueue / addAgentImage /
 //      removeAgentImage staging helpers
 //    - setAppMode / toggleAppMode + sessions: startNewAgentSession,
-//      selectAgentSession, pruneEmptyAgentSessions, deleteAgentSession
+//      selectAgentSession, deleteAgentSession
 //    - Routines: saveAgentRoutine / deleteAgentRoutine /
 //      toggleAgentRoutineEnabled / runAgentRoutineNow / fireRoutine
 //    - toggleAgentSessionPinned / toggleAgentSessionArchived /
@@ -30,6 +30,11 @@
 
 import AppKit
 import Foundation
+
+struct AgentSessionLoadFailure: Identifiable, Equatable {
+    let id: AgentSession.ID
+    let title: String
+}
 
 extension AppState {
 
@@ -905,11 +910,6 @@ extension AppState {
         // one keeps streaming in the background and the user can pick
         // it back up from the sidebar.
 
-        // Garbage-collect any prior empty "New Chat" rows before adding a
-        // fresh one — otherwise repeatedly pressing ⌘N stacks up empty
-        // placeholders in the sidebar.
-        pruneEmptyAgentSessions()
-
         let defaultManagedRouting = defaultSomeIMManagedRoutingState()
         let defaultModelID = defaultAgentModelIDForNewSession(managedRouting: defaultManagedRouting)
         let session = AgentSession(
@@ -935,7 +935,9 @@ extension AppState {
         agentApprovalMode = .smart
         agentCurrentPlan = nil
         agentCurrentGoal = nil
-        AgentSessionStore.save(session)
+        // saveAsync, not save: sync save can beachball behind another
+        // instance's NSFileCoordinator hold on the session directory.
+        AgentSessionStore.saveAsync(session)
         upsertAgentUsageSnapshot(for: session)
         refreshAgentGitWorktrees()
         return session
@@ -964,8 +966,6 @@ extension AppState {
             normalizedPath = nil
         }
 
-        pruneEmptyAgentSessions()
-
         let defaultManagedRouting = defaultSomeIMManagedRoutingState()
         let defaultModelID = defaultAgentModelIDForNewSession(managedRouting: defaultManagedRouting)
         let session = AgentSession(
@@ -986,7 +986,9 @@ extension AppState {
         agentApprovalMode = .smart
         agentCurrentPlan = nil
         agentCurrentGoal = nil
-        AgentSessionStore.save(session)
+        // saveAsync, not save: sync save can beachball behind another
+        // instance's NSFileCoordinator hold on the session directory.
+        AgentSessionStore.saveAsync(session)
         upsertAgentUsageSnapshot(for: session)
         unhideWorkspace(key: session.workspaceSidebarGroupKey)
         refreshAgentGitWorktrees()
@@ -1041,7 +1043,6 @@ extension AppState {
         }
 
         if let runtime = activeRuntime, canRebindActiveRuntimeInPlace(runtime) {
-            pruneEmptyAgentSessions(excluding: runtime.id)
             runtime.rebindWorkspace(to: url.path)
             runtime.worktreeChanges = .init()
             runtime.agentArtifactPaths = []
@@ -1093,7 +1094,6 @@ extension AppState {
     func moveActiveAgentSessionToRemoteWorkspace(runtimeID: UUID, path: String) -> AgentSession {
         let normalizedPath = RemotePathValidator.normalizedWorkspaceRoot(path)
         if let runtime = activeRuntime, runtime.isEmpty, !runtime.isResponding {
-            pruneEmptyAgentSessions(excluding: runtime.id)
             runtime.rebindRemoteWorkspace(runtimeID: runtimeID, path: normalizedPath)
             runtime.worktreeChanges = .init()
             runtime.agentArtifactPaths = []
@@ -1102,7 +1102,6 @@ extension AppState {
             return runtime.session
         }
 
-        pruneEmptyAgentSessions()
         let defaultManagedRouting = defaultSomeIMManagedRoutingState()
         let session = AgentSession(
             workspaceRootPath: nil,
@@ -1121,15 +1120,21 @@ extension AppState {
         agentApprovalMode = .smart
         agentCurrentPlan = nil
         agentCurrentGoal = nil
-        AgentSessionStore.save(session)
+        // saveAsync, not save: sync save can beachball behind another
+        // instance's NSFileCoordinator hold on the session directory.
+        AgentSessionStore.saveAsync(session)
         upsertAgentUsageSnapshot(for: session)
         unhideWorkspace(key: session.workspaceSidebarGroupKey)
         return session
     }
 
-    func selectAgentSession(id: AgentSession.ID) {
-        guard agentSessions.contains(where: { $0.id == id }) else { return }
-        guard activeAgentSessionID != id else { return }
+    @discardableResult
+    func selectAgentSession(id: AgentSession.ID) -> Bool {
+        guard let targetSession = agentSessions.first(where: { $0.id == id }) else { return false }
+        guard activeAgentSessionID != id else {
+            agentSessionLoadFailure = nil
+            return true
+        }
         let outgoingRuntime = activeRuntime
 
         // rc4: switching away from a session no longer kills its in-flight
@@ -1144,7 +1149,17 @@ extension AppState {
         // `activeAgentSessionID` — delegated readers fall back to
         // safe defaults if the runtime is missing, which would briefly
         // show the new session as empty before the runtime appears.
-        guard runtime(for: id) != nil else { return }
+        guard runtime(for: id) != nil else {
+            // Keep the metadata row visible so a Time Machine/manual restore
+            // can reconnect it later. The old silent return made a valid
+            // click look broken and encouraged repeated clicks/restarts.
+            agentSessionLoadFailure = AgentSessionLoadFailure(
+                id: targetSession.id,
+                title: targetSession.title
+            )
+            return false
+        }
+        agentSessionLoadFailure = nil
         activeAgentSessionID = id
         subscribeToActiveRuntime()
         evictInactiveAgentRuntimesIfNeeded()
@@ -1174,6 +1189,11 @@ extension AppState {
             refreshAgentGitWorktrees()
             autoSummarizeTitleIfPlaceholder(runtime)
         }
+        return true
+    }
+
+    func dismissAgentSessionLoadFailure() {
+        agentSessionLoadFailure = nil
     }
 
     /// When the user opens a session still carrying a generic placeholder
@@ -1210,75 +1230,6 @@ extension AppState {
         if securityScopedAccessURLs.contains(url) { return }
         guard Self.isExistingDirectory(url) else { return }
         _ = activateSecurityScope(for: url)
-    }
-
-    /// Drop sessions that never received a user message — they're
-    /// indistinguishable "New Chat" placeholders left behind by users
-    /// who hit ⌘N and walked away. The currently-active session is
-    /// preserved even when empty (the user is presumably about to type
-    /// into it). Wipes both the in-memory list and the persisted JSON.
-    func pruneEmptyAgentSessions(excluding protectedID: AgentSession.ID? = nil) {
-        let activeID = activeAgentSessionID
-        let toRemove = agentSessions.filter { session in
-            if session.id == activeID { return false }
-            if session.id == protectedID { return false }
-            // Cross-process grace: a file another WillDeep just wrote (or
-            // is mid-write on) reads as empty on our stale scan but is
-            // very likely a live session in that process. Skip anything
-            // touched within the grace window; a truly abandoned
-            // placeholder falls outside it and prunes on a later launch.
-            // Placed ahead of the metadata-only shortcut so it guards the
-            // startup path too, where loadAll marks every session
-            // metadata-only. The delete-time re-read in deleteIfStillEmpty
-            // is the hard safety gate; this just avoids even attempting a
-            // delete on a freshly-touched file.
-            if let mtime = AgentSessionStore.fileModificationDate(id: session.id),
-               Date().timeIntervalSince(mtime) < AgentSessionStore.pruneGracePeriod {
-                return false
-            }
-            if AgentSessionStore.isMetadataOnly(session.id) {
-                return !AgentSessionStore.metadataOnlySessionHasUserMessage(session.id)
-            }
-            if pendingDispatchQueue.contains(where: { $0.runtimeID == session.id }) { return false }
-            if let runtime = agentRuntimes[session.id] {
-                if runtime.isResponding || runtime.requestTask != nil || runtime.toolDecisionWaiter != nil {
-                    return false
-                }
-                if runtime.messages.contains(where: { $0.role == .user }) {
-                    return false
-                }
-            }
-            if session.messages.contains(where: { $0.role == .user }) { return false }
-            return true
-        }
-        guard !toRemove.isEmpty else { return }
-        // Delete each only if its on-disk copy is STILL empty — another
-        // process may have flushed a user message into it between our scan
-        // and now. Ids that decline deletion stay in the in-memory list so
-        // we never drop a session that still exists (and has history) on
-        // disk.
-        var removedIDs = Set<AgentSession.ID>()
-        for session in toRemove where AgentSessionStore.deleteIfStillEmpty(id: session.id) {
-            removedIDs.insert(session.id)
-        }
-        guard !removedIDs.isEmpty else { return }
-        agentSessions.removeAll { removedIDs.contains($0.id) }
-        agentUsageSnapshots.removeAll { removedIDs.contains($0.id) }
-        // Tear down any runtimes left for the pruned sessions, lest
-        // they keep republishing change events into AppState and
-        // hold onto in-flight tasks for sessions that no longer exist.
-        for id in removedIDs {
-            if let runtime = agentRuntimes[id] {
-                runtime.requestTask?.cancel()
-                runtime.toolDecisionWaiter?.resume(returning: .denied(reason: "Empty session pruned"))
-                runtime.toolDecisionWaiter = nil
-                runtime.toolDecisionWaiterCallID = nil
-                runtime.pendingToolDecisions.removeAll()
-            }
-            agentSubagentRegistry.cancelAll(forParentRuntime: id)
-            cancelAgentKnowledgeFolderWatchers(sessionID: id)
-            agentRuntimes.removeValue(forKey: id)
-        }
     }
 
     /// Lazy lookup: returns the existing runtime for `sessionID` or
@@ -1460,7 +1411,9 @@ extension AppState {
                 : agentConfiguration.normalized.model(for: .interactive)
         )
         agentSessions.insert(session, at: 0)
-        AgentSessionStore.save(session)
+        // saveAsync, not save: sync save can beachball behind another
+        // instance's NSFileCoordinator hold on the session directory.
+        AgentSessionStore.saveAsync(session)
         upsertAgentUsageSnapshot(for: session)
         let runtime = AgentRuntime(session: session)
         agentRuntimes[session.id] = runtime

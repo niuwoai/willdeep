@@ -87,6 +87,7 @@ final class AgentAttachmentCitationWindowRegistry {
     static let shared = AgentAttachmentCitationWindowRegistry()
 
     private var windows: [String: NSWindowController] = [:]
+    private var closeObservers: [String: NSObjectProtocol] = [:]
 
     func open(file: AgentFileAttachment, section: AgentAttachmentSection) {
         let key = file.id + "\u{1f}" + section.sourceReference
@@ -111,14 +112,21 @@ final class AgentAttachmentCitationWindowRegistry {
 
         let controller = NSWindowController(window: window)
         windows[key] = controller
-        NotificationCenter.default.addObserver(
+        // Keep the token: block-based observers are retained by
+        // NotificationCenter until removeObserver, so dropping it leaks
+        // one registration per opened reader window.
+        closeObservers[key] = NotificationCenter.default.addObserver(
             forName: NSWindow.willCloseNotification,
             object: window,
             queue: .main
         ) { [weak self, weak window] _ in
             guard window != nil else { return }
             Task { @MainActor [weak self] in
-                self?.windows.removeValue(forKey: key)
+                guard let self else { return }
+                self.windows.removeValue(forKey: key)
+                if let token = self.closeObservers.removeValue(forKey: key) {
+                    NotificationCenter.default.removeObserver(token)
+                }
             }
         }
         controller.showWindow(nil)

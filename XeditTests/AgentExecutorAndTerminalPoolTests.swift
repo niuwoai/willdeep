@@ -33,4 +33,70 @@ struct AgentExecutorAndTerminalPoolTests {
         #expect(!AgentInteractiveTerminalController.canCreateDelegatedShellTab(existingCount: 3))
         #expect(!AgentInteractiveTerminalController.canCreateDelegatedShellTab(existingCount: 4))
     }
+
+    @Test("composer uses semantic model and worker icons")
+    func composerSemanticIcons() {
+        #expect(ModelPickerPill.modelSymbol == "brain.head.profile")
+        #expect(AgentExecutionAgent.willDeep.symbol == "person.fill")
+    }
+
+    @Test("delegated images are private, forwarded to both CLIs, and removable")
+    func delegatedImageDoubleInsurance() throws {
+        let temporaryRoot = FileManager.default.temporaryDirectory.appendingPathComponent(
+            "WillDeepDelegatedImageTests-\(UUID().uuidString)",
+            isDirectory: true
+        )
+        try FileManager.default.createDirectory(at: temporaryRoot, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: temporaryRoot) }
+
+        let bytes = Data("visual-fixture".utf8)
+        let image = AgentImageAttachment(
+            mimeType: "image/png",
+            dataBase64: bytes.base64EncodedString()
+        )
+        let bundle = try AgentDelegatedImageBundle.create(
+            images: [image],
+            temporaryDirectory: temporaryRoot,
+            token: "PRIVATE"
+        )
+        let imagePath = try #require(bundle.fileURLs.first?.path)
+        #expect(try Data(contentsOf: bundle.fileURLs[0]) == bytes)
+
+        let directoryMode = try #require(
+            FileManager.default.attributesOfItem(atPath: bundle.directoryURL.path)[.posixPermissions] as? NSNumber
+        )
+        let fileMode = try #require(
+            FileManager.default.attributesOfItem(atPath: imagePath)[.posixPermissions] as? NSNumber
+        )
+        #expect(directoryMode.intValue & 0o777 == 0o700)
+        #expect(fileMode.intValue & 0o777 == 0o600)
+
+        let arguments: [String: AgentJSONValue] = [
+            "image_paths": .array([.string(imagePath)])
+        ]
+        #expect(AgentToolRunner.delegatedImagePaths(arguments) == [imagePath])
+
+        let codex = AgentToolRunner.codexCLICommandLine(
+            executable: "/x/codex",
+            prompt: "inspect",
+            permissionMode: "workspaceWrite",
+            model: nil,
+            workspacePath: "/tmp/workspace",
+            imagePaths: [imagePath]
+        )
+        #expect(codex.contains("--image '\(imagePath)' -- 'inspect'"))
+
+        let claude = AgentToolRunner.claudeCodeCommandLine(
+            executable: "/x/claude",
+            prompt: "inspect \(imagePath)",
+            permissionMode: "acceptEdits",
+            model: nil,
+            imagePaths: [imagePath]
+        )
+        #expect(claude.contains("--add-dir '\(bundle.directoryURL.path)'"))
+        #expect(claude.contains(imagePath))
+
+        bundle.removeAll()
+        #expect(!FileManager.default.fileExists(atPath: bundle.directoryURL.path))
+    }
 }
