@@ -1,6 +1,6 @@
 # WillDeep Product Overview
 
-> Last updated: 2026-07-15 | Current version: v1.163.0-rc2
+> Last updated: 2026-07-16 | Current version: v1.166.0-rc2
 
 ## Positioning
 
@@ -12,6 +12,12 @@ WillDeep is configured for non-App-Store distribution without App Sandbox so it 
 
 ## 架构概览
 
+- **工作树 diff 审查防卡顿（1.166.0-rc2）** —— Composer 的“审查”入口会直接读取有界的小型未跟踪 UTF-8 文本，不再为每个 `+0 -0` 文件串行启动 `git diff --no-index`；大型、二进制和特殊文件提前降级为摘要。按钮在准备期间展示进度并阻止重复请求，弹窗 diff 着色移到后台执行，避免主线程承担大段 `AttributedString` 构建。
+- **执行器入口与可见委托终端（1.166.0-rc1）** —— 输入框顶部工作区信息行右侧直接选择“我们 / Claude Code / Codex”，内置名称完整支持 i18n；审批入口紧跟普通、计划与目标模式选择器，“更多”只保留插件与专家。Codex 探测新增 ChatGPT App 内置 CLI 路径。Claude Code、Codex 等外部委托改在右侧栏可见的专用 `/bin/sh` 标签页中执行，不再生成隐藏临时脚本；自动化标签页最多 3 个，任务结束后回到空闲池复用，繁忙时按超时预算排队。
+- **Coding Plan 控制面与状态语义修复（1.165.0-rc2）** —— 客户资料、登录和 Coding Plan 查询固定走 some.im 控制面，不再复用中国区模型推理网关；套餐状态新增“查询中、登录失效、服务不可用、已订阅、未订阅”的明确分流，查询失败不会再沿用旧的 `false` 缓存并误报未购买。中国区模型调用仍走 `api.niuwoai.com`，不受本次修复影响。
+- **Composer 未知附件安全分流与宠物动画降噪（1.165.0-rc1）** —— Composer 统一文件选择、拖放与 `@文件` 的附件校验入口，扩展 Procfile、Dockerfile、常见无扩展名工程文件和源码/配置文本类型；未知类型不超过 8 KB 时先征求用户确认再按纯文本解析发送，超过 8 KB 或无法读取大小时直接在 Composer 上方提示且不进入附件栏。“用户确认按文本发送”会随会话文档持久化，文件刷新后仍使用相同解析策略。桌面宠物删除 3D 转圈状态与渲染属性，新输出就绪时改用温和待机动作，只保留周期性红唇与闪光彩蛋。
+- **省心托管信息页与聊天排版统一（1.164.0-rc1）** —— Composer 的省心托管胶囊不再暴露内部 Auto/Flash/Pro/Premium 名称，始终只显示“省心托管”；模型面板中的省心托管标签改为模式说明页，明确当前是否选中、裁判模型负责选型与校验、干活模型成本优先且必要时自动升档。Coding Plan 作为 some.im 独立可选套餐展示订阅与到期日期，未购买或未登录时提供购买入口，并明确不购买也能使用省心托管。聊天正文的普通段落边界统一为正常换行，不再出现整行空白；代码块后的正文继续保持与前文一致的字号和行距。
+- **流式输出光标按字符活动收口（1.163.0-rc3）** —— 助手正文末尾的闪烁方块不再跟随整个 Agent 响应周期常驻；每次流式或普通正文内容变化时显示并重置计时，连续 500ms 没有新字符后自动隐藏。长消息预览即使字符总数保持不变，也会按尾部实际变化重新计时。
 - **Composer 当前工作区 `@文件` 引用（1.162.0-rc2）** —— 在输入框键入 `@` 后，WillDeep 会针对当前 Agent 会话绑定的本地工作区异步检查文件，而不是借用 Editor 可能指向另一目录的 Quick Open 缓存；文件名、部分文件名和相对路径都可召回，精确文件名优先。选中候选后文件以附件 chip 挂载并进入既有本地解析/检索链路；扫描跳过隐藏、依赖和构建目录，并设置遍历上限保护大型仓库。
 - **侧边栏委托任务跨 Shell 启动（1.161.0-rc5）** —— Claude Code、Codex CLI、Cursor Agent 与 Cline CLI 不再把完整 prompt 和 zsh 包装语法直接输入用户配置的交互式 Shell；宿主改为生成权限 `0600` 的临时 POSIX runner，只向侧边栏发送短 `/bin/sh <runner>` 命令，兼容 fish、zsh、bash 与 sh，并规避超长 PTY 单行阻塞。runner 以独立启动标记和输出冲刷后的最终状态文件回报生命周期；15 秒内未真正启动会明确失败，结束后统一清理 prompt、日志和状态临时文件。
 - **当前 worktree 一键安装 Debug App（1.163.0-rc1）** —— 仓库根目录的 `dev_install.rb` 只从本 worktree 的 `.env.local` 读取 `WILLDEEP_CLIENT_LOGIN_SECRET`，以隐藏值的子进程环境完成 Debug 编译和 Apple Development 签名；安装前后校验版本、签名与 Debug dylib 密钥注入，并通过临时 App 路径原子替换 `/Applications/WillDeep.app`。支持 `--dry-run`、自定义 DerivedData、签名 Team 和安装目录。

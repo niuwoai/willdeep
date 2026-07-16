@@ -6,6 +6,22 @@
     "agent-model-picker.choose-help" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Choose a model and provider" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "选择模型与供应商" } } } },
     "agent-model-picker.clear-search" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Clear Search" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "清除搜索" } } } },
     "agent-model-picker.coding-picks" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Coding Picks" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "编程精选" } } } },
+    "agent-model-picker.coding-plan-active" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Coding Plan is currently active." } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "Coding Plan 套餐权益当前有效。" } } } },
+    "agent-model-picker.coding-plan-authentication-required" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Your some.im session has expired. Sign in again to verify the package." } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "some.im 登录会话已失效，请重新登录后核验套餐。" } } } },
+    "agent-model-picker.coding-plan-benefit" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "A some.im package for frequent coding tasks, with packaged usage and more predictable cost." } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "some.im 为高频编程任务提供的套餐包，让用量打包、成本更可预期。" } } } },
+    "agent-model-picker.coding-plan-buy" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Learn More and Buy" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "了解并购买" } } } },
+    "agent-model-picker.coding-plan-checking" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Checking Coding Plan…" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "正在查询 Coding Plan…" } } } },
+    "agent-model-picker.coding-plan-checking-hint" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Your package name and expiration date will appear here." } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "查询完成后会在这里显示套餐名称和到期日期。" } } } },
+    "agent-model-picker.coding-plan-check-failed" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Unable to verify Coding Plan" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "暂时无法核验 Coding Plan" } } } },
+    "agent-model-picker.coding-plan-expires" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Valid until %@" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "有效期至 %@" } } } },
+    "agent-model-picker.coding-plan-login-description" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Sign in to check an existing subscription, or open some.im to learn about and buy Coding Plan." } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "登录后可查看已有订阅；也可以前往 some.im 了解并购买 Coding Plan。" } } } },
+    "agent-model-picker.coding-plan-manage" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Manage Coding Plan" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "管理 Coding Plan" } } } },
+    "agent-model-picker.coding-plan-not-purchased" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "No active Coding Plan" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "当前没有有效的 Coding Plan" } } } },
+    "agent-model-picker.coding-plan-not-purchased-description" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "You can still use Managed Routing. Buy Coding Plan only when a coding package suits your usage." } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "不购买也能使用省心托管；只有需要编程套餐包时再购买即可。" } } } },
+    "agent-model-picker.coding-plan-retry" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Retry" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "重新查询" } } } },
+    "agent-model-picker.coding-plan-subscribed" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Subscribed" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "已订阅" } } } },
+    "agent-model-picker.coding-plan-title" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Coding Plan (optional package)" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "Coding Plan（可选套餐）" } } } },
+    "agent-model-picker.coding-plan-unavailable" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "The package service is temporarily unavailable. Your existing subscription has not been changed." } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "套餐服务暂时不可用；这不代表你没有订阅，也不会改变现有套餐。" } } } },
     "agent-model-picker.coding-recommended" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Coding Picks" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "编程推荐" } } } },
     "agent-model-picker.coding-task" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Coding task" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "编程任务" } } } },
     "agent-model-picker.current" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Current" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "当前" } } } },
@@ -16,8 +32,20 @@
     "agent-model-picker.general-task" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "General task" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "通用任务" } } } },
     "agent-model-picker.loading" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Loading model catalog…" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "正在加载模型目录…" } } } },
     "agent-model-picker.managed" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Managed" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "省心托管" } } } },
+    "agent-model-picker.managed-benefits-title" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Two-model collaboration" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "两路模型协作" } } } },
+    "agent-model-picker.managed-judge-description" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "A judge identifies the task and difficulty, chooses the working model, and validates the result." } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "裁判负责判断任务类型和难度、选择干活模型，并对结果进行质量校验。" } } } },
+    "agent-model-picker.managed-judge-title" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Judge: selection and validation" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "裁判模型：选型与校验" } } } },
+    "agent-model-picker.managed-login-required-description" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Sign in to some.im to enable Managed Routing. Coding Plan is optional and is not required." } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "登录 some.im 后即可使用省心托管；Coding Plan 是可选套餐，不是使用前提。" } } } },
+    "agent-model-picker.managed-login-required-title" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Sign in to use Managed Routing" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "登录后可使用省心托管" } } } },
+    "agent-model-picker.managed-not-selected-description" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "This conversation is using a specific model. Switch back when you want some.im to handle model selection." } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "当前会话仍使用你选择的具体模型；需要自动选型时可切回省心托管。" } } } },
+    "agent-model-picker.managed-not-selected-title" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Managed Routing is not selected" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "当前没有选择省心托管" } } } },
+    "agent-model-picker.managed-plan-independence" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Managed Routing works without Coding Plan. Coding Plan is a separate some.im package for coding usage." } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "省心托管无需购买 Coding Plan；Coding Plan 只是 some.im 另行提供的编程套餐包。" } } } },
     "agent-model-picker.managed-rule" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "General tasks always use someim-auto-*; Coding Plan is used only for coding tasks" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "通用任务始终使用 someim-auto-*；Coding Plan 仅用于编程任务" } } } },
+    "agent-model-picker.managed-selected-description" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "This conversation uses a judge to choose and validate the working model automatically." } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "当前会话会由裁判自动选择干活模型，并对执行结果进行校验。" } } } },
+    "agent-model-picker.managed-selected-title" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Managed Routing is selected" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "当前已选择省心托管" } } } },
     "agent-model-picker.managed-subtitle" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Automatically select a model" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "自动选择模型" } } } },
+    "agent-model-picker.managed-worker-description" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "A cost-efficient model tries first. If it cannot finish or validation fails, Managed Routing escalates automatically." } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "先由低成本模型干活；实现不了或校验未通过时，再自动升档继续处理。" } } } },
+    "agent-model-picker.managed-worker-title" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Worker: cost first, capability when needed" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "干活模型：成本优先，能力兜底" } } } },
     "agent-model-picker.model-count" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "%lld models" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "%lld 个模型" } } } },
     "agent-model-picker.no-models" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "No models are available from this provider" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "这个供应商暂时没有可用模型" } } } },
     "agent-model-picker.no-results" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "No matching models" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "没有找到匹配的模型" } } } },
@@ -33,9 +61,11 @@
     "agent-model-picker.retry-catalog" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Retry catalog refresh" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "重新加载模型目录" } } } },
     "agent-model-picker.route-default" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Provider Default" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "供应商默认" } } } },
     "agent-model-picker.search-placeholder" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Search models or providers" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "搜索模型或供应商" } } } },
+    "agent-model-picker.select-managed" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Select Managed Routing" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "选择省心托管" } } } },
     "agent-model-picker.selection-footer" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Selecting a model switches the provider and model for this conversation" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "选择后将切换当前会话的供应商与模型" } } } },
     "agent-model-picker.some-im-connect-hint" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Connect to use Managed Routing, Coding Plan, and recommendations" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "连接后可使用省心托管、Coding Plan 和推荐模型" } } } },
     "agent-model-picker.some-im-disconnected" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "some.im is not connected" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "some.im 未连接" } } } },
+    "agent-model-picker.sign-in-some-im" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Sign in to some.im" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "登录 some.im" } } } },
     "agent-model-picker.tag.affordable" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Affordable" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "便宜" } } } },
     "agent-model-picker.tag.coding" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Coding" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "编程" } } } },
     "agent-model-picker.tag.fast" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Fast" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "快速" } } } },
@@ -3588,6 +3618,27 @@
         }
       }
     },
+    "agent-terminal.delegated-shell-title" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Delegated · sh" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "外部委托 · sh" } }
+      }
+    },
+    "agent-terminal.delegated-shell-tooltip" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Reusable /bin/sh tab managed for external coding tasks" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "供外部编程任务复用、由应用自动管理的 /bin/sh 标签页" } }
+      }
+    },
+    "agent-terminal.delegated-task" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Delegated task" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "外部委托任务" } }
+      }
+    },
     "agent-terminal.new-local-tab" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -3758,6 +3809,13 @@
             "value" : "已复制"
           }
         }
+      }
+    },
+    "agent-terminal.session.delegated" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Delegated Shell" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "委托 Shell" } }
       }
     },
     "agent-terminal.session.local" : {
@@ -4829,6 +4887,24 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "审查"
+          }
+        }
+      }
+    },
+    "agent-worktree-summary.preparing-review" : {
+      "comment" : "Loading label shown while the composer prepares an uncommitted diff preview.",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Preparing…"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "准备中…"
           }
         }
       }
@@ -7930,14 +8006,14 @@
       "localizations" : {
         "en" : {
           "stringUnit" : {
-            "state" : "new",
-            "value" : "More settings: approval, executor, plugins, experts"
+            "state" : "translated",
+            "value" : "More settings: plugins and experts"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
-            "state" : "needs_review",
-            "value" : "更多设置:执行器、插件、专家"
+            "state" : "translated",
+            "value" : "更多设置：插件、专家"
           }
         }
       }
@@ -8184,6 +8260,13 @@
         }
       }
     },
+    "composer.attach-file.notice.dismiss" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Dismiss attachment notice" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "关闭附件提示" } }
+      }
+    },
     "composer.attach-file.too-large" : {
       "comment" : "Error shown when a document attachment exceeds the local size limit",
       "extractionState" : "manual",
@@ -8218,6 +8301,48 @@
             "value" : "%@ 不是受支持的附件类型。"
           }
         }
+      }
+    },
+    "composer.attach-file.unknown.cancel" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Cancel" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "取消" } }
+      }
+    },
+    "composer.attach-file.unknown.confirm" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Attach as Text" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "仍按文本附加" } }
+      }
+    },
+    "composer.attach-file.unknown.message" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "%@ has an unknown file type but is only %@. If you continue, WillDeep will decode and send it as plain text." } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "无法识别 %@ 的文件类型，但它只有 %@。如果继续，WillDeep 会把它解码为纯文本并发送。" } }
+      }
+    },
+    "composer.attach-file.unknown.title" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Attach %@ as text?" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "仍要把 %@ 当作文本附加吗？" } }
+      }
+    },
+    "composer.attach-file.unknown.too-large" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "%@ has an unknown file type and is larger than 8 KB, so it was not attached." } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "无法识别 %@ 的文件类型，而且文件超过 8 KB，因此没有附加。" } }
+      }
+    },
+    "composer.attach-file.unknown.unreadable" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "%@ has an unknown file type and its size could not be read, so it was not attached." } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "无法识别 %@ 的文件类型，也无法读取文件大小，因此没有附加。" } }
       }
     },
     "composer.insert-secret.action" : {
@@ -10307,6 +10432,55 @@
             "value" : "展开组件"
           }
         }
+      }
+    },
+    "execution-agent.claude-code.name" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Claude Code" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "Claude Code" } }
+      }
+    },
+    "execution-agent.claude-code.summary" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Run this task with the local Claude Code CLI." } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "通过本机 Claude Code CLI 执行这轮任务。" } }
+      }
+    },
+    "execution-agent.codex.name" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Codex" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "Codex" } }
+      }
+    },
+    "execution-agent.codex.summary" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Run this task with the local Codex CLI." } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "通过本机 Codex CLI 执行这轮任务。" } }
+      }
+    },
+    "execution-agent.ours.name" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Us" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "我们" } }
+      }
+    },
+    "execution-agent.ours.summary" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Use this conversation's model and tool loop." } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "使用当前会话自己的模型和工具循环。" } }
+      }
+    },
+    "execution-agent.picker.help" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Choose whether this turn runs here or is delegated to the local Claude Code or Codex CLI." } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "选择这一轮由我们执行，还是委托给本机 Claude Code 或 Codex CLI。" } }
       }
     },
     "expert.picker-help" : {
@@ -25425,6 +25599,125 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "国际（some.im）"
+          }
+        }
+      }
+    },
+    "settings.some-im.new-tab-default-section" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "New Tab Default"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "新标签页默认模型"
+          }
+        }
+      }
+    },
+    "settings.some-im.new-tab-default-label" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Default model mode"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "默认模型模式"
+          }
+        }
+      }
+    },
+    "settings.some-im.new-tab-default-managed" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Managed Routing"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "省心托管"
+          }
+        }
+      }
+    },
+    "settings.some-im.new-tab-default-model" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "someim-auto-flash"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "someim-auto-flash"
+          }
+        }
+      }
+    },
+    "settings.some-im.new-tab-default-managed-help" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "New tabs use Managed Routing. You can still choose a concrete model in the composer for the current conversation."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "新标签页默认使用省心托管；你仍可在当前会话的输入区手动选择具体模型。"
+          }
+        }
+      }
+    },
+    "settings.some-im.new-tab-default-model-help" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "New tabs use someim-auto-flash and let you choose another concrete model in the composer."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "新标签页默认使用 someim-auto-flash，并可在输入区改选其他具体模型。"
+          }
+        }
+      }
+    },
+    "settings.some-im.new-tab-default-login-required" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sign in to some.im to configure the default model mode for new tabs."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "登录 some.im 后才能设置新标签页的默认模型模式。"
           }
         }
       }

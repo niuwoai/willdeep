@@ -44,7 +44,6 @@ struct DesktopPetTests {
 
         #expect(animation.scale == 1)
         #expect(animation.facesRight)
-        #expect(animation.yawRotation == 0)
         #expect(animation.verticalOffset < 0)
     }
 
@@ -72,18 +71,17 @@ struct DesktopPetTests {
         )
 
         #expect(animation.scale == 1)
-        #expect(animation.yawRotation == 0)
     }
 
     @Test
-    func spinningAnimationTurnsAroundVerticalAxis() {
+    func readyAnimationUsesGentleIdleMotion() {
         let animation = DesktopPetAnimationValues(
-            mood: .spinning,
+            mood: .ready,
             date: Date(timeIntervalSinceReferenceDate: 123)
         )
 
-        #expect(animation.rotation == 0)
-        #expect(animation.yawRotation != 0)
+        #expect(animation.scale == 1)
+        #expect(abs(animation.rotation) < 12)
     }
 
     @Test

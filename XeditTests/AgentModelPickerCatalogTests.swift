@@ -74,4 +74,31 @@ struct AgentModelPickerCatalogTests {
         #expect(AgentModelPickerCatalog.filtered(items, by: .flash).map(\.modelID) == ["deepseek-v4-flash"])
         #expect(AgentModelPickerCatalog.filtered(items, by: .pro).map(\.modelID) == ["deepseek-v4-pro"])
     }
+
+    @Test
+    func managedMarketingStatusSeparatesSelectionFromAuthentication() {
+        #expect(AgentManagedMarketingStatus.resolve(
+            isAuthenticated: true,
+            isManagedActive: true
+        ) == .selected)
+        #expect(AgentManagedMarketingStatus.resolve(
+            isAuthenticated: true,
+            isManagedActive: false
+        ) == .available)
+        #expect(AgentManagedMarketingStatus.resolve(
+            isAuthenticated: false,
+            isManagedActive: true
+        ) == .loginRequired)
+    }
+
+    @Test
+    func managedPillNeverExposesResolvedModelOrTier() {
+        let label = AgentModelPickerPresentation.pillLabel(
+            managedActive: true,
+            currentModelLabel: "some.im · Auto Flash",
+            managedLabel: "省心托管",
+            selectModelLabel: "选择模型"
+        )
+        #expect(label == "省心托管")
+    }
 }

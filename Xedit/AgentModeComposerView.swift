@@ -312,12 +312,21 @@ private struct AgentComposerWorktreeSummaryBar: View {
             Button {
                 appState.showAgentWorktreeDiff()
             } label: {
-                Text(L10n.AgentWorktreeSummary.review)
-                    .font(.system(size: 12, weight: .medium))
+                HStack(spacing: 5) {
+                    if appState.isAgentWorktreeDiffPreviewLoading {
+                        ProgressView()
+                            .controlSize(.mini)
+                    }
+                    Text(appState.isAgentWorktreeDiffPreviewLoading
+                         ? L10n.AgentWorktreeSummary.preparingReview
+                         : L10n.AgentWorktreeSummary.review)
+                }
+                .font(.system(size: 12, weight: .medium))
             }
             .buttonStyle(.plain)
             .focusable(false)
             .foregroundStyle(.primary)
+            .disabled(appState.isAgentWorktreeDiffPreviewLoading)
             .help(L10n.AgentWorktreeSummary.reviewHelp)
 
             Button {
@@ -467,7 +476,9 @@ private struct AgentComposerGoalCard: View {
 struct AgentWorktreeDiffPreviewSheet: View {
     let preview: AgentWorktreeDiffPreview
     @Environment(\.dismiss) private var dismiss
+    @EnvironmentObject private var appState: AppState
     @State private var didCopy = false
+    @State private var coloredDiff: AttributedString?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -500,46 +511,34 @@ struct AgentWorktreeDiffPreviewSheet: View {
             Divider()
                 .focusable(false)
 
-            ScrollView([.vertical, .horizontal]) {
-                Text(coloredDiff)
-                    .font(.system(size: 11, design: .monospaced))
-                    .textSelection(.enabled)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(14)
-                    .focusable(false)
+            Group {
+                if let coloredDiff {
+                    ScrollView([.vertical, .horizontal]) {
+                        Text(coloredDiff)
+                            .font(.system(size: 11, design: .monospaced))
+                            .textSelection(.enabled)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .padding(14)
+                            .focusable(false)
+                    }
+                } else {
+                    ProgressView()
+                        .controlSize(.small)
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                }
             }
             .background(Color(nsColor: .textBackgroundColor))
             .focusable(false)
         }
         .frame(minWidth: 760, minHeight: 520)
         .focusable(false)
-    }
-
-    /// 给 diff 文本按行上色:新增行绿、删除行红、hunk 头青、文件头次要
-    /// 色,其余正文用主色。用 AttributedString 整块上色,保持仍是单个
-    /// 可选中 / 可复制的 Text(逐行 Text 会破坏跨行选择)。
-    private var coloredDiff: AttributedString {
-        var result = AttributedString()
-        let lines = preview.diff.components(separatedBy: "\n")
-        for (index, line) in lines.enumerated() {
-            var piece = AttributedString(line)
-            piece.foregroundColor = diffLineColor(line)
-            result += piece
-            if index < lines.count - 1 {
-                result += AttributedString("\n")
-            }
+        .task {
+            let diff = preview.diff
+            let palette = appState.editorSettings.interfaceSkin.palette
+            coloredDiff = await Task.detached(priority: .userInitiated) {
+                AgentDiffColorizer.attributed(diff, palette: palette)
+            }.value
         }
-        return result
-    }
-
-    private func diffLineColor(_ line: String) -> Color {
-        // 顺序要紧:文件头 `+++/---` 必须先于单字符 `+/-` 判断,否则会被
-        // 误当成新增 / 删除行。
-        if line.hasPrefix("+++") || line.hasPrefix("---") { return .secondary }
-        if line.hasPrefix("@@") { return .cyan }
-        if line.hasPrefix("+") { return .green }
-        if line.hasPrefix("-") { return .red }
-        return .primary
     }
 
     private func copyDiff() {
@@ -591,6 +590,8 @@ private struct ComposerCard: View {
     /// prompt instead of making the user hunt for the completed tool card.
     @State private var pendingTerminalProtectedInput: TerminalShortcutProtectedPromptSet?
     @State private var lastAutoPresentedTerminalShortcutID: UUID?
+    @State private var attachmentNotice: String?
+    @State private var pendingUnknownAttachment: PendingUnknownAttachmentConfirmation?
 
     private var filteredSlashCommands: [SlashCommand] {
         SlashCommand.filter(
@@ -667,6 +668,28 @@ private struct ComposerCard: View {
             || !appState.agentSessionDocuments.isEmpty
             || !appState.agentKnowledgeFolders.isEmpty
         VStack(alignment: .leading, spacing: 8) {
+            if let attachmentNotice {
+                HStack(alignment: .top, spacing: 8) {
+                    Image(systemName: "exclamationmark.triangle.fill")
+                        .foregroundStyle(.orange)
+                    Text(attachmentNotice)
+                        .font(.system(size: 11, weight: .medium))
+                        .fixedSize(horizontal: false, vertical: true)
+                    Spacer(minLength: 4)
+                    Button {
+                        self.attachmentNotice = nil
+                    } label: {
+                        Image(systemName: "xmark")
+                    }
+                    .buttonStyle(.plain)
+                    .help(L10n.Composer.dismissAttachmentNotice)
+                }
+                .padding(.horizontal, 10)
+                .padding(.vertical, 8)
+                .background(Color.orange.opacity(0.10))
+                .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+            }
+
             AgentComposerRunContextBar()
 
             if !appState.agentPendingImages.isEmpty {
@@ -933,6 +956,19 @@ private struct ComposerCard: View {
                 inputFocused = true
             }
         }
+        .alert(item: $pendingUnknownAttachment) { pending in
+            Alert(
+                title: Text(L10n.Composer.unknownAttachmentConfirmationTitle(pending.url.lastPathComponent)),
+                message: Text(L10n.Composer.unknownAttachmentConfirmationMessage(
+                    pending.url.lastPathComponent,
+                    ByteCountFormatter.string(fromByteCount: Int64(pending.byteCount), countStyle: .file)
+                )),
+                primaryButton: .default(Text(L10n.Composer.attachUnknownFile)) {
+                    attachFile(pending.url, userConfirmedUnknownText: true)
+                },
+                secondaryButton: .cancel(Text(L10n.Composer.cancelUnknownFile))
+            )
+        }
     }
 
     /// Runs the currently-highlighted slash command. Returns true when a
@@ -1147,7 +1183,7 @@ private struct ComposerCard: View {
                 appState.toggleAgentWorkspaceOverview()
             }
         case .file(let url, _):
-            appState.attachAgentFile(url: url)
+            attachFile(url)
         }
         closeAtMenu()
         return true
@@ -1230,29 +1266,50 @@ private struct ComposerCard: View {
         }
     }
 
-    private func attachFile(_ url: URL) {
+    private func attachFile(_ url: URL, userConfirmedUnknownText: Bool = false) {
         var isDirectory: ObjCBool = false
         if FileManager.default.fileExists(atPath: url.path, isDirectory: &isDirectory),
            isDirectory.boolValue {
+            attachmentNotice = nil
             appState.addAgentKnowledgeFolder(url: url)
             return
         }
 
         if let mime = AgentImagePasteboardHelper.mimeType(forPath: url.path),
            let data = try? Data(contentsOf: url) {
+            attachmentNotice = nil
             ingest(data: data, mimeType: mime)
             return
         }
 
-        guard AgentComposerAttachmentSupport.isSupportedDocument(url) else {
-            appState.agentErrorMessage = L10n.Composer.unsupportedAttachment(url.lastPathComponent)
-            return
+        switch AgentComposerAttachmentSupport.selectionPolicy(for: url) {
+        case .supported:
+            guard !AgentComposerAttachmentSupport.documentExceedsSizeLimit(url) else {
+                attachmentNotice = L10n.Composer.attachmentTooLarge(url.lastPathComponent)
+                return
+            }
+            attachmentNotice = nil
+            appState.attachAgentFile(url: url)
+
+        case .unknownNeedsConfirmation(let byteCount):
+            if userConfirmedUnknownText {
+                attachmentNotice = nil
+                appState.attachAgentFile(url: url, treatsUnknownTypeAsText: true)
+            } else {
+                pendingUnknownAttachment = PendingUnknownAttachmentConfirmation(
+                    url: url,
+                    byteCount: byteCount
+                )
+            }
+
+        case .unknownTooLarge:
+            pendingUnknownAttachment = nil
+            attachmentNotice = L10n.Composer.unknownAttachmentTooLarge(url.lastPathComponent)
+
+        case .unknownUnreadable:
+            pendingUnknownAttachment = nil
+            attachmentNotice = L10n.Composer.unknownAttachmentUnreadable(url.lastPathComponent)
         }
-        guard !AgentComposerAttachmentSupport.documentExceedsSizeLimit(url) else {
-            appState.agentErrorMessage = L10n.Composer.attachmentTooLarge(url.lastPathComponent)
-            return
-        }
-        appState.attachAgentFile(url: url)
     }
 
     private func ingest(data: Data, mimeType: String) {
@@ -1265,6 +1322,12 @@ private struct ComposerCard: View {
               let rep = NSBitmapImageRep(data: tiff) else { return nil }
         return rep.representation(using: .png, properties: [:])
     }
+}
+
+private struct PendingUnknownAttachmentConfirmation: Identifiable {
+    let id = UUID()
+    let url: URL
+    let byteCount: Int
 }
 
 private struct ConsultationButton: View {

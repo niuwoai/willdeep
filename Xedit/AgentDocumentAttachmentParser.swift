@@ -66,17 +66,26 @@ nonisolated enum AgentDocumentAttachmentParser {
 
     static func analyze(
         url: URL,
+        forceText: Bool = false,
         ocrProvider: any AgentAttachmentOCRProviding = AgentVisionOCRProvider()
     ) async throws -> AgentAttachmentAnalysis {
         try await Task.detached(priority: .userInitiated) {
-            try analyzeSynchronously(url: url, ocrProvider: ocrProvider)
+            try analyzeSynchronously(
+                url: url,
+                forceText: forceText,
+                ocrProvider: ocrProvider
+            )
         }.value
     }
 
     private static func analyzeSynchronously(
         url: URL,
+        forceText: Bool,
         ocrProvider: any AgentAttachmentOCRProviding
     ) throws -> AgentAttachmentAnalysis {
+        if forceText {
+            return try analyzeText(url: url)
+        }
         let ext = url.pathExtension.lowercased()
         switch ext {
         case "pdf":
@@ -86,7 +95,7 @@ nonisolated enum AgentDocumentAttachmentParser {
         case "xlsx":
             return try analyzeXLSX(url: url)
         default:
-            guard AgentComposerAttachmentSupport.textExtensions.contains(ext) else {
+            guard AgentComposerAttachmentSupport.isKnownTextDocument(url) else {
                 throw ParserError.unsupported
             }
             return try analyzeText(url: url)

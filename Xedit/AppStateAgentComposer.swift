@@ -1202,7 +1202,7 @@ extension AppState {
         agentPendingSkills.removeAll { $0.identifier == identifier }
     }
 
-    func attachAgentFile(url: URL) {
+    func attachAgentFile(url: URL, treatsUnknownTypeAsText: Bool = false) {
         guard let runtime = activeRuntime ?? activeRuntimeAfterCreatingNewSession() else { return }
         let standardized = url.standardizedFileURL
         guard !runtime.pendingFiles.contains(where: { $0.url.standardizedFileURL == standardized }) else { return }
@@ -1220,9 +1220,15 @@ extension AppState {
         if let existingIndex = runtime.documentAttachments.firstIndex(where: { $0.id == standardized.path }) {
             var existing = runtime.documentAttachments[existingIndex]
             existing.isEnabled = true
+            let alreadyForcedToText = existing.treatsUnknownTypeAsText == true
+            if treatsUnknownTypeAsText {
+                existing.treatsUnknownTypeAsText = true
+            }
+            let forceTextNeedsReparse = treatsUnknownTypeAsText && !alreadyForcedToText
             if existing.parseStatus == .ready,
                existing.sourceFileSize == metadata.size,
-               existing.sourceModifiedAt == metadata.modifiedAt {
+               existing.sourceModifiedAt == metadata.modifiedAt,
+               !forceTextNeedsReparse {
                 runtime.documentAttachments[existingIndex] = existing
                 runtime.pendingFiles.append(existing)
                 runtime.persist(touchUpdatedAt: false)
@@ -1233,11 +1239,17 @@ extension AppState {
         var attachment = AgentFileAttachment(url: standardized, relativePath: relative)
         attachment.sourceFileSize = metadata.size
         attachment.sourceModifiedAt = metadata.modifiedAt
+        attachment.treatsUnknownTypeAsText = treatsUnknownTypeAsText ? true : nil
         runtime.pendingFiles.append(attachment)
         runtime.documentAttachments.removeAll { $0.id == attachment.id }
         runtime.documentAttachments.append(attachment)
         runtime.persist(touchUpdatedAt: false)
-        analyzeAgentFileAttachment(id: attachment.id, url: standardized, for: runtime)
+        analyzeAgentFileAttachment(
+            id: attachment.id,
+            url: standardized,
+            treatsUnknownTypeAsText: treatsUnknownTypeAsText,
+            for: runtime
+        )
     }
 
     func detachAgentFile(id: String) {
@@ -1312,10 +1324,18 @@ extension AppState {
         runtime.persist(touchUpdatedAt: false)
     }
 
-    private func analyzeAgentFileAttachment(id: String, url: URL, for runtime: AgentRuntime) {
+    private func analyzeAgentFileAttachment(
+        id: String,
+        url: URL,
+        treatsUnknownTypeAsText: Bool,
+        for runtime: AgentRuntime
+    ) {
         Task { [weak runtime] in
             do {
-                let analysis = try await AgentDocumentAttachmentParser.analyze(url: url)
+                let analysis = try await AgentDocumentAttachmentParser.analyze(
+                    url: url,
+                    forceText: treatsUnknownTypeAsText
+                )
                 guard let runtime else { return }
                 if let index = runtime.pendingFiles.firstIndex(where: { $0.id == id }) {
                     runtime.pendingFiles[index].analysis = analysis
@@ -1382,7 +1402,12 @@ extension AppState {
             runtime.documentAttachments[index].parseStatus = .parsing
             runtime.documentAttachments[index].analysis = nil
             runtime.documentAttachments[index].parseError = nil
-            analyzeAgentFileAttachment(id: file.id, url: file.url, for: runtime)
+            analyzeAgentFileAttachment(
+                id: file.id,
+                url: file.url,
+                treatsUnknownTypeAsText: file.treatsUnknownTypeAsText == true,
+                for: runtime
+            )
             startedParsing = true
         }
         if startedParsing {

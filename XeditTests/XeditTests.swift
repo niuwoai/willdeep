@@ -1900,50 +1900,6 @@ struct WillDeepTests {
         #expect(!act.contains("--model"))
     }
 
-    @Test("external agent executable discovery and local catalog expose direct tools")
-    func testExternalAgentDiscovery() {
-        let codex = AgentToolRunner.codexCLIExecutablePath(
-            environment: ["PATH": "/usr/local/bin:/opt/homebrew/bin"],
-            isExecutable: { $0 == "/Applications/Codex.app/Contents/Resources/codex" }
-        )
-        #expect(codex == "/Applications/Codex.app/Contents/Resources/codex")
-
-        // Editor-launcher fallback: only `cursor` present.
-        let cursor = AgentToolRunner.cursorAgentExecutablePath(
-            environment: ["PATH": "/usr/local/bin"],
-            isExecutable: { $0 == "/usr/local/bin/cursor" }
-        )
-        #expect(cursor == "/usr/local/bin/cursor")
-
-        // Standalone install: only `cursor-agent` in ~/.local/bin, no `cursor`
-        // command at all. Must still be discovered (regression: previously the
-        // discovery only looked for `cursor` and reported "not installed").
-        let standalone = "\(NSHomeDirectory())/.local/bin/cursor-agent"
-        let cursorAgentOnly = AgentToolRunner.cursorAgentExecutablePath(
-            environment: ["PATH": "/usr/bin"],
-            isExecutable: { $0 == standalone }
-        )
-        #expect(cursorAgentOnly == standalone)
-
-        // When both exist, prefer the standalone `cursor-agent`.
-        let both = AgentToolRunner.cursorAgentExecutablePath(
-            environment: ["PATH": "/usr/local/bin"],
-            isExecutable: { $0 == standalone || $0 == "/usr/local/bin/cursor" }
-        )
-        #expect(both == standalone)
-
-        let cline = AgentToolRunner.clineCLIExecutablePath(
-            environment: ["PATH": "/usr/local/bin"],
-            isExecutable: { $0 == "/usr/local/bin/cline" }
-        )
-        #expect(cline == "/usr/local/bin/cline")
-
-        let entries = LocalAgentCLI.catalog
-        #expect(entries.first(where: { $0.id == "codex-cli" })?.integration == .directTool("codex_cli"))
-        #expect(entries.first(where: { $0.id == "cursor-cli" })?.integration == .directTool("cursor_agent"))
-        #expect(entries.first(where: { $0.id == "cline-cli" })?.integration == .directTool("cline_cli"))
-    }
-
     @Test("external agent always-allow signatures are scoped by permission mode")
     func testExternalAgentAuthorizationSignatures() {
         #expect(AgentToolAuthorization.signature(

@@ -910,6 +910,7 @@ enum AgentToolRunner {
         isExecutable: (String) -> Bool = { FileManager.default.isExecutableFile(atPath: $0) }
     ) -> String? {
         executablePath(commandName: "codex", preferredPaths: [
+            "/Applications/ChatGPT.app/Contents/Resources/codex",
             "/Applications/Codex.app/Contents/Resources/codex",
             "\(NSHomeDirectory())/.local/bin/codex",
         ], environment: environment, isExecutable: isExecutable)
@@ -1175,9 +1176,9 @@ enum AgentToolRunner {
                 .map(TimeInterval.init) ?? delegatedAgentForegroundTimeout
             let label = arguments["visible_terminal_label"]?.stringValue()?
                 .trimmingCharacters(in: .whitespacesAndNewlines)
-            let displayCommand = label.flatMap { $0.isEmpty ? nil : "\($0) task" }
-                ?? "Delegated coding task"
-            return try await controller.runCommandInBoundTab(
+            let displayCommand = label.flatMap { $0.isEmpty ? nil : $0 }
+                ?? L10n.AgentTerminal.delegatedTask
+            return try await controller.runCommandInDelegatedShellTab(
                 command,
                 sessionID: sessionID,
                 displayCommand: displayCommand,

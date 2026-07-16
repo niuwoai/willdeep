@@ -731,6 +731,7 @@ struct SomeIMBrowserLoginStatusTests {
         }
 
         SomeIMBrowserLoginMockURLProtocol.handler = { request in
+            #expect(request.url?.host == "some.im")
             #expect(request.url?.path == "/api/v1/customer/plan/subscription")
             #expect(request.value(forHTTPHeaderField: "Authorization") == "Bearer session-plan")
             let response = HTTPURLResponse(
@@ -757,7 +758,7 @@ struct SomeIMBrowserLoginStatusTests {
         }
 
         let status = try await SomeIMClient.fetchCodingPlanStatus(
-            settings: SomeIMIntegrationSettings(baseURL: "https://some.im/v1"),
+            settings: SomeIMIntegrationSettings(baseURL: SomeIMRelayRegion.chinaBaseURL),
             sessionToken: "session-plan",
             session: session
         )
@@ -766,6 +767,22 @@ struct SomeIMBrowserLoginStatusTests {
         #expect(status.planID == "plan-pro")
         #expect(status.planName == "Coding Pro")
         #expect(status.periodEnd != nil)
+    }
+
+    @Test("coding plan subscription fetch requires a customer session")
+    func testCodingPlanSubscriptionFetchRequiresCustomerSession() async {
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.protocolClasses = [SomeIMBrowserLoginMockURLProtocol.self]
+        let session = URLSession(configuration: configuration)
+        defer { session.invalidateAndCancel() }
+
+        await #expect(throws: URLError.self) {
+            _ = try await SomeIMClient.fetchCodingPlanStatus(
+                settings: SomeIMIntegrationSettings(baseURL: SomeIMRelayRegion.chinaBaseURL),
+                sessionToken: "",
+                session: session
+            )
+        }
     }
 
     @Test("coding plan subscription fetch treats null subscription as no plan")

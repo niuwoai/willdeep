@@ -168,12 +168,14 @@ extension AppState {
         if !force, !someIMCodingPlanStatus.isStale {
             return someIMCodingPlanStatus
         }
+        someIMCodingPlanRefreshFailure = nil
         do {
             let status = try await SomeIMClient.fetchCodingPlanStatus()
             someIMCodingPlanStatus = status
             SomeIMIntegrationStore.saveCodingPlanStatus(status)
             return status
         } catch {
+            someIMCodingPlanRefreshFailure = SomeIMCodingPlanRefreshFailure.classify(error)
             return someIMCodingPlanStatus
         }
     }
@@ -733,20 +735,21 @@ extension AppState {
 
     func showAgentWorktreeDiff() {
         let changes = agentWorktreeChanges
-        guard !changes.isEmpty else { return }
+        guard !changes.isEmpty, !isAgentWorktreeDiffPreviewLoading else { return }
 
         let repositoryRoot = changes.repositoryRoot
             ?? activeRuntime?.workspaceRootPath.map { URL(fileURLWithPath: $0).standardizedFileURL }
             ?? rootDirectory?.standardizedFileURL
         guard let repositoryRoot else { return }
 
+        isAgentWorktreeDiffPreviewLoading = true
         Task { [weak self] in
             let preview = await Task.detached(priority: .utility) {
                 Self.loadAgentWorktreeDiffPreview(changes: changes, repositoryRoot: repositoryRoot)
             }.value
-            await MainActor.run {
-                self?.agentWorktreeDiffPreview = preview
-            }
+            guard let self else { return }
+            self.isAgentWorktreeDiffPreviewLoading = false
+            self.agentWorktreeDiffPreview = preview
         }
     }
 
@@ -908,10 +911,11 @@ extension AppState {
         pruneEmptyAgentSessions()
 
         let defaultManagedRouting = defaultSomeIMManagedRoutingState()
+        let defaultModelID = defaultAgentModelIDForNewSession(managedRouting: defaultManagedRouting)
         let session = AgentSession(
             workspaceRootPath: rootDirectory?.standardizedFileURL.path,
             workspaceLocation: (rootDirectory?.standardizedFileURL.path).map { WorkspaceLocation.local(path: $0) },
-            modelID: defaultManagedRouting == nil ? activeAgentModelID : nil,
+            modelID: defaultModelID,
             managedRouting: defaultManagedRouting
         )
         agentSessions.insert(session, at: 0)
@@ -920,6 +924,7 @@ extension AppState {
         // and there has to be one in `agentRuntimes` for those writes
         // to land somewhere.
         let newRuntime = AgentRuntime(session: session)
+        seedNewSessionModelOverride(for: newRuntime)
         agentRuntimes[session.id] = newRuntime
         activeAgentSessionID = session.id
         subscribeToActiveRuntime()
@@ -962,14 +967,16 @@ extension AppState {
         pruneEmptyAgentSessions()
 
         let defaultManagedRouting = defaultSomeIMManagedRoutingState()
+        let defaultModelID = defaultAgentModelIDForNewSession(managedRouting: defaultManagedRouting)
         let session = AgentSession(
             workspaceRootPath: normalizedPath,
             workspaceLocation: normalizedPath.map { WorkspaceLocation.local(path: $0) },
-            modelID: defaultManagedRouting == nil ? activeAgentModelID : nil,
+            modelID: defaultModelID,
             managedRouting: defaultManagedRouting
         )
         agentSessions.insert(session, at: 0)
         let newRuntime = AgentRuntime(session: session)
+        seedNewSessionModelOverride(for: newRuntime)
         agentRuntimes[session.id] = newRuntime
         activeAgentSessionID = session.id
         subscribeToActiveRuntime()
@@ -1722,7 +1729,6 @@ extension AppState {
     }
 
     func setAgentSessionModel(_ model: String?) {
-        AgentSettingsStore.saveDefaultModelModePreference(.explicitModel)
         // Picking any explicit model (or route-default) exits managed
         // routing — the three session-selection states (route default /
         // explicit model / managed) are mutually exclusive.
@@ -1811,7 +1817,6 @@ extension AppState {
         if runtime.managedRouting == nil {
             runtime.managedRouting = AgentManagedRoutingState()
         }
-        AgentSettingsStore.saveDefaultModelModePreference(.managed)
         persistActiveAgentSession()
     }
 
@@ -1821,10 +1826,36 @@ extension AppState {
     /// reconciliation may only adopt an empty chat.
     private func defaultSomeIMManagedRoutingState() -> AgentManagedRoutingState? {
         guard SomeIMIntegrationStore.hasAuthenticatedSessionForAutomaticDefaults(),
-              agentProviderLibrary.active?.providerID == AgentProviderPreset.someIMID else {
+              agentProviderLibrary.active?.providerID == AgentProviderPreset.someIMID,
+              AgentSettingsStore.loadDefaultModelModePreference().usesManagedRoutingForNewSessions else {
             return nil
         }
         return AgentManagedRoutingState()
+    }
+
+    private func defaultAgentModelIDForNewSession(
+        managedRouting: AgentManagedRoutingState?
+    ) -> String? {
+        if managedRouting != nil {
+            return nil
+        }
+        if SomeIMIntegrationStore.hasAuthenticatedSessionForAutomaticDefaults(),
+           agentProviderLibrary.active?.providerID == AgentProviderPreset.someIMID,
+           !AgentSettingsStore.loadDefaultModelModePreference().usesManagedRoutingForNewSessions {
+            return SomeIMIntegrationSettings.defaultTextModel
+        }
+        return activeAgentModelID
+    }
+
+    private func seedNewSessionModelOverride(for runtime: AgentRuntime) {
+        guard runtime.managedRouting == nil else {
+            runtime.sessionModelOverride = nil
+            return
+        }
+        let routedModel = agentConfiguration.normalized.model(for: .interactive)
+        runtime.sessionModelOverride = runtime.session.modelID == routedModel
+            ? nil
+            : runtime.session.modelID
     }
 
     private func adoptSomeIMManagedRoutingForEmptySessionIfNeeded() {

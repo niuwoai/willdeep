@@ -54,6 +54,7 @@ struct LocalAgentCLI: Identifiable, Equatable {
             displayName: "Codex CLI",
             commandName: "codex",
             commonPaths: [
+                "/Applications/ChatGPT.app/Contents/Resources/codex",
                 "/Applications/Codex.app/Contents/Resources/codex",
                 "\(NSHomeDirectory())/.local/bin/codex",
                 "/opt/homebrew/bin/codex",

@@ -4,6 +4,16 @@ import Foundation
 // complexity-guard hard limit. Same `nonisolated` isolation as the parent
 // `enum L10n` so these lookups stay callable from nonisolated model code.
 extension L10n {
+    nonisolated enum ExecutionAgent {
+        static let oursName = String(localized: "execution-agent.ours.name", defaultValue: "Us")
+        static let claudeCodeName = String(localized: "execution-agent.claude-code.name", defaultValue: "Claude Code")
+        static let codexName = String(localized: "execution-agent.codex.name", defaultValue: "Codex")
+        static let oursSummary = String(localized: "execution-agent.ours.summary", defaultValue: "Use this conversation's model and tool loop.")
+        static let claudeCodeSummary = String(localized: "execution-agent.claude-code.summary", defaultValue: "Run this task with the local Claude Code CLI.")
+        static let codexSummary = String(localized: "execution-agent.codex.summary", defaultValue: "Run this task with the local Codex CLI.")
+        static let pickerHelp = String(localized: "execution-agent.picker.help", defaultValue: "Choose whether this turn runs here or is delegated to the local Claude Code or Codex CLI.")
+    }
+
     nonisolated enum AgentTerminal {
         static let clear = String(localized: "agent-terminal.clear", defaultValue: "Clear")
         static let connect = String(localized: "agent-terminal.connect", defaultValue: "Connect")
@@ -25,6 +35,10 @@ extension L10n {
         static let dockerLogs = String(localized: "agent-terminal.docker.logs", defaultValue: "Docker logs")
         static let newTab = String(localized: "agent-terminal.new-tab", defaultValue: "New Terminal Tab")
         static let newLocalTab = String(localized: "agent-terminal.new-local-tab", defaultValue: "New Local Shell")
+        static let delegatedShellTitle = String(localized: "agent-terminal.delegated-shell-title", defaultValue: "Delegated · sh")
+        static let delegatedShellTooltip = String(localized: "agent-terminal.delegated-shell-tooltip", defaultValue: "Reusable /bin/sh tab managed for external coding tasks")
+        static let delegatedTask = String(localized: "agent-terminal.delegated-task", defaultValue: "Delegated task")
+        static let sessionDelegated = String(localized: "agent-terminal.session.delegated", defaultValue: "Delegated Shell")
         static let sshHostsSection = String(localized: "agent-terminal.ssh-hosts-section", defaultValue: "Configured SSH Hosts")
         static let noSSHHostsConfigured = String(localized: "agent-terminal.no-ssh-hosts-configured", defaultValue: "No SSH hosts configured")
         static let manageSSHHosts = String(localized: "agent-terminal.manage-ssh-hosts", defaultValue: "Manage SSH Hosts...")

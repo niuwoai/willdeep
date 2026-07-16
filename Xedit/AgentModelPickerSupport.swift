@@ -15,6 +15,29 @@ enum AgentModelPickerSource: Hashable {
     case provider(UUID)
 }
 
+enum AgentManagedMarketingStatus: Equatable {
+    case selected
+    case available
+    case loginRequired
+
+    static func resolve(isAuthenticated: Bool, isManagedActive: Bool) -> Self {
+        guard isAuthenticated else { return .loginRequired }
+        return isManagedActive ? .selected : .available
+    }
+}
+
+enum AgentModelPickerPresentation {
+    static func pillLabel(
+        managedActive: Bool,
+        currentModelLabel: String,
+        managedLabel: String,
+        selectModelLabel: String
+    ) -> String {
+        if managedActive { return managedLabel }
+        return currentModelLabel.isEmpty ? selectModelLabel : currentModelLabel
+    }
+}
+
 enum AgentModelPickerTierFilter: String, CaseIterable, Identifiable {
     case all
     case flash

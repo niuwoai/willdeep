@@ -2,70 +2,69 @@
 //  AgentDelegatedTerminalRunner.swift
 //  Xedit
 //
-//  Builds a private POSIX-sh runner for delegated coding agents. The visible
-//  terminal receives only a short `/bin/sh <runner>` invocation, so the
-//  configured interactive shell never parses the real command or prompt.
+//  Builds a POSIX-sh command wrapper for delegated coding agents. The wrapper
+//  is sent directly to a dedicated visible `/bin/sh` terminal tab so users can
+//  inspect the real command and prompt instead of seeing an opaque temp script.
 //
 
 import Foundation
 
 struct AgentDelegatedTerminalArtifacts {
-    let runnerURL: URL
+    let command: String
     let outputURL: URL
     let pendingStatusURL: URL
     let statusURL: URL
     let startedURL: URL
 
     nonisolated var invocation: String {
-        AgentDelegatedTerminalRunner.invocation(runnerURL: runnerURL)
+        AgentDelegatedTerminalRunner.invocation(
+            command: command,
+            outputURL: outputURL,
+            pendingStatusURL: pendingStatusURL,
+            statusURL: statusURL,
+            startedURL: startedURL
+        )
     }
 
     nonisolated func removeAll(fileManager: FileManager = .default) {
-        for url in [runnerURL, outputURL, pendingStatusURL, statusURL, startedURL] {
+        for url in [outputURL, pendingStatusURL, statusURL, startedURL] {
             try? fileManager.removeItem(at: url)
         }
     }
 }
 
 enum AgentDelegatedTerminalRunner {
-    nonisolated static let runnerPermissions = 0o600
-
     nonisolated static func create(
         command: String,
+        workingDirectory: String? = nil,
         directory: URL = FileManager.default.temporaryDirectory,
         token: String = UUID().uuidString.replacingOccurrences(of: "-", with: ""),
         fileManager: FileManager = .default
     ) throws -> AgentDelegatedTerminalArtifacts {
         let baseName = "willdeep-terminal-\(token)"
         let artifacts = AgentDelegatedTerminalArtifacts(
-            runnerURL: directory.appendingPathComponent("\(baseName).sh"),
+            command: scopedCommand(command, workingDirectory: workingDirectory),
             outputURL: directory.appendingPathComponent("\(baseName).log"),
             pendingStatusURL: directory.appendingPathComponent("\(baseName).status.pending"),
             statusURL: directory.appendingPathComponent("\(baseName).status"),
             startedURL: directory.appendingPathComponent("\(baseName).started")
         )
-        let script = script(
-            command: command,
-            outputURL: artifacts.outputURL,
-            pendingStatusURL: artifacts.pendingStatusURL,
-            statusURL: artifacts.statusURL,
-            startedURL: artifacts.startedURL
-        )
-
-        do {
-            try Data(script.utf8).write(to: artifacts.runnerURL, options: .atomic)
-            try fileManager.setAttributes(
-                [.posixPermissions: runnerPermissions],
-                ofItemAtPath: artifacts.runnerURL.path
-            )
-            return artifacts
-        } catch {
-            artifacts.removeAll(fileManager: fileManager)
-            throw error
+        guard fileManager.isWritableFile(atPath: directory.path) else {
+            throw CocoaError(.fileWriteNoPermission)
         }
+        return artifacts
     }
 
-    nonisolated static func script(
+    nonisolated static func scopedCommand(_ command: String, workingDirectory: String?) -> String {
+        guard let workingDirectory = workingDirectory?
+            .trimmingCharacters(in: .whitespacesAndNewlines),
+              !workingDirectory.isEmpty else {
+            return command
+        }
+        return "cd \(shellQuoted(workingDirectory)) || exit 1\n\(command)"
+    }
+
+    nonisolated static func invocation(
         command: String,
         outputURL: URL,
         pendingStatusURL: URL,
@@ -77,7 +76,7 @@ enum AgentDelegatedTerminalRunner {
         let status = shellQuoted(statusURL.path)
         let started = shellQuoted(startedURL.path)
         return """
-        #!/bin/sh
+        umask 077
         set +e
         printf '%s' '' > \(started)
         (
@@ -92,10 +91,6 @@ enum AgentDelegatedTerminalRunner {
             printf '%s' '1' > \(status)
         fi
         """
-    }
-
-    nonisolated static func invocation(runnerURL: URL) -> String {
-        "/bin/sh \(shellQuoted(runnerURL.path))"
     }
 
     nonisolated static func shellQuoted(_ value: String) -> String {

@@ -101,6 +101,33 @@ struct SomeIMCodingPlanStatus: Codable, Equatable {
     }
 }
 
+enum SomeIMCodingPlanRefreshFailure: Equatable {
+    case authenticationRequired
+    case unavailable
+
+    static func classify(_ error: Error) -> SomeIMCodingPlanRefreshFailure? {
+        if error is CancellationError {
+            return nil
+        }
+        if let urlError = error as? URLError {
+            switch urlError.code {
+            case .cancelled:
+                return nil
+            case .userAuthenticationRequired:
+                return .authenticationRequired
+            default:
+                return .unavailable
+            }
+        }
+        if let toolError = error as? AgentToolError,
+           case .httpFailed(let status, _) = toolError,
+           status == 401 || status == 403 {
+            return .authenticationRequired
+        }
+        return .unavailable
+    }
+}
+
 struct SomeIMIntegrationSettings: Codable, Equatable {
     static let defaultBaseURL = SomeIMRelayRegion.internationalBaseURL
     static let defaultImageModel = "gpt-image-2"
@@ -758,7 +785,10 @@ struct SomeIMGeneratedImage: Equatable, Sendable {
 enum SomeIMClient {
     static let willDeepClientID = "willdeep"
     static let customerPortalURL = URL(string: "https://some.im/customer")!
-    private static let browserControlOrigin = "https://some.im"
+    /// Customer identity, login, and subscription APIs live on some.im.
+    /// Model relay selection (for example api.niuwoai.com in China) must not
+    /// redirect these control-plane calls to an inference-only gateway.
+    private static let controlPlaneOrigin = "https://some.im"
     private static let someIMClientLocationEndpoint = URL(string: "https://some.im/api/v1/public/client-location")!
     private static let ipipClientLocationEndpoint = URL(string: "https://myip.ipip.net")!
     private static let myIPLAClientLocationEndpoint = URL(string: "https://api.myip.la/en?json")!
@@ -920,10 +950,10 @@ enum SomeIMClient {
 
     static func sendClientLoginCode(
         email: String,
-        settings: SomeIMIntegrationSettings,
+        settings _: SomeIMIntegrationSettings,
         session: URLSession
     ) async throws {
-        let endpoint = try publicAPIEndpoint(from: settings.normalized.baseURL, suffix: "public/client-login/email/send")
+        let endpoint = try publicAPIEndpoint(from: controlPlaneOrigin, suffix: "public/client-login/email/send")
         var request = jsonRequest(url: endpoint, method: "POST")
         applyClientLoginSecret(to: &request)
         request.httpBody = try JSONSerialization.data(withJSONObject: [
@@ -954,7 +984,7 @@ enum SomeIMClient {
         session: URLSession
     ) async throws -> SomeIMAccount {
         let normalized = settings.normalized
-        let endpoint = try publicAPIEndpoint(from: normalized.baseURL, suffix: "public/client-login/email/verify")
+        let endpoint = try publicAPIEndpoint(from: controlPlaneOrigin, suffix: "public/client-login/email/verify")
         var request = jsonRequest(url: endpoint, method: "POST")
         applyClientLoginSecret(to: &request)
         request.httpBody = try JSONSerialization.data(withJSONObject: [
@@ -1029,13 +1059,13 @@ enum SomeIMClient {
     }
 
     private static func fetchCustomerProfile(
-        settings: SomeIMIntegrationSettings,
+        settings _: SomeIMIntegrationSettings,
         sessionToken: String,
         session: URLSession
     ) async throws -> (account: AccountData, tenantID: String?) {
         let token = sessionToken.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !token.isEmpty else { throw URLError(.userAuthenticationRequired) }
-        let endpoint = try publicAPIEndpoint(from: settings.normalized.baseURL, suffix: "customer/me")
+        let endpoint = try publicAPIEndpoint(from: controlPlaneOrigin, suffix: "customer/me")
         var request = URLRequest(url: endpoint)
         request.httpMethod = "GET"
         request.timeoutInterval = 12
@@ -1057,21 +1087,13 @@ enum SomeIMClient {
     }
 
     static func fetchCodingPlanStatus(
-        settings: SomeIMIntegrationSettings,
+        settings _: SomeIMIntegrationSettings,
         sessionToken: String,
         session: URLSession
     ) async throws -> SomeIMCodingPlanStatus {
         let token = sessionToken.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !token.isEmpty else {
-            return SomeIMCodingPlanStatus(
-                hasActivePlan: false,
-                planID: nil,
-                planName: nil,
-                periodEnd: nil,
-                checkedAt: Date()
-            )
-        }
-        let endpoint = try publicAPIEndpoint(from: settings.normalized.baseURL, suffix: "customer/plan/subscription")
+        guard !token.isEmpty else { throw URLError(.userAuthenticationRequired) }
+        let endpoint = try publicAPIEndpoint(from: controlPlaneOrigin, suffix: "customer/plan/subscription")
         var request = jsonRequest(url: endpoint, method: "GET")
         request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
         let data = try await send(request, session: session)
@@ -1276,7 +1298,7 @@ enum SomeIMClient {
     }
 
     private static func browserStatusEndpoint(code: String) throws -> URL {
-        guard var components = URLComponents(url: try publicAPIEndpoint(from: browserControlOrigin, suffix: "public/client-login/browser-status"), resolvingAgainstBaseURL: false) else {
+        guard var components = URLComponents(url: try publicAPIEndpoint(from: controlPlaneOrigin, suffix: "public/client-login/browser-status"), resolvingAgainstBaseURL: false) else {
             throw AgentClientError.invalidResponse
         }
         components.queryItems = [
@@ -1290,7 +1312,7 @@ enum SomeIMClient {
     }
 
     private static func browserLoginURL(code: String, pairToken: String) throws -> URL {
-        guard var components = URLComponents(string: browserControlOrigin) else {
+        guard var components = URLComponents(string: controlPlaneOrigin) else {
             throw AgentClientError.invalidResponse
         }
         components.path = "/customer/login"
@@ -1855,6 +1877,7 @@ struct SomeIMIntegrationSettingsView: View {
     @State private var handledBrowserLoginAutogenerateRequestID: UUID?
     @State private var status = ""
     @State private var showLogoutConfirm = false
+    @State private var defaultModelModePreference = AgentSettingsStore.loadDefaultModelModePreference()
 
     private var imageModels: [SomeIMModel] {
         fetchedModels.filter(\.supportsImageGeneration)
@@ -1956,6 +1979,22 @@ struct SomeIMIntegrationSettingsView: View {
                 }
             }
 
+            Section(L10n.Settings.SomeIM.newTabDefaultSection) {
+                Picker(
+                    L10n.Settings.SomeIM.newTabDefaultLabel,
+                    selection: newTabDefaultUsesManagedRoutingBinding
+                ) {
+                    Text(L10n.Settings.SomeIM.newTabDefaultManaged).tag(true)
+                    Text(L10n.Settings.SomeIM.newTabDefaultModel).tag(false)
+                }
+                .pickerStyle(.segmented)
+                .disabled(!isSomeIMAuthenticated)
+
+                Text(newTabDefaultHelp)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
             Section(L10n.Settings.SomeIM.imageSection) {
                 modelPicker(
                     L10n.Settings.SomeIM.imageModelLabel,
@@ -2016,6 +2055,29 @@ struct SomeIMIntegrationSettingsView: View {
         }
         if isWatchingBrowserLogin { return L10n.Settings.SomeIM.browserLoginWaiting }
         return status.isEmpty ? L10n.Settings.SomeIM.browserLoginReady : status
+    }
+
+    private var isSomeIMAuthenticated: Bool {
+        !apiKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
+    private var newTabDefaultUsesManagedRoutingBinding: Binding<Bool> {
+        Binding {
+            defaultModelModePreference.usesManagedRoutingForNewSessions
+        } set: { enabled in
+            let preference: AgentDefaultModelModePreference = enabled ? .managed : .explicitModel
+            defaultModelModePreference = preference
+            AgentSettingsStore.saveDefaultModelModePreference(preference)
+        }
+    }
+
+    private var newTabDefaultHelp: String {
+        guard isSomeIMAuthenticated else {
+            return L10n.Settings.SomeIM.newTabDefaultLoginRequired
+        }
+        return defaultModelModePreference.usesManagedRoutingForNewSessions
+            ? L10n.Settings.SomeIM.newTabDefaultManagedHelp
+            : L10n.Settings.SomeIM.newTabDefaultModelHelp
     }
 
     private func modelPicker(

@@ -41,6 +41,89 @@ struct AgentChatHistoryRendererTests {
     }
 
     @Test
+    func assistantParagraphBoundariesDoNotInsertBlankRows() throws {
+        let message = AgentMessage(
+            role: .assistant,
+            content: "第一段。\n\n第二段。\n\n第三段。"
+        )
+
+        let rendered = AgentChatHistoryRenderer.render(messages: [message], isDark: false)
+        #expect(rendered.string.contains("第一段。\n第二段。\n第三段。"))
+
+        for text in ["第一段。", "第二段。", "第三段。"] {
+            let range = (rendered.string as NSString).range(of: text)
+            let style = try #require(rendered.attribute(
+                .paragraphStyle,
+                at: range.location,
+                effectiveRange: nil
+            ) as? NSParagraphStyle)
+            #expect(style.lineSpacing == AgentChatHistoryLayoutMetrics.bodyLineSpacing)
+            #expect(style.paragraphSpacing == 0)
+        }
+    }
+
+    @Test
+    func proseAfterCodeBlockKeepsBodyFontAndLineSpacing() throws {
+        let message = AgentMessage(
+            role: .assistant,
+            content: """
+            代码块前的正文。
+
+            ```text
+            web: npm start
+            ```
+
+            代码块后的正文会自然换行，但字号与行距不能缩小。
+            """
+        )
+
+        let rendered = AgentChatHistoryRenderer.render(
+            messages: [message],
+            isDark: false,
+            baseFontSize: 14
+        )
+        let beforeRange = (rendered.string as NSString).range(of: "代码块前的正文")
+        let afterRange = (rendered.string as NSString).range(of: "代码块后的正文")
+        let beforeFont = try #require(rendered.attribute(
+            .font,
+            at: beforeRange.location,
+            effectiveRange: nil
+        ) as? NSFont)
+        let afterFont = try #require(rendered.attribute(
+            .font,
+            at: afterRange.location,
+            effectiveRange: nil
+        ) as? NSFont)
+        let beforeStyle = try #require(rendered.attribute(
+            .paragraphStyle,
+            at: beforeRange.location,
+            effectiveRange: nil
+        ) as? NSParagraphStyle)
+        let afterStyle = try #require(rendered.attribute(
+            .paragraphStyle,
+            at: afterRange.location,
+            effectiveRange: nil
+        ) as? NSParagraphStyle)
+
+        #expect(beforeFont.pointSize == 14)
+        #expect(afterFont.pointSize == beforeFont.pointSize)
+        #expect(afterStyle.lineSpacing == beforeStyle.lineSpacing)
+        #expect(afterStyle.lineSpacing == AgentChatHistoryLayoutMetrics.bodyLineSpacing)
+    }
+
+    @Test
+    func streamingMarkdownUsesOneNewlineBetweenPlainParagraphs() {
+        let rendered = AgentAssistantMarkdownRenderer.render(
+            "实时第一段。\n\n实时第二段。",
+            isDark: false,
+            baseFontSize: 14
+        )
+        let plain = String(rendered.characters)
+        #expect(plain.contains("实时第一段。\n实时第二段。"))
+        #expect(!plain.contains("实时第一段。\n\n实时第二段。"))
+    }
+
+    @Test
     func olderHistoryPreviewCapsPlainTextWithoutRenderingFullDetails() {
         let messages = [
             AgentMessage(role: .user, content: "short request"),

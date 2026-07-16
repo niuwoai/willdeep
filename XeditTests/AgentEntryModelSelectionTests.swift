@@ -253,10 +253,31 @@ struct AgentEntryModelSelectionTests {
         app.startNewAgentSession()
 
         app.setAgentSessionModel("someim-auto-flash")
-        #expect(AgentSettingsStore.loadDefaultModelModePreference() == .explicitModel)
+        #expect(AgentSettingsStore.loadDefaultModelModePreference() == .automatic)
         let managedSession = app.startNewAgentSession()
         #expect(managedSession.modelID == nil)
         #expect(managedSession.managedRouting != nil)
+    }
+
+    @Test
+    func disablingManagedDefaultStartsNewChatsWithSomeIMAutoFlash() {
+        let _sandbox = installKeychainSandbox(); _ = _sandbox
+        let app = AppState()
+        SomeIMIntegrationStore._setTestSharedSessionOverride(enabled: true)
+        defer { SomeIMIntegrationStore._setTestSharedSessionOverride(enabled: false) }
+        #expect(SomeIMIntegrationStore.saveAPIKey("test-fixture-someim-key"))
+        app.syncSomeIMProvider(
+            settings: SomeIMIntegrationSettings(enabled: true),
+            apiKey: "test-fixture-someim-key"
+        )
+        AgentSettingsStore.saveDefaultModelModePreference(.explicitModel)
+
+        let session = app.startNewAgentSession()
+
+        #expect(session.managedRouting == nil)
+        #expect(session.modelID == SomeIMIntegrationSettings.defaultTextModel)
+        #expect(app.agentSessionModelOverride == nil)
+        #expect(app.activeAgentModelID == SomeIMIntegrationSettings.defaultTextModel)
     }
 
     @Test

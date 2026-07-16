@@ -22,6 +22,10 @@ enum AgentDefaultModelModePreference: String, Equatable {
     case managed
     /// The user explicitly selected a concrete model or route default.
     case explicitModel
+
+    var usesManagedRoutingForNewSessions: Bool {
+        self != .explicitModel
+    }
 }
 
 enum AgentWebSearchProvider: String, CaseIterable, Codable, Identifiable {
@@ -211,9 +215,10 @@ enum AgentSettingsStore {
            let preference = AgentDefaultModelModePreference(rawValue: raw) {
             return preference
         }
-        // Backward-compatible inference: before this preference existed,
-        // recently-used models were written only by explicit picker actions.
-        return loadRecentlyUsedModelIDs().isEmpty ? .automatic : .explicitModel
+        // Fresh installs and upgrades default to managed routing. Composer
+        // picks are conversation-scoped and must not silently change this
+        // new-tab preference; only the some.im Settings control persists it.
+        return .automatic
     }
 
     static func saveDefaultModelModePreference(_ preference: AgentDefaultModelModePreference) {

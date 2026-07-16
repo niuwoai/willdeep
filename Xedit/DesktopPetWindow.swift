@@ -16,7 +16,7 @@ enum DesktopPetMood: Equatable {
     case walking
     case typing
     case jumping
-    case spinning
+    case ready
     case attention
     case celebrating
 }
@@ -438,7 +438,7 @@ final class DesktopPetWindowManager: ObservableObject {
             baseMood = .celebrating
             status = L10n.DesktopPet.statusComplete
         } else if latestPreview != nil {
-            baseMood = .spinning
+            baseMood = .ready
             status = L10n.DesktopPet.statusReady
         } else {
             baseMood = .idle
@@ -779,7 +779,7 @@ struct DesktopPetOverlayView: View {
             return .orange
         case .walking, .typing, .jumping:
             return .mint
-        case .celebrating, .spinning:
+        case .celebrating, .ready:
             return .cyan
         case .idle:
             return .secondary
@@ -815,11 +815,6 @@ struct DesktopPetSceneView: View {
                     y: animation.scale * animation.verticalScale
                 )
                 .rotationEffect(.degrees(animation.rotation))
-                .rotation3DEffect(
-                    .degrees(animation.yawRotation),
-                    axis: (x: 0, y: 1, z: 0),
-                    perspective: 0.35
-                )
                 .offset(
                     x: animation.horizontalOffset,
                     y: animation.verticalOffset
@@ -835,10 +830,10 @@ struct DesktopPetSceneView: View {
 
     private var cuteEffectLayer: some View {
         ZStack {
-            Image(systemName: "heart.fill")
-                .font(.system(size: 19, weight: .bold))
-                .symbolRenderingMode(.palette)
-                .foregroundStyle(.pink, .white)
+            Image(systemName: "mouth.fill")
+                .font(.system(size: 22, weight: .bold))
+                .symbolRenderingMode(.hierarchical)
+                .foregroundStyle(.red)
                 .offset(
                     x: Layout.heartHorizontalOffset,
                     y: Layout.heartVerticalOffset + animation.cuteEffectVerticalOffset
@@ -870,7 +865,6 @@ struct DesktopPetAnimationValues {
     let horizontalOffset: CGFloat
     let verticalOffset: CGFloat
     let rotation: Double
-    let yawRotation: Double
     let scale: CGFloat
     let horizontalScale: CGFloat
     let verticalScale: CGFloat
@@ -884,7 +878,6 @@ struct DesktopPetAnimationValues {
         var horizontalOffset: CGFloat = 0
         var verticalOffset: CGFloat = 0
         var rotation = 0.0
-        var yawRotation = 0.0
         var scale: CGFloat = 1
         var horizontalScale: CGFloat = 1
         var verticalScale: CGFloat = 1
@@ -894,7 +887,7 @@ struct DesktopPetAnimationValues {
         var cuteEffectRotation = 0.0
 
         switch mood {
-        case .idle:
+        case .idle, .ready:
             let breathing = CGFloat(sin(t * 2.1))
             let cycleTime = t.truncatingRemainder(dividingBy: Self.idleCuteCycleDuration)
             let isPerformingCuteAction = cycleTime >= Self.idleCuteStart
@@ -911,7 +904,7 @@ struct DesktopPetAnimationValues {
             horizontalScale = 1 + cuteEnvelope * 0.035
             verticalScale = 1 - cuteEnvelope * 0.025
             cuteEffectOpacity = Double(cuteEnvelope)
-            cuteEffectVerticalOffset = -cuteEnvelope * 8
+            cuteEffectVerticalOffset = -cuteEnvelope * 22
             cuteEffectRotation = Double(cuteWiggle * 10)
         case .walking:
             horizontalOffset = CGFloat(sin(t * Self.walkingSwayRate)) * 11
@@ -934,10 +927,6 @@ struct DesktopPetAnimationValues {
             rotation = sin(t * 3.5) * 7
             horizontalScale = 1 + jump * 0.04
             verticalScale = 1 - jump * 0.03
-        case .spinning:
-            verticalOffset = CGFloat(sin(t * 2.4)) * 3
-            yawRotation = (t * 135).truncatingRemainder(dividingBy: 360)
-            scale = 0.96 + CGFloat(sin(t * 4.8)) * 0.04
         case .attention:
             horizontalOffset = CGFloat(sin(t * 12)) * 5
             rotation = sin(t * 12) * 4
@@ -954,7 +943,6 @@ struct DesktopPetAnimationValues {
         self.horizontalOffset = horizontalOffset
         self.verticalOffset = verticalOffset
         self.rotation = rotation
-        self.yawRotation = yawRotation
         self.scale = scale
         self.horizontalScale = horizontalScale
         self.verticalScale = verticalScale

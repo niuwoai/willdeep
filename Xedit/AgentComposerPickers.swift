@@ -12,7 +12,7 @@
 //     on macOS dismiss on the slightest hover drift). Has
 //     "Recently used", "Hot", "New", and "All models" tail
 //     menus for ad-hoc model IDs not in the library entries.
-//   - `AgentExecutionPickerPill`: WillDeep / Claude Code / Codex
+//   - `AgentExecutionPickerPill`: 我们 / Claude Code / Codex
 //     execution backend selector for the next composer turn.
 //   - `AgentModePickerPill`: Normal / Plan / Goal selector. Plan locks
 //     writes until approval; Goal gathers the objective through chat
@@ -357,13 +357,19 @@ struct AgentComposerRunContextBar: View {
     @EnvironmentObject var appState: AppState
 
     var body: some View {
-        ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 8) {
-                WorkspacePickerPill()
-                AgentRunLocationPickerPill()
-                branchPill
+        HStack(spacing: 8) {
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 8) {
+                    WorkspacePickerPill()
+                    AgentRunLocationPickerPill()
+                    branchPill
+                }
+                .padding(.horizontal, 1)
             }
-            .padding(.horizontal, 1)
+            .frame(maxWidth: .infinity, alignment: .leading)
+
+            AgentExecutionPickerPill()
+                .layoutPriority(1)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .focusable(false)
@@ -532,14 +538,16 @@ struct ComposerAdaptiveControlStrip: View {
     // rc482 perf: 改为固定单套布局，去掉 ViewThatFits。原先用 ViewThatFits
     // 在三套布局变体间按窗口宽度挑一套显示，代价是**每次重渲染都要把每个
     // 变体整建一遍来测量**——composer pill 重建因此成为主线程热点（打字、
-    // 窗口切换、焦点变化都中招，采样里占主线程大头）。现在常用的三个
-    // （Workspace / Model / Mode）固定展示，其余（审批 / 执行器 / 插件 /
-    // 专家）固定收进「更多 …」弹层。布局不再随宽度变化，每次重建只建一套。
+    // 窗口切换、焦点变化都中招，采样里占主线程大头）。现在常用的四个
+    // （Workspace / Model / Mode / Approval）固定展示，其余（插件 / 专家）
+    // 固定收进「更多 …」弹层。执行器固定在输入框顶部上下文栏右侧。
+    // 布局不再随宽度变化，每次重建只建一套。
     var body: some View {
         HStack(spacing: 6) {
             ModelPickerPill()
             AgentModePickerPill()
-            ComposerOverflowPill(controls: [.approval, .executor, .plugins, .experts])
+            AgentApprovalModePickerPill()
+            ComposerOverflowPill(controls: [.plugins, .experts])
         }
         .focusable(false)
     }
@@ -994,15 +1002,13 @@ struct ModelPickerPill: View {
         let entries = selectableProviderEntries
         ScrollView {
             VStack(alignment: .leading, spacing: 5) {
-            if menuSnapshot.isSomeIMAuthenticated {
-                providerSourceButton(
-                    title: L10n.AgentModelPicker.managed,
-                    subtitle: L10n.AgentModelPicker.managedSubtitle,
-                    systemImage: "wand.and.stars",
-                    checked: selectedSource == .managed
-                ) {
-                    selectSource(.managed)
-                }
+            providerSourceButton(
+                title: L10n.AgentModelPicker.managed,
+                subtitle: L10n.AgentModelPicker.managedSubtitle,
+                systemImage: "wand.and.stars",
+                checked: selectedSource == .managed
+            ) {
+                selectSource(.managed)
             }
 
             providerSourceButton(
@@ -1050,30 +1056,6 @@ struct ModelPickerPill: View {
                     selectSource(.provider(entry.id))
                     refreshProviderCatalog(entry)
                 }
-            }
-
-            if !menuSnapshot.isSomeIMAuthenticated {
-                Divider()
-                    .padding(.vertical, 4)
-                VStack(alignment: .leading, spacing: 8) {
-                    Label(L10n.AgentModelPicker.someIMDisconnected, systemImage: "lock")
-                        .font(.system(size: 11, weight: .semibold))
-                    Text(L10n.AgentModelPicker.someIMConnectHint)
-                        .font(.system(size: 10))
-                        .foregroundStyle(.secondary)
-                    Button {
-                        openURL(URL(string: "https://some.im/customer/plan")!)
-                    } label: {
-                        Label(L10n.AgentModelPicker.viewPlans, systemImage: "arrow.up.right.square")
-                    }
-                    .buttonStyle(.bordered)
-                    .controlSize(.small)
-                    .focusable(false)
-                }
-                .padding(10)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .background(appState.editorSettings.interfaceSkin.palette.controlFill.opacity(0.38))
-                .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
             }
 
             }
@@ -1151,61 +1133,160 @@ struct ModelPickerPill: View {
 
     @ViewBuilder
     private var managedCatalogOverview: some View {
-        managedSummary
-        codingRecommendationsDetail
-        if !recentCatalogItems.isEmpty {
-            recentModelsDetail
+        managedSelectionSummary
+        managedBenefitsSummary
+        codingPlanSection
+    }
+
+    private var managedSelectionSummary: some View {
+        HStack(alignment: .top, spacing: 12) {
+            Image(systemName: managedSelectionIcon)
+                .font(.system(size: 17, weight: .semibold))
+                .foregroundStyle(managedSelectionTint)
+                .frame(width: 36, height: 36)
+                .background(managedSelectionTint.opacity(0.11))
+                .clipShape(RoundedRectangle(cornerRadius: 9, style: .continuous))
+
+            VStack(alignment: .leading, spacing: 5) {
+                Text(L10n.AgentModelPicker.managed)
+                    .font(.system(size: 15, weight: .semibold))
+                Text(managedSelectionTitle)
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(managedSelectionTint)
+                Text(managedSelectionDescription)
+                    .font(.system(size: 11))
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
+            Spacer(minLength: 12)
+
+            if !menuSnapshot.managedActive, menuSnapshot.isSomeIMAuthenticated {
+                Button(L10n.AgentModelPicker.selectManaged) {
+                    appState.selectSomeIMManagedRouting()
+                    refreshMenuSnapshot()
+                }
+                .buttonStyle(.borderedProminent)
+                .controlSize(.small)
+                .focusable(false)
+            } else if !menuSnapshot.isSomeIMAuthenticated {
+                Button {
+                    isModelPanelPresented = false
+                    EditorSettingsNavigation.shared.openSomeIM(
+                        autogenerateBrowserLogin: true,
+                        appState: appState
+                    )
+                } label: {
+                    Label(L10n.AgentModelPicker.signInSomeIM, systemImage: "person.crop.circle.badge.checkmark")
+                }
+                .buttonStyle(.borderedProminent)
+                .controlSize(.small)
+                .focusable(false)
+            }
+        }
+        .padding(14)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(managedSelectionTint.opacity(0.07))
+        .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+    }
+
+    private var managedBenefitsSummary: some View {
+        modelPanelSection(
+            title: L10n.AgentModelPicker.managedBenefitsTitle,
+            systemImage: "point.3.connected.trianglepath.dotted"
+        ) {
+            VStack(alignment: .leading, spacing: 0) {
+                managedBenefitRow(
+                    systemImage: "checkmark.seal",
+                    title: L10n.AgentModelPicker.managedJudgeTitle,
+                    description: L10n.AgentModelPicker.managedJudgeDescription
+                )
+                Divider().padding(.leading, 36)
+                managedBenefitRow(
+                    systemImage: "hammer",
+                    title: L10n.AgentModelPicker.managedWorkerTitle,
+                    description: L10n.AgentModelPicker.managedWorkerDescription
+                )
+                Divider().padding(.leading, 36)
+                Text(L10n.AgentModelPicker.managedPlanIndependence)
+                    .font(.system(size: 10, weight: .medium))
+                    .foregroundStyle(.secondary)
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 9)
+            }
+            .background(appState.editorSettings.interfaceSkin.palette.controlFill.opacity(0.42))
+            .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
         }
     }
 
-    private var managedSummary: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            HStack(alignment: .center, spacing: 10) {
-                Image(systemName: "sparkles")
-                    .font(.system(size: 14, weight: .semibold))
-                    .foregroundStyle(.teal)
-                    .frame(width: 28, height: 28)
-                    .background(.teal.opacity(0.10))
-                    .clipShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
-                VStack(alignment: .leading, spacing: 2) {
-                    HStack(spacing: 6) {
-                        Text("\(L10n.AgentModelPicker.managed) · \(managedFamilyLabel)")
-                            .font(.system(size: 13, weight: .semibold))
-                        if menuSnapshot.managedActive {
-                            pickerTag(L10n.AgentModelPicker.current, tint: .teal)
-                        }
-                    }
-                    Text("\(managedTaskLabel) · \(managedActualModelID)")
-                        .font(.system(size: 10))
-                        .foregroundStyle(.secondary)
-                        .lineLimit(1)
-                }
-                Spacer(minLength: 8)
-                HStack(spacing: 6) {
-                    catalogManagedTierButton(.low)
-                    catalogManagedTierButton(.high)
-                    catalogManagedTierButton(.premium)
-                }
-            }
-
-            HStack(spacing: 8) {
-                Text(L10n.AgentModelPicker.managedRule)
+    private func managedBenefitRow(
+        systemImage: String,
+        title: String,
+        description: String
+    ) -> some View {
+        HStack(alignment: .top, spacing: 10) {
+            Image(systemName: systemImage)
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundStyle(.teal)
+                .frame(width: 26, height: 26)
+                .background(.teal.opacity(0.10))
+                .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
+            VStack(alignment: .leading, spacing: 3) {
+                Text(title)
+                    .font(.system(size: 12, weight: .semibold))
+                Text(description)
                     .font(.system(size: 10))
                     .foregroundStyle(.secondary)
-                Spacer()
-                if menuSnapshot.managedActive, menuSnapshot.managedFloor != .low {
-                    Button(L10n.AgentModelPicker.resetToFlash) {
-                        appState.resetManagedRoutingFloor()
-                        refreshMenuSnapshot()
-                    }
-                    .buttonStyle(.plain)
-                    .focusable(false)
-                    .font(.system(size: 10, weight: .medium))
-                    .foregroundStyle(.teal)
-                }
+                    .fixedSize(horizontal: false, vertical: true)
             }
+            Spacer(minLength: 0)
         }
-        .padding(.bottom, 4)
+        .padding(10)
+    }
+
+    private var managedSelectionTitle: String {
+        switch managedMarketingStatus {
+        case .selected:
+            return L10n.AgentModelPicker.managedSelectedTitle
+        case .available:
+            return L10n.AgentModelPicker.managedNotSelectedTitle
+        case .loginRequired:
+            return L10n.AgentModelPicker.managedLoginRequiredTitle
+        }
+    }
+
+    private var managedSelectionDescription: String {
+        switch managedMarketingStatus {
+        case .selected:
+            return L10n.AgentModelPicker.managedSelectedDescription
+        case .available:
+            return L10n.AgentModelPicker.managedNotSelectedDescription
+        case .loginRequired:
+            return L10n.AgentModelPicker.managedLoginRequiredDescription
+        }
+    }
+
+    private var managedSelectionIcon: String {
+        switch managedMarketingStatus {
+        case .selected: return "checkmark.circle.fill"
+        case .available: return "circle"
+        case .loginRequired: return "lock"
+        }
+    }
+
+    private var managedSelectionTint: Color {
+        switch managedMarketingStatus {
+        case .selected: return .green
+        case .available: return .teal
+        case .loginRequired: return .secondary
+        }
+    }
+
+    private var managedMarketingStatus: AgentManagedMarketingStatus {
+        AgentManagedMarketingStatus.resolve(
+            isAuthenticated: menuSnapshot.isSomeIMAuthenticated,
+            isManagedActive: menuSnapshot.managedActive
+        )
     }
 
     @ViewBuilder
@@ -1823,19 +1904,36 @@ struct ModelPickerPill: View {
     @ViewBuilder
     private var codingPlanSection: some View {
         let status = appState.someIMCodingPlanStatus
-        let isInitialRefresh = isRefreshingCodingPlan && status.checkedAt == .distantPast
-        modelPanelSection(title: "Coding Plan 套餐", systemImage: "creditcard") {
+        let hasActivePlan = menuSnapshot.isSomeIMAuthenticated && status.isActiveNow
+        let refreshFailure = menuSnapshot.isSomeIMAuthenticated
+            ? appState.someIMCodingPlanRefreshFailure
+            : nil
+        let isChecking = menuSnapshot.isSomeIMAuthenticated
+            && isRefreshingCodingPlan
+            && !hasActivePlan
+        let statusTint: Color = hasActivePlan ? .green : (refreshFailure == nil ? .teal : .orange)
+        let statusIcon = hasActivePlan
+            ? "checkmark.seal.fill"
+            : (refreshFailure == nil ? "shippingbox" : "exclamationmark.triangle.fill")
+        modelPanelSection(title: L10n.AgentModelPicker.codingPlanTitle, systemImage: "creditcard") {
             VStack(alignment: .leading, spacing: 10) {
+                Text(L10n.AgentModelPicker.codingPlanBenefit)
+                    .font(.system(size: 11))
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+
+                Divider()
+
                 HStack(alignment: .top, spacing: 10) {
-                    Image(systemName: status.isActiveNow ? "checkmark.seal.fill" : "bolt.badge.checkmark")
-                        .foregroundStyle(status.isActiveNow ? Color.green : Color.teal)
+                    Image(systemName: statusIcon)
+                        .foregroundStyle(statusTint)
                         .frame(width: 22)
                     VStack(alignment: .leading, spacing: 4) {
-                        if status.isActiveNow {
+                        if hasActivePlan {
                             HStack(spacing: 6) {
-                                Text(status.planName ?? "Coding Plan")
+                                Text(status.planName ?? L10n.AgentModelPicker.codingPlanTitle)
                                     .font(.system(size: 12, weight: .semibold))
-                                Text("已订阅")
+                                Text(L10n.AgentModelPicker.codingPlanSubscribed)
                                     .font(.system(size: 10, weight: .bold))
                                     .foregroundStyle(.green)
                                     .padding(.horizontal, 6)
@@ -1846,43 +1944,85 @@ struct ModelPickerPill: View {
                             Text(codingPlanValidityText(status))
                                 .font(.system(size: 11))
                                 .foregroundStyle(.secondary)
-                        } else if isInitialRefresh {
+                        } else if isChecking {
                             HStack(spacing: 7) {
                                 ProgressView()
                                     .controlSize(.small)
-                                Text("正在查询 Coding Plan 套餐状态…")
+                                Text(L10n.AgentModelPicker.codingPlanChecking)
                                     .font(.system(size: 12, weight: .medium))
                             }
-                            Text("查询完成后会显示套餐名称和有效期。")
+                            Text(L10n.AgentModelPicker.codingPlanCheckingHint)
                                 .font(.system(size: 11))
                                 .foregroundStyle(.secondary)
+                        } else if let refreshFailure {
+                            Text(L10n.AgentModelPicker.codingPlanCheckFailed)
+                                .font(.system(size: 12, weight: .semibold))
+                            Text(codingPlanRefreshFailureDescription(refreshFailure))
+                                .font(.system(size: 11))
+                                .foregroundStyle(.secondary)
+                                .fixedSize(horizontal: false, vertical: true)
                         } else {
-                            Text("订阅 Coding Plan 后，优先选择 someim-coding-plan-low / high。")
-                                .font(.system(size: 12, weight: .medium))
-                            Text("低档适合日常开发，高档适合复杂重构、多文件推理和疑难调试。")
+                            Text(L10n.AgentModelPicker.codingPlanNotPurchased)
+                                .font(.system(size: 12, weight: .semibold))
+                            Text(menuSnapshot.isSomeIMAuthenticated
+                                ? L10n.AgentModelPicker.codingPlanNotPurchasedDescription
+                                : L10n.AgentModelPicker.codingPlanLoginDescription)
                                 .font(.system(size: 11))
                                 .foregroundStyle(.secondary)
+                                .fixedSize(horizontal: false, vertical: true)
                         }
                     }
                 }
-                HStack(spacing: 8) {
-                    modelMiniButton("Plan Low") { chooseSomeIMModel(SomeIMManagedModel.codingPlanLow) }
-                    modelMiniButton("Plan High") { chooseSomeIMModel(SomeIMManagedModel.codingPlanHigh) }
+
+                HStack {
                     Spacer()
-                    if status.isActiveNow {
+                    if hasActivePlan {
                         Button {
                             openURL(URL(string: "https://some.im/customer/plan")!)
                         } label: {
-                            Label("管理套餐", systemImage: "arrow.up.right.square")
+                            Label(
+                                L10n.AgentModelPicker.manageCodingPlan,
+                                systemImage: "arrow.up.right.square"
+                            )
                         }
                         .buttonStyle(.bordered)
                         .controlSize(.small)
                         .focusable(false)
+                    } else if isChecking {
+                        EmptyView()
+                    } else if let refreshFailure {
+                        if refreshFailure == .authenticationRequired {
+                            Button {
+                                isModelPanelPresented = false
+                                EditorSettingsNavigation.shared.openSomeIM(
+                                    autogenerateBrowserLogin: true,
+                                    appState: appState
+                                )
+                            } label: {
+                                Label(
+                                    L10n.AgentModelPicker.signInSomeIM,
+                                    systemImage: "person.crop.circle.badge.checkmark"
+                                )
+                            }
+                            .buttonStyle(.borderedProminent)
+                            .controlSize(.small)
+                            .focusable(false)
+                        } else {
+                            Button(L10n.AgentModelPicker.codingPlanRetry) {
+                                refreshCodingPlanStatus()
+                            }
+                            .buttonStyle(.borderedProminent)
+                            .controlSize(.small)
+                            .focusable(false)
+                        }
                     } else {
                         Button {
                             openURL(URL(string: "https://some.im/customer/plan")!)
                         } label: {
-                            Label(isInitialRefresh ? "查看套餐" : "购买套餐", systemImage: "arrow.up.right.square")
+                            Label(
+                                L10n.AgentModelPicker.buyCodingPlan,
+                                systemImage: "arrow.up.right.square"
+                            )
                         }
                         .buttonStyle(.borderedProminent)
                         .controlSize(.small)
@@ -1891,18 +2031,31 @@ struct ModelPickerPill: View {
                 }
             }
             .padding(12)
-            .background(status.isActiveNow
+            .background(hasActivePlan
                 ? Color.green.opacity(0.07)
                 : appState.editorSettings.interfaceSkin.palette.controlFill.opacity(0.48))
             .clipShape(RoundedRectangle(cornerRadius: 8))
         }
     }
 
+    private func codingPlanRefreshFailureDescription(
+        _ failure: SomeIMCodingPlanRefreshFailure
+    ) -> String {
+        switch failure {
+        case .authenticationRequired:
+            return L10n.AgentModelPicker.codingPlanAuthenticationRequired
+        case .unavailable:
+            return L10n.AgentModelPicker.codingPlanUnavailable
+        }
+    }
+
     private func codingPlanValidityText(_ status: SomeIMCodingPlanStatus) -> String {
         guard let periodEnd = status.periodEnd else {
-            return "套餐权益当前有效；省心托管会优先使用 Coding Plan 模型。"
+            return L10n.AgentModelPicker.codingPlanActive
         }
-        return "有效期至 \(periodEnd.formatted(date: .abbreviated, time: .shortened))；省心托管会优先使用 Coding Plan 模型。"
+        return L10n.AgentModelPicker.codingPlanExpires(
+            periodEnd.formatted(date: .abbreviated, time: .omitted)
+        )
     }
 
     private func refreshCodingPlanStatus() {
@@ -2370,47 +2523,12 @@ struct ModelPickerPill: View {
     }
 
     private var pillLabel: String {
-        if menuSnapshot.managedActive {
-            return "\(L10n.AgentModelPicker.managed) · \(managedFamilyLabel)"
-        }
-        return menuSnapshot.currentModelLabel.isEmpty
-            ? L10n.AgentModelPicker.selectModel
-            : menuSnapshot.currentModelLabel
-    }
-
-    private var managedActualModelID: String {
-        if let selected = appState.activeRuntime?.managedRouting?.lastSelectedModel,
-           !selected.isEmpty {
-            return selected
-        }
-        switch appState.activeRuntime?.managedRouting?.minimumTier ?? .low {
-        case .low: return SomeIMManagedModel.autoFlash
-        case .high: return SomeIMManagedModel.autoPro
-        case .premium: return SomeIMManagedModel.autoPremium
-        }
-    }
-
-    private var managedFamilyLabel: String {
-        let tier = SomeIMManagedModel.tier(of: managedActualModelID)
-            ?? appState.activeRuntime?.managedRouting?.minimumTier
-            ?? .low
-        let family: String
-        if managedActualModelID.hasPrefix("someim-coding-plan-") {
-            family = "Plan"
-        } else if managedActualModelID.hasPrefix("someim-code-") {
-            family = "Code"
-        } else {
-            family = "Auto"
-        }
-        return "\(family) \(managedTierLabel(tier))"
-    }
-
-    private var managedTaskLabel: String {
-        let modelID = managedActualModelID.lowercased()
-        if modelID.contains("coding-plan") || modelID.hasPrefix("someim-code-") {
-            return L10n.AgentModelPicker.codingTask
-        }
-        return L10n.AgentModelPicker.generalTask
+        AgentModelPickerPresentation.pillLabel(
+            managedActive: menuSnapshot.managedActive,
+            currentModelLabel: menuSnapshot.currentModelLabel,
+            managedLabel: L10n.AgentModelPicker.managed,
+            selectModelLabel: L10n.AgentModelPicker.selectModel
+        )
     }
 
     private func isCatalogItemCurrent(_ item: AgentModelCatalogItem) -> Bool {
