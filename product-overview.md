@@ -1,6 +1,6 @@
 # WillDeep Product Overview
 
-> Last updated: 2026-07-16 | Current version: v1.173.0-rc1
+> Last updated: 2026-07-16 | Current version: v1.174.0-rc1
 
 ## Positioning
 
@@ -12,6 +12,9 @@ WillDeep is configured for non-App-Store distribution without App Sandbox so it 
 
 ## 架构概览
 
+- **聊天 Markdown 块级排版稳定性（1.174.0-rc1）** —— TextKit 历史消息把表格内部行距与表格块上下边距分开处理：2pt 表内行距只负责数据可读性，10pt 上下 margin 只落在整张表首尾；离开表格或代码块后，正文继续使用统一的基准字号、5pt 行距与普通段落间距，避免视觉密度突然变化。
+- **流式思考 Markdown 渲染（1.174.0）** —— Agent 的实时 reasoning 预览改用单节点富文本 Markdown 管线，标题、粗体/斜体、列表、引用、分隔线、代码块和 GFM 表格会在思考阶段直接排版，不再暴露原始标记；普通回答的流式阶段继续保留低成本纯文本路径，结束后再切换完整 Markdown，以控制长回复的主线程开销。
+- **Worktree 迁出项目目录（1.173.0-rc2）** —— Agent composer 新建 Git worktree 时统一存放到 `~/.willdeep/worktrees/<仓库名-路径摘要>/<分支名>`，不再在原仓库的父目录直接创建 sibling 目录；路径摘要隔离同名仓库，分支目录重名时继续自动追加序号。
 - **Workflow 可取消生命周期与 Agent 结果闭环（1.173.0-rc1）** —— 运行卡片提供实时耗时和明确“停止”按钮，`/stop` 同时取消当前模型轮次与活动工作流；任务句柄归属具体 Agent runtime，会话生命周期会同步取消工作流。`run_workflow` 按调用所在会话、工作区和远端 runtime 启动，结果以一次性 system 通知回到模型上下文；声明式 `parallel: true` 步骤受 `max_agents` 限制并发，父任务取消会传播到子任务。
 - **摘要卡淡灰描边与无副作用关闭（1.173.0）** —— 聊天区右上角的产物、媒体与工作区 Dev Server 卡片统一使用自适应淡灰边框，并提供小型关闭按钮。关闭只影响当前摘要的可见性，不会删除产物、取消任务或停止服务；普通轮询与日志增长不会反复弹回，只有文件集合、媒体生命周期或 Dev Server 任务发生实质变化时才重新出现。
 - **春庭旗韵壁纸人像重构（1.172.0-rc2）** —— 内置“春庭旗韵”从远景全身构图重制为高颜值半身主视觉：面部成为第一焦点，发髻、旗袍刺绣与江南春庭氛围保持精细，右侧保留安静留白以兼容桌面图标和工作区内容；4K 主图与轻量缩略图同步替换，稳定资源标识保持不变。

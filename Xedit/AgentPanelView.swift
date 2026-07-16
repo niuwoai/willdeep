@@ -437,7 +437,8 @@ struct AgentThinkingDivider: View {
                     content: reasoning,
                     isStreaming: true,
                     baseFontSize: appState.agentChatBaseFontSize,
-                    showsStreamingCursor: false
+                    showsStreamingCursor: false,
+                    rendersStreamingMarkdown: true
                 )
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(.leading, leadingInset)

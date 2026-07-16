@@ -1,5 +1,54 @@
 # Changelog
 
+## 1.174.0-rc1 - 2026-07-16
+
+### Fixed
+
+- **Markdown 表格不再把每一行撑成“大段落”。** TextKit 表格仍保留块级上下边距，但只在整张表的首行与末行生效；表内标题、分隔线和数据行只使用稳定的 2pt 行距，表格或代码块之后的正文继续保持与前文一致的字号、5pt 行距和段落节奏。
+
+### Changed
+
+- 版本号从 **1.174.0** 递增为 **1.174.0-rc1**；Xcode App、Go agent、Help bundle、Computer Use Helper、Chrome 扩展、README badge、移动网关响应头契约与产品文档同步。
+
+### Tests
+
+- 新增表格首尾边距与后续正文排版回归，覆盖表格中间行不继承块级 margin，以及表后正文的字号、行距、段前和段后间距与表前正文一致；`AgentChatHistoryRendererTests` 58 项全部通过。
+
+---
+
+## 1.174.0 - 2026-07-16
+
+### Added
+
+- **流式思考支持 Markdown。** Agent 实时 reasoning 预览现在可直接渲染标题、粗体/斜体、列表、引用、分隔线、代码块与 GFM 表格，不再把 `#`、`**` 和表格分隔行原样展示。
+
+### Changed
+
+- 思考预览复用单 `AttributedString` Markdown 渲染器，避免按 Markdown block 构建嵌套 SwiftUI 视图；普通回答的流式阶段仍保留低成本纯文本路径，完成后继续使用完整 Markdown。
+- 版本号从 **1.173.0-rc2** 提升为 **1.174.0**；Xcode App、Go agent、Help bundle、Computer Use Helper、Chrome 扩展、README badge、移动网关响应头契约与产品文档同步。
+
+### Tests
+
+- 新增流式思考 Markdown 与普通回答纯文本快速路径回归，覆盖标题、粗体和 GFM 表格，并通过 `AgentChatHistoryRendererTests` 全套 58 项测试。
+
+---
+
+## 1.173.0-rc2 - 2026-07-16
+
+### Fixed
+
+- **Git worktree 不再污染项目目录。** Agent composer 新建 worktree 的默认位置从原仓库父目录迁到 `~/.willdeep/worktrees/<仓库名-路径摘要>/<分支名>`；同名仓库通过规范路径摘要隔离，同一分支名发生目录冲突时自动追加序号。
+
+### Changed
+
+- 版本号从 **1.173.0-rc1** 递增为 **1.173.0-rc2**；Xcode App、Go agent、Help bundle、Computer Use Helper、Chrome 扩展、README badge、移动网关响应头契约与产品文档同步。
+
+### Tests
+
+- 更新 Git worktree 命名与真实创建回归，验证默认存储根位于 WillDeep 用户目录结构、不会回落到项目相邻目录，并继续覆盖重名避让与 `.git` 文件 worktree 根识别。
+
+---
+
 ## 1.173.0-rc1 - 2026-07-16
 
 ### Fixed

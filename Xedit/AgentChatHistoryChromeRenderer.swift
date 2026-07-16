@@ -227,6 +227,11 @@ extension AgentChatHistoryRenderer {
         attributed.enumerateAttribute(.agentChatHistoryTableBlockID, in: range, options: []) { value, subrange, _ in
             guard value != nil else { return }
             attributed.addAttribute(.paragraphStyle, value: tableParagraphStyle, range: subrange)
+            applyTableBlockVerticalMargins(
+                to: attributed,
+                tableRange: subrange,
+                baseStyle: tableParagraphStyle
+            )
         }
         let headingStyle = headingParagraphStyle(from: paragraphStyle)
         attributed.enumerateAttribute(.agentChatHistoryHeadingLevel, in: range, options: []) { value, subrange, _ in
@@ -262,6 +267,11 @@ extension AgentChatHistoryRenderer {
         attributed.enumerateAttribute(.agentChatHistoryTableBlockID, in: range, options: []) { value, subrange, _ in
             guard value != nil else { return }
             attributed.addAttribute(.paragraphStyle, value: tableParagraphStyle, range: subrange)
+            applyTableBlockVerticalMargins(
+                to: attributed,
+                tableRange: subrange,
+                baseStyle: tableParagraphStyle
+            )
         }
         let headingStyle = headingParagraphStyle(from: paragraphStyle)
         attributed.enumerateAttribute(.agentChatHistoryHeadingLevel, in: range, options: []) { value, subrange, _ in
@@ -619,9 +629,37 @@ extension AgentChatHistoryRenderer {
         // wrap; wide tables open in the dedicated table detail window.
         style.lineBreakMode = .byClipping
         style.lineSpacing = MarkdownSpacing.tableLine
-        style.paragraphSpacing = MarkdownSpacing.tableParagraph
-        style.paragraphSpacingBefore = MarkdownSpacing.tableParagraphBefore
+        // Each visual table row is a TextKit paragraph. Block margins must
+        // therefore be applied only to the first and last row below; putting
+        // them on this shared style inflates every row and makes the normal
+        // prose after a table look as though its line height suddenly shrank.
+        style.paragraphSpacing = 0
+        style.paragraphSpacingBefore = 0
         return style
+    }
+
+    private static func applyTableBlockVerticalMargins(
+        to attributed: NSMutableAttributedString,
+        tableRange: NSRange,
+        baseStyle: NSParagraphStyle
+    ) {
+        guard tableRange.length > 0 else { return }
+        let text = attributed.string as NSString
+        let firstParagraph = text.paragraphRange(for: NSRange(location: tableRange.location, length: 0))
+        let lastParagraph = text.paragraphRange(for: NSRange(location: NSMaxRange(tableRange) - 1, length: 0))
+        if firstParagraph == lastParagraph {
+            let style = baseStyle.mutableCopy() as? NSMutableParagraphStyle ?? NSMutableParagraphStyle()
+            style.paragraphSpacingBefore = MarkdownSpacing.tableParagraphBefore
+            style.paragraphSpacing = MarkdownSpacing.tableParagraph
+            attributed.addAttribute(.paragraphStyle, value: style, range: firstParagraph)
+            return
+        }
+        let firstStyle = baseStyle.mutableCopy() as? NSMutableParagraphStyle ?? NSMutableParagraphStyle()
+        firstStyle.paragraphSpacingBefore = MarkdownSpacing.tableParagraphBefore
+        attributed.addAttribute(.paragraphStyle, value: firstStyle, range: firstParagraph)
+        let lastStyle = baseStyle.mutableCopy() as? NSMutableParagraphStyle ?? NSMutableParagraphStyle()
+        lastStyle.paragraphSpacing = MarkdownSpacing.tableParagraph
+        attributed.addAttribute(.paragraphStyle, value: lastStyle, range: lastParagraph)
     }
 
     private static func headingParagraphStyle(from baseStyle: NSParagraphStyle) -> NSParagraphStyle {
