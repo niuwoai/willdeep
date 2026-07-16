@@ -2115,7 +2115,6 @@ struct AgentShortDramaPanel: View {
         ]
         if kind == .imageGeneration {
             body["size"] = "1024x1024"
-            body["response_format"] = "b64_json"
         } else if kind == .videoGeneration,
                   let referenceURL = referenceImageURL(for: shot),
                   let imageDataURL = try? dataURL(for: referenceURL) {
@@ -2167,7 +2166,6 @@ struct AgentShortDramaPanel: View {
             "model": model,
             "prompt": prompt,
             "size": "1024x1024",
-            "response_format": "b64_json",
         ]
 
         let response = try await SomeIMAsyncMediaClient.submit(

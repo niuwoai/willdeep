@@ -14,7 +14,7 @@
 
 import Foundation
 
-enum GitHubCLIPreflight {
+nonisolated enum GitHubCLIPreflight {
     enum Failure: Error, LocalizedError {
         case ghNotInstalled
         case notLoggedIn(stderr: String)
@@ -41,16 +41,21 @@ enum GitHubCLIPreflight {
     /// 在 workspace 根目录跑一次预检。所有 GitHub 系 workflow 的
     /// `run(...)` 开头都调一次。失败抛 Failure，调用方 catch 后把
     /// errorDescription 当成 workflow summary 显示给用户。
-    static func check(workspaceURL: URL?) throws {
-        try checkGhAvailable()
-        try checkGhAuthenticated()
-        if let workspaceURL {
-            try checkGitRepo(at: workspaceURL)
-            try checkGitHubRemote(at: workspaceURL)
-        }
-        // 没传 workspaceURL（agent 不绑 workspace 的场景）就跳过最后
-        // 两步 —— /issue-triage 等其实也能跑（gh 命令自己挑默认 repo
-        // 或要用户在 args 里显式指定），不强求。
+    ///
+    /// Detached：每个探测都是 10s 超时的同步子进程，`gh auth status`
+    /// 还要打网络（走代理时单次可达数秒），调用方在 MainActor 上。
+    static func check(workspaceURL: URL?) async throws {
+        try await Task.detached(priority: .userInitiated) {
+            try checkGhAvailable()
+            try checkGhAuthenticated()
+            if let workspaceURL {
+                try checkGitRepo(at: workspaceURL)
+                try checkGitHubRemote(at: workspaceURL)
+            }
+            // 没传 workspaceURL（agent 不绑 workspace 的场景）就跳过最后
+            // 两步 —— /issue-triage 等其实也能跑（gh 命令自己挑默认 repo
+            // 或要用户在 args 里显式指定），不强求。
+        }.value
     }
 
     private static func checkGhAvailable() throws {
@@ -106,20 +111,11 @@ enum GitHubCLIPreflight {
         if let cwd {
             process.currentDirectoryURL = cwd
         }
-        let outPipe = Pipe()
-        let errPipe = Pipe()
-        process.standardOutput = outPipe
-        process.standardError = errPipe
-
         do {
-            try process.run()
+            let output = try AgentSubprocess.runSynchronously(process, timeout: 10)
+            return RunResult(exitCode: output.exitStatus, stdout: output.stdoutText, stderr: output.stderrText)
         } catch {
             return RunResult(exitCode: -1, stdout: "", stderr: "Failed to launch: \(error.localizedDescription)")
         }
-        process.waitUntilExit()
-
-        let stdout = String(data: outPipe.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? ""
-        let stderr = String(data: errPipe.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? ""
-        return RunResult(exitCode: process.terminationStatus, stdout: stdout, stderr: stderr)
     }
 }

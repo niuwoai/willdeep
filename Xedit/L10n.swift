@@ -727,21 +727,10 @@ nonisolated enum L10n {
     }
 
     enum EmptyState {
-        // 1.155.0-rc3：EmptyWorkspaceView 欢迎页删除后，agent-mode /
-        // no-folder-open / open-folder / recent-files / recent-folders
-        // 一组 key 随之移除（xcstrings 里的历史词条保留无害）。
         static func hero(_ a1: String) -> String {
             let template = String(localized: "empty-state.hero", defaultValue: "What's up next")
             return String(format: template, a1)
         }
-        static let noFileOpenSubtitle = String(localized: "empty-state.no-file-open.subtitle", defaultValue: "Select a file from the sidebar to start editing.")
-        static let noFileOpenTitle = String(localized: "empty-state.no-file-open.title", defaultValue: "No File Open")
-        static let openFile = String(localized: "empty-state.open-file", defaultValue: "Open File")
-        static let openFileAccessibilityLabel = String(localized: "empty-state.open-file.accessibility-label", defaultValue: "Open File")
-        static let openFileHelp = String(localized: "empty-state.open-file.help", defaultValue: "Open File")
-        static let quickOpen = String(localized: "empty-state.quick-open", defaultValue: "Quick Open")
-        static let quickOpenAccessibilityLabel = String(localized: "empty-state.quick-open.accessibility-label", defaultValue: "Quick Open")
-        static let quickOpenHelp = String(localized: "empty-state.quick-open.help", defaultValue: "Quick Open")
         static let subtitleNoFolder = String(localized: "empty-state.subtitle.no-folder", defaultValue: "Open a folder from the menu to chat about a project.")
         static func subtitleWithFolder(_ a1: String) -> String {
             let template = String(localized: "empty-state.subtitle.with-folder", defaultValue: "Paste images switch models queue follow-ups.")
@@ -1190,6 +1179,12 @@ nonisolated enum L10n {
         static let renameSessionAlertMessage = String(localized: "sidebar.rename-session.alert-message", defaultValue: "Give this conversation a new name.")
         static let renameSessionConfirm = String(localized: "sidebar.rename-session.confirm", defaultValue: "Save")
         static let renameSessionCancel = String(localized: "sidebar.rename-session.cancel", defaultValue: "Cancel")
+        static let sessionUnavailableAlertTitle = String(localized: "sidebar.session-unavailable.alert-title", defaultValue: "Conversation Unavailable")
+        static func sessionUnavailableAlertMessage(_ title: String) -> String {
+            let template = String(localized: "sidebar.session-unavailable.alert-message", defaultValue: "“%@” could not be opened because its local history file is missing. WillDeep kept the sidebar entry so you can restore the file from backup. No new data was written over it.")
+            return String(format: template, title)
+        }
+        static let sessionUnavailableConfirm = String(localized: "sidebar.session-unavailable.confirm", defaultValue: "OK")
         static let sessionRowArchiveTooltip = String(localized: "sidebar.session-row.archive-tooltip", defaultValue: "Archive")
         static let sessionRowPinTooltip = String(localized: "sidebar.session-row.pin-tooltip", defaultValue: "Pin")
         static let sessionRowUnarchiveTooltip = String(localized: "sidebar.session-row.unarchive-tooltip", defaultValue: "Unarchive")
@@ -1405,6 +1400,10 @@ nonisolated enum L10n {
         static let interfaceSkinHelp = String(localized: "settings.interface-skin.help", defaultValue: "Choose a full-window skin. Skin changes apply to window chrome, sidebars, panels, selection color, and the recommended editor theme.")
         static let sectionColorStyle = String(localized: "settings.section.color-style", defaultValue: "Color Style")
         static let sectionEditorBackground = String(localized: "settings.section.editor-background", defaultValue: "Editor Background")
+        static let sectionWorkspaceWallpaper = String(localized: "settings.section.workspace-wallpaper", defaultValue: "Workspace Wallpaper")
+        static let builtInWallpapers = String(localized: "settings.workspace-wallpaper.built-in", defaultValue: "Built-in Wallpapers")
+        static let workspaceWallpaperHelp = String(localized: "settings.workspace-wallpaper.help", defaultValue: "Choose a built-in wallpaper or your own image for both the Editor and Agent workspace. WillDeep keeps a private managed copy of custom images.")
+        static let workspaceWallpaperInstallFailed = String(localized: "settings.workspace-wallpaper.install-failed", defaultValue: "WillDeep couldn't use that image. Choose a valid image smaller than 64 MB and 80 megapixels.")
         static let sectionEditor = String(localized: "settings.section.editor", defaultValue: "Editor")
         static let sectionSidebar = String(localized: "settings.section.sidebar", defaultValue: "Sidebar")
         static let sectionInspector = String(localized: "settings.section.inspector", defaultValue: "Inspector")
@@ -1451,8 +1450,38 @@ nonisolated enum L10n {
         static let labelViewOrder = String(localized: "settings.label.view-order", defaultValue: "View Order")
         static let noImageSelected = String(localized: "settings.no-image-selected", defaultValue: "No image selected")
         static let chooseBackgroundImageTitle = String(localized: "settings.choose-background-image.title", defaultValue: "Choose Editor Background Image")
+        static let chooseWorkspaceWallpaperTitle = String(localized: "settings.choose-workspace-wallpaper.title", defaultValue: "Choose Workspace Wallpaper")
+        static let backgroundImageModeFill = String(localized: "settings.background-image-mode.fill", defaultValue: "Fill & Crop")
+        static let backgroundImageModeFit = String(localized: "settings.background-image-mode.fit", defaultValue: "Fit")
+        static let backgroundImageModeStretch = String(localized: "settings.background-image-mode.stretch", defaultValue: "Stretch")
+        static let backgroundImageModeCenter = String(localized: "settings.background-image-mode.center", defaultValue: "Center")
         static let savedStatus = String(localized: "settings.saved-status", defaultValue: "Saved.")
         static let allChangesSaved = String(localized: "settings.all-changes-saved", defaultValue: "All changes saved")
+
+        enum BuiltInWallpaper {
+            static func name(_ id: String) -> String {
+                switch id {
+                case BuiltInWorkspaceWallpaper.pastelDrift.id:
+                    return String(localized: "settings.workspace-wallpaper.name.pastel-drift", defaultValue: "Pastel Drift")
+                case BuiltInWorkspaceWallpaper.ringedWorld.id:
+                    return String(localized: "settings.workspace-wallpaper.name.ringed-world", defaultValue: "Ringed World")
+                case BuiltInWorkspaceWallpaper.skyGarden.id:
+                    return String(localized: "settings.workspace-wallpaper.name.sky-garden", defaultValue: "Sky Garden")
+                case BuiltInWorkspaceWallpaper.springQipao.id:
+                    return String(localized: "settings.workspace-wallpaper.name.spring-qipao", defaultValue: "Spring Qipao")
+                case BuiltInWorkspaceWallpaper.glacierMirror.id:
+                    return String(localized: "settings.workspace-wallpaper.name.glacier-mirror", defaultValue: "Glacier Mirror")
+                case BuiltInWorkspaceWallpaper.emeraldSteppe.id:
+                    return String(localized: "settings.workspace-wallpaper.name.emerald-steppe", defaultValue: "Emerald Steppe")
+                case BuiltInWorkspaceWallpaper.coralRealm.id:
+                    return String(localized: "settings.workspace-wallpaper.name.coral-realm", defaultValue: "Coral Realm")
+                case BuiltInWorkspaceWallpaper.auroraSanctuary.id:
+                    return String(localized: "settings.workspace-wallpaper.name.aurora-sanctuary", defaultValue: "Aurora Sanctuary")
+                default:
+                    return id
+                }
+            }
+        }
 
         enum InterfaceSkin {
             static func name(_ skin: EditorInterfaceSkin) -> String {

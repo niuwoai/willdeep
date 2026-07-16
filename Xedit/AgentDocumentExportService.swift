@@ -27,7 +27,7 @@ enum AgentDocumentExportService {
             guard response == .OK, let url = panel.url else { return }
             Task {
                 do {
-                    try export(file: file, section: section, to: url)
+                    try await export(file: file, section: section, to: url)
                 } catch {
                     presentError(error)
                 }
@@ -44,7 +44,7 @@ enum AgentDocumentExportService {
         file: AgentFileAttachment,
         section: AgentAttachmentSection,
         to url: URL
-    ) throws {
+    ) async throws {
         let markdown = """
         # \(file.relativePath)
 
@@ -56,7 +56,7 @@ enum AgentDocumentExportService {
         case "pdf":
             try writePDF(markdown, to: url)
         case "docx":
-            try writeDOCX(markdown, to: url)
+            try await writeDOCX(markdown, to: url)
         case "txt":
             try section.text.write(to: url, atomically: true, encoding: .utf8)
         default:
@@ -104,7 +104,7 @@ enum AgentDocumentExportService {
         context.closePDF()
     }
 
-    private static func writeDOCX(_ text: String, to url: URL) throws {
+    private static func writeDOCX(_ text: String, to url: URL) async throws {
         let temporaryDirectory = FileManager.default.temporaryDirectory
             .appendingPathComponent("willdeep_export_\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: temporaryDirectory, withIntermediateDirectories: true)
@@ -124,11 +124,13 @@ enum AgentDocumentExportService {
         let process = Process()
         process.executableURL = URL(fileURLWithPath: "/usr/bin/textutil")
         process.arguments = ["-convert", "docx", "-output", url.path, rtfURL.path]
-        process.standardOutput = FileHandle.nullDevice
-        process.standardError = FileHandle.nullDevice
-        try process.run()
-        process.waitUntilExit()
-        guard process.terminationStatus == 0 else {
+        let output = try await AgentSubprocess.run(
+            process,
+            timeout: 60,
+            stdoutLimit: 64 * 1_024,
+            stderrLimit: 64 * 1_024
+        )
+        guard output.exitStatus == 0, !output.timedOut else {
             throw CocoaError(.fileWriteUnknown)
         }
     }

@@ -13,6 +13,10 @@ import UniformTypeIdentifiers
 import Vision
 
 enum ImageWorkflowSupport {
+    private static let maxCompressedImageBytes = 64 * 1_024 * 1_024
+    private static let maxDecodedPixels = 40_000_000
+    private static let maxImageDimension = 16_384
+
     enum Failure: Error, LocalizedError {
         case missingImage(path: String)
         case unreadableImage(path: String)
@@ -138,7 +142,25 @@ enum ImageWorkflowSupport {
         guard FileManager.default.fileExists(atPath: url.path) else {
             throw Failure.missingImage(path: path)
         }
-        guard let source = CGImageSourceCreateWithURL(url as CFURL, nil),
+        let fileSize = (try? url.resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? 0
+        guard fileSize <= maxCompressedImageBytes else {
+            throw Failure.invalidArguments("Image exceeds the 64 MiB compressed-file safety limit: `\(path)`.")
+        }
+        guard let source = CGImageSourceCreateWithURL(url as CFURL, nil) else {
+            throw Failure.unreadableImage(path: path)
+        }
+        let properties = CGImageSourceCopyPropertiesAtIndex(source, 0, nil) as? [CFString: Any]
+        let width = (properties?[kCGImagePropertyPixelWidth] as? NSNumber)?.intValue ?? 0
+        let height = (properties?[kCGImagePropertyPixelHeight] as? NSNumber)?.intValue ?? 0
+        guard width > 0, height > 0 else {
+            throw Failure.unreadableImage(path: path)
+        }
+        guard width <= maxImageDimension,
+              height <= maxImageDimension,
+              width <= maxDecodedPixels / height else {
+            throw Failure.invalidArguments("Image dimensions \(width)×\(height) exceed the decoded-pixel safety budget: `\(path)`.")
+        }
+        guard
               let image = CGImageSourceCreateImageAtIndex(source, 0, [
                 kCGImageSourceShouldCache: true
               ] as CFDictionary) else {

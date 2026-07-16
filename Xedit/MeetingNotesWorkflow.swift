@@ -59,7 +59,7 @@ struct MeetingNotesWorkflow: WorkflowDefinition {
             tempDir = dir
             let extracted = dir.appendingPathComponent("audio.wav")
             do {
-                try extractAudio(videoURL: audioURL, audioURL: extracted)
+                try await extractAudio(videoURL: audioURL, audioURL: extracted)
             } catch {
                 return "Audio extraction failed: \(error.localizedDescription)"
             }
@@ -125,7 +125,7 @@ struct MeetingNotesWorkflow: WorkflowDefinition {
     // MARK: - ffmpeg helper (duplicated from VideoSummaryWorkflow to keep
     // the two files independently readable; phase 3 will extract a
     // shared MediaExtraction helper).
-    private func extractAudio(videoURL: URL, audioURL: URL) throws {
+    private func extractAudio(videoURL: URL, audioURL: URL) async throws {
         let p = Process()
         p.launchPath = "/usr/bin/env"
         p.arguments = [
@@ -135,15 +135,10 @@ struct MeetingNotesWorkflow: WorkflowDefinition {
             "-acodec", "pcm_s16le",
             audioURL.path,
         ]
-        let errPipe = Pipe()
-        p.standardOutput = Pipe()
-        p.standardError = errPipe
-        try p.run()
-        p.waitUntilExit()
-        if p.terminationStatus != 0 {
-            let err = String(data: errPipe.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? ""
-            throw NSError(domain: "meeting-notes", code: Int(p.terminationStatus), userInfo: [
-                NSLocalizedDescriptionKey: "ffmpeg exit \(p.terminationStatus): \(err)"
+        let result = try await AgentSubprocess.run(p)
+        if result.exitStatus != 0 {
+            throw NSError(domain: "meeting-notes", code: Int(result.exitStatus), userInfo: [
+                NSLocalizedDescriptionKey: "ffmpeg exit \(result.exitStatus): \(result.stderrText)"
             ])
         }
     }

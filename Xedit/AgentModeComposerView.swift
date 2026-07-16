@@ -1275,8 +1275,16 @@ private struct ComposerCard: View {
             return
         }
 
-        if let mime = AgentImagePasteboardHelper.mimeType(forPath: url.path),
-           let data = try? Data(contentsOf: url) {
+        if let mime = AgentImagePasteboardHelper.mimeType(forPath: url.path) {
+            let byteCount = (try? url.resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? Int.max
+            guard byteCount <= 8 * 1_024 * 1_024 else {
+                attachmentNotice = L10n.Composer.attachmentTooLarge(url.lastPathComponent)
+                return
+            }
+            guard let data = try? Data(contentsOf: url) else {
+                attachmentNotice = L10n.Composer.unknownAttachmentUnreadable(url.lastPathComponent)
+                return
+            }
             attachmentNotice = nil
             ingest(data: data, mimeType: mime)
             return

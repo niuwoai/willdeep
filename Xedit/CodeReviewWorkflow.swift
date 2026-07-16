@@ -36,7 +36,7 @@ struct CodeReviewWorkflow: WorkflowDefinition {
         // PR mode → preflight gh + 替换 diff 来源。
         if let prNumber = parsed.prNumber {
             do {
-                try GitHubCLIPreflight.check(workspaceURL: engine.workspaceURL)
+                try await GitHubCLIPreflight.check(workspaceURL: engine.workspaceURL)
             } catch let failure as GitHubCLIPreflight.Failure {
                 return failure.errorDescription ?? "GitHub CLI preflight failed."
             }

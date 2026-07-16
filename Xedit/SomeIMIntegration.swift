@@ -1188,8 +1188,7 @@ enum SomeIMClient {
         let body: [String: Any] = [
             "model": model,
             "prompt": trimmedPrompt,
-            "size": size,
-            "response_format": "b64_json"
+            "size": size
         ]
         request.httpBody = try JSONSerialization.data(withJSONObject: body, options: [.sortedKeys])
 

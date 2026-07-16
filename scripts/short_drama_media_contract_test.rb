@@ -99,6 +99,7 @@ registry_source = read_file(repo_root, "Xedit/AgentToolRegistry.swift")
 panel_source = read_file(repo_root, "Xedit/AgentShortDramaExportActions.swift")
 side_panel_source = read_file(repo_root, "Xedit/AgentSidePanel.swift")
 mode_view_source = read_file(repo_root, "Xedit/AgentModeView.swift")
+conversation_activity_overlay_source = read_file(repo_root, "Xedit/AgentConversationActivityOverlay.swift")
 app_state_source = read_file(repo_root, "Xedit/AppState.swift")
 app_state_loop_source = read_file(repo_root, "Xedit/AppStateAgentLoop.swift")
 chat_header_source = read_file(repo_root, "Xedit/AgentChatHeader.swift")
@@ -1706,16 +1707,15 @@ plan_import_contract = {
     media_artifact_views_source.include?("当前分镜主图") &&
     media_artifact_views_source.include?("设为人物/场景参考图") &&
     media_artifact_views_source.include?("已是资产参考图"),
-  "media task completion notice carries anchors and follow-up tools" =>
+  "media task completion notice carries anchors and uses session card instead of auto-open" =>
     app_state_loop_source.include?("mediaTaskAnchorLines(for: task)") &&
     app_state_loop_source.include?("mediaTaskFollowUpLines(for: task)") &&
     app_state_loop_source.include?("mediaTaskActionLines(for: task)") &&
     app_state_loop_source.include?("mediaTaskPanelScope(for task: AgentMediaTask)") &&
-    app_state_loop_source.include?("focusTask.flatMap(Self.mediaTaskPanelScope)") &&
-    app_state_loop_source.include?("finishedMediaTasks.first(where: \\.needsAttention)") &&
-    app_state_loop_source.include?("AgentSidePanelOpenRequest(") &&
-    app_state_loop_source.include?("kind: .mediaTasks") &&
-    app_state_loop_source.include?("mediaTaskScope: agentMediaTaskPanelScope") &&
+    !app_state_loop_source.include?("finishedMediaTasks.first(where: \\.needsAttention)") &&
+    conversation_activity_overlay_source.include?("static func scopedTasks") &&
+    conversation_activity_overlay_source.include?("task.runtimeID == runtimeID") &&
+    conversation_activity_overlay_source.include?("AgentSidePanelOpenRequest(kind: .mediaTasks)") &&
     app_state_loop_source.include?("检查项任务：\\(task.title)") &&
     app_state_loop_source.include?("分镜任务：\\(task.title)") &&
     app_state_loop_source.include?("项目任务：\\(task.title)") &&

@@ -95,14 +95,9 @@ struct VideoCompressWorkflow: WorkflowDefinition {
                 "-f", "null",
                 "/dev/null",
             ]
-            let errPipe = Pipe()
-            p1.standardOutput = Pipe()
-            p1.standardError = errPipe
-            try p1.run()
-            await AgentProcessSupport.waitUntilExit(p1)
-            if p1.terminationStatus != 0 {
-                let err = String(data: errPipe.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? ""
-                return "ffmpeg pass 1 failed (\(p1.terminationStatus)): \(err.suffix(500))"
+            let result = try await AgentSubprocess.run(p1)
+            if result.exitStatus != 0 {
+                return "ffmpeg pass 1 failed (\(result.exitStatus)): \(result.stderrText.suffix(500))"
             }
         } catch {
             return "Failed to launch ffmpeg pass 1: \(error.localizedDescription)"
@@ -122,14 +117,9 @@ struct VideoCompressWorkflow: WorkflowDefinition {
                 "-movflags", "+faststart",
                 outputURL.path,
             ]
-            let errPipe = Pipe()
-            p2.standardOutput = Pipe()
-            p2.standardError = errPipe
-            try p2.run()
-            await AgentProcessSupport.waitUntilExit(p2)
-            if p2.terminationStatus != 0 {
-                let err = String(data: errPipe.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? ""
-                return "ffmpeg pass 2 failed (\(p2.terminationStatus)): \(err.suffix(500))"
+            let result = try await AgentSubprocess.run(p2)
+            if result.exitStatus != 0 {
+                return "ffmpeg pass 2 failed (\(result.exitStatus)): \(result.stderrText.suffix(500))"
             }
         } catch {
             return "Failed to launch ffmpeg pass 2: \(error.localizedDescription)"

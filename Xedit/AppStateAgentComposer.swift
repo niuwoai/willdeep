@@ -222,6 +222,7 @@ extension AppState {
             textAttachments: textAttachments,
             images: images,
             imageDescriptions: nil,
+            imageFilePaths: [],
             executionAgent: executionAgent,
             workspaceLocation: runtime.workspaceLocation ?? runtime.workspaceRootPath.map { .local(path: $0) }
         )
@@ -303,6 +304,12 @@ extension AppState {
         let remoteRuntimeDescriptor: RuntimeDescriptor? = workspaceLocation?.remoteRuntimeID.flatMap {
             AgentRuntimeStore.descriptor(id: $0)
         }
+        let delegatedImageBundle: AgentDelegatedImageBundle?
+        if !images.isEmpty, workspaceLocation?.remoteRuntimeID == nil {
+            delegatedImageBundle = try? AgentDelegatedImageBundle.create(images: images)
+        } else {
+            delegatedImageBundle = nil
+        }
         let baselineTask = workspaceURL.map { workspaceURL in
             Task.detached(priority: .utility) {
                 await Self.loadAgentWorktreeSnapshot(
@@ -313,6 +320,7 @@ extension AppState {
         }
 
         defer {
+            delegatedImageBundle?.removeAll()
             runtime.isResponding = false
             runtime.turnStartedAt = nil
             runtime.requestTask = nil
@@ -337,10 +345,16 @@ extension AppState {
                 textAttachments: textAttachments,
                 images: images,
                 imageDescriptions: imageDescriptions,
+                imageFilePaths: delegatedImageBundle?.fileURLs.map(\.path) ?? [],
                 executionAgent: executionAgent,
                 workspaceLocation: workspaceLocation
             )
             arguments["prompt"] = .string(prompt)
+            if let delegatedImageBundle {
+                arguments["image_paths"] = .array(
+                    delegatedImageBundle.fileURLs.map { .string($0.path) }
+                )
+            }
             if let messageIndex = runtime.messages.firstIndex(where: {
                 $0.toolCalls.contains(where: { $0.externalID == externalID })
             }), let callIndex = runtime.messages[messageIndex].toolCalls.firstIndex(where: { $0.externalID == externalID }) {
@@ -876,6 +890,7 @@ extension AppState {
         textAttachments: [AgentTextAttachment],
         images: [AgentImageAttachment],
         imageDescriptions: String?,
+        imageFilePaths: [String],
         executionAgent: AgentExecutionAgent,
         workspaceLocation: WorkspaceLocation?
     ) -> String {
@@ -912,9 +927,23 @@ extension AppState {
 
                 \(imageDescriptions)
                 """)
+            } else if !imageFilePaths.isEmpty {
+                blocks.append("WillDeep VL description was unavailable. Inspect the original image files below directly.")
             } else {
-                blocks.append("WillDeep is preparing descriptions for \(images.count) image attachment(s) before this delegated CLI task runs.")
+                blocks.append("WillDeep could not prepare a VL description or a local image copy. Continue using the available text context and report that visual details could not be inspected.")
             }
+        }
+        if !imageFilePaths.isEmpty {
+            let fileList = imageFilePaths.enumerated().map { offset, path in
+                "- Image \(offset + 1): \(path)"
+            }.joined(separator: "\n")
+            blocks.append("""
+            ### Original image attachment files
+
+            These are permission-scoped temporary copies of the original attachments. Inspect them directly for pixel-level details; the VL description above is a fallback and may omit fine text, colors, or spacing.
+
+            \(fileList)
+            """)
         }
         if !textAttachments.isEmpty {
             blocks.append(textAttachments.map(\.modelBlock).joined(separator: "\n\n"))

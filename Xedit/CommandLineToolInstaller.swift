@@ -134,27 +134,19 @@ enum CommandLineToolInstaller {
 
     nonisolated private static func runUserShellScript(_ shellScript: String) throws {
         let process = Process()
-        let pipe = Pipe()
         process.executableURL = URL(fileURLWithPath: "/usr/bin/osascript")
         process.arguments = [
             "-e",
             "do shell script \(appleScriptStringLiteral(shellScript))"
         ]
-        process.standardOutput = pipe
-        process.standardError = pipe
-
+        let output: AgentSubprocess.Output
         do {
-            try process.run()
+            output = try AgentSubprocess.runSynchronously(process, timeout: 120)
         } catch {
             throw InstallError.installerFailed(error.localizedDescription)
         }
-
-        process.waitUntilExit()
-
-        guard process.terminationStatus == 0 else {
-            let data = pipe.fileHandleForReading.readDataToEndOfFile()
-            let message = String(data: data, encoding: .utf8)?
-                .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        guard output.exitStatus == 0, !output.timedOut else {
+            let message = output.stderrText.trimmingCharacters(in: .whitespacesAndNewlines)
             throw InstallError.installerFailed(message)
         }
     }

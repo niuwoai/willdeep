@@ -1345,6 +1345,21 @@ extension WillDeepTests {
         #expect(summary.commandText == "已运行 1 条命令")
     }
 
+    @Test("collapsed live tool summary hides arguments and describes file creation")
+    func testCollapsedLiveToolSummaryUsesAggregateDescription() {
+        let calls = [
+            makeCall("create_file", arguments: ["path": .string("private/episode-16.md")]),
+            makeCall("create_file", arguments: ["path": .string("private/episode-17.md")]),
+            makeCall("create_file", arguments: ["path": .string("private/episode-18.md")])
+        ]
+
+        let summary = AgentCollapsedToolActivitySummary.text(for: calls)
+
+        #expect(summary == "生成了 3 个文件")
+        #expect(summary?.contains("private/") == false)
+        #expect(summary?.contains("create_file") == false)
+    }
+
     @Test("AgentToolCallGrouping never merges ask_user even when adjacent")
     func testToolCallGroupingKeepsAskUserStandalone() {
         let calls = [
@@ -1469,6 +1484,23 @@ extension WillDeepTests {
         } else {
             Issue.record("Expected second call to be approved, got \(secondDecision)")
         }
+    }
+
+    @Test("tool approval actions keep a comfortably clickable hit target")
+    func testToolApprovalActionMetrics() {
+        #expect(AgentApprovalActionMetrics.minimumButtonHeight >= 36)
+        #expect(AgentApprovalActionMetrics.minimumButtonWidth >= 88)
+        #expect(AgentApprovalActionMetrics.spacing >= 8)
+        #expect(AgentApprovalActionMetrics.cornerRadius >= 8)
+    }
+
+    @Test("command confirmation stays calm, scrollable, and honest about shortcuts")
+    func testCommandConfirmationReviewMetrics() {
+        #expect(AgentConfirmationReviewMetrics.commandVisibleLineCount == 3)
+        #expect(AgentConfirmationReviewMetrics.commandViewportHeight >= 60)
+        #expect(AgentConfirmationReviewMetrics.decisionColumnWidth >= 180)
+        #expect(AgentConfirmationReviewMetrics.horizontalMinimumWidth >= 560)
+        #expect(AgentConfirmationReviewMetrics.showsKeyboardShortcutHint == false)
     }
 
     // MARK: - Usage stats

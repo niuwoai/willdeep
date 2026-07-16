@@ -120,15 +120,14 @@ struct AgentPanelView: View {
                             .frame(maxWidth: .infinity)
                             .padding(.top, 44)
                     } else {
-                        ForEach(visibleMessages) { message in
-                            if shouldShowMessageBubble(message) {
+                        ForEach(transcriptItems) { item in
+                            switch item.payload {
+                            case .message(let message):
                                 AgentMessageBubble(message: message)
                                     .id(message.id)
-                            }
-                            let calls = toolCalls(for: message.id)
-                            if !calls.isEmpty {
+                            case .tools(let calls):
                                 AgentToolCallGroup(calls: calls)
-                                    .id(toolGroupScrollID(for: message.id))
+                                    .id(item.id)
                             }
                         }
                     }
@@ -236,6 +235,30 @@ struct AgentPanelView: View {
 
     private func toolCalls(for messageID: AgentMessage.ID) -> [AgentToolCall] {
         appState.agentToolCalls.filter { $0.messageID == messageID }
+    }
+
+    /// Build one linear presentation stream so adjacent tool-only messages
+    /// share a single compact card. A prose bubble is a real boundary; a
+    /// tool-only assistant message is not. The group's id stays anchored to
+    /// its first message while more calls stream in, avoiding SwiftUI tearing
+    /// down and recreating the card as the group grows.
+    private var transcriptItems: [AgentPanelTranscriptItem] {
+        var items: [AgentPanelTranscriptItem] = []
+        for message in visibleMessages {
+            if shouldShowMessageBubble(message) {
+                items.append(.message(message))
+            }
+
+            let calls = toolCalls(for: message.id)
+            guard !calls.isEmpty else { continue }
+            if !shouldShowMessageBubble(message),
+               case .tools(let existingCalls)? = items.last?.payload {
+                items[items.count - 1].payload = .tools(existingCalls + calls)
+            } else {
+                items.append(.tools(messageID: message.id, calls: calls))
+            }
+        }
+        return items
     }
 
     private func isEmptyThinkingPlaceholder(_ message: AgentMessage) -> Bool {
@@ -406,24 +429,42 @@ struct AgentThinkingDivider: View {
                 )
             }
 
-            // 两行实时预览：reasoning 流到哪里就显示到哪里的尾部。
-            // reservesSpace 把高度钉死在两行 —— 流式追加时整个
-            // transcript 不会跟着抖。思考结束（首个正文 token 到达）
-            // 整个 divider 连预览一起消失，由 shouldShow… 统一控制。
+            // Reasoning 与正式回答共用同一套正文渲染和流式节流。首个
+            // 正文 token 到达时，AgentStreamingMessageBuffer 会原子提交
+            // 两类增量；父视图随后一次性用回答替换这里，不做交叉淡入。
             if let reasoning = appState.agentLiveThinkingPreview {
-                Text(AppState.agentThinkingPreviewTail(reasoning))
-                    .font(.caption)
-                    .foregroundStyle(.secondary.opacity(0.62))
-                    .lineLimit(2, reservesSpace: true)
-                    .truncationMode(.head)
+                AgentAssistantMarkdownBody(
+                    content: reasoning,
+                    isStreaming: true,
+                    baseFontSize: appState.agentChatBaseFontSize,
+                    showsStreamingCursor: false
+                )
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(.leading, leadingInset)
                     .padding(.trailing, trailingInset)
-                    .padding(.top, 2)
-                    .padding(.bottom, 4)
+                    .padding(.top, AgentChatHistoryLayoutMetrics.assistantStatusDividerBottomSpacing)
+                    .padding(.bottom, 8)
                     .accessibilityLabel(L10n.AgentPanel.thinkingPreviewAccessibility)
             }
         }
+    }
+}
+
+private struct AgentPanelTranscriptItem: Identifiable {
+    enum Payload {
+        case message(AgentMessage)
+        case tools([AgentToolCall])
+    }
+
+    let id: String
+    var payload: Payload
+
+    static func message(_ message: AgentMessage) -> Self {
+        Self(id: "message:\(message.id.uuidString)", payload: .message(message))
+    }
+
+    static func tools(messageID: AgentMessage.ID, calls: [AgentToolCall]) -> Self {
+        Self(id: "tools:\(messageID.uuidString)", payload: .tools(calls))
     }
 }
 

@@ -350,11 +350,7 @@ struct AgentChatTranscript: View {
                                 if !segments.isEmpty {
                                     VStack(alignment: .leading, spacing: 8) {
                                         ForEach(segments) { segment in
-                                            AgentToolCallGroup(
-                                                calls: segment.calls,
-                                                headline: segment.title,
-                                                headlineIcon: segment.kind.groupIcon
-                                            )
+                                            AgentToolCallGroup(calls: segment.calls)
                                         }
                                     }
                                     .id(toolGroupScrollID(for: messageID))
@@ -385,6 +381,15 @@ struct AgentChatTranscript: View {
                             .frame(maxWidth: AgentDesign.chatMaxContentWidth)
                     }
 
+                    // 底部活动指示，两档（参照 Claude Code）：
+                    //  - 有任务在跑（前台工具阻塞 / 后台作业存活）→
+                    //    「✳ N 个任务运行中」状态行；turn 结束后只要后台
+                    //    作业还活着就继续挂着，解释"输出停了在等任务"。
+                    //  - 否则 turn 还在跑 → 纯呼吸 icon（等首 token / 流式中）。
+                    // Reasoning 直接占用正文位置。首个正式正文 token 到达
+                    // 时 shouldShowAgentThinkingIndicator 会在同一批发布中
+                    // 变为 false，下面的整块思考正文原子退场，正式回答
+                    // 接替它，不做淡入淡出或双层交叉渲染。
                     if appState.shouldShowAgentThinkingIndicator {
                         AgentThinkingDivider(
                             leadingInset: AgentChatHistoryLayoutMetrics.assistantContentHeadIndent,
@@ -393,11 +398,6 @@ struct AgentChatTranscript: View {
                             .frame(maxWidth: AgentDesign.chatMaxContentWidth)
                     }
 
-                    // 底部活动指示，两档（参照 Claude Code）：
-                    //  - 有任务在跑（前台工具阻塞 / 后台作业存活）→
-                    //    「✳ N 个任务运行中」状态行；turn 结束后只要后台
-                    //    作业还活着就继续挂着，解释"输出停了在等任务"。
-                    //  - 否则 turn 还在跑 → 纯呼吸 icon（等首 token / 流式中）。
                     if !appState.isCompressingAgentContext {
                         let runningTasks = appState.agentRunningTaskCount
                         if runningTasks > 0 {

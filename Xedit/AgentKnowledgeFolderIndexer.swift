@@ -15,6 +15,7 @@ nonisolated struct AgentKnowledgeFolderIndexResult: Sendable {
 nonisolated enum AgentKnowledgeFolderIndexer {
     private static let maximumDocumentCount = 250
     private static let maximumTotalBytes: Int64 = 80 * 1_024 * 1_024
+    private static let maximumTraversalNodes = 50_000
     private static let excludedDirectoryNames: Set<String> = [
         ".git", ".svn", ".hg", ".build", ".swiftpm", "build", "dist",
         "deriveddata", "node_modules", "pods", "vendor", "target", "coverage"
@@ -32,12 +33,15 @@ nonisolated enum AgentKnowledgeFolderIndexer {
         existingDocuments: [AgentFileAttachment],
         excludedPatterns: [String]
     ) async -> AgentKnowledgeFolderIndexResult {
-        let scan = scanCandidates(folderURL: folderURL, excludedPatterns: excludedPatterns)
+        let scan = await Task.detached(priority: .utility) {
+            scanCandidates(folderURL: folderURL, excludedPatterns: excludedPatterns)
+        }.value
         let existingByPath = Dictionary(uniqueKeysWithValues: existingDocuments.map { ($0.url.standardizedFileURL.path, $0) })
         var documents: [AgentFileAttachment] = []
         var skipped = scan.skippedFileCount
 
         for candidate in scan.candidates {
+            guard !Task.isCancelled else { break }
             if let existing = existingByPath[candidate.url.path],
                existing.parseStatus == .ready,
                existing.sourceFileSize == candidate.size,
@@ -108,9 +112,15 @@ nonisolated enum AgentKnowledgeFolderIndexer {
         var candidates: [Candidate] = []
         var skipped = 0
         var totalBytes: Int64 = 0
+        var visitedNodes = 0
         let rootPath = root.path
 
         while let url = enumerator.nextObject() as? URL {
+            visitedNodes += 1
+            if visitedNodes > maximumTraversalNodes || Task.isCancelled {
+                skipped += 1
+                break
+            }
             let values = try? url.resourceValues(forKeys: resourceKeys)
             let relativePath = String(url.standardizedFileURL.path.dropFirst(rootPath.count))
                 .trimmingCharacters(in: CharacterSet(charactersIn: "/"))
@@ -151,6 +161,7 @@ nonisolated enum AgentKnowledgeFolderIndexer {
                     modifiedAt: values?.contentModificationDate
                 )
             )
+            if candidates.count >= maximumDocumentCount { break }
         }
 
         return (

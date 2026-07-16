@@ -144,7 +144,7 @@ enum AgentToolRegistry {
         ),
         AgentToolDescriptor(
             name: "terminal_snapshot",
-            description: "Read the latest live visible screen of the current conversation's bound Agent Terminal tab, or the exact terminal_tab_id when supplied. Never guesses from the UI's active tab. Returns the tab id, cursor row/column, and exact current cursor line. The screen marks the cursor line with `=>`; lines above it may be prior output from before SSH or directory changes. Local tabs can contain nested manual SSH, so verify host/cwd before machine-specific claims. Read-only; redacts common secrets.",
+            description: "Read the latest live visible screen of the current conversation's bound Agent Terminal tab, or the exact terminal_tab_id when supplied. Never guesses from the UI's active tab. Returns the tab id, cursor row/column, and exact current cursor line. The screen marks the cursor line with `=>`; lines above it may be prior output from before SSH or directory changes. Local tabs can contain nested manual SSH, so verify host/cwd before machine-specific claims. If no tab is bound to this conversation, the error lists every open side-panel tab: never claim the side panel is closed — confirm the intended tab with the user and retry with terminal_tab_id. Read-only; redacts common secrets.",
             risk: .read,
             parameters: [
                 AgentToolParameter(name: "max_characters", type: .integer, description: "Maximum characters from the latest visible screen to return. Defaults to 6000, capped at 12000.", required: false),
@@ -604,7 +604,7 @@ enum AgentToolRegistry {
             parameters: [
                 AgentToolParameter(name: "kind", type: .string, description: "Optional media kind: image_generation, image_edit, image_upscale, image_erase, image_inpaint, video_generation, short_drama, or unknown. Defaults to image_generation.", required: false),
                 AgentToolParameter(name: "prompt", type: .string, description: "Prompt or edit instruction. Required unless input_json is provided.", required: false),
-                AgentToolParameter(name: "input_json", type: .string, description: "Optional full JSON object string for the some.im endpoint. If omitted, the tool builds {model,prompt,size,response_format}.", required: false),
+                AgentToolParameter(name: "input_json", type: .string, description: "Optional full JSON object string for the some.im endpoint. If omitted, the tool builds a minimal request from model, prompt, and size.", required: false),
                 AgentToolParameter(name: "model", type: .string, description: "Optional some.im media model override. Defaults to Settings -> some.im preferred image/video model.", required: false),
                 AgentToolParameter(name: "size", type: .string, description: "Optional image size such as 1024x1024 when not using input_json.", required: false),
                 AgentToolParameter(name: "reference_image_path", type: .string, description: "Optional local image path to send as the `image` input, useful for image-to-video or image edit workflows. Relative paths resolve from the workspace root when available.", required: false),

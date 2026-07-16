@@ -17,7 +17,7 @@ import Combine
 /// Immutable snapshot of a scheduled task, rendered as an inline transcript
 /// card. `id` equals the backing `AgentRoutine.id` so the card can open the
 /// routine's detail on tap and reflect deletion when the task auto-completes.
-struct AgentScheduledTaskCard: Codable, Equatable, Sendable, Identifiable {
+nonisolated struct AgentScheduledTaskCard: Codable, Equatable, Sendable, Identifiable {
     let id: UUID
     var title: String
     var scheduleSummary: String

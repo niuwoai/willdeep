@@ -47,31 +47,15 @@ private struct ObservedDot: View {
     let accentColor: Color
 
     var body: some View {
-        // 脉动必须走 symbolEffect（渲染服务器驱动），禁用
-        // withAnimation(.repeatForever)/.animation(.repeatForever) ——
-        // 那会让 SwiftUI 每帧跑一次图事务，N 个会话行 × 每帧叠加，
-        // 见 AgentBreathingIndicator 注释（1.58.0-rc9 CPU 修复）。
-        dotImage
+        // Sidebar rows only need state, not motion. A sampled macOS 26.5
+        // hang showed RBSymbolAnimator feeding repeated AttributeGraph and
+        // display-list updates while the user tried to switch sessions.
+        // A static circle keeps the same active/running/waiting semantics
+        // without a permanent per-row animation source.
+        Circle()
+            .fill(color)
             .frame(width: 5, height: 5)
             .opacity(shouldShow ? 1 : 0)
-    }
-
-    @ViewBuilder
-    private var dotImage: some View {
-        if #available(macOS 15.0, *) {
-            Image(systemName: "circle.fill")
-                .font(.system(size: 5))
-                .foregroundStyle(color)
-                .symbolEffect(.breathe, isActive: shouldPulse)
-        } else {
-            Image(systemName: "circle.fill")
-                .font(.system(size: 5))
-                .foregroundStyle(color)
-        }
-    }
-
-    private var shouldPulse: Bool {
-        runtime.isResponding
     }
 
     private var shouldShow: Bool {
@@ -79,11 +63,8 @@ private struct ObservedDot: View {
     }
 
     private var color: Color {
-        // toolDecisionWaiter is non-Published — we can read it for
-        // color tinting but can't drive the pulse off it (SwiftUI
-        // wouldn't see the change). isResponding stays the single
-        // animation source; the orange tint is best-effort and
-        // settles correctly on the next isResponding flip.
+        // toolDecisionWaiter is non-Published, so its orange tint is
+        // best-effort and settles on the next published runtime change.
         if runtime.toolDecisionWaiter != nil { return .orange }
         if runtime.isResponding { return .green }
         if isActive { return accentColor }

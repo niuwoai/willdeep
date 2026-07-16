@@ -8,6 +8,7 @@
 import Testing
 import Foundation
 import CoreGraphics
+import Combine
 @testable import WillDeep
 
 @Suite(.serialized)
@@ -467,6 +468,107 @@ struct WillDeepTests {
         #expect(TerminalShortcutStore.isStoreFile(TerminalShortcutStore.fileURL))
     }
 
+    @MainActor
+    @Test("terminal shortcut per-item JSON save merges into the live list")
+    func testTerminalShortcutPerItemJSONSaveMergesIntoLiveList() throws {
+        let shortcutsDirectory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("terminal-shortcut-single-edit-\(UUID().uuidString)", isDirectory: true)
+        TerminalShortcutStore._setTestDirectoryOverride(shortcutsDirectory)
+        defer {
+            TerminalShortcutStore._setTestDirectoryOverride(nil)
+            try? FileManager.default.removeItem(at: shortcutsDirectory)
+        }
+
+        let editedID = UUID()
+        let untouchedID = UUID()
+        let editedSource = TerminalShortcut(
+            id: editedID,
+            title: "Before",
+            createdAt: Date(timeIntervalSince1970: 0),
+            updatedAt: Date(timeIntervalSince1970: 2),
+            durationMilliseconds: 1_000,
+            events: [TerminalShortcutEvent(delayMilliseconds: 0, bytes: Array("pwd\n".utf8))],
+            hasProtectedInput: false
+        )
+        let untouched = TerminalShortcut(
+            id: untouchedID,
+            title: "Untouched",
+            createdAt: Date(timeIntervalSince1970: 0),
+            updatedAt: Date(timeIntervalSince1970: 1),
+            durationMilliseconds: 1_000,
+            events: [TerminalShortcutEvent(delayMilliseconds: 0, bytes: Array("ls\n".utf8))],
+            hasProtectedInput: false
+        )
+        TerminalShortcutStore.save([editedSource, untouched])
+
+        let controller = AgentInteractiveTerminalController()
+        let editURL = try #require(controller.prepareShortcutFileForEditing(id: editedID))
+        let json = try String(contentsOf: editURL, encoding: .utf8)
+        #expect(json.trimmingCharacters(in: .whitespacesAndNewlines).hasPrefix("{"))
+        #expect(json.contains("Before"))
+        #expect(!json.contains("Untouched"))
+        #expect(TerminalShortcutStore.editableShortcutID(for: editURL) == editedID)
+
+        let editedJSON = json.replacingOccurrences(of: "\"Before\"", with: "\"After\"")
+        try editedJSON.write(to: editURL, atomically: true, encoding: .utf8)
+        #expect(controller.reloadShortcutFromEditFile(id: editedID, url: editURL))
+
+        let persisted = TerminalShortcutStore.load()
+        #expect(persisted.count == 2)
+        #expect(persisted.first(where: { $0.id == editedID })?.title == "After")
+        #expect(persisted.first(where: { $0.id == untouchedID })?.title == "Untouched")
+
+        let reopenedURL = try #require(controller.prepareShortcutFileForEditing(id: editedID))
+        let reopenedJSON = try String(contentsOf: reopenedURL, encoding: .utf8)
+        #expect(reopenedJSON.contains("After"))
+        #expect(!reopenedJSON.contains("Before"))
+    }
+
+    @MainActor
+    @Test("terminal shortcut clone creates an independent persisted copy")
+    func testTerminalShortcutCloneCreatesIndependentPersistedCopy() throws {
+        let shortcutsDirectory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("terminal-shortcut-clone-\(UUID().uuidString)", isDirectory: true)
+        TerminalShortcutStore._setTestDirectoryOverride(shortcutsDirectory)
+        defer {
+            TerminalShortcutStore._setTestDirectoryOverride(nil)
+            try? FileManager.default.removeItem(at: shortcutsDirectory)
+        }
+
+        let sourceEvent = TerminalShortcutEvent(
+            delayMilliseconds: 250,
+            bytes: Array("yarn test\n".utf8)
+        )
+        let source = TerminalShortcut(
+            id: UUID(),
+            title: "Build",
+            createdAt: Date(timeIntervalSince1970: 0),
+            updatedAt: Date(timeIntervalSince1970: 1),
+            durationMilliseconds: 1_000,
+            events: [sourceEvent],
+            hasProtectedInput: false
+        )
+        TerminalShortcutStore.save([source])
+
+        let controller = AgentInteractiveTerminalController()
+        let clone = try #require(
+            controller.cloneShortcut(
+                id: source.id,
+                title: "Build-副本",
+                now: Date(timeIntervalSince1970: 2)
+            )
+        )
+
+        #expect(clone.id != source.id)
+        #expect(clone.title == "Build-副本")
+        #expect(clone.events.first?.id != sourceEvent.id)
+        #expect(clone.events.first?.bytes == sourceEvent.bytes)
+        let persisted = TerminalShortcutStore.load()
+        #expect(persisted.count == 2)
+        #expect(persisted.contains(where: { $0.id == source.id }))
+        #expect(persisted.contains(where: { $0.id == clone.id }))
+    }
+
     @Test("terminal shortcut editable JSON text decodes escapes and legacy bytes")
     func testTerminalShortcutEditableTextDecodesEscapesAndLegacyBytes() throws {
         let shortcutsDirectory = FileManager.default.temporaryDirectory
@@ -715,6 +817,50 @@ struct WillDeepTests {
     }
 
     @MainActor
+    @Test("opening terminal in a fresh conversation creates an isolated tab")
+    func testFreshConversationTerminalDoesNotReuseVisibleTab() throws {
+        let controller = AgentInteractiveTerminalController()
+        let settings = EditorTerminalSettings.default
+        let sessionA = UUID()
+        let sessionB = UUID()
+        let tabA = controller.openLocalTab(
+            originAgentSessionID: sessionA,
+            workingDirectory: FileManager.default.temporaryDirectory.path,
+            settings: settings,
+            skin: nil
+        )
+
+        controller.ensureAtLeastOneTab(
+            originAgentSessionID: sessionB,
+            workingDirectory: FileManager.default.temporaryDirectory.path,
+            settings: settings,
+            skin: nil
+        )
+        let tabBID = try #require(controller.boundTabID(for: sessionB))
+        defer {
+            controller.closeTab(id: tabA.id)
+            controller.closeTab(id: tabBID)
+        }
+
+        #expect(tabBID != tabA.id)
+        #expect(controller.tabs.count == 2)
+        #expect(controller.tab(id: tabBID)?.originAgentSessionID == sessionB)
+
+        controller.activateBoundTab(for: sessionA)
+        #expect(controller.activeTabID == tabA.id)
+        controller.activateBoundTab(for: sessionB)
+        #expect(controller.activeTabID == tabBID)
+
+        controller.ensureAtLeastOneTab(
+            originAgentSessionID: sessionB,
+            workingDirectory: FileManager.default.temporaryDirectory.path,
+            settings: settings,
+            skin: nil
+        )
+        #expect(controller.tabs.count == 2)
+    }
+
+    @MainActor
     @Test("explicit terminal tab id overrides conversation binding")
     func testExplicitTerminalTabIDOverridesConversationBinding() throws {
         let controller = AgentInteractiveTerminalController()
@@ -738,9 +884,45 @@ struct WillDeepTests {
         }
 
         #expect(try controller.rawSnapshot(targetTabID: exact.id, sessionID: sessionID).tabID == exact.id)
+        // An explicit one-off read of another tab must not move an existing
+        // binding — later unqualified calls still hit the bound tab.
+        #expect(controller.boundTabID(for: sessionID) == bound.id)
+        #expect(try controller.rawSnapshot(sessionID: sessionID).tabID == bound.id)
         #expect(throws: AgentToolError.self) {
             _ = try controller.rawSnapshot(targetTabID: UUID(), sessionID: sessionID)
         }
+    }
+
+    @MainActor
+    @Test("unbound conversation gets open-tab guidance and binds via explicit tab id")
+    func testUnboundConversationSnapshotListsOpenTabsAndBindsExplicitTarget() throws {
+        let controller = AgentInteractiveTerminalController()
+        let settings = EditorTerminalSettings.default
+        let sessionA = UUID()
+        let sessionB = UUID()
+        let tabA = controller.openLocalTab(
+            originAgentSessionID: sessionA,
+            workingDirectory: FileManager.default.temporaryDirectory.path,
+            settings: settings,
+            skin: nil
+        )
+        defer { controller.closeTab(id: tabA.id) }
+
+        do {
+            _ = try controller.rawSnapshot(sessionID: sessionB)
+            Issue.record("expected unbound snapshot to throw the open-tab guidance error")
+        } catch let error as AgentToolError {
+            let message = error.errorDescription ?? ""
+            #expect(message.contains(tabA.id.uuidString))
+            #expect(message.contains("[currently visible to the user]"))
+            #expect(message.contains("Do NOT tell the user the side panel or terminal is closed"))
+        }
+
+        // Explicitly targeting the confirmed tab binds it while the session
+        // has no binding, so follow-up calls may omit terminal_tab_id.
+        #expect(try controller.rawSnapshot(targetTabID: tabA.id, sessionID: sessionB).tabID == tabA.id)
+        #expect(controller.boundTabID(for: sessionB) == tabA.id)
+        #expect(try controller.rawSnapshot(sessionID: sessionB).tabID == tabA.id)
     }
 
     @MainActor
@@ -985,17 +1167,23 @@ struct WillDeepTests {
         #expect(appState.agentLiveThinkingPreview == nil)
     }
 
-    @Test("thinking preview tail collapses whitespace and keeps the newest characters")
-    func testAgentThinkingPreviewTail() {
-        // 短文本原样返回，只折叠换行
-        #expect(AppState.agentThinkingPreviewTail("第一步\n第二步") == "第一步 第二步")
+    @MainActor
+    @Test("streaming buffer publishes reasoning and answer as one atomic frame")
+    func testAgentStreamingBufferPublishesAtomically() {
+        let assistant = AgentMessage(role: .assistant, content: "")
+        let runtime = AgentRuntime(session: AgentSession(messages: [assistant]))
+        let buffer = AgentStreamingMessageBuffer(runtime: runtime, assistantID: assistant.id)
+        var publishCount = 0
+        let observation = runtime.objectWillChange.sink { publishCount += 1 }
 
-        // 超长 trace 截尾：保留最新内容，前置省略号
-        let long = (1...100).map { "片段\($0)" }.joined(separator: "\n")
-        let tail = AppState.agentThinkingPreviewTail(long)
-        #expect(tail.hasPrefix("…"))
-        #expect(tail.hasSuffix("片段100"))
-        #expect(tail.count <= 161)
+        buffer.appendReasoningDelta("先检查文件")
+        buffer.appendTextDelta("结论")
+        buffer.flushPending()
+
+        #expect(publishCount == 1)
+        #expect(runtime.messages[0].reasoningContent == "先检查文件")
+        #expect(runtime.messages[0].content == "结论")
+        withExtendedLifetime(observation) {}
     }
 
     @Test("command palette matcher supports fuzzy and keyword lookup")

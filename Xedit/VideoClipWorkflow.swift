@@ -197,15 +197,10 @@ enum VideoMediaHelpers {
             "-acodec", "pcm_s16le",
             audioURL.path,
         ]
-        let errPipe = Pipe()
-        p.standardOutput = Pipe()
-        p.standardError = errPipe
-        try p.run()
-        await AgentProcessSupport.waitUntilExit(p)
-        if p.terminationStatus != 0 {
-            let err = String(data: errPipe.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? ""
-            throw NSError(domain: "video-media", code: Int(p.terminationStatus), userInfo: [
-                NSLocalizedDescriptionKey: "ffmpeg extractWavAudio exit \(p.terminationStatus): \(err)"
+        let result = try await AgentSubprocess.run(p)
+        if result.exitStatus != 0 {
+            throw NSError(domain: "video-media", code: Int(result.exitStatus), userInfo: [
+                NSLocalizedDescriptionKey: "ffmpeg extractWavAudio exit \(result.exitStatus): \(result.stderrText)"
             ])
         }
     }
@@ -224,15 +219,10 @@ enum VideoMediaHelpers {
             "-c", "copy",
             outputURL.path,
         ]
-        let errPipe = Pipe()
-        p.standardOutput = Pipe()
-        p.standardError = errPipe
-        try p.run()
-        await AgentProcessSupport.waitUntilExit(p)
-        if p.terminationStatus != 0 {
-            let err = String(data: errPipe.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? ""
-            throw NSError(domain: "video-media", code: Int(p.terminationStatus), userInfo: [
-                NSLocalizedDescriptionKey: "ffmpeg cutSegment exit \(p.terminationStatus): \(err)"
+        let result = try await AgentSubprocess.run(p)
+        if result.exitStatus != 0 {
+            throw NSError(domain: "video-media", code: Int(result.exitStatus), userInfo: [
+                NSLocalizedDescriptionKey: "ffmpeg cutSegment exit \(result.exitStatus): \(result.stderrText)"
             ])
         }
     }
@@ -249,20 +239,13 @@ enum VideoMediaHelpers {
             "-of", "json",
             videoURL.path,
         ]
-        let outPipe = Pipe()
-        let errPipe = Pipe()
-        p.standardOutput = outPipe
-        p.standardError = errPipe
-        try p.run()
-        await AgentProcessSupport.waitUntilExit(p)
-        if p.terminationStatus != 0 {
-            let err = String(data: errPipe.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? ""
-            throw NSError(domain: "video-media", code: Int(p.terminationStatus), userInfo: [
-                NSLocalizedDescriptionKey: "ffprobe exit \(p.terminationStatus): \(err)"
+        let result = try await AgentSubprocess.run(p, timeout: 60)
+        if result.exitStatus != 0 {
+            throw NSError(domain: "video-media", code: Int(result.exitStatus), userInfo: [
+                NSLocalizedDescriptionKey: "ffprobe exit \(result.exitStatus): \(result.stderrText)"
             ])
         }
-        let data = outPipe.fileHandleForReading.readDataToEndOfFile()
-        guard let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+        guard let obj = try? JSONSerialization.jsonObject(with: result.stdout) as? [String: Any] else {
             throw NSError(domain: "video-media", code: -1, userInfo: [
                 NSLocalizedDescriptionKey: "ffprobe output not parseable as JSON"
             ])

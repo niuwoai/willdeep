@@ -12,13 +12,10 @@ import Foundation
 enum AgentChatToolSummaryFormatter {
     static func collapsedTitle(for toolCalls: [AgentMessageToolCall]) -> String {
         guard !toolCalls.isEmpty else { return "工具调用" }
-        if let text = ToolHistoryActivitySummary(toolCalls: toolCalls).text {
+        if let text = AgentCollapsedToolActivitySummary.text(for: toolCalls) {
             return text
         }
-        if toolCalls.count == 1, let first = toolCalls.first {
-            return "已调用 \(readableToolName(first.toolName))"
-        }
-        return "已调用 \(toolCalls.count) 个工具"
+        return "执行了 \(toolCalls.count) 次工具调用"
     }
 
     static func toolCallSummary(for toolCalls: [AgentMessageToolCall], argumentLimit: Int = 160) -> String {
@@ -41,86 +38,6 @@ enum AgentChatToolSummaryFormatter {
                 return "tool  \(call.toolName)  \(arguments)  · 完整参数 \(byteLabel(call.argumentsJSON.count))"
             }
             .joined(separator: "\n")
-    }
-
-    private static func readableToolName(_ name: String) -> String {
-        name
-            .replacingOccurrences(of: "_", with: " ")
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-    }
-
-    private struct ToolHistoryActivitySummary {
-        var readFileCount = 0
-        var listedDirectoryCount = 0
-        var searchCount = 0
-        var gitStatusCount = 0
-        var commandCount = 0
-        var terminalOperationCount = 0
-
-        init(toolCalls: [AgentMessageToolCall]) {
-            var readFiles = Set<String>()
-            var listedDirectories = Set<String>()
-
-            for call in toolCalls {
-                let arguments = Self.argumentsDictionary(from: call.argumentsJSON)
-                switch call.toolName {
-                case "read_file":
-                    readFiles.insert(Self.path(in: arguments))
-                case "list_directory":
-                    listedDirectories.insert(Self.path(in: arguments))
-                case "grep_files", "search_files":
-                    searchCount += 1
-                case "git_status":
-                    gitStatusCount += 1
-                case "run_command":
-                    commandCount += 1
-                case _ where AgentTerminalToolNames.isVisibleTerminalOperation(call.toolName):
-                    terminalOperationCount += 1
-                default:
-                    break
-                }
-            }
-
-            readFileCount = readFiles.count
-            listedDirectoryCount = listedDirectories.count
-        }
-
-        var text: String? {
-            var parts: [String] = []
-            if readFileCount > 0 {
-                parts.append("已读取 \(readFileCount) 个文件")
-            }
-            if listedDirectoryCount > 0 {
-                parts.append("已浏览 \(listedDirectoryCount) 个目录")
-            }
-            if searchCount > 0 {
-                parts.append(searchCount == 1 ? "已搜索代码" : "已搜索代码 \(searchCount) 次")
-            }
-            if gitStatusCount > 0 {
-                parts.append(gitStatusCount == 1 ? "已查看 Git 状态" : "已查看 Git 状态 \(gitStatusCount) 次")
-            }
-            if commandCount > 0 {
-                parts.append("已运行 \(commandCount) 条命令")
-            }
-            if terminalOperationCount > 0 {
-                parts.append("已执行 \(terminalOperationCount) 次终端操作")
-            }
-            return parts.isEmpty ? nil : parts.joined(separator: " · ")
-        }
-
-        private static func argumentsDictionary(from json: String) -> [String: Any] {
-            guard let data = json.data(using: .utf8),
-                  let object = try? JSONSerialization.jsonObject(with: data),
-                  let dict = object as? [String: Any] else {
-                return [:]
-            }
-            return dict
-        }
-
-        private static func path(in arguments: [String: Any]) -> String {
-            guard let path = arguments["path"] as? String, !path.isEmpty else { return "." }
-            return path
-        }
     }
 
     /// Adapter that wraps `compactArguments` and reports whether the
@@ -255,5 +172,165 @@ enum AgentChatToolSummaryFormatter {
         guard normalized.count > limit else { return normalized }
         let end = normalized.index(normalized.startIndex, offsetBy: limit)
         return String(normalized[..<end]) + "..."
+    }
+}
+
+/// Collapsed tool rows deliberately expose only an aggregate activity label.
+/// Paths, prompts, commands, queries, and raw tool identifiers stay hidden
+/// until the user expands the row. Both the persisted TextKit history and the
+/// live SwiftUI tool group use this formatter so privacy does not depend on
+/// which rendering path happens to be active.
+enum AgentCollapsedToolActivitySummary {
+    private struct InputCall {
+        let identity: String
+        let toolName: String
+        let arguments: [String: Any]
+    }
+
+    private struct PathCounter {
+        private(set) var paths: Set<String> = []
+
+        mutating func insert(path: String?, fallbackIdentity: String) {
+            let normalized = path?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            paths.insert(normalized.isEmpty ? "call:\(fallbackIdentity)" : "path:\(normalized)")
+        }
+
+        var count: Int { paths.count }
+    }
+
+    private static let imageExtensions: Set<String> = [
+        "avif", "bmp", "gif", "heic", "heif", "jpeg", "jpg", "png", "tif", "tiff", "webp"
+    ]
+
+    static func text(for calls: [AgentMessageToolCall]) -> String? {
+        text(for: calls.map { call in
+            InputCall(
+                identity: call.externalID,
+                toolName: call.toolName,
+                arguments: argumentsDictionary(from: call.argumentsJSON)
+            )
+        })
+    }
+
+    static func text(for calls: [AgentToolCall]) -> String? {
+        text(for: calls.map { call in
+            InputCall(
+                identity: call.id.uuidString,
+                toolName: call.toolName,
+                arguments: call.arguments.mapValues(\.rawAny)
+            )
+        })
+    }
+
+    private static func text(for calls: [InputCall]) -> String? {
+        guard !calls.isEmpty else { return nil }
+
+        var createdFiles = PathCounter()
+        var editedFiles = PathCounter()
+        var readFiles = PathCounter()
+        var readImages = PathCounter()
+        var listedDirectories = PathCounter()
+        var generatedImageCount = 0
+        var editedImageCount = 0
+        var screenshotCount = 0
+        var searchCount = 0
+        var gitStatusCount = 0
+        var commandCount = 0
+        var terminalOperationCount = 0
+        var fallbackCallCount = 0
+
+        for call in calls {
+            let path = path(in: call.arguments)
+            switch call.toolName {
+            case "create_file":
+                createdFiles.insert(path: path, fallbackIdentity: call.identity)
+            case "edit_file":
+                editedFiles.insert(path: path, fallbackIdentity: call.identity)
+            case "read_file":
+                if isImagePath(path) {
+                    readImages.insert(path: path, fallbackIdentity: call.identity)
+                } else {
+                    readFiles.insert(path: path, fallbackIdentity: call.identity)
+                }
+            case "view_image", "read_image", "load_image":
+                readImages.insert(path: path, fallbackIdentity: call.identity)
+            case "list_directory":
+                listedDirectories.insert(path: path, fallbackIdentity: call.identity)
+            case "grep_files", "search_files", "glob":
+                searchCount += 1
+            case "git_status":
+                gitStatusCount += 1
+            case "run_command":
+                commandCount += 1
+            case "generate_image":
+                generatedImageCount += 1
+            case "edit_generated_image", "edit_image_with_mask", "upscale_image":
+                editedImageCount += 1
+            case "visual_qa_screenshot", "capture_screenshot", "embedded_browser_capture_screenshot", "chrome_capture_tab":
+                screenshotCount += 1
+            case _ where AgentTerminalToolNames.isVisibleTerminalOperation(call.toolName):
+                terminalOperationCount += 1
+            default:
+                fallbackCallCount += 1
+            }
+        }
+
+        var parts: [String] = []
+        appendCount(createdFiles.count, singular: "生成了 1 个文件", plural: "生成了 %d 个文件", to: &parts)
+        appendCount(editedFiles.count, singular: "修改了 1 个文件", plural: "修改了 %d 个文件", to: &parts)
+        appendCount(readImages.count, singular: "读取了 1 张图片", plural: "读取了 %d 张图片", to: &parts)
+        appendCount(readFiles.count, singular: "已读取 1 个文件", plural: "已读取 %d 个文件", to: &parts)
+        appendCount(listedDirectories.count, singular: "已浏览 1 个目录", plural: "已浏览 %d 个目录", to: &parts)
+        if searchCount > 0 {
+            parts.append(searchCount == 1 ? "已搜索代码" : "已搜索代码 \(searchCount) 次")
+        }
+        if gitStatusCount > 0 {
+            parts.append(gitStatusCount == 1 ? "已查看 Git 状态" : "已查看 Git 状态 \(gitStatusCount) 次")
+        }
+        appendCount(commandCount, singular: "已运行 1 条命令", plural: "已运行 %d 条命令", to: &parts)
+        appendCount(terminalOperationCount, singular: "已执行 1 次终端操作", plural: "已执行 %d 次终端操作", to: &parts)
+        appendCount(generatedImageCount, singular: "生成了 1 张图片", plural: "生成了 %d 张图片", to: &parts)
+        appendCount(editedImageCount, singular: "处理了 1 张图片", plural: "处理了 %d 张图片", to: &parts)
+        appendCount(screenshotCount, singular: "截取了 1 张图片", plural: "截取了 %d 张图片", to: &parts)
+
+        if fallbackCallCount > 0 {
+            let fallback = "执行了 \(fallbackCallCount) 次工具调用"
+            parts.append(parts.isEmpty ? fallback : "另\(fallback)")
+        }
+        return parts.joined(separator: " · ")
+    }
+
+    private static func appendCount(
+        _ count: Int,
+        singular: String,
+        plural: String,
+        to parts: inout [String]
+    ) {
+        guard count > 0 else { return }
+        parts.append(count == 1 ? singular : String(format: plural, count))
+    }
+
+    private static func argumentsDictionary(from json: String) -> [String: Any] {
+        guard let data = json.data(using: .utf8),
+              let object = try? JSONSerialization.jsonObject(with: data),
+              let dict = object as? [String: Any] else {
+            return [:]
+        }
+        return dict
+    }
+
+    private static func path(in arguments: [String: Any]) -> String? {
+        for key in ["path", "image_path", "file_path", "artifact_path"] {
+            if let path = arguments[key] as? String, !path.isEmpty {
+                return path
+            }
+        }
+        return nil
+    }
+
+    private static func isImagePath(_ path: String?) -> Bool {
+        guard let path else { return false }
+        let pathExtension = URL(fileURLWithPath: path).pathExtension.lowercased()
+        return imageExtensions.contains(pathExtension)
     }
 }

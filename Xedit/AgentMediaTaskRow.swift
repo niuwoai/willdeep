@@ -257,7 +257,10 @@ struct AgentMediaTaskRow: View {
             return "已有产物可先预览；末尾占位表示任务仍在生成"
         }
         if task.artifacts.count > 1 {
-            return "点击缩略图预览；图片可进入蒙版编辑"
+            return "点击缩略图预览；用“…”进入局部重绘、擦除、放大等操作"
+        }
+        if !task.artifacts.isEmpty {
+            return "点击缩略图预览；用“…”继续编辑或加入聊天"
         }
         return nil
     }

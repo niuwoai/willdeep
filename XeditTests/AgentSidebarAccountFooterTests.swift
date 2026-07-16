@@ -14,6 +14,9 @@ struct AgentSidebarAccountFooterTests {
         #expect(AgentSidebarAccountMetrics.menuWidth == 344)
         #expect(AgentSidebarAccountMetrics.menuHeaderHeight == 34)
         #expect(AgentSidebarAccountMetrics.menuRowHeight == 34)
+        #expect(AgentSidebarAccountMetrics.accountBaseFillOpacity == 0.68)
+        #expect(AgentSidebarAccountMetrics.accountSkinTintOpacity == 0.055)
+        #expect(AgentSidebarAccountMetrics.accountDepthOpacity == 0.035)
     }
 
     @Test("help link uses a localized some.im WillDeep page")

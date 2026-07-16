@@ -32,7 +32,34 @@ struct DesktopPetTests {
         #expect(DesktopPetAppearance.cloudForge.assetName == "DesktopPetCloudForge")
         #expect(DesktopPetAppearance.codeShiba.assetName == "DesktopPetCodeShiba")
         #expect(DesktopPetAppearance.moonRabbit.assetName == "DesktopPetMoonRabbit")
-        #expect(DesktopPetAppearance.allCases.count == 24)
+        #expect(DesktopPetAppearance.cosmicDownsizer.assetName == "DesktopPetCosmicDownsizer")
+        #expect(DesktopPetAppearance.allCases.count == 25)
+    }
+
+    @Test @MainActor
+    func cosmicDownsizerAssetKeepsTransparentCorners() throws {
+        let repositoryRoot = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+        let assetURL = repositoryRoot
+            .appendingPathComponent("Xedit/Assets.xcassets/DesktopPetCosmicDownsizer.imageset")
+            .appendingPathComponent("DesktopPetCosmicDownsizer.png")
+        let bitmap = try #require(NSBitmapImageRep(data: Data(contentsOf: assetURL)))
+
+        #expect(bitmap.pixelsWide == 1_254)
+        #expect(bitmap.pixelsHigh == 1_254)
+        #expect(bitmap.hasAlpha)
+
+        let cornerPixels = [
+            (x: 0, y: 0),
+            (x: bitmap.pixelsWide - 1, y: 0),
+            (x: 0, y: bitmap.pixelsHigh - 1),
+            (x: bitmap.pixelsWide - 1, y: bitmap.pixelsHigh - 1)
+        ]
+        for pixel in cornerPixels {
+            let color = try #require(bitmap.colorAt(x: pixel.x, y: pixel.y))
+            #expect(color.alphaComponent == 0)
+        }
     }
 
     @Test
@@ -192,7 +219,7 @@ struct DesktopPetTests {
     func renderDesktopPetAnimationShowcaseForDesignQA() throws {
         let outputPath = ProcessInfo.processInfo.environment["WILLDEEP_DESKTOP_PET_ANIMATION_QA_OUTPUT"]
             ?? "/tmp/Xedit-desktop-pet-animation-design-qa.png"
-        let size = NSSize(width: 580, height: 260)
+        let size = NSSize(width: 732, height: 260)
         let root = HStack(alignment: .top, spacing: 26) {
             animationPreview(
                 title: L10n.DesktopPet.statusTyping,
@@ -209,6 +236,12 @@ struct DesktopPetTests {
             animationPreview(
                 title: L10n.DesktopPet.statusIdle,
                 appearance: .robotFox,
+                mood: .idle,
+                time: 7.5
+            )
+            animationPreview(
+                title: L10n.DesktopPet.appearanceCosmicDownsizer,
+                appearance: .cosmicDownsizer,
                 mood: .idle,
                 time: 7.5
             )

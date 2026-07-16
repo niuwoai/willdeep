@@ -12,10 +12,8 @@
 //
 //  Implementation notes:
 //   - `NSWindowController` + `NSScrollView` + `NSTextView`. No
-//     SwiftUI. NSTextView gets the entire transcript baked into one
-//     `NSAttributedString` once at open time; TextKit handles its
-//     own layout incrementally and doesn't bother the main thread
-//     during scroll.
+//     SwiftUI. The transcript is paged so only a bounded message
+//     segment is baked into an `NSAttributedString` at any one time.
 //   - Markdown-with-role-headers format. No bubbles, no per-message
 //     chrome. Selectable, copyable, supports ⌘F find (NSTextView ships
 //     with that out of the box).
@@ -70,12 +68,36 @@ final class AgentTranscriptReaderWindowRegistry {
     }
 }
 
+nonisolated enum AgentTranscriptPagination {
+    static let messagesPerPage = 60
+
+    static func pageCount(for messageCount: Int) -> Int {
+        let safeCount = max(0, messageCount)
+        return max(1, (safeCount + messagesPerPage - 1) / messagesPerPage)
+    }
+
+    static func messageRange(messageCount: Int, pageIndex: Int) -> Range<Int> {
+        let safeCount = max(0, messageCount)
+        let lastPageIndex = pageCount(for: safeCount) - 1
+        let safePageIndex = min(max(0, pageIndex), lastPageIndex)
+        let lowerBound = min(safeCount, safePageIndex * messagesPerPage)
+        let upperBound = min(safeCount, lowerBound + messagesPerPage)
+        return lowerBound..<upperBound
+    }
+}
+
 @MainActor
 final class AgentTranscriptReaderWindowController: NSWindowController, NSWindowDelegate {
     /// Called when the underlying NSWindow closes so the registry can
     /// drop its reference.
     var onClose: ((UUID) -> Void)?
     private let sessionID: UUID
+    private var session: AgentSession
+    private var currentPageIndex: Int
+    private let textView: NSTextView
+    private let previousPageButton: NSButton
+    private let nextPageButton: NSButton
+    private let pageLabel: NSTextField
     /// rc14:挂在主菜单响应链外的窗口,默认接不到 Cmd+W —— 装一个本地
     /// keyDown 监听把它路由到 `performClose(_:)`。本窗口内嵌 NSTextView
     /// 用了 Find bar,所以 **不**把无修饰 Esc 也当关窗,免得截掉搜索取消。
@@ -83,8 +105,11 @@ final class AgentTranscriptReaderWindowController: NSWindowController, NSWindowD
 
     init(session: AgentSession) {
         self.sessionID = session.id
+        self.session = session
+        self.currentPageIndex = AgentTranscriptPagination.pageCount(for: session.messages.count) - 1
 
         let textView = NSTextView()
+        self.textView = textView
         textView.isEditable = false
         textView.isSelectable = true
         textView.drawsBackground = true
@@ -111,6 +136,49 @@ final class AgentTranscriptReaderWindowController: NSWindowController, NSWindowD
         scrollView.drawsBackground = true
         scrollView.backgroundColor = .textBackgroundColor
 
+        let previousPageButton = NSButton()
+        self.previousPageButton = previousPageButton
+        previousPageButton.bezelStyle = .texturedRounded
+        previousPageButton.image = NSImage(
+            systemSymbolName: "chevron.left",
+            accessibilityDescription: "Previous transcript page"
+        )
+        previousPageButton.toolTip = "Previous page"
+
+        let nextPageButton = NSButton()
+        self.nextPageButton = nextPageButton
+        nextPageButton.bezelStyle = .texturedRounded
+        nextPageButton.image = NSImage(
+            systemSymbolName: "chevron.right",
+            accessibilityDescription: "Next transcript page"
+        )
+        nextPageButton.toolTip = "Next page"
+
+        let pageLabel = NSTextField(labelWithString: "")
+        self.pageLabel = pageLabel
+        pageLabel.alignment = .center
+        pageLabel.textColor = .secondaryLabelColor
+        pageLabel.font = .systemFont(ofSize: NSFont.smallSystemFontSize)
+
+        let pageControls = NSStackView(views: [previousPageButton, pageLabel, nextPageButton])
+        pageControls.orientation = .horizontal
+        pageControls.alignment = .centerY
+        pageControls.spacing = 8
+
+        let contentView = NSView()
+        pageControls.translatesAutoresizingMaskIntoConstraints = false
+        scrollView.translatesAutoresizingMaskIntoConstraints = false
+        contentView.addSubview(pageControls)
+        contentView.addSubview(scrollView)
+        NSLayoutConstraint.activate([
+            pageControls.topAnchor.constraint(equalTo: contentView.topAnchor, constant: 8),
+            pageControls.centerXAnchor.constraint(equalTo: contentView.centerXAnchor),
+            scrollView.topAnchor.constraint(equalTo: pageControls.bottomAnchor, constant: 8),
+            scrollView.leadingAnchor.constraint(equalTo: contentView.leadingAnchor),
+            scrollView.trailingAnchor.constraint(equalTo: contentView.trailingAnchor),
+            scrollView.bottomAnchor.constraint(equalTo: contentView.bottomAnchor),
+        ])
+
         // Make the text view track the scroll view's content width so
         // long lines wrap instead of forcing horizontal scrolling.
         textView.frame = NSRect(x: 0, y: 0, width: 800, height: 600)
@@ -127,16 +195,18 @@ final class AgentTranscriptReaderWindowController: NSWindowController, NSWindowD
             defer: false
         )
         window.title = session.title.isEmpty ? "Transcript" : "Transcript — \(session.title)"
-        window.contentView = scrollView
+        window.contentView = contentView
         window.center()
         window.isReleasedWhenClosed = false
 
         super.init(window: window)
         window.delegate = self
         keyMonitor = AuxiliaryWindowCloseShortcut.install(on: window, closesOnEscape: false)
-
-        let attributed = Self.renderTranscript(session: session)
-        textView.textStorage?.setAttributedString(attributed)
+        previousPageButton.target = self
+        previousPageButton.action = #selector(showPreviousPage)
+        nextPageButton.target = self
+        nextPageButton.action = #selector(showNextPage)
+        renderCurrentPage()
     }
 
     required init?(coder: NSCoder) {
@@ -148,10 +218,46 @@ final class AgentTranscriptReaderWindowController: NSWindowController, NSWindowD
     /// underlying session). Called when re-`open` is invoked for the
     /// same id.
     func refresh(with session: AgentSession) {
-        guard let scrollView = window?.contentView as? NSScrollView,
-              let textView = scrollView.documentView as? NSTextView else { return }
+        let oldLastPageIndex = AgentTranscriptPagination.pageCount(for: self.session.messages.count) - 1
+        let wasShowingLatestPage = currentPageIndex == oldLastPageIndex
+        self.session = session
+        let newLastPageIndex = AgentTranscriptPagination.pageCount(for: session.messages.count) - 1
+        currentPageIndex = wasShowingLatestPage ? newLastPageIndex : min(currentPageIndex, newLastPageIndex)
         window?.title = session.title.isEmpty ? "Transcript" : "Transcript — \(session.title)"
-        textView.textStorage?.setAttributedString(Self.renderTranscript(session: session))
+        renderCurrentPage()
+    }
+
+    @objc private func showPreviousPage() {
+        guard currentPageIndex > 0 else { return }
+        currentPageIndex -= 1
+        renderCurrentPage()
+    }
+
+    @objc private func showNextPage() {
+        let lastPageIndex = AgentTranscriptPagination.pageCount(for: session.messages.count) - 1
+        guard currentPageIndex < lastPageIndex else { return }
+        currentPageIndex += 1
+        renderCurrentPage()
+    }
+
+    private func renderCurrentPage() {
+        let messageCount = session.messages.count
+        let range = AgentTranscriptPagination.messageRange(
+            messageCount: messageCount,
+            pageIndex: currentPageIndex
+        )
+        let messages = Array(session.messages[range])
+        textView.textStorage?.setAttributedString(Self.renderTranscript(
+            messages: messages,
+            messageRange: range,
+            session: session
+        ))
+
+        let pageCount = AgentTranscriptPagination.pageCount(for: messageCount)
+        pageLabel.stringValue = "Page \(currentPageIndex + 1) of \(pageCount)"
+        previousPageButton.isEnabled = currentPageIndex > 0
+        nextPageButton.isEnabled = currentPageIndex + 1 < pageCount
+        textView.scrollToBeginningOfDocument(nil)
     }
 
     func windowWillClose(_ notification: Notification) {
@@ -170,22 +276,32 @@ final class AgentTranscriptReaderWindowController: NSWindowController, NSWindowD
 
     // MARK: - Transcript rendering
 
-    /// Build the full transcript as one NSAttributedString using the
-    /// same TextKit Markdown renderer as the chat-pane history.
-    private static func renderTranscript(session: AgentSession) -> NSAttributedString {
+    /// Build one bounded transcript page using the same TextKit Markdown
+    /// renderer as the chat-pane history.
+    private static func renderTranscript(
+        messages: [AgentMessage],
+        messageRange: Range<Int>,
+        session: AgentSession
+    ) -> NSAttributedString {
         let result = NSMutableAttributedString(attributedString: AgentChatHistoryRenderer.render(
-            messages: session.messages,
+            messages: messages,
             isDark: false
         ))
         let bodyFont = NSFont.systemFont(ofSize: NSFont.systemFontSize)
         let secondaryColor = NSColor.secondaryLabelColor
 
-        // Add a small footer with overall message count.
+        // Add a small footer with the visible range and overall message count.
         if result.length > 0 {
             result.append(NSAttributedString(string: "\n\n", attributes: [.font: bodyFont]))
         }
+        let visibleRange: String
+        if messageRange.isEmpty {
+            visibleRange = "0"
+        } else {
+            visibleRange = "\(messageRange.lowerBound + 1)–\(messageRange.upperBound)"
+        }
         result.append(NSAttributedString(
-            string: "—\n\(session.messages.count) message(s) total · session id \(session.id.uuidString)",
+            string: "—\nShowing \(visibleRange) of \(session.messages.count) message(s) · session id \(session.id.uuidString)",
             attributes: [
                 .font: NSFont.systemFont(ofSize: 11),
                 .foregroundColor: secondaryColor,

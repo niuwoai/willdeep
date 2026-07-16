@@ -50,9 +50,9 @@ nonisolated enum AgentToolDisplay {
         "change_workspace": "更改 Workspace",
         "run_command": "运行命令",
         "terminal_snapshot": "终端快照",
-        "terminal_create_shortcut": "生成终端录制",
-        "terminal_list_shortcuts": "终端录制列表",
-        "terminal_edit_shortcut": "编辑终端录制",
+        "terminal_create_shortcut": "生成终端捷径",
+        "terminal_list_shortcuts": "终端捷径列表",
+        "terminal_edit_shortcut": "编辑终端捷径",
         "terminal_send_command": "终端执行命令",
         "terminal_send_control": "终端控制键",
         "create_file": "创建文件",
@@ -111,33 +111,78 @@ nonisolated enum AgentToolDisplay {
     ]
 }
 
+/// Approval controls are primary task actions, so their hit targets must not
+/// collapse to the compact caption-sized controls used by passive tool rows.
+/// Keeping the metrics centralized also makes accidental regressions easy to
+/// catch without rendering the full transcript in a unit test.
+nonisolated enum AgentApprovalActionMetrics {
+    static let spacing: CGFloat = 10
+    static let minimumButtonWidth: CGFloat = 96
+    static let minimumButtonHeight: CGFloat = 36
+    static let cornerRadius: CGFloat = 9
+}
+
+private extension View {
+    /// The custom-radius overload arrived in macOS 14. Keep the intended
+    /// 9pt shape there, and use SwiftUI's system rounded rectangle on the
+    /// app's macOS 13.7 deployment floor.
+    @ViewBuilder
+    func approvalButtonBorderShape(cornerRadius: CGFloat) -> some View {
+        if #available(macOS 14.0, *) {
+            buttonBorderShape(.roundedRectangle(radius: cornerRadius))
+        } else {
+            buttonBorderShape(.roundedRectangle)
+        }
+    }
+}
+
+/// Layout contract for the calm, skin-aware command confirmation surface.
+/// The viewport intentionally exposes about three wrapped command lines;
+/// longer content stays available through vertical scrolling.
+nonisolated enum AgentConfirmationReviewMetrics {
+    static let contentPadding: CGFloat = 18
+    static let sectionSpacing: CGFloat = 12
+    static let decisionColumnWidth: CGFloat = 190
+    static let horizontalMinimumWidth: CGFloat = 590
+    static let commandViewportHeight: CGFloat = 68
+    static let commandVisibleLineCount = 3
+    static let showsKeyboardShortcutHint = false
+}
+
 struct AgentToolCallGroup: View {
     @EnvironmentObject var appState: AppState
     let calls: [AgentToolCall]
-    /// Optional codex-style headline ("已运行 3 条命令"). When set, it
-    /// replaces the default "N tools" label and we also swap the icon
-    /// to match the kind.
-    var headline: String? = nil
-    var headlineIcon: String? = nil
     @State private var isExpanded = false
 
+    @ViewBuilder
     var body: some View {
+        if containsAwaitingConfirmation {
+            interactiveCallsBody
+        } else {
+            collapsibleGroupBody
+        }
+    }
+
+    private var interactiveCallsBody: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            ForEach(calls) { call in
+                AgentToolCallCard(call: call)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .fixedSize(horizontal: false, vertical: true)
+        .padding(.top, 8)
+    }
+
+    private var collapsibleGroupBody: some View {
         let status = statusSummary
-        VStack(alignment: .leading, spacing: detailsVisible ? 8 : 0) {
+        return VStack(alignment: .leading, spacing: detailsVisible ? 8 : 0) {
             Button {
                 if canToggleDetails {
                     isExpanded.toggle()
                 }
             } label: {
                 HStack(spacing: 7) {
-                    Image(systemName: groupIconName)
-                        .font(.system(size: 11, weight: .semibold))
-                        .foregroundStyle(groupIconColor)
-                        .frame(width: 14)
-                    Text(titleText)
-                        .font(.system(size: 11, weight: .semibold))
-                        .foregroundStyle(.secondary)
-                        .lineLimit(1)
                     if !status.isEmpty {
                         Text(status)
                             .font(.caption2)
@@ -186,9 +231,6 @@ struct AgentToolCallGroup: View {
             RoundedRectangle(cornerRadius: 6)
                 .stroke(groupBorderColor, lineWidth: 1)
         )
-        // The expanded card paints padding above its title row. Give that
-        // expanded chrome its own external breathing room so it never
-        // visually climbs into the previous assistant bubble.
         .padding(.top, detailsVisible ? 8 : 0)
     }
 
@@ -220,15 +262,8 @@ struct AgentToolCallGroup: View {
         }
     }
 
-    private var titleText: String {
-        if let headline, !headline.isEmpty { return headline }
-        if let activityText = AgentToolActivitySummary(calls: calls).activityText {
-            return activityText
-        }
-        if calls.count == 1, let first = calls.first {
-            return "已调用 \(AgentToolDisplay.name(for: first.toolName))"
-        }
-        return "已调用 \(calls.count) 个工具"
+    private var containsAwaitingConfirmation: Bool {
+        calls.contains { $0.status == .awaitingConfirm }
     }
 
     private var statusSummary: String {
@@ -252,87 +287,7 @@ struct AgentToolCallGroup: View {
     }
 
     private var previewSummary: String? {
-        guard detailsVisible else { return nil }
-        let previews = calls.prefix(3).map { call in
-            var text = AgentToolDisplay.name(for: call.toolName)
-            if let summary = call.result?.summary, !summary.isEmpty {
-                text += " \(summary)"
-            } else if let compactArguments = compactArguments(for: call), !compactArguments.isEmpty {
-                text += " \(compactArguments)"
-            }
-            return text
-        }
-        let suffix = calls.count > previews.count ? " · +\(calls.count - previews.count) more" : ""
-        let summary = previews.joined(separator: " · ") + suffix
-        return summary.isEmpty ? nil : summary
-    }
-
-    private func compactArguments(for call: AgentToolCall) -> String? {
-        if call.toolName == "run_command", let command = call.arguments["command"]?.stringValue() {
-            let cwd = call.arguments["cwd"]?.stringValue().map { "  cwd: \(trimmed($0, limit: 72))" } ?? ""
-            return "command: \(trimmed(command, limit: 140))\(cwd)"
-        }
-        if call.toolName == "terminal_send_command", let command = call.arguments["command"]?.stringValue() {
-            var summary = "命令: \(trimmed(command, limit: 140))"
-            if let paths = call.arguments["zmodem_upload_paths"]?.stringArrayValue(), !paths.isEmpty {
-                summary += " · zmodem_upload_paths: \(paths.count)"
-            } else if let directory = call.arguments["zmodem_download_directory"]?.stringValue(), !directory.isEmpty {
-                summary += " · zmodem_download_directory: \(trimmed(directory, limit: 72))"
-            }
-            return summary
-        }
-        if call.toolName == "terminal_send_control", let raw = call.arguments["control"]?.stringValue() {
-            return "按键: \(AgentToolDisplay.controlLabel(for: raw))"
-        }
-        if call.toolName == "spawn_agent" {
-            let label = call.arguments["label"]?.stringValue()
-                ?? call.arguments["prompt"]?.stringValue()
-                ?? ""
-            let modelSuffix = (call.subagentModel?.isEmpty == false) ? " · \(call.subagentModel!)" : ""
-            return label.isEmpty ? nil : "task: \(trimmed(label, limit: 120))\(modelSuffix)"
-        }
-        if ["claude_code", "codex_cli", "cursor_agent"].contains(call.toolName) {
-            let prompt = call.arguments["prompt"]?.stringValue() ?? ""
-            let mode = call.arguments["permission_mode"]?.stringValue().map { "  mode: \($0)" } ?? ""
-            return prompt.isEmpty ? nil : "task: \(trimmed(prompt, limit: 120))\(mode)"
-        }
-        if let path = call.arguments["path"]?.stringValue() {
-            return "path: \(trimmed(path, limit: 120))"
-        }
-        if let pattern = call.arguments["pattern"]?.stringValue() {
-            return "pattern: \(trimmed(pattern, limit: 120))"
-        }
-        if let query = call.arguments["query"]?.stringValue() {
-            return "query: \(trimmed(query, limit: 120))"
-        }
-        return nil
-    }
-
-    private func trimmed(_ value: String, limit: Int) -> String {
-        let normalized = value
-            .replacingOccurrences(of: "\n", with: " ")
-            .replacingOccurrences(of: "\t", with: " ")
-        guard normalized.count > limit else { return normalized }
-        let end = normalized.index(normalized.startIndex, offsetBy: limit)
-        return String(normalized[..<end]) + "…"
-    }
-
-    private var groupIconName: String {
-        // Status-derived icons (failed / running / asking) take precedence
-        // so the user can see a problem at a glance, even when the row is
-        // collapsed. A static headline icon is only the calm-state default.
-        if calls.contains(where: { $0.status == .failed }) { return "exclamationmark.triangle.fill" }
-        if calls.contains(where: { $0.status == .running }) { return "hourglass" }
-        if containsInteractiveCall { return "questionmark.circle" }
-        if let headlineIcon, !headlineIcon.isEmpty { return headlineIcon }
-        return "checkmark.circle.fill"
-    }
-
-    private var groupIconColor: Color {
-        if calls.contains(where: { $0.status == .failed }) { return .orange }
-        if calls.contains(where: { $0.status == .running }) { return .secondary }
-        if containsInteractiveCall { return appState.editorSettings.interfaceSkin.palette.accent }
-        return .secondary
+        AgentCollapsedToolActivitySummary.text(for: calls)
     }
 
     private var groupBorderColor: Color {
@@ -352,53 +307,56 @@ struct AgentToolCallCard: View {
     @State private var approvalExplanation: AgentApprovalExplanationResult?
     @State private var approvalExplanationError: String?
     @State private var isLoadingApprovalExplanation = false
+    @State private var commandCopied = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: isInteractive ? 6 : 3) {
-            HStack(spacing: 6) {
-                Image(systemName: iconName)
-                    .font(.system(size: 11, weight: .semibold))
-                    .foregroundStyle(iconColor)
-                    .frame(width: 14)
-                Text(AgentToolDisplay.name(for: call.toolName))
-                    .font(.system(size: 11, weight: .semibold))
-                    .lineLimit(1)
-                    .fixedSize(horizontal: true, vertical: false)
-                    .help(call.toolName)
-                Text(argumentsSummary)
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(isInteractive ? 2 : 1)
-                    .truncationMode(.middle)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                Text(statusText)
-                    .font(.caption2)
-                    .foregroundStyle(statusColor)
-                    .lineLimit(1)
-                    .fixedSize(horizontal: true, vertical: false)
-                if let label = approvalSourceLabel {
-                    Text(label)
-                        .font(.system(size: 9, weight: .semibold))
-                        .padding(.horizontal, 5)
-                        .padding(.vertical, 1)
-                        .background(Color.green.opacity(0.12))
-                        .foregroundStyle(.green)
-                        .clipShape(Capsule())
-                        .help(approvalSourceTooltip ?? "")
-                }
-                if hasExpandableContent {
-                    Button {
-                        isExpanded.toggle()
-                    } label: {
-                        Image(systemName: isExpanded ? "chevron.up" : "chevron.down")
-                            .font(.system(size: 10, weight: .semibold))
+            if !isAwaitingConfirmation {
+                HStack(spacing: 6) {
+                    Image(systemName: iconName)
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundStyle(iconColor)
+                        .frame(width: 14)
+                    Text(AgentToolDisplay.name(for: call.toolName))
+                        .font(.system(size: 11, weight: .semibold))
+                        .lineLimit(1)
+                        .fixedSize(horizontal: true, vertical: false)
+                        .help(call.toolName)
+                    Text(argumentsSummary)
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(isInteractive ? 2 : 1)
+                        .truncationMode(.middle)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                    Text(statusText)
+                        .font(.caption2)
+                        .foregroundStyle(statusColor)
+                        .lineLimit(1)
+                        .fixedSize(horizontal: true, vertical: false)
+                    if let label = approvalSourceLabel {
+                        Text(label)
+                            .font(.system(size: 9, weight: .semibold))
+                            .padding(.horizontal, 5)
+                            .padding(.vertical, 1)
+                            .background(Color.green.opacity(0.12))
+                            .foregroundStyle(.green)
+                            .clipShape(Capsule())
+                            .help(approvalSourceTooltip ?? "")
                     }
-                    .buttonStyle(.borderless)
-                    .help(isExpanded ? L10n.ToolCard.collapse : L10n.ToolCard.expand)
+                    if hasExpandableContent {
+                        Button {
+                            isExpanded.toggle()
+                        } label: {
+                            Image(systemName: isExpanded ? "chevron.up" : "chevron.down")
+                                .font(.system(size: 10, weight: .semibold))
+                        }
+                        .buttonStyle(.borderless)
+                        .help(isExpanded ? L10n.ToolCard.collapse : L10n.ToolCard.expand)
+                    }
                 }
+                .frame(minHeight: 20)
+                .help("\(riskBadge): \(argumentsSummary)")
             }
-            .frame(minHeight: 20)
-            .help("\(riskBadge): \(argumentsSummary)")
 
             if let badge = subagentBadgeText {
                 HStack(spacing: 5) {
@@ -443,83 +401,60 @@ struct AgentToolCallCard: View {
                     if decisionAlreadySubmitted {
                         submittedDecisionNotice
                     } else {
-                        // rc16:把 Deny 推到最左,Allow / Always Allow 在右侧簇集,
-                        // 对齐 macOS「主操作右、负操作远离」防误触习惯。
-                        HStack {
-                            // 拒绝:空心(描边)按钮;允许:实心(高亮)主操作。
-                            Button(L10n.ToolCard.deny) { appState.denyAgentToolCall(id: call.id) }
-                                .buttonStyle(.bordered)
-                                .cursor(.arrow)
-                            Spacer(minLength: 0)
-                            if let signature = alwaysAllowSignature {
-                                Button(L10n.ToolCard.alwaysAllow) { appState.alwaysAllowAgentToolCall(id: call.id) }
-                                    .buttonStyle(.bordered)
-                                    .help(L10n.ToolCard.alwaysAllowHelp(signature))
-                                    .cursor(.arrow)
+                        // The previous caption-sized controls were only about
+                        // 19pt tall in this card. Make the complete visible
+                        // button face clickable and keep every action at least
+                        // 36pt tall so approval never feels "unclickable".
+                        HStack(spacing: AgentApprovalActionMetrics.spacing) {
+                            Button(role: .destructive) {
+                                appState.denyAgentToolCall(id: call.id)
+                            } label: {
+                                approvalActionLabel(
+                                    L10n.ToolCard.deny,
+                                    systemImage: "xmark"
+                                )
                             }
-                            Button(L10n.ToolCard.allow) { appState.approveAgentToolCall(id: call.id) }
-                                .buttonStyle(.borderedProminent)
+                            .buttonStyle(.bordered)
+                            .approvalButtonBorderShape(cornerRadius: AgentApprovalActionMetrics.cornerRadius)
+                            .tint(.red)
+                            .frame(maxWidth: .infinity)
+                            .cursor(.arrow)
+
+                            if let signature = alwaysAllowSignature {
+                                Button {
+                                    appState.alwaysAllowAgentToolCall(id: call.id)
+                                } label: {
+                                    approvalActionLabel(
+                                        L10n.ToolCard.alwaysAllow,
+                                        systemImage: "checkmark.shield"
+                                    )
+                                }
+                                .buttonStyle(.bordered)
+                                .approvalButtonBorderShape(cornerRadius: AgentApprovalActionMetrics.cornerRadius)
+                                .frame(maxWidth: .infinity)
+                                .help(L10n.ToolCard.alwaysAllowHelp(signature))
                                 .cursor(.arrow)
+                            }
+
+                            Button {
+                                appState.approveAgentToolCall(id: call.id)
+                            } label: {
+                                approvalActionLabel(
+                                    L10n.ToolCard.allow,
+                                    systemImage: "checkmark"
+                                )
+                            }
+                            .buttonStyle(.borderedProminent)
+                            .approvalButtonBorderShape(cornerRadius: AgentApprovalActionMetrics.cornerRadius)
+                            .frame(maxWidth: .infinity)
+                            .cursor(.arrow)
                         }
-                        .font(.caption)
-                        .controlSize(.small)
+                        .controlSize(.large)
+                        .padding(.top, 2)
                     }
                 }
             } else if call.status == .awaitingConfirm {
-                VStack(alignment: .leading, spacing: 9) {
-                    approvalReviewHeader(
-                        title: "高风险确认",
-                        subtitle: L10n.ToolCard.destructiveWarning,
-                        tint: destructiveAccentColor,
-                        systemImage: "exclamationmark.shield.fill"
-                    )
-                    approvalCommandBlock
-                    approvalExplanationSection
-                    if decisionAlreadySubmitted {
-                        submittedDecisionNotice
-                    } else {
-                        // rc16:同上,Deny 在左,Confirm Run 在右。
-                        // 破坏性命令误点代价高,把两个按钮的点击区放大:字号 caption→subheadline,
-                        // 内边距加大,并给 Deny 也补上等大的描边点击区(原来是裸文字,极难点中)。
-                        HStack(spacing: 8) {
-                            Button {
-                                appState.denyAgentToolCall(id: call.id)
-                            } label: {
-                                Text(L10n.ToolCard.deny)
-                                    .font(.subheadline.weight(.medium))
-                                    .padding(.horizontal, 16)
-                                    .padding(.vertical, 8)
-                                    .foregroundStyle(.secondary)
-                                    .background(Color.clear)
-                                    .overlay(
-                                        RoundedRectangle(cornerRadius: 7, style: .continuous)
-                                            .stroke(Color.secondary.opacity(0.45), lineWidth: 1)
-                                    )
-                                    .contentShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
-                            }
-                            .buttonStyle(.plain)
-                            .cursor(.arrow)
-                            Spacer(minLength: 0)
-                            Button {
-                                _ = appState.confirmAgentToolCall(id: call.id, typedConfirmation: "confirm")
-                            } label: {
-                                Text(L10n.ToolCard.confirmRun)
-                                    .font(.subheadline.weight(.semibold))
-                                    .padding(.horizontal, 16)
-                                    .padding(.vertical, 8)
-                                    .foregroundStyle(destructiveAccentColor)
-                                    .background(Color.clear)
-                                    .overlay(
-                                        RoundedRectangle(cornerRadius: 7, style: .continuous)
-                                            .stroke(destructiveAccentColor.opacity(0.62), lineWidth: 1)
-                                    )
-                                    .contentShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
-                            }
-                            .buttonStyle(.plain)
-                            .cursor(.arrow)
-                        }
-                    }
-                }
+                awaitingConfirmationBody
             } else if call.status == .awaitingUserAnswer {
                 askUserBody
             } else if call.toolName == "ask_user" {
@@ -528,14 +463,247 @@ struct AgentToolCallCard: View {
                 terminalShortcutProtectedInputsBody
             }
         }
-        .padding(.horizontal, 7)
-        .padding(.vertical, isInteractive ? 7 : 4)
+        .padding(.horizontal, isAwaitingConfirmation ? 0 : 7)
+        .padding(.vertical, isAwaitingConfirmation ? 0 : (isInteractive ? 7 : 4))
         .background(cardBackground)
-        .clipShape(RoundedRectangle(cornerRadius: 6))
+        .clipShape(RoundedRectangle(cornerRadius: isAwaitingConfirmation ? 10 : 6, style: .continuous))
         .overlay(
-            RoundedRectangle(cornerRadius: 6)
+            RoundedRectangle(cornerRadius: isAwaitingConfirmation ? 10 : 6, style: .continuous)
                 .stroke(borderColor, lineWidth: 1)
         )
+    }
+
+    private var awaitingConfirmationBody: some View {
+        ViewThatFits(in: .horizontal) {
+            HStack(spacing: 0) {
+                confirmationReviewColumn
+                    .frame(minWidth: 390, maxWidth: .infinity)
+                confirmationDivider
+                confirmationDecisionColumn
+                    .frame(width: AgentConfirmationReviewMetrics.decisionColumnWidth)
+            }
+            .frame(minWidth: AgentConfirmationReviewMetrics.horizontalMinimumWidth)
+
+            VStack(spacing: 0) {
+                confirmationReviewColumn
+                Rectangle()
+                    .fill(appState.editorSettings.interfaceSkin.palette.hairline)
+                    .frame(height: 1)
+                confirmationDecisionColumn
+            }
+        }
+    }
+
+    private var confirmationDivider: some View {
+        Rectangle()
+            .fill(appState.editorSettings.interfaceSkin.palette.hairline)
+            .frame(width: 1)
+    }
+
+    private var confirmationReviewColumn: some View {
+        let palette = appState.editorSettings.interfaceSkin.palette
+        return VStack(alignment: .leading, spacing: AgentConfirmationReviewMetrics.sectionSpacing) {
+            Text("命令确认")
+                .font(.system(size: 12, weight: .medium))
+                .foregroundStyle(palette.secondaryText)
+
+            Text("Agent 想执行以下命令")
+                .font(.system(size: 18, weight: .semibold))
+                .foregroundStyle(palette.primaryText)
+
+            Text("请检查内容是否符合你的预期。")
+                .font(.system(size: 13))
+                .foregroundStyle(palette.secondaryText)
+
+            confirmationCommandViewport
+            confirmationMetadata
+
+            if let text = approvalExplanation?.text {
+                Text(text)
+                    .font(.system(size: 11))
+                    .foregroundStyle(palette.primaryText)
+                    .textSelection(.enabled)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .padding(.top, 2)
+            } else if let error = approvalExplanationError {
+                Text(error)
+                    .font(.caption2)
+                    .foregroundStyle(palette.secondaryAccent)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+        .padding(AgentConfirmationReviewMetrics.contentPadding)
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    @ViewBuilder
+    private var confirmationCommandViewport: some View {
+        if let detail = approvalDetail {
+            let palette = appState.editorSettings.interfaceSkin.palette
+            VStack(alignment: .leading, spacing: 6) {
+                HStack(spacing: 8) {
+                    Text("命令内容")
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundStyle(palette.primaryText)
+                    Spacer(minLength: 0)
+                    Button {
+                        copyApprovalCommand(detail.body)
+                    } label: {
+                        Image(systemName: commandCopied ? "checkmark" : "doc.on.doc")
+                            .font(.system(size: 11, weight: .semibold))
+                            .foregroundStyle(commandCopied ? palette.secondaryAccent : palette.secondaryText)
+                            .frame(width: 24, height: 24)
+                            .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .help(commandCopied ? "已复制" : "复制命令")
+                    .cursor(.arrow)
+                }
+
+                ScrollView(.vertical, showsIndicators: true) {
+                    Text(detail.body)
+                        .font(.system(size: 12, design: .monospaced))
+                        .lineSpacing(3)
+                        .foregroundStyle(palette.primaryText)
+                        .textSelection(.enabled)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .padding(10)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
+                .frame(height: AgentConfirmationReviewMetrics.commandViewportHeight)
+                .background(palette.controlFill)
+                .clipShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 7, style: .continuous)
+                        .stroke(palette.hairline, lineWidth: 1)
+                )
+            }
+        }
+    }
+
+    private var confirmationMetadata: some View {
+        ViewThatFits(in: .horizontal) {
+            HStack(spacing: 9) {
+                if let directory = approvalWorkingDirectoryName {
+                    Text("工作目录：\(directory)")
+                        .foregroundStyle(appState.editorSettings.interfaceSkin.palette.secondaryText)
+                    Text("·")
+                        .foregroundStyle(appState.editorSettings.interfaceSkin.palette.secondaryText)
+                }
+                confirmationMutationLabel
+                Text("·")
+                    .foregroundStyle(appState.editorSettings.interfaceSkin.palette.secondaryText)
+                confirmationExplanationButton
+            }
+            VStack(alignment: .leading, spacing: 7) {
+                if let directory = approvalWorkingDirectoryName {
+                    Text("工作目录：\(directory)")
+                        .foregroundStyle(appState.editorSettings.interfaceSkin.palette.secondaryText)
+                }
+                confirmationMutationLabel
+                confirmationExplanationButton
+            }
+        }
+        .font(.system(size: 11))
+    }
+
+    private var confirmationMutationLabel: some View {
+        let palette = appState.editorSettings.interfaceSkin.palette
+        return HStack(spacing: 5) {
+            Circle()
+                .fill(palette.secondaryAccent)
+                .frame(width: 6, height: 6)
+            Text("可能修改文件")
+                .foregroundStyle(palette.secondaryAccent)
+        }
+    }
+
+    private var confirmationExplanationButton: some View {
+        let palette = appState.editorSettings.interfaceSkin.palette
+        return Button {
+            loadApprovalExplanation()
+        } label: {
+            HStack(spacing: 5) {
+                if isLoadingApprovalExplanation {
+                    ProgressView()
+                        .controlSize(.small)
+                        .scaleEffect(0.62)
+                        .frame(width: 11, height: 11)
+                }
+                Text(approvalExplanation == nil ? "查看命令说明" : "重新分析")
+            }
+            .foregroundStyle(palette.accent)
+        }
+        .buttonStyle(.plain)
+        .disabled(isLoadingApprovalExplanation)
+        .help("解释命令影响，并给出允许、拒绝或改用更安全方案的建议。")
+        .cursor(.arrow)
+    }
+
+    private var confirmationDecisionColumn: some View {
+        let palette = appState.editorSettings.interfaceSkin.palette
+        return VStack(alignment: .leading, spacing: AgentConfirmationReviewMetrics.sectionSpacing) {
+            Text("是否继续？")
+                .font(.system(size: 17, weight: .semibold))
+                .foregroundStyle(palette.primaryText)
+
+            Text("你的确认将授权 Agent 执行这条命令。")
+                .font(.system(size: 12))
+                .foregroundStyle(palette.secondaryText)
+                .fixedSize(horizontal: false, vertical: true)
+
+            Spacer(minLength: 16)
+
+            if decisionAlreadySubmitted {
+                submittedDecisionNotice
+            } else {
+                Button {
+                    _ = appState.confirmAgentToolCall(id: call.id, typedConfirmation: "confirm")
+                } label: {
+                    confirmationActionLabel("允许执行")
+                }
+                .buttonStyle(.borderedProminent)
+                .approvalButtonBorderShape(cornerRadius: AgentApprovalActionMetrics.cornerRadius)
+                .tint(palette.accent)
+                .cursor(.arrow)
+
+                Button {
+                    appState.denyAgentToolCall(id: call.id)
+                } label: {
+                    confirmationActionLabel(L10n.ToolCard.deny)
+                }
+                .buttonStyle(.bordered)
+                .approvalButtonBorderShape(cornerRadius: AgentApprovalActionMetrics.cornerRadius)
+                .tint(palette.accent)
+                .cursor(.arrow)
+            }
+        }
+        .controlSize(.large)
+        .padding(AgentConfirmationReviewMetrics.contentPadding)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+    }
+
+    private func confirmationActionLabel(_ title: String) -> some View {
+        Text(title)
+            .font(.system(size: 13, weight: .semibold))
+            .frame(maxWidth: .infinity, minHeight: AgentApprovalActionMetrics.minimumButtonHeight)
+            .contentShape(
+                RoundedRectangle(
+                    cornerRadius: AgentApprovalActionMetrics.cornerRadius,
+                    style: .continuous
+                )
+            )
+    }
+
+    private func copyApprovalCommand(_ command: String) {
+        let pasteboard = NSPasteboard.general
+        pasteboard.clearContents()
+        pasteboard.setString(command, forType: .string)
+        commandCopied = true
+        Task { @MainActor in
+            try? await Task.sleep(for: .seconds(1.2))
+            commandCopied = false
+        }
     }
 
     @ViewBuilder
@@ -623,6 +791,26 @@ struct AgentToolCallCard: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(approvalSurfaceBackground)
         .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+    }
+
+    private func approvalActionLabel(
+        _ title: String,
+        systemImage: String
+    ) -> some View {
+        Label(title, systemImage: systemImage)
+            .font(.system(size: 13, weight: .semibold))
+            .lineLimit(1)
+            .frame(
+                minWidth: AgentApprovalActionMetrics.minimumButtonWidth,
+                minHeight: AgentApprovalActionMetrics.minimumButtonHeight
+            )
+            .frame(maxWidth: .infinity)
+            .contentShape(
+                RoundedRectangle(
+                    cornerRadius: AgentApprovalActionMetrics.cornerRadius,
+                    style: .continuous
+                )
+            )
     }
 
     @ViewBuilder
@@ -1100,6 +1288,27 @@ struct AgentToolCallCard: View {
         return nil
     }
 
+    private var approvalWorkingDirectoryName: String? {
+        if let cwdValue = call.arguments["cwd"]?.stringValue() {
+            let cwd = cwdValue.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !cwd.isEmpty {
+                return URL(fileURLWithPath: cwd).lastPathComponent
+            }
+        }
+
+        guard let command = fullCommand?
+            .trimmingCharacters(in: .whitespacesAndNewlines),
+              command.hasPrefix("cd "),
+              let cdSegment = command.dropFirst(3).components(separatedBy: "&&").first else {
+            return nil
+        }
+        let path = cdSegment
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .trimmingCharacters(in: CharacterSet(charactersIn: "\"'"))
+        guard !path.isEmpty else { return nil }
+        return URL(fileURLWithPath: path).lastPathComponent
+    }
+
     private var alwaysAllowSignature: String? {
         AgentToolAuthorization.suggestedPersistentSignature(
             toolName: call.toolName,
@@ -1131,7 +1340,7 @@ struct AgentToolCallCard: View {
         }
         switch call.status {
         case .pendingApproval: return appState.editorSettings.interfaceSkin.palette.accent
-        case .awaitingConfirm: return destructiveAccentColor
+        case .awaitingConfirm: return appState.editorSettings.interfaceSkin.palette.secondaryAccent
         case .awaitingUserAnswer: return askUserAccentColor
         case .running: return .secondary
         case .succeeded: return .secondary
@@ -1146,7 +1355,7 @@ struct AgentToolCallCard: View {
         }
         switch call.status {
         case .pendingApproval: return appState.editorSettings.interfaceSkin.palette.accent
-        case .awaitingConfirm: return destructiveAccentColor
+        case .awaitingConfirm: return appState.editorSettings.interfaceSkin.palette.secondaryAccent
         case .awaitingUserAnswer: return askUserAccentColor
         case .failed: return .orange
         case .running, .succeeded, .denied: return .secondary
@@ -1163,6 +1372,10 @@ struct AgentToolCallCard: View {
         case .running, .succeeded, .failed, .denied:
             return isExpanded
         }
+    }
+
+    private var isAwaitingConfirmation: Bool {
+        call.status == .awaitingConfirm
     }
 
     private var hasExpandableContent: Bool {
@@ -1209,6 +1422,9 @@ struct AgentToolCallCard: View {
     }
 
     private var cardBackground: Color {
+        if isAwaitingConfirmation {
+            return appState.editorSettings.interfaceSkin.palette.panelFill
+        }
         if isInteractive {
             return appState.editorSettings.interfaceSkin.palette.controlFill.opacity(0.72)
         }
@@ -1255,16 +1471,12 @@ struct AgentToolCallCard: View {
     private var borderColor: Color {
         switch call.status {
         case .pendingApproval: return appState.editorSettings.interfaceSkin.palette.accent.opacity(0.4)
-        case .awaitingConfirm: return destructiveAccentColor.opacity(0.42)
+        case .awaitingConfirm: return appState.editorSettings.interfaceSkin.palette.hairline
         case .awaitingUserAnswer: return askUserAccentColor.opacity(0.4)
         case .failed: return Color.orange.opacity(0.4)
         case .denied: return Color.secondary.opacity(0.3)
         default: return Color.clear
         }
-    }
-
-    private var destructiveAccentColor: Color {
-        Color(red: 0.68, green: 0.16, blue: 0.16)
     }
 
     private var askUserAccentColor: Color {

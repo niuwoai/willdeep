@@ -177,22 +177,14 @@ nonisolated enum AgentConsultationModelCatalog {
         let process = Process()
         process.executableURL = URL(fileURLWithPath: executablePath)
         process.arguments = arguments
-        let outputPipe = Pipe()
-        process.standardOutput = outputPipe
-        process.standardError = FileHandle.nullDevice
-        let finished = DispatchSemaphore(value: 0)
-        process.terminationHandler = { _ in finished.signal() }
-        do {
-            try process.run()
-        } catch {
+        // AgentSubprocess drains stdout while the child runs; the previous
+        // wait-then-read order deadlocked whenever the model list exceeded
+        // the 64KB pipe buffer (child blocks on write, never exits).
+        guard let output = try? AgentSubprocess.runSynchronously(process, timeout: timeout),
+              !output.timedOut else {
             return ""
         }
-        if finished.wait(timeout: .now() + timeout) == .timedOut {
-            process.terminate()
-            return ""
-        }
-        let data = outputPipe.fileHandleForReading.readDataToEndOfFile()
-        return String(data: data, encoding: .utf8) ?? ""
+        return output.stdoutText
     }
 
     private static func isPlausibleModelID(_ value: String) -> Bool {

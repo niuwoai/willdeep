@@ -48,8 +48,8 @@ extension L10n {
         static let startRecording = String(localized: "agent-terminal.start-recording", defaultValue: "Start recording")
         static let stopRecording = String(localized: "agent-terminal.stop-recording", defaultValue: "Stop recording")
         static let recordingHelp = String(localized: "agent-terminal.recording-help", defaultValue: "Record terminal steps to replay later")
-        static let recentRecordings = String(localized: "agent-terminal.recent-recordings", defaultValue: "Recent recordings")
-        static let noShortcuts = String(localized: "agent-terminal.no-shortcuts", defaultValue: "No recordings yet")
+        static let recentRecordings = String(localized: "agent-terminal.recent-recordings", defaultValue: "Recent shortcuts")
+        static let noShortcuts = String(localized: "agent-terminal.no-shortcuts", defaultValue: "No shortcuts yet")
         static let sessionLocal = String(localized: "agent-terminal.session.local", defaultValue: "Local Shell")
         static let sessionSSH = String(localized: "agent-terminal.session.ssh", defaultValue: "SSH")
         static let sessionRunning = String(localized: "agent-terminal.session.running", defaultValue: "Running")
@@ -69,6 +69,7 @@ extension L10n {
         static let shortcutActions = String(localized: "agent-terminal.shortcut.actions", defaultValue: "Shortcut actions")
         static let shortcutEdit = String(localized: "agent-terminal.shortcut.edit", defaultValue: "Edit")
         static let shortcutRename = String(localized: "agent-terminal.shortcut.rename", defaultValue: "Rename...")
+        static let shortcutClone = String(localized: "agent-terminal.shortcut.clone", defaultValue: "Clone")
         static let shortcutDelete = String(localized: "agent-terminal.shortcut.delete", defaultValue: "Delete")
         static let shortcutPasswordCardDescription = String(localized: "agent-terminal.shortcut.password-card.description", defaultValue: "Saved only to this Mac's encrypted terminal vault. The AI never receives these values.")
         static let shortcutPasswordSave = String(localized: "agent-terminal.shortcut.password-card.save", defaultValue: "Save to Recording")
@@ -91,6 +92,10 @@ extension L10n {
         static func shortcutMeta(_ a1: String, _ a2: String) -> String {
             let template = String(localized: "agent-terminal.shortcut.meta", defaultValue: "%1$@ · %2$@ events")
             return String(format: template, a1, a2)
+        }
+        static func shortcutCopyTitle(_ a1: String) -> String {
+            let template = String(localized: "agent-terminal.shortcut.copy-title", defaultValue: "%@-Copy")
+            return String(format: template, a1)
         }
         static func shortcutDurationFallback(_ a1: String) -> String {
             let template = String(localized: "agent-terminal.shortcut.duration-fallback", defaultValue: "%@s")

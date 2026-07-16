@@ -8,7 +8,7 @@
 
 import Foundation
 
-enum AgentSessionStore {
+nonisolated enum AgentSessionStore {
     private nonisolated final class MetadataOnlySessionTracker: @unchecked Sendable {
         private let lock = NSLock()
         private var ids: Set<UUID> = []
@@ -39,6 +39,19 @@ enum AgentSessionStore {
             userMessageIDs.remove(id)
             lock.unlock()
         }
+
+#if DEBUG
+        func insertForTesting(_ id: UUID, hasUserMessage: Bool) {
+            lock.lock()
+            ids.insert(id)
+            if hasUserMessage {
+                userMessageIDs.insert(id)
+            } else {
+                userMessageIDs.remove(id)
+            }
+            lock.unlock()
+        }
+#endif
     }
 
     private static let metadataOnlySessions = MetadataOnlySessionTracker()
@@ -534,6 +547,71 @@ enum AgentSessionStore {
         return decoder
     }()
 
+    struct Catalog {
+        let sessions: [AgentSession]
+        let usageSnapshots: [AgentUsageSessionSnapshot]
+    }
+
+    /// Reads each persisted session file once and derives both sidebar and
+    /// usage indexes from that buffer. Callers should run this off the main
+    /// actor: historical messages can make individual JSON files several MiB.
+    static func loadCatalog() -> Catalog {
+        var sessions: [AgentSession] = []
+        var snapshots: [AgentUsageSessionSnapshot] = []
+        var metadataOnlyIDs: Set<UUID> = []
+        var metadataOnlyUserMessageIDs: Set<UUID> = []
+        let pendingSnapshot = pendingWrites.allPending()
+
+        let dir = directory
+        var isDir: ObjCBool = false
+        if FileManager.default.fileExists(atPath: dir.path, isDirectory: &isDir), isDir.boolValue,
+           let entries = try? FileManager.default.contentsOfDirectory(
+               at: dir,
+               includingPropertiesForKeys: nil,
+               options: [.skipsHiddenFiles]
+           ) {
+            for url in entries where url.pathExtension == "json" {
+                guard let data = try? Data(contentsOf: url) else { continue }
+                do {
+                    let index = try decoder.decode(SessionIndex.self, from: data)
+                    let session = index.session
+                    metadataOnlyIDs.insert(session.id)
+                    if index.hasUserMessage { metadataOnlyUserMessageIDs.insert(session.id) }
+                    sessions.append(session)
+                } catch {
+                    print("AgentSessionStore: skipping unreadable session at \(url.lastPathComponent): \(error)")
+                }
+                do {
+                    snapshots.append(try decoder.decode(UsageSessionIndex.self, from: data).snapshot)
+                } catch {
+                    print("AgentSessionStore: skipping unreadable usage snapshot at \(url.lastPathComponent): \(error)")
+                }
+            }
+        }
+
+        for (id, snapshot) in pendingSnapshot {
+            metadataOnlyIDs.remove(id)
+            metadataOnlyUserMessageIDs.remove(id)
+            if let index = sessions.firstIndex(where: { $0.id == id }) {
+                sessions[index] = snapshot
+            } else {
+                sessions.append(snapshot)
+            }
+            let usage = AgentUsageSessionSnapshot(session: snapshot)
+            if let index = snapshots.firstIndex(where: { $0.id == id }) {
+                snapshots[index] = usage
+            } else {
+                snapshots.append(usage)
+            }
+        }
+
+        metadataOnlySessions.replace(with: metadataOnlyIDs, userMessageIDs: metadataOnlyUserMessageIDs)
+        return Catalog(
+            sessions: sessions.sorted { $0.updatedAt > $1.updatedAt },
+            usageSnapshots: snapshots.sorted { $0.updatedAt > $1.updatedAt }
+        )
+    }
+
     /// Loads a lightweight session index, newest-updated first. Message bodies
     /// can contain pasted screenshots or generated media as base64, so keeping
     /// every transcript resident at launch makes the app grow with historical
@@ -581,9 +659,8 @@ enum AgentSessionStore {
         // this merge, a second AppState instance (the Settings window
         // builds its own) calling loadAll during the write window would
         // re-mark a just-persisted session metadata-only-without-user-
-        // message — and pruneEmptyAgentSessions would then DELETE a
-        // session that has real history. The pending snapshot is the
-        // full session, so it is not metadata-only at all.
+        // message. The pending snapshot is the full session, so it is not
+        // metadata-only at all.
         for (id, snapshot) in pendingSnapshot {
             metadataOnlyIDs.remove(id)
             metadataOnlyUserMessageIDs.remove(id)
@@ -652,6 +729,16 @@ enum AgentSessionStore {
         metadataOnlySessions.containsUserMessage(id)
     }
 
+#if DEBUG
+    static func markMetadataOnlyForTesting(_ id: UUID, hasUserMessage: Bool) {
+        metadataOnlySessions.insertForTesting(id, hasUserMessage: hasUserMessage)
+    }
+
+    static func clearMetadataOnlyForTesting(_ id: UUID) {
+        metadataOnlySessions.remove(id)
+    }
+#endif
+
     static func decodeSessionIndexForTesting(_ data: Data) throws -> (session: AgentSession, hasUserMessage: Bool) {
         let index = try decoder.decode(SessionIndex.self, from: data)
         return (index.session, index.hasUserMessage)
@@ -710,61 +797,6 @@ enum AgentSessionStore {
     ///
     /// The unconditional `delete(id:)` above stays for user-initiated
     /// deletions where the caller owns the session and truly means it.
-    @discardableResult
-    static func deleteIfStillEmpty(id: UUID) -> Bool {
-        // Our own not-yet-flushed snapshot is the freshest truth. If it
-        // carries a user message the session is decidedly not empty.
-        if let pending = pendingWrites.peek(id),
-           pending.messages.contains(where: { $0.role == .user }) {
-            return false
-        }
-        return writeQueue.sync {
-            let url = directory.appendingPathComponent("\(id.uuidString).json")
-            var safeToDelete = true
-            coordinatedRead(at: url) { readURL in
-                guard let data = try? Data(contentsOf: readURL) else {
-                    // File already gone — nothing to remove, and nothing
-                    // lost. Leave `safeToDelete` true so we no-op cleanly.
-                    return
-                }
-                if let index = try? decoder.decode(SessionIndex.self, from: data) {
-                    if index.hasUserMessage { safeToDelete = false }
-                } else {
-                    // Unreadable or mid-write from another process — stay
-                    // conservative and keep the file rather than risk
-                    // deleting real (if momentarily undecodable) history.
-                    safeToDelete = false
-                }
-            }
-            guard safeToDelete else { return false }
-            pendingWrites.cancel(id)
-            do {
-                try coordinatedRemove(at: url)
-                metadataOnlySessions.remove(id)
-                return true
-            } catch {
-                print("AgentSessionStore: failed to delete empty session \(id): \(error)")
-                return false
-            }
-        }
-    }
-
-    /// Last-modified timestamp of a session's file on disk, or nil if it
-    /// doesn't exist. The startup prune skips files touched within
-    /// `pruneGracePeriod` — a file another process just wrote (or is
-    /// mid-write on) reads as empty on our stale scan but is very likely
-    /// a live session.
-    static func fileModificationDate(id: UUID) -> Date? {
-        let url = directory.appendingPathComponent("\(id.uuidString).json")
-        return (try? FileManager.default.attributesOfItem(atPath: url.path))?[.modificationDate] as? Date
-    }
-
-    /// Recent-write grace window for the startup prune. A session file
-    /// modified within this window is presumed live in some process and
-    /// left alone; genuinely-abandoned placeholders fall outside it and
-    /// get pruned on a later launch.
-    static let pruneGracePeriod: TimeInterval = 90
-
     private static func ensureDirectory() throws {
         let dir = directory
         var isDir: ObjCBool = false

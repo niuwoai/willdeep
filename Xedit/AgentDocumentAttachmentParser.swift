@@ -45,6 +45,7 @@ nonisolated struct AgentVisionOCRProvider: AgentAttachmentOCRProviding {
 
 nonisolated enum AgentDocumentAttachmentParser {
     private static let maxTextCharacters = 500_000
+    private static let maxTextInputBytes = 4 * 1_024 * 1_024
     private static let targetChunkCharacters = 3_500
     private static let maxPDFPages = 200
     private static let maxOCRPages = 60
@@ -103,10 +104,20 @@ nonisolated enum AgentDocumentAttachmentParser {
     }
 
     private static func analyzeText(url: URL) throws -> AgentAttachmentAnalysis {
-        guard let data = try? Data(contentsOf: url),
-              let rawText = decodeText(data) else {
+        guard let handle = try? FileHandle(forReadingFrom: url) else {
             throw ParserError.unreadable
         }
+        defer { try? handle.close() }
+        guard var data = try? handle.read(upToCount: maxTextInputBytes + 1),
+              !data.isEmpty else {
+            throw ParserError.unreadable
+        }
+        let wasByteTruncated = data.count > maxTextInputBytes
+        if wasByteTruncated { data.removeLast(data.count - maxTextInputBytes) }
+        guard var rawText = decodeText(data) else {
+            throw ParserError.unreadable
+        }
+        if wasByteTruncated { rawText += "\n\n[truncated at 4 MiB input]" }
         let text = limit(rawText, to: maxTextCharacters)
         let sections = chunkText(text, sourcePrefix: "lines")
         return analysis(kind: .text, sections: sections, totalUnitCount: sections.count)

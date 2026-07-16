@@ -363,28 +363,9 @@ struct ContentView: View {
                         EditorStatusBar(language: editorLanguage)
                             .environmentObject(appState)
                     }
-                } else {
-                    // 1.155.0-rc3：「未打开文件夹」欢迎页（EmptyWorkspaceView）
-                    // 整体移除 —— 纯启动直接进 Agent 窗口，新开的 editor
-                    // 窗口由 WindowRootView 自动建一个空白 untitled tab，
-                    // 不再需要 hero 式欢迎屏。这里只剩「有 tab 全关掉」
-                    // 之后的空 detail 状态。
-                    EmptyProjectEditorView {
-                        appState.showQuickOpen()
-                    } onOpenFile: {
-                        appState.openFile()
-                    }
-                    .frame(minWidth: 400, minHeight: 400)
-                    .overlay(alignment: .topTrailing) {
-                        if shouldShowEnterAgentButton {
-                            EnterAgentModeButton()
-                                .padding(.top, 10)
-                                .padding(.trailing, 12)
-                        }
-                    }
                 }
             }
-            .background(EditorAreaBackground(settings: appState.editorSettings))
+            .background(WorkspaceWallpaperBackground(settings: appState.editorSettings))
             .overlay {
                 if appState.isQuickOpenVisible {
                     QuickOpenPanel()
@@ -517,16 +498,11 @@ struct ContentView: View {
     }
 }
 
-// `WorkspaceWindowBackground` / `EditorAreaBackground` /
+// `WorkspaceWindowBackground` / `WorkspaceWallpaperBackground` /
 // `EditorGlassBackgroundModifier` / `VisualEffectView` /
 // `SidebarResizeHandle` / `CursorModifier` (+ `.editorGlassBackground` /
 // `.cursor` modifiers) live in `ContentViewBackgrounds.swift` since
 // rc39.
-
-// `EmptyProjectEditorView` / `EmptyWorkspaceButtonStyle` live in
-// `EmptyStateViews.swift` since rc39. (`EmptyWorkspaceView` and its
-// hero / recent-section pieces were removed in 1.155.0-rc3 — plain
-// launches go straight to the Agent window now.)
 
 private struct CommandPalettePanel: View {
     @EnvironmentObject var appState: AppState

@@ -69,15 +69,23 @@ final class AgentStreamingMessageBuffer {
             return
         }
 
-        if !pendingContent.isEmpty {
-            runtime.messages[index].content += pendingContent
-            pendingContent = ""
+        // Apply reasoning + answer text as one value replacement. Mutating
+        // the two fields through separate array subscripts publishes twice,
+        // which lets SwiftUI briefly lay out the reasoning surface and the
+        // first answer token as two different frames. One replacement keeps
+        // the 100 ms debounce boundary atomic: when answer text arrives, the
+        // thinking surface disappears in the same render pass that reveals
+        // the answer body.
+        let contentDelta = pendingContent
+        let reasoningDelta = pendingReasoning
+        pendingContent = ""
+        pendingReasoning = ""
+
+        var updatedMessage = runtime.messages[index]
+        updatedMessage.content += contentDelta
+        if !reasoningDelta.isEmpty {
+            updatedMessage.reasoningContent = (updatedMessage.reasoningContent ?? "") + reasoningDelta
         }
-        if !pendingReasoning.isEmpty {
-            var existing = runtime.messages[index].reasoningContent ?? ""
-            existing += pendingReasoning
-            runtime.messages[index].reasoningContent = existing
-            pendingReasoning = ""
-        }
+        runtime.messages[index] = updatedMessage
     }
 }

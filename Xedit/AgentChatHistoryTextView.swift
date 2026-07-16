@@ -215,7 +215,7 @@ final class AgentChatHistoryNSTextView: NSTextView {
         super.setFrameSize(newSize)
         guard newSize.width > 0 else { return }
         let resolvedWidth = AgentChatHistoryLayoutMetrics.resolvedLayoutWidth(newSize.width)
-        guard abs(resolvedWidth - currentLayoutWidth) >= 1 else { return }
+        guard resolvedWidth != currentLayoutWidth else { return }
         currentLayoutWidth = resolvedWidth
         guard !currentMessages.isEmpty else { return }
         renderCurrentMessages()
@@ -474,7 +474,10 @@ final class AgentChatHistoryNSTextView: NSTextView {
             for image in m.images {
                 hasher.combine(image.id)
                 hasher.combine(image.mimeType)
-                hasher.combine(image.dataBase64.count)
+                // byteCount, never dataBase64: for file-backed images the
+                // latter is a full disk read + base64 encode per call, and
+                // this fingerprint runs on every streaming flush.
+                hasher.combine(image.byteCount ?? -1)
                 hasher.combine(image.source?.rawValue)
                 hasher.combine(image.filePath)
                 hasher.combine(image.model)
@@ -995,6 +998,21 @@ enum AgentChatHistoryLayoutMetrics {
     /// AppKit/SwiftUI compositing resolves this neutral overlay to #F0F0F0
     /// on the white reference surface.
     static let assistantStatusDividerOpacity: Double = 0.075
+    /// Inline-code chips may sit after a single proportional-font space.
+    /// Keep the horizontal expansion below that space's advance so a
+    /// one-glyph chip such as `/` cannot paint over the preceding text.
+    static let inlineCodeChipHorizontalPadding: CGFloat = 2
+    static let inlineCodeChipVerticalPadding: CGFloat = 1.5
+
+    static func inlineCodeChipRect(for glyphRect: NSRect, at origin: NSPoint) -> NSRect {
+        glyphRect
+            .offsetBy(dx: origin.x, dy: origin.y)
+            .insetBy(
+                dx: -inlineCodeChipHorizontalPadding,
+                dy: -inlineCodeChipVerticalPadding
+            )
+            .integral
+    }
 
     static func assistantStatusDividerColor(isDark: Bool) -> NSColor {
         let white: CGFloat = isDark ? 1 : 0
@@ -1023,6 +1041,10 @@ enum AgentChatHistoryLayoutMetrics {
     static let userFooterBottomSpacing: CGFloat = 8
     static let userImageToBubbleSpacing: CGFloat = 8
     static let userMessageElementSpacing: CGFloat = 4
+    /// Reuse TextKit renders while the window moves within a small width
+    /// interval. Flooring keeps the rendered content inside the actual view;
+    /// the maximum layout-width difference is `layoutWidthBucket - 1` points.
+    static let layoutWidthBucket: CGFloat = 8
     /// Bubble backgrounds are drawn outside TextKit's glyph usedRect.
     /// Without this bottom slack the final user bubble can have its lower
     /// rounded corners clipped by the hosting SwiftUI layout.
@@ -1030,7 +1052,8 @@ enum AgentChatHistoryLayoutMetrics {
 
     static func resolvedLayoutWidth(_ width: CGFloat) -> CGFloat {
         guard width.isFinite, width > 0 else { return defaultTranscriptWidth }
-        return floor(width)
+        guard width >= layoutWidthBucket else { return floor(width) }
+        return floor(width / layoutWidthBucket) * layoutWidthBucket
     }
 
     static func userBubbleWidth(for layoutWidth: CGFloat) -> CGFloat {
@@ -1320,10 +1343,10 @@ private final class AgentChatHistoryBubbleLayoutManager: NSLayoutManager {
             guard visibleRange.length > 0 else { return }
             var rect = self.boundingRect(forGlyphRange: visibleRange, in: textContainer)
             guard !rect.isNull, !rect.isEmpty else { return }
-            rect = rect.offsetBy(dx: origin.x, dy: origin.y).insetBy(dx: -4, dy: -1.5)
+            rect = AgentChatHistoryLayoutMetrics.inlineCodeChipRect(for: rect, at: origin)
             let radius = min(6, rect.height / 2)
             color.setFill()
-            NSBezierPath(roundedRect: rect.integral, xRadius: radius, yRadius: radius).fill()
+            NSBezierPath(roundedRect: rect, xRadius: radius, yRadius: radius).fill()
         }
     }
 

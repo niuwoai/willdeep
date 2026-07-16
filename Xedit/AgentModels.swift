@@ -767,7 +767,7 @@ nonisolated enum AgentExecutionAgent: String, Codable, CaseIterable, Identifiabl
 
     var symbol: String {
         switch self {
-        case .willDeep: return "sparkles"
+        case .willDeep: return "person.fill"
         case .claudeCode: return "sparkles.rectangle.stack"
         case .codexCLI: return "terminal"
         }

@@ -9,6 +9,7 @@ extension L10n {
         static let appearanceCloudForge = String(localized: "desktop-pet.appearance.cloud-forge", defaultValue: "Cloud-forge engineer")
         static let appearanceCodeShiba = String(localized: "desktop-pet.appearance.code-shiba", defaultValue: "Code Shiba")
         static let appearanceCosmicScholar = String(localized: "desktop-pet.appearance.cosmic-scholar", defaultValue: "Cosmic scholar")
+        static let appearanceCosmicDownsizer = String(localized: "desktop-pet.appearance.cosmic-downsizer", defaultValue: "Cosmic snapper")
         static let appearanceCyberDrifter = String(localized: "desktop-pet.appearance.cyber-drifter", defaultValue: "Cyber drifter")
         static let appearanceDesertOracle = String(localized: "desktop-pet.appearance.desert-oracle", defaultValue: "Desert oracle")
         static let appearanceFluffyBear = String(localized: "desktop-pet.appearance.fluffy-bear", defaultValue: "Fluffy bear")

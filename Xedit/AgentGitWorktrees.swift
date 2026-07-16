@@ -552,20 +552,21 @@ extension AppState {
             isCancelling: false
         )
 
+        let outputHandler: @Sendable (String) -> Void = { [weak self] output in
+            Task { @MainActor [weak self] in
+                guard let self,
+                      self.agentGitWorktreeCreation?.sessionID == sessionID else { return }
+                self.agentGitWorktreeCreation?.output = output
+                self.agentGitWorktreeCreation?.progress = Self.gitWorktreeCheckoutProgress(from: output)
+            }
+        }
         agentGitWorktreeCreationTask = Task { [weak self] in
             let result = await Task.detached(priority: .userInitiated) {
                 Self.createGitWorktreeStreaming(
                     from: source,
                     branchName: branchName,
                     controller: controller
-                ) { output in
-                    Task { @MainActor [weak self] in
-                        guard let self,
-                              self.agentGitWorktreeCreation?.sessionID == sessionID else { return }
-                        self.agentGitWorktreeCreation?.output = output
-                        self.agentGitWorktreeCreation?.progress = Self.gitWorktreeCheckoutProgress(from: output)
-                    }
-                }
+                ) { output in outputHandler(output) }
             }.value
 
             await MainActor.run {

@@ -455,8 +455,16 @@ enum AgentMCPBridge {
 
     nonisolated private static func send(_ object: [String: Any], to pipe: Pipe) throws {
         let data = try JSONSerialization.data(withJSONObject: object, options: [])
-        pipe.fileHandleForWriting.write(data)
-        pipe.fileHandleForWriting.write(Data([0x0A]))
+        // Legacy `write(_:)` raises an uncatchable ObjC exception when the
+        // server died between the isRunning check and this write (broken
+        // pipe), crashing the whole app. `write(contentsOf:)` throws a
+        // Swift error we can surface as a tool failure instead.
+        do {
+            try pipe.fileHandleForWriting.write(contentsOf: data)
+            try pipe.fileHandleForWriting.write(contentsOf: Data([0x0A]))
+        } catch {
+            throw AgentToolError.commandFailed(-1, "MCP server stdin write failed (server likely exited): \(error.localizedDescription)")
+        }
     }
 
     nonisolated private static func waitForResponse(

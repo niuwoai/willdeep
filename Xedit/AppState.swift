@@ -243,6 +243,10 @@ final class AppState: ObservableObject {
     }
     /// Persisted Agent-mode chat sessions, newest-updated first.
     @Published var agentSessions: [AgentSession] = []
+    /// Set only when a metadata-only sidebar row can no longer be
+    /// materialized from disk. The row is deliberately retained so a
+    /// recovered JSON file can reconnect without losing its visible title.
+    @Published var agentSessionLoadFailure: AgentSessionLoadFailure?
     /// Lightweight usage snapshots decoded from persisted sessions. This
     /// keeps the stats dashboard accurate while `agentSessions` may hold
     /// metadata-only rows at launch for memory reasons.
@@ -300,6 +304,8 @@ final class AppState: ObservableObject {
     @Published var agentRuntimes: [AgentSession.ID: AgentRuntime] = [:]
     var agentKnowledgeFolderWatchers: [String: DispatchSourceFileSystemObject] = [:]
     var agentKnowledgeFolderReindexTasks: [String: Task<Void, Never>] = [:]
+    var agentKnowledgeFolderIndexTasks: [String: Task<Void, Never>] = [:]
+    var agentKnowledgeFolderWatcherDiscoveryTasks: [String: Task<Void, Never>] = [:]
     var isRestoringAgentSidePanelGlobals = false
 
     /// Session ids for which an LLM title-summarization request is
@@ -552,18 +558,13 @@ final class AppState: ObservableObject {
                 guard self.editorSettings != normalizedSettings else { return }
                 self.editorSettings = normalizedSettings
             }
-        self.agentSessions = AgentSessionStore.loadAll()
-        self.agentUsageSnapshots = AgentSessionStore.loadUsageSnapshots()
+        self.agentSessions = []
+        self.agentUsageSnapshots = []
         self.agentKnownModelIDs = AgentSettingsStore.loadKnownModelIDs()
         self.agentDiscoveredModelMetadata = AgentSettingsStore.loadDiscoveredModelMetadata()
         self.agentRecentlyUsedModelIDs = AgentSettingsStore.loadRecentlyUsedModelIDs()
         self.agentAlwaysAllowedCommands = AgentSettingsStore.loadAlwaysAllowedCommands()
         syncLocalModelComposerProvider(settings: AgentSettingsStore.loadLocalModelSettings())
-        // Sweep persisted "New Chat" rows that never received a user
-        // message — every ⌘N press creates one on disk, and over time
-        // the sidebar fills with identical empty placeholders. At launch
-        // there's no active session yet, so this purges all of them.
-        pruneEmptyAgentSessions()
         self.agentRoutines = AgentRoutineStore.loadAll()
         agentRoutineScheduler.start(initialRoutines: agentRoutines) { [weak self] routineID in
             self?.fireRoutine(id: routineID) != nil
@@ -678,6 +679,26 @@ final class AppState: ObservableObject {
                 self.isApplyingExternalTerminalSettings = false
             }
         startAgentSidePanelResourceReaper()
+        Task { @MainActor [weak self] in
+            let catalog = await Task.detached(priority: .utility) {
+                AgentSessionStore.loadCatalog()
+            }.value
+            guard let self, !Task.isCancelled else { return }
+
+            // A user can create a session while the disk index is loading.
+            // In-memory state is newer and therefore wins on ID collisions.
+            var sessionsByID = Dictionary(uniqueKeysWithValues: catalog.sessions.map { ($0.id, $0) })
+            for session in self.agentSessions { sessionsByID[session.id] = session }
+            self.agentSessions = sessionsByID.values.sorted { $0.updatedAt > $1.updatedAt }
+
+            var usageByID = Dictionary(uniqueKeysWithValues: catalog.usageSnapshots.map { ($0.id, $0) })
+            for snapshot in self.agentUsageSnapshots { usageByID[snapshot.id] = snapshot }
+            self.agentUsageSnapshots = usageByID.values.sorted { $0.updatedAt > $1.updatedAt }
+
+            // Empty placeholders are filtered by sidebar visibility instead
+            // of being deleted from disk. Automatic deletion previously made
+            // a stale/cross-process index capable of erasing real history.
+        }
     }
 
     deinit {
@@ -704,8 +725,8 @@ final class AppState: ObservableObject {
         // crashes the Swift Testing harness, where release sites are
         // sometimes nonisolated and the precondition trips. The
         // background-runtime task is now cancelled explicitly at the
-        // call sites that retire a session (`deleteAgentSession`,
-        // `pruneEmptyAgentSessions`, etc), not on deinit — see the
+        // call sites that retire a session (`deleteAgentSession`, app
+        // termination, etc), not on deinit — see the
         // commentary on those for the new policy.
         for url in securityScopedAccessURLs {
             url.stopAccessingSecurityScopedResource()

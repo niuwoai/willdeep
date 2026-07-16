@@ -737,10 +737,16 @@ final class MobileGatewayCoordinator: ObservableObject {
 
     nonisolated private static func terminateGatewayProcess(_ process: Process?) {
         guard let process, process.isRunning else { return }
+        let pid = process.processIdentifier
         process.terminate()
-        usleep(250_000)
-        guard process.isRunning else { return }
-        kill(process.processIdentifier, SIGKILL)
+        // Escalate to SIGKILL off-thread: callers are MainActor sync paths
+        // (stop / fail / mode switch / deinit), and the old usleep(250ms)
+        // froze the main thread on every one of them.
+        DispatchQueue.global(qos: .utility).asyncAfter(deadline: .now() + 0.25) {
+            if kill(pid, 0) == 0 {
+                kill(pid, SIGKILL)
+            }
+        }
     }
 
     nonisolated private static func terminateGatewayPID(_ pid: pid_t) {

@@ -15,7 +15,7 @@
 
 import Foundation
 
-enum DatabaseToolingPreflight {
+nonisolated enum DatabaseToolingPreflight {
     enum Target {
         case csvOrParquet(path: String)
         case duckdb(path: String)
@@ -80,9 +80,16 @@ enum DatabaseToolingPreflight {
         throw Failure.unparseableConnection(raw)
     }
 
-    /// 对一个 Target 同步跑相应 CLI 的 `--version` 检测；对文件型 target
-    /// 顺便检查文件存在。
-    static func check(_ target: Target) throws {
+    /// 对一个 Target 跑相应 CLI 的 `--version` 检测；对文件型 target
+    /// 顺便检查文件存在。Detached：探测是 10s 超时的同步子进程，
+    /// 调用方在 MainActor 上。
+    static func check(_ target: Target) async throws {
+        try await Task.detached(priority: .userInitiated) {
+            try checkSync(target)
+        }.value
+    }
+
+    private static func checkSync(_ target: Target) throws {
         switch target {
         case .csvOrParquet(let path), .duckdb(let path):
             try requireFile(path)
@@ -153,18 +160,11 @@ enum DatabaseToolingPreflight {
         let process = Process()
         process.launchPath = launchPath
         process.arguments = arguments
-        let outPipe = Pipe()
-        let errPipe = Pipe()
-        process.standardOutput = outPipe
-        process.standardError = errPipe
         do {
-            try process.run()
+            let output = try AgentSubprocess.runSynchronously(process, timeout: 10)
+            return RunResult(exitCode: output.exitStatus, stdout: output.stdoutText, stderr: output.stderrText)
         } catch {
             return RunResult(exitCode: -1, stdout: "", stderr: "Failed to launch: \(error.localizedDescription)")
         }
-        process.waitUntilExit()
-        let stdout = String(data: outPipe.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? ""
-        let stderr = String(data: errPipe.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? ""
-        return RunResult(exitCode: process.terminationStatus, stdout: stdout, stderr: stderr)
     }
 }

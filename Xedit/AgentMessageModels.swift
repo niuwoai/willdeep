@@ -162,6 +162,13 @@ nonisolated struct AgentImageAttachment: Codable, Equatable, Identifiable, Senda
         try container.encodeIfPresent(createdAt, forKey: .createdAt)
     }
 
+    /// Decoded inline bytes, if any — nil for purely file-backed images.
+    /// Unlike `dataBase64`, this never touches disk, so it is safe on
+    /// render-frequency paths.
+    nonisolated var inlineImageData: Data? {
+        inlineDataBase64.flatMap { Data(base64Encoded: $0) }
+    }
+
     /// Image bytes as base64, read from the inline copy if present, otherwise
     /// lazily from the file-backed copy.
     nonisolated var dataBase64: String {

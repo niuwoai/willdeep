@@ -312,6 +312,16 @@ private struct AgentSidePanelTerminalContentView: View {
                 }
                 .focusable(false)
 
+                Button {
+                    controller.cloneShortcut(
+                        id: shortcut.id,
+                        title: L10n.AgentTerminal.shortcutCopyTitle(shortcut.title)
+                    )
+                } label: {
+                    Label(L10n.AgentTerminal.shortcutClone, systemImage: "plus.square.on.square")
+                }
+                .focusable(false)
+
                 Divider()
 
                 Button(role: .destructive) {
@@ -434,14 +444,13 @@ private struct AgentSidePanelTerminalContentView: View {
     }
 
     private func editShortcut(_ shortcut: TerminalShortcut) {
-        controller.prepareShortcutsFileForEditing()
-        let url = TerminalShortcutStore.fileURL
-        guard appState.openEditorFile(url, allowLargeFile: true, performsSafetyChecks: false) else {
+        guard let url = controller.prepareShortcutFileForEditing(id: shortcut.id) else {
             NSSound.beep()
             return
         }
-        if let line = TerminalShortcutStore.lineNumber(for: shortcut.id, in: appState.fileContent) {
-            appState.navigateEditor(toLine: line)
+        guard appState.openEditorFile(url, allowLargeFile: true, performsSafetyChecks: false) else {
+            NSSound.beep()
+            return
         }
         if !appState.showEditor() {
             openWindow(value: url)

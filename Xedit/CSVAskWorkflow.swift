@@ -28,7 +28,7 @@ struct CSVAskWorkflow: WorkflowDefinition {
         let target: DatabaseToolingPreflight.Target
         do {
             target = try DatabaseToolingPreflight.parseTarget(path)
-            try DatabaseToolingPreflight.check(target)
+            try await DatabaseToolingPreflight.check(target)
         } catch let failure as DatabaseToolingPreflight.Failure {
             return failure.errorDescription ?? "Preflight failed."
         }

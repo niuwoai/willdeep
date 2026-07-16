@@ -12,6 +12,7 @@ import Foundation
 import UserNotifications
 
 final class WillDeepAppDelegate: NSObject, NSApplicationDelegate {
+    private var isFlushingBeforeTermination = false
     func applicationDidFinishLaunching(_ notification: Notification) {
         // Wire the shared some.im login store before anything reads credentials:
         // sets the shared Keychain access group, migrates legacy per-app keys,
@@ -35,15 +36,22 @@ final class WillDeepAppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationWillTerminate(_ notification: Notification) {
         AIPipe.flush()
-        // Session persists are asynchronous; drain the write queue so
-        // quitting right after a turn can't drop the last messages.
-        AgentSessionStore.flushPendingWrites()
     }
 
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
+        guard !isFlushingBeforeTermination else { return .terminateLater }
+        isFlushingBeforeTermination = true
         AIPipe.flush()
-        AgentSessionStore.flushPendingWrites()
-        return .terminateNow
+        // Do not synchronously block AppKit while a large transcript is still
+        // encoding/writing. macOS keeps the app alive until we reply, while the
+        // main run loop remains responsive instead of showing a beachball.
+        DispatchQueue.global(qos: .utility).async {
+            AgentSessionStore.flushPendingWrites()
+            DispatchQueue.main.async {
+                sender.reply(toApplicationShouldTerminate: true)
+            }
+        }
+        return .terminateLater
     }
 }
 

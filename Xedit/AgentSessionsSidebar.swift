@@ -108,31 +108,39 @@ struct AgentSessionsSidebar: View {
             // strip duplicated information available elsewhere and consumed
             // valuable vertical space in the sidebar.
             Color.clear.frame(height: trafficLightReserve)
-            TimelineView(.periodic(from: .now, by: 60)) { timeline in
-                ScrollView {
-                    VStack(alignment: .leading, spacing: 0) {
-                        primaryActions
-                        Spacer().frame(height: 18)
-                        AgentRoutinesSidebarSection()
-                        Spacer().frame(height: 4)
-                        workspacesSection(now: timeline.date)
-                        if appState.agentSessions.isEmpty {
-                            Text(L10n.Sidebar.emptyState)
-                                .font(AgentDesign.secondaryFont)
-                                .foregroundStyle(.secondary)
-                                .padding(.horizontal, 14)
-                                .padding(.top, 16)
-                        }
+            ScrollView {
+                // Workspace groups are the expensive unit: each contains up
+                // to five transcript rows plus badges/actions. Keeping them
+                // as direct LazyVStack children prevents off-screen projects
+                // from participating in every AttributeGraph layout pass.
+                LazyVStack(alignment: .leading, spacing: 0) {
+                    primaryActions
+                    Spacer().frame(height: 18)
+                    AgentRoutinesSidebarSection()
+                    Spacer().frame(height: 4)
+                    workspacesHeader
+                    ForEach(groupedSessions) { group in
+                        workspaceGroup(group)
                     }
-                    .padding(.vertical, 8)
-                    // 父 AgentModeView 给了 `.frame(width: sidebarWidth)`,
-                    // 但 SwiftUI ScrollView 里的内容若声明了更大的固有宽
-                    // 度(比如长 session title 跑出 truncation 边界),会向
-                    // 右溢出到 chat 区域。把内容显式钉到 maxWidth=.infinity
-                    // 让 ScrollView 知道它就只有那么宽,内部 Text 会按
-                    // truncationMode 收尾。
-                    .frame(maxWidth: .infinity, alignment: .leading)
+                    if appState.agentSessions.isEmpty {
+                        Text(L10n.Sidebar.emptyState)
+                            .font(AgentDesign.secondaryFont)
+                            .foregroundStyle(.secondary)
+                            .padding(.horizontal, 14)
+                            .padding(.top, 16)
+                    }
                 }
+                // 30pt 交通灯安全区继续保留；顶部只补 3pt 呼吸感，
+                // 避免再叠加完整的 8pt，让“新聊天”显得离顶部过远。
+                .padding(.top, 3)
+                .padding(.bottom, 8)
+                // 父 AgentModeView 给了 `.frame(width: sidebarWidth)`,
+                // 但 SwiftUI ScrollView 里的内容若声明了更大的固有宽
+                // 度(比如长 session title 跑出 truncation 边界),会向
+                // 右溢出到 chat 区域。把内容显式钉到 maxWidth=.infinity
+                // 让 ScrollView 知道它就只有那么宽,内部 Text 会按
+                // truncationMode 收尾。
+                .frame(maxWidth: .infinity, alignment: .leading)
             }
             someIMAccountFooter
         }
@@ -150,6 +158,29 @@ struct AgentSessionsSidebar: View {
         .task(id: someIMAccount?.email) {
             await runAutomaticSomeIMAccountRefreshLoop()
         }
+        .alert(
+            L10n.Sidebar.sessionUnavailableAlertTitle,
+            isPresented: sessionUnavailableAlertBinding
+        ) {
+            Button(L10n.Sidebar.sessionUnavailableConfirm, role: .cancel) {
+                appState.dismissAgentSessionLoadFailure()
+            }
+        } message: {
+            Text(L10n.Sidebar.sessionUnavailableAlertMessage(
+                appState.agentSessionLoadFailure?.title ?? L10n.Sidebar.defaultSessionTitle
+            ))
+        }
+    }
+
+    private var sessionUnavailableAlertBinding: Binding<Bool> {
+        Binding(
+            get: { appState.agentSessionLoadFailure != nil },
+            set: { isPresented in
+                if !isPresented {
+                    appState.dismissAgentSessionLoadFailure()
+                }
+            }
+        )
     }
 
     @ViewBuilder
@@ -189,42 +220,36 @@ struct AgentSessionsSidebar: View {
         }
     }
 
-    private func workspacesSection(now: Date) -> some View {
-        VStack(alignment: .leading, spacing: 0) {
-            HStack {
-                Text(L10n.Sidebar.workspaceHeader)
-                    .font(AgentDesign.sidebarSectionFont)
+    private var workspacesHeader: some View {
+        HStack {
+            Text(L10n.Sidebar.workspaceHeader)
+                .font(AgentDesign.sidebarSectionFont)
+                .foregroundStyle(.secondary)
+                .textCase(.uppercase)
+            Spacer(minLength: 0)
+            // 标题行右侧"打开新工作区"入口。和 Composer 下方
+            // WorkspacePickerPill 的 "Choose folder…" 走同一条路：
+            // 选完目录后**立刻**新建一个 Agent 会话并锚到这个
+            // workspace 路径，分组立刻出现在下面的列表里——而不是
+            // 只切了根目录，让用户再手动 New Chat 一次才看到分组。
+            Button {
+                appState.openFolderAndStartAgentSession()
+            } label: {
+                Image(systemName: "folder.badge.plus")
+                    .font(.system(size: 11, weight: .semibold))
                     .foregroundStyle(.secondary)
-                    .textCase(.uppercase)
-                Spacer(minLength: 0)
-                // 标题行右侧"打开新工作区"入口。和 Composer 下方
-                // WorkspacePickerPill 的 "Choose folder…" 走同一条路：
-                // 选完目录后**立刻**新建一个 Agent 会话并锚到这个
-                // workspace 路径，分组立刻出现在下面的列表里——而不是
-                // 只切了根目录，让用户再手动 New Chat 一次才看到分组。
-                Button {
-                    appState.openFolderAndStartAgentSession()
-                } label: {
-                    Image(systemName: "folder.badge.plus")
-                        .font(.system(size: 11, weight: .semibold))
-                        .foregroundStyle(.secondary)
-                        .frame(width: 16, height: 16)
-                        .contentShape(Rectangle())
-                }
-                .buttonStyle(.plain)
-                .help(L10n.Sidebar.workspaceHeaderOpenTooltip)
+                    .frame(width: 16, height: 16)
+                    .contentShape(Rectangle())
             }
-            .padding(.horizontal, 14)
-            .padding(.bottom, 6)
-
-            ForEach(groupedSessions) { group in
-                workspaceGroup(group, now: now)
-            }
+            .buttonStyle(.plain)
+            .help(L10n.Sidebar.workspaceHeaderOpenTooltip)
         }
+        .padding(.horizontal, 14)
+        .padding(.bottom, 6)
     }
 
     @ViewBuilder
-    private func workspaceGroup(_ group: SidebarWorkspaceGroup, now: Date) -> some View {
+    private func workspaceGroup(_ group: SidebarWorkspaceGroup) -> some View {
         let palette = appState.editorSettings.interfaceSkin.palette
         let workspace = group.id
         let sessions = group.sessions
@@ -316,7 +341,7 @@ struct AgentSessionsSidebar: View {
 
             if !isCollapsed {
                 ForEach(visible) { session in
-                    sessionRow(session, now: now)
+                    sessionRow(session)
                 }
 
                 if activeSessions.count > initialRowCount {
@@ -336,8 +361,7 @@ struct AgentSessionsSidebar: View {
                     archivedDisclosure(
                         workspace: workspace,
                         sessions: archivedSessions,
-                        isExpanded: archivedExpanded,
-                        now: now
+                        isExpanded: archivedExpanded
                     )
                 }
             }
@@ -361,8 +385,7 @@ struct AgentSessionsSidebar: View {
     private func archivedDisclosure(
         workspace: String,
         sessions: [AgentSession],
-        isExpanded: Bool,
-        now: Date
+        isExpanded: Bool
     ) -> some View {
         Button {
             setArchivedGroupExpanded(workspace, expanded: !isExpanded)
@@ -387,13 +410,13 @@ struct AgentSessionsSidebar: View {
 
         if isExpanded {
             ForEach(sessions) { session in
-                sessionRow(session, now: now)
+                sessionRow(session)
             }
         }
     }
 
     @ViewBuilder
-    private func sessionRow(_ session: AgentSession, now: Date) -> some View {
+    private func sessionRow(_ session: AgentSession) -> some View {
         let palette = appState.editorSettings.interfaceSkin.palette
         let isActive = appState.activeAgentSessionID == session.id
         let isHovered = (hoveredSessionID == session.id)

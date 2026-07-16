@@ -168,40 +168,22 @@ enum AgentLarkCLI {
         process.arguments = arguments
         process.environment = AgentToolRunner.shellEnvironment()
 
-        let stdoutPipe = Pipe()
-        let stderrPipe = Pipe()
-        process.standardOutput = stdoutPipe
-        process.standardError = stderrPipe
-
+        let output: AgentSubprocess.Output
         do {
-            try process.run()
+            output = try AgentSubprocess.runSynchronously(
+                process,
+                timeout: timeout,
+                stdoutLimit: 2 * 1_024 * 1_024,
+                stderrLimit: 512 * 1_024
+            )
         } catch {
             return CommandOutcome(exitStatus: -1, stdout: "", stderr: error.localizedDescription, timedOut: false)
         }
-
-        let runState = LarkCLIRunState()
-        let timeoutWorkItem = DispatchWorkItem {
-            runState.markTimedOut()
-            if process.isRunning {
-                process.terminate()
-            }
-            DispatchQueue.global(qos: .utility).asyncAfter(deadline: .now() + 2) {
-                if process.isRunning {
-                    kill(process.processIdentifier, SIGKILL)
-                }
-            }
-        }
-        DispatchQueue.global(qos: .utility).asyncAfter(deadline: .now() + timeout, execute: timeoutWorkItem)
-        process.waitUntilExit()
-        timeoutWorkItem.cancel()
-
-        let stdout = String(data: stdoutPipe.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? ""
-        let stderr = String(data: stderrPipe.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? ""
         return CommandOutcome(
-            exitStatus: process.terminationStatus,
-            stdout: AgentSandboxPolicy.scrub(stdout),
-            stderr: AgentSandboxPolicy.scrub(stderr),
-            timedOut: runState.didTimeout
+            exitStatus: output.exitStatus,
+            stdout: AgentSandboxPolicy.scrub(output.stdoutText),
+            stderr: AgentSandboxPolicy.scrub(output.stderrText),
+            timedOut: output.timedOut
         )
     }
 
@@ -236,20 +218,4 @@ enum AgentLarkCLI {
         }
     }
 
-    private nonisolated final class LarkCLIRunState: @unchecked Sendable {
-        private let lock = NSLock()
-        private var timedOut = false
-
-        var didTimeout: Bool {
-            lock.lock()
-            defer { lock.unlock() }
-            return timedOut
-        }
-
-        func markTimedOut() {
-            lock.lock()
-            timedOut = true
-            lock.unlock()
-        }
-    }
 }

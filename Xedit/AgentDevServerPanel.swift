@@ -51,9 +51,34 @@ struct AgentDevServerPanel: View {
                 Text("Dev Server")
                     .font(.system(size: 13, weight: .semibold))
                 Spacer(minLength: 0)
-                Text("\(devJobs.filter(\.isAlive).count) running")
+                Text("\(runningServerJobs.count) running")
                     .font(.caption2.monospacedDigit())
                     .foregroundStyle(.secondary)
+                if previewURL != nil {
+                    Button(action: openPreview) {
+                        Image(systemName: "safari")
+                            .font(.caption2)
+                    }
+                    .buttonStyle(.borderless)
+                    .focusable(false)
+                    .help("在侧栏预览工作区页面")
+                }
+                if !runningServerJobs.isEmpty {
+                    Button(action: restartAllServers) {
+                        Image(systemName: "arrow.clockwise")
+                            .font(.caption2)
+                    }
+                    .buttonStyle(.borderless)
+                    .focusable(false)
+                    .help("重启工作区 Dev Server")
+                    Button(action: stopAllServers) {
+                        Image(systemName: "stop.fill")
+                            .font(.caption2)
+                    }
+                    .buttonStyle(.borderless)
+                    .focusable(false)
+                    .help("停止工作区 Dev Server")
+                }
             }
             Text("绑定当前工作区的前端、后端和 tail -f 日志任务。AI 或你在这里启动的后台任务都会出现在同一个列表里。")
                 .font(.caption2)
@@ -216,13 +241,7 @@ struct AgentDevServerPanel: View {
     }
 
     private var workspaceRootURL: URL? {
-        if let path = appState.activeRuntime?.workspaceLocation?.localPath, !path.isEmpty {
-            return URL(fileURLWithPath: path).standardizedFileURL
-        }
-        if let path = appState.activeRuntime?.workspaceRootPath, !path.isEmpty {
-            return URL(fileURLWithPath: path).standardizedFileURL
-        }
-        return appState.rootDirectory?.standardizedFileURL
+        AgentWorkspaceDevServerSupport.workspaceRootURL(from: appState)
     }
 
     private var devJobs: [AgentBackgroundJob] {
@@ -231,6 +250,20 @@ struct AgentDevServerPanel: View {
             .filter { job in
                 job.isAlive || Self.looksLikeDevServerCommand(job.command)
             }
+    }
+
+    private var runningServerJobs: [AgentBackgroundJob] {
+        devJobs.filter { job in
+            job.isAlive
+                && Self.looksLikeDevServerCommand(job.command)
+                && !Self.looksLikeTailCommand(job.command)
+        }
+    }
+
+    private var previewURL: URL? {
+        AgentWorkspaceDevServerSupport.previewURL(for: runningServerJobs) { job in
+            appState.agentJobRegistry.output(id: job.id, tailLines: 120)
+        }
     }
 
     private func refreshCommands() {
@@ -283,6 +316,24 @@ struct AgentDevServerPanel: View {
         )
     }
 
+    private func openPreview() {
+        guard let previewURL else { return }
+        let controller = AgentEmbeddedBrowserController.shared
+        controller.address = previewURL.absoluteString
+        if controller.isReady {
+            try? controller.navigate(to: previewURL.absoluteString)
+        }
+        appState.agentSidePanelKind = .embeddedBrowser
+    }
+
+    private func restartAllServers() {
+        runningServerJobs.forEach(restart)
+    }
+
+    private func stopAllServers() {
+        runningServerJobs.forEach { _ = appState.agentJobRegistry.kill(id: $0.id) }
+    }
+
     private func runCommand(
         _ command: String,
         workingDirectory: URL?,
@@ -328,21 +379,12 @@ struct AgentDevServerPanel: View {
     }
 
     private static func looksLikeTailCommand(_ command: String) -> Bool {
-        command.lowercased().contains("tail -f") || command.lowercased().contains("tail -F".lowercased())
+        AgentWorkspaceDevServerSupport.looksLikeTailCommand(command)
     }
 
     private static func looksLikeDevServerCommand(_ command: String) -> Bool {
-        let lower = command.lowercased()
-        let needles = [
-            "yarn dev", "yarn start", "yarn serve",
-            "npm run dev", "npm start", "npm run serve",
-            "pnpm dev", "pnpm start", "pnpm serve", "bun dev",
-            "vite", "next dev", "react-scripts start", "vue-cli-service serve",
-            "tail -f", "tail -F", "air", "gin --", "go run",
-            "rails server", "rails s", "uvicorn", "fastapi", "nodemon",
-            "python -m http.server", "python3 -m http.server"
-        ]
-        return needles.contains { lower.contains($0.lowercased()) }
+        AgentWorkspaceDevServerSupport.looksLikeDevServerCommand(command)
+            || AgentWorkspaceDevServerSupport.looksLikeTailCommand(command)
     }
 
     private func normalizedCommand(_ command: String) -> String {

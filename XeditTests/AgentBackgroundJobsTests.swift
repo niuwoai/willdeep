@@ -739,6 +739,139 @@ struct AgentBackgroundJobsTests {
         #expect(verifying.autoOpenDigest == baseline.autoOpenDigest)
     }
 
+    @Test
+    func conversationMediaSummaryIsStrictlySessionScoped() {
+        let firstRuntimeID = UUID()
+        let secondRuntimeID = UUID()
+        let firstTask = AgentMediaTask(
+            provider: .someIM,
+            kind: .imageGeneration,
+            title: "first session image",
+            runtimeID: firstRuntimeID,
+            status: .succeeded
+        )
+        let secondTask = AgentMediaTask(
+            provider: .replicate,
+            kind: .videoGeneration,
+            title: "second session video",
+            runtimeID: secondRuntimeID,
+            status: .processing
+        )
+        let canceledTask = AgentMediaTask(
+            provider: .local,
+            kind: .imageEdit,
+            title: "canceled",
+            runtimeID: firstRuntimeID,
+            status: .canceled
+        )
+
+        let scoped = AgentSessionMediaSummary.scopedTasks(
+            [firstTask, secondTask, canceledTask],
+            runtimeID: firstRuntimeID
+        )
+
+        #expect(scoped.map(\.id) == [firstTask.id])
+    }
+
+    @Test
+    func devServerPreviewUsesReportedWorkspaceURL() throws {
+        let job = makeStubJob(command: "yarn dev", workingDirectoryPath: "/tmp/project")
+
+        let url = try #require(
+            AgentWorkspaceDevServerSupport.previewURL(for: [job]) { _ in
+                "Local: http://localhost:4317/"
+            }
+        )
+
+        #expect(url.absoluteString == "http://localhost:4317/")
+    }
+
+    @Test
+    func devServerPreviewFallsBackToCommandPort() throws {
+        let explicit = makeStubJob(command: "yarn dev --port 4321")
+        let viteDefault = makeStubJob(command: "vite")
+
+        let explicitURL = try #require(
+            AgentWorkspaceDevServerSupport.previewURL(for: [explicit]) { _ in "" }
+        )
+        let defaultURL = try #require(
+            AgentWorkspaceDevServerSupport.previewURL(for: [viteDefault]) { _ in "" }
+        )
+
+        #expect(explicitURL.port == 4321)
+        #expect(defaultURL.port == 5173)
+    }
+
+    @Test
+    func activityCardDismissalKeysOnlyChangeForMeaningfulUpdates() {
+        let runtimeID = UUID()
+        let taskID = UUID()
+        let earlyTask = AgentMediaTask(
+            id: taskID,
+            provider: .someIM,
+            kind: .imageGeneration,
+            title: "image",
+            runtimeID: runtimeID,
+            status: .processing,
+            updatedAt: Date(timeIntervalSinceReferenceDate: 10)
+        )
+        var polledTask = earlyTask
+        polledTask.updatedAt = Date(timeIntervalSinceReferenceDate: 20)
+        let earlyMedia = AgentSessionMediaSummary(
+            tasks: [earlyTask],
+            artifacts: [],
+            activeCount: 1,
+            attentionCount: 0,
+            imageCount: 0,
+            videoCount: 0
+        )
+        let polledMedia = AgentSessionMediaSummary(
+            tasks: [polledTask],
+            artifacts: [],
+            activeCount: 1,
+            attentionCount: 0,
+            imageCount: 0,
+            videoCount: 0
+        )
+
+        #expect(earlyMedia.identityDigest != polledMedia.identityDigest)
+        #expect(earlyMedia.dismissalDigest == polledMedia.dismissalDigest)
+
+        var noisyJob = makeStubJob(command: "yarn dev", outputByteCount: 12)
+        let quietSummary = AgentWorkspaceDevServerSummary(
+            workspaceRoot: URL(fileURLWithPath: "/tmp/project"),
+            jobs: [noisyJob],
+            previewURL: URL(string: "http://127.0.0.1:5173")
+        )
+        noisyJob.outputByteCount = 4_096
+        let noisySummary = AgentWorkspaceDevServerSummary(
+            workspaceRoot: URL(fileURLWithPath: "/tmp/project"),
+            jobs: [noisyJob],
+            previewURL: URL(string: "http://127.0.0.1:5173")
+        )
+
+        #expect(quietSummary.identityDigest != noisySummary.identityDigest)
+        #expect(quietSummary.dismissalDigest == noisySummary.dismissalDigest)
+
+        let firstArtifacts = AgentConversationActivitySnapshot(
+            sessionID: runtimeID,
+            sessionArtifacts: [URL(fileURLWithPath: "/tmp/a.html")],
+            mediaSummary: nil,
+            devServerSummary: nil
+        )
+        let newArtifacts = AgentConversationActivitySnapshot(
+            sessionID: runtimeID,
+            sessionArtifacts: [
+                URL(fileURLWithPath: "/tmp/a.html"),
+                URL(fileURLWithPath: "/tmp/b.png"),
+            ],
+            mediaSummary: nil,
+            devServerSummary: nil
+        )
+
+        #expect(firstArtifacts.artifactDismissalKey != newArtifacts.artifactDismissalKey)
+    }
+
     // MARK: - Helpers
 
     /// Poll the registry until the job leaves `.running` or the
