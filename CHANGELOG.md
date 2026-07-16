@@ -12,7 +12,7 @@
 
 ### Tests
 
-- 新增表格首尾边距与后续正文排版回归，覆盖表格中间行不继承块级 margin，以及表后正文的字号、行距、段前和段后间距与表前正文一致；`AgentChatHistoryRendererTests` 58 项全部通过。
+- 新增表格首尾边距与后续正文排版回归，覆盖表格中间行不继承块级 margin，以及表后正文的字号、行距、段前和段后间距与表前正文一致；`AgentChatHistoryRendererTests` 59 项全部通过。
 
 ---
 

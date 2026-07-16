@@ -1410,12 +1410,12 @@ struct AgentChatHistoryRendererTests {
             effectiveRange: nil
         ) as? NSParagraphStyle)
         #expect(paragraphStyle.lineSpacing >= 2)
-        // 用户反馈：表格紧贴前后正文一团糟。`tableBlockParagraphStyle`
-        // 必须在该段范围内同时设置 paragraphSpacingBefore（上 margin）
-        // 和 paragraphSpacing（下 margin）。两个 > 0 才算正常生效；
-        // 别的回归会把其中一个意外清零。
+        // 表格首行保留块级上 margin，但不能把下 margin 也落在首行；
+        // 否则每一行都会被共享段落样式撑高。末行下 margin 与中间行
+        // 零 margin 由 tableMarginsDoNotInflateRowsOrChangeFollowingProseRhythm
+        // 完整覆盖。
         #expect(paragraphStyle.paragraphSpacingBefore > 0)
-        #expect(paragraphStyle.paragraphSpacing > 0)
+        #expect(paragraphStyle.paragraphSpacing == 0)
     }
 
     @Test
