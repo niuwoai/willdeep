@@ -1,5 +1,26 @@
 # Changelog
 
+## 1.175.0 - 2026-07-16
+
+### Added
+
+- **Agent 流式思考支持 Markdown。** 思考内容在生成过程中使用单一富文本视图增量渲染标题、列表、强调、链接和代码样式，避免逐段视图抖动，并与正式回答保持一致的阅读体验。
+- **Git worktree 默认隔离到应用目录。** 新建 worktree 统一存放在 `~/.willdeep/worktrees/<repository-hash>/<branch>`，不再污染仓库父目录；相同仓库和分支仍可稳定复用路径。
+
+### Fixed
+
+- 修复聊天 Markdown 表格与后续段落间距不足的问题，避免表格和正文视觉粘连。
+
+### Changed
+
+- 版本号从 **1.174.0** 提升为 **1.175.0**；Xcode App、Go agent、Help bundle、Computer Use Helper、Chrome 扩展、README badge、移动网关响应头契约与产品文档同步。
+
+### Tests
+
+- 补充流式思考 Markdown、表格块间距和 Git worktree 路径隔离回归测试。
+
+---
+
 ## 1.174.0 - 2026-07-16
 
 ### Added

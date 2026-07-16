@@ -8,6 +8,7 @@
 //
 
 import AppKit
+import CryptoKit
 import Foundation
 
 struct AgentGitWorktree: Identifiable, Equatable {
@@ -302,16 +303,25 @@ extension AppState {
     nonisolated static func defaultGitWorktreeURL(
         repositoryRoot: URL,
         branchName: String,
+        worktreeRoot: URL? = nil,
         fileManager: FileManager = .default
     ) -> URL {
         let baseName = repositoryRoot.lastPathComponent.isEmpty ? "repo" : repositoryRoot.lastPathComponent
         let slug = sanitizedGitWorktreeName(branchName)
-        let parent = repositoryRoot.deletingLastPathComponent()
-        let stem = "\(baseName)-\(slug)"
-        var candidate = parent.appendingPathComponent(stem, isDirectory: true)
+        let repositoryPath = repositoryRoot.standardizedFileURL.path
+        let repositoryHash = SHA256.hash(data: Data(repositoryPath.utf8))
+            .prefix(4)
+            .map { String(format: "%02x", $0) }
+            .joined()
+        let repositoryDirectoryName = "\(sanitizedGitWorktreeName(baseName))-\(repositoryHash)"
+        let root = worktreeRoot?.standardizedFileURL
+            ?? fileManager.homeDirectoryForCurrentUser
+                .appendingPathComponent(".willdeep/worktrees", isDirectory: true)
+        let parent = root.appendingPathComponent(repositoryDirectoryName, isDirectory: true)
+        var candidate = parent.appendingPathComponent(slug, isDirectory: true)
         var suffix = 2
         while fileManager.fileExists(atPath: candidate.path) {
-            candidate = parent.appendingPathComponent("\(stem)-\(suffix)", isDirectory: true)
+            candidate = parent.appendingPathComponent("\(slug)-\(suffix)", isDirectory: true)
             suffix += 1
         }
         return candidate.standardizedFileURL
@@ -319,14 +329,22 @@ extension AppState {
 
     nonisolated static func createGitWorktree(
         from directoryURL: URL,
-        branchName rawBranchName: String
+        branchName rawBranchName: String,
+        worktreeRoot: URL? = nil
     ) -> Result<AgentGitWorktreeCreateResult, AgentGitWorktreeFailure> {
         guard let repositoryRoot = findGitRepositoryRoot(startingAt: directoryURL) else {
             return .failure(AgentGitWorktreeFailure(message: "当前 workspace 不是 Git 仓库。"))
         }
 
         let branchName = sanitizedGitWorktreeName(rawBranchName)
-        let worktreeURL = defaultGitWorktreeURL(repositoryRoot: repositoryRoot, branchName: branchName)
+        let worktreeURL = defaultGitWorktreeURL(
+            repositoryRoot: repositoryRoot,
+            branchName: branchName,
+            worktreeRoot: worktreeRoot
+        )
+        if let failure = prepareGitWorktreeParentDirectory(for: worktreeURL) {
+            return .failure(failure)
+        }
         let existingBranch = runGitCommand(
             arguments: ["show-ref", "--verify", "--quiet", "refs/heads/\(branchName)"],
             in: repositoryRoot,
@@ -370,6 +388,7 @@ extension AppState {
     nonisolated static func createGitWorktreeStreaming(
         from directoryURL: URL,
         branchName rawBranchName: String,
+        worktreeRoot: URL? = nil,
         controller: AgentGitWorktreeProcessController,
         onOutput: @escaping @Sendable (String) -> Void
     ) -> Result<AgentGitWorktreeCreateResult, AgentGitWorktreeFailure> {
@@ -378,7 +397,14 @@ extension AppState {
         }
 
         let branchName = sanitizedGitWorktreeName(rawBranchName)
-        let worktreeURL = defaultGitWorktreeURL(repositoryRoot: repositoryRoot, branchName: branchName)
+        let worktreeURL = defaultGitWorktreeURL(
+            repositoryRoot: repositoryRoot,
+            branchName: branchName,
+            worktreeRoot: worktreeRoot
+        )
+        if let failure = prepareGitWorktreeParentDirectory(for: worktreeURL) {
+            return .failure(failure)
+        }
         let existingBranch = runGitCommand(
             arguments: ["show-ref", "--verify", "--quiet", "refs/heads/\(branchName)"],
             in: repositoryRoot,
@@ -460,6 +486,23 @@ extension AppState {
             isPrimary: false
         )
         return .success(AgentGitWorktreeCreateResult(worktree: created, output: output))
+    }
+
+    nonisolated private static func prepareGitWorktreeParentDirectory(
+        for worktreeURL: URL,
+        fileManager: FileManager = .default
+    ) -> AgentGitWorktreeFailure? {
+        do {
+            try fileManager.createDirectory(
+                at: worktreeURL.deletingLastPathComponent(),
+                withIntermediateDirectories: true
+            )
+            return nil
+        } catch {
+            return AgentGitWorktreeFailure(
+                message: "无法创建 WillDeep worktree 目录：\(error.localizedDescription)"
+            )
+        }
     }
 
     nonisolated private static func cleanupCancelledGitWorktree(

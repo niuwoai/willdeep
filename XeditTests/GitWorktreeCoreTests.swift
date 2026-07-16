@@ -580,12 +580,11 @@ struct GitWorktreeCoreTests {
 
     @Test("git worktree names are sanitized and default paths avoid collisions")
     func testGitWorktreeDefaultNaming() throws {
-        let root = FileManager.default.temporaryDirectory
+        let base = FileManager.default.temporaryDirectory
             .appendingPathComponent("willdeep_worktree_name_\(UUID().uuidString)")
-            .appendingPathComponent("Repo")
-        let existing = root.deletingLastPathComponent().appendingPathComponent("Repo-feature-name")
-        try FileManager.default.createDirectory(at: existing, withIntermediateDirectories: true)
-        defer { try? FileManager.default.removeItem(at: root.deletingLastPathComponent()) }
+        let repository = base.appendingPathComponent("sources/Repo")
+        let worktreeRoot = base.appendingPathComponent("home/.willdeep/worktrees")
+        defer { try? FileManager.default.removeItem(at: base) }
 
         #expect(AppState.sanitizedGitWorktreeName(" feature/name ! ") == "feature-name")
         #expect(AppState.defaultGitWorktreeBranchName(
@@ -598,8 +597,26 @@ struct GitWorktreeCoreTests {
             fallbackStem: "quiet-orbit",
             uniqueness: "B7C2"
         ) == "xedit-quiet-orbit-b7c2")
-        let next = AppState.defaultGitWorktreeURL(repositoryRoot: root, branchName: "feature/name !")
-        #expect(next.lastPathComponent == "Repo-feature-name-2")
+        let first = AppState.defaultGitWorktreeURL(
+            repositoryRoot: repository,
+            branchName: "feature/name !",
+            worktreeRoot: worktreeRoot
+        )
+        try FileManager.default.createDirectory(at: first, withIntermediateDirectories: true)
+        let next = AppState.defaultGitWorktreeURL(
+            repositoryRoot: repository,
+            branchName: "feature/name !",
+            worktreeRoot: worktreeRoot
+        )
+
+        #expect(
+            first.deletingLastPathComponent().deletingLastPathComponent().standardizedFileURL.path
+                == worktreeRoot.standardizedFileURL.path
+        )
+        #expect(first.deletingLastPathComponent().lastPathComponent.hasPrefix("Repo-"))
+        #expect(first.lastPathComponent == "feature-name")
+        #expect(next.lastPathComponent == "feature-name-2")
+        #expect(!first.path.hasPrefix(repository.deletingLastPathComponent().path))
     }
 
     @Test("git worktree checkout progress reads the latest percentage")
@@ -614,6 +631,7 @@ struct GitWorktreeCoreTests {
         let base = FileManager.default.temporaryDirectory
             .appendingPathComponent("willdeep_worktree_create_\(UUID().uuidString)")
         let repository = base.appendingPathComponent("main")
+        let worktreeRoot = base.appendingPathComponent("home/.willdeep/worktrees")
         try FileManager.default.createDirectory(at: repository, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: base) }
 
@@ -624,13 +642,19 @@ struct GitWorktreeCoreTests {
         try requireGit(["add", "README.md"], in: repository)
         try requireGit(["commit", "-m", "initial"], in: repository)
 
-        let created = AppState.createGitWorktree(from: repository, branchName: "feature test")
+        let created = AppState.createGitWorktree(
+            from: repository,
+            branchName: "feature test",
+            worktreeRoot: worktreeRoot
+        )
         guard case .success(let result) = created else {
             Issue.record("Expected worktree creation to succeed")
             return
         }
 
         #expect(result.worktree.branch == "feature-test")
+        #expect(result.worktree.url.path.hasPrefix(worktreeRoot.path + "/"))
+        #expect(!result.worktree.url.path.hasPrefix(repository.deletingLastPathComponent().path + "/main-"))
         #expect(FileManager.default.fileExists(atPath: result.worktree.url.appendingPathComponent(".git").path))
 
         let detectedRoot = AppState.findGitRepositoryRoot(startingAt: result.worktree.url)

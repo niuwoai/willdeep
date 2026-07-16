@@ -135,6 +135,82 @@ struct AgentChatHistoryRendererTests {
     }
 
     @Test
+    func tableMarginsDoNotInflateRowsOrChangeFollowingProseRhythm() throws {
+        let message = AgentMessage(
+            role: .assistant,
+            content: """
+            表格前的正文。
+
+            | 项目 | niuwo | sslcat |
+            | --- | --- | --- |
+            | 服务状态 | active | active |
+            | Error/Critical | 0 条 | 0 条 |
+
+            表格后的正文会自然换行，字号与行距必须和前文一致。
+            """
+        )
+
+        let rendered = AgentChatHistoryRenderer.render(
+            messages: [message],
+            isDark: false,
+            baseFontSize: 14
+        )
+        let string = rendered.string as NSString
+        let beforeRange = string.range(of: "表格前的正文")
+        let headerRange = string.range(of: "项目")
+        let separatorRange = string.range(of: "─┼─")
+        let lastRowRange = string.range(of: "Error/Critical")
+        let afterRange = string.range(of: "表格后的正文")
+        let beforeFont = try #require(rendered.attribute(
+            .font,
+            at: beforeRange.location,
+            effectiveRange: nil
+        ) as? NSFont)
+        let afterFont = try #require(rendered.attribute(
+            .font,
+            at: afterRange.location,
+            effectiveRange: nil
+        ) as? NSFont)
+        let beforeStyle = try #require(rendered.attribute(
+            .paragraphStyle,
+            at: beforeRange.location,
+            effectiveRange: nil
+        ) as? NSParagraphStyle)
+        let headerStyle = try #require(rendered.attribute(
+            .paragraphStyle,
+            at: headerRange.location,
+            effectiveRange: nil
+        ) as? NSParagraphStyle)
+        let separatorStyle = try #require(rendered.attribute(
+            .paragraphStyle,
+            at: separatorRange.location,
+            effectiveRange: nil
+        ) as? NSParagraphStyle)
+        let lastRowStyle = try #require(rendered.attribute(
+            .paragraphStyle,
+            at: lastRowRange.location,
+            effectiveRange: nil
+        ) as? NSParagraphStyle)
+        let afterStyle = try #require(rendered.attribute(
+            .paragraphStyle,
+            at: afterRange.location,
+            effectiveRange: nil
+        ) as? NSParagraphStyle)
+
+        #expect(headerStyle.paragraphSpacingBefore == AgentChatHistoryRenderer.MarkdownSpacing.tableParagraphBefore)
+        #expect(headerStyle.paragraphSpacing == 0)
+        #expect(separatorStyle.paragraphSpacingBefore == 0)
+        #expect(separatorStyle.paragraphSpacing == 0)
+        #expect(lastRowStyle.paragraphSpacingBefore == 0)
+        #expect(lastRowStyle.paragraphSpacing == AgentChatHistoryRenderer.MarkdownSpacing.tableParagraph)
+        #expect(afterFont.pointSize == beforeFont.pointSize)
+        #expect(afterStyle.lineSpacing == beforeStyle.lineSpacing)
+        #expect(afterStyle.lineSpacing == AgentChatHistoryLayoutMetrics.bodyLineSpacing)
+        #expect(afterStyle.paragraphSpacingBefore == beforeStyle.paragraphSpacingBefore)
+        #expect(afterStyle.paragraphSpacing == beforeStyle.paragraphSpacing)
+    }
+
+    @Test
     func streamingMarkdownUsesOneNewlineBetweenPlainParagraphs() {
         let rendered = AgentAssistantMarkdownRenderer.render(
             "实时第一段。\n\n实时第二段。",
@@ -144,6 +220,44 @@ struct AgentChatHistoryRendererTests {
         let plain = String(rendered.characters)
         #expect(plain.contains("实时第一段。\n实时第二段。"))
         #expect(!plain.contains("实时第一段。\n\n实时第二段。"))
+    }
+
+    @Test
+    func liveThinkingStreamingRendererParsesCommonMarkdownWhenEnabled() {
+        let rendered = AgentAssistantStreamingTextRenderer.render(
+            """
+            # 策划案
+
+            核心是 **天才萌宝**。
+
+            | 项目 | 内容 |
+            |---|---|
+            | 集数 | 80 集 |
+            """,
+            rendersMarkdown: true,
+            isDark: false,
+            baseFontSize: 14
+        )
+        let plain = String(rendered.characters)
+
+        #expect(plain.contains("策划案"))
+        #expect(plain.contains("天才萌宝"))
+        #expect(!plain.contains("# 策划案"))
+        #expect(!plain.contains("**天才萌宝**"))
+        #expect(plain.contains("项目 │ 内容"))
+        #expect(!plain.contains("|---|---|"))
+    }
+
+    @Test
+    func ordinaryAnswerStreamingRendererKeepsLowCostPlainTextPath() {
+        let rendered = AgentAssistantStreamingTextRenderer.render(
+            "# 标题与 **粗体**",
+            rendersMarkdown: false,
+            isDark: false,
+            baseFontSize: 14
+        )
+
+        #expect(String(rendered.characters) == "# 标题与 **粗体**")
     }
 
     @Test
@@ -1290,18 +1404,24 @@ struct AgentChatHistoryRendererTests {
         #expect(linkPayload.headers == payload.headers)
         #expect(linkPayload.rows == payload.rows)
 
-        let paragraphStyle = try #require(rendered.attribute(
+        let firstRowStyle = try #require(rendered.attribute(
             .paragraphStyle,
             at: tableRange.location,
             effectiveRange: nil
         ) as? NSParagraphStyle)
-        #expect(paragraphStyle.lineSpacing >= 2)
-        // 用户反馈：表格紧贴前后正文一团糟。`tableBlockParagraphStyle`
-        // 必须在该段范围内同时设置 paragraphSpacingBefore（上 margin）
-        // 和 paragraphSpacing（下 margin）。两个 > 0 才算正常生效；
-        // 别的回归会把其中一个意外清零。
-        #expect(paragraphStyle.paragraphSpacingBefore > 0)
-        #expect(paragraphStyle.paragraphSpacing > 0)
+        let lastRowRange = (rendered.string as NSString).range(of: "06-04 13:33")
+        let lastRowStyle = try #require(rendered.attribute(
+            .paragraphStyle,
+            at: lastRowRange.location,
+            effectiveRange: nil
+        ) as? NSParagraphStyle)
+        #expect(firstRowStyle.lineSpacing >= 2)
+        // 上下 margin 只落在整个表格的首行和末行，避免每一行都被
+        // paragraph spacing 撑开；表格块仍必须与前后正文明确分隔。
+        #expect(firstRowStyle.paragraphSpacingBefore > 0)
+        #expect(firstRowStyle.paragraphSpacing == 0)
+        #expect(lastRowStyle.paragraphSpacingBefore == 0)
+        #expect(lastRowStyle.paragraphSpacing > 0)
     }
 
     @Test
