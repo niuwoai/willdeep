@@ -4646,6 +4646,24 @@
         }
       }
     },
+    "agent-transcript-reader.load-earlier" : {
+      "comment" : "Link at the top of the transcript reader window that loads one more page of earlier messages; %1$lld = batch size to load, %2$lld = total earlier messages not shown yet",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Load %1$lld earlier messages (%2$lld not shown)"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "载入更早的 %1$lld 条消息（共 %2$lld 条未显示）"
+          }
+        }
+      }
+    },
     "agent-text-attachment.remove-help" : {
       "comment" : "Tooltip for removing a pasted text attachment from the composer",
       "extractionState" : "manual",

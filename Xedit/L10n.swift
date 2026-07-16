@@ -111,6 +111,13 @@ nonisolated enum L10n {
         static let quoteHelp = String(localized: "agent-generated-image.quote-help", defaultValue: "Reference this generated image in your next reply without uploading it again.")
     }
 
+    enum AgentTranscriptReader {
+        static func loadEarlier(_ batch: Int, _ hidden: Int) -> String {
+            let template = String(localized: "agent-transcript-reader.load-earlier", defaultValue: "Load %1$lld earlier messages (%2$lld not shown)")
+            return String(format: template, batch, hidden)
+        }
+    }
+
     enum ComputerUsePreview {
         static let close = String(localized: "computer-use-preview.close", defaultValue: "Close Computer Use preview")
         static let open = String(localized: "computer-use-preview.open", defaultValue: "Open latest Computer Use screenshot")
