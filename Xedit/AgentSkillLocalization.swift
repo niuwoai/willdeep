@@ -91,6 +91,11 @@ enum AgentSkillLocalization {
             description: "Control native macOS apps with clicks, typing, keyboard shortcuts, scrolling, dragging, and screenshots.",
             aliases: ["desktop automation", "mac app", "accessibility"]
         ),
+        "mac-app-docs-site": .init(
+            name: "Mac App Docs Site",
+            description: "Capture real macOS app workflows, write illustrated Markdown tutorials, and publish them through a documentation website.",
+            aliases: ["mac app documentation", "screenshot tutorial", "markdown docs", "documentation website"]
+        ),
         "daily-report": .init(
             name: "daily-report",
             description: "Generate a work journal for a day or week, grouped by project, decisions, mentions, and versions.",
@@ -266,6 +271,7 @@ enum AgentSkillLocalization {
     private static let zhHansMetadata: [String: AgentSkillLocalizedMetadata] = [
         "browser": .init(name: "浏览器自动化", description: "自动操作网页:导航、填表、点击按钮、提取数据和截图。", aliases: ["浏览器", "网页自动化", "Chrome", "PinchTab"]),
         "computer-use": .init(name: "电脑操作", description: "控制 macOS 原生应用:点击、输入、快捷键、滚动、拖拽和截图。", aliases: ["桌面自动化", "Mac 应用", "辅助功能"]),
+        "mac-app-docs-site": .init(name: "Mac App 图文文档站", description: "采集真实 macOS App 界面与流程截图，生成图文 Markdown 教程并接入文档网页。", aliases: ["Mac App 文档", "截图教程", "图文教程", "Markdown 文档站"]),
         "daily-report": .init(name: "工作日报", description: "生成按项目、决策、提及和版本分组的每日或每周工作日志。", aliases: ["日报", "复盘", "工作总结"]),
         "discord": .init(name: "Discord", description: "与 Discord 频道交互并管理 Discord 机器人集成。", aliases: ["机器人", "频道", "服务器"]),
         "design-to-code": .init(name: "Design to Code", description: "把选中的截图、视觉稿或 Figma 画面还原成高保真、响应式且经过验证的 Web 前端。", aliases: ["截图转代码", "设计转代码", "界面复刻", "视觉稿转前端"]),

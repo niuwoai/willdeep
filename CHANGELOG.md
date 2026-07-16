@@ -1,5 +1,22 @@
 # Changelog
 
+## 1.177.0-rc1 - 2026-07-17
+
+### Added
+
+- 新增内置 `mac-app-docs-site` 技能：可通过 WillDeep 或 Codex Desktop 的 Computer Use 能力采集真实 macOS App 界面与流程截图，生成带 front matter、章节导航、相对图片和安全说明的图文 Markdown 教程，并按目标项目既有模式接入文档网页。
+- 技能附带教程首页/章节模板、双宿主 Computer Use 适配说明、Markdown 与网页接入规范，以及 Ruby 文档审计器；审计器会检查章节顺序、链接、图片、本机绝对路径和孤儿资源，并同时生成 Markdown 与 JSON 报告。
+
+### Changed
+
+- 版本号从 **1.176.0-rc8** 提升为 **1.177.0-rc1**；Xcode App、Go agent、Help bundle、Computer Use Helper、Chrome 扩展、README badge、移动网关响应头契约与产品文档同步。
+
+### Tests
+
+- 通过 `skill-creator` 官方结构校验；以现有 `docs/willdeep-tutorial` 作为真实样例运行文档审计，9 个 Markdown 页面与 13 张界面图片全部通过，0 错误、0 警告；`AgentSkillDirectoryTests` 12 项定向测试通过，确认技能会被打包、发现并读取。
+
+---
+
 ## 1.176.0-rc8 - 2026-07-17
 
 ### Fixed

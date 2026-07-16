@@ -1,0 +1,4 @@
+interface:
+  display_name: "Mac App 图文文档站"
+  short_description: "采集 macOS App 界面流程并生成图文文档网页"
+  default_prompt: "Use $mac-app-docs-site to capture a macOS app workflow, write illustrated Markdown documentation, and generate the matching docs website."

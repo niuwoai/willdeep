@@ -35,6 +35,22 @@ struct AgentSkillDirectoryTests {
     }
 
     @Test
+    func bundledMacAppDocsSiteSkillIsDiscoveredAndReadable() throws {
+        AgentSkillSettingsStore.setSkillEnabled(identifier: "mac-app-docs-site", enabled: true)
+        let skill = try #require(AgentSkillDirectory.bundledSkill(identifier: "mac-app-docs-site"))
+        let body = try #require(AgentSkillDirectory.loadBody(for: skill))
+        let root = skill.url.deletingLastPathComponent()
+
+        #expect(skill.source == .bundled)
+        #expect(skill.description.contains("macOS app"))
+        #expect(body.contains("references/computer-use-adapters.md"))
+        #expect(body.contains("scripts/audit_docs.rb"))
+        #expect(FileManager.default.fileExists(atPath: root.appendingPathComponent("references/site-integration.md").path))
+        #expect(FileManager.default.fileExists(atPath: root.appendingPathComponent("assets/tutorial-index-template.md").path))
+        #expect(FileManager.default.fileExists(atPath: root.appendingPathComponent("scripts/audit_docs.rb").path))
+    }
+
+    @Test
     func bundledSwiftUIHangDiagnoseSkillIsDiscoveredAndReadable() throws {
         AgentSkillSettingsStore.setSkillEnabled(identifier: "swiftui-hang-diagnose", enabled: true)
         let skills = AgentSkillDirectory.list(includeDisabled: true)
