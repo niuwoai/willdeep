@@ -94,7 +94,6 @@ struct AgentStatsDashboard: View {
                 metricStrip
                 activitySection
                 detailSections
-                workbenchSection
                 funFact
             } else {
                 modelUsageList
@@ -153,14 +152,6 @@ struct AgentStatsDashboard: View {
 
     private var capabilityRows: [AgentCapabilityUsageRow] {
         AgentUsageStats.capabilityUsage(for: filteredUsageSnapshots)
-    }
-
-    private var weeklyDeliverables: [AgentWeeklyDeliverableRow] {
-        AgentUsageStats.weeklyDeliverables(for: appState.agentUsageSnapshots)
-    }
-
-    private var failedToolCallReviewRows: [AgentFailedToolCallReviewRow] {
-        AgentUsageStats.failedToolCallReview(for: appState.agentUsageSnapshots)
     }
 
     private var filteredUsageSnapshots: [AgentUsageSessionSnapshot] {
@@ -261,67 +252,6 @@ struct AgentStatsDashboard: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
             capabilitySection
                 .frame(maxWidth: .infinity, alignment: .leading)
-        }
-    }
-
-    private var workbenchSection: some View {
-        HStack(alignment: .top, spacing: 10) {
-            DashboardWorkbenchCard(
-                title: L10n.StatsDashboard.weeklyDeliverablesTitle,
-                subtitle: L10n.StatsDashboard.weeklyDeliverablesSubtitle,
-                symbol: "shippingbox",
-                tint: appState.editorSettings.interfaceSkin.palette.accent
-            ) {
-                if weeklyDeliverables.isEmpty {
-                    Text(L10n.StatsDashboard.weeklyDeliverablesEmpty)
-                        .font(.system(size: 10))
-                        .foregroundStyle(.secondary)
-                        .frame(maxWidth: .infinity, minHeight: 42, alignment: .leading)
-                } else {
-                    ForEach(weeklyDeliverables.prefix(3)) { artifact in
-                        HStack(spacing: 6) {
-                            Image(systemName: "doc")
-                                .font(.system(size: 10, weight: .medium))
-                                .foregroundStyle(.secondary)
-                                .frame(width: 13)
-                            Text(artifact.displayName)
-                                .font(.system(size: 10, weight: .medium))
-                                .lineLimit(1)
-                                .truncationMode(.middle)
-                            Spacer(minLength: 0)
-                            Text(L10n.StatsDashboard.deliverableSessionCount("\(artifact.sessionCount)"))
-                                .font(.system(size: 9))
-                                .foregroundStyle(.secondary)
-                        }
-                    }
-                }
-            }
-            DashboardWorkbenchCard(
-                title: L10n.StatsDashboard.failureReviewTitle,
-                subtitle: L10n.StatsDashboard.failureReviewSubtitle,
-                symbol: "exclamationmark.triangle",
-                tint: failedToolCallReviewRows.isEmpty ? .secondary : .orange
-            ) {
-                if failedToolCallReviewRows.isEmpty {
-                    Label(L10n.StatsDashboard.failureReviewEmpty, systemImage: "checkmark.circle")
-                        .font(.system(size: 10))
-                        .foregroundStyle(.secondary)
-                        .frame(maxWidth: .infinity, minHeight: 42, alignment: .leading)
-                } else {
-                    ForEach(failedToolCallReviewRows.prefix(2)) { failure in
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text(failure.toolName)
-                                .font(.system(size: 10, weight: .semibold, design: .monospaced))
-                                .lineLimit(1)
-                            Text(failure.errorSummary)
-                                .font(.system(size: 9))
-                                .foregroundStyle(.secondary)
-                                .lineLimit(1)
-                                .truncationMode(.tail)
-                        }
-                    }
-                }
-            }
         }
     }
 
@@ -660,40 +590,6 @@ private struct DashboardInsightRow: View {
                 .lineLimit(1)
                 .truncationMode(.middle)
         }
-    }
-}
-
-private struct DashboardWorkbenchCard<Content: View>: View {
-    let title: String
-    let subtitle: String
-    let symbol: String
-    let tint: Color
-    @ViewBuilder let content: Content
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 7) {
-            HStack(spacing: 6) {
-                Image(systemName: symbol)
-                    .font(.system(size: 10, weight: .semibold))
-                    .foregroundStyle(tint)
-                    .frame(width: 13)
-                Text(title)
-                    .font(.system(size: 11, weight: .semibold))
-                    .lineLimit(1)
-                Spacer(minLength: 0)
-            }
-            Text(subtitle)
-                .font(.system(size: 9))
-                .foregroundStyle(.secondary)
-                .lineLimit(1)
-            VStack(alignment: .leading, spacing: 5) {
-                content
-            }
-        }
-        .frame(maxWidth: .infinity, minHeight: 90, alignment: .topLeading)
-        .padding(9)
-        .background(Color.secondary.opacity(0.055))
-        .clipShape(RoundedRectangle(cornerRadius: 8))
     }
 }
 

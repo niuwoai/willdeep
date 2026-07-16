@@ -82,12 +82,48 @@ struct DesktopPetTests {
         )
         let cuteAnimation = DesktopPetAnimationValues(
             mood: .idle,
-            date: Date(timeIntervalSinceReferenceDate: 7.5)
+            date: Date(timeIntervalSinceReferenceDate: 5.2)
         )
 
-        #expect(quietAnimation.cuteEffectOpacity == 0)
-        #expect(cuteAnimation.cuteEffectOpacity > 0.99)
+        #expect(quietAnimation.ambientEffectPlan == nil)
+        #expect(cuteAnimation.ambientEffectPlan != nil)
         #expect(cuteAnimation.verticalOffset < quietAnimation.verticalOffset)
+    }
+
+    @Test
+    func ambientEffectsChooseExactlyOneKindPerCycle() {
+        let plans = (0..<64).map {
+            DesktopPetAmbientEffectPlan.make(cycleIndex: $0, progress: 0.5)
+        }
+
+        #expect(Set(plans.map(\.kind)).count == DesktopPetAmbientEffectKind.allCases.count)
+        #expect(plans.allSatisfy { $0.particleCount > 0 })
+    }
+
+    @Test
+    func lipEffectsVaryBetweenOneAndManyParticles() {
+        let lipPlans = (0..<256)
+            .map { DesktopPetAmbientEffectPlan.make(cycleIndex: $0, progress: 0.5) }
+            .filter { $0.kind == .lips }
+
+        #expect(lipPlans.contains { $0.particleCount == 1 })
+        #expect(lipPlans.contains { $0.particleCount > 1 })
+    }
+
+    @Test
+    func ambientParticlesGrowThenShrinkAndFade() {
+        let plan = DesktopPetAmbientEffectPlan.make(cycleIndex: 3, progress: 0.5)
+
+        #expect(plan.particleProgress(at: 0) == 0.5)
+        #expect(sin(plan.particleProgress(at: 0) * .pi) > 0.99)
+        #expect(sin(DesktopPetAmbientEffectPlan.make(cycleIndex: 3, progress: 1).particleProgress(at: 0) * .pi) < 0.001)
+    }
+
+    @Test
+    func automaticJumpDelayStaysInsidePlayfulRange() {
+        #expect(DesktopPetAutonomy.jumpDelay(unitInterval: -1) == DesktopPetAutonomy.minimumJumpDelay)
+        #expect(DesktopPetAutonomy.jumpDelay(unitInterval: 1) == DesktopPetAutonomy.maximumJumpDelay)
+        #expect(DesktopPetAutonomy.jumpDelay(unitInterval: 0.5) == 23)
     }
 
     @Test
@@ -219,7 +255,7 @@ struct DesktopPetTests {
     func renderDesktopPetAnimationShowcaseForDesignQA() throws {
         let outputPath = ProcessInfo.processInfo.environment["WILLDEEP_DESKTOP_PET_ANIMATION_QA_OUTPUT"]
             ?? "/tmp/Xedit-desktop-pet-animation-design-qa.png"
-        let size = NSSize(width: 732, height: 260)
+        let size = NSSize(width: 1_090, height: 260)
         let root = HStack(alignment: .top, spacing: 26) {
             animationPreview(
                 title: L10n.DesktopPet.statusTyping,
@@ -237,13 +273,25 @@ struct DesktopPetTests {
                 title: L10n.DesktopPet.statusIdle,
                 appearance: .robotFox,
                 mood: .idle,
-                time: 7.5
+                time: 5.2
             )
             animationPreview(
                 title: L10n.DesktopPet.appearanceCosmicDownsizer,
                 appearance: .cosmicDownsizer,
                 mood: .idle,
-                time: 7.5
+                time: 13.2
+            )
+            animationPreview(
+                title: L10n.DesktopPet.statusIdle,
+                appearance: .starRaccoon,
+                mood: .idle,
+                time: 29.2
+            )
+            animationPreview(
+                title: L10n.DesktopPet.statusIdle,
+                appearance: .moonRabbit,
+                mood: .idle,
+                time: 37.2
             )
         }
         .padding(24)

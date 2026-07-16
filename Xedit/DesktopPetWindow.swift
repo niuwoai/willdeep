@@ -21,6 +21,77 @@ enum DesktopPetMood: Equatable {
     case celebrating
 }
 
+enum DesktopPetAmbientEffectKind: Int, CaseIterable, Hashable {
+    case lips
+    case stars
+    case hearts
+    case bubbles
+}
+
+struct DesktopPetAmbientEffectPlan: Equatable {
+    let kind: DesktopPetAmbientEffectKind
+    let particleCount: Int
+    let progress: Double
+    let seed: UInt64
+
+    static func make(cycleIndex: Int, progress: Double) -> Self {
+        let seed = mixedSeed(for: cycleIndex)
+        let kind = DesktopPetAmbientEffectKind(
+            rawValue: Int(seed % UInt64(DesktopPetAmbientEffectKind.allCases.count))
+        ) ?? .stars
+        let particleCount: Int
+        switch kind {
+        case .lips:
+            particleCount = ((seed >> 12) & 1) == 0 ? 1 : 3 + Int((seed >> 8) % 4)
+        case .stars, .hearts:
+            particleCount = 3 + Int((seed >> 8) % 5)
+        case .bubbles:
+            particleCount = 4 + Int((seed >> 8) % 5)
+        }
+        return Self(
+            kind: kind,
+            particleCount: particleCount,
+            progress: min(max(progress, 0), 1),
+            seed: seed
+        )
+    }
+
+    func particleProgress(at index: Int) -> Double {
+        let delay = min(Double(index) * 0.065, 0.4)
+        return min(max((progress - delay) / (1 - delay), 0), 1)
+    }
+
+    func unitValue(particle index: Int, salt: UInt64) -> Double {
+        let mixed = Self.mix(seed &+ UInt64(index + 1) &* 0x9E37_79B9_7F4A_7C15 &+ salt)
+        return Double(mixed % 10_000) / 9_999
+    }
+
+    private static func mixedSeed(for cycleIndex: Int) -> UInt64 {
+        mix(UInt64(bitPattern: Int64(cycleIndex)) &+ 0xD1B5_4A32_D192_ED03)
+    }
+
+    private static func mix(_ input: UInt64) -> UInt64 {
+        var value = input
+        value ^= value >> 30
+        value &*= 0xBF58_476D_1CE4_E5B9
+        value ^= value >> 27
+        value &*= 0x94D0_49BB_1331_11EB
+        value ^= value >> 31
+        return value
+    }
+}
+
+enum DesktopPetAutonomy {
+    static let minimumJumpDelay: TimeInterval = 14
+    static let maximumJumpDelay: TimeInterval = 32
+    static let jumpDuration: TimeInterval = 1.15
+
+    static func jumpDelay(unitInterval: Double) -> TimeInterval {
+        let normalized = min(max(unitInterval, 0), 1)
+        return minimumJumpDelay + (maximumJumpDelay - minimumJumpDelay) * normalized
+    }
+}
+
 enum DesktopPetAppearance: String, CaseIterable, Identifiable {
     case robotFox
     case penguin
@@ -238,7 +309,8 @@ final class DesktopPetWindowManager: ObservableObject {
     private var pollingTimer: Timer?
     private var wasBusy = false
     private var celebrationEndsAt: Date?
-    private var manualJumpEndsAt: Date?
+    private var jumpEndsAt: Date?
+    private var nextAutomaticJumpAt: Date?
     private var hibernationEndsAt: Date?
 
     private init() {
@@ -265,6 +337,8 @@ final class DesktopPetWindowManager: ObservableObject {
         isEnabled = enabled
         UserDefaults.standard.set(enabled, forKey: DefaultsKey.isEnabled)
         if enabled {
+            scheduleNextAutomaticJump(after: Date())
+            startPollingIfNeeded()
             showIfNeeded()
             refresh()
         } else {
@@ -314,7 +388,9 @@ final class DesktopPetWindowManager: ObservableObject {
     }
 
     func jumpOnce() {
-        manualJumpEndsAt = Date().addingTimeInterval(0.9)
+        let now = Date()
+        jumpEndsAt = now.addingTimeInterval(DesktopPetAutonomy.jumpDuration)
+        scheduleNextAutomaticJump(after: now)
         refresh()
     }
 
@@ -379,12 +455,13 @@ final class DesktopPetWindowManager: ObservableObject {
         if let hibernationEndsAt {
             guard !DesktopPetHibernation.isActive(endsAt: hibernationEndsAt, now: now) else { return }
             self.hibernationEndsAt = nil
+            scheduleNextAutomaticJump(after: now)
             window?.orderFrontRegardless()
         }
         showIfNeeded()
-        let isManualJumping = manualJumpIsActive(at: now)
-
         guard let appState else {
+            updateAutomaticJump(at: now, isBusy: false)
+            let isJumping = jumpIsActive(at: now)
             presentation = DesktopPetPresentation(
                 sessionID: nil,
                 sessionTitle: DesktopPetPresentation.empty.sessionTitle,
@@ -393,7 +470,7 @@ final class DesktopPetWindowManager: ObservableObject {
                 outputSessionCount: 0,
                 isMessageBubbleVisible: false,
                 status: DesktopPetPresentation.empty.status,
-                mood: isManualJumping ? .jumping : .idle
+                mood: isJumping ? .jumping : .idle
             )
             return
         }
@@ -422,6 +499,11 @@ final class DesktopPetWindowManager: ObservableObject {
         let latestPreview = visiblePreviews.first
         let hasCelebration = celebrationEndsAt.map { $0 > now } ?? false
         let isUserTyping = !appState.agentInput.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        updateAutomaticJump(
+            at: now,
+            isBusy: isBusy || needsAttention || isUserTyping || hasCelebration
+        )
+        let isJumping = jumpIsActive(at: now)
 
         let baseMood: DesktopPetMood
         let status: String
@@ -456,7 +538,7 @@ final class DesktopPetWindowManager: ObservableObject {
             outputSessionCount: outputPreviews.count,
             isMessageBubbleVisible: shouldShowMessageCards,
             status: status,
-            mood: isManualJumping ? .jumping : baseMood
+            mood: isJumping ? .jumping : baseMood
         )
         // @Published notifies even on same-value writes; this runs on a
         // 0.4s timer, so an unconditional write re-renders the overlay
@@ -466,11 +548,27 @@ final class DesktopPetWindowManager: ObservableObject {
         }
     }
 
-    private func manualJumpIsActive(at date: Date) -> Bool {
-        guard let manualJumpEndsAt else { return false }
-        if manualJumpEndsAt > date { return true }
-        self.manualJumpEndsAt = nil
+    private func jumpIsActive(at date: Date) -> Bool {
+        guard let jumpEndsAt else { return false }
+        if jumpEndsAt > date { return true }
+        self.jumpEndsAt = nil
         return false
+    }
+
+    private func updateAutomaticJump(at date: Date, isBusy: Bool) {
+        guard !isBusy, !isDraggingPet else { return }
+        guard let nextAutomaticJumpAt else {
+            scheduleNextAutomaticJump(after: date)
+            return
+        }
+        guard nextAutomaticJumpAt <= date, !jumpIsActive(at: date) else { return }
+        jumpEndsAt = date.addingTimeInterval(DesktopPetAutonomy.jumpDuration)
+        scheduleNextAutomaticJump(after: date)
+    }
+
+    private func scheduleNextAutomaticJump(after date: Date) {
+        let delay = DesktopPetAutonomy.jumpDelay(unitInterval: Double.random(in: 0...1))
+        nextAutomaticJumpAt = date.addingTimeInterval(delay)
     }
 
     private static let maximumVisibleOutputPreviews = 3
@@ -804,12 +902,8 @@ struct DesktopPetSceneView: View {
         static let sceneWidth: CGFloat = 140
         static let sceneHeight: CGFloat = 148
         static let petSize: CGFloat = 132
-        static let heartHorizontalOffset: CGFloat = -45
-        static let heartVerticalOffset: CGFloat = -94
-        static let sparkleHorizontalOffset: CGFloat = 45
-        static let sparkleVerticalOffset: CGFloat = -83
-        static let snapHorizontalOffset: CGFloat = -47
-        static let snapVerticalOffset: CGFloat = -92
+        static let softHeartPrimary = Color(red: 1, green: 0.4, blue: 0.46)
+        static let softHeartSecondary = Color(red: 1, green: 0.57, blue: 0.68)
     }
 
     let appearance: DesktopPetAppearance
@@ -843,69 +937,69 @@ struct DesktopPetSceneView: View {
     }
 
     private var cuteEffectLayer: some View {
-        Group {
-            if appearance == .cosmicDownsizer {
-                snapEffectLayer
-            } else {
-                standardCuteEffectLayer
+        ZStack {
+            if let plan = animation.ambientEffectPlan {
+                ForEach(0..<plan.particleCount, id: \.self) { index in
+                    ambientParticle(plan: plan, index: index)
+                }
             }
         }
+        .accessibilityHidden(true)
     }
 
-    private var standardCuteEffectLayer: some View {
-        ZStack {
+    private func ambientParticle(plan: DesktopPetAmbientEffectPlan, index: Int) -> some View {
+        let progress = plan.particleProgress(at: index)
+        let envelope = sin(progress * .pi)
+        let scale = 0.18 + envelope * (0.95 + plan.unitValue(particle: index, salt: 17) * 0.35)
+        let horizontal = -48 + plan.unitValue(particle: index, salt: 31) * 96
+        let initialHeight = 62 + plan.unitValue(particle: index, salt: 47) * 34
+        let rise = progress * (24 + plan.unitValue(particle: index, salt: 59) * 26)
+        let drift = sin(progress * .pi * 2 + Double(index)) * 7
+
+        return effectSymbol(kind: plan.kind, index: index)
+            .scaleEffect(scale)
+            .rotationEffect(.degrees((plan.unitValue(particle: index, salt: 71) - 0.5) * 24))
+            .offset(x: horizontal + drift, y: -(initialHeight + rise))
+            .opacity(envelope)
+    }
+
+    @ViewBuilder
+    private func effectSymbol(kind: DesktopPetAmbientEffectKind, index: Int) -> some View {
+        switch kind {
+        case .lips:
             Image(systemName: "mouth.fill")
-                .font(.system(size: 22, weight: .bold))
+                .font(.system(size: index == 0 ? 24 : 19, weight: .bold))
                 .symbolRenderingMode(.hierarchical)
                 .foregroundStyle(.red)
-                .offset(
-                    x: Layout.heartHorizontalOffset,
-                    y: Layout.heartVerticalOffset + animation.cuteEffectVerticalOffset
+        case .stars:
+            Image(systemName: index.isMultiple(of: 2) ? "star.fill" : "sparkles")
+                .font(.system(size: index.isMultiple(of: 2) ? 21 : 24, weight: .bold))
+                .symbolRenderingMode(.hierarchical)
+                .foregroundStyle(index.isMultiple(of: 2) ? Color.yellow : Color.mint)
+        case .hearts:
+            Image(systemName: "heart.fill")
+                .font(.system(size: index.isMultiple(of: 2) ? 21 : 17, weight: .bold))
+                .symbolRenderingMode(.hierarchical)
+                .foregroundStyle(
+                    index.isMultiple(of: 2)
+                        ? Layout.softHeartPrimary
+                        : Layout.softHeartSecondary
                 )
-
-            Image(systemName: "sparkles")
-                .font(.system(size: 24, weight: .bold))
-                .symbolRenderingMode(.palette)
-                .foregroundStyle(.yellow, .mint)
-                .rotationEffect(.degrees(animation.cuteEffectRotation))
-                .offset(
-                    x: Layout.sparkleHorizontalOffset,
-                    y: Layout.sparkleVerticalOffset + animation.cuteEffectVerticalOffset
-                )
-        }
-        .opacity(animation.cuteEffectOpacity)
-        .accessibilityHidden(true)
-    }
-
-    private var snapEffectLayer: some View {
-        ZStack {
+        case .bubbles:
             Circle()
-                .stroke(Color.purple.opacity(0.8), lineWidth: 2)
-                .frame(width: 34, height: 34)
-                .scaleEffect(0.55 + CGFloat(animation.cuteEffectOpacity) * 0.9)
-
-            Image(systemName: "sparkle")
-                .font(.system(size: 25, weight: .bold))
-                .symbolRenderingMode(.palette)
-                .foregroundStyle(.white, .purple)
-                .rotationEffect(.degrees(animation.cuteEffectRotation * 1.8))
-                .scaleEffect(0.72 + CGFloat(animation.cuteEffectOpacity) * 0.48)
+                .strokeBorder(index.isMultiple(of: 2) ? Color.cyan : Color.white, lineWidth: 2)
+                .background(Circle().fill(Color.cyan.opacity(0.12)))
+                .frame(width: index.isMultiple(of: 2) ? 22 : 15, height: index.isMultiple(of: 2) ? 22 : 15)
         }
-        .offset(
-            x: Layout.snapHorizontalOffset,
-            y: Layout.snapVerticalOffset + animation.cuteEffectVerticalOffset * 0.25
-        )
-        .opacity(animation.cuteEffectOpacity)
-        .accessibilityHidden(true)
     }
 }
 
 struct DesktopPetAnimationValues {
     private static let walkingSwayRate = 0.85
     private static let walkingStepRate = 2.2
-    private static let idleCuteCycleDuration = 11.0
-    private static let idleCuteStart = 6.0
-    private static let idleCuteDuration = 3.0
+    private static let ambientCycleDuration = 8.0
+    private static let ambientEffectStart = 3.8
+    private static let ambientEffectDuration = 2.8
     private static let typingStrokeRate = 13.2
 
     let horizontalOffset: CGFloat
@@ -915,9 +1009,7 @@ struct DesktopPetAnimationValues {
     let horizontalScale: CGFloat
     let verticalScale: CGFloat
     let facesRight: Bool
-    let cuteEffectOpacity: Double
-    let cuteEffectVerticalOffset: CGFloat
-    let cuteEffectRotation: Double
+    let ambientEffectPlan: DesktopPetAmbientEffectPlan?
 
     init(mood: DesktopPetMood, date: Date) {
         let t = date.timeIntervalSinceReferenceDate
@@ -928,18 +1020,17 @@ struct DesktopPetAnimationValues {
         var horizontalScale: CGFloat = 1
         var verticalScale: CGFloat = 1
         var facesRight = true
-        var cuteEffectOpacity = 0.0
-        var cuteEffectVerticalOffset: CGFloat = 0
-        var cuteEffectRotation = 0.0
+        var ambientEffectPlan: DesktopPetAmbientEffectPlan?
 
         switch mood {
         case .idle, .ready:
             let breathing = CGFloat(sin(t * 2.1))
-            let cycleTime = t.truncatingRemainder(dividingBy: Self.idleCuteCycleDuration)
-            let isPerformingCuteAction = cycleTime >= Self.idleCuteStart
-                && cycleTime <= Self.idleCuteStart + Self.idleCuteDuration
+            let cycleIndex = Int(floor(t / Self.ambientCycleDuration))
+            let cycleTime = t - Double(cycleIndex) * Self.ambientCycleDuration
+            let isPerformingCuteAction = cycleTime >= Self.ambientEffectStart
+                && cycleTime <= Self.ambientEffectStart + Self.ambientEffectDuration
             let cuteProgress = isPerformingCuteAction
-                ? (cycleTime - Self.idleCuteStart) / Self.idleCuteDuration
+                ? (cycleTime - Self.ambientEffectStart) / Self.ambientEffectDuration
                 : 0
             let cuteEnvelope = CGFloat(sin(cuteProgress * .pi))
             let cuteWiggle = CGFloat(sin(cuteProgress * .pi * 4))
@@ -949,9 +1040,9 @@ struct DesktopPetAnimationValues {
             rotation = Double(breathing * 1.5 + cuteEnvelope * (4 + cuteWiggle * 3))
             horizontalScale = 1 + cuteEnvelope * 0.035
             verticalScale = 1 - cuteEnvelope * 0.025
-            cuteEffectOpacity = Double(cuteEnvelope)
-            cuteEffectVerticalOffset = -cuteEnvelope * 22
-            cuteEffectRotation = Double(cuteWiggle * 10)
+            if isPerformingCuteAction {
+                ambientEffectPlan = .make(cycleIndex: cycleIndex, progress: cuteProgress)
+            }
         case .walking:
             horizontalOffset = CGFloat(sin(t * Self.walkingSwayRate)) * 11
             verticalOffset = -CGFloat(abs(sin(t * Self.walkingStepRate))) * 4
@@ -981,9 +1072,9 @@ struct DesktopPetAnimationValues {
             verticalOffset = -CGFloat(abs(sin(t * 3.8))) * 14
             rotation = sin(t * 7) * 10
             scale = 1.04
-            cuteEffectOpacity = 1
-            cuteEffectVerticalOffset = CGFloat(sin(t * 4.2)) * -5
-            cuteEffectRotation = sin(t * 6) * 12
+            let cycleIndex = Int(floor(t / Self.ambientCycleDuration))
+            let progress = (sin(t * 2.4) + 1) / 2
+            ambientEffectPlan = .make(cycleIndex: cycleIndex, progress: progress)
         }
 
         self.horizontalOffset = horizontalOffset
@@ -993,8 +1084,6 @@ struct DesktopPetAnimationValues {
         self.horizontalScale = horizontalScale
         self.verticalScale = verticalScale
         self.facesRight = facesRight
-        self.cuteEffectOpacity = cuteEffectOpacity
-        self.cuteEffectVerticalOffset = cuteEffectVerticalOffset
-        self.cuteEffectRotation = cuteEffectRotation
+        self.ambientEffectPlan = ambientEffectPlan
     }
 }
