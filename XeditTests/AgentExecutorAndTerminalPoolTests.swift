@@ -34,6 +34,49 @@ struct AgentExecutorAndTerminalPoolTests {
         #expect(!AgentInteractiveTerminalController.canCreateDelegatedShellTab(existingCount: 4))
     }
 
+    @MainActor
+    @Test("terminal panel bootstrap keeps a running delegated CLI tab active")
+    func terminalPanelBootstrapPreservesRunningDelegatedTab() throws {
+        let controller = AgentInteractiveTerminalController()
+        let settings = EditorTerminalSettings.default
+        let sessionID = UUID()
+        let boundTab = controller.openLocalTab(
+            originAgentSessionID: sessionID,
+            workingDirectory: FileManager.default.temporaryDirectory.path,
+            settings: settings,
+            skin: nil
+        )
+        let delegatedTab = controller.openDelegatedShellTab(
+            workingDirectory: FileManager.default.temporaryDirectory.path,
+            settings: settings,
+            skin: nil
+        )
+        defer {
+            delegatedTab.finishAutomationCommand()
+            controller.closeTab(id: delegatedTab.id)
+            controller.closeTab(id: boundTab.id)
+        }
+
+        try delegatedTab.sendAutomationCommand(":", displayCommand: "Codex CLI")
+        controller.bootstrapSidePanel(
+            originAgentSessionID: sessionID,
+            workingDirectory: FileManager.default.temporaryDirectory.path,
+            settings: settings,
+            skin: nil
+        )
+
+        #expect(controller.activeTabID == delegatedTab.id)
+
+        delegatedTab.finishAutomationCommand()
+        controller.bootstrapSidePanel(
+            originAgentSessionID: sessionID,
+            workingDirectory: FileManager.default.temporaryDirectory.path,
+            settings: settings,
+            skin: nil
+        )
+        #expect(controller.activeTabID == boundTab.id)
+    }
+
     @Test("composer uses semantic model and worker icons")
     func composerSemanticIcons() {
         #expect(ModelPickerPill.modelSymbol == "brain.head.profile")

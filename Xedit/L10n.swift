@@ -904,9 +904,28 @@ nonisolated enum L10n {
         static let diffLoading = String(localized: "agent-side-panel.diff-loading", defaultValue: "Computing diff…")
         static let diffEmpty = String(localized: "agent-side-panel.diff-empty", defaultValue: "No uncommitted changes.")
         static let diffNotRepo = String(localized: "agent-side-panel.diff-not-repo", defaultValue: "Not a git repository.")
+        static let diffBackToFiles = String(localized: "agent-side-panel.diff-back-to-files", defaultValue: "Back to changed files")
+        static let diffFileUnavailable = String(localized: "agent-side-panel.diff-file-unavailable", defaultValue: "No diff preview is available for this file.")
+        static func diffFilesSummary(_ a1: String, _ a2: String, _ a3: String) -> String {
+            let template = String(localized: "agent-side-panel.diff-files-summary", defaultValue: "%@ files · +%@ -%@")
+            return String(format: template, a1, a2, a3)
+        }
         static func diffSummary(_ a1: String) -> String {
             let template = String(localized: "agent-side-panel.diff-summary", defaultValue: "Diff against HEAD · %@")
             return String(format: template, a1)
+        }
+        static func diffTruncated(
+            _ a1: String,
+            _ a2: String,
+            _ a3: String,
+            _ a4: String,
+            _ a5: String
+        ) -> String {
+            let template = String(
+                localized: "agent-side-panel.diff-truncated",
+                defaultValue: "Diff is %@ UTF-8 bytes / %@ lines, above the side-panel budget of %@ bytes / %@ lines. Showing a bounded sample.\n\n%@\n\n… Diff truncated. Open the file in an editor or use git diff --no-ext-diff HEAD -- <path> for the complete content."
+            )
+            return String(format: template, a1, a2, a3, a4, a5)
         }
         static let planMissing = String(localized: "agent-side-panel.plan-missing", defaultValue: "No active plan.")
         static let previewEmpty = String(localized: "agent-side-panel.preview-empty", defaultValue: "Pick a markdown or HTML file to preview.")

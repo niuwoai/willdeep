@@ -47,7 +47,7 @@ extension L10n {
         static let recording = String(localized: "agent-terminal.recording", defaultValue: "Recording")
         static let startRecording = String(localized: "agent-terminal.start-recording", defaultValue: "Start recording")
         static let stopRecording = String(localized: "agent-terminal.stop-recording", defaultValue: "Stop recording")
-        static let recordingHelp = String(localized: "agent-terminal.recording-help", defaultValue: "Record terminal steps to replay later")
+        static let recordingHelp = String(localized: "agent-terminal.recording-help", defaultValue: "Record common commands for quick execution later")
         static let recentRecordings = String(localized: "agent-terminal.recent-recordings", defaultValue: "Recent shortcuts")
         static let noShortcuts = String(localized: "agent-terminal.no-shortcuts", defaultValue: "No shortcuts yet")
         static let sessionLocal = String(localized: "agent-terminal.session.local", defaultValue: "Local Shell")
@@ -63,9 +63,9 @@ extension L10n {
         static let shortcutFinished = String(localized: "agent-terminal.shortcut.finished", defaultValue: "Finished")
         static let shortcutCancelled = String(localized: "agent-terminal.shortcut.cancelled", defaultValue: "Interrupted")
         static let shortcutDefaultTitle = String(localized: "agent-terminal.shortcut.default-title", defaultValue: "Terminal Shortcut")
-        static let shortcutProtected = String(localized: "agent-terminal.shortcut.protected", defaultValue: "Contains protected input; replays only while terminal echo is off")
-        static let shortcutReplay = String(localized: "agent-terminal.shortcut.replay", defaultValue: "Replay")
-        static let shortcutStopReplay = String(localized: "agent-terminal.shortcut.stop-replay", defaultValue: "Stop replay")
+        static let shortcutProtected = String(localized: "agent-terminal.shortcut.protected", defaultValue: "Contains protected input; executes only while terminal echo is off")
+        static let shortcutReplay = String(localized: "agent-terminal.shortcut.replay", defaultValue: "Run")
+        static let shortcutStopReplay = String(localized: "agent-terminal.shortcut.stop-replay", defaultValue: "Stop")
         static let shortcutActions = String(localized: "agent-terminal.shortcut.actions", defaultValue: "Shortcut actions")
         static let shortcutEdit = String(localized: "agent-terminal.shortcut.edit", defaultValue: "Edit")
         static let shortcutRename = String(localized: "agent-terminal.shortcut.rename", defaultValue: "Rename...")
@@ -102,7 +102,7 @@ extension L10n {
             return String(format: template, a1)
         }
         static func shortcutReplayWait(_ a1: String) -> String {
-            let template = String(localized: "agent-terminal.shortcut.replay-wait", defaultValue: "Replay wait: %@")
+            let template = String(localized: "agent-terminal.shortcut.replay-wait", defaultValue: "Execution wait: %@")
             return String(format: template, a1)
         }
         static func shortcutRemaining(_ a1: String) -> String {

@@ -3142,6 +3142,23 @@
         }
       }
     },
+    "agent-side-panel.diff-back-to-files" : {
+      "extractionState" : "extracted_with_value",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Back to changed files"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "返回变更文件列表"
+          }
+        }
+      }
+    },
     "agent-side-panel.diff-empty" : {
       "extractionState" : "extracted_with_value",
       "localizations" : {
@@ -3155,6 +3172,40 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "没有未提交的改动。"
+          }
+        }
+      }
+    },
+    "agent-side-panel.diff-file-unavailable" : {
+      "extractionState" : "extracted_with_value",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "No diff preview is available for this file."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "该文件没有可用的 Diff 预览。"
+          }
+        }
+      }
+    },
+    "agent-side-panel.diff-files-summary" : {
+      "extractionState" : "extracted_with_value",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%@ files · +%@ -%@"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ 个文件 · +%@ -%@"
           }
         }
       }
@@ -3206,6 +3257,23 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "对比 HEAD · %@"
+          }
+        }
+      }
+    },
+    "agent-side-panel.diff-truncated" : {
+      "extractionState" : "extracted_with_value",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Diff is %@ UTF-8 bytes / %@ lines, above the side-panel budget of %@ bytes / %@ lines. Showing a bounded sample.\n\n%@\n\n… Diff truncated. Open the file in an editor or use git diff --no-ext-diff HEAD -- <path> for the complete content."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Diff 大小为 %@ 个 UTF-8 字节 / %@ 行，超过侧边栏 %@ 字节 / %@ 行的流畅预算。当前仅显示有界样本。\n\n%@\n\n… Diff 已截断。请在编辑器中打开文件，或运行 git diff --no-ext-diff HEAD -- <path> 查看完整内容。"
           }
         }
       }
@@ -3985,13 +4053,13 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Record terminal steps to replay later"
+            "value" : "Record common commands for quick execution later"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "录制终端操作，稍后可重复播放"
+            "value" : "录制常用命令，之后可快捷执行"
           }
         }
       }
@@ -4158,13 +4226,13 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Contains protected input; replays only while terminal echo is off"
+            "value" : "Contains protected input; executes only while terminal echo is off"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "包含受保护输入，仅在终端不回显时回放"
+            "value" : "包含受保护输入，仅在终端关闭回显时执行"
           }
         }
       }
@@ -4413,13 +4481,13 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Replay"
+            "value" : "Run"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "回放"
+            "value" : "执行"
           }
         }
       }
@@ -4447,13 +4515,30 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Replay wait: %@"
+            "value" : "Execution wait: %@"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "回放等待：%@"
+            "value" : "执行等待：%@"
+          }
+        }
+      }
+    },
+    "agent-terminal.shortcut.stop-replay" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Stop"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "停止执行"
           }
         }
       }

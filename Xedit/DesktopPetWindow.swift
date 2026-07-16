@@ -281,6 +281,35 @@ enum DesktopPetFirstMousePolicy {
     }
 }
 
+struct DesktopPetDragAnchor: Equatable {
+    let mouseLocation: CGPoint
+    let windowOrigin: CGPoint
+}
+
+enum DesktopPetDragPositioning {
+    nonisolated static func windowOrigin(
+        anchor: DesktopPetDragAnchor,
+        currentMouseLocation: CGPoint
+    ) -> CGPoint {
+        CGPoint(
+            x: anchor.windowOrigin.x + currentMouseLocation.x - anchor.mouseLocation.x,
+            y: anchor.windowOrigin.y + currentMouseLocation.y - anchor.mouseLocation.y
+        )
+    }
+
+    /// SwiftUI reports drag translation with a downward-positive y axis, while
+    /// `NSEvent.mouseLocation` uses AppKit's upward-positive screen coordinates.
+    nonisolated static func mouseDownLocation(
+        currentMouseLocation: CGPoint,
+        initialTranslation: CGSize
+    ) -> CGPoint {
+        CGPoint(
+            x: currentMouseLocation.x - initialTranslation.width,
+            y: currentMouseLocation.y + initialTranslation.height
+        )
+    }
+}
+
 private final class DesktopPetFirstMouseHostingView: NSHostingView<DesktopPetOverlayView> {
     override func acceptsFirstMouse(for event: NSEvent?) -> Bool {
         DesktopPetFirstMousePolicy.accepts(event)
@@ -312,6 +341,7 @@ final class DesktopPetWindowManager: ObservableObject {
     private var jumpEndsAt: Date?
     private var nextAutomaticJumpAt: Date?
     private var hibernationEndsAt: Date?
+    private var dragAnchor: DesktopPetDragAnchor?
 
     private init() {
         // 默认开启桌面宠物:首次启动即陪伴,用户可随时在右键菜单 /
@@ -411,22 +441,38 @@ final class DesktopPetWindowManager: ObservableObject {
         window?.orderOut(nil)
     }
 
-    func beginDraggingPet() {
+    func beginDraggingPet(
+        at mouseLocation: CGPoint,
+        initialTranslation: CGSize
+    ) {
+        guard !isDraggingPet, let window else { return }
+        let mouseDownLocation = DesktopPetDragPositioning.mouseDownLocation(
+            currentMouseLocation: mouseLocation,
+            initialTranslation: initialTranslation
+        )
+        dragAnchor = DesktopPetDragAnchor(
+            mouseLocation: mouseDownLocation,
+            windowOrigin: window.frame.origin
+        )
         isDraggingPet = true
     }
 
-    /// 按增量位移拖动宠物窗口。SwiftUI 的 y 轴向下、AppKit 向上,
-    /// 所以纵向取反。
-    func moveWindow(by delta: CGSize) {
-        guard let window else { return }
-        var origin = window.frame.origin
-        origin.x += delta.width
-        origin.y -= delta.height
+    /// 以鼠标和窗口在按下时的全局坐标为锚点直接求当前位置。窗口移动
+    /// 不会改变这个坐标基准，因此快速拖动时也不会累计误差或逐帧落后。
+    func moveWindow(to mouseLocation: CGPoint) {
+        guard let window, let dragAnchor else { return }
+        let origin = DesktopPetDragPositioning.windowOrigin(
+            anchor: dragAnchor,
+            currentMouseLocation: mouseLocation
+        )
         window.setFrameOrigin(origin)
     }
 
     func finishDraggingPet() {
-        defer { isDraggingPet = false }
+        defer {
+            dragAnchor = nil
+            isDraggingPet = false
+        }
         persistWindowPosition()
     }
 
@@ -694,7 +740,6 @@ final class DesktopPetWindowManager: ObservableObject {
 
 struct DesktopPetOverlayView: View {
     @ObservedObject var manager: DesktopPetWindowManager
-    @State private var lastDragTranslation: CGSize = .zero
 
     // 显式 init:私有的 @State 存储会把 memberwise init 降级成
     // private,跨文件(单测)构造需要这个。
@@ -706,21 +751,19 @@ struct DesktopPetOverlayView: View {
         manager.isDraggingPet ? .walking : manager.presentation.mood
     }
 
-    /// DragGesture 报告的是自手势开始起的累计位移;这里缓存上一帧的
-    /// 累计值,每帧只把「增量」喂给窗口,实现跟手拖动。
+    /// 窗口位置始终由全局鼠标坐标计算。宠物姿态可以保持柔和动画，
+    /// 但窗口本身不参与插值，避免快速拖动时产生明显的滞后感。
     private var dragGesture: some Gesture {
         DragGesture(minimumDistance: 2)
             .onChanged { value in
-                manager.beginDraggingPet()
-                let delta = CGSize(
-                    width: value.translation.width - lastDragTranslation.width,
-                    height: value.translation.height - lastDragTranslation.height
+                let mouseLocation = NSEvent.mouseLocation
+                manager.beginDraggingPet(
+                    at: mouseLocation,
+                    initialTranslation: value.translation
                 )
-                lastDragTranslation = value.translation
-                manager.moveWindow(by: delta)
+                manager.moveWindow(to: mouseLocation)
             }
             .onEnded { _ in
-                lastDragTranslation = .zero
                 manager.finishDraggingPet()
             }
     }

@@ -1529,6 +1529,15 @@ extension WillDeepTests {
         #expect(AgentConfirmationReviewMetrics.commandViewportHeight >= 52)
         #expect(AgentConfirmationReviewMetrics.commandViewportHeight <= 60)
         #expect(AgentConfirmationReviewMetrics.decisionColumnWidth >= 240)
+        #expect(AgentConfirmationReviewMetrics.actionButtonHeight >= 26)
+        #expect(AgentConfirmationReviewMetrics.actionButtonHeight <= 30)
+        #expect(AgentConfirmationReviewMetrics.actionButtonMaxWidth >= 112)
+        #expect(AgentConfirmationReviewMetrics.actionButtonMaxWidth <= 132)
+        #expect(AgentConfirmationReviewMetrics.actionButtonSpacing >= 20)
+        #expect(
+            AgentConfirmationReviewMetrics.actionButtonSpacing
+                > AgentApprovalActionMetrics.spacing
+        )
         #expect(AgentConfirmationReviewMetrics.horizontalMinimumWidth >= 640)
         #expect(AgentConfirmationReviewMetrics.horizontalMinimumWidth <= 720)
         #expect(

@@ -300,7 +300,7 @@ enum AgentChatHistoryRenderer {
         let monoFont = NSFont.monospacedSystemFont(ofSize: baseFontSize, weight: .regular)
         let chromeMonoFont = NSFont.monospacedSystemFont(ofSize: NSFont.systemFontSize, weight: .regular)
         let headerFont = NSFont.systemFont(ofSize: 11, weight: .semibold)
-        let assistantStatusFont = NSFont.systemFont(ofSize: baseFontSize, weight: .medium)
+        let assistantStatusFont = bodyFont
         let bodyColor = NSColor.labelColor
         let assistantStatusColor = NSColor.tertiaryLabelColor
         let assistantStatusDividerColor = AgentChatHistoryLayoutMetrics.assistantStatusDividerColor(

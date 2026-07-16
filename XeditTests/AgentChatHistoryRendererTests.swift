@@ -1684,6 +1684,18 @@ struct AgentChatHistoryRendererTests {
         let bodyRange = (view.string as NSString).range(of: "正文排版校验")
         #expect(processedRange.location != NSNotFound)
         #expect(bodyRange.location != NSNotFound)
+        let processedFont = try #require(view.attributedString().attribute(
+            .font,
+            at: processedRange.location,
+            effectiveRange: nil
+        ) as? NSFont)
+        let bodyFont = try #require(view.attributedString().attribute(
+            .font,
+            at: bodyRange.location,
+            effectiveRange: nil
+        ) as? NSFont)
+        #expect(processedFont.pointSize == bodyFont.pointSize)
+        #expect(processedFont.fontDescriptor == bodyFont.fontDescriptor)
         let dividerRange = NSRange(location: NSMaxRange(processedRange) + 1, length: 1)
 
         let processedGlyphRange = layoutManager.glyphRange(

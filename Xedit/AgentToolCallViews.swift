@@ -147,6 +147,9 @@ nonisolated enum AgentConfirmationReviewMetrics {
     static let horizontalMinimumWidth: CGFloat = 680
     static let commandViewportHeight: CGFloat = 56
     static let commandVisibleLineCount = 2
+    static let actionButtonHeight: CGFloat = 28
+    static let actionButtonMaxWidth: CGFloat = 124
+    static let actionButtonSpacing: CGFloat = 24
     static let showsKeyboardShortcutHint = false
 
     static func usesHorizontalLayout(availableWidth: CGFloat) -> Bool {
@@ -798,7 +801,7 @@ struct AgentToolCallCard: View {
             if decisionAlreadySubmitted {
                 submittedDecisionNotice
             } else {
-                HStack(spacing: AgentApprovalActionMetrics.spacing) {
+                HStack(spacing: AgentConfirmationReviewMetrics.actionButtonSpacing) {
                     Button {
                         appState.denyAgentToolCall(id: call.id)
                     } label: {
@@ -808,6 +811,7 @@ struct AgentToolCallCard: View {
                     .approvalButtonBorderShape(cornerRadius: AgentApprovalActionMetrics.cornerRadius)
                     .tint(palette.accent)
                     .cursor(.arrow)
+                    .frame(maxWidth: AgentConfirmationReviewMetrics.actionButtonMaxWidth)
 
                     Button {
                         _ = appState.confirmAgentToolCall(id: call.id, typedConfirmation: "confirm")
@@ -818,18 +822,23 @@ struct AgentToolCallCard: View {
                     .approvalButtonBorderShape(cornerRadius: AgentApprovalActionMetrics.cornerRadius)
                     .tint(palette.accent)
                     .cursor(.arrow)
+                    .frame(maxWidth: AgentConfirmationReviewMetrics.actionButtonMaxWidth)
                 }
+                .controlSize(.regular)
+                .frame(maxWidth: .infinity, alignment: .center)
             }
         }
-        .controlSize(.large)
         .padding(AgentConfirmationReviewMetrics.contentPadding)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
     }
 
     private func confirmationActionLabel(_ title: String) -> some View {
         Text(title)
-            .font(.system(size: 13, weight: .semibold))
-            .frame(maxWidth: .infinity, minHeight: AgentApprovalActionMetrics.minimumButtonHeight)
+            .font(.system(size: 12, weight: .semibold))
+            .frame(
+                maxWidth: .infinity,
+                minHeight: AgentConfirmationReviewMetrics.actionButtonHeight
+            )
             .contentShape(
                 RoundedRectangle(
                     cornerRadius: AgentApprovalActionMetrics.cornerRadius,

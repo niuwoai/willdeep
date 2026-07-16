@@ -19,14 +19,15 @@ private enum SessionIdentityMetrics {
     static let hostnameCommand = "hostname"
 }
 
-private enum TerminalRecordingMetrics {
+enum TerminalRecordingMetrics {
     static let controlRowHeight: CGFloat = 42
     static let recordButtonHeight: CGFloat = 28
     static let historyHeaderHeight: CGFloat = 26
-    static let historyRowHeight: CGFloat = 42
+    static let historyRowHeight: CGFloat = 28
     static let emptyHistoryHeight: CGFloat = 34
-    static let visibleHistoryRows = 2
-    static let playButtonSize: CGFloat = 28
+    static let visibleHistoryRows = 3
+    static let playButtonSize: CGFloat = 22
+    static let shortcutItemSpacing: CGFloat = 6
     static let horizontalPadding: CGFloat = 8
 }
 
@@ -168,7 +169,12 @@ private struct AgentSidePanelTerminalContentView: View {
 
                                     if index < controller.shortcuts.count - 1 {
                                         Divider()
-                                            .padding(.leading, TerminalRecordingMetrics.horizontalPadding + TerminalRecordingMetrics.playButtonSize + 10)
+                                            .padding(
+                                                .leading,
+                                                TerminalRecordingMetrics.horizontalPadding
+                                                    + TerminalRecordingMetrics.playButtonSize
+                                                    + TerminalRecordingMetrics.shortcutItemSpacing
+                                            )
                                     }
                                 }
                             }
@@ -260,7 +266,7 @@ private struct AgentSidePanelTerminalContentView: View {
     private func shortcutControl(_ shortcut: TerminalShortcut, now: Date) -> some View {
         let playbackState = playbackState(for: shortcut)
         let isRunning = playbackState?.isRunning == true
-        return HStack(spacing: 10) {
+        return HStack(spacing: TerminalRecordingMetrics.shortcutItemSpacing) {
             Button {
                 if isRunning {
                     controller.cancelActiveShortcutPlayback()
@@ -269,20 +275,13 @@ private struct AgentSidePanelTerminalContentView: View {
                 }
             } label: {
                 Image(systemName: isRunning ? "stop.fill" : "play.fill")
-                    .font(.system(size: 9, weight: .bold))
+                    .font(.system(size: 10, weight: .semibold))
                     .foregroundStyle(isRunning ? skinAccent : interfacePalette.primaryText)
                     .frame(
                         width: TerminalRecordingMetrics.playButtonSize,
                         height: TerminalRecordingMetrics.playButtonSize
                     )
-                    .background(
-                        Circle()
-                            .fill(isRunning ? skinAccent.opacity(0.16) : interfacePalette.controlFill.opacity(0.74))
-                    )
-                    .overlay(
-                        Circle()
-                            .stroke(isRunning ? skinAccent.opacity(0.4) : interfacePalette.hairline, lineWidth: 1)
-                    )
+                    .contentShape(Rectangle())
             }
             .disabled(
                 (!isRunning && controller.isRecording) ||
@@ -732,15 +731,12 @@ private struct AgentSidePanelTerminalContentView: View {
         bootstrapTask = Task { @MainActor in
             try? await Task.sleep(nanoseconds: 60_000_000)
             guard !Task.isCancelled else { return }
-            controller.selectRuntimeIfNeeded()
-            controller.ensureAtLeastOneTab(
+            controller.bootstrapSidePanel(
                 originAgentSessionID: originAgentSessionID,
                 workingDirectory: directory,
                 settings: terminalSettings,
                 skin: colors
             )
-            controller.activateBoundTab(for: originAgentSessionID)
-            controller.applyAppearanceToAll(terminalSettings, skin: colors)
         }
     }
 

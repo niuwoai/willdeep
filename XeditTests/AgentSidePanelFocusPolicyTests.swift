@@ -53,6 +53,34 @@ struct AgentSidePanelFocusPolicyTests {
         #expect(trailingSource.distance(from: buttonStyle.lowerBound, to: focusPolicy.lowerBound) < 80)
     }
 
+    @Test("Terminal shortcut rows fit three entries without a circled play button")
+    func terminalShortcutRowsStayCompact() throws {
+        #expect(TerminalRecordingMetrics.visibleHistoryRows == 3)
+        #expect(TerminalRecordingMetrics.historyRowHeight == 28)
+        #expect(TerminalRecordingMetrics.playButtonSize == 22)
+
+        let source = try Self.source(named: "AgentSidePanelTerminalView.swift")
+        let controlStart = try #require(source.range(of: "private func shortcutControl("))
+        let detailsStart = try #require(
+            source.range(of: "private func shortcutDetails(", range: controlStart.upperBound..<source.endIndex)
+        )
+        let shortcutControlSource = source[controlStart.lowerBound..<detailsStart.lowerBound]
+        #expect(!shortcutControlSource.contains("Circle()"))
+    }
+
+    @Test("Terminal shortcut copy emphasizes quick command execution")
+    func terminalShortcutCopyDescribesQuickExecution() throws {
+        let catalog = try Self.source(named: "Localizable.xcstrings")
+        let localization = try Self.source(named: "L10n+AgentTerminal.swift")
+
+        #expect(catalog.contains("录制常用命令，之后可快捷执行"))
+        #expect(catalog.contains("\"value\" : \"执行\""))
+        #expect(catalog.contains("\"value\" : \"停止执行\""))
+        #expect(!catalog.contains("录制终端操作，稍后可重复播放"))
+        #expect(localization.contains("defaultValue: \"Record common commands for quick execution later\""))
+        #expect(!localization.contains("defaultValue: \"Replay\""))
+    }
+
     @Test("Retired task monitor cannot return from persisted session state")
     func retiredTaskMonitorIsNormalizedOnSessionChanges() throws {
         let source = try Self.source(named: "AgentModeView.swift")

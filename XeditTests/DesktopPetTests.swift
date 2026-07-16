@@ -207,6 +207,33 @@ struct DesktopPetTests {
     }
 
     @Test
+    func desktopPetDragTracksGlobalMousePositionWithoutAccumulatedLag() {
+        let mouseDown = CGPoint(x: 400, y: 300)
+        let windowOrigin = CGPoint(x: 240, y: 120)
+        let anchor = DesktopPetDragAnchor(
+            mouseLocation: mouseDown,
+            windowOrigin: windowOrigin
+        )
+
+        let movedOrigin = DesktopPetDragPositioning.windowOrigin(
+            anchor: anchor,
+            currentMouseLocation: CGPoint(x: 575, y: 390)
+        )
+
+        #expect(movedOrigin == CGPoint(x: 415, y: 210))
+    }
+
+    @Test
+    func desktopPetDragConvertsInitialSwiftUITranslationToScreenCoordinates() {
+        let mouseDown = DesktopPetDragPositioning.mouseDownLocation(
+            currentMouseLocation: CGPoint(x: 515, y: 285),
+            initialTranslation: CGSize(width: 15, height: 15)
+        )
+
+        #expect(mouseDown == CGPoint(x: 500, y: 300))
+    }
+
+    @Test
     func desktopPetSettingsUseReadableBodyTypography() {
         #expect(DesktopPetSettingsDesign.bodyFontSize == 14)
         #expect(DesktopPetSettingsDesign.appearanceNameMinimumHeight >= 36)

@@ -2178,6 +2178,30 @@ final class AgentInteractiveTerminalController: ObservableObject {
         )
     }
 
+    /// Prepare the terminal side panel for the active conversation without
+    /// stealing visibility from a delegated CLI task that just opened its own
+    /// tab. The panel appears asynchronously, so its delayed bootstrap can
+    /// otherwise reactivate the conversation's older bound shell after the
+    /// delegated tab has already been selected.
+    func bootstrapSidePanel(
+        originAgentSessionID: UUID?,
+        workingDirectory: String?,
+        settings: EditorTerminalSettings,
+        skin: TerminalSkinColors?
+    ) {
+        selectRuntimeIfNeeded()
+        if activeTab?.kind.isDelegatedShell != true || activeTab?.isAutomationBusy != true {
+            ensureAtLeastOneTab(
+                originAgentSessionID: originAgentSessionID,
+                workingDirectory: workingDirectory,
+                settings: settings,
+                skin: skin
+            )
+            activateBoundTab(for: originAgentSessionID)
+        }
+        applyAppearanceToAll(settings, skin: skin)
+    }
+
     func applyAppearanceToAll(_ settings: EditorTerminalSettings, skin: TerminalSkinColors?) {
         for tab in tabs {
             tab.applyAppearance(settings, skin: skin)

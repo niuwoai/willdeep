@@ -220,7 +220,7 @@ extension AppState {
     nonisolated static let gitCommandTimeout: TimeInterval = 5
     nonisolated static let worktreeDiffPreviewMaxFiles = 40
     nonisolated static let worktreeDiffPreviewMaxChangedLines = 1_200
-    nonisolated static let worktreeDiffPreviewMaxCharacters = 96 * 1024
+    nonisolated static let worktreeDiffPreviewMaxUTF8Bytes = 96 * 1024
     nonisolated static let worktreeDiffPreviewGeneratedFileThreshold = 8
     nonisolated static let worktreeDiffPreviewFileListLimit = 80
     nonisolated static let worktreeDiffPreviewMaxUntrackedFileBytes = 64 * 1024
@@ -864,11 +864,11 @@ extension AppState {
         var diff = sections.joined(separator: "\n")
         if diff.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
             diff = "当前没有可显示的 diff。"
-        } else if diff.count > worktreeDiffPreviewMaxCharacters {
+        } else if diff.utf8.count > worktreeDiffPreviewMaxUTF8Bytes {
             diff = worktreeDiffPreviewSummaryText(
                 changes: changes,
-                reasons: ["diff 文本超过 \(worktreeDiffPreviewMaxCharacters / 1024)KB，已降级为摘要，避免界面渲染长文本。"],
-                sample: String(diff.prefix(24 * 1024))
+                reasons: ["diff 的 UTF-8 数据超过 \(worktreeDiffPreviewMaxUTF8Bytes / 1024)KB，已降级为摘要，避免界面渲染长文本。"],
+                sample: AgentSidePanelDiffLimiter.utf8Prefix(diff, maximumBytes: 24 * 1024)
             )
         }
 

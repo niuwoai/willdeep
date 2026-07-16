@@ -1,28 +1,29 @@
 # 命令确认卡响应式布局 Design QA
 
-- source visual truth: `/var/folders/np/rjc0y5w52x324x21pv6g33440000gp/T/codex-clipboard-d004c841-98d5-4b60-bc3e-8e2d4a1a0e5e.png` 与用户本轮布局要求
+- source visual truth: `/var/folders/np/rjc0y5w52x324x21pv6g33440000gp/T/codex-clipboard-cf3ca2fa-70bb-49e6-9e6a-ef90e201dedc.png` 与用户本轮按钮密度要求
 - wide implementation: `/tmp/Xedit-confirmation-design-qa/command-confirmation-wide.png`
 - narrow implementation: `/tmp/Xedit-confirmation-design-qa/command-confirmation-narrow.png`
-- combined comparison: `/tmp/Xedit-confirmation-design-qa/command-confirmation-comparison.png`
+- combined comparison: `/tmp/Xedit-confirmation-design-qa/command-confirmation-button-density-comparison.png`
 - viewport: 宽屏卡片 `1040 pt @2x`；窄屏卡片 `620 pt @2x`
 - state: macOS 浅色外观、Rice Paper 皮肤、长 `run_command`、等待用户确认
 - final result: passed
 
 **Full-View Comparison Evidence**
 
-原始界面、宽屏实现与窄屏实现已放入同一张对比图检查。宽屏从 `680 pt` 可用宽度起稳定切换为左侧命令审阅、右侧授权操作；窄屏回退为上下结构。两种布局均把“拒绝 / 允许”保持在同一行，拒绝在左、允许在右，原有标题、风险提示、工作目录、复制和命令说明入口完整保留。
+原始界面、上一轮实现与本轮宽窄屏实现已放入同一张对比图检查。宽屏从 `680 pt` 可用宽度起稳定切换为左侧命令审阅、右侧授权操作；窄屏回退为上下结构。两种布局均把“拒绝 / 允许”保持在同一行，拒绝在左、允许在右，并将按钮宽高收紧、间距扩大，原有标题、风险提示、工作目录、复制和命令说明入口完整保留。
 
 **Focused Region Comparison Evidence**
 
 - 命令视口固定为 `56 pt`，当前长命令可见约两行，超出内容仍可纵向滚动。
-- 宽屏操作栏使用稳定的 `260 pt` 宽度；按钮没有被长命令的理想宽度挤压或迫使卡片错误回退。
-- 窄屏按钮共享一行且等宽展开，没有恢复成上下两个大按钮。
+- 宽屏操作栏使用稳定的 `260 pt` 宽度；按钮按栏宽自适应，单个按钮最大宽度为 `124 pt`，没有被长命令的理想宽度挤压或迫使卡片错误回退。
+- 窄屏按钮共享一行、居中排列，并同样限制为最大 `124 pt`，不再横向铺满操作区。
+- 两个按钮的间距统一为 `24 pt`；标签使用 `12 pt` 半粗体，名义内容高度为 `28 pt`，控件尺寸为系统常规级别。
 - 主操作继续使用强调色并位于右侧，拒绝使用次级样式；按钮文案来自现有 `L10n.ToolCard` 本地化资源。
 
 **Required Fidelity Surfaces**
 
-- Fonts and typography: 沿用现有原生 macOS 字体、字号与字重，没有改变信息层级。
-- Spacing and layout rhythm: 审阅区与操作区继续使用既有 `18 pt` 内边距和 `12 pt` 节奏，只收紧命令视口并重排按钮。
+- Fonts and typography: 沿用现有原生 macOS 字体，将按钮标签收紧为 `12 pt` 半粗体，没有改变信息层级。
+- Spacing and layout rhythm: 审阅区与操作区继续使用既有 `18 pt` 内边距和 `12 pt` 节奏；按钮之间单独使用更舒展的 `24 pt` 间距。
 - Colors and visual tokens: 背景、边框、分隔线、正文、风险色与按钮强调色全部继续读取当前皮肤 palette。
 - Image quality and asset fidelity: 本界面只使用 SF Symbols 与原生形状，没有新增或缩放位图素材。
 - Copy and content: 保留现有 i18n 文案；“拒绝 / 允许”均从 `L10n.ToolCard` 获取。
@@ -37,12 +38,13 @@
 
 **Findings**
 
-没有未解决的 P0、P1 或 P2 视觉问题。宽屏显著降低了卡片纵向占用，窄屏也不再被两个纵向大按钮拖高。
+没有未解决的 P0、P1 或 P2 视觉问题。宽屏与窄屏按钮均明显小于上一轮，两个操作之间的留白也更清楚；按钮顺序、可读性和点击区域未出现回归。
 
 **Comparison History**
 
 - Before: 宽屏仍采用上下结构，允许与拒绝纵向堆叠，命令框与操作区共同占用较高垂直空间。
 - Iteration 1: 使用自定义 SwiftUI `Layout` 按真实可用宽度切换结构，避免长命令的理想宽度干扰断点判断。
+- Iteration 2: 将按钮名义高度收紧至 `28 pt`、最大宽度限制为 `124 pt`，并把宽窄布局的按钮间距统一扩大到 `24 pt`。
 - Final pass: 重新编译并生成 `1040 pt`、`620 pt` 两张原生 SwiftUI 快照；合成对比后未发现需要继续修复的布局差异。Final result passed.
 
 ---

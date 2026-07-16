@@ -230,7 +230,7 @@ struct AgentModeMessageView: View {
                             for: assistantTurnPresentation?.summaryMessage ?? message,
                             isStreaming: isStreamingThisMessage
                         ))
-                            .font(.system(size: baseFontSize, weight: .medium))
+                            .font(.system(size: baseFontSize))
                             .foregroundStyle(Color(nsColor: .tertiaryLabelColor))
 
                         Rectangle()
