@@ -1,5 +1,22 @@
 # Changelog
 
+## 1.177.0-rc2 - 2026-07-17
+
+### Fixed
+
+- 修复命令确认卡“查看解释与解决建议”在 Coding Plan 有效时请求不存在的 `someim-coding-plan-low/flow`、导致模型服务返回 HTTP 400 的问题；解释请求改用已配置的 `someim-coding-plan-low`，失败时自动回退 `someim-auto-flash`。
+- 解释失败提示改用统一的 provider 错误解析，直接展示脱敏、截断后的服务端原因，不再只留下缺少上下文的 HTTP 状态码。
+
+### Changed
+
+- 版本号从 **1.177.0-rc1** 递增为 **1.177.0-rc2**；Xcode App、Go agent、Help bundle、Computer Use Helper、Chrome 扩展、README badge、移动网关响应头契约与产品文档同步。
+
+### Tests
+
+- 新增审核解释路由回归测试，锁定 Coding Plan 模型名称、`someim-auto-flash` 回退顺序、非套餐路由和 provider 错误正文展示。
+
+---
+
 ## 1.177.0-rc1 - 2026-07-17
 
 ### Added

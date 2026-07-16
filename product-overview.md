@@ -1,6 +1,6 @@
 # WillDeep Product Overview
 
-> Last updated: 2026-07-17 | Current version: v1.177.0-rc1
+> Last updated: 2026-07-17 | Current version: v1.177.0-rc2
 
 ## Positioning
 
@@ -12,6 +12,7 @@ WillDeep is configured for non-App-Store distribution without App Sandbox so it 
 
 ## 架构概览
 
+- **审核解释模型路由修复（1.177.0-rc2）** —— 命令确认卡使用 some.im Coding Plan 时请求已配置的 `someim-coding-plan-low`，失败后回退 `someim-auto-flash`；provider 返回错误时直接显示经过统一解析和长度限制的服务端原因，避免只显示孤零零的 HTTP 状态码。
 - **macOS App 图文文档站内置技能（1.177.0-rc1）** —— 新增 `mac-app-docs-site`，在 WillDeep 内可调用原生 `computer_use_*` 工具、在 Codex Desktop 内可调用 `node_repl + @oai/sky`，以真实界面状态采集流程截图并生成标准 Markdown 教程；同一技能继续把内容目录接入既有 React 或其他文档站路由，附带模板、隐私边界、深链/SSR/i18n 验收规则与 Markdown/JSON 双格式审计报告。
 - **命令确认按钮密度再收紧（1.176.0-rc8）** —— “拒绝 / 允许”在宽屏左右栏与窄屏上下栏中均使用更低的按钮高度和 124pt 最大宽度，按钮间距扩大到 24pt，保留主次操作与左右顺序但减少视觉压迫。
 - **侧边栏 Diff 按文件延迟加载与 TextKit 渲染（1.176.0-rc7）** —— 工作区变更入口先读取 Git 状态与行数统计，用户选中文件后才生成该文件的 diff；大文本由开启非连续布局的 `NSTextView` 按视口排版，并以 UTF-8 字节数和行数设置双重上限，避免大量中文变更触发 SwiftUI 全文同步字形塑形而卡住主线程。
@@ -122,7 +123,7 @@ WillDeep is configured for non-App-Store distribution without App Sandbox so it 
 - **Workspace 会话查询与自动改名（1.152.0-rc15）** —— Agent 新增 `list_workspace_sessions` 只读工具查看当前 workspace 分组下的会话列表，并新增 `suggest_session_title` 通过标题总结 flash 模型生成当前会话短标题候选；系统提示会在新用户输入后检查会话名是否仍贴合任务，普通模式通过 `rename_session` 询问用户确认，Goal 模式下 `rename_session` 自动通过且不打断目标执行，`change_workspace` 仍在 Goal 模式禁用。
 - **同会话后续请求待办刷新（1.152.0-rc14）** —— Plan 模式中已完成计划会重新进入计划门，后续同一会话的新需求必须先生成新 `plan`；捕获逻辑现在优先识别最新助手消息里的 `plan` 块并替换旧计划，右侧待办随新需求刷新。
 - **当前会话排队任务工具（1.152.0-rc14）** —— Agent 新增 `list_queued_tasks` 只读工具，可查看当前会话排队用户消息、provider dispatch 等候、后台 job、媒体任务和 `.codex-build/queue` 项目构建队列；系统提示要求在用户未明确要求时，完整编译、测试、归档、发布、上线等重操作前先查队列，若还有后续用户任务则优先推迟重操作。
-- **Agent 主界面与审核框重排（1.152.0-rc13）** —— Agent 窗口的聊天区、左侧会话栏和右侧任务监控做了更清晰的视觉层次；工具审核卡独立展示风险、命令预览和操作按钮，长命令限制在约 3 行内滚动，并提供“查看解释与解决建议”。解释模型按 some.im Coding Plan 订阅优先 `someim-coding-plan-low/flow`，无订阅回退 `someim-auto-flash`，未绑定 some.im 则使用当前 provider 的 flash 模型。
+- **Agent 主界面与审核框重排（1.152.0-rc13）** —— Agent 窗口的聊天区、左侧会话栏和右侧任务监控做了更清晰的视觉层次；工具审核卡独立展示风险、命令预览和操作按钮，长命令限制在约 3 行内滚动，并提供“查看解释与解决建议”。解释模型在 some.im Coding Plan 有效时使用 `someim-coding-plan-low` 并回退 `someim-auto-flash`，未绑定 some.im 则使用当前 provider 的 flash 模型。
 - **省心托管档位菜单（1.152.0-rc12）** —— 模型菜单在当前会话启用「省心托管」后显示「托管档位」子菜单，支持 Flash / Pro / Premium 三档互切并勾选当前档位；会话标签也展示 `省心托管 · Flash/Pro/Premium`，避免用户看不出托管最低档。
 - **项目级构建守卫（1.152.0-rc11）** —— 仓库新增 `scripts/project_build_guard.rb`，以 `.codex-build/` 维护 workspace 级队列、锁、manifest 与报告；Xedit 的测试和 release 打包入口已接入该守卫，多个 Agent 会话同时触发 `xcodebuild` 时会排队执行，且相同 fingerprint 的成功产物可直接复用。
 - **Agent 模型菜单勾选与分组文案（1.152.0-rc10）** —— 模型选择菜单里路由默认值、省心托管与具体模型的勾选态互斥；具体模型只在用户显式选择后显示勾选。尾部“最近获取”分组改为“所有模型”，省心托管升档后的重置操作改称“降回基础托管档”。

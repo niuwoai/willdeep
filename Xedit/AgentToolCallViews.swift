@@ -1036,7 +1036,7 @@ struct AgentToolCallCard: View {
                 }
             } catch {
                 await MainActor.run {
-                    approvalExplanationError = "解释失败：\(error.localizedDescription)"
+                    approvalExplanationError = "解释失败：\(AppState.friendlyMessage(for: error))"
                     isLoadingApprovalExplanation = false
                 }
             }

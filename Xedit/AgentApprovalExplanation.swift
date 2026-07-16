@@ -25,9 +25,15 @@ private actor AgentApprovalExplanationTextBuffer {
 }
 
 private struct AgentApprovalExplanationRoute {
-    let configuration: AgentConfiguration
+    let configurations: [AgentConfiguration]
     let someIMContext: SomeIMRequestContext?
-    let model: String
+}
+
+nonisolated enum AgentApprovalExplanationRouting {
+    static func someIMModels(hasCodingPlan: Bool) -> [String] {
+        guard hasCodingPlan else { return [SomeIMManagedModel.autoFlash] }
+        return [SomeIMManagedModel.codingPlanLow, SomeIMManagedModel.autoFlash]
+    }
 }
 
 extension AppState {
@@ -37,20 +43,33 @@ extension AppState {
             AgentMessage(role: .system, content: AgentApprovalExplanationPrompt.systemPrompt),
             AgentMessage(role: .user, content: AgentApprovalExplanationPrompt.userPayload(for: call))
         ]
-        let buffer = AgentApprovalExplanationTextBuffer()
-        try await AgentClient(
-            configuration: route.configuration,
-            someIMContext: route.someIMContext
-        ).streamChat(messages: messages) { event in
-            if case .textDelta(let delta) = event {
-                await buffer.append(delta)
+        var lastError: Error?
+
+        for configuration in route.configurations {
+            let buffer = AgentApprovalExplanationTextBuffer()
+            do {
+                try await AgentClient(
+                    configuration: configuration,
+                    someIMContext: route.someIMContext
+                ).streamChat(messages: messages) { event in
+                    if case .textDelta(let delta) = event {
+                        await buffer.append(delta)
+                    }
+                }
+                let text = await buffer.value().trimmingCharacters(in: .whitespacesAndNewlines)
+                guard !text.isEmpty else {
+                    throw AgentToolError.invalidArgument("解释模型返回了空内容。")
+                }
+                return AgentApprovalExplanationResult(text: text, model: configuration.model)
+            } catch {
+                if Task.isCancelled || error is CancellationError {
+                    throw CancellationError()
+                }
+                lastError = error
             }
         }
-        let text = await buffer.value().trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !text.isEmpty else {
-            throw AgentToolError.invalidArgument("解释模型返回了空内容。")
-        }
-        return AgentApprovalExplanationResult(text: text, model: route.model)
+
+        throw lastError ?? AgentToolError.invalidArgument("没有可用的审核解释模型。")
     }
 
     private func approvalExplanationRoute() async -> AgentApprovalExplanationRoute {
@@ -59,31 +78,30 @@ extension AppState {
         if !someIMAPIKey.isEmpty {
             let settings = SomeIMIntegrationStore.loadSettings().normalized
             let status = await refreshedSomeIMCodingPlanStatusIfNeeded()
-            let model = status.isActiveNow
-                ? AgentApprovalExplanationPrompt.codingPlanFlowModel
-                : SomeIMManagedModel.autoFlash
-            let configuration = AgentConfiguration(
-                providerID: AgentProviderPreset.someIMID,
-                baseURL: settings.baseURL,
-                model: model,
-                flashModel: model,
-                proModel: model,
-                routingMode: .flash,
-                apiKey: someIMAPIKey
-            ).normalized
+            let configurations = AgentApprovalExplanationRouting
+                .someIMModels(hasCodingPlan: status.isActiveNow)
+                .map { model in
+                    AgentConfiguration(
+                        providerID: AgentProviderPreset.someIMID,
+                        baseURL: settings.baseURL,
+                        model: model,
+                        flashModel: model,
+                        proModel: model,
+                        routingMode: .flash,
+                        apiKey: someIMAPIKey
+                    ).normalized
+                }
             return AgentApprovalExplanationRoute(
-                configuration: configuration,
-                someIMContext: approvalExplanationSomeIMContext(),
-                model: model
+                configurations: configurations,
+                someIMContext: approvalExplanationSomeIMContext()
             )
         }
 
         var configuration = agentConfiguration.resolved(for: .compression)
         configuration.model = configuration.flashModel
         return AgentApprovalExplanationRoute(
-            configuration: configuration.normalized,
-            someIMContext: nil,
-            model: configuration.flashModel
+            configurations: [configuration.normalized],
+            someIMContext: nil
         )
     }
 
@@ -97,8 +115,6 @@ extension AppState {
 }
 
 private enum AgentApprovalExplanationPrompt {
-    static let codingPlanFlowModel = "someim-coding-plan-low/flow"
-
     static let systemPrompt = """
     你是 WillDeep 的工具审核解释助手。用户正在决定是否允许一个工具调用。
     你的任务是用简体中文给出简短、可靠、非夸张的解释：
