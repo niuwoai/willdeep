@@ -181,7 +181,7 @@ nonisolated enum AgentSessionStore {
             do {
                 try ensureDirectory()
                 let url = directory.appendingPathComponent("\(id.uuidString).json")
-                let data = try encoder.encode(payload)
+                let data = try encoder.encode(payload.externalizingAttachmentContent())
                 try coordinatedWrite(data, to: url)
             } catch {
                 print("AgentSessionStore: failed to save session \(id): \(error)")
@@ -758,7 +758,7 @@ nonisolated enum AgentSessionStore {
             do {
                 try ensureDirectory()
                 let url = directory.appendingPathComponent("\(session.id.uuidString).json")
-                let data = try encoder.encode(session)
+                let data = try encoder.encode(session.externalizingAttachmentContent())
                 try coordinatedWrite(data, to: url)
                 return true
             } catch {

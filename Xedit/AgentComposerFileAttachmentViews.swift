@@ -500,7 +500,7 @@ struct AgentAttachmentPreviewPopover: View {
 
                 ScrollView {
                     LazyVStack(alignment: .leading, spacing: 8) {
-                        ForEach(analysis.sections) { section in
+                        ForEach(analysis.sectionSummaries) { section in
                             sectionRow(section)
                         }
                     }
@@ -527,7 +527,7 @@ struct AgentAttachmentPreviewPopover: View {
         .focusable(false)
     }
 
-    private func sectionRow(_ section: AgentAttachmentSection) -> some View {
+    private func sectionRow(_ section: AgentAttachmentSectionSummary) -> some View {
         let isIncluded = !file.excludedSectionIDs.contains(section.id)
         return Button {
             onToggleSection(section.id)
@@ -545,7 +545,7 @@ struct AgentAttachmentPreviewPopover: View {
                                 .foregroundStyle(.blue)
                         }
                     }
-                    Text(section.text)
+                    Text(section.preview)
                         .font(.system(size: 11))
                         .foregroundStyle(.secondary)
                         .lineLimit(3)
@@ -568,13 +568,13 @@ struct AgentAttachmentPreviewPopover: View {
         case .ready:
             guard let analysis = file.analysis else { return L10n.Composer.attachmentParseFailed }
             return L10n.Composer.attachmentReady(
-                analysis.sections.count,
+                analysis.sectionSummaries.count,
                 analysis.extractedCharacterCount
             )
         }
     }
 
-    private func displayTitle(for section: AgentAttachmentSection) -> String {
+    private func displayTitle(for section: AgentAttachmentSectionSummary) -> String {
         switch section.kind {
         case .page:
             return L10n.Composer.attachmentPage(section.ordinal)

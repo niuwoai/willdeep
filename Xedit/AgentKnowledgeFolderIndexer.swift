@@ -57,7 +57,9 @@ nonisolated enum AgentKnowledgeFolderIndexer {
             attachment.sourceFileSize = candidate.size
             attachment.sourceModifiedAt = candidate.modifiedAt
             do {
-                attachment.analysis = try await AgentDocumentAttachmentParser.analyze(url: candidate.url)
+                attachment.analysis = try await AgentDocumentAttachmentParser
+                    .analyze(url: candidate.url)
+                    .externalizedOrInline()
                 attachment.parseStatus = .ready
             } catch {
                 attachment.parseStatus = .failed

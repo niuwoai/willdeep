@@ -39,7 +39,7 @@ nonisolated enum AgentAttachmentCitationResolver {
         sourceReference: String,
         in file: AgentFileAttachment
     ) -> AgentAttachmentSection? {
-        guard let sections = file.analysis?.sections else { return nil }
+        guard let sections = file.analysis?.loadedSections() else { return nil }
         if let exact = sections.first(where: { $0.sourceReference == sourceReference }) {
             return exact
         }

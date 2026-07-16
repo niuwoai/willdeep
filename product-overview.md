@@ -1,6 +1,6 @@
 # WillDeep Product Overview
 
-> Last updated: 2026-07-16 | Current version: v1.173.0-rc1
+> Last updated: 2026-07-16 | Current version: v1.174.0
 
 ## Positioning
 
@@ -12,6 +12,7 @@ WillDeep is configured for non-App-Store distribution without App Sandbox so it 
 
 ## 架构概览
 
+- **附件解析正文内容寻址外置（1.174.0）** —— 会话文档与知识文件夹解析完成后，将全文写入按 SHA-256 去重的 Application Support sidecar，session JSON 只保留分段摘要、路径与哈希；列表和勾选界面不再反复载入全文，发送、引用与导出时才按需读取并校验完整性。旧版内联会话继续可读，并在下次保存时自动迁移。
 - **Workflow 可取消生命周期与 Agent 结果闭环（1.173.0-rc1）** —— 运行卡片提供实时耗时和明确“停止”按钮，`/stop` 同时取消当前模型轮次与活动工作流；任务句柄归属具体 Agent runtime，会话生命周期会同步取消工作流。`run_workflow` 按调用所在会话、工作区和远端 runtime 启动，结果以一次性 system 通知回到模型上下文；声明式 `parallel: true` 步骤受 `max_agents` 限制并发，父任务取消会传播到子任务。
 - **摘要卡淡灰描边与无副作用关闭（1.173.0）** —— 聊天区右上角的产物、媒体与工作区 Dev Server 卡片统一使用自适应淡灰边框，并提供小型关闭按钮。关闭只影响当前摘要的可见性，不会删除产物、取消任务或停止服务；普通轮询与日志增长不会反复弹回，只有文件集合、媒体生命周期或 Dev Server 任务发生实质变化时才重新出现。
 - **春庭旗韵壁纸人像重构（1.172.0-rc2）** —— 内置“春庭旗韵”从远景全身构图重制为高颜值半身主视觉：面部成为第一焦点，发髻、旗袍刺绣与江南春庭氛围保持精细，右侧保留安静留白以兼容桌面图标和工作区内容；4K 主图与轻量缩略图同步替换，稳定资源标识保持不变。

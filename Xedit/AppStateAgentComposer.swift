@@ -1304,7 +1304,7 @@ extension AppState {
         guard let index = agentPendingFiles.firstIndex(where: { $0.id == fileID }),
               let analysis = agentPendingFiles[index].analysis else { return }
         var files = agentPendingFiles
-        files[index].excludedSectionIDs = included ? [] : Set(analysis.sections.map(\.id))
+        files[index].excludedSectionIDs = included ? [] : Set(analysis.sectionSummaries.map(\.id))
         agentPendingFiles = files
         synchronizePendingAgentFileSelection(fileID: fileID, excludedSectionIDs: files[index].excludedSectionIDs)
     }
@@ -1345,7 +1345,7 @@ extension AppState {
         guard let runtime = activeRuntime,
               let index = runtime.documentAttachments.firstIndex(where: { $0.id == fileID }),
               let analysis = runtime.documentAttachments[index].analysis else { return }
-        let excluded = included ? Set<String>() : Set(analysis.sections.map(\.id))
+        let excluded = included ? Set<String>() : Set(analysis.sectionSummaries.map(\.id))
         runtime.documentAttachments[index].excludedSectionIDs = excluded
         if let pendingIndex = runtime.pendingFiles.firstIndex(where: { $0.id == fileID }) {
             runtime.pendingFiles[pendingIndex].excludedSectionIDs = excluded
@@ -1361,10 +1361,9 @@ extension AppState {
     ) {
         Task { [weak runtime] in
             do {
-                let analysis = try await AgentDocumentAttachmentParser.analyze(
-                    url: url,
-                    forceText: treatsUnknownTypeAsText
-                )
+                let analysis = try await AgentDocumentAttachmentParser
+                    .analyze(url: url, forceText: treatsUnknownTypeAsText)
+                    .externalizedOrInline()
                 guard let runtime else { return }
                 if let index = runtime.pendingFiles.firstIndex(where: { $0.id == id }) {
                     runtime.pendingFiles[index].analysis = analysis
