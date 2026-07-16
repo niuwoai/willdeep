@@ -698,7 +698,7 @@ struct AgentSemanticActivityStatusLine: View {
             return AgentActivityPhase(label: "验证中", systemImage: "terminal", tint: .orange)
         case .terminalOperation:
             return AgentActivityPhase(label: "操作终端", systemImage: "terminal", tint: .orange)
-        case .applyPatch:
+        case .fileMutation, .applyPatch:
             return AgentActivityPhase(label: "编辑中", systemImage: "pencil.line", tint: .green)
         case .subagent, .claudeCode, .codexCLI, .cursorAgent:
             // Fold the spawn_agent per-round progress ("第 3/12 轮 · 5 次工具")

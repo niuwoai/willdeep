@@ -288,8 +288,7 @@ extension AgentChatHistoryRenderer {
         secondaryColor: NSColor
     ) {
         let start = result.length
-        let chevron = isExpanded ? "▾" : "▸"
-        let titleText = "\(chevron) \(AgentChatToolSummaryFormatter.collapsedTitle(for: group.calls))"
+        let titleText = AgentChatToolSummaryFormatter.collapsedTitle(for: group.calls)
         result.append(NSAttributedString(
             string: titleText,
             attributes: [
@@ -592,9 +591,9 @@ extension AgentChatHistoryRenderer {
         // so clipped text was simply unreadable.
         style.lineBreakMode = .byCharWrapping
         if baseStyle.alignment != .right {
-            style.headIndent = baseStyle.headIndent + 8
-            style.firstLineHeadIndent = baseStyle.firstLineHeadIndent + 8
-            style.tailIndent = baseStyle.tailIndent - 8
+            style.headIndent = baseStyle.headIndent + AgentChatHistoryLayoutMetrics.richBlockTextInset
+            style.firstLineHeadIndent = baseStyle.firstLineHeadIndent + AgentChatHistoryLayoutMetrics.richBlockTextInset
+            style.tailIndent = baseStyle.tailIndent - AgentChatHistoryLayoutMetrics.richBlockTextInset
         }
         return style
     }
@@ -625,9 +624,11 @@ extension AgentChatHistoryRenderer {
 
     private static func tableBlockParagraphStyle(from baseStyle: NSParagraphStyle) -> NSParagraphStyle {
         let style = codeBlockParagraphStyle(from: baseStyle).mutableCopy() as? NSMutableParagraphStyle ?? NSMutableParagraphStyle()
-        // Tables keep clipping: monospace column alignment breaks if rows
-        // wrap; wide tables open in the dedicated table detail window.
-        style.lineBreakMode = .byClipping
+        // Keep each monospace row intact, but make the viewport boundary
+        // explicit with an ellipsis. The full underlying text remains
+        // selectable/copyable, and clicking the table opens the real
+        // horizontally scrollable NSTableView detail window.
+        style.lineBreakMode = .byTruncatingTail
         style.lineSpacing = MarkdownSpacing.tableLine
         // Each visual table row is a TextKit paragraph. Block margins must
         // therefore be applied only to the first and last row below; putting

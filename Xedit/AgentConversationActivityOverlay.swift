@@ -485,9 +485,6 @@ private struct AgentMediaActivityCard: View {
                         }
                     }
                     Spacer(minLength: 4)
-                    Image(systemName: "chevron.right")
-                        .font(.caption2.weight(.semibold))
-                        .foregroundStyle(.tertiary)
                 }
                 .padding(.leading, 11)
                 .padding(.vertical, 9)
@@ -681,9 +678,6 @@ private struct AgentActivityCardLabel: View {
                     .truncationMode(.middle)
             }
             Spacer(minLength: 4)
-            Image(systemName: "chevron.right")
-                .font(.caption2.weight(.semibold))
-                .foregroundStyle(.tertiary)
         }
         .padding(.leading, 11)
         .padding(.vertical, 9)

@@ -1360,6 +1360,35 @@ extension WillDeepTests {
         #expect(summary?.contains("create_file") == false)
     }
 
+    @Test("consecutive file creations merge into one live activity row")
+    func testToolCallGroupingMergesConsecutiveFileCreations() {
+        let calls = [
+            makeCall("create_file", arguments: ["path": .string("episode-1.md")]),
+            makeCall("create_file", arguments: ["path": .string("episode-2.md")])
+        ]
+
+        let segments = AgentToolCallGrouping.livePresentationSegments(calls)
+
+        #expect(segments.count == 1)
+        #expect(segments[0].kind == .fileMutation)
+        #expect(segments[0].calls.count == 2)
+        #expect(AgentCollapsedToolActivitySummary.text(for: segments[0].calls) == "生成了 2 个文件")
+    }
+
+    @Test("interactive patch proposals remain separate")
+    func testToolCallGroupingKeepsPatchProposalsStandalone() {
+        let calls = [
+            makeCall("apply_patch", status: .awaitingConfirm),
+            makeCall("apply_patch", status: .awaitingConfirm)
+        ]
+
+        let segments = AgentToolCallGrouping.livePresentationSegments(calls)
+
+        #expect(segments.count == 2)
+        #expect(segments.allSatisfy { $0.kind == .applyPatch })
+        #expect(segments.allSatisfy { $0.calls.count == 1 })
+    }
+
     @Test("AgentToolCallGrouping never merges ask_user even when adjacent")
     func testToolCallGroupingKeepsAskUserStandalone() {
         let calls = [
@@ -1496,10 +1525,22 @@ extension WillDeepTests {
 
     @Test("command confirmation stays calm, scrollable, and honest about shortcuts")
     func testCommandConfirmationReviewMetrics() {
-        #expect(AgentConfirmationReviewMetrics.commandVisibleLineCount == 3)
-        #expect(AgentConfirmationReviewMetrics.commandViewportHeight >= 60)
-        #expect(AgentConfirmationReviewMetrics.decisionColumnWidth >= 180)
-        #expect(AgentConfirmationReviewMetrics.horizontalMinimumWidth >= 560)
+        #expect(AgentConfirmationReviewMetrics.commandVisibleLineCount == 2)
+        #expect(AgentConfirmationReviewMetrics.commandViewportHeight >= 52)
+        #expect(AgentConfirmationReviewMetrics.commandViewportHeight <= 60)
+        #expect(AgentConfirmationReviewMetrics.decisionColumnWidth >= 240)
+        #expect(AgentConfirmationReviewMetrics.horizontalMinimumWidth >= 640)
+        #expect(AgentConfirmationReviewMetrics.horizontalMinimumWidth <= 720)
+        #expect(
+            AgentConfirmationReviewMetrics.usesHorizontalLayout(
+                availableWidth: AgentConfirmationReviewMetrics.horizontalMinimumWidth
+            )
+        )
+        #expect(
+            !AgentConfirmationReviewMetrics.usesHorizontalLayout(
+                availableWidth: AgentConfirmationReviewMetrics.horizontalMinimumWidth - 1
+            )
+        )
         #expect(AgentConfirmationReviewMetrics.showsKeyboardShortcutHint == false)
     }
 

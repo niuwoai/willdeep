@@ -64,6 +64,30 @@ struct AgentStatsDashboard: View {
 
     var body: some View {
         let palette = appState.editorSettings.interfaceSkin.palette
+        Group {
+            if appState.hasLoadedAgentUsageSnapshots {
+                dashboardContent
+            } else {
+                ProgressView()
+                    .controlSize(.small)
+                    .frame(maxWidth: .infinity, minHeight: 160)
+            }
+        }
+        .padding(18)
+        .background(
+            RoundedRectangle(cornerRadius: 14)
+                .fill(palette.panelFill)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 14)
+                .stroke(palette.hairline, lineWidth: 1)
+        )
+        .task {
+            await appState.loadAgentUsageSnapshotsIfNeeded()
+        }
+    }
+
+    private var dashboardContent: some View {
         VStack(alignment: .leading, spacing: 12) {
             tabBar
             if selectedTab == .overview {
@@ -76,15 +100,6 @@ struct AgentStatsDashboard: View {
                 modelUsageList
             }
         }
-        .padding(18)
-        .background(
-            RoundedRectangle(cornerRadius: 14)
-                .fill(palette.panelFill)
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: 14)
-                .stroke(palette.hairline, lineWidth: 1)
-        )
     }
 
     private var tabBar: some View {
