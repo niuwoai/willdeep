@@ -8,7 +8,7 @@
 
 import SwiftUI
 
-// MARK: - Execution picker (WillDeep / external coding agents)
+// MARK: - Execution picker (built-in / external coding agents)
 
 struct AgentExecutionPickerPill: View {
     @EnvironmentObject var appState: AppState
@@ -53,7 +53,7 @@ struct AgentExecutionPickerPill: View {
         .menuIndicator(.hidden)
         .focusable(false)
         .fixedSize()
-        .help("选择这一轮由 WillDeep 自己执行，还是委托给本机 Claude Code / Codex CLI。")
+        .help(L10n.ExecutionAgent.pickerHelp)
     }
 
     private var pillForeground: Color {

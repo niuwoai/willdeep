@@ -1,3 +1,50 @@
+# Composer 执行器入口 Design QA
+
+- source visual truth: `/var/folders/np/rjc0y5w52x324x21pv6g33440000gp/T/codex-clipboard-e930db3d-5745-4a5a-95c3-3684a3262afe.png`
+- implementation screenshot: `/Users/rocky/Sites/Xedit/build/visual-qa/executor-picker-rc1/implementation-matched-full.png`
+- focused implementation: `/Users/rocky/Sites/Xedit/build/visual-qa/executor-picker-rc1/implementation-composer.png`
+- combined comparison: `/Users/rocky/Sites/Xedit/build/visual-qa/executor-picker-rc1/comparison.png`
+- comparison viewport: 参考 Composer 裁切为 `606 x 156 @1x`，生产 Composer 裁切为 `602 x 148 @1x`；通过缩放原生窗口将输入区宽度匹配到约 600 pt 后再裁切
+- state: macOS 浅色外观；参考图为 muchtoken / 本地处理 / detached，实现图为未选择工作区 / 本地处理 / 无分支；两者均为普通模式、空输入状态
+- final result: passed
+
+**Full-View Comparison Evidence**
+
+参考图与生产 `AgentModeComposerView` 已按近似相同的 600 pt Composer 宽度并排合成。实现中的“我们”执行器胶囊位于工作区、运行位置和分支信息行的最右侧，正好落在参考图红框标记区域；输入区和底部常用控制保持原有层级，没有被新入口挤压或遮挡。
+
+**Focused Region Comparison Evidence**
+
+- 执行器胶囊与顶部上下文栏使用同一垂直基线，靠右固定且不会随左侧工作区信息横向滚动。
+- 空工作区与窄窗口状态下，左侧上下文栏可压缩，执行器入口仍完整显示“我们”与图标，没有截字或越界。
+- 底部“审批”紧跟普通、计划与目标模式选择器；“更多”帮助文本为“更多设置：插件、专家”，执行器不再在底部重复出现。
+- 原生辅助功能树确认菜单包含“我们 / Claude Code / Codex”三项，入口帮助文案说明本轮可在当前会话执行或委托给本机 CLI。
+
+**Required Fidelity Surfaces**
+
+- Fonts and typography: 继续使用 Composer 现有原生 macOS 胶囊字号、字重和 SF Symbols；“我们 / Us”及摘要全部走 `Localizable.xcstrings`。
+- Spacing and layout rhythm: 顶部上下文栏维持原有 8 pt 控件间距，执行器胶囊通过独立尾部布局保持右对齐；输入提示和底部控制区未改变高度。
+- Colors and visual tokens: 胶囊沿用当前界面皮肤的动态前景、控制填充和强调色，没有新增硬编码颜色。
+- Image quality and asset fidelity: 仅使用现有 SF Symbols，没有新增位图或近似绘制素材。
+- Copy and content: 中文显示“我们”，英文显示“Us”；Claude Code、Codex 名称与所有说明均由 i18n 资源提供。
+
+**Primary Interactions Checked**
+
+- 点击顶部执行器入口后显示“我们 / Claude Code / Codex”：passed。
+- 窄窗口约 600 pt Composer 宽度下入口保持右对齐且完整可见：passed。
+- 底部审批入口独立展示且更多菜单只保留插件与专家：passed。
+- 原生 Debug App 启动、布局和辅助功能标签检查：passed。
+
+**Findings**
+
+没有未解决的 P0、P1 或 P2 视觉问题。参考图中的目标位置已被稳定占用，入口不会和工作区、运行位置、分支信息或输入区发生重叠。
+
+**Comparison History**
+
+- Iteration 1: 全宽窗口截图确认入口已在顶部右侧，但 Composer 宽度大于参考图，不满足同视口对照。
+- Iteration 2: 将原生窗口收窄，使生产 Composer 宽度从约 985 pt 调整到 602 pt，与参考裁切 606 pt 对齐；重新捕获并合成后未发现需继续修复的布局差异。Final result passed.
+
+---
+
 # 桌面宠物新增形象与情境动画 Design QA
 
 - source visual truth: `/Users/rocky/Sites/Xedit/build/visual-qa/desktop-pet-rc1/source.png`、现有 `DesktopPet` / `DesktopPetLaptop` 生产素材及本次两套透明像素画原图

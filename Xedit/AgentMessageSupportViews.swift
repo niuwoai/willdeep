@@ -85,7 +85,8 @@ enum AgentLongTokenBreaker {
 }
 
 /// A small blinking bar that follows the assistant's last token. Pure
-/// decoration — disappears the moment `isAgentResponding` goes false.
+/// decoration — its parent removes it after output has been idle for
+/// `AgentStreamingCursorPolicy.inactivityTimeout`.
 /// 闪烁必须走 symbolEffect（渲染服务器驱动），禁用
 /// withAnimation(.repeatForever) —— 那会让 SwiftUI 每帧跑一次图事务，
 /// 见 AgentBreathingIndicator 注释（1.58.0-rc9 CPU 修复）。
@@ -96,6 +97,18 @@ struct AgentStreamingCursor: View {
             .foregroundStyle(Color.accentColor.opacity(0.85))
             .symbolPulseCompat()
             .frame(width: 7, height: 14)
+    }
+}
+
+enum AgentStreamingCursorPolicy {
+    private static let nanosecondsPerSecond: TimeInterval = 1_000_000_000
+    static let inactivityTimeout: TimeInterval = 0.5
+    static var inactivityTimeoutNanoseconds: UInt64 {
+        UInt64(inactivityTimeout * nanosecondsPerSecond)
+    }
+
+    static func shouldShow(lastOutputAt: Date, now: Date) -> Bool {
+        now.timeIntervalSince(lastOutputAt) < inactivityTimeout
     }
 }
 

@@ -160,12 +160,14 @@ final class AppState: ObservableObject {
     /// exposes these through public pricing and `/v1/models` extensions.
     @Published var agentDiscoveredModelMetadata: [AgentModelDiscovery] = []
     @Published var someIMCodingPlanStatus = SomeIMIntegrationStore.loadCodingPlanStatus()
+    @Published var someIMCodingPlanRefreshFailure: SomeIMCodingPlanRefreshFailure?
     /// Model IDs explicitly chosen in the composer, most-recently-used
     /// first. This is separate from fetched IDs so a large /models
     /// result doesn't drown out the handful of models the user actually
     /// rotates between.
     @Published var agentRecentlyUsedModelIDs: [String] = []
     @Published var agentWorktreeDiffPreview: AgentWorktreeDiffPreview?
+    @Published var isAgentWorktreeDiffPreviewLoading = false
     /// One-shot request from chat-pane affordances (file chips, citations,
     /// future commands) to open a specific kind of side panel in Agent
     /// mode and optionally focus a file. AgentModeView listens, applies

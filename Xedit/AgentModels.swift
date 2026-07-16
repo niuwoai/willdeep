@@ -751,20 +751,17 @@ nonisolated enum AgentExecutionAgent: String, Codable, CaseIterable, Identifiabl
 
     var displayName: String {
         switch self {
-        case .willDeep: return "WillDeep"
-        case .claudeCode: return "Claude Code"
-        case .codexCLI: return "Codex"
+        case .willDeep: return L10n.ExecutionAgent.oursName
+        case .claudeCode: return L10n.ExecutionAgent.claudeCodeName
+        case .codexCLI: return L10n.ExecutionAgent.codexName
         }
     }
 
     var summary: String {
         switch self {
-        case .willDeep:
-            return "使用当前会话自己的模型和工具循环。"
-        case .claudeCode:
-            return "通过本机 Claude Code CLI 执行这轮任务。"
-        case .codexCLI:
-            return "通过本机 Codex CLI 执行这轮任务。"
+        case .willDeep: return L10n.ExecutionAgent.oursSummary
+        case .claudeCode: return L10n.ExecutionAgent.claudeCodeSummary
+        case .codexCLI: return L10n.ExecutionAgent.codexSummary
         }
     }
 
@@ -1739,6 +1736,9 @@ nonisolated struct AgentFileAttachment: Identifiable, Codable, Equatable, Sendab
     var isEnabled: Bool = true
     var sourceFileSize: Int64?
     var sourceModifiedAt: Date?
+    /// Set only after the user explicitly confirms that an otherwise unknown
+    /// file of at most 8 KB should be decoded and sent as plain text.
+    var treatsUnknownTypeAsText: Bool?
 
     var id: String { url.standardizedFileURL.path }
 

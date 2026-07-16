@@ -19,6 +19,7 @@ nonisolated enum AgentAttachedPromptProtocol {
 
 nonisolated enum AgentComposerAttachmentSupport {
     static let maxDocumentBytes = 50 * 1_024 * 1_024
+    static let maxUnknownAttachmentBytes = 8 * 1_024
 
     static let textExtensions: Set<String> = [
         "txt", "md", "markdown", "go", "rb", "ruby", "py", "python",
@@ -26,7 +27,24 @@ nonisolated enum AgentComposerAttachmentSupport {
         "html", "htm", "css", "js", "jsx", "ts", "tsx", "swift",
         "java", "kt", "kts", "c", "h", "m", "mm", "cc", "cpp",
         "hpp", "rs", "sh", "bash", "zsh", "fish", "sql", "toml",
-        "ini", "conf", "log", "diff", "patch"
+        "ini", "conf", "cfg", "config", "properties", "env", "log",
+        "diff", "patch", "lock", "gradle", "groovy", "scala", "cs",
+        "fs", "fsx", "vb", "r", "lua", "pl", "pm", "ex", "exs",
+        "erl", "hrl", "clj", "cljs", "edn", "vue", "svelte", "astro",
+        "graphql", "gql", "proto", "tex", "rst", "adoc", "org"
+    ]
+
+    /// Common text-based build and repository files intentionally have no
+    /// extension. UTType cannot classify them reliably, so recognize their
+    /// conventional basenames before falling back to the unknown-file flow.
+    static let extensionlessTextFilenames: Set<String> = [
+        "procfile", "dockerfile", "makefile", "gemfile", "rakefile",
+        "guardfile", "vagrantfile", "podfile", "cartfile", "brewfile",
+        "justfile", "taskfile", "fastfile", "appfile", "deliverfile",
+        "matchfile", "pluginfile", "dangerfile", "readme", "license",
+        "notice", "changelog", "authors", ".gitignore", ".gitattributes",
+        ".gitmodules", ".dockerignore", ".editorconfig", ".npmrc",
+        ".yarnrc", ".swiftlint"
     ]
 
     static let locallyParsedDocumentExtensions: Set<String> = [
@@ -37,22 +55,51 @@ nonisolated enum AgentComposerAttachmentSupport {
         .union(locallyParsedDocumentExtensions)
 
     static var allowedContentTypes: [UTType] {
-        let documentTypes = supportedDocumentExtensions.compactMap {
-            UTType(filenameExtension: $0)
-        }
-        var seen = Set<String>()
-        return ([.image] + documentTypes).filter { seen.insert($0.identifier).inserted }
+        // Unknown files must remain selectable so Composer can apply the
+        // 8 KB confirmation/blocking policy itself. `.item` also admits
+        // extensionless text files such as Procfile.
+        [.item]
     }
 
     static func isSupportedDocument(_ url: URL) -> Bool {
-        supportedDocumentExtensions.contains(url.pathExtension.lowercased())
+        isKnownTextDocument(url)
+            || locallyParsedDocumentExtensions.contains(url.pathExtension.lowercased())
+    }
+
+    static func isKnownTextDocument(_ url: URL) -> Bool {
+        let filename = url.lastPathComponent.lowercased()
+        if textExtensions.contains(url.pathExtension.lowercased()) { return true }
+        if extensionlessTextFilenames.contains(filename) { return true }
+        return filename.hasPrefix("procfile.")
+            || filename.hasPrefix("dockerfile.")
+            || filename.hasPrefix(".env.")
+    }
+
+    static func selectionPolicy(for url: URL) -> AgentComposerAttachmentSelectionPolicy {
+        if isSupportedDocument(url) { return .supported }
+        guard let byteCount = fileByteCount(url) else { return .unknownUnreadable }
+        if byteCount > maxUnknownAttachmentBytes {
+            return .unknownTooLarge(byteCount: byteCount)
+        }
+        return .unknownNeedsConfirmation(byteCount: byteCount)
     }
 
     static func documentExceedsSizeLimit(_ url: URL) -> Bool {
-        guard let values = try? url.resourceValues(forKeys: [.fileSizeKey]),
-              let fileSize = values.fileSize else {
-            return false
-        }
+        guard let fileSize = fileByteCount(url) else { return false }
         return fileSize > maxDocumentBytes
     }
+
+    private static func fileByteCount(_ url: URL) -> Int? {
+        guard let values = try? url.resourceValues(forKeys: [.fileSizeKey]) else {
+            return nil
+        }
+        return values.fileSize
+    }
+}
+
+nonisolated enum AgentComposerAttachmentSelectionPolicy: Equatable {
+    case supported
+    case unknownNeedsConfirmation(byteCount: Int)
+    case unknownTooLarge(byteCount: Int)
+    case unknownUnreadable
 }

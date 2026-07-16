@@ -401,6 +401,102 @@ struct GitWorktreeCoreTests {
         #expect(!preview.diff.contains("+user"))
     }
 
+    @Test("agent worktree diff preview renders small untracked files without git child processes")
+    func testWorktreeDiffPreviewRendersSmallUntrackedFilesDirectly() throws {
+        let repository = FileManager.default.temporaryDirectory
+            .appendingPathComponent("willdeep_untracked_diff_preview_\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: repository, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: repository) }
+
+        let files = try (0..<7).map { index -> AgentFileChangeSummary in
+            let path = "new-file-\(index).txt"
+            try "line \(index)\n".write(
+                to: repository.appendingPathComponent(path),
+                atomically: true,
+                encoding: .utf8
+            )
+            return AgentFileChangeSummary(
+                path: path,
+                kind: .untracked,
+                lineStats: AgentLineChangeStats(added: nil, deleted: nil)
+            )
+        }
+        let summary = AgentWorktreeChangeSummary(repositoryRoot: repository, files: files)
+
+        let preview = AppState.loadAgentWorktreeDiffPreview(
+            changes: summary,
+            repositoryRoot: repository
+        )
+
+        #expect(!preview.diff.contains("Diff 预览已降级"))
+        #expect(preview.diff.contains("diff --git a/new-file-0.txt b/new-file-0.txt"))
+        #expect(preview.diff.contains("diff --git a/new-file-6.txt b/new-file-6.txt"))
+        #expect(preview.diff.contains("+line 6"))
+    }
+
+    @Test("agent worktree diff preview summarizes oversized untracked files")
+    func testWorktreeDiffPreviewSummarizesOversizedUntrackedFiles() throws {
+        let repository = FileManager.default.temporaryDirectory
+            .appendingPathComponent("willdeep_large_untracked_diff_\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: repository, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: repository) }
+
+        let path = "large-output.txt"
+        let oversizedData = Data(
+            repeating: 0x61,
+            count: AppState.worktreeDiffPreviewMaxUntrackedFileBytes + 1
+        )
+        try oversizedData.write(to: repository.appendingPathComponent(path))
+        let summary = AgentWorktreeChangeSummary(
+            repositoryRoot: repository,
+            files: [
+                AgentFileChangeSummary(
+                    path: path,
+                    kind: .untracked,
+                    lineStats: AgentLineChangeStats(added: nil, deleted: nil)
+                )
+            ]
+        )
+
+        let preview = AppState.loadAgentWorktreeDiffPreview(
+            changes: summary,
+            repositoryRoot: repository
+        )
+
+        #expect(preview.diff.contains("Diff 预览已降级"))
+        #expect(preview.diff.contains("单文件 64KB"))
+        #expect(!preview.diff.contains(String(repeating: "a", count: 1_024)))
+    }
+
+    @Test("agent worktree diff preview summarizes binary untracked files")
+    func testWorktreeDiffPreviewSummarizesBinaryUntrackedFiles() throws {
+        let repository = FileManager.default.temporaryDirectory
+            .appendingPathComponent("willdeep_binary_untracked_diff_\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: repository, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: repository) }
+
+        let path = "asset.bin"
+        try Data([0x00, 0x01, 0x02, 0x03]).write(to: repository.appendingPathComponent(path))
+        let summary = AgentWorktreeChangeSummary(
+            repositoryRoot: repository,
+            files: [
+                AgentFileChangeSummary(
+                    path: path,
+                    kind: .untracked,
+                    lineStats: AgentLineChangeStats(added: nil, deleted: nil)
+                )
+            ]
+        )
+
+        let preview = AppState.loadAgentWorktreeDiffPreview(
+            changes: summary,
+            repositoryRoot: repository
+        )
+
+        #expect(preview.diff.contains("Diff 预览已降级"))
+        #expect(preview.diff.contains("二进制或非 UTF-8"))
+    }
+
     @Test("agent worktree diff preview summarizes large generated web dist changes")
     func testWorktreeDiffPreviewSummarizesGeneratedWebDist() {
         let root = URL(fileURLWithPath: "/tmp/willdeep-git-root")

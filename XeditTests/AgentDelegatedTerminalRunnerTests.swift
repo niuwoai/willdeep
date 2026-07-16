@@ -36,14 +36,14 @@ struct AgentDelegatedTerminalRunnerTests {
         )
         defer { artifacts.removeAll() }
 
-        let permissions = try #require(
-            FileManager.default.attributesOfItem(atPath: artifacts.runnerURL.path)[.posixPermissions] as? NSNumber
-        )
-        #expect(permissions.intValue == AgentDelegatedTerminalRunner.runnerPermissions)
+        #expect(!FileManager.default.fileExists(
+            atPath: directory.appendingPathComponent("willdeep-terminal-SPECIAL.sh").path
+        ))
+        #expect(artifacts.invocation.contains(command))
 
         let process = Process()
         process.executableURL = URL(fileURLWithPath: "/bin/sh")
-        process.arguments = [artifacts.runnerURL.path]
+        process.arguments = ["-c", artifacts.invocation]
         process.standardOutput = FileHandle.nullDevice
         process.standardError = FileHandle.nullDevice
         try process.run()
@@ -54,16 +54,41 @@ struct AgentDelegatedTerminalRunnerTests {
         #expect(try String(contentsOf: artifacts.outputURL, encoding: .utf8) == prompt)
     }
 
-    @Test("short runner invocation works from sh, bash, zsh, and fish when installed")
-    func invocationWorksAcrossInteractiveShells() throws {
+    @Test("delegated command enters the requested workspace without a runner file")
+    func entersRequestedWorkspaceDirectly() throws {
+        let directory = try makeTemporaryDirectory(named: "runner workspace")
+        defer { try? FileManager.default.removeItem(at: directory) }
+
+        let artifacts = try AgentDelegatedTerminalRunner.create(
+            command: "/bin/pwd",
+            workingDirectory: directory.path,
+            directory: directory,
+            token: "WORKSPACE"
+        )
+        defer { artifacts.removeAll() }
+
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/bin/sh")
+        process.arguments = ["-c", artifacts.invocation]
+        process.standardOutput = FileHandle.nullDevice
+        process.standardError = FileHandle.nullDevice
+        try process.run()
+        process.waitUntilExit()
+
+        #expect(process.terminationStatus == 0)
+        #expect(try String(contentsOf: artifacts.outputURL, encoding: .utf8)
+            .trimmingCharacters(in: .whitespacesAndNewlines) == directory.path)
+        #expect(!FileManager.default.fileExists(
+            atPath: directory.appendingPathComponent("willdeep-terminal-WORKSPACE.sh").path
+        ))
+    }
+
+    @Test("direct delegated invocation works in POSIX shells")
+    func invocationWorksInPOSIXShells() throws {
         let directory = try makeTemporaryDirectory(named: "runner shells ' path")
         defer { try? FileManager.default.removeItem(at: directory) }
 
-        var shells = ["/bin/sh", "/bin/bash", "/bin/zsh"]
-        let fish = "/opt/homebrew/bin/fish"
-        if FileManager.default.isExecutableFile(atPath: fish) {
-            shells.append(fish)
-        }
+        let shells = ["/bin/sh", "/bin/bash", "/bin/zsh"]
 
         for (index, shell) in shells.enumerated() {
             let artifacts = try AgentDelegatedTerminalRunner.create(
@@ -75,9 +100,7 @@ struct AgentDelegatedTerminalRunnerTests {
 
             let process = Process()
             process.executableURL = URL(fileURLWithPath: shell)
-            process.arguments = shell == fish
-                ? ["--no-config", "-c", artifacts.invocation]
-                : ["-c", artifacts.invocation]
+            process.arguments = ["-c", artifacts.invocation]
             process.standardOutput = FileHandle.nullDevice
             process.standardError = FileHandle.nullDevice
             try process.run()

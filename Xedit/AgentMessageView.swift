@@ -394,6 +394,7 @@ struct AgentAssistantMarkdownBody: View {
 private struct AgentAssistantStreamingBody: View {
     let content: String
     let baseFontSize: CGFloat
+    @State private var showsStreamingCursor = true
 
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
@@ -409,7 +410,32 @@ private struct AgentAssistantStreamingBody: View {
                 .foregroundStyle(.primary)
                 .lineSpacing(AgentChatHistoryLayoutMetrics.bodyLineSpacing)
                 .fixedSize(horizontal: false, vertical: true)
-            AgentStreamingCursor()
+            if showsStreamingCursor {
+                AgentStreamingCursor()
+            }
+        }
+        // Use the content itself instead of its length as the task identity:
+        // long-message previews keep a fixed character count while their tail
+        // still changes as new output arrives.
+        .task(id: content) {
+            let lastOutputAt = Date()
+            showsStreamingCursor = true
+
+            do {
+                try await Task.sleep(
+                    nanoseconds: AgentStreamingCursorPolicy.inactivityTimeoutNanoseconds
+                )
+            } catch {
+                return
+            }
+
+            guard !AgentStreamingCursorPolicy.shouldShow(
+                lastOutputAt: lastOutputAt,
+                now: Date()
+            ) else {
+                return
+            }
+            showsStreamingCursor = false
         }
     }
 }
@@ -486,7 +512,10 @@ enum AgentAssistantMarkdownRenderer {
 
         func appendSeparator() {
             if !result.characters.isEmpty {
-                result += AttributedString("\n\n")
+                // A Markdown paragraph boundary is one visual line break in
+                // chat. Two literal newlines produced a full blank row and
+                // made wrapped prose look tighter than nearby paragraphs.
+                result += AttributedString("\n")
                 if pendingCodeBottomSpacer {
                     var spacer = AttributedString("\n")
                     spacer.font = .system(size: 6)
@@ -570,7 +599,7 @@ enum AgentAssistantMarkdownRenderer {
                     code.backgroundColor = Color.primary.opacity(0.035)
                     result += code
                 }
-                // 底部 margin 由下一次 appendSeparator 在 "\n\n" 之后补
+                // 底部 margin 由下一次 appendSeparator 在段落换行之后补
                 // 一行微型 spacer（与顶部结构完全镜像）；直接在这里追加
                 // 会排在分隔符前面、把空隙撑成两个整行。代码块是最后
                 // 一块时分隔符不会再来，flag 自然作废，流式中结尾是

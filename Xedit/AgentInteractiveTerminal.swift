@@ -825,9 +825,12 @@ enum TerminalShortcutProtectedVault {
 
 enum AgentTerminalTabKind: Equatable {
     case localShell
+    /// Reusable app-managed `/bin/sh` tab for visible external CLI delegation.
+    case delegatedShell
     case ssh(runtimeID: UUID, displayName: String, target: String)
 
     var isSSH: Bool { if case .ssh = self { return true }; return false }
+    var isDelegatedShell: Bool { self == .delegatedShell }
 }
 
 // MARK: - SwiftTerm view subclass that reports user activity
@@ -1120,6 +1123,8 @@ final class AgentLocalProcessTerminalView: TerminalView, TerminalViewDelegate, L
 
 @MainActor
 final class AgentTerminalTab: ObservableObject, Identifiable, AgentTerminalProcessDelegate {
+    nonisolated static let delegatedShellExecutable = "/bin/sh"
+
     let id: UUID
     /// Which Agent session opened this tab. nil for tabs the user opened
     /// manually with no active session context.
@@ -1196,6 +1201,15 @@ final class AgentTerminalTab: ObservableObject, Identifiable, AgentTerminalProce
                 args: ["-l"],
                 environment: env,
                 execName: "-" + (shell as NSString).lastPathComponent,
+                currentDirectory: cwd
+            )
+        case .delegatedShell:
+            let cwd = workingDirectory ?? FileManager.default.homeDirectoryForCurrentUser.path
+            terminalView.startProcess(
+                executable: Self.delegatedShellExecutable,
+                args: ["-i"],
+                environment: env,
+                execName: "sh",
                 currentDirectory: cwd
             )
         case .ssh(_, _, let target):
@@ -1410,6 +1424,7 @@ final class AgentTerminalTab: ObservableObject, Identifiable, AgentTerminalProce
             throw AgentToolError.invalidArgument("The bound Agent Terminal tab is already running another delegated task.")
         }
         isAutomationBusy = true
+        title = "\(displayCommand) · sh"
         recordCommand(displayCommand)
         lastActivity = Date()
         terminalView.send(txt: command + "\n")
@@ -1446,6 +1461,7 @@ final class AgentTerminalTab: ObservableObject, Identifiable, AgentTerminalProce
 
     var runtimeTarget: String {
         if case .ssh(_, _, let target) = kind { return target }
+        if kind.isDelegatedShell { return "/bin/sh automation tab" }
         return "local tab (may contain nested manual SSH)"
     }
 
@@ -1537,6 +1553,15 @@ final class AgentTerminalTab: ObservableObject, Identifiable, AgentTerminalProce
 
 @MainActor
 final class AgentInteractiveTerminalController: ObservableObject {
+    /// Keep the visible delegated-executor pool small. Finished tabs are
+    /// reused; additional tasks wait for a free slot instead of opening tabs
+    /// without bound.
+    nonisolated static let maximumDelegatedShellTabs = 3
+
+    nonisolated static func canCreateDelegatedShellTab(existingCount: Int) -> Bool {
+        max(existingCount, 0) < maximumDelegatedShellTabs
+    }
+
     @Published private(set) var tabs: [AgentTerminalTab] = []
     @Published var activeTabID: UUID?
     /// Stable routing table for terminal tools and delegated coding agents.
@@ -1629,6 +1654,23 @@ final class AgentInteractiveTerminalController: ObservableObject {
             kind: .localShell,
             originAgentSessionID: originAgentSessionID,
             title: "Shell \(localShellCounter)",
+            settings: settings
+        )
+        tab.start(settings: settings, workingDirectory: workingDirectory, profile: nil, skin: skin)
+        register(tab)
+        return tab
+    }
+
+    @discardableResult
+    func openDelegatedShellTab(
+        workingDirectory: String?,
+        settings: EditorTerminalSettings,
+        skin: TerminalSkinColors?
+    ) -> AgentTerminalTab {
+        let tab = AgentTerminalTab(
+            kind: .delegatedShell,
+            originAgentSessionID: nil,
+            title: L10n.AgentTerminal.delegatedShellTitle,
             settings: settings
         )
         tab.start(settings: settings, workingDirectory: workingDirectory, profile: nil, skin: skin)
@@ -2171,32 +2213,37 @@ final class AgentInteractiveTerminalController: ObservableObject {
         return created
     }
 
-    func runCommandInBoundTab(
+    func runCommandInDelegatedShellTab(
         _ command: String,
         sessionID: UUID,
         displayCommand: String,
         timeout: TimeInterval,
         secretRedactionValues: [String]
     ) async throws -> AgentToolResult {
-        let tab = try tabForToolUse(
-            targetTabID: nil,
-            sessionID: sessionID,
-            opensLocalTabIfNeeded: true
-        )
-        guard tab.kind == .localShell else {
+        guard let config = defaultLocalTabProvider?(sessionID) else {
             throw AgentToolError.invalidArgument(
-                "Delegated local coding agents require a local terminal tab; this conversation is bound to an SSH tab."
+                "Could not prepare a visible /bin/sh terminal for this delegated task."
             )
         }
 
+        let deadline = Date().addingTimeInterval(max(timeout, 1))
+        let tab = try await acquireDelegatedShellTab(
+            workingDirectory: config.workingDirectory,
+            settings: config.settings,
+            skin: config.skin,
+            deadline: deadline
+        )
         activeTabID = tab.id
         let artifacts: AgentDelegatedTerminalArtifacts
         do {
-            artifacts = try AgentDelegatedTerminalRunner.create(command: command)
+            artifacts = try AgentDelegatedTerminalRunner.create(
+                command: command,
+                workingDirectory: config.workingDirectory
+            )
         } catch {
             throw AgentToolError.commandFailed(
                 1,
-                "Failed to prepare the private delegated-agent runner: \(error.localizedDescription)"
+                "Failed to prepare the visible delegated-agent command: \(error.localizedDescription)"
             )
         }
 
@@ -2210,7 +2257,6 @@ final class AgentInteractiveTerminalController: ObservableObject {
         try tab.sendAutomationCommand(artifacts.invocation, displayCommand: displayCommand)
         ownsAutomation = true
 
-        let deadline = Date().addingTimeInterval(max(timeout, 1))
         let startupDeadline = Date().addingTimeInterval(15)
         var didStart = false
         while Date() < deadline {
@@ -2223,7 +2269,7 @@ final class AgentInteractiveTerminalController: ObservableObject {
                 if !didStart, Date() >= startupDeadline {
                     _ = try? tab.sendApprovedControl(.ctrlC)
                     throw AgentToolError.invalidArgument(
-                        "The delegated-agent runner did not start within 15 seconds. Make sure the bound terminal is at an interactive shell prompt, then retry."
+                        "The delegated command did not start within 15 seconds. Make sure the dedicated /bin/sh terminal is still running, then retry."
                     )
                 }
             }
@@ -2253,6 +2299,43 @@ final class AgentInteractiveTerminalController: ObservableObject {
         _ = try? tab.sendApprovedControl(.ctrlC)
         throw AgentToolError.invalidArgument(
             "Command in Agent Terminal tab \(tab.id.uuidString) timed out after \(Int(timeout)) seconds."
+        )
+    }
+
+    private func acquireDelegatedShellTab(
+        workingDirectory: String?,
+        settings: EditorTerminalSettings,
+        skin: TerminalSkinColors?,
+        deadline: Date
+    ) async throws -> AgentTerminalTab {
+        while Date() < deadline {
+            let exited = tabs.filter {
+                $0.kind.isDelegatedShell && !$0.isRunning && !$0.isAutomationBusy
+            }
+            for tab in exited {
+                closeTab(id: tab.id)
+            }
+
+            let pool = tabs.filter { $0.kind.isDelegatedShell }
+            if let reusable = pool
+                .filter({ $0.isRunning && !$0.isAutomationBusy })
+                .min(by: { $0.lastActivity < $1.lastActivity }) {
+                return reusable
+            }
+            if Self.canCreateDelegatedShellTab(existingCount: pool.count) {
+                return openDelegatedShellTab(
+                    workingDirectory: workingDirectory,
+                    settings: settings,
+                    skin: skin
+                )
+            }
+            if Task.isCancelled {
+                throw CancellationError()
+            }
+            try await Task.sleep(nanoseconds: 250_000_000)
+        }
+        throw AgentToolError.invalidArgument(
+            "All \(Self.maximumDelegatedShellTabs) delegated /bin/sh terminal tabs stayed busy until this task timed out."
         )
     }
 }

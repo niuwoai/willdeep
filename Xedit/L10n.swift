@@ -321,6 +321,9 @@ nonisolated enum L10n {
         static let addSecretHelp = String(localized: "composer.add-secret.help", defaultValue: "Add another protected secret, up to three total")
         static let attachFileHelp = String(localized: "composer.attach-file.help", defaultValue: "Attach images or documents")
         static let attachFilePanelTitle = String(localized: "composer.attach-file.panel-title", defaultValue: "Attach Files or Knowledge Folders")
+        static let attachUnknownFile = String(localized: "composer.attach-file.unknown.confirm", defaultValue: "Attach as Text")
+        static let cancelUnknownFile = String(localized: "composer.attach-file.unknown.cancel", defaultValue: "Cancel")
+        static let dismissAttachmentNotice = String(localized: "composer.attach-file.notice.dismiss", defaultValue: "Dismiss attachment notice")
         static let attachmentInjectionWarning = String(localized: "composer.attachment.injection-warning", defaultValue: "Suspicious instructions detected")
         static let attachmentOCRUsed = String(localized: "composer.attachment.ocr-used", defaultValue: "Local OCR used")
         static let attachmentParseFailed = String(localized: "composer.attachment.parse-failed", defaultValue: "Could not parse this attachment")
@@ -375,6 +378,22 @@ nonisolated enum L10n {
             let template = String(localized: "composer.attach-file.unsupported", defaultValue: "%@ is not a supported attachment type.")
             return String(format: template, a1)
         }
+        static func unknownAttachmentConfirmationTitle(_ a1: String) -> String {
+            let template = String(localized: "composer.attach-file.unknown.title", defaultValue: "Attach %@ as text?")
+            return String(format: template, a1)
+        }
+        static func unknownAttachmentConfirmationMessage(_ a1: String, _ a2: String) -> String {
+            let template = String(localized: "composer.attach-file.unknown.message", defaultValue: "%@ has an unknown file type but is only %@. If you continue, WillDeep will decode and send it as plain text.")
+            return String(format: template, a1, a2)
+        }
+        static func unknownAttachmentTooLarge(_ a1: String) -> String {
+            let template = String(localized: "composer.attach-file.unknown.too-large", defaultValue: "%@ has an unknown file type and is larger than 8 KB, so it was not attached.")
+            return String(format: template, a1)
+        }
+        static func unknownAttachmentUnreadable(_ a1: String) -> String {
+            let template = String(localized: "composer.attach-file.unknown.unreadable", defaultValue: "%@ has an unknown file type and its size could not be read, so it was not attached.")
+            return String(format: template, a1)
+        }
         static let insertSecretAction = String(localized: "composer.insert-secret.action", defaultValue: "Insert")
         static let knowledgeFolderApplyExclusions = String(localized: "composer.knowledge-folder.apply-exclusions", defaultValue: "Apply")
         static let knowledgeFolderExclusionsHelp = String(localized: "composer.knowledge-folder.exclusions-help", defaultValue: "Comma-separated .gitignore-style patterns")
@@ -402,7 +421,7 @@ nonisolated enum L10n {
         static let skillPickerNoMatches = String(localized: "composer.skill-picker.no-matches", defaultValue: "No matching skills")
         static let skillPickerSearchPlaceholder = String(localized: "composer.skill-picker.search-placeholder", defaultValue: "Search skills...")
         static let stopHelp = String(localized: "composer.stop.help", defaultValue: "Stop the current Agent turn")
-        static let overflowHelp = String(localized: "composer.overflow.help", defaultValue: "More settings: approval, executor, plugins, experts")
+        static let overflowHelp = String(localized: "composer.overflow.help", defaultValue: "More settings: plugins and experts")
         static let overflowTitle = String(localized: "composer.overflow.title", defaultValue: "More settings")
         static let overflowWorkspace = String(localized: "composer.overflow.workspace", defaultValue: "Workspace")
         static let overflowExecutor = String(localized: "composer.overflow.executor", defaultValue: "Executor")
@@ -1555,6 +1574,13 @@ nonisolated enum L10n {
             static let accountConnected = String(localized: "settings.some-im.account-connected", defaultValue: "Connected")
             static let creditsLabel = String(localized: "settings.some-im.credits", defaultValue: "Credits")
             static let defaultModelLabel = String(localized: "settings.some-im.default-model", defaultValue: "Default Model")
+            static let newTabDefaultSection = String(localized: "settings.some-im.new-tab-default-section", defaultValue: "New Tab Default")
+            static let newTabDefaultLabel = String(localized: "settings.some-im.new-tab-default-label", defaultValue: "Default model mode")
+            static let newTabDefaultManaged = String(localized: "settings.some-im.new-tab-default-managed", defaultValue: "Managed Routing")
+            static let newTabDefaultModel = String(localized: "settings.some-im.new-tab-default-model", defaultValue: "someim-auto-flash")
+            static let newTabDefaultManagedHelp = String(localized: "settings.some-im.new-tab-default-managed-help", defaultValue: "New tabs use Managed Routing. You can still choose a concrete model in the composer for the current conversation.")
+            static let newTabDefaultModelHelp = String(localized: "settings.some-im.new-tab-default-model-help", defaultValue: "New tabs use someim-auto-flash and let you choose another concrete model in the composer.")
+            static let newTabDefaultLoginRequired = String(localized: "settings.some-im.new-tab-default-login-required", defaultValue: "Sign in to some.im to configure the default model mode for new tabs.")
             static let codeSent = String(localized: "settings.some-im.code-sent", defaultValue: "Verification code sent.")
             static let connected = String(localized: "settings.some-im.connected", defaultValue: "some.im connected.")
             static let browserLoginSection = String(localized: "settings.some-im.browser-login-section", defaultValue: "Browser Login")
@@ -2881,6 +2907,7 @@ nonisolated enum L10n {
             String(format: String(localized: "agent-worktree-summary.files-changed", defaultValue: "%d files changed"), n)
         }
         static let review = String(localized: "agent-worktree-summary.review", defaultValue: "Review")
+        static let preparingReview = String(localized: "agent-worktree-summary.preparing-review", defaultValue: "Preparing…")
         static let reviewHelp = String(localized: "agent-worktree-summary.review-help", defaultValue: "View the current uncommitted diff")
         static func moreFiles(_ n: Int) -> String {
             String(format: String(localized: "agent-worktree-summary.more-files", defaultValue: "%d more files"), n)

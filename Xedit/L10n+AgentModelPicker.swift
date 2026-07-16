@@ -32,6 +32,35 @@ extension L10n {
         static let noResults = String(localized: "agent-model-picker.no-results", defaultValue: "No matching models")
         static let clearSearch = String(localized: "agent-model-picker.clear-search", defaultValue: "Clear Search")
         static let enableManaged = String(localized: "agent-model-picker.enable-managed", defaultValue: "Enable Managed Routing")
+        static let managedSelectedTitle = String(localized: "agent-model-picker.managed-selected-title", defaultValue: "Managed Routing is selected")
+        static let managedSelectedDescription = String(localized: "agent-model-picker.managed-selected-description", defaultValue: "This conversation uses a judge to choose and validate the working model automatically.")
+        static let managedNotSelectedTitle = String(localized: "agent-model-picker.managed-not-selected-title", defaultValue: "Managed Routing is not selected")
+        static let managedNotSelectedDescription = String(localized: "agent-model-picker.managed-not-selected-description", defaultValue: "This conversation is using a specific model. Switch back when you want some.im to handle model selection.")
+        static let managedLoginRequiredTitle = String(localized: "agent-model-picker.managed-login-required-title", defaultValue: "Sign in to use Managed Routing")
+        static let managedLoginRequiredDescription = String(localized: "agent-model-picker.managed-login-required-description", defaultValue: "Sign in to some.im to enable Managed Routing. Coding Plan is optional and is not required.")
+        static let selectManaged = String(localized: "agent-model-picker.select-managed", defaultValue: "Select Managed Routing")
+        static let signInSomeIM = String(localized: "agent-model-picker.sign-in-some-im", defaultValue: "Sign in to some.im")
+        static let managedBenefitsTitle = String(localized: "agent-model-picker.managed-benefits-title", defaultValue: "Two-model collaboration")
+        static let managedJudgeTitle = String(localized: "agent-model-picker.managed-judge-title", defaultValue: "Judge: selection and validation")
+        static let managedJudgeDescription = String(localized: "agent-model-picker.managed-judge-description", defaultValue: "A judge identifies the task and difficulty, chooses the working model, and validates the result.")
+        static let managedWorkerTitle = String(localized: "agent-model-picker.managed-worker-title", defaultValue: "Worker: cost first, capability when needed")
+        static let managedWorkerDescription = String(localized: "agent-model-picker.managed-worker-description", defaultValue: "A cost-efficient model tries first. If it cannot finish or validation fails, Managed Routing escalates automatically.")
+        static let managedPlanIndependence = String(localized: "agent-model-picker.managed-plan-independence", defaultValue: "Managed Routing works without Coding Plan. Coding Plan is a separate some.im package for coding usage.")
+        static let codingPlanTitle = String(localized: "agent-model-picker.coding-plan-title", defaultValue: "Coding Plan (optional package)")
+        static let codingPlanBenefit = String(localized: "agent-model-picker.coding-plan-benefit", defaultValue: "A some.im package for frequent coding tasks, with packaged usage and more predictable cost.")
+        static let codingPlanSubscribed = String(localized: "agent-model-picker.coding-plan-subscribed", defaultValue: "Subscribed")
+        static let codingPlanChecking = String(localized: "agent-model-picker.coding-plan-checking", defaultValue: "Checking Coding Plan…")
+        static let codingPlanCheckingHint = String(localized: "agent-model-picker.coding-plan-checking-hint", defaultValue: "Your package name and expiration date will appear here.")
+        static let codingPlanCheckFailed = String(localized: "agent-model-picker.coding-plan-check-failed", defaultValue: "Unable to verify Coding Plan")
+        static let codingPlanAuthenticationRequired = String(localized: "agent-model-picker.coding-plan-authentication-required", defaultValue: "Your some.im session has expired. Sign in again to verify the package.")
+        static let codingPlanUnavailable = String(localized: "agent-model-picker.coding-plan-unavailable", defaultValue: "The package service is temporarily unavailable. Your existing subscription has not been changed.")
+        static let codingPlanRetry = String(localized: "agent-model-picker.coding-plan-retry", defaultValue: "Retry")
+        static let codingPlanNotPurchased = String(localized: "agent-model-picker.coding-plan-not-purchased", defaultValue: "No active Coding Plan")
+        static let codingPlanNotPurchasedDescription = String(localized: "agent-model-picker.coding-plan-not-purchased-description", defaultValue: "You can still use Managed Routing. Buy Coding Plan only when a coding package suits your usage.")
+        static let codingPlanLoginDescription = String(localized: "agent-model-picker.coding-plan-login-description", defaultValue: "Sign in to check an existing subscription, or open some.im to learn about and buy Coding Plan.")
+        static let manageCodingPlan = String(localized: "agent-model-picker.coding-plan-manage", defaultValue: "Manage Coding Plan")
+        static let buyCodingPlan = String(localized: "agent-model-picker.coding-plan-buy", defaultValue: "Learn More and Buy")
+        static let codingPlanActive = String(localized: "agent-model-picker.coding-plan-active", defaultValue: "Coding Plan is currently active.")
         static let managedRule = String(localized: "agent-model-picker.managed-rule", defaultValue: "General tasks always use someim-auto-*; Coding Plan is used only for coding tasks")
         static let chooseHelp = String(localized: "agent-model-picker.choose-help", defaultValue: "Choose a model and provider")
         static let someIMDisconnected = String(localized: "agent-model-picker.some-im-disconnected", defaultValue: "some.im is not connected")
@@ -60,6 +89,11 @@ extension L10n {
         static func upgradeTo(_ tier: String) -> String {
             let template = String(localized: "agent-model-picker.upgrade-to", defaultValue: "Upgrade this conversation to %@")
             return String(format: template, tier)
+        }
+
+        static func codingPlanExpires(_ date: String) -> String {
+            let template = String(localized: "agent-model-picker.coding-plan-expires", defaultValue: "Valid until %@")
+            return String(format: template, date)
         }
     }
 }

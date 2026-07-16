@@ -45,7 +45,10 @@ enum AgentChatHistoryRenderer {
     enum MarkdownSpacing {
         static let headerToBody: CGFloat = 10
         static let bodyLine = AgentChatHistoryLayoutMetrics.bodyLineSpacing
-        static let assistantParagraph: CGFloat = 7
+        // Paragraph boundaries should keep the same reading rhythm as a
+        // naturally wrapped body line. Extra paragraph spacing looked like
+        // an empty row and made prose after a code block appear compressed.
+        static let assistantParagraph: CGFloat = 0
         static let userParagraph: CGFloat = 7
         static let tableLine: CGFloat = 2
         /// Inline table 的"下 margin"——段落结束后到下一块的间距。

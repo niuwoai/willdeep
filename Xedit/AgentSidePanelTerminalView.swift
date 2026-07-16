@@ -753,6 +753,8 @@ private struct AgentSidePanelTerminalContentView: View {
         switch tab.kind {
         case .localShell:
             lines.append(L10n.AgentTerminal.localShellTooltip)
+        case .delegatedShell:
+            lines.append(L10n.AgentTerminal.delegatedShellTooltip)
         case .ssh(_, _, let target):
             lines.append(target)
         }
@@ -763,13 +765,19 @@ private struct AgentSidePanelTerminalContentView: View {
     }
 
     private func sessionKindLabel(_ tab: AgentTerminalTab) -> String {
-        tab.kind.isSSH ? L10n.AgentTerminal.sessionSSH : L10n.AgentTerminal.sessionLocal
+        switch tab.kind {
+        case .localShell: return L10n.AgentTerminal.sessionLocal
+        case .delegatedShell: return L10n.AgentTerminal.sessionDelegated
+        case .ssh: return L10n.AgentTerminal.sessionSSH
+        }
     }
 
     private func sessionTargetLabel(_ tab: AgentTerminalTab) -> String {
         switch tab.kind {
         case .localShell:
             return tab.title
+        case .delegatedShell:
+            return "/bin/sh"
         case .ssh(_, let displayName, let target):
             return displayName.isEmpty ? target : displayName
         }
@@ -779,6 +787,8 @@ private struct AgentSidePanelTerminalContentView: View {
         switch tab.kind {
         case .localShell:
             return L10n.AgentTerminal.localSessionCaution
+        case .delegatedShell:
+            return L10n.AgentTerminal.delegatedShellTooltip
         case .ssh(_, _, let target):
             return target
         }

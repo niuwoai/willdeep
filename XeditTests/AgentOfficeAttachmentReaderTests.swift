@@ -16,7 +16,8 @@ struct AgentOfficeAttachmentReaderTests {
         for filename in [
             "notes.txt", "readme.md", "main.go", "tool.rb", "script.py",
             "index.php", "data.csv", "data.tsv", "payload.json",
-            "report.pdf", "brief.docx", "budget.xlsx"
+            "report.pdf", "brief.docx", "budget.xlsx", "Procfile",
+            "Dockerfile.dev", ".gitignore", ".env.production", "build.gradle"
         ] {
             #expect(
                 AgentComposerAttachmentSupport.isSupportedDocument(
@@ -29,6 +30,54 @@ struct AgentOfficeAttachmentReaderTests {
                 URL(fileURLWithPath: "/tmp/archive.zip")
             )
         )
+    }
+
+    @Test("extensionless Procfile is parsed as readable text")
+    func procfileParsesAsText() async throws {
+        let root = try makeTemporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let procfile = root.appendingPathComponent("Procfile")
+        try write("web: npm start\nworker: bundle exec sidekiq", to: procfile)
+
+        let analysis = try await AgentDocumentAttachmentParser.analyze(url: procfile)
+
+        #expect(analysis.documentKind == .text)
+        #expect(analysis.sections.map(\.text).joined(separator: "\n").contains("web: npm start"))
+    }
+
+    @Test("unknown attachment policy confirms through 8 KB and blocks larger files")
+    func unknownAttachmentSizePolicy() throws {
+        let root = try makeTemporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let confirmable = root.appendingPathComponent("small.unknownpayload")
+        let blocked = root.appendingPathComponent("large.unknownpayload")
+        try Data(repeating: 0x41, count: 8 * 1_024).write(to: confirmable)
+        try Data(repeating: 0x41, count: 8 * 1_024 + 1).write(to: blocked)
+
+        #expect(
+            AgentComposerAttachmentSupport.selectionPolicy(for: confirmable)
+                == .unknownNeedsConfirmation(byteCount: 8 * 1_024)
+        )
+        #expect(
+            AgentComposerAttachmentSupport.selectionPolicy(for: blocked)
+                == .unknownTooLarge(byteCount: 8 * 1_024 + 1)
+        )
+    }
+
+    @Test("confirmed small unknown file can be forced through the text parser")
+    func confirmedUnknownFileParsesAsText() async throws {
+        let root = try makeTemporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let source = root.appendingPathComponent("notes.unknownpayload")
+        try write("用户确认发送的小文件", to: source)
+
+        let analysis = try await AgentDocumentAttachmentParser.analyze(
+            url: source,
+            forceText: true
+        )
+
+        #expect(analysis.documentKind == .text)
+        #expect(analysis.sections.first?.text.contains("用户确认发送") == true)
     }
 
     @Test("DOCX attachments are converted to readable paragraph text")
@@ -195,6 +244,7 @@ struct AgentOfficeAttachmentReaderTests {
         attachment.isEnabled = false
         attachment.sourceFileSize = 4_096
         attachment.sourceModifiedAt = Date(timeIntervalSince1970: 123_456)
+        attachment.treatsUnknownTypeAsText = true
 
         let encoded = try JSONEncoder().encode(
             AgentSession(documentAttachments: [attachment])
@@ -205,6 +255,7 @@ struct AgentOfficeAttachmentReaderTests {
         #expect(persisted == attachment)
         #expect(persisted.analysis?.sections.first?.sourceReference == "page=1")
         #expect(!persisted.isEnabled)
+        #expect(persisted.treatsUnknownTypeAsText == true)
     }
 
     private func makeTemporaryDirectory() throws -> URL {

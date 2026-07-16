@@ -19,6 +19,11 @@
 
 import Foundation
 
+enum AgentUntrackedDiffPreviewSection: Equatable {
+    case diff(String)
+    case summaryReason(String)
+}
+
 extension AppState {
     nonisolated static func loadGitStatus(for directoryURL: URL) -> GitRepositoryStatus {
         guard let repositoryRoot = findGitRepositoryRoot(startingAt: directoryURL) else {
@@ -218,6 +223,8 @@ extension AppState {
     nonisolated static let worktreeDiffPreviewMaxCharacters = 96 * 1024
     nonisolated static let worktreeDiffPreviewGeneratedFileThreshold = 8
     nonisolated static let worktreeDiffPreviewFileListLimit = 80
+    nonisolated static let worktreeDiffPreviewMaxUntrackedFileBytes = 64 * 1024
+    nonisolated static let worktreeDiffPreviewMaxUntrackedTotalBytes = 96 * 1024
 
     nonisolated static func runGit(
         arguments: [String],
@@ -808,7 +815,13 @@ extension AppState {
         changes: AgentWorktreeChangeSummary,
         repositoryRoot: URL
     ) -> AgentWorktreeDiffPreview {
-        let summaryReasons = worktreeDiffPreviewSummaryReasons(for: changes)
+        var summaryReasons = worktreeDiffPreviewSummaryReasons(for: changes)
+        if summaryReasons.isEmpty {
+            summaryReasons = worktreeDiffPreviewUntrackedSummaryReasons(
+                for: changes,
+                repositoryRoot: repositoryRoot
+            )
+        }
         if !summaryReasons.isEmpty {
             return AgentWorktreeDiffPreview(
                 title: "\(changes.fileCount) 个文件已更改 +\(changes.totalAddedLines) -\(changes.totalDeletedLines)",
@@ -817,6 +830,20 @@ extension AppState {
         }
 
         var sections: [String] = []
+        for change in changes.files where change.kind == .untracked {
+            switch loadUntrackedDiffPreviewSection(change, repositoryRoot: repositoryRoot) {
+            case .diff(let diff):
+                if !diff.isEmpty {
+                    sections.append(diff)
+                }
+            case .summaryReason(let reason):
+                return AgentWorktreeDiffPreview(
+                    title: "\(changes.fileCount) 个文件已更改 +\(changes.totalAddedLines) -\(changes.totalDeletedLines)",
+                    diff: worktreeDiffPreviewSummaryText(changes: changes, reasons: [reason])
+                )
+            }
+        }
+
         let trackedPaths = changes.files
             .filter { $0.kind != .untracked }
             .map(\.path)
@@ -827,17 +854,6 @@ extension AppState {
             )
             if !trackedDiff.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                 sections.append(trackedDiff)
-            }
-        }
-
-        for change in changes.files where change.kind == .untracked {
-            let untrackedDiff = runGit(
-                arguments: ["diff", "--no-ext-diff", "--no-index", "--", "/dev/null", change.path],
-                in: repositoryRoot,
-                allowedExitStatuses: [0, 1]
-            )
-            if !untrackedDiff.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                sections.append(untrackedDiff)
             }
         }
 
@@ -856,6 +872,121 @@ extension AppState {
             title: "\(changes.fileCount) 个文件已更改 +\(changes.totalAddedLines) -\(changes.totalDeletedLines)",
             diff: diff
         )
+    }
+
+    /// Untracked files have no `git diff --numstat` entry, so their line
+    /// counts appear as `+0 -0`. Running `git diff --no-index` once per file
+    /// made seven such files wait on seven sequential child processes. Read
+    /// bounded, regular UTF-8 files directly instead; large/binary/special
+    /// files are summarized before any expensive diff rendering begins.
+    nonisolated static func loadUntrackedDiffPreviewSection(
+        _ change: AgentFileChangeSummary,
+        repositoryRoot: URL
+    ) -> AgentUntrackedDiffPreviewSection {
+        let fileURL = repositoryRoot.appendingPathComponent(change.path).standardizedFileURL
+        let rootPath = repositoryRoot.standardizedFileURL.path
+        guard fileURL.path == rootPath || fileURL.path.hasPrefix(rootPath + "/") else {
+            return .summaryReason("未跟踪文件 \(change.path) 超出工作区范围，已跳过完整内容。")
+        }
+        let keys: Set<URLResourceKey> = [.isRegularFileKey, .isSymbolicLinkKey, .fileSizeKey]
+        guard let values = try? fileURL.resourceValues(forKeys: keys),
+              values.isRegularFile == true,
+              values.isSymbolicLink != true,
+              let fileSize = values.fileSize else {
+            return .summaryReason("未跟踪文件 \(change.path) 不是可安全预览的普通文件。")
+        }
+        guard fileSize <= worktreeDiffPreviewMaxUntrackedFileBytes else {
+            return .summaryReason(
+                "未跟踪文件 \(change.path) 超过 \(worktreeDiffPreviewMaxUntrackedFileBytes / 1024)KB，已跳过完整内容。"
+            )
+        }
+
+        let data: Data
+        do {
+            let handle = try FileHandle(forReadingFrom: fileURL)
+            defer { try? handle.close() }
+            data = try handle.read(upToCount: worktreeDiffPreviewMaxUntrackedFileBytes + 1) ?? Data()
+        } catch {
+            return .summaryReason("未跟踪文件 \(change.path) 无法读取，已跳过完整内容。")
+        }
+        guard data.count <= worktreeDiffPreviewMaxUntrackedFileBytes else {
+            return .summaryReason("未跟踪文件 \(change.path) 在读取时变大，已跳过完整内容。")
+        }
+        guard !data.contains(0), let text = String(data: data, encoding: .utf8) else {
+            return .summaryReason("未跟踪文件 \(change.path) 是二进制或非 UTF-8 文件，已跳过完整内容。")
+        }
+
+        return .diff(syntheticUntrackedDiff(path: change.path, text: text))
+    }
+
+    nonisolated static func syntheticUntrackedDiff(path: String, text: String) -> String {
+        guard !text.isEmpty else { return "" }
+        let normalized = text
+            .replacingOccurrences(of: "\r\n", with: "\n")
+            .replacingOccurrences(of: "\r", with: "\n")
+        let hasFinalNewline = normalized.hasSuffix("\n")
+        var lines = normalized.split(separator: "\n", omittingEmptySubsequences: false).map(String.init)
+        if hasFinalNewline, lines.last == "" {
+            lines.removeLast()
+        }
+
+        var output = [
+            "diff --git a/\(path) b/\(path)",
+            "new file mode 100644",
+            "--- /dev/null",
+            "+++ b/\(path)",
+            "@@ -0,0 +1,\(lines.count) @@"
+        ]
+        output.append(contentsOf: lines.map { "+\($0)" })
+        if !hasFinalNewline {
+            output.append("\\ No newline at end of file")
+        }
+        return output.joined(separator: "\n")
+    }
+
+    nonisolated static func worktreeDiffPreviewUntrackedSummaryReasons(
+        for changes: AgentWorktreeChangeSummary,
+        repositoryRoot: URL
+    ) -> [String] {
+        var totalBytes = 0
+        var oversizedCount = 0
+        var unsupportedCount = 0
+        let keys: Set<URLResourceKey> = [.isRegularFileKey, .isSymbolicLinkKey, .fileSizeKey]
+        let rootPath = repositoryRoot.standardizedFileURL.path
+
+        for change in changes.files where change.kind == .untracked {
+            let fileURL = repositoryRoot.appendingPathComponent(change.path).standardizedFileURL
+            guard (fileURL.path == rootPath || fileURL.path.hasPrefix(rootPath + "/")),
+                  let values = try? fileURL.resourceValues(forKeys: keys),
+                  values.isRegularFile == true,
+                  values.isSymbolicLink != true,
+                  let fileSize = values.fileSize else {
+                unsupportedCount += 1
+                continue
+            }
+            if fileSize > worktreeDiffPreviewMaxUntrackedFileBytes {
+                oversizedCount += 1
+            }
+            if totalBytes <= worktreeDiffPreviewMaxUntrackedTotalBytes {
+                totalBytes += min(fileSize, worktreeDiffPreviewMaxUntrackedTotalBytes + 1)
+            }
+        }
+
+        var reasons: [String] = []
+        if oversizedCount > 0 {
+            reasons.append(
+                "\(oversizedCount) 个未跟踪文件超过单文件 \(worktreeDiffPreviewMaxUntrackedFileBytes / 1024)KB 的预览上限。"
+            )
+        }
+        if totalBytes > worktreeDiffPreviewMaxUntrackedTotalBytes {
+            reasons.append(
+                "未跟踪文件合计超过 \(worktreeDiffPreviewMaxUntrackedTotalBytes / 1024)KB 的完整预览上限。"
+            )
+        }
+        if unsupportedCount > 0 {
+            reasons.append("\(unsupportedCount) 个未跟踪路径不是可安全预览的普通文件。")
+        }
+        return reasons
     }
 
     nonisolated static func worktreeDiffPreviewSummaryReasons(
