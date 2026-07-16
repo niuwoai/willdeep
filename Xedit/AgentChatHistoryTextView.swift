@@ -1028,9 +1028,18 @@ enum AgentChatHistoryLayoutMetrics {
     /// rounded corners clipped by the hosting SwiftUI layout.
     static let bubbleDrawingVerticalOverscan: CGFloat = 14
 
+    /// 布局宽度量化桶。渲染缓存 key 含 layoutWidth,若逐 pt 取值,拖拽
+    /// 窗口时每 1pt 都 cache miss 触发全量重渲;量化到 8pt 桶后一次拖拽
+    /// 只在跨桶时重渲。向下取桶,保证排版宽度 ≤ 实际视图宽度(文字最多
+    /// 比视图右缘留出 7pt 空白,不会溢出裁切)。气泡背景绘制
+    /// (`bubbleRect`)的 containerWidth 也走本函数,与文字排版落在同一
+    /// 个桶里,背景与文字不会错位。
+    static let layoutWidthBucket: CGFloat = 8
+
     static func resolvedLayoutWidth(_ width: CGFloat) -> CGFloat {
         guard width.isFinite, width > 0 else { return defaultTranscriptWidth }
-        return floor(width)
+        let bucketed = floor(width / layoutWidthBucket) * layoutWidthBucket
+        return max(layoutWidthBucket, bucketed)
     }
 
     static func userBubbleWidth(for layoutWidth: CGFloat) -> CGFloat {

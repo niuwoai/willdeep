@@ -12,10 +12,13 @@
 //
 //  Implementation notes:
 //   - `NSWindowController` + `NSScrollView` + `NSTextView`. No
-//     SwiftUI. NSTextView gets the entire transcript baked into one
-//     `NSAttributedString` once at open time; TextKit handles its
-//     own layout incrementally and doesn't bother the main thread
-//     during scroll.
+//     SwiftUI. TextKit handles its own layout incrementally and
+//     doesn't bother the main thread during scroll.
+//   - Paged rendering: only the most recent `pageSize` messages are
+//     rendered at open time. A "load earlier" link at the top of the
+//     document prepends one more page per click. Rendering the whole
+//     session in one shot froze the main thread and spiked memory on
+//     multi-thousand-message sessions with many images.
 //   - Markdown-with-role-headers format. No bubbles, no per-message
 //     chrome. Selectable, copyable, supports ⌘F find (NSTextView ships
 //     with that out of the box).
@@ -70,8 +73,15 @@ final class AgentTranscriptReaderWindowRegistry {
     }
 }
 
+/// `.link` value for the "load earlier messages" control at the top of
+/// the reader document. Same string-marker pattern as
+/// `AgentChatHistoryTableLink` & co.
+enum AgentTranscriptReaderLoadEarlierLink {
+    static let value = "agent-transcript-reader-load-earlier"
+}
+
 @MainActor
-final class AgentTranscriptReaderWindowController: NSWindowController, NSWindowDelegate {
+final class AgentTranscriptReaderWindowController: NSWindowController, NSWindowDelegate, NSTextViewDelegate {
     /// Called when the underlying NSWindow closes so the registry can
     /// drop its reference.
     var onClose: ((UUID) -> Void)?
@@ -80,6 +90,18 @@ final class AgentTranscriptReaderWindowController: NSWindowController, NSWindowD
     /// keyDown 监听把它路由到 `performClose(_:)`。本窗口内嵌 NSTextView
     /// 用了 Find bar,所以 **不**把无修饰 Esc 也当关窗,免得截掉搜索取消。
     private var keyMonitor: Any?
+
+    // 分页状态:一次性 render 整个 session 会在数千条消息+多图时构建
+    // 巨型 NSAttributedString(主线程长卡顿+内存峰值),所以只渲染尾部
+    // `pageSize` 条,顶部挂"载入更早"链接逐页往前补。
+    private static let pageSize = 200
+    private var messages: [AgentMessage] = []
+    /// `messages` 中第一条已渲染消息的下标;>0 表示还有更早的页。
+    private var visibleStart = 0
+    /// 文档最顶部"载入更早"链接段的字符长度(0 = 已全部载入,无链接段)。
+    /// 载入下一页时用它定位替换范围。
+    private var headerLength = 0
+    private weak var textView: NSTextView?
 
     init(session: AgentSession) {
         self.sessionID = session.id
@@ -135,8 +157,9 @@ final class AgentTranscriptReaderWindowController: NSWindowController, NSWindowD
         window.delegate = self
         keyMonitor = AuxiliaryWindowCloseShortcut.install(on: window, closesOnEscape: false)
 
-        let attributed = Self.renderTranscript(session: session)
-        textView.textStorage?.setAttributedString(attributed)
+        self.textView = textView
+        textView.delegate = self
+        installTranscript(session: session)
     }
 
     required init?(coder: NSCoder) {
@@ -146,12 +169,10 @@ final class AgentTranscriptReaderWindowController: NSWindowController, NSWindowD
     /// Replace the text content if the session shape changed since
     /// the window was opened (e.g. the user kept chatting in the
     /// underlying session). Called when re-`open` is invoked for the
-    /// same id.
+    /// same id. Resets pagination back to the latest page.
     func refresh(with session: AgentSession) {
-        guard let scrollView = window?.contentView as? NSScrollView,
-              let textView = scrollView.documentView as? NSTextView else { return }
         window?.title = session.title.isEmpty ? "Transcript" : "Transcript — \(session.title)"
-        textView.textStorage?.setAttributedString(Self.renderTranscript(session: session))
+        installTranscript(session: session)
     }
 
     func windowWillClose(_ notification: Notification) {
@@ -168,30 +189,126 @@ final class AgentTranscriptReaderWindowController: NSWindowController, NSWindowD
         }
     }
 
-    // MARK: - Transcript rendering
+    // MARK: - Transcript rendering (paged)
 
-    /// Build the full transcript as one NSAttributedString using the
-    /// same TextKit Markdown renderer as the chat-pane history.
-    private static func renderTranscript(session: AgentSession) -> NSAttributedString {
-        let result = NSMutableAttributedString(attributedString: AgentChatHistoryRenderer.render(
-            messages: session.messages,
+    /// (Re)build the document from scratch: "load earlier" header +
+    /// the most recent `pageSize` messages + footer.
+    private func installTranscript(session: AgentSession) {
+        messages = session.messages
+        visibleStart = max(0, messages.count - Self.pageSize)
+        let header = Self.loadEarlierHeader(hiddenCount: visibleStart)
+        headerLength = header.length
+        let content = NSMutableAttributedString(attributedString: header)
+        content.append(AgentChatHistoryRenderer.render(
+            messages: Array(messages[visibleStart...]),
             isDark: false
         ))
-        let bodyFont = NSFont.systemFont(ofSize: NSFont.systemFontSize)
-        let secondaryColor = NSColor.secondaryLabelColor
+        content.append(Self.footer(
+            messageCount: messages.count,
+            sessionID: sessionID,
+            precededByContent: content.length > 0
+        ))
+        textView?.textStorage?.setAttributedString(content)
+    }
 
-        // Add a small footer with overall message count.
-        if result.length > 0 {
-            result.append(NSAttributedString(string: "\n\n", attributes: [.font: bodyFont]))
-        }
-        result.append(NSAttributedString(
-            string: "—\n\(session.messages.count) message(s) total · session id \(session.id.uuidString)",
-            attributes: [
-                .font: NSFont.systemFont(ofSize: 11),
-                .foregroundColor: secondaryColor,
-            ]
+    /// Prepend one more page of earlier messages, replacing the old
+    /// "load earlier" header with a fresh one (or nothing when the
+    /// whole transcript is now visible). Keeps the viewport anchored
+    /// on the content the user was reading.
+    private func loadEarlierPage() {
+        guard visibleStart > 0,
+              let textView,
+              let textStorage = textView.textStorage,
+              let layoutManager = textView.layoutManager,
+              let textContainer = textView.textContainer else { return }
+
+        let newStart = max(0, visibleStart - Self.pageSize)
+        let header = Self.loadEarlierHeader(hiddenCount: newStart)
+        let replacement = NSMutableAttributedString(attributedString: header)
+        replacement.append(AgentChatHistoryRenderer.render(
+            messages: Array(messages[newStart..<visibleStart]),
+            isDark: false
+        ))
+        // Renderer 只在同一次 render 内的消息之间插 "\n\n";页缝手工
+        // 补一个,保持消息间距一致。
+        replacement.append(NSAttributedString(
+            string: "\n\n",
+            attributes: [.font: NSFont.systemFont(ofSize: NSFont.systemFontSize)]
         ))
 
+        let oldHeaderGlyphRange = layoutManager.glyphRange(
+            forCharacterRange: NSRange(location: 0, length: headerLength),
+            actualCharacterRange: nil
+        )
+        let oldTopHeight = layoutManager
+            .boundingRect(forGlyphRange: oldHeaderGlyphRange, in: textContainer).maxY
+
+        textStorage.replaceCharacters(
+            in: NSRange(location: 0, length: headerLength),
+            with: replacement
+        )
+        headerLength = header.length
+        visibleStart = newStart
+
+        // 插入发生在视口上方,文档整体被顶下去了 —— 把滚动位置平移
+        // 相同的高度,视口停留在点击前正在看的消息上。
+        let insertedGlyphRange = layoutManager.glyphRange(
+            forCharacterRange: NSRange(location: 0, length: replacement.length),
+            actualCharacterRange: nil
+        )
+        let newTopHeight = layoutManager
+            .boundingRect(forGlyphRange: insertedGlyphRange, in: textContainer).maxY
+        if let scrollView = textView.enclosingScrollView {
+            var origin = scrollView.contentView.bounds.origin
+            origin.y += newTopHeight - oldTopHeight
+            scrollView.contentView.scroll(to: origin)
+            scrollView.reflectScrolledClipView(scrollView.contentView)
+        }
+    }
+
+    func textView(_ textView: NSTextView, clickedOnLink link: Any, at charIndex: Int) -> Bool {
+        guard let value = link as? String,
+              value == AgentTranscriptReaderLoadEarlierLink.value else { return false }
+        loadEarlierPage()
+        return true
+    }
+
+    private static func loadEarlierHeader(hiddenCount: Int) -> NSAttributedString {
+        guard hiddenCount > 0 else { return NSAttributedString() }
+        let paragraph = NSMutableParagraphStyle()
+        paragraph.alignment = .center
+        paragraph.paragraphSpacing = 12
+        return NSAttributedString(
+            string: L10n.AgentTranscriptReader.loadEarlier(min(pageSize, hiddenCount), hiddenCount) + "\n",
+            attributes: [
+                .font: NSFont.systemFont(ofSize: 12, weight: .medium),
+                .foregroundColor: NSColor.linkColor,
+                .link: AgentTranscriptReaderLoadEarlierLink.value,
+                .cursor: NSCursor.pointingHand,
+                .paragraphStyle: paragraph,
+            ]
+        )
+    }
+
+    private static func footer(
+        messageCount: Int,
+        sessionID: UUID,
+        precededByContent: Bool
+    ) -> NSAttributedString {
+        let result = NSMutableAttributedString()
+        if precededByContent {
+            result.append(NSAttributedString(
+                string: "\n\n",
+                attributes: [.font: NSFont.systemFont(ofSize: NSFont.systemFontSize)]
+            ))
+        }
+        result.append(NSAttributedString(
+            string: "—\n\(messageCount) message(s) total · session id \(sessionID.uuidString)",
+            attributes: [
+                .font: NSFont.systemFont(ofSize: 11),
+                .foregroundColor: NSColor.secondaryLabelColor,
+            ]
+        ))
         return result
     }
 }
