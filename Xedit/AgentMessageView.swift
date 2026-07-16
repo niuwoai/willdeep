@@ -368,6 +368,11 @@ struct AgentAssistantMarkdownBody: View {
     /// height and reads as flashing while the text itself is already enough
     /// feedback that thinking is progressing.
     var showsStreamingCursor = true
+    /// Live answers keep the low-cost plain-text path while tokens arrive.
+    /// Reasoning previews opt into the single-node Markdown renderer so common
+    /// structure such as headings, emphasis, lists, and tables is readable
+    /// without rebuilding a nested SwiftUI view tree on every stream flush.
+    var rendersStreamingMarkdown = false
     @Environment(\.colorScheme) private var colorScheme
 
     var body: some View {
@@ -375,7 +380,8 @@ struct AgentAssistantMarkdownBody: View {
             AgentAssistantStreamingBody(
                 content: content,
                 baseFontSize: baseFontSize,
-                showsCursor: showsStreamingCursor
+                showsCursor: showsStreamingCursor,
+                rendersMarkdown: rendersStreamingMarkdown
             )
         } else {
             renderedMarkdownBody
@@ -404,7 +410,9 @@ private struct AgentAssistantStreamingBody: View {
     let content: String
     let baseFontSize: CGFloat
     let showsCursor: Bool
+    let rendersMarkdown: Bool
     @State private var showsStreamingCursor = true
+    @Environment(\.colorScheme) private var colorScheme
 
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
@@ -415,9 +423,12 @@ private struct AgentAssistantStreamingBody: View {
             // select text that's still moving anyway — selection is restored
             // the moment streaming ends and the body flips to the finished
             // renderer (rich Text / NSTextView history), both selectable.
-            Text(AgentLongTokenBreaker.inject(into: AgentMarkdownNormalizer.normalizedForChatRendering(content)))
-                .font(.system(size: baseFontSize))
-                .foregroundStyle(.primary)
+            Text(AgentAssistantStreamingTextRenderer.render(
+                content,
+                rendersMarkdown: rendersMarkdown,
+                isDark: colorScheme == .dark,
+                baseFontSize: baseFontSize
+            ))
                 .lineSpacing(AgentChatHistoryLayoutMetrics.bodyLineSpacing)
                 .fixedSize(horizontal: false, vertical: true)
             if showsCursor && showsStreamingCursor {
@@ -448,6 +459,30 @@ private struct AgentAssistantStreamingBody: View {
             }
             showsStreamingCursor = false
         }
+    }
+}
+
+enum AgentAssistantStreamingTextRenderer {
+    static func render(
+        _ content: String,
+        rendersMarkdown: Bool,
+        isDark: Bool,
+        baseFontSize: CGFloat
+    ) -> AttributedString {
+        if rendersMarkdown {
+            return AgentAssistantMarkdownRenderer.render(
+                content,
+                isDark: isDark,
+                baseFontSize: baseFontSize
+            )
+        }
+
+        let normalized = AgentMarkdownNormalizer.normalizedForChatRendering(content)
+        let safe = AgentLongTokenBreaker.inject(into: normalized)
+        var plain = AttributedString(safe)
+        plain.font = .system(size: baseFontSize)
+        plain.foregroundColor = .primary
+        return plain
     }
 }
 
