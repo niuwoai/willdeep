@@ -109,7 +109,7 @@ struct DBSchemaDocWorkflow: WorkflowDefinition {
             block that runs against this dialect.
             """
         }
-        let inspectResults = await engine.parallel(
+        let inspectResults = try await engine.parallel(
             maxConcurrent: maxTablesToInspect,
             inspectPrompts.enumerated().map { idx, prompt in
                 { @Sendable in

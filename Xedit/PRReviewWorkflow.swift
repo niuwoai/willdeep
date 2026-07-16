@@ -89,7 +89,7 @@ struct PRReviewWorkflow: WorkflowDefinition {
             """
         }
 
-        let reviewResults = await engine.parallel(maxConcurrent: 4, reviewPrompts.enumerated().map { idx, prompt in
+        let reviewResults = try await engine.parallel(maxConcurrent: 4, reviewPrompts.enumerated().map { idx, prompt in
             { @Sendable in
                 try await engine.agent(prompt, label: "review:\(dimensions[idx].label)")
             }

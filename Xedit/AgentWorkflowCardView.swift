@@ -12,6 +12,7 @@
 import SwiftUI
 
 struct AgentWorkflowCardView: View {
+    @EnvironmentObject private var appState: AppState
     let report: WorkflowReport
 
     /// 折叠展开看每个 sub-agent。默认折叠（运行中也不展开，避免抖动）。
@@ -75,6 +76,19 @@ struct AgentWorkflowCardView: View {
 
             Spacer(minLength: 8)
 
+            if isActive {
+                Button {
+                    appState.cancelWorkflow(reportID: report.id)
+                } label: {
+                    Label(L10n.WorkflowCard.stop, systemImage: "stop.circle.fill")
+                        .labelStyle(.titleAndIcon)
+                        .font(.system(size: 11, weight: .medium))
+                }
+                .buttonStyle(.borderless)
+                .foregroundStyle(.red)
+                .help(L10n.WorkflowCard.stopHelp)
+            }
+
             Button {
                 expanded.toggle()
             } label: {
@@ -87,11 +101,22 @@ struct AgentWorkflowCardView: View {
         }
     }
 
+    @ViewBuilder
     private var progressRow: some View {
+        if isActive {
+            TimelineView(.periodic(from: .now, by: 1)) { context in
+                progressContent(now: context.date)
+            }
+        } else {
+            progressContent(now: report.finishedAt ?? Date())
+        }
+    }
+
+    private func progressContent(now: Date) -> some View {
         let total = report.subAgents.count
         let done = report.completedAgentCount
         return HStack(spacing: 8) {
-            if report.status == .running || report.status == .planning {
+            if isActive {
                 ProgressView()
                     .controlSize(.small)
             }
@@ -99,7 +124,7 @@ struct AgentWorkflowCardView: View {
                 .font(.system(size: 12, weight: .medium))
                 .foregroundStyle(.secondary)
             Spacer(minLength: 8)
-            Text(elapsedText)
+            Text(elapsedText(at: now))
                 .font(.system(size: 11))
                 .foregroundStyle(.secondary)
                 .monospacedDigit()
@@ -196,8 +221,12 @@ struct AgentWorkflowCardView: View {
         }
     }
 
-    private var elapsedText: String {
-        let seconds = Int(report.elapsedSeconds.rounded())
+    private var isActive: Bool {
+        report.status == .planning || report.status == .running
+    }
+
+    private func elapsedText(at date: Date) -> String {
+        let seconds = max(0, Int(date.timeIntervalSince(report.startedAt).rounded()))
         if seconds < 60 {
             return "\(seconds)s"
         }

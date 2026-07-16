@@ -26,6 +26,9 @@ the `summary` template with the step's output.
    - `slash_command`: pick a unique slash (built-in commands win on conflict)
    - `steps`: each step is one sub-agent call; chain them by referring to
      earlier outputs via `{{steps.<id>.output}}`
+   - `parallel: true`: consecutive marked steps run as one batch, capped by
+     `max_agents`; a parallel batch can reference only outputs from earlier
+     batches or sequential steps
    - `summary`: the markdown rendered into the report card
 3. Restart WillDeep (or wait for next workflow dispatch — discovery is
    re-scanned on every dispatch).

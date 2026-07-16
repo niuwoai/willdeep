@@ -2088,26 +2088,35 @@ enum AgentToolRunner {
             )
         }
         let args = arguments["args"]?.stringValue() ?? ""
-        let result = await MainActor.run { () -> (Bool, String) in
-            // 用 runtime 自己的 startWorkflow 路径 —— 它会找到该 runtime
-            // 的 messages / 状态并塞 workflow card 进去。
+        let result = await MainActor.run { () -> WorkflowStartResult in
             guard let appState = EditorAppStateRegistry.shared.appState(forRuntime: runtimeID) else {
-                return (false, "no app state for runtime \(runtimeID)")
+                return .rejected(reason: "No AppState owns runtime \(runtimeID).")
             }
-            let claimed = appState.startWorkflow(slashCommand: workflow.slashCommand, args: args)
-            return (claimed, claimed ? "started" : "could not start (workflow rejected args)")
+            return appState.startWorkflow(
+                slashCommand: workflow.slashCommand,
+                args: args,
+                runtimeID: runtimeID,
+                notifyAgentOnCompletion: true
+            )
         }
-        if result.0 {
+        switch result {
+        case .started(let reportID):
             let argsHint = args.isEmpty ? "" : " with args: \(args)"
             return AgentToolResult(
                 summary: "Started \(workflow.displayTitle)",
-                payload: "workflow `\(workflow.name)` queued\(argsHint). Card will appear in the transcript with live agent counts; final report joins the transcript when synthesize finishes."
+                payload: "workflow `\(workflow.name)` queued\(argsHint) as report `\(reportID.uuidString)`. The card will show live progress. When it finishes, the host will deliver the report back in a workflow-completion notice so you can continue the user's task."
+            )
+        case .rejected(let reason):
+            return AgentToolResult(
+                summary: "Failed to start \(workflow.displayTitle)",
+                payload: "Could not start workflow `\(workflow.name)`: \(reason)"
+            )
+        case .notRecognized:
+            return AgentToolResult(
+                summary: "Failed to start \(workflow.displayTitle)",
+                payload: "Workflow `\(workflow.name)` disappeared from the registry before dispatch."
             )
         }
-        return AgentToolResult(
-            summary: "Failed to start \(workflow.displayTitle)",
-            payload: "Could not start workflow `\(workflow.name)`: \(result.1)."
-        )
     }
 
 }

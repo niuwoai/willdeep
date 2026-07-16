@@ -1,5 +1,25 @@
 # Changelog
 
+## 1.166.0-rc3 - 2026-07-16
+
+### Fixed
+
+- **Workflow 现在可以真正停止。** 运行中的 Workflow 卡片提供持续可见的“停止”按钮，`/stop` 也会取消当前会话的活动工作流；取消会向并行子任务与远端运行上下文传播，并立即把卡片收口为 Cancelled。
+- **后台 Workflow 不再串错会话或假报启动成功。** `run_workflow` 按发起工具调用的 runtime、工作区与远端绑定启动；缺少必填参数时明确拒绝，不再返回 Started，也不会在当前前台会话误插卡片。
+- **Workflow 结果重新进入 Agent 闭环。** 工具发起的工作流完成、失败或取消后会生成一次性模型可见通知并自动续跑，让主 Agent 能读取摘要并继续交付；清空或删除会话时会抑制迟到通知，避免已取消任务重新唤醒。
+- **中断状态与计时不再失真。** App 重开后遗留的 planning/running 工作流统一归一为 Cancelled，运行卡片的耗时每秒刷新，取消错误不再被并行执行器吞成普通空结果。
+
+### Changed
+
+- 自定义 `workflow.yaml` 支持给连续步骤声明 `parallel: true`，实际并发受 `max_agents` 限制；默认步骤仍保持原有串行语义。
+- 版本号从 **1.166.0-rc2** 递增为 **1.166.0-rc3**；Xcode App、Go agent、Help bundle、Computer Use Helper、Chrome 扩展、README badge、移动网关响应头契约与产品文档同步。
+
+### Tests
+
+- 新增工作流精确 runtime 路由、缺参数拒绝、取消生命周期、结果通知只消费一次、父任务取消传播、恢复中断状态，以及 declarative parallel 解析回归。
+
+---
+
 ## 1.166.0-rc2 - 2026-07-16
 
 ### Fixed

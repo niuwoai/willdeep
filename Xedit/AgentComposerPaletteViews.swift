@@ -75,7 +75,7 @@ struct SlashCommand: Identifiable {
             SlashCommand(id: "compress", title: "/compress", subtitle: "Summarize older turns to free context", symbol: "rectangle.compress.vertical") { _ in
                 state.compressAgentContext()
             },
-            SlashCommand(id: "stop", title: "/stop", subtitle: "Stop the current model response", symbol: "stop.circle") { _ in
+            SlashCommand(id: "stop", title: "/stop", subtitle: "Stop the current response and workflows", symbol: "stop.circle") { _ in
                 state.stopAgentResponse()
             },
             SlashCommand(id: "clear-queue", title: "/clear-queue", subtitle: "Drop any pending queued messages", symbol: "tray.2") { _ in

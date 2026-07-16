@@ -350,6 +350,7 @@ extension AppState {
         agentJobRegistry.pendingCompletionCount(forRuntime: runtime.id) > 0
             || agentMediaTaskRegistry.pendingCompletionCount(forRuntime: runtime.id) > 0
             || agentSubagentRegistry.pendingReportCount(forParentRuntime: runtime.id) > 0
+            || !runtime.pendingWorkflowCompletionReportIDs.isEmpty
     }
 
     /// Sweep every live runtime and kick a wake-up turn for any with
@@ -367,7 +368,9 @@ extension AppState {
 
     func clearAgentConversation() {
         agentRequestTask?.cancel()
-        if let runtimeID = activeRuntime?.id {
+        if let runtime = activeRuntime {
+            cancelAllWorkflows(for: runtime)
+            let runtimeID = runtime.id
             agentSubagentRegistry.cancelAll(forParentRuntime: runtimeID)
         }
         agentMessages.removeAll()
@@ -566,6 +569,21 @@ extension AppState {
         var consecutivePlanRepliesWithoutProgress = 0
 
         for _ in 0..<Self.maxAgentToolRounds {
+            // `run_workflow` is asynchronous, but unlike the workflow card its
+            // final report must return to the model that delegated the work.
+            // Consume the owning runtime's pending ids into normal system
+            // messages so every provider adapter receives the result without
+            // exposing the raw card object itself.
+            let finishedWorkflows = consumePendingWorkflowCompletions(for: runtime)
+            for report in finishedWorkflows {
+                runtime.messages.append(
+                    AgentMessage(
+                        role: .system,
+                        content: Self.workflowCompletionNotice(for: report)
+                    )
+                )
+            }
+
             // Background-job completion notices. Pulled at the top of
             // each round so the model sees any "job xyz finished"
             // notification right before it speaks — see

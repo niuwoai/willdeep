@@ -68,7 +68,7 @@ struct CodeReviewWorkflow: WorkflowDefinition {
             return lines.joined(separator: "\n")
         }
 
-        let results = await engine.parallel(maxConcurrent: 4, prompts.enumerated().map { idx, prompt in
+        let results = try await engine.parallel(maxConcurrent: 4, prompts.enumerated().map { idx, prompt in
             { @Sendable in
                 try await engine.agent(prompt, label: "review:\(self.dimensions[idx].label)")
             }
@@ -109,7 +109,7 @@ struct CodeReviewWorkflow: WorkflowDefinition {
             return lines.joined(separator: "\n")
         }
 
-        let results = await engine.parallel(maxConcurrent: 4, prompts.enumerated().map { idx, prompt in
+        let results = try await engine.parallel(maxConcurrent: 4, prompts.enumerated().map { idx, prompt in
             { @Sendable in
                 try await engine.agent(prompt, label: "review:\(self.dimensions[idx].label)")
             }

@@ -84,7 +84,7 @@ struct ReleaseNotesWorkflow: WorkflowDefinition {
             """),
         ]
 
-        let categoryResults = await engine.parallel(maxConcurrent: 3, categoryPrompts.map { item in
+        let categoryResults = try await engine.parallel(maxConcurrent: 3, categoryPrompts.map { item in
             { @Sendable in
                 try await engine.agent(item.prompt, label: "cat:\(item.label)")
             }

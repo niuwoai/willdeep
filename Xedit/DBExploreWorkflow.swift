@@ -142,7 +142,7 @@ struct DBExploreWorkflow: WorkflowDefinition {
             """),
         ]
 
-        let parts = await engine.parallel(maxConcurrent: 3, angles.map { item in
+        let parts = try await engine.parallel(maxConcurrent: 3, angles.map { item in
             { @Sendable in
                 try await engine.agent(item.prompt, label: item.label)
             }

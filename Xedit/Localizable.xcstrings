@@ -32558,6 +32558,23 @@
         }
       }
     },
+    "workflow-card.cancelled-by-user" : {
+      "extractionState" : "extracted_with_value",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Workflow cancelled by the user."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "工作流已由用户取消。"
+          }
+        }
+      }
+    },
     "workflow-card.collapse" : {
       "extractionState" : "extracted_with_value",
       "localizations" : {
@@ -32588,6 +32605,40 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "显示子 agent 列表"
+          }
+        }
+      }
+    },
+    "workflow-card.failed-reason" : {
+      "extractionState" : "extracted_with_value",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Workflow failed: %@"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "工作流失败：%@"
+          }
+        }
+      }
+    },
+    "workflow-card.interrupted" : {
+      "extractionState" : "extracted_with_value",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Workflow was interrupted when the app closed."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "App 关闭时工作流被中断，已自动取消。"
           }
         }
       }
@@ -32673,6 +32724,40 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "运行中"
+          }
+        }
+      }
+    },
+    "workflow-card.stop" : {
+      "extractionState" : "extracted_with_value",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Stop"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "停止"
+          }
+        }
+      }
+    },
+    "workflow-card.stop-help" : {
+      "extractionState" : "extracted_with_value",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Cancel this workflow and its running sub-agents"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "取消此工作流及其正在运行的子 agent"
           }
         }
       }

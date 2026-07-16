@@ -12,32 +12,100 @@
 
 import Foundation
 
+enum WorkflowStartResult: Equatable {
+    case started(reportID: UUID)
+    case rejected(reason: String)
+    case notRecognized
+
+    var commandWasRecognized: Bool {
+        if case .notRecognized = self { return false }
+        return true
+    }
+}
+
 extension AppState {
     /// Slash 命令 (`/research`, `/code-review`, ...) 触发入口。
-    /// 返回 true 表示已认领并启动，调用方应清空 composer；false 表示
-    /// 没识别成 workflow 命令（让常规 slash command palette 继续处理）。
+    /// 返回 true 表示命令已由 workflow 层认领（可能启动，也可能因参数
+    /// 缺失而明确拒绝）；false 表示未识别，让其他 slash handler 继续。
     @discardableResult
     func startWorkflow(slashCommand: String, args: String) -> Bool {
+        let result = startWorkflow(
+            slashCommand: slashCommand,
+            args: args,
+            runtimeID: activeRuntime?.id,
+            notifyAgentOnCompletion: false
+        )
+        return result.commandWasRecognized
+    }
+
+    /// Session-explicit workflow entry used by `run_workflow`. Unlike the
+    /// composer wrapper above, this never consults `activeRuntime`, so a tool
+    /// call finishing in background session A cannot put its card in the
+    /// currently visible session B.
+    @discardableResult
+    func startWorkflow(
+        slashCommand: String,
+        args: String,
+        runtimeID: UUID?,
+        notifyAgentOnCompletion: Bool
+    ) -> WorkflowStartResult {
         guard let workflow = WorkflowRegistry.find(slashCommand: slashCommand) else {
             // 1.85.0-rc6:slash 没匹配任何内置/用户 workflow 时,如果有
             // 用户 workflow.yaml 解析失败,顺手把错误浮上来给用户看 ——
             // 否则用户写错 yaml 后 slash 命令静默"不存在",根本不知道
             // 是 yaml 语法错。注意只 set message 不 return true,常规
             // slash palette 仍然有机会处理这条命令(可能是别的功能)。
-            if let banner = UserWorkflowRegistry.errorBanner() {
-                agentErrorMessage = banner
+            if let banner = UserWorkflowRegistry.errorBanner(),
+               let runtimeID,
+               let runtime = runtime(for: runtimeID) {
+                runtime.errorMessage = banner
             }
-            return false
+            return .notRecognized
         }
+
+        return startWorkflow(
+            workflow: workflow,
+            args: args,
+            runtimeID: runtimeID,
+            notifyAgentOnCompletion: notifyAgentOnCompletion
+        )
+    }
+
+    /// Definition-explicit overload kept internal so lifecycle tests can use
+    /// deterministic workflows without reaching a real model/provider.
+    @discardableResult
+    func startWorkflow(
+        workflow: any WorkflowDefinition,
+        args: String,
+        runtimeID: UUID?,
+        notifyAgentOnCompletion: Bool
+    ) -> WorkflowStartResult {
         let trimmedArgs = args.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let runtimeID, let runtime = runtime(for: runtimeID) else {
+            let reason = WorkflowError.noActiveRuntime.errorDescription ?? "No Agent session."
+            agentErrorMessage = reason
+            return .rejected(reason: reason)
+        }
         if !workflow.allowsEmptyArgs && trimmedArgs.isEmpty {
-            agentErrorMessage = WorkflowError.missingArgs(workflow: workflow.displayTitle).errorDescription
-            return true
+            let reason = WorkflowError.missingArgs(workflow: workflow.displayTitle).errorDescription
+                ?? "Workflow input is required."
+            runtime.errorMessage = reason
+            return .rejected(reason: reason)
         }
-        guard let runtime = activeRuntime else {
-            agentErrorMessage = WorkflowError.noActiveRuntime.errorDescription
-            return true
+
+        let workspaceLocation = runtime.workspaceLocation
+            ?? runtime.workspaceRootPath.map { .local(path: $0) }
+        let workspaceURL: URL?
+        do {
+            workspaceURL = try runtime.localWorkspaceURLForOptimisticUse()
+        } catch {
+            runtime.errorMessage = error.localizedDescription
+            return .rejected(reason: error.localizedDescription)
         }
+        let runtimeDescriptor = workspaceLocation?.remoteRuntimeID.flatMap {
+            AgentRuntimeStore.descriptor(id: $0)
+        }
+        runtime.errorMessage = nil
 
         // 1. 创建一个初始 report。
         let report = WorkflowReport(
@@ -54,12 +122,11 @@ extension AppState {
             workflowReport: report
         )
         runtime.messages.append(card)
+        persistAgentSession(runtime: runtime, touchUpdatedAt: false, moveToFront: false)
 
-        // 3. 起后台 Task 跑 engine。capture 弱引用避免 runtime 被释放后
-        // 还往里写。
-        let runtimeID = runtime.id
-        let workspaceURL = rootDirectory
-        let configuration = agentConfiguration
+        // 3. 起后台 Task 跑 engine，并把句柄留在 owning runtime 里供卡片
+        // stop / 会话删除 / clear conversation 精确取消。
+        let configuration = configurationForCurrentTurn(for: runtime)
         // 省心托管:主循环每回合跑 routing judge 解析具体虚拟模型
         // (AppStateAgentLoop),workflow 之前直接拿原始配置里的静态模型,
         // 完全绕过托管路由 —— 与 5dd9273a 修的 someIMContext 缺失同族,
@@ -82,13 +149,14 @@ extension AppState {
             return SomeIMRequestContext(sessionID: runtimeID.uuidString, workspaceID: workspaceID)
         }()
 
-        Task { [weak self] in
+        let workflowTask = Task { @MainActor [weak self] in
             guard let self else { return }
             // 标记 running。
             await MainActor.run {
                 self.updateWorkflowReport(id: report.id, runtimeID: runtimeID) { r in
                     r.status = .running
                 }
+                self.persistWorkflowRuntime(runtimeID: runtimeID)
             }
 
             var workflowConfiguration = configuration
@@ -105,12 +173,15 @@ extension AppState {
                 reportID: report.id,
                 runtimeID: runtimeID,
                 workspaceURL: workspaceURL,
+                workspaceLocation: workspaceLocation,
+                runtimeDescriptor: runtimeDescriptor,
                 configuration: workflowConfiguration,
                 someIMContext: someIMContext,
                 appState: self
             )
 
             do {
+                try Task.checkCancellation()
                 // Watchdog so a stalled provider request surfaces as a `.failed`
                 // card instead of hanging forever with no feedback.
                 let summary = try await Self.runWorkflowWithWatchdog(seconds: Self.workflowWatchdogSeconds) {
@@ -122,13 +193,26 @@ extension AppState {
                         r.status = .done
                         r.finishedAt = Date()
                     }
+                    self.finishWorkflowRun(
+                        reportID: report.id,
+                        runtimeID: runtimeID,
+                        notifyAgentOnCompletion: notifyAgentOnCompletion
+                    )
                 }
             } catch is CancellationError {
                 await MainActor.run {
                     self.updateWorkflowReport(id: report.id, runtimeID: runtimeID) { r in
                         r.status = .cancelled
                         r.finishedAt = Date()
+                        if r.summary.isEmpty {
+                            r.summary = L10n.WorkflowCard.cancelledByUser
+                        }
                     }
+                    self.finishWorkflowRun(
+                        reportID: report.id,
+                        runtimeID: runtimeID,
+                        notifyAgentOnCompletion: notifyAgentOnCompletion
+                    )
                 }
             } catch {
                 await MainActor.run {
@@ -136,14 +220,105 @@ extension AppState {
                         r.status = .failed
                         r.finishedAt = Date()
                         if r.summary.isEmpty {
-                            r.summary = "Workflow failed: \(error.localizedDescription)"
+                            r.summary = L10n.WorkflowCard.failed(error.localizedDescription)
                         }
                     }
+                    self.finishWorkflowRun(
+                        reportID: report.id,
+                        runtimeID: runtimeID,
+                        notifyAgentOnCompletion: notifyAgentOnCompletion
+                    )
                 }
             }
         }
+        runtime.workflowTasks[report.id] = workflowTask
 
-        return true
+        return .started(reportID: report.id)
+    }
+
+    /// Stop a live workflow immediately. The optimistic report mutation makes
+    /// the UI respond on the click; the task's cancellation handler then
+    /// tears down watchdog/subagent work and performs final persistence.
+    func cancelWorkflow(reportID: UUID, runtimeID: UUID? = nil) {
+        let owner: AgentRuntime? = {
+            if let runtimeID { return runtime(for: runtimeID) }
+            return agentRuntimes.values.first(where: { runtime in
+                runtime.workflowTasks[reportID] != nil
+                    || runtime.messages.contains(where: {
+                        $0.workflowReport?.id == reportID
+                    })
+            })
+        }()
+        guard let owner else { return }
+
+        if owner.messages.contains(where: { $0.workflowReport?.id == reportID && $0.workflowReport?.consultation != nil }) {
+            stopAgentConsultation(reportID: reportID)
+            return
+        }
+        guard let task = owner.workflowTasks[reportID] else { return }
+        updateWorkflowReport(id: reportID, runtimeID: owner.id) { report in
+            guard report.status == .planning || report.status == .running else { return }
+            report.status = .cancelled
+            report.finishedAt = Date()
+            if report.summary.isEmpty {
+                report.summary = L10n.WorkflowCard.cancelledByUser
+            }
+        }
+        persistWorkflowRuntime(runtimeID: owner.id)
+        task.cancel()
+    }
+
+    func cancelAllWorkflows(for runtime: AgentRuntime) {
+        let tasks = Array(runtime.workflowTasks.values)
+        runtime.workflowTasks.removeAll()
+        runtime.pendingWorkflowCompletionReportIDs.removeAll()
+        for task in tasks { task.cancel() }
+    }
+
+    private func finishWorkflowRun(
+        reportID: UUID,
+        runtimeID: UUID,
+        notifyAgentOnCompletion: Bool
+    ) {
+        guard let runtime = runtime(for: runtimeID) else { return }
+        let wasTracked = runtime.workflowTasks.removeValue(forKey: reportID) != nil
+        persistWorkflowRuntime(runtimeID: runtimeID)
+        // clear conversation / session deletion removes task handles before
+        // cancellation. The late cancellation callback must not wake a session
+        // the user has intentionally cleared or deleted.
+        guard wasTracked,
+              notifyAgentOnCompletion,
+              !runtime.pendingWorkflowCompletionReportIDs.contains(reportID) else { return }
+        runtime.pendingWorkflowCompletionReportIDs.append(reportID)
+        resumeAgentLoopForPendingBackgroundCompletions(for: runtime)
+    }
+
+    func consumePendingWorkflowCompletions(for runtime: AgentRuntime) -> [WorkflowReport] {
+        let ids = runtime.pendingWorkflowCompletionReportIDs
+        runtime.pendingWorkflowCompletionReportIDs.removeAll()
+        guard !ids.isEmpty else { return [] }
+        let reportsByID: [UUID: WorkflowReport] = Dictionary(
+            uniqueKeysWithValues: runtime.messages.compactMap { message in
+                guard let report = message.workflowReport else { return nil }
+                return (report.id, report)
+            }
+        )
+        return ids.compactMap { reportsByID[$0] }
+    }
+
+    nonisolated static func workflowCompletionNotice(for report: WorkflowReport) -> String {
+        let summary = report.summary.trimmingCharacters(in: .whitespacesAndNewlines)
+        return """
+        <workflow-completion>
+        workflow: \(report.workflowName)
+        status: \(report.status.rawValue)
+        report_id: \(report.id.uuidString)
+        summary:
+        \(summary.isEmpty ? "(no summary)" : summary)
+        </workflow-completion>
+
+        A workflow you started has finished. Use its result to continue the user's task. Do not merely announce completion; synthesize the useful outcome, or explain the failure/cancellation and the next actionable step.
+        """
     }
 
     /// 省心托管会话里 workflow 子 agent 的主模型解析:floor 与 high 取
@@ -243,7 +418,7 @@ extension AppState {
     }
 }
 
-private final class WorkflowWatchdogRace<T: Sendable>: @unchecked Sendable {
+nonisolated private final class WorkflowWatchdogRace<T: Sendable>: @unchecked Sendable {
     private let lock = NSLock()
     private var continuation: CheckedContinuation<T, Error>?
     private var pendingResult: Result<T, Error>?
