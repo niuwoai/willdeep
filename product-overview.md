@@ -1,6 +1,6 @@
 # WillDeep Product Overview
 
-> Last updated: 2026-07-17 | Current version: v1.177.0-rc1
+> Last updated: 2026-07-17 | Current version: v1.179.0-rc9
 
 ## Positioning
 
@@ -12,6 +12,7 @@ WillDeep is configured for non-App-Store distribution without App Sandbox so it 
 
 ## 架构概览
 
+- **柔和圆角授权通知与多场景确认（1.179.0-rc9）** —— 命令审批、强确认、侧边栏终端命令、终端控制键、网页抓取及其他工具共用一套圆角通知组件，按场景切换标题、说明、元信息和按钮语义。界面不再用红色危险框制造压迫感，按钮提升到 42pt 命中高度，“以后允许”降为次要文字操作；全部 7 套界面皮肤沿用各自面板、控件、描边和强调色。
 - **macOS App 图文文档站内置技能（1.177.0-rc1）** —— 新增 `mac-app-docs-site`，在 WillDeep 内可调用原生 `computer_use_*` 工具、在 Codex Desktop 内可调用 `node_repl + @oai/sky`，以真实界面状态采集流程截图并生成标准 Markdown 教程；同一技能继续把内容目录接入既有 React 或其他文档站路由，附带模板、隐私边界、深链/SSR/i18n 验收规则与 Markdown/JSON 双格式审计报告。
 - **命令确认按钮密度再收紧（1.176.0-rc8）** —— “拒绝 / 允许”在宽屏左右栏与窄屏上下栏中均使用更低的按钮高度和 124pt 最大宽度，按钮间距扩大到 24pt，保留主次操作与左右顺序但减少视觉压迫。
 - **侧边栏 Diff 按文件延迟加载与 TextKit 渲染（1.176.0-rc7）** —— 工作区变更入口先读取 Git 状态与行数统计，用户选中文件后才生成该文件的 diff；大文本由开启非连续布局的 `NSTextView` 按视口排版，并以 UTF-8 字节数和行数设置双重上限，避免大量中文变更触发 SwiftUI 全文同步字形塑形而卡住主线程。

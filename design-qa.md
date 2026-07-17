@@ -1,3 +1,56 @@
+# 柔和圆角授权通知 Design QA
+
+- source visual truth: /Users/rocky/.codex/generated_images/019f7064-33cd-7371-86b0-7b69fe93459e/exec-e4b89cab-2e17-4c8b-9c3f-3a442e9a4caf.png
+- wide implementation: /tmp/Xedit-confirmation-design-qa/command-confirmation-wide.png
+- narrow implementation: /tmp/Xedit-confirmation-design-qa/command-confirmation-narrow.png
+- all-skin montage: /Users/rocky/.codex/visualizations/2026/07/17/019f7064-33cd-7371-86b0-7b69fe93459e/authorization-ui-all-skins.png
+- aligned reference comparison: /Users/rocky/.codex/visualizations/2026/07/17/019f7064-33cd-7371-86b0-7b69fe93459e/authorization-ui-reference-comparison.png
+- viewport: 参考卡片裁切与实现窄版均对齐到 1240 x 678 px；额外验证 1040 pt @2x 宽版与 620 pt @2x 窄版
+- state: 长 run_command，分别覆盖普通审批与强确认；七套界面皮肤全部渲染
+- final result: passed
+
+**Full-View Comparison Evidence**
+
+参考设计与 Rice Paper 生产组件已按相同像素尺寸并排检查。实现保留参考稿的核心层级：大圆角单卡、柔和图标底板、通知式标题、可复制的内容区、胶囊元信息、轻量说明入口、细分隔线，以及左侧决定说明和右侧双操作。生产组件使用当前皮肤的真实 palette，因此强调色不强行复制参考稿的绿色；在七套皮肤中分别呈现各自的浅色、深色和高对比风格。
+
+**Focused Region Comparison Evidence**
+
+- 外层使用 20 pt 连续圆角，内容区和图标底板使用 14 pt 圆角；边框统一为皮肤 hairline，没有红色危险外框。
+- 主次按钮最小高度为 42 pt、圆角为 14 pt，拒绝/暂不操作保持次级样式，允许/继续位于右侧并使用皮肤强调色。
+- 命令内容固定为 72 pt 视口，长内容可横向与纵向滚动；复制入口始终可见。
+- 元信息改为柔和胶囊，工作区、可能影响及终端/网页访问约束不再以高饱和风险警告呈现。
+- 620 pt 窄版没有裁字、按钮越界或内容溢出；1040 pt 宽版保持紧凑同高布局。
+
+**Scenario Coverage**
+
+- run_command：“暂不执行 / 继续”，展示工作区与可能更新文件。
+- terminal_send_command：“暂不发送 / 发送到终端”，强调侧边栏可见、目标终端和可中断。
+- terminal_send_control：展开 Ctrl-C / Enter / Esc 的友好说明，并提示发送后立即生效。
+- web_fetch：“暂不访问 / 本次允许”，展示 GET、公开网页和最大读取字符数。
+- 其他待确认工具：使用通用操作明细、说明和允许语义，避免退回旧版危险卡。
+
+**Required Fidelity Surfaces**
+
+- Fonts and typography: 沿用原生 macOS 字体，以 18pt 标题、13pt 说明、12pt 内容和 10–11pt 元信息形成稳定层级。
+- Spacing and layout rhythm: 主区与底部均使用 20pt 内边距，14pt 分区节奏；宽窄布局由 ViewThatFits 平滑适配。
+- Colors and visual tokens: 面板、内容底、选中底、描边、主次文字和强调色全部来自当前 EditorInterfaceSkin.palette。
+- Image quality and asset fidelity: 仅使用 SF Symbols 与矢量原生形状，没有位图缩放或近似素材。
+- Copy and content: 命令、终端、控制键、网页和通用工具分别使用真实场景文案；没有把所有授权都伪装成命令确认。
+
+**Primary Interactions Checked**
+
+- 普通审批调用 approveAgentToolCall，强确认调用 confirmAgentToolCall：passed。
+- 拒绝、复制、查看说明及“以后允许同类操作”入口保持可用：passed。
+- 七套皮肤 1040 pt 原生 SwiftUI 快照：passed。
+- Rice Paper 1040 pt / 620 pt 响应式快照：passed。
+- Debug 构建与授权通知目标测试：passed。
+
+**Findings**
+
+没有未解决的 P0、P1 或 P2 视觉问题。与概念稿相比，生产实现有意缩小图标与纵向留白，以适配聊天内容区；有意使用各皮肤自己的强调色，而不是把全部皮肤染成同一种绿色。通知语气、圆角层级、内容审阅能力和操作顺序均与用户选定方向一致。Final result passed.
+
+---
+
 # 命令确认卡响应式布局 Design QA
 
 - source visual truth: `/var/folders/np/rjc0y5w52x324x21pv6g33440000gp/T/codex-clipboard-cf3ca2fa-70bb-49e6-9e6a-ef90e201dedc.png` 与用户本轮按钮密度要求
