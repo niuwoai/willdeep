@@ -721,7 +721,7 @@ nonisolated enum AgentExpert: String, Codable, CaseIterable, Identifiable, Hasha
             return """
             === BROWSER OPERATIONS EXPERT — ACTIVE ===
             The user enabled the browser operations expert for this session. You may use `embedded_browser_*` tools for the visible in-app side-panel browser, including navigation, page reading, DOM snapshots, wait conditions, console logs, AJAX/API request inspection, redacted request/response headers, HAR export, storage/cookie inspection, page performance diagnostics, failed-resource aggregation, network resource timing, screenshot capture, CSS-selector clicks, JavaScript evaluation, and form filling.
-            Use `chrome_*` tools only when the user needs their existing Chrome tabs, cookies, or login session. Screenshots and page mutations may expose or change private web apps, so keep actions scoped, explain selectors when useful, and prefer read/status calls before clicking or typing.
+            Use `chrome_*` tools only when the user needs their existing Chrome tabs, cookies, or login session. Start with chrome_list_tabs/chrome_activate_tab when the target tab is ambiguous, then take a fresh chrome_snapshot and prefer its ref over a hand-written selector. After navigation or mutation, use chrome_wait_for and take another snapshot before the next action. Screenshots and page mutations may expose or change private web apps, so keep actions scoped and prefer read/status calls before clicking or typing.
             """
         case .webCoding:
             return """

@@ -70,12 +70,17 @@ struct AgentComputerUseToolTests {
     func computerUseToolRiskBoundariesAreExplicit() throws {
         let permissions = try #require(AgentToolRegistry.descriptor(for: "computer_use_permissions"))
         let apps = try #require(AgentToolRegistry.descriptor(for: "computer_use_list_apps"))
+        let inspect = try #require(AgentToolRegistry.descriptor(for: "computer_use_inspect_app"))
+        let wait = try #require(AgentToolRegistry.descriptor(for: "computer_use_wait_for"))
         #expect(permissions.risk == .read)
         #expect(apps.risk == .read)
+        #expect(inspect.risk == .read)
+        #expect(wait.risk == .read)
         for name in [
-            "computer_use_request_permissions", "computer_use_launch_app", "computer_use_get_app_state",
+            "computer_use_request_permissions", "computer_use_launch_app", "computer_use_activate_app", "computer_use_get_app_state",
             "computer_use_click", "computer_use_secondary_action", "computer_use_scroll", "computer_use_drag",
-            "computer_use_type_text", "computer_use_press_key", "computer_use_set_value", "computer_use_restart_helper"
+            "computer_use_type_text", "computer_use_press_key", "computer_use_set_value", "computer_use_focus",
+            "computer_use_hover", "computer_use_select_text", "computer_use_restart_helper"
         ] {
             let descriptor = try #require(AgentToolRegistry.descriptor(for: name))
             #expect(descriptor.risk == .write, "\(name) must require approval")
@@ -100,6 +105,31 @@ struct AgentComputerUseToolTests {
             try await AgentComputerUseTools.perform(
                 action: "type_text",
                 arguments: ["pid": .number(123), "text": .string("sk-example-secret")]
+            )
+        }
+    }
+
+    @Test
+    func richerComputerUseActionsExposeFreshRefParameters() throws {
+        let focus = try #require(AgentToolRegistry.descriptor(for: "computer_use_focus"))
+        let hover = try #require(AgentToolRegistry.descriptor(for: "computer_use_hover"))
+        let select = try #require(AgentToolRegistry.descriptor(for: "computer_use_select_text"))
+        let state = try #require(AgentToolRegistry.descriptor(for: "computer_use_get_app_state"))
+        let wait = try #require(AgentToolRegistry.descriptor(for: "computer_use_wait_for"))
+
+        #expect(focus.parameters.contains { $0.name == "ref" && $0.required })
+        #expect(hover.parameters.contains { $0.name == "ref" && !$0.required })
+        #expect(select.parameters.contains { $0.name == "selection_type" && !$0.required })
+        #expect(state.parameters.contains { $0.name == "include_screenshot" && !$0.required })
+        #expect(wait.parameters.contains { $0.name == "condition" && $0.required })
+    }
+
+    @Test
+    func computerUseSelectTextRefusesLikelySecretsBeforeLaunchingHelper() async {
+        await #expect(throws: AgentToolError.self) {
+            try await AgentComputerUseTools.perform(
+                action: "select_text",
+                arguments: ["ref": .string("snapshot:e1"), "text": .string("123456")]
             )
         }
     }

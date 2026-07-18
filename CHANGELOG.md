@@ -1,7 +1,43 @@
 # Changelog
 
-> 当前文件保留最新 538 个版本（1.182.0-rc1 至 1.109.0-rc340）。
+> 当前文件保留最新 540 个版本（1.184.0-rc1 至 1.109.0-rc340）。
 > 更早的 1000 个版本已移至 [CHANGELOG-ARCHIVE.md](CHANGELOG-ARCHIVE.md)。
+
+## 1.184.0-rc1 - 2026-07-18
+
+### Added
+
+- Computer Use 新增无截图的只读 AX 语义检查工具，不需要 Screen Recording 权限；新增按新鲜控件 ref、控件值与窗口标题轮询等待的能力，默认不截图并限制最长等待时间。
+- Chrome 浏览器控制新增 DOM ref/唯一选择器悬停、按 value 或可见 label 选择原生下拉选项；按键控制补齐 Tab 焦点移动、Escape 失焦、Backspace/Delete 文本编辑及 Enter 激活/表单提交回退。
+
+### Changed
+
+- Computer Use Helper 与 Chrome Native Host 协议同步升级到 v3，能力声明、工具注册、界面摘要和模型执行提示完整贯通；动作链优先使用语义状态与条件等待，减少无意义截图和盲等。
+- 将 `AgentComposerPickers.swift` 的运行上下文/审批 picker 拆到独立文件，将 `L10n.swift` 的工作区相关资源拆到扩展文件；两个主文件均降到 3000 行以内，复杂度守门硬性违规归零。
+- 版本号从 **1.183.0-rc1** 提升为 **1.184.0-rc1**，内部构建号从 **6** 递增为 **7**。
+
+### Tests
+
+- 扩展 Computer Use 与 Chrome 的 Swift 单测、Ruby Markdown/JSON 合约报告和浏览器本地闭环夹具，覆盖无截图状态、条件等待、悬停、下拉选择及键盘语义回退。
+- 通过 Swift 编译测试、Go Native Host 测试、JavaScript 语法检查、版本一致性检查、复杂度守门，并使用真实 macOS 应用与真实 Chrome 页面进行闭环验证。
+
+## 1.183.0-rc1 - 2026-07-18
+
+### Added
+
+- Computer Use 新增前台激活应用、控件聚焦、悬停与文本选择动作；无障碍树补充控件 identifier、help、选中/展开状态、屏幕 frame 与中心点，`AXPress` 失败时可回退到控件中心点击。
+- Chrome 浏览器控制新增标签页列表与切换、HTTP(S) 导航、前进/后退/刷新、结构化 DOM 快照、按键、滚动和页面条件等待；快照返回新鲜 element ref、可访问名称、角色、状态、选择器提示与视口坐标。
+- Chrome 截图现在作为真正的图片附件返回给模型，不再把整段 base64 塞进文本结果；新增 Computer Use Helper 与 Chrome 扩展 Markdown/JSON 契约报告并接入一键测试。
+
+### Changed
+
+- Chrome 点击与输入优先接受 DOM 快照 ref，CSS selector 仅作为兼容回退且多匹配会直接拒绝；表单输入改用框架兼容的原生 value setter，并继续隐去密码、Token、OTP、信用卡等敏感字段值。
+- Browser Ops 与 Computer Use 系统提示更新为“先列标签页/抓新快照、动作后等待并重抓”的闭环；版本号从 **1.182.0-rc1** 提升为 **1.183.0-rc1**，内部构建号从 **5** 递增为 **6**。
+
+### Tests
+
+- 新增 Chrome 工具风险等级、DOM ref 参数、缺失/冲突目标与等待条件校验测试；扩展脚本语法、16 项 Chrome 契约、5 项 Computer Use 契约和 Go Native Host 测试通过。
+- 使用真实 macOS 应用与真实 Chrome 页面完成 Computer Use 和浏览器操作闭环验证。
 
 ## 1.182.0-rc1 - 2026-07-18
 

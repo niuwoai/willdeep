@@ -1127,12 +1127,46 @@ enum AgentToolRegistry {
             parameters: [AgentToolParameter(name: "app", type: .string, description: "Application bundle identifier, for example `com.apple.Notes`.", required: true)]
         ),
         AgentToolDescriptor(
-            name: "computer_use_get_app_state",
-            description: "Read a macOS app's Accessibility tree and capture only its visible front window. Returns fresh element refs plus a screenshot. Requires approval because the screenshot may contain private information. Always call this before desktop actions and refresh after every action.",
+            name: "computer_use_activate_app",
+            description: "Bring a running macOS app and its windows to the foreground before keyboard-heavy interaction. Requires approval because it changes the user's active application.",
             risk: .write,
             parameters: [
                 AgentToolParameter(name: "app", type: .string, description: "Running application bundle identifier or localized app name. Omit only when pid is provided.", required: false),
                 AgentToolParameter(name: "pid", type: .integer, description: "Running application process ID. Omit only when app is provided.", required: false)
+            ]
+        ),
+        AgentToolDescriptor(
+            name: "computer_use_get_app_state",
+            description: "Read a macOS app's Accessibility tree and optionally capture only its visible front window. Returns fresh element refs plus a screenshot by default. Requires approval because the screenshot may contain private information. Always refresh before desktop actions.",
+            risk: .write,
+            parameters: [
+                AgentToolParameter(name: "app", type: .string, description: "Running application bundle identifier or localized app name. Omit only when pid is provided.", required: false),
+                AgentToolParameter(name: "pid", type: .integer, description: "Running application process ID. Omit only when app is provided.", required: false),
+                AgentToolParameter(name: "include_screenshot", type: .boolean, description: "Capture the visible front window. Defaults to true. Prefer computer_use_inspect_app when no screenshot is needed.", required: false)
+            ]
+        ),
+        AgentToolDescriptor(
+            name: "computer_use_inspect_app",
+            description: "Read only a macOS app's Accessibility tree without taking a screenshot. Returns fresh semantic element refs and does not require Screen Recording permission.",
+            risk: .read,
+            parameters: [
+                AgentToolParameter(name: "app", type: .string, description: "Running application bundle identifier or localized app name. Omit only when pid is provided.", required: false),
+                AgentToolParameter(name: "pid", type: .integer, description: "Running application process ID. Omit only when app is provided.", required: false)
+            ]
+        ),
+        AgentToolDescriptor(
+            name: "computer_use_wait_for",
+            description: "Wait read-only for a fresh Accessibility ref, element value, or window title condition. Returns a refreshed Accessibility tree; screenshot capture is opt-in.",
+            risk: .read,
+            parameters: [
+                AgentToolParameter(name: "app", type: .string, description: "Running app identifier or name. Omit when pid or ref is provided.", required: false),
+                AgentToolParameter(name: "pid", type: .integer, description: "Target process ID. Omit when app or ref is provided.", required: false),
+                AgentToolParameter(name: "ref", type: .string, description: "Fresh ref required by ref_exists and value_contains.", required: false),
+                AgentToolParameter(name: "condition", type: .string, description: "ref_exists, value_contains, or title_contains.", required: true),
+                AgentToolParameter(name: "expected", type: .string, description: "Expected substring for value_contains or title_contains.", required: false),
+                AgentToolParameter(name: "timeout_ms", type: .integer, description: "100 through 15000 milliseconds; defaults to 5000.", required: false),
+                AgentToolParameter(name: "poll_ms", type: .integer, description: "50 through 1000 milliseconds; defaults to 100.", required: false),
+                AgentToolParameter(name: "include_screenshot", type: .boolean, description: "Capture a screenshot after matching. Defaults to false.", required: false)
             ]
         ),
         AgentToolDescriptor(
@@ -1208,6 +1242,35 @@ enum AgentToolRegistry {
             ]
         ),
         AgentToolDescriptor(
+            name: "computer_use_focus",
+            description: "Focus a fresh Accessibility element ref before typing or sending keys. Requires approval. Use this when a field or control is visible but not receiving keyboard input.",
+            risk: .write,
+            parameters: [
+                AgentToolParameter(name: "ref", type: .string, description: "Fresh focusable element ref from computer_use_get_app_state.", required: true)
+            ]
+        ),
+        AgentToolDescriptor(
+            name: "computer_use_hover",
+            description: "Move the pointer to the center of a fresh Accessibility element ref, or to screenshot-relative coordinates. Useful for hover-only controls and tooltips. Requires approval.",
+            risk: .write,
+            parameters: [
+                AgentToolParameter(name: "ref", type: .string, description: "Fresh element ref. Omit for pixel fallback.", required: false),
+                AgentToolParameter(name: "pid", type: .integer, description: "Target process ID; optional when ref is supplied.", required: false),
+                AgentToolParameter(name: "x", type: .integer, description: "Screenshot-relative x coordinate for pixel fallback.", required: false),
+                AgentToolParameter(name: "y", type: .integer, description: "Screenshot-relative y coordinate for pixel fallback.", required: false)
+            ]
+        ),
+        AgentToolDescriptor(
+            name: "computer_use_select_text",
+            description: "Select matching text, or place the cursor before or after it, inside a fresh editable Accessibility element. Requires approval and never accepts secret text.",
+            risk: .write,
+            parameters: [
+                AgentToolParameter(name: "ref", type: .string, description: "Fresh editable element ref.", required: true),
+                AgentToolParameter(name: "text", type: .string, description: "Non-sensitive text to select.", required: true),
+                AgentToolParameter(name: "selection_type", type: .string, description: "text (default), cursor_before, or cursor_after.", required: false)
+            ]
+        ),
+        AgentToolDescriptor(
             name: "computer_use_restart_helper",
             description: "Restart only the separate WillDeep Computer Use helper and then report its permissions. Use after the user changes macOS permissions; WillDeep itself does not need a restart.",
             risk: .write,
@@ -1234,25 +1297,118 @@ enum AgentToolRegistry {
             parameters: []
         ),
         AgentToolDescriptor(
-            name: "chrome_click",
-            description: "Click an element in the active Chrome tab using a CSS selector through the WillDeep Browser extension. Requires approval because it changes browser state.",
+            name: "chrome_snapshot",
+            description: "Capture a structured DOM snapshot of the active Chrome tab with fresh element refs, accessible names, roles, focus/checked state, unique selector hints, and viewport rectangles. Sensitive input values are omitted. Read-only; use its fresh refs for the next browser action.",
+            risk: .read,
+            parameters: [
+                AgentToolParameter(name: "max_elements", type: .integer, description: "Maximum visible interactive/heading elements, from 1 to 600. Defaults to 240.", required: false)
+            ]
+        ),
+        AgentToolDescriptor(
+            name: "chrome_list_tabs",
+            description: "List Chrome tabs across windows with tab IDs, active/pinned state, title, and URL. Read-only and does not inspect cookies or storage.",
+            risk: .read,
+            parameters: []
+        ),
+        AgentToolDescriptor(
+            name: "chrome_activate_tab",
+            description: "Activate one Chrome tab by an ID returned from chrome_list_tabs and focus its window. Requires approval because it changes the user's browser focus.",
+            risk: .write,
+            parameters: [AgentToolParameter(name: "tab_id", type: .integer, description: "Chrome tab ID from chrome_list_tabs.", required: true)]
+        ),
+        AgentToolDescriptor(
+            name: "chrome_navigate",
+            description: "Navigate the active Chrome tab to an HTTP or HTTPS URL through the WillDeep Browser extension. Bare domains are normalized to HTTPS. Requires approval.",
+            risk: .write,
+            parameters: [AgentToolParameter(name: "url", type: .string, description: "HTTP(S) URL or bare domain to open.", required: true)]
+        ),
+        AgentToolDescriptor(
+            name: "chrome_history",
+            description: "Go back, go forward, or reload the active Chrome tab. Requires approval because it changes page state.",
             risk: .write,
             parameters: [
-                AgentToolParameter(name: "selector", type: .string, description: "CSS selector for the element to click, e.g. `button[type=submit]`.", required: true)
+                AgentToolParameter(name: "direction", type: .string, description: "back, forward, or reload.", required: true),
+                AgentToolParameter(name: "bypass_cache", type: .boolean, description: "For reload only, bypass Chrome's cache when true.", required: false)
+            ]
+        ),
+        AgentToolDescriptor(
+            name: "chrome_click",
+            description: "Click an element in the active Chrome tab using a fresh chrome_snapshot ref or a unique CSS selector. Fresh refs are preferred; ambiguous selectors are rejected. Requires approval because it changes browser state.",
+            risk: .write,
+            parameters: [
+                AgentToolParameter(name: "ref", type: .string, description: "Fresh element ref returned by chrome_snapshot.", required: false),
+                AgentToolParameter(name: "selector", type: .string, description: "Unique CSS selector fallback. Do not pass together with ref.", required: false)
             ]
         ),
         AgentToolDescriptor(
             name: "chrome_type",
-            description: "Focus an element in the active Chrome tab and replace its text/value through the WillDeep Browser extension. Requires approval because it can edit web apps.",
+            description: "Focus an element and replace its text/value using React-compatible native value setters and input/change events. Accepts a fresh chrome_snapshot ref or unique CSS selector. Requires approval because it can edit web apps.",
             risk: .write,
             parameters: [
-                AgentToolParameter(name: "selector", type: .string, description: "CSS selector for the input, textarea, editable element, or text-like target.", required: true),
+                AgentToolParameter(name: "ref", type: .string, description: "Fresh editable element ref returned by chrome_snapshot.", required: false),
+                AgentToolParameter(name: "selector", type: .string, description: "Unique CSS selector fallback. Do not pass together with ref.", required: false),
                 AgentToolParameter(name: "text", type: .string, description: "Text to put into the target element.", required: true)
             ]
         ),
         AgentToolDescriptor(
+            name: "chrome_hover",
+            description: "Hover over an element using a fresh DOM ref or unique selector and dispatch pointer/mouse events. Useful for menus, tooltips, and hover-only controls. Requires approval because it changes visible page state.",
+            risk: .write,
+            parameters: [
+                AgentToolParameter(name: "ref", type: .string, description: "Fresh element ref returned by chrome_snapshot.", required: false),
+                AgentToolParameter(name: "selector", type: .string, description: "Unique CSS selector fallback. Do not pass together with ref.", required: false)
+            ]
+        ),
+        AgentToolDescriptor(
+            name: "chrome_select_option",
+            description: "Select one native HTML option by exact value or visible label using a fresh DOM ref or unique selector. Dispatches React-compatible input/change events. Requires approval.",
+            risk: .write,
+            parameters: [
+                AgentToolParameter(name: "ref", type: .string, description: "Fresh select-element ref returned by chrome_snapshot.", required: false),
+                AgentToolParameter(name: "selector", type: .string, description: "Unique CSS selector fallback. Do not pass together with ref.", required: false),
+                AgentToolParameter(name: "value", type: .string, description: "Exact option value. Do not pass together with label.", required: false),
+                AgentToolParameter(name: "label", type: .string, description: "Exact visible option label. Do not pass together with value.", required: false)
+            ]
+        ),
+        AgentToolDescriptor(
+            name: "chrome_press_key",
+            description: "Dispatch a keyboard key to the focused Chrome element or a fresh DOM ref/selector, with optional modifiers. Tab moves focus, Escape blurs, Backspace/Delete edit text controls, and Enter can activate or submit. Requires approval.",
+            risk: .write,
+            parameters: [
+                AgentToolParameter(name: "key", type: .string, description: "KeyboardEvent key such as Enter, Escape, ArrowDown, or a.", required: true),
+                AgentToolParameter(name: "ref", type: .string, description: "Optional fresh DOM ref.", required: false),
+                AgentToolParameter(name: "selector", type: .string, description: "Optional unique CSS selector fallback.", required: false),
+                AgentToolParameter(name: "code", type: .string, description: "Optional KeyboardEvent code such as Enter or KeyA.", required: false),
+                AgentToolParameter(name: "alt_key", type: .boolean, description: "Hold Alt/Option.", required: false),
+                AgentToolParameter(name: "ctrl_key", type: .boolean, description: "Hold Control.", required: false),
+                AgentToolParameter(name: "meta_key", type: .boolean, description: "Hold Command/Meta.", required: false),
+                AgentToolParameter(name: "shift_key", type: .boolean, description: "Hold Shift.", required: false)
+            ]
+        ),
+        AgentToolDescriptor(
+            name: "chrome_scroll",
+            description: "Scroll the active page, or a scrollable element selected by fresh DOM ref/unique selector. Requires approval because it changes the visible browser state.",
+            risk: .write,
+            parameters: [
+                AgentToolParameter(name: "direction", type: .string, description: "up, down, left, or right.", required: true),
+                AgentToolParameter(name: "pages", type: .integer, description: "1 through 8 viewport pages; defaults to 1.", required: false),
+                AgentToolParameter(name: "ref", type: .string, description: "Optional fresh scrollable element ref.", required: false),
+                AgentToolParameter(name: "selector", type: .string, description: "Optional unique CSS selector fallback.", required: false)
+            ]
+        ),
+        AgentToolDescriptor(
+            name: "chrome_wait_for",
+            description: "Wait for the active Chrome page to match a selector, visible text, URL substring, or title substring. Read-only and capped at eight seconds; use after navigation, click, or form actions.",
+            risk: .read,
+            parameters: [
+                AgentToolParameter(name: "condition", type: .string, description: "selector, text, url_contains, or title_contains.", required: true),
+                AgentToolParameter(name: "value", type: .string, description: "Condition value to wait for.", required: true),
+                AgentToolParameter(name: "timeout_ms", type: .integer, description: "Timeout from 100 to 8000 milliseconds. Defaults to 8000.", required: false)
+            ]
+        ),
+        AgentToolDescriptor(
             name: "chrome_capture_tab",
-            description: "Capture the visible area of the active Chrome tab through the WillDeep Browser extension and return the screenshot data URL. Requires approval because screenshots may expose private information.",
+            description: "Capture the visible area of the active Chrome tab through the WillDeep Browser extension and return it as an image attachment. Requires approval because screenshots may expose private information.",
             risk: .write,
             parameters: []
         ),

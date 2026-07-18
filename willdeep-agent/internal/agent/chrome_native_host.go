@@ -18,7 +18,7 @@ import (
 	"time"
 )
 
-const ChromeNativeHostProtocolVersion = "chrome-native-host.v1"
+const ChromeNativeHostProtocolVersion = "chrome-native-host.v3"
 
 const (
 	chromeNativeHostMaxInboundBytes  = 64 * 1024 * 1024
@@ -301,8 +301,18 @@ func chromeNativeHostCapabilities() []string {
 		"native.ping",
 		"page.read",
 		"page.selection",
+		"page.snapshot",
 		"page.click",
 		"page.type",
+		"page.hover",
+		"page.select_option",
+		"page.key",
+		"page.scroll",
+		"page.wait",
+		"tab.list",
+		"tab.activate",
+		"tab.navigate",
+		"tab.history",
 		"tab.capture",
 		"debugger.command",
 	}

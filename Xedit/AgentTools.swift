@@ -216,8 +216,14 @@ enum AgentToolRunner {
                 result = try await AgentComputerUseTools.listApps()
             case "computer_use_launch_app":
                 result = try await AgentComputerUseTools.launchApp(arguments: activeArguments)
+            case "computer_use_activate_app":
+                result = try await AgentComputerUseTools.activateApp(arguments: activeArguments)
             case "computer_use_get_app_state":
                 result = try await AgentComputerUseTools.getAppState(arguments: activeArguments)
+            case "computer_use_inspect_app":
+                result = try await AgentComputerUseTools.inspectApp(arguments: activeArguments)
+            case "computer_use_wait_for":
+                result = try await AgentComputerUseTools.waitFor(arguments: activeArguments)
             case "computer_use_click":
                 result = try await AgentComputerUseTools.perform(action: "click", arguments: activeArguments)
             case "computer_use_secondary_action":
@@ -232,6 +238,12 @@ enum AgentToolRunner {
                 result = try await AgentComputerUseTools.perform(action: "press_key", arguments: activeArguments)
             case "computer_use_set_value":
                 result = try await AgentComputerUseTools.perform(action: "set_value", arguments: activeArguments)
+            case "computer_use_focus":
+                result = try await AgentComputerUseTools.perform(action: "focus", arguments: activeArguments)
+            case "computer_use_hover":
+                result = try await AgentComputerUseTools.perform(action: "hover", arguments: activeArguments)
+            case "computer_use_select_text":
+                result = try await AgentComputerUseTools.perform(action: "select_text", arguments: activeArguments)
             case "computer_use_restart_helper":
                 result = try await AgentComputerUseTools.restartHelper()
             case "chrome_status":
@@ -240,10 +252,30 @@ enum AgentToolRunner {
                 result = try await AgentChromeTools.readPage(arguments: activeArguments)
             case "chrome_read_selection":
                 result = try await AgentChromeTools.readSelection(arguments: activeArguments)
+            case "chrome_snapshot":
+                result = try await AgentChromeTools.snapshot(arguments: activeArguments)
+            case "chrome_list_tabs":
+                result = try await AgentChromeTools.listTabs(arguments: activeArguments)
+            case "chrome_activate_tab":
+                result = try await AgentChromeTools.activateTab(arguments: activeArguments)
+            case "chrome_navigate":
+                result = try await AgentChromeTools.navigate(arguments: activeArguments)
+            case "chrome_history":
+                result = try await AgentChromeTools.history(arguments: activeArguments)
             case "chrome_click":
                 result = try await AgentChromeTools.click(arguments: activeArguments)
             case "chrome_type":
                 result = try await AgentChromeTools.typeText(arguments: activeArguments)
+            case "chrome_hover":
+                result = try await AgentChromeTools.hover(arguments: activeArguments)
+            case "chrome_select_option":
+                result = try await AgentChromeTools.selectOption(arguments: activeArguments)
+            case "chrome_press_key":
+                result = try await AgentChromeTools.pressKey(arguments: activeArguments)
+            case "chrome_scroll":
+                result = try await AgentChromeTools.scroll(arguments: activeArguments)
+            case "chrome_wait_for":
+                result = try await AgentChromeTools.waitFor(arguments: activeArguments)
             case "chrome_capture_tab":
                 result = try await AgentChromeTools.captureTab(arguments: activeArguments)
             case "chrome_debugger_command":

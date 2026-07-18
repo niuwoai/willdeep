@@ -1,6 +1,6 @@
 # WillDeep Product Overview
 
-> Last updated: 2026-07-18 | Current version: v1.182.0-rc1
+> Last updated: 2026-07-18 | Current version: v1.184.0-rc1
 
 ## Positioning
 
@@ -12,6 +12,8 @@ WillDeep is configured for non-App-Store distribution without App Sandbox so it 
 
 ## 架构概览
 
+- **Computer Use / Browser 可靠操作扩展与长文件治理（1.184.0-rc1）** —— Computer Use 协议升级到 v3，可在不截图、不申请 Screen Recording 的情况下读取 AX 语义树，并按控件存在、控件值或窗口标题等待；Chrome Native Host 协议同步升级到 v3，新增 hover、原生 select option 与 Tab/Escape/退格/Enter 行为回退。`L10n` 与 Composer picker 的超长主文件按职责拆分，复杂度守门已恢复为零个硬性违规。
+- **Computer Use 与浏览器执行闭环增强（1.183.0-rc1）** —— 原生 Mac 操作的 AX 树补齐 identifier、状态、frame/center，并新增应用激活、控件聚焦、悬停和文本选择；Chrome 控制可列出/切换标签页、导航、抓取带新鲜 ref 的结构化 DOM、按键、滚动、等待条件并把截图作为图片附件回传。两条链路都遵循“读取新状态 → 唯一定位 → 执行动作 → 等待 → 重新读取”的闭环，并用独立 Markdown/JSON 契约报告持续守门。
 - **跨工作区全局置顶（1.182.0-rc1）** —— Agent 侧边栏把所有未归档的置顶会话聚合到工作区列表之前，按最近置顶时间排序且不在原工作区重复显示；取消置顶后会话自动回到原工作区，空白置顶草稿也不会因切换工作区而消失。
 - **默认 Agent 冷启动恢复首次引导（1.181.0-rc2）** —— 新用户启动后由默认 Agent 窗口展示 Onboarding，并在弹出前同步创建 headless AppState，确保 some.im 浏览器登录、Provider 保存与语音模型配置都具备完整运行上下文；编辑器窗口不再同时绑定同一弹窗状态，避免多窗口重复展示。
 - **设置页重组与主动更新入口（1.181.0-rc1）** —— App 菜单和“设置 → 通用 → 更新”均提供“检查更新”入口；设置导航按通用、格式与外观、工作区、AI Agents、Agent 工具、账户与设备、运行时与集成等任务重新归类。工作区与 Agent 背景集中到“格式与外观 → 背景”子页，并把“无背景图”作为可直接选择的正式选项。发布脚本覆盖构建、公证、Sparkle 签名、OSS 与 appcast 全链路，并支持从既有 DMG 安全补发元数据。
