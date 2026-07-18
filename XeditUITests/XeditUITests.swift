@@ -34,6 +34,21 @@ final class WillDeepUITests: XCTestCase {
     }
 
     @MainActor
+    func testFirstLaunchShowsOnboardingFromDefaultAgentWindow() throws {
+        let app = XCUIApplication()
+        app.launchArguments += [
+            "-ApplePersistenceIgnoreState", "YES",
+            "-willdeep.onboarding.hasCompleted.v1", "NO",
+        ]
+        app.launch()
+
+        XCTAssertTrue(
+            app.staticTexts["onboarding.welcome.title"].waitForExistence(timeout: 5),
+            "A clean launch should present onboarding from the default Agent window."
+        )
+    }
+
+    @MainActor
     func testAgentHeaderDiffShortcutOpensSidePanel() throws {
         let app = XCUIApplication()
         app.launch()

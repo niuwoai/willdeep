@@ -1107,6 +1107,10 @@ enum AgentChatHistoryAttachmentCitationLink {
     static let value = "agent-chat-history-attachment-citation"
 }
 
+enum AgentChatHistoryTranscriptEventNotice {
+    static let value = "agent-chat-history-transcript-event-notice"
+}
+
 enum AgentChatHistoryCopyRangeResolver {
     static func contiguousRange(
         in attributed: NSAttributedString,
@@ -1140,6 +1144,7 @@ private final class AgentChatHistoryBubbleLayoutManager: NSLayoutManager {
     // shifted-glyph drawing path was removed.
     override func drawBackground(forGlyphRange glyphsToShow: NSRange, at origin: NSPoint) {
         drawAssistantStatusDividers(forGlyphRange: glyphsToShow, at: origin)
+        drawTranscriptEventNotices(forGlyphRange: glyphsToShow, at: origin)
         drawAgentBubbles(forGlyphRange: glyphsToShow, at: origin)
         drawAgentTables(forGlyphRange: glyphsToShow, at: origin)
         drawAgentCodeBlocks(forGlyphRange: glyphsToShow, at: origin)
@@ -1212,6 +1217,45 @@ private final class AgentChatHistoryBubbleLayoutManager: NSLayoutManager {
                 xRadius: cornerRadius,
                 yRadius: cornerRadius
             ).fill()
+        }
+    }
+
+    private func drawTranscriptEventNotices(forGlyphRange glyphsToShow: NSRange, at origin: NSPoint) {
+        guard let textStorage else { return }
+        let characterRange = characterRange(forGlyphRange: glyphsToShow, actualGlyphRange: nil)
+        let fullStorageRange = NSRange(location: 0, length: textStorage.length)
+        var drawnRanges = Set<String>()
+        textStorage.enumerateAttribute(.agentChatHistoryTranscriptEventNotice, in: characterRange, options: []) { value, range, _ in
+            guard range.length > 0, value != nil else { return }
+            var fullEffectiveRange = NSRange(location: 0, length: 0)
+            _ = textStorage.attribute(
+                .agentChatHistoryTranscriptEventNotice,
+                at: range.location,
+                longestEffectiveRange: &fullEffectiveRange,
+                in: fullStorageRange
+            )
+            let drawKey = "\(fullEffectiveRange.location)-\(fullEffectiveRange.length)"
+            guard drawnRanges.insert(drawKey).inserted else { return }
+            let glyphRange = self.glyphRange(forCharacterRange: fullEffectiveRange, actualCharacterRange: nil)
+            guard NSIntersectionRange(glyphRange, glyphsToShow).length > 0 else { return }
+            self.enumerateLineFragments(forGlyphRange: glyphRange) { lineFragmentRect, usedRect, textContainer, _, _ in
+                let width = self.usableWidth(for: textContainer, fallback: lineFragmentRect.width)
+                let leadingEnd = max(0, usedRect.minX - 12)
+                let trailingStart = min(width, usedRect.maxX + 12)
+                let y = origin.y + lineFragmentRect.midY
+                NSColor.separatorColor.withAlphaComponent(0.35).setStroke()
+                let path = NSBezierPath()
+                if leadingEnd > 0 {
+                    path.move(to: NSPoint(x: origin.x, y: y))
+                    path.line(to: NSPoint(x: origin.x + leadingEnd, y: y))
+                }
+                if trailingStart < width {
+                    path.move(to: NSPoint(x: origin.x + trailingStart, y: y))
+                    path.line(to: NSPoint(x: origin.x + width, y: y))
+                }
+                path.lineWidth = 1
+                path.stroke()
+            }
         }
     }
 

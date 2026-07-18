@@ -25,6 +25,7 @@ extension NSAttributedString.Key {
     static let agentChatHistoryTextAttachment = NSAttributedString.Key("AgentChatHistoryTextAttachment")
     static let agentChatHistoryFilePath = NSAttributedString.Key("AgentChatHistoryFilePath")
     static let agentChatHistoryAttachmentCitation = NSAttributedString.Key("AgentChatHistoryAttachmentCitation")
+    static let agentChatHistoryTranscriptEventNotice = NSAttributedString.Key("AgentChatHistoryTranscriptEventNotice")
     static let agentChatHistoryImageID = NSAttributedString.Key("AgentChatHistoryImageID")
     static let agentChatHistoryImageReferenceMarker = NSAttributedString.Key("AgentChatHistoryImageReferenceMarker")
     static let agentChatHistoryToolGroupID = NSAttributedString.Key("AgentChatHistoryToolGroupID")

@@ -338,7 +338,7 @@ enum AgentToolRegistry {
         ),
         AgentToolDescriptor(
             name: "web_fetch",
-            description: "Fetch a public http(s) URL with GET and return its content as readable plain text (HTML is reduced to text; JSON/plain text passes through). Requires user approval; the user can Always-Allow a specific domain. Refuses private, loopback, and link-local hosts, including via redirects. Prefer web_search first when you don't already have an exact URL.",
+            description: "Fetch a public http(s) URL with GET and return its content as readable plain text (HTML is reduced to text; JSON/plain text passes through). Validated public URLs may run automatically while researching a Plan or Goal; normal mode requires user approval and can Always-Allow a specific domain. Refuses private, loopback, and link-local hosts, including via redirects. Prefer web_search first when you don't already have an exact URL.",
             risk: .write,
             parameters: [
                 AgentToolParameter(name: "url", type: .string, description: "Absolute http(s) URL to fetch.", required: true),

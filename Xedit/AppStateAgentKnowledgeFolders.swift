@@ -8,6 +8,12 @@
 import Darwin
 import Foundation
 
+nonisolated enum AgentKnowledgeFolderIndexPolicy {
+    static func startsAutomatically(in interactionMode: AgentInteractionMode) -> Bool {
+        interactionMode == .goal
+    }
+}
+
 extension AppState {
     func addAgentKnowledgeFolder(url: URL) {
         guard let runtime = activeRuntime ?? activeRuntimeAfterCreatingNewSession() else { return }
@@ -19,13 +25,27 @@ extension AppState {
         if let index = runtime.knowledgeFolders.firstIndex(where: { $0.id == standardized.path }) {
             runtime.knowledgeFolders[index].isEnabled = true
             runtime.persist(touchUpdatedAt: false)
-            indexAgentKnowledgeFolder(id: standardized.path, in: runtime)
+            if AgentKnowledgeFolderIndexPolicy.startsAutomatically(in: runtime.interactionMode),
+               runtime.knowledgeFolders[index].status != .ready {
+                startAgentKnowledgeFolderIndexing(id: standardized.path)
+            }
             return
         }
 
         runtime.knowledgeFolders.append(AgentKnowledgeFolder(url: standardized))
         runtime.persist(touchUpdatedAt: false)
-        indexAgentKnowledgeFolder(id: standardized.path, in: runtime)
+        if AgentKnowledgeFolderIndexPolicy.startsAutomatically(in: runtime.interactionMode) {
+            startAgentKnowledgeFolderIndexing(id: standardized.path)
+        }
+    }
+
+    /// Explicit user entry point for Normal/Plan mode. Goal mode calls the
+    /// same path automatically after a folder is attached.
+    func startAgentKnowledgeFolderIndexing(id: String) {
+        guard let runtime = activeRuntime,
+              runtime.knowledgeFolders.contains(where: { $0.id == id }) else { return }
+        cancelAgentKnowledgeFolderWatchers(sessionID: runtime.id, folderID: id)
+        indexAgentKnowledgeFolder(id: id, in: runtime)
     }
 
     func toggleAgentKnowledgeFolderEnabled(id: String) {
@@ -49,28 +69,26 @@ extension AppState {
             .components(separatedBy: CharacterSet(charactersIn: ",\n"))
             .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
             .filter { !$0.isEmpty }
+        guard runtime.knowledgeFolders[index].excludedPatterns != patterns else { return }
+        cancelAgentKnowledgeFolderWatchers(sessionID: runtime.id, folderID: id)
         runtime.knowledgeFolders[index].excludedPatterns = patterns
+        runtime.knowledgeFolders[index].status = .pending
+        runtime.knowledgeFolders[index].errorMessage = nil
         runtime.persist(touchUpdatedAt: false)
-        indexAgentKnowledgeFolder(id: id, in: runtime)
+        if AgentKnowledgeFolderIndexPolicy.startsAutomatically(in: runtime.interactionMode) {
+            startAgentKnowledgeFolderIndexing(id: id)
+        }
     }
 
     func startAgentKnowledgeFolderWatchers(for runtime: AgentRuntime) {
-        for folder in runtime.knowledgeFolders {
+        for folder in runtime.knowledgeFolders where folder.status == .ready {
             installAgentKnowledgeFolderWatchers(folder: folder, runtime: runtime)
         }
     }
 
     func cancelAgentKnowledgeFolderWatchers(sessionID: AgentSession.ID, folderID: String? = nil) {
+        cancelAgentKnowledgeFolderSources(sessionID: sessionID, folderID: folderID)
         let sessionPrefix = sessionID.uuidString + "|"
-        let folderPrefix = folderID.map { sessionPrefix + $0 + "|" }
-        let keys = agentKnowledgeFolderWatchers.keys.filter { key in
-            if let folderPrefix { return key.hasPrefix(folderPrefix) }
-            return key.hasPrefix(sessionPrefix)
-        }
-        for key in keys {
-            agentKnowledgeFolderWatchers.removeValue(forKey: key)?.cancel()
-        }
-
         let taskKeys = agentKnowledgeFolderReindexTasks.keys.filter { key in
             if let folderID { return key == sessionPrefix + folderID }
             return key.hasPrefix(sessionPrefix)
@@ -85,6 +103,19 @@ extension AppState {
         for key in indexKeys {
             agentKnowledgeFolderIndexTasks.removeValue(forKey: key)?.cancel()
         }
+    }
+
+    private func cancelAgentKnowledgeFolderSources(sessionID: AgentSession.ID, folderID: String? = nil) {
+        let sessionPrefix = sessionID.uuidString + "|"
+        let folderPrefix = folderID.map { sessionPrefix + $0 + "|" }
+        let keys = agentKnowledgeFolderWatchers.keys.filter { key in
+            if let folderPrefix { return key.hasPrefix(folderPrefix) }
+            return key.hasPrefix(sessionPrefix)
+        }
+        for key in keys {
+            agentKnowledgeFolderWatchers.removeValue(forKey: key)?.cancel()
+        }
+
         let discoveryKeys = agentKnowledgeFolderWatcherDiscoveryTasks.keys.filter { key in
             if let folderID { return key == sessionPrefix + folderID }
             return key.hasPrefix(sessionPrefix)
@@ -194,7 +225,8 @@ extension AppState {
             }
             source.setEventHandler { [weak self, weak runtime] in
                 Task { @MainActor [weak self, weak runtime] in
-                    guard let self, let runtime else { return }
+                    guard let self, let runtime,
+                          runtime.knowledgeFolders.first(where: { $0.id == folder.id })?.status == .ready else { return }
                     scheduleAgentKnowledgeFolderReindex(folderID: folder.id, runtime: runtime)
                 }
             }
@@ -208,7 +240,14 @@ extension AppState {
         agentKnowledgeFolderReindexTasks[key] = Task { [weak self, weak runtime] in
             try? await Task.sleep(for: .seconds(1))
             guard !Task.isCancelled, let self, let runtime else { return }
-            indexAgentKnowledgeFolder(id: folderID, in: runtime)
+            if AgentKnowledgeFolderIndexPolicy.startsAutomatically(in: runtime.interactionMode) {
+                indexAgentKnowledgeFolder(id: folderID, in: runtime)
+            } else if let index = runtime.knowledgeFolders.firstIndex(where: { $0.id == folderID }) {
+                runtime.knowledgeFolders[index].status = .pending
+                runtime.knowledgeFolders[index].errorMessage = nil
+                cancelAgentKnowledgeFolderSources(sessionID: runtime.id, folderID: folderID)
+                runtime.persist(touchUpdatedAt: false)
+            }
             agentKnowledgeFolderReindexTasks[key] = nil
         }
     }

@@ -276,6 +276,33 @@ enum SomeIMIntegrationStore {
         return try? JSONDecoder().decode(SomeIMAccount.self, from: data)
     }
 
+    /// The account object is a display cache, not proof of authentication.
+    /// Only expose it as a signed-in account while the shared session still
+    /// carries a usable API key. This prevents a stale UserDefaults snapshot
+    /// from making the sidebar claim the user is logged in after Keychain
+    /// access was lost or the shared session was cleared elsewhere.
+    static func loadAuthenticatedAccount() -> SomeIMAccount? {
+        loadAuthenticationSnapshot().account
+    }
+
+    static func loadAuthenticationSnapshot() -> SomeIMAuthenticationSnapshot {
+        authenticationSnapshot(cachedAccount: loadAccount(), apiKey: loadAPIKey())
+    }
+
+    nonisolated static func authenticationSnapshot(
+        cachedAccount: SomeIMAccount?,
+        apiKey: String
+    ) -> SomeIMAuthenticationSnapshot {
+        SomeIMAuthenticationSnapshot(cachedAccount: cachedAccount, apiKey: apiKey)
+    }
+
+    nonisolated static func authenticatedAccount(
+        cachedAccount: SomeIMAccount?,
+        apiKey: String
+    ) -> SomeIMAccount? {
+        authenticationSnapshot(cachedAccount: cachedAccount, apiKey: apiKey).account
+    }
+
     static func saveAccount(_ account: SomeIMAccount?) {
         if let account, let data = try? JSONEncoder().encode(account) {
             UserDefaults.standard.set(data, forKey: accountKey)
@@ -546,6 +573,14 @@ enum SomeIMIntegrationStore {
         testSharedSessionOverride = session
     }
 
+    static func _setTestSharedAPIKeyWithoutNotification(_ apiKey: String) {
+        testSharedSessionOverrideEnabled = true
+        let trimmed = apiKey.trimmingCharacters(in: .whitespacesAndNewlines)
+        testSharedSessionOverride = trimmed.isEmpty
+            ? nil
+            : SomeIMSharedSession(apiKey: trimmed, baseURL: loadSettings().baseURL)
+    }
+
     static func _setTestSharedSessionPersistFailure(_ enabled: Bool) {
         testSharedSessionPersistFailureEnabled = enabled
     }
@@ -675,6 +710,21 @@ struct SomeIMAccount: Codable, Equatable {
         let scaled = value / unit.divisor
         let rendered = formatter.string(from: NSNumber(value: scaled)) ?? String(format: "%.2f", scaled)
         return rendered + unit.suffix
+    }
+}
+
+struct SomeIMAuthenticationSnapshot: Equatable {
+    let apiKey: String
+    let account: SomeIMAccount?
+
+    nonisolated init(cachedAccount: SomeIMAccount?, apiKey: String) {
+        let normalizedAPIKey = apiKey.trimmingCharacters(in: .whitespacesAndNewlines)
+        self.apiKey = normalizedAPIKey
+        account = normalizedAPIKey.isEmpty ? nil : cachedAccount
+    }
+
+    nonisolated var isAuthenticated: Bool {
+        !apiKey.isEmpty
     }
 }
 
@@ -1865,7 +1915,7 @@ struct SomeIMIntegrationSettingsView: View {
     @ObservedObject private var settingsNavigation = EditorSettingsNavigation.shared
     @State private var settings = SomeIMIntegrationStore.loadSettings()
     @State private var apiKey = SomeIMIntegrationStore.loadAPIKey()
-    @State private var account = SomeIMIntegrationStore.loadAccount()
+    @State private var account = SomeIMIntegrationStore.loadAuthenticatedAccount()
     @State private var fetchedModels: [SomeIMModel] = []
     @State private var isFetching = false
     @State private var isRefreshingBalance = false
@@ -2150,13 +2200,13 @@ struct SomeIMIntegrationSettingsView: View {
 
     private func reloadSharedSessionState() {
         let latestSettings = SomeIMIntegrationStore.loadSettings()
-        let latestAPIKey = SomeIMIntegrationStore.loadAPIKey()
+        let authentication = SomeIMIntegrationStore.loadAuthenticationSnapshot()
         settings = latestSettings
-        apiKey = latestAPIKey
-        account = SomeIMIntegrationStore.loadAccount()
-        guard !latestAPIKey.isEmpty else { return }
-        appState.syncSomeIMProvider(settings: latestSettings, apiKey: latestAPIKey)
-        appState.syncSomeIMImageUnderstanding(apiKey: latestAPIKey)
+        apiKey = authentication.apiKey
+        account = authentication.account
+        guard authentication.isAuthenticated else { return }
+        appState.syncSomeIMProvider(settings: latestSettings, apiKey: authentication.apiKey)
+        appState.syncSomeIMImageUnderstanding(apiKey: authentication.apiKey)
     }
 
     private func prepareBrowserLoginRequest(openInBrowser: Bool) {
@@ -2241,7 +2291,7 @@ struct SomeIMIntegrationSettingsView: View {
                     if result.state == .connected, let linked = result.account {
                         await MainActor.run {
                             reloadSharedSessionState()
-                            account = SomeIMIntegrationStore.loadAccount() ?? linked
+                            account = SomeIMIntegrationStore.loadAuthenticatedAccount() ?? linked
                             browserLoginRequest = nil
                             isWatchingBrowserLogin = false
                             status = L10n.Settings.SomeIM.browserLoginConnected

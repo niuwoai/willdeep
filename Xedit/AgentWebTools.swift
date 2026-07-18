@@ -10,8 +10,9 @@
 //  curl/wget (both are flagged dangerous there): arbitrary fetching is
 //  an exfiltration channel once hostile instructions are in context,
 //  so `web_fetch` stays write-tier — per-call Allow, pinnable per
-//  domain via the `web_fetch:<host>` signature, auto-approved in Goal
-//  mode. `web_search` only ships the query string to one configured
+//  domain via the `web_fetch:<host>` signature, auto-approved for
+//  validated public URLs during Plan research and in Goal mode.
+//  `web_search` only ships the query string to one configured
 //  search provider endpoint, so it rides the read tier like
 //  search_files.
 //

@@ -147,6 +147,61 @@ struct AgentSessionStoreTests {
         #expect(visible.map(\.id) == [chatted.id])
     }
 
+    @Test
+    func sidebarKeepsPinnedEmptySessionEvenOutsideActiveWorkspace() {
+        let pinned = AgentSession(
+            title: "Pinned draft",
+            workspaceRootPath: "/tmp/willdeep-sidebar-pinned",
+            pinnedAt: Date(timeIntervalSince1970: 200)
+        )
+        let active = AgentSession(workspaceRootPath: "/tmp/willdeep-sidebar-active")
+
+        let visible = AgentSidebarSessionVisibility.visibleSessions(
+            from: [pinned, active],
+            activeID: active.id
+        )
+
+        #expect(visible.map(\.id).contains(pinned.id))
+        #expect(visible.map(\.id).contains(active.id))
+    }
+
+    @Test
+    func sidebarCollectsPinsAcrossWorkspacesWithoutDuplicatingWorkspaceRows() {
+        let olderPin = AgentSession(
+            title: "Pinned from Alpha",
+            workspaceRootPath: "/tmp/alpha",
+            updatedAt: Date(timeIntervalSince1970: 300),
+            messages: [AgentMessage(role: .user, content: "alpha")],
+            pinnedAt: Date(timeIntervalSince1970: 400)
+        )
+        let newerPin = AgentSession(
+            title: "Pinned from Beta",
+            workspaceRootPath: "/tmp/beta",
+            updatedAt: Date(timeIntervalSince1970: 500),
+            messages: [AgentMessage(role: .user, content: "beta")],
+            pinnedAt: Date(timeIntervalSince1970: 600)
+        )
+        let regular = AgentSession(
+            title: "Regular Alpha chat",
+            workspaceRootPath: "/tmp/alpha",
+            messages: [AgentMessage(role: .user, content: "regular")]
+        )
+        let archivedPin = AgentSession(
+            title: "Archived pin",
+            workspaceRootPath: "/tmp/beta",
+            messages: [AgentMessage(role: .user, content: "archived")],
+            pinnedAt: Date(timeIntervalSince1970: 700),
+            archivedAt: Date(timeIntervalSince1970: 800)
+        )
+        let sessions = [olderPin, regular, archivedPin, newerPin]
+
+        let pinned = AgentSidebarSessionPlacement.globalPinnedSessions(from: sessions)
+        let workspaceRows = AgentSidebarSessionPlacement.workspaceSessions(from: sessions)
+
+        #expect(pinned.map(\.id) == [newerPin.id, olderPin.id])
+        #expect(workspaceRows.map(\.id) == [regular.id, archivedPin.id])
+    }
+
     /// Skip non-user roles when picking the title source.
     @Test
     func deriveTitleUsesFirstUserMessageNotAssistant() {
@@ -390,6 +445,110 @@ struct AgentSessionStoreTests {
         #expect(path.contains("Application Support"))
         #expect(path.contains("WillDeep"))
         #expect(path.hasSuffix("agent-sessions"))
+    }
+
+    @Test
+    func legacyDirectoryImportRestoresSessionAndIsIdempotent() throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("willdeep-legacy-import-\(UUID().uuidString)", isDirectory: true)
+        let legacyDirectory = root.appendingPathComponent("VeilWriter/agent-sessions", isDirectory: true)
+        let currentDirectory = root.appendingPathComponent("WillDeep/agent-sessions", isDirectory: true)
+        try FileManager.default.createDirectory(at: legacyDirectory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        let session = AgentSession(
+            title: "Thirty day history",
+            messages: [
+                AgentMessage(role: .user, content: "keep my usage history"),
+                AgentMessage(role: .assistant, content: "kept", usageTokens: 123)
+            ]
+        )
+        let encoder = JSONEncoder()
+        encoder.dateEncodingStrategy = .iso8601
+        let sourceURL = legacyDirectory.appendingPathComponent("\(session.id.uuidString).json")
+        try encoder.encode(session).write(to: sourceURL)
+
+        let firstImportCount = try AgentSessionStore.importLegacySessions(
+            from: legacyDirectory,
+            into: currentDirectory
+        )
+        let secondImportCount = try AgentSessionStore.importLegacySessions(
+            from: legacyDirectory,
+            into: currentDirectory
+        )
+
+        let destinationURL = currentDirectory.appendingPathComponent("\(session.id.uuidString).json")
+        let restored = try JSONDecoder.iso8601Decoder.decode(
+            AgentSession.self,
+            from: Data(contentsOf: destinationURL)
+        )
+        #expect(firstImportCount == 1)
+        #expect(secondImportCount == 0)
+        #expect(restored.title == session.title)
+        #expect(restored.messages.last?.usageTokens == 123)
+        #expect(FileManager.default.fileExists(atPath: sourceURL.path))
+    }
+
+    @Test
+    func legacyDirectoryImportNeverOverwritesCurrentSession() throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("willdeep-legacy-conflict-\(UUID().uuidString)", isDirectory: true)
+        let legacyDirectory = root.appendingPathComponent("VeilWriter/agent-sessions", isDirectory: true)
+        let currentDirectory = root.appendingPathComponent("WillDeep/agent-sessions", isDirectory: true)
+        try FileManager.default.createDirectory(at: legacyDirectory, withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: currentDirectory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        let id = UUID()
+        let legacy = AgentSession(id: id, title: "Legacy copy")
+        let current = AgentSession(id: id, title: "Current copy")
+        let encoder = JSONEncoder()
+        encoder.dateEncodingStrategy = .iso8601
+        try encoder.encode(legacy).write(
+            to: legacyDirectory.appendingPathComponent("\(id.uuidString).json")
+        )
+        let destinationURL = currentDirectory.appendingPathComponent("\(id.uuidString).json")
+        try encoder.encode(current).write(to: destinationURL)
+
+        let importCount = try AgentSessionStore.importLegacySessions(
+            from: legacyDirectory,
+            into: currentDirectory
+        )
+        let preserved = try JSONDecoder.iso8601Decoder.decode(
+            AgentSession.self,
+            from: Data(contentsOf: destinationURL)
+        )
+
+        #expect(importCount == 0)
+        #expect(preserved.title == "Current copy")
+    }
+
+    @Test
+    func legacyDirectoryImportSkipsCorruptJSONWithoutBlockingValidSessions() throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("willdeep-legacy-corrupt-\(UUID().uuidString)", isDirectory: true)
+        let legacyDirectory = root.appendingPathComponent("VeilWriter/agent-sessions", isDirectory: true)
+        let currentDirectory = root.appendingPathComponent("WillDeep/agent-sessions", isDirectory: true)
+        try FileManager.default.createDirectory(at: legacyDirectory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        try Data("not-json".utf8).write(to: legacyDirectory.appendingPathComponent("broken.json"))
+        let valid = AgentSession(title: "Recoverable")
+        let encoder = JSONEncoder()
+        encoder.dateEncodingStrategy = .iso8601
+        try encoder.encode(valid).write(
+            to: legacyDirectory.appendingPathComponent("\(valid.id.uuidString).json")
+        )
+
+        let importCount = try AgentSessionStore.importLegacySessions(
+            from: legacyDirectory,
+            into: currentDirectory
+        )
+
+        #expect(importCount == 1)
+        #expect(FileManager.default.fileExists(
+            atPath: currentDirectory.appendingPathComponent("\(valid.id.uuidString).json").path
+        ))
     }
 
     // MARK: - compact updated timestamp

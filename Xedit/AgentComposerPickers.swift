@@ -1140,7 +1140,21 @@ struct ModelPickerPill: View {
         codingPlanSection
     }
 
+    @ViewBuilder
     private var managedSelectionSummary: some View {
+        if managedMarketingStatus == .selected {
+            managedSelectionSummaryContent
+        } else {
+            Button(action: performManagedSummaryAction) {
+                managedSelectionSummaryContent
+            }
+            .buttonStyle(.plain)
+            .focusable(false)
+            .help(managedSelectionTitle)
+        }
+    }
+
+    private var managedSelectionSummaryContent: some View {
         HStack(alignment: .top, spacing: 12) {
             Image(systemName: managedSelectionIcon)
                 .font(.system(size: 17, weight: .semibold))
@@ -1163,27 +1177,14 @@ struct ModelPickerPill: View {
 
             Spacer(minLength: 12)
 
-            if !menuSnapshot.managedActive, menuSnapshot.isSomeIMAuthenticated {
-                Button(L10n.AgentModelPicker.selectManaged) {
-                    appState.selectSomeIMManagedRouting()
-                    refreshMenuSnapshot()
-                }
-                .buttonStyle(.borderedProminent)
-                .controlSize(.small)
-                .focusable(false)
-            } else if !menuSnapshot.isSomeIMAuthenticated {
-                Button {
-                    isModelPanelPresented = false
-                    EditorSettingsNavigation.shared.openSomeIM(
-                        autogenerateBrowserLogin: true,
-                        appState: appState
-                    )
-                } label: {
-                    Label(L10n.AgentModelPicker.signInSomeIM, systemImage: "person.crop.circle.badge.checkmark")
-                }
-                .buttonStyle(.borderedProminent)
-                .controlSize(.small)
-                .focusable(false)
+            if managedMarketingStatus != .selected {
+                Label(managedSelectionActionTitle, systemImage: managedSelectionActionIcon)
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(.white)
+                    .padding(.horizontal, 9)
+                    .padding(.vertical, 5)
+                    .background(Color.accentColor)
+                    .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
             }
         }
         .padding(14)
@@ -1281,6 +1282,40 @@ struct ModelPickerPill: View {
         case .selected: return .green
         case .available: return .teal
         case .loginRequired: return .secondary
+        }
+    }
+
+    private var managedSelectionActionTitle: String {
+        switch managedMarketingStatus {
+        case .selected:
+            return L10n.AgentModelPicker.managedSelectedTitle
+        case .available:
+            return L10n.AgentModelPicker.selectManaged
+        case .loginRequired:
+            return L10n.AgentModelPicker.signInSomeIM
+        }
+    }
+
+    private var managedSelectionActionIcon: String {
+        switch managedMarketingStatus {
+        case .selected: return "checkmark"
+        case .available: return "sparkles"
+        case .loginRequired: return "person.crop.circle.badge.checkmark"
+        }
+    }
+
+    private func performManagedSummaryAction() {
+        switch managedMarketingStatus {
+        case .selected:
+            break
+        case .available:
+            chooseManagedRouting(tier: .low)
+        case .loginRequired:
+            isModelPanelPresented = false
+            EditorSettingsNavigation.shared.openSomeIM(
+                autogenerateBrowserLogin: true,
+                appState: appState
+            )
         }
     }
 

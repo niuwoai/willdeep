@@ -508,10 +508,19 @@ private struct AtPickerRow: View {
     }
 }
 
+nonisolated enum SkillPickerLayout {
+    static let minimumVisibleRowCount = 3
+    static let rowHeight: CGFloat = 38
+    static let maximumListHeight: CGFloat = 340
+
+    static func minimumListHeight(entryCount: Int) -> CGFloat {
+        CGFloat(min(max(entryCount, 0), minimumVisibleRowCount)) * rowHeight
+    }
+}
+
 struct SkillPickerMenu: View {
     private enum Metrics {
         static let width: CGFloat = 540
-        static let maxListHeight: CGFloat = 340
     }
 
     let entries: [SkillPickerEntry]
@@ -570,7 +579,10 @@ struct SkillPickerMenu: View {
                         }
                     }
                 }
-                .frame(maxHeight: Metrics.maxListHeight)
+                .frame(
+                    minHeight: SkillPickerLayout.minimumListHeight(entryCount: entries.count),
+                    maxHeight: SkillPickerLayout.maximumListHeight
+                )
             }
         }
         .padding(.bottom, 6)
@@ -612,6 +624,7 @@ private struct SkillPickerRow: View {
         }
         .padding(.horizontal, 10)
         .padding(.vertical, 5)
+        .frame(minHeight: SkillPickerLayout.rowHeight)
         .background(isSelected ? Color.accentColor : Color.clear)
     }
 }

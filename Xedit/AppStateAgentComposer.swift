@@ -377,7 +377,12 @@ extension AppState {
         )
         let autoApproval = Self.delegatedComposerApprovalSource(risk: risk)
 
-        if risk != .read && runtime.isPlanGateActive {
+        if Self.planGateBlocks(
+            toolName: toolName,
+            arguments: arguments,
+            risk: risk,
+            isActive: runtime.isPlanGateActive
+        ) {
             finishDelegatedAgentRecord(
                 runtime: runtime,
                 recordID: recordID,

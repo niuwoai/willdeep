@@ -46,6 +46,7 @@ struct AgentSidebarAccountFooter: View {
     @ObservedObject private var desktopPet = DesktopPetWindowManager.shared
 
     let account: SomeIMAccount?
+    let isAuthenticated: Bool
     let isRefreshingAccount: Bool
     let accountStatus: String
     let onOpenAccount: () -> Void
@@ -140,6 +141,33 @@ struct AgentSidebarAccountFooter: View {
                 )
                 .environmentObject(appState)
             }
+        } else if isAuthenticated {
+            Button(action: onOpenAccount) {
+                HStack(spacing: 8) {
+                    anonymousAvatar
+                    VStack(alignment: .leading, spacing: 1) {
+                        Text(L10n.Sidebar.someIMAccountTitle)
+                            .font(.system(size: 11, weight: .semibold))
+                            .foregroundStyle(.primary)
+                        Text(L10n.Settings.SomeIM.accountConnected)
+                            .font(.system(size: 10, weight: .medium))
+                            .foregroundStyle(.secondary)
+                    }
+                    Spacer(minLength: 0)
+                    if isRefreshingAccount {
+                        ProgressView()
+                            .controlSize(.small)
+                            .scaleEffect(0.7)
+                    }
+                }
+                .padding(.horizontal, 8)
+                .frame(height: AgentSidebarAccountMetrics.accountRowHeight)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(accountControlBackground)
+            }
+            .buttonStyle(.plain)
+            .onHover { isAccountHovered = $0 }
+            .help(accountStatus.isEmpty ? L10n.SidebarAccount.menuHelp : accountStatus)
         } else {
             Button(action: onOpenLogin) {
                 HStack(spacing: 8) {

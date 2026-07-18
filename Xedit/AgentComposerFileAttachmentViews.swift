@@ -131,6 +131,7 @@ struct AgentKnowledgeFolderStrip: View {
     let onToggleEnabled: (String) -> Void
     let onRemove: (String) -> Void
     let onUpdateExclusions: (String, String) -> Void
+    let onStartIndexing: (String) -> Void
 
     var body: some View {
         VStack(alignment: .leading, spacing: 5) {
@@ -149,7 +150,8 @@ struct AgentKnowledgeFolderStrip: View {
                             folder: folder,
                             onToggleEnabled: { onToggleEnabled(folder.id) },
                             onRemove: { onRemove(folder.id) },
-                            onUpdateExclusions: { onUpdateExclusions(folder.id, $0) }
+                            onUpdateExclusions: { onUpdateExclusions(folder.id, $0) },
+                            onStartIndexing: { onStartIndexing(folder.id) }
                         )
                     }
                 }
@@ -163,6 +165,7 @@ private struct AgentKnowledgeFolderChip: View {
     let onToggleEnabled: () -> Void
     let onRemove: () -> Void
     let onUpdateExclusions: (String) -> Void
+    let onStartIndexing: () -> Void
 
     @State private var isPresented = false
     @State private var exclusionDraft = ""
@@ -215,6 +218,10 @@ private struct AgentKnowledgeFolderChip: View {
     @ViewBuilder
     private var statusIcon: some View {
         switch folder.status {
+        case .pending:
+            Image(systemName: "pause.circle")
+                .font(.system(size: 10))
+                .foregroundStyle(.secondary)
         case .indexing:
             ProgressView().controlSize(.mini).frame(width: 10, height: 10)
         case .ready:
@@ -231,6 +238,11 @@ private struct AgentKnowledgeFolderChip: View {
             Text(statusText)
                 .font(.caption)
                 .foregroundStyle(.secondary)
+
+            if folder.status != .indexing {
+                Button(indexActionTitle, action: onStartIndexing)
+                    .buttonStyle(.borderedProminent)
+            }
 
             TextField(L10n.Composer.knowledgeFolderExclusionsPlaceholder, text: $exclusionDraft)
                 .textFieldStyle(.roundedBorder)
@@ -267,6 +279,8 @@ private struct AgentKnowledgeFolderChip: View {
 
     private var statusText: String {
         switch folder.status {
+        case .pending:
+            return L10n.Composer.knowledgeFolderPending
         case .indexing:
             return L10n.Composer.knowledgeFolderIndexing
         case .failed:
@@ -276,6 +290,19 @@ private struct AgentKnowledgeFolderChip: View {
                 folder.documents.filter { $0.parseStatus == .ready }.count,
                 folder.skippedFileCount
             )
+        }
+    }
+
+    private var indexActionTitle: String {
+        switch folder.status {
+        case .pending:
+            return L10n.Composer.knowledgeFolderStartIndexing
+        case .failed:
+            return L10n.Composer.knowledgeFolderRetryIndexing
+        case .ready:
+            return L10n.Composer.knowledgeFolderReindex
+        case .indexing:
+            return L10n.Composer.knowledgeFolderIndexing
         }
     }
 }

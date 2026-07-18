@@ -110,7 +110,7 @@ struct AgentModeView: View {
         let committedPanelWidth = min(max(sidePanelWidth, sidePanelWidthRange.lowerBound), cap)
         let panelWidth = min(currentSidePanelWidth, cap)
         let isResizingPanel = liveSidePanelWidth != nil
-        let hasWallpaper = appState.editorSettings.hasConfiguredWorkspaceWallpaper
+        let hasWallpaper = appState.editorSettings.hasConfiguredAgentWallpaper
         let frozenChatWidth = max(totalWidth - occupiedSidebarWidth - 1 - CGFloat(committedPanelWidth), 0)
         // `.backgroundTasks` remains decodable for persisted sessions, but it
         // is never a renderable destination after the monitor rail redesign.
@@ -129,6 +129,7 @@ struct AgentModeView: View {
                     .fixedSize(horizontal: true, vertical: false)
                     .background(
                         skin.sidebarBackground
+                            .opacity(hasWallpaper ? appState.editorSettings.agentWallpaperSurfaceOpacity : 1)
                             .overlay(skin.palette.hoverFill.opacity(0.35))
                     )
                     .transition(.move(edge: .leading).combined(with: .opacity))
@@ -166,7 +167,7 @@ struct AgentModeView: View {
             .frame(minWidth: 0, maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
             .background(
                 skin.windowBackground
-                    .opacity(hasWallpaper ? AgentDesign.wallpaperChatSurfaceOpacity : 1)
+                    .opacity(hasWallpaper ? appState.editorSettings.agentWallpaperSurfaceOpacity : 1)
                     .overlay(
                         skin.palette.panelFill.opacity(hasWallpaper ? 0.12 : 0.18)
                     )
@@ -214,7 +215,12 @@ struct AgentModeView: View {
         // 挡不住平铺工具 / 编程式 resize),HStack 溢出时不再默认居中
         // 把左栏推出窗体左缘 —— 靠左钉住,溢出只从右缘裁掉。
         .frame(minWidth: minimumContentWidth, maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
-        .background(WorkspaceWallpaperBackground(settings: appState.editorSettings))
+        .background(
+            WorkspaceWallpaperBackground(
+                settings: appState.editorSettings,
+                appliesAgentEffects: true
+            )
+        )
         .background(AgentWindowMinWidthSetter(minWidth: minimumContentWidth))
         .overlay(alignment: .leading) {
             if !effectiveSidebarVisible {
@@ -587,12 +593,14 @@ enum AgentDesign {
     static let sidebarWorkspaceIconToTitleSpacing: CGFloat = 8
     static let sidebarSelectionHorizontalInset: CGFloat = 8
     static let sidebarSessionContentHorizontalInset: CGFloat = 32
+    // Global pins are top-level navigation, so their title column starts at
+    // 12 pt like Codex instead of inheriting the 40 pt workspace-child inset.
+    static let sidebarPinnedSessionContentHorizontalInset: CGFloat = 4
     static let sidebarSelectionCornerRadius: CGFloat = 10
     static let sidebarWorkspaceGroupSpacing: CGFloat = 6
     static let sidebarPrimaryTextOpacity: Double = 0.86
     // Keep the conversation readable while allowing the configured image to
     // show through. Navigation and utility panels intentionally stay opaque.
-    static let wallpaperChatSurfaceOpacity: Double = 0.52
     // Automations are first-class sidebar content, not caption metadata.
     // Keep every user-visible automation label on the same regular text
     // scale as workspace and conversation rows.

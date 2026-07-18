@@ -2,6 +2,16 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
+	<key>SUEnableAutomaticChecks</key>
+	<true/>
+	<key>SUAutomaticallyUpdate</key>
+	<true/>
+	<key>SUFeedURL</key>
+	<string>https://some.im/api/v1/public/app-updates/appcast.xml?app_id=willdeep&amp;platform=macos&amp;channel=stable</string>
+	<key>SUPublicEDKey</key>
+	<string>3QVMPCYo42ORmq8uUHqUdW8ayy5nw8Hs5uq9DLKDp0A=</string>
+	<key>SUVerifyUpdateBeforeExtraction</key>
+	<true/>
 	<key>CFBundleDisplayName</key>
 	<string>WillDeep</string>
 	<key>CFBundleDocumentTypes</key>

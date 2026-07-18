@@ -1,3 +1,50 @@
+# 跨工作区全局置顶 Design QA
+
+- source visual truth: `/var/folders/np/rjc0y5w52x324x21pv6g33440000gp/T/codex-clipboard-91c9b5ff-e018-40a5-8729-022a4def0266.png`
+- previous WillDeep behavior: `/var/folders/np/rjc0y5w52x324x21pv6g33440000gp/T/codex-clipboard-7eb205d1-c86e-4dff-a251-43bf69a6c205.png`
+- implementation screenshot: `/tmp/Xedit-sidebar-design-qa.png`
+- viewport: `228 × 606 pt` 原生 SwiftUI 生产侧边栏，Rice Paper 浅色皮肤
+- state: 两个置顶会话分别来自 `83d` 与 `agentrules`，另有普通会话分布在多个工作区
+- final result: passed
+
+**Full-View Comparison Evidence**
+
+Codex 参考图与生产侧边栏快照已在同一轮视觉输入中并排检查。实现新增一级“置顶”分区，并把来自不同工作区的置顶会话统一放在工作区标题之前；置顶行不再缩进到工作区子级，也不在所属工作区重复显示。工作区列表仍保持原有字母顺序，不会因置顶或取消置顶而改变绑定关系。
+
+**Focused Region Comparison Evidence**
+
+- “置顶”与“工作区”使用相同的 11pt 半粗体分区标题和次要文字色，层级与 Codex 一致。
+- 全局置顶标题列为 12pt 左起点；工作区内会话继续使用 40pt 子级标题列，一级与二级关系清楚。
+- 置顶图标保持常驻右侧，悬停时切换为取消置顶与归档操作；选中圆角、状态点、审批徽标和 Todo 摘要均复用生产会话行。
+- 仅剩置顶会话的工作区仍保留工作区标题，取消置顶后会话可立即回到原分组，不会让工作区入口消失。
+
+**Required Fidelity Surfaces**
+
+- Fonts and typography: 分区标题继续使用生产 `sidebarSectionFont`，会话与工作区继续使用 14pt SF 系统字体；长标题尾部截断，未出现换行或基线漂移。
+- Spacing and layout rhythm: 置顶标题、两行会话与工作区标题保持 31pt 行高及现有分区节奏；一级标题列 12pt、工作区子级标题列 40pt，与参考图的层级差一致。
+- Colors and visual tokens: 背景、主次文字、选中态、悬停态和图标全部读取当前 Rice Paper 皮肤 palette；没有为参考图另写固定颜色。
+- Image quality and asset fidelity: 界面只使用生产 SF Symbols 的文件夹、置顶和状态图标，原生矢量渲染清晰，没有新增位图、占位素材或手绘图形。
+- Copy and content: “置顶 / Pinned”进入中英文字符串目录；工作区、会话标题和操作文案继续复用既有本地化资源。
+
+**Primary Interactions Checked**
+
+- 跨工作区置顶按 `pinnedAt` 最近优先聚合：passed。
+- 置顶会话从工作区普通列表排除，避免重复：passed。
+- 取消置顶所需的原工作区绑定保持不变：passed。
+- 未发送消息但已置顶的草稿在切换工作区后保持可见：passed。
+- 已归档的置顶会话不进入全局分区，继续留在工作区归档披露中：passed。
+- 生产侧边栏原生快照与 42 项定向测试：passed。
+
+**Findings**
+
+没有未解决的 P0、P1 或 P2 问题。实现有意保留 WillDeep 现有的“自动化”分区和皮肤背景；与 Codex 参考图对齐的是置顶的信息架构、一级缩进、常驻状态图标及工作区之前的排序关系。
+
+**Comparison History**
+
+首轮同屏对照未发现需要修复的 P0、P1 或 P2 差异，因此没有进入二次视觉迭代；实现与参考的差别仅来自 WillDeep 既有自动化分区和皮肤系统，均为有意保留的产品约束。
+
+---
+
 # 柔和圆角授权通知 Design QA
 
 - source visual truth: /Users/rocky/.codex/generated_images/019f7064-33cd-7371-86b0-7b69fe93459e/exec-e4b89cab-2e17-4c8b-9c3f-3a442e9a4caf.png

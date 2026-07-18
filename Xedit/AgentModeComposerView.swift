@@ -741,7 +741,8 @@ private struct ComposerCard: View {
                     onRemove: { appState.removeAgentKnowledgeFolder(id: $0) },
                     onUpdateExclusions: { folderID, patterns in
                         appState.updateAgentKnowledgeFolderExclusions(id: folderID, rawPatterns: patterns)
-                    }
+                    },
+                    onStartIndexing: { appState.startAgentKnowledgeFolderIndexing(id: $0) }
                 )
             }
 

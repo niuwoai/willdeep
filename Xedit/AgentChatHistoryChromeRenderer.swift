@@ -9,6 +9,39 @@ import AppKit
 import ImageIO
 
 extension AgentChatHistoryRenderer {
+    static func appendTranscriptEventNotice(
+        _ event: AgentTranscriptEvent,
+        content: String,
+        to result: NSMutableAttributedString,
+        font: NSFont,
+        color: NSColor
+    ) {
+        let start = result.length
+        switch event {
+        case .modelChanged:
+            result.append(transcriptEventIconToken())
+        }
+        result.append(NSAttributedString(
+            string: "  " + content,
+            attributes: [
+                .font: font,
+                .foregroundColor: color,
+            ]
+        ))
+        let range = NSRange(location: start, length: result.length - start)
+        let style = NSMutableParagraphStyle()
+        style.alignment = .center
+        style.lineSpacing = 1
+        style.paragraphSpacing = 2
+        result.addAttributes(
+            [
+                .paragraphStyle: style,
+                .agentChatHistoryTranscriptEventNotice: AgentChatHistoryTranscriptEventNotice.value,
+            ],
+            range: range
+        )
+    }
+
     static func appendHeader(
         for message: AgentMessage,
         isToolCallOnly: Bool,
@@ -552,6 +585,16 @@ extension AgentChatHistoryRenderer {
         let attachment = NSTextAttachment()
         attachment.image = image
         attachment.bounds = NSRect(x: 0, y: -6, width: size.width, height: size.height)
+        return NSAttributedString(attachment: attachment)
+    }
+
+    private static func transcriptEventIconToken() -> NSAttributedString {
+        let attachment = NSTextAttachment()
+        if let image = NSImage(systemSymbolName: "cube", accessibilityDescription: nil)?
+            .withSymbolConfiguration(NSImage.SymbolConfiguration(pointSize: 12, weight: .regular)) {
+            attachment.image = image
+            attachment.bounds = NSRect(x: 0, y: -2, width: 13, height: 13)
+        }
         return NSAttributedString(attachment: attachment)
     }
 

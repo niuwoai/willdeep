@@ -32,8 +32,7 @@ extension AppState {
     /// the chosen URL to `rootDirectory`.
     func openFolder(openInNewWindow: ((URL) -> Void)? = nil) {
         let panel = Self.folderOpenPanel()
-
-        panel.begin { [weak self] response in
+        Self.presentFolderOpenPanel(panel) { [weak self] response in
             guard response == .OK, let url = panel.url else { return }
             self?.openFolderURL(url, openInNewWindow: openInNewWindow)
         }
@@ -52,7 +51,7 @@ extension AppState {
     /// creating a duplicate empty session.
     func openFolderAndStartAgentSession() {
         let panel = Self.folderOpenPanel()
-        panel.begin { [weak self] response in
+        Self.presentFolderOpenPanel(panel) { [weak self] response in
             guard response == .OK, let url = panel.url else { return }
             guard let self else { return }
             let standardized = url.standardizedFileURL
@@ -68,7 +67,13 @@ extension AppState {
             if alreadyHere && hasSessionHere,
                let runtime = self.activeRuntime,
                runtime.workspaceRootPath == standardized.path {
-                self.openFolderURL(url)
+                // This is a genuine no-op. The old path called openFolderURL,
+                // which unnecessarily restarted the editor Quick Open scan,
+                // editor Git status, Agent Git status, and session persistence
+                // just because the user picked the already-active workspace.
+                _ = self.activateSecurityScope(for: standardized)
+                self.registerRecentFolder(standardized)
+                self.unhideWorkspace(key: runtime.session.workspaceSidebarGroupKey)
                 return
             }
             _ = self.moveActiveAgentSessionToWorkspace(at: standardized.path)
@@ -85,6 +90,20 @@ extension AppState {
         panel.allowsMultipleSelection = false
         panel.canCreateDirectories = false
         return panel
+    }
+
+    /// Prefer a window-attached sheet. On newer macOS releases a standalone
+    /// panel can temporarily block the app's event handling while SwiftUI is
+    /// also updating the composer/sidebar after a workspace choice.
+    private static func presentFolderOpenPanel(
+        _ panel: NSOpenPanel,
+        completion: @escaping (NSApplication.ModalResponse) -> Void
+    ) {
+        if let hostWindow = NSApp.keyWindow ?? NSApp.mainWindow {
+            panel.beginSheetModal(for: hostWindow, completionHandler: completion)
+        } else {
+            panel.begin(completionHandler: completion)
+        }
     }
 
     // MARK: - File Opening

@@ -1,6 +1,6 @@
 # WillDeep 发布手册（Developer ID + 双重公证 + DMG + OSS）
 
-> 一句话：用 `ruby scripts/release_mac_app.rb` 完成 Release 编译、App 公证、DMG 公证和 OSS 上传；首次使用前需要准备 Developer ID 证书、Keychain 公证凭据和 `.env.local`。
+> 一句话：用 `ruby scripts/release_mac_app.rb` 完成测试、Release 编译、App/DMG 双重公证、Sparkle 签名、OSS 上传和 appcast 元数据发布；首次使用前需要准备 Developer ID 证书、Keychain 公证凭据和 `.env.local`。
 
 ---
 
@@ -73,7 +73,7 @@ brew install create-dmg
 cp .env.example .env.local
 ```
 
-至少填写 `WILLDEEP_CLIENT_LOGIN_SECRET`。`AIPIPE_API_KEY` 会作为构建环境传入但不会写入日志；OSS 凭据既可以放在本机 `~/.ossutilconfig`，也可以使用 `.env.local` 中的 `OSS_ACCESS_KEY_ID`、`OSS_ACCESS_KEY_SECRET`、`OSS_ENDPOINT`。`.env.local` 已被 Git 忽略，禁止提交真实凭据。
+至少填写 `WILLDEEP_CLIENT_LOGIN_SECRET` 与 `SOMEIM_ADMIN_TOKEN`。前者仅在构建期注入需要的登录能力，后者仅用于发布 some.im appcast 元数据；两者都会从发布日志中脱敏。`AIPIPE_API_KEY` 会作为构建环境传入但不会写入日志；OSS 凭据既可以放在本机 `~/.ossutilconfig`，也可以使用 `.env.local` 中的 `OSS_ACCESS_KEY_ID`、`OSS_ACCESS_KEY_SECRET`、`OSS_ENDPOINT`。`.env.local` 已被 Git 忽略，禁止提交真实凭据。
 
 ---
 
@@ -83,7 +83,7 @@ cp .env.example .env.local
 # 先做无副作用演练，只检查路径、版本和配置
 ruby scripts/release_mac_app.rb --dry-run
 
-# 完整流程：测试 → Release archive → App 公证 → DMG 公证 → OSS
+# 完整流程：测试 → Release archive → App/DMG 公证 → Sparkle 签名 → OSS → appcast
 ruby scripts/release_mac_app.rb
 
 # 本地签名打包，不公证也不上传
@@ -91,6 +91,12 @@ ruby scripts/release_mac_app.rb --skip-notarize --skip-upload
 
 # 已在其他流程跑完测试时跳过测试
 ruby scripts/release_mac_app.rb --skip-tests
+
+# DMG 已完成公证和 OSS 上传、但元数据阶段失败时，只校验并补发 appcast
+ruby scripts/release_mac_app.rb \
+  --publish-metadata-only build/mac-releases/veilwriter/WillDeep-1.180.0-rc1.dmg \
+  --release-version 1.180.0-rc1 \
+  --bundle-version 2
 ```
 
 产物路径：`build/mac-releases/veilwriter/WillDeep-<版本号>.dmg`。默认上传两个对象：
@@ -98,7 +104,7 @@ ruby scripts/release_mac_app.rb --skip-tests
 - `oss://sz-trans/mac-apps/WillDeep-<版本号>.dmg`
 - `oss://sz-trans/mac-apps/latest/WillDeep.dmg`
 
-JSON 和 Markdown 发布报告位于同一构建目录。旧的 `scripts/release.sh` 仍保留给本地备份、tag/push 等历史工作流，但不负责 OSS 上传。
+JSON 和 Markdown 发布报告位于同一构建目录。完整发布在任一步失败时立即停止；如果仅元数据写入失败，可使用 `--publish-metadata-only` 恢复，无需重新编译、公证或上传。旧的 `scripts/release.sh` 仍保留给本地备份、tag/push 等历史工作流，但不负责 OSS 上传。
 
 发布前的检查清单：
 
@@ -122,7 +128,10 @@ JSON 和 Markdown 发布报告位于同一构建目录。旧的 `scripts/release
 | 7 | `codesign DMG` | 使用同一 Developer ID 身份签名最终 DMG |
 | 8 | `notarytool submit DMG` | 单独公证最终分发物，成功后装订 DMG 票据 |
 | 9 | `codesign` / `stapler` / `spctl` | 校验签名、公证票据和 Gatekeeper 状态 |
-| 10 | `ossutil cp` | 上传版本对象与 `latest` 对象，并通过 `ossutil stat` 复核 |
+| 10 | Sparkle `sign_update` | 使用钥匙串私钥为最终 DMG 生成 Ed25519 更新签名与精确文件长度 |
+| 11 | `ossutil cp` | 上传版本对象与 `latest` 对象，并通过 `ossutil stat` 复核 |
+| 12 | some.im 管理 API | 创建或更新 `willdeep / macos / stable` 频道，写入版本、构建号、SHA-256、文件大小和签名 |
+| 13 | JSON / Markdown report | 保存全链路结果、下载地址、公证 submission ID 与各阶段耗时 |
 
 ---
 

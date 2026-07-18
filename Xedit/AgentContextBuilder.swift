@@ -119,7 +119,7 @@ enum AgentContextBuilder {
 
                 Treat the plan as the complete delivery contract for the user's request. Cover the requested end state, not just an outline, sample, first chapter, first file, or first phase unless the user explicitly asked for a partial delivery. Before emitting the plan, compare every requested deliverable against the numbered steps and add any missing work.
 
-                Then STOP and wait for the user to click Approve. Do not call any tool yet. Read-only tools (search_files, grep_files, read_file, list_directory, git_status) are still allowed if you need them BEFORE drafting the plan — but once you've drafted, stop and wait.
+                Then STOP and wait for the user to click Approve. Do not call any tool after drafting the plan. Read-only investigation tools (search_files, grep_files, read_file, list_directory, git_status, web_search) and web_fetch for validated public URLs are still allowed BEFORE drafting the plan — but once you've drafted, stop and wait.
                 If the user revises and re-prompts after a Reject, emit a new ```plan block.
                 """)
             } else if currentPlan?.status == .approved || currentPlan?.status == .executing {

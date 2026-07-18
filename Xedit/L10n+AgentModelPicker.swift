@@ -76,6 +76,11 @@ extension L10n {
         static let dailyCodingNote = String(localized: "agent-model-picker.note.daily-coding", defaultValue: "Daily coding and quick edits")
         static let fastCodingNote = String(localized: "agent-model-picker.note.fast-coding", defaultValue: "Stable, low-latency daily development")
 
+        static func modelChanged(from oldModel: String, to newModel: String) -> String {
+            let template = String(localized: "agent-model-picker.model-changed", defaultValue: "Model changed from %@ to %@.")
+            return String(format: template, oldModel, newModel)
+        }
+
         static func modelCount(_ count: Int) -> String {
             let template = String(localized: "agent-model-picker.model-count", defaultValue: "%lld models")
             return String(format: template, Int64(count))

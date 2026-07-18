@@ -33,7 +33,9 @@ struct AgentEntryModelSelectionTests {
     /// Keychain write. Without the sandbox those rows land under the
     /// production service name and show up in the running Settings UI
     /// on developer machines.
-    private func makeAppStateWithTwoEntries() -> (AppState, AgentProviderEntry, AgentProviderEntry) {
+    private func makeAppStateWithTwoEntries(
+        startSession: Bool = true
+    ) -> (AppState, AgentProviderEntry, AgentProviderEntry) {
         let app = AppState()
         // NB: assigning `app.agentProviderLibrary = …` below fires its
         // didSet, which writes each entry's apiKey into Keychain. The
@@ -70,8 +72,29 @@ struct AgentEntryModelSelectionTests {
         // a no-op and the picker assertions below would all see nil.
         // Production starts a New Chat on first entry into Agent mode;
         // tests have to do the same handshake.
-        app.startNewAgentSession()
+        if startSession {
+            app.startNewAgentSession()
+        }
         return (app, openai, deepseek)
+    }
+
+    @Test
+    func explicitModelCanBeSelectedBeforeWorkspace() {
+        let _sandbox = installKeychainSandbox(); _ = _sandbox
+        let (app, _, deepseek) = makeAppStateWithTwoEntries(startSession: false)
+        #expect(app.activeRuntime == nil)
+
+        app.selectAgentEntryAndModel(entryID: deepseek.id, model: "deepseek-v4-pro")
+
+        #expect(app.activeRuntime != nil)
+        #expect(app.activeRuntime?.workspaceRootPath == nil)
+        #expect(app.agentProviderLibrary.activeID == deepseek.id)
+        #expect(app.agentSessionModelOverride == "deepseek-v4-pro")
+
+        let workspacePath = FileManager.default.temporaryDirectory.standardizedFileURL.path
+        app.moveActiveAgentSessionToWorkspace(at: workspacePath)
+        #expect(app.activeRuntime?.workspaceRootPath == workspacePath)
+        #expect(app.agentSessionModelOverride == "deepseek-v4-pro")
     }
 
     @Test
@@ -120,6 +143,33 @@ struct AgentEntryModelSelectionTests {
 
         #expect(app.agentSessionModelOverride == nil)
         #expect(app.agentRecentlyUsedModelIDs.first == "gpt-4.1-mini")
+    }
+
+    @Test
+    func modelSwitchAppendsLocalTranscriptNotice() throws {
+        let _sandbox = installKeychainSandbox(); _ = _sandbox
+        let (app, openai, _) = makeAppStateWithTwoEntries()
+
+        app.selectAgentEntryAndModel(entryID: openai.id, model: "gpt-4o-mini")
+
+        let notice = try #require(app.agentMessages.last)
+        #expect(notice.role == .system)
+        #expect(notice.transcriptEvent == .modelChanged)
+        #expect(notice.content == L10n.AgentModelPicker.modelChanged(
+            from: "gpt-4.1-mini",
+            to: "gpt-4o-mini"
+        ))
+        #expect(AgentClient.providerReadyMessages(app.agentMessages).isEmpty)
+    }
+
+    @Test
+    func selectingCurrentModelDoesNotAppendDuplicateNotice() {
+        let _sandbox = installKeychainSandbox(); _ = _sandbox
+        let (app, openai, _) = makeAppStateWithTwoEntries()
+
+        app.selectAgentEntryAndModel(entryID: openai.id, model: "gpt-4.1-mini")
+
+        #expect(app.agentMessages.isEmpty)
     }
 
     @Test
@@ -300,6 +350,32 @@ struct AgentEntryModelSelectionTests {
         #expect(app.agentConfiguration.providerID == AgentProviderPreset.someIMID)
         #expect(app.activeRuntime?.managedRouting != nil)
         #expect(app.agentSessionModelOverride == nil)
+    }
+
+    @Test
+    func managedRoutingCanBeSelectedBeforeWorkspace() {
+        let _sandbox = installKeychainSandbox(); _ = _sandbox
+        let app = AppState()
+        SomeIMIntegrationStore._setTestSharedSessionOverride(enabled: true)
+        defer { SomeIMIntegrationStore._setTestSharedSessionOverride(enabled: false) }
+        #expect(SomeIMIntegrationStore.saveAPIKey("test-fixture-someim-key"))
+        app.syncSomeIMProvider(
+            settings: SomeIMIntegrationSettings(enabled: true),
+            apiKey: "test-fixture-someim-key"
+        )
+        #expect(app.activeRuntime == nil)
+
+        app.selectSomeIMManagedRouting()
+
+        #expect(app.activeRuntime != nil)
+        #expect(app.activeRuntime?.workspaceRootPath == nil)
+        #expect(app.activeRuntime?.managedRouting != nil)
+        #expect(app.agentSessionModelOverride == nil)
+
+        let workspacePath = FileManager.default.temporaryDirectory.standardizedFileURL.path
+        app.moveActiveAgentSessionToWorkspace(at: workspacePath)
+        #expect(app.activeRuntime?.workspaceRootPath == workspacePath)
+        #expect(app.activeRuntime?.managedRouting != nil)
     }
 }
 

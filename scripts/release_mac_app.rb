@@ -4,14 +4,16 @@
 require "digest"
 require "fileutils"
 require "json"
+require "net/http"
 require "open3"
 require "optparse"
 require "shellwords"
 require "tmpdir"
 require "time"
+require "uri"
 
 module WillDeepRelease
-  SCRIPT_VERSION = "1.0.0"
+  SCRIPT_VERSION = "1.2.0"
   REPO_ROOT = File.expand_path("..", __dir__)
   LOCAL_ENV_PATH = File.join(REPO_ROOT, ".env.local")
 
@@ -21,11 +23,20 @@ module WillDeepRelease
   DEFAULT_OSS_BUCKET = "sz-trans"
   DEFAULT_OSS_PREFIX = "mac-apps"
   DEFAULT_OSS_PUBLIC_BASE_URL = "https://img.niuwoai.com"
+  DEFAULT_CONTROL_PLANE_BASE_URL = "https://some.im/api/v1"
 
   PRODUCT_NAME = "WillDeep"
   PROJECT_NAME = "Xedit.xcodeproj"
   SCHEME = "Xedit"
   TEST_BUNDLE = "XeditTests"
+
+  NOTARIZATION_NESTED_CODE_PATHS = [
+    "Contents/Resources/willdeep-agent",
+    "Contents/Resources/WillDeepComputerUseHelper.app/Contents/MacOS/WillDeepComputerUseHelper",
+    "Contents/Resources/WillDeepComputerUseHelper.app"
+  ].freeze
+
+  PRESERVED_APP_SIGNATURE_METADATA = "identifier,entitlements,requirements,flags,runtime"
 
   DOTENV_KEYS = %w[
     WILLDEEP_CLIENT_LOGIN_SECRET
@@ -47,6 +58,9 @@ module WillDeepRelease
     OSS_BUCKET
     OSS_PREFIX
     OSS_PUBLIC_BASE_URL
+    SOMEIM_CONTROL_PLANE_BASE_URL
+    SOMEIM_ADMIN_TOKEN
+    SPARKLE_SIGN_UPDATE_BIN
   ].freeze
 
   SENSITIVE_ENV_KEYS = %w[
@@ -56,6 +70,7 @@ module WillDeepRelease
     OSS_ACCESS_KEY_SECRET
     OSS_SECURITY_TOKEN
     OSS_STS_TOKEN
+    SOMEIM_ADMIN_TOKEN
   ].freeze
 
   BUILD_SECRET_KEYS = %w[
@@ -194,16 +209,21 @@ module WillDeepRelease
       print_summary
       return print_dry_run_plan if @options[:dry_run]
 
+      return publish_existing_artifact_metadata if metadata_only?
+
       prepare_build_directory
       @identity = resolve_signing_identity!
       run_tests unless @options[:skip_tests]
       archive_and_export
+      resign_exported_app_for_notarization
       verify_exported_app
       notarize_and_staple_app unless @options[:skip_notarize]
       stage_app_for_dmg
       create_and_sign_dmg
       notarize_and_staple_dmg unless @options[:skip_notarize]
+      sign_update_archive
       upload_to_oss unless @options[:skip_upload]
+      publish_update_metadata unless @options[:skip_upload] || @options[:skip_update_metadata]
       write_reports
       print_completion
     rescue ReleaseError => e
@@ -214,6 +234,19 @@ module WillDeepRelease
 
     private
 
+    def metadata_only?
+      !@options[:publish_metadata_only].to_s.empty?
+    end
+
+    def publish_existing_artifact_metadata
+      validate_existing_release_artifact
+      sign_update_archive
+      verify_uploaded_version_artifact
+      publish_update_metadata
+      write_reports
+      print_completion
+    end
+
     def apply_environment_defaults!
       @options[:team_id] ||= ENV.fetch("APPLE_TEAM_ID", DEFAULT_TEAM_ID)
       @options[:notary_profile] ||= ENV.fetch("NOTARY_PROFILE", DEFAULT_NOTARY_PROFILE)
@@ -222,7 +255,9 @@ module WillDeepRelease
       @options[:oss_prefix] ||= ENV.fetch("OSS_PREFIX", DEFAULT_OSS_PREFIX)
       @options[:oss_public_base_url] ||= ENV.fetch("OSS_PUBLIC_BASE_URL", DEFAULT_OSS_PUBLIC_BASE_URL)
       @options[:ossutil] ||= ENV.fetch("OSSUTIL_BIN", "ossutil")
-      @version = read_marketing_version
+      @options[:control_plane_base_url] ||= ENV.fetch("SOMEIM_CONTROL_PLANE_BASE_URL", DEFAULT_CONTROL_PLANE_BASE_URL)
+      @version = @options[:release_version] || read_marketing_version
+      @bundle_version = @options[:bundle_version] || read_bundle_version
     end
 
     def release_paths
@@ -237,7 +272,7 @@ module WillDeepRelease
         notarize_zip: File.join(build_root, "#{PRODUCT_NAME}.app.notarize.zip"),
         dmg_source: File.join(build_root, "dmg-src"),
         staged_app: File.join(build_root, "dmg-src", "#{PRODUCT_NAME}.app"),
-        dmg: File.join(build_root, artifact),
+        dmg: @options[:publish_metadata_only] || File.join(build_root, artifact),
         derived_data: File.join(build_root, "DerivedData"),
         source_packages: File.join(build_root, "SourcePackages"),
         test_result: File.join(build_root, "test-results.xcresult"),
@@ -256,18 +291,58 @@ module WillDeepRelease
       version
     end
 
+    def read_bundle_version
+      pbxproj = File.join(REPO_ROOT, PROJECT_NAME, "project.pbxproj")
+      versions = File.read(pbxproj, encoding: "UTF-8")
+        .scan(/CURRENT_PROJECT_VERSION = "?([^";\n]+)"?;/)
+        .flatten
+        .map(&:strip)
+        .uniq
+      unless versions.length == 1 && versions.first.match?(/\A[1-9]\d*\z/)
+        raise ReleaseError, "CURRENT_PROJECT_VERSION 必须在所有 target 中保持一致且为正整数：#{versions.inspect}"
+      end
+
+      versions.first.to_i
+    end
+
     def validate_configuration!
       raise ReleaseError, "必须在 macOS 上执行" unless RUBY_PLATFORM.include?("darwin")
-      raise ReleaseError, "缺少 .env.local 中的 WILLDEEP_CLIENT_LOGIN_SECRET" if ENV.fetch("WILLDEEP_CLIENT_LOGIN_SECRET", "").strip.empty?
+      raise ReleaseError, "无效的发布版本：#{@version}" unless @version.match?(SEMVER_PATTERN)
+      raise ReleaseError, "Bundle version 必须为正整数" unless @bundle_version.to_i.positive?
+      if (@options[:release_version] || @options[:bundle_version]) && !metadata_only?
+        raise ReleaseError, "--release-version / --bundle-version 只允许与 --publish-metadata-only 一起使用"
+      end
       validate_build_root!
+      return validate_metadata_only_configuration! if metadata_only?
+
+      raise ReleaseError, "缺少 .env.local 中的 WILLDEEP_CLIENT_LOGIN_SECRET" if ENV.fetch("WILLDEEP_CLIENT_LOGIN_SECRET", "").strip.empty?
       if @options[:skip_notarize] && !@options[:skip_upload]
         raise ReleaseError, "跳过公证时禁止上传；请同时传入 --skip-upload"
+      end
+      if !@options[:skip_upload] && !@options[:skip_update_metadata] && ENV.fetch("SOMEIM_ADMIN_TOKEN", "").strip.empty?
+        raise ReleaseError, "上传发布时缺少 SOMEIM_ADMIN_TOKEN；如需仅上传产物请显式传入 --skip-update-metadata"
       end
 
       required_commands = %w[xcodebuild codesign security xcrun ditto hdiutil plutil]
       required_commands << @options[:ossutil] unless @options[:skip_upload]
       missing = required_commands.reject { |command| command_available?(command) }
       raise ReleaseError, "缺少命令：#{missing.join(', ')}" unless missing.empty?
+    end
+
+    def validate_metadata_only_configuration!
+      raise ReleaseError, "--publish-metadata-only 不能与 --skip-update-metadata 同时使用" if @options[:skip_update_metadata]
+      raise ReleaseError, "补发元数据时缺少 SOMEIM_ADMIN_TOKEN" if ENV.fetch("SOMEIM_ADMIN_TOKEN", "").strip.empty?
+      raise ReleaseError, "DMG 不存在：#{@paths[:dmg]}" unless File.file?(@paths[:dmg])
+
+      expected_name = "#{PRODUCT_NAME}-#{@version}.dmg"
+      unless File.basename(@paths[:dmg]) == expected_name
+        raise ReleaseError, "DMG 文件名必须与发布版本一致：期望 #{expected_name}"
+      end
+
+      required_commands = ["codesign", "xcrun", "hdiutil", @options[:ossutil]]
+      missing = required_commands.reject { |command| command_available?(command) }
+      raise ReleaseError, "缺少命令：#{missing.join(', ')}" unless missing.empty?
+      raise ReleaseError, "找不到 Sparkle sign_update；请设置 SPARKLE_SIGN_UPDATE_BIN" unless sparkle_sign_update_path
     end
 
     def validate_build_root!
@@ -298,18 +373,22 @@ module WillDeepRelease
         构建目录：#{@paths[:build_root]}
         公证配置：#{@options[:notary_profile]}
         OSS 目标：oss://#{@options[:oss_bucket]}/#{@options[:oss_prefix]}
-        测试：#{@options[:skip_tests] ? '跳过' : '执行'}
-        公证：#{@options[:skip_notarize] ? '跳过' : 'App + DMG'}
-        上传：#{@options[:skip_upload] ? '跳过' : '版本文件 + latest'}
+        模式：#{metadata_only? ? '校验既有 DMG 并补发 appcast 元数据' : '完整发布'}
+        测试：#{metadata_only? || @options[:skip_tests] ? '跳过' : '执行'}
+        公证：#{metadata_only? ? '验证既有票据' : (@options[:skip_notarize] ? '跳过' : 'App + DMG')}
+        上传：#{metadata_only? ? '验证既有版本对象' : (@options[:skip_upload] ? '跳过' : '版本文件 + latest')}
+        更新元数据：#{@options[:skip_update_metadata] || (!metadata_only? && @options[:skip_upload]) ? '跳过' : @options[:control_plane_base_url]}
+        Bundle version：#{@bundle_version}
       SUMMARY
     end
 
     def print_dry_run_plan
       version_key, latest_key = oss_keys
-      puts "演练完成：未执行构建、签名、公证或上传。"
+      puts "演练完成：未执行构建、签名、公证、上传或元数据写入。"
       puts "计划产物：#{@paths[:dmg]}"
       puts "版本对象：oss://#{@options[:oss_bucket]}/#{version_key}"
-      puts "latest 对象：oss://#{@options[:oss_bucket]}/#{latest_key}"
+      puts "latest 对象：oss://#{@options[:oss_bucket]}/#{latest_key}" unless metadata_only?
+      puts "Sparkle appcast：#{@options[:control_plane_base_url]}/public/app-updates/appcast.xml?app_id=willdeep&platform=macos&channel=stable"
     end
 
     def prepare_build_directory
@@ -435,6 +514,32 @@ module WillDeepRelease
       end
     end
 
+    def resign_exported_app_for_notarization
+      NOTARIZATION_NESTED_CODE_PATHS.each do |relative_path|
+        path = File.join(@paths[:app], relative_path)
+        raise ReleaseError, "发布包缺少需要签名的嵌套代码：#{path}" unless File.exist?(path)
+
+        @runner.run!(distribution_codesign_arguments(path))
+      end
+
+      @runner.run!(
+        distribution_codesign_arguments(
+          @paths[:app],
+          preserve_metadata: PRESERVED_APP_SIGNATURE_METADATA
+        )
+      )
+    end
+
+    def distribution_codesign_arguments(path, preserve_metadata: nil)
+      arguments = [
+        "codesign", "--force", "--sign", @identity,
+        "--timestamp", "--options", "runtime"
+      ]
+      arguments << "--preserve-metadata=#{preserve_metadata}" if preserve_metadata
+      arguments << path
+      arguments
+    end
+
     def notarize_and_staple_app
       measure(:app_notarization) do
         @runner.run!(["ditto", "-c", "-k", "--keepParent", @paths[:app], @paths[:notarize_zip]])
@@ -450,6 +555,8 @@ module WillDeepRelease
       FileUtils.rm_rf(@paths[:dmg_source])
       FileUtils.mkdir_p(@paths[:dmg_source])
       @runner.run!(["ditto", @paths[:app], @paths[:staged_app]])
+      return if command_available?("create-dmg")
+
       FileUtils.ln_s("/Applications", File.join(@paths[:dmg_source], "Applications"))
     end
 
@@ -500,6 +607,46 @@ module WillDeepRelease
       end
     end
 
+    def sign_update_archive
+      sign_update = sparkle_sign_update_path
+      raise ReleaseError, "找不到 Sparkle sign_update；请先解析 Swift Package 或设置 SPARKLE_SIGN_UPDATE_BIN" unless sign_update
+
+      output = @runner.capture!([sign_update, @paths[:dmg]])
+      signature = output[/sparkle:edSignature="([^"]+)"/, 1]
+      length = output[/\blength="(\d+)"/, 1]
+      unless signature && length && Integer(length, exception: false) == File.size(@paths[:dmg])
+        raise ReleaseError, "无法解析 Sparkle 更新签名：#{output.strip}"
+      end
+
+      @sparkle_ed_signature = signature
+      @sparkle_file_size = length.to_i
+    end
+
+    def validate_existing_release_artifact
+      measure(:artifact_validation) do
+        @runner.run!(["codesign", "--verify", "--verbose=2", @paths[:dmg]])
+        @runner.run!(["xcrun", "stapler", "validate", @paths[:dmg]])
+        @runner.run!(["hdiutil", "verify", @paths[:dmg]])
+      end
+    end
+
+    def verify_uploaded_version_artifact
+      version_key, = oss_keys
+      destination = "oss://#{@options[:oss_bucket]}/#{version_key}"
+      measure(:remote_artifact_validation) do
+        @runner.run!([@options[:ossutil], "stat", destination], allowed_secret_keys: OSS_SECRET_KEYS)
+      end
+    end
+
+    def sparkle_sign_update_path
+      candidates = [
+        ENV.fetch("SPARKLE_SIGN_UPDATE_BIN", "").strip,
+        File.join(@paths[:source_packages], "artifacts", "sparkle", "Sparkle", "bin", "sign_update"),
+        File.join(REPO_ROOT, "build", "SourcePackages", "artifacts", "sparkle", "Sparkle", "bin", "sign_update")
+      ].reject(&:empty?)
+      candidates.find { |path| File.executable?(path) }
+    end
+
     def submit_for_notarization(path, label)
       output = @runner.run!(
         [
@@ -544,6 +691,95 @@ module WillDeepRelease
       end
     end
 
+    def publish_update_metadata
+      raise ReleaseError, "Sparkle 签名尚未生成" if @sparkle_ed_signature.to_s.empty?
+
+      version_key, = oss_keys
+      payload = {
+        app_id: "willdeep",
+        app_name: PRODUCT_NAME,
+        platform: "macos",
+        channel: "stable",
+        latest_version: @version,
+        bundle_version: @bundle_version,
+        minimum_version: "",
+        minimum_system_version: "13.7",
+        download_url: public_url(version_key),
+        release_notes_url: "https://some.im/zh/products/willdeep",
+        release_notes: release_notes_for_current_version,
+        sha256: Digest::SHA256.file(@paths[:dmg]).hexdigest,
+        ed_signature: @sparkle_ed_signature,
+        file_size_bytes: @sparkle_file_size,
+        enabled: true,
+        # MySQL TIMESTAMP accepts this database-native form consistently;
+        # RFC 3339 (`T...Z`) caused production inserts to fail.
+        published_at: database_timestamp
+      }
+      existing = fetch_update_channel
+      validate_existing_bundle_version!(existing) if existing
+      path = existing ? "/admin/app-updates/#{URI.encode_www_form_component(existing.fetch('id'))}" : "/admin/app-updates"
+      request = existing ? Net::HTTP::Patch.new(update_metadata_uri(path)) : Net::HTTP::Post.new(update_metadata_uri(path))
+      request["Authorization"] = "Bearer #{ENV.fetch('SOMEIM_ADMIN_TOKEN')}"
+      request["Content-Type"] = "application/json"
+      request.body = JSON.generate(payload)
+      response = perform_update_metadata_request(request)
+      raise ReleaseError, "更新元数据发布失败：HTTP #{response.code}" unless response.is_a?(Net::HTTPSuccess)
+
+      @update_metadata_published = true
+    end
+
+    def fetch_update_channel
+      query = URI.encode_www_form(app_id: "willdeep", platform: "macos", channel: "stable")
+      request = Net::HTTP::Get.new(update_metadata_uri("/admin/app-updates?#{query}"))
+      request["Authorization"] = "Bearer #{ENV.fetch('SOMEIM_ADMIN_TOKEN')}"
+      response = perform_update_metadata_request(request)
+      raise ReleaseError, "读取更新元数据失败：HTTP #{response.code}" unless response.is_a?(Net::HTTPSuccess)
+
+      decoded = JSON.parse(response.body)
+      items = decoded.dig("data", "items") || decoded["items"] || []
+      items.find do |item|
+        item["app_id"] == "willdeep" && item["platform"] == "macos" && item["channel"] == "stable"
+      end
+    rescue JSON::ParserError
+      raise ReleaseError, "无法解析更新元数据响应"
+    end
+
+    def validate_existing_bundle_version!(existing)
+      existing_bundle_version = Integer(existing["bundle_version"], exception: false)
+      return unless existing_bundle_version
+      if @bundle_version < existing_bundle_version ||
+          (existing["latest_version"] != @version && @bundle_version == existing_bundle_version)
+        raise ReleaseError,
+              "Bundle version #{@bundle_version} 必须大于已发布版本 #{existing_bundle_version}；请先递增 CURRENT_PROJECT_VERSION"
+      end
+    end
+
+    def update_metadata_uri(path)
+      base = @options[:control_plane_base_url].to_s.sub(%r{/+\z}, "")
+      URI.parse("#{base}#{path}")
+    rescue URI::InvalidURIError
+      raise ReleaseError, "无效的 SOMEIM_CONTROL_PLANE_BASE_URL：#{@options[:control_plane_base_url]}"
+    end
+
+    def perform_update_metadata_request(request)
+      uri = request.uri
+      Net::HTTP.start(uri.host, uri.port, use_ssl: uri.scheme == "https", open_timeout: 10, read_timeout: 30) do |http|
+        http.request(request)
+      end
+    rescue StandardError => e
+      raise ReleaseError, "更新元数据请求失败：#{e.class}"
+    end
+
+    def release_notes_for_current_version
+      changelog = File.read(File.join(REPO_ROOT, "CHANGELOG.md"), encoding: "UTF-8")
+      section = changelog[/^## #{Regexp.escape(@version)}\b.*?\n(.*?)(?=^## |\z)/m, 1].to_s.strip
+      section.empty? ? "WillDeep #{@version}" : section[0, 8_000]
+    end
+
+    def database_timestamp(time = Time.now.utc)
+      time.utc.strftime("%Y-%m-%d %H:%M:%S")
+    end
+
     def oss_keys
       prefix = @options[:oss_prefix].to_s.gsub(%r{\A/+|/+$}, "")
       version_key = File.join(prefix, File.basename(@paths[:dmg]))
@@ -568,17 +804,22 @@ module WillDeepRelease
       version_key, latest_key = oss_keys
       report = {
         ok: true,
+        mode: metadata_only? ? "metadata-only" : "full-release",
         script_version: SCRIPT_VERSION,
         app: PRODUCT_NAME,
         version: @version,
+        bundle_version: @bundle_version,
         generated_at: Time.now.iso8601,
         dmg_path: @paths[:dmg],
         dmg_sha256: Digest::SHA256.file(@paths[:dmg]).hexdigest,
-        notarized: !@options[:skip_notarize],
+        sparkle_ed_signature: @sparkle_ed_signature,
+        sparkle_file_size_bytes: @sparkle_file_size,
+        notarized: metadata_only? || !@options[:skip_notarize],
         submission_ids: @submission_ids,
-        uploaded: !@options[:skip_upload],
-        download_url: @options[:skip_upload] ? nil : public_url(version_key),
-        latest_url: @options[:skip_upload] ? nil : public_url(latest_key),
+        uploaded: metadata_only? || !@options[:skip_upload],
+        update_metadata_published: !!@update_metadata_published,
+        download_url: (!metadata_only? && @options[:skip_upload]) ? nil : public_url(version_key),
+        latest_url: metadata_only? || @options[:skip_upload] ? nil : public_url(latest_key),
         timings_seconds: @timings.transform_values { |seconds| seconds.round(2) }
       }
       File.write(@paths[:report_json], JSON.pretty_generate(report) + "\n")
@@ -591,11 +832,15 @@ module WillDeepRelease
 
         - Status: PASS
         - Generated at: #{report[:generated_at]}
+        - Mode: #{report[:mode]}
         - Version: #{report[:version]}
+        - Bundle version: #{report[:bundle_version]}
         - DMG: `#{report[:dmg_path]}`
         - SHA-256: `#{report[:dmg_sha256]}`
+        - Sparkle Ed25519 signature: `#{report[:sparkle_ed_signature]}`
         - App and DMG notarized: #{report[:notarized]}
         - Uploaded to OSS: #{report[:uploaded]}
+        - Update metadata published: #{report[:update_metadata_published]}
         - Version URL: #{report[:download_url] || "skipped"}
         - Latest URL: #{report[:latest_url] || "skipped"}
 
@@ -615,8 +860,9 @@ module WillDeepRelease
         ✅ WillDeep v#{@version} 发布完成
         DMG：#{@paths[:dmg]}
         SHA-256：#{Digest::SHA256.file(@paths[:dmg]).hexdigest}
-        版本下载：#{@options[:skip_upload] ? '未上传' : public_url(version_key)}
-        latest：#{@options[:skip_upload] ? '未上传' : public_url(latest_key)}
+        Sparkle Ed25519：#{@sparkle_ed_signature}
+        版本下载：#{(!metadata_only? && @options[:skip_upload]) ? '未上传' : public_url(version_key)}
+        latest：#{metadata_only? || @options[:skip_upload] ? '未变更' : public_url(latest_key)}
         总耗时：#{elapsed.round(1)} 秒
         报告：#{@paths[:report_markdown]}
       SUMMARY
@@ -632,7 +878,8 @@ module WillDeepRelease
         clean: false,
         skip_tests: false,
         skip_notarize: false,
-        skip_upload: false
+        skip_upload: false,
+        skip_update_metadata: false
       }
 
       parser = OptionParser.new do |opts|
@@ -642,6 +889,14 @@ module WillDeepRelease
         opts.on("--skip-tests", "跳过 XeditTests") { options[:skip_tests] = true }
         opts.on("--skip-notarize", "跳过 App/DMG 公证，仅供本地验证") { options[:skip_notarize] = true }
         opts.on("--skip-upload", "不上传 OSS") { options[:skip_upload] = true }
+        opts.on("--skip-update-metadata", "不把 Sparkle 更新元数据发布到 some.im") { options[:skip_update_metadata] = true }
+        opts.on("--publish-metadata-only PATH", "校验已公证并上传的 DMG，只补发 appcast 元数据") do |value|
+          options[:publish_metadata_only] = File.expand_path(value)
+        end
+        opts.on("--release-version VERSION", "补发元数据时指定 DMG 的语义版本") { |value| options[:release_version] = value }
+        opts.on("--bundle-version NUMBER", Integer, "补发元数据时指定严格递增的构建号") do |value|
+          options[:bundle_version] = value
+        end
         opts.on("--build-root PATH", "指定构建目录") { |value| options[:build_root] = File.expand_path(value) }
         opts.on("--notary-profile NAME", "指定 notarytool Keychain profile") { |value| options[:notary_profile] = value }
         opts.on("--team-id ID", "指定 Apple Developer Team ID") { |value| options[:team_id] = value }
@@ -649,6 +904,7 @@ module WillDeepRelease
         opts.on("--oss-prefix PREFIX", "指定 OSS 对象前缀") { |value| options[:oss_prefix] = value }
         opts.on("--oss-public-base-url URL", "指定公开下载域名") { |value| options[:oss_public_base_url] = value }
         opts.on("--ossutil PATH", "指定 ossutil 可执行文件") { |value| options[:ossutil] = value }
+        opts.on("--control-plane-base-url URL", "指定 some.im 管理 API 根地址") { |value| options[:control_plane_base_url] = value }
       end
       parser.parse!(argv)
       options

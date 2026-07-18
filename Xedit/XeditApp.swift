@@ -118,6 +118,12 @@ private struct WillDeepCommands: Commands {
     @Environment(\.openWindow) private var openWindow
 
     var body: some Commands {
+            CommandGroup(after: .appInfo) {
+                Button(L10n.AppUpdate.checkForUpdates) {
+                    AppUpdateController.shared.checkForUpdates()
+                }
+            }
+
             CommandGroup(replacing: .newItem) {
                 // agent 窗口前台时 ⌘N 走「新聊天」，名实相符（侧边栏那
                 // 个 ⌘N 标签过去只是画着看，从不真的触发）。editor 窗口
@@ -333,10 +339,6 @@ private struct WindowRootView: View {
     /// 用 @StateObject 持有 observer 的生命周期；deinit 时自动摘
     /// 通知。
     @StateObject private var windowFocus = WindowFocusObserver()
-    /// 1.88.0:首次启动 onboarding sheet 控制器。每个 WindowRootView
-    /// 都 .sheet 绑这个,但 OnboardingFlowController.presentIfNeeded()
-    /// 只让第一窗口翻 isPresented = true。
-    @ObservedObject private var onboarding = OnboardingFlowController.shared
     @Environment(\.openWindow) private var openWindow
     let initialExternalURL: URL?
     @State private var didHandleInitialExternalURL = false
@@ -386,15 +388,10 @@ private struct WindowRootView: View {
                 if appState.tabs.isEmpty {
                     appState.createNewTab()
                 }
-                onboarding.presentIfNeeded()
             }
             .onDisappear {
                 EditorAppStateRegistry.shared.unregister(appState)
                 windowFocus.detach()
-            }
-            .sheet(isPresented: $onboarding.isPresented) {
-                OnboardingView()
-                    .environmentObject(appState)
             }
     }
 

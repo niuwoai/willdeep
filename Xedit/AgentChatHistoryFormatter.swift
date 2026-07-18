@@ -328,6 +328,20 @@ enum AgentChatHistoryRenderer {
         var index = 0
         while index < messages.count {
             let message = messages[index]
+            if let event = message.transcriptEvent {
+                if result.length > 0 {
+                    result.append(NSAttributedString(string: "\n\n"))
+                }
+                appendTranscriptEventNotice(
+                    event,
+                    content: message.content,
+                    to: result,
+                    font: NSFont.systemFont(ofSize: 12),
+                    color: secondaryColor
+                )
+                index += 1
+                continue
+            }
             // Skip empty assistant placeholders (the loop emits them
             // while a turn is waiting on tool calls).
             if message.role == .assistant && message.content.isEmpty && message.images.isEmpty && message.toolCalls.isEmpty {

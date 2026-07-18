@@ -104,9 +104,9 @@ nonisolated struct AgentSession: Identifiable, Codable, Equatable {
     /// one chat is restored when returning to that chat without leaking
     /// into unrelated conversations.
     var sidePanelState: AgentSidePanelState
-    /// When the user pinned this session to the top of its workspace
-    /// group. Nil = not pinned. We store the timestamp (not a bool) so
-    /// that multiple pinned items inside one workspace can be ordered
+    /// When the user pinned this session to the global pinned section.
+    /// Nil = not pinned. We store the timestamp (not a bool) so pinned
+    /// conversations across every workspace can be ordered
     /// "most-recently-pinned first" in the sidebar.
     var pinnedAt: Date?
     /// When the user archived this session. Nil = active. Archived
@@ -620,7 +620,8 @@ nonisolated enum AgentInteractionMode: String, Codable, CaseIterable, Identifiab
 /// Per-session approval posture exposed from the Agent composer. It
 /// influences only write-tier auto-approval; read tools still run
 /// automatically, danger-tier tools still require typed confirmation,
-/// and Plan mode keeps its own plan-approval gate.
+/// and Plan mode keeps its own plan-approval gate except for validated
+/// public web research needed to prepare the plan.
 nonisolated enum AgentApprovalMode: String, Codable, CaseIterable, Identifiable {
     case requestEveryTime
     case smart
@@ -1894,6 +1895,7 @@ nonisolated struct AgentFileAttachment: Identifiable, Codable, Equatable, Sendab
 }
 
 nonisolated enum AgentKnowledgeFolderIndexStatus: String, Codable, Equatable, Sendable {
+    case pending
     case indexing
     case ready
     case failed
@@ -1911,7 +1913,7 @@ nonisolated enum AgentDocumentTaskMode: String, Codable, CaseIterable, Equatable
 nonisolated struct AgentKnowledgeFolder: Identifiable, Codable, Equatable, Sendable {
     let url: URL
     var isEnabled: Bool = true
-    var status: AgentKnowledgeFolderIndexStatus = .indexing
+    var status: AgentKnowledgeFolderIndexStatus = .pending
     var documents: [AgentFileAttachment] = []
     var excludedPatterns: [String] = []
     var skippedFileCount: Int = 0

@@ -9,6 +9,23 @@ import Testing
 
 @Suite
 struct AgentKnowledgeFolderIndexerTests {
+    @Test("New knowledge folders stay pending outside Goal mode")
+    func knowledgeFolderIndexPolicy() {
+        let folder = AgentKnowledgeFolder(url: URL(fileURLWithPath: "/tmp/reference"))
+        #expect(folder.status == .pending)
+        #expect(!AgentKnowledgeFolderIndexPolicy.startsAutomatically(in: .normal))
+        #expect(!AgentKnowledgeFolderIndexPolicy.startsAutomatically(in: .plan))
+        #expect(AgentKnowledgeFolderIndexPolicy.startsAutomatically(in: .goal))
+    }
+
+    @Test("Skill picker reserves three complete rows when available")
+    func skillPickerMinimumHeight() {
+        #expect(SkillPickerLayout.minimumListHeight(entryCount: 0) == 0)
+        #expect(SkillPickerLayout.minimumListHeight(entryCount: 1) == SkillPickerLayout.rowHeight)
+        #expect(SkillPickerLayout.minimumListHeight(entryCount: 3) == SkillPickerLayout.rowHeight * 3)
+        #expect(SkillPickerLayout.minimumListHeight(entryCount: 20) == SkillPickerLayout.rowHeight * 3)
+    }
+
     @Test("Knowledge folders honor gitignore, custom exclusions, and sensitive-file defaults")
     func safeFolderIndexing() async throws {
         let root = FileManager.default.temporaryDirectory

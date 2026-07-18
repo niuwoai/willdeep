@@ -39,16 +39,33 @@ struct WorkspaceWindowBackground: View {
 /// WillDeep's two work surfaces.
 struct WorkspaceWallpaperBackground: View {
     let settings: EditorSettings
+    var appliesAgentEffects = false
     @State private var backgroundImage: NSImage?
+
+    private var showsWallpaper: Bool {
+        appliesAgentEffects
+            ? settings.hasConfiguredAgentWallpaper
+            : settings.hasConfiguredWorkspaceWallpaper
+    }
 
     var body: some View {
         GeometryReader { proxy in
             ZStack {
                 settings.interfaceSkin.windowBackground
 
-                if let image = backgroundImage {
+                if showsWallpaper, let image = backgroundImage {
                     imageView(image, in: proxy.size)
                         .opacity(settings.windowBackgroundImageOpacity)
+                }
+
+                if appliesAgentEffects,
+                   showsWallpaper,
+                   settings.agentWallpaperGlassEnabled {
+                    VisualEffectView(
+                        material: settings.agentWallpaperGlassMaterial.material,
+                        blendingMode: .withinWindow
+                    )
+                    .opacity(settings.agentWallpaperGlassOpacity)
                 }
             }
         }
@@ -100,6 +117,18 @@ struct WorkspaceWallpaperBackground: View {
                 )
                 .frame(width: size.width, height: size.height)
                 .clipped()
+        case .tile:
+            let scale = max(0.25, settings.windowBackgroundImageScale)
+            Image(nsImage: image)
+                .resizable(capInsets: EdgeInsets(), resizingMode: .tile)
+                .frame(
+                    width: max(1, size.width / scale),
+                    height: max(1, size.height / scale),
+                    alignment: .topLeading
+                )
+                .scaleEffect(scale, anchor: .topLeading)
+                .frame(width: size.width, height: size.height, alignment: .topLeading)
+                .clipped()
         }
     }
 }
@@ -135,10 +164,19 @@ extension View {
 /// regardless of window focus.
 struct VisualEffectView: NSViewRepresentable {
     let material: NSVisualEffectView.Material
+    let blendingMode: NSVisualEffectView.BlendingMode
+
+    init(
+        material: NSVisualEffectView.Material,
+        blendingMode: NSVisualEffectView.BlendingMode = .behindWindow
+    ) {
+        self.material = material
+        self.blendingMode = blendingMode
+    }
 
     func makeNSView(context: Context) -> NSVisualEffectView {
         let view = NSVisualEffectView()
-        view.blendingMode = .behindWindow
+        view.blendingMode = blendingMode
         view.state = .active
         view.material = material
         return view
@@ -146,7 +184,7 @@ struct VisualEffectView: NSViewRepresentable {
 
     func updateNSView(_ nsView: NSVisualEffectView, context: Context) {
         nsView.material = material
-        nsView.blendingMode = .behindWindow
+        nsView.blendingMode = blendingMode
         nsView.state = .active
     }
 }
