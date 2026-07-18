@@ -1239,6 +1239,7 @@ extension AppState {
     }
 
     func attachAgentSkill(_ skill: AgentSkillEntry) {
+        ensureActiveAgentSessionForInteractiveControl()
         guard !agentPendingSkills.contains(where: { $0.identifier == skill.identifier }) else { return }
         agentPendingSkills.append(skill)
     }

@@ -1,6 +1,6 @@
 # WillDeep Product Overview
 
-> Last updated: 2026-07-18 | Current version: v1.185.0-rc6
+> Last updated: 2026-07-18 | Current version: v1.185.0-rc9
 
 ## Positioning
 
@@ -12,7 +12,10 @@ WillDeep is configured for non-App-Store distribution without App Sandbox so it 
 
 ## 架构概览
 
+- **无工作区交互会话与可行动空态（1.185.0-rc9）** —— 未选择工作区时，执行器、模式、审批、专家、插件及右侧辅助栏的首次操作会自动创建无工作区草稿会话并立即保存选择；之后选目录会原地绑定该会话。Files / Diff 这类必须有文件系统根目录的面板不再静默空白，而是说明原因并提供“选择工作区”入口；聊天、终端、浏览器和预览仍可脱离工作区使用。
 - **主线审核解释修复整合（1.185.0-rc6）** —— 将 `main` 上已验证的 Coding Plan 审核解释模型路由、`someim-auto-flash` 回退与 provider 错误详情展示纳入当前发布线；贴图生成、浏览器和 Computer Use 改进与这一修复共同交付，版本与构建号同步递增。
+- **执行器即时状态刷新（1.185.0-rc8）** —— Composer 执行器在选择 Claude Code 或 Codex 后立即更新图标、名称、选中标记和配色；切换会话时会重新读取该会话的已保存选择，不再出现实际已切换但 pill 仍显示 WillDeep 的错觉。
+- **执行器身份与任务图标（1.185.0-rc7）** —— Composer 的内置执行器显示为 WillDeep，使用锤子图标清楚表达“实际干活 / 执行任务”；菜单摘要与悬浮提示不再用“我们”指代产品。
 - **Codex 风格 Computer Use / 浏览器授权（1.185.0-rc2）** —— Computer Use、Chrome 与内置浏览器的普通写操作使用紧凑三按钮授权卡；“允许此对话”只写入当前 Agent runtime 并按工具族隔离，“始终允许”按工具族持久化，danger 级调试操作继续走严格确认，避免便捷授权扩大高风险操作边界。
 - **视觉验收响应式 OCR（1.185.0-rc3）** —— 贴图生成代码的 OCR 覆盖率使用归一化字符片段比较，忽略浏览器窄视口造成的自然换行差异，同时继续拒绝缺失或无关文案，避免完成门禁在响应式页面上误杀。
 - **贴图生成直接执行语义（1.185.0-rc4）** —— `/screenshot-to-code` 会退出会话遗留的 Plan 模式并清理旧计划，再进入生产代码修改、运行、浏览器截图与视觉验收闭环，避免显式执行命令被旧计划门禁切成只读规划。

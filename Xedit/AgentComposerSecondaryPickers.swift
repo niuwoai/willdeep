@@ -12,11 +12,13 @@ import SwiftUI
 
 struct AgentExecutionPickerPill: View {
     @EnvironmentObject var appState: AppState
+    @State private var selectedAgent: AgentExecutionAgent = .willDeep
 
     var body: some View {
         Menu {
             ForEach(AgentExecutionAgent.allCases) { agent in
                 Button {
+                    selectedAgent = agent
                     appState.setAgentExecutionAgent(agent)
                 } label: {
                     HStack(alignment: .firstTextBaseline, spacing: 8) {
@@ -27,7 +29,7 @@ struct AgentExecutionPickerPill: View {
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
                         }
-                        if appState.agentExecutionAgent == agent {
+                        if selectedAgent == agent {
                             Image(systemName: "checkmark")
                         }
                     }
@@ -35,9 +37,9 @@ struct AgentExecutionPickerPill: View {
             }
         } label: {
             HStack(spacing: 4) {
-                Image(systemName: appState.agentExecutionAgent.symbol)
+                Image(systemName: selectedAgent.symbol)
                     .font(.system(size: 10, weight: .semibold))
-                Text(appState.agentExecutionAgent.displayName)
+                Text(selectedAgent.displayName)
                     .font(.system(size: 11, weight: .medium))
                     .lineLimit(1)
                 Image(systemName: "chevron.down")
@@ -54,14 +56,18 @@ struct AgentExecutionPickerPill: View {
         .focusable(false)
         .fixedSize()
         .help(L10n.ExecutionAgent.pickerHelp)
+        .onAppear(perform: syncSelectedAgent)
+        .onReceive(appState.$activeAgentSessionID) { _ in
+            syncSelectedAgent()
+        }
     }
 
     private var pillForeground: Color {
-        appState.agentExecutionAgent == .willDeep ? Color.secondary : Color.white
+        selectedAgent == .willDeep ? Color.secondary : Color.white
     }
 
     private var pillBackground: Color {
-        switch appState.agentExecutionAgent {
+        switch selectedAgent {
         case .willDeep: return Color.secondary.opacity(0.10)
         case .claudeCode: return Color.purple
         case .codexCLI: return Color.accentColor
@@ -69,9 +75,13 @@ struct AgentExecutionPickerPill: View {
     }
 
     private var pillBorder: Color {
-        appState.agentExecutionAgent == .willDeep
+        selectedAgent == .willDeep
             ? Color.secondary.opacity(0.25)
             : Color.clear
+    }
+
+    private func syncSelectedAgent() {
+        selectedAgent = appState.agentExecutionAgent
     }
 }
 

@@ -5,13 +5,13 @@ import Foundation
 // `enum L10n` so these lookups stay callable from nonisolated model code.
 extension L10n {
     nonisolated enum ExecutionAgent {
-        static let oursName = String(localized: "execution-agent.ours.name", defaultValue: "Us")
+        static let willDeepName = String(localized: "execution-agent.willdeep.name", defaultValue: "WillDeep")
         static let claudeCodeName = String(localized: "execution-agent.claude-code.name", defaultValue: "Claude Code")
         static let codexName = String(localized: "execution-agent.codex.name", defaultValue: "Codex")
-        static let oursSummary = String(localized: "execution-agent.ours.summary", defaultValue: "Use this conversation's model and tool loop.")
+        static let willDeepSummary = String(localized: "execution-agent.willdeep.summary", defaultValue: "Let WillDeep run this task with its built-in model and tools.")
         static let claudeCodeSummary = String(localized: "execution-agent.claude-code.summary", defaultValue: "Run this task with the local Claude Code CLI.")
         static let codexSummary = String(localized: "execution-agent.codex.summary", defaultValue: "Run this task with the local Codex CLI.")
-        static let pickerHelp = String(localized: "execution-agent.picker.help", defaultValue: "Choose whether this turn runs here or is delegated to the local Claude Code or Codex CLI.")
+        static let pickerHelp = String(localized: "execution-agent.picker.help", defaultValue: "Choose whether WillDeep runs this turn or delegates it to the local Claude Code or Codex CLI.")
     }
 
     nonisolated enum AgentTerminal {

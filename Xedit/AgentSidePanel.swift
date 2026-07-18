@@ -288,6 +288,39 @@ struct AgentSidePanelHost: View {
     }
 }
 
+/// The Agent remains useful without a project (chat, terminal, browser, and
+/// preview), while Files and Diff require a filesystem root. Make that
+/// boundary explicit and provide the shortest path instead of a dead end.
+struct AgentSidePanelWorkspaceRequiredView: View {
+    @EnvironmentObject private var appState: AppState
+
+    var body: some View {
+        VStack(spacing: 10) {
+            Spacer()
+            Image(systemName: "folder.badge.questionmark")
+                .font(.system(size: 22))
+                .foregroundStyle(.secondary.opacity(0.6))
+            Text(L10n.AgentSidePanel.noWorkspace)
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
+            Text(L10n.AgentSidePanel.noWorkspaceDetail)
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
+                .fixedSize(horizontal: false, vertical: true)
+            Button(L10n.AgentSidePanel.chooseWorkspace) {
+                appState.openFolderAndStartAgentSession()
+            }
+            .controlSize(.small)
+            .focusable(false)
+            Spacer()
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .padding(20)
+    }
+}
+
 // MARK: - Widget panel
 
 struct AgentSidePanelWidgetView: View {
@@ -1417,19 +1450,7 @@ struct AgentSidePanelFilesView: View {
     }
 
     private var placeholderNoWorkspace: some View {
-        VStack(spacing: 8) {
-            Spacer()
-            Image(systemName: "folder.badge.questionmark")
-                .font(.system(size: 22))
-                .foregroundStyle(.secondary.opacity(0.6))
-            Text(L10n.AgentSidePanel.noWorkspace)
-                .font(.caption)
-                .foregroundStyle(.secondary)
-                .multilineTextAlignment(.center)
-            Spacer()
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .padding(20)
+        AgentSidePanelWorkspaceRequiredView()
     }
 
     private func rebuildIfNeeded() {

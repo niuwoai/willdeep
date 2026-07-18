@@ -752,7 +752,7 @@ nonisolated enum AgentExecutionAgent: String, Codable, CaseIterable, Identifiabl
 
     var displayName: String {
         switch self {
-        case .willDeep: return L10n.ExecutionAgent.oursName
+        case .willDeep: return L10n.ExecutionAgent.willDeepName
         case .claudeCode: return L10n.ExecutionAgent.claudeCodeName
         case .codexCLI: return L10n.ExecutionAgent.codexName
         }
@@ -760,7 +760,7 @@ nonisolated enum AgentExecutionAgent: String, Codable, CaseIterable, Identifiabl
 
     var summary: String {
         switch self {
-        case .willDeep: return L10n.ExecutionAgent.oursSummary
+        case .willDeep: return L10n.ExecutionAgent.willDeepSummary
         case .claudeCode: return L10n.ExecutionAgent.claudeCodeSummary
         case .codexCLI: return L10n.ExecutionAgent.codexSummary
         }
@@ -768,7 +768,7 @@ nonisolated enum AgentExecutionAgent: String, Codable, CaseIterable, Identifiabl
 
     var symbol: String {
         switch self {
-        case .willDeep: return "person.fill"
+        case .willDeep: return "hammer.fill"
         case .claudeCode: return "sparkles.rectangle.stack"
         case .codexCLI: return "terminal"
         }

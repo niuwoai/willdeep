@@ -119,7 +119,7 @@ struct AgentSidePanelDiffView: View {
         case .empty:
             placeholder(systemImage: "checkmark.seal", text: L10n.AgentSidePanel.diffEmpty)
         case .noWorkspace:
-            placeholder(systemImage: "folder.badge.questionmark", text: L10n.AgentSidePanel.noWorkspace)
+            AgentSidePanelWorkspaceRequiredView()
         case .notRepo:
             placeholder(systemImage: "exclamationmark.triangle", text: L10n.AgentSidePanel.diffNotRepo)
         }

@@ -165,6 +165,10 @@ struct AgentChatHeader: View {
             sidePanel = nil
             return
         }
+        // Every side panel belongs to a session. Opening one from a cold
+        // Agent window should create an unbound draft instead of rendering
+        // against nil state and making the click appear to do nothing.
+        appState.ensureActiveAgentSessionForInteractiveControl()
         sidePanel = item
         appState.agentSidePanelRequest = AgentSidePanelOpenRequest(kind: item)
     }

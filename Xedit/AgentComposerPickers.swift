@@ -12,7 +12,7 @@
 //     on macOS dismiss on the slightest hover drift). Has
 //     "Recently used", "Hot", "New", and "All models" tail
 //     menus for ad-hoc model IDs not in the library entries.
-//   - `AgentExecutionPickerPill`: 我们 / Claude Code / Codex
+//   - `AgentExecutionPickerPill`: WillDeep / Claude Code / Codex
 //     execution backend selector for the next composer turn.
 //   - `AgentModePickerPill`: Normal / Plan / Goal selector. Plan locks
 //     writes until approval; Goal gathers the objective through chat

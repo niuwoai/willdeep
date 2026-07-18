@@ -107,3 +107,30 @@ struct AgentPlanModeSuggestionSendTests {
 
     private static let complexTask = "请重构认证模块，同时完成数据库迁移，并补充单元测试。"
 }
+
+@Suite
+@MainActor
+struct AgentNoWorkspaceInteractiveControlTests {
+    @Test("session-scoped composer controls materialize one unbound draft")
+    func controlsCreateAndReuseUnboundDraft() throws {
+        let appState = AppState()
+        #expect(appState.activeRuntime == nil)
+
+        appState.setAgentExecutionAgent(.codexCLI)
+        let runtime = try #require(appState.activeRuntime)
+        let sessionID = runtime.id
+
+        #expect(runtime.workspaceLocation == nil)
+        #expect(runtime.workspaceRootPath == nil)
+        #expect(runtime.executionAgent == .codexCLI)
+
+        appState.setAgentInteractionMode(.goal)
+        appState.setAgentApprovalMode(.requestEveryTime)
+        appState.activateAgentExpert(.browserOps)
+
+        #expect(appState.activeAgentSessionID == sessionID)
+        #expect(runtime.interactionMode == .goal)
+        #expect(runtime.approvalMode == .requestEveryTime)
+        #expect(runtime.activeExperts.contains(.browserOps))
+    }
+}

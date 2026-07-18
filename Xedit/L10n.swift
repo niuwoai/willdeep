@@ -910,6 +910,8 @@ nonisolated enum L10n {
         static let comingSoon = String(localized: "agent-side-panel.coming-soon", defaultValue: "Coming soon")
         static let refresh = String(localized: "agent-side-panel.refresh", defaultValue: "Refresh")
         static let noWorkspace = String(localized: "agent-side-panel.no-workspace", defaultValue: "No workspace selected for this session.")
+        static let noWorkspaceDetail = String(localized: "agent-side-panel.no-workspace-detail", defaultValue: "Choose a folder to browse files and review changes. Chat, Terminal, Browser, and Preview work without one.")
+        static let chooseWorkspace = String(localized: "agent-side-panel.choose-workspace", defaultValue: "Choose Workspace")
         static let diffLoading = String(localized: "agent-side-panel.diff-loading", defaultValue: "Computing diff…")
         static let diffEmpty = String(localized: "agent-side-panel.diff-empty", defaultValue: "No uncommitted changes.")
         static let diffNotRepo = String(localized: "agent-side-panel.diff-not-repo", defaultValue: "Not a git repository.")

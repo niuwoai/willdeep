@@ -38,6 +38,19 @@ struct AgentSessionLoadFailure: Identifiable, Equatable {
 
 extension AppState {
 
+    // MARK: - Interactive session materialization
+
+    /// Composer controls are useful before a project is chosen: a user may
+    /// select an execution backend, approval posture, or specialist pack
+    /// while starting a general-purpose conversation. Those settings are
+    /// session-scoped, so create one unbound draft on the first such action
+    /// instead of silently dropping the write because `activeRuntime` is nil.
+    /// Choosing a workspace later migrates this empty draft in place.
+    func ensureActiveAgentSessionForInteractiveControl() {
+        guard activeRuntime == nil else { return }
+        _ = startNewAgentSession(inWorkspaceAt: nil)
+    }
+
     // MARK: - Provider library
 
     /// Reflect the active library entry's tier picks back into
@@ -340,6 +353,7 @@ extension AppState {
     /// of Plan or Goal also drops any associated state so the next
     /// session pick-up starts clean.
     func setAgentInteractionMode(_ mode: AgentInteractionMode) {
+        ensureActiveAgentSessionForInteractiveControl()
         guard agentInteractionMode != mode else { return }
         cancelAgentPlanModeSuggestion()
         agentInteractionMode = mode
@@ -353,6 +367,7 @@ extension AppState {
     /// can require every approval while a local scratch chat stays
     /// frictionless.
     func setAgentApprovalMode(_ mode: AgentApprovalMode) {
+        ensureActiveAgentSessionForInteractiveControl()
         guard agentApprovalMode != mode else { return }
         agentApprovalMode = mode
         persistActiveAgentSession()
@@ -363,6 +378,7 @@ extension AppState {
     /// controls whether the next user turn runs natively or delegates to
     /// an external coding-agent CLI.
     func setAgentExecutionAgent(_ agent: AgentExecutionAgent) {
+        ensureActiveAgentSessionForInteractiveControl()
         guard agentExecutionAgent != agent else { return }
         agentExecutionAgent = agent
         persistActiveAgentSession()
@@ -372,6 +388,7 @@ extension AppState {
     /// the model-facing tool surface and add a small domain contract once
     /// enabled.
     func activateAgentExpert(_ expert: AgentExpert) {
+        ensureActiveAgentSessionForInteractiveControl()
         var experts = agentActiveExperts
         guard !experts.contains(expert) else { return }
         experts.insert(expert)
@@ -1785,9 +1802,7 @@ extension AppState {
         // The model picker is available before a workspace is chosen. Materialize
         // an unbound conversation so the user's selection has a real session to
         // land on; choosing a folder later rebinds this empty runtime in place.
-        if activeRuntime == nil {
-            startNewAgentSession(inWorkspaceAt: nil)
-        }
+        ensureActiveAgentSessionForInteractiveControl()
         let previousModel = previousModelForNotice ?? activeAgentModelSelectionLabel
         // Picking any explicit model (or route-default) exits managed
         // routing — the three session-selection states (route default /

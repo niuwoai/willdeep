@@ -3313,6 +3313,40 @@
         }
       }
     },
+    "agent-side-panel.no-workspace-detail" : {
+      "extractionState" : "extracted_with_value",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Choose a folder to browse files and review changes. Chat, Terminal, Browser, and Preview work without one."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "选择一个文件夹后即可浏览文件与查看变更；聊天、终端、浏览器和预览无需工作区也能直接使用。"
+          }
+        }
+      }
+    },
+    "agent-side-panel.choose-workspace" : {
+      "extractionState" : "extracted_with_value",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Choose Workspace"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "选择工作区"
+          }
+        }
+      }
+    },
     "agent-side-panel.plan" : {
       "extractionState" : "extracted_with_value",
       "localizations" : {
@@ -10394,25 +10428,25 @@
         "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "通过本机 Codex CLI 执行这轮任务。" } }
       }
     },
-    "execution-agent.ours.name" : {
+    "execution-agent.willdeep.name" : {
       "extractionState" : "manual",
       "localizations" : {
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "Us" } },
-        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "我们" } }
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "WillDeep" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "WillDeep" } }
       }
     },
-    "execution-agent.ours.summary" : {
+    "execution-agent.willdeep.summary" : {
       "extractionState" : "manual",
       "localizations" : {
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "Use this conversation's model and tool loop." } },
-        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "使用当前会话自己的模型和工具循环。" } }
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Let WillDeep run this task with its built-in model and tools." } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "由 WillDeep 使用内置模型和工具执行这轮任务。" } }
       }
     },
     "execution-agent.picker.help" : {
       "extractionState" : "manual",
       "localizations" : {
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "Choose whether this turn runs here or is delegated to the local Claude Code or Codex CLI." } },
-        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "选择这一轮由我们执行，还是委托给本机 Claude Code 或 Codex CLI。" } }
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Choose whether WillDeep runs this turn or delegates it to the local Claude Code or Codex CLI." } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "选择这一轮由 WillDeep 执行，还是委托给本机 Claude Code 或 Codex CLI。" } }
       }
     },
     "expert.picker-help" : {
