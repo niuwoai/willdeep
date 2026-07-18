@@ -57,6 +57,13 @@ nonisolated enum AgentMessageSource: String, Codable, Equatable {
     case hostInstruction
 }
 
+/// A local-only marker rendered in the transcript. These events are stored
+/// with the conversation for auditability, but must never be sent to a model
+/// as chat context.
+nonisolated enum AgentTranscriptEvent: String, Codable, Equatable {
+    case modelChanged
+}
+
 nonisolated enum AgentImageAttachmentSource: String, Codable, Equatable, Sendable {
     case userUpload
     case generated
@@ -481,6 +488,10 @@ nonisolated struct AgentMessage: Identifiable, Codable, Equatable {
     /// instruction sent after approving a plan) remain model context without
     /// impersonating text typed by the operator in the transcript.
     var source: AgentMessageSource?
+    /// Presentation-only event metadata for system messages such as a model
+    /// switch. Unlike ordinary `.system` messages, these are visible in the
+    /// transcript and excluded from every provider request.
+    var transcriptEvent: AgentTranscriptEvent?
     /// Distinguishes native provider turns from external CLI delegated
     /// results so cache/cost analytics don't mix black-box CLI output
     /// into WillDeep's provider-side cache rate.
@@ -530,6 +541,7 @@ nonisolated struct AgentMessage: Identifiable, Codable, Equatable {
         reasoningTokens: Int? = nil,
         elapsedSeconds: Double? = nil,
         source: AgentMessageSource? = nil,
+        transcriptEvent: AgentTranscriptEvent? = nil,
         origin: AgentMessageOrigin? = nil,
         originLabel: String? = nil,
         requestPrefixHash: String? = nil,
@@ -558,6 +570,7 @@ nonisolated struct AgentMessage: Identifiable, Codable, Equatable {
         self.reasoningTokens = reasoningTokens
         self.elapsedSeconds = elapsedSeconds
         self.source = source
+        self.transcriptEvent = transcriptEvent
         self.origin = origin
         self.originLabel = originLabel
         self.requestPrefixHash = requestPrefixHash
@@ -576,7 +589,7 @@ nonisolated struct AgentMessage: Identifiable, Codable, Equatable {
         case toolCallStatus, toolErrorMessage
         case usageTokens, promptTokens, completionTokens
         case cachedPromptTokens, cacheWritePromptTokens, reasoningTokens
-        case elapsedSeconds, source
+        case elapsedSeconds, source, transcriptEvent
         case origin, originLabel, requestPrefixHash, requestStablePrefixCharacters
         case managedRoute, workflowReport
         case scheduledTask
@@ -603,6 +616,7 @@ nonisolated struct AgentMessage: Identifiable, Codable, Equatable {
         reasoningTokens = try container.decodeIfPresent(Int.self, forKey: .reasoningTokens)
         elapsedSeconds = try container.decodeIfPresent(Double.self, forKey: .elapsedSeconds)
         source = try container.decodeIfPresent(AgentMessageSource.self, forKey: .source)
+        transcriptEvent = try container.decodeIfPresent(AgentTranscriptEvent.self, forKey: .transcriptEvent)
         origin = try container.decodeIfPresent(AgentMessageOrigin.self, forKey: .origin)
         originLabel = try container.decodeIfPresent(String.self, forKey: .originLabel)
         requestPrefixHash = try container.decodeIfPresent(String.self, forKey: .requestPrefixHash)
@@ -615,6 +629,10 @@ nonisolated struct AgentMessage: Identifiable, Codable, Equatable {
 }
 
 extension AgentMessage {
+    nonisolated var isLocalTranscriptEvent: Bool {
+        transcriptEvent != nil
+    }
+
     /// Older sessions predate `source`; recognize the one host-only prompt
     /// that was previously persisted as a visible user message so reopening a
     /// conversation does not keep showing text the operator never typed.

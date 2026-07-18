@@ -548,27 +548,64 @@ extension AppState {
 
     func refreshAgentGitWorktrees() {
         guard let targetDirectory = activeAgentLocalWorkspaceURL ?? rootDirectory?.standardizedFileURL else {
+            agentGitWorktreeRefreshTask?.cancel()
+            agentGitWorktreeRefreshTask = nil
+            agentGitWorktreeRefreshPath = nil
             agentGitWorktrees = []
             agentWorkspaceGitStatus = GitRepositoryStatus()
             return
         }
 
-        Task { [weak self] in
+        let targetPath = targetDirectory.path
+        if agentGitWorktreeRefreshPath == targetPath,
+           agentGitWorktreeRefreshTask != nil {
+            return
+        }
+
+        agentGitWorktreeRefreshTask?.cancel()
+        agentGitWorktreeRefreshPath = targetPath
+        agentGitWorktreeRefreshTask = Task { [weak self] in
             let context = await Task.detached(priority: .utility) {
                 (
                     worktrees: Self.listGitWorktrees(for: targetDirectory),
-                    status: Self.loadGitStatus(for: targetDirectory)
+                    // The workspace picker only consumes repository identity
+                    // and branch here. Do not launch a second full `git status`
+                    // beside the editor's own refresh.
+                    status: Self.loadAgentGitRepositoryIdentity(for: targetDirectory)
                 )
             }.value
 
             await MainActor.run {
-                guard let self, self.activeAgentLocalWorkspaceURL?.path == targetDirectory.path
+                guard let self else { return }
+                defer {
+                    if self.agentGitWorktreeRefreshPath == targetPath {
+                        self.agentGitWorktreeRefreshTask = nil
+                        self.agentGitWorktreeRefreshPath = nil
+                    }
+                }
+                let isCurrentWorkspace = self.activeAgentLocalWorkspaceURL?.path == targetPath
                     || (self.activeAgentLocalWorkspaceURL == nil
-                        && self.rootDirectory?.standardizedFileURL.path == targetDirectory.path) else { return }
+                        && self.rootDirectory?.standardizedFileURL.path == targetPath)
+                guard !Task.isCancelled, isCurrentWorkspace else { return }
                 self.agentGitWorktrees = context.worktrees
                 self.agentWorkspaceGitStatus = context.status
             }
         }
+    }
+
+    nonisolated private static func loadAgentGitRepositoryIdentity(
+        for directoryURL: URL
+    ) -> GitRepositoryStatus {
+        guard let repositoryRoot = findGitRepositoryRoot(startingAt: directoryURL) else {
+            return GitRepositoryStatus()
+        }
+        let branch = runGit(arguments: ["branch", "--show-current"], in: repositoryRoot)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        return GitRepositoryStatus(
+            repositoryRoot: repositoryRoot,
+            branchName: branch.isEmpty ? "detached" : branch,
+            entries: [:]
+        )
     }
 
     func createAgentGitWorktreeFromActiveWorkspace() {

@@ -61,8 +61,34 @@ ensure
 end
 
 check.call("CLI 支持安全的本地演练参数") do
-  options = WillDeepRelease::CLI.parse(%w[--dry-run --skip-tests --skip-notarize --skip-upload])
-  assert.call(options.values_at(:dry_run, :skip_tests, :skip_notarize, :skip_upload).all?, "CLI flags were not parsed")
+  options = WillDeepRelease::CLI.parse(%w[--dry-run --skip-tests --skip-notarize --skip-upload --skip-update-metadata])
+  assert.call(
+    options.values_at(:dry_run, :skip_tests, :skip_notarize, :skip_upload, :skip_update_metadata).all?,
+    "CLI flags were not parsed"
+  )
+end
+
+check.call("CLI 支持从既有 DMG 恢复发布 appcast 元数据") do
+  options = WillDeepRelease::CLI.parse(
+    %w[--publish-metadata-only /tmp/WillDeep-1.2.3-rc1.dmg --release-version 1.2.3-rc1 --bundle-version 42]
+  )
+  assert.call(options[:publish_metadata_only] == "/tmp/WillDeep-1.2.3-rc1.dmg", "metadata-only DMG path missing")
+  assert.call(options[:release_version] == "1.2.3-rc1", "release version override missing")
+  assert.call(options[:bundle_version] == 42, "bundle version override missing")
+end
+
+check.call("appcast 发布时间使用 MySQL TIMESTAMP 兼容格式") do
+  release = WillDeepRelease::Release.new(
+    dry_run: true,
+    clean: false,
+    skip_tests: true,
+    skip_notarize: true,
+    skip_upload: true,
+    skip_update_metadata: true,
+    build_root: File.join(Dir.tmpdir, "willdeep-release-contract")
+  )
+  timestamp = release.send(:database_timestamp, Time.utc(2026, 7, 18, 3, 4, 5))
+  assert.call(timestamp == "2026-07-18 03:04:05", "unexpected database timestamp: #{timestamp}")
 end
 
 check.call("OSS 同时生成版本对象和 latest 对象") do
@@ -97,6 +123,151 @@ check.call("clean 构建目录限制在仓库 build 或系统临时目录") do
     next
   end
   raise "unsafe build root was accepted"
+end
+
+check.call("发布导出会为嵌套可执行文件启用 hardened runtime") do
+  Dir.mktmpdir("willdeep-release-signing") do |directory|
+    app_path = File.join(directory, "WillDeep.app")
+    nested_paths = WillDeepRelease::NOTARIZATION_NESTED_CODE_PATHS.map do |relative_path|
+      File.join(app_path, relative_path)
+    end
+    nested_paths.each do |path|
+      if File.extname(path) == ".app"
+        FileUtils.mkdir_p(path)
+      else
+        FileUtils.mkdir_p(File.dirname(path))
+        File.write(path, "test executable")
+      end
+    end
+
+    runner = Object.new
+    commands = []
+    runner.define_singleton_method(:run!) do |arguments|
+      commands << arguments
+      ""
+    end
+
+    release = WillDeepRelease::Release.new(
+      dry_run: true,
+      clean: false,
+      skip_tests: true,
+      skip_notarize: true,
+      skip_upload: true,
+      build_root: File.join(Dir.tmpdir, "willdeep-release-contract")
+    )
+    release.instance_variable_set(:@paths, { app: app_path })
+    release.instance_variable_set(:@identity, "TEST_DEVELOPER_ID")
+    release.instance_variable_set(:@runner, runner)
+    release.send(:resign_exported_app_for_notarization)
+
+    assert.call(commands.length == nested_paths.length + 1, "unexpected codesign command count: #{commands.length}")
+    commands.each do |command|
+      assert.call(command.include?("--timestamp"), "codesign command omitted timestamp: #{command.inspect}")
+      runtime_index = command.index("--options")
+      assert.call(runtime_index && command[runtime_index + 1] == "runtime", "codesign command omitted hardened runtime: #{command.inspect}")
+    end
+    assert.call(
+      commands.last.include?("--preserve-metadata=#{WillDeepRelease::PRESERVED_APP_SIGNATURE_METADATA}"),
+      "outer app signature did not preserve metadata"
+    )
+  end
+end
+
+check.call("create-dmg 路径不会重复创建 Applications 链接") do
+  Dir.mktmpdir("willdeep-release-dmg") do |directory|
+    app_path = File.join(directory, "export", "WillDeep.app")
+    dmg_source = File.join(directory, "dmg-src")
+    FileUtils.mkdir_p(app_path)
+
+    runner = Object.new
+    runner.define_singleton_method(:run!) { |_arguments| "" }
+    release = WillDeepRelease::Release.new(
+      dry_run: true,
+      clean: false,
+      skip_tests: true,
+      skip_notarize: true,
+      skip_upload: true,
+      build_root: File.join(Dir.tmpdir, "willdeep-release-contract")
+    )
+    release.instance_variable_set(
+      :@paths,
+      {
+        app: app_path,
+        dmg_source: dmg_source,
+        staged_app: File.join(dmg_source, "WillDeep.app")
+      }
+    )
+    release.instance_variable_set(:@runner, runner)
+    release.define_singleton_method(:command_available?) { |command| command == "create-dmg" }
+    release.send(:stage_app_for_dmg)
+
+    assert.call(!File.exist?(File.join(dmg_source, "Applications")), "Applications link was pre-created for create-dmg")
+  end
+end
+
+check.call("Sparkle 更新签名会校验签名片段与真实文件大小") do
+  Dir.mktmpdir("willdeep-release-sparkle") do |directory|
+    dmg_path = File.join(directory, "WillDeep.dmg")
+    sign_update_path = File.join(directory, "sign_update")
+    File.write(dmg_path, "signed release payload")
+    File.write(sign_update_path, "test executable")
+    FileUtils.chmod(0o755, sign_update_path)
+    signature = "A" * 86 + "=="
+
+    runner = Object.new
+    runner.define_singleton_method(:capture!) do |arguments|
+      raise "unexpected sign_update path" unless arguments == [sign_update_path, dmg_path]
+
+      %(sparkle:edSignature="#{signature}" length="#{File.size(dmg_path)}")
+    end
+    release = WillDeepRelease::Release.new(
+      dry_run: true,
+      clean: false,
+      skip_tests: true,
+      skip_notarize: true,
+      skip_upload: true,
+      skip_update_metadata: true,
+      build_root: File.join(Dir.tmpdir, "willdeep-release-contract")
+    )
+    release.instance_variable_set(:@paths, { dmg: dmg_path, source_packages: directory })
+    release.instance_variable_set(:@runner, runner)
+    previous = ENV["SPARKLE_SIGN_UPDATE_BIN"]
+    ENV["SPARKLE_SIGN_UPDATE_BIN"] = sign_update_path
+    release.send(:sign_update_archive)
+
+    assert.call(release.instance_variable_get(:@sparkle_ed_signature) == signature, "signature was not retained")
+    assert.call(release.instance_variable_get(:@sparkle_file_size) == File.size(dmg_path), "file size was not retained")
+  ensure
+    ENV["SPARKLE_SIGN_UPDATE_BIN"] = previous
+  end
+end
+
+check.call("新版本必须递增 Sparkle bundle version") do
+  release = WillDeepRelease::Release.new(
+    dry_run: true,
+    clean: false,
+    skip_tests: true,
+    skip_notarize: true,
+    skip_upload: true,
+    skip_update_metadata: true,
+    build_root: File.join(Dir.tmpdir, "willdeep-release-contract")
+  )
+  current_version = release.instance_variable_get(:@version)
+  current_bundle_version = release.instance_variable_get(:@bundle_version)
+  release.send(
+    :validate_existing_bundle_version!,
+    { "latest_version" => current_version, "bundle_version" => current_bundle_version }
+  )
+
+  begin
+    release.send(
+      :validate_existing_bundle_version!,
+      { "latest_version" => "0.0.1", "bundle_version" => current_bundle_version }
+    )
+  rescue WillDeepRelease::ReleaseError
+    next
+  end
+  raise "new user version reused the existing bundle version"
 end
 
 ok = results.all? { |result| result[:ok] }

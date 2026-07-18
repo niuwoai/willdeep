@@ -176,6 +176,7 @@ extension AppState {
     func retryLastAgentTurn() {
         guard canRetryLastAgentTurn,
               let runtime = activeRuntime else { return }
+        repairSomeIMProviderCredentialsForTurnIfNeeded(for: runtime)
         let configuration = configurationForCurrentTurn(for: runtime)
 
         // Re-check the some.im login gate: if they clicked 重试 while still

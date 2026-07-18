@@ -664,6 +664,7 @@ struct AgentChatTranscript: View {
             // right-side jobs drawer, not the transcript.
             // `.workflowReport` (1.81.0-rc1) is rendered as a custom card
             // — explicitly allowed through.
+            if message.isLocalTranscriptEvent { return message }
             if message.role == .workflowReport { return message }
             if message.role == .widget { return message }
             if message.role == .scheduledTask { return message }

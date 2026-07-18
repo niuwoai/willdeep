@@ -35,28 +35,136 @@ enum AgentChromeTools {
         return AgentToolResult(summary: "Read Chrome selection", payload: prettyJSONString(data))
     }
 
+    static func snapshot(arguments: [String: AgentJSONValue]) async throws -> AgentToolResult {
+        let maxElements = arguments["max_elements"]?.intValue().map { max(1, min($0, 600)) } ?? 240
+        let data = try await bridgeRequest(type: "page.snapshot", payload: ["maxElements": maxElements])
+        return AgentToolResult(summary: "Captured structured Chrome DOM snapshot", payload: prettyJSONString(data))
+    }
+
+    static func listTabs(arguments: [String: AgentJSONValue]) async throws -> AgentToolResult {
+        let data = try await bridgeRequest(type: "tab.list", payload: [:])
+        return AgentToolResult(summary: "Listed Chrome tabs", payload: prettyJSONString(data))
+    }
+
+    static func activateTab(arguments: [String: AgentJSONValue]) async throws -> AgentToolResult {
+        guard let tabID = arguments["tab_id"]?.intValue() else { throw AgentToolError.missingArgument("tab_id") }
+        let data = try await bridgeRequest(type: "tab.activate", payload: ["tabId": tabID])
+        return AgentToolResult(summary: "Activated Chrome tab", payload: prettyJSONString(data))
+    }
+
+    static func navigate(arguments: [String: AgentJSONValue]) async throws -> AgentToolResult {
+        let url = try requiredString("url", arguments: arguments)
+        let data = try await bridgeRequest(type: "tab.navigate", payload: ["url": url])
+        return AgentToolResult(summary: "Navigated active Chrome tab", payload: prettyJSONString(data))
+    }
+
+    static func history(arguments: [String: AgentJSONValue]) async throws -> AgentToolResult {
+        let direction = try requiredString("direction", arguments: arguments).lowercased()
+        guard ["back", "forward", "reload"].contains(direction) else {
+            throw AgentToolError.invalidArgument("direction must be back, forward, or reload.")
+        }
+        let data = try await bridgeRequest(
+            type: "tab.history",
+            payload: ["direction": direction, "bypassCache": arguments["bypass_cache"]?.boolValue() ?? false]
+        )
+        return AgentToolResult(summary: "Changed Chrome navigation history", payload: prettyJSONString(data))
+    }
+
     static func click(arguments: [String: AgentJSONValue]) async throws -> AgentToolResult {
-        let selector = try requiredString("selector", arguments: arguments)
+        let target = try elementTargetPayload(arguments)
         let data = try await bridgeRequest(
             type: "page.click",
-            payload: ["selector": selector]
+            payload: target
         )
         return AgentToolResult(summary: "Clicked Chrome element", payload: prettyJSONString(data))
     }
 
     static func typeText(arguments: [String: AgentJSONValue]) async throws -> AgentToolResult {
-        let selector = try requiredString("selector", arguments: arguments)
         let text = try requiredString("text", arguments: arguments)
+        var payload = try elementTargetPayload(arguments)
+        payload["text"] = text
         let data = try await bridgeRequest(
             type: "page.type",
-            payload: ["selector": selector, "text": text]
+            payload: payload
         )
         return AgentToolResult(summary: "Typed into Chrome element", payload: prettyJSONString(data))
     }
 
+    static func hover(arguments: [String: AgentJSONValue]) async throws -> AgentToolResult {
+        let target = try elementTargetPayload(arguments)
+        let data = try await bridgeRequest(type: "page.hover", payload: target)
+        return AgentToolResult(summary: "Hovered over Chrome element", payload: prettyJSONString(data))
+    }
+
+    static func selectOption(arguments: [String: AgentJSONValue]) async throws -> AgentToolResult {
+        var payload = try elementTargetPayload(arguments)
+        let value = arguments["value"]?.stringValue()?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        let label = arguments["label"]?.stringValue()?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        guard value.isEmpty || label.isEmpty else {
+            throw AgentToolError.invalidArgument("Provide option value or label, not both.")
+        }
+        guard !value.isEmpty || !label.isEmpty else {
+            throw AgentToolError.invalidArgument("Provide option value or label.")
+        }
+        if !value.isEmpty { payload["value"] = value }
+        if !label.isEmpty { payload["label"] = label }
+        let data = try await bridgeRequest(type: "page.select_option", payload: payload)
+        return AgentToolResult(summary: "Selected Chrome option", payload: prettyJSONString(data))
+    }
+
+    static func pressKey(arguments: [String: AgentJSONValue]) async throws -> AgentToolResult {
+        let key = try requiredString("key", arguments: arguments)
+        var payload = try optionalElementTargetPayload(arguments)
+        payload["key"] = key
+        for (source, destination) in [
+            ("code", "code"), ("alt_key", "alt_key"), ("ctrl_key", "ctrl_key"),
+            ("meta_key", "meta_key"), ("shift_key", "shift_key")
+        ] {
+            if let value = arguments[source] { payload[destination] = value.rawAny }
+        }
+        let data = try await bridgeRequest(type: "page.key", payload: payload)
+        return AgentToolResult(summary: "Pressed a key in Chrome", payload: prettyJSONString(data))
+    }
+
+    static func scroll(arguments: [String: AgentJSONValue]) async throws -> AgentToolResult {
+        let direction = try requiredString("direction", arguments: arguments).lowercased()
+        guard ["up", "down", "left", "right"].contains(direction) else {
+            throw AgentToolError.invalidArgument("direction must be up, down, left, or right.")
+        }
+        var payload = try optionalElementTargetPayload(arguments)
+        payload["direction"] = direction
+        if let pages = arguments["pages"]?.intValue() { payload["pages"] = max(1, min(pages, 8)) }
+        let data = try await bridgeRequest(type: "page.scroll", payload: payload)
+        return AgentToolResult(summary: "Scrolled Chrome page", payload: prettyJSONString(data))
+    }
+
+    static func waitFor(arguments: [String: AgentJSONValue]) async throws -> AgentToolResult {
+        let condition = try requiredString("condition", arguments: arguments).lowercased()
+        guard ["selector", "text", "url_contains", "title_contains"].contains(condition) else {
+            throw AgentToolError.invalidArgument("Unsupported wait condition.")
+        }
+        let value = try requiredString("value", arguments: arguments)
+        let timeoutMS = max(100, min(arguments["timeout_ms"]?.intValue() ?? 8_000, 8_000))
+        let data = try await bridgeRequest(
+            type: "page.wait",
+            payload: ["condition": condition, "value": value, "timeoutMs": timeoutMS]
+        )
+        return AgentToolResult(summary: "Waited for Chrome page condition", payload: prettyJSONString(data))
+    }
+
     static func captureTab(arguments: [String: AgentJSONValue]) async throws -> AgentToolResult {
         let data = try await bridgeRequest(type: "tab.capture", payload: [:])
-        return AgentToolResult(summary: "Captured visible Chrome tab", payload: prettyJSONString(data))
+        guard var object = data as? [String: Any],
+              let dataURL = object.removeValue(forKey: "image_data_url") as? String,
+              let comma = dataURL.firstIndex(of: ","),
+              dataURL[..<comma].contains(";base64"),
+              let imageData = Data(base64Encoded: String(dataURL[dataURL.index(after: comma)...])) else {
+            throw AgentToolError.invalidArgument("Chrome bridge returned an invalid screenshot.")
+        }
+        let image = try AgentImageAttachment.fileBacked(data: imageData, mimeType: "image/png")
+        object["image_byte_count"] = imageData.count
+        object["path"] = image.filePath
+        return AgentToolResult(summary: "Captured visible Chrome tab", payload: prettyJSONString(object), images: [image])
     }
 
     static func debuggerCommand(arguments: [String: AgentJSONValue]) async throws -> AgentToolResult {
@@ -175,5 +283,24 @@ enum AgentChromeTools {
             throw AgentToolError.missingArgument(name)
         }
         return value
+    }
+
+    private static func elementTargetPayload(_ arguments: [String: AgentJSONValue]) throws -> [String: Any] {
+        let payload = try optionalElementTargetPayload(arguments)
+        guard !payload.isEmpty else {
+            throw AgentToolError.invalidArgument("Provide a fresh DOM ref or a unique CSS selector.")
+        }
+        return payload
+    }
+
+    private static func optionalElementTargetPayload(_ arguments: [String: AgentJSONValue]) throws -> [String: Any] {
+        let ref = arguments["ref"]?.stringValue()?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        let selector = arguments["selector"]?.stringValue()?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        guard ref.isEmpty || selector.isEmpty else {
+            throw AgentToolError.invalidArgument("Provide ref or selector, not both.")
+        }
+        if !ref.isEmpty { return ["ref": ref] }
+        if !selector.isEmpty { return ["selector": selector] }
+        return [:]
     }
 }

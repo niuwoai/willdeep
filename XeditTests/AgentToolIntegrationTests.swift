@@ -1517,29 +1517,26 @@ extension WillDeepTests {
 
     @Test("tool approval actions keep a comfortably clickable hit target")
     func testToolApprovalActionMetrics() {
-        #expect(AgentApprovalActionMetrics.minimumButtonHeight >= 36)
-        #expect(AgentApprovalActionMetrics.minimumButtonWidth >= 88)
-        #expect(AgentApprovalActionMetrics.spacing >= 8)
-        #expect(AgentApprovalActionMetrics.cornerRadius >= 8)
+        #expect(AgentApprovalActionMetrics.minimumButtonHeight >= 40)
+        #expect(AgentApprovalActionMetrics.minimumButtonWidth >= 108)
+        #expect(AgentApprovalActionMetrics.spacing >= 10)
+        #expect(AgentApprovalActionMetrics.cornerRadius >= 12)
     }
 
     @Test("command confirmation stays calm, scrollable, and honest about shortcuts")
     func testCommandConfirmationReviewMetrics() {
-        #expect(AgentConfirmationReviewMetrics.commandVisibleLineCount == 2)
-        #expect(AgentConfirmationReviewMetrics.commandViewportHeight >= 52)
-        #expect(AgentConfirmationReviewMetrics.commandViewportHeight <= 60)
-        #expect(AgentConfirmationReviewMetrics.decisionColumnWidth >= 240)
-        #expect(AgentConfirmationReviewMetrics.actionButtonHeight >= 26)
-        #expect(AgentConfirmationReviewMetrics.actionButtonHeight <= 30)
-        #expect(AgentConfirmationReviewMetrics.actionButtonMaxWidth >= 112)
-        #expect(AgentConfirmationReviewMetrics.actionButtonMaxWidth <= 132)
-        #expect(AgentConfirmationReviewMetrics.actionButtonSpacing >= 20)
-        #expect(
-            AgentConfirmationReviewMetrics.actionButtonSpacing
-                > AgentApprovalActionMetrics.spacing
-        )
+        #expect(AgentConfirmationReviewMetrics.commandVisibleLineCount == 3)
+        #expect(AgentConfirmationReviewMetrics.commandViewportHeight >= 68)
+        #expect(AgentConfirmationReviewMetrics.commandViewportHeight <= 76)
+        #expect(AgentConfirmationReviewMetrics.actionButtonHeight >= 40)
+        #expect(AgentConfirmationReviewMetrics.actionButtonHeight <= 44)
+        #expect(AgentConfirmationReviewMetrics.actionButtonMaxWidth >= 148)
+        #expect(AgentConfirmationReviewMetrics.actionButtonMaxWidth <= 164)
+        #expect(AgentConfirmationReviewMetrics.actionButtonSpacing >= 10)
+        #expect(AgentConfirmationReviewMetrics.outerCornerRadius >= 18)
+        #expect(AgentConfirmationReviewMetrics.innerCornerRadius >= 12)
         #expect(AgentConfirmationReviewMetrics.horizontalMinimumWidth >= 640)
-        #expect(AgentConfirmationReviewMetrics.horizontalMinimumWidth <= 720)
+        #expect(AgentConfirmationReviewMetrics.horizontalMinimumWidth <= 740)
         #expect(
             AgentConfirmationReviewMetrics.usesHorizontalLayout(
                 availableWidth: AgentConfirmationReviewMetrics.horizontalMinimumWidth
@@ -2806,4 +2803,47 @@ extension WillDeepTests {
         #expect(!result.payload.contains("node_modules"))
     }
 
+}
+
+@Suite
+struct AgentAuthorizationNoticeTests {
+    @Test("authorization notice copy adapts to command, terminal, and web access")
+    func descriptorsAdaptToToolContext() {
+        let command = AgentApprovalNoticeCopy.descriptor(
+            toolName: "run_command",
+            arguments: [
+                "command": .string("yarn test"),
+                "cwd": .string("/tmp/Xedit"),
+            ]
+        )
+        #expect(command.title == "Agent 准备执行一条命令")
+        #expect(command.approveTitle == "继续")
+        #expect(command.declineTitle == "暂不执行")
+        #expect(command.metadata.contains("在 Xedit 工作区运行"))
+
+        let terminal = AgentApprovalNoticeCopy.descriptor(
+            toolName: "terminal_send_command",
+            arguments: [
+                "command": .string("yarn dev"),
+                "terminal_tab_id": .string("sidebar-1"),
+            ]
+        )
+        #expect(terminal.title == "Agent 准备发送命令到终端")
+        #expect(terminal.approveTitle == "发送到终端")
+        #expect(terminal.metadata.contains("侧边栏可见"))
+        #expect(terminal.metadata.contains("指定终端标签"))
+
+        let web = AgentApprovalNoticeCopy.descriptor(
+            toolName: "web_fetch",
+            arguments: [
+                "url": .string("https://example.com"),
+                "max_chars": .number(12_000),
+            ]
+        )
+        #expect(web.title == "Agent 想读取一个网页")
+        #expect(web.approveTitle == "本次允许")
+        #expect(web.declineTitle == "暂不访问")
+        #expect(web.metadata.contains("仅发送 GET 请求"))
+        #expect(web.metadata.contains { $0.hasPrefix("最多读取 12") })
+    }
 }

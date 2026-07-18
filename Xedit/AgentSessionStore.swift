@@ -565,6 +565,95 @@ nonisolated enum AgentSessionStore {
             .appendingPathComponent("agent-sessions", isDirectory: true)
     }
 
+    /// The product was named VeilWriter before 1.59. The rename changed the
+    /// Application Support directory but did not move existing conversations,
+    /// which also made usage tokens and streaks appear to reset. Keep this as
+    /// a retryable, idempotent import rather than a one-shot defaults flag:
+    /// files may arrive later from a backup or another still-running old build.
+    private static var legacyDirectories: [URL] {
+        let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
+            ?? FileManager.default.temporaryDirectory
+        return [
+            base.appendingPathComponent("VeilWriter", isDirectory: true)
+                .appendingPathComponent("agent-sessions", isDirectory: true)
+        ]
+    }
+
+    private static func importLegacySessionsIfNeeded() {
+        writeQueue.sync {
+            do {
+                try ensureDirectory()
+                let importedCount = try legacyDirectories.reduce(into: 0) { count, legacyDirectory in
+                    count += try importLegacySessions(
+                        from: legacyDirectory,
+                        into: directory
+                    )
+                }
+                if importedCount > 0 {
+                    print("AgentSessionStore: imported \(importedCount) legacy session(s)")
+                }
+            } catch {
+                // A failed import must not prevent current WillDeep sessions
+                // from loading. Because no completion marker is written, the
+                // next launch safely retries files that are still absent.
+                print("AgentSessionStore: failed to import legacy sessions: \(error)")
+            }
+        }
+    }
+
+    /// Validates and imports legacy session JSON without deleting its source.
+    /// Existing destination IDs always win, so repeated launches and an old
+    /// app process writing concurrently cannot overwrite newer WillDeep data.
+    @discardableResult
+    static func importLegacySessions(
+        from sourceDirectory: URL,
+        into destinationDirectory: URL
+    ) throws -> Int {
+        let fileManager = FileManager.default
+        let standardizedSource = sourceDirectory.standardizedFileURL
+        let standardizedDestination = destinationDirectory.standardizedFileURL
+        guard standardizedSource != standardizedDestination else { return 0 }
+
+        var sourceIsDirectory: ObjCBool = false
+        guard fileManager.fileExists(atPath: standardizedSource.path, isDirectory: &sourceIsDirectory),
+              sourceIsDirectory.boolValue else {
+            return 0
+        }
+        var destinationIsDirectory: ObjCBool = false
+        if !fileManager.fileExists(atPath: standardizedDestination.path, isDirectory: &destinationIsDirectory) {
+            try fileManager.createDirectory(at: standardizedDestination, withIntermediateDirectories: true)
+        } else if !destinationIsDirectory.boolValue {
+            throw CocoaError(.fileWriteFileExists)
+        }
+
+        let sourceURLs = try fileManager.contentsOfDirectory(
+            at: standardizedSource,
+            includingPropertiesForKeys: nil,
+            options: [.skipsHiddenFiles]
+        )
+        var importedCount = 0
+        for sourceURL in sourceURLs where sourceURL.pathExtension.lowercased() == "json" {
+            let data: Data
+            let session: AgentSession
+            do {
+                data = try Data(contentsOf: sourceURL)
+                session = try decoder.decode(AgentSession.self, from: data)
+            } catch {
+                // One corrupt legacy conversation must not block every other
+                // recoverable session in the directory.
+                print("AgentSessionStore: skipping unreadable legacy session \(sourceURL.lastPathComponent): \(error)")
+                continue
+            }
+
+            let destinationURL = standardizedDestination
+                .appendingPathComponent("\(session.id.uuidString).json")
+            if try coordinatedImportIfAbsent(data, to: destinationURL) {
+                importedCount += 1
+            }
+        }
+        return importedCount
+    }
+
     /// Lightweight launch index. Keeping it in a child directory prevents
     /// its JSON files from being mistaken for full conversation files by
     /// legacy builds that enumerate `agent-sessions/*.json`.
@@ -680,6 +769,8 @@ nonisolated enum AgentSessionStore {
     /// Full messages are materialized by `load(id:)` when the user opens a
     /// session. Usage analytics are deliberately not loaded here.
     static func loadAll() -> [AgentSession] {
+        importLegacySessionsIfNeeded()
+
         var sessions: [AgentSession] = []
         var metadataOnlyIDs: Set<UUID> = []
         var metadataOnlyUserMessageIDs: Set<UUID> = []
@@ -733,6 +824,8 @@ nonisolated enum AgentSessionStore {
     }
 
     static func loadUsageSnapshots() -> [AgentUsageSessionSnapshot] {
+        importLegacySessionsIfNeeded()
+
         let dir = directory
         var isDir: ObjCBool = false
         guard FileManager.default.fileExists(atPath: dir.path, isDirectory: &isDir), isDir.boolValue else {
@@ -906,6 +999,33 @@ nonisolated enum AgentSessionStore {
             return
         }
         if let writeError { throw writeError }
+    }
+
+    /// Writes an imported file only when the destination is still absent.
+    /// The existence check lives inside the coordinated write slot so two
+    /// WillDeep processes launching together cannot replace one another's
+    /// current session with the legacy copy.
+    private static func coordinatedImportIfAbsent(_ data: Data, to url: URL) throws -> Bool {
+        let coordinator = NSFileCoordinator()
+        var coordinationError: NSError?
+        var importError: Error?
+        var didImport = false
+        coordinator.coordinate(writingItemAt: url, options: [.forReplacing], error: &coordinationError) { writeURL in
+            guard !FileManager.default.fileExists(atPath: writeURL.path) else { return }
+            do {
+                try data.write(to: writeURL, options: .atomic)
+                didImport = true
+            } catch {
+                importError = error
+            }
+        }
+        if coordinationError != nil {
+            guard !FileManager.default.fileExists(atPath: url.path) else { return false }
+            try data.write(to: url, options: .atomic)
+            return true
+        }
+        if let importError { throw importError }
+        return didImport
     }
 
     private static func coordinatedRemove(at url: URL) throws {

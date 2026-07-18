@@ -213,10 +213,13 @@ extension AppState {
     /// React to a shared some.im session change (this app or another one sharing
     /// the Keychain access group). Login/key-change adopts the fresh key without
     /// hijacking the user's active provider; logout drops the some-im entry.
-    func reconcileSomeIMProviderFromSharedSession() {
+    @discardableResult
+    func reconcileSomeIMProviderFromSharedSession() -> Bool {
         let apiKey = SomeIMIntegrationStore.loadAPIKey()
+            .trimmingCharacters(in: .whitespacesAndNewlines)
         if apiKey.isEmpty {
             clearSomeIMProvider()
+            return false
         } else {
             syncSomeIMProvider(
                 settings: SomeIMIntegrationStore.loadSettings(),
@@ -224,21 +227,73 @@ extension AppState {
                 activate: false
             )
             syncSomeIMImageUnderstanding(apiKey: apiKey)
+            return true
         }
     }
 
-    func refreshSomeIMRelayRouting() async {
+    /// Last-chance repair for the exact split-brain state where the shared
+    /// some.im session is valid but the active provider entry has no materialized
+    /// key. This is intentionally run before constructing the turn snapshot so
+    /// the first send after launch cannot fail merely because startup routing is
+    /// still probing the user's region.
+    @discardableResult
+    func repairSomeIMProviderCredentialsForTurnIfNeeded(for runtime: AgentRuntime) -> Bool {
+        let current = agentConfiguration.normalized
+        let usesSomeIM = current.providerID == AgentProviderPreset.someIMID
+            || agentProviderLibrary.active?.providerID == AgentProviderPreset.someIMID
+            || runtime.managedRouting != nil
+        guard usesSomeIM else { return false }
+        guard current.apiKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            return true
+        }
+
+        let apiKey = SomeIMIntegrationStore.loadAPIKey()
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !apiKey.isEmpty else { return false }
+        syncSomeIMProvider(
+            settings: SomeIMIntegrationStore.loadSettings(),
+            apiKey: apiKey,
+            activate: runtime.managedRouting != nil
+                || agentProviderLibrary.active?.providerID == AgentProviderPreset.someIMID
+        )
+        syncSomeIMImageUnderstanding(apiKey: apiKey)
+        return !agentConfiguration.apiKey
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .isEmpty
+    }
+
+    func refreshSomeIMRelayRouting(
+        resolveBaseURL: () async throws -> String = {
+            try await SomeIMClient.resolveAutomaticRelayBaseURL()
+        }
+    ) async {
+        var settings = SomeIMIntegrationStore.loadSettings()
+        let apiKey = SomeIMIntegrationStore.loadAPIKey()
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !apiKey.isEmpty else { return }
+
+        // Credential availability must never depend on the location probes.
+        // Preserve the live provider route while offline; a successful probe
+        // below may refine only the Base URL.
+        let existingSomeIMEntry = agentProviderLibrary.active?.providerID == AgentProviderPreset.someIMID
+            ? agentProviderLibrary.active
+            : agentProviderLibrary.entries.first { $0.providerID == AgentProviderPreset.someIMID }
+        if let existingBaseURL = existingSomeIMEntry?.baseURL
+            .trimmingCharacters(in: .whitespacesAndNewlines),
+           !existingBaseURL.isEmpty {
+            settings.baseURL = existingBaseURL
+        }
+        settings.enabled = true
+        settings = settings.normalized
+        SomeIMIntegrationStore.saveSettings(settings)
+        syncSomeIMProvider(settings: settings, apiKey: apiKey, activate: false)
+        syncSomeIMImageUnderstanding(apiKey: apiKey, settings: settings)
+
         do {
-            let baseURL = try await SomeIMClient.resolveAutomaticRelayBaseURL()
-            var settings = SomeIMIntegrationStore.loadSettings()
+            let baseURL = try await resolveBaseURL()
             settings.baseURL = baseURL
-            let apiKey = SomeIMIntegrationStore.loadAPIKey()
-            if !apiKey.isEmpty {
-                settings.enabled = true
-            }
             let normalized = settings.normalized
             SomeIMIntegrationStore.saveSettings(normalized)
-            guard !apiKey.isEmpty else { return }
             syncSomeIMProvider(settings: normalized, apiKey: apiKey, activate: false)
             syncSomeIMImageUnderstanding(apiKey: apiKey, settings: normalized)
         } catch {
@@ -1072,6 +1127,18 @@ extension AppState {
             registerRecentFolder(url)
         }
 
+        if let runtime = activeRuntime {
+            let currentLocalPath = runtime.workspaceLocation?.localPath ?? runtime.workspaceRootPath
+            if let currentLocalPath,
+               URL(fileURLWithPath: currentLocalPath).standardizedFileURL.path == url.path {
+                // Selecting the checked/current workspace is a true no-op.
+                // A history-bearing runtime used to fall through and create a
+                // duplicate session, followed by another filesystem/Git scan.
+                unhideWorkspace(key: runtime.session.workspaceSidebarGroupKey)
+                return runtime.session
+            }
+        }
+
         if let runtime = activeRuntime, canRebindActiveRuntimeInPlace(runtime) {
             runtime.rebindWorkspace(to: url.path)
             runtime.worktreeChanges = .init()
@@ -1082,9 +1149,10 @@ extension AppState {
             return runtime.session
         }
 
-        let session = startNewAgentSession(inWorkspaceAt: url.path)
-        refreshAgentGitWorktrees()
-        return session
+        // startNewAgentSession(inWorkspaceAt:) already schedules the Git
+        // refresh. Calling it again here used to launch two identical
+        // `git status -uall` / worktree scans for every new workspace.
+        return startNewAgentSession(inWorkspaceAt: url.path)
     }
 
     /// Rebind the runtime that invoked the approved `change_workspace` tool.
@@ -1504,11 +1572,10 @@ extension AppState {
         return session.id
     }
 
-    /// Toggle pin state. Pinned sessions float to the top of their
-    /// workspace group, sorted by `pinnedAt` (most recently pinned
-    /// first). The timestamp doubles as both the on/off flag and the
-    /// within-pinned ordering key, so re-pinning sends the row back to
-    /// the top of the pinned block.
+    /// Toggle pin state. Pinned sessions move into the global pinned section
+    /// above every workspace, sorted by `pinnedAt` (most recently pinned
+    /// first). The timestamp doubles as both the on/off flag and the ordering
+    /// key, so re-pinning sends the row back to the top.
     func toggleAgentSessionPinned(id: AgentSession.ID) {
         _ = materializeAgentSessionIfNeeded(id: id)
         guard let index = agentSessions.firstIndex(where: { $0.id == id }) else { return }
@@ -1714,7 +1781,14 @@ extension AppState {
         AgentSettingsStore.saveRecentlyUsedModelIDs(agentRecentlyUsedModelIDs)
     }
 
-    func setAgentSessionModel(_ model: String?) {
+    func setAgentSessionModel(_ model: String?, previousModelForNotice: String? = nil) {
+        // The model picker is available before a workspace is chosen. Materialize
+        // an unbound conversation so the user's selection has a real session to
+        // land on; choosing a folder later rebinds this empty runtime in place.
+        if activeRuntime == nil {
+            startNewAgentSession(inWorkspaceAt: nil)
+        }
+        let previousModel = previousModelForNotice ?? activeAgentModelSelectionLabel
         // Picking any explicit model (or route-default) exits managed
         // routing — the three session-selection states (route default /
         // explicit model / managed) are mutually exclusive.
@@ -1732,6 +1806,32 @@ extension AppState {
             agentSessionModelOverride = nil
         }
         persistActiveAgentSession()
+        appendModelChangeNoticeIfNeeded(from: previousModel, to: activeAgentModelID)
+    }
+
+    private func appendModelChangeNoticeIfNeeded(from previousModel: String, to currentModel: String) {
+        let old = previousModel.trimmingCharacters(in: .whitespacesAndNewlines)
+        let new = currentModel.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !old.isEmpty,
+              !new.isEmpty,
+              old.caseInsensitiveCompare(new) != .orderedSame,
+              let runtime = activeRuntime else {
+            return
+        }
+        runtime.messages.append(
+            AgentMessage(
+                role: .system,
+                content: L10n.AgentModelPicker.modelChanged(from: old, to: new),
+                transcriptEvent: .modelChanged
+            )
+        )
+        persistActiveAgentSession()
+    }
+
+    private var activeAgentModelSelectionLabel: String {
+        activeRuntime?.managedRouting == nil
+            ? activeAgentModelID
+            : L10n.AgentModelPicker.managed
     }
 
     func agentModelIsCompatibleWithActiveProvider(_ model: String) -> Bool {
@@ -1762,6 +1862,7 @@ extension AppState {
     /// that already matches the route default clears the override so
     /// the chip falls back to displaying the routed name.
     func selectAgentEntryAndModel(entryID: UUID, model: String) {
+        let previousModel = activeAgentModelSelectionLabel
         // Activate the target library entry — this rebuilds
         // agentConfiguration's provider / base URL / key / primaries.
         if agentProviderLibrary.activeID != entryID {
@@ -1769,7 +1870,7 @@ extension AppState {
         }
         let trimmed = model.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else {
-            setAgentSessionModel(nil)
+            setAgentSessionModel(nil, previousModelForNotice: previousModel)
             return
         }
         // If the chosen model is already what the route would pick by
@@ -1778,9 +1879,9 @@ extension AppState {
         let routed = agentConfiguration.normalized.model(for: .interactive)
         if trimmed == routed {
             recordRecentlyUsedAgentModel(trimmed)
-            setAgentSessionModel(nil)
+            setAgentSessionModel(nil, previousModelForNotice: previousModel)
         } else {
-            setAgentSessionModel(trimmed)
+            setAgentSessionModel(trimmed, previousModelForNotice: previousModel)
         }
     }
 
@@ -1791,7 +1892,7 @@ extension AppState {
     /// clears any explicit model override so the three session-selection
     /// states stay mutually exclusive.
     func selectSomeIMManagedRouting() {
-        guard let runtime = activeRuntime else { return }
+        let previousModel = activeAgentModelSelectionLabel
         if agentProviderLibrary.active?.providerID != AgentProviderPreset.someIMID {
             guard let someIMEntry = agentProviderLibrary.entries.first(where: {
                 $0.providerID == AgentProviderPreset.someIMID
@@ -1799,11 +1900,26 @@ extension AppState {
             setActiveProviderLibraryEntry(id: someIMEntry.id)
         }
         guard agentProviderLibrary.active?.providerID == AgentProviderPreset.someIMID else { return }
+        // Model choice comes before workspace choice in the composer. Keep that
+        // order valid by creating an empty, workspace-less conversation now;
+        // moveActiveAgentSessionToWorkspace will preserve it when a folder is
+        // selected later.
+        if activeRuntime == nil {
+            startNewAgentSession(inWorkspaceAt: nil)
+        }
+        guard let runtime = activeRuntime else { return }
+        let wasUsingManagedRouting = runtime.managedRouting != nil
         runtime.sessionModelOverride = nil
         if runtime.managedRouting == nil {
             runtime.managedRouting = AgentManagedRoutingState()
         }
         persistActiveAgentSession()
+        if !wasUsingManagedRouting {
+            appendModelChangeNoticeIfNeeded(
+                from: previousModel,
+                to: L10n.AgentModelPicker.managed
+            )
+        }
     }
 
     /// Signed-in some.im users start new chats in managed routing until they

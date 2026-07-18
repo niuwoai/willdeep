@@ -46,6 +46,7 @@
     "agent-model-picker.managed-subtitle" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Automatically select a model" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "自动选择模型" } } } },
     "agent-model-picker.managed-worker-description" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "A cost-efficient model tries first. If it cannot finish or validation fails, Managed Routing escalates automatically." } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "先由低成本模型干活；实现不了或校验未通过时，再自动升档继续处理。" } } } },
     "agent-model-picker.managed-worker-title" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Worker: cost first, capability when needed" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "干活模型：成本优先，能力兜底" } } } },
+    "agent-model-picker.model-changed" : { "comment" : "Transcript notice shown when a conversation changes models. The placeholders are the previous and current model names.", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Model changed from %@ to %@." } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "模型已从 %@ 更改为 %@。" } } } },
     "agent-model-picker.model-count" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "%lld models" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "%lld 个模型" } } } },
     "agent-model-picker.no-models" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "No models are available from this provider" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "这个供应商暂时没有可用模型" } } } },
     "agent-model-picker.no-results" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "No matching models" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "没有找到匹配的模型" } } } },
@@ -5354,6 +5355,13 @@
         }
       }
     },
+    "app-update.check-for-updates" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Check for Updates…" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "检查更新…" } }
+      }
+    },
     "app-update.download" : {
       "comment" : "Primary button in the app update alert",
       "localizations" : {
@@ -8650,6 +8658,34 @@
         "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "本地检测到 %lld 个敏感值" } }
       }
     },
+    "composer.design-to-code.action" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Generate UI code" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "生成界面代码" } }
+      }
+    },
+    "composer.design-to-code.action-detail" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Build · run · visual acceptance" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "构建 · 运行 · 视觉验收" } }
+      }
+    },
+    "composer.design-to-code.help" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Implement the attached UI in this workspace, then verify it with Browser or Computer Use" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "把附图实现到当前工作区，并通过浏览器或 Computer Use 实际验收" } }
+      }
+    },
+    "composer.design-to-code.prompt" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Implement the attached UI completely in the current workspace using the existing project stack. Write the production code directly, build and run it, then use Browser or Computer Use to capture the real result and compare it with the source. Keep correcting material differences until visual acceptance passes." } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "请使用当前项目已有技术栈，把附图中的界面完整实现到当前工作区。直接写入生产代码、构建并运行，然后使用浏览器或 Computer Use 捕获真实结果并与原图比较；如有明显差异，继续修正，直到视觉验收通过。" } }
+      }
+    },
     "composer.knowledge-folder.apply-exclusions" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -8685,11 +8721,39 @@
         "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "正在索引本地文档…" } }
       }
     },
+    "composer.knowledge-folder.pending" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Not indexed yet. Start indexing when you want to use this folder." } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "尚未索引。需要使用该文件夹时再开始索引。" } }
+      }
+    },
     "composer.knowledge-folder.ready" : {
       "extractionState" : "manual",
       "localizations" : {
         "en" : { "stringUnit" : { "state" : "translated", "value" : "%lld documents ready · %lld skipped" } },
         "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "%lld 份文档可用 · 已跳过 %lld 项" } }
+      }
+    },
+    "composer.knowledge-folder.reindex" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Reindex" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "重新索引" } }
+      }
+    },
+    "composer.knowledge-folder.retry-indexing" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Retry indexing" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "重试索引" } }
+      }
+    },
+    "composer.knowledge-folder.start-indexing" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Start indexing" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "开始索引" } }
       }
     },
     "composer.knowledge-folder.title" : {
@@ -14867,6 +14931,23 @@
         }
       }
     },
+    "settings.agent-wallpaper.help" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Uses the workspace wallpaper selected above throughout the Agent workspace. Adjust the interface surface opacity and optional frosted glass for readability."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Agent 工作区使用上方选择的工作区壁纸；可调整界面遮罩透明度，并按需启用毛玻璃以保持内容清晰。"
+          }
+        }
+      }
+    },
     "settings.background-image-mode.center" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -14931,6 +15012,23 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "拉伸"
+          }
+        }
+      }
+    },
+    "settings.background-image-mode.tile" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tile"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "平铺"
           }
         }
       }
@@ -17145,6 +17243,20 @@
         }
       }
     },
+    "settings.group.account-and-devices" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Account & Devices" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "账户与设备" } }
+      }
+    },
+    "settings.group.agent-tools" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Agent Tools" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "Agent 工具" } }
+      }
+    },
     "settings.group.ai" : {
       "extractionState" : "extracted_with_value",
       "localizations" : {
@@ -17160,6 +17272,20 @@
             "value" : "AI Agents"
           }
         }
+      }
+    },
+    "settings.group.format-and-appearance" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Format & Appearance" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "格式与外观" } }
+      }
+    },
+    "settings.group.general" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "General" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "通用" } }
       }
     },
     "settings.group.editor" : {
@@ -17808,6 +17934,23 @@
         }
       }
     },
+    "settings.label.agent-wallpaper-surface-opacity" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Agent Surface Opacity"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Agent 界面遮罩透明度"
+          }
+        }
+      }
+    },
     "settings.label.image-size" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -17840,6 +17983,13 @@
             "value" : "行高"
           }
         }
+      }
+    },
+    "settings.label.installed-version" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Installed Version" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "已安装版本" } }
       }
     },
     "settings.label.text-size" : {
@@ -21577,6 +21727,13 @@
         }
       }
     },
+    "settings.no-background" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "No Background" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "无背景图" } }
+      }
+    },
     "settings.no-image-selected" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -23294,6 +23451,13 @@
         }
       }
     },
+    "settings.section.software-update" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Software Update" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "软件更新" } }
+      }
+    },
     "settings.section.agent-appearance" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -23409,6 +23573,23 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "编辑器背景"
+          }
+        }
+      }
+    },
+    "settings.section.agent-wallpaper" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Agent Global Wallpaper"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Agent 全局壁纸"
           }
         }
       }
@@ -25743,6 +25924,20 @@
         }
       }
     },
+    "settings.software-update.help" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "WillDeep checks for signed updates automatically. You can also check now; Sparkle verifies the download before installing it." } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "WillDeep 会自动检查已签名的更新；你也可以立即检查，Sparkle 会在安装前验证下载内容。" } }
+      }
+    },
+    "settings.software-update.version-and-build" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "%1$@ (Build %2$@)" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "%1$@（构建 %2$@）" } }
+      }
+    },
     "settings.tab.agent" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -25775,6 +25970,13 @@
             "value" : "格式"
           }
         }
+      }
+    },
+    "settings.tab.background" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Background" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "背景" } }
       }
     },
     "settings.tab.connectors" : {
@@ -25981,6 +26183,13 @@
         }
       }
     },
+    "settings.tab.updates" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Updates" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "更新" } }
+      }
+    },
     "settings.tab.typography" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -26028,6 +26237,40 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "工作区"
+          }
+        }
+      }
+    },
+    "settings.toggle.agent-wallpaper" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Use as Agent Global Background"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "用作 Agent 全局背景"
+          }
+        }
+      }
+    },
+    "settings.toggle.agent-wallpaper-glass" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Frosted Glass"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "毛玻璃（磨砂）"
           }
         }
       }
@@ -27340,6 +27583,62 @@
         }
       }
     },
+    "settings.voice.overlay.color.sky-glass" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Sky glass" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "天空玻璃" } }
+      }
+    },
+    "settings.voice.overlay.color.mint-cream" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Mint cream" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "薄荷奶油" } }
+      }
+    },
+    "settings.voice.overlay.color.lavender-mist" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Lavender mist" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "薰衣草雾" } }
+      }
+    },
+    "settings.voice.overlay.color.peach-sorbet" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Peach sorbet" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "蜜桃冰沙" } }
+      }
+    },
+    "settings.voice.overlay.color.rose-quartz" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Rose quartz" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "玫瑰晶石" } }
+      }
+    },
+    "settings.voice.overlay.color.lemon-cream" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Lemon cream" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "柠檬奶油" } }
+      }
+    },
+    "settings.voice.overlay.color.aqua-glass" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Aqua glass" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "水色玻璃" } }
+      }
+    },
+    "settings.voice.overlay.color.warm-sand" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Warm sand" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "暖沙金" } }
+      }
+    },
     "settings.voice.overlay.corner" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -27626,6 +27925,27 @@
       "localizations" : {
         "en" : { "stringUnit" : { "state" : "translated", "value" : "Spectrum" } },
         "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "频谱" } }
+      }
+    },
+    "settings.voice.overlay.wave.sine" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Sine wave" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "正弦波" } }
+      }
+    },
+    "settings.voice.overlay.wave.cosine" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Cosine wave" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "余弦波" } }
+      }
+    },
+    "settings.voice.overlay.wave.ecg" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "ECG" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "心电图" } }
       }
     },
     "settings.voice.overlay.style.compact" : {
@@ -27985,19 +28305,26 @@
         }
       }
     },
+    "settings.workspace-wallpaper.choices" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Background Choices" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "背景选择" } }
+      }
+    },
     "settings.workspace-wallpaper.help" : {
       "extractionState" : "manual",
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Choose a built-in wallpaper or your own image for both the Editor and Agent workspace. WillDeep keeps a private managed copy of custom images."
+            "value" : "Choose the shared wallpaper and image layout here. Agent workspace effects are controlled separately below. WillDeep keeps a private managed copy of custom images."
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "选择内置壁纸或自己的图片，同时应用到编辑器和 Agent 工作区。WillDeep 会为自定义图片保存一份仅供本机使用的副本。"
+            "value" : "在这里选择共享壁纸并调整图片布局；Agent 工作区效果可在下方单独控制。WillDeep 会为自定义图片保存一份仅供本机使用的副本。"
           }
         }
       }
@@ -28677,6 +29004,24 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "删除会话"
+          }
+        }
+      }
+    },
+    "sidebar.pinned-header" : {
+      "comment" : "section header for globally pinned conversations",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Pinned"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "置顶"
           }
         }
       }
@@ -29591,6 +29936,23 @@
         }
       }
     },
+    "tool-card.allow-conversation" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Allow for This Conversation"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "允许此对话"
+          }
+        }
+      }
+    },
     "tool-card.always-allow" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -29603,7 +29965,92 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "永久允许"
+            "value" : "始终允许"
+          }
+        }
+      }
+    },
+    "tool-card.authorization.browser.chrome-question" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Allow WillDeep to control Chrome?"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "允许 WillDeep 操作 Chrome？"
+          }
+        }
+      }
+    },
+    "tool-card.authorization.browser.embedded-question" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Allow WillDeep to control Browser?"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "允许 WillDeep 操作内置浏览器？"
+          }
+        }
+      }
+    },
+    "tool-card.authorization.browser.title" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Browser"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "浏览器"
+          }
+        }
+      }
+    },
+    "tool-card.authorization.computer-use.question" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Allow WillDeep to use Computer Use?"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "允许 WillDeep 使用 Computer Use？"
+          }
+        }
+      }
+    },
+    "tool-card.authorization.computer-use.title" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Computer Use"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Computer Use"
           }
         }
       }

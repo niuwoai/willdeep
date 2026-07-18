@@ -13,6 +13,38 @@ import SwiftUI
 import UniformTypeIdentifiers
 
 extension EditorSettingsView {
+    var updatesSettings: some View {
+        Form {
+            Section(L10n.Settings.sectionSoftwareUpdate) {
+                LabeledContent(L10n.Settings.labelInstalledVersion) {
+                    Text(L10n.Settings.versionAndBuild(installedVersion, installedBuild))
+                        .monospacedDigit()
+                }
+
+                Text(L10n.Settings.softwareUpdateHelp)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+
+                Button {
+                    AppUpdateController.shared.checkForUpdates()
+                } label: {
+                    Label(L10n.AppUpdate.checkForUpdates, systemImage: "arrow.triangle.2.circlepath")
+                }
+            }
+        }
+        .formStyle(.grouped)
+    }
+
+    private var installedVersion: String {
+        Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String
+            ?? L10n.About.unknownValue
+    }
+
+    private var installedBuild: String {
+        Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String
+            ?? L10n.About.unknownValue
+    }
+
     var typographySettings: some View {
         Form {
             Section(L10n.Settings.sectionEditorText) {
@@ -62,13 +94,14 @@ extension EditorSettingsView {
 
     var appearanceSettings: some View {
         Form {
-            editorFormatSections
+            appearanceSections
+            editorSurfaceSection
         }
         .formStyle(.grouped)
     }
 
     @ViewBuilder
-    var editorFormatSections: some View {
+    var appearanceSections: some View {
         Section {
             LazyVGrid(
                 columns: [GridItem(.adaptive(minimum: 158, maximum: 220), spacing: 12)],
@@ -113,9 +146,19 @@ extension EditorSettingsView {
             }
             .padding(.vertical, 4)
         }
+    }
 
+    var backgroundSettings: some View {
+        Form {
+            backgroundSections
+        }
+        .formStyle(.grouped)
+    }
+
+    @ViewBuilder
+    var backgroundSections: some View {
         Section {
-            Text(L10n.Settings.builtInWallpapers)
+            Text(L10n.Settings.backgroundChoices)
                 .font(.subheadline.weight(.semibold))
 
             LazyVGrid(
@@ -123,6 +166,11 @@ extension EditorSettingsView {
                 alignment: .leading,
                 spacing: 10
             ) {
+                NoWorkspaceWallpaperCard(
+                    isSelected: appState.editorSettings.windowBackgroundImagePath == nil,
+                    action: clearBackgroundImage
+                )
+
                 ForEach(BuiltInWorkspaceWallpaper.all) { wallpaper in
                     BuiltInWorkspaceWallpaperCard(
                         wallpaper: wallpaper,
@@ -184,6 +232,7 @@ extension EditorSettingsView {
                         .frame(width: 44, alignment: .trailing)
                 }
             }
+            .disabled(appState.editorSettings.windowBackgroundImagePath == nil)
 
             Text(L10n.Settings.workspaceWallpaperHelp)
                 .font(.caption)
@@ -198,6 +247,11 @@ extension EditorSettingsView {
             Text(L10n.Settings.sectionWorkspaceWallpaper)
         }
 
+        agentWallpaperSettingsSection
+    }
+
+    @ViewBuilder
+    var editorSurfaceSection: some View {
         Section(L10n.Settings.sectionEditor) {
             Toggle(L10n.Settings.toggleShowLineNumbers, isOn: setting(\.showsLineNumbers))
             Toggle(L10n.Settings.toggleHighlightCurrentLine, isOn: setting(\.highlightsCurrentLine))
@@ -264,6 +318,65 @@ extension EditorSettingsView {
             return wallpaper.displayName
         }
         return WorkspaceWallpaperStore.displayName(for: path)
+    }
+
+    @ViewBuilder
+    var agentWallpaperSettingsSection: some View {
+        Section {
+            Toggle(
+                L10n.Settings.toggleAgentWallpaper,
+                isOn: setting(\.agentWallpaperEnabled)
+            )
+            .disabled(!appState.editorSettings.hasConfiguredWorkspaceWallpaper)
+
+            LabeledContent(L10n.Settings.labelAgentWallpaperSurfaceOpacity) {
+                HStack {
+                    Slider(value: setting(\.agentWallpaperSurfaceOpacity), in: 0.2...1, step: 0.05)
+                    Text("\(Int(appState.editorSettings.agentWallpaperSurfaceOpacity * 100))%")
+                        .monospacedDigit()
+                        .frame(width: 44, alignment: .trailing)
+                }
+            }
+            .disabled(!appState.editorSettings.hasConfiguredAgentWallpaper)
+
+            Toggle(
+                L10n.Settings.toggleAgentWallpaperGlass,
+                isOn: setting(\.agentWallpaperGlassEnabled)
+            )
+            .disabled(!appState.editorSettings.hasConfiguredAgentWallpaper)
+
+            Picker(
+                L10n.Settings.labelGlassMaterial,
+                selection: setting(\.agentWallpaperGlassMaterial)
+            ) {
+                ForEach(EditorGlassMaterial.allCases) { material in
+                    Text(material.displayName).tag(material)
+                }
+            }
+            .disabled(
+                !appState.editorSettings.hasConfiguredAgentWallpaper
+                    || !appState.editorSettings.agentWallpaperGlassEnabled
+            )
+
+            LabeledContent(L10n.Settings.labelGlassStrength) {
+                HStack {
+                    Slider(value: setting(\.agentWallpaperGlassOpacity), in: 0...1, step: 0.05)
+                    Text("\(Int(appState.editorSettings.agentWallpaperGlassOpacity * 100))%")
+                        .monospacedDigit()
+                        .frame(width: 44, alignment: .trailing)
+                }
+            }
+            .disabled(
+                !appState.editorSettings.hasConfiguredAgentWallpaper
+                    || !appState.editorSettings.agentWallpaperGlassEnabled
+            )
+
+            Text(L10n.Settings.agentWallpaperHelp)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        } header: {
+            Text(L10n.Settings.sectionAgentWallpaper)
+        }
     }
 
     func selectBuiltInWallpaper(_ wallpaper: BuiltInWorkspaceWallpaper) {

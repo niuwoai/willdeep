@@ -79,10 +79,30 @@ async function handleRuntimeMessage(message) {
       return withActiveTab((tab) => sendContentCommand(tab.id, "readPage", message.payload));
     case "page.selection":
       return withActiveTab((tab) => sendContentCommand(tab.id, "readSelection", message.payload));
+    case "page.snapshot":
+      return withActiveTab((tab) => sendContentCommand(tab.id, "snapshot", message.payload));
     case "page.click":
       return withActiveTab((tab) => sendContentCommand(tab.id, "clickSelector", message.payload));
     case "page.type":
       return withActiveTab((tab) => sendContentCommand(tab.id, "typeSelector", message.payload));
+    case "page.hover":
+      return withActiveTab((tab) => sendContentCommand(tab.id, "hoverSelector", message.payload));
+    case "page.select_option":
+      return withActiveTab((tab) => sendContentCommand(tab.id, "selectOption", message.payload));
+    case "page.key":
+      return withActiveTab((tab) => sendContentCommand(tab.id, "pressKey", message.payload));
+    case "page.scroll":
+      return withActiveTab((tab) => sendContentCommand(tab.id, "scrollPage", message.payload));
+    case "page.wait":
+      return withActiveTab((tab) => sendContentCommand(tab.id, "waitFor", message.payload));
+    case "tab.list":
+      return listTabs();
+    case "tab.activate":
+      return activateTab(message.payload || {});
+    case "tab.navigate":
+      return navigateActiveTab(message.payload || {});
+    case "tab.history":
+      return navigateHistory(message.payload || {});
     case "tab.capture":
       return captureActiveTab();
     case "debugger.command":
@@ -228,6 +248,57 @@ async function ensureContentScript(tabId) {
 async function sendContentCommand(tabId, command, payload = {}) {
   await ensureContentScript(tabId);
   return chrome.tabs.sendMessage(tabId, { type: command, payload });
+}
+
+async function listTabs() {
+  const tabs = await chrome.tabs.query({});
+  return {
+    ok: true,
+    tabs: tabs.map((tab) => ({
+      id: tab.id,
+      window_id: tab.windowId,
+      active: Boolean(tab.active),
+      pinned: Boolean(tab.pinned),
+      title: tab.title || "",
+      url: tab.url || ""
+    }))
+  };
+}
+
+async function activateTab(payload) {
+  const tabId = Number(payload.tabId);
+  if (!Number.isInteger(tabId)) return { ok: false, error: "missing tabId" };
+  const tab = await chrome.tabs.update(tabId, { active: true });
+  if (tab.windowId) await chrome.windows.update(tab.windowId, { focused: true });
+  return { ok: true, tab: { id: tab.id, window_id: tab.windowId, title: tab.title || "", url: tab.url || "" } };
+}
+
+async function navigateActiveTab(payload) {
+  const url = normalizeNavigationURL(payload.url);
+  const [active] = await chrome.tabs.query({ active: true, currentWindow: true });
+  if (!active?.id) return { ok: false, error: "no active tab" };
+  const tab = await chrome.tabs.update(active.id, { url });
+  return { ok: true, tab: { id: tab.id, title: tab.title || "", url } };
+}
+
+async function navigateHistory(payload) {
+  const direction = String(payload.direction || "reload").toLowerCase();
+  const [active] = await chrome.tabs.query({ active: true, currentWindow: true });
+  if (!active?.id) return { ok: false, error: "no active tab" };
+  if (direction === "back") await chrome.tabs.goBack(active.id);
+  else if (direction === "forward") await chrome.tabs.goForward(active.id);
+  else if (direction === "reload") await chrome.tabs.reload(active.id, { bypassCache: Boolean(payload.bypassCache) });
+  else return { ok: false, error: "direction must be back, forward, or reload" };
+  return { ok: true, tab_id: active.id, direction };
+}
+
+function normalizeNavigationURL(value) {
+  const raw = String(value || "").trim();
+  if (!raw) throw new Error("missing url");
+  const candidate = /^https?:\/\//i.test(raw) ? raw : `https://${raw}`;
+  const url = new URL(candidate);
+  if (url.protocol !== "http:" && url.protocol !== "https:") throw new Error("only http and https URLs are supported");
+  return url.href;
 }
 
 async function captureActiveTab() {

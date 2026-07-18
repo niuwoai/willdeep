@@ -176,3 +176,54 @@ struct BuiltInWorkspaceWallpaperCard: View {
         }
     }
 }
+
+struct NoWorkspaceWallpaperCard: View {
+    let isSelected: Bool
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            VStack(alignment: .leading, spacing: 7) {
+                ZStack(alignment: .topTrailing) {
+                    RoundedRectangle(cornerRadius: 7, style: .continuous)
+                        .fill(Color.secondary.opacity(0.08))
+                        .overlay {
+                            Image(systemName: "photo.badge.minus")
+                                .font(.system(size: 24, weight: .regular))
+                                .foregroundStyle(.secondary)
+                        }
+
+                    if isSelected {
+                        Image(systemName: "checkmark.circle.fill")
+                            .font(.system(size: 16, weight: .semibold))
+                            .symbolRenderingMode(.palette)
+                            .foregroundStyle(.white, Color.accentColor)
+                            .padding(6)
+                    }
+                }
+                .frame(height: 76)
+
+                Text(L10n.Settings.noBackground)
+                    .font(.system(size: 11, weight: .medium))
+                    .foregroundStyle(.primary)
+                    .lineLimit(1)
+            }
+            .padding(7)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(
+                RoundedRectangle(cornerRadius: 9, style: .continuous)
+                    .fill(Color(nsColor: .controlBackgroundColor))
+            )
+            .overlay {
+                RoundedRectangle(cornerRadius: 9, style: .continuous)
+                    .stroke(
+                        isSelected ? Color.accentColor : Color.secondary.opacity(0.2),
+                        lineWidth: isSelected ? 1.6 : 1
+                    )
+            }
+            .contentShape(RoundedRectangle(cornerRadius: 9, style: .continuous))
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(L10n.Settings.noBackground)
+    }
+}

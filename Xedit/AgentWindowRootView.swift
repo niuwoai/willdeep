@@ -21,6 +21,7 @@ import AppKit
 
 struct AgentWindowRootView: View {
     @ObservedObject private var registry = EditorAppStateRegistry.shared
+    @ObservedObject private var onboarding = OnboardingFlowController.shared
     @Environment(\.openWindow) private var openWindow
 
     var body: some View {
@@ -59,6 +60,16 @@ struct AgentWindowRootView: View {
             // headless AppState 顶上,保证「editor 没开 / 没选 workspace
             // 时 agent 窗口里就空了」这件事不再发生。
             registry.ensureHeadlessFallback()
+            // Agent 是普通冷启动的默认窗口,首次引导也必须从这里触发。
+            // 先创建 headless AppState,确保 onboarding 的 some.im 登录、
+            // provider 保存等步骤始终拿得到完整环境。
+            onboarding.presentIfNeeded()
+        }
+        .sheet(isPresented: $onboarding.isPresented) {
+            if let appState = registry.current {
+                OnboardingView()
+                    .environmentObject(appState)
+            }
         }
         // Tapped agent notification → focus this window (covers the case
         // where the Agent window is open but no editor window is).

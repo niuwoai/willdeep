@@ -74,13 +74,17 @@ nonisolated enum AgentToolDisplay {
         "web_search": "联网搜索",
         "web_fetch": "抓取网页",
         "generate_image": "生成图片",
+        "design_to_code_acceptance": "界面视觉验收",
         "visual_qa_screenshot": "截图视觉检查",
         "capture_screenshot": "截屏",
         "computer_use_permissions": "电脑操作权限",
         "computer_use_request_permissions": "请求电脑操作权限",
         "computer_use_list_apps": "列出 Mac 应用",
         "computer_use_launch_app": "后台启动 Mac 应用",
+        "computer_use_activate_app": "切到 Mac 应用",
         "computer_use_get_app_state": "读取应用界面",
+        "computer_use_inspect_app": "检查应用控件",
+        "computer_use_wait_for": "等待应用状态",
         "computer_use_click": "点击应用控件",
         "computer_use_secondary_action": "打开应用菜单",
         "computer_use_scroll": "滚动应用界面",
@@ -88,12 +92,25 @@ nonisolated enum AgentToolDisplay {
         "computer_use_type_text": "输入应用文本",
         "computer_use_press_key": "发送应用按键",
         "computer_use_set_value": "设置应用控件值",
+        "computer_use_focus": "聚焦应用控件",
+        "computer_use_hover": "悬停应用控件",
+        "computer_use_select_text": "选择应用文本",
         "computer_use_restart_helper": "重启电脑操作 Helper",
         "chrome_status": "Chrome 状态",
         "chrome_read_page": "读取网页",
         "chrome_read_selection": "读取网页选区",
+        "chrome_snapshot": "读取网页控件",
+        "chrome_list_tabs": "列出 Chrome 标签页",
+        "chrome_activate_tab": "切换 Chrome 标签页",
+        "chrome_navigate": "打开网页",
+        "chrome_history": "浏览器前进后退",
         "chrome_click": "点击页面元素",
         "chrome_type": "输入网页文本",
+        "chrome_hover": "悬停网页元素",
+        "chrome_select_option": "选择网页选项",
+        "chrome_press_key": "发送网页按键",
+        "chrome_scroll": "滚动网页",
+        "chrome_wait_for": "等待网页状态",
         "chrome_capture_tab": "截取标签页",
         "chrome_debugger_command": "Chrome 调试命令",
         "list_mcp_servers": "MCP 服务列表",
@@ -116,10 +133,10 @@ nonisolated enum AgentToolDisplay {
 /// Keeping the metrics centralized also makes accidental regressions easy to
 /// catch without rendering the full transcript in a unit test.
 nonisolated enum AgentApprovalActionMetrics {
-    static let spacing: CGFloat = 10
-    static let minimumButtonWidth: CGFloat = 96
-    static let minimumButtonHeight: CGFloat = 36
-    static let cornerRadius: CGFloat = 9
+    static let spacing: CGFloat = 12
+    static let minimumButtonWidth: CGFloat = 112
+    static let minimumButtonHeight: CGFloat = 42
+    static let cornerRadius: CGFloat = 14
 }
 
 private extension View {
@@ -136,20 +153,22 @@ private extension View {
     }
 }
 
-/// Layout contract for the calm, skin-aware command confirmation surface.
-/// The viewport intentionally exposes about two wrapped command lines;
-/// longer content stays available through vertical scrolling.
+/// Layout contract for the soft, skin-aware authorization notice.
+/// The same geometry is shared by commands, web access, visible terminal
+/// handoffs, and other tools so confirmations feel like one product system.
 nonisolated enum AgentConfirmationReviewMetrics {
-    static let contentPadding: CGFloat = 18
-    static let sectionSpacing: CGFloat = 12
+    static let contentPadding: CGFloat = 20
+    static let sectionSpacing: CGFloat = 14
     static let dividerThickness: CGFloat = 1
-    static let decisionColumnWidth: CGFloat = 260
-    static let horizontalMinimumWidth: CGFloat = 680
-    static let commandViewportHeight: CGFloat = 56
-    static let commandVisibleLineCount = 2
-    static let actionButtonHeight: CGFloat = 28
-    static let actionButtonMaxWidth: CGFloat = 124
-    static let actionButtonSpacing: CGFloat = 24
+    static let horizontalMinimumWidth: CGFloat = 700
+    static let commandViewportHeight: CGFloat = 72
+    static let commandVisibleLineCount = 3
+    static let actionButtonHeight: CGFloat = 42
+    static let actionButtonMaxWidth: CGFloat = 156
+    static let actionButtonSpacing: CGFloat = 12
+    static let outerCornerRadius: CGFloat = 20
+    static let innerCornerRadius: CGFloat = 14
+    static let iconTileSize: CGFloat = 44
     static let showsKeyboardShortcutHint = false
 
     static func usesHorizontalLayout(availableWidth: CGFloat) -> Bool {
@@ -157,153 +176,171 @@ nonisolated enum AgentConfirmationReviewMetrics {
     }
 }
 
-/// `ViewThatFits` measures the command's ideal width, so a long shell command
-/// can incorrectly force the confirmation card into a vertical layout even
-/// when the card itself is wide enough. This layout responds only to the
-/// actual proposed card width and gives the decision column a stable width.
-private struct AgentConfirmationReviewLayout: Layout {
-    private struct Measurements {
-        let isHorizontal: Bool
-        let width: CGFloat
-        let reviewSize: CGSize
-        let decisionSize: CGSize
+nonisolated enum AgentCompactAuthorizationMetrics {
+    static let horizontalPadding: CGFloat = 14
+    static let verticalPadding: CGFloat = 15
+    static let contentSpacing: CGFloat = 15
+    static let actionSpacing: CGFloat = 8
+    static let minimumButtonHeight: CGFloat = 22
+    static let cornerRadius: CGFloat = 20
+    static let buttonCornerRadius: CGFloat = 14
+    static let horizontalMinimumWidth: CGFloat = 520
 
-        var size: CGSize {
-            if isHorizontal {
-                return CGSize(
-                    width: width,
-                    height: max(reviewSize.height, decisionSize.height)
-                )
-            }
-            return CGSize(
-                width: width,
-                height: reviewSize.height
-                    + AgentConfirmationReviewMetrics.dividerThickness
-                    + decisionSize.height
+    static func usesHorizontalActions(availableWidth: CGFloat) -> Bool {
+        availableWidth >= horizontalMinimumWidth
+    }
+}
+
+nonisolated struct AgentCompactAuthorizationDescriptor: Equatable {
+    let iconName: String
+    let title: String
+    let question: String
+}
+
+nonisolated enum AgentCompactAuthorizationCopy {
+    static func descriptor(toolName: String) -> AgentCompactAuthorizationDescriptor? {
+        if toolName.hasPrefix("computer_use_") {
+            return AgentCompactAuthorizationDescriptor(
+                iconName: "cursorarrow.motionlines",
+                title: L10n.ToolCard.computerUseAuthorizationTitle,
+                question: L10n.ToolCard.computerUseAuthorizationQuestion
+            )
+        }
+        if toolName.hasPrefix("chrome_") {
+            return AgentCompactAuthorizationDescriptor(
+                iconName: "globe",
+                title: L10n.ToolCard.browserAuthorizationTitle,
+                question: L10n.ToolCard.browserChromeAuthorizationQuestion
+            )
+        }
+        if toolName.hasPrefix("embedded_browser_") {
+            return AgentCompactAuthorizationDescriptor(
+                iconName: "globe",
+                title: L10n.ToolCard.browserAuthorizationTitle,
+                question: L10n.ToolCard.browserEmbeddedAuthorizationQuestion
+            )
+        }
+        return nil
+    }
+}
+
+nonisolated struct AgentApprovalNoticeDescriptor: Equatable {
+    let iconName: String
+    let title: String
+    let subtitle: String
+    let detailTitle: String
+    let metadata: [String]
+    let explanationTitle: String
+    let decisionTitle: String
+    let decisionSubtitle: String
+    let declineTitle: String
+    let approveTitle: String
+}
+
+/// Tool-specific copy for the shared authorization notice. Keep this free of
+/// SwiftUI types so its user-facing promises can be covered by unit tests.
+nonisolated enum AgentApprovalNoticeCopy {
+    static func descriptor(
+        toolName: String,
+        arguments: [String: AgentJSONValue]
+    ) -> AgentApprovalNoticeDescriptor {
+        switch toolName {
+        case "run_command":
+            return AgentApprovalNoticeDescriptor(
+                iconName: "terminal",
+                title: "Agent 准备执行一条命令",
+                subtitle: "确认后，Agent 会继续完成当前任务。",
+                detailTitle: "命令内容",
+                metadata: commandMetadata(arguments: arguments),
+                explanationTitle: "查看命令说明",
+                decisionTitle: "要继续吗？",
+                decisionSubtitle: "你可以随时查看后续执行结果。",
+                declineTitle: "暂不执行",
+                approveTitle: "继续"
+            )
+        case "terminal_send_command":
+            return AgentApprovalNoticeDescriptor(
+                iconName: "rectangle.rightthird.inset.filled",
+                title: "Agent 准备发送命令到终端",
+                subtitle: "命令会出现在侧边栏终端中，并在确认后执行。",
+                detailTitle: "即将发送",
+                metadata: terminalMetadata(arguments: arguments),
+                explanationTitle: "查看终端详情",
+                decisionTitle: "发送到这个终端吗？",
+                decisionSubtitle: "执行过程和结果会继续显示在侧边栏。",
+                declineTitle: "暂不发送",
+                approveTitle: "发送到终端"
+            )
+        case "terminal_send_control":
+            return AgentApprovalNoticeDescriptor(
+                iconName: "keyboard",
+                title: "Agent 准备向终端发送控制键",
+                subtitle: "控制键会立即发送到当前会话绑定的终端。",
+                detailTitle: "控制键",
+                metadata: ["侧边栏终端", "发送后立即生效"],
+                explanationTitle: "查看终端详情",
+                decisionTitle: "发送这个控制键吗？",
+                decisionSubtitle: "终端会保持可见，便于你继续操作。",
+                declineTitle: "暂不发送",
+                approveTitle: "发送"
+            )
+        case "web_fetch":
+            return AgentApprovalNoticeDescriptor(
+                iconName: "globe",
+                title: "Agent 想读取一个网页",
+                subtitle: "网页内容会用于继续回答当前问题。",
+                detailTitle: "访问地址",
+                metadata: webMetadata(arguments: arguments),
+                explanationTitle: "查看访问说明",
+                decisionTitle: "允许这次访问吗？",
+                decisionSubtitle: "不会提交表单或修改网页内容。",
+                declineTitle: "暂不访问",
+                approveTitle: "本次允许"
+            )
+        default:
+            let displayName = AgentToolDisplay.name(for: toolName)
+            return AgentApprovalNoticeDescriptor(
+                iconName: "sparkles",
+                title: "Agent 准备\(displayName)",
+                subtitle: "确认后，Agent 会继续完成当前任务。",
+                detailTitle: "操作内容",
+                metadata: ["由你确认后继续", displayName],
+                explanationTitle: "查看操作说明",
+                decisionTitle: "允许这一步吗？",
+                decisionSubtitle: "操作结果会继续显示在当前对话中。",
+                declineTitle: "暂不允许",
+                approveTitle: "允许"
             )
         }
     }
 
-    func sizeThatFits(
-        proposal: ProposedViewSize,
-        subviews: Subviews,
-        cache: inout ()
-    ) -> CGSize {
-        measurements(proposal: proposal, subviews: subviews).size
+    private static func commandMetadata(
+        arguments: [String: AgentJSONValue]
+    ) -> [String] {
+        let workspaceName = arguments["cwd"]?.stringValue()
+            .map { URL(fileURLWithPath: $0).lastPathComponent }
+            .flatMap { $0.isEmpty ? nil : $0 }
+        return [
+            workspaceName.map { "在 \($0) 工作区运行" } ?? "在当前工作区运行",
+            "可能更新工作区文件",
+        ]
     }
 
-    func placeSubviews(
-        in bounds: CGRect,
-        proposal: ProposedViewSize,
-        subviews: Subviews,
-        cache: inout ()
-    ) {
-        guard subviews.count == 3 else { return }
-        let measured = measurements(
-            proposal: ProposedViewSize(width: bounds.width, height: proposal.height),
-            subviews: subviews
-        )
-
-        if measured.isHorizontal {
-            let reviewWidth = max(
-                0,
-                bounds.width
-                    - AgentConfirmationReviewMetrics.dividerThickness
-                    - AgentConfirmationReviewMetrics.decisionColumnWidth
-            )
-            subviews[0].place(
-                at: bounds.origin,
-                anchor: .topLeading,
-                proposal: ProposedViewSize(width: reviewWidth, height: bounds.height)
-            )
-            subviews[1].place(
-                at: CGPoint(x: bounds.minX + reviewWidth, y: bounds.minY),
-                anchor: .topLeading,
-                proposal: ProposedViewSize(
-                    width: AgentConfirmationReviewMetrics.dividerThickness,
-                    height: bounds.height
-                )
-            )
-            subviews[2].place(
-                at: CGPoint(
-                    x: bounds.maxX - AgentConfirmationReviewMetrics.decisionColumnWidth,
-                    y: bounds.minY
-                ),
-                anchor: .topLeading,
-                proposal: ProposedViewSize(
-                    width: AgentConfirmationReviewMetrics.decisionColumnWidth,
-                    height: bounds.height
-                )
-            )
-            return
-        }
-
-        subviews[0].place(
-            at: bounds.origin,
-            anchor: .topLeading,
-            proposal: ProposedViewSize(width: bounds.width, height: measured.reviewSize.height)
-        )
-        subviews[1].place(
-            at: CGPoint(x: bounds.minX, y: bounds.minY + measured.reviewSize.height),
-            anchor: .topLeading,
-            proposal: ProposedViewSize(
-                width: bounds.width,
-                height: AgentConfirmationReviewMetrics.dividerThickness
-            )
-        )
-        subviews[2].place(
-            at: CGPoint(
-                x: bounds.minX,
-                y: bounds.minY
-                    + measured.reviewSize.height
-                    + AgentConfirmationReviewMetrics.dividerThickness
-            ),
-            anchor: .topLeading,
-            proposal: ProposedViewSize(width: bounds.width, height: measured.decisionSize.height)
-        )
+    private static func terminalMetadata(
+        arguments: [String: AgentJSONValue]
+    ) -> [String] {
+        let target = arguments.keys.contains("terminal_tab_id")
+            ? "指定终端标签"
+            : "当前会话终端"
+        return ["侧边栏可见", target, "可随时按 Ctrl-C 中断"]
     }
 
-    private func measurements(
-        proposal: ProposedViewSize,
-        subviews: Subviews
-    ) -> Measurements {
-        guard subviews.count == 3 else {
-            return Measurements(
-                isHorizontal: false,
-                width: proposal.width ?? 0,
-                reviewSize: .zero,
-                decisionSize: .zero
-            )
-        }
-
-        let proposedWidth = proposal.width ?? AgentConfirmationReviewMetrics.horizontalMinimumWidth
-        let isHorizontal = AgentConfirmationReviewMetrics.usesHorizontalLayout(
-            availableWidth: proposedWidth
-        )
-        let reviewWidth = isHorizontal
-            ? max(
-                0,
-                proposedWidth
-                    - AgentConfirmationReviewMetrics.dividerThickness
-                    - AgentConfirmationReviewMetrics.decisionColumnWidth
-            )
-            : proposedWidth
-        let decisionWidth = isHorizontal
-            ? AgentConfirmationReviewMetrics.decisionColumnWidth
-            : proposedWidth
-        let reviewSize = subviews[0].sizeThatFits(
-            ProposedViewSize(width: reviewWidth, height: nil)
-        )
-        let decisionSize = subviews[2].sizeThatFits(
-            ProposedViewSize(width: decisionWidth, height: nil)
-        )
-
-        return Measurements(
-            isHorizontal: isHorizontal,
-            width: proposedWidth,
-            reviewSize: reviewSize,
-            decisionSize: decisionSize
-        )
+    private static func webMetadata(
+        arguments: [String: AgentJSONValue]
+    ) -> [String] {
+        let maxCharacters = arguments["max_chars"]?.intValue() ?? 20_000
+        let formattedCount = maxCharacters.formatted(.number.grouping(.automatic))
+        return ["仅发送 GET 请求", "公开网页", "最多读取 \(formattedCount) 字符"]
     }
 }
 
@@ -469,7 +506,7 @@ struct AgentToolCallCard: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: isInteractive ? 6 : 3) {
-            if !isAwaitingConfirmation {
+            if !isAuthorizationNotice {
                 HStack(spacing: 6) {
                     Image(systemName: iconName)
                         .font(.system(size: 11, weight: .semibold))
@@ -546,73 +583,12 @@ struct AgentToolCallCard: View {
                 }
             }
 
-            if call.status == .pendingApproval {
-                VStack(alignment: .leading, spacing: 9) {
-                    approvalReviewHeader(
-                        title: "等待你审核",
-                        subtitle: "这一步需要你的允许后才会继续执行。",
-                        tint: appState.editorSettings.interfaceSkin.palette.accent,
-                        systemImage: "shield.lefthalf.filled"
-                    )
-                    approvalCommandBlock
-                    approvalExplanationSection
-                    if decisionAlreadySubmitted {
-                        submittedDecisionNotice
-                    } else {
-                        // The previous caption-sized controls were only about
-                        // 19pt tall in this card. Make the complete visible
-                        // button face clickable and keep every action at least
-                        // 36pt tall so approval never feels "unclickable".
-                        HStack(spacing: AgentApprovalActionMetrics.spacing) {
-                            Button(role: .destructive) {
-                                appState.denyAgentToolCall(id: call.id)
-                            } label: {
-                                approvalActionLabel(
-                                    L10n.ToolCard.deny,
-                                    systemImage: "xmark"
-                                )
-                            }
-                            .buttonStyle(.bordered)
-                            .approvalButtonBorderShape(cornerRadius: AgentApprovalActionMetrics.cornerRadius)
-                            .tint(.red)
-                            .frame(maxWidth: .infinity)
-                            .cursor(.arrow)
-
-                            if let signature = alwaysAllowSignature {
-                                Button {
-                                    appState.alwaysAllowAgentToolCall(id: call.id)
-                                } label: {
-                                    approvalActionLabel(
-                                        L10n.ToolCard.alwaysAllow,
-                                        systemImage: "checkmark.shield"
-                                    )
-                                }
-                                .buttonStyle(.bordered)
-                                .approvalButtonBorderShape(cornerRadius: AgentApprovalActionMetrics.cornerRadius)
-                                .frame(maxWidth: .infinity)
-                                .help(L10n.ToolCard.alwaysAllowHelp(signature))
-                                .cursor(.arrow)
-                            }
-
-                            Button {
-                                appState.approveAgentToolCall(id: call.id)
-                            } label: {
-                                approvalActionLabel(
-                                    L10n.ToolCard.allow,
-                                    systemImage: "checkmark"
-                                )
-                            }
-                            .buttonStyle(.borderedProminent)
-                            .approvalButtonBorderShape(cornerRadius: AgentApprovalActionMetrics.cornerRadius)
-                            .frame(maxWidth: .infinity)
-                            .cursor(.arrow)
-                        }
-                        .controlSize(.large)
-                        .padding(.top, 2)
-                    }
+            if isAuthorizationNotice {
+                if isCompactSurfaceAuthorizationNotice {
+                    compactSurfaceAuthorizationNoticeBody
+                } else {
+                    authorizationNoticeBody
                 }
-            } else if call.status == .awaitingConfirm {
-                awaitingConfirmationBody
             } else if call.status == .awaitingUserAnswer {
                 askUserBody
             } else if call.toolName == "ask_user" {
@@ -621,22 +597,451 @@ struct AgentToolCallCard: View {
                 terminalShortcutProtectedInputsBody
             }
         }
-        .padding(.horizontal, isAwaitingConfirmation ? 0 : 7)
-        .padding(.vertical, isAwaitingConfirmation ? 0 : (isInteractive ? 7 : 4))
+        .padding(.horizontal, isAuthorizationNotice ? 0 : 7)
+        .padding(.vertical, isAuthorizationNotice ? 0 : (isInteractive ? 7 : 4))
         .background(cardBackground)
-        .clipShape(RoundedRectangle(cornerRadius: isAwaitingConfirmation ? 10 : 6, style: .continuous))
+        .clipShape(
+            RoundedRectangle(
+                cornerRadius: isAuthorizationNotice
+                    ? authorizationCornerRadius
+                    : 6,
+                style: .continuous
+            )
+        )
         .overlay(
-            RoundedRectangle(cornerRadius: isAwaitingConfirmation ? 10 : 6, style: .continuous)
+            RoundedRectangle(
+                cornerRadius: isAuthorizationNotice
+                    ? authorizationCornerRadius
+                    : 6,
+                style: .continuous
+            )
                 .stroke(borderColor, lineWidth: 1)
         )
     }
 
-    private var awaitingConfirmationBody: some View {
-        AgentConfirmationReviewLayout {
-            confirmationReviewColumn
-            confirmationDivider
-            confirmationDecisionColumn
+    private var approvalDescriptor: AgentApprovalNoticeDescriptor {
+        AgentApprovalNoticeCopy.descriptor(toolName: call.toolName, arguments: call.arguments)
+    }
+
+    private var compactAuthorizationDescriptor: AgentCompactAuthorizationDescriptor? {
+        AgentCompactAuthorizationCopy.descriptor(toolName: call.toolName)
+    }
+
+    private var compactSurfaceAuthorizationNoticeBody: some View {
+        let descriptor = compactAuthorizationDescriptor
+        return VStack(alignment: .leading, spacing: AgentCompactAuthorizationMetrics.contentSpacing) {
+            if let descriptor {
+                HStack(spacing: 8) {
+                    Image(systemName: descriptor.iconName)
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundStyle(appState.editorSettings.interfaceSkin.palette.accent)
+                        .frame(width: 18, height: 18)
+                    Text(descriptor.title)
+                        .font(.system(size: 12, weight: .medium))
+                        .foregroundStyle(appState.editorSettings.interfaceSkin.palette.secondaryText)
+                }
+
+                Text(descriptor.question)
+                    .font(.system(size: 15, weight: .medium))
+                    .foregroundStyle(appState.editorSettings.interfaceSkin.palette.primaryText)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
+            compactAuthorizationActions
         }
+        .padding(.horizontal, AgentCompactAuthorizationMetrics.horizontalPadding)
+        .padding(.vertical, AgentCompactAuthorizationMetrics.verticalPadding)
+    }
+
+    @ViewBuilder
+    private var compactAuthorizationActions: some View {
+        if decisionAlreadySubmitted {
+            submittedDecisionNotice
+        } else {
+            ViewThatFits(in: .horizontal) {
+                HStack(spacing: AgentCompactAuthorizationMetrics.actionSpacing) {
+                    compactAlwaysAllowButton
+                    Spacer(minLength: 16)
+                    compactDenyButton
+                    compactConversationAllowButton
+                }
+                VStack(alignment: .leading, spacing: AgentCompactAuthorizationMetrics.actionSpacing) {
+                    compactAlwaysAllowButton
+                    HStack(spacing: AgentCompactAuthorizationMetrics.actionSpacing) {
+                        Spacer(minLength: 0)
+                        compactDenyButton
+                        compactConversationAllowButton
+                    }
+                }
+            }
+            .controlSize(.regular)
+        }
+    }
+
+    private var compactAlwaysAllowButton: some View {
+        Button {
+            appState.alwaysAllowAgentToolCall(id: call.id)
+        } label: {
+            compactAuthorizationActionLabel(L10n.ToolCard.alwaysAllow)
+        }
+        .buttonStyle(.bordered)
+        .approvalButtonBorderShape(cornerRadius: AgentCompactAuthorizationMetrics.buttonCornerRadius)
+        .tint(appState.editorSettings.interfaceSkin.palette.accent)
+        .cursor(.arrow)
+    }
+
+    private var compactDenyButton: some View {
+        Button {
+            appState.denyAgentToolCall(id: call.id)
+        } label: {
+            compactAuthorizationActionLabel(L10n.ToolCard.deny)
+        }
+        .buttonStyle(.bordered)
+        .approvalButtonBorderShape(cornerRadius: AgentCompactAuthorizationMetrics.buttonCornerRadius)
+        .tint(appState.editorSettings.interfaceSkin.palette.accent)
+        .cursor(.arrow)
+    }
+
+    private var compactConversationAllowButton: some View {
+        Button {
+            appState.allowAgentToolFamilyForConversation(id: call.id)
+        } label: {
+            compactAuthorizationActionLabel(L10n.ToolCard.allowConversation)
+        }
+        .buttonStyle(.borderedProminent)
+        .approvalButtonBorderShape(cornerRadius: AgentCompactAuthorizationMetrics.buttonCornerRadius)
+        .tint(appState.editorSettings.interfaceSkin.palette.accent)
+        .cursor(.arrow)
+    }
+
+    private func compactAuthorizationActionLabel(_ title: String) -> some View {
+        Text(title)
+            .font(.system(size: 12, weight: .semibold))
+            .padding(.horizontal, 2)
+            .frame(minHeight: AgentCompactAuthorizationMetrics.minimumButtonHeight)
+            .contentShape(
+                RoundedRectangle(
+                    cornerRadius: AgentCompactAuthorizationMetrics.buttonCornerRadius,
+                    style: .continuous
+                )
+            )
+    }
+
+    private var authorizationNoticeBody: some View {
+        let descriptor = approvalDescriptor
+        let palette = appState.editorSettings.interfaceSkin.palette
+        return VStack(alignment: .leading, spacing: 0) {
+            VStack(alignment: .leading, spacing: AgentConfirmationReviewMetrics.sectionSpacing) {
+                authorizationHeader(descriptor)
+                authorizationDetailSurface(descriptor)
+                authorizationMetadata(descriptor)
+                authorizationExplanation
+            }
+            .padding(AgentConfirmationReviewMetrics.contentPadding)
+
+            Rectangle()
+                .fill(palette.hairline)
+                .frame(height: AgentConfirmationReviewMetrics.dividerThickness)
+
+            authorizationFooter(descriptor)
+                .padding(AgentConfirmationReviewMetrics.contentPadding)
+        }
+    }
+
+    private func authorizationHeader(
+        _ descriptor: AgentApprovalNoticeDescriptor
+    ) -> some View {
+        let palette = appState.editorSettings.interfaceSkin.palette
+        return HStack(alignment: .top, spacing: 14) {
+            ZStack {
+                RoundedRectangle(
+                    cornerRadius: AgentConfirmationReviewMetrics.innerCornerRadius,
+                    style: .continuous
+                )
+                .fill(palette.selectionFill)
+                Image(systemName: descriptor.iconName)
+                    .font(.system(size: 18, weight: .semibold))
+                    .foregroundStyle(palette.accent)
+            }
+            .frame(
+                width: AgentConfirmationReviewMetrics.iconTileSize,
+                height: AgentConfirmationReviewMetrics.iconTileSize
+            )
+
+            VStack(alignment: .leading, spacing: 4) {
+                Text("需要你的确认")
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(palette.accent)
+                Text(descriptor.title)
+                    .font(.system(size: 18, weight: .semibold))
+                    .foregroundStyle(palette.primaryText)
+                    .fixedSize(horizontal: false, vertical: true)
+                Text(descriptor.subtitle)
+                    .font(.system(size: 13))
+                    .foregroundStyle(palette.secondaryText)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            Spacer(minLength: 0)
+        }
+    }
+
+    @ViewBuilder
+    private func authorizationDetailSurface(
+        _ descriptor: AgentApprovalNoticeDescriptor
+    ) -> some View {
+        if let detail = approvalDetail {
+            let palette = appState.editorSettings.interfaceSkin.palette
+            VStack(alignment: .leading, spacing: 8) {
+                HStack(spacing: 8) {
+                    Text(descriptor.detailTitle)
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundStyle(palette.primaryText)
+                    Spacer(minLength: 0)
+                    Button {
+                        copyApprovalCommand(detail.body)
+                    } label: {
+                        Label(
+                            commandCopied ? "已复制" : "复制",
+                            systemImage: commandCopied ? "checkmark" : "doc.on.doc"
+                        )
+                        .font(.system(size: 11, weight: .medium))
+                        .foregroundStyle(
+                            commandCopied ? palette.secondaryAccent : palette.secondaryText
+                        )
+                    }
+                    .buttonStyle(.plain)
+                    .help(commandCopied ? "内容已复制" : "复制完整内容")
+                    .cursor(.arrow)
+                }
+
+                ScrollView([.horizontal, .vertical], showsIndicators: true) {
+                    Text(detail.body)
+                        .font(.system(size: 12, design: .monospaced))
+                        .lineSpacing(3)
+                        .foregroundStyle(palette.primaryText)
+                        .textSelection(.enabled)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .padding(12)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
+                .frame(height: AgentConfirmationReviewMetrics.commandViewportHeight)
+                .background(palette.controlFill.opacity(0.72))
+                .clipShape(
+                    RoundedRectangle(
+                        cornerRadius: AgentConfirmationReviewMetrics.innerCornerRadius,
+                        style: .continuous
+                    )
+                )
+                .overlay(
+                    RoundedRectangle(
+                        cornerRadius: AgentConfirmationReviewMetrics.innerCornerRadius,
+                        style: .continuous
+                    )
+                    .stroke(palette.hairline, lineWidth: 1)
+                )
+            }
+        }
+    }
+
+    private func authorizationMetadata(
+        _ descriptor: AgentApprovalNoticeDescriptor
+    ) -> some View {
+        ViewThatFits(in: .horizontal) {
+            HStack(spacing: 8) {
+                authorizationMetadataChips(descriptor.metadata)
+                Spacer(minLength: 4)
+                authorizationExplanationButton(descriptor)
+            }
+            VStack(alignment: .leading, spacing: 10) {
+                authorizationMetadataRows(descriptor.metadata)
+                authorizationExplanationButton(descriptor)
+            }
+        }
+    }
+
+    private func authorizationMetadataChips(_ metadata: [String]) -> some View {
+        HStack(spacing: 7) {
+            ForEach(Array(metadata.enumerated()), id: \.offset) { index, item in
+                authorizationMetadataChip(item, index: index)
+            }
+        }
+    }
+
+    private func authorizationMetadataRows(_ metadata: [String]) -> some View {
+        VStack(alignment: .leading, spacing: 7) {
+            ForEach(Array(metadata.enumerated()), id: \.offset) { index, item in
+                authorizationMetadataChip(item, index: index)
+            }
+        }
+    }
+
+    private func authorizationMetadataChip(_ item: String, index: Int) -> some View {
+        let palette = appState.editorSettings.interfaceSkin.palette
+        return HStack(spacing: 5) {
+            Image(systemName: metadataIcon(at: index))
+                .font(.system(size: 9, weight: .semibold))
+            Text(item)
+                .lineLimit(1)
+        }
+        .font(.system(size: 10, weight: .medium))
+        .foregroundStyle(palette.secondaryText)
+        .padding(.horizontal, 9)
+        .padding(.vertical, 6)
+        .background(palette.selectionFill.opacity(0.68))
+        .clipShape(Capsule())
+    }
+
+    private func metadataIcon(at index: Int) -> String {
+        switch index {
+        case 0: return "location"
+        case 1: return "bell"
+        default: return "text.alignleft"
+        }
+    }
+
+    private func authorizationExplanationButton(
+        _ descriptor: AgentApprovalNoticeDescriptor
+    ) -> some View {
+        let palette = appState.editorSettings.interfaceSkin.palette
+        return Button {
+            loadApprovalExplanation()
+        } label: {
+            HStack(spacing: 6) {
+                if isLoadingApprovalExplanation {
+                    ProgressView()
+                        .controlSize(.small)
+                        .scaleEffect(0.64)
+                        .frame(width: 12, height: 12)
+                } else {
+                    Image(systemName: "sparkles")
+                        .font(.system(size: 10, weight: .semibold))
+                }
+                Text(approvalExplanation == nil ? descriptor.explanationTitle : "重新查看说明")
+                    .font(.system(size: 11, weight: .semibold))
+            }
+            .foregroundStyle(palette.accent)
+        }
+        .buttonStyle(.plain)
+        .disabled(isLoadingApprovalExplanation)
+        .help("查看这一步会做什么，以及可能影响哪些内容。")
+        .cursor(.arrow)
+    }
+
+    @ViewBuilder
+    private var authorizationExplanation: some View {
+        let palette = appState.editorSettings.interfaceSkin.palette
+        if let text = approvalExplanation?.text {
+            Text(text)
+                .font(.system(size: 11))
+                .foregroundStyle(palette.primaryText)
+                .textSelection(.enabled)
+                .fixedSize(horizontal: false, vertical: true)
+                .padding(12)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(palette.selectionFill.opacity(0.46))
+                .clipShape(
+                    RoundedRectangle(
+                        cornerRadius: AgentConfirmationReviewMetrics.innerCornerRadius,
+                        style: .continuous
+                    )
+                )
+        } else if let error = approvalExplanationError {
+            Text(error)
+                .font(.system(size: 11))
+                .foregroundStyle(palette.secondaryAccent)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+    }
+
+    private func authorizationFooter(
+        _ descriptor: AgentApprovalNoticeDescriptor
+    ) -> some View {
+        ViewThatFits(in: .horizontal) {
+            HStack(alignment: .center, spacing: 20) {
+                authorizationDecisionCopy(descriptor)
+                Spacer(minLength: 16)
+                authorizationActions(descriptor)
+            }
+            VStack(alignment: .leading, spacing: 16) {
+                authorizationDecisionCopy(descriptor)
+                authorizationActions(descriptor)
+                    .frame(maxWidth: .infinity, alignment: .trailing)
+            }
+        }
+    }
+
+    private func authorizationDecisionCopy(
+        _ descriptor: AgentApprovalNoticeDescriptor
+    ) -> some View {
+        let palette = appState.editorSettings.interfaceSkin.palette
+        return VStack(alignment: .leading, spacing: 4) {
+            Text(descriptor.decisionTitle)
+                .font(.system(size: 15, weight: .semibold))
+                .foregroundStyle(palette.primaryText)
+            Text(descriptor.decisionSubtitle)
+                .font(.system(size: 12))
+                .foregroundStyle(palette.secondaryText)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+    }
+
+    @ViewBuilder
+    private func authorizationActions(
+        _ descriptor: AgentApprovalNoticeDescriptor
+    ) -> some View {
+        if decisionAlreadySubmitted {
+            submittedDecisionNotice
+        } else {
+            let palette = appState.editorSettings.interfaceSkin.palette
+            VStack(alignment: .trailing, spacing: 8) {
+                HStack(spacing: AgentConfirmationReviewMetrics.actionButtonSpacing) {
+                    Button {
+                        appState.denyAgentToolCall(id: call.id)
+                    } label: {
+                        approvalActionLabel(descriptor.declineTitle, systemImage: "xmark")
+                    }
+                    .buttonStyle(.bordered)
+                    .approvalButtonBorderShape(cornerRadius: AgentApprovalActionMetrics.cornerRadius)
+                    .tint(palette.accent)
+                    .cursor(.arrow)
+                    .frame(maxWidth: AgentConfirmationReviewMetrics.actionButtonMaxWidth)
+
+                    Button {
+                        approveAuthorizationNotice()
+                    } label: {
+                        approvalActionLabel(descriptor.approveTitle, systemImage: "arrow.right")
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .approvalButtonBorderShape(cornerRadius: AgentApprovalActionMetrics.cornerRadius)
+                    .tint(palette.accent)
+                    .cursor(.arrow)
+                    .frame(maxWidth: AgentConfirmationReviewMetrics.actionButtonMaxWidth)
+                }
+                .controlSize(.regular)
+
+                if alwaysAllowSignature != nil {
+                    Button("以后允许同类操作") {
+                        appState.alwaysAllowAgentToolCall(id: call.id)
+                    }
+                    .buttonStyle(.plain)
+                    .font(.system(size: 10, weight: .medium))
+                    .foregroundStyle(palette.secondaryText)
+                    .cursor(.arrow)
+                }
+            }
+        }
+    }
+
+    private func approveAuthorizationNotice() {
+        if call.status == .awaitingConfirm {
+            _ = appState.confirmAgentToolCall(id: call.id, typedConfirmation: "confirm")
+        } else {
+            appState.approveAgentToolCall(id: call.id)
+        }
+    }
+
+    private var awaitingConfirmationBody: some View {
+        authorizationNoticeBody
     }
 
     private var confirmationDivider: some View {
@@ -1416,8 +1821,8 @@ struct AgentToolCallCard: View {
     }
 
     /// 审批时给用户看的「这次到底要做什么」明细块。命令类工具显示
-    /// 完整命令(默认约 2 行高,超出滚动查看);控制键工具显示展开后的
-    /// 友好按键说明,而不是裸的 `ctrl_c`。
+    /// 完整命令（默认约 3 行高，超出滚动查看）；网页、控制键及通用工具
+    /// 分别展示地址、友好按键说明或参数明细。
     private var approvalDetail: (title: String, body: String)? {
         if let command = fullCommand {
             var body = command
@@ -1437,7 +1842,13 @@ struct AgentToolCallCard: View {
            let raw = call.arguments["control"]?.stringValue() {
             return ("控制键", AgentToolDisplay.controlLabel(for: raw))
         }
-        return nil
+        if call.toolName == "web_fetch",
+           let url = call.arguments["url"]?.stringValue(),
+           !url.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            return ("访问地址", url)
+        }
+        guard !argumentsLines.isEmpty else { return nil }
+        return ("操作内容", argumentsLines)
     }
 
     private var approvalWorkingDirectoryName: String? {
@@ -1526,8 +1937,18 @@ struct AgentToolCallCard: View {
         }
     }
 
-    private var isAwaitingConfirmation: Bool {
-        call.status == .awaitingConfirm
+    private var isAuthorizationNotice: Bool {
+        call.status == .pendingApproval || call.status == .awaitingConfirm
+    }
+
+    private var isCompactSurfaceAuthorizationNotice: Bool {
+        call.risk == .write && compactAuthorizationDescriptor != nil
+    }
+
+    private var authorizationCornerRadius: CGFloat {
+        isCompactSurfaceAuthorizationNotice
+            ? AgentCompactAuthorizationMetrics.cornerRadius
+            : AgentConfirmationReviewMetrics.outerCornerRadius
     }
 
     private var hasExpandableContent: Bool {
@@ -1574,7 +1995,7 @@ struct AgentToolCallCard: View {
     }
 
     private var cardBackground: Color {
-        if isAwaitingConfirmation {
+        if isAuthorizationNotice {
             return appState.editorSettings.interfaceSkin.palette.panelFill
         }
         if isInteractive {
@@ -1621,9 +2042,11 @@ struct AgentToolCallCard: View {
     }
 
     private var borderColor: Color {
+        if isAuthorizationNotice {
+            return appState.editorSettings.interfaceSkin.palette.hairline
+        }
         switch call.status {
-        case .pendingApproval: return appState.editorSettings.interfaceSkin.palette.accent.opacity(0.4)
-        case .awaitingConfirm: return appState.editorSettings.interfaceSkin.palette.hairline
+        case .pendingApproval, .awaitingConfirm: return appState.editorSettings.interfaceSkin.palette.hairline
         case .awaitingUserAnswer: return askUserAccentColor.opacity(0.4)
         case .failed: return Color.orange.opacity(0.4)
         case .denied: return Color.secondary.opacity(0.3)

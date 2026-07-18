@@ -141,6 +141,7 @@ struct AgentSidePanelHost: View {
 
     var body: some View {
         let palette = appState.editorSettings.interfaceSkin.palette
+        let hasWallpaper = appState.editorSettings.hasConfiguredAgentWallpaper
         VStack(spacing: 0) {
             header
             Rectangle().fill(palette.hairline).frame(height: 1)
@@ -149,7 +150,11 @@ struct AgentSidePanelHost: View {
         .frame(width: layoutWidth)
         .frame(width: width, alignment: .trailing)
         .clipped()
-        .background(palette.panelFill)
+        .background(
+            palette.panelFill.opacity(
+                hasWallpaper ? appState.editorSettings.agentWallpaperSurfaceOpacity : 1
+            )
+        )
         // The side-panel shell is mouse-driven chrome. Keeping the shell out
         // of the keyboard focus chain also prevents popovers from painting an
         // automatic focus ring around their first action.

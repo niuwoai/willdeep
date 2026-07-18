@@ -54,7 +54,8 @@ enum AgentSidebarSessionVisibility {
         }
 
         return sessions.filter { session in
-            session.id == activeID
+            session.isPinned
+                || session.id == activeID
                 || hasUserMessage(session)
                 || fallbackPlaceholderIDs.contains(session.id)
         }
@@ -65,6 +66,41 @@ enum AgentSidebarSessionVisibility {
             return AgentSessionStore.metadataOnlySessionHasUserMessage(session.id)
         }
         return session.messages.contains { $0.role == .user }
+    }
+}
+
+/// Splits the visible conversation list into Codex-style global pins and
+/// workspace-owned rows. Pinning changes presentation only: the session keeps
+/// its workspace binding, but appears once in the global section until it is
+/// unpinned. Archived sessions stay behind their workspace disclosure even if
+/// they were pinned before archiving.
+enum AgentSidebarSessionPlacement {
+    static func globalPinnedSessions(from sessions: [AgentSession]) -> [AgentSession] {
+        sessions
+            .filter { $0.isPinned && !$0.isArchived }
+            .sorted { lhs, rhs in
+                let lhsPinnedAt = lhs.pinnedAt ?? .distantPast
+                let rhsPinnedAt = rhs.pinnedAt ?? .distantPast
+                if lhsPinnedAt != rhsPinnedAt {
+                    return lhsPinnedAt > rhsPinnedAt
+                }
+                return lhs.lastActivityAt > rhs.lastActivityAt
+            }
+    }
+
+    static func workspaceSessions(from sessions: [AgentSession]) -> [AgentSession] {
+        sessions.filter { !$0.isPinned || $0.isArchived }
+    }
+
+    static func workspaceOrder(_ lhs: AgentSession, _ rhs: AgentSession) -> Bool {
+        switch (lhs.isPinned, rhs.isPinned) {
+        case (true, false): return true
+        case (false, true): return false
+        case (true, true):
+            return (lhs.pinnedAt ?? .distantPast) > (rhs.pinnedAt ?? .distantPast)
+        case (false, false):
+            return lhs.lastActivityAt > rhs.lastActivityAt
+        }
     }
 }
 
@@ -88,7 +124,10 @@ struct AgentSessionsSidebar: View {
     /// "+" (new chat in this workspace) button visibility, same
     /// show-on-aim pattern as the session rows.
     @State private var hoveredWorkspaceGroup: String?
-    @State private var someIMAccount = SomeIMIntegrationStore.loadAccount()
+    @State private var someIMAccount = SomeIMIntegrationStore.loadAuthenticatedAccount()
+    @State private var isSomeIMAuthenticated = SomeIMIntegrationStore
+        .loadAuthenticationSnapshot()
+        .isAuthenticated
     @State private var isRefreshingSomeIMAccount = false
     @State private var someIMAccountStatus = ""
 
@@ -118,6 +157,7 @@ struct AgentSessionsSidebar: View {
                     Spacer().frame(height: 18)
                     AgentRoutinesSidebarSection()
                     Spacer().frame(height: 4)
+                    pinnedSessionsSection
                     workspacesHeader
                     ForEach(groupedSessions) { group in
                         workspaceGroup(group)
@@ -153,9 +193,18 @@ struct AgentSessionsSidebar: View {
             prunePersistedWorkspaceStateIfNeeded()
         }
         .onReceive(NotificationCenter.default.publisher(for: SomeIMIntegrationStore.accountDidChangeNotification)) { _ in
-            someIMAccount = SomeIMIntegrationStore.loadAccount()
+            reloadSomeIMAuthenticationState()
+            if someIMAccount != nil {
+                someIMAccountStatus = ""
+            }
         }
-        .task(id: someIMAccount?.email) {
+        .onReceive(NotificationCenter.default.publisher(for: SomeIMIntegrationStore.sessionDidChangeNotification)) { _ in
+            reloadSomeIMAuthenticationState()
+            if someIMAccount != nil {
+                someIMAccountStatus = ""
+            }
+        }
+        .task(id: isSomeIMAuthenticated) {
             await runAutomaticSomeIMAccountRefreshLoop()
         }
         .alert(
@@ -187,6 +236,7 @@ struct AgentSessionsSidebar: View {
     private var someIMAccountFooter: some View {
         AgentSidebarAccountFooter(
             account: someIMAccount,
+            isAuthenticated: isSomeIMAuthenticated,
             isRefreshingAccount: isRefreshingSomeIMAccount,
             accountStatus: someIMAccountStatus,
             onOpenAccount: { openSomeIMSettings() },
@@ -199,6 +249,7 @@ struct AgentSessionsSidebar: View {
                 SomeIMIntegrationStore.logout()
                 appState.clearSomeIMProvider()
                 someIMAccount = nil
+                isSomeIMAuthenticated = false
                 someIMAccountStatus = ""
             },
             onOpenHelp: {
@@ -246,6 +297,29 @@ struct AgentSessionsSidebar: View {
         }
         .padding(.horizontal, 14)
         .padding(.bottom, 6)
+    }
+
+    @ViewBuilder
+    private var pinnedSessionsSection: some View {
+        let sessions = globalPinnedSessions
+        if !sessions.isEmpty {
+            VStack(alignment: .leading, spacing: 0) {
+                Text(L10n.Sidebar.pinnedHeader)
+                    .font(AgentDesign.sidebarSectionFont)
+                    .foregroundStyle(.secondary)
+                    .textCase(.uppercase)
+                    .padding(.horizontal, 14)
+                    .padding(.bottom, 6)
+
+                ForEach(sessions) { session in
+                    sessionRow(
+                        session,
+                        contentHorizontalInset: AgentDesign.sidebarPinnedSessionContentHorizontalInset
+                    )
+                }
+            }
+            Spacer().frame(height: 12)
+        }
     }
 
     @ViewBuilder
@@ -416,7 +490,10 @@ struct AgentSessionsSidebar: View {
     }
 
     @ViewBuilder
-    private func sessionRow(_ session: AgentSession) -> some View {
+    private func sessionRow(
+        _ session: AgentSession,
+        contentHorizontalInset: CGFloat = AgentDesign.sidebarSessionContentHorizontalInset
+    ) -> some View {
         let palette = appState.editorSettings.interfaceSkin.palette
         let isActive = appState.activeAgentSessionID == session.id
         let isHovered = (hoveredSessionID == session.id)
@@ -478,7 +555,7 @@ struct AgentSessionsSidebar: View {
                     )
                 }
             }
-            .padding(.horizontal, AgentDesign.sidebarSessionContentHorizontalInset)
+            .padding(.horizontal, contentHorizontalInset)
             .frame(height: todoSummary == nil ? AgentDesign.sidebarRowHeight : AgentDesign.sidebarTodoRowHeight)
             .contentShape(Rectangle())
             .background(
@@ -690,7 +767,9 @@ struct AgentSessionsSidebar: View {
                     id: entry.key,
                     displayName: workspaceDisplayName(entry.key, remoteDescriptors: remoteDescriptors),
                     remoteRuntime: remoteRuntime,
-                    sessions: entry.value.sorted(by: sessionOrder)
+                    sessions: AgentSidebarSessionPlacement
+                        .workspaceSessions(from: entry.value)
+                        .sorted(by: AgentSidebarSessionPlacement.workspaceOrder)
                 )
             }
             .sorted { lhs, rhs in
@@ -701,6 +780,14 @@ struct AgentSessionsSidebar: View {
                 if lIsNoWorkspace != rIsNoWorkspace { return !lIsNoWorkspace }
                 return lhs.displayName.localizedCaseInsensitiveCompare(rhs.displayName) == .orderedAscending
             }
+    }
+
+    private var globalPinnedSessions: [AgentSession] {
+        let visibleSessions = AgentSidebarSessionVisibility.visibleSessions(
+            from: appState.agentSessions,
+            activeID: appState.activeAgentSessionID
+        )
+        return AgentSidebarSessionPlacement.globalPinnedSessions(from: visibleSessions)
     }
 
     private var remoteRuntimeDescriptorsByID: [UUID: RuntimeDescriptor] {
@@ -745,7 +832,13 @@ struct AgentSessionsSidebar: View {
 
     private func handleAppear() {
         prunePersistedWorkspaceStateIfNeeded()
-        someIMAccount = SomeIMIntegrationStore.loadAccount()
+        reloadSomeIMAuthenticationState()
+    }
+
+    private func reloadSomeIMAuthenticationState() {
+        let authentication = SomeIMIntegrationStore.loadAuthenticationSnapshot()
+        isSomeIMAuthenticated = authentication.isAuthenticated
+        someIMAccount = authentication.account
     }
 
     private func prunePersistedWorkspaceStateIfNeeded() {
@@ -764,6 +857,14 @@ struct AgentSessionsSidebar: View {
     @MainActor
     private func refreshSomeIMAccountNow() async {
         guard !isRefreshingSomeIMAccount else { return }
+        let authentication = SomeIMIntegrationStore.loadAuthenticationSnapshot()
+        guard authentication.isAuthenticated else {
+            isSomeIMAuthenticated = false
+            someIMAccount = nil
+            someIMAccountStatus = ""
+            return
+        }
+        isSomeIMAuthenticated = true
         isRefreshingSomeIMAccount = true
         someIMAccountStatus = ""
         defer { isRefreshingSomeIMAccount = false }
@@ -776,11 +877,11 @@ struct AgentSessionsSidebar: View {
 
     @MainActor
     private func runAutomaticSomeIMAccountRefreshLoop() async {
-        guard someIMAccount != nil else { return }
-        if SomeIMAccountRefreshPolicy.shouldRefresh(someIMAccount) {
+        guard isSomeIMAuthenticated else { return }
+        if someIMAccount == nil || SomeIMAccountRefreshPolicy.shouldRefresh(someIMAccount) {
             await refreshSomeIMAccountNow()
         }
-        while !Task.isCancelled, someIMAccount != nil {
+        while !Task.isCancelled, isSomeIMAuthenticated {
             let delay = SomeIMAccountRefreshPolicy.nextDelay()
             do {
                 try await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000))
@@ -845,26 +946,6 @@ struct AgentSessionsSidebar: View {
         return (runtimeID, path)
     }
 
-    /// Within-group ordering:
-    ///   1. Pinned rows first, most-recently-pinned at the top of the
-    ///      pinned block (`pinnedAt` desc) — re-pinning therefore
-    ///      bubbles a chat back to the very top.
-    ///   2. Non-pinned rows after, by recency (`lastActivityAt` desc) so the
-    ///      displayed timestamp and the row order agree — a chat showing "5m"
-    ///      never sits above one showing "0m".
-    /// Archived rows still flow through this comparator; `workspaceGroup`
-    /// splits them off into the disclosure section after sorting, so the
-    /// archived disclosure stays in recency-desc order too.
-    private func sessionOrder(_ lhs: AgentSession, _ rhs: AgentSession) -> Bool {
-        switch (lhs.isPinned, rhs.isPinned) {
-        case (true, false): return true
-        case (false, true): return false
-        case (true, true):
-            return (lhs.pinnedAt ?? .distantPast) > (rhs.pinnedAt ?? .distantPast)
-        case (false, false):
-            return lhs.lastActivityAt > rhs.lastActivityAt
-        }
-    }
 }
 
 enum AgentSidebarWorkspaceStateStore {

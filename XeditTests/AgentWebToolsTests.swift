@@ -100,6 +100,78 @@ struct AgentWebToolsTests {
         #expect(AgentWebTools.validatedPublicURL("not a url") == nil)
     }
 
+    @Test
+    func planGateAllowsOnlyValidatedPublicWebFetchResearch() {
+        let publicFetch = ["url": AgentJSONValue.string("https://developer.apple.com/documentation")]
+        let privateFetch = ["url": AgentJSONValue.string("http://127.0.0.1/admin")]
+
+        #expect(AppState.planModeCanAutoApprove(toolName: "web_fetch", arguments: publicFetch))
+        #expect(!AppState.planGateBlocks(
+            toolName: "web_fetch",
+            arguments: publicFetch,
+            risk: .write,
+            isActive: true
+        ))
+        #expect(AppState.planGateBlocks(
+            toolName: "web_fetch",
+            arguments: privateFetch,
+            risk: .write,
+            isActive: true
+        ))
+        #expect(AppState.planGateBlocks(
+            toolName: "run_command",
+            arguments: ["command": .string("swift build")],
+            risk: .write,
+            isActive: true
+        ))
+    }
+
+    @Test
+    func planModeAutoApprovesValidatedPublicWebResearchOnly() async {
+        let sandbox = KeychainSandbox()
+        defer { withExtendedLifetime(sandbox) {} }
+        let appState = AppState()
+        let root = URL(fileURLWithPath: "/tmp/willdeep-test-workspace")
+
+        let publicFetch = await appState.autoApprovalSource(
+            toolName: "web_fetch",
+            arguments: ["url": .string("https://developer.apple.com/documentation")],
+            risk: .write,
+            rootDirectory: root,
+            interactionMode: .plan,
+            approvalMode: .requestEveryTime
+        )
+        #expect(publicFetch == .staticAllowlist)
+
+        let privateFetch = await appState.autoApprovalSource(
+            toolName: "web_fetch",
+            arguments: ["url": .string("http://127.0.0.1/admin")],
+            risk: .write,
+            rootDirectory: root,
+            interactionMode: .plan
+        )
+        #expect(privateFetch == nil)
+
+        let command = await appState.autoApprovalSource(
+            toolName: "run_command",
+            arguments: ["command": .string("swift build")],
+            risk: .write,
+            rootDirectory: root,
+            interactionMode: .plan,
+            approvalMode: .requestEveryTime
+        )
+        #expect(command == nil)
+
+        let normalFetch = await appState.autoApprovalSource(
+            toolName: "web_fetch",
+            arguments: ["url": .string("https://developer.apple.com/documentation")],
+            risk: .write,
+            rootDirectory: root,
+            interactionMode: .normal
+        )
+        #expect(normalFetch == nil)
+    }
+
     // MARK: - HTML reducer
 
     @Test

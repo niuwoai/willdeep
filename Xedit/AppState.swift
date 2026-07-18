@@ -14,7 +14,7 @@ import AppKit
 /// Manages the currently opened file URL, its text content, the dirty (edited) flag,
 /// and the root directory for the sidebar file tree.
 final class AppState: ObservableObject {
-    nonisolated static let maxAgentToolRounds = 64
+    nonisolated static let maxAgentToolRounds = 256
     nonisolated static let agentSidePanelResourceIdleTimeout: TimeInterval = 60 * 60
 
     @Published var openedFileURL: URL?
@@ -123,6 +123,8 @@ final class AppState: ObservableObject {
     /// start/end and on session switch — see `refreshAgentWorkspaceCollision`.
     @Published var agentWorkspaceCollision = AgentWorkspaceCollision()
     @Published var agentGitWorktreeCreation: AgentGitWorktreeCreation?
+    var agentGitWorktreeRefreshTask: Task<Void, Never>?
+    var agentGitWorktreeRefreshPath: String?
     var agentGitWorktreeCreationTask: Task<Void, Never>?
     var agentGitWorktreeProcessController: AgentGitWorktreeProcessController?
     @Published var isAgentPanelVisible = false
@@ -592,6 +594,11 @@ final class AppState: ObservableObject {
                 self?.reconcileSomeIMProviderFromSharedSession()
                 self?.refreshSomeIMCodingPlanStatus(force: true)
             }
+        // Session observers only report future cross-app changes. Reconcile the
+        // session that already exists at launch immediately and without a
+        // network dependency, otherwise a signed-in user can race the async
+        // relay-region probe and send with an empty provider-library key.
+        reconcileSomeIMProviderFromSharedSession()
         Task { @MainActor [weak self] in
             guard !SomeIMIntegrationStore.loadAPIKey().isEmpty else { return }
             await self?.refreshSomeIMRelayRouting()
@@ -701,6 +708,7 @@ final class AppState: ObservableObject {
     deinit {
         gitStatusRefreshTask?.cancel()
         quickOpenRefreshTask?.cancel()
+        agentGitWorktreeRefreshTask?.cancel()
         agentRequestTask?.cancel()
         activeRuntimeSubscription?.cancel()
         activeRuntimeForwardTask?.cancel()

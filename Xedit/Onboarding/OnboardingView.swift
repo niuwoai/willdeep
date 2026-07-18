@@ -9,7 +9,7 @@
 //    4. 完成,告知怎么用
 //
 //  这个 sheet 由 OnboardingFlowController.shared.isPresented 控制,
-//  挂在 WindowRootView 的根层级。view 内部用 @State currentStep 在 4
+//  挂在默认 AgentWindowRootView 的根层级。view 内部用 @State currentStep 在 4
 //  步之间切换,没有路由,简单 wizard 即可。
 //
 
@@ -85,6 +85,7 @@ struct OnboardingView: View {
                 ))
             Text(L10n.Onboarding.Welcome.title)
                 .font(.system(size: 26, weight: .semibold))
+                .accessibilityIdentifier("onboarding.welcome.title")
             Text(L10n.Onboarding.Welcome.subtitle)
                 .font(.callout)
                 .foregroundStyle(.secondary)

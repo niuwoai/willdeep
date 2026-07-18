@@ -58,6 +58,25 @@ struct GitWorktreeCoreTests {
         #expect(status.kind(for: root.appendingPathComponent("README.md")) == nil)
     }
 
+    @Test("initial workspace status summarizes untracked directories")
+    func testLightweightInitialGitStatus() throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("willdeep_git_status_\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: root) }
+        let generated = root.appendingPathComponent("generated/deep")
+        try FileManager.default.createDirectory(at: generated, withIntermediateDirectories: true)
+        try Data("one".utf8).write(to: generated.appendingPathComponent("one.txt"))
+        try Data("two".utf8).write(to: generated.appendingPathComponent("two.txt"))
+        try requireGit(["init"], in: root)
+
+        let summary = AppState.loadGitStatus(for: root, enumerateUntrackedFiles: false)
+        let detailed = AppState.loadGitStatus(for: root, enumerateUntrackedFiles: true)
+
+        #expect(summary.entries == ["generated": .untracked])
+        #expect(detailed.entries.keys.contains("generated/deep/one.txt"))
+        #expect(detailed.entries.keys.contains("generated/deep/two.txt"))
+    }
+
     @Test("git repository status aggregates folder markers deterministically")
     func testGitRepositoryStatusFolderMarkerPriority() {
         let root = URL(fileURLWithPath: "/tmp/willdeep-git-root")

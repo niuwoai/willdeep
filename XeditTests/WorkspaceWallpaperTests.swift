@@ -59,23 +59,60 @@ struct WorkspaceWallpaperTests {
         }
     }
 
-    @Test("Agent wallpaper surface preserves readable contrast")
-    func agentWallpaperContrastTokenIsBounded() {
-        #expect(AgentDesign.wallpaperChatSurfaceOpacity >= 0.5)
-        #expect(AgentDesign.wallpaperChatSurfaceOpacity < 1)
+    @Test("Agent wallpaper effects are opt-in to a configured image and remain bounded")
+    func agentWallpaperConfigurationIsBounded() {
+        var settings = EditorSettings.default
+        #expect(!settings.hasConfiguredAgentWallpaper)
+
+        settings.windowBackgroundImagePath = "builtin-wallpaper://aurora-drift"
+        #expect(settings.hasConfiguredAgentWallpaper)
+
+        settings.agentWallpaperEnabled = false
+        #expect(!settings.hasConfiguredAgentWallpaper)
+
+        settings.agentWallpaperEnabled = true
+        settings.agentWallpaperGlassOpacity = 2
+        settings.agentWallpaperSurfaceOpacity = 0
+        let normalized = settings.normalized()
+        #expect(normalized.agentWallpaperGlassOpacity == 1)
+        #expect(normalized.agentWallpaperSurfaceOpacity == 0.2)
+        #expect(EditorSettings.default.agentWallpaperSurfaceOpacity >= 0.5)
+        #expect(EditorSettings.default.agentWallpaperSurfaceOpacity < 1)
     }
 
     @Test("workspace wallpaper preference remains backward-compatible")
-    func wallpaperConfigurationUsesExistingPersistedPath() {
+    @MainActor
+    func wallpaperConfigurationUsesExistingPersistedPath() throws {
         var settings = EditorSettings.default
         #expect(!settings.hasConfiguredWorkspaceWallpaper)
 
         settings.windowBackgroundImagePath = "/tmp/wallpaper.png"
         #expect(settings.hasConfiguredWorkspaceWallpaper)
+        #expect(EditorBackgroundImageMode.allCases.contains(.tile))
         #expect(EditorBackgroundImageMode.allCases.allSatisfy { !$0.displayName.isEmpty })
+
+        let encoded = try JSONEncoder().encode(EditorSettings.default)
+        var legacyPayload = try #require(
+            JSONSerialization.jsonObject(with: encoded) as? [String: Any]
+        )
+        legacyPayload.removeValue(forKey: "agentWallpaperEnabled")
+        legacyPayload.removeValue(forKey: "agentWallpaperGlassEnabled")
+        legacyPayload.removeValue(forKey: "agentWallpaperGlassMaterial")
+        legacyPayload.removeValue(forKey: "agentWallpaperGlassOpacity")
+        legacyPayload.removeValue(forKey: "agentWallpaperSurfaceOpacity")
+        let decoded = try JSONDecoder().decode(
+            EditorSettings.self,
+            from: JSONSerialization.data(withJSONObject: legacyPayload)
+        )
+        #expect(decoded.agentWallpaperEnabled == EditorSettings.default.agentWallpaperEnabled)
+        #expect(decoded.agentWallpaperGlassEnabled == EditorSettings.default.agentWallpaperGlassEnabled)
+        #expect(decoded.agentWallpaperGlassMaterial == EditorSettings.default.agentWallpaperGlassMaterial)
+        #expect(decoded.agentWallpaperGlassOpacity == EditorSettings.default.agentWallpaperGlassOpacity)
+        #expect(decoded.agentWallpaperSurfaceOpacity == EditorSettings.default.agentWallpaperSurfaceOpacity)
     }
 
     @Test("built-in wallpaper catalog has eight stable 4K resources and thumbnails")
+    @MainActor
     func builtInWallpaperCatalogResources() throws {
         let wallpapers = BuiltInWorkspaceWallpaper.all
         #expect(wallpapers.count == 8)

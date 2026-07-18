@@ -84,6 +84,37 @@ record.call(
   "native disconnect consumes runtime.lastError"
 )
 
+advanced_worker_commands = %w[
+  page.snapshot page.hover page.select_option page.key page.scroll page.wait
+  tab.list tab.activate tab.navigate tab.history
+]
+missing_worker_commands = advanced_worker_commands.reject { |command| worker_source.include?(%Q{"#{command}"}) }
+record.call(
+  "advanced-browser-commands",
+  missing_worker_commands.empty?,
+  "missing=#{missing_worker_commands.join(",")}"
+)
+
+content_source = EXTENSION.join("content.js").read
+advanced_content_commands = %w[snapshot hoverSelector selectOption pressKey scrollPage waitFor]
+missing_content_commands = advanced_content_commands.reject { |command| content_source.include?(%Q{"#{command}"}) }
+record.call(
+  "structured-dom-actions",
+  missing_content_commands.empty? && content_source.include?("snapshotElements") && content_source.include?("accessibleName"),
+  "missing=#{missing_content_commands.join(",")}"
+)
+record.call(
+  "sensitive-input-redaction",
+  content_source.include?("isSensitiveInput") && content_source.include?("type === \"password\"") && content_source.include?("entry.value"),
+  "snapshot omits sensitive input values"
+)
+record.call(
+  "semantic-form-controls",
+  content_source.include?("HTMLSelectElement") && content_source.include?("focusRelative") &&
+    content_source.include?("deleteFromTextControl"),
+  "select/hover/tab/delete fallbacks"
+)
+
 status = checks.all? { |check| check[:ok] } ? "pass" : "fail"
 payload = {
   status: status,

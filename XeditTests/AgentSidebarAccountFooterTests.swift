@@ -30,6 +30,46 @@ struct AgentSidebarAccountFooterTests {
         #expect(english.path == "/en/products/willdeep")
     }
 
+    @Test("cached account is not presented as logged in without a shared credential")
+    @MainActor
+    func cachedAccountRequiresAuthenticatedSession() {
+        let cached = SomeIMAccount(
+            email: "cached@example.invalid",
+            nickname: "Cached",
+            avatarURL: nil,
+            tenantID: nil,
+            balanceUSD: "1.00",
+            credits: "100000",
+            creditsPerUSD: 100000,
+            defaultModel: SomeIMIntegrationSettings.defaultTextModel,
+            lastUpdatedAt: .distantPast
+        )
+
+        #expect(SomeIMIntegrationStore.authenticatedAccount(cachedAccount: cached, apiKey: "") == nil)
+        #expect(
+            SomeIMIntegrationStore.authenticatedAccount(
+                cachedAccount: cached,
+                apiKey: " shared-session-key "
+            ) == cached
+        )
+
+        let signedOut = SomeIMIntegrationStore.authenticationSnapshot(
+            cachedAccount: cached,
+            apiKey: "  "
+        )
+        #expect(!signedOut.isAuthenticated)
+        #expect(signedOut.apiKey.isEmpty)
+        #expect(signedOut.account == nil)
+
+        let signedIn = SomeIMIntegrationStore.authenticationSnapshot(
+            cachedAccount: cached,
+            apiKey: " shared-session-key "
+        )
+        #expect(signedIn.isAuthenticated)
+        #expect(signedIn.apiKey == "shared-session-key")
+        #expect(signedIn.account == cached)
+    }
+
     @Test("account popover actions stay out of the keyboard focus chain")
     func accountPopoverActionsAreNotFocusable() throws {
         let repositoryRoot = URL(fileURLWithPath: #filePath)
@@ -87,6 +127,7 @@ struct AgentSidebarAccountFooterTests {
 
             AgentSidebarAccountFooter(
                 account: account,
+                isAuthenticated: true,
                 isRefreshingAccount: false,
                 accountStatus: "",
                 onOpenAccount: {},

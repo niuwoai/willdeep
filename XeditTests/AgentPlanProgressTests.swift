@@ -369,5 +369,6 @@ struct AgentPlanProgressTests {
 
         #expect(prompt.contains("complete delivery contract"))
         #expect(prompt.contains("not just an outline, sample, first chapter"))
+        #expect(prompt.contains("web_fetch for validated public URLs"))
     }
 }

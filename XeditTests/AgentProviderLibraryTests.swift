@@ -466,6 +466,100 @@ struct AgentProviderLibraryTests {
     }
 
     @MainActor
+    @Test("shared some.im login repairs an active provider with an empty library key")
+    func sharedSessionReconciliationRepairsEmptyProviderKey() {
+        let sandbox = KeychainSandbox()
+        _ = sandbox
+        SomeIMIntegrationStore._setTestSharedSessionOverride(enabled: true)
+        defer { SomeIMIntegrationStore._setTestSharedSessionOverride(enabled: false) }
+
+        let appState = AppState()
+        installEmptyActiveSomeIMProvider(in: appState)
+        SomeIMIntegrationStore._setTestSharedAPIKeyWithoutNotification("shared-login-key")
+
+        #expect(appState.reconcileSomeIMProviderFromSharedSession())
+        #expect(appState.agentProviderLibrary.active?.apiKey == "shared-login-key")
+        #expect(appState.agentConfiguration.apiKey == "shared-login-key")
+    }
+
+    @MainActor
+    @Test("turn preflight self-heals a missing some.im provider key")
+    func turnPreflightRepairsSomeIMCredentialSplitBrain() {
+        let sandbox = KeychainSandbox()
+        _ = sandbox
+        SomeIMIntegrationStore._setTestSharedSessionOverride(enabled: true)
+        defer { SomeIMIntegrationStore._setTestSharedSessionOverride(enabled: false) }
+
+        let appState = AppState()
+        installEmptyActiveSomeIMProvider(in: appState)
+        let runtime = AgentRuntime(session: appState.startNewAgentSession())
+        SomeIMIntegrationStore._setTestSharedAPIKeyWithoutNotification("turn-repair-key")
+
+        #expect(appState.repairSomeIMProviderCredentialsForTurnIfNeeded(for: runtime))
+        #expect(appState.configurationForCurrentTurn(for: runtime).apiKey == "turn-repair-key")
+    }
+
+    @MainActor
+    @Test("relay location probe failure keeps the shared credential usable")
+    func failedRelayProbeDoesNotBlockCredentialSync() async {
+        let sandbox = KeychainSandbox()
+        _ = sandbox
+        SomeIMIntegrationStore._setTestSharedSessionOverride(enabled: true)
+        defer { SomeIMIntegrationStore._setTestSharedSessionOverride(enabled: false) }
+
+        let appState = AppState()
+        installEmptyActiveSomeIMProvider(in: appState)
+        let originalBaseURL = appState.agentConfiguration.baseURL
+        SomeIMIntegrationStore._setTestSharedAPIKeyWithoutNotification("offline-startup-key")
+
+        await appState.refreshSomeIMRelayRouting {
+            throw AgentClientError.invalidResponse
+        }
+
+        #expect(appState.agentConfiguration.apiKey == "offline-startup-key")
+        #expect(appState.agentConfiguration.baseURL == originalBaseURL)
+    }
+
+    @Test("app startup reconciles shared credentials before async relay probing")
+    func startupReconciliationPrecedesRelayProbe() throws {
+        let repositoryRoot = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+        let source = try String(
+            contentsOf: repositoryRoot.appendingPathComponent("Xedit/AppState.swift"),
+            encoding: .utf8
+        )
+        let startupSequence = """
+        reconcileSomeIMProviderFromSharedSession()
+                Task { @MainActor [weak self] in
+        """
+
+        #expect(source.contains(startupSequence))
+    }
+
+    @Test("every Agent request entry point runs the some.im credential repair")
+    func requestEntryPointsRepairSomeIMCredentials() throws {
+        let repositoryRoot = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+        let loopSource = try String(
+            contentsOf: repositoryRoot.appendingPathComponent("Xedit/AppStateAgentLoop.swift"),
+            encoding: .utf8
+        )
+        let retrySource = try String(
+            contentsOf: repositoryRoot.appendingPathComponent("Xedit/AppStateAgentErrors.swift"),
+            encoding: .utf8
+        )
+        let repairBeforeSnapshot = """
+        repairSomeIMProviderCredentialsForTurnIfNeeded(for: runtime)
+                let configuration = configurationForCurrentTurn(for: runtime)
+        """
+
+        #expect(loopSource.components(separatedBy: repairBeforeSnapshot).count - 1 == 2)
+        #expect(retrySource.contains(repairBeforeSnapshot))
+    }
+
+    @MainActor
     @Test
     func syncingSomeIMImageUnderstandingUsesResolvedRelayRoute() {
         let sandbox = KeychainSandbox()
@@ -481,6 +575,21 @@ struct AgentProviderLibraryTests {
         #expect(imageDescription.baseURL == SomeIMRelayRegion.internationalBaseURL)
         #expect(imageDescription.model == SomeIMIntegrationSettings.defaultVisionModel)
         #expect(imageDescription.apiKey == "sk-some-im")
+    }
+
+    @MainActor
+    private func installEmptyActiveSomeIMProvider(in appState: AppState) {
+        let entry = AgentProviderEntry(
+            providerID: AgentProviderPreset.someIMID,
+            baseURL: SomeIMRelayRegion.internationalBaseURL,
+            apiKey: "",
+            flashPrimary: SomeIMIntegrationSettings.defaultTextModel,
+            proPrimary: SomeIMIntegrationSettings.defaultTextModel,
+            routingMode: .flash
+        )
+        appState.agentProviderLibrary = AgentProviderLibrary(entries: [entry], activeID: entry.id)
+        #expect(appState.agentConfiguration.providerID == AgentProviderPreset.someIMID)
+        #expect(appState.agentConfiguration.apiKey.isEmpty)
     }
 
     @MainActor

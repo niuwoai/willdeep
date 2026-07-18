@@ -1,6 +1,6 @@
 # WillDeep Product Overview
 
-> Last updated: 2026-07-17 | Current version: v1.177.0-rc2
+> Last updated: 2026-07-18 | Current version: v1.185.0-rc5
 
 ## Positioning
 
@@ -12,7 +12,30 @@ WillDeep is configured for non-App-Store distribution without App Sandbox so it 
 
 ## 架构概览
 
+- **Codex 风格 Computer Use / 浏览器授权（1.185.0-rc2）** —— Computer Use、Chrome 与内置浏览器的普通写操作使用紧凑三按钮授权卡；“允许此对话”只写入当前 Agent runtime 并按工具族隔离，“始终允许”按工具族持久化，danger 级调试操作继续走严格确认，避免便捷授权扩大高风险操作边界。
+- **视觉验收响应式 OCR（1.185.0-rc3）** —— 贴图生成代码的 OCR 覆盖率使用归一化字符片段比较，忽略浏览器窄视口造成的自然换行差异，同时继续拒绝缺失或无关文案，避免完成门禁在响应式页面上误杀。
+- **贴图生成直接执行语义（1.185.0-rc4）** —— `/screenshot-to-code` 会退出会话遗留的 Plan 模式并清理旧计划，再进入生产代码修改、运行、浏览器截图与视觉验收闭环，避免显式执行命令被旧计划门禁切成只读规划。
+- **贴图生成浏览器专家直挂（1.185.0-rc5）** —— `/screenshot-to-code` 会按目标框架确定性挂载专家：Web 目标直接启用 Web Programming 与 Browser Ops 并打开内置 Browser，SwiftUI/AppKit/UIKit 保持原生实现与 Computer Use 验收路径。
+- **贴图到可验收代码闭环（1.185.0-rc1）** —— Composer 粘贴或附加 UI 图片后提供“一键生成 UI 代码”入口，自动启用 Web 或 SwiftUI 视觉实现技能并把原图路径注入执行上下文；主 Agent 必须直接修改生产文件、构建运行、通过内置 Browser/Chrome 或 Computer Use 捕获真实渲染，再调用视觉验收工具比较像素、OCR 与配色。宿主完成门禁会拦截缺少实现、截图或 `PASS` 证据的提前收工，并输出 `design-qa.md` 与视觉 diff 供复核。
+- **Computer Use / Browser 可靠操作扩展与长文件治理（1.184.0-rc1）** —— Computer Use 协议升级到 v3，可在不截图、不申请 Screen Recording 的情况下读取 AX 语义树，并按控件存在、控件值或窗口标题等待；Chrome Native Host 协议同步升级到 v3，新增 hover、原生 select option 与 Tab/Escape/退格/Enter 行为回退。`L10n` 与 Composer picker 的超长主文件按职责拆分，复杂度守门已恢复为零个硬性违规。
+- **Computer Use 与浏览器执行闭环增强（1.183.0-rc1）** —— 原生 Mac 操作的 AX 树补齐 identifier、状态、frame/center，并新增应用激活、控件聚焦、悬停和文本选择；Chrome 控制可列出/切换标签页、导航、抓取带新鲜 ref 的结构化 DOM、按键、滚动、等待条件并把截图作为图片附件回传。两条链路都遵循“读取新状态 → 唯一定位 → 执行动作 → 等待 → 重新读取”的闭环，并用独立 Markdown/JSON 契约报告持续守门。
+- **跨工作区全局置顶（1.182.0-rc1）** —— Agent 侧边栏把所有未归档的置顶会话聚合到工作区列表之前，按最近置顶时间排序且不在原工作区重复显示；取消置顶后会话自动回到原工作区，空白置顶草稿也不会因切换工作区而消失。
+- **默认 Agent 冷启动恢复首次引导（1.181.0-rc2）** —— 新用户启动后由默认 Agent 窗口展示 Onboarding，并在弹出前同步创建 headless AppState，确保 some.im 浏览器登录、Provider 保存与语音模型配置都具备完整运行上下文；编辑器窗口不再同时绑定同一弹窗状态，避免多窗口重复展示。
+- **设置页重组与主动更新入口（1.181.0-rc1）** —— App 菜单和“设置 → 通用 → 更新”均提供“检查更新”入口；设置导航按通用、格式与外观、工作区、AI Agents、Agent 工具、账户与设备、运行时与集成等任务重新归类。工作区与 Agent 背景集中到“格式与外观 → 背景”子页，并把“无背景图”作为可直接选择的正式选项。发布脚本覆盖构建、公证、Sparkle 签名、OSS 与 appcast 全链路，并支持从既有 DMG 安全补发元数据。
+- **Sparkle 签名自动更新（1.180.0-rc1）** —— WillDeep 启动后由 Sparkle 读取 some.im 动态 appcast，自动下载并校验 Ed25519 签名；用户确认安装时，独立 helper 会等待当前 App 退出，再原子替换 `.app`、失败回滚并重新启动新版，因此不再要求用户打开 DMG 手动覆盖。发布脚本在 Developer ID 签名和 Apple 公证完成后生成 Sparkle 签名，并把递增构建号、文件大小、SHA-256 和签名元数据发布到 muchtoken。
+- **会话内模型切换提示（1.179.0-rc10）** —— 切换具体模型、跨供应商选模型或切入省心托管后，聊天流会以居中的立方体图标和两侧分隔线记录“模型已从 A 更改为 B”。提示跟随会话持久化，便于回看当时的选择，却不会被发给模型作为上下文；再次选择当前模型也不会刷出重复记录。
+- **柔和圆角授权通知与多场景确认（1.179.0-rc9）** —— 命令审批、强确认、侧边栏终端命令、终端控制键、网页抓取及其他工具共用一套圆角通知组件，按场景切换标题、说明、元信息和按钮语义。界面不再用红色危险框制造压迫感，按钮提升到 42pt 命中高度，“以后允许”降为次要文字操作；全部 7 套界面皮肤沿用各自面板、控件、描边和强调色。
+- **工作区切换轻量化与知识目录按模式索引（1.179.0-rc8）** —— 重选当前工作区不再重复启动 Quick Open、编辑器 Git 与 Agent Git 扫描；首次 Git 快照只汇总未跟踪目录，不再用 `-uall` 递归展开海量生成文件，同路径刷新可合并、切换目录会取消旧任务。知识文件夹在普通/计划模式先保持待索引并由用户手动启动，目标模式自动后台索引。`$` 技能选择框在候选充足时至少完整显示三行。
+- **模型可先于工作目录选择（1.179.0-rc7）** —— 用户尚未选择工作目录或创建会话时，也可以先选省心托管或具体模型；选择动作会建立一个未绑定工作区的空会话，之后选择目录时原地绑定，保留刚才的模型选择。省心托管状态卡整块均可点击，不必精确点击右上角的小按钮。
+- **旧品牌会话与用量自动恢复（1.179.0-rc6）** —— 启动和首次打开统计时会校验并幂等导入 `Application Support/VeilWriter/agent-sessions` 中遗留的会话 JSON 到当前 WillDeep 会话存储；当前同 ID 会话始终优先，旧文件保留不删，损坏文件单独跳过。导入后的历史消息会继续进入现有 token、活跃天数和连续使用统计，避免品牌改名后旧记录被留在旧目录而显示清零。
+- **Agent 壁纸设置归位（1.179.0-rc5）** —— Agent 全局壁纸从 AI Agents 配置页迁入“编辑器 → 格式”，与工作区壁纸图库和图片布局参数相邻；重复图库被合并，Agent 专属区域只保留启用开关、界面遮罩透明度及毛玻璃参数，外观设置与模型、记忆、规则等能力配置不再混放。
+- **macOS Release 签名与 DMG 链路修复（1.179.0-rc4）** —— Ruby 发布脚本在导出 Developer ID App 后，会按由内到外的顺序重新签名 `willdeep-agent`、Computer Use Helper 可执行文件及 Helper App，强制启用时间戳与 Hardened Runtime，再保留主 App 的标识、entitlement 和签名要求重新封装；`create-dmg` 与 `hdiutil` 路径也分别负责自己的 Applications 链接，避免严格签名通过后仍在公证或 DMG 制作阶段断链。
+- **计划模式公开网页调研放行（1.179.0-rc3）** —— 未批准计划前，经过公网 URL 校验的 `web_fetch` GET 调研请求不再被直接拒绝，而是按静态安全策略自动执行；localhost、私网、link-local、危险命令和真实写操作仍保留原计划门禁，避免“为了写计划先查资料，却先吃一张拒绝卡”的挫败体验。
+- **悬浮语音连续波形与明亮配色（1.179.0-rc1）** —— 悬浮转写条在原有柱状波形之外新增跟随实时音量的正弦波、余弦波和心电图动态曲线；颜色库新增 8 组天空蓝、薄荷绿、薰衣草紫、蜜桃橙、玫瑰粉、柠檬黄、水色青与暖沙金浅色背景，并为每组提供高对比波形渐变和描边。
+- **AI Agent 全局壁纸与认证状态统一（1.178.0-rc1）** —— 设置 → 编辑器 → 格式可将 8 张内置 4K 壁纸或自定义图片应用到整个 Agent 工作区，支持填充、适应、拉伸、居中、平铺、缩放、图片与内容表面透明度，以及可选材质和强度的毛玻璃；some.im 设置页与左下账号区共用同一认证快照，不再因残留账号缓存显示互相矛盾的登录状态。
+- **Agent 长任务工具轮次扩容（1.177.0-rc3）** —— 单轮任务的工具调用安全上限从 64 轮提高到 256 轮，支持更长的排查、实现和验证链路；到达上限后仍会暂停并等待用户继续，保留意外循环保护。
 - **审核解释模型路由修复（1.177.0-rc2）** —— 命令确认卡使用 some.im Coding Plan 时请求已配置的 `someim-coding-plan-low`，失败后回退 `someim-auto-flash`；provider 返回错误时直接显示经过统一解析和长度限制的服务端原因，避免只显示孤零零的 HTTP 状态码。
+- **some.im 登录凭据单一真相与请求前自愈（1.177.0-rc2）** —— 侧边栏只在共享会话中确有 API 凭据时显示登录；App 启动、新消息、错误重试和后台续跑前都会把共享凭据同步到当前 some.im Provider，区域探测失败也不再阻断凭据注入，避免“左下角已登录、发送却提示未配置 API Key”的状态分裂。
 - **macOS App 图文文档站内置技能（1.177.0-rc1）** —— 新增 `mac-app-docs-site`，在 WillDeep 内可调用原生 `computer_use_*` 工具、在 Codex Desktop 内可调用 `node_repl + @oai/sky`，以真实界面状态采集流程截图并生成标准 Markdown 教程；同一技能继续把内容目录接入既有 React 或其他文档站路由，附带模板、隐私边界、深链/SSR/i18n 验收规则与 Markdown/JSON 双格式审计报告。
 - **命令确认按钮密度再收紧（1.176.0-rc8）** —— “拒绝 / 允许”在宽屏左右栏与窄屏上下栏中均使用更低的按钮高度和 124pt 最大宽度，按钮间距扩大到 24pt，保留主次操作与左右顺序但减少视觉压迫。
 - **侧边栏 Diff 按文件延迟加载与 TextKit 渲染（1.176.0-rc7）** —— 工作区变更入口先读取 Git 状态与行数统计，用户选中文件后才生成该文件的 diff；大文本由开启非连续布局的 `NSTextView` 按视口排版，并以 UTF-8 字节数和行数设置双重上限，避免大量中文变更触发 SwiftUI 全文同步字形塑形而卡住主线程。
@@ -123,7 +146,7 @@ WillDeep is configured for non-App-Store distribution without App Sandbox so it 
 - **Workspace 会话查询与自动改名（1.152.0-rc15）** —— Agent 新增 `list_workspace_sessions` 只读工具查看当前 workspace 分组下的会话列表，并新增 `suggest_session_title` 通过标题总结 flash 模型生成当前会话短标题候选；系统提示会在新用户输入后检查会话名是否仍贴合任务，普通模式通过 `rename_session` 询问用户确认，Goal 模式下 `rename_session` 自动通过且不打断目标执行，`change_workspace` 仍在 Goal 模式禁用。
 - **同会话后续请求待办刷新（1.152.0-rc14）** —— Plan 模式中已完成计划会重新进入计划门，后续同一会话的新需求必须先生成新 `plan`；捕获逻辑现在优先识别最新助手消息里的 `plan` 块并替换旧计划，右侧待办随新需求刷新。
 - **当前会话排队任务工具（1.152.0-rc14）** —— Agent 新增 `list_queued_tasks` 只读工具，可查看当前会话排队用户消息、provider dispatch 等候、后台 job、媒体任务和 `.codex-build/queue` 项目构建队列；系统提示要求在用户未明确要求时，完整编译、测试、归档、发布、上线等重操作前先查队列，若还有后续用户任务则优先推迟重操作。
-- **Agent 主界面与审核框重排（1.152.0-rc13）** —— Agent 窗口的聊天区、左侧会话栏和右侧任务监控做了更清晰的视觉层次；工具审核卡独立展示风险、命令预览和操作按钮，长命令限制在约 3 行内滚动，并提供“查看解释与解决建议”。解释模型在 some.im Coding Plan 有效时使用 `someim-coding-plan-low` 并回退 `someim-auto-flash`，未绑定 some.im 则使用当前 provider 的 flash 模型。
+- **Agent 主界面与审核框重排（1.152.0-rc13）** —— Agent 窗口的聊天区、左侧会话栏和右侧任务监控做了更清晰的视觉层次；工具审核卡独立展示风险、命令预览和操作按钮，长命令限制在约 3 行内滚动，并提供“查看解释与解决建议”。解释模型按 some.im Coding Plan 订阅优先 `someim-coding-plan-low/flow`，无订阅回退 `someim-auto-flash`，未绑定 some.im 则使用当前 provider 的 flash 模型。
 - **省心托管档位菜单（1.152.0-rc12）** —— 模型菜单在当前会话启用「省心托管」后显示「托管档位」子菜单，支持 Flash / Pro / Premium 三档互切并勾选当前档位；会话标签也展示 `省心托管 · Flash/Pro/Premium`，避免用户看不出托管最低档。
 - **项目级构建守卫（1.152.0-rc11）** —— 仓库新增 `scripts/project_build_guard.rb`，以 `.codex-build/` 维护 workspace 级队列、锁、manifest 与报告；Xedit 的测试和 release 打包入口已接入该守卫，多个 Agent 会话同时触发 `xcodebuild` 时会排队执行，且相同 fingerprint 的成功产物可直接复用。
 - **Agent 模型菜单勾选与分组文案（1.152.0-rc10）** —— 模型选择菜单里路由默认值、省心托管与具体模型的勾选态互斥；具体模型只在用户显式选择后显示勾选。尾部“最近获取”分组改为“所有模型”，省心托管升档后的重置操作改称“降回基础托管档”。
@@ -1197,7 +1220,7 @@ CLAUDE.md §2 要求 React 部分必须走 i18n，但 WillDeep 是 SwiftUI macOS
 - Keep file IO off the main thread.
 - Skip generated dependency/build directories during project-wide scans, and cap Quick Open candidate collection so huge workspaces remain responsive.
 - Keep Git status and Agent network requests bounded with output caps and timeouts so unavailable providers or huge repositories cannot leave the UI waiting indefinitely.
-- Allow longer bounded Agent tool sessions so normal multi-step work can continue, while still pausing after 64 tool rounds to prevent accidental loops.
+- Allow longer bounded Agent tool sessions so normal multi-step work can continue, while still pausing after 256 tool rounds to prevent accidental loops.
 - Keep Agent-mode chat scrolling out of SwiftUI lazy-stack placement: historical messages and transcript readers render through a single TextKit attributed string, with Markdown, syntax-highlighted code, code-block copy affordances, compact tool summaries, and chat-like bubble chrome baked into that string instead of building nested SwiftUI Markdown block views.
 - Persist only command-family approvals for Agent `run_command`, and keep destructive commands behind confirmation even if a related safe command was always allowed.
 - Apply completed file loads back on the main thread and target the tab that requested the load.

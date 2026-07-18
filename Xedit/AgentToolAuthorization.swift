@@ -183,7 +183,7 @@ enum AgentSandboxPolicy {
                 reason: "This tool can modify application state or run external code.",
                 prefixRule: nil
             )
-        case "computer_use_request_permissions", "computer_use_launch_app", "computer_use_get_app_state", "computer_use_click", "computer_use_secondary_action", "computer_use_scroll", "computer_use_drag", "computer_use_type_text", "computer_use_press_key", "computer_use_set_value", "computer_use_restart_helper":
+        case "computer_use_request_permissions", "computer_use_launch_app", "computer_use_activate_app", "computer_use_get_app_state", "computer_use_click", "computer_use_secondary_action", "computer_use_scroll", "computer_use_drag", "computer_use_type_text", "computer_use_press_key", "computer_use_set_value", "computer_use_focus", "computer_use_hover", "computer_use_select_text", "computer_use_restart_helper":
             return AgentSandboxDecision(
                 mode: .escalated,
                 requiresUserApproval: true,

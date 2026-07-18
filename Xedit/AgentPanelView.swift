@@ -38,7 +38,13 @@ struct AgentPanelView: View {
             }
         }
         .frame(minWidth: isJobsDrawerOpen ? 600 : 300)
-        .background(appState.editorSettings.interfaceSkin.palette.panelFill)
+        .background(
+            appState.editorSettings.interfaceSkin.palette.panelFill.opacity(
+                appState.editorSettings.hasConfiguredAgentWallpaper
+                    ? appState.editorSettings.agentWallpaperSurfaceOpacity
+                    : 1
+            )
+        )
         .overlay(alignment: .leading) {
             Divider()
         }

@@ -24,6 +24,16 @@ extension AppState {
         resolveAgentToolCallDecision(id: id, decision: .approved)
     }
 
+    func allowAgentToolFamilyForConversation(id: AgentToolCall.ID) {
+        guard let (runtime, index) = runtimeAndToolCallIndex(containing: id) else { return }
+        let call = runtime.toolCalls[index]
+        guard let signature = AgentToolAuthorization.interactiveSurfaceSignature(
+            toolName: call.toolName
+        ) else { return }
+        runtime.conversationAllowedToolSignatures.insert(signature)
+        resolveAgentToolCallDecision(id: id, decision: .approved)
+    }
+
     func denyAgentToolCall(id: AgentToolCall.ID) {
         resolveAgentToolCallDecision(id: id, decision: .denied(reason: "User denied"))
     }
@@ -115,7 +125,8 @@ extension AppState {
         risk: AgentToolRisk,
         rootDirectory: URL?,
         interactionMode: AgentInteractionMode = .normal,
-        approvalMode: AgentApprovalMode = .smart
+        approvalMode: AgentApprovalMode = .smart,
+        conversationAllowedToolSignatures: Set<String> = []
     ) async -> AgentToolApprovalSource? {
         guard risk == .write else { return nil }
 
@@ -137,6 +148,22 @@ extension AppState {
             rootDirectory: rootDirectory
         )
 
+        // Plan mode still needs read-like research before the user can judge
+        // the proposed plan. A validated public GET has no workspace side
+        // effects, so let it run instead of turning the investigation into a
+        // confusing "denied" tool result. Keep every other write-tier call
+        // behind the plan gate.
+        if interactionMode == .plan,
+           Self.planModeCanAutoApprove(toolName: toolName, arguments: arguments) {
+            return .staticAllowlist
+        }
+
+        if let signature = AgentToolAuthorization.interactiveSurfaceSignature(
+            toolName: toolName
+        ), conversationAllowedToolSignatures.contains(signature) {
+            return .user
+        }
+
         // Goal mode implicitly enables the auto-approve safety judge for
         // command-shaped calls so it can stay autonomous without the user
         // flipping the master toggle. In smart mode this stays exactly
@@ -156,7 +183,7 @@ extension AppState {
         if interactionMode == .goal,
            !sandboxDecision.requiresTypedConfirmation,
            !Self.isCommandShapedTool(toolName),
-           sandboxDecision.mode != .escalated || goalModeCanAutoApproveEscalated(
+           sandboxDecision.mode != .escalated || Self.planModeCanAutoApprove(
                toolName: toolName,
                arguments: arguments
            ) {
@@ -558,7 +585,7 @@ extension AppState {
         return nil
     }
 
-    private func goalModeCanAutoApproveEscalated(
+    nonisolated static func planModeCanAutoApprove(
         toolName: String,
         arguments: [String: AgentJSONValue]
     ) -> Bool {
@@ -568,6 +595,16 @@ extension AppState {
         default:
             return false
         }
+    }
+
+    nonisolated static func planGateBlocks(
+        toolName: String,
+        arguments: [String: AgentJSONValue],
+        risk: AgentToolRisk,
+        isActive: Bool
+    ) -> Bool {
+        guard isActive, risk != .read else { return false }
+        return !planModeCanAutoApprove(toolName: toolName, arguments: arguments)
     }
 
     private func workspaceAccessCanAutoApprove(

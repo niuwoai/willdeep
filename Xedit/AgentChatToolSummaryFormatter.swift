@@ -266,6 +266,8 @@ enum AgentCollapsedToolActivitySummary {
                 generatedImageCount += 1
             case "edit_generated_image", "edit_image_with_mask", "upscale_image":
                 editedImageCount += 1
+            case "design_to_code_acceptance":
+                screenshotCount += 1
             case "visual_qa_screenshot", "capture_screenshot", "embedded_browser_capture_screenshot", "chrome_capture_tab":
                 screenshotCount += 1
             case _ where AgentTerminalToolNames.isVisibleTerminalOperation(call.toolName):

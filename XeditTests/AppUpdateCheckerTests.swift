@@ -86,4 +86,18 @@ struct AppUpdateCheckerTests {
         #expect(meta.downloadURL.absoluteString == "https://some.im/downloads/WillDeep.dmg")
         #expect(meta.notes == "Managed update")
     }
+
+    @Test
+    func managedUpdateURLsUseControlPlaneRoutes() throws {
+        let settings = SomeIMIntegrationSettings(baseURL: "https://edge.example.test/v1")
+        let metadataURL = try #require(AppUpdateChecker.managedUpdateURL(currentVersion: "1.180.0-rc1", settings: settings))
+        let appcastURL = try #require(AppUpdateChecker.managedAppcastURL(settings: settings))
+
+        #expect(metadataURL.path == "/api/v1/public/app-updates/latest")
+        #expect(metadataURL.query?.contains("current_version=1.180.0-rc1") == true)
+        #expect(appcastURL.path == "/api/v1/public/app-updates/appcast.xml")
+        #expect(appcastURL.query?.contains("app_id=willdeep") == true)
+        #expect(appcastURL.query?.contains("platform=macos") == true)
+        #expect(appcastURL.query?.contains("channel=stable") == true)
+    }
 }

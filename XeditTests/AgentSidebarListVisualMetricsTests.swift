@@ -25,6 +25,11 @@ struct AgentSidebarListVisualMetricsTests {
 
         #expect(workspaceTitleX == 40)
         #expect(sessionTitleX == workspaceTitleX)
+        #expect(
+            AgentDesign.sidebarSelectionHorizontalInset
+                + AgentDesign.sidebarPinnedSessionContentHorizontalInset
+                == 12
+        )
     }
 
     @Test("render the production conversation sidebar for design QA")
@@ -62,10 +67,20 @@ struct AgentSidebarListVisualMetricsTests {
         ]
         let now = Date(timeIntervalSince1970: 1_784_070_000)
         appState.agentSessions = [
-            makeSession(title: "修改脚本默认不使用缓存", workspace: "/tmp/83d", updatedAt: now.addingTimeInterval(-900)),
+            makeSession(
+                title: "调整图层面板展开方式",
+                workspace: "/tmp/83d",
+                updatedAt: now.addingTimeInterval(-900),
+                pinnedAt: now.addingTimeInterval(-120)
+            ),
             makeSession(title: "更新版本号", workspace: "/tmp/83d", updatedAt: now.addingTimeInterval(-800)),
             makeSession(title: "83d-go 里，帮我检查接口", workspace: "/tmp/83d", updatedAt: now.addingTimeInterval(-700)),
-            makeSession(title: "完善版本控制文档", workspace: "/tmp/agentrules", updatedAt: now.addingTimeInterval(-600)),
+            makeSession(
+                title: "完善版本控制文档",
+                workspace: "/tmp/agentrules",
+                updatedAt: now.addingTimeInterval(-600),
+                pinnedAt: now.addingTimeInterval(-60)
+            ),
             makeSession(title: "我们 wdtq,在同一个项目", workspace: "/tmp/aistaff", updatedAt: now.addingTimeInterval(-500)),
             makeSession(title: "hello,列一下我们当前功能", workspace: "/tmp/metaserver", updatedAt: now.addingTimeInterval(-400)),
         ]

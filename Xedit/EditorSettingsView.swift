@@ -90,42 +90,42 @@ struct EditorSettingsView: View {
     }
 
     private var settingsSidebar: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            ForEach(SettingsGroup.allCases) { group in
-                Button {
-                    settingsNavigation.selectedTab = group.tabs.first ?? settingsNavigation.selectedTab
-                } label: {
-                    let isSelected = settingsNavigation.selectedTab.group == group
-                    HStack(spacing: 8) {
-                        Image(systemName: group.icon)
-                            .frame(width: 16, alignment: .center)
-                        Text(group.title)
-                        Spacer(minLength: 0)
-                    }
-                        .font(.system(size: 13, weight: isSelected ? .semibold : .regular))
-                        .foregroundStyle(isSelected ? Color.primary : Color.secondary)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .padding(.horizontal, 10)
-                        .padding(.vertical, 8)
-                        .contentShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
-                        .background {
-                            if isSelected {
-                                RoundedRectangle(cornerRadius: 8, style: .continuous)
-                                    .fill(Color.accentColor.opacity(0.16))
-                            }
+        ScrollView {
+            VStack(alignment: .leading, spacing: 6) {
+                ForEach(SettingsGroup.allCases) { group in
+                    Button {
+                        settingsNavigation.selectedTab = group.tabs.first ?? settingsNavigation.selectedTab
+                    } label: {
+                        let isSelected = settingsNavigation.selectedTab.group == group
+                        HStack(spacing: 8) {
+                            Image(systemName: group.icon)
+                                .frame(width: 16, alignment: .center)
+                            Text(group.title)
+                            Spacer(minLength: 0)
                         }
+                            .font(.system(size: 13, weight: isSelected ? .semibold : .regular))
+                            .foregroundStyle(isSelected ? Color.primary : Color.secondary)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .padding(.horizontal, 10)
+                            .padding(.vertical, 8)
+                            .contentShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+                            .background {
+                                if isSelected {
+                                    RoundedRectangle(cornerRadius: 8, style: .continuous)
+                                        .fill(Color.accentColor.opacity(0.16))
+                                }
+                            }
+                    }
+                    .buttonStyle(.plain)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .contentShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+                    .settingsFocusDisabled()
+                    .help(group.title)
                 }
-                .buttonStyle(.plain)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .contentShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
-                .settingsFocusDisabled()
-                .help(group.title)
             }
-
-            Spacer(minLength: 0)
+            .padding(.horizontal, 10)
+            .padding(.vertical, 16)
         }
-        .padding(.horizontal, 10)
-        .padding(.vertical, 16)
         .frame(width: 190)
         .frame(maxHeight: .infinity, alignment: .topLeading)
         .background(.regularMaterial)
@@ -184,8 +184,10 @@ struct EditorSettingsView: View {
     @ViewBuilder
     private func settingsPage(for tab: EditorSettingsTab) -> some View {
         switch tab {
+        case .updates: updatesSettings
         case .typography: typographySettings
         case .appearance: appearanceSettings
+        case .background: backgroundSettings
         case .workspace: workspaceSettings
         case .agent: agentSettings
         case .someIM: SomeIMIntegrationSettingsView()

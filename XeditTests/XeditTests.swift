@@ -75,9 +75,10 @@ struct WillDeepTests {
         let displayText = AgentSidePanelDiffLimiter.displayText(for: oversizedDiff)
 
         #expect(displayText.count < oversizedDiff.count)
-        #expect(displayText.contains("已只显示前 24KB"))
         #expect(displayText.contains(prefix))
-        #expect(displayText.contains("完整内容可在终端运行 git diff --no-ext-diff HEAD -- 查看"))
+        #expect(displayText.contains(String(AgentSidePanelDiffLimiter.maximumDisplayUTF8Bytes)))
+        #expect(displayText.contains(String(AgentSidePanelDiffLimiter.maximumDisplayLines)))
+        #expect(displayText.contains("git diff --no-ext-diff HEAD -- <path>"))
     }
 
     @MainActor
@@ -239,6 +240,33 @@ struct WillDeepTests {
         #expect(appState.activeRuntime?.messages.count == 2)
         #expect(appState.activeRuntime?.workspaceRootPath == workspace.standardizedFileURL.path)
         #expect(appState.agentSessions.first(where: { $0.id == session.id })?.workspaceRootPath == workspace.standardizedFileURL.path)
+    }
+
+    @MainActor
+    @Test("selecting the active workspace is a no-op")
+    func testComposerWorkspacePickCurrentWorkspaceIsNoOp() throws {
+        let workspace = FileManager.default.temporaryDirectory
+            .appendingPathComponent("willdeep_workspace_same_\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: workspace, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: workspace) }
+
+        let appState = AppState(rootDirectory: nil)
+        let existingIDs = Set(appState.agentSessions.map(\.id))
+        let session = appState.startNewAgentSession(inWorkspaceAt: workspace.path)
+        defer {
+            for id in appState.agentSessions.map(\.id) where !existingIDs.contains(id) {
+                AgentSessionStore.delete(id: id)
+            }
+        }
+        appState.agentMessages = [AgentMessage(role: .user, content: "keep this conversation")]
+        let initialCount = appState.agentSessions.count
+
+        let selected = appState.moveActiveAgentSessionToWorkspace(at: workspace.path)
+
+        #expect(selected.id == session.id)
+        #expect(appState.activeAgentSessionID == session.id)
+        #expect(appState.agentSessions.count == initialCount)
+        #expect(appState.agentMessages.count == 1)
     }
 
     @MainActor
@@ -2404,6 +2432,11 @@ struct WillDeepTests {
 
         #expect(withTools > withoutTools)
         #expect(withTools < maximumExpectedToolSchemaTokens)
+    }
+
+    @Test("agent tool-round safety limit supports long multi-step work")
+    func testAgentToolRoundSafetyLimit() {
+        #expect(AppState.maxAgentToolRounds == 256)
     }
 
     @Test("MCP and skill tools are registered")

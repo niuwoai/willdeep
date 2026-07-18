@@ -440,6 +440,11 @@ struct OpenAIChatAdapter {
         while index < messages.count {
             let message = messages[index]
 
+            if message.isLocalTranscriptEvent {
+                index += 1
+                continue
+            }
+
             if message.role == .workflowReport || message.role == .widget || message.role == .scheduledTask {
                 index += 1
                 continue

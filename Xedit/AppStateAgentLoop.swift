@@ -41,6 +41,7 @@ extension AppState {
     ) {
         resolvePendingAgentPatchProposalsBeforeNewMessage(for: runtime)
 
+        repairSomeIMProviderCredentialsForTurnIfNeeded(for: runtime)
         let configuration = configurationForCurrentTurn(for: runtime)
         let providerID = configuration.providerID
 
@@ -320,6 +321,7 @@ extension AppState {
               runtime.requestTask == nil else { return }
         guard hasPendingBackgroundWakeups(for: runtime) else { return }
 
+        repairSomeIMProviderCredentialsForTurnIfNeeded(for: runtime)
         let configuration = configurationForCurrentTurn(for: runtime)
         let providerID = configuration.providerID
         guard acquireProviderSlotIfPossible(providerID: providerID) else { return }
@@ -567,6 +569,13 @@ extension AppState {
         var didQualityRetry = false
         var planAutomaticContinuationCount = 0
         var consecutivePlanRepliesWithoutProgress = 0
+        let designToCodeToolCallBaseline = runtime.toolCalls.count
+        let latestUserImages = runtime.messages.last(where: { $0.role == .user })?.images ?? []
+        let requiresDesignToCodeAcceptance = workspaceURL != nil && AgentDesignToCode.isActive(
+            skills: runtime.currentTurnAttachedSkills,
+            images: latestUserImages
+        )
+        var designToCodeGateContinuationCount = 0
 
         for _ in 0..<Self.maxAgentToolRounds {
             // `run_workflow` is asynchronous, but unlike the workflow card its
@@ -949,6 +958,18 @@ extension AppState {
                         continue
                     }
                 }
+                if requiresDesignToCodeAcceptance,
+                   designToCodeGateContinuationCount < AgentDesignToCode.maximumGateContinuations,
+                   let notice = AgentDesignToCode.completionGateNotice(
+                       toolCalls: runtime.toolCalls.dropFirst(designToCodeToolCallBaseline)
+                   ) {
+                    designToCodeGateContinuationCount += 1
+                    if let dropIndex = runtime.messages.firstIndex(where: { $0.id == assistantID }) {
+                        runtime.messages.remove(at: dropIndex)
+                    }
+                    runtime.messages.append(AgentMessage(role: .system, content: notice))
+                    continue
+                }
                 attachRecentGeneratedToolImages(to: assistantID, in: runtime)
                 captureAgentPatchProposals(for: runtime, fromMessageID: assistantID)
                 // A stream can end "successfully" having produced nothing
@@ -1140,7 +1161,8 @@ extension AppState {
                     risk: risk,
                     rootDirectory: workspaceURL,
                     interactionMode: runtime.interactionMode,
-                    approvalMode: runtime.approvalMode
+                    approvalMode: runtime.approvalMode,
+                    conversationAllowedToolSignatures: runtime.conversationAllowedToolSignatures
                 )
                 let isAlwaysAllowed = autoApproval != nil
                 let initialStatus: AgentToolCallStatus
@@ -1235,10 +1257,16 @@ extension AppState {
                     continue
                 }
 
-                // Plan mode: block any write/exec tool until the user has
-                // approved a plan. The reply goes back as a tool error so
+                // Plan mode blocks writes until the user approves a plan,
+                // while still allowing validated public web GETs needed to
+                // research that plan. Blocked calls go back as tool errors so
                 // the model knows to stop and emit a plan.
-                if risk != .read && runtime.isPlanGateActive {
+                if Self.planGateBlocks(
+                    toolName: call.toolName,
+                    arguments: argsDict,
+                    risk: risk,
+                    isActive: runtime.isPlanGateActive
+                ) {
                     anyDenied = true
                     if let index = runtime.toolCalls.firstIndex(where: { $0.id == recordID }) {
                         runtime.toolCalls[index].status = .denied

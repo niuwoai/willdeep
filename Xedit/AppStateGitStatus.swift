@@ -25,14 +25,21 @@ enum AgentUntrackedDiffPreviewSection: Equatable {
 }
 
 extension AppState {
-    nonisolated static func loadGitStatus(for directoryURL: URL) -> GitRepositoryStatus {
+    nonisolated static func loadGitStatus(
+        for directoryURL: URL,
+        enumerateUntrackedFiles: Bool = true
+    ) -> GitRepositoryStatus {
         guard let repositoryRoot = findGitRepositoryRoot(startingAt: directoryURL) else {
             return GitRepositoryStatus()
         }
 
         let branch = runGit(arguments: ["branch", "--show-current"], in: repositoryRoot)
             .trimmingCharacters(in: .whitespacesAndNewlines)
-        let statusOutput = runGit(arguments: ["status", "--porcelain=v1", "-uall"], in: repositoryRoot)
+        let untrackedMode = enumerateUntrackedFiles ? "-uall" : "-unormal"
+        let statusOutput = runGit(
+            arguments: ["status", "--porcelain=v1", untrackedMode],
+            in: repositoryRoot
+        )
         let entries = parseGitStatusPorcelain(statusOutput)
 
         return GitRepositoryStatus(
@@ -493,7 +500,13 @@ extension AppState {
         let editedPaths = agentEditedRelativePaths
         gitStatusRefreshTask = Task { [weak self] in
             let snapshot = await Task.detached(priority: .utility) {
-                let status = Self.loadGitStatus(for: targetDirectory)
+                // Workspace selection only needs a fast first snapshot. Using
+                // -uall here can recursively enumerate enormous untracked
+                // build/vendor directories and has caused multi-GB git peaks.
+                let status = Self.loadGitStatus(
+                    for: targetDirectory,
+                    enumerateUntrackedFiles: false
+                )
                 let changes = Self.loadAgentWorktreeChangeSummary(
                     status: status,
                     restrictTo: editedPaths

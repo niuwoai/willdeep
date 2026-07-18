@@ -24,6 +24,11 @@ struct EditorSettings: Codable, Equatable {
     var windowBackgroundImageOpacity: Double
     var windowBackgroundImageMode: EditorBackgroundImageMode
     var windowBackgroundImageScale: Double
+    var agentWallpaperEnabled: Bool
+    var agentWallpaperGlassEnabled: Bool
+    var agentWallpaperGlassMaterial: EditorGlassMaterial
+    var agentWallpaperGlassOpacity: Double
+    var agentWallpaperSurfaceOpacity: Double
     var editorGlassEnabled: Bool
     var editorGlassMaterial: EditorGlassMaterial
     var editorGlassOpacity: Double
@@ -47,6 +52,11 @@ struct EditorSettings: Codable, Equatable {
         windowBackgroundImageOpacity: 0.28,
         windowBackgroundImageMode: .fill,
         windowBackgroundImageScale: 1.0,
+        agentWallpaperEnabled: true,
+        agentWallpaperGlassEnabled: false,
+        agentWallpaperGlassMaterial: .contentBackground,
+        agentWallpaperGlassOpacity: 0.45,
+        agentWallpaperSurfaceOpacity: 0.58,
         editorGlassEnabled: false,
         editorGlassMaterial: .contentBackground,
         editorGlassOpacity: 0.75,
@@ -71,6 +81,11 @@ struct EditorSettings: Codable, Equatable {
         windowBackgroundImageOpacity: Double,
         windowBackgroundImageMode: EditorBackgroundImageMode,
         windowBackgroundImageScale: Double,
+        agentWallpaperEnabled: Bool = true,
+        agentWallpaperGlassEnabled: Bool = false,
+        agentWallpaperGlassMaterial: EditorGlassMaterial = .contentBackground,
+        agentWallpaperGlassOpacity: Double = 0.45,
+        agentWallpaperSurfaceOpacity: Double = 0.58,
         editorGlassEnabled: Bool,
         editorGlassMaterial: EditorGlassMaterial,
         editorGlassOpacity: Double,
@@ -93,6 +108,11 @@ struct EditorSettings: Codable, Equatable {
         self.windowBackgroundImageOpacity = windowBackgroundImageOpacity
         self.windowBackgroundImageMode = windowBackgroundImageMode
         self.windowBackgroundImageScale = windowBackgroundImageScale
+        self.agentWallpaperEnabled = agentWallpaperEnabled
+        self.agentWallpaperGlassEnabled = agentWallpaperGlassEnabled
+        self.agentWallpaperGlassMaterial = agentWallpaperGlassMaterial
+        self.agentWallpaperGlassOpacity = agentWallpaperGlassOpacity
+        self.agentWallpaperSurfaceOpacity = agentWallpaperSurfaceOpacity
         self.editorGlassEnabled = editorGlassEnabled
         self.editorGlassMaterial = editorGlassMaterial
         self.editorGlassOpacity = editorGlassOpacity
@@ -120,6 +140,11 @@ struct EditorSettings: Codable, Equatable {
         windowBackgroundImageOpacity = try container.decodeIfPresent(Double.self, forKey: .windowBackgroundImageOpacity) ?? fallback.windowBackgroundImageOpacity
         windowBackgroundImageMode = try container.decodeIfPresent(EditorBackgroundImageMode.self, forKey: .windowBackgroundImageMode) ?? fallback.windowBackgroundImageMode
         windowBackgroundImageScale = try container.decodeIfPresent(Double.self, forKey: .windowBackgroundImageScale) ?? fallback.windowBackgroundImageScale
+        agentWallpaperEnabled = try container.decodeIfPresent(Bool.self, forKey: .agentWallpaperEnabled) ?? fallback.agentWallpaperEnabled
+        agentWallpaperGlassEnabled = try container.decodeIfPresent(Bool.self, forKey: .agentWallpaperGlassEnabled) ?? fallback.agentWallpaperGlassEnabled
+        agentWallpaperGlassMaterial = try container.decodeIfPresent(EditorGlassMaterial.self, forKey: .agentWallpaperGlassMaterial) ?? fallback.agentWallpaperGlassMaterial
+        agentWallpaperGlassOpacity = try container.decodeIfPresent(Double.self, forKey: .agentWallpaperGlassOpacity) ?? fallback.agentWallpaperGlassOpacity
+        agentWallpaperSurfaceOpacity = try container.decodeIfPresent(Double.self, forKey: .agentWallpaperSurfaceOpacity) ?? fallback.agentWallpaperSurfaceOpacity
         editorGlassEnabled = try container.decodeIfPresent(Bool.self, forKey: .editorGlassEnabled) ?? fallback.editorGlassEnabled
         editorGlassMaterial = try container.decodeIfPresent(EditorGlassMaterial.self, forKey: .editorGlassMaterial) ?? fallback.editorGlassMaterial
         editorGlassOpacity = try container.decodeIfPresent(Double.self, forKey: .editorGlassOpacity) ?? fallback.editorGlassOpacity
@@ -171,6 +196,8 @@ extension EditorSettings {
         }
         result.windowBackgroundImageOpacity = min(max(result.windowBackgroundImageOpacity, 0), 1)
         result.windowBackgroundImageScale = min(max(result.windowBackgroundImageScale, 0.25), 3)
+        result.agentWallpaperGlassOpacity = min(max(result.agentWallpaperGlassOpacity, 0), 1)
+        result.agentWallpaperSurfaceOpacity = min(max(result.agentWallpaperSurfaceOpacity, 0.2), 1)
         result.editorGlassOpacity = min(max(result.editorGlassOpacity, 0), 1)
         result.editorSurfaceOpacity = min(max(result.editorSurfaceOpacity, 0.25), 1)
         return result
@@ -191,6 +218,10 @@ extension EditorSettings {
     var hasConfiguredWorkspaceWallpaper: Bool {
         guard let path = windowBackgroundImagePath else { return false }
         return !path.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
+    var hasConfiguredAgentWallpaper: Bool {
+        agentWallpaperEnabled && hasConfiguredWorkspaceWallpaper
     }
 
     func editorFont() -> NSFont {
@@ -463,6 +494,7 @@ enum EditorBackgroundImageMode: String, Codable, CaseIterable, Identifiable {
     case fit
     case stretch
     case center
+    case tile
 
     var id: String { rawValue }
 
@@ -476,6 +508,8 @@ enum EditorBackgroundImageMode: String, Codable, CaseIterable, Identifiable {
             return L10n.Settings.backgroundImageModeStretch
         case .center:
             return L10n.Settings.backgroundImageModeCenter
+        case .tile:
+            return L10n.Settings.backgroundImageModeTile
         }
     }
 }

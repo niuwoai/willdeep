@@ -8,6 +8,7 @@
 
 /* Begin PBXBuildFile section */
 		4C6FDA980F6219C8E718AEE6 /* SomeIMSharedSession in Frameworks */ = {isa = PBXBuildFile; productRef = 4D400004B6087AD73D48973E /* SomeIMSharedSession */; };
+		4D535041524B4C4530303031 /* Sparkle in Frameworks */ = {isa = PBXBuildFile; productRef = 4D535041524B4C4530303033 /* Sparkle */; };
 		5CA6B0922FC70A00006DFCCC /* WillDeep.help in Resources */ = {isa = PBXBuildFile; fileRef = 5CA6B0912FC70A00006DFCCC /* WillDeep.help */; };
 		5CA6B0A22FD0C9E0006DFCCC /* BundledSkills in Resources */ = {isa = PBXBuildFile; fileRef = 5CA6B0A12FD0C9E0006DFCCC /* BundledSkills */; };
 		5CA6B0B42FDDF001006DFCCC /* AIPipe.m in Sources */ = {isa = PBXBuildFile; fileRef = 5CA6B0AE2FDDF001006DFCCC /* AIPipe.m */; };
@@ -94,6 +95,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				4D535041524B4C4530303031 /* Sparkle in Frameworks */,
 				5CA6B0D02FE2A000006DFCCC /* SwiftTerm in Frameworks */,
 				4C6FDA980F6219C8E718AEE6 /* SomeIMSharedSession in Frameworks */,
 			);
@@ -209,6 +211,7 @@
 			);
 			name = Xedit;
 			packageProductDependencies = (
+				4D535041524B4C4530303033 /* Sparkle */,
 				5CA6B0D22FE2A000006DFCCC /* SwiftTerm */,
 				4D400004B6087AD73D48973E /* SomeIMSharedSession */,
 			);
@@ -292,6 +295,7 @@
 			mainGroup = 5CA6B0582FC6D8F9006DFCCC;
 			minimizedProjectReferenceProxies = 1;
 			packageReferences = (
+				4D535041524B4C4530303032 /* XCRemoteSwiftPackageReference "Sparkle" */,
 				5CA6B0D12FE2A000006DFCCC /* XCRemoteSwiftPackageReference "SwiftTerm" */,
 				8E3B78276C406A11424E710D /* XCRemoteSwiftPackageReference "SomeIMSharedSession" */,
 			);
@@ -467,7 +471,7 @@
 				CODE_SIGN_ENTITLEMENTS = Xedit/WillDeep.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 1;
+				CURRENT_PROJECT_VERSION = 12;
 				DEVELOPMENT_TEAM = ZH2S7D6PL6;
 				ENABLE_APP_SANDBOX = NO;
 				ENABLE_HARDENED_RUNTIME = YES;
@@ -494,7 +498,7 @@
 					"$(SRCROOT)/Xedit/Voice/Libraries/onnxruntime",
 					"$(PROJECT_DIR)/Xedit/Voice/Libraries/onnxruntime",
 				);
-				MARKETING_VERSION = "1.177.0-rc2";
+				MARKETING_VERSION = "1.185.0-rc5";
 				OTHER_LDFLAGS = (
 					"$(inherited)",
 					"$(SRCROOT)/Xedit/Voice/Libraries/onnxruntime/libonnxruntime.1.23.2.dylib",
@@ -522,7 +526,7 @@
 				CODE_SIGN_ENTITLEMENTS = Xedit/WillDeep.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 1;
+				CURRENT_PROJECT_VERSION = 12;
 				DEVELOPMENT_TEAM = ZH2S7D6PL6;
 				ENABLE_APP_SANDBOX = NO;
 				ENABLE_HARDENED_RUNTIME = YES;
@@ -549,7 +553,7 @@
 					"$(SRCROOT)/Xedit/Voice/Libraries/onnxruntime",
 					"$(PROJECT_DIR)/Xedit/Voice/Libraries/onnxruntime",
 				);
-				MARKETING_VERSION = "1.177.0-rc2";
+				MARKETING_VERSION = "1.185.0-rc5";
 				OTHER_LDFLAGS = (
 					"$(inherited)",
 					"$(SRCROOT)/Xedit/Voice/Libraries/onnxruntime/libonnxruntime.1.23.2.dylib",
@@ -693,11 +697,11 @@
 			buildSettings = {
 				BUNDLE_LOADER = "$(TEST_HOST)";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 1;
+				CURRENT_PROJECT_VERSION = 12;
 				DEVELOPMENT_TEAM = ZH2S7D6PL6;
 				GENERATE_INFOPLIST_FILE = YES;
 				MACOSX_DEPLOYMENT_TARGET = 13.7;
-				MARKETING_VERSION = "1.177.0-rc2";
+				MARKETING_VERSION = "1.185.0-rc5";
 				PRODUCT_BUNDLE_IDENTIFIER = com.willdeep.app.tests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				STRING_CATALOG_GENERATE_SYMBOLS = NO;
@@ -714,11 +718,11 @@
 			buildSettings = {
 				BUNDLE_LOADER = "$(TEST_HOST)";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 1;
+				CURRENT_PROJECT_VERSION = 12;
 				DEVELOPMENT_TEAM = ZH2S7D6PL6;
 				GENERATE_INFOPLIST_FILE = YES;
 				MACOSX_DEPLOYMENT_TARGET = 13.7;
-				MARKETING_VERSION = "1.177.0-rc2";
+				MARKETING_VERSION = "1.185.0-rc5";
 				PRODUCT_BUNDLE_IDENTIFIER = com.willdeep.app.tests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				STRING_CATALOG_GENERATE_SYMBOLS = NO;
@@ -734,10 +738,10 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 1;
+				CURRENT_PROJECT_VERSION = 12;
 				DEVELOPMENT_TEAM = ZH2S7D6PL6;
 				GENERATE_INFOPLIST_FILE = YES;
-				MARKETING_VERSION = "1.177.0-rc2";
+				MARKETING_VERSION = "1.185.0-rc5";
 				PRODUCT_BUNDLE_IDENTIFIER = com.willdeep.app.uitests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				STRING_CATALOG_GENERATE_SYMBOLS = NO;
@@ -753,10 +757,10 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 1;
+				CURRENT_PROJECT_VERSION = 12;
 				DEVELOPMENT_TEAM = ZH2S7D6PL6;
 				GENERATE_INFOPLIST_FILE = YES;
-				MARKETING_VERSION = "1.177.0-rc2";
+				MARKETING_VERSION = "1.185.0-rc5";
 				PRODUCT_BUNDLE_IDENTIFIER = com.willdeep.app.uitests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				STRING_CATALOG_GENERATE_SYMBOLS = NO;
@@ -810,6 +814,14 @@
 /* End XCConfigurationList section */
 
 /* Begin XCRemoteSwiftPackageReference section */
+		4D535041524B4C4530303032 /* XCRemoteSwiftPackageReference "Sparkle" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/sparkle-project/Sparkle";
+			requirement = {
+				kind = exactVersion;
+				version = 2.9.2;
+			};
+		};
 		5CA6B0D12FE2A000006DFCCC /* XCRemoteSwiftPackageReference "SwiftTerm" */ = {
 			isa = XCRemoteSwiftPackageReference;
 			repositoryURL = "https://github.com/migueldeicaza/SwiftTerm.git";
@@ -829,6 +841,11 @@
 /* End XCRemoteSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
+		4D535041524B4C4530303033 /* Sparkle */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 4D535041524B4C4530303032 /* XCRemoteSwiftPackageReference "Sparkle" */;
+			productName = Sparkle;
+		};
 		4D400004B6087AD73D48973E /* SomeIMSharedSession */ = {
 			isa = XCSwiftPackageProductDependency;
 			package = 8E3B78276C406A11424E710D /* XCRemoteSwiftPackageReference "SomeIMSharedSession" */;

@@ -1,0 +1,102 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <title>WillDeep Browser Capability Test</title>
+  <style>
+    body { font: 16px system-ui; margin: 40px; }
+    label, input, button, select, #status, #hover-status { display: block; margin: 12px 0; }
+    input { width: 320px; padding: 10px; }
+    button { padding: 10px 18px; }
+    #scroll-box { height: 120px; overflow: auto; border: 1px solid #bbb; }
+    #scroll-content { height: 700px; padding: 8px; }
+    pre { white-space: pre-wrap; }
+  </style>
+</head>
+<body>
+  <h1>WillDeep 浏览器能力实测</h1>
+  <label for="query">测试文本</label>
+  <input id="query" name="query" placeholder="输入一段文字">
+  <button id="submit" type="button">确认测试</button>
+  <div id="status" role="status">等待操作</div>
+  <label for="mode">运行模式</label>
+  <select id="mode" name="mode">
+    <option value="safe">安全模式</option>
+    <option value="pro">专业模式</option>
+  </select>
+  <button id="hover-target" type="button">悬停测试</button>
+  <div id="hover-status" role="status">尚未悬停</div>
+  <div id="scroll-box" tabindex="0"><div id="scroll-content">滚动区域顶部</div></div>
+  <button id="run-bridge-flow" type="button">运行 Browser Bridge 闭环</button>
+  <pre id="result">尚未运行</pre>
+
+  <script>
+    globalThis.chrome = {
+      runtime: {
+        onMessage: {
+          addListener(listener) { globalThis.__bridgeListener = listener; }
+        }
+      }
+    };
+  </script>
+  <script src="../../chrome-extension/willdeep-browser/content.js"></script>
+  <script>
+    document.querySelector('#submit').addEventListener('click', () => {
+      document.querySelector('#status').textContent = `已完成：${document.querySelector('#query').value}`;
+    });
+    document.querySelector('#hover-target').addEventListener('mouseenter', () => {
+      document.querySelector('#hover-status').textContent = '悬停成功';
+    });
+
+    function sendBridge(type, payload = {}) {
+      return new Promise((resolve, reject) => {
+        const handled = globalThis.__bridgeListener({ type, payload }, {}, (response) => {
+          if (response?.ok === false) reject(new Error(response.error));
+          else resolve(response);
+        });
+        if (!handled) reject(new Error(`bridge did not handle ${type}`));
+      });
+    }
+
+    document.querySelector('#run-bridge-flow').addEventListener('click', async () => {
+      const result = document.querySelector('#result');
+      try {
+        const first = await sendBridge('snapshot', { maxElements: 40 });
+        const input = first.elements.find((element) => element.selector === '#query');
+        const submit = first.elements.find((element) => element.selector === '#submit');
+        const mode = first.elements.find((element) => element.selector === '#mode');
+        const hover = first.elements.find((element) => element.selector === '#hover-target');
+        if (!input || !submit || !mode || !hover) throw new Error('snapshot refs missing');
+        await sendBridge('typeSelector', { ref: input.ref, text: '浏览器闭环成功X' });
+        const backspace = await sendBridge('pressKey', { ref: input.ref, key: 'Backspace' });
+        const tabbed = await sendBridge('pressKey', { ref: input.ref, key: 'Tab' });
+        await sendBridge('selectOption', { ref: mode.ref, label: '专业模式' });
+        await sendBridge('hoverSelector', { ref: hover.ref });
+        await sendBridge('clickSelector', { ref: submit.ref });
+        const waited = await sendBridge('waitFor', {
+          condition: 'text', value: '已完成：浏览器闭环成功', timeoutMs: 2000
+        });
+        const second = await sendBridge('snapshot', { maxElements: 40 });
+        await sendBridge('scrollPage', { selector: '#scroll-box', direction: 'down', pages: 1 });
+        result.textContent = JSON.stringify({
+          ok: true,
+          first_snapshot: first.snapshot_id,
+          second_snapshot: second.snapshot_id,
+          input_ref: input.ref,
+          submit_ref: submit.ref,
+          selected_value: document.querySelector('#mode').value,
+          hover_status: document.querySelector('#hover-status').textContent,
+          input_after_backspace: document.querySelector('#query').value,
+          focus_after_tab: tabbed.focused_selector,
+          backspace_key: backspace.key,
+          wait_title: waited.title,
+          final_status: document.querySelector('#status').textContent,
+          scroll_top: document.querySelector('#scroll-box').scrollTop
+        }, null, 2);
+      } catch (error) {
+        result.textContent = JSON.stringify({ ok: false, error: String(error?.message || error) }, null, 2);
+      }
+    });
+  </script>
+</body>
+</html>

@@ -90,7 +90,18 @@ struct SlashCommand: Identifiable {
         // 1.81.0-rc1：注册内置 workflow 为 slash 命令（/research,
         // /code-review, /bug-hunt, /competitor）。args 部分作为 query
         // 转给 startWorkflow，runtime 内起后台 task 跑 engine。
-        let workflows: [SlashCommand] = WorkflowRegistry.all.map { workflow in
+        let designToCode = SlashCommand(
+            id: "screenshot-to-code",
+            title: "/screenshot-to-code",
+            subtitle: "Implement a UI screenshot, run it, and complete visual acceptance",
+            symbol: "wand.and.stars",
+            argumentMode: .required(placeholder: "<path> [framework=react] [context=\"where this screen lives\"]")
+        ) { args in
+            state.startDesignToCodeFromSlashArguments(args)
+        }
+        let workflows: [SlashCommand] = WorkflowRegistry.all
+            .filter { $0.name != "screenshot-to-code" }
+            .map { workflow in
             SlashCommand(
                 id: "workflow-\(workflow.name)",
                 title: workflow.slashCommand,
@@ -103,7 +114,7 @@ struct SlashCommand: Identifiable {
                 state.startWorkflow(slashCommand: workflow.slashCommand, args: args)
             }
         }
-        return core + workflows
+        return core + [designToCode] + workflows
     }
 
     /// Filters by fuzzy-ish prefix on the slash-stripped query. The text
@@ -508,10 +519,19 @@ private struct AtPickerRow: View {
     }
 }
 
+nonisolated enum SkillPickerLayout {
+    static let minimumVisibleRowCount = 3
+    static let rowHeight: CGFloat = 38
+    static let maximumListHeight: CGFloat = 340
+
+    static func minimumListHeight(entryCount: Int) -> CGFloat {
+        CGFloat(min(max(entryCount, 0), minimumVisibleRowCount)) * rowHeight
+    }
+}
+
 struct SkillPickerMenu: View {
     private enum Metrics {
         static let width: CGFloat = 540
-        static let maxListHeight: CGFloat = 340
     }
 
     let entries: [SkillPickerEntry]
@@ -570,7 +590,10 @@ struct SkillPickerMenu: View {
                         }
                     }
                 }
-                .frame(maxHeight: Metrics.maxListHeight)
+                .frame(
+                    minHeight: SkillPickerLayout.minimumListHeight(entryCount: entries.count),
+                    maxHeight: SkillPickerLayout.maximumListHeight
+                )
             }
         }
         .padding(.bottom, 6)
@@ -612,6 +635,7 @@ private struct SkillPickerRow: View {
         }
         .padding(.horizontal, 10)
         .padding(.vertical, 5)
+        .frame(minHeight: SkillPickerLayout.rowHeight)
         .background(isSelected ? Color.accentColor : Color.clear)
     }
 }

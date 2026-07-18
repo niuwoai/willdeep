@@ -5,7 +5,7 @@ import Foundation
 import ImageIO
 import UniformTypeIdentifiers
 
-private let protocolVersion = "willdeep-computer-use.v1"
+private let protocolVersion = "willdeep-computer-use.v3"
 private let maximumElementCount = 500
 private let maximumDepth = 12
 private let maximumTextLength = 500
@@ -56,9 +56,13 @@ private final class ComputerUseController {
             return listApps()
         case "launch_app":
             return try launchApp(arguments)
+        case "activate_app":
+            return try activateApp(arguments)
         case "get_app_state":
             return try getAppState(arguments)
-        case "click", "secondary_action", "scroll", "drag", "type_text", "press_key", "set_value":
+        case "wait_for":
+            return try waitFor(arguments)
+        case "click", "secondary_action", "scroll", "drag", "type_text", "press_key", "set_value", "focus", "hover", "select_text":
             return try perform(action: action, arguments: arguments)
         case "shutdown":
             return ["shutdown": true]
@@ -131,9 +135,18 @@ private final class ComputerUseController {
         }
     }
 
+    private func activateApp(_ arguments: [String: Any]) throws -> [String: Any] {
+        let app = try resolveApplication(arguments)
+        guard app.activate(options: [.activateAllWindows, .activateIgnoringOtherApps]) else {
+            throw HelperFailure.invalidRequest("Could not activate \(app.localizedName ?? "the target app").")
+        }
+        return appDictionary(app, launched: false).merging(["activated": true]) { _, new in new }
+    }
+
     private func getAppState(_ arguments: [String: Any]) throws -> [String: Any] {
         try requireAccessibility()
         let app = try resolveApplication(arguments)
+        let includeScreenshot = bool(arguments, "include_screenshot", default: true)
         let axApplication = AXUIElementCreateApplication(app.processIdentifier)
         elements.removeAll(keepingCapacity: true)
         let snapshotID = UUID().uuidString.lowercased()
@@ -145,18 +158,78 @@ private final class ComputerUseController {
             depth: 0,
             counter: counter
         )
-        let capture = try captureWindow(for: app)
-        snapshots[app.processIdentifier] = Snapshot(
-            pid: app.processIdentifier,
-            windowFrame: capture.frame,
-            imageSize: capture.imageSize
-        )
-        return [
+        var result: [String: Any] = [
             "app": appDictionary(app, launched: false),
             "snapshot_id": snapshotID,
-            "tree": tree,
-            "screenshot": capture.dictionary
+            "tree": tree
         ]
+        if includeScreenshot {
+            let capture = try captureWindow(for: app)
+            snapshots[app.processIdentifier] = Snapshot(
+                pid: app.processIdentifier,
+                windowFrame: capture.frame,
+                imageSize: capture.imageSize
+            )
+            result["screenshot"] = capture.dictionary
+        } else {
+            snapshots.removeValue(forKey: app.processIdentifier)
+            result["screenshot"] = NSNull()
+        }
+        return result
+    }
+
+    private func waitFor(_ arguments: [String: Any]) throws -> [String: Any] {
+        try requireAccessibility()
+        let condition = try requiredString(arguments, "condition")
+        let timeoutMilliseconds = max(100, min(int(arguments, "timeout_ms", default: 5_000), 15_000))
+        let pollMilliseconds = max(50, min(int(arguments, "poll_ms", default: 100), 1_000))
+        let expected = arguments["expected"] as? String ?? ""
+        let ref = arguments["ref"] as? String
+        let pid = try targetPID(arguments)
+        let deadline = Date().addingTimeInterval(Double(timeoutMilliseconds) / 1_000)
+
+        repeat {
+            let matchedValue: String?
+            switch condition {
+            case "ref_exists":
+                guard let ref else { throw HelperFailure.invalidRequest("ref_exists requires ref.") }
+                matchedValue = elements[ref].flatMap { attributeValue($0, kAXRoleAttribute) }.map { _ in "true" }
+            case "value_contains":
+                guard let ref else { throw HelperFailure.invalidRequest("value_contains requires ref.") }
+                guard !expected.isEmpty else { throw HelperFailure.invalidRequest("value_contains requires expected.") }
+                matchedValue = elements[ref]
+                    .flatMap { attributeValue($0, kAXValueAttribute) }
+                    .map { String(describing: printable($0)) }
+                    .flatMap { $0.localizedCaseInsensitiveContains(expected) ? $0 : nil }
+            case "title_contains":
+                guard !expected.isEmpty else { throw HelperFailure.invalidRequest("title_contains requires expected.") }
+                let axApplication = AXUIElementCreateApplication(pid)
+                let focusedWindow: AXUIElement? = {
+                    guard let raw = attributeValue(axApplication, kAXFocusedWindowAttribute),
+                          CFGetTypeID(raw as CFTypeRef) == AXUIElementGetTypeID() else { return nil }
+                    return (raw as! AXUIElement)
+                }()
+                let titleSource = focusedWindow ?? axApplication
+                let title = attributeValue(titleSource, kAXTitleAttribute).map { String(describing: printable($0)) } ?? ""
+                matchedValue = title.localizedCaseInsensitiveContains(expected) ? title : nil
+            default:
+                throw HelperFailure.invalidRequest("Unsupported wait condition: \(condition).")
+            }
+
+            if let matchedValue {
+                return try getAppState([
+                    "pid": Int(pid),
+                    "include_screenshot": bool(arguments, "include_screenshot", default: false)
+                ]).merging([
+                    "waited_condition": condition,
+                    "matched_value": matchedValue,
+                    "timeout_ms": timeoutMilliseconds
+                ]) { _, new in new }
+            }
+            Thread.sleep(forTimeInterval: Double(pollMilliseconds) / 1_000)
+        } while Date() < deadline
+
+        throw HelperFailure.invalidRequest("Timed out waiting for \(condition) after \(timeoutMilliseconds) ms.")
     }
 
     private func perform(action: String, arguments: [String: Any]) throws -> [String: Any] {
@@ -171,10 +244,16 @@ private final class ComputerUseController {
         case "type_text": try typeText(arguments, pid: pid)
         case "press_key": try pressKey(arguments, pid: pid)
         case "set_value": try setValue(arguments)
+        case "focus": try focus(arguments)
+        case "hover": try hover(arguments, pid: pid)
+        case "select_text": try selectText(arguments)
         default: throw HelperFailure.unsupportedAction(action)
         }
         let app = try resolveApplication(["pid": Int(pid)])
-        return try getAppState(["pid": Int(app.processIdentifier)])
+        return try getAppState(["pid": Int(app.processIdentifier)]).merging([
+            "performed_action": action,
+            "target_pid": Int(pid)
+        ]) { _, new in new }
     }
 
     private func buildTree(
@@ -190,10 +269,26 @@ private final class ComputerUseController {
         let ref = "\(snapshotID):e\(counter.pointee)"
         elements[ref] = element
         var result: [String: Any] = ["ref": ref]
-        for attribute in [kAXRoleAttribute, kAXSubroleAttribute, kAXTitleAttribute, kAXDescriptionAttribute, kAXValueAttribute, kAXEnabledAttribute, kAXFocusedAttribute] {
+        for attribute in [
+            kAXRoleAttribute,
+            kAXSubroleAttribute,
+            kAXIdentifierAttribute,
+            kAXTitleAttribute,
+            kAXDescriptionAttribute,
+            kAXHelpAttribute,
+            kAXValueAttribute,
+            kAXEnabledAttribute,
+            kAXFocusedAttribute,
+            kAXSelectedAttribute,
+            kAXExpandedAttribute
+        ] {
             if let value = attributeValue(element, attribute) {
                 result[normalizedAttributeName(attribute)] = printable(value)
             }
+        }
+        if let frame = elementFrame(element) {
+            result["frame"] = frameDictionary(frame)
+            result["center"] = ["x": frame.midX, "y": frame.midY]
         }
         let actions = copyActionNames(element)
         if !actions.isEmpty { result["actions"] = actions }
@@ -212,8 +307,17 @@ private final class ComputerUseController {
     private func click(_ arguments: [String: Any], pid: pid_t) throws {
         if let ref = arguments["ref"] as? String, let element = elements[ref] {
             let status = AXUIElementPerformAction(element, kAXPressAction as CFString)
-            guard status == .success else { throw HelperFailure.elementNotFound(ref) }
-            return
+            if status == .success { return }
+            if let frame = elementFrame(element) {
+                let clicks = max(1, min(3, int(arguments, "click_count", default: 1)))
+                let center = CGPoint(x: frame.midX, y: frame.midY)
+                for _ in 0..<clicks {
+                    postMouse(.leftMouseDown, point: center, pid: pid)
+                    postMouse(.leftMouseUp, point: center, pid: pid)
+                }
+                return
+            }
+            throw HelperFailure.elementNotFound(ref)
         }
         let point = try point(arguments, pid: pid)
         let clicks = max(1, min(3, int(arguments, "click_count", default: 1)))
@@ -275,6 +379,55 @@ private final class ComputerUseController {
         let value = try requiredString(arguments, "value")
         guard let element = elements[ref] else { throw HelperFailure.elementNotFound(ref) }
         let status = AXUIElementSetAttributeValue(element, kAXValueAttribute as CFString, value as CFTypeRef)
+        guard status == .success else { throw HelperFailure.elementNotFound(ref) }
+    }
+
+    private func focus(_ arguments: [String: Any]) throws {
+        let ref = try requiredString(arguments, "ref")
+        guard let element = elements[ref] else { throw HelperFailure.elementNotFound(ref) }
+        let status = AXUIElementSetAttributeValue(element, kAXFocusedAttribute as CFString, true as CFTypeRef)
+        if status == .success { return }
+        let raiseStatus = AXUIElementPerformAction(element, kAXRaiseAction as CFString)
+        guard raiseStatus == .success else { throw HelperFailure.elementNotFound(ref) }
+    }
+
+    private func hover(_ arguments: [String: Any], pid: pid_t) throws {
+        let target: CGPoint
+        if let ref = arguments["ref"] as? String,
+           let element = elements[ref],
+           let frame = elementFrame(element) {
+            target = CGPoint(x: frame.midX, y: frame.midY)
+        } else {
+            target = try point(arguments, pid: pid)
+        }
+        postMouse(.mouseMoved, point: target, pid: pid)
+    }
+
+    private func selectText(_ arguments: [String: Any]) throws {
+        let ref = try requiredString(arguments, "ref")
+        let text = try requiredString(arguments, "text")
+        guard let element = elements[ref] else { throw HelperFailure.elementNotFound(ref) }
+        guard let value = attributeValue(element, kAXValueAttribute) as? String,
+              let range = value.range(of: text),
+              let lowerBound = range.lowerBound.samePosition(in: value.utf16),
+              let upperBound = range.upperBound.samePosition(in: value.utf16) else {
+            throw HelperFailure.invalidRequest("Text was not found in the target element.")
+        }
+        let location = value.utf16.distance(from: value.utf16.startIndex, to: lowerBound)
+        let length = value.utf16.distance(from: lowerBound, to: upperBound)
+        let selectionType = (arguments["selection_type"] as? String ?? "text").lowercased()
+        let selectedRange: CFRange
+        switch selectionType {
+        case "cursor_before": selectedRange = CFRange(location: location, length: 0)
+        case "cursor_after": selectedRange = CFRange(location: location + length, length: 0)
+        case "text": selectedRange = CFRange(location: location, length: length)
+        default: throw HelperFailure.invalidRequest("selection_type must be text, cursor_before, or cursor_after.")
+        }
+        var mutableRange = selectedRange
+        guard let rangeValue = AXValueCreate(.cfRange, &mutableRange) else {
+            throw HelperFailure.invalidRequest("Could not create an Accessibility text range.")
+        }
+        let status = AXUIElementSetAttributeValue(element, kAXSelectedTextRangeAttribute as CFString, rangeValue)
         guard status == .success else { throw HelperFailure.elementNotFound(ref) }
     }
 
@@ -342,6 +495,10 @@ private final class ComputerUseController {
 
     private func targetPID(_ arguments: [String: Any]) throws -> pid_t {
         if let pid = arguments["pid"] as? Int { return pid_t(pid) }
+        if let identifier = arguments["app"] as? String,
+           let app = resolveRunningApplication(identifier) {
+            return app.processIdentifier
+        }
         if let ref = arguments["ref"] as? String, let element = elements[ref] {
             var pid: pid_t = 0
             AXUIElementGetPid(element, &pid)
@@ -413,6 +570,34 @@ private struct KeyStroke {
 private func attributeValue(_ element: AXUIElement, _ attribute: String) -> Any? {
     var value: CFTypeRef?
     return AXUIElementCopyAttributeValue(element, attribute as CFString, &value) == .success ? value : nil
+}
+
+private func elementFrame(_ element: AXUIElement) -> CGRect? {
+    guard let rawPositionValue = attributeValue(element, kAXPositionAttribute),
+          CFGetTypeID(rawPositionValue as CFTypeRef) == AXValueGetTypeID(),
+          let rawSizeValue = attributeValue(element, kAXSizeAttribute),
+          CFGetTypeID(rawSizeValue as CFTypeRef) == AXValueGetTypeID() else {
+        return nil
+    }
+    let positionValue = rawPositionValue as! AXValue
+    let sizeValue = rawSizeValue as! AXValue
+    guard AXValueGetType(positionValue) == .cgPoint,
+          AXValueGetType(sizeValue) == .cgSize else {
+        return nil
+    }
+    var origin = CGPoint.zero
+    var size = CGSize.zero
+    guard AXValueGetValue(positionValue, .cgPoint, &origin),
+          AXValueGetValue(sizeValue, .cgSize, &size),
+          origin.x.isFinite, origin.y.isFinite,
+          size.width.isFinite, size.height.isFinite else {
+        return nil
+    }
+    return CGRect(origin: origin, size: size)
+}
+
+private func frameDictionary(_ frame: CGRect) -> [String: CGFloat] {
+    ["x": frame.minX, "y": frame.minY, "width": frame.width, "height": frame.height]
 }
 
 private func copyActionNames(_ element: AXUIElement) -> [String] {

@@ -32,13 +32,30 @@ enum AgentComputerUseTools {
         return AgentToolResult(summary: "Launched macOS app", payload: jsonPayload(result))
     }
 
+    static func activateApp(arguments: [String: AgentJSONValue]) async throws -> AgentToolResult {
+        let result = try await AgentComputerUseBridge.shared.invoke(action: "activate_app", arguments: arguments)
+        return AgentToolResult(summary: "Activated macOS app", payload: jsonPayload(result))
+    }
+
     static func getAppState(arguments: [String: AgentJSONValue]) async throws -> AgentToolResult {
         let result = try await AgentComputerUseBridge.shared.invoke(action: "get_app_state", arguments: arguments)
         return try stateResult(summary: "Captured macOS app state", result: result)
     }
 
+    static func inspectApp(arguments: [String: AgentJSONValue]) async throws -> AgentToolResult {
+        var safeArguments = arguments
+        safeArguments["include_screenshot"] = .bool(false)
+        let result = try await AgentComputerUseBridge.shared.invoke(action: "get_app_state", arguments: safeArguments)
+        return try stateResult(summary: "Inspected macOS app Accessibility state", result: result)
+    }
+
+    static func waitFor(arguments: [String: AgentJSONValue]) async throws -> AgentToolResult {
+        let result = try await AgentComputerUseBridge.shared.invoke(action: "wait_for", arguments: arguments)
+        return try stateResult(summary: "Waited for macOS app state", result: result)
+    }
+
     static func perform(action: String, arguments: [String: AgentJSONValue]) async throws -> AgentToolResult {
-        if action == "type_text" || action == "set_value" {
+        if action == "type_text" || action == "set_value" || action == "select_text" {
             try rejectSensitiveText(arguments)
         }
         let result = try await AgentComputerUseBridge.shared.invoke(action: action, arguments: arguments)
@@ -55,7 +72,7 @@ enum AgentComputerUseTools {
     private static func stateResult(summary: String, result: [String: Any]) throws -> AgentToolResult {
         let image = try result["screenshot"].flatMap { $0 as? [String: Any] }.flatMap(attachment)
         var payload = jsonPayload(result)
-        payload += "\n\nCoordinate rule: element refs are valid only for this fresh state. Pixel x/y values are relative to the returned screenshot unless coordinate_space is explicitly `screen`."
+        payload += "\n\nCoordinate rule: element refs are valid only for this fresh state. Pixel x/y values are relative to the returned screenshot unless coordinate_space is explicitly `screen`. A null screenshot means this was an Accessibility-only inspection and pixel fallback is intentionally unavailable."
         return AgentToolResult(summary: summary, payload: payload, images: image.map { [$0] } ?? [])
     }
 

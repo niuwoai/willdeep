@@ -71,8 +71,13 @@ extension AppState {
             files: files,
             includeWorkspaceOverview: includeWorkspaceOverview,
             documentTaskMode: runtime.documentTaskMode,
-            redactSensitiveContent: runtime.redactSensitiveAttachmentContent
+            redactSensitiveContent: runtime.redactSensitiveAttachmentContent,
+            imagePaths: AgentDesignToCode.sourcePaths(from: images)
         )
+
+        if skills.contains(where: { $0.identifier == AgentDesignToCode.webSkillIdentifier }) {
+            runtime.activeExperts.formUnion(AgentDesignToCode.webExperts)
+        }
 
         runtime.input = ""
         runtime.pendingImages = []
@@ -377,7 +382,12 @@ extension AppState {
         )
         let autoApproval = Self.delegatedComposerApprovalSource(risk: risk)
 
-        if risk != .read && runtime.isPlanGateActive {
+        if Self.planGateBlocks(
+            toolName: toolName,
+            arguments: arguments,
+            risk: risk,
+            isActive: runtime.isPlanGateActive
+        ) {
             finishDelegatedAgentRecord(
                 runtime: runtime,
                 recordID: recordID,
@@ -1030,9 +1040,11 @@ extension AppState {
         files: [AgentFileAttachment],
         includeWorkspaceOverview: Bool,
         documentTaskMode: AgentDocumentTaskMode = .automatic,
-        redactSensitiveContent: Bool = true
+        redactSensitiveContent: Bool = true,
+        imagePaths: [String] = []
     ) -> String {
-        guard !skills.isEmpty || !files.isEmpty || includeWorkspaceOverview else { return userText }
+        let designToCodeBlock = AgentDesignToCode.promptBlock(skills: skills, imagePaths: imagePaths)
+        guard !skills.isEmpty || !files.isEmpty || includeWorkspaceOverview || designToCodeBlock != nil else { return userText }
         var blocks: [String] = []
         blocks.append(AgentAttachedPromptProtocol.preludeHeader)
 
@@ -1052,6 +1064,10 @@ extension AppState {
 
             \(body)
             """)
+        }
+
+        if let designToCodeBlock {
+            blocks.append(designToCodeBlock)
         }
 
         if !files.isEmpty {
@@ -1225,6 +1241,83 @@ extension AppState {
     func attachAgentSkill(_ skill: AgentSkillEntry) {
         guard !agentPendingSkills.contains(where: { $0.identifier == skill.identifier }) else { return }
         agentPendingSkills.append(skill)
+    }
+
+    func preparePendingImagesForDesignToCode() {
+        guard let runtime = activeRuntime ?? activeRuntimeAfterCreatingNewSession(),
+              !runtime.pendingImages.isEmpty else { return }
+        let prompt = L10n.Composer.designToCodePrompt
+        if runtime.input.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            runtime.input = prompt
+        } else if !runtime.input.contains(prompt) {
+            runtime.input += "\n\n\(prompt)"
+        }
+        runtime.pendingSkills = AgentSkillAutoActivation.mergedSkills(
+            userText: runtime.input,
+            workspaceRootPath: runtime.workspaceRootPath ?? rootDirectory?.standardizedFileURL.path,
+            manuallySelectedSkills: runtime.pendingSkills,
+            hasVisualTargetAttachment: true
+        )
+        // This button is an explicit user choice, so its behavior must not
+        // depend on whether a localized prompt happens to match a keyword.
+        // Deterministically attach one visual implementation skill from the
+        // actual workspace shape.
+        if !runtime.pendingSkills.contains(where: AgentDesignToCode.isVisualImplementationSkill) {
+            let workspacePath = runtime.workspaceRootPath ?? rootDirectory?.standardizedFileURL.path
+            let identifier = AgentDesignToCode.preferredSkillIdentifier(workspaceRootPath: workspacePath)
+            if let skill = AgentSkillDirectory.bundledSkill(identifier: identifier) {
+                runtime.pendingSkills.append(skill)
+            }
+        }
+        if runtime.pendingSkills.contains(where: { $0.identifier == AgentDesignToCode.webSkillIdentifier }) {
+            runtime.activeExperts.formUnion(AgentDesignToCode.webExperts)
+            // Mount the browser workbench before the turn starts so the Agent can
+            // navigate, capture, and visually accept static or dev-server output
+            // without falling back to an external `open` command.
+            agentSidePanelKind = .embeddedBrowser
+        }
+        runtime.persist(touchUpdatedAt: false)
+    }
+
+    func startDesignToCodeFromSlashArguments(_ args: String) {
+        guard let runtime = activeRuntime ?? activeRuntimeAfterCreatingNewSession() else { return }
+        let parsed = ImageWorkflowSupport.parse(args)
+        guard let rawPath = parsed.positional.first else {
+            runtime.errorMessage = "Usage: /screenshot-to-code <path> [framework=react] [context=\"where this screen lives\"]"
+            return
+        }
+        let expanded = (rawPath as NSString).expandingTildeInPath
+        let imageURL = (expanded as NSString).isAbsolutePath
+            ? URL(fileURLWithPath: expanded).standardizedFileURL
+            : (runtime.workspaceRootPath.map { URL(fileURLWithPath: $0) } ?? rootDirectory)?
+                .appendingPathComponent(expanded)
+                .standardizedFileURL
+        guard let imageURL,
+              let data = try? Data(contentsOf: imageURL),
+              (try? ImageWorkflowSupport.loadImage(path: imageURL.path)) != nil else {
+            runtime.errorMessage = "Could not read UI screenshot: \(rawPath)"
+            return
+        }
+        AgentDesignToCode.prepareRuntimeForSlashExecution(
+            runtime,
+            framework: parsed.options["framework"]
+        )
+        if runtime.activeExperts.contains(.browserOps) {
+            agentSidePanelKind = .embeddedBrowser
+        }
+        let mimeType: String = switch imageURL.pathExtension.lowercased() {
+        case "jpg", "jpeg": "image/jpeg"
+        case "webp": "image/webp"
+        case "heic", "heif": "image/heic"
+        case "tif", "tiff": "image/tiff"
+        default: "image/png"
+        }
+        addAgentImage(data: data, mimeType: mimeType)
+        let framework = parsed.options["framework"].map { " Target framework: \($0)." } ?? ""
+        let productContext = parsed.options["context"].map { " Product context: \($0)." } ?? ""
+        runtime.input = L10n.Composer.designToCodePrompt + framework + productContext
+        preparePendingImagesForDesignToCode()
+        sendAgentMessage(allowPlanModeSuggestion: false)
     }
 
     func detachAgentSkill(identifier: String) {

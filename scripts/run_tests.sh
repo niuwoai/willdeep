@@ -12,6 +12,8 @@
 #   - complexity_report.*   复杂度守门报告
 #   - version_report.*      版本一致性报告
 #   - project_build_guard_report.* 项目级构建排队/缓存报告
+#   - computer_use_helper_contract_report.* Computer Use Helper 能力契约报告
+#   - chrome_extension_contract_report.* Chrome 扩展能力契约报告
 #   - short_drama_media_report.* 短剧媒体制作包/manifest/Ruby 模板契约报告
 #   - widget_side_panel_report.* 网页组件侧栏/聊天接力契约报告
 #   - image_edit_report.* 图片蒙版编辑/聊天接力契约报告
@@ -41,6 +43,8 @@ mkdir -p "${OUT_DIR}"
 
 ruby "${ROOT_DIR}/scripts/complexity_guard.rb" "${OUT_DIR}/complexity_report.md" "${OUT_DIR}/complexity_report.json"
 ruby "${ROOT_DIR}/scripts/version_consistency.rb" "${OUT_DIR}/version_report.md" "${OUT_DIR}/version_report.json"
+ruby "${ROOT_DIR}/scripts/computer_use_helper_contract_test.rb" "${OUT_DIR}/computer_use_helper_contract_report.md" "${OUT_DIR}/computer_use_helper_contract_report.json"
+ruby "${ROOT_DIR}/scripts/chrome_extension_contract_test.rb" "${OUT_DIR}/chrome_extension_contract_report.md" "${OUT_DIR}/chrome_extension_contract_report.json"
 ruby "${ROOT_DIR}/scripts/short_drama_media_contract_test.rb" "${OUT_DIR}/short_drama_media_report.md" "${OUT_DIR}/short_drama_media_report.json"
 ruby "${ROOT_DIR}/scripts/widget_side_panel_contract_test.rb" "${OUT_DIR}/widget_side_panel_report.md" "${OUT_DIR}/widget_side_panel_report.json"
 ruby "${ROOT_DIR}/scripts/image_edit_contract_test.rb" "${OUT_DIR}/image_edit_report.md" "${OUT_DIR}/image_edit_report.json"

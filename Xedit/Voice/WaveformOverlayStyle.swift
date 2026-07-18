@@ -5,6 +5,7 @@
 //  fastv-derived style presets for the push-to-talk floating transcription bar.
 //
 
+import Foundation
 import SwiftUI
 
 struct WaveformOverlayColorConfig {
@@ -168,6 +169,9 @@ enum WaveformOverlayWaveStyle: String, CaseIterable, Identifiable {
     case pulse
     case digital
     case skyline
+    case sine
+    case cosine
+    case ecg
 
     var id: String { rawValue }
 
@@ -179,6 +183,16 @@ enum WaveformOverlayWaveStyle: String, CaseIterable, Identifiable {
         case .pulse: return L10n.Settings.Voice.overlayWavePulse
         case .digital: return L10n.Settings.Voice.overlayWaveDigital
         case .skyline: return L10n.Settings.Voice.overlayWaveSkyline
+        case .sine: return L10n.Settings.Voice.overlayWaveSine
+        case .cosine: return L10n.Settings.Voice.overlayWaveCosine
+        case .ecg: return L10n.Settings.Voice.overlayWaveECG
+        }
+    }
+
+    var usesContinuousPath: Bool {
+        switch self {
+        case .sine, .cosine, .ecg: return true
+        case .classic, .equalizer, .spectrum, .pulse, .digital, .skyline: return false
         }
     }
 
@@ -190,6 +204,7 @@ enum WaveformOverlayWaveStyle: String, CaseIterable, Identifiable {
         case .pulse: return 7
         case .digital: return 11
         case .skyline: return 9
+        case .sine, .cosine, .ecg: return 0
         }
     }
 
@@ -203,6 +218,7 @@ enum WaveformOverlayWaveStyle: String, CaseIterable, Identifiable {
         case .pulse: profile = [0.18, 0.28, 0.58, 1, 0.58, 0.28, 0.18]
         case .digital: profile = [0.24, 0.48, 0.74, 0.4, 0.92, 0.62, 0.98, 0.45, 0.76, 0.5, 0.26]
         case .skyline: profile = [0.24, 0.42, 0.72, 1, 0.56, 0.84, 0.48, 0.7, 0.3]
+        case .sine, .cosine, .ecg: return 0
         }
         let floor: CGFloat = self == .digital ? 0.18 : 0.12
         return floor + profile[index] * (0.25 + level * 0.75)
@@ -213,6 +229,7 @@ enum WaveformOverlayWaveStyle: String, CaseIterable, Identifiable {
         case .spectrum, .digital: return max(2, style.barWidth * 0.58)
         case .equalizer, .skyline: return max(2.5, style.barWidth * 0.78)
         case .classic, .pulse: return style.barWidth
+        case .sine, .cosine, .ecg: return max(1.6, style.barWidth * 0.5)
         }
     }
 
@@ -221,7 +238,41 @@ enum WaveformOverlayWaveStyle: String, CaseIterable, Identifiable {
         case .spectrum, .digital: return max(1.5, style.barSpacing * 0.48)
         case .equalizer, .skyline: return max(2, style.barSpacing * 0.68)
         case .classic, .pulse: return style.barSpacing
+        case .sine, .cosine, .ecg: return 0
         }
+    }
+
+    func normalizedSample(at progress: CGFloat, phase: CGFloat) -> CGFloat {
+        let wrappedProgress = progress - floor(progress)
+        switch self {
+        case .sine:
+            return sin(wrappedProgress * .pi * 4 + phase)
+        case .cosine:
+            return cos(wrappedProgress * .pi * 4 + phase)
+        case .ecg:
+            let shifted = wrappedProgress + phase / (.pi * 2)
+            return ecgSample(at: shifted - floor(shifted))
+        case .classic, .equalizer, .spectrum, .pulse, .digital, .skyline:
+            return 0
+        }
+    }
+
+    private func ecgSample(at progress: CGFloat) -> CGFloat {
+        let points: [(CGFloat, CGFloat)] = [
+            (0.00, 0.00), (0.22, 0.00),
+            (0.29, 0.10), (0.34, -0.14),
+            (0.39, 0.00), (0.43, 0.92),
+            (0.47, -0.72), (0.52, 0.18),
+            (0.60, 0.00), (1.00, 0.00),
+        ]
+        guard let segment = zip(points, points.dropFirst()).first(where: {
+            progress >= $0.0.0 && progress <= $0.1.0
+        }) else { return 0 }
+        let start = segment.0
+        let end = segment.1
+        let distance = max(end.0 - start.0, 0.0001)
+        let interpolation = (progress - start.0) / distance
+        return start.1 + (end.1 - start.1) * interpolation
     }
 }
 
@@ -233,21 +284,22 @@ struct WaveformOverlayBars: View {
     let audioLevel: CGFloat
 
     var body: some View {
+        Group {
+            if waveStyle.usesContinuousPath {
+                continuousSignal
+            } else {
+                barSignal
+            }
+        }
+        .animation(.easeOut(duration: 0.12), value: audioLevel)
+    }
+
+    private var barSignal: some View {
         HStack(spacing: waveStyle.spacing(for: windowStyle)) {
             ForEach(0..<waveStyle.barCount, id: \.self) { index in
                 let width = waveStyle.barWidth(for: windowStyle)
                 RoundedRectangle(cornerRadius: width / 2, style: .continuous)
-                    .fill(
-                        LinearGradient(
-                            colors: [
-                                primaryColor.opacity(0.98),
-                                accentColor.opacity(0.78),
-                                primaryColor.opacity(0.42),
-                            ],
-                            startPoint: .top,
-                            endPoint: .bottom
-                        )
-                    )
+                    .fill(signalGradient)
                     .frame(
                         width: width,
                         height: waveStyle.barHeight(at: index, audioLevel: audioLevel) * windowStyle.maxBarHeight
@@ -255,7 +307,62 @@ struct WaveformOverlayBars: View {
                     .shadow(color: primaryColor.opacity(0.42), radius: 2)
             }
         }
-        .animation(.easeOut(duration: 0.12), value: audioLevel)
+    }
+
+    private var continuousSignal: some View {
+        TimelineView(.animation(minimumInterval: 1.0 / 30.0)) { timeline in
+            Canvas { context, size in
+                let seconds = timeline.date.timeIntervalSinceReferenceDate
+                let phase = CGFloat(seconds.truncatingRemainder(dividingBy: 2.4) / 2.4) * .pi * 2
+                let amplitude = max(2, size.height * (0.22 + min(max(audioLevel, 0), 1) * 0.28))
+                let centerY = size.height / 2
+                let sampleCount = max(80, Int(size.width * 2))
+                var path = Path()
+
+                for index in 0...sampleCount {
+                    let progress = CGFloat(index) / CGFloat(sampleCount)
+                    let x = progress * size.width
+                    let sample = waveStyle.normalizedSample(at: progress, phase: phase)
+                    let y = centerY - sample * amplitude
+                    if index == 0 {
+                        path.move(to: CGPoint(x: x, y: y))
+                    } else {
+                        path.addLine(to: CGPoint(x: x, y: y))
+                    }
+                }
+
+                context.addFilter(.shadow(color: primaryColor.opacity(0.5), radius: 2))
+                context.stroke(
+                    path,
+                    with: .linearGradient(
+                        Gradient(colors: [primaryColor, accentColor, primaryColor.opacity(0.82)]),
+                        startPoint: .zero,
+                        endPoint: CGPoint(x: size.width, y: 0)
+                    ),
+                    style: StrokeStyle(
+                        lineWidth: waveStyle.barWidth(for: windowStyle),
+                        lineCap: .round,
+                        lineJoin: .round
+                    )
+                )
+            }
+        }
+        .frame(
+            width: max(36, windowStyle.size.width - windowStyle.horizontalPadding * 2),
+            height: windowStyle.maxBarHeight
+        )
+    }
+
+    private var signalGradient: LinearGradient {
+        LinearGradient(
+            colors: [
+                primaryColor.opacity(0.98),
+                accentColor.opacity(0.78),
+                primaryColor.opacity(0.42),
+            ],
+            startPoint: .top,
+            endPoint: .bottom
+        )
     }
 }
 
@@ -268,6 +375,14 @@ enum WaveformOverlayWindowColorStyle: String, CaseIterable, Identifiable {
     case red
     case blackWhite
     case whiteBlack
+    case skyGlass
+    case mintCream
+    case lavenderMist
+    case peachSorbet
+    case roseQuartz
+    case lemonCream
+    case aquaGlass
+    case warmSand
     case darkGrayWhite
     case darkBlueCyan
     case darkPurplePink
@@ -306,6 +421,14 @@ enum WaveformOverlayWindowColorStyle: String, CaseIterable, Identifiable {
         case .red: return L10n.Settings.Voice.overlayColorRed
         case .blackWhite: return L10n.Settings.Voice.overlayColorBlackWhite
         case .whiteBlack: return L10n.Settings.Voice.overlayColorWhiteBlack
+        case .skyGlass: return L10n.Settings.Voice.overlayColorSkyGlass
+        case .mintCream: return L10n.Settings.Voice.overlayColorMintCream
+        case .lavenderMist: return L10n.Settings.Voice.overlayColorLavenderMist
+        case .peachSorbet: return L10n.Settings.Voice.overlayColorPeachSorbet
+        case .roseQuartz: return L10n.Settings.Voice.overlayColorRoseQuartz
+        case .lemonCream: return L10n.Settings.Voice.overlayColorLemonCream
+        case .aquaGlass: return L10n.Settings.Voice.overlayColorAquaGlass
+        case .warmSand: return L10n.Settings.Voice.overlayColorWarmSand
         case .darkGrayWhite: return L10n.Settings.Voice.overlayColorDarkGrayWhite
         case .darkBlueCyan: return L10n.Settings.Voice.overlayColorDarkBlueCyan
         case .darkPurplePink: return L10n.Settings.Voice.overlayColorDarkPurplePink
@@ -392,6 +515,22 @@ enum WaveformOverlayWindowColorStyle: String, CaseIterable, Identifiable {
                 backgroundOpacity: 0.9,
                 useMaterial: false
             )
+        case .skyGlass:
+            return lightConfig(background: Color(red: 0.78, green: 0.90, blue: 1.0), primary: Color(red: 0.04, green: 0.34, blue: 0.72), accent: Color(red: 0.0, green: 0.62, blue: 0.92))
+        case .mintCream:
+            return lightConfig(background: Color(red: 0.80, green: 0.97, blue: 0.89), primary: Color(red: 0.02, green: 0.43, blue: 0.32), accent: Color(red: 0.0, green: 0.67, blue: 0.48))
+        case .lavenderMist:
+            return lightConfig(background: Color(red: 0.90, green: 0.85, blue: 1.0), primary: Color(red: 0.34, green: 0.18, blue: 0.68), accent: Color(red: 0.65, green: 0.30, blue: 0.82))
+        case .peachSorbet:
+            return lightConfig(background: Color(red: 1.0, green: 0.86, blue: 0.76), primary: Color(red: 0.68, green: 0.20, blue: 0.10), accent: Color(red: 0.94, green: 0.42, blue: 0.20))
+        case .roseQuartz:
+            return lightConfig(background: Color(red: 1.0, green: 0.84, blue: 0.90), primary: Color(red: 0.64, green: 0.12, blue: 0.34), accent: Color(red: 0.90, green: 0.30, blue: 0.52))
+        case .lemonCream:
+            return lightConfig(background: Color(red: 1.0, green: 0.96, blue: 0.72), primary: Color(red: 0.46, green: 0.35, blue: 0.02), accent: Color(red: 0.78, green: 0.58, blue: 0.0))
+        case .aquaGlass:
+            return lightConfig(background: Color(red: 0.75, green: 0.96, blue: 0.98), primary: Color(red: 0.0, green: 0.35, blue: 0.43), accent: Color(red: 0.0, green: 0.68, blue: 0.72))
+        case .warmSand:
+            return lightConfig(background: Color(red: 0.96, green: 0.89, blue: 0.75), primary: Color(red: 0.40, green: 0.25, blue: 0.08), accent: Color(red: 0.70, green: 0.43, blue: 0.12))
         case .darkGrayWhite:
             return WaveformOverlayColorConfig(
                 backgroundColor: Color(red: 0.15, green: 0.15, blue: 0.15),
@@ -517,6 +656,17 @@ enum WaveformOverlayWindowColorStyle: String, CaseIterable, Identifiable {
             barAccentColor: accent,
             borderColor: primary.opacity(0.62),
             backgroundOpacity: 0.96,
+            useMaterial: false
+        )
+    }
+
+    private func lightConfig(background: Color, primary: Color, accent: Color) -> WaveformOverlayColorConfig {
+        WaveformOverlayColorConfig(
+            backgroundColor: background,
+            barColor: primary,
+            barAccentColor: accent,
+            borderColor: primary.opacity(0.22),
+            backgroundOpacity: 0.94,
             useMaterial: false
         )
     }

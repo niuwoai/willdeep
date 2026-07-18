@@ -5,8 +5,8 @@
 //  1.88.0 起。首次启动 onboarding sheet 的总控开关。
 //  - hasCompleted 持久化到 UserDefaults。
 //  - isPresented 是 SwiftUI sheet 的 binding 目标。
-//  - WindowRootView .onAppear 调 presentIfNeeded():第一窗口会把
-//    isPresented 翻成 true,后续窗口因为 hasShownThisSession 标志而 noop。
+//  - AgentWindowRootView .onAppear 调 presentIfNeeded():默认冷启动先创建
+//    headless AppState,再把 isPresented 翻成 true。
 //
 
 import Foundation
@@ -28,7 +28,7 @@ final class OnboardingFlowController: ObservableObject {
         set { UserDefaults.standard.set(newValue, forKey: Self.hasCompletedKey) }
     }
 
-    /// 第一窗口出现时调。已完成或本会话已经弹过都直接 noop。
+    /// 默认 Agent 窗口出现时调。已完成或本会话已经弹过都直接 noop。
     func presentIfNeeded() {
         guard !hasShownThisSession else { return }
         guard !hasCompleted else { return }

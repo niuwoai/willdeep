@@ -693,8 +693,41 @@ private struct ComposerCard: View {
             AgentComposerRunContextBar()
 
             if !appState.agentPendingImages.isEmpty {
-                AgentComposerImageStrip(images: appState.agentPendingImages) { id in
-                    appState.removeAgentImage(id: id)
+                HStack(alignment: .center, spacing: 8) {
+                    Button {
+                        appState.preparePendingImagesForDesignToCode()
+                    } label: {
+                        VStack(alignment: .leading, spacing: 2) {
+                            HStack(spacing: 5) {
+                                Image(systemName: "wand.and.stars")
+                                Text(L10n.Composer.designToCodeAction)
+                                    .fontWeight(.semibold)
+                            }
+                            .foregroundStyle(palette.accent)
+                            Text(L10n.Composer.designToCodeActionDetail)
+                                .foregroundStyle(.secondary)
+                                .lineLimit(1)
+                        }
+                        .font(.system(size: 11))
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 6)
+                        .background(
+                            RoundedRectangle(cornerRadius: 9, style: .continuous)
+                                .fill(palette.accent.opacity(0.10))
+                        )
+                        .overlay {
+                            RoundedRectangle(cornerRadius: 9, style: .continuous)
+                                .stroke(palette.accent.opacity(0.18), lineWidth: 1)
+                        }
+                    }
+                    .buttonStyle(.plain)
+                    .frame(width: 250, alignment: .leading)
+                    .layoutPriority(2)
+                    .help(L10n.Composer.designToCodeHelp)
+                    AgentComposerImageStrip(images: appState.agentPendingImages) { id in
+                        appState.removeAgentImage(id: id)
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
                 }
             }
 
@@ -741,7 +774,8 @@ private struct ComposerCard: View {
                     onRemove: { appState.removeAgentKnowledgeFolder(id: $0) },
                     onUpdateExclusions: { folderID, patterns in
                         appState.updateAgentKnowledgeFolderExclusions(id: folderID, rawPatterns: patterns)
-                    }
+                    },
+                    onStartIndexing: { appState.startAgentKnowledgeFolderIndexing(id: $0) }
                 )
             }
 

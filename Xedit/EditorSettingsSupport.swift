@@ -72,8 +72,10 @@ private struct CompatibleChangeModifier<Value: Equatable>: ViewModifier {
 }
 
 enum EditorSettingsTab: Hashable {
+    case updates
     case typography
     case appearance
+    case background
     case workspace
     case agent
     case someIM
@@ -100,12 +102,14 @@ extension EditorSettingsTab {
     /// (e.g. `selectedTab = .mobileGateway`) still resolve to the right group.
     var group: SettingsGroup {
         switch self {
-        case .typography, .appearance, .workspace: return .editor
-        case .agent, .memory, .rules, .skills, .mcp, .tools: return .ai
+        case .updates: return .general
+        case .typography, .appearance, .background: return .formatAndAppearance
+        case .workspace: return .workspace
+        case .agent, .memory, .rules: return .ai
+        case .skills, .mcp, .tools: return .agentTools
         case .localAgents, .remoteRuntimes: return .runtimes
-        case .mobileGateway: return .mobileGateway
         case .terminal: return .terminal
-        case .someIM: return .someIM
+        case .someIM, .mobileGateway: return .accountAndDevices
         case .replicate, .connectors: return .integrations
         case .voice: return .voice
         case .pet: return .pet
@@ -116,8 +120,10 @@ extension EditorSettingsTab {
     /// existing per-pane menu titles so nothing new needs translating.
     var shortTitle: String {
         switch self {
+        case .updates: return L10n.Settings.tabUpdates
         case .typography: return L10n.Settings.tabTypography
         case .appearance: return L10n.Settings.tabAppearance
+        case .background: return L10n.Settings.tabBackground
         case .workspace: return L10n.Settings.tabWorkspace
         case .agent: return L10n.Settings.tabAgent
         case .someIM: return L10n.Settings.tabSomeIM
@@ -141,15 +147,17 @@ extension EditorSettingsTab {
 /// Top-level Settings groupings. Each becomes one tab in the Settings window;
 /// groups with more than one pane render a second-level segmented picker.
 enum SettingsGroup: Hashable, CaseIterable, Identifiable {
-    case editor
-    case pet
+    case general
+    case formatAndAppearance
+    case workspace
     case ai
-    case someIM
-    case mobileGateway
+    case agentTools
+    case accountAndDevices
     case runtimes
     case integrations
     case terminal
     case voice
+    case pet
 
     var id: Self { self }
 
@@ -157,11 +165,13 @@ enum SettingsGroup: Hashable, CaseIterable, Identifiable {
     /// pane a freshly-selected group falls back to.
     var tabs: [EditorSettingsTab] {
         switch self {
-        case .editor: return [.typography, .appearance, .workspace]
+        case .general: return [.updates]
+        case .formatAndAppearance: return [.appearance, .background, .typography]
+        case .workspace: return [.workspace]
         case .pet: return [.pet]
-        case .ai: return [.agent, .memory, .rules, .skills, .mcp, .tools]
-        case .someIM: return [.someIM]
-        case .mobileGateway: return [.mobileGateway]
+        case .ai: return [.agent, .memory, .rules]
+        case .agentTools: return [.skills, .mcp, .tools]
+        case .accountAndDevices: return [.someIM, .mobileGateway]
         case .runtimes: return [.localAgents, .remoteRuntimes]
         case .integrations: return [.replicate, .connectors]
         case .terminal: return [.terminal]
@@ -171,25 +181,29 @@ enum SettingsGroup: Hashable, CaseIterable, Identifiable {
 
     var title: String {
         switch self {
-        case .editor: return String(localized: "settings.group.editor", defaultValue: "Editor")
+        case .general: return L10n.Settings.groupGeneral
+        case .formatAndAppearance: return L10n.Settings.groupFormatAndAppearance
+        case .workspace: return L10n.Settings.tabWorkspace
         case .pet: return L10n.DesktopPet.settingsTabTitle
-        case .ai: return String(localized: "settings.group.ai", defaultValue: "AI Agents")
-        case .someIM: return L10n.Settings.tabSomeIM
-        case .mobileGateway: return L10n.Settings.tabMobileGateway
-        case .runtimes: return String(localized: "settings.group.runtimes", defaultValue: "Runtimes")
-        case .integrations: return String(localized: "settings.group.integrations", defaultValue: "Integrations")
-        case .terminal: return String(localized: "settings.group.terminal", defaultValue: "Terminal")
-        case .voice: return String(localized: "settings.group.voice", defaultValue: "Voice")
+        case .ai: return L10n.Settings.groupAI
+        case .agentTools: return L10n.Settings.groupAgentTools
+        case .accountAndDevices: return L10n.Settings.groupAccountAndDevices
+        case .runtimes: return L10n.Settings.groupRuntimes
+        case .integrations: return L10n.Settings.groupIntegrations
+        case .terminal: return L10n.Settings.groupTerminal
+        case .voice: return L10n.Settings.groupVoice
         }
     }
 
     var icon: String {
         switch self {
-        case .editor: return "textformat"
+        case .general: return "gearshape"
+        case .formatAndAppearance: return "paintbrush"
+        case .workspace: return "folder"
         case .pet: return "pawprint.fill"
         case .ai: return "sparkles"
-        case .someIM: return "person.crop.circle.badge.checkmark"
-        case .mobileGateway: return "iphone.radiowaves.left.and.right"
+        case .agentTools: return "wrench.and.screwdriver"
+        case .accountAndDevices: return "person.crop.circle.badge.checkmark"
         case .runtimes: return "network"
         case .integrations: return "puzzlepiece.extension"
         case .terminal: return "rectangle.bottomthird.inset.filled"
@@ -202,7 +216,7 @@ enum SettingsGroup: Hashable, CaseIterable, Identifiable {
 final class EditorSettingsNavigation: ObservableObject {
     static let shared = EditorSettingsNavigation()
 
-    @Published var selectedTab: EditorSettingsTab = .typography
+    @Published var selectedTab: EditorSettingsTab = .updates
     @Published var someIMBrowserLoginAutogenerateRequestID: UUID?
     private var fallbackSettingsWindowController: NSWindowController?
 

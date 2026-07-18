@@ -2,12 +2,10 @@
 //  AppUpdateChecker.swift
 //  WillDeep
 //
-//  Lightweight update check for non-App-Store distribution. The server
-//  publishes a small JSON document; the app only notifies the user and
-//  opens the download URL, leaving installation explicit.
+//  Lightweight update metadata check for the sidebar. Sparkle owns the
+//  signed download, privileged install handoff, rollback, and relaunch.
 //
 
-import AppKit
 import Foundation
 
 struct AppUpdateMeta: Decodable {
@@ -218,27 +216,6 @@ enum AppUpdateChecker {
     nonisolated static let defaultPlatform = "macos"
     nonisolated static let defaultChannel = "stable"
 
-    static func checkForUpdatesOnLaunch() {
-        Task {
-            await checkForUpdates()
-        }
-    }
-
-    nonisolated static func checkForUpdates(
-        metaURL: URL? = nil,
-        currentVersion: String = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "",
-        session: URLSession = .shared
-    ) async {
-        do {
-            guard let meta = try await fetchAvailableUpdate(metaURL: metaURL, currentVersion: currentVersion, session: session) else { return }
-            await presentUpdate(meta: meta, currentVersion: currentVersion)
-        } catch {
-            #if DEBUG
-            NSLog("[WillDeep] update check failed: %@", error.localizedDescription)
-            #endif
-        }
-    }
-
     static func fetchAvailableUpdate(
         metaURL: URL? = nil,
         currentVersion: String = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "",
@@ -295,6 +272,23 @@ enum AppUpdateChecker {
         return components.url
     }
 
+    static func managedAppcastURL(
+        settings: SomeIMIntegrationSettings = SomeIMIntegrationStore.loadSettings()
+    ) -> URL? {
+        guard var components = URLComponents(
+            string: settings.normalized.baseURL.trimmingCharacters(in: .whitespacesAndNewlines)
+        ) else {
+            return nil
+        }
+        components.path = "/api/v1/public/app-updates/appcast.xml"
+        components.queryItems = [
+            URLQueryItem(name: "app_id", value: defaultAppID),
+            URLQueryItem(name: "platform", value: defaultPlatform),
+            URLQueryItem(name: "channel", value: defaultChannel),
+        ]
+        return components.url
+    }
+
     nonisolated static func decodeUpdateMeta(from data: Data) throws -> AppUpdateMeta {
         let decoder = JSONDecoder()
         if let envelope = try? decoder.decode(SomeIMAppUpdateEnvelope.self, from: data),
@@ -311,83 +305,6 @@ enum AppUpdateChecker {
         return try decoder.decode(AppUpdateMeta.self, from: data)
     }
 
-    nonisolated static func download(meta: AppUpdateMeta, session: URLSession = .shared) async throws -> URL {
-        let request = makeRequest(url: meta.downloadURL)
-        let (temporaryURL, response) = try await session.download(for: request)
-        guard let httpResponse = response as? HTTPURLResponse,
-              (200..<300).contains(httpResponse.statusCode) else {
-            throw URLError(.badServerResponse)
-        }
-        let fileManager = FileManager.default
-        let downloads = fileManager.urls(for: .downloadsDirectory, in: .userDomainMask).first ?? fileManager.temporaryDirectory
-        let name = downloadFileName(for: meta)
-        let destination = downloads.appendingPathComponent(name, isDirectory: false)
-        if fileManager.fileExists(atPath: destination.path) {
-            try fileManager.removeItem(at: destination)
-        }
-        try fileManager.moveItem(at: temporaryURL, to: destination)
-        return destination
-    }
-
-    @MainActor
-    static func presentDownloadedUpdate(fileURL: URL, meta: AppUpdateMeta) {
-        let alert = NSAlert()
-        alert.messageText = L10n.AppUpdate.downloadedTitle(meta.version)
-        alert.informativeText = L10n.AppUpdate.downloadedMessage(fileURL.lastPathComponent)
-        alert.alertStyle = .informational
-        alert.addButton(withTitle: L10n.AppUpdate.quitAndInstall)
-        alert.addButton(withTitle: L10n.AppUpdate.later)
-        if alert.runModal() == .alertFirstButtonReturn {
-            NSWorkspace.shared.open(fileURL)
-            NSApplication.shared.terminate(nil)
-        }
-    }
-
-    private nonisolated static func downloadFileName(for meta: AppUpdateMeta) -> String {
-        let lastPath = meta.downloadURL.lastPathComponent.trimmingCharacters(in: .whitespacesAndNewlines)
-        if !lastPath.isEmpty, lastPath != "/" {
-            return lastPath
-        }
-        return "WillDeep-\(meta.version).dmg"
-    }
-
-    @MainActor
-    static func presentUpdate(meta: AppUpdateMeta, currentVersion: String) {
-        let alert = NSAlert()
-        alert.messageText = meta.title ?? L10n.AppUpdate.title(meta.version)
-        alert.informativeText = informativeText(meta: meta, currentVersion: currentVersion)
-        alert.alertStyle = .informational
-        alert.addButton(withTitle: L10n.AppUpdate.download)
-        if meta.releaseNotesURL != nil {
-            alert.addButton(withTitle: L10n.AppUpdate.releaseNotes)
-        }
-        alert.addButton(withTitle: L10n.AppUpdate.later)
-
-        let response = alert.runModal()
-        if response == .alertFirstButtonReturn {
-            NSWorkspace.shared.open(meta.downloadURL)
-            return
-        }
-        if response == .alertSecondButtonReturn, let releaseNotesURL = meta.releaseNotesURL {
-            NSWorkspace.shared.open(releaseNotesURL)
-        }
-    }
-
-    @MainActor
-    private static func informativeText(meta: AppUpdateMeta, currentVersion: String) -> String {
-        var lines = [
-            L10n.AppUpdate.message(currentVersion, meta.version)
-        ]
-        if let minimumSystemVersion = meta.minimumSystemVersion,
-           !minimumSystemVersion.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            lines.append(L10n.AppUpdate.minimumSystem(minimumSystemVersion))
-        }
-        if let notes = meta.notes?.trimmingCharacters(in: .whitespacesAndNewlines), !notes.isEmpty {
-            lines.append("")
-            lines.append(notes)
-        }
-        return lines.joined(separator: "\n")
-    }
 }
 
 private struct SomeIMAppUpdateEnvelope: Decodable {

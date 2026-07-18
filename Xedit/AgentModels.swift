@@ -104,9 +104,9 @@ nonisolated struct AgentSession: Identifiable, Codable, Equatable {
     /// one chat is restored when returning to that chat without leaking
     /// into unrelated conversations.
     var sidePanelState: AgentSidePanelState
-    /// When the user pinned this session to the top of its workspace
-    /// group. Nil = not pinned. We store the timestamp (not a bool) so
-    /// that multiple pinned items inside one workspace can be ordered
+    /// When the user pinned this session to the global pinned section.
+    /// Nil = not pinned. We store the timestamp (not a bool) so pinned
+    /// conversations across every workspace can be ordered
     /// "most-recently-pinned first" in the sidebar.
     var pinnedAt: Date?
     /// When the user archived this session. Nil = active. Archived
@@ -620,7 +620,8 @@ nonisolated enum AgentInteractionMode: String, Codable, CaseIterable, Identifiab
 /// Per-session approval posture exposed from the Agent composer. It
 /// influences only write-tier auto-approval; read tools still run
 /// automatically, danger-tier tools still require typed confirmation,
-/// and Plan mode keeps its own plan-approval gate.
+/// and Plan mode keeps its own plan-approval gate except for validated
+/// public web research needed to prepare the plan.
 nonisolated enum AgentApprovalMode: String, Codable, CaseIterable, Identifiable {
     case requestEveryTime
     case smart
@@ -720,7 +721,7 @@ nonisolated enum AgentExpert: String, Codable, CaseIterable, Identifiable, Hasha
             return """
             === BROWSER OPERATIONS EXPERT — ACTIVE ===
             The user enabled the browser operations expert for this session. You may use `embedded_browser_*` tools for the visible in-app side-panel browser, including navigation, page reading, DOM snapshots, wait conditions, console logs, AJAX/API request inspection, redacted request/response headers, HAR export, storage/cookie inspection, page performance diagnostics, failed-resource aggregation, network resource timing, screenshot capture, CSS-selector clicks, JavaScript evaluation, and form filling.
-            Use `chrome_*` tools only when the user needs their existing Chrome tabs, cookies, or login session. Screenshots and page mutations may expose or change private web apps, so keep actions scoped, explain selectors when useful, and prefer read/status calls before clicking or typing.
+            Use `chrome_*` tools only when the user needs their existing Chrome tabs, cookies, or login session. Start with chrome_list_tabs/chrome_activate_tab when the target tab is ambiguous, then take a fresh chrome_snapshot and prefer its ref over a hand-written selector. After navigation or mutation, use chrome_wait_for and take another snapshot before the next action. Screenshots and page mutations may expose or change private web apps, so keep actions scoped and prefer read/status calls before clicking or typing.
             """
         case .webCoding:
             return """
@@ -1894,6 +1895,7 @@ nonisolated struct AgentFileAttachment: Identifiable, Codable, Equatable, Sendab
 }
 
 nonisolated enum AgentKnowledgeFolderIndexStatus: String, Codable, Equatable, Sendable {
+    case pending
     case indexing
     case ready
     case failed
@@ -1911,7 +1913,7 @@ nonisolated enum AgentDocumentTaskMode: String, Codable, CaseIterable, Equatable
 nonisolated struct AgentKnowledgeFolder: Identifiable, Codable, Equatable, Sendable {
     let url: URL
     var isEnabled: Bool = true
-    var status: AgentKnowledgeFolderIndexStatus = .indexing
+    var status: AgentKnowledgeFolderIndexStatus = .pending
     var documents: [AgentFileAttachment] = []
     var excludedPatterns: [String] = []
     var skippedFileCount: Int = 0

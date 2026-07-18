@@ -2,10 +2,9 @@
 //  AppStateAppUpdates.swift
 //  WillDeep
 //
-//  Background polling and download action for some.im managed app updates.
+//  Background polling and Sparkle install action for some.im managed app updates.
 //
 
-import AppKit
 import Foundation
 
 @MainActor
@@ -14,6 +13,7 @@ extension AppState {
     private static let appUpdatePollInterval: UInt64 = 17 * 60 * 1_000_000_000
 
     func startAppUpdateChecks() {
+        AppUpdateController.shared.start()
         appUpdateCheckTask?.cancel()
         appUpdateCheckTask = Task { @MainActor [weak self] in
             try? await Task.sleep(nanoseconds: Self.appUpdateInitialDelay)
@@ -36,27 +36,7 @@ extension AppState {
     }
 
     func downloadAvailableAppUpdate() {
-        guard !isDownloadingAppUpdate, let update = availableAppUpdate else { return }
-        isDownloadingAppUpdate = true
-        Task { @MainActor [weak self] in
-            guard let self else { return }
-            do {
-                let fileURL = try await AppUpdateChecker.download(meta: update)
-                self.isDownloadingAppUpdate = false
-                AppUpdateChecker.presentDownloadedUpdate(fileURL: fileURL, meta: update)
-            } catch {
-                self.isDownloadingAppUpdate = false
-                self.presentAppUpdateDownloadError(error)
-            }
-        }
-    }
-
-    private func presentAppUpdateDownloadError(_ error: Error) {
-        let alert = NSAlert()
-        alert.messageText = L10n.AppUpdate.downloadFailedTitle
-        alert.informativeText = error.localizedDescription
-        alert.alertStyle = .warning
-        alert.addButton(withTitle: L10n.Alert.binaryFileButtonOk)
-        alert.runModal()
+        guard availableAppUpdate != nil else { return }
+        AppUpdateController.shared.checkForUpdates()
     }
 }
