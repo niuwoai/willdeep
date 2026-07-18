@@ -50,14 +50,15 @@ Do not add backend services, authentication, persistence, new routes, or broad r
 
 - Run the repository's normal formatter, type check, tests, and build in proportion to the change.
 - Start the existing development command rather than replacing project tooling.
-- Use WillDeep's in-app browser tools when available: navigate to the local page, inspect the visible page, exercise primary interactions, read console errors, and capture a screenshot.
+- Use WillDeep's in-app browser tools when available: navigate to the local page, inspect the visible page, exercise primary interactions, read console errors, and capture a screenshot. If the in-app browser cannot capture the page, try the Chrome extension; if neither browser surface is available, use Computer Use on the running browser or native app.
 - Match the source viewport, route, theme, content, and interaction state before comparing.
 - A successful build or HTTP response is not visual verification.
 
 ## 7. Compare and iterate
 
 - Read `references/design-qa.md`.
-- Compare the source and implementation captures together, not from memory.
+- Compare the source and implementation captures together, not from memory. Call `design_to_code_acceptance` with the exact source path from the run contract, the fresh rendered screenshot path, and the actual capture surface.
+- Treat `NEEDS_ITERATION` as unfinished work. Read its `design-qa.md` metrics and `.willdeep/design-to-code/visual-diff.png`, correct material mismatches, and run the real capture plus acceptance again.
 - Fix all material layout, typography, color, asset, copy, responsive, and interaction mismatches.
 - Repeat capture and comparison after fixes until no actionable high- or medium-impact mismatch remains.
-- Save the final evidence and result in project-root `design-qa.md`.
+- Finish only after `design_to_code_acceptance` returns `PASS`. It saves final evidence in project-root `design-qa.md`.

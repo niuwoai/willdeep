@@ -24,6 +24,16 @@ extension AppState {
         resolveAgentToolCallDecision(id: id, decision: .approved)
     }
 
+    func allowAgentToolFamilyForConversation(id: AgentToolCall.ID) {
+        guard let (runtime, index) = runtimeAndToolCallIndex(containing: id) else { return }
+        let call = runtime.toolCalls[index]
+        guard let signature = AgentToolAuthorization.interactiveSurfaceSignature(
+            toolName: call.toolName
+        ) else { return }
+        runtime.conversationAllowedToolSignatures.insert(signature)
+        resolveAgentToolCallDecision(id: id, decision: .approved)
+    }
+
     func denyAgentToolCall(id: AgentToolCall.ID) {
         resolveAgentToolCallDecision(id: id, decision: .denied(reason: "User denied"))
     }
@@ -115,7 +125,8 @@ extension AppState {
         risk: AgentToolRisk,
         rootDirectory: URL?,
         interactionMode: AgentInteractionMode = .normal,
-        approvalMode: AgentApprovalMode = .smart
+        approvalMode: AgentApprovalMode = .smart,
+        conversationAllowedToolSignatures: Set<String> = []
     ) async -> AgentToolApprovalSource? {
         guard risk == .write else { return nil }
 
@@ -145,6 +156,12 @@ extension AppState {
         if interactionMode == .plan,
            Self.planModeCanAutoApprove(toolName: toolName, arguments: arguments) {
             return .staticAllowlist
+        }
+
+        if let signature = AgentToolAuthorization.interactiveSurfaceSignature(
+            toolName: toolName
+        ), conversationAllowedToolSignatures.contains(signature) {
+            return .user
         }
 
         // Goal mode implicitly enables the auto-approve safety judge for

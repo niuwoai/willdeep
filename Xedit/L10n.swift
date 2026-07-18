@@ -348,6 +348,10 @@ nonisolated enum L10n {
         static let documentSendPreview = String(localized: "composer.document.send-preview", defaultValue: "Send preview")
         static let documentSendPreviewClose = String(localized: "composer.document.send-preview-close", defaultValue: "Close send preview")
         static let documentSendPreviewTitle = String(localized: "composer.document.send-preview-title", defaultValue: "Document context sent to the model")
+        static let designToCodeAction = String(localized: "composer.design-to-code.action", defaultValue: "Generate UI code")
+        static let designToCodeActionDetail = String(localized: "composer.design-to-code.action-detail", defaultValue: "Build · run · visual acceptance")
+        static let designToCodeHelp = String(localized: "composer.design-to-code.help", defaultValue: "Implement the attached UI in this workspace, then verify it with Browser or Computer Use")
+        static let designToCodePrompt = String(localized: "composer.design-to-code.prompt", defaultValue: "Implement the attached UI completely in the current workspace using the existing project stack. Write the production code directly, build and run it, then use Browser or Computer Use to capture the real result and compare it with the source. Keep correcting material differences until visual acceptance passes.")
         static let enableSessionDocument = String(localized: "composer.attachment.session-enable", defaultValue: "Include in future turns")
         static let removeSessionDocument = String(localized: "composer.attachment.session-remove", defaultValue: "Remove from this conversation")
         static let removeAttachmentHelp = String(localized: "composer.attachment.remove-help", defaultValue: "Remove attachment")
@@ -1344,7 +1348,13 @@ nonisolated enum L10n {
 
     enum ToolCard {
         static let allow = String(localized: "tool-card.allow", defaultValue: "Allow")
+        static let allowConversation = String(localized: "tool-card.allow-conversation", defaultValue: "Allow for This Conversation")
         static let alwaysAllow = String(localized: "tool-card.always-allow", defaultValue: "Always Allow")
+        static let browserAuthorizationTitle = String(localized: "tool-card.authorization.browser.title", defaultValue: "Browser")
+        static let browserChromeAuthorizationQuestion = String(localized: "tool-card.authorization.browser.chrome-question", defaultValue: "Allow WillDeep to control Chrome?")
+        static let browserEmbeddedAuthorizationQuestion = String(localized: "tool-card.authorization.browser.embedded-question", defaultValue: "Allow WillDeep to control Browser?")
+        static let computerUseAuthorizationTitle = String(localized: "tool-card.authorization.computer-use.title", defaultValue: "Computer Use")
+        static let computerUseAuthorizationQuestion = String(localized: "tool-card.authorization.computer-use.question", defaultValue: "Allow WillDeep to use Computer Use?")
         static func alwaysAllowHelp(_ a1: String) -> String {
             let template = String(localized: "tool-card.always-allow.help", defaultValue: "Always allow future %@ commands")
             return String(format: template, a1)

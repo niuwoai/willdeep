@@ -33,5 +33,7 @@ Build navigation and shared state before polishing individual screens when multi
 ## 4. Verify
 
 1. Build or run focused tests with the repository's normal Xcode command.
-2. Capture the implemented screen when possible and compare hierarchy, spacing, typography, colors, states, and interactions against the Figma screenshot.
-3. Report any deliberate native-platform substitutions or inaccessible Figma details.
+2. Launch the built app or simulator and use Computer Use (or an approved platform screenshot capture) to capture the actual implemented screen at the source state and viewport. Source inspection alone is not verification.
+3. Call `design_to_code_acceptance` with the source image path from the run contract, the fresh rendered screenshot path, and `surface: computer_use` (or the actual platform screenshot surface).
+4. When acceptance returns `NEEDS_ITERATION`, inspect the diff, correct material hierarchy, spacing, typography, color, content, and state mismatches, then rebuild and repeat capture plus acceptance.
+5. Finish only after acceptance returns `PASS`. Report deliberate native-platform substitutions or inaccessible Figma details without using them to excuse unverified material differences.

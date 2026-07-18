@@ -195,6 +195,10 @@ final class AgentRuntime: ObservableObject, Identifiable {
     /// This closes the race where the UI card accepts a click but the
     /// continuation slot is not ready yet, leaving an apparently dead card.
     var pendingToolDecisions: [AgentToolCall.ID: AgentToolDecision] = [:]
+    /// Runtime-only grants created by the Codex-style “allow for this
+    /// conversation” action. These deliberately do not enter AgentSession or
+    /// disk persistence: closing/reopening the conversation asks again.
+    var conversationAllowedToolSignatures: Set<String> = []
 
     // MARK: - Plan gate
 

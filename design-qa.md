@@ -1,3 +1,49 @@
+# Computer Use / 浏览器紧凑授权卡 Design QA
+
+- source visual truth: `/var/folders/np/rjc0y5w52x324x21pv6g33440000gp/T/codex-clipboard-a5b3fe76-516b-489b-9f3c-8778780e5d2e.png`
+- implementation screenshot: `/Users/rocky/Sites/Xedit/artifacts/design-qa/compact-authorization/implementation-card.png`
+- browser implementation screenshot: `/Users/rocky/Sites/Xedit/artifacts/design-qa/compact-authorization/browser-authorization@2x.png`
+- aligned comparison: `/Users/rocky/Sites/Xedit/artifacts/design-qa/compact-authorization/reference-vs-implementation.png`
+- viewport: `716 × 127 pt` 授权卡对齐视口；原生 SwiftUI 快照以 `714 pt @2x` 渲染后居中对齐
+- state: Rice Paper 浅色皮肤、简体中文、Computer Use / Chrome / 内置浏览器写操作等待审批
+- final result: passed
+
+**Full-View Comparison Evidence**
+
+Codex 参考卡与生产 `AgentToolCallCard` 快照已在同一张纵向对比图中按相同尺寸检查。实现保留参考卡的核心层级：左上工具来源、单句许可问题、左侧“始终允许”、右侧“拒绝 / 允许此对话”，并将原来的大段风险说明和高按钮压缩为聊天流中的紧凑授权条。
+
+**Focused Region Comparison Evidence**
+
+该组件本身只有 `716 × 127 pt`，全图已足以辨认全部文字、图标、圆角、按钮和间距，因此不另做可能丢失上下文的局部裁切。外层 20pt 圆角、14pt 内边距、15pt 内容节奏与紧凑胶囊按钮均在原始像素下复核。
+
+**Required Fidelity Surfaces**
+
+- Fonts and typography: 工具来源使用 12pt medium，许可问题使用 15pt medium；按钮沿用系统正文语义，层级与参考图一致。
+- Spacing and layout rhythm: 参考卡的左右分组与底部操作节奏完整保留；窄宽度通过 `ViewThatFits` 自动切换堆叠布局。
+- Colors and visual tokens: 面板、描边、主次文字、次级按钮和强调按钮全部读取当前界面皮肤 palette，没有硬编码参考图颜色。
+- Image quality and asset fidelity: 工具来源使用原生 SF Symbols，保持矢量清晰度；没有新增低清位图或近似插画。
+- Copy and content: Computer Use、Chrome 与内置浏览器分别使用本地化问题文案；“始终允许 / 拒绝 / 允许此对话”均进入中英文字符串目录。
+
+**Primary Interactions Checked**
+
+- “允许此对话”仅写入当前 Agent runtime，并按 Computer Use、Chrome、内置浏览器三个工具族隔离：passed。
+- “始终允许”沿用持久授权规则，但粒度提升为对应工具族：passed。
+- danger 级浏览器调试操作不会套用紧凑写操作授权，也不会被会话授权自动放行：passed。
+- Computer Use 与浏览器授权原生快照、17 项定向 Swift 测试：passed。
+
+**Findings**
+
+没有未解决的 P0、P1 或 P2 问题。WillDeep 有意使用当前皮肤的米白背景和深蓝主按钮，并用产品名替代参考图中的 ChatGPT / WildDeepDebug；其余信息架构、按钮语义和视觉密度均与参考保持一致。
+
+**Comparison History**
+
+- Before: 通用授权通知包含标题、风险说明、参数内容和较高操作区，Computer Use / 浏览器的简单许可显得过重。
+- Iteration 1: 切换为 Codex 式三按钮紧凑卡，但原生按钮最小高度仍略显厚重。
+- Iteration 2: 将名义按钮高度收紧至 22pt，最终卡片高度为 127pt，并重新生成原生快照与同尺寸对比图。
+- Final pass: 操作语义、响应式布局、皮肤取色和中英文资源均通过定向测试。Final result passed.
+
+---
+
 # 跨工作区全局置顶 Design QA
 
 - source visual truth: `/var/folders/np/rjc0y5w52x324x21pv6g33440000gp/T/codex-clipboard-91c9b5ff-e018-40a5-8729-022a4def0266.png`

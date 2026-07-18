@@ -21,6 +21,50 @@ struct AgentChromeToolTests {
     }
 
     @Test
+    func browserAuthorizationSeparatesChromeAndEmbeddedConversationGrants() async {
+        #expect(
+            AgentToolAuthorization.interactiveSurfaceSignature(
+                toolName: "chrome_click"
+            ) == "browser:chrome"
+        )
+        #expect(
+            AgentToolAuthorization.interactiveSurfaceSignature(
+                toolName: "embedded_browser_click"
+            ) == "browser:embedded"
+        )
+
+        let appState = AppState()
+        let chromeApproval = await appState.autoApprovalSource(
+            toolName: "chrome_click",
+            arguments: ["ref": .string("dom-1:e1")],
+            risk: .write,
+            rootDirectory: nil,
+            approvalMode: .requestEveryTime,
+            conversationAllowedToolSignatures: ["browser:chrome"]
+        )
+        let embeddedApproval = await appState.autoApprovalSource(
+            toolName: "embedded_browser_click",
+            arguments: ["selector": .string("button")],
+            risk: .write,
+            rootDirectory: nil,
+            approvalMode: .requestEveryTime,
+            conversationAllowedToolSignatures: ["browser:chrome"]
+        )
+        let debuggerApproval = await appState.autoApprovalSource(
+            toolName: "chrome_debugger_command",
+            arguments: ["method": .string("Runtime.evaluate")],
+            risk: .danger,
+            rootDirectory: nil,
+            approvalMode: .requestEveryTime,
+            conversationAllowedToolSignatures: ["browser:chrome"]
+        )
+
+        #expect(chromeApproval == .user)
+        #expect(embeddedApproval == nil)
+        #expect(debuggerApproval == nil)
+    }
+
+    @Test
     func chromeSnapshotAndRefActionsExposeFreshRefContract() throws {
         let snapshot = try #require(AgentToolRegistry.descriptor(for: "chrome_snapshot"))
         let click = try #require(AgentToolRegistry.descriptor(for: "chrome_click"))

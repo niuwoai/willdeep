@@ -457,7 +457,7 @@ struct ScreenshotToCodeWorkflow: WorkflowDefinition {
     var name: String { "screenshot-to-code" }
     var displayTitle: String { "Screenshot to Code" }
     var slashCommand: String { "/screenshot-to-code" }
-    var shortDescription: String { "Turn a UI screenshot into a React/Tailwind implementation brief or component" }
+    var shortDescription: String { "Implement a UI screenshot, run it, and complete visual acceptance" }
     var argsPlaceholder: String { "<path> [framework=react] [context=\"where this screen lives\"]" }
     var maxAgents: Int { 2 }
     var allowsEmptyArgs: Bool { false }

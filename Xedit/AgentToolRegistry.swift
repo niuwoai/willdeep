@@ -1090,6 +1090,20 @@ enum AgentToolRegistry {
             ]
         ),
         AgentToolDescriptor(
+            name: "design_to_code_acceptance",
+            description: "Perform the mandatory final visual acceptance for a pasted-image Design-to-Code run. Call only after production files were written, the implementation was actually run, and a fresh screenshot was captured through the in-app browser, Chrome extension, Computer Use, or an approved platform screenshot tool. Compares the source and rendered pixels, OCR coverage, and palettes; writes design-qa.md plus .willdeep/design-to-code/visual-diff.png. If status is NEEDS_ITERATION, fix the UI and repeat capture + acceptance before finalizing.",
+            risk: .write,
+            parameters: [
+                AgentToolParameter(name: "source_path", type: .string, description: "Absolute source image path from the Design-to-Code run contract.", required: true),
+                AgentToolParameter(name: "rendered_path", type: .string, description: "Fresh screenshot path returned by embedded_browser_capture_screenshot, chrome_capture_tab, computer_use_get_app_state, or capture_screenshot.", required: true),
+                AgentToolParameter(name: "surface", type: .string, description: "Actual capture surface: embedded_browser, chrome, computer_use, mac_screen, android, or ios_simulator.", required: true),
+                AgentToolParameter(name: "viewport", type: .string, description: "Optional rendered viewport, for example 1440x900.", required: false),
+                AgentToolParameter(name: "notes", type: .string, description: "Optional concise notes about dynamic content or intentionally different states.", required: false),
+                AgentToolParameter(name: "pass_score", type: .integer, description: "Optional composite pass score from 0 to 100. Defaults to 78.", required: false),
+                AgentToolParameter(name: "minimum_text_coverage", type: .integer, description: "Optional minimum percentage of source OCR lines found in the rendered screenshot. Defaults to 70.", required: false)
+            ]
+        ),
+        AgentToolDescriptor(
             name: "capture_screenshot",
             description: "Capture a screenshot and hand the pixels back to you for visual analysis. Targets: `mac_screen` (this Mac's display), `android` (a connected device/emulator via adb), or `ios_simulator` (a booted simulator via simctl). The image is attached to the tool result so vision-capable models see it directly; the payload also carries the saved full-resolution path and local OCR text so text-only models can follow up with `visual_qa_screenshot`. Use for UI verification after a change, inspecting app/device state, or when the user asks what something looks like. Requires approval because screenshots can contain private information.",
             risk: .write,

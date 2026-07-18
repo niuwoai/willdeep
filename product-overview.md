@@ -1,6 +1,6 @@
 # WillDeep Product Overview
 
-> Last updated: 2026-07-18 | Current version: v1.184.0-rc1
+> Last updated: 2026-07-18 | Current version: v1.185.0-rc5
 
 ## Positioning
 
@@ -12,6 +12,11 @@ WillDeep is configured for non-App-Store distribution without App Sandbox so it 
 
 ## 架构概览
 
+- **Codex 风格 Computer Use / 浏览器授权（1.185.0-rc2）** —— Computer Use、Chrome 与内置浏览器的普通写操作使用紧凑三按钮授权卡；“允许此对话”只写入当前 Agent runtime 并按工具族隔离，“始终允许”按工具族持久化，danger 级调试操作继续走严格确认，避免便捷授权扩大高风险操作边界。
+- **视觉验收响应式 OCR（1.185.0-rc3）** —— 贴图生成代码的 OCR 覆盖率使用归一化字符片段比较，忽略浏览器窄视口造成的自然换行差异，同时继续拒绝缺失或无关文案，避免完成门禁在响应式页面上误杀。
+- **贴图生成直接执行语义（1.185.0-rc4）** —— `/screenshot-to-code` 会退出会话遗留的 Plan 模式并清理旧计划，再进入生产代码修改、运行、浏览器截图与视觉验收闭环，避免显式执行命令被旧计划门禁切成只读规划。
+- **贴图生成浏览器专家直挂（1.185.0-rc5）** —— `/screenshot-to-code` 会按目标框架确定性挂载专家：Web 目标直接启用 Web Programming 与 Browser Ops 并打开内置 Browser，SwiftUI/AppKit/UIKit 保持原生实现与 Computer Use 验收路径。
+- **贴图到可验收代码闭环（1.185.0-rc1）** —— Composer 粘贴或附加 UI 图片后提供“一键生成 UI 代码”入口，自动启用 Web 或 SwiftUI 视觉实现技能并把原图路径注入执行上下文；主 Agent 必须直接修改生产文件、构建运行、通过内置 Browser/Chrome 或 Computer Use 捕获真实渲染，再调用视觉验收工具比较像素、OCR 与配色。宿主完成门禁会拦截缺少实现、截图或 `PASS` 证据的提前收工，并输出 `design-qa.md` 与视觉 diff 供复核。
 - **Computer Use / Browser 可靠操作扩展与长文件治理（1.184.0-rc1）** —— Computer Use 协议升级到 v3，可在不截图、不申请 Screen Recording 的情况下读取 AX 语义树，并按控件存在、控件值或窗口标题等待；Chrome Native Host 协议同步升级到 v3，新增 hover、原生 select option 与 Tab/Escape/退格/Enter 行为回退。`L10n` 与 Composer picker 的超长主文件按职责拆分，复杂度守门已恢复为零个硬性违规。
 - **Computer Use 与浏览器执行闭环增强（1.183.0-rc1）** —— 原生 Mac 操作的 AX 树补齐 identifier、状态、frame/center，并新增应用激活、控件聚焦、悬停和文本选择；Chrome 控制可列出/切换标签页、导航、抓取带新鲜 ref 的结构化 DOM、按键、滚动、等待条件并把截图作为图片附件回传。两条链路都遵循“读取新状态 → 唯一定位 → 执行动作 → 等待 → 重新读取”的闭环，并用独立 Markdown/JSON 契约报告持续守门。
 - **跨工作区全局置顶（1.182.0-rc1）** —— Agent 侧边栏把所有未归档的置顶会话聚合到工作区列表之前，按最近置顶时间排序且不在原工作区重复显示；取消置顶后会话自动回到原工作区，空白置顶草稿也不会因切换工作区而消失。

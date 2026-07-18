@@ -206,6 +206,8 @@ enum AgentToolRunner {
                 result = try await AgentMediaTools.editGeneratedImage(arguments: activeArguments, context: activeContext)
             case "visual_qa_screenshot":
                 result = try await AgentVisualQATools.analyzeScreenshot(arguments: activeArguments, context: activeContext)
+            case "design_to_code_acceptance":
+                result = try AgentDesignToCodeTools.acceptance(arguments: activeArguments, context: activeContext)
             case "capture_screenshot":
                 result = try await AgentCaptureTools.captureScreenshot(arguments: activeArguments, context: activeContext)
             case "computer_use_permissions":

@@ -163,6 +163,7 @@ enum AgentChromeTools {
         }
         let image = try AgentImageAttachment.fileBacked(data: imageData, mimeType: "image/png")
         object["image_byte_count"] = imageData.count
+        object["path"] = image.filePath
         return AgentToolResult(summary: "Captured visible Chrome tab", payload: prettyJSONString(object), images: [image])
     }
 

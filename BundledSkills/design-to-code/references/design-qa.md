@@ -12,7 +12,7 @@ Collect and record:
 - Route, theme, content, and interaction state.
 - Build/test result and browser-console result.
 
-Capture the implementation with `embedded_browser_capture_screenshot` when the in-app browser is available. Use `visual_qa_screenshot` when approved and helpful. Compare both visuals at the same viewport and state.
+Capture the implementation with `embedded_browser_capture_screenshot` when the in-app browser is available. Fall back to `chrome_capture_tab`, then Computer Use for a running browser or native app. Use `visual_qa_screenshot` when approved and helpful. Compare both visuals at the same viewport and state, then call `design_to_code_acceptance`; a final answer requires its `PASS` result.
 
 ## Required review surfaces
 
@@ -35,7 +35,9 @@ Fix every P0, P1, and P2. After each fix, capture the same state again and recom
 
 ## Required report
 
-Write project-root `design-qa.md` containing:
+`design_to_code_acceptance` writes project-root `design-qa.md` and `.willdeep/design-to-code/visual-diff.png`. Add human/VL findings when useful, but do not replace or remove the machine-generated metrics and capture-surface evidence.
+
+The report must contain:
 
 ```markdown
 # Design QA
@@ -59,4 +61,4 @@ Write project-root `design-qa.md` containing:
 final result: passed
 ```
 
-Use exactly `final result: passed` when no actionable P0/P1/P2 remains. Use exactly `final result: blocked` when evidence is unavailable or actionable findings remain, and state the blocker.
+Acceptance status must be `PASS` only when the tool threshold is met and no actionable P0/P1/P2 remains. Keep `NEEDS_ITERATION` when the threshold or material review fails. If every browser and Computer Use capture route was attempted and unavailable, state the exact blocker; never relabel an unverified result as passed.

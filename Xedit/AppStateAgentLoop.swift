@@ -569,6 +569,13 @@ extension AppState {
         var didQualityRetry = false
         var planAutomaticContinuationCount = 0
         var consecutivePlanRepliesWithoutProgress = 0
+        let designToCodeToolCallBaseline = runtime.toolCalls.count
+        let latestUserImages = runtime.messages.last(where: { $0.role == .user })?.images ?? []
+        let requiresDesignToCodeAcceptance = workspaceURL != nil && AgentDesignToCode.isActive(
+            skills: runtime.currentTurnAttachedSkills,
+            images: latestUserImages
+        )
+        var designToCodeGateContinuationCount = 0
 
         for _ in 0..<Self.maxAgentToolRounds {
             // `run_workflow` is asynchronous, but unlike the workflow card its
@@ -951,6 +958,18 @@ extension AppState {
                         continue
                     }
                 }
+                if requiresDesignToCodeAcceptance,
+                   designToCodeGateContinuationCount < AgentDesignToCode.maximumGateContinuations,
+                   let notice = AgentDesignToCode.completionGateNotice(
+                       toolCalls: runtime.toolCalls.dropFirst(designToCodeToolCallBaseline)
+                   ) {
+                    designToCodeGateContinuationCount += 1
+                    if let dropIndex = runtime.messages.firstIndex(where: { $0.id == assistantID }) {
+                        runtime.messages.remove(at: dropIndex)
+                    }
+                    runtime.messages.append(AgentMessage(role: .system, content: notice))
+                    continue
+                }
                 attachRecentGeneratedToolImages(to: assistantID, in: runtime)
                 captureAgentPatchProposals(for: runtime, fromMessageID: assistantID)
                 // A stream can end "successfully" having produced nothing
@@ -1142,7 +1161,8 @@ extension AppState {
                     risk: risk,
                     rootDirectory: workspaceURL,
                     interactionMode: runtime.interactionMode,
-                    approvalMode: runtime.approvalMode
+                    approvalMode: runtime.approvalMode,
+                    conversationAllowedToolSignatures: runtime.conversationAllowedToolSignatures
                 )
                 let isAlwaysAllowed = autoApproval != nil
                 let initialStatus: AgentToolCallStatus

@@ -63,6 +63,40 @@ struct AgentConfirmationVisualTests {
         #expect(AgentConfirmationReviewMetrics.actionButtonSpacing == 12)
     }
 
+    @Test("render Codex-style Computer Use and browser authorizations")
+    @MainActor
+    func renderCompactSurfaceAuthorizationsForDesignQA() throws {
+        let outputDirectory = try designQAOutputDirectory()
+        var settings = EditorSettings.default
+        settings.interfaceSkinID = EditorInterfaceSkin.ricePaper.id
+        let appState = AppState(editorSettings: settings)
+
+        let computerUseSize = try render(
+            call: surfaceAuthorizationCall(toolName: "computer_use_click"),
+            appState: appState,
+            width: 714,
+            outputURL: outputDirectory.appendingPathComponent(
+                "computer-use-authorization-codex-style.png"
+            )
+        )
+        let browserSize = try render(
+            call: surfaceAuthorizationCall(toolName: "chrome_click"),
+            appState: appState,
+            width: 714,
+            outputURL: outputDirectory.appendingPathComponent(
+                "browser-authorization-codex-style.png"
+            )
+        )
+
+        #expect(computerUseSize.width == 714)
+        #expect(browserSize.width == 714)
+        #expect(computerUseSize.height < 180)
+        #expect(browserSize.height < 180)
+        #expect(AgentCompactAuthorizationMetrics.minimumButtonHeight == 22)
+        #expect(AgentCompactAuthorizationMetrics.usesHorizontalActions(availableWidth: 714))
+        #expect(!AgentCompactAuthorizationMetrics.usesHorizontalActions(availableWidth: 480))
+    }
+
     private func designQAOutputDirectory() throws -> URL {
         let outputDirectory = URL(
             fileURLWithPath: ProcessInfo.processInfo.environment["WILLDEEP_CONFIRMATION_QA_OUTPUT"]
@@ -92,6 +126,17 @@ struct AgentConfirmationVisualTests {
             ],
             risk: .danger,
             status: status
+        )
+    }
+
+    private func surfaceAuthorizationCall(toolName: String) -> AgentToolCall {
+        AgentToolCall(
+            messageID: UUID(),
+            externalID: "surface-authorization-design-qa",
+            toolName: toolName,
+            arguments: ["ref": .string("snapshot:e1")],
+            risk: .write,
+            status: .pendingApproval
         )
     }
 

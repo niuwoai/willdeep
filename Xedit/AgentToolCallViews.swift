@@ -74,6 +74,7 @@ nonisolated enum AgentToolDisplay {
         "web_search": "联网搜索",
         "web_fetch": "抓取网页",
         "generate_image": "生成图片",
+        "design_to_code_acceptance": "界面视觉验收",
         "visual_qa_screenshot": "截图视觉检查",
         "capture_screenshot": "截屏",
         "computer_use_permissions": "电脑操作权限",
@@ -172,6 +173,54 @@ nonisolated enum AgentConfirmationReviewMetrics {
 
     static func usesHorizontalLayout(availableWidth: CGFloat) -> Bool {
         availableWidth >= horizontalMinimumWidth
+    }
+}
+
+nonisolated enum AgentCompactAuthorizationMetrics {
+    static let horizontalPadding: CGFloat = 14
+    static let verticalPadding: CGFloat = 15
+    static let contentSpacing: CGFloat = 15
+    static let actionSpacing: CGFloat = 8
+    static let minimumButtonHeight: CGFloat = 22
+    static let cornerRadius: CGFloat = 20
+    static let buttonCornerRadius: CGFloat = 14
+    static let horizontalMinimumWidth: CGFloat = 520
+
+    static func usesHorizontalActions(availableWidth: CGFloat) -> Bool {
+        availableWidth >= horizontalMinimumWidth
+    }
+}
+
+nonisolated struct AgentCompactAuthorizationDescriptor: Equatable {
+    let iconName: String
+    let title: String
+    let question: String
+}
+
+nonisolated enum AgentCompactAuthorizationCopy {
+    static func descriptor(toolName: String) -> AgentCompactAuthorizationDescriptor? {
+        if toolName.hasPrefix("computer_use_") {
+            return AgentCompactAuthorizationDescriptor(
+                iconName: "cursorarrow.motionlines",
+                title: L10n.ToolCard.computerUseAuthorizationTitle,
+                question: L10n.ToolCard.computerUseAuthorizationQuestion
+            )
+        }
+        if toolName.hasPrefix("chrome_") {
+            return AgentCompactAuthorizationDescriptor(
+                iconName: "globe",
+                title: L10n.ToolCard.browserAuthorizationTitle,
+                question: L10n.ToolCard.browserChromeAuthorizationQuestion
+            )
+        }
+        if toolName.hasPrefix("embedded_browser_") {
+            return AgentCompactAuthorizationDescriptor(
+                iconName: "globe",
+                title: L10n.ToolCard.browserAuthorizationTitle,
+                question: L10n.ToolCard.browserEmbeddedAuthorizationQuestion
+            )
+        }
+        return nil
     }
 }
 
@@ -535,7 +584,11 @@ struct AgentToolCallCard: View {
             }
 
             if isAuthorizationNotice {
-                authorizationNoticeBody
+                if isCompactSurfaceAuthorizationNotice {
+                    compactSurfaceAuthorizationNoticeBody
+                } else {
+                    authorizationNoticeBody
+                }
             } else if call.status == .awaitingUserAnswer {
                 askUserBody
             } else if call.toolName == "ask_user" {
@@ -550,7 +603,7 @@ struct AgentToolCallCard: View {
         .clipShape(
             RoundedRectangle(
                 cornerRadius: isAuthorizationNotice
-                    ? AgentConfirmationReviewMetrics.outerCornerRadius
+                    ? authorizationCornerRadius
                     : 6,
                 style: .continuous
             )
@@ -558,7 +611,7 @@ struct AgentToolCallCard: View {
         .overlay(
             RoundedRectangle(
                 cornerRadius: isAuthorizationNotice
-                    ? AgentConfirmationReviewMetrics.outerCornerRadius
+                    ? authorizationCornerRadius
                     : 6,
                 style: .continuous
             )
@@ -568,6 +621,110 @@ struct AgentToolCallCard: View {
 
     private var approvalDescriptor: AgentApprovalNoticeDescriptor {
         AgentApprovalNoticeCopy.descriptor(toolName: call.toolName, arguments: call.arguments)
+    }
+
+    private var compactAuthorizationDescriptor: AgentCompactAuthorizationDescriptor? {
+        AgentCompactAuthorizationCopy.descriptor(toolName: call.toolName)
+    }
+
+    private var compactSurfaceAuthorizationNoticeBody: some View {
+        let descriptor = compactAuthorizationDescriptor
+        return VStack(alignment: .leading, spacing: AgentCompactAuthorizationMetrics.contentSpacing) {
+            if let descriptor {
+                HStack(spacing: 8) {
+                    Image(systemName: descriptor.iconName)
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundStyle(appState.editorSettings.interfaceSkin.palette.accent)
+                        .frame(width: 18, height: 18)
+                    Text(descriptor.title)
+                        .font(.system(size: 12, weight: .medium))
+                        .foregroundStyle(appState.editorSettings.interfaceSkin.palette.secondaryText)
+                }
+
+                Text(descriptor.question)
+                    .font(.system(size: 15, weight: .medium))
+                    .foregroundStyle(appState.editorSettings.interfaceSkin.palette.primaryText)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
+            compactAuthorizationActions
+        }
+        .padding(.horizontal, AgentCompactAuthorizationMetrics.horizontalPadding)
+        .padding(.vertical, AgentCompactAuthorizationMetrics.verticalPadding)
+    }
+
+    @ViewBuilder
+    private var compactAuthorizationActions: some View {
+        if decisionAlreadySubmitted {
+            submittedDecisionNotice
+        } else {
+            ViewThatFits(in: .horizontal) {
+                HStack(spacing: AgentCompactAuthorizationMetrics.actionSpacing) {
+                    compactAlwaysAllowButton
+                    Spacer(minLength: 16)
+                    compactDenyButton
+                    compactConversationAllowButton
+                }
+                VStack(alignment: .leading, spacing: AgentCompactAuthorizationMetrics.actionSpacing) {
+                    compactAlwaysAllowButton
+                    HStack(spacing: AgentCompactAuthorizationMetrics.actionSpacing) {
+                        Spacer(minLength: 0)
+                        compactDenyButton
+                        compactConversationAllowButton
+                    }
+                }
+            }
+            .controlSize(.regular)
+        }
+    }
+
+    private var compactAlwaysAllowButton: some View {
+        Button {
+            appState.alwaysAllowAgentToolCall(id: call.id)
+        } label: {
+            compactAuthorizationActionLabel(L10n.ToolCard.alwaysAllow)
+        }
+        .buttonStyle(.bordered)
+        .approvalButtonBorderShape(cornerRadius: AgentCompactAuthorizationMetrics.buttonCornerRadius)
+        .tint(appState.editorSettings.interfaceSkin.palette.accent)
+        .cursor(.arrow)
+    }
+
+    private var compactDenyButton: some View {
+        Button {
+            appState.denyAgentToolCall(id: call.id)
+        } label: {
+            compactAuthorizationActionLabel(L10n.ToolCard.deny)
+        }
+        .buttonStyle(.bordered)
+        .approvalButtonBorderShape(cornerRadius: AgentCompactAuthorizationMetrics.buttonCornerRadius)
+        .tint(appState.editorSettings.interfaceSkin.palette.accent)
+        .cursor(.arrow)
+    }
+
+    private var compactConversationAllowButton: some View {
+        Button {
+            appState.allowAgentToolFamilyForConversation(id: call.id)
+        } label: {
+            compactAuthorizationActionLabel(L10n.ToolCard.allowConversation)
+        }
+        .buttonStyle(.borderedProminent)
+        .approvalButtonBorderShape(cornerRadius: AgentCompactAuthorizationMetrics.buttonCornerRadius)
+        .tint(appState.editorSettings.interfaceSkin.palette.accent)
+        .cursor(.arrow)
+    }
+
+    private func compactAuthorizationActionLabel(_ title: String) -> some View {
+        Text(title)
+            .font(.system(size: 12, weight: .semibold))
+            .padding(.horizontal, 2)
+            .frame(minHeight: AgentCompactAuthorizationMetrics.minimumButtonHeight)
+            .contentShape(
+                RoundedRectangle(
+                    cornerRadius: AgentCompactAuthorizationMetrics.buttonCornerRadius,
+                    style: .continuous
+                )
+            )
     }
 
     private var authorizationNoticeBody: some View {
@@ -1782,6 +1939,16 @@ struct AgentToolCallCard: View {
 
     private var isAuthorizationNotice: Bool {
         call.status == .pendingApproval || call.status == .awaitingConfirm
+    }
+
+    private var isCompactSurfaceAuthorizationNotice: Bool {
+        call.risk == .write && compactAuthorizationDescriptor != nil
+    }
+
+    private var authorizationCornerRadius: CGFloat {
+        isCompactSurfaceAuthorizationNotice
+            ? AgentCompactAuthorizationMetrics.cornerRadius
+            : AgentConfirmationReviewMetrics.outerCornerRadius
     }
 
     private var hasExpandableContent: Bool {

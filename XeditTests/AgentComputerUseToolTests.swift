@@ -100,6 +100,32 @@ struct AgentComputerUseToolTests {
     }
 
     @Test
+    func computerUseAuthorizationUsesFamilyScopedConversationGrant() async {
+        #expect(
+            AgentToolAuthorization.interactiveSurfaceSignature(
+                toolName: "computer_use_click"
+            ) == "computer_use:*"
+        )
+        #expect(
+            AgentToolAuthorization.signature(
+                toolName: "computer_use_type_text",
+                arguments: ["pid": .number(123), "text": .string("hello")]
+            ) == "computer_use:*"
+        )
+
+        let appState = AppState()
+        let approval = await appState.autoApprovalSource(
+            toolName: "computer_use_click",
+            arguments: ["pid": .number(123), "x": .number(10), "y": .number(10)],
+            risk: .write,
+            rootDirectory: nil,
+            approvalMode: .requestEveryTime,
+            conversationAllowedToolSignatures: ["computer_use:*"]
+        )
+        #expect(approval == .user)
+    }
+
+    @Test
     func computerUseRefusesLikelySecretsBeforeLaunchingHelper() async {
         await #expect(throws: AgentToolError.self) {
             try await AgentComputerUseTools.perform(

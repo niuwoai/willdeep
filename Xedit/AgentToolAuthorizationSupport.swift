@@ -422,6 +422,19 @@ enum AgentCommandAuthorization {
 ///    file_remove are deliberately not pinnable because their blast
 ///    radius depends entirely on the path argument.
 enum AgentToolAuthorization {
+    static func interactiveSurfaceSignature(toolName: String) -> String? {
+        if toolName.hasPrefix("computer_use_") {
+            return "computer_use:*"
+        }
+        if toolName.hasPrefix("chrome_") {
+            return "browser:chrome"
+        }
+        if toolName.hasPrefix("embedded_browser_") {
+            return "browser:embedded"
+        }
+        return nil
+    }
+
     /// Signature offered by the approval card as a durable rule.
     ///
     /// `signature` remains the matching contract for rules the user already
@@ -499,6 +512,9 @@ enum AgentToolAuthorization {
     }
 
     static func signature(toolName: String, arguments: [String: AgentJSONValue]) -> String? {
+        if let signature = interactiveSurfaceSignature(toolName: toolName) {
+            return signature
+        }
         switch toolName {
         case "run_command":
             guard let command = arguments["command"]?.stringValue() else { return nil }
