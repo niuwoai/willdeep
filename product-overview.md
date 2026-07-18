@@ -1,6 +1,6 @@
 # WillDeep Product Overview
 
-> Last updated: 2026-07-18 | Current version: v1.185.0-rc5
+> Last updated: 2026-07-18 | Current version: v1.185.0-rc6
 
 ## Positioning
 
@@ -12,6 +12,7 @@ WillDeep is configured for non-App-Store distribution without App Sandbox so it 
 
 ## 架构概览
 
+- **主线审核解释修复整合（1.185.0-rc6）** —— 将 `main` 上已验证的 Coding Plan 审核解释模型路由、`someim-auto-flash` 回退与 provider 错误详情展示纳入当前发布线；贴图生成、浏览器和 Computer Use 改进与这一修复共同交付，版本与构建号同步递增。
 - **Codex 风格 Computer Use / 浏览器授权（1.185.0-rc2）** —— Computer Use、Chrome 与内置浏览器的普通写操作使用紧凑三按钮授权卡；“允许此对话”只写入当前 Agent runtime 并按工具族隔离，“始终允许”按工具族持久化，danger 级调试操作继续走严格确认，避免便捷授权扩大高风险操作边界。
 - **视觉验收响应式 OCR（1.185.0-rc3）** —— 贴图生成代码的 OCR 覆盖率使用归一化字符片段比较，忽略浏览器窄视口造成的自然换行差异，同时继续拒绝缺失或无关文案，避免完成门禁在响应式页面上误杀。
 - **贴图生成直接执行语义（1.185.0-rc4）** —— `/screenshot-to-code` 会退出会话遗留的 Plan 模式并清理旧计划，再进入生产代码修改、运行、浏览器截图与视觉验收闭环，避免显式执行命令被旧计划门禁切成只读规划。
