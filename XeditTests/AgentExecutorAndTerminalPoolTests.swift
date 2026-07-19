@@ -80,7 +80,7 @@ struct AgentExecutorAndTerminalPoolTests {
     @Test("composer uses semantic model and worker icons")
     func composerSemanticIcons() {
         #expect(ModelPickerPill.modelSymbol == "brain.head.profile")
-        #expect(AgentExecutionAgent.willDeep.symbol == "person.fill")
+        #expect(AgentExecutionAgent.willDeep.symbol == "hammer.fill")
     }
 
     @Test("delegated images are private, forwarded to both CLIs, and removable")

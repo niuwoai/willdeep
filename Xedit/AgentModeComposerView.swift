@@ -960,6 +960,11 @@ private struct ComposerCard: View {
                     isSecretSheetPresented = false
                     inputFocused = true
                 },
+                onInsertSaved: { placeholder in
+                    insertSecretPlaceholders([placeholder])
+                    isSecretSheetPresented = false
+                    inputFocused = true
+                },
                 onInsert: { secrets in
                     insertSecrets(secrets)
                     isSecretSheetPresented = false
@@ -1145,7 +1150,15 @@ private struct ComposerCard: View {
 
     private func insertSecrets(_ secrets: [AgentSecretInput]) {
         let placeholders = AgentSecretStore.saveSecrets(secrets)
+        insertSecretPlaceholders(placeholders)
+    }
+
+    private func insertSecretPlaceholders(_ placeholders: [String]) {
         guard !placeholders.isEmpty else { return }
+        let insertion = placeholders.joined(separator: " ")
+        if coordinatorRef.coordinator?.insertComposerTextAtSelection(insertion) == true {
+            return
+        }
         let current = appState.agentInput
         let separator: String
         if current.isEmpty || current.hasSuffix(" ") || current.hasSuffix("\n") {
@@ -1153,7 +1166,7 @@ private struct ComposerCard: View {
         } else {
             separator = " "
         }
-        appState.agentInput = current + separator + placeholders.joined(separator: " ")
+        appState.agentInput = current + separator + insertion
     }
 
     private func presentPendingTerminalProtectedInputIfNeeded() {
@@ -1397,8 +1410,10 @@ private struct ConsultationButton: View {
 
 private struct AgentSecretInsertSheet: View {
     @State private var rows: [AgentSecretInput] = [AgentSecretInput(label: "", secret: "")]
+    @State private var savedSecrets: [AgentSavedSecret] = []
 
     let onCancel: () -> Void
+    let onInsertSaved: (_ placeholder: String) -> Void
     let onInsert: (_ secrets: [AgentSecretInput]) -> Void
 
     var body: some View {
@@ -1419,6 +1434,68 @@ private struct AgentSecretInsertSheet: View {
                 .font(.caption)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
+
+            VStack(alignment: .leading, spacing: 8) {
+                Text(L10n.Composer.savedSecretsTitle)
+                    .font(.system(size: 12, weight: .semibold))
+
+                if savedSecrets.isEmpty {
+                    Text(L10n.Composer.savedSecretsEmpty)
+                        .font(.caption)
+                        .foregroundStyle(.tertiary)
+                        .padding(.vertical, 4)
+                } else {
+                    ScrollView {
+                        LazyVStack(spacing: 6) {
+                            ForEach(savedSecrets) { secret in
+                                Button {
+                                    onInsertSaved(secret.placeholder)
+                                } label: {
+                                    HStack(spacing: 9) {
+                                        Image(systemName: "key.fill")
+                                            .font(.system(size: 11, weight: .semibold))
+                                            .foregroundStyle(Color.accentColor)
+                                            .frame(width: 22, height: 22)
+                                            .background(Color.accentColor.opacity(0.12))
+                                            .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
+                                        VStack(alignment: .leading, spacing: 2) {
+                                            Text(savedSecretLabel(secret))
+                                                .font(.system(size: 12, weight: .medium))
+                                                .foregroundStyle(.primary)
+                                                .lineLimit(1)
+                                            Text(secret.placeholder)
+                                                .font(.system(size: 10, design: .monospaced))
+                                                .foregroundStyle(.secondary)
+                                                .lineLimit(1)
+                                        }
+                                        Spacer(minLength: 8)
+                                        Image(systemName: "plus.circle.fill")
+                                            .foregroundStyle(Color.accentColor)
+                                    }
+                                    .padding(.horizontal, 9)
+                                    .padding(.vertical, 7)
+                                    .contentShape(Rectangle())
+                                    .background(Color.primary.opacity(0.035))
+                                    .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+                                }
+                                .buttonStyle(.plain)
+                                .help(L10n.Composer.savedSecretInsertHelp)
+                            }
+                        }
+                    }
+                    .frame(maxHeight: 132)
+                }
+            }
+
+            Divider()
+
+            VStack(alignment: .leading, spacing: 3) {
+                Text(L10n.Composer.newSecretsTitle)
+                    .font(.system(size: 12, weight: .semibold))
+                Text(L10n.Composer.secretAliasRule)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
 
             VStack(alignment: .leading, spacing: 10) {
                 ForEach(rows.indices, id: \.self) { index in
@@ -1450,15 +1527,34 @@ private struct AgentSecretInsertSheet: View {
                     onInsert(rows)
                 }
                 .keyboardShortcut(.defaultAction)
-                .disabled(validSecretCount == 0)
+                .disabled(validSecretCount == 0 || hasIncompleteRow)
             }
         }
         .padding(18)
-        .frame(width: 430)
+        .frame(width: 480)
+        .onAppear {
+            savedSecrets = AgentSecretStore.savedSecrets()
+        }
     }
 
     private var validSecretCount: Int {
-        rows.filter { !$0.secret.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }.count
+        rows.filter {
+            !$0.label.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                && !$0.secret.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        }.count
+    }
+
+    private func savedSecretLabel(_ secret: AgentSavedSecret) -> String {
+        guard secret.label.isEmpty else { return secret.label }
+        return L10n.Composer.legacySecretLabel(String(secret.identifier.prefix(8)))
+    }
+
+    private var hasIncompleteRow: Bool {
+        rows.contains {
+            let hasLabel = !$0.label.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            let hasSecret = !$0.secret.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            return hasLabel != hasSecret
+        }
     }
 
     private func removeRow(at index: Int) {
@@ -1474,6 +1570,7 @@ private struct AgentSecretInputRow: View {
     let shouldFocusOnAppear: Bool
     let canRemove: Bool
     let onRemove: () -> Void
+    @FocusState private var labelFocused: Bool
     @FocusState private var secretFocused: Bool
 
     var body: some View {
@@ -1486,9 +1583,16 @@ private struct AgentSecretInputRow: View {
             VStack(alignment: .leading, spacing: 6) {
                 TextField(L10n.Composer.secretLabelPlaceholder, text: $label)
                     .textFieldStyle(.roundedBorder)
+                    .focused($labelFocused)
                 SecureField(L10n.Composer.secretValuePlaceholder, text: $secret)
                     .textFieldStyle(.roundedBorder)
                     .focused($secretFocused)
+                if !label.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                    Text(AgentSecretStore.placeholder(identifier: AgentSecretStore.normalizedAlias(label)))
+                        .font(.system(size: 10, design: .monospaced))
+                        .foregroundStyle(Color.accentColor)
+                        .lineLimit(1)
+                }
             }
 
             Button(action: onRemove) {
@@ -1503,7 +1607,7 @@ private struct AgentSecretInputRow: View {
         }
         .onAppear {
             guard shouldFocusOnAppear else { return }
-            DispatchQueue.main.async { secretFocused = true }
+            DispatchQueue.main.async { labelFocused = true }
         }
     }
 }

@@ -155,8 +155,6 @@ struct AgentSessionsSidebar: View {
                 LazyVStack(alignment: .leading, spacing: 0) {
                     primaryActions
                     Spacer().frame(height: 18)
-                    AgentRoutinesSidebarSection()
-                    Spacer().frame(height: 4)
                     pinnedSessionsSection
                     workspacesHeader
                     ForEach(groupedSessions) { group in
@@ -267,6 +265,16 @@ struct AgentSessionsSidebar: View {
         VStack(spacing: 0) {
             SidebarActionRow(icon: "square.and.pencil", title: L10n.Sidebar.newChatAction, shortcut: "⌘N") {
                 appState.startNewAgentSession()
+            }
+            SidebarActionRow(
+                icon: "clock",
+                title: L10n.Automation.navigationTitle,
+                shortcut: nil,
+                isSelected: appState.agentPrimaryDestination == .scheduledTasks
+            ) {
+                appState.agentPrimaryDestination = .scheduledTasks
+                appState.agentSidePanelKind = nil
+                appState.agentSidePanelRequest = nil
             }
         }
     }
@@ -1032,6 +1040,7 @@ struct SidebarActionRow: View {
     let title: String
     let shortcut: String?
     var isDimmed: Bool = false
+    var isSelected: Bool = false
     let action: () -> Void
 
     @State private var isHovered = false
@@ -1063,10 +1072,25 @@ struct SidebarActionRow: View {
             .padding(.horizontal, 14)
             .frame(height: AgentDesign.sidebarRowHeight)
             .contentShape(Rectangle())
-            .background(isHovered ? appState.editorSettings.interfaceSkin.palette.hoverFill : Color.clear)
+            .background(
+                RoundedRectangle(cornerRadius: AgentDesign.sidebarSelectionCornerRadius)
+                    .fill(rowBackground)
+                    .padding(.horizontal, AgentDesign.sidebarSelectionHorizontalInset)
+            )
         }
         .buttonStyle(.plain)
         .onHover { isHovered = $0 }
         .disabled(isDimmed)
+    }
+
+    private var rowBackground: Color {
+        let palette = appState.editorSettings.interfaceSkin.palette
+        if isSelected {
+            return palette.selectionFill
+        }
+        if isHovered {
+            return palette.hoverFill
+        }
+        return .clear
     }
 }

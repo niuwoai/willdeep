@@ -95,6 +95,7 @@ final class AgentRuntime: ObservableObject, Identifiable {
     /// after the user switches to another conversation.
     @Published var pendingPlanModeSuggestion: AgentPlanModeSuggestion?
     @Published var currentGoal: AgentGoal?
+    @Published var goalPlanningState: AgentGoalPlanningState?
     /// Runtime-only guard for mid-turn manual goal edits. If the user edits
     /// the goal while an old request is already in flight, that older reply's
     /// trailing `goal-check` block must not be applied to the new checklist.
@@ -202,10 +203,10 @@ final class AgentRuntime: ObservableObject, Identifiable {
 
     // MARK: - Plan gate
 
-    /// True when Plan mode is on AND no active approved/executing plan exists.
-    /// Completed plans require a fresh approval before later write-tier work.
+    /// Approval gate shared by Plan mode and Goal-backed Plans. Goal setup,
+    /// planning, rejected, proposed, blocked, and completed cycles stay locked.
     var isPlanGateActive: Bool {
-        guard interactionMode == .plan else { return false }
+        guard interactionMode == .plan || interactionMode == .goal else { return false }
         guard let plan = currentPlan else { return true }
         return plan.status != .approved && plan.status != .executing
     }
@@ -232,6 +233,17 @@ final class AgentRuntime: ObservableObject, Identifiable {
         self.activeExperts = session.activeExperts
         self.currentPlan = session.currentPlan
         self.currentGoal = session.currentGoal
+        let restoredGoalPlanningState = session.goalPlanningState?.normalizedForRestore(
+            currentPlan: session.currentPlan,
+            currentGoal: session.currentGoal
+        )
+        self.goalPlanningState = restoredGoalPlanningState
+        if restoredGoalPlanningState?.phase == .blocked,
+           self.currentPlan?.status == .approved || self.currentPlan?.status == .executing {
+            // A contradictory persisted ledger cannot retain write authority.
+            // Legacy sessions without a ledger still keep an approved Plan.
+            self.currentPlan = nil
+        }
         self.learningEvents = session.learningEvents
         self.latestTurnRecall = session.latestTurnRecall
         self.documentAttachments = session.documentAttachments
@@ -353,6 +365,7 @@ final class AgentRuntime: ObservableObject, Identifiable {
         session.activeExperts = activeExperts
         session.currentPlan = currentPlan
         session.currentGoal = currentGoal
+        session.goalPlanningState = goalPlanningState
         session.learningEvents = learningEvents
         session.latestTurnRecall = latestTurnRecall
         session.documentAttachments = documentAttachments

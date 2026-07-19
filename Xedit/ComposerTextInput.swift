@@ -616,6 +616,42 @@ struct ComposerTextEditor: NSViewRepresentable {
             lastHistoryString = nil
             return true
         }
+
+        /// Inserts content at the live caret rather than appending to the end
+        /// of the SwiftUI binding. Protected-secret picker rows use this so a
+        /// saved key lands exactly where the user was composing a command.
+        func insertComposerTextAtSelection(_ insertion: String) -> Bool {
+            guard let textView = activeTextView, !insertion.isEmpty else { return false }
+            let source = textView.string as NSString
+            let selected = textView.selectedRange()
+            guard selected.location != NSNotFound,
+                  NSMaxRange(selected) <= source.length else { return false }
+
+            let hasLeadingBoundary = selected.location == 0
+                || CharacterSet.whitespacesAndNewlines.contains(
+                    UnicodeScalar(source.character(at: selected.location - 1)) ?? UnicodeScalar(32)
+                )
+            let selectionEnd = NSMaxRange(selected)
+            let hasTrailingBoundary = selectionEnd == source.length
+                || CharacterSet.whitespacesAndNewlines.contains(
+                    UnicodeScalar(source.character(at: selectionEnd)) ?? UnicodeScalar(32)
+                )
+            let prefix = hasLeadingBoundary ? "" : " "
+            let suffix = hasTrailingBoundary ? "" : " "
+            let replacement = prefix + insertion + suffix
+            let mutable = NSMutableString(string: source)
+            mutable.replaceCharacters(in: selected, with: replacement)
+            let result = mutable as String
+            textView.string = result
+            lastPublishedValue = result
+            text.wrappedValue = result
+            let caret = selected.location + (prefix + insertion).utf16.count
+            textView.setSelectedRange(NSRange(location: caret, length: 0))
+            textView.needsDisplay = true
+            historyIndex = nil
+            lastHistoryString = nil
+            return true
+        }
     }
 
     static func dismantleNSView(_ nsView: NSScrollView, coordinator: Coordinator) {}
@@ -646,8 +682,80 @@ fileprivate final class ComposerNSTextView: NSTextView {
     }
 
     override func draw(_ dirtyRect: NSRect) {
+        refreshSecretTagAttributes()
         super.draw(dirtyRect)
         drawPlaceholderIfNeeded()
+    }
+
+    override func drawBackground(in dirtyRect: NSRect) {
+        super.drawBackground(in: dirtyRect)
+        guard let layoutManager,
+              let textContainer else { return }
+        let origin = textContainerOrigin
+        for match in AgentSecretStore.placeholderMatches(in: string) {
+            let glyphRange = layoutManager.glyphRange(
+                forCharacterRange: match.range,
+                actualCharacterRange: nil
+            )
+            var rect = layoutManager.boundingRect(forGlyphRange: glyphRange, in: textContainer)
+            rect.origin.x += origin.x
+            rect.origin.y += origin.y
+            rect = rect.insetBy(dx: -3, dy: -1)
+            guard rect.intersects(dirtyRect) else { continue }
+            NSColor.controlAccentColor.withAlphaComponent(0.13).setFill()
+            NSBezierPath(roundedRect: rect, xRadius: 5, yRadius: 5).fill()
+            NSColor.controlAccentColor.withAlphaComponent(0.24).setStroke()
+            let border = NSBezierPath(roundedRect: rect.insetBy(dx: 0.5, dy: 0.5), xRadius: 5, yRadius: 5)
+            border.lineWidth = 1
+            border.stroke()
+        }
+    }
+
+    override func shouldChangeText(in affectedCharRange: NSRange, replacementString: String?) -> Bool {
+        let matches = AgentSecretStore.placeholderMatches(in: string)
+        let overlapping = matches.filter { match in
+            if affectedCharRange.length == 0 {
+                return affectedCharRange.location > match.range.location
+                    && affectedCharRange.location < NSMaxRange(match.range)
+            }
+            return NSIntersectionRange(affectedCharRange, match.range).length > 0
+        }
+        guard !overlapping.isEmpty else {
+            return super.shouldChangeText(in: affectedCharRange, replacementString: replacementString)
+        }
+
+        // A caret inside the pill cannot mutate its alias character-by-
+        // character. Select the complete token so Backspace/Delete removes it
+        // atomically and the picker can insert a replacement.
+        if affectedCharRange.length == 0 {
+            setSelectedRange(overlapping[0].range)
+            NSSound.beep()
+            return false
+        }
+
+        let expanded = overlapping.reduce(affectedCharRange) { partial, match in
+            NSUnionRange(partial, match.range)
+        }
+        let replacement = replacementString ?? ""
+        guard super.shouldChangeText(in: expanded, replacementString: replacement) else { return false }
+        textStorage?.replaceCharacters(in: expanded, with: replacement)
+        didChangeText()
+        setSelectedRange(NSRange(location: expanded.location + replacement.utf16.count, length: 0))
+        return false
+    }
+
+    private func refreshSecretTagAttributes() {
+        guard let layoutManager else { return }
+        let fullRange = NSRange(location: 0, length: (string as NSString).length)
+        layoutManager.removeTemporaryAttribute(.foregroundColor, forCharacterRange: fullRange)
+        layoutManager.removeTemporaryAttribute(.font, forCharacterRange: fullRange)
+        let tagColor = NSColor.controlAccentColor.blended(withFraction: 0.18, of: .labelColor)
+            ?? NSColor.controlAccentColor
+        let tagFont = NSFont.systemFont(ofSize: 12, weight: .medium)
+        for match in AgentSecretStore.placeholderMatches(in: string) {
+            layoutManager.addTemporaryAttribute(.foregroundColor, value: tagColor, forCharacterRange: match.range)
+            layoutManager.addTemporaryAttribute(.font, value: tagFont, forCharacterRange: match.range)
+        }
     }
 
     private func drawPlaceholderIfNeeded() {

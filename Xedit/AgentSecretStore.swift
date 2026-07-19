@@ -19,17 +19,41 @@ struct AgentSecretInput: Equatable {
     var secret: String
 }
 
+struct AgentSavedSecret: Codable, Equatable, Identifiable {
+    var identifier: String
+    var label: String
+    var updatedAt: Date
+
+    var id: String { identifier }
+    var placeholder: String { AgentSecretStore.placeholder(identifier: identifier) }
+}
+
+struct AgentSecretPlaceholderMatch: Equatable {
+    var range: NSRange
+    var identifier: String
+}
+
 enum AgentSecretStore {
     nonisolated static let maxBatchInsertCount = 3
     nonisolated static let placeholderPrefix = "${secret:"
+    nonisolated static let maxAliasLength = 48
     nonisolated private static let keychainAccountPrefix = "agent-secret/"
+    nonisolated private static let indexAccount = "agent-secret-index-v1"
     nonisolated private static let encodedValuePrefix = "base64:"
 
     nonisolated static func saveSecret(_ secret: String, label: String) -> String? {
         guard !secret.isEmpty else { return nil }
-        let identifier = randomIdentifier()
+        let trimmedLabel = label.trimmingCharacters(in: .whitespacesAndNewlines)
+        let identifier = normalizedAlias(trimmedLabel)
         let encoded = Data(secret.utf8).base64EncodedString()
         AgentCredentialStore.save("\(encodedValuePrefix)\(encoded)", account: account(for: identifier))
+        upsertIndexEntry(
+            AgentSavedSecret(
+                identifier: identifier,
+                label: trimmedLabel.isEmpty ? identifier : trimmedLabel,
+                updatedAt: Date()
+            )
+        )
         return placeholder(identifier: identifier)
     }
 
@@ -44,6 +68,62 @@ enum AgentSecretStore {
     nonisolated static func placeholder(identifier: String, transform: String? = nil) -> String {
         let suffix = transform.flatMap { $0.isEmpty ? nil : "|\($0)" } ?? ""
         return "\(placeholderPrefix)\(identifier)\(suffix)}"
+    }
+
+    nonisolated static func normalizedAlias(_ label: String) -> String {
+        let trimmed = label.trimmingCharacters(in: .whitespacesAndNewlines)
+        var result = ""
+        var needsSeparator = false
+        for scalar in trimmed.unicodeScalars {
+            if CharacterSet.alphanumerics.contains(scalar) {
+                if needsSeparator, !result.isEmpty, !result.hasSuffix("-") {
+                    result.append("-")
+                }
+                result.append(String(scalar).lowercased())
+                needsSeparator = false
+            } else {
+                needsSeparator = !result.isEmpty
+            }
+        }
+        let capped = String(result.prefix(maxAliasLength))
+            .trimmingCharacters(in: CharacterSet(charactersIn: "-"))
+        return capped.isEmpty ? "secret-\(String(randomIdentifier().prefix(8)))" : capped
+    }
+
+    nonisolated static func savedSecrets() -> [AgentSavedSecret] {
+        let indexed = loadIndex().filter { !loadSecret(identifier: $0.identifier).isEmpty }
+        let indexedIdentifiers = Set(indexed.map(\.identifier))
+        let legacy = AgentCredentialStore.accounts(matchingPrefix: keychainAccountPrefix)
+            .map { String($0.dropFirst(keychainAccountPrefix.count)) }
+            .filter { !indexedIdentifiers.contains($0) && !loadSecret(identifier: $0).isEmpty }
+            .map {
+                AgentSavedSecret(identifier: $0, label: "", updatedAt: .distantPast)
+            }
+        return (indexed + legacy).sorted {
+                if $0.updatedAt != $1.updatedAt { return $0.updatedAt > $1.updatedAt }
+                return $0.label.localizedStandardCompare($1.label) == .orderedAscending
+            }
+    }
+
+    nonisolated static func placeholderMatches(in text: String) -> [AgentSecretPlaceholderMatch] {
+        var matches: [AgentSecretPlaceholderMatch] = []
+        var searchStart = text.startIndex
+        while let start = text.range(of: placeholderPrefix, range: searchStart..<text.endIndex) {
+            guard let close = text[start.upperBound...].firstIndex(of: "}") else { break }
+            let rawBody = String(text[start.upperBound..<close])
+            let identifier = rawBody.split(separator: "|", maxSplits: 1).first.map(String.init) ?? ""
+            if !identifier.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                let closedRange = start.lowerBound...close
+                matches.append(
+                    AgentSecretPlaceholderMatch(
+                        range: NSRange(closedRange, in: text),
+                        identifier: identifier
+                    )
+                )
+            }
+            searchStart = text.index(after: close)
+        }
+        return matches
     }
 
     nonisolated static func containsPlaceholder(_ value: String) -> Bool {
@@ -159,6 +239,23 @@ enum AgentSecretStore {
 
     nonisolated private static func account(for identifier: String) -> String {
         "\(keychainAccountPrefix)\(identifier)"
+    }
+
+    nonisolated private static func loadIndex() -> [AgentSavedSecret] {
+        let raw = AgentCredentialStore.load(account: indexAccount)
+        guard let data = raw.data(using: .utf8),
+              let entries = try? JSONDecoder().decode([AgentSavedSecret].self, from: data) else {
+            return []
+        }
+        return entries
+    }
+
+    nonisolated private static func upsertIndexEntry(_ entry: AgentSavedSecret) {
+        var entries = loadIndex().filter { $0.identifier != entry.identifier }
+        entries.append(entry)
+        guard let data = try? JSONEncoder().encode(entries),
+              let raw = String(data: data, encoding: .utf8) else { return }
+        AgentCredentialStore.save(raw, account: indexAccount)
     }
 
     nonisolated private static func loadSecret(identifier: String) -> String {

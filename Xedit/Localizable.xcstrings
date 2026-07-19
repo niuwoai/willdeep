@@ -640,6 +640,21 @@
         }
       }
     },
+    "about.app.qecho.name" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "QEcho" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "轻语" } } } },
+    "about.app.qecho.summary" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "AI voice input and text polishing." } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "AI 语音输入与文字整理。" } } } },
+    "about.app.qmailmate.name" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "QMailMate" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "轻邮" } } } },
+    "about.app.qmailmate.summary" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "AI email writing, triage, summaries, and replies." } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "AI 邮件写作、摘要、分类与回复助手。" } } } },
+    "about.app.qmarkview.name" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "QMarkView" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "轻阅" } } } },
+    "about.app.qmarkview.summary" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Clean Markdown reading." } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "清爽的 Markdown 阅读。" } } } },
+    "about.app.qnote.name" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "QNote" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "轻记" } } } },
+    "about.app.qnote.summary" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Light notes and Markdown writing." } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "轻量笔记与 Markdown 创作。" } } } },
+    "about.app.qpic.name" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "QPic" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "轻图" } } } },
+    "about.app.qpic.summary" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Screenshots, image editing, and upload sharing." } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "截图、图片编辑与上传分享。" } } } },
+    "about.app.qterm.name" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "QTerm" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "轻连" } } } },
+    "about.app.qterm.summary" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "A lightweight terminal with tabs, SSH, and AI-friendly tooling." } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "轻快的多标签终端，支持 SSH 与 AI 工具桥。" } } } },
+    "about.app.timebill.name" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "TimeBill" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "TimeBill" } } } },
+    "about.app.timebill.summary" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Time tracking and billing companion." } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "时间记录与账单助手。" } } } },
+    "about.author-homepage" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Author homepage · 83d.me" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "作者主页 · 83d.me" } } } },
     "about.build-label" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -708,6 +723,9 @@
         }
       }
     },
+    "about.other-apps" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "More apps by Rocky" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "Rocky 的其他 App" } } } },
+    "about.other-apps-summary" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "A small shelf of sibling macOS apps from the 83d release catalog." } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "来自 83d 发布清单的一组 macOS 小伙伴。" } } } },
+    "about.summary" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "A native macOS agent workspace for inspecting projects, using tools, and turning tasks into verifiable deliverables." } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "原生 macOS Agent 工作台，可查看项目、使用工具，并把任务推进为可验证的交付成果。" } } } },
     "about.unknown-value" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -6215,6 +6233,23 @@
         }
       }
     },
+    "automation.navigation-title" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Scheduled"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已安排"
+          }
+        }
+      }
+    },
     "automation.no-workspace" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -6228,6 +6263,125 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "不绑定工作区"
+          }
+        }
+      }
+    },
+    "automation.page.empty-search" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No scheduled tasks match your search"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "没有匹配的已安排任务"
+          }
+        }
+      }
+    },
+    "automation.page.new-task" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "New task"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "新建任务"
+          }
+        }
+      }
+    },
+    "automation.page.search-placeholder" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Search scheduled tasks"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "搜索已安排任务"
+          }
+        }
+      }
+    },
+    "automation.page.subtitle" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Let WillDeep run recurring prompts, reminders, and project checks for you"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "让 WillDeep 为你运行周期提示、提醒和项目检查"
+          }
+        }
+      }
+    },
+    "automation.page.suggestions" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Suggestions"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "建议"
+          }
+        }
+      }
+    },
+    "automation.page.title" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Scheduled tasks"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已安排的任务"
+          }
+        }
+      }
+    },
+    "automation.page.your-tasks" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Your tasks"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "你的任务"
           }
         }
       }
@@ -8525,6 +8679,114 @@
         "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "无法识别 %@ 的文件类型，也无法读取文件大小，因此没有附加。" } }
       }
     },
+    "composer.secret.legacy-label" : {
+      "comment" : "Fallback label for protected secrets created before aliases were indexed",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Legacy secret · %@"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "旧密钥 · %@"
+          }
+        }
+      }
+    },
+    "composer.secret.alias-rule" : {
+      "comment" : "Guidance for protected secret alias normalization and replacement behavior",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Aliases become lowercase kebab-case placeholders. Saving the same alias updates its local value."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "别名会规范为小写短横线格式；再次保存相同别名会更新本机密钥值。"
+          }
+        }
+      }
+    },
+    "composer.secret.new-title" : {
+      "comment" : "Section title above the protected secret creation form",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Add or update a secret"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "添加或更新密钥"
+          }
+        }
+      }
+    },
+    "composer.secret.saved-empty" : {
+      "comment" : "Empty state for the saved protected secret list",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No reusable secrets have been saved yet."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "还没有保存过可复用密钥。"
+          }
+        }
+      }
+    },
+    "composer.secret.saved-insert-help" : {
+      "comment" : "Tooltip for inserting a saved protected secret",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Insert this protected secret at the cursor"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "在光标位置插入这个受保护密钥"
+          }
+        }
+      }
+    },
+    "composer.secret.saved-title" : {
+      "comment" : "Section title above the saved protected secret list",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Saved secrets"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已保存的密钥"
+          }
+        }
+      }
+    },
     "composer.insert-secret.action" : {
       "comment" : "Button label for inserting a protected secret placeholder into the Agent composer",
       "extractionState" : "manual",
@@ -10774,6 +11036,21 @@
         }
       }
     },
+    "goal-planning.arbitration" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Evidence arbitration" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "证据仲裁" } } } },
+    "goal-planning.header" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Goal Teams planning" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "Goal Teams 规划" } } } },
+    "goal-planning.phase.arbitrating" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Arbitrating" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "仲裁中" } } } },
+    "goal-planning.phase.awaiting-approval" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Awaiting approval" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "等待批准" } } } },
+    "goal-planning.phase.blocked" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Blocked" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "已阻塞" } } } },
+    "goal-planning.phase.collecting" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Independent review" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "独立评审" } } } },
+    "goal-planning.phase.completed" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Completed" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "已完成" } } } },
+    "goal-planning.phase.executing" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Executing" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "执行中" } } } },
+    "goal-planning.phase.synthesizing" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Synthesizing proposal" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "综合提案" } } } },
+    "goal-planning.retry" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Retry planning" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "重试规划" } } } },
+    "goal-planning.status.completed" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Completed" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "已完成" } } } },
+    "goal-planning.status.failed" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Failed" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "失败" } } } },
+    "goal-planning.status.interrupted" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Interrupted" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "已中断" } } } },
+    "goal-planning.status.pending" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Pending" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "等待中" } } } },
+    "goal-planning.status.running" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Running" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "进行中" } } } },
     "goal-card.edit-button.help" : {
       "comment" : "tooltip for edit button",
       "extractionState" : "manual",

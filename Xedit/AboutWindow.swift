@@ -84,33 +84,23 @@ private final class AboutMenuHandler: NSObject {
 }
 
 private struct AboutView: View {
-    static let defaultWindowSize = CGSize(width: 620, height: 360)
+    static let defaultWindowSize = CGSize(width: 700, height: 500)
 
     private var version: String {
         bundleString("CFBundleShortVersionString")
-    }
-
-    private var build: String {
-        bundleString(kCFBundleVersionKey as String)
-    }
-
-    private var bundleIdentifier: String {
-        Bundle.main.bundleIdentifier ?? L10n.About.unknownValue
     }
 
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 18) {
                 HStack(alignment: .center, spacing: 18) {
-                    Image(nsImage: NSApplication.shared.applicationIconImage)
+                    Image("DesktopPetPenguin")
                         .resizable()
                         .interpolation(.high)
                         .scaledToFit()
-                        .frame(width: 116, height: 116)
-                        .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
-                        .shadow(color: .black.opacity(0.16), radius: 18, x: 0, y: 10)
+                        .frame(width: 128, height: 128)
 
-                    VStack(alignment: .leading, spacing: 10) {
+                    VStack(alignment: .leading, spacing: 8) {
                         HStack(alignment: .firstTextBaseline, spacing: 10) {
                             Text(L10n.About.appName)
                                 .font(.title2.weight(.semibold))
@@ -119,44 +109,37 @@ private struct AboutView: View {
                                 .foregroundStyle(.secondary)
                         }
 
-                        HStack(spacing: 12) {
-                            Link(destination: URL(string: "https://willdeep.com")!) {
-                                Label(L10n.About.website, systemImage: "link")
-                            }
-                            .buttonStyle(.link)
+                        Text(L10n.About.summary)
+                            .font(.callout)
+                            .foregroundStyle(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
 
-                            Button {
-                                copyVersionInfo()
-                            } label: {
-                                Label(L10n.About.copyVersionInfo, systemImage: "doc.on.doc")
-                            }
-                            .buttonStyle(.link)
+                        Link(destination: URL(string: "https://83d.me")!) {
+                            Label(L10n.About.authorHomepage, systemImage: "link")
+                                .font(.subheadline.weight(.medium))
                         }
-                        .font(.subheadline.weight(.medium))
+                        .buttonStyle(.link)
                     }
                 }
 
                 Divider()
 
                 VStack(alignment: .leading, spacing: 10) {
-                    Text(L10n.About.versionDetails)
+                    Text(L10n.About.otherApps)
                         .font(.headline)
+                    Text(L10n.About.otherAppsSummary)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
 
-                    VStack(spacing: 0) {
-                        AboutFactRow(title: L10n.About.versionLabel, value: version)
-                        Divider()
-                        AboutFactRow(title: L10n.About.buildLabel, value: build)
-                        Divider()
-                        AboutFactRow(title: L10n.About.bundleIDLabel, value: bundleIdentifier)
+                    LazyVGrid(columns: [GridItem(.adaptive(minimum: 156), spacing: 10)], spacing: 10) {
+                        ForEach(AboutRecommendedApp.allCases) { app in
+                            AboutRecommendedAppCard(app: app)
+                        }
                     }
-                    .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 8, style: .continuous)
-                            .strokeBorder(Color.primary.opacity(0.08), lineWidth: 1)
-                    )
                 }
             }
-            .padding(22)
+            .padding(20)
             .frame(maxWidth: .infinity, alignment: .topLeading)
         }
         .frame(width: Self.defaultWindowSize.width, height: Self.defaultWindowSize.height)
@@ -172,33 +155,124 @@ private struct AboutView: View {
         return value
     }
 
-    private func copyVersionInfo() {
-        let lines = [
-            "\(L10n.About.appName) \(version)",
-            "\(L10n.About.buildLabel): \(build)",
-            "\(L10n.About.bundleIDLabel): \(bundleIdentifier)"
-        ]
-        NSPasteboard.general.clearContents()
-        NSPasteboard.general.setString(lines.joined(separator: "\n"), forType: .string)
+}
+
+private enum AboutRecommendedApp: String, CaseIterable, Identifiable {
+    case qTerm
+    case timeBill
+    case qPic
+    case qMarkView
+    case qEcho
+    case qMailMate
+    case qNote
+
+    var id: String { rawValue }
+
+    var name: String {
+        switch self {
+        case .qTerm: return L10n.About.App.qTermName
+        case .timeBill: return L10n.About.App.timeBillName
+        case .qPic: return L10n.About.App.qPicName
+        case .qMarkView: return L10n.About.App.qMarkViewName
+        case .qEcho: return L10n.About.App.qEchoName
+        case .qMailMate: return L10n.About.App.qMailMateName
+        case .qNote: return L10n.About.App.qNoteName
+        }
+    }
+
+    var summary: String {
+        switch self {
+        case .qTerm: return L10n.About.App.qTermSummary
+        case .timeBill: return L10n.About.App.timeBillSummary
+        case .qPic: return L10n.About.App.qPicSummary
+        case .qMarkView: return L10n.About.App.qMarkViewSummary
+        case .qEcho: return L10n.About.App.qEchoSummary
+        case .qMailMate: return L10n.About.App.qMailMateSummary
+        case .qNote: return L10n.About.App.qNoteSummary
+        }
+    }
+
+    var systemImage: String {
+        switch self {
+        case .qTerm: return "terminal.fill"
+        case .timeBill: return "clock.badge.checkmark.fill"
+        case .qPic: return "photo.stack.fill"
+        case .qMarkView: return "doc.richtext.fill"
+        case .qEcho: return "waveform.badge.mic"
+        case .qMailMate: return "envelope.fill"
+        case .qNote: return "note.text"
+        }
+    }
+
+    var accent: Color {
+        switch self {
+        case .qTerm: return .indigo
+        case .timeBill: return .orange
+        case .qPic: return .pink
+        case .qMarkView: return .blue
+        case .qEcho: return .purple
+        case .qMailMate: return .teal
+        case .qNote: return .green
+        }
+    }
+
+    var productURL: URL {
+        URL(string: "https://83d.me/products/\(productSlug)")!
+    }
+
+    private var productSlug: String {
+        switch self {
+        case .qTerm: return "museterm"
+        case .timeBill: return "timebill"
+        case .qPic: return "qpic"
+        case .qMarkView: return "qmarkview"
+        case .qEcho: return "qecho"
+        case .qMailMate: return "qmailmate"
+        case .qNote: return "qnote"
+        }
     }
 }
 
-private struct AboutFactRow: View {
-    let title: String
-    let value: String
+private struct AboutRecommendedAppCard: View {
+    let app: AboutRecommendedApp
 
     var body: some View {
-        HStack(alignment: .firstTextBaseline, spacing: 12) {
-            Text(title)
-                .font(.subheadline.weight(.medium))
-                .foregroundStyle(.secondary)
-                .frame(width: 120, alignment: .leading)
-            Text(value)
-                .font(.subheadline.monospacedDigit())
-                .textSelection(.enabled)
-            Spacer(minLength: 0)
+        Link(destination: app.productURL) {
+            HStack(spacing: 10) {
+                Image(systemName: app.systemImage)
+                    .font(.system(size: 20, weight: .semibold))
+                    .foregroundStyle(.white)
+                    .frame(width: 42, height: 42)
+                    .background(app.accent.gradient)
+                    .clipShape(RoundedRectangle(cornerRadius: 9, style: .continuous))
+
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(app.name)
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(.primary)
+                        .lineLimit(1)
+                    Text(app.summary)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(2)
+                }
+
+                Spacer(minLength: 0)
+
+                Image(systemName: "arrow.up.right")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(app.accent)
+                    .accessibilityHidden(true)
+            }
+            .padding(10)
+            .frame(maxWidth: .infinity, minHeight: 72, alignment: .leading)
+            .background(.regularMaterial)
+            .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    .strokeBorder(Color.primary.opacity(0.08), lineWidth: 1)
+            )
         }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 9)
+        .buttonStyle(.plain)
     }
 }

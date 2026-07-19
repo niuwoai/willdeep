@@ -197,12 +197,19 @@ struct AgentChatTranscript: View {
                     // Plan + Goal banners — pinned above the transcript so
                     // the user always sees the current execution gate /
                     // long-term objective.
-                    if appState.agentInteractionMode == .plan, let plan = appState.agentCurrentPlan {
-                        AgentPlanCard(plan: plan)
-                            .frame(maxWidth: AgentDesign.chatMaxContentWidth, alignment: .leading)
-                    }
                     if appState.agentInteractionMode == .goal, let goal = appState.agentCurrentGoal, !goal.isEmpty {
                         AgentGoalCard(goal: goal)
+                            .frame(maxWidth: AgentDesign.chatMaxContentWidth, alignment: .leading)
+                    }
+                    if appState.agentInteractionMode == .goal,
+                       let planningState = appState.activeRuntime?.goalPlanningState,
+                       appState.agentCurrentPlan == nil {
+                        AgentGoalPlanningCard(state: planningState)
+                            .frame(maxWidth: AgentDesign.chatMaxContentWidth, alignment: .leading)
+                    }
+                    if (appState.agentInteractionMode == .plan || appState.agentInteractionMode == .goal),
+                       let plan = appState.agentCurrentPlan {
+                        AgentPlanCard(plan: plan)
                             .frame(maxWidth: AgentDesign.chatMaxContentWidth, alignment: .leading)
                     }
 

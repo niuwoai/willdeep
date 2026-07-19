@@ -67,6 +67,7 @@ enum AgentContextBuilder {
         approvalMode: AgentApprovalMode = .smart,
         currentPlan: AgentPlan? = nil,
         currentGoal: AgentGoal? = nil,
+        goalPlanningState: AgentGoalPlanningState? = nil,
         currentSessionTitle: String? = nil,
         currentSessionTitleIsLocked: Bool = false,
         activeExperts: Set<AgentExpert> = [],
@@ -167,7 +168,24 @@ enum AgentContextBuilder {
             """)
         } else if interactionMode == .goal, let goal = currentGoal, !goal.isEmpty {
             var goalBlock = "=== GOAL MODE — ACTIVE ===\n"
-            goalBlock += "Write-tier tool calls are auto-approved in this mode — work autonomously toward the goal without pausing to ask permission. Danger-tier commands (mass deletion, force push, privilege escalation) still require the user's typed confirmation, so prefer safer alternatives where possible.\n"
+            if currentPlan?.status == .approved || currentPlan?.status == .executing {
+                goalBlock += "The user explicitly approved the current Goal-backed Plan. Execute only that plan and its locked scope. Ordinary write-tier tools may proceed through the existing approval policy; danger-tier operations still require typed confirmation every time.\n"
+                if let plan = currentPlan {
+                    goalBlock += "Approved Plan steps:\n"
+                    for (index, step) in plan.steps.enumerated() {
+                        goalBlock += "  \(index + 1). [\(step.status.rawValue)] \(step.text)\n"
+                    }
+                    goalBlock += "At the end of each execution reply, emit exactly one `progress` fenced block for touched steps.\n"
+                }
+            } else if currentPlan?.status == .proposed || goalPlanningState?.phase == .awaitingApproval {
+                goalBlock += "A Goal-backed Plan is awaiting explicit user approval. Do not call tools or continue automatically. Wait for Approve, Reject, or revision guidance.\n"
+            } else {
+                goalBlock += "Goal Teams planning is host-coordinated and write-tier tools are locked. Do not implement and do not manually spawn planning members. The host starts exactly three independent read-only members, waits until all are terminal, then runs read-only evidence arbitration when at least two reports are valid. Only after arbitration succeeds may the parent emit a proposal.\n"
+                goalBlock += "A valid proposal must include the exact ten-column Teams table (Member, Skill/Subagent, Goal Slice, Claimed Tasks, Locked Scope, Deliverable, Done Criteria, Docs/Tasklist Updates, Test Owner, Validator) plus one complete numbered fenced `plan` covering implementation, tests, documentation, version handling, and acceptance (or explicit reasoned N/A). Then stop for explicit approval.\n"
+                if goalPlanningState?.phase == .blocked {
+                    goalBlock += "Independent planning is blocked. Explain the visible evidence gap; do not synthesize a proposed Plan or offer execution approval.\n"
+                }
+            }
             if !goal.statement.isEmpty {
                 goalBlock += "Goal: \(goal.statement)\n"
             }

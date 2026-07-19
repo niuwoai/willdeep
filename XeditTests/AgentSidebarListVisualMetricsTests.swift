@@ -32,6 +32,29 @@ struct AgentSidebarListVisualMetricsTests {
         )
     }
 
+    @Test("scheduled-task search covers name, prompt, and workspace without reordering")
+    @MainActor
+    func scheduledTaskSearchUsesUserVisibleFields() {
+        let release = AgentRoutine(
+            name: "每周发版检查",
+            prompt: "检查 changelog 和签名状态",
+            workspaceRootPath: "/tmp/WillDeep",
+            schedule: .weeklyAt(weekday: 6, hour: 17, minute: 0)
+        )
+        let monitor = AgentRoutine(
+            name: "Service Monitor",
+            prompt: "Inspect deployment health",
+            workspaceRootPath: "/tmp/backend",
+            schedule: .interval(minutes: 30)
+        )
+        let routines = [release, monitor]
+
+        #expect(AgentScheduledTasksFilter.routines(routines, matching: "  ") == routines)
+        #expect(AgentScheduledTasksFilter.routines(routines, matching: "changelog") == [release])
+        #expect(AgentScheduledTasksFilter.routines(routines, matching: "BACKEND") == [monitor])
+        #expect(AgentScheduledTasksFilter.routines(routines, matching: "不存在").isEmpty)
+    }
+
     @Test("render the production conversation sidebar for design QA")
     @MainActor
     func renderProductionSidebarForDesignQA() throws {
@@ -101,6 +124,101 @@ struct AgentSidebarListVisualMetricsTests {
         hostingView.cacheDisplay(in: hostingView.bounds, to: bitmap)
         let png = try #require(bitmap.representation(using: .png, properties: [:]))
         try png.write(to: URL(fileURLWithPath: outputPath), options: .atomic)
+    }
+
+    @Test("render the production scheduled-tasks page for design QA")
+    @MainActor
+    func renderScheduledTasksPageForDesignQA() throws {
+        let outputPath = ProcessInfo.processInfo.environment["WILLDEEP_SCHEDULED_QA_OUTPUT"]
+            ?? "/tmp/Xedit-scheduled-tasks-design-qa.png"
+
+        var settings = EditorSettings.default
+        settings.interfaceSkinID = EditorInterfaceSkin.ricePaper.id
+        let appState = AppState(editorSettings: settings)
+        appState.agentPrimaryDestination = .scheduledTasks
+        appState.agentRoutines = [
+            AgentRoutine(
+                name: "每日产品简报",
+                prompt: "检查昨天的改动、风险和今天最重要的行动项。",
+                workspaceRootPath: "/tmp/Xedit",
+                schedule: .weekdaysAt(hour: 9, minute: 0)
+            ),
+            AgentRoutine(
+                name: "版本发布检查",
+                prompt: "检查版本号、变更记录、签名与公证准备情况。",
+                workspaceRootPath: "/tmp/Xedit",
+                schedule: .weeklyAt(weekday: 6, hour: 17, minute: 0)
+            ),
+            AgentRoutine(
+                name: "服务健康监控",
+                prompt: "检查线上服务健康状态并汇总需要关注的问题。",
+                workspaceRootPath: "/tmp/backend",
+                schedule: .interval(minutes: 120),
+                isEnabled: false
+            ),
+        ]
+
+        let size = NSSize(width: 838, height: 606)
+        let root = AgentScheduledTasksPage()
+            .environmentObject(appState)
+            .frame(width: size.width, height: size.height)
+            .background(appState.editorSettings.interfaceSkin.windowBackground)
+            .preferredColorScheme(.light)
+        let hostingView = NSHostingView(rootView: root)
+        hostingView.frame = NSRect(origin: .zero, size: size)
+        hostingView.layoutSubtreeIfNeeded()
+
+        let bitmap = try #require(hostingView.bitmapImageRepForCachingDisplay(in: hostingView.bounds))
+        hostingView.cacheDisplay(in: hostingView.bounds, to: bitmap)
+        let png = try #require(bitmap.representation(using: .png, properties: [:]))
+        try png.write(to: URL(fileURLWithPath: outputPath), options: .atomic)
+    }
+
+    @Test("render scheduled navigation and page together at the reference viewport")
+    @MainActor
+    func renderScheduledTasksFullLayoutForDesignQA() throws {
+        var settings = EditorSettings.default
+        settings.interfaceSkinID = EditorInterfaceSkin.ricePaper.id
+        let appState = AppState(editorSettings: settings)
+        appState.agentPrimaryDestination = .scheduledTasks
+        appState.agentRoutines = [
+            AgentRoutine(
+                name: "每日产品简报",
+                prompt: "检查昨天的改动、风险和今天最重要的行动项。",
+                workspaceRootPath: "/tmp/Xedit",
+                schedule: .weekdaysAt(hour: 9, minute: 0)
+            ),
+            AgentRoutine(
+                name: "服务健康监控",
+                prompt: "检查线上服务健康状态并汇总需要关注的问题。",
+                workspaceRootPath: "/tmp/backend",
+                schedule: .interval(minutes: 120)
+            ),
+        ]
+
+        let size = NSSize(width: 1066, height: 462)
+        let root = HStack(spacing: 0) {
+            AgentSessionsSidebar()
+                .frame(width: 230)
+                .background(appState.editorSettings.interfaceSkin.sidebarBackground)
+            Divider()
+            AgentScheduledTasksPage()
+        }
+        .environmentObject(appState)
+        .frame(width: size.width, height: size.height)
+        .background(appState.editorSettings.interfaceSkin.windowBackground)
+        .preferredColorScheme(.light)
+        let hostingView = NSHostingView(rootView: root)
+        hostingView.frame = NSRect(origin: .zero, size: size)
+        hostingView.layoutSubtreeIfNeeded()
+
+        let bitmap = try #require(hostingView.bitmapImageRepForCachingDisplay(in: hostingView.bounds))
+        hostingView.cacheDisplay(in: hostingView.bounds, to: bitmap)
+        let png = try #require(bitmap.representation(using: .png, properties: [:]))
+        try png.write(
+            to: URL(fileURLWithPath: "/tmp/Xedit-scheduled-tasks-full-design-qa.png"),
+            options: .atomic
+        )
     }
 
     @MainActor
