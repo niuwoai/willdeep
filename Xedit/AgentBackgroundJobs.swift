@@ -84,6 +84,14 @@ struct AgentBackgroundJob: Identifiable, Equatable {
 /// main actor to mutate state.
 @MainActor
 final class AgentJobRegistry: ObservableObject {
+    /// Process termination and timeout escalation must not share the
+    /// global utility queue. Under a cold Xcode test build that queue can
+    /// be starved long enough for a requested kill to miss its UI budget.
+    private static let lifecycleQueue = DispatchQueue(
+        label: "com.willdeep.agent-background-jobs.lifecycle",
+        qos: .userInitiated
+    )
+
     /// All jobs the app has ever seen this launch, newest-first.
     /// Capped at `historyLimit` per runtime so a chatty agent can't
     /// blow the array up.
@@ -234,14 +242,14 @@ final class AgentJobRegistry: ObservableObject {
                 if processBox.process.isRunning {
                     processBox.markTimedOut()
                     processBox.process.terminate()
-                    DispatchQueue.global(qos: .utility).asyncAfter(deadline: .now() + 2) {
+                    Self.lifecycleQueue.asyncAfter(deadline: .now() + 2) {
                         if processBox.process.isRunning {
                             Darwin.kill(processBox.process.processIdentifier, SIGKILL)
                         }
                     }
                 }
             }
-            DispatchQueue.global(qos: .utility).asyncAfter(
+            Self.lifecycleQueue.asyncAfter(
                 deadline: .now() + timeoutSeconds,
                 execute: work
             )
@@ -348,7 +356,7 @@ final class AgentJobRegistry: ObservableObject {
         guard let proc = processes[id], proc.process.isRunning else { return false }
         proc.markExplicitKill()
         proc.process.terminate()
-        DispatchQueue.global(qos: .utility).asyncAfter(deadline: .now() + 2) { [weak proc] in
+        Self.lifecycleQueue.asyncAfter(deadline: .now() + 2) { [weak proc] in
             guard let proc, proc.process.isRunning else { return }
             Darwin.kill(proc.process.processIdentifier, SIGKILL)
         }
