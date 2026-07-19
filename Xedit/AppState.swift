@@ -175,8 +175,11 @@ final class AppState: ObservableObject {
     /// mode and optionally focus a file. AgentModeView listens, applies
     /// the request to the active session runtime, then clears it.
     @Published var agentSidePanelRequest: AgentSidePanelOpenRequest?
+    /// The center-column destination in Agent mode. Scheduled tasks use a
+    /// dedicated page instead of expanding an unbounded list in the sidebar.
+    @Published var agentPrimaryDestination: AgentPrimaryDestination = .conversation
     /// One-shot request to open a scheduled task's detail. A transcript
-    /// scheduled-task card sets the routine id; the sidebar Routines section
+    /// scheduled-task card sets the routine id; the scheduled-tasks page
     /// observes it, opens that routine's editor sheet, then clears it.
     @Published var pendingRoutineDetailID: UUID?
     /// Optional scope for the media task side panel. Short-drama rows set
@@ -651,7 +654,11 @@ final class AppState: ObservableObject {
             self.resumeAgentLoopForPendingBackgroundCompletions(for: runtime)
         }
         agentSubagentRegistry.onRunFinished = { [weak self] run in
-            guard let self,
+            guard let self else { return }
+            if self.handleAgentGoalPlanningSubagentCompletion(run) {
+                return
+            }
+            guard
                   let runtime = self.runtime(for: run.parentRuntimeID) else { return }
             self.resumeAgentLoopForPendingBackgroundCompletions(for: runtime)
         }

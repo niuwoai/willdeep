@@ -360,11 +360,13 @@ struct AgentToolsCoreTests {
 
         let secret = " p@ss word&role=admin "
         let placeholder = try #require(AgentSecretStore.saveSecret(secret, label: "Production Password"))
-        #expect(placeholder.hasPrefix("${secret:"))
-        #expect(placeholder.count > 40)
-        #expect(!placeholder.contains("production"))
-        #expect(!placeholder.contains("password"))
+        #expect(placeholder == "${secret:production-password}")
         #expect(!placeholder.contains("p@ss word"))
+
+        let saved = AgentSecretStore.savedSecrets()
+        #expect(saved.count == 1)
+        #expect(saved.first?.label == "Production Password")
+        #expect(saved.first?.identifier == "production-password")
 
         let raw = AgentSecretStore.resolvePlaceholders(in: "value=\(placeholder)")
         #expect(raw.text == "value=\(secret)")
@@ -391,6 +393,43 @@ struct AgentToolsCoreTests {
     }
 
     @Test
+    func agentSecretAliasesAreNormalizedAndUpdateExistingValues() throws {
+        _ = AgentCredentialStore._setTestKeychainServiceOverride("agent-secret-alias-\(UUID().uuidString)")
+        defer {
+            AgentCredentialStore._wipeTestKeychain()
+            AgentCredentialStore._setTestKeychainServiceOverride(nil)
+        }
+
+        #expect(AgentSecretStore.normalizedAlias("  Production / SSH Password  ") == "production-ssh-password")
+        #expect(AgentSecretStore.normalizedAlias("生产 SSH 密码") == "生产-ssh-密码")
+
+        let original = try #require(AgentSecretStore.saveSecret("old-value", label: "Production SSH Password"))
+        let updated = try #require(AgentSecretStore.saveSecret("new-value", label: "production ssh password"))
+        #expect(original == updated)
+        #expect(AgentSecretStore.savedSecrets().count == 1)
+
+        let resolved = AgentSecretStore.resolvePlaceholders(in: updated)
+        #expect(resolved.text == "new-value")
+        #expect(resolved.secretValues == ["new-value"])
+
+        let legacyIdentifier = "d12c00b05721481ebf82bff83ffe3776"
+        AgentCredentialStore.save("legacy-value", account: "agent-secret/\(legacyIdentifier)")
+        let saved = AgentSecretStore.savedSecrets()
+        #expect(saved.count == 2)
+        #expect(saved.contains { $0.identifier == legacyIdentifier && $0.label.isEmpty })
+        #expect(
+            AgentSecretStore.resolvePlaceholders(
+                in: AgentSecretStore.placeholder(identifier: legacyIdentifier)
+            ).text == "legacy-value"
+        )
+
+        let source = "run \(updated) now"
+        let match = try #require(AgentSecretStore.placeholderMatches(in: source).first)
+        #expect((source as NSString).substring(with: match.range) == updated)
+        #expect(match.identifier == "production-ssh-password")
+    }
+
+    @Test
     func agentSecretBatchInsertCapsAtThreePlaceholders() throws {
         _ = AgentCredentialStore._setTestKeychainServiceOverride("agent-secret-batch-\(UUID().uuidString)")
         defer {
@@ -408,6 +447,7 @@ struct AgentToolsCoreTests {
 
         #expect(AgentSecretStore.maxBatchInsertCount == 3)
         #expect(placeholders.count == 3)
+        #expect(placeholders == ["${secret:first}", "${secret:second}", "${secret:third}"])
         let resolved = AgentSecretStore.resolvePlaceholders(in: placeholders.joined(separator: " "))
         #expect(resolved.secretValues == ["first-secret", "second-secret", "third-secret"])
         #expect(!resolved.text.contains("fourth-secret"))

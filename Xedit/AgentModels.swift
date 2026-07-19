@@ -84,6 +84,9 @@ nonisolated struct AgentSession: Identifiable, Codable, Equatable {
     /// outside Goal mode, or when Goal mode is on but the user hasn't
     /// defined a goal yet.
     var currentGoal: AgentGoal?
+    /// Host-owned evidence ledger for Goal Teams planning. Optional and
+    /// tolerantly decoded so sessions written before this feature remain valid.
+    var goalPlanningState: AgentGoalPlanningState?
     /// Recent automatic learning outcomes for this session. These are
     /// product-visible audit events for memory, skill, and MCP discovery
     /// actions captured at turn end.
@@ -151,6 +154,7 @@ nonisolated struct AgentSession: Identifiable, Codable, Equatable {
         activeExperts: Set<AgentExpert> = [],
         currentPlan: AgentPlan? = nil,
         currentGoal: AgentGoal? = nil,
+        goalPlanningState: AgentGoalPlanningState? = nil,
         learningEvents: [AgentLearningEvent] = [],
         latestTurnRecall: AgentTurnRecallSnapshot? = nil,
         documentAttachments: [AgentFileAttachment] = [],
@@ -186,6 +190,7 @@ nonisolated struct AgentSession: Identifiable, Codable, Equatable {
         self.activeExperts = activeExperts
         self.currentPlan = currentPlan
         self.currentGoal = currentGoal
+        self.goalPlanningState = goalPlanningState
         self.learningEvents = learningEvents
         self.latestTurnRecall = latestTurnRecall
         self.documentAttachments = documentAttachments
@@ -253,7 +258,7 @@ nonisolated struct AgentSession: Identifiable, Codable, Equatable {
         case id, title, workspaceRootPath, workspaceLocation, localWorkspaceIdentity, modelID
         case providerID, providerDisplayName, managedRouting
         case createdAt, updatedAt, messages, contextSummary, contextSummaryThroughMessageID
-        case didEditFiles, agentEditedPaths, agentArtifactPaths, interactionMode, approvalMode, executionAgent, activeExperts, currentPlan, currentGoal, learningEvents, latestTurnRecall, documentAttachments, knowledgeFolders, documentTaskMode, redactSensitiveAttachmentContent, sidePanelState
+        case didEditFiles, agentEditedPaths, agentArtifactPaths, interactionMode, approvalMode, executionAgent, activeExperts, currentPlan, currentGoal, goalPlanningState, learningEvents, latestTurnRecall, documentAttachments, knowledgeFolders, documentTaskMode, redactSensitiveAttachmentContent, sidePanelState
         case pinnedAt, archivedAt, titleIsUserSet
     }
 
@@ -283,6 +288,25 @@ nonisolated struct AgentSession: Identifiable, Codable, Equatable {
         self.activeExperts = try c.decodeIfPresent(Set<AgentExpert>.self, forKey: .activeExperts) ?? []
         self.currentPlan = try c.decodeIfPresent(AgentPlan.self, forKey: .currentPlan)
         self.currentGoal = try c.decodeIfPresent(AgentGoal.self, forKey: .currentGoal)
+        if !c.contains(.goalPlanningState) {
+            self.goalPlanningState = nil
+        } else if let decoded = try? c.decodeIfPresent(AgentGoalPlanningState.self, forKey: .goalPlanningState) {
+            self.goalPlanningState = decoded
+        } else {
+            // A present-but-malformed ledger is observable and conservative:
+            // preserve the session, but never silently erase the evidence that
+            // recovery is required.
+            self.goalPlanningState = AgentGoalPlanningState(
+                goalFingerprint: self.currentGoal?.statement ?? "unreadable-goal-planning-state",
+                phase: .blocked,
+                members: [
+                    .init(roleID: "requirements", displayName: "requirements", status: .interrupted),
+                    .init(roleID: "architecture", displayName: "architecture", status: .interrupted),
+                    .init(roleID: "testing", displayName: "testing", status: .interrupted),
+                ],
+                arbitration: .init(status: .interrupted, errorMessage: "malformed persisted planning state")
+            )
+        }
         self.learningEvents = try c.decodeIfPresent([AgentLearningEvent].self, forKey: .learningEvents) ?? []
         self.latestTurnRecall = try c.decodeIfPresent(AgentTurnRecallSnapshot.self, forKey: .latestTurnRecall)
         self.documentAttachments = try c.decodeIfPresent([AgentFileAttachment].self, forKey: .documentAttachments) ?? []
@@ -788,6 +812,189 @@ nonisolated enum AgentExecutionAgent: String, Codable, CaseIterable, Identifiabl
         case .claudeCode: return "acceptEdits"
         case .codexCLI: return "workspaceWrite"
         }
+    }
+}
+
+/// Persisted, host-owned ledger for Goal Teams planning. The raw-value enums
+/// intentionally use tolerant decoding: future/unknown values narrow the
+/// session to a blocked/interrupted state instead of failing the whole chat.
+nonisolated struct AgentGoalPlanningState: Codable, Equatable {
+    static let currentSchemaVersion = 1
+
+    enum Phase: String, Codable, Equatable {
+        case collecting
+        case arbitrating
+        case readyForProposal = "ready_for_proposal"
+        case awaitingApproval = "awaiting_approval"
+        case executing
+        case blocked
+        case completed
+
+        init(from decoder: Decoder) throws {
+            let raw = (try? decoder.singleValueContainer().decode(String.self)) ?? ""
+            self = Phase(rawValue: raw) ?? .blocked
+        }
+    }
+
+    struct Member: Codable, Equatable, Identifiable {
+        enum Status: String, Codable, Equatable {
+            case pending
+            case running
+            case completed
+            case failed
+            case interrupted
+
+            init(from decoder: Decoder) throws {
+                let raw = (try? decoder.singleValueContainer().decode(String.self)) ?? ""
+                self = Status(rawValue: raw) ?? .interrupted
+            }
+        }
+
+        var id: String { roleID }
+        var roleID: String
+        var displayName: String
+        var runID: UUID?
+        var status: Status
+        var report: String?
+        var errorMessage: String?
+
+        init(
+            roleID: String,
+            displayName: String,
+            runID: UUID? = nil,
+            status: Status = .pending,
+            report: String? = nil,
+            errorMessage: String? = nil
+        ) {
+            self.roleID = roleID
+            self.displayName = displayName
+            self.runID = runID
+            self.status = status
+            self.report = report
+            self.errorMessage = errorMessage
+        }
+    }
+
+    struct Arbitration: Codable, Equatable {
+        enum Status: String, Codable, Equatable {
+            case pending
+            case running
+            case completed
+            case failed
+            case interrupted
+
+            init(from decoder: Decoder) throws {
+                let raw = (try? decoder.singleValueContainer().decode(String.self)) ?? ""
+                self = Status(rawValue: raw) ?? .interrupted
+            }
+        }
+
+        var status: Status
+        var report: String?
+        var errorMessage: String?
+
+        init(status: Status = .pending, report: String? = nil, errorMessage: String? = nil) {
+            self.status = status
+            self.report = report
+            self.errorMessage = errorMessage
+        }
+    }
+
+    var schemaVersion: Int
+    var generationID: UUID
+    var goalFingerprint: String
+    var revisionNote: String?
+    var phase: Phase
+    var members: [Member]
+    var arbitration: Arbitration
+
+    init(
+        schemaVersion: Int = currentSchemaVersion,
+        generationID: UUID = UUID(),
+        goalFingerprint: String,
+        revisionNote: String? = nil,
+        phase: Phase = .collecting,
+        members: [Member],
+        arbitration: Arbitration = Arbitration()
+    ) {
+        self.schemaVersion = schemaVersion
+        self.generationID = generationID
+        self.goalFingerprint = goalFingerprint
+        self.revisionNote = revisionNote
+        self.phase = phase
+        self.members = members
+        self.arbitration = arbitration
+    }
+
+    static func fingerprint(for goal: AgentGoal) -> String {
+        ([goal.statement] + goal.checklist.map(\.text)).joined(separator: "\u{1F}")
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case schemaVersion, generationID, goalFingerprint, revisionNote, phase, members, arbitration
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        schemaVersion = (try? container.decodeIfPresent(Int.self, forKey: .schemaVersion)) ?? 1
+        generationID = (try? container.decodeIfPresent(UUID.self, forKey: .generationID)) ?? UUID()
+        goalFingerprint = (try? container.decodeIfPresent(String.self, forKey: .goalFingerprint)) ?? ""
+        revisionNote = (try? container.decodeIfPresent(String.self, forKey: .revisionNote)) ?? nil
+        phase = (try? container.decodeIfPresent(Phase.self, forKey: .phase)) ?? .blocked
+        members = (try? container.decodeIfPresent([Member].self, forKey: .members)) ?? []
+        arbitration = (try? container.decodeIfPresent(Arbitration.self, forKey: .arbitration)) ?? Arbitration(status: .interrupted)
+
+        if schemaVersion > Self.currentSchemaVersion || goalFingerprint.isEmpty || members.count != 3 {
+            phase = .blocked
+        }
+    }
+
+    /// Runtime restoration never resumes an in-flight network operation.
+    /// Completed evidence is retained, while ambiguous work is interrupted.
+    var normalizedForRestore: AgentGoalPlanningState {
+        normalizedForRestore(currentPlan: nil)
+    }
+
+    func normalizedForRestore(
+        currentPlan: AgentPlan?,
+        currentGoal: AgentGoal? = nil
+    ) -> AgentGoalPlanningState {
+        var copy = self
+        var interrupted = false
+        for index in copy.members.indices
+        where copy.members[index].status == .running || copy.members[index].status == .pending {
+            copy.members[index].status = .interrupted
+            interrupted = true
+        }
+        if copy.arbitration.status == .running {
+            copy.arbitration.status = .interrupted
+            interrupted = true
+        }
+        if interrupted || copy.phase == .collecting || copy.phase == .arbitrating
+            || copy.schemaVersion > Self.currentSchemaVersion {
+            copy.phase = .blocked
+        }
+        if let currentGoal, copy.goalFingerprint != Self.fingerprint(for: currentGoal) {
+            copy.phase = .blocked
+        }
+        switch copy.phase {
+        case .readyForProposal:
+            // The synthesis wake is runtime-only and cannot be reconstructed
+            // safely after launch. Require an explicit retry instead of
+            // leaving a permanently ready-but-silent session.
+            copy.phase = .blocked
+        case .awaitingApproval:
+            if currentPlan?.status != .proposed { copy.phase = .blocked }
+        case .executing:
+            if currentPlan?.status != .approved && currentPlan?.status != .executing {
+                copy.phase = .blocked
+            }
+        case .completed:
+            if currentPlan?.status != .done { copy.phase = .blocked }
+        case .collecting, .arbitrating, .blocked:
+            break
+        }
+        return copy
     }
 }
 

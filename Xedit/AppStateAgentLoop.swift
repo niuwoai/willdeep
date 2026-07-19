@@ -416,6 +416,7 @@ extension AppState {
         // Refresh the same-checkout collision hint so the foreground composer
         // reflects a background session now working in its directory.
         refreshAgentWorkspaceCollision()
+        _ = startAgentGoalPlanningIfNeeded(for: runtime)
         defer {
             let shouldConsumeQueueAfterStop = runtime.shouldConsumeQueueAfterStop
             runtime.isResponding = false
@@ -425,8 +426,10 @@ extension AppState {
             // Turn finished — one fewer concurrent worker on this checkout.
             refreshAgentWorkspaceCollision()
             captureAgentPlanFromLatestMessage(for: runtime)
-            captureAgentGoalDefinitionFromLatestMessage(for: runtime)
+            let didDefineGoal = captureAgentGoalDefinitionFromLatestMessage(for: runtime)
             captureAgentGoalEvaluationFromLatestMessage(for: runtime)
+            prepareNextAgentGoalPlanningCycleIfNeeded(for: runtime)
+            startAgentGoalPlanningAfterCaptureIfNeeded(didDefineGoal, for: runtime)
             persistAgentSession(runtime: runtime)
             if !shouldConsumeQueueAfterStop {
                 maybeAutoCompressContext(for: runtime)
@@ -720,6 +723,7 @@ extension AppState {
                 approvalMode: runtime.approvalMode,
                 currentPlan: runtime.currentPlan,
                 currentGoal: runtime.currentGoal,
+                goalPlanningState: runtime.goalPlanningState,
                 currentSessionTitle: runtime.session.title,
                 currentSessionTitleIsLocked: runtime.session.titleIsUserSet,
                 activeExperts: activeExperts,
@@ -1001,6 +1005,8 @@ extension AppState {
 
                 let planStatusesBeforeReply = runtime.currentPlan?.steps.map(\.status)
                 captureAgentPlanFromLatestMessage(for: runtime)
+                captureAgentGoalEvaluationFromLatestMessage(for: runtime)
+                prepareNextAgentGoalPlanningCycleIfNeeded(for: runtime)
                 let planStatusesAfterReply = runtime.currentPlan?.steps.map(\.status)
                 if planStatusesBeforeReply != planStatusesAfterReply {
                     consecutivePlanRepliesWithoutProgress = 0
@@ -1257,7 +1263,7 @@ extension AppState {
                     continue
                 }
 
-                // Plan mode blocks writes until the user approves a plan,
+                // Plan approval gate blocks writes until the user approves,
                 // while still allowing validated public web GETs needed to
                 // research that plan. Blocked calls go back as tool errors so
                 // the model knows to stop and emit a plan.
@@ -1270,15 +1276,15 @@ extension AppState {
                     anyDenied = true
                     if let index = runtime.toolCalls.firstIndex(where: { $0.id == recordID }) {
                         runtime.toolCalls[index].status = .denied
-                        runtime.toolCalls[index].errorMessage = "Plan mode: needs user approval"
+                        runtime.toolCalls[index].errorMessage = "Plan approval required"
                     }
                     appendToolMessage(
                         for: runtime,
                         toolCallID: call.externalID,
-                        payload: "Blocked: Plan mode is active and no plan has been approved yet. Emit a ```plan``` block listing the steps you intend to take, then stop and wait for the user to approve.",
+                        payload: "Blocked: no current plan has explicit user approval. Complete the required planning flow, then stop and wait for approval.",
                         source: .systemNotice,
                         outcomeStatus: .denied,
-                        errorMessage: "Plan mode: needs user approval"
+                        errorMessage: "Plan approval required"
                     )
                     continue
                 }

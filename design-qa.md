@@ -1,3 +1,107 @@
+# 独立“已安排”任务中心 Design QA
+
+- source visual truth: `/Users/rocky/Sites/Xedit/artifacts/design-qa/scheduled-tasks/reference.png`
+- full implementation screenshot: `/Users/rocky/Sites/Xedit/artifacts/design-qa/scheduled-tasks/implementation-full.png`
+- focused implementation screenshot: `/Users/rocky/Sites/Xedit/artifacts/design-qa/scheduled-tasks/implementation-focused.png`
+- aligned full comparison: `/Users/rocky/Sites/Xedit/artifacts/design-qa/scheduled-tasks/comparison-full.png`
+- viewport: `1066 × 462 px` 完整侧栏 + 主页面；聚焦主页面另以 `838 × 606 pt @2x` 渲染
+- state: Rice Paper 浅色皮肤、简体中文、两个现有周期任务与三个建议模板
+- final result: passed
+
+**Full-View Comparison Evidence**
+
+Codex 参考图与生产 SwiftUI 完整布局已经按相同 `1066 × 462` 视口拼接检查。实现保留参考图的单一“已安排”侧栏入口、选中态、主标题、副标题、横向搜索框与建议列表层级；WillDeep 继续使用产品既有的 230pt 固定侧栏和 Rice Paper 皮肤，没有强行复制 Codex 的白色主题或更宽侧栏。
+
+**Focused Region Comparison Evidence**
+
+- 左侧原先会随任务数量增长的 Automations 区块已收拢为一行“已安排”，选中时使用现有侧栏 selection token。
+- 主区域在参考图“建议”之前增加“你的任务”，以解决用户明确提出的任务多时管理问题；页面本身可滚动，任务数量不再影响侧栏高度。
+- 搜索框与参考图保持同一视觉位置和低对比度描边，可按任务名称、提示词、计划摘要和工作区过滤。
+- 任务行保留名称、计划、提示词和工作区；悬停后显示立即运行与暂停/启用操作，整行点击继续打开现有编辑器。
+- 每日简报、每周回顾与项目监控使用 SF Symbols 和蓝、紫、绿语义色，结构与参考建议列表一致。
+
+**Required Fidelity Surfaces**
+
+- Fonts and typography: 主标题为 29pt 半粗系统字体，副标题 15pt；分区、任务与说明沿用生产 App 的系统字体层级。
+- Spacing and layout rhythm: 主内容 34pt 横向、30pt 顶部留白；搜索、任务与建议分区形成与参考图相近的垂直节奏。
+- Colors and visual tokens: 背景、选中态、悬停态、控件填充全部读取当前 interface skin palette；强调色跟随用户主题。
+- Image quality and asset fidelity: 全部图标使用原生 SF Symbols，保持 Retina 矢量清晰度，没有新增位图或近似绘制素材。
+- Copy and content: 导航、标题、副标题、搜索、空搜索结果、任务分区、建议分区和新建按钮均进入英文与简体中文字符串目录。
+
+**Primary Interactions Checked**
+
+- 点击侧栏“已安排”切换到独立页面并关闭会话右侧面板：passed（实现与原生渲染测试）。
+- 点击新聊天、历史会话、本地或远程工作区返回会话视图：passed（集中导航状态实现）。
+- 多字段搜索保持原任务顺序，支持大小写不敏感匹配：passed（定向 Swift 测试）。
+- 创建、编辑、立即运行、暂停/启用与删除继续复用现有调度存储和编辑器：passed。
+- 聊天内已安排任务卡跳转页面并直接打开对应编辑器：passed。
+- 完整布局、聚焦页面和生产侧栏原生 SwiftUI 渲染：passed（6 项定向测试）。
+
+**Findings**
+
+没有未解决的 P0、P1 或 P2 问题。实现有意在标题右侧保留“新建任务”按钮，并在建议之前展示现有任务；这是对参考信息架构的产品化补全，使用户无需依赖模板才能创建任务，也不会为了管理已有任务再回到侧栏。
+
+**Comparison History**
+
+- Before: 每个周期任务都直接占用左侧栏高度，任务增多后会把置顶会话与工作区向下挤，缺少搜索和集中管理页面。
+- Iteration 1: 建立独立页面、搜索、任务列表与建议模板，首次 Debug 构建通过；聚焦快照确认标题与列表层级。
+- Iteration 2: 增加与参考图完全相同的 `1066 × 462` 完整布局快照，校正为 1× 像素并与原图并排复核。
+- Final pass: 侧栏选中态、页面层级、任务扩展性、交互路径和中英文资源均通过定向测试。Final result passed.
+
+---
+
+# 受保护密钥列表、别名与 Composer 标签 Design QA
+
+- source visual truth: `/var/folders/np/rjc0y5w52x324x21pv6g33440000gp/T/codex-clipboard-39b2f1c1-59d0-41aa-a807-d886ed345943.png`
+- empty-list implementation screenshot: `/var/folders/np/rjc0y5w52x324x21pv6g33440000gp/T/com.openai.sky.CUAService/WillDeep Screenshot 2026-07-19 at 1.21.30 AM.jpeg`
+- saved-list implementation screenshot: `/var/folders/np/rjc0y5w52x324x21pv6g33440000gp/T/com.openai.sky.CUAService/WillDeep Screenshot 2026-07-19 at 1.22.22 AM.jpeg`
+- Composer tag implementation screenshot: `/var/folders/np/rjc0y5w52x324x21pv6g33440000gp/T/com.openai.sky.CUAService/WillDeep Screenshot 2026-07-19 at 1.22.04 AM.jpeg`
+- viewport: `1240 × 768 px` WillDeep Agent 窗口；密钥 sheet 为 `480 pt` 宽浅色外观
+- state: 简体中文、空列表 / 单个已保存密钥 / Composer 已插入别名标签
+- final result: passed
+
+**Full-View Comparison Evidence**
+
+原始弹窗与生产 Debug App 已在同一轮视觉验收中检查。实现保留原有标题、安全说明、最多三行输入、取消与插入操作，同时在创建区之前加入“已保存的密钥”列表；空态不会留下大块空白，有数据时列表限制高度并可滚动。创建区新增别名规范说明和实时安全占位符预览，没有展示真实密钥值。
+
+**Focused Region Comparison Evidence**
+
+- 已保存行整块可点击，使用钥匙图标底板、主标签、安全占位符副标题和右侧加号，点击后关闭 sheet 并插入当前光标。
+- 升级前没有别名索引的旧钥匙串条目会显示为“旧密钥 · 短编号”，保留原 UUID 占位符并可直接复用；真实值不会被枚举或展示。
+- `Production SSH Password` 实际预览并插入为 `${secret:production-ssh-password}`，Composer 以强调色圆角标签绘制。
+- 在 Composer 末尾对第二个标签按一次 Backspace，完整标签被原子删除，前一个标签保持不变；没有出现残缺 `${secret:...` 文本。
+- 真实钥匙串值在 Accessibility 树中继续显示为安全掩码；验收使用的假密钥与索引已在验收后删除，Composer 草稿已清空。
+
+**Required Fidelity Surfaces**
+
+- Fonts and typography: 标题、说明、分区标题、列表主副文本继续使用系统字体层级；占位符使用 10–12pt 等宽字体，别名和语法边界清楚。
+- Spacing and layout rhythm: sheet 从 430pt 扩至 480pt，为列表与创建区提供稳定节奏；列表行 6pt 间距，分隔线明确区分复用与新建。
+- Colors and visual tokens: 列表图标、加号、预览和 Composer 标签使用系统 accent color 及低透明度底色，适配用户强调色；正文和空态使用语义前景色。
+- Image quality and asset fidelity: 全部图标使用 SF Symbols，圆角底板与标签由原生 AppKit/SwiftUI 绘制，没有新增位图或低清素材。
+- Copy and content: 已保存列表、空态、插入帮助、创建标题及别名规范说明均进入英文与简体中文字符串目录。
+
+**Primary Interactions Checked**
+
+- 新密钥保存后重新打开 sheet，已保存列表出现对应别名：passed。
+- 点击已保存行，在当前光标插入占位符：passed。
+- 同一别名再次保存会更新原值，不增加重复列表项：passed（定向 Swift 测试）。
+- 旧版本 `agent-secret/*` 钥匙串条目无需新索引即可出现在列表：passed（定向 Swift 测试）。
+- 旧 UUID 占位符与 raw / base64 / urlencode 解析继续可用：passed（定向 Swift 测试）。
+- Composer 标签禁止内部逐字修改，Backspace 原子删除整块：passed（原生实机操作）。
+- Debug 构建、AgentToolsCoreTests、版本一致性、i18n 覆盖率和复杂度守卫：passed。
+
+**Findings**
+
+没有未解决的 P0、P1 或 P2 问题。实现有意继续显示完整 `${secret:别名}` 安全语法，而不是只显示裸别名，以便用户复制、审阅和理解最终发送给模型的占位符；视觉上已通过圆角强调色标签降低“长串代码”的噪音。
+
+**Comparison History**
+
+- Before: 弹窗只能创建新密钥，标签未保存，Composer 输出随机 UUID，无法复用也无法辨认。
+- Iteration 1: 增加本地索引、可读别名和列表插入；编译发现 AppKit 提示音 API 名称不正确，改用 `NSSound.beep()`。
+- Final pass: 生产 Debug App 完成创建、列表复用、光标插入、标签视觉与原子删除实机验证，没有剩余 P0/P1/P2。
+
+---
+
 # Computer Use / 浏览器紧凑授权卡 Design QA
 
 - source visual truth: `/var/folders/np/rjc0y5w52x324x21pv6g33440000gp/T/codex-clipboard-a5b3fe76-516b-489b-9f3c-8778780e5d2e.png`

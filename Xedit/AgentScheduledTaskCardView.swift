@@ -23,6 +23,9 @@ struct AgentScheduledTaskCardView: View {
         Button {
             guard isActive else { return }
             appState.pendingRoutineDetailID = card.id
+            appState.agentPrimaryDestination = .scheduledTasks
+            appState.agentSidePanelKind = nil
+            appState.agentSidePanelRequest = nil
         } label: {
             content
         }

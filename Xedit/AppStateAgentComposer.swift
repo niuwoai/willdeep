@@ -395,8 +395,8 @@ extension AppState {
                 executionAgent: executionAgent,
                 status: .denied,
                 result: nil,
-                errorMessage: "Plan mode: needs user approval",
-                toolPayload: "Blocked: Plan mode is active and no plan has been approved yet."
+                errorMessage: "Plan approval required",
+                toolPayload: "Blocked: no current plan has explicit user approval."
             )
             return
         }

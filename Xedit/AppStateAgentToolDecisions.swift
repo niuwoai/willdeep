@@ -604,6 +604,10 @@ extension AppState {
         isActive: Bool
     ) -> Bool {
         guard isActive, risk != .read else { return false }
+        // The narrow public-web research exception applies only to ordinary
+        // write-tier classification. A danger-tier call can never use it to
+        // bypass the Plan/Goal gate.
+        guard risk == .write else { return true }
         return !planModeCanAutoApprove(toolName: toolName, arguments: arguments)
     }
 

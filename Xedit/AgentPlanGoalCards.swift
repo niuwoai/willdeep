@@ -247,7 +247,10 @@ struct AgentPlanStepRow: View {
             if interactive {
                 Divider()
                 Button(L10n.PlanStep.menuRestart) { sheet = .restart }
-                    .disabled(appState.agentInteractionMode != .plan)
+                    .disabled(
+                        appState.agentInteractionMode != .plan
+                            && appState.agentInteractionMode != .goal
+                    )
             }
             Divider()
             Button(L10n.PlanStep.menuRemove, role: .destructive) {
@@ -387,6 +390,149 @@ struct AgentPlanStepSimpleSheet: View {
         }
         .padding(20)
         .frame(width: 420)
+    }
+}
+
+// MARK: - Goal planning card
+
+struct AgentGoalPlanningCard: View {
+    @EnvironmentObject var appState: AppState
+    let state: AgentGoalPlanningState
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 9) {
+            HStack(spacing: 8) {
+                Image(systemName: state.phase == .blocked ? "exclamationmark.triangle.fill" : "person.3.sequence.fill")
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(state.phase == .blocked ? Color.red : Color.accentColor)
+                Text(L10n.GoalPlanning.header)
+                    .font(.system(size: 11, weight: .semibold))
+                    .textCase(.uppercase)
+                    .foregroundStyle(.secondary)
+                Text(phaseLabel)
+                    .font(.system(size: 10, weight: .medium))
+                    .foregroundStyle(state.phase == .blocked ? Color.red : Color.secondary)
+                Spacer(minLength: 0)
+            }
+
+            VStack(alignment: .leading, spacing: 6) {
+                ForEach(state.members) { member in
+                    planningRow(
+                        icon: memberIcon(member.status),
+                        title: member.displayName,
+                        status: memberStatusLabel(member.status),
+                        detail: member.errorMessage
+                    )
+                }
+                if state.arbitration.status != .pending || state.phase == .arbitrating {
+                    planningRow(
+                        icon: arbitrationIcon,
+                        title: L10n.GoalPlanning.arbitration,
+                        status: arbitrationStatusLabel,
+                        detail: state.arbitration.errorMessage
+                    )
+                }
+            }
+
+            if state.phase == .blocked {
+                Button(L10n.GoalPlanning.retry) {
+                    appState.retryAgentGoalPlanning()
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.small)
+            }
+        }
+        .padding(12)
+        .background(
+            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                .fill(Color.accentColor.opacity(0.06))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                .stroke(
+                    state.phase == .blocked ? Color.red.opacity(0.4) : Color.accentColor.opacity(0.3),
+                    lineWidth: 1
+                )
+        )
+    }
+
+    private func planningRow(
+        icon: String,
+        title: String,
+        status: String,
+        detail: String?
+    ) -> some View {
+        VStack(alignment: .leading, spacing: 2) {
+            HStack(spacing: 7) {
+                Image(systemName: icon)
+                    .frame(width: 14)
+                    .foregroundStyle(.secondary)
+                Text(title)
+                    .font(.system(size: 11, weight: .medium))
+                Spacer(minLength: 8)
+                Text(status)
+                    .font(.system(size: 10))
+                    .foregroundStyle(.secondary)
+            }
+            if let detail, !detail.isEmpty {
+                Text(detail)
+                    .font(.system(size: 10))
+                    .foregroundStyle(.red)
+                    .textSelection(.enabled)
+            }
+        }
+    }
+
+    private var phaseLabel: String {
+        switch state.phase {
+        case .collecting: return L10n.GoalPlanning.phaseCollecting
+        case .arbitrating: return L10n.GoalPlanning.phaseArbitrating
+        case .readyForProposal: return L10n.GoalPlanning.phaseSynthesizing
+        case .awaitingApproval: return L10n.GoalPlanning.phaseAwaitingApproval
+        case .executing: return L10n.GoalPlanning.phaseExecuting
+        case .blocked: return L10n.GoalPlanning.phaseBlocked
+        case .completed: return L10n.GoalPlanning.phaseCompleted
+        }
+    }
+
+    private func memberStatusLabel(_ status: AgentGoalPlanningState.Member.Status) -> String {
+        switch status {
+        case .pending: return L10n.GoalPlanning.statusPending
+        case .running: return L10n.GoalPlanning.statusRunning
+        case .completed: return L10n.GoalPlanning.statusCompleted
+        case .failed: return L10n.GoalPlanning.statusFailed
+        case .interrupted: return L10n.GoalPlanning.statusInterrupted
+        }
+    }
+
+    private func memberIcon(_ status: AgentGoalPlanningState.Member.Status) -> String {
+        switch status {
+        case .pending: return "circle"
+        case .running: return "arrow.triangle.2.circlepath"
+        case .completed: return "checkmark.circle.fill"
+        case .failed: return "xmark.circle.fill"
+        case .interrupted: return "pause.circle.fill"
+        }
+    }
+
+    private var arbitrationStatusLabel: String {
+        switch state.arbitration.status {
+        case .pending: return L10n.GoalPlanning.statusPending
+        case .running: return L10n.GoalPlanning.statusRunning
+        case .completed: return L10n.GoalPlanning.statusCompleted
+        case .failed: return L10n.GoalPlanning.statusFailed
+        case .interrupted: return L10n.GoalPlanning.statusInterrupted
+        }
+    }
+
+    private var arbitrationIcon: String {
+        switch state.arbitration.status {
+        case .pending: return "circle"
+        case .running: return "arrow.triangle.2.circlepath"
+        case .completed: return "checkmark.seal.fill"
+        case .failed: return "xmark.octagon.fill"
+        case .interrupted: return "pause.circle.fill"
+        }
     }
 }
 

@@ -428,6 +428,15 @@ nonisolated enum L10n {
         static let insertSecretHelp = String(localized: "composer.insert-secret.help", defaultValue: "Insert protected secret")
         static let insertSecretTitle = String(localized: "composer.insert-secret.title", defaultValue: "Insert Protected Secret")
         static let insertSecretUsage = String(localized: "composer.insert-secret.usage", defaultValue: "Use one row per password or token. After inserting, place the generated placeholders exactly where the command, header, or form field needs them.")
+        static func legacySecretLabel(_ a1: String) -> String {
+            let template = String(localized: "composer.secret.legacy-label", defaultValue: "Legacy secret · %@")
+            return String(format: template, a1)
+        }
+        static let newSecretsTitle = String(localized: "composer.secret.new-title", defaultValue: "Add or update a secret")
+        static let savedSecretInsertHelp = String(localized: "composer.secret.saved-insert-help", defaultValue: "Insert this protected secret at the cursor")
+        static let savedSecretsEmpty = String(localized: "composer.secret.saved-empty", defaultValue: "No reusable secrets have been saved yet.")
+        static let savedSecretsTitle = String(localized: "composer.secret.saved-title", defaultValue: "Saved secrets")
+        static let secretAliasRule = String(localized: "composer.secret.alias-rule", defaultValue: "Aliases become lowercase kebab-case placeholders. Saving the same alias updates its local value.")
         static let inputPlaceholder = String(localized: "composer.input.placeholder", defaultValue: "Ask anything... / commands, @ files/workspace, $ skills & plugins")
         static let queueSendHelp = String(localized: "composer.queue-send.help", defaultValue: "Queue this message after the current turn")
         static let removeSecretHelp = String(localized: "composer.remove-secret.help", defaultValue: "Remove this secret row")

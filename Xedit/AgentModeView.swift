@@ -114,9 +114,13 @@ struct AgentModeView: View {
         let frozenChatWidth = max(totalWidth - occupiedSidebarWidth - 1 - CGFloat(committedPanelWidth), 0)
         // `.backgroundTasks` remains decodable for persisted sessions, but it
         // is never a renderable destination after the monitor rail redesign.
-        let activeSidePanel = appState.agentSidePanelKind == .backgroundTasks
-            ? nil
-            : appState.agentSidePanelKind
+        let activeSidePanel: AgentSidePanelKind? = if appState.agentPrimaryDestination == .scheduledTasks {
+            nil
+        } else if appState.agentSidePanelKind == .backgroundTasks {
+            nil
+        } else {
+            appState.agentSidePanelKind
+        }
         HStack(spacing: 0) {
             if effectiveSidebarVisible {
                 AgentSessionsSidebar()
@@ -138,15 +142,19 @@ struct AgentModeView: View {
             }
 
             VStack(spacing: 0) {
-                AgentChatHeader(
-                    sidePanel: sidePanelBinding,
-                    sessionsSidebarVisible: $sessionsSidebarVisible,
-                    isSessionSearchPresented: $isSessionSearchPresented
-                )
-                Divider().opacity(0.5)
-                AgentChatTranscript()
-                AgentChatComposer()
-                AgentChatStatusBar()
+                if appState.agentPrimaryDestination == .scheduledTasks {
+                    AgentScheduledTasksPage()
+                } else {
+                    AgentChatHeader(
+                        sidePanel: sidePanelBinding,
+                        sessionsSidebarVisible: $sessionsSidebarVisible,
+                        isSessionSearchPresented: $isSessionSearchPresented
+                    )
+                    Divider().opacity(0.5)
+                    AgentChatTranscript()
+                    AgentChatComposer()
+                    AgentChatStatusBar()
+                }
             }
             // 拖拽调宽期间把 chat 内容冻结在拖拽起点的宽度上:文本不随
             // 每个鼠标事件重折行(重折行时单词在行间跳动,肉眼就是
@@ -173,10 +181,12 @@ struct AgentModeView: View {
                     )
             )
             .overlay(alignment: .topTrailing) {
-                AgentConversationActivityOverlay()
-                    .padding(.top, AgentDesign.headerHeight + 12)
-                    .padding(.trailing, 14)
-                    .zIndex(20)
+                if appState.agentPrimaryDestination == .conversation {
+                    AgentConversationActivityOverlay()
+                        .padding(.top, AgentDesign.headerHeight + 12)
+                        .padding(.trailing, 14)
+                        .zIndex(20)
+                }
             }
             .clipped()
 
@@ -229,13 +239,15 @@ struct AgentModeView: View {
             }
         }
         .overlay {
-            AgentComputerUsePresentationLayer(
-                activity: appState.activeRuntime?.latestComputerUseActivity,
-                isActive: appState.activeRuntime?.isResponding == true,
-                sessionID: appState.activeAgentSessionID,
-                turnStartedAt: appState.activeRuntime?.turnStartedAt,
-                thumbnailTrailingInset: activeSidePanel == nil ? 0 : CGFloat(panelWidth + 1)
-            )
+            if appState.agentPrimaryDestination == .conversation {
+                AgentComputerUsePresentationLayer(
+                    activity: appState.activeRuntime?.latestComputerUseActivity,
+                    isActive: appState.activeRuntime?.isResponding == true,
+                    sessionID: appState.activeAgentSessionID,
+                    turnStartedAt: appState.activeRuntime?.turnStartedAt,
+                    thumbnailTrailingInset: activeSidePanel == nil ? 0 : CGFloat(panelWidth + 1)
+                )
+            }
         }
         .sheet(isPresented: $isSessionSearchPresented) {
             AgentSessionSearchView()

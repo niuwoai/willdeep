@@ -88,6 +88,16 @@ enum AgentSubagentError: LocalizedError {
 /// uses for background shell jobs.
 @MainActor
 final class AgentSubagentRegistry: ObservableObject {
+    typealias RunOperation = @MainActor (
+        _ prompt: String,
+        _ configuration: AgentConfiguration,
+        _ workspaceURL: URL?,
+        _ runtimeDescriptor: RuntimeDescriptor?,
+        _ workspaceLocation: WorkspaceLocation?,
+        _ someIMContext: SomeIMRequestContext?,
+        _ outputSchema: AgentStructuredSchema?
+    ) async throws -> AgentSubagentRunner.Outcome
+
     @Published private(set) var runs: [AgentSubagentRun] = []
 
     /// Parallel fan-out cap per parent session. Provider rate limits
@@ -101,6 +111,22 @@ final class AgentSubagentRegistry: ObservableObject {
 
     private var tasks: [UUID: Task<Void, Never>] = [:]
     private var pendingReports: [UUID: [UUID]] = [:]
+    /// Goal-planning runs are aggregated by their host coordinator. Their
+    /// individual completions must never enter the generic parent wake queue.
+    private var coordinatorOwnedRunIDs: Set<UUID> = []
+    /// Injectable only so coordinator orchestration can be covered without a
+    /// live provider. Production keeps the real read-only runner.
+    var runOperation: RunOperation = { prompt, configuration, workspaceURL, runtimeDescriptor, workspaceLocation, someIMContext, outputSchema in
+        try await AgentSubagentRunner.run(
+            prompt: prompt,
+            configuration: configuration,
+            workspaceURL: workspaceURL,
+            runtimeDescriptor: runtimeDescriptor,
+            workspaceLocation: workspaceLocation,
+            someIMContext: someIMContext,
+            outputSchema: outputSchema
+        )
+    }
 
     /// Host hook fired after a run finishes and its report is queued
     /// into `pendingReports`. AppState uses it to auto-resume the parent
@@ -118,6 +144,10 @@ final class AgentSubagentRegistry: ObservableObject {
         runs.first { $0.id == id }
     }
 
+    func isGoalPlanningRun(_ id: UUID) -> Bool {
+        coordinatorOwnedRunIDs.contains(id)
+    }
+
     // MARK: Spawn (background)
 
     /// Start a background subagent. Returns the snapshot immediately;
@@ -130,7 +160,10 @@ final class AgentSubagentRegistry: ObservableObject {
         workspaceURL: URL?,
         runtimeDescriptor: RuntimeDescriptor? = nil,
         workspaceLocation: WorkspaceLocation? = nil,
-        parentRuntimeID: UUID
+        parentRuntimeID: UUID,
+        someIMContext: SomeIMRequestContext? = nil,
+        outputSchema: AgentStructuredSchema? = nil,
+        queuesParentReport: Bool = true
     ) throws -> AgentSubagentRun {
         guard activeCount(forParentRuntime: parentRuntimeID) < Self.maxConcurrentPerRuntime else {
             throw AgentSubagentError.tooManyConcurrent(Self.maxConcurrentPerRuntime)
@@ -147,16 +180,26 @@ final class AgentSubagentRegistry: ObservableObject {
             startedAt: Date()
         )
         runs.insert(run, at: 0)
+        if !queuesParentReport {
+            coordinatorOwnedRunIDs.insert(id)
+        }
 
         tasks[id] = Task { [weak self] in
             let outcome: AgentSubagentRunner.Outcome
             do {
-                outcome = try await AgentSubagentRunner.run(
-                    prompt: prompt,
-                    configuration: configuration,
-                    workspaceURL: workspaceURL,
-                    runtimeDescriptor: runtimeDescriptor,
-                    workspaceLocation: workspaceLocation
+                outcome = try await self?.runOperation(
+                    prompt,
+                    configuration,
+                    workspaceURL,
+                    runtimeDescriptor,
+                    workspaceLocation,
+                    someIMContext,
+                    outputSchema
+                ) ?? AgentSubagentRunner.Outcome(
+                    report: "",
+                    usageTokens: 0,
+                    roundCount: 0,
+                    toolInvocationCount: 0
                 )
             } catch is CancellationError {
                 self?.finish(id: id, status: .cancelled, report: "(subagent cancelled)")
@@ -177,6 +220,55 @@ final class AgentSubagentRegistry: ObservableObject {
         return run
     }
 
+    /// Controlled Goal Teams entry point: fixed structured output and no
+    /// per-member parent report/wake. The coordinator receives completions
+    /// through `onRunFinished` and wakes the parent once after arbitration.
+    @discardableResult
+    func startGoalPlanningBackground(
+        prompt: String,
+        label: String,
+        configuration: AgentConfiguration,
+        workspaceURL: URL?,
+        runtimeDescriptor: RuntimeDescriptor? = nil,
+        workspaceLocation: WorkspaceLocation? = nil,
+        parentRuntimeID: UUID,
+        someIMContext: SomeIMRequestContext? = nil,
+        outputSchema: AgentStructuredSchema
+    ) throws -> AgentSubagentRun {
+        try startBackground(
+            prompt: prompt,
+            label: label,
+            configuration: configuration,
+            workspaceURL: workspaceURL,
+            runtimeDescriptor: runtimeDescriptor,
+            workspaceLocation: workspaceLocation,
+            parentRuntimeID: parentRuntimeID,
+            someIMContext: someIMContext,
+            outputSchema: outputSchema,
+            queuesParentReport: false
+        )
+    }
+
+    func runGoalPlanningSynchronously(
+        prompt: String,
+        configuration: AgentConfiguration,
+        workspaceURL: URL?,
+        runtimeDescriptor: RuntimeDescriptor?,
+        workspaceLocation: WorkspaceLocation?,
+        someIMContext: SomeIMRequestContext?,
+        outputSchema: AgentStructuredSchema
+    ) async throws -> AgentSubagentRunner.Outcome {
+        try await runOperation(
+            prompt,
+            configuration,
+            workspaceURL,
+            runtimeDescriptor,
+            workspaceLocation,
+            someIMContext,
+            outputSchema
+        )
+    }
+
     private func finish(
         id: UUID,
         status: AgentSubagentRun.Status,
@@ -195,7 +287,10 @@ final class AgentSubagentRegistry: ObservableObject {
         runs[index].toolInvocationCount = toolInvocationCount
 
         let parentID = runs[index].parentRuntimeID
-        pendingReports[parentID, default: []].append(id)
+        let coordinatorOwned = coordinatorOwnedRunIDs.contains(id)
+        if !coordinatorOwned {
+            pendingReports[parentID, default: []].append(id)
+        }
         evictOldFinishedRuns(forParentRuntime: parentID)
         if let finished = runs.first(where: { $0.id == id }) {
             onRunFinished?(finished)
@@ -229,11 +324,25 @@ final class AgentSubagentRegistry: ObservableObject {
         }
     }
 
+    /// Retire one Goal-planning generation synchronously so a replacement
+    /// generation can claim the same three per-session concurrency slots.
+    /// Late task completions remain coordinator-owned and are ignored by the
+    /// generation/runID check in AppState.
+    func cancelGoalPlanningRuns(_ runIDs: Set<UUID>) {
+        guard !runIDs.isEmpty else { return }
+        for index in runs.indices where runIDs.contains(runs[index].id) && runs[index].status == .running {
+            tasks[runs[index].id]?.cancel()
+            runs[index].status = .cancelled
+            runs[index].finishedAt = Date()
+        }
+    }
+
     private func evictOldFinishedRuns(forParentRuntime runtimeID: UUID) {
         let finished = runs.filter { $0.parentRuntimeID == runtimeID && $0.status != .running }
         guard finished.count > Self.historyLimit else { return }
         let toEvict = Set(finished.suffix(finished.count - Self.historyLimit).map(\.id))
         runs.removeAll { toEvict.contains($0.id) }
+        coordinatorOwnedRunIDs.subtract(toEvict)
     }
 }
 

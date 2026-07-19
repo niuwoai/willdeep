@@ -88,7 +88,8 @@ struct AgentSidePanelFocusPolicyTests {
         #expect(source.contains("if appState.agentSidePanelKind == .backgroundTasks"))
         #expect(source.contains("if newPanel == .backgroundTasks"))
         #expect(source.contains("guard request.kind != .backgroundTasks else"))
-        #expect(source.contains("let activeSidePanel = appState.agentSidePanelKind == .backgroundTasks"))
+        #expect(source.contains("let activeSidePanel: AgentSidePanelKind? = if appState.agentPrimaryDestination == .scheduledTasks"))
+        #expect(source.contains("else if appState.agentSidePanelKind == .backgroundTasks"))
         #expect(source.contains("newPanel == .backgroundTasks ? nil : newPanel"))
     }
 

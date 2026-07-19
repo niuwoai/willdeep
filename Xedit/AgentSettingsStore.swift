@@ -910,6 +910,41 @@ enum AgentCredentialStore {
         return value
     }
 
+    /// Returns account names only; secret bytes never leave Keychain. This is
+    /// used to discover protected Composer secrets created before the alias
+    /// index existed, so upgrades do not make those entries invisible.
+    nonisolated static func accounts(matchingPrefix prefix: String) -> [String] {
+        if let testKeychainStorage {
+            return testKeychainStorage.keys.filter { $0.hasPrefix(prefix) }.sorted()
+        }
+
+        if isRunningUnderXCTest {
+            return xctestKeychainStorage.keys.filter { $0.hasPrefix(prefix) }.sorted()
+        }
+
+        let query: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: keychainService,
+            kSecReturnAttributes as String: true,
+            kSecMatchLimit as String: kSecMatchLimitAll
+        ]
+        var item: CFTypeRef?
+        guard SecItemCopyMatching(query as CFDictionary, &item) == errSecSuccess else {
+            return []
+        }
+        let rows: [[String: Any]]
+        if let many = item as? [[String: Any]] {
+            rows = many
+        } else if let one = item as? [String: Any] {
+            rows = [one]
+        } else {
+            return []
+        }
+        return rows.compactMap { $0[kSecAttrAccount as String] as? String }
+            .filter { $0.hasPrefix(prefix) }
+            .sorted()
+    }
+
     nonisolated static func delete(account: String) {
         if testKeychainStorage != nil {
             testKeychainStorage?.removeValue(forKey: account)

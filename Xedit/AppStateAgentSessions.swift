@@ -416,6 +416,10 @@ extension AppState {
     /// User clicks Approve on the proposed plan — flips it to approved
     /// so the next turn's system prompt unlocks write tools.
     func approveAgentPlan() {
+        if agentInteractionMode == .goal {
+            confirmAgentPlanAndExecute()
+            return
+        }
         guard var plan = agentCurrentPlan else { return }
         plan.status = .approved
         agentCurrentPlan = plan
@@ -424,8 +428,12 @@ extension AppState {
 
     /// User clicks Reject — drops the plan so the agent re-plans next turn.
     func rejectAgentPlan() {
+        guard let runtime = activeRuntime else { return }
         agentCurrentPlan = nil
         persistActiveAgentSession()
+        if agentInteractionMode == .goal {
+            _ = startAgentGoalPlanningIfNeeded(for: runtime, forceRestart: true)
+        }
     }
 
     /// 1.79.0 plan 自动执行 banner 入口。用户点「执行」或倒计时归零
@@ -438,19 +446,25 @@ extension AppState {
     /// 如果 agent 当前 turn 还在跑（罕见 —— banner 只在 plan 刚解析
     /// 完时出现），prompt 会进队列。
     func confirmAgentPlanAndExecute() {
-        guard agentInteractionMode == .plan,
+        guard agentInteractionMode == .plan || agentInteractionMode == .goal,
               var plan = agentCurrentPlan,
               plan.status == .proposed else { return }
         plan.status = .approved
         agentCurrentPlan = plan
+        if agentInteractionMode == .goal, var state = activeRuntime?.goalPlanningState {
+            state.phase = .executing
+            activeRuntime?.goalPlanningState = state
+        }
         persistActiveAgentSession()
 
+        let goalTurnEndContract = agentInteractionMode == .goal
+            ? "At the end of every reply, emit both exactly one ```progress fenced block and exactly one ```goal-check fenced block in the same reply, even when either block contains no changes."
+            : "At the end of each reply, emit exactly one ```progress fenced block with the latest status of every step touched."
         let prompt = """
         Plan approved. Execute the complete plan step by step. Do not treat an outline, sample, first file, \
-        or first chapter as completion when an approved step promises the full deliverable. At the end of \
-        each reply, emit exactly one ```progress fenced block with the latest status of every step touched. \
-        If the response budget forces a pause, leave the current step in_progress so WillDeep can continue \
-        automatically. Stop only when every step has reached a terminal state.
+        or first chapter as completion when an approved step promises the full deliverable. \
+        \(goalTurnEndContract) If the response budget forces a pause, leave the current step in_progress so \
+        WillDeep can continue automatically. Stop only when every step has reached a terminal state.
         """
         guard let runtime = activeRuntime else { return }
         if runtime.isResponding {
@@ -473,6 +487,9 @@ extension AppState {
         plan.status = .done
         agentCurrentPlan = plan
         persistActiveAgentSession()
+        if let runtime = activeRuntime {
+            prepareNextAgentGoalPlanningCycleIfNeeded(for: runtime)
+        }
     }
 
     /// Ask the agent to revise the current plan. Drops the existing
@@ -481,7 +498,7 @@ extension AppState {
     /// boilerplate, or the caller's free-form note appended to it.
     /// Falls through to the normal queue path if the agent is busy.
     func requestPlanRevision(note: String) {
-        guard agentInteractionMode == .plan else { return }
+        guard agentInteractionMode == .plan || agentInteractionMode == .goal else { return }
         // Drop the existing plan so the next turn's system prompt
         // sends the "you must emit a ```plan block" instructions.
         agentCurrentPlan = nil
@@ -502,6 +519,14 @@ extension AppState {
         }
 
         guard let runtime = activeRuntime else { return }
+        if runtime.interactionMode == .goal {
+            _ = startAgentGoalPlanningIfNeeded(
+                for: runtime,
+                forceRestart: true,
+                revisionNote: trimmed.isEmpty ? nil : trimmed
+            )
+            return
+        }
         if runtime.isResponding {
             runtime.queuedMessages.append(AgentQueuedMessage(text: prompt, images: []))
             return
@@ -520,12 +545,23 @@ extension AppState {
     }
 
     func captureAgentPlanFromLatestMessage(for runtime: AgentRuntime) {
-        guard runtime.interactionMode == .plan else { return }
+        guard runtime.interactionMode == .plan || runtime.interactionMode == .goal else { return }
         guard let last = runtime.messages.last(where: { $0.role == .assistant && !$0.content.isEmpty }) else {
             return
         }
-        if let parsed = AgentPlanParser.extract(from: last.content) {
+        if let parsed = AgentPlanParser.extract(from: last.content),
+           runtime.interactionMode == .plan
+            || (runtime.goalPlanningState?.phase == .readyForProposal
+                && AgentGoalPlanProposalValidator.validates(
+                    content: last.content,
+                    plan: parsed,
+                    generationID: runtime.goalPlanningState?.generationID
+                )) {
             runtime.currentPlan = parsed
+            if runtime.interactionMode == .goal, var state = runtime.goalPlanningState {
+                state.phase = .awaitingApproval
+                runtime.goalPlanningState = state
+            }
             return
         }
         if let existing = runtime.currentPlan,
@@ -548,16 +584,28 @@ extension AppState {
         captureAgentGoalEvaluationFromLatestMessage(for: runtime)
     }
 
-    func captureAgentGoalDefinitionFromLatestMessage(for runtime: AgentRuntime) {
+    @discardableResult
+    func captureAgentGoalDefinitionFromLatestMessage(for runtime: AgentRuntime) -> Bool {
         guard runtime.interactionMode == .goal,
-              runtime.currentGoal == nil || runtime.currentGoal?.isEmpty == true else { return }
+              runtime.currentGoal == nil || runtime.currentGoal?.isEmpty == true else { return false }
         guard let last = runtime.messages.last(where: { $0.role == .assistant && !$0.content.isEmpty }),
               let parsed = AgentGoalParser.extract(from: last.content),
               !parsed.isEmpty else {
-            return
+            return false
         }
         runtime.currentGoal = parsed
+        runtime.currentPlan = nil
+        runtime.goalPlanningState = nil
         persistAgentSession(runtime: runtime)
+        return true
+    }
+
+    func startAgentGoalPlanningAfterCaptureIfNeeded(
+        _ didDefineGoal: Bool,
+        for runtime: AgentRuntime
+    ) {
+        guard didDefineGoal else { return }
+        _ = startAgentGoalPlanningIfNeeded(for: runtime)
     }
 
     func captureAgentGoalEvaluationFromLatestMessage(for runtime: AgentRuntime) {
@@ -650,7 +698,7 @@ extension AppState {
     /// common need when an earlier step's output turned out wrong and
     /// every downstream step has to be redone.
     func restartAgentPlanFromStep(id: UUID, note: String) {
-        guard agentInteractionMode == .plan,
+        guard agentInteractionMode == .plan || agentInteractionMode == .goal,
               var plan = agentCurrentPlan,
               let startIdx = plan.steps.firstIndex(where: { $0.id == id }) else { return }
         for i in startIdx..<plan.steps.count {
@@ -697,7 +745,12 @@ extension AppState {
         let previousGoal = runtime.currentGoal
 
         if trimmedStatement.isEmpty && trimmedItems.isEmpty {
+            if let state = runtime.goalPlanningState {
+                agentSubagentRegistry.cancelGoalPlanningRuns(Set(state.members.compactMap(\.runID)))
+            }
             runtime.currentGoal = nil
+            runtime.currentPlan = nil
+            runtime.goalPlanningState = nil
             if previousGoal != nil {
                 runtime.currentGoalEditedAt = Date()
             }
@@ -722,10 +775,18 @@ extension AppState {
         )
         runtime.currentGoal = updatedGoal
         if previousGoal != updatedGoal {
+            if let state = runtime.goalPlanningState {
+                agentSubagentRegistry.cancelGoalPlanningRuns(Set(state.members.compactMap(\.runID)))
+            }
             runtime.currentGoalEditedAt = Date()
+            runtime.currentPlan = nil
+            runtime.goalPlanningState = nil
         }
         persistActiveAgentSession()
         enqueueGoalUpdateNoticeIfNeeded(for: runtime, previousGoal: previousGoal, updatedGoal: updatedGoal)
+        if previousGoal != updatedGoal {
+            _ = startAgentGoalPlanningIfNeeded(for: runtime)
+        }
     }
 
     private func enqueueGoalUpdateNoticeIfNeeded(
@@ -1002,6 +1063,7 @@ extension AppState {
 
     @discardableResult
     func startNewAgentSession() -> AgentSession {
+        agentPrimaryDestination = .conversation
         // Pre-rc2 this function cleared a wall of `agent*` fields on
         // AppState (messages, toolCalls, queued, errors, …). Under rc2
         // those fields delegate to `activeRuntime`, so clearing them
@@ -1056,6 +1118,7 @@ extension AppState {
     /// 当前的根,跟用户在菜单里选的目录对不上。
     @discardableResult
     func startNewAgentSession(inWorkspaceAt workspacePath: String?) -> AgentSession {
+        agentPrimaryDestination = .conversation
         let normalizedPath: String?
         if let workspacePath, !workspacePath.isEmpty {
             let url = URL(fileURLWithPath: workspacePath).standardizedFileURL
@@ -1136,6 +1199,7 @@ extension AppState {
     /// old tool context is never silently rewritten to a different folder.
     @discardableResult
     func moveActiveAgentSessionToWorkspace(at workspacePath: String) -> AgentSession {
+        agentPrimaryDestination = .conversation
         let url = URL(fileURLWithPath: workspacePath).standardizedFileURL
         if Self.isExistingDirectory(url) {
             // 1.85.0-rc9：agent 选 folder 不再联动 editor 窗口的 rootDirectory。
@@ -1207,6 +1271,7 @@ extension AppState {
 
     @discardableResult
     func moveActiveAgentSessionToRemoteWorkspace(runtimeID: UUID, path: String) -> AgentSession {
+        agentPrimaryDestination = .conversation
         let normalizedPath = RemotePathValidator.normalizedWorkspaceRoot(path)
         if let runtime = activeRuntime, runtime.isEmpty, !runtime.isResponding {
             runtime.rebindRemoteWorkspace(runtimeID: runtimeID, path: normalizedPath)
@@ -1245,6 +1310,7 @@ extension AppState {
 
     @discardableResult
     func selectAgentSession(id: AgentSession.ID) -> Bool {
+        agentPrimaryDestination = .conversation
         guard let targetSession = agentSessions.first(where: { $0.id == id }) else { return false }
         guard activeAgentSessionID != id else {
             agentSessionLoadFailure = nil

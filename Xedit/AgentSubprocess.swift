@@ -7,6 +7,11 @@ import Darwin
 /// a full pipe. Captured output is bounded independently from draining: bytes
 /// beyond the budget are discarded while the pipe continues to be consumed.
 nonisolated enum AgentSubprocess {
+    private static let timeoutQueue = DispatchQueue(
+        label: "com.willdeep.agent-subprocess.timeout",
+        qos: .userInitiated
+    )
+
     struct Output: Sendable {
         let exitStatus: Int32
         let stdout: Data
@@ -19,11 +24,6 @@ nonisolated enum AgentSubprocess {
         var stderrText: String { String(decoding: stderr, as: UTF8.self) }
     }
 
-    private enum WaitEvent: Sendable {
-        case exited
-        case timedOut
-    }
-
     private final class ProcessBox: @unchecked Sendable {
         let process: Process
 
@@ -31,23 +31,17 @@ nonisolated enum AgentSubprocess {
             self.process = process
         }
 
-        func terminateAndEscalate() {
-            guard process.isRunning else { return }
+        @discardableResult
+        func terminateAndEscalate() -> Bool {
+            guard process.isRunning else { return false }
             process.terminate()
             let pid = process.processIdentifier
-            DispatchQueue.global(qos: .utility).asyncAfter(deadline: .now() + 2) { [self] in
+            AgentSubprocess.timeoutQueue.asyncAfter(deadline: .now() + 2) { [self] in
                 if self.process.isRunning {
                     kill(pid, SIGKILL)
                 }
             }
-        }
-    }
-
-    private final class FileHandleBox: @unchecked Sendable {
-        let handle: FileHandle
-
-        init(_ handle: FileHandle) {
-            self.handle = handle
+            return true
         }
     }
 
@@ -133,10 +127,11 @@ nonisolated enum AgentSubprocess {
         let processBox = ProcessBox(process)
         let timedOut = TimeoutFlag()
         let timeoutWorkItem = DispatchWorkItem {
-            timedOut.mark()
-            processBox.terminateAndEscalate()
+            if processBox.terminateAndEscalate() {
+                timedOut.mark()
+            }
         }
-        DispatchQueue.global(qos: .utility).asyncAfter(deadline: .now() + timeout, execute: timeoutWorkItem)
+        timeoutQueue.asyncAfter(deadline: .now() + timeout, execute: timeoutWorkItem)
         process.waitUntilExit()
         timeoutWorkItem.cancel()
 
@@ -170,22 +165,20 @@ nonisolated enum AgentSubprocess {
         process.standardOutput = stdoutPipe
         process.standardError = stderrPipe
 
-        let stdoutReader = FileHandleBox(stdoutPipe.fileHandleForReading)
-        let stderrReader = FileHandleBox(stderrPipe.fileHandleForReading)
-        let stdoutTask = Task.detached(priority: .utility) {
-            drain(stdoutReader.handle, limit: stdoutLimit, keepTail: false)
+        let stdoutCapture = LockedCapture(limit: stdoutLimit, keepTail: false)
+        let stderrCapture = LockedCapture(limit: stderrLimit, keepTail: true)
+        stdoutPipe.fileHandleForReading.readabilityHandler = { handle in
+            stdoutCapture.append(handle.availableData)
         }
-        let stderrTask = Task.detached(priority: .utility) {
-            drain(stderrReader.handle, limit: stderrLimit, keepTail: true)
+        stderrPipe.fileHandleForReading.readabilityHandler = { handle in
+            stderrCapture.append(handle.availableData)
         }
 
         do {
             try process.run()
         } catch {
-            try? stdoutPipe.fileHandleForWriting.close()
-            try? stderrPipe.fileHandleForWriting.close()
-            _ = await stdoutTask.value
-            _ = await stderrTask.value
+            stdoutPipe.fileHandleForReading.readabilityHandler = nil
+            stderrPipe.fileHandleForReading.readabilityHandler = nil
             throw error
         }
 
@@ -195,86 +188,41 @@ nonisolated enum AgentSubprocess {
         try? stderrPipe.fileHandleForWriting.close()
 
         let processBox = ProcessBox(process)
-        let waitEvent = await withTaskCancellationHandler {
-            await withTaskGroup(of: WaitEvent.self) { group in
-                group.addTask {
-                    await AgentProcessSupport.waitUntilExit(processBox.process)
-                    return .exited
-                }
-                group.addTask {
-                    do {
-                        try await Task.sleep(for: .seconds(timeout))
-                        return .timedOut
-                    } catch {
-                        return .exited
-                    }
-                }
-
-                let first = await group.next() ?? .exited
-                if case .timedOut = first {
-                    processBox.terminateAndEscalate()
-                }
-                group.cancelAll()
-                while await group.next() != nil {}
-                return first
+        let timedOut = TimeoutFlag()
+        let timeoutWorkItem = DispatchWorkItem {
+            if processBox.terminateAndEscalate() {
+                timedOut.mark()
             }
+        }
+        // A Dispatch deadline is intentional here. Blocking pipe readers must
+        // not occupy Swift's cooperative executor and delay a sub-second
+        // timeout until the child exits naturally under a busy test/app load.
+        timeoutQueue.asyncAfter(
+            deadline: .now() + timeout,
+            execute: timeoutWorkItem
+        )
+
+        await withTaskCancellationHandler {
+            await AgentProcessSupport.waitUntilExit(processBox.process)
         } onCancel: {
             processBox.terminateAndEscalate()
         }
+        timeoutWorkItem.cancel()
 
-        let stdout = await stdoutTask.value
-        let stderr = await stderrTask.value
+        stdoutPipe.fileHandleForReading.readabilityHandler = nil
+        stderrPipe.fileHandleForReading.readabilityHandler = nil
+        if let tail = try? stdoutPipe.fileHandleForReading.readToEnd() { stdoutCapture.append(tail) }
+        if let tail = try? stderrPipe.fileHandleForReading.readToEnd() { stderrCapture.append(tail) }
+        let stdout = stdoutCapture.snapshot()
+        let stderr = stderrCapture.snapshot()
         try Task.checkCancellation()
-        let timedOut: Bool
-        if case .timedOut = waitEvent {
-            timedOut = true
-        } else {
-            timedOut = false
-        }
         return Output(
             exitStatus: process.terminationStatus,
             stdout: stdout.data,
             stderr: stderr.data,
             stdoutWasTruncated: stdout.wasTruncated,
             stderrWasTruncated: stderr.wasTruncated,
-            timedOut: timedOut
+            timedOut: timedOut.isSet
         )
-    }
-
-    private static func drain(_ handle: FileHandle, limit: Int, keepTail: Bool) -> Capture {
-        var captured = Data()
-        captured.reserveCapacity(min(limit, 64 * 1_024))
-        var wasTruncated = false
-
-        while true {
-            let chunk: Data
-            do {
-                guard let next = try handle.read(upToCount: 64 * 1_024), !next.isEmpty else { break }
-                chunk = next
-            } catch {
-                break
-            }
-
-            guard limit > 0 else {
-                wasTruncated = true
-                continue
-            }
-            if keepTail {
-                captured.append(chunk)
-                if captured.count > limit {
-                    captured.removeFirst(captured.count - limit)
-                    wasTruncated = true
-                }
-            } else {
-                let remaining = limit - captured.count
-                if remaining > 0 {
-                    captured.append(chunk.prefix(remaining))
-                }
-                if chunk.count > remaining {
-                    wasTruncated = true
-                }
-            }
-        }
-        return Capture(data: captured, wasTruncated: wasTruncated)
     }
 }
