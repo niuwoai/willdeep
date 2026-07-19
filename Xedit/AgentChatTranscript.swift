@@ -486,6 +486,9 @@ struct AgentChatTranscript: View {
                             },
                             onRemove: { queued in
                                 appState.removeQueuedAgentMessage(id: queued.id)
+                            },
+                            onMove: { sourceID, targetID in
+                                appState.moveQueuedAgentMessage(id: sourceID, to: targetID)
                             }
                         )
                         .frame(maxWidth: AgentDesign.chatMaxContentWidth, alignment: .leading)

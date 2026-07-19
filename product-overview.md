@@ -1,6 +1,6 @@
 # WillDeep Product Overview
 
-> Last updated: 2026-07-19 | Current version: v1.189.0-rc2
+> Last updated: 2026-07-19 | Current version: v1.189.0-rc3
 
 ## Positioning
 
@@ -11,6 +11,10 @@ Official product domain: [willdeep.com](https://willdeep.com).
 WillDeep is configured for non-App-Store distribution without App Sandbox so it can access local project files with fewer permission interruptions.
 
 ## 架构概览
+
+- **Diff 单文件详情原生着色与有界渲染（1.189.0-rc3）** —— Diff 侧栏使用 AppKit 原生富文本向 TextKit 传递新增、删除、hunk 与元数据颜色，新增/删除行同时带低透明度背景；详情超过 32KB 或 600 行时只展示 24KB 样本，未跟踪单文件超过 64KB 时降级为摘要，Git 输出收集另有 512KB 与 5 秒上限。
+
+- **队列与 Goal 左侧语义标识（1.189.0-rc2）** —— 待发消息使用独立的警示图标与拖拽把手，支持直接调整 FIFO 发送顺序；Goal 卡片以稳定的左侧目标图标对齐正文和操作区，提升两类运行状态的辨识度。
 
 - **Goal Teams 计划先行闭环（1.189.0-rc1）** —— Goal 形成后由宿主固定启动需求、架构、测试三个相互独立的只读规划身份，全部终态后再做证据仲裁；只有至少两份有效报告且仲裁成功，才生成十列 Teams 表与完整 Plan 供用户显式确认。计划前锁定写级和危险级工具，执行每轮同时更新 `progress` 与 `goal-check`，拒绝、中断、旧会话恢复和 Goal 未完成的再规划都默认收紧权限。
 

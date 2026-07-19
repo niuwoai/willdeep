@@ -1,17 +1,31 @@
 # Changelog
 
-> 当前文件保留最新版本（1.189.0-rc2 至 1.109.0-rc340）。
+> 当前文件保留最新版本（1.189.0-rc3 至 1.109.0-rc340）。
 > 更早的 1000 个版本已移至 [CHANGELOG-ARCHIVE.md](CHANGELOG-ARCHIVE.md)。
+
+## 1.189.0-rc3 - 2026-07-19
+
+### Fixed
+
+- Diff 侧栏的单文件详情改为直接生成 AppKit 原生富文本属性，避免 SwiftUI `AttributedString` 桥接到 `NSTextView` 时丢失颜色；新增行、删除行恢复红绿前景色与浅色行背景，hunk 和元数据继续跟随当前界面皮肤。
+- 保留并明确大 diff 资源预算：单文件详情超过 32KB 或 600 行时只渲染 24KB 有界样本，未跟踪单文件超过 64KB 时降级为摘要；Git 输出收集仍受 512KB 与 5 秒超时上限约束。
+- 版本号从 **1.189.0-rc2** 递增为 **1.189.0-rc3**，内部构建号从 **22** 递增为 **23**；Xcode App、Go agent、Help bundle、Computer Use Helper、Chrome 扩展、README、移动网关响应头契约与产品文档同步。
+
+### Tests
+
+- 新增 TextKit 原生 diff 着色回归测试，断言新增、删除、hunk 的前景色以及新增/删除行背景色不会在 AppKit 渲染链路中丢失；既有 UTF-8 字节、行数、非连续布局和按文件延迟加载保护继续覆盖。
 
 ## 1.189.0-rc2 - 2026-07-19
 
 ### Fixed
 
+- 待发消息左侧新增独立状态图标与可拖拽把手，并支持直接调整 FIFO 发送顺序；Goal 卡片改用稳定的左侧目标图标布局，与 Codex 的状态消息层级保持一致。
 - 后台命令的显式终止、超时触发与两秒 SIGKILL 升级改由专用高优先级串行队列驱动，避免冷编译或共享 CI 高负载时全局 utility 队列饥饿，导致任务长期停留在 `running`。
 - 版本号从 **1.189.0-rc1** 递增为 **1.189.0-rc2**，内部构建号从 **21** 递增为 **22**；Xcode App、Go agent、Help bundle、Computer Use Helper、Chrome 扩展、README、移动网关响应头契约与产品文档同步。
 
 ### Tests
 
+- 新增待发消息双向重排测试，覆盖从队首移到队尾以及移回队首的顺序变化。
 - 后台任务终止与超时恢复为硬断言；正式发布门禁必须在高负载下同时通过 `longRunningCommandCanBeKilled` 与 `timeoutSurfacesTimedOutStatus`，不再把超时波动记作 known issue。
 
 ## 1.189.0-rc1 - 2026-07-19

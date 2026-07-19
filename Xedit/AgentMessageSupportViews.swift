@@ -9,6 +9,7 @@
 
 import AppKit
 import SwiftUI
+import UniformTypeIdentifiers
 
 /// Insert zero-width breakpoints into runs of unbreakable characters.
 ///
@@ -492,21 +493,31 @@ struct QueuedMessagesList: View {
     var onEdit: (AgentQueuedMessage) -> Void = { _ in }
     var onSendNow: (AgentQueuedMessage) -> Void = { _ in }
     var onRemove: (AgentQueuedMessage) -> Void = { _ in }
+    var onMove: (AgentQueuedMessage.ID, AgentQueuedMessage.ID) -> Void = { _, _ in }
+    @State private var draggedMessageID: AgentQueuedMessage.ID?
 
     var body: some View {
         VStack(spacing: 0) {
             ForEach(Array(messages.enumerated()), id: \.element.id) { offset, message in
                 QueuedMessageRow(
-                    index: offset,
                     message: message,
                     baseFontSize: baseFontSize,
                     onEdit: { onEdit(message) },
                     onSendNow: { onSendNow(message) },
-                    onRemove: { onRemove(message) }
+                    onRemove: { onRemove(message) },
+                    onDragStarted: { draggedMessageID = message.id }
+                )
+                .onDrop(
+                    of: [UTType.text],
+                    delegate: QueuedMessageDropDelegate(
+                        targetID: message.id,
+                        draggedMessageID: $draggedMessageID,
+                        onMove: onMove
+                    )
                 )
                 if offset < messages.count - 1 {
                     Divider()
-                        .padding(.leading, 38)
+                        .padding(.leading, 54)
                 }
             }
         }
@@ -521,7 +532,6 @@ struct QueuedMessagesList: View {
 }
 
 private struct QueuedMessageRow: View {
-    let index: Int
     let message: AgentQueuedMessage
     /// Mirror of the Agent chat base font size so the queued preview
     /// text reads at the same scale as the user's actual message
@@ -530,13 +540,27 @@ private struct QueuedMessageRow: View {
     var onEdit: () -> Void = {}
     var onSendNow: () -> Void = {}
     var onRemove: () -> Void = {}
+    var onDragStarted: () -> Void = {}
 
     var body: some View {
         HStack(alignment: .center, spacing: 8) {
-            Text("\(index + 1).")
-                .font(AgentDesign.captionFont.monospacedDigit())
+            Image(systemName: "line.3.horizontal")
+                .font(.system(size: 9, weight: .semibold))
+                .foregroundStyle(.tertiary)
+                .frame(width: 12, height: 24)
+                .contentShape(Rectangle())
+                .onDrag {
+                    onDragStarted()
+                    return NSItemProvider(object: message.id.uuidString as NSString)
+                } preview: {
+                    Image(systemName: "line.3.horizontal")
+                        .padding(8)
+                }
+                .help(L10n.QueuedMessage.dragHelp)
+            Image(systemName: "exclamationmark.circle")
+                .font(.system(size: 12, weight: .semibold))
                 .foregroundStyle(.orange)
-                .frame(width: 22, alignment: .trailing)
+                .frame(width: 16)
             HStack(alignment: .center, spacing: 6) {
                 VStack(alignment: .leading, spacing: 2) {
                     HStack(alignment: .center, spacing: 5) {
@@ -611,6 +635,26 @@ private struct QueuedMessageRow: View {
         .foregroundStyle(role == .destructive ? Color.red.opacity(0.85) : Color.secondary)
         .accessibilityLabel(accessibilityLabel)
         .help(help)
+    }
+}
+
+private struct QueuedMessageDropDelegate: DropDelegate {
+    let targetID: AgentQueuedMessage.ID
+    @Binding var draggedMessageID: AgentQueuedMessage.ID?
+    let onMove: (AgentQueuedMessage.ID, AgentQueuedMessage.ID) -> Void
+
+    func dropEntered(info: DropInfo) {
+        guard let sourceID = draggedMessageID, sourceID != targetID else { return }
+        onMove(sourceID, targetID)
+    }
+
+    func performDrop(info: DropInfo) -> Bool {
+        draggedMessageID = nil
+        return true
+    }
+
+    func dropUpdated(info: DropInfo) -> DropProposal? {
+        DropProposal(operation: .move)
     }
 }
 

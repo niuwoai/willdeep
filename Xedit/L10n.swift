@@ -1157,6 +1157,7 @@ nonisolated enum L10n {
         static let actionsButtonHelp = String(localized: "queued-message.actions-button.help", defaultValue: "Show queued message actions")
         static let deleteButton = String(localized: "queued-message.delete-button", defaultValue: "Delete")
         static let deleteButtonHelp = String(localized: "queued-message.delete-button.help", defaultValue: "Delete this queued message")
+        static let dragHelp = String(localized: "queued-message.drag.help", defaultValue: "Drag to reorder queued messages")
         static let editButton = String(localized: "queued-message.edit-button", defaultValue: "Edit queued message")
         static let editButtonHelp = String(localized: "queued-message.edit-button.help", defaultValue: "Edit this queued message in the composer")
         static let emptyPreview = String(localized: "queued-message.empty-preview", defaultValue: "Queued message")

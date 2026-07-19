@@ -951,6 +951,17 @@ extension AppState {
         agentQueuedMessages.removeAll { $0.id == id }
     }
 
+    func moveQueuedAgentMessage(id: AgentQueuedMessage.ID, to targetID: AgentQueuedMessage.ID) {
+        guard id != targetID,
+              let runtime = activeRuntime,
+              let sourceIndex = runtime.queuedMessages.firstIndex(where: { $0.id == id }),
+              let targetIndex = runtime.queuedMessages.firstIndex(where: { $0.id == targetID })
+        else { return }
+
+        let message = runtime.queuedMessages.remove(at: sourceIndex)
+        runtime.queuedMessages.insert(message, at: targetIndex)
+    }
+
     func editQueuedAgentMessage(id: AgentQueuedMessage.ID) {
         guard let runtime = activeRuntime,
               let index = runtime.queuedMessages.firstIndex(where: { $0.id == id })

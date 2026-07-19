@@ -14689,6 +14689,24 @@
         }
       }
     },
+    "queued-message.drag.help" : {
+      "comment" : "tooltip for the queued-message drag handle",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Drag to reorder queued messages"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "拖拽调整排队消息顺序"
+          }
+        }
+      }
+    },
     "queued-message.edit-button" : {
       "comment" : "accessibility label for editing a queued message",
       "extractionState" : "manual",
