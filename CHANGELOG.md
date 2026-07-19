@@ -1,7 +1,18 @@
 # Changelog
 
-> 当前文件保留最新版本（1.189.0-rc1 至 1.109.0-rc340）。
+> 当前文件保留最新版本（1.189.0-rc2 至 1.109.0-rc340）。
 > 更早的 1000 个版本已移至 [CHANGELOG-ARCHIVE.md](CHANGELOG-ARCHIVE.md)。
+
+## 1.189.0-rc2 - 2026-07-19
+
+### Fixed
+
+- 后台命令的显式终止、超时触发与两秒 SIGKILL 升级改由专用高优先级串行队列驱动，避免冷编译或共享 CI 高负载时全局 utility 队列饥饿，导致任务长期停留在 `running`。
+- 版本号从 **1.189.0-rc1** 递增为 **1.189.0-rc2**，内部构建号从 **21** 递增为 **22**；Xcode App、Go agent、Help bundle、Computer Use Helper、Chrome 扩展、README、移动网关响应头契约与产品文档同步。
+
+### Tests
+
+- 后台任务终止与超时恢复为硬断言；正式发布门禁必须在高负载下同时通过 `longRunningCommandCanBeKilled` 与 `timeoutSurfacesTimedOutStatus`，不再把超时波动记作 known issue。
 
 ## 1.189.0-rc1 - 2026-07-19
 

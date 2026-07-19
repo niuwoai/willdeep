@@ -411,16 +411,9 @@ struct AgentBackgroundJobsTests {
     /// so the model can tell whether the user gave up vs whether
     /// the host enforced a budget.
     ///
-    /// The 0.4s deadline races process spawn + SIGTERM delivery; on a
-    /// loaded shared CI box the job is still `.running` even after a 15s
-    /// wait, which made this the recurring red on GitHub Actions. We
-    /// can't gate it out reliably: `.enabled(if: GITHUB_ACTIONS)` never
-    /// fires because the swift-testing process gets a sanitized env, and
-    /// `-skip-testing` only matches `test`-prefixed swift-testing funcs.
-    /// So instead we let it run everywhere but wrap the timing-sensitive
-    /// expectations in `withKnownIssue(isIntermittent:)`: a slow-CI miss
-    /// is recorded as a tolerated known issue (not a red), while a fast
-    /// machine still asserts the real behavior.
+    /// Timeout enforcement uses the registry's dedicated lifecycle queue,
+    /// so even a loaded shared CI box must deliver SIGTERM/SIGKILL without
+    /// relying on a starved global utility queue.
     @Test
     func timeoutSurfacesTimedOutStatus() async throws {
         let registry = AgentJobRegistry()
@@ -436,13 +429,8 @@ struct AgentBackgroundJobsTests {
             id: job.id,
             timeoutMs: 15000
         )
-        withKnownIssue(
-            "Process-timeout enforcement is timing-sensitive under heavy shared-CI load.",
-            isIntermittent: true
-        ) {
-            #expect(finished)
-            #expect(registry.job(id: job.id)?.status == .timedOut)
-        }
+        #expect(finished)
+        #expect(registry.job(id: job.id)?.status == .timedOut)
     }
 
     // MARK: - Output capture
