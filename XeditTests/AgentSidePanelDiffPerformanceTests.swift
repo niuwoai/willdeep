@@ -16,7 +16,7 @@ struct AgentSidePanelDiffPerformanceTests {
         +new
         """
 
-        #expect(AgentSidePanelDiffLimiter.displayText(for: diff) == diff)
+        #expect(AgentSidePanelDiffLimiter.unavailableReason(for: diff) == nil)
     }
 
     @Test("UTF-8 byte budget catches large CJK diff before the old character budget")
@@ -25,10 +25,10 @@ struct AgentSidePanelDiffPerformanceTests {
 
         #expect(diff.count < 96 * 1024)
         #expect(diff.utf8.count > AgentSidePanelDiffLimiter.maximumDisplayUTF8Bytes)
-        #expect(AgentSidePanelDiffLimiter.displayText(for: diff) != diff)
+        #expect(AgentSidePanelDiffLimiter.unavailableReason(for: diff) != nil)
     }
 
-    @Test("Line budget truncates narrow but very tall diff")
+    @Test("Line budget refuses narrow but very tall diff")
     func tallDiffUsesLineBudget() {
         let diff = Array(
             repeating: "+x",
@@ -36,7 +36,20 @@ struct AgentSidePanelDiffPerformanceTests {
         ).joined(separator: "\n")
 
         #expect(diff.utf8.count < AgentSidePanelDiffLimiter.maximumDisplayUTF8Bytes)
-        #expect(AgentSidePanelDiffLimiter.displayText(for: diff) != diff)
+        #expect(AgentSidePanelDiffLimiter.unavailableReason(for: diff) != nil)
+    }
+
+    @Test("Source files above the editor file limit are rejected before diff generation")
+    func oversizedSourceFileIsRejected() {
+        let accepted = AgentSidePanelDiffLimiter.fileUnavailableReason(
+            byteCount: Int64(AppState.maxFileSize)
+        )
+        let rejected = AgentSidePanelDiffLimiter.fileUnavailableReason(
+            byteCount: Int64(AppState.maxFileSize + 1)
+        )
+
+        #expect(accepted == nil)
+        #expect(rejected?.contains(String(AppState.maxFileSize)) == true)
     }
 
     @Test("UTF-8 prefix never splits a multibyte scalar")
@@ -47,6 +60,68 @@ struct AgentSidePanelDiffPerformanceTests {
         #expect(prefix.utf8.count <= 17)
         #expect(!prefix.contains("�"))
         #expect(text.hasPrefix(prefix))
+    }
+
+    @Test("Requested changed file resolves to its exact nested diff path")
+    func requestedFileResolvesToChangedPath() {
+        let root = URL(fileURLWithPath: "/tmp/willdeep-diff-selection")
+        let changes = AgentWorktreeChangeSummary(
+            repositoryRoot: root,
+            files: [
+                AgentFileChangeSummary(
+                    path: "web/src/AdminGatewayTracePanel.tsx",
+                    kind: .modified,
+                    lineStats: AgentLineChangeStats(added: 4, deleted: 1)
+                )
+            ]
+        )
+
+        let selected = AgentSidePanelDiffSelection.relativePath(
+            for: root.appendingPathComponent("web/src/AdminGatewayTracePanel.tsx"),
+            changes: changes
+        )
+        let unrelated = AgentSidePanelDiffSelection.relativePath(
+            for: root.appendingPathComponent("web/src/Other.tsx"),
+            changes: changes
+        )
+
+        #expect(selected == "web/src/AdminGatewayTracePanel.tsx")
+        #expect(unrelated == nil)
+    }
+
+    @MainActor
+    @Test("Transcript click routes a changed file directly to focused Diff")
+    func transcriptChangedFileClickRoutesToDiff() throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("willdeep_diff_route_\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: root) }
+        let nested = root.appendingPathComponent("web/src", isDirectory: true)
+        try FileManager.default.createDirectory(at: nested, withIntermediateDirectories: true)
+        let file = nested.appendingPathComponent("AdminGatewayTracePanel.tsx")
+        try Data("export {}".utf8).write(to: file)
+
+        let appState = AppState()
+        appState.startNewAgentSession()
+        appState.agentWorktreeChanges = AgentWorktreeChangeSummary(
+            repositoryRoot: root,
+            files: [
+                AgentFileChangeSummary(
+                    path: "web/src/AdminGatewayTracePanel.tsx",
+                    kind: .modified,
+                    lineStats: AgentLineChangeStats(added: 1, deleted: 0)
+                )
+            ]
+        )
+
+        appState.revealAgentReferencedFileInSidePanel("web/src/AdminGatewayTracePanel.tsx")
+
+        #expect(appState.agentSidePanelRequest?.kind == .diff)
+        #expect(appState.agentSidePanelRequest?.file?.standardizedFileURL == file.standardizedFileURL)
+
+        appState.agentWorktreeChanges = AgentWorktreeChangeSummary(repositoryRoot: root)
+        appState.revealAgentReferencedFileInSidePanel("web/src/AdminGatewayTracePanel.tsx")
+
+        #expect(appState.agentSidePanelRequest?.kind == .preview)
     }
 
     @Test("TextKit diff keeps native foreground and line background colors")
@@ -96,6 +171,8 @@ struct AgentSidePanelDiffPerformanceTests {
         #expect(source.contains("LazyVStack(spacing: 0)"))
         #expect(source.contains("loadAgentWorktreeChangeSummary(status: status)"))
         #expect(source.contains("loadUntrackedDiffPreviewSection"))
+        #expect(source.contains(".onCompatibleChange(of: appState.agentSidePanelSelectedFile)"))
+        #expect(source.contains("selectRequestedFile(appState.agentSidePanelSelectedFile"))
         #expect(source.contains("NSTextView.scrollableTextView()"))
         #expect(source.contains("allowsNonContiguousLayout = true"))
         #expect(source.contains("AgentDiffColorizer.appKitAttributed"))

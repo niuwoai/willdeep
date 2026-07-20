@@ -1318,7 +1318,9 @@ extension AppState {
                     }
                     if let index = runtime.toolCalls.firstIndex(where: { $0.id == recordID }) {
                         runtime.toolCalls[index].status = .running
-                        runtime.toolCalls[index].approvalSource = sandboxDecision.mode == .escalated ? .escalated : .user
+                        if runtime.toolCalls[index].approvalSource == nil {
+                            runtime.toolCalls[index].approvalSource = sandboxDecision.mode == .escalated ? .escalated : .user
+                        }
                     }
                 }
 

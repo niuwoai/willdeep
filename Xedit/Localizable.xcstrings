@@ -3294,19 +3294,36 @@
         }
       }
     },
-    "agent-side-panel.diff-truncated" : {
+    "agent-side-panel.diff-source-file-too-large" : {
       "extractionState" : "extracted_with_value",
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "new",
-            "value" : "Diff is %@ UTF-8 bytes / %@ lines, above the side-panel budget of %@ bytes / %@ lines. Showing a bounded sample.\n\n%@\n\n… Diff truncated. Open the file in an editor or use git diff --no-ext-diff HEAD -- <path> for the complete content."
+            "value" : "This file is %@ bytes, above the side-panel file limit of %@ bytes, so its diff is not generated here. Open it in an editor or use an external Git tool to review it."
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Diff 大小为 %@ 个 UTF-8 字节 / %@ 行，超过侧边栏 %@ 字节 / %@ 行的流畅预算。当前仅显示有界样本。\n\n%@\n\n… Diff 已截断。请在编辑器中打开文件，或运行 git diff --no-ext-diff HEAD -- <path> 查看完整内容。"
+            "value" : "该文件大小为 %@ 字节，超过侧边栏 %@ 字节的文件上限，因此不会在这里生成 Diff。请在编辑器或外部 Git 工具中查看。"
+          }
+        }
+      }
+    },
+    "agent-side-panel.diff-too-large" : {
+      "extractionState" : "extracted_with_value",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Diff is %@ UTF-8 bytes / %@ lines, above the side-panel budget of %@ bytes / %@ lines, so it is not displayed here. Open the file in an editor or use git diff --no-ext-diff HEAD -- <path> to review it."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Diff 大小为 %@ 个 UTF-8 字节 / %@ 行，超过侧边栏 %@ 字节 / %@ 行的流畅预算，因此不在这里展示。请在编辑器中打开文件，或运行 git diff --no-ext-diff HEAD -- <path> 查看。"
           }
         }
       }

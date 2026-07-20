@@ -135,7 +135,7 @@ nonisolated enum AgentToolDisplay {
 nonisolated enum AgentApprovalActionMetrics {
     static let spacing: CGFloat = 12
     static let minimumButtonWidth: CGFloat = 112
-    static let minimumButtonHeight: CGFloat = 42
+    static let minimumButtonHeight: CGFloat = 36
     static let cornerRadius: CGFloat = 14
 }
 
