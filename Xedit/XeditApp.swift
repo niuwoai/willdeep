@@ -118,7 +118,13 @@ private struct WillDeepCommands: Commands {
     @Environment(\.openWindow) private var openWindow
 
     var body: some Commands {
-            CommandGroup(after: .appInfo) {
+            CommandGroup(replacing: .appInfo) {
+                Button(L10n.About.menuItem) {
+                    Task { @MainActor in
+                        AboutWindowOpener.open()
+                    }
+                }
+
                 Button(L10n.AppUpdate.checkForUpdates) {
                     AppUpdateController.shared.checkForUpdates()
                 }

@@ -13,11 +13,13 @@ import UserNotifications
 
 final class WillDeepAppDelegate: NSObject, NSApplicationDelegate {
     private var isFlushingBeforeTermination = false
+
     func applicationDidFinishLaunching(_ notification: Notification) {
         // Wire the shared some.im login store before anything reads credentials:
         // sets the shared Keychain access group, migrates legacy per-app keys,
         // and starts forwarding cross-app login/logout changes.
         SomeIMIntegrationStore.configureSharedSession()
+        guard !Self.isRunningUnderXCTest else { return }
         AIPipeBootstrap.initialize()
         ChromeNativeHostInstaller.installAtLaunch()
         // Route taps on agent approval / job notifications back to the
@@ -27,11 +29,6 @@ final class WillDeepAppDelegate: NSObject, NSApplicationDelegate {
             FnPushToTalkMonitor.shared.install()
             VoiceModelLifecycleController.shared.install()
         }
-        AboutMenuInstaller.install()
-    }
-
-    func applicationDidBecomeActive(_ notification: Notification) {
-        AboutMenuInstaller.install()
     }
 
     func applicationWillTerminate(_ notification: Notification) {
@@ -52,6 +49,10 @@ final class WillDeepAppDelegate: NSObject, NSApplicationDelegate {
             }
         }
         return .terminateLater
+    }
+
+    private static var isRunningUnderXCTest: Bool {
+        ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil
     }
 }
 
