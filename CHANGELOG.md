@@ -1,7 +1,18 @@
 # Changelog
 
-> 当前文件保留最新版本（1.192.0-rc13 至 1.109.0-rc340）。
+> 当前文件保留最新版本（1.192.0-rc14 至 1.109.0-rc340）。
 > 更早的 1000 个版本已移至 [CHANGELOG-ARCHIVE.md](CHANGELOG-ARCHIVE.md)。
+
+## 1.192.0-rc14 - 2026-07-21
+
+### Fixed
+
+- Workspace Access 审批模式现在只自动放行明确属于当前工作区的白名单操作；未命中的 MCP 写工具会回到人工确认，不再继续落入 LLM judge 自动审批分支。
+- 版本号从 **1.192.0-rc13** 递增为 **1.192.0-rc14**，内部构建号从 **53** 递增为 **54**；App、Go agent、Help、Helper、浏览器扩展、README、响应头契约与产品文档保持一致。
+
+### Tests
+
+- 重新运行 release 前置测试，用于覆盖 Workspace Access / MCP 审批边界。
 
 ## 1.192.0-rc13 - 2026-07-21
 

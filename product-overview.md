@@ -1,6 +1,6 @@
 # WillDeep Product Overview
 
-> Last updated: 2026-07-21 | Current version: v1.192.0-rc13
+> Last updated: 2026-07-21 | Current version: v1.192.0-rc14
 
 ## Positioning
 
@@ -11,6 +11,8 @@ Official product domain: [willdeep.com](https://willdeep.com).
 WillDeep is configured for non-App-Store distribution without App Sandbox so it can access local project files with fewer permission interruptions.
 
 ## 架构概览
+
+- **Workspace Access 审批边界（1.192.0-rc14）** —— Workspace Access 只自动放行明确属于当前工作区的本地命令、委派 Agent、用户技能和配置类操作；未信任或标准 MCP 写工具不会继续落入 LLM judge 自动审批，而是回到人工确认。
 
 - **集成终端中文渲染（1.192.0-rc12）** —— 终端字体解析链在 Nerd Font fallback 之后追加与 Editor 一致的 CJK cascade（PingFang / Hiragino / STHeiti / Emoji）；终端字体设为 Nerd Font 时汉字不再落到 .notdef 消失。
 
