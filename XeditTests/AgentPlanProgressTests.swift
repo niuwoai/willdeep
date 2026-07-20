@@ -8,6 +8,7 @@
 //
 
 import Testing
+import AppKit
 import Foundation
 @testable import WillDeep
 
@@ -262,6 +263,31 @@ struct AgentPlanProgressTests {
         #expect(next?.steps[3].status == .skipped)
     }
 
+    @Test("plan step text renders inline Markdown instead of delimiters")
+    func planStepTextRendersInlineMarkdown() {
+        let attributed = MarkdownInline.attributedString(
+            from: "**`AgentPlan.swift`**: keep *status* synchronized"
+        )
+
+        #expect(String(attributed.characters) == "AgentPlan.swift: keep status synchronized")
+        #expect(attributed.runs.contains { run in
+            run.inlinePresentationIntent?.contains(.stronglyEmphasized) == true
+        })
+        #expect(attributed.runs.contains { run in
+            run.inlinePresentationIntent?.contains(.code) == true
+        })
+    }
+
+    @Test("plan step index column fits double-digit numbering")
+    func planStepIndexColumnFitsDoubleDigits() {
+        let attributes: [NSAttributedString.Key: Any] = [
+            .font: NSFont.monospacedSystemFont(ofSize: 12, weight: .semibold)
+        ]
+        let doubleDigitWidth = ("10." as NSString).size(withAttributes: attributes).width
+
+        #expect(AgentPlanStepLayoutMetrics.indexColumnWidth >= ceil(doubleDigitWidth))
+    }
+
     @Test("approved plan with unfinished work continues automatically")
     func unfinishedApprovedPlanContinuesAutomatically() {
         let plan = AgentPlan(
@@ -370,5 +396,20 @@ struct AgentPlanProgressTests {
         #expect(prompt.contains("complete delivery contract"))
         #expect(prompt.contains("not just an outline, sample, first chapter"))
         #expect(prompt.contains("web_fetch for validated public URLs"))
+
+        let executionPrompt = AgentContextBuilder.systemPrompt(
+            rootDirectory: nil,
+            openedFileURL: nil,
+            fileContent: "",
+            selectedText: "",
+            language: nil,
+            interactionMode: .plan,
+            currentPlan: AgentPlan(
+                status: .approved,
+                steps: [AgentPlan.Step(text: "Run the tests")],
+                summary: ""
+            )
+        )
+        #expect(executionPrompt.contains("refresh the visible checklist immediately"))
     }
 }

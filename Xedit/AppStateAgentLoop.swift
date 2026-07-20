@@ -573,6 +573,7 @@ extension AppState {
         var didQualityRetry = false
         var planAutomaticContinuationCount = 0
         var consecutivePlanRepliesWithoutProgress = 0
+        var didAdvancePlanSinceLastContinuationDecision = false
         let designToCodeToolCallBaseline = runtime.toolCalls.count
         let latestUserImages = runtime.messages.last(where: { $0.role == .user })?.images ?? []
         let requiresDesignToCodeAcceptance = workspaceURL != nil && AgentDesignToCode.isActive(
@@ -903,6 +904,19 @@ extension AppState {
                 runtime.messages[index].managedRoute = managedRouteDecision
             }
 
+            // A tool-using model round can already contain the progress for
+            // the previous tool results. Apply it before running the next
+            // calls so completed steps visibly tick off during long plans,
+            // rather than waiting for the final prose-only reply.
+            if !latestToolCalls.isEmpty {
+                let statusesBeforeRound = runtime.currentPlan?.steps.map(\.status)
+                captureAgentPlanFromLatestMessage(for: runtime)
+                let statusesAfterRound = runtime.currentPlan?.steps.map(\.status)
+                if statusesBeforeRound != statusesAfterRound {
+                    didAdvancePlanSinceLastContinuationDecision = true
+                }
+            }
+
             // No tool calls → assistant finished talking. Capture patches and return.
             guard !latestToolCalls.isEmpty else {
                 // Phase 2: managed-routing output quality check + single
@@ -1009,11 +1023,13 @@ extension AppState {
                 captureAgentGoalEvaluationFromLatestMessage(for: runtime)
                 prepareNextAgentGoalPlanningCycleIfNeeded(for: runtime)
                 let planStatusesAfterReply = runtime.currentPlan?.steps.map(\.status)
-                if planStatusesBeforeReply != planStatusesAfterReply {
+                if didAdvancePlanSinceLastContinuationDecision
+                    || planStatusesBeforeReply != planStatusesAfterReply {
                     consecutivePlanRepliesWithoutProgress = 0
                 } else {
                     consecutivePlanRepliesWithoutProgress += 1
                 }
+                didAdvancePlanSinceLastContinuationDecision = false
 
                 switch AgentPlanAutoContinuationPolicy.decision(
                     for: runtime.currentPlan,
