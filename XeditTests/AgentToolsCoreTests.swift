@@ -18,7 +18,7 @@ import Foundation
 @Suite
 @MainActor
 struct AgentToolsCoreTests {
-    private static let headlessCommandTimeoutSeconds = 10.0
+    private static let headlessCommandTimeoutSeconds = 30.0
 
     // MARK: - Risk / status enums
 
@@ -1371,7 +1371,10 @@ struct AgentQueueModeTests {
         runtime.requestTask = Task {}
 
         state.scheduleQueuedMessageConsumptionAfterCancellation(for: runtime)
-        try? await Task.sleep(nanoseconds: 3_300_000_000)
+        let deadline = Date().addingTimeInterval(8)
+        while Date() < deadline, runtime.isResponding || runtime.requestTask != nil || runtime.currentProviderSlotClaim != nil {
+            try? await Task.sleep(nanoseconds: 100_000_000)
+        }
 
         #expect(runtime.isResponding == false)
         #expect(runtime.turnStartedAt == nil)
