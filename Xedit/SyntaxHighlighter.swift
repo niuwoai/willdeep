@@ -1491,27 +1491,73 @@ enum SyntaxHighlighter {
         textStorage.endEditing()
     }
 
+    /// Returns the character ranges whose font was actually rewritten, so
+    /// callers touching a live text storage can invalidate exactly those.
+    @discardableResult
     static func applyEditorCJKFallbackFonts(
         to attributed: NSMutableAttributedString,
         source: String,
         defaultFont: NSFont,
         range: NSRange? = nil
-    ) {
+    ) -> [NSRange] {
         let fullRange = NSRange(location: 0, length: attributed.length)
         let safeRange = NSIntersectionRange(range ?? fullRange, fullRange)
-        guard safeRange.length > 0 else { return }
+        guard safeRange.length > 0 else { return [] }
 
         var fontRuns: [(range: NSRange, font: NSFont)] = []
         attributed.enumerateAttribute(.font, in: safeRange, options: []) { value, range, _ in
             fontRuns.append((range, (value as? NSFont) ?? defaultFont))
         }
 
+        var appliedRanges: [NSRange] = []
         for run in fontRuns {
             let fallbackFont = run.font.editorCJKFallbackFont()
+            guard !run.font.isEqual(fallbackFont) else { continue }
             for cjkRange in cjkScalarRanges(in: source, limiting: run.range) {
                 attributed.addAttribute(.font, value: fallbackFont, range: cjkRange)
+                appliedRanges.append(cjkRange)
             }
         }
+        return appliedRanges
+    }
+
+    /// Live-typing variant of `applyEditorCJKFallbackFonts` for a text view's
+    /// storage, safe to call from inside a `textDidChange` delegate callback.
+    ///
+    /// Two constraints the plain variant doesn't cover:
+    /// - The pass runs re-entrant with the text system's own edit processing,
+    ///   where a bare attribute edit can lose its layout/display invalidation
+    ///   and leave the new glyphs undrawn until an unrelated full redraw. The
+    ///   edit is wrapped in `beginEditing`/`endEditing` and the touched ranges
+    ///   are explicitly re-invalidated afterwards.
+    /// - While an input-method composition is in flight, rewriting fonts under
+    ///   the marked text breaks the IME session, so the pass is skipped; the
+    ///   commit fires another `textDidChange`, which re-runs it.
+    @MainActor
+    @discardableResult
+    static func applyLiveEditorCJKFallbackFonts(
+        in textView: NSTextView,
+        defaultFont: NSFont,
+        range: NSRange
+    ) -> [NSRange] {
+        guard let textStorage = textView.textStorage, !textView.hasMarkedText() else { return [] }
+
+        textStorage.beginEditing()
+        let appliedRanges = applyEditorCJKFallbackFonts(
+            to: textStorage,
+            source: textStorage.string,
+            defaultFont: defaultFont,
+            range: range
+        )
+        textStorage.endEditing()
+
+        if !appliedRanges.isEmpty, let layoutManager = textView.layoutManager {
+            for applied in appliedRanges {
+                layoutManager.invalidateLayout(forCharacterRange: applied, actualCharacterRange: nil)
+                layoutManager.invalidateDisplay(forCharacterRange: applied)
+            }
+        }
+        return appliedRanges
     }
 
     private static func cjkScalarRanges(in source: String, limiting range: NSRange) -> [NSRange] {

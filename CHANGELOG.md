@@ -1,7 +1,18 @@
 # Changelog
 
-> 当前文件保留最新版本（1.192.0-rc6 至 1.109.0-rc340）。
+> 当前文件保留最新版本（1.192.0-rc12 至 1.109.0-rc340）。
 > 更早的 1000 个版本已移至 [CHANGELOG-ARCHIVE.md](CHANGELOG-ARCHIVE.md)。
+
+## 1.192.0-rc12 - 2026-07-21
+
+### Fixed
+
+- 修复 1.192.0-rc5 引入的 editor 重绘失效回归：输入含汉字的内容后文字已进入 text storage 但界面不绘制新内容，需 cmd+A 全选或窗口 resize 等全量重绘才显示（纯文本/Untitled 下最明显，与所选字体无关）。根因是 live CJK fallback 字体 pass 在 `textDidChange` 回调内直接改写 `.font` 属性，既没包 `beginEditing()/endEditing()` 也没有对受影响 range 做布局/显示失效，纯文本模式又没有语法高亮回填兜底。现改为：pass 包裹 begin/endEditing，只改写字体确实需要变化的 CJK 段（已是 fallback 字体的段跳过，纯 ASCII 输入零开销），并对实际改写的 range 显式 `invalidateLayout` + `invalidateDisplay`；IME 组合（marked text）期间整体跳过，不打扰输入法，提交后由下一次 `textDidChange` 正常补跑。
+- 版本号从 **1.192.0-rc6** 递增为 **1.192.0-rc12**（跳过并行会话在途的 rc7–rc11，避免版本号撞车），内部构建号从 **46** 递增为 **52**；App、Go agent、Help、Helper、浏览器扩展、README、响应头契约与产品文档保持一致。
+
+### Tests
+
+- 新增 `EditorCJKLiveRedrawTests`：断言 live pass 对实际改写的 CJK range 调度了 layout/display invalidation 且 `ensureLayout` 无需额外事件即可完成；断言纯 ASCII 与已应用 fallback 字体的文本为零改写零失效；断言 marked text 组合期间 pass 完全跳过、提交后恢复正常改写。三个用例本地 `xcodebuild test-without-building`（CODE_SIGNING_ALLOWED=NO）全部通过。
 
 ## 1.192.0-rc6 - 2026-07-20
 
