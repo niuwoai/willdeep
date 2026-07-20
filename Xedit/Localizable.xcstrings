@@ -657,6 +657,10 @@
         }
       }
     },
+    "about.app.bearcleaner.name" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "BearCleaner" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "BearCleaner" } } } },
+    "about.app.bearcleaner.summary" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Mac cleanup and storage management." } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "Mac 清理与存储管理工具。" } } } },
+    "about.app.gitwise.name" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "GitWise" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "GitWise" } } } },
+    "about.app.gitwise.summary" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Native Git client with diffs, worktrees, and AI help." } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "原生 Git 客户端，支持 Diff、Worktree 与 AI 辅助。" } } } },
     "about.app.qecho.name" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "QEcho" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "轻语" } } } },
     "about.app.qecho.summary" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "AI voice input and text polishing." } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "AI 语音输入与文字整理。" } } } },
     "about.app.qmailmate.name" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "QMailMate" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "轻邮" } } } },
@@ -671,6 +675,8 @@
     "about.app.qterm.summary" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "A lightweight terminal with tabs, SSH, and AI-friendly tooling." } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "轻快的多标签终端，支持 SSH 与 AI 工具桥。" } } } },
     "about.app.timebill.name" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "TimeBill" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "TimeBill" } } } },
     "about.app.timebill.summary" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Time tracking and billing companion." } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "时间记录与账单助手。" } } } },
+    "about.app.xomo.name" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Xomo" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "像界" } } } },
+    "about.app.xomo.summary" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Layered image editing and UI design studio." } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "分层图像编辑与界面设计工作台。" } } } },
     "about.author-homepage" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Author homepage · 83d.me" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "作者主页 · 83d.me" } } } },
     "about.build-label" : {
       "extractionState" : "manual",

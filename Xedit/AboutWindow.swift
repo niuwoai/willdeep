@@ -159,7 +159,10 @@ private struct AboutView: View {
 
 private enum AboutRecommendedApp: String, CaseIterable, Identifiable {
     case qTerm
+    case gitWise
     case timeBill
+    case xomo
+    case bearCleaner
     case qPic
     case qMarkView
     case qEcho
@@ -171,7 +174,10 @@ private enum AboutRecommendedApp: String, CaseIterable, Identifiable {
     var name: String {
         switch self {
         case .qTerm: return L10n.About.App.qTermName
+        case .gitWise: return L10n.About.App.gitWiseName
         case .timeBill: return L10n.About.App.timeBillName
+        case .xomo: return L10n.About.App.xomoName
+        case .bearCleaner: return L10n.About.App.bearCleanerName
         case .qPic: return L10n.About.App.qPicName
         case .qMarkView: return L10n.About.App.qMarkViewName
         case .qEcho: return L10n.About.App.qEchoName
@@ -183,7 +189,10 @@ private enum AboutRecommendedApp: String, CaseIterable, Identifiable {
     var summary: String {
         switch self {
         case .qTerm: return L10n.About.App.qTermSummary
+        case .gitWise: return L10n.About.App.gitWiseSummary
         case .timeBill: return L10n.About.App.timeBillSummary
+        case .xomo: return L10n.About.App.xomoSummary
+        case .bearCleaner: return L10n.About.App.bearCleanerSummary
         case .qPic: return L10n.About.App.qPicSummary
         case .qMarkView: return L10n.About.App.qMarkViewSummary
         case .qEcho: return L10n.About.App.qEchoSummary
@@ -195,7 +204,10 @@ private enum AboutRecommendedApp: String, CaseIterable, Identifiable {
     var systemImage: String {
         switch self {
         case .qTerm: return "terminal.fill"
+        case .gitWise: return "point.3.connected.trianglepath.dotted"
         case .timeBill: return "clock.badge.checkmark.fill"
+        case .xomo: return "paintbrush.pointed.fill"
+        case .bearCleaner: return "sparkles.rectangle.stack.fill"
         case .qPic: return "photo.stack.fill"
         case .qMarkView: return "doc.richtext.fill"
         case .qEcho: return "waveform.badge.mic"
@@ -207,7 +219,10 @@ private enum AboutRecommendedApp: String, CaseIterable, Identifiable {
     var accent: Color {
         switch self {
         case .qTerm: return .indigo
+        case .gitWise: return .mint
         case .timeBill: return .orange
+        case .xomo: return .purple
+        case .bearCleaner: return .brown
         case .qPic: return .pink
         case .qMarkView: return .blue
         case .qEcho: return .purple
@@ -217,18 +232,17 @@ private enum AboutRecommendedApp: String, CaseIterable, Identifiable {
     }
 
     var productURL: URL {
-        URL(string: "https://83d.me/products/\(productSlug)")!
-    }
-
-    private var productSlug: String {
         switch self {
-        case .qTerm: return "museterm"
-        case .timeBill: return "timebill"
-        case .qPic: return "qpic"
-        case .qMarkView: return "qmarkview"
-        case .qEcho: return "qecho"
-        case .qMailMate: return "qmailmate"
-        case .qNote: return "qnote"
+        case .qTerm: return URL(string: "https://83d.me/products/museterm")!
+        case .gitWise: return URL(string: "https://83d.me/zh/products/gitwise")!
+        case .timeBill: return URL(string: "https://83d.me/products/timebill")!
+        case .xomo: return URL(string: "https://83d.me/zh/products/xomo")!
+        case .bearCleaner: return URL(string: "https://83d.me/zh/products/bearcleaner")!
+        case .qPic: return URL(string: "https://83d.me/products/qpic")!
+        case .qMarkView: return URL(string: "https://83d.me/products/qmarkview")!
+        case .qEcho: return URL(string: "https://83d.me/products/qecho")!
+        case .qMailMate: return URL(string: "https://83d.me/products/qmailmate")!
+        case .qNote: return URL(string: "https://83d.me/products/qnote")!
         }
     }
 }

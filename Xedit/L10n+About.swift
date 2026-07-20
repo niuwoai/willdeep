@@ -7,10 +7,16 @@ extension L10n.About {
     static let summary = String(localized: "about.summary", defaultValue: "A native macOS agent workspace for inspecting projects, using tools, and turning tasks into verifiable deliverables.")
 
     enum App {
+        static let bearCleanerName = String(localized: "about.app.bearcleaner.name", defaultValue: "BearCleaner")
+        static let bearCleanerSummary = String(localized: "about.app.bearcleaner.summary", defaultValue: "Mac cleanup and storage management.")
+        static let gitWiseName = String(localized: "about.app.gitwise.name", defaultValue: "GitWise")
+        static let gitWiseSummary = String(localized: "about.app.gitwise.summary", defaultValue: "Native Git client with diffs, worktrees, and AI help.")
         static let qTermName = String(localized: "about.app.qterm.name", defaultValue: "QTerm")
         static let qTermSummary = String(localized: "about.app.qterm.summary", defaultValue: "A lightweight terminal with tabs, SSH, and AI-friendly tooling.")
         static let timeBillName = String(localized: "about.app.timebill.name", defaultValue: "TimeBill")
         static let timeBillSummary = String(localized: "about.app.timebill.summary", defaultValue: "Time tracking and billing companion.")
+        static let xomoName = String(localized: "about.app.xomo.name", defaultValue: "Xomo")
+        static let xomoSummary = String(localized: "about.app.xomo.summary", defaultValue: "Layered image editing and UI design studio.")
         static let qPicName = String(localized: "about.app.qpic.name", defaultValue: "QPic")
         static let qPicSummary = String(localized: "about.app.qpic.summary", defaultValue: "Screenshots, image editing, and upload sharing.")
         static let qMarkViewName = String(localized: "about.app.qmarkview.name", defaultValue: "QMarkView")

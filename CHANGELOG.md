@@ -1,7 +1,14 @@
 # Changelog
 
-> 当前文件保留最新版本（1.192.0-rc5 至 1.109.0-rc340）。
+> 当前文件保留最新版本（1.192.0-rc6 至 1.109.0-rc340）。
 > 更早的 1000 个版本已移至 [CHANGELOG-ARCHIVE.md](CHANGELOG-ARCHIVE.md)。
+
+## 1.192.0-rc6 - 2026-07-20
+
+### Added
+
+- 关于页的“Rocky 的其他 App”新增 GitWise、像界（Xomo）与 BearCleaner 三个产品入口；GitWise 指向新建的 `https://83d.me/zh/products/gitwise`，Xomo 与 BearCleaner 分别指向现有中文产品页。
+- 版本号从 **1.192.0-rc5** 递增为 **1.192.0-rc6**，内部构建号从 **45** 递增为 **46**；App、Go agent、Help、Helper、浏览器扩展、README、响应头契约与产品文档保持一致。
 
 ## 1.192.0-rc5 - 2026-07-20
 
