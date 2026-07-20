@@ -31,6 +31,12 @@
 
 import SwiftUI
 
+enum AgentPlanStepLayoutMetrics {
+    /// Keeps `10.` and larger indexes on one line while preserving a stable
+    /// text column across every row in the plan.
+    static let indexColumnWidth: CGFloat = 30
+}
+
 // MARK: - Plan card
 
 struct AgentPlanCard: View {
@@ -231,8 +237,10 @@ struct AgentPlanStepRow: View {
             Text("\(index).")
                 .font(.system(size: 12, weight: .semibold, design: .monospaced))
                 .foregroundStyle(.secondary)
-                .frame(width: 20, alignment: .trailing)
-            Text(step.text)
+                .lineLimit(1)
+                .fixedSize(horizontal: true, vertical: false)
+                .frame(width: AgentPlanStepLayoutMetrics.indexColumnWidth, alignment: .trailing)
+            Text(MarkdownInline.attributedString(from: step.text))
                 .font(.system(size: 12))
                 .strikethrough(step.status == .done || step.status == .skipped, color: .secondary)
                 .foregroundStyle(textColor)

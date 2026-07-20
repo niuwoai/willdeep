@@ -1,6 +1,6 @@
 # WillDeep Product Overview
 
-> Last updated: 2026-07-20 | Current version: v1.191.0-rc6
+> Last updated: 2026-07-20 | Current version: v1.191.0-rc7
 
 ## Positioning
 
@@ -11,6 +11,8 @@ Official product domain: [willdeep.com](https://willdeep.com).
 WillDeep is configured for non-App-Store distribution without App Sandbox so it can access local project files with fewer permission interruptions.
 
 ## 架构概览
+
+- **Plan 步骤排版与实时完成态（1.191.0-rc7）** —— 计划卡为双位数及更长序号保留稳定单行列宽，步骤正文按内联 Markdown 渲染加粗、斜体与代码样式；长任务在每个带工具调用的模型回合结束后立即消费显式 `progress` 证据，已完成步骤无需等到整轮最终回复才打勾。
 
 - **执行中权限切换即时生效（1.191.0-rc5）** —— 会话正在等待普通写级工具审批时，切换到「Workspace 访问」会用当前安全策略重新评估并立即续跑符合条件的调用，不必先手动处理旧审批卡；危险命令、未批准计划、会话/工作区身份变更与不受信任 MCP 仍保留人工门禁。
 - **聊天改动文件直达 Diff（1.191.0-rc6）** —— 点击 Agent 执行过程里展示的已修改文件，会直接打开右侧 Diff 并聚焦该文件，不再先落到文件树；源文件超过 1MB，或单文件 Diff 超过 32KB / 600 行时只显示安全提示，不生成或渲染 Diff 样本。
