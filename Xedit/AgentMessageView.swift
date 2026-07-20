@@ -75,6 +75,8 @@ struct AgentModeMessageView: View {
     /// callers that don't pass it keep working.
     var baseFontSize: CGFloat = NSFont.systemFontSize
     var onReferenceGeneratedImage: (String) -> Void = { _ in }
+    var progressPlan: AgentPlan? = nil
+    var onShowPlan: () -> Void = {}
     @State private var isHoveringUserMessage = false
     @Environment(\.colorScheme) private var colorScheme
 
@@ -251,7 +253,9 @@ struct AgentModeMessageView: View {
                             AgentAssistantMarkdownBody(
                                 content: message.content,
                                 isStreaming: isStreamingThisMessage,
-                                baseFontSize: baseFontSize
+                                baseFontSize: baseFontSize,
+                                progressPlan: progressPlan,
+                                onShowPlan: onShowPlan
                             )
                         }
                         if !message.images.isEmpty {
@@ -373,35 +377,43 @@ struct AgentAssistantMarkdownBody: View {
     /// structure such as headings, emphasis, lists, and tables is readable
     /// without rebuilding a nested SwiftUI view tree on every stream flush.
     var rendersStreamingMarkdown = false
+    var progressPlan: AgentPlan? = nil
+    var onShowPlan: () -> Void = {}
     @Environment(\.colorScheme) private var colorScheme
 
     var body: some View {
-        if isStreaming {
-            AgentAssistantStreamingBody(
-                content: content,
-                baseFontSize: baseFontSize,
-                showsCursor: showsStreamingCursor,
-                rendersMarkdown: rendersStreamingMarkdown
-            )
-        } else {
-            renderedMarkdownBody
-        }
-    }
-
-    private var renderedMarkdownBody: some View {
-        // The Text on the bottom is the single-view substitute for
-        // the old `VStack + ForEach(blocks)`. The streaming cursor
-        // is a tiny separate view (one AgentStreamingCursor) — that
-        // is fine because it's always either 0 or 1 child, never N.
-        VStack(alignment: .leading, spacing: 4) {
-            Text(AgentAssistantMarkdownRenderer.render(
-                content,
-                isDark: colorScheme == .dark,
-                baseFontSize: baseFontSize
-            ))
-                .textSelection(.enabled)
-                .lineSpacing(AgentChatHistoryLayoutMetrics.bodyLineSpacing)
-                .fixedSize(horizontal: false, vertical: true)
+        let extraction = AgentTurnProgressPresentation.extract(from: content, plan: progressPlan)
+        VStack(alignment: .leading, spacing: 10) {
+            if !extraction.visibleContent.isEmpty {
+                if isStreaming {
+                    AgentAssistantStreamingBody(
+                        content: extraction.visibleContent,
+                        baseFontSize: baseFontSize,
+                        showsCursor: showsStreamingCursor,
+                        rendersMarkdown: rendersStreamingMarkdown
+                    )
+                } else {
+                    // The Text below is the single-view substitute for the
+                    // old `VStack + ForEach(blocks)`. The one progress
+                    // summary remains a bounded second view rather than
+                    // rebuilding one view per Markdown block.
+                    Text(AgentAssistantMarkdownRenderer.render(
+                        extraction.visibleContent,
+                        isDark: colorScheme == .dark,
+                        baseFontSize: baseFontSize
+                    ))
+                        .textSelection(.enabled)
+                        .lineSpacing(AgentChatHistoryLayoutMetrics.bodyLineSpacing)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+            if let presentation = extraction.presentation {
+                AgentTurnProgressView(
+                    presentation: presentation,
+                    showsPlanAction: progressPlan != nil,
+                    onShowPlan: onShowPlan
+                )
+            }
         }
     }
 }

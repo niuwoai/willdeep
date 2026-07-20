@@ -38,6 +38,13 @@ nonisolated enum AgentApprovalExplanationRouting {
 
 extension AppState {
     func explainAgentToolApproval(_ call: AgentToolCall) async throws -> AgentApprovalExplanationResult {
+        if isLocalConfirmationPreviewCall(id: call.id) {
+            return AgentApprovalExplanationResult(
+                text: L10n.ToolCard.localPreviewExplanation,
+                model: L10n.ToolCard.localPreviewModel
+            )
+        }
+
         let route = await approvalExplanationRoute()
         let messages = [
             AgentMessage(role: .system, content: AgentApprovalExplanationPrompt.systemPrompt),

@@ -17,6 +17,9 @@ extension AppState {
 
     func alwaysAllowAgentToolCall(id: AgentToolCall.ID) {
         guard let (runtime, index) = runtimeAndToolCallIndex(containing: id) else { return }
+        if runtime.resolveLocalConfirmationPreview(id: id, decision: .approved) {
+            return
+        }
         let call = runtime.toolCalls[index]
         if let rule = alwaysAllowedCommand(for: call) {
             addAgentAlwaysAllowedCommand(rule)
@@ -26,6 +29,9 @@ extension AppState {
 
     func allowAgentToolFamilyForConversation(id: AgentToolCall.ID) {
         guard let (runtime, index) = runtimeAndToolCallIndex(containing: id) else { return }
+        if runtime.resolveLocalConfirmationPreview(id: id, decision: .approved) {
+            return
+        }
         let call = runtime.toolCalls[index]
         guard let signature = AgentToolAuthorization.interactiveSurfaceSignature(
             toolName: call.toolName
@@ -56,6 +62,10 @@ extension AppState {
 
     func hasPendingAgentToolDecision(id: AgentToolCall.ID) -> Bool {
         runtimeAndToolCallIndex(containing: id)?.runtime.pendingToolDecisions[id] != nil
+    }
+
+    func isLocalConfirmationPreviewCall(id: AgentToolCall.ID) -> Bool {
+        runtimeAndToolCallIndex(containing: id)?.runtime.localConfirmationPreviewCallIDs.contains(id) == true
     }
 
     func fillTerminalShortcutProtectedInputs(
@@ -542,6 +552,9 @@ extension AppState {
 
     func resolveAgentToolCallDecision(id: AgentToolCall.ID, decision: AgentToolDecision) {
         guard let (runtime, index) = runtimeAndToolCallIndex(containing: id) else { return }
+        if runtime.resolveLocalConfirmationPreview(id: id, decision: decision) {
+            return
+        }
         guard runtime.toolCalls[index].status == .pendingApproval
             || runtime.toolCalls[index].status == .awaitingConfirm
             || runtime.toolCalls[index].status == .awaitingUserAnswer else {

@@ -266,6 +266,16 @@ extension AgentChatHistoryRenderer {
                 baseStyle: tableParagraphStyle
             )
         }
+        let progressStyle = progressBlockParagraphStyle(from: paragraphStyle)
+        attributed.enumerateAttribute(.agentChatHistoryProgressBlockID, in: range, options: []) { value, subrange, _ in
+            guard value != nil else { return }
+            attributed.addAttribute(.paragraphStyle, value: progressStyle, range: subrange)
+            applyProgressBlockVerticalMargins(
+                to: attributed,
+                progressRange: subrange,
+                baseStyle: progressStyle
+            )
+        }
         let headingStyle = headingParagraphStyle(from: paragraphStyle)
         attributed.enumerateAttribute(.agentChatHistoryHeadingLevel, in: range, options: []) { value, subrange, _ in
             guard value != nil else { return }
@@ -304,6 +314,16 @@ extension AgentChatHistoryRenderer {
                 to: attributed,
                 tableRange: subrange,
                 baseStyle: tableParagraphStyle
+            )
+        }
+        let progressStyle = progressBlockParagraphStyle(from: paragraphStyle)
+        attributed.enumerateAttribute(.agentChatHistoryProgressBlockID, in: range, options: []) { value, subrange, _ in
+            guard value != nil else { return }
+            attributed.addAttribute(.paragraphStyle, value: progressStyle, range: subrange)
+            applyProgressBlockVerticalMargins(
+                to: attributed,
+                progressRange: subrange,
+                baseStyle: progressStyle
             )
         }
         let headingStyle = headingParagraphStyle(from: paragraphStyle)
@@ -639,6 +659,46 @@ extension AgentChatHistoryRenderer {
             style.tailIndent = baseStyle.tailIndent - AgentChatHistoryLayoutMetrics.richBlockTextInset
         }
         return style
+    }
+
+    private static func progressBlockParagraphStyle(from baseStyle: NSParagraphStyle) -> NSParagraphStyle {
+        let style = baseStyle.mutableCopy() as? NSMutableParagraphStyle ?? NSMutableParagraphStyle()
+        style.headIndent = baseStyle.headIndent + 12
+        style.firstLineHeadIndent = baseStyle.firstLineHeadIndent + 12
+        if baseStyle.tailIndent < 0 {
+            style.tailIndent = baseStyle.tailIndent - 12
+        }
+        style.lineSpacing = 5
+        style.paragraphSpacing = 0
+        return style
+    }
+
+    private static func applyProgressBlockVerticalMargins(
+        to attributed: NSMutableAttributedString,
+        progressRange: NSRange,
+        baseStyle: NSParagraphStyle
+    ) {
+        guard progressRange.length > 0 else { return }
+        let ns = attributed.string as NSString
+        let firstParagraph = ns.paragraphRange(for: NSRange(location: progressRange.location, length: 0))
+        let lastLocation = max(progressRange.location, NSMaxRange(progressRange) - 1)
+        let lastParagraph = ns.paragraphRange(for: NSRange(location: lastLocation, length: 0))
+
+        let firstStyle = baseStyle.mutableCopy() as? NSMutableParagraphStyle ?? NSMutableParagraphStyle()
+        firstStyle.paragraphSpacingBefore = 12
+        attributed.addAttribute(
+            .paragraphStyle,
+            value: firstStyle,
+            range: NSIntersectionRange(firstParagraph, progressRange)
+        )
+
+        let lastStyle = baseStyle.mutableCopy() as? NSMutableParagraphStyle ?? NSMutableParagraphStyle()
+        lastStyle.paragraphSpacing = 10
+        attributed.addAttribute(
+            .paragraphStyle,
+            value: lastStyle,
+            range: NSIntersectionRange(lastParagraph, progressRange)
+        )
     }
 
     private static func applyCodeBlockVerticalMargins(

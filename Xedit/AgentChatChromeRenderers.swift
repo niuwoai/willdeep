@@ -206,7 +206,7 @@ enum AgentChatHistoryTableChrome {
 
 /// Render an SF Symbol as a color-tinted inline text attachment, with a
 /// unicode glyph fallback if the symbol is unavailable.
-private func symbolAttachmentString(
+func symbolAttachmentString(
     named name: String,
     fallback: String,
     pointSize: CGFloat,

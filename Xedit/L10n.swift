@@ -248,66 +248,6 @@ nonisolated enum L10n {
         }
     }
 
-    enum Onboarding {
-        enum SomeIM {
-            static let title = String(localized: "onboarding.some-im.title", defaultValue: "Connect some.im")
-            static let subtitle = String(localized: "onboarding.some-im.subtitle", defaultValue: "Open some.im in your browser, sign in, then return to WillDeep. WillDeep will configure chat, image/video generation, and vision fallback automatically.")
-            static let note = String(localized: "onboarding.some-im.note", defaultValue: "Recommended. You can skip this and use your own API key/model setup, but some.im avoids separate vision-model wiring.")
-        }
-        enum Welcome {
-            static let title = String(localized: "onboarding.welcome.title", defaultValue: "Welcome to WillDeep")
-            static let subtitle = String(localized: "onboarding.welcome.subtitle", defaultValue: "An editor that codes, transcribes, and ships alongside you. Let's get you set up in three quick steps.")
-            static let bulletProvider = String(localized: "onboarding.welcome.bullet-provider", defaultValue: "Bring your own AI provider — Claude, OpenAI, DeepSeek and more")
-            static let bulletVoice = String(localized: "onboarding.welcome.bullet-voice", defaultValue: "Push-to-talk voice transcription runs 100% on-device")
-            static let bulletSettings = String(localized: "onboarding.welcome.bullet-settings", defaultValue: "Settings, models and skills you can change anytime")
-        }
-        enum Provider {
-            static let title = String(localized: "onboarding.provider.title", defaultValue: "Connect an AI provider")
-            static let subtitle = String(localized: "onboarding.provider.subtitle", defaultValue: "Pick one to start with — you can add more later in Settings → AI Providers. Skip if you'll only use voice features.")
-            static let labelProvider = String(localized: "onboarding.provider.label-provider", defaultValue: "Provider")
-            static let labelBaseURL = String(localized: "onboarding.provider.label-base-url", defaultValue: "Base URL")
-            static let labelAPIKey = String(localized: "onboarding.provider.label-api-key", defaultValue: "API key")
-            static let labelModel = String(localized: "onboarding.provider.label-model", defaultValue: "Default model")
-            static let someIMRecommendation = String(localized: "onboarding.provider.some-im-recommendation", defaultValue: "Recommendation: connect some.im in the next step if you want one setup for chat, images, videos, and fallback vision routing.")
-            static let visionRequired = String(localized: "onboarding.provider.vision-required", defaultValue: "This chat model does not accept images. Add a VL/vision provider so WillDeep can describe pasted images before sending them to the text model.")
-            static let labelVisionProvider = String(localized: "onboarding.provider.label-vision-provider", defaultValue: "VL provider")
-            static let labelVisionBaseURL = String(localized: "onboarding.provider.label-vision-base-url", defaultValue: "VL Base URL")
-            static let labelVisionAPIKey = String(localized: "onboarding.provider.label-vision-api-key", defaultValue: "VL API key")
-            static let labelVisionModel = String(localized: "onboarding.provider.label-vision-model", defaultValue: "VL model")
-            static let errorUnknownPreset = String(localized: "onboarding.provider.error-unknown-preset", defaultValue: "Unknown provider preset.")
-            static let errorBaseURLRequired = String(localized: "onboarding.provider.error-base-url-required", defaultValue: "Base URL is required for this provider.")
-            static let errorModelRequired = String(localized: "onboarding.provider.error-model-required", defaultValue: "Please specify a model id.")
-            static let errorVisionBaseURLRequired = String(localized: "onboarding.provider.error-vision-base-url-required", defaultValue: "VL Base URL is required for this model.")
-            static let errorVisionModelRequired = String(localized: "onboarding.provider.error-vision-model-required", defaultValue: "Please specify a VL model id.")
-            static let errorVisionAPIKeyRequired = String(localized: "onboarding.provider.error-vision-api-key-required", defaultValue: "VL API key is required for this provider.")
-        }
-        enum Voice {
-            static let title = String(localized: "onboarding.voice.title", defaultValue: "Set up voice transcription")
-            static let subtitle = String(localized: "onboarding.voice.subtitle", defaultValue: "Optional — but if you want to talk to your agent or use push-to-talk in the composer, you'll need the on-device SenseVoice model (~937 MB).")
-            static let installedTitle = String(localized: "onboarding.voice.installed-title", defaultValue: "Model installed")
-            static let notInstalledTitle = String(localized: "onboarding.voice.not-installed-title", defaultValue: "Model not installed")
-            static let installedDetail = String(localized: "onboarding.voice.installed-detail", defaultValue: "Push-to-talk is ready. Press and hold the mic button in the composer, or hold the Fn key anywhere in the app.")
-            static let notInstalledDetail = String(localized: "onboarding.voice.not-installed-detail", defaultValue: "Click Download for the full file, or import a copy you already have from fastv (no bytes transferred).")
-            static let downloadButton = String(localized: "onboarding.voice.download-button", defaultValue: "Download (~937 MB)")
-            static let importButton = String(localized: "onboarding.voice.import-button", defaultValue: "Import from fastv")
-            static let importing = String(localized: "onboarding.voice.importing", defaultValue: "Importing from fastv…")
-            static let cancel = String(localized: "onboarding.voice.cancel", defaultValue: "Cancel")
-        }
-        enum Done {
-            static let title = String(localized: "onboarding.done.title", defaultValue: "You're all set")
-            static let tipAgent = String(localized: "onboarding.done.tip-agent", defaultValue: "Open the Agent panel from the toolbar, ask anything in plain language.")
-            static let tipVoice = String(localized: "onboarding.done.tip-voice", defaultValue: "Hold the mic button in the composer, or hold Fn anywhere, to talk instead of type.")
-            static let tipSettings = String(localized: "onboarding.done.tip-settings", defaultValue: "Need to tweak providers, voice, memory, or skills? Cmd-, opens Settings.")
-        }
-        enum Footer {
-            static let back = String(localized: "onboarding.footer.back", defaultValue: "Back")
-            static let skip = String(localized: "onboarding.footer.skip", defaultValue: "Skip")
-            static let `continue` = String(localized: "onboarding.footer.continue", defaultValue: "Continue")
-            static let saveContinue = String(localized: "onboarding.footer.save-continue", defaultValue: "Save & Continue")
-            static let getStarted = String(localized: "onboarding.footer.get-started", defaultValue: "Get started")
-        }
-    }
-
     enum PluginPicker {
         static let help = String(localized: "plugin-picker.help", defaultValue: "Browse installed plugin skills and MCP capabilities.")
         static func installedPlugins(_ a1: String) -> String {
@@ -1378,6 +1318,8 @@ nonisolated enum L10n {
         static let arguments = String(localized: "tool-card.arguments", defaultValue: "Arguments")
         static let output = String(localized: "tool-card.output", defaultValue: "Output")
         static let error = String(localized: "tool-card.error", defaultValue: "Error")
+        static let localPreviewExplanation = String(localized: "tool-card.local-preview.explanation", defaultValue: "This is a local confirmation-panel preview. No command or network request will run, and nothing from this preview is sent to AI.")
+        static let localPreviewModel = String(localized: "tool-card.local-preview.model", defaultValue: "Local preview")
         static let collapse = String(localized: "tool-card.collapse", defaultValue: "Collapse")
         static let expand = String(localized: "tool-card.expand", defaultValue: "Expand")
         static let statusAwaitingApproval = String(localized: "tool-card.status.awaiting-approval", defaultValue: "Awaiting approval")

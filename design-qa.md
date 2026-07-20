@@ -908,3 +908,31 @@ No open P0, P1, or P2 visual findings.
 3. 第二轮对照确认分组标题、模型数量、行标签、搜索空状态和左侧供应商选中态均可见；未发现剩余 P0、P1 或 P2 问题。
 
 final result: passed
+
+---
+
+# Design QA — 对话内本轮进度摘要
+
+## 验收对象
+
+- 选定设计源：`/Users/rocky/.codex/generated_images/019f7ac8-a89d-7e43-b6d8-e2db92517fde/exec-31358f27-e7ff-4781-ac8a-17898562d3a2.png`
+- 真实 SwiftUI 渲染：`/Users/rocky/Sites/Xedit/build/visual-qa/turn-progress/implementation-option-3.png`
+- 同屏对照：`/Users/rocky/Sites/Xedit/build/visual-qa/turn-progress/source-vs-implementation.png`
+- 验收环境：macOS 深色模式，714 pt 聊天内容宽度；同时覆盖收起态与展开态。
+
+## 对照记录
+
+1. 首轮真实渲染发现测试宿主没有继承深色 `NSAppearance`，导致深色背景上的主文本仍按浅色模式输出；这不是生产界面的真实状态，已修正视觉夹具并重新生成快照。
+2. 进行中状态从界面主题强调色收敛为稳定的系统蓝，与选定设计的蓝 / 绿 / 红状态语义保持一致；重新构建并通过视觉测试。
+3. 同屏比较确认：摘要层级、计数分组、圆角边界、展开明细、状态色和“查看完整计划”入口均与第 3 案一致。生产实现按 WillDeep 的聊天密度缩小了垂直留白，并会展示全部进行中 / 失败步骤，属于有意的原生适配。
+
+## 功能与回归证据
+
+- SwiftUI：收起 / 展开交互可用，展开后仅展示进行中与失败项，可跳转完整计划。
+- TextKit：历史消息使用同一解析模型，协议代码块不会泄露，摘要具备展开与计划跳转属性。
+- 流式消息：保留消息正文，`progress` 协议在流式阶段即转换为原生摘要。
+- 自动化：`AgentTurnProgressPresentationTests`、`AgentPlanProgressTests`、`AgentChatHistoryRendererTests` 共 80 项通过。
+
+## 最终结果
+
+**passed**
