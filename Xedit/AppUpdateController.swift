@@ -39,8 +39,35 @@ final class AppUpdateController: NSObject, SPUUpdaterDelegate {
 
     nonisolated func feedURLString(for updater: SPUUpdater) -> String? {
         MainActor.assumeIsolated {
-            AppUpdateChecker.managedAppcastURL()?.absoluteString
+            let urlString = AppUpdateChecker.managedAppcastURL()?.absoluteString
+            if let urlString {
+                Self.log("Sparkle appcast URL: \(urlString)")
+            } else {
+                Self.log("Sparkle appcast URL is unavailable.")
+            }
+            return urlString
         }
+    }
+
+    nonisolated func updater(_ updater: SPUUpdater, didAbortWithError error: Error) {
+        Self.log("Sparkle update check aborted: \(Self.describe(error))")
+    }
+
+    nonisolated func updaterDidNotFindUpdate(_ updater: SPUUpdater, error: Error) {
+        Self.log("Sparkle did not find update: \(Self.describe(error))")
+    }
+
+    private nonisolated static func describe(_ error: Error) -> String {
+        let nsError = error as NSError
+        var details = "\(nsError.domain) code=\(nsError.code): \(nsError.localizedDescription)"
+        if !nsError.userInfo.isEmpty {
+            details += " userInfo=\(nsError.userInfo)"
+        }
+        return details
+    }
+
+    private nonisolated static func log(_ message: String) {
+        NSLog("[WillDeep] %@", message)
     }
 
     private static var isRunningTests: Bool {
