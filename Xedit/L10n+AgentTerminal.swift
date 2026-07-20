@@ -8,10 +8,14 @@ extension L10n {
         static let willDeepName = String(localized: "execution-agent.willdeep.name", defaultValue: "WillDeep")
         static let claudeCodeName = String(localized: "execution-agent.claude-code.name", defaultValue: "Claude Code")
         static let codexName = String(localized: "execution-agent.codex.name", defaultValue: "Codex")
+        static let cursorName = String(localized: "execution-agent.cursor.name", defaultValue: "Cursor Agent")
+        static let clineName = String(localized: "execution-agent.cline.name", defaultValue: "Cline")
         static let willDeepSummary = String(localized: "execution-agent.willdeep.summary", defaultValue: "Let WillDeep run this task with its built-in model and tools.")
         static let claudeCodeSummary = String(localized: "execution-agent.claude-code.summary", defaultValue: "Run this task with the local Claude Code CLI.")
         static let codexSummary = String(localized: "execution-agent.codex.summary", defaultValue: "Run this task with the local Codex CLI.")
-        static let pickerHelp = String(localized: "execution-agent.picker.help", defaultValue: "Choose whether WillDeep runs this turn or delegates it to the local Claude Code or Codex CLI.")
+        static let cursorSummary = String(localized: "execution-agent.cursor.summary", defaultValue: "Run this task with the local Cursor Agent CLI.")
+        static let clineSummary = String(localized: "execution-agent.cline.summary", defaultValue: "Run this task with the local Cline CLI.")
+        static let pickerHelp = String(localized: "execution-agent.picker.help", defaultValue: "Choose whether WillDeep runs this turn or delegates it to a local external coding CLI.")
     }
 
     nonisolated enum AgentTerminal {

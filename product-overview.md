@@ -1,6 +1,6 @@
 # WillDeep Product Overview
 
-> Last updated: 2026-07-20 | Current version: v1.192.0-rc1
+> Last updated: 2026-07-20 | Current version: v1.192.0-rc5
 
 ## Positioning
 
@@ -11,6 +11,14 @@ Official product domain: [willdeep.com](https://willdeep.com).
 WillDeep is configured for non-App-Store distribution without App Sandbox so it can access local project files with fewer permission interruptions.
 
 ## 架构概览
+
+- **Editor 字体菜单与中文即时渲染（1.192.0-rc5）** —— Editor 设置的字体菜单会从系统已安装字体中补充等宽/编程字体，不再只列固定 4 项；正文编辑时会立即给 CJK 字符应用中文 fallback 字体，plain text 模式和语法高亮延迟期间也能显示汉字。
+
+- **执行器选择与委派边界（1.192.0-rc4）** —— Composer 执行器支持 WillDeep、Claude Code、Codex、Cursor Agent 与 Cline。选择 WillDeep 时，普通模式和计划模式不向模型暴露外部 CLI 委派工具；Goal 模式只把它们作为原生工具链无效后的兜底。选择外部执行器时，本轮任务直接路由到对应 CLI，并只暴露该执行器对应的委派工具。
+
+- **委派状态目标工具可见（1.192.0-rc3）** —— 顶部活动条不再把所有委派统一写成“委派中”，而是按实际工具显示“委派给子代理 / Claude Code / Codex / Cursor Agent / Cline”。内置 `spawn_agent` 仍显示真实轮次与工具次数，外部 CLI 委派只展示目标工具，不伪造 `n/m` 进度。
+
+- **终端浅色配色与皮肤联动（1.192.0-rc2）** —— 终端设置新增多套浅色背景方案，包括 Paper Light、Harbor Light、Mist Mint、Rose Quartz、Daylight、Solarized Light 与 GitHub Light；新终端默认跟随 App 皮肤，每套界面皮肤都有对应的终端推荐配色，浅色皮肤默认使用浅色终端，深色皮肤继续使用高对比深色终端。
 
 - **终端捷径 tab 标签（1.192.0-rc1）** —— 终端录制捷径开始回放后，会把所用捷径名称作为小标签显示在对应终端 tab 标题旁；线上、beta、自跳转等常用环境入口可直接从 tab 栏辨认，tooltip 也会显示完整捷径来源。
 

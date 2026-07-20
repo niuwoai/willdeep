@@ -759,6 +759,7 @@ extension AppState {
                 language: effectiveLanguage,
                 toolsEnabled: true,
                 interactionMode: runtime.interactionMode,
+                executionAgent: runtime.executionAgent,
                 approvalMode: runtime.approvalMode,
                 currentPlan: runtime.currentPlan,
                 currentGoal: runtime.currentGoal,
@@ -852,7 +853,8 @@ extension AppState {
                             messages: requestMessages,
                             tools: AgentToolRegistry.tools(
                                 activeExperts: activeExperts,
-                                interactionMode: runtime.interactionMode
+                                interactionMode: runtime.interactionMode,
+                                executionAgent: runtime.executionAgent
                             )
                         ) { event in
                             await MainActor.run { [weak runtime] in

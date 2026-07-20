@@ -31,7 +31,7 @@ struct EditorTerminalSettings: Codable, Equatable {
             shellPath: "/bin/zsh",
             fontName: EditorTerminalFont.preferredDefaultID,
             fontSize: 12,
-            colorSchemeID: EditorTerminalColorScheme.midnight.id,
+            colorSchemeID: EditorTerminalSettings.followSkinColorSchemeID,
             environmentText: "",
             cursorStyleID: EditorTerminalCursorStyle.block.id,
             cursorBlinks: true
@@ -321,6 +321,38 @@ struct EditorTerminalColorScheme: Identifiable, Equatable {
         muted: NSColor(calibratedRed: 0.54, green: 0.62, blue: 0.52, alpha: 1)
     )
 
+    // Light-background terminal schemes. These are intentionally solid and
+    // high-contrast because the terminal does long-running logs, prompts, and
+    // ANSI output; airy editor skins need a sturdier terminal surface.
+    static let paperLight = EditorTerminalColorScheme(
+        id: "paper-light", displayName: "Paper Light",
+        background: hex(0xFAF7EF), foreground: hex(0x232628), accent: hex(0x2F7D70), muted: hex(0x7A766D)
+    )
+    static let harborLight = EditorTerminalColorScheme(
+        id: "harbor-light", displayName: "Harbor Light",
+        background: hex(0xF7FBFC), foreground: hex(0x1F2933), accent: hex(0x0F6E8C), muted: hex(0x6B7B83)
+    )
+    static let mintLight = EditorTerminalColorScheme(
+        id: "mint-light", displayName: "Mist Mint",
+        background: hex(0xF1FAF3), foreground: hex(0x18342D), accent: hex(0x2F7D58), muted: hex(0x5F746B)
+    )
+    static let roseLight = EditorTerminalColorScheme(
+        id: "rose-light", displayName: "Rose Quartz",
+        background: hex(0xFFF7F5), foreground: hex(0x302625), accent: hex(0xB45F5F), muted: hex(0x806D68)
+    )
+    static let daylight = EditorTerminalColorScheme(
+        id: "daylight", displayName: "Daylight",
+        background: hex(0xF8FAFC), foreground: hex(0x1E293B), accent: hex(0x2563EB), muted: hex(0x64748B)
+    )
+    static let solarizedLight = EditorTerminalColorScheme(
+        id: "solarized-light", displayName: "Solarized Light",
+        background: hex(0xFDF6E3), foreground: hex(0x657B83), accent: hex(0x268BD2), muted: hex(0x93A1A1)
+    )
+    static let githubLight = EditorTerminalColorScheme(
+        id: "github-light", displayName: "GitHub Light",
+        background: hex(0xFFFFFF), foreground: hex(0x24292F), accent: hex(0x0969DA), muted: hex(0x57606A)
+    )
+
     // Popular dark schemes from the wider terminal/editor world, using their
     // canonical hex values. Only background / foreground / accent / muted are
     // themed here; the 16-color ANSI palette stays at SwiftTerm's default so
@@ -353,10 +385,24 @@ struct EditorTerminalColorScheme: Identifiable, Equatable {
         id: "monokai", displayName: "Monokai",
         background: hex(0x272822), foreground: hex(0xF8F8F2), accent: hex(0xA6E22E), muted: hex(0x75715E)
     )
+    static let rasterDark = EditorTerminalColorScheme(
+        id: "raster-dark", displayName: "Raster Grid",
+        background: hex(0x071B1E), foreground: hex(0xD6FFFA), accent: hex(0x00B8C8), muted: hex(0x5E8A8D)
+    )
+    static let auroraDark = EditorTerminalColorScheme(
+        id: "aurora-dark", displayName: "Aurora Night",
+        background: hex(0x031C20), foreground: hex(0xC9F7E6), accent: hex(0x3BE58A), muted: hex(0x5C8E86)
+    )
+    static let emberDark = EditorTerminalColorScheme(
+        id: "ember-dark", displayName: "Ember Glow",
+        background: hex(0x241B16), foreground: hex(0xF5EDE3), accent: hex(0xFF9B36), muted: hex(0x9A8171)
+    )
 
     static let all: [EditorTerminalColorScheme] = [
-        .midnight, .graphite, .solar, .orchard,
-        .solarizedDark, .dracula, .oneDark, .gruvboxDark, .nord, .tokyoNight, .monokai
+        .paperLight, .harborLight, .mintLight, .roseLight, .daylight, .solarizedLight, .githubLight,
+        .solar, .midnight, .graphite, .orchard,
+        .solarizedDark, .dracula, .oneDark, .gruvboxDark, .nord, .tokyoNight, .monokai,
+        .rasterDark, .auroraDark, .emberDark
     ]
 
     static func byID(_ id: String) -> EditorTerminalColorScheme? {

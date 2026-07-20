@@ -21,6 +21,7 @@ nonisolated enum AgentToolKind: Equatable, Sendable {
     case claudeCode
     case codexCLI
     case cursorAgent
+    case clineCLI
     case fileMutation
     case applyPatch
     case askUser
@@ -44,6 +45,8 @@ nonisolated enum AgentToolKind: Equatable, Sendable {
             return .codexCLI
         case "cursor_agent":
             return .cursorAgent
+        case "cline_cli":
+            return .clineCLI
         case "edit_file", "create_file":
             return .fileMutation
         case "apply_patch":
@@ -81,6 +84,8 @@ nonisolated enum AgentToolKind: Equatable, Sendable {
             return "已委派 \(count) 个 Codex CLI 任务"
         case .cursorAgent:
             return "已委派 \(count) 个 Cursor Agent 任务"
+        case .clineCLI:
+            return "已委派 \(count) 个 Cline 任务"
         case .fileMutation:
             return "已写入 \(count) 个文件"
         case .applyPatch:
@@ -114,11 +119,37 @@ nonisolated enum AgentToolKind: Equatable, Sendable {
         case .claudeCode: return "sparkles.rectangle.stack"
         case .codexCLI: return "terminal.fill"
         case .cursorAgent: return "cursorarrow.rays"
+        case .clineCLI: return "chevron.left.forwardslash.chevron.right"
         case .fileMutation: return "square.and.pencil"
         case .applyPatch: return "square.and.pencil"
         case .askUser: return "bubble.left.and.text.bubble.right"
         case .other: return "wrench.and.screwdriver"
         }
+    }
+}
+
+extension AgentToolKind {
+    var delegatedActivityBaseLabel: String? {
+        switch self {
+        case .subagent:
+            return "委派给子代理"
+        case .claudeCode:
+            return "委派给 Claude Code"
+        case .codexCLI:
+            return "委派给 Codex"
+        case .cursorAgent:
+            return "委派给 Cursor Agent"
+        case .clineCLI:
+            return "委派给 Cline"
+        default:
+            return nil
+        }
+    }
+
+    func delegatedActivityLabel(progress: String?) -> String? {
+        guard let base = delegatedActivityBaseLabel else { return nil }
+        let cleanProgress = progress?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        return cleanProgress.isEmpty ? base : "\(base) · \(cleanProgress)"
     }
 }
 

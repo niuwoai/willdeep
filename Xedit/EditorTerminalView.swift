@@ -26,7 +26,7 @@ private struct EditorTerminalPaneContent: View {
 
     private var skinColors: TerminalSkinColors? {
         settings.followsInterfaceSkin
-            ? .from(palette: appState.editorSettings.interfaceSkin.palette)
+            ? .from(skin: appState.editorSettings.interfaceSkin)
             : nil
     }
 

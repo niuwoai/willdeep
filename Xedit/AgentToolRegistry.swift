@@ -1728,9 +1728,18 @@ enum AgentToolRegistry {
 
     static func tools(
         activeExperts: Set<AgentExpert>,
-        interactionMode: AgentInteractionMode = .normal
+        interactionMode: AgentInteractionMode = .normal,
+        executionAgent: AgentExecutionAgent = .willDeep
     ) -> [AgentToolDescriptor] {
         all.filter { descriptor in
+            if isDelegatedCodingTool(descriptor.name),
+               !shouldExposeDelegatedCodingTool(
+                   descriptor.name,
+                   interactionMode: interactionMode,
+                   executionAgent: executionAgent
+               ) {
+                return false
+            }
             if interactionMode == .goal, descriptor.name == "change_workspace" {
                 return false
             }
@@ -1742,6 +1751,27 @@ enum AgentToolRegistry {
             }
             return true
         }
+    }
+
+    static func isDelegatedCodingTool(_ name: String) -> Bool {
+        switch name {
+        case "claude_code", "codex_cli", "cursor_agent", "cline_cli":
+            return true
+        default:
+            return false
+        }
+    }
+
+    static func shouldExposeDelegatedCodingTool(
+        _ name: String,
+        interactionMode: AgentInteractionMode,
+        executionAgent: AgentExecutionAgent
+    ) -> Bool {
+        guard isDelegatedCodingTool(name) else { return true }
+        if executionAgent == .willDeep {
+            return interactionMode == .goal
+        }
+        return executionAgent.toolName == name
     }
 
     static func isSessionMutationTool(_ name: String) -> Bool {

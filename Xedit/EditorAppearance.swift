@@ -244,6 +244,7 @@ struct EditorInterfaceSkin: Identifiable, CaseIterable {
     let symbolName: String
     let preferredColorScheme: ColorScheme?
     let recommendedThemeID: String
+    let recommendedTerminalColorSchemeID: String
     let palette: EditorInterfaceSkinPalette
 
     static let system = EditorInterfaceSkin(
@@ -251,6 +252,7 @@ struct EditorInterfaceSkin: Identifiable, CaseIterable {
         symbolName: "macwindow",
         preferredColorScheme: nil,
         recommendedThemeID: EditorTheme.paper.id,
+        recommendedTerminalColorSchemeID: EditorTerminalColorScheme.daylight.id,
         palette: EditorInterfaceSkinPalette(
             windowColors: [
                 Color(nsColor: .windowBackgroundColor),
@@ -279,6 +281,7 @@ struct EditorInterfaceSkin: Identifiable, CaseIterable {
         symbolName: "leaf",
         preferredColorScheme: .light,
         recommendedThemeID: EditorTheme.harbor.id,
+        recommendedTerminalColorSchemeID: EditorTerminalColorScheme.mintLight.id,
         palette: EditorInterfaceSkinPalette(
             windowColors: [
                 Color(red: 0.94, green: 0.98, blue: 0.95),
@@ -308,6 +311,7 @@ struct EditorInterfaceSkin: Identifiable, CaseIterable {
         symbolName: "paintbrush.pointed",
         preferredColorScheme: .light,
         recommendedThemeID: EditorTheme.paper.id,
+        recommendedTerminalColorSchemeID: EditorTerminalColorScheme.paperLight.id,
         palette: EditorInterfaceSkinPalette(
             windowColors: [
                 Color(red: 0.95, green: 0.93, blue: 0.86),
@@ -337,6 +341,7 @@ struct EditorInterfaceSkin: Identifiable, CaseIterable {
         symbolName: "sparkles",
         preferredColorScheme: .dark,
         recommendedThemeID: EditorTheme.graphite.id,
+        recommendedTerminalColorSchemeID: EditorTerminalColorScheme.rasterDark.id,
         palette: EditorInterfaceSkinPalette(
             windowColors: [
                 Color(red: 0.07, green: 0.10, blue: 0.12),
@@ -366,6 +371,7 @@ struct EditorInterfaceSkin: Identifiable, CaseIterable {
         symbolName: "moon.stars",
         preferredColorScheme: .dark,
         recommendedThemeID: EditorTheme.graphite.id,
+        recommendedTerminalColorSchemeID: EditorTerminalColorScheme.nord.id,
         palette: EditorInterfaceSkinPalette(
             windowColors: [
                 Color(red: 0.13, green: 0.17, blue: 0.25),
@@ -395,6 +401,7 @@ struct EditorInterfaceSkin: Identifiable, CaseIterable {
         symbolName: "waveform.path.ecg",
         preferredColorScheme: .dark,
         recommendedThemeID: EditorTheme.graphite.id,
+        recommendedTerminalColorSchemeID: EditorTerminalColorScheme.auroraDark.id,
         palette: EditorInterfaceSkinPalette(
             windowColors: [
                 Color(red: 0.04, green: 0.12, blue: 0.13),
@@ -424,6 +431,7 @@ struct EditorInterfaceSkin: Identifiable, CaseIterable {
         symbolName: "flame",
         preferredColorScheme: .dark,
         recommendedThemeID: EditorTheme.ember.id,
+        recommendedTerminalColorSchemeID: EditorTerminalColorScheme.emberDark.id,
         palette: EditorInterfaceSkinPalette(
             windowColors: [
                 Color(red: 0.20, green: 0.17, blue: 0.15),
@@ -559,6 +567,8 @@ struct EditorFontChoice: Identifiable, CaseIterable, Equatable {
     let displayName: String
     let postScriptName: String?
 
+    private static let installedFontIDPrefix = "installed:"
+
     static let systemMono = EditorFontChoice(
         id: "system-mono",
         displayName: "System Monospace",
@@ -569,15 +579,72 @@ struct EditorFontChoice: Identifiable, CaseIterable, Equatable {
     static let monaco = EditorFontChoice(id: "monaco", displayName: "Monaco", postScriptName: "Monaco")
     static let courier = EditorFontChoice(id: "courier", displayName: "Courier", postScriptName: "Courier")
 
-    static let allCases: [EditorFontChoice] = [
+    private static let builtInChoices: [EditorFontChoice] = [
         .systemMono,
         .menlo,
         .monaco,
         .courier,
     ]
 
+    static var allCases: [EditorFontChoice] {
+        uniqueChoices(builtInChoices + installedEditorFontChoices())
+    }
+
     static func byID(_ id: String) -> EditorFontChoice? {
-        allCases.first { $0.id == id }
+        if let builtIn = builtInChoices.first(where: { $0.id == id }) {
+            return builtIn
+        }
+
+        guard id.hasPrefix(installedFontIDPrefix) else {
+            return nil
+        }
+        let postScriptName = String(id.dropFirst(installedFontIDPrefix.count))
+        guard !postScriptName.isEmpty,
+              let font = NSFont(name: postScriptName, size: CGFloat(EditorSettings.default.fontSize)) else {
+            return nil
+        }
+        return EditorFontChoice(
+            id: id,
+            displayName: installedFontDisplayName(for: font),
+            postScriptName: postScriptName
+        )
+    }
+
+    static func installedFontID(postScriptName: String) -> String {
+        "\(installedFontIDPrefix)\(postScriptName)"
+    }
+
+    static func isLikelyEditorFont(
+        familyName: String,
+        postScriptName: String,
+        traits: NSFontTraitMask
+    ) -> Bool {
+        if traits.contains(.fixedPitchFontMask) {
+            return true
+        }
+
+        let searchableName = "\(familyName) \(postScriptName)"
+            .folding(options: [.caseInsensitive, .diacriticInsensitive], locale: .current)
+            .lowercased()
+        let editorFontHints = [
+            "mono",
+            "monospace",
+            "code",
+            "console",
+            "term",
+            "nerd",
+            "meslo",
+            "iosevka",
+            "hack",
+            "cascadia",
+            "jetbrains",
+            "fira",
+            "sourcecode",
+            "commitmono",
+            "berkeley",
+            "等宽",
+        ]
+        return editorFontHints.contains { searchableName.contains($0) }
     }
 
     func font(size: CGFloat) -> NSFont {
@@ -589,6 +656,101 @@ struct EditorFontChoice: Identifiable, CaseIterable, Equatable {
         }
         return baseFont.withEditorCJKCascade()
     }
+
+    private struct InstalledFontMember {
+        let familyName: String
+        let faceName: String
+        let postScriptName: String
+        let traits: NSFontTraitMask
+    }
+
+    private static func installedEditorFontChoices() -> [EditorFontChoice] {
+        let manager = NSFontManager.shared
+        return manager.availableFontFamilies.compactMap { familyName in
+            guard let members = manager.availableMembers(ofFontFamily: familyName) else {
+                return nil
+            }
+
+            let editorMembers = members.compactMap { member -> InstalledFontMember? in
+                guard member.count >= 2,
+                      let postScriptName = member[0] as? String,
+                      let faceName = member[1] as? String,
+                      let font = NSFont(name: postScriptName, size: CGFloat(EditorSettings.default.fontSize)) else {
+                    return nil
+                }
+                let traits = manager.traits(of: font)
+                guard isLikelyEditorFont(
+                    familyName: familyName,
+                    postScriptName: postScriptName,
+                    traits: traits
+                ) else {
+                    return nil
+                }
+                return InstalledFontMember(
+                    familyName: familyName,
+                    faceName: faceName,
+                    postScriptName: postScriptName,
+                    traits: traits
+                )
+            }
+
+            guard let selected = preferredInstalledMember(from: editorMembers) else {
+                return nil
+            }
+            return EditorFontChoice(
+                id: installedFontID(postScriptName: selected.postScriptName),
+                displayName: selected.familyName,
+                postScriptName: selected.postScriptName
+            )
+        }
+        .sorted { lhs, rhs in
+            lhs.displayName.localizedStandardCompare(rhs.displayName) == .orderedAscending
+        }
+    }
+
+    private static func preferredInstalledMember(from members: [InstalledFontMember]) -> InstalledFontMember? {
+        members.min { lhs, rhs in
+            installedMemberScore(lhs) < installedMemberScore(rhs)
+        }
+    }
+
+    private static func installedMemberScore(_ member: InstalledFontMember) -> Int {
+        let face = member.faceName.lowercased()
+        var score = 0
+        if member.traits.contains(.boldFontMask) || face.contains("bold") {
+            score += 100
+        }
+        if member.traits.contains(.italicFontMask) || face.contains("italic") || face.contains("oblique") {
+            score += 100
+        }
+        if ["regular", "book", "text", "normal", "roman"].contains(face) {
+            score -= 50
+        } else if face.contains("regular") {
+            score -= 25
+        }
+        score += face.count
+        return score
+    }
+
+    private static func uniqueChoices(_ choices: [EditorFontChoice]) -> [EditorFontChoice] {
+        var seenIDs = Set<String>()
+        var seenPostScriptNames = Set<String>()
+        return choices.filter { choice in
+            guard seenIDs.insert(choice.id).inserted else {
+                return false
+            }
+            if let postScriptName = choice.postScriptName {
+                guard seenPostScriptNames.insert(postScriptName).inserted else {
+                    return false
+                }
+            }
+            return true
+        }
+    }
+
+    private static func installedFontDisplayName(for font: NSFont) -> String {
+        font.familyName ?? font.displayName ?? font.fontName
+    }
 }
 
 extension NSFont {
@@ -599,7 +761,18 @@ extension NSFont {
             "STHeitiSC-Light",
             "AppleColorEmoji",
         ]
-        let cascadeList = cascadeNames.map { NSFontDescriptor(name: $0, size: pointSize) }
+        let existingCascade = fontDescriptor.object(forKey: .cascadeList) as? [NSFontDescriptor] ?? []
+        let editorCascade = cascadeNames.compactMap { NSFont(name: $0, size: pointSize)?.fontDescriptor }
+        var seenNames = Set<String>()
+        let cascadeList = (existingCascade + editorCascade).filter { descriptor in
+            guard let name = descriptor.postscriptName, !name.isEmpty else {
+                return true
+            }
+            return seenNames.insert(name).inserted
+        }
+        guard !cascadeList.isEmpty else {
+            return self
+        }
         let descriptor = fontDescriptor.addingAttributes([.cascadeList: cascadeList])
         return NSFont(descriptor: descriptor, size: pointSize) ?? self
     }

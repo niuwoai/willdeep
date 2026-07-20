@@ -784,6 +784,8 @@ nonisolated enum AgentExecutionAgent: String, Codable, CaseIterable, Identifiabl
     case willDeep
     case claudeCode
     case codexCLI
+    case cursorAgent
+    case clineCLI
 
     var id: String { rawValue }
 
@@ -792,6 +794,8 @@ nonisolated enum AgentExecutionAgent: String, Codable, CaseIterable, Identifiabl
         case .willDeep: return L10n.ExecutionAgent.willDeepName
         case .claudeCode: return L10n.ExecutionAgent.claudeCodeName
         case .codexCLI: return L10n.ExecutionAgent.codexName
+        case .cursorAgent: return L10n.ExecutionAgent.cursorName
+        case .clineCLI: return L10n.ExecutionAgent.clineName
         }
     }
 
@@ -800,6 +804,8 @@ nonisolated enum AgentExecutionAgent: String, Codable, CaseIterable, Identifiabl
         case .willDeep: return L10n.ExecutionAgent.willDeepSummary
         case .claudeCode: return L10n.ExecutionAgent.claudeCodeSummary
         case .codexCLI: return L10n.ExecutionAgent.codexSummary
+        case .cursorAgent: return L10n.ExecutionAgent.cursorSummary
+        case .clineCLI: return L10n.ExecutionAgent.clineSummary
         }
     }
 
@@ -808,6 +814,8 @@ nonisolated enum AgentExecutionAgent: String, Codable, CaseIterable, Identifiabl
         case .willDeep: return "hammer.fill"
         case .claudeCode: return "sparkles.rectangle.stack"
         case .codexCLI: return "terminal"
+        case .cursorAgent: return "cursorarrow.click"
+        case .clineCLI: return "chevron.left.forwardslash.chevron.right"
         }
     }
 
@@ -816,6 +824,8 @@ nonisolated enum AgentExecutionAgent: String, Codable, CaseIterable, Identifiabl
         case .willDeep: return nil
         case .claudeCode: return "claude_code"
         case .codexCLI: return "codex_cli"
+        case .cursorAgent: return "cursor_agent"
+        case .clineCLI: return "cline_cli"
         }
     }
 
@@ -824,6 +834,8 @@ nonisolated enum AgentExecutionAgent: String, Codable, CaseIterable, Identifiabl
         case .willDeep: return nil
         case .claudeCode: return "acceptEdits"
         case .codexCLI: return "workspaceWrite"
+        case .cursorAgent: return "default"
+        case .clineCLI: return "act"
         }
     }
 }

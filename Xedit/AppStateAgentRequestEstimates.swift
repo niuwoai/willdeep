@@ -106,6 +106,7 @@ extension AppState {
             language: effectiveLanguage,
             toolsEnabled: true,
             interactionMode: agentInteractionMode,
+            executionAgent: agentExecutionAgent,
             approvalMode: agentApprovalMode,
             currentPlan: agentCurrentPlan,
             currentGoal: agentCurrentGoal,

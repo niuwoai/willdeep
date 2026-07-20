@@ -509,6 +509,7 @@ struct EditorView: NSViewRepresentable {
             textView.invalidateFoldableGuidesCache()
             textView.clearFoldedScopes()
             parent.text = textView.string
+            applyLiveEditorCJKFallbackFonts(to: textView)
 
             if !suppressDirtyFlag {
                 parent.onEdit?()
@@ -1345,6 +1346,30 @@ struct EditorView: NSViewRepresentable {
         }
 
         // MARK: - Debounced Highlighting
+
+        private func applyLiveEditorCJKFallbackFonts(to textView: WillDeepTextView) {
+            guard let textStorage = textView.textStorage, textStorage.length > 0 else {
+                return
+            }
+
+            let source = textView.string
+            let fullRange = NSRange(location: 0, length: textStorage.length)
+            let targetRange: NSRange
+            if textStorage.length < Self.viewportHighlightThreshold {
+                targetRange = fullRange
+            } else if let visibleRange = visibleHighlightRange(in: textView) {
+                targetRange = visibleRange
+            } else {
+                targetRange = (source as NSString).lineRange(for: NSIntersectionRange(textView.selectedRange(), fullRange))
+            }
+
+            SyntaxHighlighter.applyEditorCJKFallbackFonts(
+                to: textStorage,
+                source: source,
+                defaultFont: parent.settings.editorFont(),
+                range: targetRange
+            )
+        }
 
         /// Schedules a debounced re-highlight of the current document content.
         /// The highlight runs on a background queue and results are applied on

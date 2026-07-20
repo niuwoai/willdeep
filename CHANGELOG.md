@@ -1,7 +1,58 @@
 # Changelog
 
-> 当前文件保留最新版本（1.192.0-rc1 至 1.109.0-rc340）。
+> 当前文件保留最新版本（1.192.0-rc5 至 1.109.0-rc340）。
 > 更早的 1000 个版本已移至 [CHANGELOG-ARCHIVE.md](CHANGELOG-ARCHIVE.md)。
+
+## 1.192.0-rc5 - 2026-07-20
+
+### Fixed
+
+- Editor 设置里的字体菜单不再只显示 System Monospace、Menlo、Monaco、Courier，会从系统已安装字体中补充等宽/编程字体，并保留已选 installed 字体 ID 的解析能力。
+- Editor 正文在用户输入或编辑后会立即给 CJK 字符应用中文 fallback 字体；plain text 模式和语法高亮延迟期间也能显示汉字，不再等高亮回填后才修正。
+- 版本号从 **1.192.0-rc4** 递增为 **1.192.0-rc5**，内部构建号从 **44** 递增为 **45**；App、Go agent、Help、Helper、浏览器扩展、README、响应头契约与产品文档保持一致。
+
+### Tests
+
+- 新增 editor 字体菜单识别测试，覆盖编程字体关键字、固定宽度字体判断、 installed 字体 ID 解析与菜单 ID 去重。
+- `xcodebuild build-for-testing -scheme Xedit -destination platform=macOS ENABLE_DEBUG_DYLIB=NO -only-testing:XeditTests/EditorCoreBehaviorTests` 通过；`xcodebuild test` 当前被 Xcode 测试宿主启动阶段的 `WillDeep.debug.dylib` 缺失问题阻断，未进入断言执行。
+
+## 1.192.0-rc4 - 2026-07-20
+
+### Fixed
+
+- WillDeep 作为当前执行器时，普通模式和计划模式不再向模型暴露 Claude Code、Codex、Cursor Agent、Cline 这类外部委派工具；Goal 模式仍保留这些工具作为原生方式无效后的兜底。
+- 外部执行器选择扩展到 Cursor Agent 与 Cline；选择 Claude Code、Codex、Cursor Agent 或 Cline 时，会直接路由到对应 CLI 工具，并只暴露该执行器对应的委派工具。
+- 系统提示新增委派执行器策略，明确 WillDeep 普通/计划模式不随意外包、Goal 模式只兜底、外部执行器只走所选工具。
+- 版本号从 **1.192.0-rc3** 递增为 **1.192.0-rc4**，内部构建号从 **43** 递增为 **44**；App、Go agent、Help、Helper、浏览器扩展、README、响应头契约与产品文档保持一致。
+
+### Tests
+
+- 新增委派工具可见性回归测试，覆盖 WillDeep 普通/计划/Goal 模式和 Codex、Cursor Agent、Cline 外部执行器。
+- 扩展外部执行器参数与后台任务识别测试，覆盖 Cursor Agent 与 Cline。
+
+## 1.192.0-rc3 - 2026-07-20
+
+### Fixed
+
+- 顶部活动条的委派状态会直接显示目标工具：`spawn_agent` 显示“委派给子代理”，外部委派分别显示“委派给 Claude Code / Codex / Cursor Agent / Cline”，避免所有委派任务都只写成笼统的“委派中”。
+- `spawn_agent` 继续保留原有实时轮次与工具次数，例如“委派给子代理 · 第 5/12 轮 · 11 次工具”；外部 CLI 委派不伪造轮次，只展示真实目标工具。
+- 版本号从 **1.192.0-rc2** 递增为 **1.192.0-rc3**，内部构建号从 **42** 递增为 **43**；App、Go agent、Help、Helper、浏览器扩展、README、响应头契约与产品文档保持一致。
+
+### Tests
+
+- 新增委派活动标签回归测试，覆盖子代理、Claude Code、Codex、Cursor Agent、Cline 及子代理轮次进度拼接。
+
+## 1.192.0-rc2 - 2026-07-20
+
+### Added
+
+- 终端配色新增 Paper Light、Harbor Light、Mist Mint、Rose Quartz、Daylight、Solarized Light、GitHub Light 等浅色背景方案，并补充 Raster Grid、Aurora Night、Ember Glow 等与深色皮肤更匹配的方案。
+- 新终端默认改为“跟随应用皮肤”，每套 App 皮肤都会映射到对应的终端配色；浅色 App 皮肤默认得到浅色终端，深色 App 皮肤仍保持深色高对比终端。
+- 版本号从 **1.192.0-rc1** 递增为 **1.192.0-rc2**，内部构建号从 **41** 递增为 **42**；App、Go agent、Help、Helper、浏览器扩展、README、响应头契约与产品文档保持一致。
+
+### Tests
+
+- 新增终端配色回归测试，覆盖默认跟随 App 皮肤、浅色配色集合存在，以及每个 App 皮肤都能解析到有效终端配色。
 
 ## 1.192.0-rc1 - 2026-07-20
 

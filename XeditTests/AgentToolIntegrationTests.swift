@@ -903,6 +903,33 @@ private func restoreSomeIMSessionStoreAfterTest() {
     SomeIMIntegrationStore._setTestSharedSessionOverride(enabled: false)
 }
 
+@Suite
+struct AgentToolCallGroupingPresentationTests {
+    private func makeCall(_ name: String) -> AgentToolCall {
+        AgentToolCall(
+            messageID: UUID(),
+            externalID: UUID().uuidString,
+            toolName: name,
+            arguments: [:],
+            risk: .read,
+            status: .running
+        )
+    }
+
+    @Test("delegated agent activity labels name the target tool")
+    func delegatedAgentActivityLabelsNameTargetTool() {
+        #expect(AgentToolKind.of(makeCall("spawn_agent")).delegatedActivityLabel(progress: nil) == "委派给子代理")
+        #expect(AgentToolKind.of(makeCall("claude_code")).delegatedActivityLabel(progress: nil) == "委派给 Claude Code")
+        #expect(AgentToolKind.of(makeCall("codex_cli")).delegatedActivityLabel(progress: nil) == "委派给 Codex")
+        #expect(AgentToolKind.of(makeCall("cursor_agent")).delegatedActivityLabel(progress: nil) == "委派给 Cursor Agent")
+        #expect(AgentToolKind.of(makeCall("cline_cli")).delegatedActivityLabel(progress: nil) == "委派给 Cline")
+        #expect(
+            AgentToolKind.of(makeCall("spawn_agent")).delegatedActivityLabel(progress: " 第 5/12 轮 · 11 次工具 ")
+                == "委派给子代理 · 第 5/12 轮 · 11 次工具"
+        )
+    }
+}
+
 private final class SomeIMBrowserLoginMockURLProtocol: URLProtocol {
     static var handler: ((URLRequest) throws -> (HTTPURLResponse, Data))?
 

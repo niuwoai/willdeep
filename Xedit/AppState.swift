@@ -626,7 +626,7 @@ final class AppState: ObservableObject {
                 ?? requestedRuntime?.workspaceRootPath
                 ?? self.rootDirectory?.standardizedFileURL.path
             let skin = settings.followsInterfaceSkin
-                ? TerminalSkinColors.from(palette: self.editorSettings.interfaceSkin.palette)
+                ? TerminalSkinColors.from(skin: self.editorSettings.interfaceSkin)
                 : nil
             return (settings, workingDirectory, requestedSessionID ?? self.activeAgentSessionID, skin)
         }

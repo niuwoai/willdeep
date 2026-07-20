@@ -363,12 +363,12 @@
         }
       }
     },
-    "“Follow App Skin” derives the terminal background, foreground, and cursor from your interface skin; ANSI program colors stay standard so output stays readable. Line spacing isn't adjustable with the current terminal engine." : {
+    "“Follow App Skin” uses the terminal palette matched to your interface skin; ANSI program colors stay standard so output stays readable. Line spacing isn't adjustable with the current terminal engine." : {
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "“跟随应用皮肤”会根据界面皮肤推导出终端的背景色、前景色和光标颜色;ANSI 程序色保持标准配色,确保输出清晰可读。当前终端引擎不支持调整行间距。"
+            "value" : "“跟随应用皮肤”会使用与界面皮肤匹配的终端配色;ANSI 程序色保持标准配色,确保输出清晰可读。当前终端引擎不支持调整行间距。"
           }
         }
       }
@@ -10221,13 +10221,13 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "“Follow App Skin” derives the terminal background, foreground, and cursor from your interface skin; ANSI program colors stay standard so output stays readable. Line spacing isn't adjustable with the current terminal engine."
+            "value" : "“Follow App Skin” uses the terminal palette matched to your interface skin; ANSI program colors stay standard so output stays readable. Line spacing isn't adjustable with the current terminal engine."
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "“跟随应用皮肤”会根据界面皮肤推导出终端的背景色、前景色和光标颜色;ANSI 程序色保持标准配色,确保输出清晰可读。当前终端引擎不支持调整行间距。"
+            "value" : "“跟随应用皮肤”会使用与界面皮肤匹配的终端配色;ANSI 程序色保持标准配色,确保输出清晰可读。当前终端引擎不支持调整行间距。"
           }
         }
       }
@@ -10758,6 +10758,34 @@
         "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "通过本机 Codex CLI 执行这轮任务。" } }
       }
     },
+    "execution-agent.cursor.name" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Cursor Agent" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "Cursor Agent" } }
+      }
+    },
+    "execution-agent.cursor.summary" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Run this task with the local Cursor Agent CLI." } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "通过本机 Cursor Agent CLI 执行这轮任务。" } }
+      }
+    },
+    "execution-agent.cline.name" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Cline" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "Cline" } }
+      }
+    },
+    "execution-agent.cline.summary" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Run this task with the local Cline CLI." } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "通过本机 Cline CLI 执行这轮任务。" } }
+      }
+    },
     "execution-agent.willdeep.name" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -10775,8 +10803,8 @@
     "execution-agent.picker.help" : {
       "extractionState" : "manual",
       "localizations" : {
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "Choose whether WillDeep runs this turn or delegates it to the local Claude Code or Codex CLI." } },
-        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "选择这一轮由 WillDeep 执行，还是委托给本机 Claude Code 或 Codex CLI。" } }
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Choose whether WillDeep runs this turn or delegates it to a local external coding CLI." } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "选择这一轮由 WillDeep 执行，还是委托给本机外部编程 CLI。" } }
       }
     },
     "expert.picker-help" : {

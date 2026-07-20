@@ -116,6 +116,50 @@ struct AgentToolsCoreTests {
         #expect(workspaceAutoApproval == nil)
     }
 
+    @Test
+    func delegatedCodingToolsRespectExecutionAgentAndMode() {
+        let delegatedTools: Set<String> = ["claude_code", "codex_cli", "cursor_agent", "cline_cli"]
+
+        let willDeepNormal = Set(AgentToolRegistry.tools(
+            activeExperts: [],
+            interactionMode: .normal,
+            executionAgent: .willDeep
+        ).map(\.name))
+        let willDeepPlan = Set(AgentToolRegistry.tools(
+            activeExperts: [],
+            interactionMode: .plan,
+            executionAgent: .willDeep
+        ).map(\.name))
+        let willDeepGoal = Set(AgentToolRegistry.tools(
+            activeExperts: [],
+            interactionMode: .goal,
+            executionAgent: .willDeep
+        ).map(\.name))
+        let codexSelected = Set(AgentToolRegistry.tools(
+            activeExperts: [],
+            interactionMode: .normal,
+            executionAgent: .codexCLI
+        ).map(\.name))
+        let cursorSelected = Set(AgentToolRegistry.tools(
+            activeExperts: [],
+            interactionMode: .normal,
+            executionAgent: .cursorAgent
+        ).map(\.name))
+        let clineSelected = Set(AgentToolRegistry.tools(
+            activeExperts: [],
+            interactionMode: .normal,
+            executionAgent: .clineCLI
+        ).map(\.name))
+
+        #expect(willDeepNormal.isDisjoint(with: delegatedTools))
+        #expect(willDeepPlan.isDisjoint(with: delegatedTools))
+        #expect(delegatedTools.isSubset(of: willDeepGoal))
+        #expect(!willDeepGoal.contains("change_workspace"))
+        #expect(codexSelected.intersection(delegatedTools) == ["codex_cli"])
+        #expect(cursorSelected.intersection(delegatedTools) == ["cursor_agent"])
+        #expect(clineSelected.intersection(delegatedTools) == ["cline_cli"])
+    }
+
     @Test("terminal protected-input payload exposes only prompts, never values")
     func terminalProtectedInputPromptSetParsesPendingPrompts() {
         let shortcutID = UUID()
@@ -1057,6 +1101,19 @@ struct AgentToolsCoreTests {
         #expect(arguments["use_visible_terminal"]?.boolValue() == true)
         #expect(arguments["visible_terminal_label"]?.stringValue() == "Codex")
         #expect(arguments["permission_mode"]?.stringValue() == AgentExecutionAgent.codexCLI.defaultPermissionMode)
+
+        let cursorArguments = AppState.delegatedAgentArguments(
+            prompt: "delegate this task",
+            executionAgent: .cursorAgent
+        )
+        let clineArguments = AppState.delegatedAgentArguments(
+            prompt: "delegate this task",
+            executionAgent: .clineCLI
+        )
+        #expect(cursorArguments["visible_terminal_label"]?.stringValue() == "Cursor Agent")
+        #expect(cursorArguments["permission_mode"]?.stringValue() == AgentExecutionAgent.cursorAgent.defaultPermissionMode)
+        #expect(clineArguments["visible_terminal_label"]?.stringValue() == "Cline")
+        #expect(clineArguments["permission_mode"]?.stringValue() == AgentExecutionAgent.clineCLI.defaultPermissionMode)
     }
 
     @Test
@@ -1464,10 +1521,20 @@ struct DelegatedAgentComposerOutputTests {
         claude -p 'WillDeep Delegated Executor Context Package v1
         You are being invoked from WillDeep Composer as the selected execution agent: Claude Code.'
         """
+        let cursorCommand = """
+        cursor agent --print 'WillDeep Delegated Executor Context Package v1
+        You are being invoked from WillDeep Composer as the selected execution agent: Cursor Agent.'
+        """
+        let clineCommand = """
+        cline --json 'WillDeep Delegated Executor Context Package v1
+        You are being invoked from WillDeep Composer as the selected execution agent: Cline.'
+        """
         let ordinaryCommand = "codex exec 'selected execution agent: Codex'"
 
         #expect(AppState.delegatedExecutionAgent(forBackgroundJobCommand: codexCommand) == .codexCLI)
         #expect(AppState.delegatedExecutionAgent(forBackgroundJobCommand: claudeCommand) == .claudeCode)
+        #expect(AppState.delegatedExecutionAgent(forBackgroundJobCommand: cursorCommand) == .cursorAgent)
+        #expect(AppState.delegatedExecutionAgent(forBackgroundJobCommand: clineCommand) == .clineCLI)
         #expect(AppState.delegatedExecutionAgent(forBackgroundJobCommand: ordinaryCommand) == nil)
     }
 

@@ -271,7 +271,7 @@ extension AppState {
                 attachedSkills: attachedSkills,
                 source: source
             )
-        case .claudeCode, .codexCLI:
+        case .claudeCode, .codexCLI, .cursorAgent, .clineCLI:
             dispatchDelegatedAgentMessage(
                 for: runtime,
                 text: text,
@@ -832,11 +832,10 @@ extension AppState {
         guard command.contains("WillDeep Delegated Executor Context Package v1") else {
             return nil
         }
-        if command.contains("selected execution agent: \(AgentExecutionAgent.codexCLI.displayName)") {
-            return .codexCLI
-        }
-        if command.contains("selected execution agent: \(AgentExecutionAgent.claudeCode.displayName)") {
-            return .claudeCode
+        for executionAgent in AgentExecutionAgent.allCases where executionAgent.toolName != nil {
+            if command.contains("selected execution agent: \(executionAgent.displayName)") {
+                return executionAgent
+            }
         }
         return nil
     }

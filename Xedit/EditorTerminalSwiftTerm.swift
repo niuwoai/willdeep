@@ -14,16 +14,28 @@ import SwiftUI
 
 // MARK: - Shared appearance
 
-/// Colors pulled from the active interface skin, passed in when the
-/// terminal color scheme is "Follow App Skin". Kept as NSColors so the
-/// model/appearance layer doesn't depend on the skin types.
+/// Colors resolved for "Follow App Skin". The active skin points to a
+/// terminal-specific palette so editor/window colors and terminal readability
+/// can evolve independently.
 struct TerminalSkinColors {
     let background: NSColor
     let foreground: NSColor
     let cursor: NSColor
 
-    /// Resolve from a SwiftUI-based skin palette. `base`/`ink` come from the
-    /// skin's opaque preview surface so the terminal background is solid.
+    @MainActor
+    static func from(skin: EditorInterfaceSkin) -> TerminalSkinColors {
+        if let scheme = EditorTerminalColorScheme.byID(skin.recommendedTerminalColorSchemeID) {
+            return TerminalSkinColors(
+                background: scheme.background,
+                foreground: scheme.foreground,
+                cursor: scheme.accent
+            )
+        }
+        return from(palette: skin.palette)
+    }
+
+    /// Fallback for older or unknown skins. `base`/`ink` come from the skin's
+    /// opaque preview surface so the terminal background is solid.
     @MainActor
     static func from(palette: EditorInterfaceSkinPalette) -> TerminalSkinColors {
         TerminalSkinColors(

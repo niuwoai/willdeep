@@ -484,6 +484,39 @@ struct EditorCoreBehaviorTests {
         #expect(fallbackNames.contains("PingFangSC-Regular"))
     }
 
+    @Test("editor font menu recognizes installed coding fonts")
+    @MainActor
+    func testEditorFontMenuRecognizesInstalledCodingFonts() {
+        #expect(EditorFontChoice.isLikelyEditorFont(
+            familyName: "JetBrains Mono",
+            postScriptName: "JetBrainsMono-Regular",
+            traits: []
+        ))
+        #expect(EditorFontChoice.isLikelyEditorFont(
+            familyName: "Example",
+            postScriptName: "Example-Regular",
+            traits: .fixedPitchFontMask
+        ))
+        #expect(!EditorFontChoice.isLikelyEditorFont(
+            familyName: "Helvetica",
+            postScriptName: "Helvetica",
+            traits: []
+        ))
+
+        let choices = EditorFontChoice.allCases
+        #expect(Set(choices.map(\.id)).count == choices.count)
+
+        let knownInstalledNames = [
+            "SFMono-Regular",
+            "CourierNewPSMT",
+            "AndaleMono",
+        ]
+        if let font = knownInstalledNames.compactMap({ NSFont(name: $0, size: 13) }).first {
+            let id = EditorFontChoice.installedFontID(postScriptName: font.fontName)
+            #expect(EditorFontChoice.byID(id)?.postScriptName == font.fontName)
+        }
+    }
+
     @Test("syntax highlighting keeps CJK glyphs visible")
     @MainActor
     func testSyntaxHighlightingKeepsCJKGlyphsVisible() throws {

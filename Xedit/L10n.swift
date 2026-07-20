@@ -667,7 +667,7 @@ nonisolated enum L10n {
         static let clearHelp = String(localized: "editor-terminal.clear-help", defaultValue: "Clear")
         static let closeHelp = String(localized: "editor-terminal.close-help", defaultValue: "Close")
         static let colorScheme = String(localized: "editor-terminal.color-scheme", defaultValue: "Color scheme")
-        static let colorSchemeFootnote = String(localized: "editor-terminal.color-scheme-footnote", defaultValue: "“Follow App Skin” derives the terminal background, foreground, and cursor from your interface skin; ANSI program colors stay standard so output stays readable. Line spacing isn't adjustable with the current terminal engine.")
+        static let colorSchemeFootnote = String(localized: "editor-terminal.color-scheme-footnote", defaultValue: "“Follow App Skin” uses the terminal palette matched to your interface skin; ANSI program colors stay standard so output stays readable. Line spacing isn't adjustable with the current terminal engine.")
         static let cursor = String(localized: "editor-terminal.cursor", defaultValue: "Cursor")
         static let customFont = String(localized: "editor-terminal.custom-font", defaultValue: "Custom font")
         static let customFontFootnote = String(localized: "editor-terminal.custom-font-footnote", defaultValue: "Type the exact name of any installed font to override the picker — use this to apply a Nerd Font that isn't auto-detected so powerline/icon glyphs stop showing as boxes. Leave empty to use the selection above.")

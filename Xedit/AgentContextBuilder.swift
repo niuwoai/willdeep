@@ -64,6 +64,7 @@ enum AgentContextBuilder {
         language: Language?,
         toolsEnabled: Bool = false,
         interactionMode: AgentInteractionMode = .normal,
+        executionAgent: AgentExecutionAgent = .willDeep,
         approvalMode: AgentApprovalMode = .smart,
         currentPlan: AgentPlan? = nil,
         currentGoal: AgentGoal? = nil,
@@ -96,6 +97,23 @@ enum AgentContextBuilder {
         }
 
         sections.append("=== Dynamic Turn Context ===")
+
+        if toolsEnabled {
+            if executionAgent == .willDeep {
+                let delegatedPolicy = interactionMode == .goal
+                    ? "WillDeep is the selected executor. External delegated coding tools (claude_code, codex_cli, cursor_agent, cline_cli) are available only as a Goal-mode fallback after native workspace tools, focused edits, and verification attempts are not enough."
+                    : "WillDeep is the selected executor. External delegated coding tools (claude_code, codex_cli, cursor_agent, cline_cli) are intentionally unavailable in Normal and Plan mode; use WillDeep's native tools instead."
+                sections.append("""
+                Delegated executor policy:
+                \(delegatedPolicy)
+                """)
+            } else if let toolName = executionAgent.toolName {
+                sections.append("""
+                Delegated executor policy:
+                \(executionAgent.displayName) is the selected executor for this turn; route external coding delegation through `\(toolName)` only.
+                """)
+            }
+        }
 
         if let currentSessionTitle, !currentSessionTitle.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
             sections.append("""
