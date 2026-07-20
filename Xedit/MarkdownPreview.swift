@@ -477,6 +477,11 @@ struct MarkdownPreviewBlockView: View {
 /// paragraphs, quotes, list items, and table cells stay visually
 /// consistent.
 enum MarkdownInline {
+    /// SF Mono's underscore sits on the font's lowest pixel row. SwiftUI
+    /// and TextKit can clip that row when inline code shares a paragraph
+    /// with the proportional system font, so lift code glyphs slightly.
+    static let inlineCodeBaselineOffset: CGFloat = 1
+
     static func attributedString(from raw: String) -> AttributedString {
         guard var attributed = try? AttributedString(markdown: raw) else {
             var fallback = AttributedString(raw)
@@ -490,6 +495,7 @@ enum MarkdownInline {
             guard let intent = run.inlinePresentationIntent,
                   intent.contains(.code) else { continue }
             attributed[run.range].font = .system(.body, design: .monospaced)
+            attributed[run.range].baselineOffset = inlineCodeBaselineOffset
             attributed[run.range].backgroundColor = Color.primary.opacity(0.08)
             attributed[run.range].foregroundColor = Color(nsColor: .labelColor)
         }

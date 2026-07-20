@@ -1,6 +1,6 @@
 # WillDeep Product Overview
 
-> Last updated: 2026-07-20 | Current version: v1.191.0-rc7
+> Last updated: 2026-07-20 | Current version: v1.191.0-rc8
 
 ## Positioning
 
@@ -11,6 +11,8 @@ Official product domain: [willdeep.com](https://willdeep.com).
 WillDeep is configured for non-App-Store distribution without App Sandbox so it can access local project files with fewer permission interruptions.
 
 ## 架构概览
+
+- **行内代码下划线完整显示（1.191.0-rc8）** —— SwiftUI 实时消息与 TextKit 历史消息共用 1pt 行内代码基线补偿，长文件名、函数名中的 `_` 不再贴住行高底部而被裁切；补偿仅作用于 Markdown 行内代码，不改变普通正文布局。
 
 - **Plan 步骤排版与实时完成态（1.191.0-rc7）** —— 计划卡为双位数及更长序号保留稳定单行列宽，步骤正文按内联 Markdown 渲染加粗、斜体与代码样式；长任务在每个带工具调用的模型回合结束后立即消费显式 `progress` 证据，已完成步骤无需等到整轮最终回复才打勾。
 

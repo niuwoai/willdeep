@@ -10,6 +10,7 @@
 import Testing
 import AppKit
 import Foundation
+import SwiftUI
 @testable import WillDeep
 
 @Suite
@@ -276,6 +277,10 @@ struct AgentPlanProgressTests {
         #expect(attributed.runs.contains { run in
             run.inlinePresentationIntent?.contains(.code) == true
         })
+        let codeRun = attributed.runs.first { run in
+            run.inlinePresentationIntent?.contains(.code) == true
+        }
+        #expect(codeRun?.baselineOffset == MarkdownInline.inlineCodeBaselineOffset)
     }
 
     @Test("plan step index column fits double-digit numbering")
