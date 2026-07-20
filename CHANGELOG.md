@@ -1,7 +1,18 @@
 # Changelog
 
-> 当前文件保留最新版本（1.192.0-rc6 至 1.109.0-rc340）。
+> 当前文件保留最新版本（1.192.0-rc12 至 1.109.0-rc340）。
 > 更早的 1000 个版本已移至 [CHANGELOG-ARCHIVE.md](CHANGELOG-ARCHIVE.md)。
+
+## 1.192.0-rc12 - 2026-07-21
+
+### Fixed
+
+- 集成终端（SwiftTerm）字体解析链补上 CJK fallback：`withNerdFontFallback` 之后追加与 Editor 相同的 `withEditorCJKCascade()`（PingFangSC / Hiragino Sans GB / STHeiti / Apple Color Emoji）。此前当终端字体设为 Nerd Font（本身无汉字字形）时，解析链是 Nerd Font → Nerd Font，汉字落到 .notdef 被直接丢弃、终端里中文不可见；现在任意基础字体（含自定义字体名）都会级联到中文字体。
+- 版本号从 **1.192.0-rc11** 递增为 **1.192.0-rc12**，内部构建号从 **51** 递增为 **52**；App、Go agent、Help、Helper、浏览器扩展、README、响应头契约与产品文档保持一致。
+
+### Tests
+
+- 新增 `EditorTerminalFontCascadeTests`：覆盖默认设置字体含 CJK cascade、自定义字体名保留 cascade、基础字体即 Nerd Font 时仍追加 CJK、Nerd Font fallback 排在 CJK 之前、重复应用 cascade 去重五个用例。
 
 ## 1.192.0-rc6 - 2026-07-20
 

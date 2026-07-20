@@ -1,6 +1,6 @@
 # WillDeep Product Overview
 
-> Last updated: 2026-07-20 | Current version: v1.192.0-rc6
+> Last updated: 2026-07-21 | Current version: v1.192.0-rc12
 
 ## Positioning
 
@@ -11,6 +11,8 @@ Official product domain: [willdeep.com](https://willdeep.com).
 WillDeep is configured for non-App-Store distribution without App Sandbox so it can access local project files with fewer permission interruptions.
 
 ## 架构概览
+
+- **集成终端中文渲染（1.192.0-rc12）** —— 终端字体解析链在 Nerd Font fallback 之后追加与 Editor 一致的 CJK cascade（PingFang / Hiragino / STHeiti / Emoji）；终端字体设为 Nerd Font 时汉字不再落到 .notdef 消失。
 
 - **关于页产品入口（1.192.0-rc6）** —— 关于页的 83d 产品推荐新增 GitWise、像界（Xomo）与 BearCleaner；GitWise 指向 `https://83d.me/zh/products/gitwise`，Xomo 与 BearCleaner 指向对应中文产品主页。
 
