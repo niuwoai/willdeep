@@ -52,14 +52,16 @@ struct AgentSidePanelDiffView: View {
             detailState = .idle
             refreshTick &+= 1
         }
+        .onCompatibleChange(of: appState.agentSidePanelSelectedFile) { _, file in
+            selectRequestedFile(file)
+        }
     }
 
     private var toolbar: some View {
         HStack(spacing: 6) {
             if selectedPath != nil {
                 Button {
-                    selectedPath = nil
-                    detailState = .idle
+                    clearSelection()
                 } label: {
                     Image(systemName: "chevron.left")
                 }
@@ -90,8 +92,7 @@ struct AgentSidePanelDiffView: View {
             Spacer(minLength: 0)
 
             Button {
-                selectedPath = nil
-                detailState = .idle
+                clearSelection()
                 refreshTick &+= 1
             } label: {
                 Image(systemName: "arrow.clockwise")
@@ -112,7 +113,7 @@ struct AgentSidePanelDiffView: View {
             progress
         case .loaded(let snapshot):
             if selectedPath == nil {
-                fileList(snapshot.changes)
+                fileList(snapshot)
             } else {
                 diffDetail
             }
@@ -125,8 +126,9 @@ struct AgentSidePanelDiffView: View {
         }
     }
 
-    private func fileList(_ changes: AgentWorktreeChangeSummary) -> some View {
-        VStack(spacing: 0) {
+    private func fileList(_ snapshot: AgentSidePanelDiffSnapshot) -> some View {
+        let changes = snapshot.changes
+        return VStack(spacing: 0) {
             HStack(spacing: 8) {
                 Text(
                     L10n.AgentSidePanel.diffFilesSummary(
@@ -149,6 +151,9 @@ struct AgentSidePanelDiffView: View {
                     ForEach(changes.files) { change in
                         Button {
                             selectedPath = change.path
+                            appState.agentSidePanelSelectedFile = snapshot.repositoryRoot
+                                .appendingPathComponent(change.path)
+                                .standardizedFileURL
                         } label: {
                             AgentSidePanelDiffFileRow(change: change)
                         }
@@ -239,6 +244,12 @@ struct AgentSidePanelDiffView: View {
 
         guard !Task.isCancelled else { return }
         state = result
+        if case .loaded(let snapshot) = result {
+            selectRequestedFile(appState.agentSidePanelSelectedFile, in: snapshot)
+        } else {
+            selectedPath = nil
+            detailState = .idle
+        }
     }
 
     private func reloadSelectedDiff() async {
@@ -251,6 +262,18 @@ struct AgentSidePanelDiffView: View {
         detailState = .loading
 
         let result = await Task.detached(priority: .userInitiated) {
+            if change.kind != .untracked {
+                let fileURL = snapshot.repositoryRoot
+                    .appendingPathComponent(change.path)
+                    .standardizedFileURL
+                if let fileSize = AppState.fileSize(at: fileURL),
+                   let reason = AgentSidePanelDiffLimiter.fileUnavailableReason(
+                       byteCount: fileSize
+                   ) {
+                    return DetailState.unavailable(reason)
+                }
+            }
+
             let rawDiff: String
             if change.kind == .untracked {
                 switch AppState.loadUntrackedDiffPreviewSection(
@@ -272,14 +295,35 @@ struct AgentSidePanelDiffView: View {
             guard !rawDiff.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
                 return DetailState.unavailable(L10n.AgentSidePanel.diffFileUnavailable)
             }
+            if let reason = AgentSidePanelDiffLimiter.unavailableReason(for: rawDiff) {
+                return DetailState.unavailable(reason)
+            }
             return DetailState.loaded(
-                text: AgentSidePanelDiffLimiter.displayText(for: rawDiff),
+                text: rawDiff,
                 cacheKey: "\(snapshot.loadedAt.timeIntervalSinceReferenceDate)|\(requestedPath)"
             )
         }.value
 
         guard !Task.isCancelled, selectedPath == requestedPath else { return }
         detailState = result
+    }
+
+    private func clearSelection() {
+        appState.agentSidePanelSelectedFile = nil
+        selectedPath = nil
+        detailState = .idle
+    }
+
+    private func selectRequestedFile(_ file: URL?) {
+        guard case .loaded(let snapshot) = state else { return }
+        selectRequestedFile(file, in: snapshot)
+    }
+
+    private func selectRequestedFile(_ file: URL?, in snapshot: AgentSidePanelDiffSnapshot) {
+        selectedPath = file.flatMap {
+            AgentSidePanelDiffSelection.relativePath(for: $0, changes: snapshot.changes)
+        }
+        detailState = .idle
     }
 
     private func resolveWorkspaceRoot() -> URL? {
@@ -300,6 +344,25 @@ private struct AgentSidePanelDiffSnapshot {
     let repositoryRoot: URL
     let changes: AgentWorktreeChangeSummary
     let loadedAt: Date
+}
+
+/// Resolves a requested absolute file URL back to the exact relative path in
+/// a worktree snapshot. Comparing standardized absolute URLs avoids prefix
+/// bugs (`/repo-a` vs `/repo-a-copy`) and supports nested paths and Unicode.
+enum AgentSidePanelDiffSelection {
+    nonisolated static func relativePath(
+        for file: URL,
+        changes: AgentWorktreeChangeSummary
+    ) -> String? {
+        guard let repositoryRoot = changes.repositoryRoot else { return nil }
+        let targetPath = file.standardizedFileURL.path
+        return changes.files.first { change in
+            repositoryRoot
+                .appendingPathComponent(change.path)
+                .standardizedFileURL
+                .path == targetPath
+        }?.path
+    }
 }
 
 private struct AgentSidePanelDiffFileRow: View {
@@ -472,22 +535,27 @@ struct AgentSidePanelDiffTextView: NSViewRepresentable {
 enum AgentSidePanelDiffLimiter {
     nonisolated static let maximumDisplayUTF8Bytes = 32 * 1024
     nonisolated static let maximumDisplayLines = 600
-    nonisolated static let sampleUTF8Bytes = 24 * 1024
 
-    nonisolated static func displayText(for diff: String) -> String {
+    nonisolated static func fileUnavailableReason(byteCount: Int64) -> String? {
+        guard byteCount > Int64(AppState.maxFileSize) else { return nil }
+        return L10n.AgentSidePanel.diffSourceFileTooLarge(
+            String(byteCount),
+            String(AppState.maxFileSize)
+        )
+    }
+
+    nonisolated static func unavailableReason(for diff: String) -> String? {
         let utf8ByteCount = diff.utf8.count
         let lineCount = lineCount(in: diff)
         guard utf8ByteCount > maximumDisplayUTF8Bytes || lineCount > maximumDisplayLines else {
-            return diff
+            return nil
         }
 
-        let sample = utf8Prefix(diff, maximumBytes: sampleUTF8Bytes)
-        return L10n.AgentSidePanel.diffTruncated(
+        return L10n.AgentSidePanel.diffTooLarge(
             String(utf8ByteCount),
             String(lineCount),
             String(maximumDisplayUTF8Bytes),
-            String(maximumDisplayLines),
-            sample
+            String(maximumDisplayLines)
         )
     }
 

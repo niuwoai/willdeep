@@ -368,9 +368,12 @@ extension AppState {
     /// frictionless.
     func setAgentApprovalMode(_ mode: AgentApprovalMode) {
         ensureActiveAgentSessionForInteractiveControl()
-        guard agentApprovalMode != mode else { return }
-        agentApprovalMode = mode
+        guard let runtime = activeRuntime, runtime.approvalMode != mode else { return }
+        runtime.approvalMode = mode
         persistActiveAgentSession()
+        if mode == .workspaceAccess {
+            reevaluatePendingToolCallsForWorkspaceAccess(for: runtime)
+        }
     }
 
     /// Choose which execution backend the composer should use for this

@@ -1453,6 +1453,102 @@ extension WillDeepTests {
         #expect(runtime.toolCalls.first?.status == .running)
     }
 
+    @Test("switching to workspace access resumes the current eligible approval")
+    @MainActor
+    func testWorkspaceAccessModeChangeResumesCurrentApproval() async throws {
+        let workspace = FileManager.default.temporaryDirectory
+            .appendingPathComponent("WillDeepApprovalModeChange-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: workspace, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: workspace) }
+
+        let appState = AppState(rootDirectory: workspace)
+        let existingIDs = Set(appState.agentSessions.map(\.id))
+        let session = appState.startNewAgentSession()
+        defer {
+            for id in appState.agentSessions.map(\.id) where !existingIDs.contains(id) {
+                AgentSessionStore.delete(id: id)
+            }
+        }
+        let runtime = try #require(appState.agentRuntimes[session.id])
+        runtime.interactionMode = .plan
+        runtime.currentPlan = AgentPlan(
+            status: .executing,
+            steps: (1...16).map { step in
+                AgentPlan.Step(
+                    text: "Step \(step)",
+                    status: step < 6 ? .done : (step == 6 ? .inProgress : .pending)
+                )
+            },
+            summary: "Long-running workspace update"
+        )
+        runtime.approvalMode = .requestEveryTime
+        #expect(!runtime.isPlanGateActive)
+
+        let call = AgentToolCall(
+            messageID: UUID(),
+            externalID: "call-workspace-mode-change",
+            toolName: "run_command",
+            arguments: ["command": .string("touch mode-change.txt")],
+            risk: .write,
+            status: .pendingApproval
+        )
+        runtime.toolCalls = [call]
+
+        let waiter = Task { @MainActor in
+            await appState.awaitToolDecision(for: runtime, forCallID: call.id)
+        }
+        for _ in 0..<3 { await Task.yield() }
+        #expect(runtime.toolDecisionWaiterCallID == call.id)
+
+        appState.setAgentApprovalMode(.workspaceAccess)
+        for _ in 0..<20 where runtime.toolCalls[0].status == .pendingApproval {
+            await Task.yield()
+        }
+        if runtime.toolCalls[0].status == .pendingApproval {
+            appState.denyAgentToolCall(id: call.id)
+        }
+
+        let decision = await waiter.value
+        if case .approved = decision {
+            // Expected path.
+        } else {
+            Issue.record("Expected Workspace access to approve the current call, got \(decision)")
+        }
+        #expect(runtime.toolCalls[0].status == .running)
+        #expect(runtime.toolCalls[0].approvalSource == .workspaceAccess)
+    }
+
+    @Test("switching to workspace access keeps danger confirmation blocked")
+    @MainActor
+    func testWorkspaceAccessModeChangeKeepsDangerConfirmationBlocked() async throws {
+        let appState = AppState()
+        let existingIDs = Set(appState.agentSessions.map(\.id))
+        let session = appState.startNewAgentSession()
+        defer {
+            for id in appState.agentSessions.map(\.id) where !existingIDs.contains(id) {
+                AgentSessionStore.delete(id: id)
+            }
+        }
+        let runtime = try #require(appState.agentRuntimes[session.id])
+        runtime.approvalMode = .requestEveryTime
+
+        let call = AgentToolCall(
+            messageID: UUID(),
+            externalID: "call-danger-mode-change",
+            toolName: "run_command",
+            arguments: ["command": .string("rm -rf build-output")],
+            risk: .danger,
+            status: .awaitingConfirm
+        )
+        runtime.toolCalls = [call]
+
+        appState.setAgentApprovalMode(.workspaceAccess)
+        for _ in 0..<5 { await Task.yield() }
+
+        #expect(runtime.toolCalls[0].status == .awaitingConfirm)
+        #expect(runtime.toolCalls[0].approvalSource == nil)
+    }
+
     @Test("tool approval resumes only the matching waiter")
     @MainActor
     func testToolApprovalResumesOnlyMatchingWaiter() async throws {
@@ -1515,9 +1611,9 @@ extension WillDeepTests {
         }
     }
 
-    @Test("tool approval actions keep a comfortably clickable hit target")
+    @Test("tool approval actions stay compact without collapsing")
     func testToolApprovalActionMetrics() {
-        #expect(AgentApprovalActionMetrics.minimumButtonHeight >= 40)
+        #expect(AgentApprovalActionMetrics.minimumButtonHeight == 36)
         #expect(AgentApprovalActionMetrics.minimumButtonWidth >= 108)
         #expect(AgentApprovalActionMetrics.spacing >= 10)
         #expect(AgentApprovalActionMetrics.cornerRadius >= 12)

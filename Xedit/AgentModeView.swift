@@ -283,7 +283,15 @@ struct AgentModeView: View {
                 appState.agentSidePanelRequest = nil
                 return
             }
-            if let url = request.file { appState.agentSidePanelSelectedFile = url }
+            // A generic Diff request must clear an older file focus; a
+            // file-targeted request carries the exact change the panel should
+            // open. Other panels keep their previous selection when no file
+            // was supplied.
+            if request.kind == .diff {
+                appState.agentSidePanelSelectedFile = request.file
+            } else if let url = request.file {
+                appState.agentSidePanelSelectedFile = url
+            }
             if request.kind == .mediaTasks {
                 appState.agentMediaTaskPanelScope = request.mediaTaskScope
             }

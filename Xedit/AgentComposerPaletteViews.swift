@@ -670,6 +670,10 @@ struct AgentSessionModeBadges: View {
                 )
             }
         }
+        // The sidebar reveals a fixed-width action cluster on row hover.
+        // Keep mode badges at their intrinsic width so SwiftUI truncates the
+        // session title instead of squeezing the SF Symbol and progress text.
+        .fixedSize(horizontal: true, vertical: false)
     }
 
     @ViewBuilder

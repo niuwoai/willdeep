@@ -1038,13 +1038,22 @@ final class AppState: ObservableObject {
     ///
     /// MUST NOT silently no-op. rc9–rc13 的反复 bug 就是:解析不到文件
     /// (相对路径不在 base 直下、文件名大小写对不上、文件还没生成)时
-    /// 直接 return,用户点了「屁事没发生」。现在:解析到 → Preview 那个
-    /// 文件;解析不到 → 仍然打开 Files 面板,让用户看到文件树、知道点击
-    /// 被响应了。任何情况下侧栏都会动。
+    /// 直接 return,用户点了「屁事没发生」。现在:改动文件 → Diff,
+    /// 普通文件 → Preview,解析不到 → 仍然打开 Files 面板,让用户看到
+    /// 文件树、知道点击被响应了。任何情况下侧栏都会动。
     func revealAgentReferencedFileInSidePanel(_ rawPath: String) {
         if let url = resolveAgentReferencedFileURL(rawPath) {
             registerRecentFile(url)
-            agentSidePanelRequest = AgentSidePanelOpenRequest(kind: .preview, file: url)
+            let panelKind: AgentSidePanelKind
+            if AgentSidePanelDiffSelection.relativePath(
+                for: url,
+                changes: agentWorktreeChanges
+            ) != nil {
+                panelKind = .diff
+            } else {
+                panelKind = .preview
+            }
+            agentSidePanelRequest = AgentSidePanelOpenRequest(kind: panelKind, file: url)
         } else {
             // 兜底:打开 Files 面板(没有具体文件),至少有可见反馈。
             agentSidePanelRequest = AgentSidePanelOpenRequest(kind: .files, file: nil)

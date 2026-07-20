@@ -67,18 +67,18 @@ struct WillDeepTests {
         ) == false)
     }
 
-    @Test("side panel diff display truncates oversized text")
-    func testSidePanelDiffDisplayTruncatesOversizedText() {
+    @Test("side panel diff refuses oversized text instead of rendering a sample")
+    func testSidePanelDiffRefusesOversizedText() {
         let prefix = "diff --git a/large.txt b/large.txt\n"
         let oversizedDiff = prefix + String(repeating: "+0123456789abcdef\n", count: 8_000)
 
-        let displayText = AgentSidePanelDiffLimiter.displayText(for: oversizedDiff)
+        let reason = AgentSidePanelDiffLimiter.unavailableReason(for: oversizedDiff)
 
-        #expect(displayText.count < oversizedDiff.count)
-        #expect(displayText.contains(prefix))
-        #expect(displayText.contains(String(AgentSidePanelDiffLimiter.maximumDisplayUTF8Bytes)))
-        #expect(displayText.contains(String(AgentSidePanelDiffLimiter.maximumDisplayLines)))
-        #expect(displayText.contains("git diff --no-ext-diff HEAD -- <path>"))
+        #expect(reason != nil)
+        #expect(reason?.contains(prefix) == false)
+        #expect(reason?.contains(String(AgentSidePanelDiffLimiter.maximumDisplayUTF8Bytes)) == true)
+        #expect(reason?.contains(String(AgentSidePanelDiffLimiter.maximumDisplayLines)) == true)
+        #expect(reason?.contains("git diff --no-ext-diff HEAD -- <path>") == true)
     }
 
     @MainActor

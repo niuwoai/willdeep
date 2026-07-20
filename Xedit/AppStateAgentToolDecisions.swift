@@ -585,6 +585,64 @@ extension AppState {
         waiter.resume(returning: decision)
     }
 
+    /// Apply a newly selected Workspace-access posture to calls that are
+    /// already waiting on the old posture. Tool dispatch normally evaluates
+    /// approval immediately before appending the card; without this bridge,
+    /// changing the composer picker while that card is visible only affects
+    /// the *next* call and leaves the current turn suspended indefinitely.
+    ///
+    /// Reuse the normal policy instead of blanket-approving: danger-tier,
+    /// active Plan-gate, session/workspace identity, and untrusted MCP calls
+    /// keep their existing user gate.
+    func reevaluatePendingToolCallsForWorkspaceAccess(for runtime: AgentRuntime) {
+        let pendingCallIDs = runtime.toolCalls.compactMap { call in
+            call.status == .pendingApproval ? call.id : nil
+        }
+        guard !pendingCallIDs.isEmpty else { return }
+
+        Task { @MainActor [weak self, weak runtime] in
+            guard let self, let runtime else { return }
+            let rootDirectory = try? runtime.localWorkspaceURLForOptimisticUse()
+
+            for callID in pendingCallIDs {
+                guard runtime.approvalMode == .workspaceAccess,
+                      let index = runtime.toolCalls.firstIndex(where: { $0.id == callID }),
+                      runtime.toolCalls[index].status == .pendingApproval else {
+                    continue
+                }
+
+                let call = runtime.toolCalls[index]
+                guard !Self.planGateBlocks(
+                    toolName: call.toolName,
+                    arguments: call.arguments,
+                    risk: call.risk,
+                    isActive: runtime.isPlanGateActive
+                ) else {
+                    continue
+                }
+
+                let source = await autoApprovalSource(
+                    toolName: call.toolName,
+                    arguments: call.arguments,
+                    risk: call.risk,
+                    rootDirectory: rootDirectory,
+                    interactionMode: runtime.interactionMode,
+                    approvalMode: runtime.approvalMode,
+                    conversationAllowedToolSignatures: runtime.conversationAllowedToolSignatures
+                )
+                guard let source,
+                      runtime.approvalMode == .workspaceAccess,
+                      let currentIndex = runtime.toolCalls.firstIndex(where: { $0.id == callID }),
+                      runtime.toolCalls[currentIndex].status == .pendingApproval else {
+                    continue
+                }
+
+                runtime.toolCalls[currentIndex].approvalSource = source
+                resolveAgentToolCallDecision(id: callID, decision: .approved)
+            }
+        }
+    }
+
     private func runtimeAndToolCallIndex(containing id: AgentToolCall.ID) -> (runtime: AgentRuntime, index: Int)? {
         if let runtime = activeRuntime,
            let index = runtime.toolCalls.firstIndex(where: { $0.id == id }) {

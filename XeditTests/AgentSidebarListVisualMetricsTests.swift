@@ -32,6 +32,31 @@ struct AgentSidebarListVisualMetricsTests {
         )
     }
 
+    @Test("plan progress badge keeps its intrinsic width under hover-sized pressure")
+    @MainActor
+    func planProgressBadgeResistsHorizontalCompression() {
+        var session = AgentSession(title: "A deliberately long conversation title")
+        session.currentPlan = AgentPlan(
+            status: .executing,
+            steps: [
+                .init(text: "Inspect", status: .done),
+                .init(text: "Fix", status: .inProgress),
+                .init(text: "Verify"),
+            ]
+        )
+
+        let hostingController = NSHostingController(rootView: AgentSessionModeBadges(session: session))
+        let unconstrained = hostingController.sizeThatFits(
+            in: NSSize(width: 1_000, height: AgentDesign.sidebarRowHeight)
+        )
+        let constrained = hostingController.sizeThatFits(
+            in: NSSize(width: 1, height: AgentDesign.sidebarRowHeight)
+        )
+
+        #expect(unconstrained.width > 1)
+        #expect(abs(constrained.width - unconstrained.width) < 0.5)
+    }
+
     @Test("scheduled-task search covers name, prompt, and workspace without reordering")
     @MainActor
     func scheduledTaskSearchUsesUserVisibleFields() {
