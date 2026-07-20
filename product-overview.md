@@ -1,6 +1,6 @@
 # WillDeep Product Overview
 
-> Last updated: 2026-07-20 | Current version: v1.191.0-rc12
+> Last updated: 2026-07-20 | Current version: v1.192.0-rc1
 
 ## Positioning
 
@@ -11,6 +11,14 @@ Official product domain: [willdeep.com](https://willdeep.com).
 WillDeep is configured for non-App-Store distribution without App Sandbox so it can access local project files with fewer permission interruptions.
 
 ## 架构概览
+
+- **终端捷径 tab 标签（1.192.0-rc1）** —— 终端录制捷径开始回放后，会把所用捷径名称作为小标签显示在对应终端 tab 标题旁；线上、beta、自跳转等常用环境入口可直接从 tab 栏辨认，tooltip 也会显示完整捷径来源。
+
+- **Editor 中文字体 fallback（1.191.0-rc15）** —— Editor 等宽字体会附加 CJK fallback cascade；纯文本加载、全量语法高亮和大文件视口高亮都会对中文/日文/韩文字符段显式套用 PingFang fallback 字体，避免括号内中文、中文注释或配置说明只占位不绘制。
+
+- **create_file 目标 workspace 落盘校验（1.191.0-rc14）** —— `create_file` 与自动应用 patch 统一按发起工具调用的 Agent runtime 解析 workspace，不再受当前活动会话或编辑器根目录漂移影响。每次写入后会从磁盘读回校验内容一致，失败时直接把 patch 标为 failed；编辑文件 ledger 与 worktree 刷新也归属目标 runtime，避免后台任务把文件写对了却在界面状态上串台。
+
+- **队列立即发送可接管卡住 turn（1.191.0-rc13）** —— 当 Agent 长时间停在“验证中”或其它处理中状态时，队列消息的纸飞机按钮会先取消当前 turn；如果旧 turn 没有及时退出，会释放它占用的 provider 并发槽并恢复队列消费，让新消息不再永远停在“已排队”。
 
 - **模型选择跳过无凭据 provider（1.191.0-rc12）** —— Agent 模型选择器只展示当前可实际发起请求的 provider：远程 provider 必须有自己的 API Key，本地 Ollama / Local OpenAI 可无 key，some.im 只有在共享登录态存在或 entry 自带 key 时才可选。DeepSeek provider 没有 key 时不会再显示或默认选中 `deepseek-v4-*`；如果 some.im 已登录，会在新会话和发送前自动回落到 some.im provider，避免“已登录 some.im 但当前其实在用无 key DeepSeek”的误导状态。
 

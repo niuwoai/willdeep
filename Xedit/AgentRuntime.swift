@@ -166,6 +166,10 @@ final class AgentRuntime: ObservableObject, Identifiable {
     /// when idle. Cancelled when the session is closed or the user
     /// stops the response.
     var requestTask: Task<Void, Never>?
+    /// Provider slot claimed by the currently running turn. The id lets
+    /// forced queue handoff release a stuck turn's slot without letting that
+    /// cancelled turn later release a newer turn's slot.
+    var currentProviderSlotClaim: AgentProviderSlotClaim?
     /// Live declarative/built-in workflow tasks keyed by WorkflowReport.id.
     /// Keeping them on the owning runtime makes cancellation session-safe:
     /// switching tabs never changes which task a card controls, and deleting
@@ -514,5 +518,15 @@ final class AgentRuntime: ObservableObject, Identifiable {
         toolCalls[index].errorMessage = nil
         pendingToolDecisions.removeValue(forKey: id)
         return true
+    }
+}
+
+struct AgentProviderSlotClaim: Equatable {
+    let id: UUID
+    let providerID: String
+
+    init(id: UUID = UUID(), providerID: String) {
+        self.id = id
+        self.providerID = providerID
     }
 }

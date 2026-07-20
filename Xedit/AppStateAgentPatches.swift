@@ -53,6 +53,7 @@ extension AppState {
         for index in runtime.patchProposals.indices where runtime.patchProposals[index].status == .pending {
             let outcome = resolveAgentPatchApplication(
                 runtime.patchProposals[index].diff,
+                runtime: runtime,
                 appliedMessage: autoApplyStatusMessage(for: source)
             )
             runtime.patchProposals[index].status = outcome.status
@@ -133,11 +134,24 @@ extension AppState {
         _ diff: String,
         appliedMessage: String
     ) -> (status: AgentPatchStatus, message: String) {
+        resolveAgentPatchApplication(
+            diff,
+            runtime: activeRuntime,
+            appliedMessage: appliedMessage
+        )
+    }
+
+    func resolveAgentPatchApplication(
+        _ diff: String,
+        runtime: AgentRuntime?,
+        appliedMessage: String
+    ) -> (status: AgentPatchStatus, message: String) {
         do {
-            try applyAgentPatch(diff)
+            try applyAgentPatch(diff, runtime: runtime)
             return (.applied, appliedMessage)
         } catch {
-            if case AgentPatchError.hunkDidNotMatch = error, agentPatchIsAlreadyApplied(diff) {
+            if case AgentPatchError.hunkDidNotMatch = error,
+               agentPatchIsAlreadyApplied(diff, runtime: runtime) {
                 return (.applied, L10n.AgentPatch.alreadyApplied)
             }
             return (.failed, error.localizedDescription)
@@ -149,7 +163,11 @@ extension AppState {
     /// `AgentPatchApplier.isAlreadyApplied`). Reads the current in-tab / on
     /// disk content per file so it reflects edits made outside this card.
     func agentPatchIsAlreadyApplied(_ diff: String) -> Bool {
-        guard let root = agentPatchWorkspaceRoot() else { return false }
+        agentPatchIsAlreadyApplied(diff, runtime: activeRuntime)
+    }
+
+    func agentPatchIsAlreadyApplied(_ diff: String, runtime: AgentRuntime?) -> Bool {
+        guard let root = agentPatchWorkspaceRoot(for: runtime) else { return false }
         guard let changes = try? AgentPatchApplier.parse(diff), !changes.isEmpty else { return false }
         let standardizedRoot = root.standardizedFileURL
         let rootPath = standardizedRoot.path
@@ -206,7 +224,7 @@ extension AppState {
             proposalIndex = runtime.patchProposals.count - 1
         }
 
-        let isCleanTrackedModify = shouldAutoApplyCleanTrackedPatch(changes: parsed)
+        let isCleanTrackedModify = shouldAutoApplyCleanTrackedPatch(changes: parsed, runtime: runtime)
 
         // 直接落盘的四种情形:Goal / workspace-access 自动应用、纯新建
         // 文件、用户本轮明确要求「直接写 / 落盘 / 不用审核」
@@ -222,7 +240,11 @@ extension AppState {
                     applyImmediately: applyImmediately,
                     isCleanTrackedModify: isCleanTrackedModify
                 )
-            let outcome = resolveAgentPatchApplication(diff, appliedMessage: appliedMessage)
+            let outcome = resolveAgentPatchApplication(
+                diff,
+                runtime: runtime,
+                appliedMessage: appliedMessage
+            )
             runtime.patchProposals[proposalIndex].status = outcome.status
             runtime.patchProposals[proposalIndex].statusMessage = outcome.message
         }
@@ -270,10 +292,13 @@ extension AppState {
         return nil
     }
 
-    private func shouldAutoApplyCleanTrackedPatch(changes: [AgentPatchFileChange]) -> Bool {
+    private func shouldAutoApplyCleanTrackedPatch(
+        changes: [AgentPatchFileChange],
+        runtime: AgentRuntime?
+    ) -> Bool {
         guard !changes.isEmpty,
               !changes.contains(where: \.isNewFile),
-              let workspaceRoot = agentPatchWorkspaceRoot()?.standardizedFileURL,
+              let workspaceRoot = agentPatchWorkspaceRoot(for: runtime)?.standardizedFileURL,
               let repositoryRoot = Self.findGitRepositoryRoot(startingAt: workspaceRoot)?.standardizedFileURL else {
             return false
         }
@@ -316,13 +341,17 @@ extension AppState {
     }
 
     func applyAgentPatch(_ diff: String) throws {
+        try applyAgentPatch(diff, runtime: activeRuntime)
+    }
+
+    func applyAgentPatch(_ diff: String, runtime: AgentRuntime?) throws {
         // Agent mode 下 editor 窗口的 `rootDirectory` 经常是 nil(没在
         // editor 里打开文件夹),但 agent 会话本身锚在一个 workspace 上。
         // 之前只看 `rootDirectory` → 一律报「请先打开项目文件夹」,哪怕
         // 用户明明在 mylinux 这个 workspace 里。改成和 worktree diff 同
         // 一套优先级:已知 git repo root → 会话 workspaceRootPath → editor
         // rootDirectory。
-        guard let resolvedRoot = agentPatchWorkspaceRoot() else {
+        guard let resolvedRoot = agentPatchWorkspaceRoot(for: runtime) else {
             throw AgentPatchError.noWorkspace
         }
 
@@ -361,6 +390,14 @@ extension AppState {
                 withIntermediateDirectories: true
             )
             try pendingWrite.content.write(to: pendingWrite.url, atomically: true, encoding: .utf8)
+            let verifiedContent = try Self.decodeText(
+                from: Self.readFileData(from: pendingWrite.url, allowLargeFile: true)
+            )
+            guard verifiedContent == pendingWrite.content else {
+                throw AgentPatchError.writeVerificationFailed(
+                    pendingWrite.relativePath.isEmpty ? pendingWrite.url.lastPathComponent : pendingWrite.relativePath
+                )
+            }
             applyAgentPatchedContent(pendingWrite.content, to: pendingWrite.url)
         }
 
@@ -368,24 +405,29 @@ extension AppState {
         // the worktree-change card can show. Fresh sessions with no applied
         // patch never get the card, even if the repo has unrelated diffs.
         if !pendingWrites.isEmpty {
-            agentSessionDidEditFiles = true
+            let trackingRuntime = runtime ?? activeRuntime
+            trackingRuntime?.didEditFiles = true
             // Record each written path so the card stays scoped to files
             // Agent actually touched in THIS session — never the user's
             // own diffs or untracked build artifacts.
-            var edited = agentEditedRelativePaths
-            var artifacts = agentArtifactRelativePaths
+            var edited = trackingRuntime?.agentEditedPaths ?? []
+            var artifacts = trackingRuntime?.agentArtifactPaths ?? []
             for write in pendingWrites where !write.relativePath.isEmpty {
                 edited.insert(write.relativePath)
                 if write.isNewFile, Self.isAgentSessionArtifactPath(write.relativePath) {
                     artifacts.insert(write.relativePath)
                 }
             }
-            agentEditedRelativePaths = edited
-            agentArtifactRelativePaths = artifacts
-            persistActiveAgentSession()
+            trackingRuntime?.agentEditedPaths = edited
+            trackingRuntime?.agentArtifactPaths = artifacts
+            if let trackingRuntime {
+                persistAgentSession(runtime: trackingRuntime)
+            } else {
+                persistActiveAgentSession()
+            }
         }
 
-        refreshGitStatus()
+        refreshAgentPatchGitStatus(for: runtime, workspaceRoot: root)
         persistSession()
     }
 
@@ -393,7 +435,11 @@ extension AppState {
     /// Mirrors the worktree-diff resolver so patch apply works in Agent
     /// mode even when the editor window has no folder open.
     func agentPatchWorkspaceRoot() -> URL? {
-        if let runtime = activeRuntime,
+        agentPatchWorkspaceRoot(for: activeRuntime)
+    }
+
+    func agentPatchWorkspaceRoot(for runtime: AgentRuntime?) -> URL? {
+        if let runtime,
            (runtime.workspaceRootPath?.isEmpty == false || runtime.workspaceLocation?.localPath != nil) {
             return try? runtime.localWorkspaceURLForOptimisticUse()
         }
@@ -401,6 +447,41 @@ extension AppState {
             return repoRoot.standardizedFileURL
         }
         return rootDirectory?.standardizedFileURL
+    }
+
+    private func refreshAgentPatchGitStatus(for runtime: AgentRuntime?, workspaceRoot: URL) {
+        guard let runtime else {
+            refreshGitStatus()
+            return
+        }
+
+        let targetDirectory = workspaceRoot.standardizedFileURL
+        let runtimeID = runtime.id
+        let editedPaths = runtime.agentEditedPaths
+        Task { [weak self] in
+            let snapshot = await Self.loadAgentWorktreeSnapshot(
+                for: targetDirectory,
+                restrictTo: editedPaths
+            )
+            await MainActor.run {
+                guard let self,
+                      let liveRuntime = self.agentRuntimes[runtimeID] else {
+                    return
+                }
+                guard let liveWorkspaceURL = try? liveRuntime.localWorkspaceURLForOptimisticUse(),
+                      liveWorkspaceURL.standardizedFileURL.path == targetDirectory.path else {
+                    return
+                }
+
+                if liveRuntime.worktreeChanges != snapshot.changes {
+                    liveRuntime.worktreeChanges = snapshot.changes
+                }
+                if self.rootDirectory?.standardizedFileURL.path == targetDirectory.path,
+                   self.gitStatus != snapshot.status {
+                    self.gitStatus = snapshot.status
+                }
+            }
+        }
     }
 
     nonisolated static func relativeWorkspacePath(for url: URL, root: URL, rootPath: String) -> String {

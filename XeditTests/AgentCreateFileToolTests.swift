@@ -54,4 +54,48 @@ struct AgentCreateFileToolTests {
         let tricky = "+ not a hunk\n- also not\n@@ fake header @@\n normal"
         _ = try roundTrip(path: "tricky.txt", content: tricky)
     }
+
+    @Test
+    @MainActor
+    func creationPatchUsesTargetRuntimeWorkspaceWhenAnotherSessionIsActive() throws {
+        let base = FileManager.default.temporaryDirectory
+            .appendingPathComponent("willdeep_create_file_runtime_root_\(UUID().uuidString)")
+        let targetWorkspace = base.appendingPathComponent("target")
+        let activeWorkspace = base.appendingPathComponent("active")
+        try FileManager.default.createDirectory(at: targetWorkspace, withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: activeWorkspace, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: base) }
+
+        let appState = AppState(rootDirectory: activeWorkspace)
+        let existingIDs = Set(appState.agentSessions.map(\.id))
+        defer {
+            for id in appState.agentSessions.map(\.id) where !existingIDs.contains(id) {
+                AgentSessionStore.delete(id: id)
+            }
+        }
+
+        let targetSession = appState.startNewAgentSession(inWorkspaceAt: targetWorkspace.path)
+        let targetRuntime = try #require(appState.runtime(for: targetSession.id))
+        let activeSession = appState.startNewAgentSession(inWorkspaceAt: activeWorkspace.path)
+        let activeRuntime = try #require(appState.runtime(for: activeSession.id))
+
+        let content = "services:\n  app:\n    image: tokenhub:beta\n"
+        let diff = AgentToolRunner.makeCreationDiff(path: "deploy/compose.yml", content: content)
+        let proposal = try appState.enqueueAgentPatchProposal(
+            for: targetRuntime,
+            messageID: UUID(),
+            title: "创建文件: deploy/compose.yml",
+            diff: diff
+        )
+
+        #expect(proposal.status == .applied)
+        let targetFile = targetWorkspace.appendingPathComponent("deploy/compose.yml")
+        let activeFile = activeWorkspace.appendingPathComponent("deploy/compose.yml")
+        #expect(try String(contentsOf: targetFile, encoding: .utf8) == content)
+        #expect(!FileManager.default.fileExists(atPath: activeFile.path))
+        #expect(targetRuntime.didEditFiles)
+        #expect(targetRuntime.agentEditedPaths == ["deploy/compose.yml"])
+        #expect(!activeRuntime.didEditFiles)
+        #expect(activeRuntime.agentEditedPaths.isEmpty)
+    }
 }

@@ -39,6 +39,22 @@ extension AppState {
         resumeAgentLoopsWithPendingBackgroundCompletions()
     }
 
+    func claimProviderSlot(for runtime: AgentRuntime, providerID: String) -> AgentProviderSlotClaim {
+        let claim = AgentProviderSlotClaim(providerID: providerID)
+        runtime.currentProviderSlotClaim = claim
+        return claim
+    }
+
+    func releaseProviderSlot(
+        for runtime: AgentRuntime,
+        claimID: UUID,
+        providerID: String
+    ) {
+        guard runtime.currentProviderSlotClaim?.id == claimID else { return }
+        runtime.currentProviderSlotClaim = nil
+        releaseProviderSlot(providerID: providerID)
+    }
+
     func drainPendingDispatchQueue() {
         guard !pendingDispatchQueue.isEmpty else { return }
         var remaining: [PendingDispatch] = []

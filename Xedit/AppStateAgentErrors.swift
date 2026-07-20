@@ -204,6 +204,10 @@ extension AppState {
         runtime.errorRequiresSomeIMLogin = false
         runtime.isResponding = true
         runtime.turnStartedAt = Date()
+        let providerSlotClaim = claimProviderSlot(
+            for: runtime,
+            providerID: configuration.providerID
+        )
 
         runtime.requestTask?.cancel()
         runtime.requestTask = Task { [weak self, weak runtime] in
@@ -212,7 +216,11 @@ extension AppState {
                 self.releaseProviderSlot(providerID: configuration.providerID)
                 return
             }
-            await self.runAgentLoop(for: runtime, configuration: configuration)
+            await self.runAgentLoop(
+                for: runtime,
+                configuration: configuration,
+                providerSlotClaimID: providerSlotClaim.id
+            )
         }
     }
 

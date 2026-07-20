@@ -581,10 +581,34 @@ struct EditorFontChoice: Identifiable, CaseIterable, Equatable {
     }
 
     func font(size: CGFloat) -> NSFont {
+        let baseFont: NSFont
         if let postScriptName, let font = NSFont(name: postScriptName, size: size) {
-            return font
+            baseFont = font
+        } else {
+            baseFont = NSFont.monospacedSystemFont(ofSize: size, weight: .regular)
         }
-        return NSFont.monospacedSystemFont(ofSize: size, weight: .regular)
+        return baseFont.withEditorCJKCascade()
+    }
+}
+
+extension NSFont {
+    func withEditorCJKCascade() -> NSFont {
+        let cascadeNames = [
+            "PingFangSC-Regular",
+            "HiraginoSansGB-W3",
+            "STHeitiSC-Light",
+            "AppleColorEmoji",
+        ]
+        let cascadeList = cascadeNames.map { NSFontDescriptor(name: $0, size: pointSize) }
+        let descriptor = fontDescriptor.addingAttributes([.cascadeList: cascadeList])
+        return NSFont(descriptor: descriptor, size: pointSize) ?? self
+    }
+
+    func editorCJKFallbackFont() -> NSFont {
+        let isBold = fontDescriptor.symbolicTraits.contains(.bold)
+        let name = isBold ? "PingFangSC-Medium" : "PingFangSC-Regular"
+        return NSFont(name: name, size: pointSize)
+            ?? NSFont.systemFont(ofSize: pointSize, weight: isBold ? .semibold : .regular)
     }
 }
 

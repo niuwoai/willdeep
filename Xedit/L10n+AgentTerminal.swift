@@ -117,6 +117,10 @@ extension L10n {
             let template = String(localized: "agent-terminal.shortcut.estimated-finish", defaultValue: "Estimated finish: %@")
             return String(format: template, a1)
         }
+        static func shortcutBadgeTooltip(_ a1: String) -> String {
+            let template = String(localized: "agent-terminal.shortcut.badge-tooltip", defaultValue: "Shortcut: %@")
+            return String(format: template, a1)
+        }
         static func newSSHTab(_ a1: String) -> String {
             let template = String(localized: "agent-terminal.new-ssh-tab", defaultValue: "SSH: %@")
             return String(format: template, a1)

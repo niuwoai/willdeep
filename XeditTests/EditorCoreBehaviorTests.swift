@@ -474,6 +474,36 @@ struct EditorCoreBehaviorTests {
         #expect(appliedFont?.pointSize == 17)
     }
 
+    @Test("editor fonts include CJK fallback cascade")
+    @MainActor
+    func testEditorFontsIncludeCJKFallbackCascade() throws {
+        let font = EditorFontChoice.menlo.font(size: 13)
+        let cascade = try #require(font.fontDescriptor.object(forKey: .cascadeList) as? [NSFontDescriptor])
+        let fallbackNames = Set(cascade.compactMap(\.postscriptName))
+
+        #expect(fallbackNames.contains("PingFangSC-Regular"))
+    }
+
+    @Test("syntax highlighting keeps CJK glyphs visible")
+    @MainActor
+    func testSyntaxHighlightingKeepsCJKGlyphsVisible() throws {
+        let source = "10.0.131.7:28080 (内网地址)\n"
+        let highlighted = SyntaxHighlighter.highlightSync(
+            source,
+            language: .shell,
+            theme: .graphite,
+            font: EditorFontChoice.menlo.font(size: 13)
+        )
+
+        let nsSource = source as NSString
+        let cjkRange = nsSource.range(of: "内网地址")
+        let cjkFont = try #require(highlighted.attribute(.font, at: cjkRange.location, effectiveRange: nil) as? NSFont)
+        let asciiFont = try #require(highlighted.attribute(.font, at: 0, effectiveRange: nil) as? NSFont)
+
+        #expect(cjkFont.fontName == "PingFangSC-Regular")
+        #expect(asciiFont.fontName != cjkFont.fontName)
+    }
+
     @Test("language detection supports common source file extensions")
     func testLanguageDetectionSupportsCommonExtensions() {
         let expected: [(String, Language)] = [

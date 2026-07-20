@@ -77,6 +77,15 @@ struct AgentExecutorAndTerminalPoolTests {
         #expect(controller.activeTabID == boundTab.id)
     }
 
+    @Test("terminal shortcut badge titles are trimmed and bounded")
+    func terminalShortcutBadgeTitlesAreTrimmedAndBounded() {
+        let longTitle = String(repeating: "online", count: 8)
+
+        #expect(AgentTerminalTab.shortcutBadgeTitle(for: "  online  ") == "online")
+        #expect(AgentTerminalTab.shortcutBadgeTitle(for: longTitle) == String(longTitle.prefix(24)))
+        #expect(AgentTerminalTab.shortcutBadgeTitle(for: "   ") == nil)
+    }
+
     @Test("composer uses semantic model and worker icons")
     func composerSemanticIcons() {
         #expect(ModelPickerPill.modelSymbol == "brain.head.profile")

@@ -940,6 +940,10 @@ extension AppState {
         closeBlockingAgentToolDecision(for: runtime, reason: "Response stopped")
         runtime.shouldConsumeQueueAfterStop = !runtime.queuedMessages.isEmpty
         runtime.requestTask?.cancel()
+        scheduleQueuedMessageConsumptionAfterCancellation(for: runtime)
+    }
+
+    func scheduleQueuedMessageConsumptionAfterCancellation(for runtime: AgentRuntime) {
         Task { @MainActor [weak self, weak runtime] in
             for _ in 0..<20 {
                 try? await Task.sleep(nanoseconds: 150_000_000)
@@ -951,6 +955,23 @@ extension AppState {
                     return
                 }
             }
+            guard let self, let runtime else { return }
+            guard runtime.shouldConsumeQueueAfterStop, runtime.isResponding else { return }
+            let claim = runtime.currentProviderSlotClaim
+            runtime.isResponding = false
+            runtime.turnStartedAt = nil
+            runtime.requestTask = nil
+            runtime.shouldConsumeQueueAfterStop = false
+            runtime.currentTurnAttachedSkills = []
+            self.persistAgentSession(runtime: runtime)
+            if let claim {
+                self.releaseProviderSlot(
+                    for: runtime,
+                    claimID: claim.id,
+                    providerID: claim.providerID
+                )
+            }
+            self.consumeNextQueuedMessageIfNeeded(for: runtime)
         }
     }
 
@@ -1020,6 +1041,7 @@ extension AppState {
             closeBlockingAgentToolDecision(for: runtime, reason: "Sending queued message")
             runtime.shouldConsumeQueueAfterStop = true
             runtime.requestTask?.cancel()
+            scheduleQueuedMessageConsumptionAfterCancellation(for: runtime)
         } else {
             consumeNextQueuedMessageIfNeeded(for: runtime)
         }

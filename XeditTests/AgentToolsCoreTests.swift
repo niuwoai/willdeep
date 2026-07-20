@@ -1297,6 +1297,34 @@ struct AgentQueueModeTests {
 
     @Test
     @MainActor
+    func queuedMessageCancellationFallbackReleasesStuckTurnSlot() async {
+        let state = AppState()
+        _ = state.startNewAgentSession()
+        guard let runtime = state.activeRuntime else {
+            Issue.record("Expected active runtime")
+            return
+        }
+
+        let providerID = "test-provider"
+        #expect(state.acquireProviderSlotIfPossible(providerID: providerID))
+        _ = state.claimProviderSlot(for: runtime, providerID: providerID)
+        runtime.isResponding = true
+        runtime.turnStartedAt = Date()
+        runtime.shouldConsumeQueueAfterStop = true
+        runtime.requestTask = Task {}
+
+        state.scheduleQueuedMessageConsumptionAfterCancellation(for: runtime)
+        try? await Task.sleep(nanoseconds: 3_300_000_000)
+
+        #expect(runtime.isResponding == false)
+        #expect(runtime.turnStartedAt == nil)
+        #expect(runtime.requestTask == nil)
+        #expect(runtime.currentProviderSlotClaim == nil)
+        #expect(state.inFlightCountByProvider[providerID] == nil)
+    }
+
+    @Test
+    @MainActor
     func sendingNewMessageWhileAwaitingUserDecisionClosesBlockingCall() {
         let state = AppState()
         _ = state.startNewAgentSession()

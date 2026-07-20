@@ -1179,6 +1179,7 @@ final class AgentTerminalTab: ObservableObject, Identifiable, AgentTerminalProce
     @Published private(set) var activeRecordingStartedAt: Date?
     @Published private(set) var isPlayingShortcut = false
     @Published private(set) var shortcutPlaybackState: TerminalShortcutPlaybackState?
+    @Published private(set) var shortcutBadgeTitle: String?
     @Published private(set) var isAutomationBusy = false
 
     /// Last moment the tab saw user input or fresh process output. Drives
@@ -1340,6 +1341,7 @@ final class AgentTerminalTab: ObservableObject, Identifiable, AgentTerminalProce
         isPlayingShortcut = true
         let startedAt = Date()
         let totalDelay = shortcut.playbackDurationMilliseconds
+        shortcutBadgeTitle = Self.shortcutBadgeTitle(for: shortcut.title)
         shortcutPlaybackTask?.cancel()
         shortcutPlaybackState = TerminalShortcutPlaybackState(
             shortcutID: shortcut.id,
@@ -1413,6 +1415,12 @@ final class AgentTerminalTab: ObservableObject, Identifiable, AgentTerminalProce
         guard shortcutPlaybackState != nil else { return }
         shortcutPlaybackState?.status = status
         shortcutPlaybackState?.currentEventIndex = shortcutPlaybackState?.totalEvents ?? 0
+    }
+
+    nonisolated static func shortcutBadgeTitle(for title: String) -> String? {
+        let trimmed = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return nil }
+        return String(trimmed.prefix(24))
     }
 
     // MARK: Agent-tool surface

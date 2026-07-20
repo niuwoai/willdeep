@@ -491,7 +491,10 @@ private struct AgentSidePanelTerminalContentView: View {
                 .foregroundStyle(isActive ? interfacePalette.primaryText : interfacePalette.secondaryText)
                 // 标题封顶,避免 `rocky@host:/` 这种长 OSC 标题把
                 // 整个 chip 撑得占满侧栏、把 `+` 顶出去。
-                .frame(maxWidth: 130)
+                .frame(maxWidth: tab.shortcutBadgeTitle == nil ? 130 : 92)
+            if let shortcutBadgeTitle = tab.shortcutBadgeTitle {
+                shortcutBadge(shortcutBadgeTitle, isActive: isActive)
+            }
             if isBound {
                 Image(systemName: "link")
                     .font(.system(size: 8, weight: .semibold))
@@ -523,6 +526,25 @@ private struct AgentSidePanelTerminalContentView: View {
         .onTapGesture {
             controller.activateTab(id: tab.id, bindingTo: appState.activeAgentSessionID)
         }
+    }
+
+    private func shortcutBadge(_ title: String, isActive: Bool) -> some View {
+        Text(title)
+            .font(.system(size: 9, weight: .semibold))
+            .lineLimit(1)
+            .truncationMode(.tail)
+            .foregroundStyle(isActive ? interfacePalette.accent : interfacePalette.secondaryText)
+            .padding(.horizontal, 5)
+            .frame(maxWidth: 74)
+            .frame(height: 15)
+            .background(
+                Capsule(style: .continuous)
+                    .fill(interfacePalette.accent.opacity(isActive ? 0.14 : 0.08))
+            )
+            .overlay(
+                Capsule(style: .continuous)
+                    .stroke(interfacePalette.accent.opacity(isActive ? 0.28 : 0.14), lineWidth: 1)
+            )
     }
 
     private var addTabMenu: some View {
@@ -765,6 +787,9 @@ private struct AgentSidePanelTerminalContentView: View {
         }
         if isOpenedByCurrentSession(tab) {
             lines.append(L10n.AgentTerminal.openedByThisSession)
+        }
+        if let shortcutBadgeTitle = tab.shortcutBadgeTitle {
+            lines.append(L10n.AgentTerminal.shortcutBadgeTooltip(shortcutBadgeTitle))
         }
         return lines.joined(separator: " · ")
     }

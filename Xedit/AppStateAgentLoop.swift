@@ -118,6 +118,7 @@ extension AppState {
         runtime.isResponding = true
         runtime.turnStartedAt = Date()
         runtime.currentTurnAttachedSkills = attachedSkills
+        let providerSlotClaim = claimProviderSlot(for: runtime, providerID: providerID)
 
         // The user's message was already appended and persisted to disk
         // above, before the slot gate — so even if the turn hangs
@@ -144,11 +145,20 @@ extension AppState {
                     imageDescriptionConfiguration: imageDescriptionConfiguration
                 )
             } catch is CancellationError {
+                let shouldConsumeQueueAfterStop = runtime.shouldConsumeQueueAfterStop
                 runtime.isResponding = false
                 runtime.turnStartedAt = nil
                 runtime.requestTask = nil
+                runtime.shouldConsumeQueueAfterStop = false
                 self.persistAgentSession(runtime: runtime)
-                self.releaseProviderSlot(providerID: providerID)
+                self.releaseProviderSlot(
+                    for: runtime,
+                    claimID: providerSlotClaim.id,
+                    providerID: providerID
+                )
+                if shouldConsumeQueueAfterStop {
+                    self.consumeNextQueuedMessageIfNeeded(for: runtime)
+                }
                 return
             } catch {
                 self.setAgentError(error, for: runtime)
@@ -156,11 +166,19 @@ extension AppState {
                 runtime.turnStartedAt = nil
                 runtime.requestTask = nil
                 self.persistAgentSession(runtime: runtime)
-                self.releaseProviderSlot(providerID: providerID)
+                self.releaseProviderSlot(
+                    for: runtime,
+                    claimID: providerSlotClaim.id,
+                    providerID: providerID
+                )
                 self.consumeNextQueuedMessageIfNeeded(for: runtime)
                 return
             }
-            await self.runAgentLoop(for: runtime, configuration: configuration)
+            await self.runAgentLoop(
+                for: runtime,
+                configuration: configuration,
+                providerSlotClaimID: providerSlotClaim.id
+            )
         }
     }
 
@@ -334,6 +352,7 @@ extension AppState {
         runtime.latestComputerUseActivity = nil
         runtime.isResponding = true
         runtime.turnStartedAt = Date()
+        let providerSlotClaim = claimProviderSlot(for: runtime, providerID: providerID)
 
         runtime.requestTask = Task { [weak self, weak runtime] in
             guard let self else { return }
@@ -341,7 +360,11 @@ extension AppState {
                 self.releaseProviderSlot(providerID: providerID)
                 return
             }
-            await self.runAgentLoop(for: runtime, configuration: configuration)
+            await self.runAgentLoop(
+                for: runtime,
+                configuration: configuration,
+                providerSlotClaimID: providerSlotClaim.id
+            )
         }
     }
 
@@ -418,7 +441,11 @@ extension AppState {
     }
 
     @MainActor
-    func runAgentLoop(for runtime: AgentRuntime, configuration: AgentConfiguration) async {
+    func runAgentLoop(
+        for runtime: AgentRuntime,
+        configuration: AgentConfiguration,
+        providerSlotClaimID: UUID
+    ) async {
         // This turn just went live (isResponding was set true by the caller).
         // Refresh the same-checkout collision hint so the foreground composer
         // reflects a background session now working in its directory.
@@ -445,7 +472,11 @@ extension AppState {
             // Always release the provider slot last so the queue drain
             // sees a fully cleared `isResponding` and won't refuse to
             // dispatch a queued user message that's for the same runtime.
-            releaseProviderSlot(providerID: configuration.providerID)
+            releaseProviderSlot(
+                for: runtime,
+                claimID: providerSlotClaimID,
+                providerID: configuration.providerID
+            )
             // A background job can finish in the tiny window between this
             // turn's last drain and its end. If one did — and no queued
             // user message just claimed the runtime above — kick a fresh

@@ -624,13 +624,18 @@ struct EditorView: NSViewRepresentable {
             // Show plain text immediately so the file appears the instant it
             // loads — never block the main thread on a full-file regex pass.
             // Syntax highlighting is applied asynchronously afterwards.
-            let plain = NSAttributedString(
+            let plain = NSMutableAttributedString(
                 string: newText,
                 attributes: [
                     .font: parent.settings.editorFont(),
                     .foregroundColor: parent.settings.theme.foregroundColor,
                     .paragraphStyle: parent.settings.editorParagraphStyle(),
                 ]
+            )
+            SyntaxHighlighter.applyEditorCJKFallbackFonts(
+                to: plain,
+                source: newText,
+                defaultFont: parent.settings.editorFont()
             )
             // Fresh content: don't preserve/restore a viewport (no full-document
             // layout). Scroll is restored separately on tab switch; a freshly

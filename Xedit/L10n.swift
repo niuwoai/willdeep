@@ -845,6 +845,10 @@ nonisolated enum L10n {
             let template = String(localized: "agent-patch-error.target-already-exists", defaultValue: "Cannot create %@ — it already exists. Use a modify diff instead.")
             return String(format: template, a1)
         }
+        static func writeVerificationFailed(_ a1: String) -> String {
+            let template = String(localized: "agent-patch-error.write-verification-failed", defaultValue: "The patch reported a write for %@, but the file could not be verified on disk.")
+            return String(format: template, a1)
+        }
     }
 
     enum AgentSidePanel {

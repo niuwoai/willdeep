@@ -1346,6 +1346,7 @@ enum SyntaxHighlighter {
             }
         }
 
+        applyEditorCJKFallbackFonts(to: base, source: source, defaultFont: font, range: fullRange)
         return base
     }
 
@@ -1479,7 +1480,91 @@ enum SyntaxHighlighter {
                 textStorage.addAttributes(span.attributes, range: r)
             }
         }
+        let defaultFont = textStorage.attribute(.font, at: safeRange.location, effectiveRange: nil) as? NSFont
+            ?? NSFont.monospacedSystemFont(ofSize: 13, weight: .regular)
+        applyEditorCJKFallbackFonts(
+            to: textStorage,
+            source: textStorage.string,
+            defaultFont: defaultFont,
+            range: safeRange
+        )
         textStorage.endEditing()
+    }
+
+    static func applyEditorCJKFallbackFonts(
+        to attributed: NSMutableAttributedString,
+        source: String,
+        defaultFont: NSFont,
+        range: NSRange? = nil
+    ) {
+        let fullRange = NSRange(location: 0, length: attributed.length)
+        let safeRange = NSIntersectionRange(range ?? fullRange, fullRange)
+        guard safeRange.length > 0 else { return }
+
+        var fontRuns: [(range: NSRange, font: NSFont)] = []
+        attributed.enumerateAttribute(.font, in: safeRange, options: []) { value, range, _ in
+            fontRuns.append((range, (value as? NSFont) ?? defaultFont))
+        }
+
+        for run in fontRuns {
+            let fallbackFont = run.font.editorCJKFallbackFont()
+            for cjkRange in cjkScalarRanges(in: source, limiting: run.range) {
+                attributed.addAttribute(.font, value: fallbackFont, range: cjkRange)
+            }
+        }
+    }
+
+    private static func cjkScalarRanges(in source: String, limiting range: NSRange) -> [NSRange] {
+        guard !source.isEmpty, range.length > 0 else { return [] }
+
+        var result: [NSRange] = []
+        var utf16Location = 0
+        var currentStart: Int?
+        var currentLength = 0
+
+        func flushCurrent() {
+            if let start = currentStart, currentLength > 0 {
+                result.append(NSRange(location: start, length: currentLength))
+            }
+            currentStart = nil
+            currentLength = 0
+        }
+
+        for scalar in source.unicodeScalars {
+            let scalarLength = String(scalar).utf16.count
+            let scalarRange = NSRange(location: utf16Location, length: scalarLength)
+            let insideLimit = NSIntersectionRange(scalarRange, range).length == scalarLength
+            if insideLimit, isCJKScalar(scalar) {
+                if currentStart == nil {
+                    currentStart = utf16Location
+                }
+                currentLength += scalarLength
+            } else {
+                flushCurrent()
+            }
+            utf16Location += scalarLength
+        }
+        flushCurrent()
+        return result
+    }
+
+    private static func isCJKScalar(_ scalar: UnicodeScalar) -> Bool {
+        switch scalar.value {
+        case 0x1100...0x11FF,   // Hangul Jamo
+             0x2E80...0x2EFF,   // CJK Radicals Supplement
+             0x3000...0x303F,   // CJK punctuation
+             0x3040...0x30FF,   // Hiragana and Katakana
+             0x31F0...0x31FF,   // Katakana phonetic extensions
+             0x3400...0x4DBF,   // CJK Unified Ideographs Extension A
+             0x4E00...0x9FFF,   // CJK Unified Ideographs
+             0xAC00...0xD7AF,   // Hangul syllables
+             0xF900...0xFAFF,   // CJK Compatibility Ideographs
+             0xFF00...0xFFEF,   // Fullwidth forms
+             0x20000...0x2FA1F: // CJK extensions B through compatibility supplement
+            return true
+        default:
+            return false
+        }
     }
 }
 

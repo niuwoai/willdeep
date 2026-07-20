@@ -2711,6 +2711,23 @@
         }
       }
     },
+    "agent-patch-error.write-verification-failed" : {
+      "extractionState" : "extracted_with_value",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "The patch reported a write for %@, but the file could not be verified on disk."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "patch 已报告写入 %@，但无法在磁盘上验证该文件。"
+          }
+        }
+      }
+    },
     "agent-patch-error.unsupported-diff" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -4252,6 +4269,23 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "预计结束：%@"
+          }
+        }
+      }
+    },
+    "agent-terminal.shortcut.badge-tooltip" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Shortcut: %@"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "捷径：%@"
           }
         }
       }
