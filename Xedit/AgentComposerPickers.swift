@@ -105,7 +105,7 @@ struct WorkspacePickerPill: View {
         if let remote = activeRemoteWorkspaceLabel {
             return remote
         }
-        if let localPath = appState.activeRuntime?.workspaceLocation?.localPath {
+        if let localPath = activeLocalWorkspacePath {
             let root = URL(fileURLWithPath: localPath)
             return root.lastPathComponent.isEmpty ? localPath : root.lastPathComponent
         }
@@ -116,7 +116,7 @@ struct WorkspacePickerPill: View {
         if let remote = activeRemoteWorkspace {
             return WorkspacePresentation.remoteHelp(runtime: remote.runtime, path: remote.path)
         }
-        if let localPath = appState.activeRuntime?.workspaceLocation?.localPath {
+        if let localPath = activeLocalWorkspacePath {
             return localPath
         }
         if appState.activeRuntime == nil, let root = appState.rootDirectory {
@@ -157,6 +157,7 @@ struct WorkspacePickerPill: View {
 
         if appState.agentWorkspaceGitStatus.isRepository {
             Section(L10n.ComposerWorkspace.gitWorktrees) {
+                let activeExecutionPath = activeExecutionLocalWorkspacePath
                 Button {
                     appState.createAgentGitWorktreeFromActiveWorkspace()
                 } label: {
@@ -166,7 +167,10 @@ struct WorkspacePickerPill: View {
 
                 ForEach(appState.agentGitWorktrees) { worktree in
                     Button {
-                        appState.moveActiveAgentSessionToWorkspace(at: worktree.path)
+                        appState.moveActiveAgentSessionToGitWorktree(
+                            at: worktree.path,
+                            sidebarWorkspaceRootPath: primaryWorktree?.path ?? worktree.path
+                        )
                     } label: {
                         HStack {
                             VStack(alignment: .leading) {
@@ -175,7 +179,7 @@ struct WorkspacePickerPill: View {
                                     .font(.caption)
                                     .foregroundStyle(.secondary)
                             }
-                            if activeLocalPath == worktree.url.path {
+                            if activeExecutionPath == worktree.url.path {
                                 Image(systemName: "checkmark")
                             }
                         }
@@ -270,16 +274,31 @@ struct WorkspacePickerPill: View {
     }
 
     private var activeLocalWorkspacePath: String? {
+        guard let runtime = appState.activeRuntime else { return nil }
+        let path = runtime.session.sidebarWorkspaceRootPath
+            ?? runtime.workspaceLocation?.localPath
+            ?? runtime.workspaceRootPath
+        guard let path, !path.isEmpty else {
+            return nil
+        }
+        return URL(fileURLWithPath: path).standardizedFileURL.path
+    }
+
+    private var activeExecutionLocalWorkspacePath: String? {
         guard let path = appState.activeRuntime?.workspaceLocation?.localPath, !path.isEmpty else {
             return nil
         }
         return URL(fileURLWithPath: path).standardizedFileURL.path
     }
 
+    private var primaryWorktree: AgentGitWorktree? {
+        appState.agentGitWorktrees.first(where: \.isPrimary)
+    }
+
     private var activeRemovableWorktree: AgentGitWorktree? {
-        guard let activeLocalWorkspacePath else { return nil }
+        guard let activeExecutionLocalWorkspacePath else { return nil }
         return appState.agentGitWorktrees.first { worktree in
-            activeLocalWorkspacePath == worktree.url.path && !worktree.isPrimary && !worktree.isBare
+            activeExecutionLocalWorkspacePath == worktree.url.path && !worktree.isPrimary && !worktree.isBare
         }
     }
 
@@ -2285,12 +2304,16 @@ struct ModelPickerPill: View {
     }
 
     private func prepareModelPanel() {
+        appState.reconcileSomeIMProviderFromSharedSession()
+        appState.ensureActiveProviderIsUsableForChatSelection()
+        appState.materializeProviderLibraryAPIKeys()
         refreshMenuSnapshot()
         searchText = ""
         selectedTierFilter = .all
         if menuSnapshot.managedActive, menuSnapshot.isSomeIMAuthenticated {
             selectSource(.managed)
-        } else if let activeID = menuSnapshot.activeProviderID {
+        } else if let activeID = menuSnapshot.activeProviderID,
+                  selectableProviderEntries.contains(where: { $0.id == activeID }) {
             selectSource(.provider(activeID))
         } else {
             selectSource(.allModels)
@@ -2459,7 +2482,7 @@ struct ModelPickerPill: View {
     }
 
     private func chooseSomeIMModel(_ model: String) {
-        if let entry = menuSnapshot.providerEntries.first(where: { $0.providerID == AgentProviderPreset.someIMID }) {
+        if let entry = selectableProviderEntries.first(where: { $0.providerID == AgentProviderPreset.someIMID }) {
             appState.selectAgentEntryAndModel(entryID: entry.id, model: model)
         } else {
             appState.setAgentSessionModel(model)
@@ -2473,10 +2496,9 @@ struct ModelPickerPill: View {
     }
 
     private var selectableProviderEntries: [AgentProviderEntry] {
-        if menuSnapshot.isSomeIMAuthenticated {
-            return menuSnapshot.providerEntries
+        menuSnapshot.providerEntries.filter {
+            $0.isUsableForChatSelection(isSomeIMAuthenticated: menuSnapshot.isSomeIMAuthenticated)
         }
-        return menuSnapshot.providerEntries.filter { $0.providerID != AgentProviderPreset.someIMID }
     }
 
     private var combinedCatalogModels: [String] {
@@ -2750,6 +2772,12 @@ struct ModelPickerPill: View {
         let routed = appState.agentConfiguration.normalized.model(for: .interactive)
         let model = appState.agentSessionModelOverride?.trimmingCharacters(in: .whitespacesAndNewlines)
             .nilIfEmpty ?? routed
+        let authenticated = SomeIMIntegrationStore.hasAuthenticatedSessionForAutomaticDefaults()
+        guard appState.agentProviderLibrary.active?.isUsableForChatSelection(
+            isSomeIMAuthenticated: authenticated
+        ) == true else {
+            return ""
+        }
         guard appState.agentProviderLibrary.entries.count > 1,
               let active = appState.agentProviderLibrary.active else {
             return model

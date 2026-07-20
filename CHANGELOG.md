@@ -1,7 +1,60 @@
 # Changelog
 
-> 当前文件保留最新版本（1.191.0-rc8 至 1.109.0-rc340）。
+> 当前文件保留最新版本（1.191.0-rc12 至 1.109.0-rc340）。
 > 更早的 1000 个版本已移至 [CHANGELOG-ARCHIVE.md](CHANGELOG-ARCHIVE.md)。
+
+## 1.191.0-rc12 - 2026-07-20
+
+### Fixed
+
+- 模型选择器不再展示缺少 API Key 的远程 provider 模型；DeepSeek provider 没有 key 时，其 `deepseek-v4-*` 不会再被误当成 some.im 可用模型。
+- 新会话、发送前预检和模型切换都会跳过不可用 provider；如果 some.im 已登录且当前 DeepSeek provider 没有 key，会自动回落到 some.im provider，避免默认卡在无 key 的 DeepSeek。
+- TextKit 历史消息中的行内代码和文件路径保持一致行高；文件路径识别不会把 `hub-beta.tsingfly.com` 里的 `hub-beta.ts` 误判成 `.ts` 文件链接。
+- 版本号从 **1.191.0-rc11** 递增为 **1.191.0-rc12**，内部构建号从 **36** 递增为 **37**；App、Go agent、Help、Helper、浏览器扩展、README、响应头契约与产品文档保持一致。
+
+### Tests
+
+- 新增 provider 可用性、无 key DeepSeek 回落到已登录 some.im、模型选择器拒绝激活无 key provider 的回归测试。
+- 新增 TextKit 行内代码行框回归测试，覆盖中文正文夹 `hub-beta.tsingfly.com` / `tokenhub` 时不撑高行高或被路径链接拆段。
+
+## 1.191.0-rc11 - 2026-07-20
+
+### Fixed
+
+- TextKit 历史消息中的行内代码和文件路径改用略小一号的 monospace 字体，避免 SF Mono 在同字号下把含代码的中文正文行框撑高，修复聊天记录行高忽宽忽窄的问题。
+- 文件路径识别不再把 `hub-beta.tsingfly.com` 中的 `hub-beta.ts` 误判成 `.ts` 文件链接，避免行内代码胶囊被拆成两套样式。
+- 版本号从 **1.191.0-rc10** 递增为 **1.191.0-rc11**，内部构建号从 **35** 递增为 **36**；App、Go agent、Help、Helper、浏览器扩展、README、响应头契约与产品文档保持一致。
+
+### Tests
+
+- 新增 TextKit 行内代码行框回归测试，覆盖中文正文夹 `hub-beta.tsingfly.com` / `tokenhub` 这类代码胶囊时不再撑高行高或被路径链接拆段。
+
+## 1.191.0-rc10 - 2026-07-20
+
+### Fixed
+
+- 命令等工具确认卡底部的拒绝与继续按钮恢复为更紧凑的 28pt 高、124pt 最大宽，延续当前皮肤的强调色体系，降低确认区视觉重量。
+- 右上角产物、媒体和 Dev Server 摘要卡的可点击主体、菜单、关闭按钮与整卡 hover 区域显式使用箭头 cursor，避免悬停到标题或文件名文字时显示文本插入光标。
+- 右上角产物卡主体与单文件菜单项会把当前 worktree 已改动文件直接打开到 Diff 面板并聚焦该文件；未改动产物仍进入 Preview，“查看全部文件”和显式 HTML 预览入口保持原语义。
+- 会话列表行的 pin/archive hover 操作区始终预留 40pt，避免带 Plan/Goal 进度徽章的长会话标题在鼠标移入移出时重新压缩并闪动。
+- 版本号从 **1.191.0-rc9** 递增为 **1.191.0-rc10**，内部构建号从 **34** 递增为 **35**；App、Go agent、Help、Helper、浏览器扩展、README、响应头契约与产品文档保持一致。
+
+### Tests
+
+- 更新确认卡视觉、工具审批布局、产物文件点击路由与会话列表 hover 几何断言，覆盖紧凑按钮尺寸、Diff 直达和标题闪动回归。
+
+## 1.191.0-rc9 - 2026-07-20
+
+### Fixed
+
+- 同目录并发会话提醒补齐简体中文文案与操作提示，不再在中文界面显示英文警告。
+- 一键隔离到 worktree 只切换当前会话的执行 checkout，并保留原会话、原侧边栏 workspace 分组和 workspace 标签；不再新建对话或把 worktree 当成独立 workspace。
+- worktree 隔离与退出完成后立即重算同目录冲突；执行目录已隔离时自动关闭提示条。
+- 版本号从 **1.191.0-rc8** 递增为 **1.191.0-rc9**，内部构建号从 **33** 递增为 **34**；App、Go agent、Help、Helper、浏览器扩展、README、响应头契约与产品文档保持一致。
+
+### Tests
+
+- 新增 worktree 隔离后的冲突清除、原 workspace 分组保留与会话持久化回归覆盖；定向 13 项测试通过。
 
 ## 1.191.0-rc8 - 2026-07-20
 

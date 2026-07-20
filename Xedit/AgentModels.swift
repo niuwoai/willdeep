@@ -23,6 +23,10 @@ nonisolated struct AgentSession: Identifiable, Codable, Equatable {
     /// Canonical workspace binding. Remote sessions persist here while
     /// `workspaceRootPath` remains as the local-only compatibility slot.
     var workspaceLocation: WorkspaceLocation?
+    /// Optional sidebar grouping root when this conversation executes in a
+    /// Git worktree. The tools use `workspaceLocation`; the sidebar continues
+    /// to group the conversation under the original project workspace.
+    var sidebarWorkspaceRootPath: String?
     /// Best-effort local folder identity for recovering from Finder moves
     /// or renames. Tools do not poll this on the happy path; it is consulted
     /// only after the recorded path appears to have failed.
@@ -135,6 +139,7 @@ nonisolated struct AgentSession: Identifiable, Codable, Equatable {
         title: String = AgentSessionStore.defaultTitle,
         workspaceRootPath: String? = nil,
         workspaceLocation: WorkspaceLocation? = nil,
+        sidebarWorkspaceRootPath: String? = nil,
         localWorkspaceIdentity: LocalWorkspaceIdentity? = nil,
         modelID: String? = nil,
         providerID: String? = nil,
@@ -170,6 +175,7 @@ nonisolated struct AgentSession: Identifiable, Codable, Equatable {
         self.title = title
         self.workspaceRootPath = workspaceRootPath
         self.workspaceLocation = workspaceLocation ?? workspaceRootPath.map { .local(path: $0) }
+        self.sidebarWorkspaceRootPath = sidebarWorkspaceRootPath
         self.localWorkspaceIdentity = localWorkspaceIdentity
             ?? AgentWorkspaceAvailabilityResolver.captureIdentity(for: self.workspaceLocation?.localPath ?? workspaceRootPath)
         self.modelID = modelID
@@ -225,6 +231,9 @@ nonisolated struct AgentSession: Identifiable, Codable, Equatable {
     }
 
     var workspaceName: String {
+        if let sidebarWorkspaceRootPath, !sidebarWorkspaceRootPath.isEmpty {
+            return URL(fileURLWithPath: sidebarWorkspaceRootPath).lastPathComponent
+        }
         if let workspaceLocation {
             return workspaceLocation.displayName
         }
@@ -233,6 +242,9 @@ nonisolated struct AgentSession: Identifiable, Codable, Equatable {
     }
 
     var workspaceSidebarGroupKey: String {
+        if let sidebarWorkspaceRootPath, !sidebarWorkspaceRootPath.isEmpty {
+            return sidebarWorkspaceRootPath
+        }
         if let workspaceLocation {
             switch workspaceLocation {
             case .local(let path):
@@ -255,7 +267,7 @@ nonisolated struct AgentSession: Identifiable, Codable, Equatable {
     // currentGoal) loads cleanly — every newer field uses
     // decodeIfPresent with a default.
     enum CodingKeys: String, CodingKey {
-        case id, title, workspaceRootPath, workspaceLocation, localWorkspaceIdentity, modelID
+        case id, title, workspaceRootPath, workspaceLocation, sidebarWorkspaceRootPath, localWorkspaceIdentity, modelID
         case providerID, providerDisplayName, managedRouting
         case createdAt, updatedAt, messages, contextSummary, contextSummaryThroughMessageID
         case didEditFiles, agentEditedPaths, agentArtifactPaths, interactionMode, approvalMode, executionAgent, activeExperts, currentPlan, currentGoal, goalPlanningState, learningEvents, latestTurnRecall, documentAttachments, knowledgeFolders, documentTaskMode, redactSensitiveAttachmentContent, sidePanelState
@@ -269,6 +281,7 @@ nonisolated struct AgentSession: Identifiable, Codable, Equatable {
         self.workspaceRootPath = try c.decodeIfPresent(String.self, forKey: .workspaceRootPath)
         self.workspaceLocation = try c.decodeIfPresent(WorkspaceLocation.self, forKey: .workspaceLocation)
             ?? self.workspaceRootPath.map { .local(path: $0) }
+        self.sidebarWorkspaceRootPath = try c.decodeIfPresent(String.self, forKey: .sidebarWorkspaceRootPath)
         self.localWorkspaceIdentity = try c.decodeIfPresent(LocalWorkspaceIdentity.self, forKey: .localWorkspaceIdentity)
         self.modelID = try c.decodeIfPresent(String.self, forKey: .modelID)
         self.providerID = try c.decodeIfPresent(String.self, forKey: .providerID)

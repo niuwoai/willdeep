@@ -13,6 +13,7 @@ struct AgentSidebarListVisualMetricsTests {
         #expect(AgentDesign.sidebarSelectionCornerRadius == 10)
         #expect(AgentDesign.sidebarWorkspaceGroupSpacing == 6)
         #expect(AgentDesign.sidebarAutomationFontSize == AgentDesign.sidebarRowFontSize)
+        #expect(AgentDesign.sidebarSessionTrailingActionsWidth == 40)
     }
 
     @Test("workspace and conversation titles share the Codex text column")

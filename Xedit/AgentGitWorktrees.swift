@@ -620,6 +620,9 @@ extension AppState {
 
     func createAgentGitWorktree(from source: URL, branchName: String) {
         guard let sessionID = activeAgentSessionID else { return }
+        let sidebarWorkspaceRootPath = activeRuntime?.session.sidebarWorkspaceRootPath
+            ?? activeRuntime?.localWorkspacePath
+            ?? source.standardizedFileURL.path
         let controller = AgentGitWorktreeProcessController()
         agentGitWorktreeProcessController = controller
         agentGitWorktreeCreation = AgentGitWorktreeCreation(
@@ -658,9 +661,13 @@ extension AppState {
                 case .success(let created):
                     self.agentGitWorktrees = Self.listGitWorktrees(for: created.worktree.url)
                     if self.activeAgentSessionID == sessionID {
-                        _ = self.moveActiveAgentSessionToWorkspace(at: created.worktree.path)
+                        _ = self.moveActiveAgentSessionToGitWorktree(
+                            at: created.worktree.path,
+                            sidebarWorkspaceRootPath: sidebarWorkspaceRootPath
+                        )
                     }
                     self.refreshAgentGitWorktrees()
+                    self.refreshAgentWorkspaceCollision()
                 case .failure(let failure):
                     if !failure.wasCancelled {
                         self.showFileOperationError(L10n.GitWorktreeCreation.failed(failure.message))
@@ -702,9 +709,13 @@ extension AppState {
                 case .success:
                     if self.activeAgentLocalWorkspaceURL?.path == worktree.url.path,
                        let primary = self.agentGitWorktrees.first(where: \.isPrimary) {
-                        _ = self.moveActiveAgentSessionToWorkspace(at: primary.path)
+                        _ = self.moveActiveAgentSessionToGitWorktree(
+                            at: primary.path,
+                            sidebarWorkspaceRootPath: primary.path
+                        )
                     }
                     self.refreshAgentGitWorktrees()
+                    self.refreshAgentWorkspaceCollision()
                 case .failure(let failure):
                     self.showFileOperationError("删除 Git worktree 失败：\(failure.message)")
                 }

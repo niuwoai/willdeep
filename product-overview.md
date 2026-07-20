@@ -1,6 +1,6 @@
 # WillDeep Product Overview
 
-> Last updated: 2026-07-20 | Current version: v1.191.0-rc8
+> Last updated: 2026-07-20 | Current version: v1.191.0-rc12
 
 ## Positioning
 
@@ -11,6 +11,14 @@ Official product domain: [willdeep.com](https://willdeep.com).
 WillDeep is configured for non-App-Store distribution without App Sandbox so it can access local project files with fewer permission interruptions.
 
 ## 架构概览
+
+- **模型选择跳过无凭据 provider（1.191.0-rc12）** —— Agent 模型选择器只展示当前可实际发起请求的 provider：远程 provider 必须有自己的 API Key，本地 Ollama / Local OpenAI 可无 key，some.im 只有在共享登录态存在或 entry 自带 key 时才可选。DeepSeek provider 没有 key 时不会再显示或默认选中 `deepseek-v4-*`；如果 some.im 已登录，会在新会话和发送前自动回落到 some.im provider，避免“已登录 some.im 但当前其实在用无 key DeepSeek”的误导状态。
+
+- **聊天历史行内代码行高修复（1.191.0-rc11）** —— TextKit 历史消息里的行内代码和文件路径使用略小一号的 monospace 字体，避免 SF Mono 在同字号下把含代码的中文正文行框撑高；文件路径识别也不会再把 `hub-beta.tsingfly.com` 中的 `hub-beta.ts` 误判成 `.ts` 文件链接，域名与短代码胶囊不再让相邻行看起来忽高忽低。
+
+- **确认卡按钮、产物卡点击与会话行 hover 修复（1.191.0-rc10）** —— 命令等工具确认卡底部的拒绝与继续按钮恢复为 28pt 高、124pt 最大宽，并继续使用当前皮肤的强调色；右上角产物、媒体和 Dev Server 摘要卡在可点击主体、菜单、关闭按钮及整卡 hover 区域显式保持箭头 cursor。产物卡主体与单文件菜单项会把当前 worktree 已改动文件直接打开到 Diff 面板并聚焦该文件，未改动产物仍进入 Preview；会话列表行固定预留 pin/archive hover 操作区，避免带 Plan/Goal 进度徽章的长标题在鼠标移入移出时闪动。
+
+- **并发会话 worktree 隔离语义修复（1.191.0-rc9）** —— 同目录并发提醒补齐简体中文；一键隔离只切换当前会话的实际执行目录，不新建对话、不把 worktree 注册成新的侧边栏 workspace，原项目仍是会话归属与 workspace 标签。隔离或退出 worktree 后立即重算目录冲突，已不再共享 checkout 时提示自动关闭。
 
 - **行内代码下划线完整显示（1.191.0-rc8）** —— SwiftUI 实时消息与 TextKit 历史消息共用 1pt 行内代码基线补偿，长文件名、函数名中的 `_` 不再贴住行高底部而被裁切；补偿仅作用于 Markdown 行内代码，不改变普通正文布局。
 

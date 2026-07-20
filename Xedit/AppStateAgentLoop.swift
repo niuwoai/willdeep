@@ -41,6 +41,8 @@ extension AppState {
     ) {
         resolvePendingAgentPatchProposalsBeforeNewMessage(for: runtime)
 
+        reconcileSomeIMProviderFromSharedSession()
+        ensureActiveProviderIsUsableForChatSelection()
         repairSomeIMProviderCredentialsForTurnIfNeeded(for: runtime)
         let configuration = configurationForCurrentTurn(for: runtime)
         let providerID = configuration.providerID
@@ -400,6 +402,10 @@ extension AppState {
     // Not `private`: WorkflowEngine wiring in AppStateAgentWorkflows.swift builds
     // the same some.im context and needs this key.
     static func managedWorkspaceKey(for runtime: AgentRuntime) -> String {
+        if let sidebarWorkspaceRootPath = runtime.session.sidebarWorkspaceRootPath,
+           !sidebarWorkspaceRootPath.isEmpty {
+            return sidebarWorkspaceRootPath
+        }
         let location = runtime.workspaceLocation ?? runtime.workspaceRootPath.map { .local(path: $0) }
         switch location {
         case .local(let path):

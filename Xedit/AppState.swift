@@ -1043,21 +1043,34 @@ final class AppState: ObservableObject {
     /// 文件树、知道点击被响应了。任何情况下侧栏都会动。
     func revealAgentReferencedFileInSidePanel(_ rawPath: String) {
         if let url = resolveAgentReferencedFileURL(rawPath) {
-            registerRecentFile(url)
-            let panelKind: AgentSidePanelKind
-            if AgentSidePanelDiffSelection.relativePath(
-                for: url,
-                changes: agentWorktreeChanges
-            ) != nil {
-                panelKind = .diff
-            } else {
-                panelKind = .preview
-            }
-            agentSidePanelRequest = AgentSidePanelOpenRequest(kind: panelKind, file: url)
+            revealAgentArtifactFileInSidePanel(url)
         } else {
             // 兜底:打开 Files 面板(没有具体文件),至少有可见反馈。
             agentSidePanelRequest = AgentSidePanelOpenRequest(kind: .files, file: nil)
         }
+    }
+
+    /// Click target for concrete artifact URLs in the Agent activity cards.
+    /// Changed files should land in Diff with the file focused; unchanged
+    /// generated files still use Preview, and missing files fall back to Files.
+    func revealAgentArtifactFileInSidePanel(_ url: URL) {
+        let standardized = url.standardizedFileURL
+        guard Self.existingFile(at: standardized) else {
+            agentSidePanelRequest = AgentSidePanelOpenRequest(kind: .files, file: nil)
+            return
+        }
+
+        registerRecentFile(standardized)
+        let panelKind: AgentSidePanelKind
+        if AgentSidePanelDiffSelection.relativePath(
+            for: standardized,
+            changes: agentWorktreeChanges
+        ) != nil {
+            panelKind = .diff
+        } else {
+            panelKind = .preview
+        }
+        agentSidePanelRequest = AgentSidePanelOpenRequest(kind: panelKind, file: standardized)
     }
 
     private func resolveAgentReferencedFileURL(_ rawPath: String) -> URL? {

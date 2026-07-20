@@ -124,6 +124,42 @@ struct AgentSidePanelDiffPerformanceTests {
         #expect(appState.agentSidePanelRequest?.kind == .preview)
     }
 
+    @MainActor
+    @Test("Artifact card opens a changed file directly to focused Diff")
+    func artifactFileClickRoutesChangedFileToDiff() throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("willdeep_artifact_diff_route_\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: root) }
+        let nested = root.appendingPathComponent("reports", isDirectory: true)
+        try FileManager.default.createDirectory(at: nested, withIntermediateDirectories: true)
+        let file = nested.appendingPathComponent("summary.md")
+        try Data("# Summary".utf8).write(to: file)
+
+        let appState = AppState()
+        appState.startNewAgentSession()
+        appState.agentWorktreeChanges = AgentWorktreeChangeSummary(
+            repositoryRoot: root,
+            files: [
+                AgentFileChangeSummary(
+                    path: "reports/summary.md",
+                    kind: .untracked,
+                    lineStats: AgentLineChangeStats(added: 1, deleted: 0)
+                )
+            ]
+        )
+
+        appState.revealAgentArtifactFileInSidePanel(file)
+
+        #expect(appState.agentSidePanelRequest?.kind == .diff)
+        #expect(appState.agentSidePanelRequest?.file?.standardizedFileURL == file.standardizedFileURL)
+
+        appState.agentWorktreeChanges = AgentWorktreeChangeSummary(repositoryRoot: root)
+        appState.revealAgentArtifactFileInSidePanel(file)
+
+        #expect(appState.agentSidePanelRequest?.kind == .preview)
+        #expect(appState.agentSidePanelRequest?.file?.standardizedFileURL == file.standardizedFileURL)
+    }
+
     @Test("TextKit diff keeps native foreground and line background colors")
     func appKitDiffKeepsNativeColors() throws {
         let diff = "-old\n+new\n@@ -1 +1 @@\n context"

@@ -613,6 +613,7 @@ enum AgentDesign {
     static let sidebarWorkspaceIconToTitleSpacing: CGFloat = 8
     static let sidebarSelectionHorizontalInset: CGFloat = 8
     static let sidebarSessionContentHorizontalInset: CGFloat = 32
+    static let sidebarSessionTrailingActionsWidth: CGFloat = 40
     // Global pins are top-level navigation, so their title column starts at
     // 12 pt like Codex instead of inheriting the 40 pt workspace-child inset.
     static let sidebarPinnedSessionContentHorizontalInset: CGFloat = 4

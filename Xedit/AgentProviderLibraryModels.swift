@@ -138,6 +138,19 @@ struct AgentProviderEntry: Identifiable, Codable, Equatable {
         return out.filter { !$0.isEmpty }
     }
 
+    /// Whether this entry can actually back a chat turn right now. Model
+    /// names alone are not enough: some.im and DeepSeek both expose
+    /// `deepseek-v4-*`, but their credentials live in different places.
+    func isUsableForChatSelection(isSomeIMAuthenticated: Bool) -> Bool {
+        if providerID == AgentProviderPreset.someIMID {
+            return isSomeIMAuthenticated || !apiKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        }
+        if !makeConfiguration().normalized.requiresAPIKey {
+            return true
+        }
+        return !apiKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
     /// Build an `AgentConfiguration` snapshot from this entry, choosing
     /// a specific tier model (or falling back to the primaries).
     func makeConfiguration(
@@ -196,6 +209,26 @@ struct AgentProviderLibrary: Codable, Equatable {
     var active: AgentProviderEntry? {
         guard let id = activeID else { return entries.first }
         return entries.first(where: { $0.id == id }) ?? entries.first
+    }
+
+    func usableEntriesForChatSelection(isSomeIMAuthenticated: Bool) -> [AgentProviderEntry] {
+        entries.filter {
+            $0.isUsableForChatSelection(isSomeIMAuthenticated: isSomeIMAuthenticated)
+        }
+    }
+
+    @discardableResult
+    mutating func ensureActiveEntryIsUsableForChatSelection(isSomeIMAuthenticated: Bool) -> Bool {
+        if active?.isUsableForChatSelection(isSomeIMAuthenticated: isSomeIMAuthenticated) == true {
+            return false
+        }
+        guard let fallback = usableEntriesForChatSelection(
+            isSomeIMAuthenticated: isSomeIMAuthenticated
+        ).first else {
+            return false
+        }
+        activeID = fallback.id
+        return true
     }
 
     mutating func upsert(_ entry: AgentProviderEntry) {

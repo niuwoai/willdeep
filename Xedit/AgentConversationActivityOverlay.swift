@@ -373,11 +373,12 @@ private struct AgentArtifactActivityCard: View {
                     tint: .accentColor,
                     title: "\(urls.count) 个产物",
                     subtitle: subtitle,
-                    isSelected: appState.agentSidePanelKind == .files || appState.agentSidePanelKind == .preview
+                    isSelected: isSelected
                 )
             }
             .buttonStyle(.plain)
             .focusable(false)
+            .cursor(.arrow)
 
             Menu {
                 if let htmlURL {
@@ -404,10 +405,18 @@ private struct AgentArtifactActivityCard: View {
             .menuIndicator(.hidden)
             .focusable(false)
             .help("选择产物")
+            .cursor(.arrow)
 
             AgentActivityCardDismissButton(action: onDismiss)
         }
-        .agentActivityCardSurface(isSelected: appState.agentSidePanelKind == .files || appState.agentSidePanelKind == .preview)
+        .agentActivityCardSurface(isSelected: isSelected)
+        .cursor(.arrow)
+    }
+
+    private var isSelected: Bool {
+        appState.agentSidePanelKind == .files ||
+            appState.agentSidePanelKind == .preview ||
+            appState.agentSidePanelKind == .diff
     }
 
     private var htmlURL: URL? {
@@ -424,19 +433,15 @@ private struct AgentArtifactActivityCard: View {
     }
 
     private func openPrimaryDestination() {
-        if let htmlURL {
-            openPreview(htmlURL)
+        if let first = urls.first {
+            open(first)
         } else {
             openFiles()
         }
     }
 
     private func open(_ url: URL) {
-        if ["html", "htm", "md", "markdown"].contains(url.pathExtension.lowercased()) {
-            openPreview(url)
-        } else {
-            appState.agentSidePanelRequest = AgentSidePanelOpenRequest(kind: .files, file: url)
-        }
+        appState.revealAgentArtifactFileInSidePanel(url)
     }
 
     private func openPreview(_ url: URL) {
@@ -491,10 +496,12 @@ private struct AgentMediaActivityCard: View {
             }
             .buttonStyle(.plain)
             .focusable(false)
+            .cursor(.arrow)
 
             AgentActivityCardDismissButton(action: onDismiss)
         }
         .agentActivityCardSurface(isSelected: isSelected)
+        .cursor(.arrow)
         .contextMenu {
             Button("打开媒体任务") {
                 openMediaTasks()
@@ -555,6 +562,7 @@ private struct AgentDevServerActivityCard: View {
             }
             .buttonStyle(.plain)
             .focusable(false)
+            .cursor(.arrow)
 
             Menu {
                 if summary.previewURL != nil {
@@ -582,10 +590,12 @@ private struct AgentDevServerActivityCard: View {
             .menuIndicator(.hidden)
             .focusable(false)
             .help("预览或管理工作区 Dev Server")
+            .cursor(.arrow)
 
             AgentActivityCardDismissButton(action: onDismiss)
         }
         .agentActivityCardSurface(isSelected: isSelected)
+        .cursor(.arrow)
     }
 
     private var isSelected: Bool {
@@ -699,6 +709,7 @@ private struct AgentActivityCardDismissButton: View {
         .focusable(false)
         .help("关闭摘要")
         .accessibilityLabel("关闭摘要")
+        .cursor(.arrow)
     }
 }
 

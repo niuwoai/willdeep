@@ -224,6 +224,7 @@ nonisolated enum AgentSessionStore {
         let title: String
         let workspaceRootPath: String?
         let workspaceLocation: WorkspaceLocation?
+        let sidebarWorkspaceRootPath: String?
         let localWorkspaceIdentity: LocalWorkspaceIdentity?
         let modelID: String?
         let providerID: String?
@@ -246,7 +247,7 @@ nonisolated enum AgentSessionStore {
         let hasUserMessage: Bool
 
         enum CodingKeys: String, CodingKey {
-            case id, title, workspaceRootPath, workspaceLocation, localWorkspaceIdentity, modelID
+            case id, title, workspaceRootPath, workspaceLocation, sidebarWorkspaceRootPath, localWorkspaceIdentity, modelID
             case providerID, providerDisplayName
             case createdAt, updatedAt, messages
             case didEditFiles, agentEditedPaths, interactionMode, approvalMode, executionAgent, activeExperts
@@ -261,6 +262,7 @@ nonisolated enum AgentSessionStore {
             workspaceRootPath = try c.decodeIfPresent(String.self, forKey: .workspaceRootPath)
             workspaceLocation = try c.decodeIfPresent(WorkspaceLocation.self, forKey: .workspaceLocation)
                 ?? workspaceRootPath.map { .local(path: $0) }
+            sidebarWorkspaceRootPath = try c.decodeIfPresent(String.self, forKey: .sidebarWorkspaceRootPath)
             localWorkspaceIdentity = try c.decodeIfPresent(LocalWorkspaceIdentity.self, forKey: .localWorkspaceIdentity)
             modelID = try c.decodeIfPresent(String.self, forKey: .modelID)
             providerID = try c.decodeIfPresent(String.self, forKey: .providerID)
@@ -290,6 +292,7 @@ nonisolated enum AgentSessionStore {
                 title: title,
                 workspaceRootPath: workspaceRootPath,
                 workspaceLocation: workspaceLocation,
+                sidebarWorkspaceRootPath: sidebarWorkspaceRootPath,
                 localWorkspaceIdentity: localWorkspaceIdentity,
                 modelID: modelID,
                 providerID: providerID,
@@ -504,12 +507,13 @@ nonisolated enum AgentSessionStore {
         let messages: [UsageMessageIndex]
         let workspaceLocation: WorkspaceLocation?
         let workspaceRootPath: String?
+        let sidebarWorkspaceRootPath: String?
         let agentEditedPaths: [String]
         let agentArtifactPaths: [String]
 
         enum CodingKeys: String, CodingKey {
             case id, modelID, providerID, providerDisplayName, createdAt, updatedAt, messages
-            case workspaceLocation, workspaceRootPath, agentEditedPaths, agentArtifactPaths
+            case workspaceLocation, workspaceRootPath, sidebarWorkspaceRootPath, agentEditedPaths, agentArtifactPaths
         }
 
         init(from decoder: Decoder) throws {
@@ -523,6 +527,7 @@ nonisolated enum AgentSessionStore {
             messages = try c.decodeIfPresent([UsageMessageIndex].self, forKey: .messages) ?? []
             workspaceLocation = try c.decodeIfPresent(WorkspaceLocation.self, forKey: .workspaceLocation)
             workspaceRootPath = try c.decodeIfPresent(String.self, forKey: .workspaceRootPath)
+            sidebarWorkspaceRootPath = try c.decodeIfPresent(String.self, forKey: .sidebarWorkspaceRootPath)
             agentEditedPaths = try c.decodeIfPresent([String].self, forKey: .agentEditedPaths) ?? []
             agentArtifactPaths = try c.decodeIfPresent([String].self, forKey: .agentArtifactPaths) ?? []
         }
@@ -544,6 +549,12 @@ nonisolated enum AgentSessionStore {
         }
 
         private var workspaceIdentifier: String? {
+            if let sidebarWorkspaceRootPath {
+                let normalized = sidebarWorkspaceRootPath.trimmingCharacters(in: .whitespacesAndNewlines)
+                if !normalized.isEmpty {
+                    return "local:\(normalized)"
+                }
+            }
             let location = workspaceLocation ?? workspaceRootPath.map { .local(path: $0) }
             guard let location else { return nil }
             switch location {

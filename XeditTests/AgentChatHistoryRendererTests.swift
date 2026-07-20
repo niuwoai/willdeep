@@ -404,6 +404,54 @@ struct AgentChatHistoryRendererTests {
     }
 
     @Test
+    func inlineCodeDoesNotIncreaseTextKitProseLineHeight() throws {
+        let baseFontSize: CGFloat = 14
+        let rendered = AgentChatHistoryRenderer.render(
+            messages: [
+                AgentMessage(
+                    role: .assistant,
+                    content: "清楚了，Ingress 用 `hub-beta.tsingfly.com` 做 `tokenhub` 的路由。"
+                ),
+            ],
+            isDark: false,
+            baseFontSize: baseFontSize,
+            layoutWidth: 420
+        )
+        let codeRange = try #require(firstAttributeRange(
+            .agentChatHistoryInlineCodeChipColor,
+            containing: "hub-beta.tsingfly.com",
+            in: rendered
+        ))
+        let codeFont = try #require(rendered.attribute(
+            .font,
+            at: codeRange.location,
+            effectiveRange: nil
+        ) as? NSFont)
+        #expect(codeFont.pointSize == baseFontSize - 1)
+
+        let bodyStyle = AgentChatHistoryRenderer.bodyParagraphStyle(for: .assistant, layoutWidth: 420)
+        let plainLine = NSAttributedString(
+            string: "清楚了，Ingress 用 hub-beta.tsingfly.com 做 tokenhub 的路由。",
+            attributes: [
+                .font: NSFont.systemFont(ofSize: baseFontSize),
+                .paragraphStyle: bodyStyle,
+            ]
+        )
+        let plainLineHeight = try #require(lineFragmentHeights(
+            in: plainLine,
+            width: 420,
+            intersecting: NSRange(location: 0, length: plainLine.length)
+        ).max())
+        let codeLineHeight = try #require(lineFragmentHeights(
+            in: rendered,
+            width: 420,
+            intersecting: codeRange
+        ).max())
+
+        #expect(codeLineHeight <= plainLineHeight + 0.5)
+    }
+
+    @Test
     func singleGlyphInlineCodeChipDoesNotOverlapPrecedingText() throws {
         let text = NSMutableAttributedString(
             string: "完成了。以下是 / 目录下的全部内容：",
@@ -1848,6 +1896,33 @@ struct AgentChatHistoryRendererTests {
     private func occurrences(of needle: String, in haystack: String) -> Int {
         guard !needle.isEmpty else { return 0 }
         return haystack.components(separatedBy: needle).count - 1
+    }
+
+    private func lineFragmentHeights(
+        in attributed: NSAttributedString,
+        width: CGFloat,
+        intersecting characterRange: NSRange
+    ) -> [CGFloat] {
+        let storage = NSTextStorage(attributedString: attributed)
+        let layoutManager = NSLayoutManager()
+        let textContainer = NSTextContainer(size: NSSize(width: width, height: 1000))
+        textContainer.lineFragmentPadding = 0
+        storage.addLayoutManager(layoutManager)
+        layoutManager.addTextContainer(textContainer)
+        layoutManager.ensureLayout(for: textContainer)
+
+        let glyphRange = layoutManager.glyphRange(
+            forCharacterRange: characterRange,
+            actualCharacterRange: nil
+        )
+        var heights: [CGFloat] = []
+        layoutManager.enumerateLineFragments(
+            forGlyphRange: NSRange(location: 0, length: layoutManager.numberOfGlyphs)
+        ) { rect, _, _, lineGlyphRange, _ in
+            guard NSIntersectionRange(lineGlyphRange, glyphRange).length > 0 else { return }
+            heights.append(rect.height)
+        }
+        return heights
     }
 
     private func firstAttributeRange(

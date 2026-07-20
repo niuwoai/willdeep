@@ -34,6 +34,36 @@ struct AgentProviderLibraryTests {
     }
 
     @Test
+    func entryUsabilityRequiresCredentialsForRemoteProviders() {
+        let keylessDeepSeek = AgentProviderEntry(
+            providerID: AgentProviderPreset.deepSeekID,
+            baseURL: "https://api.deepseek.com",
+            apiKey: "",
+            flashPrimary: "deepseek-v4-flash",
+            proPrimary: "deepseek-v4-pro"
+        )
+        let local = AgentProviderEntry(
+            providerID: AgentProviderPreset.ollamaID,
+            baseURL: "http://127.0.0.1:11434/v1",
+            apiKey: "",
+            flashPrimary: "qwen-local",
+            proPrimary: "qwen-local"
+        )
+        let someIM = AgentProviderEntry(
+            providerID: AgentProviderPreset.someIMID,
+            baseURL: "https://some.im/v1",
+            apiKey: "",
+            flashPrimary: "deepseek-v4-flash",
+            proPrimary: "deepseek-v4-pro"
+        )
+
+        #expect(!keylessDeepSeek.isUsableForChatSelection(isSomeIMAuthenticated: false))
+        #expect(local.isUsableForChatSelection(isSomeIMAuthenticated: false))
+        #expect(!someIM.isUsableForChatSelection(isSomeIMAuthenticated: false))
+        #expect(someIM.isUsableForChatSelection(isSomeIMAuthenticated: true))
+    }
+
+    @Test
     func entryCleansDuplicateAndEmptyAlternates() {
         let entry = AgentProviderEntry(
             providerID: "openai",
@@ -497,6 +527,64 @@ struct AgentProviderLibraryTests {
 
         #expect(appState.repairSomeIMProviderCredentialsForTurnIfNeeded(for: runtime))
         #expect(appState.configurationForCurrentTurn(for: runtime).apiKey == "turn-repair-key")
+    }
+
+    @MainActor
+    @Test("keyless active DeepSeek provider falls back to signed-in some.im")
+    func keylessActiveProviderFallsBackToUsableSomeIM() throws {
+        let sandbox = KeychainSandbox()
+        _ = sandbox
+        SomeIMIntegrationStore._setTestSharedSessionOverride(enabled: true)
+        defer { SomeIMIntegrationStore._setTestSharedSessionOverride(enabled: false) }
+
+        let deepSeek = AgentProviderEntry(
+            providerID: AgentProviderPreset.deepSeekID,
+            baseURL: "https://api.deepseek.com",
+            apiKey: "",
+            flashPrimary: "deepseek-v4-flash",
+            proPrimary: "deepseek-v4-pro"
+        )
+        let appState = AppState()
+        appState.agentProviderLibrary = AgentProviderLibrary(entries: [deepSeek], activeID: deepSeek.id)
+        SomeIMIntegrationStore._setTestSharedAPIKeyWithoutNotification("shared-login-key")
+
+        #expect(appState.reconcileSomeIMProviderFromSharedSession())
+        #expect(appState.agentProviderLibrary.active?.providerID == AgentProviderPreset.someIMID)
+        appState.startNewAgentSession()
+        let runtime = try #require(appState.activeRuntime)
+        #expect(appState.configurationForCurrentTurn(for: runtime).providerID == AgentProviderPreset.someIMID)
+        #expect(appState.agentConfiguration.apiKey == "shared-login-key")
+    }
+
+    @MainActor
+    @Test("model picker cannot activate a keyless provider entry")
+    func selectingModelFromKeylessProviderIsIgnored() {
+        let sandbox = KeychainSandbox()
+        _ = sandbox
+        SomeIMIntegrationStore._setTestSharedSessionOverride(enabled: true)
+        defer { SomeIMIntegrationStore._setTestSharedSessionOverride(enabled: false) }
+
+        let deepSeek = AgentProviderEntry(
+            providerID: AgentProviderPreset.deepSeekID,
+            baseURL: "https://api.deepseek.com",
+            apiKey: "",
+            flashPrimary: "deepseek-v4-flash",
+            proPrimary: "deepseek-v4-pro"
+        )
+        let someIM = AgentProviderEntry(
+            providerID: AgentProviderPreset.someIMID,
+            baseURL: "https://some.im/v1",
+            apiKey: "shared-login-key",
+            flashPrimary: "deepseek-v4-flash",
+            proPrimary: "deepseek-v4-pro"
+        )
+        let appState = AppState()
+        appState.agentProviderLibrary = AgentProviderLibrary(entries: [deepSeek, someIM], activeID: someIM.id)
+
+        appState.selectAgentEntryAndModel(entryID: deepSeek.id, model: "deepseek-v4-pro")
+
+        #expect(appState.agentProviderLibrary.active?.providerID == AgentProviderPreset.someIMID)
+        #expect(appState.agentConfiguration.providerID == AgentProviderPreset.someIMID)
     }
 
     @MainActor

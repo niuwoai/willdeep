@@ -59,8 +59,8 @@ struct AgentConfirmationVisualTests {
         #expect(!AgentConfirmationReviewMetrics.usesHorizontalLayout(availableWidth: 620))
         #expect(AgentConfirmationReviewMetrics.commandVisibleLineCount == 3)
         #expect(AgentApprovalActionMetrics.minimumButtonHeight == 36)
-        #expect(AgentConfirmationReviewMetrics.actionButtonHeight == 42)
-        #expect(AgentConfirmationReviewMetrics.actionButtonMaxWidth == 156)
+        #expect(AgentConfirmationReviewMetrics.actionButtonHeight == 28)
+        #expect(AgentConfirmationReviewMetrics.actionButtonMaxWidth == 124)
         #expect(AgentConfirmationReviewMetrics.actionButtonSpacing == 12)
     }
 

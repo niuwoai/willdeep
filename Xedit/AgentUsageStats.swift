@@ -229,7 +229,11 @@ nonisolated struct AgentUsageSessionSnapshot: Identifiable, Equatable {
             createdAt: session.createdAt,
             updatedAt: session.updatedAt,
             messages: session.messages.map { AgentUsageMessageSnapshot(message: $0) },
-            workspaceIdentifier: Self.workspaceIdentifier(for: session.workspaceLocation ?? session.workspaceRootPath.map { .local(path: $0) }),
+            workspaceIdentifier: Self.workspaceIdentifier(
+                for: session.sidebarWorkspaceRootPath.map { .local(path: $0) }
+                    ?? session.workspaceLocation
+                    ?? session.workspaceRootPath.map { .local(path: $0) }
+            ),
             editedFileCount: session.agentEditedPaths.count,
             artifactCount: session.agentArtifactPaths.count,
             artifactPaths: session.agentArtifactPaths,

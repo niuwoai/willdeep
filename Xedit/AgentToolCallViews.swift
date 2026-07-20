@@ -163,8 +163,8 @@ nonisolated enum AgentConfirmationReviewMetrics {
     static let horizontalMinimumWidth: CGFloat = 700
     static let commandViewportHeight: CGFloat = 72
     static let commandVisibleLineCount = 3
-    static let actionButtonHeight: CGFloat = 42
-    static let actionButtonMaxWidth: CGFloat = 156
+    static let actionButtonHeight: CGFloat = 28
+    static let actionButtonMaxWidth: CGFloat = 124
     static let actionButtonSpacing: CGFloat = 12
     static let outerCornerRadius: CGFloat = 20
     static let innerCornerRadius: CGFloat = 14

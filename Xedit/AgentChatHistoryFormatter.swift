@@ -1229,13 +1229,20 @@ enum AgentChatHistoryRenderer {
         attributed.enumerateAttributes(in: fullRange, options: []) { attributes, range, _ in
             guard range.length > 0, isInlineCode(attributes[inlinePresentationIntentKey]) else { return }
             attributed.addAttributes([
-                .font: NSFont.monospacedSystemFont(ofSize: baseFont.pointSize, weight: .regular),
+                .font: inlineMonospacedFont(for: baseFont, weight: .regular),
                 .baselineOffset: NSNumber(value: Double(MarkdownInline.inlineCodeBaselineOffset)),
                 .agentChatHistoryInlineCodeChipColor: NSColor.labelColor.withAlphaComponent(0.08),
             ], range: range)
             attributed.removeAttribute(.backgroundColor, range: range)
             attributed.removeAttribute(swiftUIBackgroundColorKey, range: range)
         }
+    }
+
+    private static func inlineMonospacedFont(for baseFont: NSFont, weight: NSFont.Weight) -> NSFont {
+        // SF Mono's bounding box is taller than the proportional body font at
+        // the same point size. Keeping inline tokens one point smaller avoids
+        // TextKit giving code-bearing prose lines a different fragment height.
+        NSFont.monospacedSystemFont(ofSize: max(10, baseFont.pointSize - 1), weight: weight)
     }
 
     private static func isInlineCode(_ value: Any?) -> Bool {
@@ -1314,12 +1321,14 @@ enum AgentChatHistoryRenderer {
     //      如 `/usr/bin/ssh`、`~/.willdeep/skills`、`./scripts/x`);
     //   ② 以已知文件后缀结尾的(可带任意层目录前缀,如 `README.md`、
     //      `src/main.ts`、`Xedit/AppState.swift`)。
-    // 两类都可带 `:行[:列]` 后缀。`GB/T` 既无锚点又无后缀 → 不再命中。
+    // 两类都可带 `:行[:列]` 后缀,并要求后面不能继续跟域名 / 路径
+    // 字符,避免把 `hub-beta.tsingfly.com` 中的 `hub-beta.ts` 当文件名。
+    // `GB/T` 既无锚点又无后缀 → 不再命中。
     // 新规则严格比旧的窄,只会去掉误链接,不会凭空多出。
     // static let:每渲染一个文本块就编译一次正则曾是纯浪费——pattern
     // 是常量,编译一次终生复用。
     private static let pathChipRegex = try? NSRegularExpression(
-        pattern: #"(?<![\w@/])(?:(?:\.{1,2}/|~/|/)[A-Za-z0-9_.$@+~()-]+(?:/[A-Za-z0-9_.$@+~()-]+)*|(?:[A-Za-z0-9_.$@+~()-]+/)*[A-Za-z0-9_.$@+~()-]+\.(?:swift|go|ts|tsx|js|jsx|vue|md|markdown|json|yaml|yml|toml|rb|py|java|kt|rs|html|css|scss|sql|sh|zsh|txt))(?:\:\d+(?:\:\d+)?)?"#
+        pattern: #"(?<![\w@/])(?:(?:\.{1,2}/|~/|/)[A-Za-z0-9_.$@+~()-]+(?:/[A-Za-z0-9_.$@+~()-]+)*|(?:[A-Za-z0-9_.$@+~()-]+/)*[A-Za-z0-9_.$@+~()-]+\.(?:swift|go|ts|tsx|js|jsx|vue|md|markdown|json|yaml|yml|toml|rb|py|java|kt|rs|html|css|scss|sql|sh|zsh|txt))(?:\:\d+(?:\:\d+)?)?(?![A-Za-z0-9_./:-])"#
     )
     private static let pathLinkCharacterSpacing: CGFloat = 0.12
     private static let pathLinkTrailingSpacing: CGFloat = 1.5
@@ -1344,7 +1353,7 @@ enum AgentChatHistoryRenderer {
             // 末字符额外增加一点字偶距,连续出现多个路径时保留清楚
             // 的视觉缝隙,但不向可复制的正文中插入空格。
             attributed.addAttributes([
-                .font: NSFont.monospacedSystemFont(ofSize: baseFont.pointSize, weight: .medium),
+                .font: inlineMonospacedFont(for: baseFont, weight: .medium),
                 .foregroundColor: color,
                 .underlineColor: color.withAlphaComponent(0.38),
                 .underlineStyle: NSUnderlineStyle.single.rawValue,

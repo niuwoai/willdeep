@@ -291,7 +291,22 @@ final class AgentRuntime: ObservableObject, Identifiable {
         workspaceAvailability = .optimistic
         session.workspaceRootPath = workspaceRootPath
         session.workspaceLocation = workspaceLocation
+        session.sidebarWorkspaceRootPath = nil
         session.localWorkspaceIdentity = AgentWorkspaceAvailabilityResolver.captureIdentity(for: workspaceRootPath)
+    }
+
+    /// Change only the conversation's execution checkout. A Git worktree is
+    /// an isolation detail, not a new sidebar workspace.
+    func rebindGitWorktree(to path: String, sidebarWorkspaceRootPath: String) {
+        let normalizedPath = URL(fileURLWithPath: path).standardizedFileURL.path
+        let normalizedSidebarPath = URL(fileURLWithPath: sidebarWorkspaceRootPath).standardizedFileURL.path
+        workspaceRootPath = normalizedPath
+        workspaceLocation = .local(path: normalizedPath)
+        workspaceAvailability = .optimistic
+        session.workspaceRootPath = normalizedPath
+        session.workspaceLocation = workspaceLocation
+        session.sidebarWorkspaceRootPath = normalizedPath == normalizedSidebarPath ? nil : normalizedSidebarPath
+        session.localWorkspaceIdentity = AgentWorkspaceAvailabilityResolver.captureIdentity(for: normalizedPath)
     }
 
     func rebindRemoteWorkspace(runtimeID: UUID, path: String) {
@@ -301,6 +316,7 @@ final class AgentRuntime: ObservableObject, Identifiable {
         workspaceAvailability = .optimistic
         session.workspaceRootPath = nil
         session.workspaceLocation = workspaceLocation
+        session.sidebarWorkspaceRootPath = nil
         session.localWorkspaceIdentity = nil
     }
 

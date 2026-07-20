@@ -99,6 +99,33 @@ extension AppState {
         agentProviderLibrary = library
     }
 
+    @discardableResult
+    func materializeProviderLibraryAPIKeys() -> Bool {
+        var library = agentProviderLibrary
+        var changed = false
+        for entry in library.entries where !entry.apiKeyLoaded {
+            changed = AgentSettingsStore.materializeProviderLibraryAPIKey(in: &library, id: entry.id) || changed
+        }
+        guard changed else { return false }
+        agentProviderLibrary = library
+        return true
+    }
+
+    @discardableResult
+    func ensureActiveProviderIsUsableForChatSelection() -> Bool {
+        var library = agentProviderLibrary
+        for entry in library.entries where !entry.apiKeyLoaded {
+            _ = AgentSettingsStore.materializeProviderLibraryAPIKey(in: &library, id: entry.id)
+        }
+        let authenticated = SomeIMIntegrationStore.hasAuthenticatedSessionForAutomaticDefaults()
+        let changedActive = library.ensureActiveEntryIsUsableForChatSelection(
+            isSomeIMAuthenticated: authenticated
+        )
+        guard library != agentProviderLibrary else { return changedActive }
+        agentProviderLibrary = library
+        return changedActive
+    }
+
     /// Add or update a library entry. If the entry is the active one,
     /// the live configuration is refreshed too.
     func upsertProviderLibraryEntry(_ entry: AgentProviderEntry) {
@@ -232,6 +259,7 @@ extension AppState {
             .trimmingCharacters(in: .whitespacesAndNewlines)
         if apiKey.isEmpty {
             clearSomeIMProvider()
+            ensureActiveProviderIsUsableForChatSelection()
             return false
         } else {
             syncSomeIMProvider(
@@ -240,6 +268,7 @@ extension AppState {
                 activate: false
             )
             syncSomeIMImageUnderstanding(apiKey: apiKey)
+            ensureActiveProviderIsUsableForChatSelection()
             return true
         }
     }
@@ -1088,6 +1117,8 @@ extension AppState {
         // one keeps streaming in the background and the user can pick
         // it back up from the sidebar.
 
+        reconcileSomeIMProviderFromSharedSession()
+        ensureActiveProviderIsUsableForChatSelection()
         let defaultManagedRouting = defaultSomeIMManagedRoutingState()
         let defaultModelID = defaultAgentModelIDForNewSession(managedRouting: defaultManagedRouting)
         let session = AgentSession(
@@ -1145,6 +1176,8 @@ extension AppState {
             normalizedPath = nil
         }
 
+        reconcileSomeIMProviderFromSharedSession()
+        ensureActiveProviderIsUsableForChatSelection()
         let defaultManagedRouting = defaultSomeIMManagedRoutingState()
         let defaultModelID = defaultAgentModelIDForNewSession(managedRouting: defaultManagedRouting)
         let session = AgentSession(
@@ -1241,6 +1274,7 @@ extension AppState {
             persistAgentSession(runtime: runtime)
             unhideWorkspace(key: runtime.session.workspaceSidebarGroupKey)
             refreshAgentGitWorktrees()
+            refreshAgentWorkspaceCollision()
             return runtime.session
         }
 
@@ -1248,6 +1282,33 @@ extension AppState {
         // refresh. Calling it again here used to launch two identical
         // `git status -uall` / worktree scans for every new workspace.
         return startNewAgentSession(inWorkspaceAt: url.path)
+    }
+
+    /// Move the current conversation's execution directory into a Git
+    /// worktree without moving the conversation to another sidebar workspace.
+    /// Unlike a regular workspace switch, this preserves conversation history.
+    @discardableResult
+    func moveActiveAgentSessionToGitWorktree(
+        at worktreePath: String,
+        sidebarWorkspaceRootPath: String
+    ) -> AgentSession? {
+        guard let runtime = activeRuntime, !runtime.isResponding else { return nil }
+        let worktreeURL = URL(fileURLWithPath: worktreePath).standardizedFileURL
+        let sidebarURL = URL(fileURLWithPath: sidebarWorkspaceRootPath).standardizedFileURL
+        guard Self.isExistingDirectory(worktreeURL) else { return nil }
+
+        _ = activateSecurityScope(for: worktreeURL)
+        runtime.rebindGitWorktree(
+            to: worktreeURL.path,
+            sidebarWorkspaceRootPath: sidebarURL.path
+        )
+        runtime.worktreeChanges = .init()
+        runtime.agentArtifactPaths = []
+        persistAgentSession(runtime: runtime)
+        unhideWorkspace(key: runtime.session.workspaceSidebarGroupKey)
+        refreshAgentGitWorktrees()
+        refreshAgentWorkspaceCollision()
+        return runtime.session
     }
 
     /// Rebind the runtime that invoked the approved `change_workspace` tool.
@@ -1296,11 +1357,14 @@ extension AppState {
             return runtime.session
         }
 
+        reconcileSomeIMProviderFromSharedSession()
+        ensureActiveProviderIsUsableForChatSelection()
         let defaultManagedRouting = defaultSomeIMManagedRoutingState()
+        let defaultModelID = defaultAgentModelIDForNewSession(managedRouting: defaultManagedRouting)
         let session = AgentSession(
             workspaceRootPath: nil,
             workspaceLocation: .remote(runtimeID: runtimeID, path: normalizedPath),
-            modelID: defaultManagedRouting == nil ? activeAgentModelID : nil,
+            modelID: defaultModelID,
             managedRouting: defaultManagedRouting
         )
         agentSessions.insert(session, at: 0)
@@ -1883,7 +1947,16 @@ extension AppState {
         // an unbound conversation so the user's selection has a real session to
         // land on; choosing a folder later rebinds this empty runtime in place.
         ensureActiveAgentSessionForInteractiveControl()
+        ensureActiveProviderIsUsableForChatSelection()
         let previousModel = previousModelForNotice ?? activeAgentModelSelectionLabel
+        let authenticated = SomeIMIntegrationStore.hasAuthenticatedSessionForAutomaticDefaults()
+        guard agentProviderLibrary.active?.isUsableForChatSelection(
+            isSomeIMAuthenticated: authenticated
+        ) == true else {
+            agentSessionModelOverride = nil
+            persistActiveAgentSession()
+            return
+        }
         // Picking any explicit model (or route-default) exits managed
         // routing — the three session-selection states (route default /
         // explicit model / managed) are mutually exclusive.
@@ -1958,6 +2031,12 @@ extension AppState {
     /// the chip falls back to displaying the routed name.
     func selectAgentEntryAndModel(entryID: UUID, model: String) {
         let previousModel = activeAgentModelSelectionLabel
+        materializeProviderLibraryEntryAPIKey(id: entryID)
+        let authenticated = SomeIMIntegrationStore.hasAuthenticatedSessionForAutomaticDefaults()
+        guard agentProviderLibrary.entries.first(where: { $0.id == entryID })?
+            .isUsableForChatSelection(isSomeIMAuthenticated: authenticated) == true else {
+            return
+        }
         // Activate the target library entry — this rebuilds
         // agentConfiguration's provider / base URL / key / primaries.
         if agentProviderLibrary.activeID != entryID {
@@ -2034,6 +2113,12 @@ extension AppState {
         managedRouting: AgentManagedRoutingState?
     ) -> String? {
         if managedRouting != nil {
+            return nil
+        }
+        let authenticated = SomeIMIntegrationStore.hasAuthenticatedSessionForAutomaticDefaults()
+        guard agentProviderLibrary.active?.isUsableForChatSelection(
+            isSomeIMAuthenticated: authenticated
+        ) == true else {
             return nil
         }
         if SomeIMIntegrationStore.hasAuthenticatedSessionForAutomaticDefaults(),

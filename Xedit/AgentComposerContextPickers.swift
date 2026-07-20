@@ -50,7 +50,10 @@ struct AgentRunLocationPickerPill: View {
         Menu {
             Button {
                 guard let primary = appState.agentGitWorktrees.first(where: \.isPrimary) else { return }
-                appState.moveActiveAgentSessionToWorkspace(at: primary.path)
+                appState.moveActiveAgentSessionToGitWorktree(
+                    at: primary.path,
+                    sidebarWorkspaceRootPath: primary.path
+                )
             } label: {
                 Label(L10n.ComposerWorkspace.localRun, systemImage: "laptopcomputer")
             }

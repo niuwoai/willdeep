@@ -75,6 +75,33 @@ struct AgentWorkspaceCollisionTests {
         #expect(count == 0)
     }
 
+    @Test("worktree isolation clears the original checkout collision")
+    func testWorktreeIsolationClearsCollision() {
+        let other = UUID()
+        let count = AppState.concurrentSessionCount(
+            activeID: active,
+            activePath: "/Users/dev/.willdeep/worktrees/project/task",
+            among: [candidate(other, responding: true, path: repo)]
+        )
+        #expect(count == 0)
+    }
+
+    @Test("worktree execution keeps the conversation in its original workspace group")
+    @MainActor
+    func testWorktreeKeepsOriginalSidebarWorkspace() {
+        let runtime = AgentRuntime(session: AgentSession(workspaceRootPath: repo))
+
+        runtime.rebindGitWorktree(
+            to: "/Users/dev/.willdeep/worktrees/project/task",
+            sidebarWorkspaceRootPath: repo
+        )
+
+        #expect(runtime.localWorkspacePath == "/Users/dev/.willdeep/worktrees/project/task")
+        #expect(runtime.session.workspaceSidebarGroupKey == repo)
+        #expect(runtime.session.workspaceName == "project")
+        #expect(AgentUsageSessionSnapshot(session: runtime.session).workspaceIdentifier == "local:\(repo)")
+    }
+
     @Test("remote / unbound runtimes (nil path) do not count")
     func testIgnoresNilPath() {
         let other = UUID()

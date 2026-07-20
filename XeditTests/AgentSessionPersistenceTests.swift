@@ -64,7 +64,8 @@ struct AgentSessionPersistenceTests {
         let sidePanelLastViewedAt = Date(timeIntervalSince1970: 760_000_100)
         let original = AgentSession(
             title: "Persistence work",
-            workspaceRootPath: "/Users/test/proj",
+            workspaceRootPath: "/Users/test/.willdeep/worktrees/proj/task",
+            sidebarWorkspaceRootPath: "/Users/test/proj",
             modelID: "gpt-4.6",
             messages: [AgentMessage(role: .user, content: "keep the visible transcript")],
             contextSummary: "summary used only for model context",
@@ -125,6 +126,8 @@ struct AgentSessionPersistenceTests {
         #expect(decoded.messages.first?.content == "keep the visible transcript")
         #expect(decoded.contextSummary == "summary used only for model context")
         #expect(decoded.contextSummaryThroughMessageID == UUID(uuidString: "44444444-4444-4444-4444-444444444444"))
+        #expect(decoded.sidebarWorkspaceRootPath == "/Users/test/proj")
+        #expect(decoded.workspaceSidebarGroupKey == "/Users/test/proj")
         #expect(decoded.latestTurnRecall?.items.count == 1)
         #expect(decoded.latestTurnRecall?.items.first?.kind == .memory)
         #expect(decoded.didEditFiles == true)

@@ -692,50 +692,48 @@ struct AgentSessionsSidebar: View {
     /// Trailing icon cluster on each session row — pin & archive
     /// buttons that fade in on hover, plus a persistent `pin.fill`
     /// badge when the row is pinned so users can see the state at a
-    /// glance even without hovering. Cursor-style: the actions stay
-    /// out of the way until the user is aiming at the row.
+    /// glance even without hovering. The cluster always reserves its
+    /// hover width so rows with plan/goal badges do not reflow as the
+    /// pointer enters and exits.
     @ViewBuilder
     private func sessionRowTrailingActions(session: AgentSession, isHovered: Bool) -> some View {
         HStack(spacing: 4) {
-            // Persistent pin badge when pinned & not hovered. While
-            // hovered, the badge is replaced by the (also pinned-state-
-            // aware) toggle button below, so we don't double up.
+            Button {
+                appState.toggleAgentSessionPinned(id: session.id)
+            } label: {
+                Image(systemName: session.isPinned ? "pin.slash" : "pin")
+                    .font(.system(size: 10, weight: .medium))
+                    .foregroundStyle(.secondary)
+                    .frame(width: 16, height: 16)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .help(session.isPinned ? L10n.Sidebar.sessionRowUnpinTooltip : L10n.Sidebar.sessionRowPinTooltip)
+
+            Button {
+                requestArchiveToggle(for: session)
+            } label: {
+                Image(systemName: session.isArchived ? "tray.and.arrow.up" : "archivebox")
+                    .font(.system(size: 10, weight: .medium))
+                    .foregroundStyle(.secondary)
+                    .frame(width: 16, height: 16)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .help(session.isArchived ? L10n.Sidebar.sessionRowUnarchiveTooltip : L10n.Sidebar.sessionRowArchiveTooltip)
+        }
+        .opacity(isHovered ? 1 : 0)
+        .allowsHitTesting(isHovered)
+        .accessibilityHidden(!isHovered)
+        .overlay(alignment: .trailing) {
             if session.isPinned && !isHovered {
                 Image(systemName: "pin.fill")
                     .font(.system(size: 9, weight: .semibold))
                     .foregroundStyle(.secondary)
                     .rotationEffect(.degrees(45))
             }
-
-            if isHovered {
-                // Pin / Unpin
-                Button {
-                    appState.toggleAgentSessionPinned(id: session.id)
-                } label: {
-                    Image(systemName: session.isPinned ? "pin.slash" : "pin")
-                        .font(.system(size: 10, weight: .medium))
-                        .foregroundStyle(.secondary)
-                        .frame(width: 16, height: 16)
-                        .contentShape(Rectangle())
-                }
-                .buttonStyle(.plain)
-                .help(session.isPinned ? L10n.Sidebar.sessionRowUnpinTooltip : L10n.Sidebar.sessionRowPinTooltip)
-
-                // Archive / Unarchive
-                Button {
-                    requestArchiveToggle(for: session)
-                } label: {
-                    Image(systemName: session.isArchived ? "tray.and.arrow.up" : "archivebox")
-                        .font(.system(size: 10, weight: .medium))
-                        .foregroundStyle(.secondary)
-                        .frame(width: 16, height: 16)
-                        .contentShape(Rectangle())
-                }
-                .buttonStyle(.plain)
-                .help(session.isArchived ? L10n.Sidebar.sessionRowUnarchiveTooltip : L10n.Sidebar.sessionRowArchiveTooltip)
-            }
         }
-        .frame(minWidth: isHovered ? 40 : 0, alignment: .trailing)
+        .frame(width: AgentDesign.sidebarSessionTrailingActionsWidth, alignment: .trailing)
     }
 
     private var groupedSessions: [SidebarWorkspaceGroup] {
