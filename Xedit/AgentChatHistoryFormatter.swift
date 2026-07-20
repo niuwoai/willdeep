@@ -1230,6 +1230,7 @@ enum AgentChatHistoryRenderer {
             guard range.length > 0, isInlineCode(attributes[inlinePresentationIntentKey]) else { return }
             attributed.addAttributes([
                 .font: NSFont.monospacedSystemFont(ofSize: baseFont.pointSize, weight: .regular),
+                .baselineOffset: NSNumber(value: Double(MarkdownInline.inlineCodeBaselineOffset)),
                 .agentChatHistoryInlineCodeChipColor: NSColor.labelColor.withAlphaComponent(0.08),
             ], range: range)
             attributed.removeAttribute(.backgroundColor, range: range)

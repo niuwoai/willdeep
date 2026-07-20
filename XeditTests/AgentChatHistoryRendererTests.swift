@@ -2050,6 +2050,40 @@ struct AgentChatHistoryRendererTests {
     }
 
     @Test
+    func longInlineCodeFileNamesKeepUnderscoresAboveTheClipEdge() throws {
+        let fileName = "customer_usage_diagnostic.go"
+        let rendered = AgentChatHistoryRenderer.render(
+            messages: [
+                AgentMessage(
+                    role: .assistant,
+                    content: "`\(fileName)`"
+                )
+            ],
+            isDark: false
+        )
+        var fileSegments: [(text: String, baselineOffset: Double?)] = []
+        rendered.enumerateAttribute(
+            .agentChatHistoryFilePath,
+            in: NSRange(location: 0, length: rendered.length)
+        ) { value, range, _ in
+            guard (value as? String) == fileName else { return }
+            fileSegments.append((
+                text: (rendered.string as NSString).substring(with: range),
+                baselineOffset: (rendered.attribute(
+                    .baselineOffset,
+                    at: range.location,
+                    effectiveRange: nil
+                ) as? NSNumber)?.doubleValue
+            ))
+        }
+
+        #expect(fileSegments.map(\.text).joined() == fileName)
+        #expect(fileSegments.allSatisfy {
+            $0.baselineOffset == Double(MarkdownInline.inlineCodeBaselineOffset)
+        })
+    }
+
+    @Test
     func attachmentSourceMarkersBecomePreciseCitationLinks() throws {
         let rendered = AgentChatHistoryRenderer.render(
             messages: [
