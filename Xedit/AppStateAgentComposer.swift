@@ -7,6 +7,28 @@
 
 import Foundation
 
+nonisolated enum AgentComposerLocalPanelTrigger {
+    static let exactInput = "#1983#"
+
+    static func isExactInput(_ input: String) -> Bool {
+        input.trimmingCharacters(in: .whitespacesAndNewlines) == exactInput
+    }
+
+    static func matches(
+        input: String,
+        isNewSession: Bool,
+        hasTurnAttachments: Bool,
+        isResponding: Bool,
+        hasExistingPreview: Bool
+    ) -> Bool {
+        isExactInput(input)
+            && isNewSession
+            && !hasTurnAttachments
+            && !isResponding
+            && !hasExistingPreview
+    }
+}
+
 extension AppState {
     func sendAgentMessage(allowPlanModeSuggestion: Bool = true) {
         // The UI's send button always targets whatever session is on
@@ -19,6 +41,32 @@ extension AppState {
         }
 
         let userText = runtime.input.trimmingCharacters(in: .whitespacesAndNewlines)
+        let hasTurnAttachments = !runtime.pendingImages.isEmpty
+            || !runtime.pendingTextAttachments.isEmpty
+            || !runtime.pendingSkills.isEmpty
+            || !runtime.pendingFiles.isEmpty
+            || runtime.pendingIncludeWorkspaceOverview
+        if AgentComposerLocalPanelTrigger.isExactInput(runtime.input) {
+            guard AgentComposerLocalPanelTrigger.matches(
+                input: runtime.input,
+                isNewSession: runtime.isEmpty,
+                hasTurnAttachments: hasTurnAttachments,
+                isResponding: runtime.isResponding,
+                hasExistingPreview: runtime.hasLocalConfirmationPreview
+            ) else {
+                // `#1983#` is reserved for this local surface. In an existing
+                // or busy session it intentionally does nothing instead of
+                // falling through into a model request.
+                return
+            }
+            clearAgentPlanModeSuggestion(for: runtime)
+            runtime.input = ""
+            runtime.installLocalConfirmationPreview(
+                localConfirmationPreviewCalls(for: runtime)
+            )
+            return
+        }
+
         let images = runtime.pendingImages.map { image in
             (try? image.diskBackedCopy()) ?? image
         }
@@ -43,6 +91,11 @@ extension AppState {
                 || !skills.isEmpty
                 || !pendingFiles.isEmpty
                 || includeWorkspaceOverview else { return }
+
+        // The preview is a transient, local-only surface. As soon as the user
+        // starts a real turn, remove its synthetic cards before any normal
+        // activity accounting or approval routing runs.
+        runtime.clearLocalConfirmationPreview()
 
         if allowPlanModeSuggestion,
            runtime.interactionMode == .normal,
@@ -112,6 +165,55 @@ extension AppState {
             attachedSkills: skills,
             source: .operatorInput
         )
+    }
+
+    private func localConfirmationPreviewCalls(for runtime: AgentRuntime) -> [AgentToolCall] {
+        let messageID = UUID()
+        var commandArguments: [String: AgentJSONValue] = [
+            "command": .string("git status --short"),
+        ]
+        if let workspacePath = runtime.workspaceRootPath?.trimmingCharacters(in: .whitespacesAndNewlines),
+           !workspacePath.isEmpty {
+            commandArguments["cwd"] = .string(workspacePath)
+        }
+
+        return [
+            AgentToolCall(
+                messageID: messageID,
+                externalID: "local-confirmation-preview-command",
+                toolName: "run_command",
+                arguments: commandArguments,
+                risk: .danger,
+                status: .awaitingConfirm
+            ),
+            AgentToolCall(
+                messageID: messageID,
+                externalID: "local-confirmation-preview-web",
+                toolName: "web_fetch",
+                arguments: ["url": .string("https://example.com/guide")],
+                risk: .write,
+                status: .pendingApproval
+            ),
+            AgentToolCall(
+                messageID: messageID,
+                externalID: "local-confirmation-preview-browser",
+                toolName: "embedded_browser_navigate",
+                arguments: ["url": .string("https://example.com")],
+                risk: .write,
+                status: .pendingApproval
+            ),
+            AgentToolCall(
+                messageID: messageID,
+                externalID: "local-confirmation-preview-computer-use",
+                toolName: "computer_use_click",
+                arguments: [
+                    "x": .number(640),
+                    "y": .number(420),
+                ],
+                risk: .write,
+                status: .pendingApproval
+            ),
+        ]
     }
 
     func resolveAgentPlanModeSuggestion(enterPlanMode: Bool) {

@@ -1,4 +1,6 @@
+import AppKit
 import Foundation
+import SwiftUI
 import Testing
 @testable import WillDeep
 
@@ -47,6 +49,46 @@ struct AgentSidePanelDiffPerformanceTests {
         #expect(text.hasPrefix(prefix))
     }
 
+    @Test("TextKit diff keeps native foreground and line background colors")
+    func appKitDiffKeepsNativeColors() throws {
+        let diff = "-old\n+new\n@@ -1 +1 @@\n context"
+        let rendered = AgentDiffColorizer.appKitAttributed(
+            diff,
+            palette: EditorInterfaceSkin.mistForest.palette
+        ).value
+        let source = rendered.string as NSString
+        let deletionRange = source.range(of: "-old")
+        let additionRange = source.range(of: "+new")
+        let hunkRange = source.range(of: "@@ -1 +1 @@")
+
+        let deletionForeground = try #require(
+            rendered.attribute(.foregroundColor, at: deletionRange.location, effectiveRange: nil) as? NSColor
+        )
+        let additionForeground = try #require(
+            rendered.attribute(.foregroundColor, at: additionRange.location, effectiveRange: nil) as? NSColor
+        )
+        let deletionBackground = rendered.attribute(
+            .backgroundColor,
+            at: deletionRange.location,
+            effectiveRange: nil
+        ) as? NSColor
+        let additionBackground = rendered.attribute(
+            .backgroundColor,
+            at: additionRange.location,
+            effectiveRange: nil
+        ) as? NSColor
+        let hunkForeground = rendered.attribute(
+            .foregroundColor,
+            at: hunkRange.location,
+            effectiveRange: nil
+        ) as? NSColor
+
+        #expect(deletionForeground != additionForeground)
+        #expect(deletionBackground != nil)
+        #expect(additionBackground != nil)
+        #expect(hunkForeground == NSColor(EditorInterfaceSkin.mistForest.palette.accent))
+    }
+
     @Test("Diff panel is file-first and uses non-contiguous TextKit layout")
     func diffPanelAvoidsWholeDocumentSwiftUILayout() throws {
         let source = try Self.source(named: "AgentSidePanelDiffView.swift")
@@ -56,6 +98,9 @@ struct AgentSidePanelDiffPerformanceTests {
         #expect(source.contains("loadUntrackedDiffPreviewSection"))
         #expect(source.contains("NSTextView.scrollableTextView()"))
         #expect(source.contains("allowsNonContiguousLayout = true"))
+        #expect(source.contains("AgentDiffColorizer.appKitAttributed"))
+        #expect(source.contains("textView.textStorage?.setAttributedString(text)"))
+        #expect(!source.contains("NSAttributedString(text)"))
         #expect(!source.contains("Text(cachedText)"))
         #expect(!source.contains("ScrollView([.vertical, .horizontal])"))
     }

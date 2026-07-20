@@ -210,10 +210,11 @@ struct AgentChatTranscript: View {
                     if (appState.agentInteractionMode == .plan || appState.agentInteractionMode == .goal),
                        let plan = appState.agentCurrentPlan {
                         AgentPlanCard(plan: plan)
+                            .id("agent-current-plan")
                             .frame(maxWidth: AgentDesign.chatMaxContentWidth, alignment: .leading)
                     }
 
-                    if appState.agentMessages.isEmpty {
+                    if appState.agentMessages.isEmpty && localConfirmationPreviewCalls.isEmpty {
                         AgentChatEmptyState()
                             .frame(maxWidth: .infinity)
                             .padding(.top, 40)
@@ -274,6 +275,12 @@ struct AgentChatTranscript: View {
                                     appState.revealAgentReferencedPath(rawPath)
                                 },
                                 onOpenAttachmentCitation: appState.openAgentAttachmentCitation,
+                                progressPlan: appState.agentCurrentPlan,
+                                onShowPlan: {
+                                    withAnimation(.easeInOut(duration: 0.2)) {
+                                        proxy.scrollTo("agent-current-plan", anchor: .top)
+                                    }
+                                },
                                 searchQuery: conversationSearchQuery,
                                 activeSearchMatchIndex: conversationSearchActiveIndex,
                                 onSearchResultCountChange: updateConversationSearchMatchCount,
@@ -330,7 +337,13 @@ struct AgentChatTranscript: View {
                                 isStreamingThisMessage: true,
                                 assistantTurnPresentation: turnPresentation,
                                 baseFontSize: appState.agentChatBaseFontSize,
-                                onReferenceGeneratedImage: appState.appendGeneratedImageReferenceToAgentInput
+                                onReferenceGeneratedImage: appState.appendGeneratedImageReferenceToAgentInput,
+                                progressPlan: appState.agentCurrentPlan,
+                                onShowPlan: {
+                                    withAnimation(.easeInOut(duration: 0.2)) {
+                                        proxy.scrollTo("agent-current-plan", anchor: .top)
+                                    }
+                                }
                             )
                                 .id(streamingMessage.id)
                                 .frame(maxWidth: AgentDesign.chatMaxContentWidth, alignment: .leading)
@@ -374,6 +387,21 @@ struct AgentChatTranscript: View {
                                 }
                             }
                         }
+                    }
+
+                    if !localConfirmationPreviewCalls.isEmpty {
+                        VStack(alignment: .leading, spacing: 12) {
+                            ForEach(localConfirmationPreviewCalls) { call in
+                                AgentToolCallCard(call: call)
+                            }
+                        }
+                        .id("agent-local-confirmation-preview")
+                        .accessibilityIdentifier("agent-local-confirmation-preview")
+                        .padding(.top, 8)
+                        .padding(.bottom, 6)
+                        .padding(.leading, AgentChatHistoryLayoutMetrics.assistantContentHeadIndent)
+                        .padding(.trailing, AgentChatHistoryLayoutMetrics.assistantContentTailInset)
+                        .frame(maxWidth: AgentDesign.chatMaxContentWidth, alignment: .leading)
                     }
 
                     // 消息已发出、但还没抢到 provider 并发槽（同一 provider
@@ -486,6 +514,9 @@ struct AgentChatTranscript: View {
                             },
                             onRemove: { queued in
                                 appState.removeQueuedAgentMessage(id: queued.id)
+                            },
+                            onMove: { sourceID, targetID in
+                                appState.moveQueuedAgentMessage(id: sourceID, to: targetID)
                             }
                         )
                         .frame(maxWidth: AgentDesign.chatMaxContentWidth, alignment: .leading)
@@ -694,6 +725,10 @@ struct AgentChatTranscript: View {
 
     private func toolCalls(for messageID: AgentMessage.ID) -> [AgentToolCall] {
         appState.agentToolCalls.filter { $0.messageID == messageID }
+    }
+
+    private var localConfirmationPreviewCalls: [AgentToolCall] {
+        appState.activeRuntime?.localConfirmationPreviewCalls ?? []
     }
 
     private func isEmptyThinkingPlaceholder(_ message: AgentMessage) -> Bool {

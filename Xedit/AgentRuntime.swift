@@ -48,6 +48,11 @@ final class AgentRuntime: ObservableObject, Identifiable {
     @Published var contextSummaryThroughMessageID: AgentMessage.ID?
     @Published var patchProposals: [AgentPatchProposal] = []
     @Published var toolCalls: [AgentToolCall] = []
+    /// Runtime-only tool cards installed by the exact `#1983#` composer
+    /// trigger. They deliberately never enter `AgentSession.messages`, so a
+    /// confirmation-surface preview cannot leak into a later model request or
+    /// survive an app restart as fake conversation history.
+    @Published private(set) var localConfirmationPreviewCallIDs: Set<AgentToolCall.ID> = []
     @Published var latestComputerUseActivity: AgentComputerUseActivity?
 
     // MARK: - Composer state (per-session draft — switching tabs preserves)
@@ -447,5 +452,51 @@ final class AgentRuntime: ObservableObject, Identifiable {
     /// True if this session has no real user messages yet.
     var isEmpty: Bool {
         !messages.contains(where: { $0.role == .user })
+    }
+
+    var localConfirmationPreviewCalls: [AgentToolCall] {
+        toolCalls.filter { localConfirmationPreviewCallIDs.contains($0.id) }
+    }
+
+    var hasLocalConfirmationPreview: Bool {
+        !localConfirmationPreviewCallIDs.isEmpty
+    }
+
+    func installLocalConfirmationPreview(_ calls: [AgentToolCall]) {
+        clearLocalConfirmationPreview()
+        localConfirmationPreviewCallIDs = Set(calls.map(\.id))
+        toolCalls.append(contentsOf: calls)
+    }
+
+    func clearLocalConfirmationPreview() {
+        guard !localConfirmationPreviewCallIDs.isEmpty else { return }
+        let previewIDs = localConfirmationPreviewCallIDs
+        toolCalls.removeAll { previewIDs.contains($0.id) }
+        for id in previewIDs {
+            pendingToolDecisions.removeValue(forKey: id)
+        }
+        localConfirmationPreviewCallIDs.removeAll()
+    }
+
+    @discardableResult
+    func resolveLocalConfirmationPreview(
+        id: AgentToolCall.ID,
+        decision: AgentToolDecision
+    ) -> Bool {
+        guard localConfirmationPreviewCallIDs.contains(id),
+              let index = toolCalls.firstIndex(where: { $0.id == id }) else {
+            return false
+        }
+
+        switch decision {
+        case .approved, .answered:
+            toolCalls[index].status = .succeeded
+        case .denied:
+            toolCalls[index].status = .denied
+        }
+        toolCalls[index].result = nil
+        toolCalls[index].errorMessage = nil
+        pendingToolDecisions.removeValue(forKey: id)
+        return true
     }
 }

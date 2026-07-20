@@ -25,6 +25,16 @@
 import AppKit
 import Foundation
 
+protocol FolderOpenPanelPresenting: AnyObject {
+    func presentStandalone(completion: @escaping (NSApplication.ModalResponse) -> Void)
+}
+
+extension NSOpenPanel: FolderOpenPanelPresenting {
+    func presentStandalone(completion: @escaping (NSApplication.ModalResponse) -> Void) {
+        begin(completionHandler: completion)
+    }
+}
+
 extension AppState {
     // MARK: - Folder Opening
 
@@ -92,18 +102,15 @@ extension AppState {
         return panel
     }
 
-    /// Prefer a window-attached sheet. On newer macOS releases a standalone
-    /// panel can temporarily block the app's event handling while SwiftUI is
-    /// also updating the composer/sidebar after a workspace choice.
-    private static func presentFolderOpenPanel(
-        _ panel: NSOpenPanel,
+    /// Keep folder selection independent from whichever auxiliary window happens
+    /// to be key. Attaching the panel to `NSApp.keyWindow` can strand an invisible
+    /// sheet on a hidden or already-sheeted window; later clicks then queue behind
+    /// that sheet and appear to do nothing.
+    static func presentFolderOpenPanel(
+        _ panel: FolderOpenPanelPresenting,
         completion: @escaping (NSApplication.ModalResponse) -> Void
     ) {
-        if let hostWindow = NSApp.keyWindow ?? NSApp.mainWindow {
-            panel.beginSheetModal(for: hostWindow, completionHandler: completion)
-        } else {
-            panel.begin(completionHandler: completion)
-        }
+        panel.presentStandalone(completion: completion)
     }
 
     // MARK: - File Opening

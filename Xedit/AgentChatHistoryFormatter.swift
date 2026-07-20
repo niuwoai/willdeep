@@ -210,9 +210,11 @@ enum AgentChatHistoryRenderer {
         assistantTurnContextMessages: [AgentMessage]? = nil,
         isAssistantTurnActive: Bool = false,
         expandedToolGroupIDs: Set<String> = [],
+        expandedProgressBlockIDs: Set<String> = [],
         hoveredUserMessageID: UUID? = nil,
         baseFontSize: CGFloat = NSFont.systemFontSize,
         layoutWidth: CGFloat = AgentChatHistoryLayoutMetrics.defaultTranscriptWidth,
+        progressPlan: AgentPlan? = nil,
         latestTurnReportToolCount: Int? = nil
     ) -> NSAttributedString {
         let clampedSize = AgentSettingsStore.clampChatBaseFontSize(baseFontSize)
@@ -222,6 +224,7 @@ enum AgentChatHistoryRenderer {
         hasher.combine(messages.count)
         hasher.combine(isAssistantTurnActive)
         hasher.combine(expandedToolGroupIDs.sorted())
+        hasher.combine(expandedProgressBlockIDs.sorted())
         hasher.combine(hoveredUserMessageID)
         hasher.combine(latestTurnReportToolCount ?? -1)
         for m in messages {
@@ -232,6 +235,14 @@ enum AgentChatHistoryRenderer {
             includesCopyContent: !isAssistantTurnActive,
             into: &hasher
         )
+        if let progressPlan {
+            hasher.combine(progressPlan.status.rawValue)
+            for step in progressPlan.steps {
+                hasher.combine(step.id)
+                hasher.combine(step.text)
+                hasher.combine(step.status.rawValue)
+            }
+        }
         let key = CacheKey(
             countAndHash: hasher.finalize(),
             isDark: isDark,
@@ -256,9 +267,11 @@ enum AgentChatHistoryRenderer {
             assistantTurnContextMessages: turnContextMessages,
             isAssistantTurnActive: isAssistantTurnActive,
             expandedToolGroupIDs: expandedToolGroupIDs,
+            expandedProgressBlockIDs: expandedProgressBlockIDs,
             hoveredUserMessageID: hoveredUserMessageID,
             baseFontSize: clampedSize,
             layoutWidth: resolvedLayoutWidth,
+            progressPlan: progressPlan,
             latestTurnReportToolCount: latestTurnReportToolCount
         )
 
@@ -285,9 +298,11 @@ enum AgentChatHistoryRenderer {
         assistantTurnContextMessages: [AgentMessage],
         isAssistantTurnActive: Bool,
         expandedToolGroupIDs: Set<String>,
+        expandedProgressBlockIDs: Set<String>,
         hoveredUserMessageID: UUID?,
         baseFontSize: CGFloat,
         layoutWidth: CGFloat,
+        progressPlan: AgentPlan?,
         latestTurnReportToolCount: Int?
     ) -> NSAttributedString {
         let result = NSMutableAttributedString()
@@ -433,6 +448,7 @@ enum AgentChatHistoryRenderer {
                 return AgentUserContentSplitter.split(source).visible
             }()
             let body: String
+            var progressPresentation: AgentTurnProgressPresentation? = nil
             if message.role == .workflowReport, let report = message.workflowReport {
                 // Workflow 消息的 content 恒为空,状态/摘要都在 report 字段
                 // 上。运行中的卡片由 AgentChatTranscript 的 SwiftUI 工作态
@@ -445,6 +461,13 @@ enum AgentChatHistoryRenderer {
                 let head = String(message.content.prefix(toolBodyLimit))
                 let omitted = message.content.count - toolBodyLimit
                 body = head + "\n\n…[truncated \(omitted) characters from this tool output — open the message reader for the full body]"
+            } else if message.role == .assistant || message.role == .system {
+                let extraction = AgentTurnProgressPresentation.extract(
+                    from: displaySourceContent,
+                    plan: progressPlan
+                )
+                body = extraction.visibleContent
+                progressPresentation = extraction.presentation
             } else {
                 body = displaySourceContent
             }
@@ -503,32 +526,49 @@ enum AgentChatHistoryRenderer {
                 hasMessageBubbleContent = true
             }
 
-            if !body.isEmpty {
+            if !body.isEmpty || progressPresentation != nil {
                 if hasMessageBubbleContent {
                     result.append(NSAttributedString(string: "\n", attributes: [.font: bodyFont]))
                 }
                 let bodyStart = result.length
-                if useMono {
-                    appendPlainBody(body, to: result, font: monoFont, color: bodyColor)
-                } else if message.role == .user {
-                    appendPlainBody(
-                        AgentLongTokenBreaker.inject(into: body),
-                        to: result,
-                        font: bodyFont,
-                        color: bodyColor
-                    )
-                } else {
-                    appendMarkdownBody(
-                        body,
-                        to: result,
-                        role: message.role,
-                        bodyFont: bodyFont,
-                        monoFont: monoFont,
-                        bodyColor: bodyColor,
-                        secondaryColor: secondaryColor,
-                        codeBackgroundColor: codeBackgroundColor,
-                        isDark: isDark
-                    )
+                if !body.isEmpty {
+                    if useMono {
+                        appendPlainBody(body, to: result, font: monoFont, color: bodyColor)
+                    } else if message.role == .user {
+                        appendPlainBody(
+                            AgentLongTokenBreaker.inject(into: body),
+                            to: result,
+                            font: bodyFont,
+                            color: bodyColor
+                        )
+                    } else {
+                        appendMarkdownBody(
+                            body,
+                            to: result,
+                            role: message.role,
+                            bodyFont: bodyFont,
+                            monoFont: monoFont,
+                            bodyColor: bodyColor,
+                            secondaryColor: secondaryColor,
+                            codeBackgroundColor: codeBackgroundColor,
+                            isDark: isDark
+                        )
+                    }
+                }
+                if let progressPresentation {
+                    if result.length > bodyStart {
+                        result.append(NSAttributedString(
+                            string: "\n",
+                            attributes: [.font: NSFont.systemFont(ofSize: 6)]
+                        ))
+                    }
+                    let progressID = message.id.uuidString
+                    result.append(AgentTurnProgressHistoryRenderer.attributedString(
+                        progressPresentation,
+                        id: progressID,
+                        isExpanded: expandedProgressBlockIDs.contains(progressID),
+                        showsPlanAction: progressPlan != nil
+                    ))
                 }
                 let bodyRange = NSRange(location: bodyStart, length: result.length - bodyStart)
                 applyBubbleChrome(

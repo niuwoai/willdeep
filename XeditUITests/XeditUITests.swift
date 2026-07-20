@@ -46,6 +46,15 @@ final class WillDeepUITests: XCTestCase {
             app.staticTexts["onboarding.welcome.title"].waitForExistence(timeout: 5),
             "A clean launch should present onboarding from the default Agent window."
         )
+
+        let primaryButton = app.buttons["onboarding.footer.primary"]
+        XCTAssertTrue(primaryButton.waitForExistence(timeout: 2))
+        primaryButton.click()
+
+        XCTAssertTrue(
+            app.otherElements["onboarding.some-im.content"].waitForExistence(timeout: 2),
+            "some.im login should be the first setup step after Welcome."
+        )
     }
 
     @MainActor

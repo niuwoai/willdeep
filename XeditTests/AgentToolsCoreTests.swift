@@ -1243,6 +1243,28 @@ struct AgentQueueModeTests {
 
     @Test
     @MainActor
+    func queuedMessagesCanBeReorderedInBothDirections() {
+        let state = AppState()
+        _ = state.startNewAgentSession()
+        guard let runtime = state.activeRuntime else {
+            Issue.record("Expected active runtime")
+            return
+        }
+
+        let first = AgentQueuedMessage(text: "first")
+        let second = AgentQueuedMessage(text: "second")
+        let third = AgentQueuedMessage(text: "third")
+        runtime.queuedMessages = [first, second, third]
+
+        state.moveQueuedAgentMessage(id: first.id, to: third.id)
+        #expect(runtime.queuedMessages.map(\.id) == [second.id, third.id, first.id])
+
+        state.moveQueuedAgentMessage(id: first.id, to: second.id)
+        #expect(runtime.queuedMessages.map(\.id) == [first.id, second.id, third.id])
+    }
+
+    @Test
+    @MainActor
     func sendingQueuedMessageNowDeniesAwaitingConfirm() {
         let state = AppState()
         _ = state.startNewAgentSession()

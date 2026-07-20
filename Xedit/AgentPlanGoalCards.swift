@@ -544,50 +544,55 @@ struct AgentGoalCard: View {
     @State private var showingEditor = false
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            HStack(spacing: 8) {
-                Image(systemName: "target")
-                    .font(.system(size: 11, weight: .semibold))
-                    .foregroundStyle(Color.accentColor)
-                Text(L10n.GoalCard.header)
-                    .font(.system(size: 11, weight: .semibold))
-                    .textCase(.uppercase)
+        HStack(alignment: .top, spacing: 10) {
+            Image(systemName: "target")
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundStyle(Color.accentColor)
+                .frame(width: 18, height: 20)
+                .accessibilityHidden(true)
+
+            VStack(alignment: .leading, spacing: 10) {
+                HStack(spacing: 8) {
+                    Text(L10n.GoalCard.header)
+                        .font(.system(size: 11, weight: .semibold))
+                        .textCase(.uppercase)
+                        .foregroundStyle(.secondary)
+                    Spacer(minLength: 0)
+                    Button {
+                        showingEditor = true
+                    } label: {
+                        Image(systemName: "pencil")
+                            .font(.system(size: 11))
+                    }
+                    .buttonStyle(.plain)
                     .foregroundStyle(.secondary)
-                Spacer(minLength: 0)
-                Button {
-                    showingEditor = true
-                } label: {
-                    Image(systemName: "pencil")
-                        .font(.system(size: 11))
+                    .help(L10n.GoalCard.editButtonHelp)
                 }
-                .buttonStyle(.plain)
-                .foregroundStyle(.secondary)
-                .help(L10n.GoalCard.editButtonHelp)
-            }
 
-            if !goal.statement.isEmpty {
-                Text(goal.statement)
-                    .font(.system(size: 13, weight: .medium))
-                    .fixedSize(horizontal: false, vertical: true)
-            }
+                if !goal.statement.isEmpty {
+                    Text(goal.statement)
+                        .font(.system(size: 13, weight: .medium))
+                        .fixedSize(horizontal: false, vertical: true)
+                }
 
-            if !goal.checklist.isEmpty {
-                VStack(alignment: .leading, spacing: 4) {
-                    ForEach(goal.checklist) { item in
-                        HStack(alignment: .top, spacing: 8) {
-                            Button {
-                                appState.toggleAgentGoalItem(item.id)
-                            } label: {
-                                Image(systemName: item.done ? "checkmark.square.fill" : "square")
+                if !goal.checklist.isEmpty {
+                    VStack(alignment: .leading, spacing: 4) {
+                        ForEach(goal.checklist) { item in
+                            HStack(alignment: .top, spacing: 8) {
+                                Button {
+                                    appState.toggleAgentGoalItem(item.id)
+                                } label: {
+                                    Image(systemName: item.done ? "checkmark.square.fill" : "square")
+                                        .font(.system(size: 12))
+                                        .foregroundStyle(item.done ? Color.accentColor : Color.secondary)
+                                }
+                                .buttonStyle(.plain)
+                                Text(item.text)
                                     .font(.system(size: 12))
-                                    .foregroundStyle(item.done ? Color.accentColor : Color.secondary)
+                                    .strikethrough(item.done, color: .secondary)
+                                    .foregroundStyle(item.done ? .secondary : .primary)
+                                    .fixedSize(horizontal: false, vertical: true)
                             }
-                            .buttonStyle(.plain)
-                            Text(item.text)
-                                .font(.system(size: 12))
-                                .strikethrough(item.done, color: .secondary)
-                                .foregroundStyle(item.done ? .secondary : .primary)
-                                .fixedSize(horizontal: false, vertical: true)
                         }
                     }
                 }
@@ -595,11 +600,11 @@ struct AgentGoalCard: View {
         }
         .padding(12)
         .background(
-            RoundedRectangle(cornerRadius: 10, style: .continuous)
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
                 .fill(Color.accentColor.opacity(0.08))
         )
         .overlay(
-            RoundedRectangle(cornerRadius: 10, style: .continuous)
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
                 .stroke(Color.accentColor.opacity(0.35), lineWidth: 1)
         )
         .sheet(isPresented: $showingEditor) {

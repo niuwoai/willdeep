@@ -362,7 +362,7 @@ private struct AgentSidePanelColoredDiffView: View {
     let cacheKey: String
     let palette: EditorInterfaceSkinPalette
     @State private var cachedKey = ""
-    @State private var cachedText: AttributedString?
+    @State private var cachedText: NSAttributedString?
 
     var body: some View {
         Group {
@@ -386,11 +386,11 @@ private struct AgentSidePanelColoredDiffView: View {
         let nextKey = cacheKey
         let nextDiff = diff
         let nextPalette = palette
-        let text = await Task.detached(priority: .userInitiated) {
-            AgentDiffColorizer.attributed(nextDiff, palette: nextPalette)
+        let rendered = await Task.detached(priority: .userInitiated) {
+            AgentDiffColorizer.appKitAttributed(nextDiff, palette: nextPalette)
         }.value
         guard !Task.isCancelled, cacheKey == nextKey else { return }
-        cachedText = text
+        cachedText = rendered.value
         cachedKey = nextKey
     }
 }
@@ -399,7 +399,7 @@ private struct AgentSidePanelColoredDiffView: View {
 /// TextKit lays out the visible viewport instead of asking SwiftUI to measure
 /// every glyph before the side panel can paint its first frame.
 struct AgentSidePanelDiffTextView: NSViewRepresentable {
-    let text: AttributedString
+    let text: NSAttributedString
     let contentID: String
 
     final class Coordinator {
@@ -463,7 +463,7 @@ struct AgentSidePanelDiffTextView: NSViewRepresentable {
         context: Context
     ) {
         context.coordinator.displayedContentID = contentID
-        textView.textStorage?.setAttributedString(NSAttributedString(text))
+        textView.textStorage?.setAttributedString(text)
         scrollView.contentView.scroll(to: .zero)
         scrollView.reflectScrolledClipView(scrollView.contentView)
     }
@@ -517,6 +517,18 @@ enum AgentSidePanelDiffLimiter {
 /// attributed string because the AppKit surface no longer inherits a SwiftUI
 /// `.font` modifier.
 enum AgentDiffColorizer {
+    struct AppKitResult: @unchecked Sendable {
+        let value: NSAttributedString
+    }
+
+    private enum LineKind {
+        case addition
+        case deletion
+        case hunk
+        case meta
+        case context
+    }
+
     nonisolated static func background(for palette: EditorInterfaceSkinPalette) -> Color {
         palette.previewBase
     }
@@ -538,7 +550,7 @@ enum AgentDiffColorizer {
             var piece = AttributedString(line)
             piece.font = font
             piece.foregroundColor = color(
-                forDiffLine: line,
+                for: lineKind(line),
                 addition: addition,
                 deletion: deletion,
                 hunk: hunk,
@@ -556,24 +568,101 @@ enum AgentDiffColorizer {
         return result
     }
 
+    /// The side panel is backed by `NSTextView`, so build native AppKit
+    /// attributes instead of round-tripping SwiftUI attributes through
+    /// `NSAttributedString`. That bridge can drop `Color` runs and leave the
+    /// file-detail diff looking like unstyled plain text.
+    nonisolated static func appKitAttributed(
+        _ diff: String,
+        palette: EditorInterfaceSkinPalette
+    ) -> AppKitResult {
+        let addition = NSColor(calibratedRed: 0.18, green: 0.62, blue: 0.31, alpha: 1)
+        let deletion = NSColor(calibratedRed: 0.83, green: 0.24, blue: 0.30, alpha: 1)
+        let hunk = NSColor(palette.accent)
+        let meta = NSColor(palette.secondaryText)
+        let context = NSColor(palette.previewInk)
+        let font = NSFont.monospacedSystemFont(ofSize: 11, weight: .regular)
+        let result = NSMutableAttributedString()
+        let lines = diff.components(separatedBy: "\n")
+
+        for (index, line) in lines.enumerated() {
+            let kind = lineKind(line)
+            var attributes: [NSAttributedString.Key: Any] = [
+                .font: font,
+                .foregroundColor: appKitColor(
+                    for: kind,
+                    addition: addition,
+                    deletion: deletion,
+                    hunk: hunk,
+                    meta: meta,
+                    context: context
+                ),
+            ]
+            switch kind {
+            case .addition:
+                attributes[.backgroundColor] = addition.withAlphaComponent(0.12)
+            case .deletion:
+                attributes[.backgroundColor] = deletion.withAlphaComponent(0.12)
+            case .hunk, .meta, .context:
+                break
+            }
+            result.append(NSAttributedString(string: line, attributes: attributes))
+            if index < lines.count - 1 {
+                result.append(NSAttributedString(
+                    string: "\n",
+                    attributes: [.font: font, .foregroundColor: context]
+                ))
+            }
+        }
+
+        return AppKitResult(value: NSAttributedString(attributedString: result))
+    }
+
+    nonisolated private static func lineKind(_ line: String) -> LineKind {
+        if line.hasPrefix("@@") { return .hunk }
+        if line.hasPrefix("+++") || line.hasPrefix("---")
+            || line.hasPrefix("diff ") || line.hasPrefix("index ")
+            || line.hasPrefix("new file") || line.hasPrefix("deleted file")
+            || line.hasPrefix("rename ") || line.hasPrefix("similarity ")
+            || line.hasPrefix("old mode") || line.hasPrefix("new mode") {
+            return .meta
+        }
+        if line.hasPrefix("+") { return .addition }
+        if line.hasPrefix("-") { return .deletion }
+        return .context
+    }
+
     nonisolated private static func color(
-        forDiffLine line: String,
+        for kind: LineKind,
         addition: Color,
         deletion: Color,
         hunk: Color,
         meta: Color,
         context: Color
     ) -> Color {
-        if line.hasPrefix("@@") { return hunk }
-        if line.hasPrefix("+++") || line.hasPrefix("---")
-            || line.hasPrefix("diff ") || line.hasPrefix("index ")
-            || line.hasPrefix("new file") || line.hasPrefix("deleted file")
-            || line.hasPrefix("rename ") || line.hasPrefix("similarity ")
-            || line.hasPrefix("old mode") || line.hasPrefix("new mode") {
-            return meta
+        switch kind {
+        case .addition: return addition
+        case .deletion: return deletion
+        case .hunk: return hunk
+        case .meta: return meta
+        case .context: return context
         }
-        if line.hasPrefix("+") { return addition }
-        if line.hasPrefix("-") { return deletion }
-        return context
+    }
+
+    nonisolated private static func appKitColor(
+        for kind: LineKind,
+        addition: NSColor,
+        deletion: NSColor,
+        hunk: NSColor,
+        meta: NSColor,
+        context: NSColor
+    ) -> NSColor {
+        switch kind {
+        case .addition: return addition
+        case .deletion: return deletion
+        case .hunk: return hunk
+        case .meta: return meta
+        case .context: return context
+        }
     }
 }

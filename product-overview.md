@@ -1,6 +1,6 @@
 # WillDeep Product Overview
 
-> Last updated: 2026-07-19 | Current version: v1.189.0-rc2
+> Last updated: 2026-07-20 | Current version: v1.191.0-rc2
 
 ## Positioning
 
@@ -11,6 +11,18 @@ Official product domain: [willdeep.com](https://willdeep.com).
 WillDeep is configured for non-App-Store distribution without App Sandbox so it can access local project files with fewer permission interruptions.
 
 ## 架构概览
+
+- **工作区目录选择器可见性修复（1.191.0-rc2）** —— 侧栏“新建项目”、Composer“选择文件夹”和菜单“打开文件夹”统一使用独立异步 `NSOpenPanel`，不再把 sheet 附着到全局 `keyWindow` 或辅助窗口；避免面板创建后不可见、后续点击排队并表现为轻微卡顿。
+
+- **对话内本轮进度摘要（1.191.0-rc1）** —— Agent 的 `progress` 协议不再作为原始代码块暴露在聊天中，而是转成可折叠的原生摘要：收起时显示完成、进行中与失败计数，展开时只展示仍在进行或失败的步骤，并可定位到完整计划；流式 SwiftUI 与历史 TextKit 两条渲染链路保持一致。
+
+- **Composer 本地确认面板口令（1.190.0-rc1）** —— 仅在新会话中整句输入 `#1983#`，可直接预览命令、网页读取、内置浏览器和 Computer Use 的真实审批界面；口令与预览卡不写入消息、不发送 AI、不持久化，点击任何审批动作也只在本地结束预览，开始正常对话前自动清理。
+
+- **首次引导以 some.im 为主路径（1.189.0-rc4）** —— Onboarding 调整为“欢迎 → some.im 登录 → 自有 AI Provider → 本机语音 → 完成摘要”，some.im 浏览器登录先于 Provider 配置；窗口采用左侧进度导航和右侧单任务内容，登录、可选项、完成状态与后续设置入口均有明确反馈，并提供完整中英文资源与视觉渲染回归测试。
+
+- **Diff 单文件详情原生着色与有界渲染（1.189.0-rc3）** —— Diff 侧栏使用 AppKit 原生富文本向 TextKit 传递新增、删除、hunk 与元数据颜色，新增/删除行同时带低透明度背景；详情超过 32KB 或 600 行时只展示 24KB 样本，未跟踪单文件超过 64KB 时降级为摘要，Git 输出收集另有 512KB 与 5 秒上限。
+
+- **队列与 Goal 左侧语义标识（1.189.0-rc2）** —— 待发消息使用独立的警示图标与拖拽把手，支持直接调整 FIFO 发送顺序；Goal 卡片以稳定的左侧目标图标对齐正文和操作区，提升两类运行状态的辨识度。
 
 - **Goal Teams 计划先行闭环（1.189.0-rc1）** —— Goal 形成后由宿主固定启动需求、架构、测试三个相互独立的只读规划身份，全部终态后再做证据仲裁；只有至少两份有效报告且仲裁成功，才生成十列 Teams 表与完整 Plan 供用户显式确认。计划前锁定写级和危险级工具，执行每轮同时更新 `progress` 与 `goal-check`，拒绝、中断、旧会话恢复和 Goal 未完成的再规划都默认收紧权限。
 

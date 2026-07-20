@@ -50,6 +50,8 @@ struct AgentChatHistoryTextView: NSViewRepresentable {
     var onAddSelectionToTask: ((String) -> Void)? = nil
     var onOpenFilePath: ((String) -> Void)? = nil
     var onOpenAttachmentCitation: ((AgentAttachmentCitationPayload) -> Void)? = nil
+    var progressPlan: AgentPlan? = nil
+    var onShowPlan: (() -> Void)? = nil
     var searchQuery: String = ""
     var activeSearchMatchIndex: Int? = nil
     var onSearchResultCountChange: ((Int) -> Void)? = nil
@@ -69,6 +71,7 @@ struct AgentChatHistoryTextView: NSViewRepresentable {
         view.onAddSelectionToTask = onAddSelectionToTask
         view.onOpenFilePath = onOpenFilePath
         view.onOpenAttachmentCitation = onOpenAttachmentCitation
+        view.onShowPlan = onShowPlan
         view.onSearchResultCountChange = onSearchResultCountChange
         configure(view)
         view.applyMessages(
@@ -77,6 +80,7 @@ struct AgentChatHistoryTextView: NSViewRepresentable {
             assistantTurnContextMessages: assistantTurnContextMessages,
             isAssistantTurnActive: isAssistantTurnActive,
             baseFontSize: baseFontSize,
+            progressPlan: progressPlan,
             latestTurnReportToolCount: latestTurnReportToolCount
         )
         view.applySearch(
@@ -94,6 +98,7 @@ struct AgentChatHistoryTextView: NSViewRepresentable {
         nsView.onAddSelectionToTask = onAddSelectionToTask
         nsView.onOpenFilePath = onOpenFilePath
         nsView.onOpenAttachmentCitation = onOpenAttachmentCitation
+        nsView.onShowPlan = onShowPlan
         nsView.onSearchResultCountChange = onSearchResultCountChange
         nsView.applyMessages(
             messages,
@@ -101,6 +106,7 @@ struct AgentChatHistoryTextView: NSViewRepresentable {
             assistantTurnContextMessages: assistantTurnContextMessages,
             isAssistantTurnActive: isAssistantTurnActive,
             baseFontSize: baseFontSize,
+            progressPlan: progressPlan,
             latestTurnReportToolCount: latestTurnReportToolCount
         )
         nsView.applySearch(
@@ -156,6 +162,7 @@ final class AgentChatHistoryNSTextView: NSTextView {
     private var currentIsAssistantTurnActive = false
     private var currentIsDark = false
     private var currentBaseFontSize: CGFloat = NSFont.systemFontSize
+    private var currentProgressPlan: AgentPlan?
     private var currentLatestTurnReportToolCount: Int? = nil
     private var currentLayoutWidth = AgentChatHistoryLayoutMetrics.defaultTranscriptWidth
     private var currentBaseAttributedString = NSAttributedString()
@@ -164,6 +171,7 @@ final class AgentChatHistoryNSTextView: NSTextView {
     private var currentSearchIsDark = false
     private var lastReportedSearchResultCount: Int?
     private var expandedToolGroupIDs = Set<String>()
+    private var expandedProgressBlockIDs = Set<String>()
     private var hoveredUserMessageID: UUID?
     private var hoverTrackingArea: NSTrackingArea?
     /// Pending "restore copy button label" work items keyed by the
@@ -182,6 +190,7 @@ final class AgentChatHistoryNSTextView: NSTextView {
     var onAddSelectionToTask: ((String) -> Void)?
     var onOpenFilePath: ((String) -> Void)?
     var onOpenAttachmentCitation: ((AgentAttachmentCitationPayload) -> Void)?
+    var onShowPlan: (() -> Void)?
     var onSearchResultCountChange: ((Int) -> Void)?
 
     init() {
@@ -419,6 +428,7 @@ final class AgentChatHistoryNSTextView: NSTextView {
         assistantTurnContextMessages: [AgentMessage]? = nil,
         isAssistantTurnActive: Bool = false,
         baseFontSize: CGFloat = NSFont.systemFontSize,
+        progressPlan: AgentPlan? = nil,
         latestTurnReportToolCount: Int? = nil
     ) {
         let turnContextMessages = assistantTurnContextMessages ?? messages
@@ -428,6 +438,7 @@ final class AgentChatHistoryNSTextView: NSTextView {
             isAssistantTurnActive: isAssistantTurnActive,
             isDark: isDark,
             baseFontSize: baseFontSize,
+            progressPlan: progressPlan,
             latestTurnReportToolCount: latestTurnReportToolCount
         )
         if fp == lastInputFingerprint {
@@ -440,6 +451,7 @@ final class AgentChatHistoryNSTextView: NSTextView {
         currentIsAssistantTurnActive = isAssistantTurnActive
         currentIsDark = isDark
         currentBaseFontSize = baseFontSize
+        currentProgressPlan = progressPlan
         currentLatestTurnReportToolCount = latestTurnReportToolCount
         renderCurrentMessages()
     }
@@ -457,6 +469,7 @@ final class AgentChatHistoryNSTextView: NSTextView {
         isAssistantTurnActive: Bool,
         isDark: Bool,
         baseFontSize: CGFloat,
+        progressPlan: AgentPlan?,
         latestTurnReportToolCount: Int?
     ) -> Int {
         var hasher = Hasher()
@@ -465,6 +478,15 @@ final class AgentChatHistoryNSTextView: NSTextView {
         hasher.combine(messages.count)
         hasher.combine(isAssistantTurnActive)
         hasher.combine(latestTurnReportToolCount ?? -1)
+        if let progressPlan {
+            hasher.combine(progressPlan.status.rawValue)
+            hasher.combine(progressPlan.steps.count)
+            for step in progressPlan.steps {
+                hasher.combine(step.id)
+                hasher.combine(step.text)
+                hasher.combine(step.status.rawValue)
+            }
+        }
         for m in messages {
             hasher.combine(m.id)
             hasher.combine(m.role.rawValue)
@@ -530,9 +552,11 @@ final class AgentChatHistoryNSTextView: NSTextView {
             assistantTurnContextMessages: currentAssistantTurnContextMessages,
             isAssistantTurnActive: currentIsAssistantTurnActive,
             expandedToolGroupIDs: expandedToolGroupIDs,
+            expandedProgressBlockIDs: expandedProgressBlockIDs,
             hoveredUserMessageID: hoveredUserMessageID,
             baseFontSize: currentBaseFontSize,
             layoutWidth: currentLayoutWidth,
+            progressPlan: currentProgressPlan,
             latestTurnReportToolCount: currentLatestTurnReportToolCount
         )
         var hasher = Hasher()
@@ -542,6 +566,7 @@ final class AgentChatHistoryNSTextView: NSTextView {
         hasher.combine(currentBaseFontSize)
         hasher.combine(currentLayoutWidth)
         hasher.combine(expandedToolGroupIDs.sorted())
+        hasher.combine(expandedProgressBlockIDs.sorted())
         hasher.combine(hoveredUserMessageID)
         let hash = hasher.finalize()
         if hash == lastContentHash, attr.length == currentBaseAttributedString.length {
@@ -849,6 +874,30 @@ extension AgentChatHistoryNSTextView: NSTextViewDelegate {
             return true
         }
 
+        if let progressID = textStorage.attribute(
+            .agentChatHistoryProgressToggleID,
+            at: charIndex,
+            effectiveRange: nil
+        ) as? String {
+            if expandedProgressBlockIDs.contains(progressID) {
+                expandedProgressBlockIDs.remove(progressID)
+            } else {
+                expandedProgressBlockIDs.insert(progressID)
+            }
+            lastContentHash = nil
+            renderCurrentMessages()
+            return true
+        }
+
+        if (textStorage.attribute(
+            .agentChatHistoryProgressShowPlan,
+            at: charIndex,
+            effectiveRange: nil
+        ) as? NSNumber)?.boolValue == true {
+            onShowPlan?()
+            return true
+        }
+
         if let attachment = textStorage.attribute(.agentChatHistoryTextAttachment, at: charIndex, effectiveRange: nil) as? AgentTextAttachment {
             AgentTextAttachmentReaderWindowRegistry.shared.open(attachment: attachment)
             return true
@@ -1147,6 +1196,7 @@ private final class AgentChatHistoryBubbleLayoutManager: NSLayoutManager {
         drawTranscriptEventNotices(forGlyphRange: glyphsToShow, at: origin)
         drawAgentBubbles(forGlyphRange: glyphsToShow, at: origin)
         drawAgentTables(forGlyphRange: glyphsToShow, at: origin)
+        drawAgentProgressBlocks(forGlyphRange: glyphsToShow, at: origin)
         drawAgentCodeBlocks(forGlyphRange: glyphsToShow, at: origin)
         drawInlineCodeChips(forGlyphRange: glyphsToShow, at: origin)
         super.drawBackground(forGlyphRange: glyphsToShow, at: origin)
@@ -1366,6 +1416,35 @@ private final class AgentChatHistoryBubbleLayoutManager: NSLayoutManager {
         }
     }
 
+    private func drawAgentProgressBlocks(forGlyphRange glyphsToShow: NSRange, at origin: NSPoint) {
+        guard let textStorage else { return }
+        let characterRange = self.characterRange(forGlyphRange: glyphsToShow, actualGlyphRange: nil)
+        let fullStorageRange = NSRange(location: 0, length: textStorage.length)
+        var drawnRanges = Set<String>()
+        textStorage.enumerateAttribute(.agentChatHistoryProgressBlockID, in: characterRange, options: []) { value, range, _ in
+            guard range.length > 0, let value = value as? String else { return }
+            var fullEffectiveRange = NSRange(location: 0, length: 0)
+            _ = textStorage.attribute(
+                .agentChatHistoryProgressBlockID,
+                at: range.location,
+                longestEffectiveRange: &fullEffectiveRange,
+                in: fullStorageRange
+            )
+            let drawKey = "\(fullEffectiveRange.location)-\(fullEffectiveRange.length)-\(value)"
+            guard drawnRanges.insert(drawKey).inserted else { return }
+            let blockGlyphRange = glyphRange(forCharacterRange: fullEffectiveRange, actualCharacterRange: nil)
+            guard NSIntersectionRange(blockGlyphRange, glyphsToShow).length > 0 else { return }
+            let rect = richBlockRect(forGlyphRange: blockGlyphRange, at: origin, verticalInset: 7)
+            guard !rect.isNull, !rect.isEmpty else { return }
+            NSColor.labelColor.withAlphaComponent(0.035).setFill()
+            let path = NSBezierPath(roundedRect: rect, xRadius: 8, yRadius: 8)
+            path.fill()
+            NSColor.separatorColor.withAlphaComponent(0.12).setStroke()
+            path.lineWidth = 1
+            path.stroke()
+        }
+    }
+
     private func drawInlineCodeChips(forGlyphRange glyphsToShow: NSRange, at origin: NSPoint) {
         guard let textStorage else { return }
         let characterRange = self.characterRange(forGlyphRange: glyphsToShow, actualGlyphRange: nil)
@@ -1446,6 +1525,36 @@ private final class AgentChatHistoryBubbleLayoutManager: NSLayoutManager {
         }
         guard !union.isNull else { return union }
         var rect = union.insetBy(dx: -10, dy: -7)
+        if containerWidth > 0 {
+            rect.origin.x = origin.x + AgentChatHistoryLayoutMetrics.richBlockBackgroundLeadingInset
+            rect.size.width = max(
+                AgentChatHistoryLayoutMetrics.richBlockMinimumWidth,
+                containerWidth
+                    - AgentChatHistoryLayoutMetrics.richBlockBackgroundLeadingInset
+                    - AgentChatHistoryLayoutMetrics.richBlockBackgroundTrailingInset
+            )
+        }
+        return rect.integral
+    }
+
+    private func richBlockRect(
+        forGlyphRange fullGlyphRange: NSRange,
+        at origin: NSPoint,
+        verticalInset: CGFloat
+    ) -> NSRect {
+        var union = NSRect.null
+        var containerWidth: CGFloat = 0
+        enumerateLineFragments(forGlyphRange: fullGlyphRange) { lineFragmentRect, _, textContainer, lineGlyphRange, _ in
+            containerWidth = max(containerWidth, self.usableWidth(for: textContainer, fallback: lineFragmentRect.width))
+            let lineRange = NSIntersectionRange(lineGlyphRange, fullGlyphRange)
+            guard lineRange.length > 0 else { return }
+            var lineRect = self.boundingRect(forGlyphRange: lineRange, in: textContainer)
+            guard !lineRect.isEmpty else { return }
+            lineRect = lineRect.offsetBy(dx: origin.x, dy: origin.y)
+            union = union.isNull ? lineRect : union.union(lineRect)
+        }
+        guard !union.isNull else { return union }
+        var rect = union.insetBy(dx: -10, dy: -verticalInset)
         if containerWidth > 0 {
             rect.origin.x = origin.x + AgentChatHistoryLayoutMetrics.richBlockBackgroundLeadingInset
             rect.size.width = max(
