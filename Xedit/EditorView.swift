@@ -1363,9 +1363,8 @@ struct EditorView: NSViewRepresentable {
                 targetRange = (source as NSString).lineRange(for: NSIntersectionRange(textView.selectedRange(), fullRange))
             }
 
-            SyntaxHighlighter.applyEditorCJKFallbackFonts(
-                to: textStorage,
-                source: source,
+            SyntaxHighlighter.applyLiveEditorCJKFallbackFonts(
+                in: textView,
                 defaultFont: parent.settings.editorFont(),
                 range: targetRange
             )
