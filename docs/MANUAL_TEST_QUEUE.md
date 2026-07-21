@@ -1,6 +1,6 @@
 # Manual Smoke-Test Queue
 
-> Last updated: 2026-07-15
+> Last updated: 2026-07-21
 
 CI 只能保编译/单测过。一系列改 UI、改窗口、改 SwiftUI 状态机的特性
 都得人坐到机器前面点。这个文件按版本累积着每次发版后我提醒你
@@ -11,6 +11,14 @@ CI 只能保编译/单测过。一系列改 UI、改窗口、改 SwiftUI 状态�
 - ⏳ = 还没测
 - ✅ = 已测、通过
 - ❌ = 已测、有 bug（请在行后写 issue link 或一句描述）
+
+---
+
+## 1.192.0-rc12 — 集成终端 CJK 字体 cascade
+
+- ⏳ 设置里把终端字体切到某个 Nerd Font（如 MesloLGS NF）→ 终端里 `echo 你好世界` 与 `ls` 中文文件名正常显示，不再消失/空白。
+- ⏳ 同一 Nerd Font 下 powerlevel10k / starship 的 prompt 图标仍正常（CJK cascade 没有顶掉 Nerd Font 图标字形）。
+- ⏳ 终端字体用自定义字体名（custom font name 输入框）时中文与 emoji 仍可显示。
 
 ---
 

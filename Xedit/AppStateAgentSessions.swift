@@ -943,10 +943,18 @@ extension AppState {
         scheduleQueuedMessageConsumptionAfterCancellation(for: runtime)
     }
 
-    func scheduleQueuedMessageConsumptionAfterCancellation(for runtime: AgentRuntime) {
+    func scheduleQueuedMessageConsumptionAfterCancellation(
+        for runtime: AgentRuntime,
+        fallbackPollAttempts: Int = 20,
+        fallbackPollIntervalNanoseconds: UInt64 = 150_000_000
+    ) {
         Task { @MainActor [weak self, weak runtime] in
-            for _ in 0..<20 {
-                try? await Task.sleep(nanoseconds: 150_000_000)
+            for _ in 0..<fallbackPollAttempts {
+                if fallbackPollIntervalNanoseconds > 0 {
+                    try? await Task.sleep(nanoseconds: fallbackPollIntervalNanoseconds)
+                } else {
+                    await Task.yield()
+                }
                 guard let self, let runtime else { return }
                 guard runtime.shouldConsumeQueueAfterStop else { return }
                 if !runtime.isResponding, runtime.requestTask == nil {

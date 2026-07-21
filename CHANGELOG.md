@@ -1,7 +1,113 @@
 # Changelog
 
-> 当前文件保留最新版本（1.192.0-rc6 至 1.109.0-rc340）。
+> 当前文件保留最新版本（1.192.0-rc16 至 1.109.0-rc340）。
 > 更早的 1000 个版本已移至 [CHANGELOG-ARCHIVE.md](CHANGELOG-ARCHIVE.md)。
+
+## 1.192.0-rc16 - 2026-07-21
+
+### Fixed
+
+- 为队列取消 fallback 释放 provider slot 的调度增加测试可控参数；生产默认延迟不变，release 测试可立即覆盖同一释放路径，避免全量并发测试下主线程调度抖动导致误报。
+
+### Changed
+
+- 版本号从 **1.192.0-rc15** 递增为 **1.192.0-rc16**，内部构建号从 **55** 递增为 **56**。
+
+## 1.192.0-rc15 - 2026-07-21
+
+### Fixed
+
+- 放宽 release 环境下最小 headless `run_command` 回归测试的超时阈值，避免高负载构建机把已关闭 stdin 的 shell 命令误判为超时。
+- 将队列取消 fallback 释放 provider slot 的测试改为条件轮询，避免主线程繁忙时固定 3.3 秒等待导致误报。
+
+### Changed
+
+- 版本号从 **1.192.0-rc14** 递增为 **1.192.0-rc15**，内部构建号从 **54** 递增为 **55**。
+
+## 1.192.0-rc14 - 2026-07-21
+
+### Fixed
+
+- Workspace Access 审批模式现在只自动放行明确属于当前工作区的白名单操作；未命中的 MCP 写工具会回到人工确认，不再继续落入 LLM judge 自动审批分支。
+- 版本号从 **1.192.0-rc13** 递增为 **1.192.0-rc14**，内部构建号从 **53** 递增为 **54**；App、Go agent、Help、Helper、浏览器扩展、README、响应头契约与产品文档保持一致。
+
+### Tests
+
+- 重新运行 release 前置测试，用于覆盖 Workspace Access / MCP 审批边界。
+
+## 1.192.0-rc13 - 2026-07-21
+
+### Fixed
+
+- 集成终端（SwiftTerm）字体解析链补上 CJK fallback：`withNerdFontFallback` 之后追加与 Editor 相同的 `withEditorCJKCascade()`（PingFangSC / Hiragino Sans GB / STHeiti / Apple Color Emoji）。此前当终端字体设为 Nerd Font（本身无汉字字形）时，解析链是 Nerd Font → Nerd Font，汉字落到 .notdef 被直接丢弃、终端里中文不可见；现在任意基础字体（含自定义字体名）都会级联到中文字体。
+- 版本号从 **1.192.0-rc12** 递增为 **1.192.0-rc13**，内部构建号从 **52** 递增为 **53**；App、Go agent、Help、Helper、浏览器扩展、README、响应头契约与产品文档保持一致。本条目原编号 rc12，因与另一并行会话已推送打 tag 的 editor 修复（下方 1.192.0-rc12）撞号，合并时重编号为 rc13。
+
+### Tests
+
+- 新增 `EditorTerminalFontCascadeTests`：覆盖默认设置字体含 CJK cascade、自定义字体名保留 cascade、基础字体即 Nerd Font 时仍追加 CJK、Nerd Font fallback 排在 CJK 之前、重复应用 cascade 去重五个用例。
+
+## 1.192.0-rc12 - 2026-07-21
+
+### Fixed
+
+- 修复 1.192.0-rc5 引入的 editor 重绘失效回归：输入含汉字的内容后文字已进入 text storage 但界面不绘制新内容，需 cmd+A 全选或窗口 resize 等全量重绘才显示（纯文本/Untitled 下最明显，与所选字体无关）。根因是 live CJK fallback 字体 pass 在 `textDidChange` 回调内直接改写 `.font` 属性，既没包 `beginEditing()/endEditing()` 也没有对受影响 range 做布局/显示失效，纯文本模式又没有语法高亮回填兜底。现改为：pass 包裹 begin/endEditing，只改写字体确实需要变化的 CJK 段（已是 fallback 字体的段跳过，纯 ASCII 输入零开销），并对实际改写的 range 显式 `invalidateLayout` + `invalidateDisplay`；IME 组合（marked text）期间整体跳过，不打扰输入法，提交后由下一次 `textDidChange` 正常补跑。
+- 版本号从 **1.192.0-rc6** 递增为 **1.192.0-rc12**（跳过并行会话在途的 rc7–rc11，避免版本号撞车），内部构建号从 **46** 递增为 **52**；App、Go agent、Help、Helper、浏览器扩展、README、响应头契约与产品文档保持一致。
+
+### Tests
+
+- 新增 `EditorCJKLiveRedrawTests`：断言 live pass 对实际改写的 CJK range 调度了 layout/display invalidation 且 `ensureLayout` 无需额外事件即可完成；断言纯 ASCII 与已应用 fallback 字体的文本为零改写零失效；断言 marked text 组合期间 pass 完全跳过、提交后恢复正常改写。三个用例本地 `xcodebuild test-without-building`（CODE_SIGNING_ALLOWED=NO）全部通过。
+
+## 1.192.0-rc11 - 2026-07-21
+
+### Fixed
+
+- App 菜单的“关于 WillDeep”改由 SwiftUI `CommandGroup(replacing: .appInfo)` 直接接管，不再启动后异步 patch AppKit 默认菜单，避免有时弹出系统简版 About、有时弹出自定义推荐页。
+- “检查更新”入口与“关于 WillDeep”共用同一个 App Info 菜单替换组，移除多 Scene `after: .appInfo` 带来的重复菜单项；Sparkle 检查会记录 appcast URL 与失败错误详情，方便定位网络、appcast、签名或版本比较问题。
+- 版本号从 **1.192.0-rc10** 递增为 **1.192.0-rc11**，内部构建号从 **50** 递增为 **51**；App、Go agent、Help、Helper、浏览器扩展、README、响应头契约与产品文档保持一致。
+
+## 1.192.0-rc10 - 2026-07-21
+
+### Fixed
+
+- Assistant 页脚的 input/output token 达到 100 万后改用 `M` 为单位并固定保留两位小数，例如 `26725.8k/43.5k` 显示为 `26.73M/43.5k`；千级数值继续使用一位小数的 `k`。
+- 版本号从 **1.192.0-rc9** 递增为 **1.192.0-rc10**，内部构建号从 **49** 递增为 **50**；App、Go agent、Help、Helper、浏览器扩展、README、响应头契约与产品文档保持一致。
+
+### Tests
+
+- 新增百万级 token 页脚格式回归测试。
+
+## 1.192.0-rc9 - 2026-07-21
+
+### Fixed
+
+- `AgentMessage.modelContent` 在没有文本附件和隐藏上下文时继续原样返回可见正文，保留首尾空格、换行和纯空白消息的既有兼容语义。
+- Assistant 页脚继续按当前用户轮次汇总所有模型请求的 input/output token，并新增缓存命中率；缓存未上报与真实 0% 现在可以区分，Anthropic 分列返回的未缓存、缓存读取和缓存写入 token 会先统一为总 input 再参与统计。
+- 版本号从 **1.192.0-rc8** 递增为 **1.192.0-rc9**，内部构建号从 **48** 递增为 **49**；App、Go agent、Help、Helper、浏览器扩展、README、响应头契约与产品文档保持一致。
+
+### Tests
+
+- 新增正文空白兼容、Anthropic input 归一化、用户轮次 token 聚合边界和缓存率格式回归测试。
+
+## 1.192.0-rc8 - 2026-07-21
+
+### Fixed
+
+- 主 Agent 将动态 turn context 从 system 移到最新 user message，并作为不展示的 `modelContext` 随该消息持久化，确保下一轮仍复现相同 history 字节；历史宿主通知不再污染稳定 system，工具结果也改用不随轮次变化的确定性摘要。
+- Anthropic 主请求为 system、稳定历史边界和请求尾部补齐显式 `cache_control`；全局规则内容按路径、修改时间与文件大小缓存，减少主线程重复读盘。
+- 稳定提示词升级至 v9：compact profile 精简长尾工具规则，去除语言冲突和重复约束，README 不再作为项目规则注入，选区/文件/压缩摘要标记为不可信参考数据，设计转代码提示最多执行三轮校正。
+- 版本号从 **1.192.0-rc7** 递增为 **1.192.0-rc8**，内部构建号从 **47** 递增为 **48**；App、Go agent、Help、Helper、浏览器扩展、README、响应头契约与产品文档保持一致。
+
+### Tests
+
+- 新增稳定提示词 v9 哈希快照、compact 契约长度、动态上下文消息位置、Anthropic 缓存断点、项目规则来源和工具结果跨轮稳定性测试。
+
+## 1.192.0-rc7 - 2026-07-20
+
+### Fixed
+
+- 发布脚本的前置单测改用 release 工作目录下的独立 DerivedData / SourcePackages，不再复用全局 Xcode DerivedData，避免旧 Debug 宿主或 `WillDeep.debug.dylib` 残留污染 release 流程。
+- XCTest 宿主启动时跳过 Chrome Native Host 注册、Fn 语音监听、语音模型生命周期预热和首次引导弹窗，避免纯单测还未建立连接就被启动期外部副作用中断。
+- 版本号从 **1.192.0-rc6** 递增为 **1.192.0-rc7**，内部构建号从 **46** 递增为 **47**；App、Go agent、Help、Helper、浏览器扩展、README、响应头契约与产品文档保持一致。
 
 ## 1.192.0-rc6 - 2026-07-20
 

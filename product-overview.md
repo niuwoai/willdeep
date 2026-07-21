@@ -1,6 +1,6 @@
 # WillDeep Product Overview
 
-> Last updated: 2026-07-20 | Current version: v1.192.0-rc6
+> Last updated: 2026-07-21 | Current version: v1.192.0-rc16
 
 ## Positioning
 
@@ -11,6 +11,20 @@ Official product domain: [willdeep.com](https://willdeep.com).
 WillDeep is configured for non-App-Store distribution without App Sandbox so it can access local project files with fewer permission interruptions.
 
 ## 架构概览
+
+- **Workspace Access 审批边界（1.192.0-rc14）** —— Workspace Access 只自动放行明确属于当前工作区的本地命令、委派 Agent、用户技能和配置类操作；未信任或标准 MCP 写工具不会继续落入 LLM judge 自动审批，而是回到人工确认。
+
+- **集成终端中文渲染（1.192.0-rc12）** —— 终端字体解析链在 Nerd Font fallback 之后追加与 Editor 一致的 CJK cascade（PingFang / Hiragino / STHeiti / Emoji）；终端字体设为 Nerd Font 时汉字不再落到 .notdef 消失。
+
+- **App 菜单关于与更新入口稳定化（1.192.0-rc11）** —— “关于 WillDeep”和“检查更新”由 SwiftUI App Info 菜单替换组统一提供，不再启动后异步改写 AppKit 默认 About 项；菜单重建后仍固定打开自定义关于页，并只保留一个检查更新入口。Sparkle 检查会记录 appcast URL 与失败详情，便于区分网络、appcast、签名和版本比较问题。
+
+- **百万级 Token 紧凑显示（1.192.0-rc10）** —— Assistant 页脚的本轮 input/output token 达到 100 万后统一使用 `M` 并保留两位小数；低于 100 万的千级数值继续使用一位小数的 `k`，让长任务用量保持可读。
+
+- **本轮 Token 与缓存可观测性（1.192.0-rc9）** —— Assistant 页脚只在一个用户轮次的最后一条可见回复上展示该轮所有模型请求的 input/output 合计，并追加缓存命中率；底层仍保留逐请求用量供费用和历史统计使用。Anthropic 的未缓存输入、缓存读取和缓存写入会归一为总 input，缓存字段同时区分“供应商未上报”和“已上报但 0% 命中”。无附件和隐藏上下文时，`modelContent` 保持原始正文空白不变。
+
+- **系统提示词缓存与信任边界（1.192.0-rc8）** —— 主 Agent 将每轮变化的工作区、文件、选区、模式与 memory 上下文从 system 移到最新 user message，并以不展示的 `modelContext` 随消息持久化，保证后续请求复现相同 history 字节；历史 system 通知转为宿主提醒，工具结果使用不随轮次变化的确定性摘要。Anthropic 主链路为 system 和历史消息设置显式 prompt-cache 断点。稳定提示词升级至 v9，compact profile 使用精简工具契约，移除 README 规则注入与重复/冲突指令，并以哈希快照、消息结构和缓存断点测试防止回退。
+
+- **Release 前置测试稳定性（1.192.0-rc7）** —— macOS release 脚本的前置单测使用 release 工作目录下的独立 DerivedData / SourcePackages，避免复用全局 Xcode 构建缓存；XCTest 宿主启动时会跳过 Chrome Native Host 注册、Fn 语音监听、语音模型生命周期预热和首次引导弹窗，让纯单测在安静环境里建立测试连接。
 
 - **关于页产品入口（1.192.0-rc6）** —— 关于页的 83d 产品推荐新增 GitWise、像界（Xomo）与 BearCleaner；GitWise 指向 `https://83d.me/zh/products/gitwise`，Xomo 与 BearCleaner 指向对应中文产品主页。
 

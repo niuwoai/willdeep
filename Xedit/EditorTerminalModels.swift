@@ -160,7 +160,9 @@ extension EditorTerminalSettings {
         // Keep the chosen font (e.g. Monaco) for normal text but cascade to an
         // installed Nerd Font for glyphs it lacks — so zsh prompt icons stop
         // rendering as boxes without forcing the whole terminal to a Nerd Font.
-        return EditorTerminalFont.withNerdFontFallback(base)
+        // Then append the CJK cascade: Nerd Fonts carry no Han glyphs, so
+        // without it a terminal set to a Nerd Font drops Chinese to .notdef.
+        return EditorTerminalFont.withNerdFontFallback(base).withEditorCJKCascade()
     }
 
     var colorScheme: EditorTerminalColorScheme {

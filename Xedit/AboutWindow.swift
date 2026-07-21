@@ -47,42 +47,6 @@ enum AboutWindowOpener {
     }
 }
 
-enum AboutMenuInstaller {
-    static func install() {
-        DispatchQueue.main.async {
-            guard let appMenu = NSApp.mainMenu?.items.first?.submenu,
-                  let aboutItem = findAboutItem(in: appMenu) else {
-                return
-            }
-
-            aboutItem.title = L10n.About.menuItem
-            aboutItem.target = AboutMenuHandler.shared
-            aboutItem.action = #selector(AboutMenuHandler.openAboutWindow(_:))
-        }
-    }
-
-    private static func findAboutItem(in menu: NSMenu) -> NSMenuItem? {
-        let standardAboutAction = #selector(NSApplication.orderFrontStandardAboutPanel(_:))
-        if let item = menu.items.first(where: { $0.action == standardAboutAction }) {
-            return item
-        }
-
-        return menu.items.first { item in
-            item.title.hasPrefix("About ") || item.title.hasPrefix("关于")
-        }
-    }
-}
-
-private final class AboutMenuHandler: NSObject {
-    static let shared = AboutMenuHandler()
-
-    @objc func openAboutWindow(_ sender: Any?) {
-        Task { @MainActor in
-            AboutWindowOpener.open()
-        }
-    }
-}
-
 private struct AboutView: View {
     static let defaultWindowSize = CGSize(width: 700, height: 500)
 
