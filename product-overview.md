@@ -1,6 +1,6 @@
 # WillDeep Product Overview
 
-> Last updated: 2026-07-21 | Current version: v1.192.0-rc19
+> Last updated: 2026-07-21 | Current version: v1.192.0-rc20
 
 ## Positioning
 
@@ -11,6 +11,8 @@ Official product domain: [willdeep.com](https://willdeep.com).
 WillDeep is configured for non-App-Store distribution without App Sandbox so it can access local project files with fewer permission interruptions.
 
 ## 架构概览
+
+- **Editor 中文输入法组合保护（1.192.0-rc20）** —— Editor 在拼音等输入法存在 marked text 时暂停 SwiftUI 文本回写、脏状态发布、光标/括号刷新和语法高亮，并取消已经排队或正在回调的整段高亮；候选文字提交后再恢复正常同步与高亮，避免 TextKit 全量替换提前结束组合态、留下原始拼音。
 
 - **apply_patch 契约测试跟进（1.192.0-rc19）** —— 更新 `testApplyPatchPromptAndRegistrySurface` 的过期文本断言，改为锁定当前“优先 `edit_file`、`apply_patch` 仅作 legacy fallback、补丁卡片位于对话内且不引导右侧面板”的真实提示词与工具注册表契约。
 

@@ -1,7 +1,19 @@
 # Changelog
 
-> 当前文件保留最新版本（1.192.0-rc19 至 1.109.0-rc340）。
+> 当前文件保留最新版本（1.192.0-rc20 至 1.109.0-rc340）。
 > 更早的 1000 个版本已移至 [CHANGELOG-ARCHIVE.md](CHANGELOG-ARCHIVE.md)。
+
+## 1.192.0-rc20 - 2026-07-21
+
+### Fixed
+
+- 修复 macOS Editor 无法使用中文输入法打字的问题：输入法存在 marked text 时暂停 SwiftUI 文本同步、脏状态回调、选择/括号刷新和语法高亮，并取消已经排队或正在回调的整段高亮；候选文字上屏后再执行正常同步，避免 `setAttributedString` 提前终止拼音组合并留下原始字母。
+- Editor 的 SwiftUI representable 更新在 marked text 期间整体延后，防止流式状态、设置或诊断刷新把尚未提交的输入法缓冲区覆盖掉。
+- 版本号从 **1.192.0-rc19** 递增为 **1.192.0-rc20**，内部构建号从 **59** 递增为 **60**；App、Go agent、Help、Helper、浏览器扩展、README、响应头契约与产品文档保持一致。
+
+### Tests
+
+- 新增 Editor IME 回归测试：覆盖 marked text 在 600ms 高亮防抖窗口内不被取消、binding 与脏状态不提前发布，以及候选提交后恢复正常同步。
 
 ## 1.192.0-rc19 - 2026-07-21
 
