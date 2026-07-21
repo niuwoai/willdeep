@@ -67,22 +67,24 @@
 ### Fixed
 
 - Workspace Access 审批模式现在只自动放行明确属于当前工作区的白名单操作；未命中的 MCP 写工具会回到人工确认，不再继续落入 LLM judge 自动审批分支。
+- 集成终端（SwiftTerm）字体解析链补上 CJK fallback：`withNerdFontFallback` 之后追加与 Editor 相同的 `withEditorCJKCascade()`（PingFangSC / Hiragino Sans GB / STHeiti / Apple Color Emoji）。此前当终端字体设为 Nerd Font（本身无汉字字形）时，解析链是 Nerd Font → Nerd Font，汉字落到 .notdef 被直接丢弃、终端里中文不可见；现在任意基础字体（含自定义字体名）都会级联到中文字体。该修复原编号 rc12，因与另一并行会话已推送打 tag 的 editor 修复（下方 1.192.0-rc12）撞号，合并时并入 rc13。
 - 版本号从 **1.192.0-rc12** 递增为 **1.192.0-rc13**，内部构建号从 **52** 递增为 **53**；App、Go agent、Help、Helper、浏览器扩展、README、响应头契约与产品文档保持一致。
 
 ### Tests
 
 - 修复 release 前置测试 `approval mode controls write-tier auto approval` 覆盖到的 Workspace Access / MCP 审批边界。
+- 新增 `EditorTerminalFontCascadeTests`：覆盖默认设置字体含 CJK cascade、自定义字体名保留 cascade、基础字体即 Nerd Font 时仍追加 CJK、Nerd Font fallback 排在 CJK 之前、重复应用 cascade 去重五个用例。
 
 ## 1.192.0-rc12 - 2026-07-21
 
 ### Fixed
 
-- 集成终端（SwiftTerm）字体解析链补上 CJK fallback：`withNerdFontFallback` 之后追加与 Editor 相同的 `withEditorCJKCascade()`（PingFangSC / Hiragino Sans GB / STHeiti / Apple Color Emoji）。此前当终端字体设为 Nerd Font（本身无汉字字形）时，解析链是 Nerd Font → Nerd Font，汉字落到 .notdef 被直接丢弃、终端里中文不可见；现在任意基础字体（含自定义字体名）都会级联到中文字体。
-- 版本号从 **1.192.0-rc11** 递增为 **1.192.0-rc12**，内部构建号从 **51** 递增为 **52**；App、Go agent、Help、Helper、浏览器扩展、README、响应头契约与产品文档保持一致。
+- 修复 1.192.0-rc5 引入的 editor 重绘失效回归：输入含汉字的内容后文字已进入 text storage 但界面不绘制新内容，需 cmd+A 全选或窗口 resize 等全量重绘才显示（纯文本/Untitled 下最明显，与所选字体无关）。根因是 live CJK fallback 字体 pass 在 `textDidChange` 回调内直接改写 `.font` 属性，既没包 `beginEditing()/endEditing()` 也没有对受影响 range 做布局/显示失效，纯文本模式又没有语法高亮回填兜底。现改为：pass 包裹 begin/endEditing，只改写字体确实需要变化的 CJK 段（已是 fallback 字体的段跳过，纯 ASCII 输入零开销），并对实际改写的 range 显式 `invalidateLayout` + `invalidateDisplay`；IME 组合（marked text）期间整体跳过，不打扰输入法，提交后由下一次 `textDidChange` 正常补跑。
+- 版本号从 **1.192.0-rc6** 递增为 **1.192.0-rc12**（跳过并行会话在途的 rc7–rc11，避免版本号撞车），内部构建号从 **46** 递增为 **52**；App、Go agent、Help、Helper、浏览器扩展、README、响应头契约与产品文档保持一致。
 
 ### Tests
 
-- 新增 `EditorTerminalFontCascadeTests`：覆盖默认设置字体含 CJK cascade、自定义字体名保留 cascade、基础字体即 Nerd Font 时仍追加 CJK、Nerd Font fallback 排在 CJK 之前、重复应用 cascade 去重五个用例。
+- 新增 `EditorCJKLiveRedrawTests`：断言 live pass 对实际改写的 CJK range 调度了 layout/display invalidation 且 `ensureLayout` 无需额外事件即可完成；断言纯 ASCII 与已应用 fallback 字体的文本为零改写零失效；断言 marked text 组合期间 pass 完全跳过、提交后恢复正常改写。三个用例本地 `xcodebuild test-without-building`（CODE_SIGNING_ALLOWED=NO）全部通过。
 
 ## 1.192.0-rc11 - 2026-07-21
 

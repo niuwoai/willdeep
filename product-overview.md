@@ -22,7 +22,7 @@ WillDeep is configured for non-App-Store distribution without App Sandbox so it 
 
 - **Workspace Access 审批边界（1.192.0-rc13）** —— Workspace Access 只自动放行明确属于当前工作区的本地命令、委派 Agent、用户技能和配置类操作；未信任或标准 MCP 写工具不会继续落入 LLM judge 自动审批，而是回到人工确认。
 
-- **集成终端中文渲染（1.192.0-rc12）** —— 终端字体解析链在 Nerd Font fallback 之后追加与 Editor 一致的 CJK cascade（PingFang / Hiragino / STHeiti / Emoji）；终端字体设为 Nerd Font 时汉字不再落到 .notdef 消失。
+- **集成终端中文渲染（1.192.0-rc13）** —— 终端字体解析链在 Nerd Font fallback 之后追加与 Editor 一致的 CJK cascade（PingFang / Hiragino / STHeiti / Emoji）；终端字体设为 Nerd Font 时汉字不再落到 .notdef 消失。原编号 rc12，因与已打 tag 的 editor 重绘修复撞号并入 rc13。
 
 - **App 菜单关于与更新入口稳定化（1.192.0-rc11）** —— “关于 WillDeep”和“检查更新”由 SwiftUI App Info 菜单替换组统一提供，不再启动后异步改写 AppKit 默认 About 项；菜单重建后仍固定打开自定义关于页，并只保留一个检查更新入口。Sparkle 检查会记录 appcast URL 与失败详情，便于区分网络、appcast、签名和版本比较问题。
 

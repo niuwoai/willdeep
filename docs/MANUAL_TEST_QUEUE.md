@@ -22,7 +22,7 @@ CI 只能保编译/单测过。一系列改 UI、改窗口、改 SwiftUI 状态�
 
 ---
 
-## 1.192.0-rc12 — 集成终端 CJK 字体 cascade
+## 1.192.0-rc13 — 集成终端 CJK 字体 cascade（原 rc12，撞号并入）
 
 - ⏳ 设置里把终端字体切到某个 Nerd Font（如 MesloLGS NF）→ 终端里 `echo 你好世界` 与 `ls` 中文文件名正常显示，不再消失/空白。
 - ⏳ 同一 Nerd Font 下 powerlevel10k / starship 的 prompt 图标仍正常（CJK cascade 没有顶掉 Nerd Font 图标字形）。
