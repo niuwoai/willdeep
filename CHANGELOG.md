@@ -1,7 +1,18 @@
 # Changelog
 
-> 当前文件保留最新版本（1.192.0-rc18 至 1.109.0-rc340）。
+> 当前文件保留最新版本（1.192.0-rc19 至 1.109.0-rc340）。
 > 更早的 1000 个版本已移至 [CHANGELOG-ARCHIVE.md](CHANGELOG-ARCHIVE.md)。
+
+## 1.192.0-rc19 - 2026-07-21
+
+### Fixed
+
+- 更新 `testApplyPatchPromptAndRegistrySurface` 的过期文本断言：测试现在锁定 `edit_file` 优先、`apply_patch` 仅作 legacy fallback，以及补丁卡片位于对话内且不得引导用户前往右侧面板的现行契约。
+- 版本号从 **1.192.0-rc18** 递增为 **1.192.0-rc19**，内部构建号从 **58** 递增为 **59**；App、Go agent、Help、Helper、浏览器扩展、README、响应头契约与产品文档保持一致。
+
+### Tests
+
+- `AgentToolIntegrationTests.testApplyPatchPromptAndRegistrySurface` 改为校验当前工具描述与 extended system prompt，不再依赖已删除的早期 unified-diff 文案。
 
 ## 1.192.0-rc18 - 2026-07-21
 

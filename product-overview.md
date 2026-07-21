@@ -1,6 +1,6 @@
 # WillDeep Product Overview
 
-> Last updated: 2026-07-21 | Current version: v1.192.0-rc18
+> Last updated: 2026-07-21 | Current version: v1.192.0-rc19
 
 ## Positioning
 
@@ -11,6 +11,8 @@ Official product domain: [willdeep.com](https://willdeep.com).
 WillDeep is configured for non-App-Store distribution without App Sandbox so it can access local project files with fewer permission interruptions.
 
 ## 架构概览
+
+- **apply_patch 契约测试跟进（1.192.0-rc19）** —— 更新 `testApplyPatchPromptAndRegistrySurface` 的过期文本断言，改为锁定当前“优先 `edit_file`、`apply_patch` 仅作 legacy fallback、补丁卡片位于对话内且不引导右侧面板”的真实提示词与工具注册表契约。
 
 - **提示词与路由审计修复第一批（1.192.0-rc18）** —— 动态回合上下文在后台唤醒回合改为持久化到隐藏 host 载体消息，请求与历史回放字节一致，不再打爆 provider 缓存；省心托管的会话档位 floor 只认裁判显式判定（低置信度兜底升档仅作用当轮），裁判模板去掉可被照抄的 `confidence:0.0` 占位；提示词档位判定改 token 边界匹配（`gemini-3` 不再被 `mini` 误伤进 compact）；Gemini 工具调用 ID 加入每流 nonce，多回合不再错配 functionResponse。
 

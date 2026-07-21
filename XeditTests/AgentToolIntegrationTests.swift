@@ -3038,6 +3038,8 @@ extension WillDeepTests {
     func testApplyPatchPromptAndRegistrySurface() {
         let descriptor = AgentToolRegistry.descriptor(for: "apply_patch")
         #expect(descriptor?.risk == .read)
+        #expect(descriptor?.description.contains("LEGACY fallback") == true)
+        #expect(descriptor?.description.contains("PREFER `edit_file`") == true)
         #expect(descriptor?.description.contains("patch card INLINE IN THE CHAT") == true)
 
         let prompt = AgentContextBuilder.stableSystemPromptPrefix(
@@ -3045,8 +3047,8 @@ extension WillDeepTests {
             promptProfile: .extended
         )
         #expect(prompt.contains("Extended operating model"))
-        #expect(prompt.contains("apply_patch validates a unified diff"))
-        #expect(prompt.contains("right-side review panel"))
+        #expect(prompt.contains("Do NOT hand-craft unified diffs with apply_patch unless edit_file genuinely cannot express the change"))
+        #expect(prompt.contains("Never tell the user to look in a \"right-side review panel\""))
     }
 
     @Test("quick open skips dependency directories")
