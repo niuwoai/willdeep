@@ -336,8 +336,8 @@ final class AppState: ObservableObject {
     /// Same invalidation rules as `agentTokenEstimateCache`. Not @Published.
     var agentBaselineEstimateCache: (messageCount: Int, sessionID: AgentSession.ID?, value: Int, at: Date)?
 
-    /// Memo for `estimatedAgentSystemMessage` — the single `system` message
-    /// (prompt skeleton + retrieved memory). Both `estimatedAgentTokens` and
+    /// Memo for the estimated request prompt split: stable `system` message
+    /// plus per-turn context appended to the latest user message. Both `estimatedAgentTokens` and
     /// `estimatedAgentBaselineTokens` independently build it, so on a session
     /// switch (which misses BOTH value caches at once) the full system-prompt
     /// construction + memory retrieval ran twice on the main thread inside the
@@ -345,7 +345,13 @@ final class AppState: ObservableObject {
     /// build across the two estimators halves it. Same (messageCount,
     /// sessionID, 1s) invalidation as the value caches above, so it inherits
     /// their precision tradeoff and adds no new staleness. Not @Published.
-    var agentSystemMessageCache: (messageCount: Int, sessionID: AgentSession.ID?, value: AgentMessage, at: Date)?
+    var agentSystemMessageCache: (
+        messageCount: Int,
+        sessionID: AgentSession.ID?,
+        systemMessage: AgentMessage,
+        turnContext: String,
+        at: Date
+    )?
 
     /// Active Agent-mode session id. nil means "scratch" — Editor-mode
     /// chat keeps working without forcing a session to exist.

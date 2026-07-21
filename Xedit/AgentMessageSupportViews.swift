@@ -357,13 +357,26 @@ enum AgentChatMessageMetrics {
     }
 
     static func tokenSummary(for message: AgentMessage) -> String? {
+        let usage: String
         if let prompt = message.promptTokens, let completion = message.completionTokens {
-            return "\(formatTokens(prompt))/\(formatTokens(completion))"
+            usage = "\(formatTokens(prompt))/\(formatTokens(completion))"
+        } else if let total = message.usageTokens, total > 0 {
+            usage = formatTokens(total)
+        } else {
+            return nil
         }
-        if let total = message.usageTokens, total > 0 {
-            return formatTokens(total)
+
+        guard let rate = cacheHitRate(for: message) else { return usage }
+        let percentage = Int((rate * 100).rounded())
+        return "\(usage) · \(L10n.MessageFooter.cacheRate("\(percentage)%"))"
+    }
+
+    static func cacheHitRate(for message: AgentMessage) -> Double? {
+        guard let prompt = message.promptTokens, prompt > 0,
+              let cached = message.cachedPromptTokens else {
+            return nil
         }
-        return nil
+        return min(1, max(0, Double(cached) / Double(prompt)))
     }
 
     static func formatElapsed(_ seconds: Double) -> String {
@@ -376,6 +389,9 @@ enum AgentChatMessageMetrics {
     }
 
     private static func formatTokens(_ count: Int) -> String {
+        if count >= 1_000_000 {
+            return String(format: "%.2fM", Double(count) / 1_000_000.0)
+        }
         if count >= 1_000 {
             return String(format: "%.1fk", Double(count) / 1_000.0)
         }

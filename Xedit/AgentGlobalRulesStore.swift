@@ -29,6 +29,7 @@ nonisolated struct AgentGlobalRulesSettings: Codable, Equatable, Sendable {
 
 nonisolated enum AgentGlobalRulesStore {
     private static let settingsKey = "com.willdeep.agentGlobalRules.settings.v1"
+    private static let rulesCache = NSCache<NSString, NSString>()
     static let maxRulesCharacters = 8_000
     static let defaultRulesTemplate = """
     # Codex 规则（严格条款）
@@ -184,6 +185,7 @@ nonisolated enum AgentGlobalRulesStore {
     static func saveSettings(_ settings: AgentGlobalRulesSettings) {
         guard let data = try? JSONEncoder().encode(settings.normalized) else { return }
         UserDefaults.standard.set(data, forKey: settingsKey)
+        rulesCache.removeAllObjects()
     }
 
     static func resolvedURL(for filePath: String) -> URL {
@@ -216,7 +218,14 @@ nonisolated enum AgentGlobalRulesStore {
         let settings = settings.normalized
         guard settings.isEnabled else { return nil }
         ensureDefaultRulesFileIfNeeded(settings: settings)
-        return readRules(at: resolvedURL(for: settings.filePath))
+        let url = resolvedURL(for: settings.filePath)
+        let cacheKey = rulesCacheKey(for: url)
+        if let cached = rulesCache.object(forKey: cacheKey) {
+            return cached as String
+        }
+        guard let rules = readRules(at: url) else { return nil }
+        rulesCache.setObject(rules as NSString, forKey: cacheKey)
+        return rules
     }
 
     static func readRules(at url: URL) -> String? {
@@ -256,6 +265,7 @@ nonisolated enum AgentGlobalRulesStore {
             withIntermediateDirectories: true
         )
         try text.write(to: url, atomically: true, encoding: .utf8)
+        rulesCache.removeAllObjects()
     }
 
     static func ensureDefaultRulesFileIfNeeded(settings: AgentGlobalRulesSettings = loadSettings()) {
@@ -278,6 +288,13 @@ nonisolated enum AgentGlobalRulesStore {
 
     static func shouldSeedDefaultRulesFile(settings: AgentGlobalRulesSettings, fileExists: Bool) -> Bool {
         settings.normalized.filePath == AgentGlobalRulesSettings.defaultFilePath && !fileExists
+    }
+
+    private static func rulesCacheKey(for url: URL) -> NSString {
+        let values = try? url.resourceValues(forKeys: [.contentModificationDateKey, .fileSizeKey])
+        let modifiedAt = values?.contentModificationDate?.timeIntervalSinceReferenceDate ?? 0
+        let fileSize = values?.fileSize ?? 0
+        return "\(url.standardizedFileURL.path)|\(modifiedAt)|\(fileSize)" as NSString
     }
 
     private static func limit(_ text: String, to maxCharacters: Int) -> String {

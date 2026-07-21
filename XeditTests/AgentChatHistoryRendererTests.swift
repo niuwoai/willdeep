@@ -1208,6 +1208,71 @@ struct AgentChatHistoryRendererTests {
     }
 
     @Test
+    func assistantTurnFooterAggregatesOnlyCurrentUserTurnAndShowsCacheRate() throws {
+        let firstUser = AgentMessage(role: .user, content: "first")
+        let firstRequest = AgentMessage(
+            role: .assistant,
+            content: "checking",
+            usageTokens: 1_100,
+            promptTokens: 1_000,
+            completionTokens: 100,
+            cachedPromptTokens: 400
+        )
+        let secondRequest = AgentMessage(
+            role: .assistant,
+            content: "done",
+            usageTokens: 3_200,
+            promptTokens: 3_000,
+            completionTokens: 200,
+            cachedPromptTokens: 2_000
+        )
+        let secondUser = AgentMessage(role: .user, content: "second")
+        let nextTurnRequest = AgentMessage(
+            role: .assistant,
+            content: "next",
+            usageTokens: 550,
+            promptTokens: 500,
+            completionTokens: 50,
+            cachedPromptTokens: 100
+        )
+        let messages = [firstUser, firstRequest, secondRequest, secondUser, nextTurnRequest]
+        let presentations = AgentAssistantTurnGrouping.presentations(in: messages)
+        let firstSummary = try #require(presentations[secondRequest.id]?.summaryMessage)
+        let nextSummary = try #require(presentations[nextTurnRequest.id]?.summaryMessage)
+
+        #expect(firstSummary.promptTokens == 4_000)
+        #expect(firstSummary.completionTokens == 300)
+        #expect(firstSummary.cachedPromptTokens == 2_400)
+        #expect(
+            AgentChatMessageMetrics.tokenSummary(for: firstSummary)
+                == "4.0k/300 · \(L10n.MessageFooter.cacheRate("60%"))"
+        )
+        #expect(nextSummary.promptTokens == 500)
+        #expect(AgentChatMessageMetrics.cacheHitRate(for: nextSummary) == 0.2)
+    }
+
+    @Test
+    func assistantTurnFooterFormatsMillionScaleTokensWithTwoDecimals() {
+        let message = AgentMessage(
+            role: .assistant,
+            content: "done",
+            usageTokens: 26_769_300,
+            promptTokens: 26_725_800,
+            completionTokens: 43_500
+        )
+        let boundaryMessage = AgentMessage(
+            role: .assistant,
+            content: "boundary",
+            usageTokens: 1_999_500,
+            promptTokens: 1_000_000,
+            completionTokens: 999_500
+        )
+
+        #expect(AgentChatMessageMetrics.tokenSummary(for: message) == "26.73M/43.5k")
+        #expect(AgentChatMessageMetrics.tokenSummary(for: boundaryMessage) == "1.00M/999.5k")
+    }
+
+    @Test
     func groupsRepeatedAssistantOutputsIntoOneUserTurnChrome() throws {
         let startedAt = Date(timeIntervalSince1970: 1_000)
         let user = AgentMessage(role: .user, content: "do the work", createdAt: startedAt)

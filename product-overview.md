@@ -1,6 +1,6 @@
 # WillDeep Product Overview
 
-> Last updated: 2026-07-21 | Current version: v1.192.0-rc12
+> Last updated: 2026-07-21 | Current version: v1.192.0-rc18
 
 ## Positioning
 
@@ -11,6 +11,16 @@ Official product domain: [willdeep.com](https://willdeep.com).
 WillDeep is configured for non-App-Store distribution without App Sandbox so it can access local project files with fewer permission interruptions.
 
 ## 架构概览
+
+- **提示词与路由审计修复第一批（1.192.0-rc18）** —— 动态回合上下文在后台唤醒回合改为持久化到隐藏 host 载体消息，请求与历史回放字节一致，不再打爆 provider 缓存；省心托管的会话档位 floor 只认裁判显式判定（低置信度兜底升档仅作用当轮），裁判模板去掉可被照抄的 `confidence:0.0` 占位；提示词档位判定改 token 边界匹配（`gemini-3` 不再被 `mini` 误伤进 compact）；Gemini 工具调用 ID 加入每流 nonce，多回合不再错配 functionResponse。
+
+- **更新窗口专用 Changelog（1.192.0-rc17）** —— macOS 发布脚本把 Sparkle `release_notes_url` 固定为 `https://some.im/zh/products/willdeep/changelog`，并继续把当前版本 CHANGELOG 片段写入 appcast；更新窗口不再嵌入产品介绍页，some.im 页面会随每次 stable appcast 发布自动展示本次更新说明。
+
+- **Onboarding 导航焦点框修复（1.192.0-rc15）** —— 左侧步骤导航统一退出键盘焦点链，切换步骤后不再由 macOS 给上一项残留绘制紫色焦点边框；当前步骤的底色、完成状态和鼠标点击行为保持不变。
+
+- **贴图后的界面代码提示（1.192.0-rc14）** —— Composer 图片缩略图独立占据附件行，“生成界面代码”收为图片区下方的轻量文字操作，不再用固定宽度卡片与图片争抢横向空间；点击后仍会准备完整实现提示、按工作区挂载 Web 或 SwiftUI 技能，并进入真实构建与视觉验收链路。
+
+- **Workspace Access 审批边界（1.192.0-rc13）** —— Workspace Access 只自动放行明确属于当前工作区的本地命令、委派 Agent、用户技能和配置类操作；未信任或标准 MCP 写工具不会继续落入 LLM judge 自动审批，而是回到人工确认。
 
 - **集成终端中文渲染（1.192.0-rc12）** —— 终端字体解析链在 Nerd Font fallback 之后追加与 Editor 一致的 CJK cascade（PingFang / Hiragino / STHeiti / Emoji）；终端字体设为 Nerd Font 时汉字不再落到 .notdef 消失。
 

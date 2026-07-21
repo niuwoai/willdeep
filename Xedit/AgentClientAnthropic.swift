@@ -278,8 +278,8 @@ struct AnthropicMessagesAdapter {
         /// up front) so the final `usageReported` can include both
         /// halves once `message_delta` brings output_tokens.
         var promptTokens: Int = 0
-        var cacheReadTokens: Int = 0
-        var cacheWriteTokens: Int = 0
+        var cacheReadTokens: Int?
+        var cacheWriteTokens: Int?
     }
 
     private struct PendingToolCall {
@@ -304,8 +304,8 @@ struct AnthropicMessagesAdapter {
         case "message_start":
             if let event = try? JSONDecoder().decode(MessageStartEvent.self, from: payload) {
                 state.promptTokens = event.message.usage?.input_tokens ?? 0
-                state.cacheReadTokens = event.message.usage?.cache_read_input_tokens ?? 0
-                state.cacheWriteTokens = event.message.usage?.cache_creation_input_tokens ?? 0
+                state.cacheReadTokens = event.message.usage?.cache_read_input_tokens
+                state.cacheWriteTokens = event.message.usage?.cache_creation_input_tokens
             }
 
         case "content_block_start":
@@ -374,10 +374,18 @@ struct AnthropicMessagesAdapter {
                 state.cacheReadTokens = usage.cache_read_input_tokens ?? state.cacheReadTokens
                 state.cacheWriteTokens = usage.cache_creation_input_tokens ?? state.cacheWriteTokens
                 let output = usage.output_tokens ?? 0
-                let total = state.promptTokens + output
+                // Anthropic reports uncached input, cache reads, and cache
+                // creation as separate buckets. Normalize `prompt` to the same
+                // total-input meaning used by OpenAI/Gemini before persisting it.
+                let totalPrompt = Self.normalizedPromptTokens(
+                    uncached: state.promptTokens,
+                    cacheRead: state.cacheReadTokens,
+                    cacheWrite: state.cacheWriteTokens
+                )
+                let total = totalPrompt + output
                 if total > 0 {
                     await onEvent(.usageReported(
-                        prompt: state.promptTokens,
+                        prompt: totalPrompt,
                         completion: output,
                         total: total,
                         cachedPrompt: state.cacheReadTokens,
@@ -414,6 +422,14 @@ struct AnthropicMessagesAdapter {
             // `ping` keepalive and any future event type — skip.
             break
         }
+    }
+
+    nonisolated static func normalizedPromptTokens(
+        uncached: Int,
+        cacheRead: Int?,
+        cacheWrite: Int?
+    ) -> Int {
+        max(0, uncached) + max(0, cacheRead ?? 0) + max(0, cacheWrite ?? 0)
     }
 
     private func emitToolCallsIfChanged(
@@ -486,9 +502,7 @@ struct AnthropicMessagesAdapter {
     /// Anthropic Messages wire format. Three reshapes happen here:
     ///
     ///   1. Every `role: system` message bubbles up into the top-level
-    ///      `system` field (multiple system blobs are joined with a
-    ///      blank line in between — Anthropic accepts a single string
-    ///      or a content-block array; we pick the simpler string form).
+    ///      `system` field as a cacheable text block.
     ///   2. `role: tool` results get re-attached as a `tool_result`
     ///      block on the FOLLOWING `role: user` message. If there's no
     ///      following user message we synthesize one — leaving an
@@ -638,6 +652,24 @@ struct AnthropicMessagesAdapter {
             ])
         }
 
+        // Anthropic prompt caching is explicit. Preserve one breakpoint at
+        // the end of stable history (immediately before the latest user turn)
+        // and another at the request tail. Together with the system breakpoint
+        // below this stays within the API's four-breakpoint limit and lets a
+        // changing per-turn reminder avoid invalidating older conversation.
+        var messageBreakpointIndices: Set<Int> = []
+        if let lastIndex = anthropicMessages.indices.last {
+            messageBreakpointIndices.insert(lastIndex)
+        }
+        if let latestUserIndex = anthropicMessages.lastIndex(where: { message in
+            message["role"] as? String == "user"
+        }), latestUserIndex > anthropicMessages.startIndex {
+            messageBreakpointIndices.insert(anthropicMessages.index(before: latestUserIndex))
+        }
+        for index in messageBreakpointIndices {
+            addEphemeralCacheControl(to: &anthropicMessages[index])
+        }
+
         var body: [String: Any] = [
             "model": model,
             "max_tokens": defaultMaxTokens,
@@ -645,12 +677,25 @@ struct AnthropicMessagesAdapter {
             "messages": anthropicMessages
         ]
         if !systemBlobs.isEmpty {
-            body["system"] = systemBlobs.joined(separator: "\n\n")
+            body["system"] = [[
+                "type": "text",
+                "text": systemBlobs.joined(separator: "\n\n"),
+                "cache_control": ["type": "ephemeral"]
+            ]]
         }
         if !tools.isEmpty {
             body["tools"] = tools.map(encodeTool)
         }
         return try JSONSerialization.data(withJSONObject: body, options: [.sortedKeys])
+    }
+
+    nonisolated private static func addEphemeralCacheControl(to message: inout [String: Any]) {
+        guard var content = message["content"] as? [[String: Any]],
+              let lastIndex = content.indices.last else {
+            return
+        }
+        content[lastIndex]["cache_control"] = ["type": "ephemeral"]
+        message["content"] = content
     }
 
     nonisolated private static func imageBlock(from image: AgentImageAttachment) -> [String: Any]? {

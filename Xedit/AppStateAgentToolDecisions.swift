@@ -244,6 +244,9 @@ extension AppState {
            workspaceAccessCanAutoApprove(toolName: toolName, arguments: arguments) {
             return .workspaceAccess
         }
+        if approvalMode == .workspaceAccess {
+            return nil
+        }
 
         // User-pinned signatures are honored unless an MCP server was
         // later demoted to untrusted.

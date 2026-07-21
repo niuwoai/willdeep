@@ -9052,8 +9052,8 @@
     "composer.design-to-code.prompt" : {
       "extractionState" : "manual",
       "localizations" : {
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "Implement the attached UI completely in the current workspace using the existing project stack. Write the production code directly, build and run it, then use Browser or Computer Use to capture the real result and compare it with the source. Keep correcting material differences until visual acceptance passes." } },
-        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "请使用当前项目已有技术栈，把附图中的界面完整实现到当前工作区。直接写入生产代码、构建并运行，然后使用浏览器或 Computer Use 捕获真实结果并与原图比较；如有明显差异，继续修正，直到视觉验收通过。" } }
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Implement the attached UI completely in the current workspace using the existing project stack. Write the production code directly, build and run it, then use Browser or Computer Use to capture the real result and compare it with the source. Make at most three focused correction passes; then report any remaining material differences instead of looping." } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "请使用当前项目已有技术栈，把附图中的界面完整实现到当前工作区。直接写入生产代码、构建并运行，然后使用浏览器或 Computer Use 捕获真实结果并与原图比较；最多进行三轮有针对性的修正，之后应报告仍存在的明显差异，不要无限循环。" } }
       }
     },
     "composer.knowledge-folder.apply-exclusions" : {
@@ -12398,6 +12398,24 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "选择标签页 %@"
+          }
+        }
+      }
+    },
+    "message-footer.cache-rate" : {
+      "comment" : "assistant turn footer cache hit rate; %@ is a percentage",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "cache %@"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "缓存 %@"
           }
         }
       }

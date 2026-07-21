@@ -716,12 +716,12 @@ private struct ChatCompletionChunk: Decodable {
         let prompt_tokens_details: PromptTokensDetails?
         let completion_tokens_details: CompletionTokensDetails?
 
-        var cachedPromptTokens: Int {
-            prompt_tokens_details?.cached_tokens ?? prompt_cache_hit_tokens ?? 0
+        var cachedPromptTokens: Int? {
+            prompt_tokens_details?.cached_tokens ?? prompt_cache_hit_tokens
         }
 
-        var cacheWritePromptTokens: Int {
-            prompt_cache_miss_tokens ?? 0
+        var cacheWritePromptTokens: Int? {
+            prompt_cache_miss_tokens
         }
 
         var reasoningTokens: Int {

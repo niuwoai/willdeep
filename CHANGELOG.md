@@ -1,7 +1,77 @@
 # Changelog
 
-> 当前文件保留最新版本（1.192.0-rc12 至 1.109.0-rc340）。
+> 当前文件保留最新版本（1.192.0-rc18 至 1.109.0-rc340）。
 > 更早的 1000 个版本已移至 [CHANGELOG-ARCHIVE.md](CHANGELOG-ARCHIVE.md)。
+
+## 1.192.0-rc18 - 2026-07-21
+
+### Fixed
+
+- 动态回合上下文不再附着到"仅存在于请求副本的转换消息"上：后台任务/工作流通知唤醒的回合，回合上下文会持久化到一条隐藏的 host 载体 user 消息（插入在流式占位消息之前），请求历史与下一回合的回放保持逐字节一致，Anthropic 显式缓存与 OpenAI/DeepSeek 隐式前缀缓存不再被唤醒回合打爆；同时删除请求副本上的第二次附着，杜绝同一请求携带两份动态上下文。
+- 省心托管路由：会话档位 floor 只接受裁判显式的 complexity 判定，低置信度保守升档只影响当轮模型选择，不再被写进只升不降的 floor（此前裁判一次照抄模板 `confidence:0.0` 就会把会话永久锁死在 high 档）；裁判提示词模板的 confidence 占位值改为带说明的示例，明确要求填写真实置信度。
+- 系统提示词档位判定改用 token 边界匹配：`gemini-3` 不再因包含子串 `mini` 被误判进 compact 档，旗舰 Gemini 恢复 extended 提示词；`flash-lite`、`4o-mini` 等真小模型仍正确落 compact。
+- Gemini 适配器的合成工具调用 ID 加入每响应流 nonce（`gemini_fcall_<nonce>_<idx>`）：多个 assistant 回合不再都从 `gemini_fcall_0` 重编号，历史编码的 id→工具名映射不再把后续回合的调用解析成会话里第一次出现的工具，functionResponse 配对恢复正确。
+- 版本号从 **1.192.0-rc17** 递增为 **1.192.0-rc18**，内部构建号从 **57** 递增为 **58**；App、Go agent、Help、Helper、浏览器扩展、README、响应头契约与产品文档保持一致。
+
+### Tests
+
+- 新增通知唤醒回合的 host 载体附着与幂等测试、无通知续跑不重复附着测试；省心托管低置信度升档不进 floor、显式 high 判定仍升 floor、裁判模板不含 `confidence:0.0` 占位测试；提示词档位 gemini-3/4o-mini/flash-lite 边界测试；Gemini 合成 ID 跨流唯一与历史映射测试。
+
+## 1.192.0-rc17 - 2026-07-21
+
+### Fixed
+
+- Sparkle 发布元数据的 `release_notes_url` 不再指向 WillDeep 产品介绍页，改为 some.im 的轻量更新日志页；该页直接展示 stable appcast 当前发布记录里的 `release_notes`，更新窗口只呈现本次版本变化。
+- 发布脚本仍从当前版本的 `CHANGELOG.md` 自动提取说明写入 appcast，因此后续发版无需重复维护整份更新历史。
+- 版本号按线上已发布的 **1.192.0-rc16 (56)** 继续递增为 **1.192.0-rc17 (57)**，避免本地工作树复用已发布版本与构建号。
+
+### Tests
+
+- 发布契约测试新增 changelog URL 锁定检查，并继续覆盖 appcast 元数据生成。
+
+## 1.192.0-rc16 - 2026-07-21
+
+### Fixed
+
+- 修复 Workspace Access 模式下标准或未信任 MCP 写入工具误入 LLM judge 自动审批的问题。
+- 稳定队列取消 fallback 的 Release 测试调度，避免异步时序导致误报。
+
+### Changed
+
+- 版本号从 **1.192.0-rc15** 递增为 **1.192.0-rc16**，内部构建号从 **55** 递增为 **56**。
+
+## 1.192.0-rc15 - 2026-07-21
+
+### Fixed
+
+- Onboarding 左侧步骤导航补齐 `.focusable(false)`：点击“继续”切换步骤后，已完成的“欢迎”等上一项不再残留 macOS 自动绘制的紫色焦点边框。
+- 版本号从 **1.192.0-rc14** 递增为 **1.192.0-rc15**，内部构建号从 **54** 递增为 **55**；App、Go agent、Help、Helper、浏览器扩展、README、响应头契约与产品文档保持一致。
+
+### Tests
+
+- 新增 Onboarding 导航焦点策略回归测试，锁定步骤行必须在 `.buttonStyle(.plain)` 后应用 `.focusable(false)`。
+
+## 1.192.0-rc14 - 2026-07-21
+
+### Changed
+
+- Composer 贴入图片后，图片缩略图恢复为独立整行；“生成界面代码”不再以固定宽度强调卡片挤占图片区，改为紧跟在缩略图下方的无背景小字提示，仍可一键准备实现提示、挂载对应技能并进入视觉验收流程。
+- 版本号从 **1.192.0-rc13** 递增为 **1.192.0-rc14**，内部构建号从 **53** 递增为 **54**；App、Go agent、Help、Helper、浏览器扩展、README、响应头契约与产品文档保持一致。
+
+### Tests
+
+- 重新构建 WillDeep，并检查图片附件区域在贴图状态下的布局与“生成界面代码”交互。
+
+## 1.192.0-rc13 - 2026-07-21
+
+### Fixed
+
+- Workspace Access 审批模式现在只自动放行明确属于当前工作区的白名单操作；未命中的 MCP 写工具会回到人工确认，不再继续落入 LLM judge 自动审批分支。
+- 版本号从 **1.192.0-rc12** 递增为 **1.192.0-rc13**，内部构建号从 **52** 递增为 **53**；App、Go agent、Help、Helper、浏览器扩展、README、响应头契约与产品文档保持一致。
+
+### Tests
+
+- 修复 release 前置测试 `approval mode controls write-tier auto approval` 覆盖到的 Workspace Access / MCP 审批边界。
 
 ## 1.192.0-rc12 - 2026-07-21
 

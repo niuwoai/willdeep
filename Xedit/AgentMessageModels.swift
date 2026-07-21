@@ -446,6 +446,11 @@ nonisolated struct AgentMessage: Identifiable, Codable, Equatable {
     /// visible bubble renders chips, while AgentClient includes the
     /// full text in the provider payload.
     var textAttachments: [AgentTextAttachment]
+    /// Hidden host context appended only to provider-facing content. Once a
+    /// user turn is sent this value is persisted with that message so later
+    /// requests reproduce the exact same history bytes for prompt caching;
+    /// transcript renderers and copy actions intentionally ignore it.
+    var modelContext: String?
     var toolCalls: [AgentMessageToolCall]
     /// When `role == .tool`, the external id of the assistant tool_call this
     /// message answers.
@@ -463,10 +468,10 @@ nonisolated struct AgentMessage: Identifiable, Codable, Equatable {
     /// messages populate this. Older sessions without it fall back to
     /// the chars/4 estimator.
     var usageTokens: Int?
-    /// Prompt-side tokens (input) reported by the provider on the final
-    /// streaming chunk. Only set on assistant messages, only when the
-    /// provider emits a usage block. Older sessions without this field
-    /// decode to nil.
+    /// Total prompt-side tokens (input) reported by the provider on the final
+    /// streaming chunk, including cache reads/writes when a provider reports
+    /// those as separate buckets. Only set on assistant messages. Older
+    /// sessions without this field decode to nil.
     var promptTokens: Int?
     /// Completion-side tokens (output) reported by the provider.
     var completionTokens: Int?
@@ -529,6 +534,7 @@ nonisolated struct AgentMessage: Identifiable, Codable, Equatable {
         reasoningContent: String? = nil,
         images: [AgentImageAttachment] = [],
         textAttachments: [AgentTextAttachment] = [],
+        modelContext: String? = nil,
         toolCalls: [AgentMessageToolCall] = [],
         toolCallID: String? = nil,
         toolCallStatus: AgentToolCallStatus? = nil,
@@ -558,6 +564,7 @@ nonisolated struct AgentMessage: Identifiable, Codable, Equatable {
         self.reasoningContent = reasoningContent
         self.images = images
         self.textAttachments = textAttachments
+        self.modelContext = modelContext
         self.toolCalls = toolCalls
         self.toolCallID = toolCallID
         self.toolCallStatus = toolCallStatus
@@ -585,7 +592,7 @@ nonisolated struct AgentMessage: Identifiable, Codable, Equatable {
     /// Explicit keys so newer fields can use `decodeIfPresent` without
     /// breaking older session JSON.
     enum CodingKeys: String, CodingKey {
-        case id, role, content, reasoningContent, images, textAttachments, toolCalls, toolCallID
+        case id, role, content, reasoningContent, images, textAttachments, modelContext, toolCalls, toolCallID
         case toolCallStatus, toolErrorMessage
         case usageTokens, promptTokens, completionTokens
         case cachedPromptTokens, cacheWritePromptTokens, reasoningTokens
@@ -604,6 +611,7 @@ nonisolated struct AgentMessage: Identifiable, Codable, Equatable {
         reasoningContent = try container.decodeIfPresent(String.self, forKey: .reasoningContent)
         images = try container.decodeIfPresent([AgentImageAttachment].self, forKey: .images) ?? []
         textAttachments = try container.decodeIfPresent([AgentTextAttachment].self, forKey: .textAttachments) ?? []
+        modelContext = try container.decodeIfPresent(String.self, forKey: .modelContext)
         toolCalls = try container.decodeIfPresent([AgentMessageToolCall].self, forKey: .toolCalls) ?? []
         toolCallID = try container.decodeIfPresent(String.self, forKey: .toolCallID)
         toolCallStatus = try container.decodeIfPresent(AgentToolCallStatus.self, forKey: .toolCallStatus)
@@ -648,16 +656,24 @@ extension AgentMessage {
     }
 
     /// Content as sent to providers. UI renderers use `content` plus
-    /// compact attachment chips; wire encoding appends the full pasted
-    /// text so the model still receives the user's context.
+    /// compact attachment chips; wire encoding appends full pasted text and
+    /// the persisted hidden host context so the model receives both while the
+    /// transcript remains unchanged.
     nonisolated var modelContent: String {
-        guard !textAttachments.isEmpty else { return content }
+        let trimmedModelContext = modelContext?.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !textAttachments.isEmpty || trimmedModelContext?.isEmpty == false else {
+            return content
+        }
         var blocks: [String] = []
         let trimmed = content.trimmingCharacters(in: .whitespacesAndNewlines)
         if !trimmed.isEmpty {
             blocks.append(content)
         }
         blocks.append(contentsOf: textAttachments.map(\.modelBlock))
+        if let modelContext = trimmedModelContext,
+           !modelContext.isEmpty {
+            blocks.append(modelContext)
+        }
         return blocks.joined(separator: "\n\n")
     }
 

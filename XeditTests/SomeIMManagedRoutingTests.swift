@@ -549,3 +549,42 @@ struct AgentManagedRouteDecisionTests {
         #expect(decoded.managedRoute == nil)
     }
 }
+
+@Suite
+struct SomeIMRouteFloorPersistenceTests {
+
+    @Test
+    func lowConfidenceEscalationStaysPerTurnAndNeverRaisesFloor() {
+        let verdict = SomeIMRouteJudgeVerdict(
+            domain: .general, complexity: .low, confidence: 0.1, reason: "unsure"
+        )
+        let resolution = SomeIMManagedRouting.resolution(
+            for: verdict, floor: .low, usedFallback: false, hasCodingPlan: false
+        )
+        // The hedge escalates this turn's model choice…
+        #expect(resolution.effectiveTier == .high)
+        // …but must never be eligible for the only-goes-up persisted floor.
+        #expect(resolution.persistedFloorTier == .low)
+    }
+
+    @Test
+    func explicitHighVerdictStillRaisesFloor() {
+        let verdict = SomeIMRouteJudgeVerdict(
+            domain: .coding, complexity: .high, confidence: 0.9, reason: "hard task"
+        )
+        let resolution = SomeIMManagedRouting.resolution(
+            for: verdict, floor: .low, usedFallback: false, hasCodingPlan: false
+        )
+        #expect(resolution.effectiveTier == .high)
+        #expect(resolution.persistedFloorTier == .high)
+    }
+
+    @Test
+    func judgePromptTemplateDoesNotAnchorZeroConfidence() {
+        let prompt = SomeIMManagedRouting.judgeSystemPrompt()
+        // A literal 0.0 placeholder gets copied verbatim by weak judges,
+        // tripping the low-confidence escalation on every single turn.
+        #expect(!prompt.contains("\"confidence\":0.0"))
+        #expect(prompt.contains("不要照抄示例值"))
+    }
+}

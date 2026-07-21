@@ -539,9 +539,12 @@ extension AppState {
                 didFallback: resolution.usedFallback
             )
             // Only a real judge verdict raises the persisted floor — a network
-            // fallback must not lock the session into a high tier.
+            // fallback must not lock the session into a high tier. Use the
+            // judge's explicit tier, not `effectiveTier`: the low-confidence
+            // conservative escalation applies to this turn's model choice only
+            // and must never be written into the only-goes-up floor.
             if !resolution.usedFallback {
-                runtime.raiseManagedFloor(to: resolution.effectiveTier, reason: resolution.verdict.reason)
+                runtime.raiseManagedFloor(to: resolution.persistedFloorTier, reason: resolution.verdict.reason)
             }
         }
 
@@ -751,7 +754,7 @@ extension AppState {
             // "what's on screen right now".
             let promptProfile = AgentSystemPromptProfile.automatic(for: configuration)
             let activeExperts = runtime.activeExperts
-            var systemPrompt = AgentContextBuilder.systemPrompt(
+            var assembledPrompt = AgentContextBuilder.systemPrompt(
                 rootDirectory: workspaceURL,
                 openedFileURL: openedFileURL,
                 fileContent: fileContent,
@@ -772,7 +775,7 @@ extension AppState {
             if let remoteRuntimeDescriptor,
                case .remote(_, let remotePath) = workspaceLocation {
                 let transportLabel = remoteRuntimeDescriptor.transport == .daemon ? "daemon" : "SSH"
-                systemPrompt += """
+                assembledPrompt += """
 
                 === REMOTE WORKSPACE (\(transportLabel)) ===
                 - Runtime: \(remoteRuntimeDescriptor.displayName) (\(remoteRuntimeDescriptor.sshTarget))
@@ -795,32 +798,38 @@ extension AppState {
                 """
             }
             if activeExperts.contains(.shortDrama), let latestImageChoice = runtime.latestImageChoice {
-                systemPrompt += "\n\n\(latestImageChoice.systemPromptBlock)"
+                assembledPrompt += "\n\n\(latestImageChoice.systemPromptBlock)"
             }
             if let latestImageEditSubmission = runtime.latestImageEditSubmission {
                 // Image-edit submission follow-up anchors live in AgentImageEditSubmission:
                 // review_item_id: \(reviewItemID)
                 // resolve_review_tool: short_drama_resolve_review_item
                 // item_id=\(reviewItemID)
-                systemPrompt += "\n\n\(latestImageEditSubmission.systemPromptBlock)"
+                assembledPrompt += "\n\n\(latestImageEditSubmission.systemPromptBlock)"
             }
             if let latestMediaTaskCompletion = runtime.latestMediaTaskCompletion {
-                systemPrompt += "\n\n\(latestMediaTaskCompletion.systemPromptBlock)"
+                assembledPrompt += "\n\n\(latestMediaTaskCompletion.systemPromptBlock)"
             }
             if let latestMediaTaskRefresh = runtime.latestMediaTaskRefresh {
-                systemPrompt += "\n\n\(latestMediaTaskRefresh.systemPromptBlock)"
+                assembledPrompt += "\n\n\(latestMediaTaskRefresh.systemPromptBlock)"
             }
             if let latestMediaImport = runtime.latestMediaImport {
-                systemPrompt += "\n\n\(latestMediaImport.systemPromptBlock)"
+                assembledPrompt += "\n\n\(latestMediaImport.systemPromptBlock)"
             }
             if let latestWidgetToolAction = runtime.latestWidgetToolAction {
-                systemPrompt += "\n\n\(latestWidgetToolAction.systemPromptBlock)"
+                assembledPrompt += "\n\n\(latestWidgetToolAction.systemPromptBlock)"
             }
             if let memoryContextBlock {
-                systemPrompt += "\n\n\(memoryContextBlock)"
+                assembledPrompt += "\n\n\(memoryContextBlock)"
             }
-            systemPrompt = AgentLocalModelPrompting.applyLanguageInstruction(
-                to: systemPrompt,
+            let promptComponents = AgentContextBuilder.requestComponents(from: assembledPrompt)
+            AgentContextBuilder.attachTurnContextIfNeeded(
+                promptComponents.turnContext,
+                to: &runtime.messages,
+                insertingBefore: assistantID
+            )
+            let systemPrompt = AgentLocalModelPrompting.applyLanguageInstruction(
+                to: promptComponents.systemPrompt,
                 configuration: configuration
             )
             let cacheDiagnostics = AgentContextBuilder.cacheDiagnostics(
@@ -838,6 +847,11 @@ extension AppState {
                 contextSummaryThroughMessageID: runtime.contextSummaryThroughMessageID,
                 excludingMessageID: assistantID
             )
+            // No second attach on the request copy: `attachTurnContextIfNeeded`
+            // above already persisted this turn's context onto `runtime.messages`
+            // (setting the fresh user message's modelContext, or inserting a
+            // hidden host carrier on notification-only wake-ups), so the
+            // model-facing history and the next turn's replay share bytes.
             let collapsedHistory = Self.collapseOldToolResults(in: history)
             let requestMessages = [AgentMessage(role: .system, content: systemPrompt)] + collapsedHistory
 
@@ -879,8 +893,8 @@ extension AppState {
                                     runtime.messages[index].usageTokens = total
                                     runtime.messages[index].promptTokens = prompt > 0 ? prompt : nil
                                     runtime.messages[index].completionTokens = completion > 0 ? completion : nil
-                                    runtime.messages[index].cachedPromptTokens = cachedPrompt > 0 ? cachedPrompt : nil
-                                    runtime.messages[index].cacheWritePromptTokens = cacheWritePrompt > 0 ? cacheWritePrompt : nil
+                                    runtime.messages[index].cachedPromptTokens = cachedPrompt
+                                    runtime.messages[index].cacheWritePromptTokens = cacheWritePrompt
                                     runtime.messages[index].reasoningTokens = reasoning > 0 ? reasoning : nil
                                 }
                             }

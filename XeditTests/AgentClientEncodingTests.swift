@@ -320,6 +320,52 @@ struct AgentClientEncodingTests {
     }
 }
 
+@Suite
+struct GeminiToolCallIDTests {
+
+    /// Gemini pairs functionResponse to functionCall by name, resolved
+    /// through the id→name history map. Ids therefore must be unique across
+    /// assistant turns — a bare per-stream index restarts at 0 every turn
+    /// and makes first-occurrence-wins resolve later slot-0 calls to
+    /// whichever tool the session used first.
+    @Test
+    func syntheticIDsAreUniquePerStreamNonce() {
+        let nonceA = GeminiAdapter.makeCallIDNonce()
+        let nonceB = GeminiAdapter.makeCallIDNonce()
+        #expect(nonceA != nonceB)
+        #expect(
+            GeminiAdapter.syntheticToolCallID(nonce: nonceA, index: 0)
+                != GeminiAdapter.syntheticToolCallID(nonce: nonceB, index: 0)
+        )
+        #expect(GeminiAdapter.syntheticToolCallID(nonce: nonceA, index: 0).hasPrefix("gemini_fcall_"))
+    }
+
+    @Test
+    func historyMapResolvesSameSlotAcrossTurnsToDifferentTools() {
+        let turnOne = AgentMessage(
+            role: .assistant,
+            content: "",
+            toolCalls: [AgentMessageToolCall(
+                externalID: GeminiAdapter.syntheticToolCallID(nonce: "aaaa1111", index: 0),
+                toolName: "read_file",
+                argumentsJSON: "{}"
+            )]
+        )
+        let turnTwo = AgentMessage(
+            role: .assistant,
+            content: "",
+            toolCalls: [AgentMessageToolCall(
+                externalID: GeminiAdapter.syntheticToolCallID(nonce: "bbbb2222", index: 0),
+                toolName: "run_command",
+                argumentsJSON: "{}"
+            )]
+        )
+        let map = GeminiAdapter.buildToolCallIDMap(from: [turnOne, turnTwo])
+        #expect(map[turnOne.toolCalls[0].externalID] == "read_file")
+        #expect(map[turnTwo.toolCalls[0].externalID] == "run_command")
+    }
+}
+
 // MARK: - Helpers
 
 private func parseJSONObject(_ data: Data) throws -> [String: Any] {

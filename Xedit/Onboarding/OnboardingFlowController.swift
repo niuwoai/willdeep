@@ -30,6 +30,7 @@ final class OnboardingFlowController: ObservableObject {
 
     /// 默认 Agent 窗口出现时调。已完成或本会话已经弹过都直接 noop。
     func presentIfNeeded() {
+        guard !Self.isRunningUnderXCTest else { return }
         guard !hasShownThisSession else { return }
         guard !hasCompleted else { return }
         hasShownThisSession = true
@@ -45,5 +46,9 @@ final class OnboardingFlowController: ObservableObject {
     func presentNow() {
         hasShownThisSession = true
         isPresented = true
+    }
+
+    private static var isRunningUnderXCTest: Bool {
+        ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil
     }
 }

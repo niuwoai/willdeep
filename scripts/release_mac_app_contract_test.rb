@@ -91,6 +91,13 @@ check.call("appcast 发布时间使用 MySQL TIMESTAMP 兼容格式") do
   assert.call(timestamp == "2026-07-18 03:04:05", "unexpected database timestamp: #{timestamp}")
 end
 
+check.call("appcast 发布说明固定使用 WillDeep changelog 页面") do
+  assert.call(
+    WillDeepRelease::RELEASE_NOTES_URL == "https://some.im/zh/products/willdeep/changelog",
+    "unexpected release notes URL: #{WillDeepRelease::RELEASE_NOTES_URL}"
+  )
+end
+
 check.call("OSS 同时生成版本对象和 latest 对象") do
   release = WillDeepRelease::Release.new(
     dry_run: true,

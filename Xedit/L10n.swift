@@ -291,7 +291,7 @@ nonisolated enum L10n {
         static let designToCodeAction = String(localized: "composer.design-to-code.action", defaultValue: "Generate UI code")
         static let designToCodeActionDetail = String(localized: "composer.design-to-code.action-detail", defaultValue: "Build · run · visual acceptance")
         static let designToCodeHelp = String(localized: "composer.design-to-code.help", defaultValue: "Implement the attached UI in this workspace, then verify it with Browser or Computer Use")
-        static let designToCodePrompt = String(localized: "composer.design-to-code.prompt", defaultValue: "Implement the attached UI completely in the current workspace using the existing project stack. Write the production code directly, build and run it, then use Browser or Computer Use to capture the real result and compare it with the source. Keep correcting material differences until visual acceptance passes.")
+        static let designToCodePrompt = String(localized: "composer.design-to-code.prompt", defaultValue: "Implement the attached UI completely in the current workspace using the existing project stack. Write the production code directly, build and run it, then use Browser or Computer Use to capture the real result and compare it with the source. Make at most three focused correction passes; then report any remaining material differences instead of looping.")
         static let enableSessionDocument = String(localized: "composer.attachment.session-enable", defaultValue: "Include in future turns")
         static let removeSessionDocument = String(localized: "composer.attachment.session-remove", defaultValue: "Remove from this conversation")
         static let removeAttachmentHelp = String(localized: "composer.attachment.remove-help", defaultValue: "Remove attachment")
@@ -995,6 +995,10 @@ nonisolated enum L10n {
     }
 
     enum MessageFooter {
+        static func cacheRate(_ percentage: String) -> String {
+            let template = String(localized: "message-footer.cache-rate", defaultValue: "cache %@")
+            return String(format: template, percentage)
+        }
         static let copied = String(localized: "message-footer.copied", defaultValue: "Copied")
         static let copy = String(localized: "message-footer.copy", defaultValue: "Copy message")
         static let copyAccessibility = String(localized: "message-footer.copy-accessibility", defaultValue: "Copy message")

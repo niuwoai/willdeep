@@ -60,6 +60,20 @@ struct AgentGlobalRulesTests {
     }
 
     @Test
+    func savingRulesInvalidatesThePromptInjectionCache() throws {
+        let tempDir = try makeTemporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: tempDir) }
+
+        let rulesURL = tempDir.appendingPathComponent("CLAUDE.md")
+        let settings = AgentGlobalRulesSettings(isEnabled: true, filePath: rulesURL.path)
+        try AgentGlobalRulesStore.saveRules("first rule", settings: settings)
+        #expect(AgentGlobalRulesStore.loadRules(settings: settings) == "first rule")
+
+        try AgentGlobalRulesStore.saveRules("second rule", settings: settings)
+        #expect(AgentGlobalRulesStore.loadRules(settings: settings) == "second rule")
+    }
+
+    @Test
     func defaultRulesSeederOnlyTargetsMissingDefaultPath() {
         #expect(AgentGlobalRulesStore.shouldSeedDefaultRulesFile(
             settings: AgentGlobalRulesSettings.default,

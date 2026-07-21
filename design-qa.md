@@ -936,3 +936,25 @@ final result: passed
 ## 最终结果
 
 **passed**
+
+---
+
+# Design QA — Composer 图片操作提示重排
+
+## 验收对象
+
+- 问题参考：`/var/folders/np/rjc0y5w52x324x21pv6g33440000gp/T/codex-clipboard-adcb984a-cb61-4f4d-8d7d-726a53744c84.png`
+- 真实 SwiftUI 渲染：`/var/folders/np/rjc0y5w52x324x21pv6g33440000gp/T/com.openai.sky.CUAService/WillDeep Screenshot 2026-07-21 at 10.53.11 AM.jpeg`
+- 验收环境：macOS 浅色模式，独立 QA 包 `com.willdeep.qa.rc14`；Composer 中附加一张图片，右侧 Browser 面板展开。
+- 设计意图：移除图片区左侧固定宽度的“生成界面代码”强调卡片；图片缩略图独占一行，操作入口改为图片区下方的一行轻量小字。
+
+## 对照记录
+
+1. 同屏对照确认缩略图回到图片区首行，不再被固定宽度卡片横向挤压。
+2. “生成界面代码 · 构建 · 运行 · 视觉验收”以 10pt、无背景、无边框样式紧跟在缩略图下方，信息层级明显弱于图片和输入内容。
+3. 在右侧 Browser 面板展开、Composer 可用宽度收窄的状态下，小字仍保持单行且未与缩略图、技能标签或输入框发生遮挡。
+4. 实际点击小字入口后，`$design-to-code` 技能成功挂载，实现提示成功写入输入框；图片删除入口与原附件流程保持可用。
+
+## 最终结果
+
+**passed**
