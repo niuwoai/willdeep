@@ -16013,6 +16013,8 @@
         }
       }
     },
+    "settings.agent-behavior.anthropic-max-output-tokens" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Anthropic reply limit" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "Anthropic 回复上限" } } } },
+    "settings.agent-behavior.anthropic-max-output-tokens-description" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Maximum tokens a single Anthropic reply may produce (max_tokens). Default 32K keeps long documents and large refactor replies from truncating; legacy Claude 3.x models are automatically clamped to their lower API caps." } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "单次 Anthropic 回复允许生成的最大 token 数（max_tokens）。默认 32K，长文档与大型重构回复不再被截断；旧的 Claude 3.x 系列会自动收紧到其 API 上限。" } } } },
     "settings.agent-behavior.concurrency-description" : {
       "extractionState" : "manual",
       "localizations" : {

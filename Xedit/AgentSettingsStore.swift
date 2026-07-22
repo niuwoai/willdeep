@@ -46,6 +46,7 @@ enum AgentSettingsStore {
     private static let autoApproveKey = "com.willdeep.agentSettings.autoApproveSafeCommands.v1"
     private static let perProviderConcurrencyKey = "com.willdeep.agentSettings.perProviderConcurrencyLimit.v1"
     private static let chatBaseFontSizeKey = "com.willdeep.agentSettings.chatBaseFontSize.v1"
+    private static let anthropicMaxOutputTokensKey = "com.willdeep.agentSettings.anthropicMaxOutputTokens.v1"
     private static let webSearchProviderKey = "com.willdeep.agentSettings.webSearchProvider.v1"
     private static let localModelSettingsKey = "com.willdeep.agentSettings.localModelSettings.v1"
     /// Global toggle: 关掉后 plan 自动执行 banner 不再做 destructive keyword
@@ -376,6 +377,31 @@ enum AgentSettingsStore {
     static func saveAgentChatBaseFontSize(_ size: CGFloat) {
         let clamped = clampChatBaseFontSize(size)
         defaults.set(Double(clamped), forKey: chatBaseFontSizeKey)
+    }
+
+    /// Upper bound for a single Anthropic reply (`max_tokens` is mandatory
+    /// on that API). Default 32K so long-form replies stop truncating with
+    /// finish_reason=length; legacy Claude 3.x models are clamped lower at
+    /// request time (`AnthropicAdapter.maxOutputTokens(forModel:)`).
+    static let anthropicMaxOutputTokensMin = 1_024
+    static let anthropicMaxOutputTokensMax = 128_000
+    static let anthropicMaxOutputTokensDefault = 32_768
+
+    static func loadAnthropicMaxOutputTokens() -> Int {
+        if defaults.object(forKey: anthropicMaxOutputTokensKey) == nil {
+            return anthropicMaxOutputTokensDefault
+        }
+        let stored = defaults.integer(forKey: anthropicMaxOutputTokensKey)
+        guard stored > 0 else { return anthropicMaxOutputTokensDefault }
+        return clampAnthropicMaxOutputTokens(stored)
+    }
+
+    static func saveAnthropicMaxOutputTokens(_ value: Int) {
+        defaults.set(clampAnthropicMaxOutputTokens(value), forKey: anthropicMaxOutputTokensKey)
+    }
+
+    static func clampAnthropicMaxOutputTokens(_ value: Int) -> Int {
+        max(anthropicMaxOutputTokensMin, min(anthropicMaxOutputTokensMax, value))
     }
 
     static func clampChatBaseFontSize(_ size: CGFloat) -> CGFloat {

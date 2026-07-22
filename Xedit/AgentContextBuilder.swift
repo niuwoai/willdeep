@@ -620,7 +620,18 @@ enum AgentContextBuilder {
     private static func rootProjectRules(in rootDirectory: URL) -> String? {
         var collected: [String] = []
 
-        for name in ["product-overview.md", "AGENTS.md", "CLAUDE.md"] {
+        // Both casings: this repo's convention is lowercase, the user's
+        // global convention is PRODUCT_OVERVIEW.md. Stop after the first
+        // hit — on case-INsensitive volumes both names resolve to the same
+        // file and would otherwise be included twice.
+        var loadedOverview = false
+        for name in ["product-overview.md", "PRODUCT_OVERVIEW.md"] where !loadedOverview {
+            let before = collected.count
+            appendRuleFile(rootDirectory.appendingPathComponent(name), label: name, to: &collected)
+            loadedOverview = collected.count > before
+        }
+
+        for name in ["AGENTS.md", "CLAUDE.md"] {
             let url = rootDirectory.appendingPathComponent(name)
             appendRuleFile(url, label: name, to: &collected)
         }

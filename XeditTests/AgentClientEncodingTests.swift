@@ -367,6 +367,37 @@ struct GeminiToolCallIDTests {
 }
 
 @Suite
+struct AnthropicMaxOutputTokensTests {
+
+    @Test
+    func modernModelsTakeTheConfiguredValue() {
+        #expect(AnthropicMessagesAdapter.maxOutputTokens(forModel: "claude-fable-5", configured: 32_768) == 32_768)
+        #expect(AnthropicMessagesAdapter.maxOutputTokens(forModel: "claude-opus-4-8", configured: 32_768) == 32_768)
+        #expect(AnthropicMessagesAdapter.maxOutputTokens(forModel: "claude-sonnet-5", configured: 64_000) == 64_000)
+    }
+
+    @Test
+    func legacyClaude3FamiliesAreClampedToTheirAPICaps() {
+        // Values above these caps are a hard 400 from Anthropic, so the
+        // user's configured limit must never reach the wire unclamped.
+        #expect(AnthropicMessagesAdapter.maxOutputTokens(forModel: "claude-3-opus-20240229", configured: 32_768) == 4096)
+        #expect(AnthropicMessagesAdapter.maxOutputTokens(forModel: "claude-3-haiku-20240307", configured: 32_768) == 4096)
+        #expect(AnthropicMessagesAdapter.maxOutputTokens(forModel: "claude-3-5-sonnet-20241022", configured: 32_768) == 8192)
+        #expect(AnthropicMessagesAdapter.maxOutputTokens(forModel: "claude-3-7-sonnet-20250219", configured: 32_768) == 8192)
+        // A configured value below the cap passes through untouched.
+        #expect(AnthropicMessagesAdapter.maxOutputTokens(forModel: "claude-3-5-sonnet-20241022", configured: 2048) == 2048)
+    }
+
+    @Test
+    func storeClampsToConfiguredBounds() {
+        #expect(AgentSettingsStore.clampAnthropicMaxOutputTokens(1) == AgentSettingsStore.anthropicMaxOutputTokensMin)
+        #expect(AgentSettingsStore.clampAnthropicMaxOutputTokens(1_000_000) == AgentSettingsStore.anthropicMaxOutputTokensMax)
+        #expect(AgentSettingsStore.clampAnthropicMaxOutputTokens(32_768) == 32_768)
+        #expect(AgentSettingsStore.anthropicMaxOutputTokensDefault == 32_768)
+    }
+}
+
+@Suite
 struct AgentContextCompressionSplitTests {
 
     /// A raw `count - keepRecent` split can land between an assistant's

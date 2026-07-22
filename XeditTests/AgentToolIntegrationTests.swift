@@ -2542,6 +2542,36 @@ extension WillDeepTests {
         #expect(components.turnContext.contains("Feature agent rule"))
     }
 
+    @Test("uppercase PRODUCT_OVERVIEW.md is honored without duplication")
+    func testUppercaseProductOverviewIsCollectedOnce() throws {
+        let workspace = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask).first!
+            .appendingPathComponent("willdeep_test_overview_\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: workspace, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: workspace) }
+
+        try "Uppercase overview marker".write(
+            to: workspace.appendingPathComponent("PRODUCT_OVERVIEW.md"),
+            atomically: true,
+            encoding: .utf8
+        )
+
+        let prompt = AgentContextBuilder.systemPrompt(
+            rootDirectory: workspace,
+            openedFileURL: nil,
+            fileContent: "",
+            selectedText: "",
+            language: nil,
+            toolsEnabled: true,
+            globalRules: nil
+        )
+
+        // Found regardless of casing convention, and — critically on
+        // case-insensitive volumes where both names resolve to the same
+        // file — included exactly once.
+        let occurrences = prompt.components(separatedBy: "Uppercase overview marker").count - 1
+        #expect(occurrences == 1)
+    }
+
     @Test("long tool results are summarized before entering model context")
     func testLongToolResultsAreSummarizedForModelContext() {
         let call = AgentMessageToolCall(

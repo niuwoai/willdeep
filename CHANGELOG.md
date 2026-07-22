@@ -1,7 +1,19 @@
 # Changelog
 
-> 当前文件保留最新版本（1.193.0-rc11 至 1.109.0-rc340）。
+> 当前文件保留最新版本（1.193.0-rc12 至 1.109.0-rc340）。
 > 更早的 1000 个版本已移至 [CHANGELOG-ARCHIVE.md](CHANGELOG-ARCHIVE.md)。
+
+## 1.193.0-rc12 - 2026-07-22
+
+### Fixed
+
+- Anthropic 回复上限（`max_tokens`）从写死的 **4096** 提升为默认 **32K**，长文档与大型重构回复不再以 `finish_reason: length` 被拦腰截断；新增 Settings → AI「Anthropic 回复上限」滑杆（1K–128K，步进 1024）兑现"设置里可调"的承诺。旧的 Claude 3.x 系列（3-opus/3-haiku/3-sonnet → 4096；3.5/3.7 → 8192）会在请求时自动收紧到其 API 上限，避免超限直接 400。
+- 根级项目规则的 `product-overview.md` 兼容大写命名：`PRODUCT_OVERVIEW.md` 在大小写敏感的卷（外接盘、Linux 远端工作区）上不再被无声跳过；大小写不敏感的卷上保证只收录一次。
+- 版本号从 **1.193.0-rc11** 递增为 **1.193.0-rc12**，内部构建号从 **71** 递增为 **72**；App、Go agent、Help、Helper、浏览器扩展、README、响应头契约与产品文档保持一致。
+
+### Tests
+
+- 新增 `AnthropicMaxOutputTokensTests`：现代模型透传配置值、Claude 3.x 各系按 API 上限收紧、低于上限的配置原样通过、设置存储边界夹取与默认值锁定。新增大写 PRODUCT_OVERVIEW 收录且不重复的回归测试。
 
 ## 1.193.0-rc11 - 2026-07-22
 

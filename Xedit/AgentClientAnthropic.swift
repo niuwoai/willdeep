@@ -36,12 +36,25 @@ struct AnthropicMessagesAdapter {
     private let configuration: AgentConfiguration
     private let session: URLSession
 
-    /// Anthropic's `max_tokens` is mandatory. Picking 4096 covers the
-    /// vast majority of single-turn replies for Sonnet / Opus / Haiku;
-    /// long-form replies that would otherwise truncate are extremely
-    /// rare in an agent loop (we'd cycle through another tool call
-    /// first). Bump via settings if it becomes a problem.
-    nonisolated private static let defaultMaxTokens = 4096
+    /// Anthropic's `max_tokens` is mandatory. Default 32K (user-adjustable
+    /// in Settings → AI) so long documents and large refactor replies stop
+    /// truncating with finish_reason=length. Legacy Claude 3.x models
+    /// hard-reject values above their output caps with a 400, so the
+    /// configured value is clamped per model family at request time.
+    nonisolated static func maxOutputTokens(forModel model: String) -> Int {
+        maxOutputTokens(forModel: model, configured: AgentSettingsStore.loadAnthropicMaxOutputTokens())
+    }
+
+    nonisolated static func maxOutputTokens(forModel model: String, configured: Int) -> Int {
+        let lower = model.lowercased()
+        if lower.contains("claude-3-opus") || lower.contains("claude-3-haiku") || lower.contains("claude-3-sonnet") {
+            return min(configured, 4096)
+        }
+        if lower.contains("claude-3-5") || lower.contains("claude-3.5") || lower.contains("claude-3-7") {
+            return min(configured, 8192)
+        }
+        return configured
+    }
 
     init(configuration: AgentConfiguration, session: URLSession? = nil) {
         self.configuration = configuration.normalized
@@ -672,7 +685,7 @@ struct AnthropicMessagesAdapter {
 
         var body: [String: Any] = [
             "model": model,
-            "max_tokens": defaultMaxTokens,
+            "max_tokens": Self.maxOutputTokens(forModel: model),
             "stream": true,
             "messages": anthropicMessages
         ]
