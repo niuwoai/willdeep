@@ -114,16 +114,29 @@ enum AgentContextBuilder {
             """)
         }
 
+        // Only root-level rules live in the stable prefix: directory-scoped
+        // AGENTS.md/CLAUDE.md follow the active file, and baking them in here
+        // changed the system prompt (and killed the provider prompt cache)
+        // every time the user switched to a file in another directory. Scoped
+        // rules ride the dynamic turn context below instead.
         if let rootDirectory,
-           let rules = projectRules(in: rootDirectory, openedFileURL: openedFileURL) {
+           let rules = rootProjectRules(in: rootDirectory) {
             sections.append("""
             Project instructions:
-            Deeper AGENTS.md/CLAUDE.md files appear later and override earlier instructions within their directory scope.
+            These live at the workspace root and apply to the whole project. Directory-scoped instruction files may appear in the per-turn context and add stricter requirements within their scope.
             \(rules)
             """)
         }
 
         sections.append(dynamicContextMarker)
+
+        if let rootDirectory,
+           let scoped = scopedProjectRules(in: rootDirectory, openedFileURL: openedFileURL) {
+            sections.append("""
+            Scoped project instructions (directory chain of the active file; deeper files override earlier ones within their scope):
+            \(scoped)
+            """)
+        }
 
         if toolsEnabled {
             if executionAgent == .willDeep {
@@ -575,15 +588,29 @@ enum AgentContextBuilder {
         }
     }
 
-    private static func projectRules(in rootDirectory: URL, openedFileURL: URL?) -> String? {
+    /// Root-level project rules only — independent of the active file, so
+    /// they are safe inside the stable (cacheable) system prefix.
+    private static func rootProjectRules(in rootDirectory: URL) -> String? {
         var collected: [String] = []
 
-        for name in ["product-overview.md"] {
+        for name in ["product-overview.md", "AGENTS.md", "CLAUDE.md"] {
             let url = rootDirectory.appendingPathComponent(name)
             appendRuleFile(url, label: name, to: &collected)
         }
 
-        for directory in scopedInstructionDirectories(rootDirectory: rootDirectory, openedFileURL: openedFileURL) {
+        guard !collected.isEmpty else { return nil }
+        return collected.joined(separator: "\n\n")
+    }
+
+    /// Directory-scoped rules along the active file's chain, excluding the
+    /// root (already in the stable prefix). These change with the active
+    /// file, so they belong to the per-turn dynamic context.
+    private static func scopedProjectRules(in rootDirectory: URL, openedFileURL: URL?) -> String? {
+        let rootPath = rootDirectory.standardizedFileURL.path
+        var collected: [String] = []
+
+        for directory in scopedInstructionDirectories(rootDirectory: rootDirectory, openedFileURL: openedFileURL)
+        where directory.standardizedFileURL.path != rootPath {
             for name in ["AGENTS.md", "CLAUDE.md"] {
                 let url = directory.appendingPathComponent(name)
                 let relative = relativePath(for: url, rootDirectory: rootDirectory)

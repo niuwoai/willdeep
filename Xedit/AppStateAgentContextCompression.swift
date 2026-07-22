@@ -39,10 +39,16 @@ extension AppState {
         let effectiveKeepRecent = hasPriorSummary ? min(2, keepRecent) : keepRecent
         guard runtime.messages.count > effectiveKeepRecent else { return }
 
+        let tailStart = Self.compressionTailStart(
+            messages: runtime.messages,
+            keepRecent: effectiveKeepRecent
+        )
+        guard tailStart > 0 else { return }
+
         runtime.isCompressingContext = true
         let configurations = contextCompressionConfigurationCandidates()
-        let head = Array(runtime.messages.prefix(runtime.messages.count - effectiveKeepRecent))
-        let tail = Array(runtime.messages.suffix(effectiveKeepRecent))
+        let head = Array(runtime.messages.prefix(tailStart))
+        let tail = Array(runtime.messages[tailStart...])
         let priorSummary = hasPriorSummary ? runtime.contextSummary : nil
 
         Task { [weak self, weak runtime] in
@@ -55,6 +61,24 @@ extension AppState {
                 configurations: configurations
             )
         }
+    }
+
+    /// Where the kept tail starts, pairing-aware. Starts from the raw
+    /// `count - keepRecent` split, then walks back over leading `.tool`
+    /// messages until their issuing assistant lands in the tail too. A raw
+    /// count split can land between an assistant's tool_calls and its
+    /// results, and providerReadyMessages then silently drops the orphans —
+    /// the model loses its freshest tool evidence right after a compression.
+    /// Returns 0 when nothing compressible remains after snapping.
+    nonisolated static func compressionTailStart(
+        messages: [AgentMessage],
+        keepRecent: Int
+    ) -> Int {
+        var tailStart = max(0, messages.count - keepRecent)
+        while tailStart > 0, messages[tailStart].role == .tool {
+            tailStart -= 1
+        }
+        return tailStart
     }
 
     /// Pure predicate: true if `maybeAutoCompressContext` would launch a

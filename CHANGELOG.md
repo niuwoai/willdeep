@@ -1,7 +1,23 @@
 # Changelog
 
-> 当前文件保留最新版本（1.193.0-rc8 至 1.109.0-rc340）。
+> 当前文件保留最新版本（1.193.0-rc9 至 1.109.0-rc340）。
 > 更早的 1000 个版本已移至 [CHANGELOG-ARCHIVE.md](CHANGELOG-ARCHIVE.md)。
+
+## 1.193.0-rc9 - 2026-07-22
+
+### Fixed
+
+- 提示词/路由审计修复第三批：
+  - 目录级项目规则（活动文件目录链上的 AGENTS.md/CLAUDE.md）移出稳定 system 前缀、改随动态回合上下文下发；根级规则（product-overview.md + 根 AGENTS.md/CLAUDE.md）留在稳定区。切换不同目录的文件不再改变 system prompt 字节、不再打爆 provider 前缀缓存。
+  - 上下文压缩的 head/tail 切分改为配对感知：切点落在孤儿 tool 结果上时自动回退到发起该组调用的 assistant 消息，压缩后 providerReadyMessages 不再静默丢弃最近的工具证据。
+  - 路由裁判模板的 confidence 占位改为「刻意非法」的尖括号占位（照抄即整体解析失败、走本地 fallback），字段缺失时缺省从 1.0 改为 0.0——偷懒裁判触发当轮保守升档而非静默满信任；输出质检裁判的 confidence 不参与门槛、维持原样。
+  - 输出质检升档写入会话 floor 时封顶在「裁判显式判定 + 一档」：低置信度 hedge 抬到 high 后再触发质检升档，不再把 premium 写进只升不降的 floor。
+  - Goal Teams 提案校验失败不再静默死锁：解析成功但校验失败时，把逐条失败原因（表头/Member 连字符格式/关键词/隐形标记等此前 prompt 未写明的硬要求）以 host 通知回灌并立即给模型一轮重发机会，最多两次；仍失败则转 blocked 相位并给出用户可见错误与重试入口。
+- 版本号从 **1.193.0-rc8** 递增为 **1.193.0-rc9**，内部构建号从 **68** 递增为 **69**；App、Go agent、Help、Helper、浏览器扩展、README、响应头契约与产品文档保持一致。
+
+### Tests
+
+- 新增/更新：nested 项目规则测试断言 scoped 规则落入动态区且 requestComponents 切分正确；压缩切分纯函数四断言 + 无可压内容返回 0；裁判模板无可照抄数字锚点、缺省 confidence=0 触发当轮升档但不进 floor；Goal 提案 validationFailures 对合法提案为空、对坏提案给出可执行原因、generation 标记缺失点名精确注释。
 
 ## 1.193.0-rc8 - 2026-07-21
 

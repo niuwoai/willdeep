@@ -245,6 +245,47 @@ struct AgentGoalTeamsTests {
     }
 
     @Test
+    func proposalValidationFailuresExplainEachProblem() throws {
+        let content = """
+        | Member | Skill/Subagent | Goal Slice | Claimed Tasks | Locked Scope | Deliverable | Done Criteria | Docs/Tasklist Updates | Test Owner | Validator |
+        | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+        | 开发-Goal Teams | goal_backend | 状态机 | GT-003 | Xedit | 生产实现 | 构建通过 | tasklist | 测试-Goal Teams | 评审-Goal Teams |
+
+        ```plan
+        1. GT-003 负责人开发-Goal Teams：实现代码产物
+        2. GT-004 负责人测试-Goal Teams：运行测试产物
+        3. GT-005 负责人文档-Goal Teams：更新文档产物
+        4. GT-006 负责人发布-Goal Teams：版本处理 N/A，理由是由 Lead 统一更新
+        5. GT-007 负责人评审-Goal Teams：完成验收产物
+        ```
+        """
+        let plan = try #require(AgentPlanParser.extract(from: content))
+        // A valid proposal produces zero failures (validates == empty).
+        #expect(AgentGoalPlanProposalValidator.validationFailures(content: content, plan: plan).isEmpty)
+
+        // A broken proposal gets actionable, specific reasons — these are
+        // fed back to the model, so vagueness here means another dead round.
+        let incomplete = AgentPlan(status: .proposed, summary: "", stepTexts: ["do stuff quietly"])
+        let failures = AgentGoalPlanProposalValidator.validationFailures(
+            content: "no table at all",
+            plan: incomplete
+        )
+        #expect(failures.contains { $0.contains("column headers") })
+        #expect(failures.contains { $0.contains("implementation") })
+        #expect(failures.contains { $0.contains("acceptance") })
+        #expect(failures.contains { $0.contains("do stuff quietly") })
+
+        // A generation-marker miss spells out the exact comment to copy.
+        let generationID = UUID()
+        let idFailures = AgentGoalPlanProposalValidator.validationFailures(
+            content: content,
+            plan: plan,
+            generationID: generationID
+        )
+        #expect(idFailures.contains { $0.contains(generationID.uuidString) })
+    }
+
+    @Test
     func revisionGuidanceSurvivesPlanningStateRoundTrip() throws {
         let state = AgentGoalPlanningState(
             goalFingerprint: "goal",

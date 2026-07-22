@@ -366,6 +366,54 @@ struct GeminiToolCallIDTests {
     }
 }
 
+@Suite
+struct AgentContextCompressionSplitTests {
+
+    /// A raw `count - keepRecent` split can land between an assistant's
+    /// tool_calls and its results; providerReadyMessages then silently drops
+    /// the orphan results. The pairing-aware split walks the tail start back
+    /// to the issuing assistant.
+    @Test
+    func splitNeverOrphansToolResults() {
+        let messages: [AgentMessage] = [
+            AgentMessage(role: .user, content: "u1"),
+            AgentMessage(role: .assistant, content: "a1"),
+            AgentMessage(role: .user, content: "u2"),
+            AgentMessage(
+                role: .assistant,
+                content: "",
+                toolCalls: [AgentMessageToolCall(externalID: "call_1", toolName: "read_file", argumentsJSON: "{}")]
+            ),
+            AgentMessage(role: .tool, content: "result 1"),
+            AgentMessage(role: .tool, content: "result 2"),
+            AgentMessage(role: .assistant, content: "done")
+        ]
+        // keepRecent 3 → raw tail start 4 (an orphan tool result); snap back
+        // to index 3 so the issuing assistant travels with its results.
+        #expect(AppState.compressionTailStart(messages: messages, keepRecent: 3) == 3)
+        // keepRecent 2 → raw tail start 5 (still a tool result) → same snap.
+        #expect(AppState.compressionTailStart(messages: messages, keepRecent: 2) == 3)
+        // Already-safe boundaries are unchanged.
+        #expect(AppState.compressionTailStart(messages: messages, keepRecent: 4) == 3)
+        #expect(AppState.compressionTailStart(messages: messages, keepRecent: 1) == 6)
+    }
+
+    @Test
+    func splitReturnsZeroWhenNothingCompressibleRemains() {
+        // Head would be empty after snapping — caller skips compression.
+        let messages: [AgentMessage] = [
+            AgentMessage(
+                role: .assistant,
+                content: "",
+                toolCalls: [AgentMessageToolCall(externalID: "call_1", toolName: "grep_files", argumentsJSON: "{}")]
+            ),
+            AgentMessage(role: .tool, content: "result"),
+            AgentMessage(role: .assistant, content: "done")
+        ]
+        #expect(AppState.compressionTailStart(messages: messages, keepRecent: 2) == 0)
+    }
+}
+
 // MARK: - Helpers
 
 private func parseJSONObject(_ data: Data) throws -> [String: Any] {

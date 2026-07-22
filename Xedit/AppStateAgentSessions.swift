@@ -589,31 +589,42 @@ extension AppState {
         captureAgentPlanFromLatestMessage(for: runtime)
     }
 
-    func captureAgentPlanFromLatestMessage(for runtime: AgentRuntime) {
-        guard runtime.interactionMode == .plan || runtime.interactionMode == .goal else { return }
+    @discardableResult
+    func captureAgentPlanFromLatestMessage(for runtime: AgentRuntime) -> AgentGoalProposalCaptureOutcome {
+        guard runtime.interactionMode == .plan || runtime.interactionMode == .goal else { return .noProposal }
         guard let last = runtime.messages.last(where: { $0.role == .assistant && !$0.content.isEmpty }) else {
-            return
+            return .noProposal
         }
-        if let parsed = AgentPlanParser.extract(from: last.content),
-           runtime.interactionMode == .plan
-            || (runtime.goalPlanningState?.phase == .readyForProposal
-                && AgentGoalPlanProposalValidator.validates(
+        if let parsed = AgentPlanParser.extract(from: last.content) {
+            if runtime.interactionMode == .plan {
+                runtime.currentPlan = parsed
+                return .captured
+            }
+            if runtime.goalPlanningState?.phase == .readyForProposal {
+                let failures = AgentGoalPlanProposalValidator.validationFailures(
                     content: last.content,
                     plan: parsed,
                     generationID: runtime.goalPlanningState?.generationID
-                )) {
-            runtime.currentPlan = parsed
-            if runtime.interactionMode == .goal, var state = runtime.goalPlanningState {
-                state.phase = .awaitingApproval
-                runtime.goalPlanningState = state
+                )
+                if failures.isEmpty {
+                    runtime.currentPlan = parsed
+                    if var state = runtime.goalPlanningState {
+                        state.phase = .awaitingApproval
+                        runtime.goalPlanningState = state
+                    }
+                    return .captured
+                }
+                // A proposal the model clearly attempted but that fails
+                // validation must not vanish silently — feed the reasons
+                // back (bounded) or surface a blocked state to the user.
+                return requestAgentGoalProposalCorrection(for: runtime, failures: failures)
             }
-            return
         }
         if let existing = runtime.currentPlan,
            existing.status == .approved || existing.status == .executing || existing.status == .done {
             applyAgentPlanProgressFromLatestMessage(for: runtime, existingPlan: existing)
-            return
         }
+        return .noProposal
     }
 
     func applyAgentPlanProgressFromLatestMessage(for runtime: AgentRuntime, existingPlan: AgentPlan) {

@@ -82,29 +82,60 @@ nonisolated enum AgentGoalPlanProposalValidator {
         plan: AgentPlan,
         generationID: UUID? = nil
     ) -> Bool {
-        guard !plan.steps.isEmpty, validatesTeamsTable(in: content) else { return false }
+        validationFailures(content: content, plan: plan, generationID: generationID).isEmpty
+    }
+
+    /// Every reason the proposal fails validation, in words the model can
+    /// act on. The requirements here are stricter than the synthesized
+    /// prompt spells out (literal keyword checks, hyphenated Member cells),
+    /// so a rejected proposal must get these reasons fed back — silently
+    /// dropping it deadlocks the approval flow at `readyForProposal`.
+    static func validationFailures(
+        content: String,
+        plan: AgentPlan,
+        generationID: UUID? = nil
+    ) -> [String] {
+        var failures: [String] = []
+        if plan.steps.isEmpty {
+            failures.append("the fenced ```plan block has no steps")
+        }
+        if !validatesTeamsTable(in: content) {
+            failures.append(
+                "the teams markdown table is missing or malformed — it needs exactly these English column headers in this order: | \(requiredColumns.joined(separator: " | ")) |, then a markdown separator row, then at least one data row with every cell non-empty; each Member cell must contain a hyphen (format: role-specificTask) and the Validator cell must differ from the Member cell"
+            )
+        }
         if let generationID,
            !content.contains("<!-- goal-planning-generation:\(generationID.uuidString) -->") {
-            return false
+            failures.append(
+                "the reply must include this exact hidden marker comment verbatim: <!-- goal-planning-generation:\(generationID.uuidString) -->"
+            )
         }
         let contract = plan.steps.map(\.text).joined(separator: "\n").lowercased()
-        let categories = [
-            ["实现", "开发", "implement", "code"],
-            ["测试", "test"],
-            ["文档", "docs", "documentation"],
-            ["版本", "version"],
-            ["验收", "acceptance", "验证"],
+        let categories: [(label: String, markers: [String])] = [
+            ("implementation", ["实现", "开发", "implement", "code"]),
+            ("testing", ["测试", "test"]),
+            ("documentation", ["文档", "docs", "documentation"]),
+            ("versioning", ["版本", "version"]),
+            ("acceptance", ["验收", "acceptance", "验证"]),
         ]
-        guard categories.allSatisfy({ markers in markers.contains(where: contract.contains) }) else {
-            return false
+        for category in categories where !category.markers.contains(where: contract.contains) {
+            failures.append(
+                "no plan step covers \(category.label) — at least one step's text must literally contain one of: \(category.markers.joined(separator: " / "))"
+            )
         }
-        return plan.steps.allSatisfy { step in
+        for step in plan.steps {
             let text = step.text
-            return text.range(of: #"\b[A-Z]{2,}-\d+\b"#, options: .regularExpression) != nil
-                || ["成员", "member", "负责人", "owner", "产物", "deliverable"].contains {
-                    text.localizedCaseInsensitiveContains($0)
-                }
+            let hasTaskID = text.range(of: #"\b[A-Z]{2,}-\d+\b"#, options: .regularExpression) != nil
+            let hasMemberWord = ["成员", "member", "负责人", "owner", "产物", "deliverable"].contains {
+                text.localizedCaseInsensitiveContains($0)
+            }
+            if !hasTaskID, !hasMemberWord {
+                failures.append(
+                    "step \"\(String(text.prefix(60)))\" must name a task ID (like ABC-1) or literally contain one of: 成员 / member / 负责人 / owner / 产物 / deliverable"
+                )
+            }
         }
+        return failures
     }
 
     private static func validatesTeamsTable(in content: String) -> Bool {
@@ -153,6 +184,17 @@ nonisolated enum AgentGoalPlanProposalValidator {
             $0.trimmingCharacters(in: .whitespacesAndNewlines)
         }
     }
+}
+
+/// What `captureAgentPlanFromLatestMessage` did with the latest assistant
+/// reply in Goal mode. The loop uses `.proposalRejectedNeedsRetry` to grant
+/// the model an immediate correction round instead of ending the turn with
+/// the approval flow silently deadlocked.
+nonisolated enum AgentGoalProposalCaptureOutcome: Equatable {
+    case captured
+    case noProposal
+    case proposalRejectedNeedsRetry
+    case proposalRejectedGaveUp
 }
 
 @MainActor
@@ -368,6 +410,42 @@ extension AppState {
             persistAgentSession(runtime: liveRuntime, touchUpdatedAt: false, moveToFront: false)
             enqueueAgentGoalPlanningBlocker(for: liveRuntime, state: liveState)
         }
+    }
+
+    static let goalProposalCorrectionPrefix = "[goal-proposal-validation]"
+
+    /// Feed validation failures back to the model (at most twice per
+    /// proposal cycle), then give up visibly: phase → blocked plus a user
+    /// facing error, so the retry button and the planning UI take over
+    /// instead of the session hanging at `readyForProposal` forever.
+    func requestAgentGoalProposalCorrection(
+        for runtime: AgentRuntime,
+        failures: [String]
+    ) -> AgentGoalProposalCaptureOutcome {
+        let priorCorrections = runtime.messages.filter {
+            $0.role == .system && $0.content.hasPrefix(Self.goalProposalCorrectionPrefix)
+        }.count
+        guard priorCorrections < 2 else {
+            if var state = runtime.goalPlanningState {
+                state.phase = .blocked
+                runtime.goalPlanningState = state
+            }
+            runtime.errorMessage = "Goal 团队提案连续 \(priorCorrections + 1) 次未通过校验，已暂停。可修改目标描述或重新发起规划。"
+            runtime.errorDetails = AgentErrorDetails(sections: [
+                .init(title: "校验失败原因", text: failures.joined(separator: "\n"))
+            ])
+            persistAgentSession(runtime: runtime)
+            return .proposalRejectedGaveUp
+        }
+        runtime.messages.append(AgentMessage(
+            role: .system,
+            content: """
+            \(Self.goalProposalCorrectionPrefix) Your team proposal was parsed but FAILED validation, so it was NOT accepted. Fix every issue below, then resend the COMPLETE proposal in one reply — the fenced ```plan block, the full teams table, and the hidden generation marker comment all together:
+            - \(failures.joined(separator: "\n- "))
+            """
+        ))
+        persistAgentSession(runtime: runtime)
+        return .proposalRejectedNeedsRetry
     }
 
     func retryAgentGoalPlanning() {

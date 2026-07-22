@@ -527,6 +527,11 @@ extension AppState {
         // still owns every release path.
         var turnConfiguration = configuration
         var managedRouteDecision: AgentManagedRouteDecision?
+        // The judge's explicit complexity verdict (nil on fallback turns).
+        // Floor writes later in the turn — including the output-quality
+        // escalation — must derive from this, never from a hedge-inflated
+        // effective tier.
+        var managedJudgeExplicitTier: AgentManagedCapabilityTier?
         if runtime.managedRouting != nil,
            configuration.providerID == AgentProviderPreset.someIMID {
             let floor = runtime.managedRouting?.minimumTier ?? .low
@@ -572,6 +577,7 @@ extension AppState {
             // conservative escalation applies to this turn's model choice only
             // and must never be written into the only-goes-up floor.
             if !resolution.usedFallback {
+                managedJudgeExplicitTier = resolution.persistedFloorTier
                 runtime.raiseManagedFloor(to: resolution.persistedFloorTier, reason: resolution.verdict.reason)
             }
         }
@@ -1049,7 +1055,20 @@ extension AppState {
                         client = AgentClient(configuration: turnConfiguration, someIMContext: someIMContext)
                         let escalatedTier = SomeIMManagedModel.tier(of: escalatedModel)
                         if let escalatedTier {
-                            runtime.raiseManagedFloor(to: escalatedTier, reason: "output-quality:\(decision.failureType)")
+                            // Cap the persisted floor at one step above the
+                            // judge's EXPLICIT verdict. The retry model itself
+                            // may climb from a hedge-inflated tier (low judged
+                            // with low confidence → turn ran high → retry runs
+                            // premium), but locking the session at premium when
+                            // the judge never said high defeats the
+                            // hedge-stays-per-turn rule.
+                            let floorTier: AgentManagedCapabilityTier
+                            if let judgeTier = managedJudgeExplicitTier {
+                                floorTier = min(escalatedTier, judgeTier.next ?? judgeTier)
+                            } else {
+                                floorTier = escalatedTier
+                            }
+                            runtime.raiseManagedFloor(to: floorTier, reason: "output-quality:\(decision.failureType)")
                         }
                         runtime.noteManagedSelectedModel(escalatedModel)
                         // Carry the escalation into this turn's route metadata so
@@ -1105,7 +1124,13 @@ extension AppState {
                 }
 
                 let planStatusesBeforeReply = runtime.currentPlan?.steps.map(\.status)
-                captureAgentPlanFromLatestMessage(for: runtime)
+                let planCaptureOutcome = captureAgentPlanFromLatestMessage(for: runtime)
+                if planCaptureOutcome == .proposalRejectedNeedsRetry {
+                    // A correction notice listing the validation failures was
+                    // appended; give the model an immediate round to resend
+                    // the proposal instead of ending the turn deadlocked.
+                    continue
+                }
                 captureAgentGoalEvaluationFromLatestMessage(for: runtime)
                 prepareNextAgentGoalPlanningCycleIfNeeded(for: runtime)
                 let planStatusesAfterReply = runtime.currentPlan?.steps.map(\.status)

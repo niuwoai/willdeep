@@ -580,11 +580,30 @@ struct SomeIMRouteFloorPersistenceTests {
     }
 
     @Test
-    func judgePromptTemplateDoesNotAnchorZeroConfidence() {
+    func judgePromptTemplateDoesNotAnchorCopyableConfidence() {
         let prompt = SomeIMManagedRouting.judgeSystemPrompt()
-        // A literal 0.0 placeholder gets copied verbatim by weak judges,
-        // tripping the low-confidence escalation on every single turn.
+        // No copyable numeric anchor in either direction: 0.0 trips the
+        // escalation every turn (fail-expensive), a high literal like 0.92
+        // silently disables the hedge (fail-open). The placeholder is
+        // deliberately invalid JSON so a verbatim copy falls back cleanly.
         #expect(!prompt.contains("\"confidence\":0.0"))
-        #expect(prompt.contains("不要照抄示例值"))
+        #expect(!prompt.contains("\"confidence\":0.92"))
+        #expect(prompt.contains("\"confidence\":<"))
+        #expect(prompt.contains("数字字面量"))
+    }
+
+    @Test
+    func missingConfidenceDefaultsToFailSafeZero() {
+        // A judge that omits confidence gets the per-turn conservative
+        // escalation, not silent full trust.
+        let verdict = SomeIMManagedRouting.decodeVerdict(
+            fromRaw: #"{"domain":"general","complexity":"low"}"#
+        )
+        #expect(verdict?.confidence == 0.0)
+        let resolution = SomeIMManagedRouting.resolution(
+            for: verdict!, floor: .low, usedFallback: false, hasCodingPlan: false
+        )
+        #expect(resolution.effectiveTier == .high)
+        #expect(resolution.persistedFloorTier == .low)
     }
 }

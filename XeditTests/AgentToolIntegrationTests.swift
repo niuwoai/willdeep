@@ -2526,9 +2526,17 @@ extension WillDeepTests {
 
         #expect(!prompt.contains("Root overview"))
         #expect(productIndex < rootRuleIndex)
-        #expect(rootRuleIndex < featureRuleIndex)
-        #expect(featureRuleIndex < dynamicIndex)
+        // Root rules stay in the stable (cacheable) prefix; directory-scoped
+        // rules follow the active file, so they ride the dynamic turn context
+        // — switching files must not change the stable system prompt bytes.
+        #expect(rootRuleIndex < dynamicIndex)
+        #expect(dynamicIndex < featureRuleIndex)
         #expect(prompt.contains("# Sources/Feature/AGENTS.md"))
+
+        let components = AgentContextBuilder.requestComponents(from: prompt)
+        #expect(components.systemPrompt.contains("Root agent rule"))
+        #expect(!components.systemPrompt.contains("Feature agent rule"))
+        #expect(components.turnContext.contains("Feature agent rule"))
     }
 
     @Test("long tool results are summarized before entering model context")
