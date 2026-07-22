@@ -539,8 +539,11 @@ extension AppState {
             // context reminders) are `.user` role but must never stand in for
             // what the human actually asked — a wake-up turn would otherwise
             // send the judge an empty message.
+            let latestOperatorMessage = runtime.messages.last(where: { $0.isOperatorInput })
             let judgeInput = SomeIMRouteJudgeInput(
-                latestUserMessage: runtime.messages.last(where: { $0.isOperatorInput })?.content ?? "",
+                latestUserMessage: latestOperatorMessage?.content ?? "",
+                hasImages: latestOperatorMessage?.images.isEmpty == false,
+                hasTextAttachments: latestOperatorMessage?.textAttachments.isEmpty == false,
                 workspaceAvailable: runtime.workspaceLocation != nil || (runtime.workspaceRootPath?.isEmpty == false),
                 selectedFileLanguage: openedFileURL.flatMap { $0.pathExtension.isEmpty ? nil : $0.pathExtension },
                 interactionMode: "\(runtime.interactionMode)",
@@ -970,6 +973,7 @@ extension AppState {
                    runtime.messages[index].content.isEmpty,
                    runtime.messages[index].toolCalls.isEmpty {
                     runtime.messages.remove(at: index)
+                    AgentContextBuilder.removeDanglingTurnContextCarrier(from: &runtime.messages)
                 }
                 return
             } catch {
@@ -979,6 +983,7 @@ extension AppState {
                    runtime.messages[index].content.isEmpty,
                    runtime.messages[index].toolCalls.isEmpty {
                     runtime.messages.remove(at: index)
+                    AgentContextBuilder.removeDanglingTurnContextCarrier(from: &runtime.messages)
                 }
                 return
             }
@@ -1107,6 +1112,7 @@ extension AppState {
                    runtime.messages[index].toolCalls.isEmpty,
                    (runtime.messages[index].reasoningContent ?? "").isEmpty {
                     runtime.messages.remove(at: index)
+                    AgentContextBuilder.removeDanglingTurnContextCarrier(from: &runtime.messages)
                     // Zero-event streams already throw `emptyStream` from the
                     // adapter and surface via the catch path. This is the
                     // other empty case — the stream finished cleanly but the

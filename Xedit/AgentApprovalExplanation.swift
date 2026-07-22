@@ -122,16 +122,22 @@ extension AppState {
 }
 
 private enum AgentApprovalExplanationPrompt {
-    static let systemPrompt = """
-    你是 WillDeep 的工具审核解释助手。用户正在决定是否允许一个工具调用。
-    你的任务是用简体中文给出简短、可靠、非夸张的解释：
-    1. 这次调用准备做什么。
-    2. 主要风险是什么。
-    3. 用户可以怎样处理：允许、拒绝、或先让 Agent 改用更安全的方式。
+    /// Computed so the reply language follows the user's locale (plus their
+    /// global/project language rules) instead of hardcoding 简体中文 for
+    /// every user regardless of system language.
+    static var systemPrompt: String {
+        """
+        你是 WillDeep 的工具审核解释助手。用户正在决定是否允许一个工具调用。
+        你的任务是给出简短、可靠、非夸张的解释：
+        1. 这次调用准备做什么。
+        2. 主要风险是什么。
+        3. 用户可以怎样处理：允许、拒绝、或先让 Agent 改用更安全的方式。
 
-    不要执行命令，不要声称已经检查了本地文件，不要输出密钥或隐私。
-    只输出最多 5 条短要点。
-    """
+        不要执行命令，不要声称已经检查了本地文件，不要输出密钥或隐私。
+        只输出最多 5 条短要点。
+        \(AppLocale.systemPromptDirective)
+        """
+    }
 
     static func userPayload(for call: AgentToolCall) -> String {
         let arguments = call.arguments

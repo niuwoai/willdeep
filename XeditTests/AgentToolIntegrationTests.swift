@@ -47,7 +47,7 @@ struct AgentContextBuilderPromptTests {
         #expect(!compact.contains("list_mcp_servers"))
     }
 
-    @Test("stable v9 prompt text is guarded by a deterministic hash snapshot")
+    @Test("stable v10 prompt text is guarded by a deterministic hash snapshot")
     func testStablePromptSnapshotHash() {
         let prompt = AgentContextBuilder.stableSystemPromptPrefix(
             toolsEnabled: true,
@@ -60,7 +60,7 @@ struct AgentContextBuilderPromptTests {
             promptProfile: .standard
         )
 
-        #expect(AgentContextBuilder.stablePrefixVersion == "willdeep-agent-system-v9")
+        #expect(AgentContextBuilder.stablePrefixVersion == "willdeep-agent-system-v10")
         #expect(diagnostics.hash == AgentContextBuilder.stablePrefixSnapshotHash)
     }
 
@@ -2478,6 +2478,9 @@ extension WillDeepTests {
         #expect(AgentSystemPromptProfile.automatic(modelID: "gpt-4o-mini", providerID: "openai") == .compact)
         #expect(AgentSystemPromptProfile.automatic(modelID: "gemini-2.5-flash-lite", providerID: "gemini") == .compact)
         #expect(AgentSystemPromptProfile.automatic(modelID: "gemini-2.5-pro", providerID: "gemini") == .standard)
+        // The flagship "gemini-3" needle must not drag its flash variant
+        // into the heaviest prompt tier.
+        #expect(AgentSystemPromptProfile.automatic(modelID: "gemini-3-flash", providerID: "gemini") == .compact)
     }
 
     @Test("AgentContextBuilder collects nested project instruction files in scope order")

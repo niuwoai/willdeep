@@ -16,6 +16,7 @@
 //
 
 import Foundation
+import os
 
 // MARK: - Judge input / output
 
@@ -140,6 +141,8 @@ nonisolated struct SomeIMRouteResolution: Equatable {
 // MARK: - Routing strategy
 
 nonisolated enum SomeIMManagedRouting {
+    private static let judgeLogger = Logger(subsystem: "com.willdeep.agent", category: "someim-judge")
+
     /// Judge output budget. Comfortably larger than the strict-JSON verdict
     /// so a non-thinking DeepSeek can always finish it. (The judge model
     /// must run with thinking disabled — see design doc; a reasoning judge
@@ -462,6 +465,12 @@ nonisolated enum SomeIMManagedRouting {
             }
             return SomeIMOutputQualityDecision(shouldRetry: false, failureType: verdict.failureType)
         }
+        // Judge unreachable or emitted nothing parseable. Never let this
+        // stay invisible — the approval judge once failed 0-for-N for
+        // months because its failure path was exactly this silent.
+        judgeLogger.warning(
+            "output-quality judge unavailable (raw \(raw == nil ? "nil" : "undecodable", privacy: .public)); using local heuristics"
+        )
         if let localFailure, localFailure == "repetition_loop" || localFailure == "empty_output" {
             return SomeIMOutputQualityDecision(shouldRetry: true, failureType: localFailure)
         }

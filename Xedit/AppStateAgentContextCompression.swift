@@ -102,8 +102,15 @@ extension AppState {
             contextSummaryThroughMessageID: runtime.contextSummaryThroughMessageID
         )
         let collapsed = Self.collapseOldToolResults(in: history)
-        let used = Self.estimateAgentTokens(messages: collapsed, tools: AgentToolRegistry.all)
-        let fixedToolOverhead = Self.estimateAgentTokens(messages: [], tools: AgentToolRegistry.all)
+        // Same expert/mode-filtered tool set the real request sends — the
+        // full registry overstates usage and trips auto-compression early.
+        let tools = AgentToolRegistry.tools(
+            activeExperts: runtime.activeExperts,
+            interactionMode: runtime.interactionMode,
+            executionAgent: runtime.executionAgent
+        )
+        let used = Self.estimateAgentTokens(messages: collapsed, tools: tools)
+        let fixedToolOverhead = Self.estimateAgentTokens(messages: [], tools: tools)
         let compressibleUsed = max(0, used - fixedToolOverhead)
         let usedFraction = Double(compressibleUsed) / Double(window)
         return usedFraction > 0.75

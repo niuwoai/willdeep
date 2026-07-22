@@ -32,7 +32,11 @@ struct AgentGlobalRulesTests {
 
     @Test
     func defaultRulesTemplateContainsCodexStrictRules() {
-        #expect(AgentGlobalRulesStore.defaultRulesTemplate.contains("# Codex 规则（严格条款）"))
+        // The template constrains "this AI assistant", never a named third
+        // party — a model reading "these rules bind Codex" can reasonably
+        // conclude they do not bind WillDeep Agent.
+        #expect(AgentGlobalRulesStore.defaultRulesTemplate.contains("# 全局规则（严格条款）"))
+        #expect(!AgentGlobalRulesStore.defaultRulesTemplate.contains("Codex"))
         #expect(AgentGlobalRulesStore.defaultRulesTemplate.contains("所有对用户的回复一律使用**简体中文**"))
         #expect(AgentGlobalRulesStore.defaultRulesTemplate.contains("前端与后端版本号必须保持一致"))
         #expect(AgentGlobalRulesStore.defaultRulesTemplate.contains("默认避免使用管道"))

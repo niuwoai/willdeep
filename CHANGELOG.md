@@ -1,7 +1,28 @@
 # Changelog
 
-> 当前文件保留最新版本（1.193.0-rc9 至 1.109.0-rc340）。
+> 当前文件保留最新版本（1.193.0-rc10 至 1.109.0-rc340）。
 > 更早的 1000 个版本已移至 [CHANGELOG-ARCHIVE.md](CHANGELOG-ARCHIVE.md)。
+
+## 1.193.0-rc10 - 2026-07-22
+
+### Fixed
+
+- 提示词/路由审计修复第四批（长尾收尾，13 项）：
+  - 路由/质检裁判传输层显式带 `enable_thinking:false`，并在 `content` 为空时回落解析 `reasoning_content`；输出质检裁判不可用时写警告日志（此前完全无痕）。
+  - 路由裁判输入补上 `has_images` / `has_text_attachments` 真实取值（此前恒为 false）。
+  - 回合上下文附着时对 memory 块等后拼内容转义 `</system-reminder>`，堵住提前闭合 reminder 的注入口子；流失败/取消/空回复后回收本次插入的隐藏载体，不再永久携带死上下文。
+  - Workspace Access 模式恢复尊重用户手工 pin 的"总是允许"（自动放行仍限白名单；被降级为不受信的 MCP pin 除外）。
+  - 稳定提示词升级 **v10**：extended 段的 chrome_*/embedded_browser_* 宣称改为"仅专家激活时存在"；工具契约去掉 "Codex skills" 品牌残留；Plan 模式不再注入会话改名指令段（rename_session 本会被 plan gate 拒绝）。
+  - 默认全局规则模板不再自称约束 "Codex"，改为约束"AI 编程助手"；locale 指令新增仲裁句：用户全局/项目规则指定回复语言时以规则为准。
+  - 审批解释提示词接入 locale 指令，回复语言跟随用户偏好而非硬编码简体中文。
+  - token 估算（圆环与 75% 自动压缩阈值）改用与真实请求一致的专家/模式过滤工具集，不再把 short-drama/chrome/委派 CLI 的固定块计入。
+  - `gemini-3-flash` 落 compact 档，不再被 `gemini-3` 旗舰匹配拖进 extended。
+  - BugHunt 猎手空结果改为强制字面哨兵 `NOTHING FOUND` 并按前缀过滤，中文/自由格式的"没发现"不再混进汇总，提及该短语的真实发现也不再被误丢。
+- 版本号从 **1.193.0-rc9** 递增为 **1.193.0-rc10**，内部构建号从 **69** 递增为 **70**；App、Go agent、Help、Helper、浏览器扩展、README、响应头契约与产品文档保持一致。
+
+### Tests
+
+- 稳定前缀快照哈希随 v10 更新；新增 `gemini-3-flash` 档位断言；全局规则模板测试改为断言不含 "Codex"。
 
 ## 1.193.0-rc9 - 2026-07-22
 

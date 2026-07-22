@@ -33,6 +33,20 @@ extension AppState {
     /// 带 memo：消息条数 / 会话不变时 1 秒内直接回缓存值——这是个给
     /// 状态栏圆环看的估算值，不需要逐 token 精确；全量重算的成本见
     /// `agentTokenEstimateCache` 的注释。
+    /// The tool set the next real request will actually send — filtered by
+    /// active experts / interaction mode / executor, exactly like the loop's
+    /// streamChat call. Estimating with the full registry counted the
+    /// short-drama, chrome, and delegated-CLI blocks that are usually
+    /// absent, overstating the ring and tripping 75% auto-compression early.
+    var estimatedAgentToolset: [AgentToolDescriptor] {
+        guard let runtime = activeRuntime else { return AgentToolRegistry.all }
+        return AgentToolRegistry.tools(
+            activeExperts: runtime.activeExperts,
+            interactionMode: runtime.interactionMode,
+            executionAgent: runtime.executionAgent
+        )
+    }
+
     var estimatedAgentTokens: Int {
         let now = Date()
         let messageCount = agentMessages.count
@@ -44,7 +58,7 @@ extension AppState {
             return cached.value
         }
         let requestMessages = estimatedAgentRequestMessages
-        let tools = AgentToolRegistry.all
+        let tools = estimatedAgentToolset
         let value = Self.estimateAgentTokens(messages: requestMessages, tools: tools)
         agentTokenEstimateCache = (messageCount, sessionID, value, now)
         return value
@@ -196,7 +210,7 @@ extension AppState {
         }
         let value = Self.estimateAgentTokens(
             messages: [estimatedAgentSystemMessage],
-            tools: AgentToolRegistry.all
+            tools: estimatedAgentToolset
         )
         agentBaselineEstimateCache = (messageCount, sessionID, value, now)
         return value

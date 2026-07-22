@@ -32,9 +32,9 @@ nonisolated enum AgentGlobalRulesStore {
     private static let rulesCache = NSCache<NSString, NSString>()
     static let maxRulesCharacters = 8_000
     static let defaultRulesTemplate = """
-    # Codex 规则（严格条款）
+    # 全局规则（严格条款）
 
-    本文件用于约束 Codex 在本仓库中的行为与输出风格。条款分级如下：
+    本文件用于约束 AI 编程助手在本仓库中的行为与输出风格。条款分级如下：
     - **MUST**：必须遵守
     - **MUST NOT**：严禁
     - **SHOULD**：应当遵守（如无充分理由不得偏离）
@@ -124,7 +124,7 @@ nonisolated enum AgentGlobalRulesStore {
 
     ## Alma 规则库摘要
 
-    以下规则适用于 Codex 全局会话。若与当前项目的 AGENTS.md / CLAUDE.md 或用户最新指令冲突，以更具体、更晚出现的指令为准。
+    以下规则适用于全局会话。若与当前项目的 AGENTS.md / CLAUDE.md 或用户最新指令冲突，以更具体、更晚出现的指令为准。
 
     ### 编程最佳实践
 
