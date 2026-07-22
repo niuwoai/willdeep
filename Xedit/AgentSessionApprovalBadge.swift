@@ -179,12 +179,17 @@ final class AgentDockBadgeCoordinator {
 struct AgentSessionApprovalBadge: View {
     let session: AgentSession
     let runtime: AgentRuntime?
+    var baseFontSize: CGFloat = AgentSettingsStore.chatBaseFontSizeDefault
 
     var body: some View {
         if let runtime {
-            ObservedApprovalBadge(session: session, runtime: runtime)
+            ObservedApprovalBadge(
+                session: session,
+                runtime: runtime,
+                baseFontSize: baseFontSize
+            )
         } else if AgentSessionApprovalBadgeLogic.needsUserApproval(session: session) {
-            Badge()
+            Badge(baseFontSize: baseFontSize)
         }
     }
 }
@@ -192,6 +197,7 @@ struct AgentSessionApprovalBadge: View {
 private struct ObservedApprovalBadge: View {
     let session: AgentSession
     @ObservedObject var runtime: AgentRuntime
+    let baseFontSize: CGFloat
 
     var body: some View {
         if AgentSessionApprovalBadgeLogic.needsUserApproval(
@@ -200,15 +206,21 @@ private struct ObservedApprovalBadge: View {
             patchStatuses: runtime.patchProposals.map(\.status),
             planStatus: runtime.currentPlan?.status
         ) {
-            Badge()
+            Badge(baseFontSize: baseFontSize)
         }
     }
 }
 
 private struct Badge: View {
+    let baseFontSize: CGFloat
+
     var body: some View {
         Text(L10n.Sidebar.sessionRowWaitingApproval)
-            .font(.system(size: 10, weight: .semibold))
+            .font(AgentDesign.chatSupportingFont(
+                baseFontSize: baseFontSize,
+                visualMinimum: 10,
+                weight: .semibold
+            ))
             .foregroundStyle(Color.green)
             .lineLimit(1)
             .fixedSize(horizontal: true, vertical: false)

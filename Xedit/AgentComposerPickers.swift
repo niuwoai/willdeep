@@ -69,7 +69,9 @@ struct WorkspacePickerPill: View {
                     .font(.system(size: 10))
                     .foregroundStyle(workspaceIconTint)
                 Text(label)
-                    .font(AgentDesign.secondaryFont)
+                    .font(AgentDesign.chatSupportingFont(
+                        baseFontSize: appState.agentChatBaseFontSize
+                    ))
                     .lineLimit(1)
                     .truncationMode(.middle)
                 Image(systemName: "chevron.down")
@@ -713,12 +715,18 @@ struct ModelPickerPill: View {
                         .font(.system(size: 10, weight: .semibold))
                         .foregroundStyle(menuSnapshot.managedActive ? Color.teal : Color.secondary)
                     Text(pillLabel)
-                        .font(AgentDesign.secondaryFont)
+                        .font(AgentDesign.chatSupportingFont(
+                            baseFontSize: appState.agentChatBaseFontSize
+                        ))
                         .lineLimit(1)
                         .truncationMode(.middle)
                     if showsAutomaticUpgradeBadge {
                         Text(L10n.AgentModelPicker.autoUpgrade)
-                            .font(.system(size: 8, weight: .bold))
+                            .font(AgentDesign.chatSupportingFont(
+                                baseFontSize: appState.agentChatBaseFontSize,
+                                visualMinimum: 8,
+                                weight: .bold
+                            ))
                             .foregroundStyle(.teal)
                             .padding(.horizontal, 5)
                             .padding(.vertical, 2)

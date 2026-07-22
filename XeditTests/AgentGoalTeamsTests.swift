@@ -592,6 +592,8 @@ struct AgentGoalTeamsTests {
         let instruction = runtime.queuedMessages.last?.text ?? ""
         #expect(instruction.contains("```progress"))
         #expect(instruction.contains("```goal-check"))
+        #expect(instruction.contains("compact Goal round delivery summary"))
+        #expect(instruction.contains("omit command transcripts, failed attempts, raw tool output"))
     }
 
     @Test("拒绝清空 Plan、保留 Goal并创建新代次，旧回复不能复活")

@@ -649,6 +649,7 @@ private struct SkillPickerRow: View {
 /// add visual noise to ordinary chats.
 struct AgentSessionModeBadges: View {
     let session: AgentSession
+    var baseFontSize: CGFloat = AgentSettingsStore.chatBaseFontSizeDefault
 
     var body: some View {
         HStack(spacing: 4) {
@@ -682,7 +683,12 @@ struct AgentSessionModeBadges: View {
             Image(systemName: symbol)
                 .font(.system(size: 8, weight: .semibold))
             Text(text)
-                .font(.system(size: 9, weight: .semibold, design: .monospaced))
+                .font(AgentDesign.chatSupportingFont(
+                    baseFontSize: baseFontSize,
+                    visualMinimum: 9,
+                    weight: .semibold,
+                    design: .monospaced
+                ))
         }
         .padding(.horizontal, 5)
         .padding(.vertical, 1)
@@ -774,6 +780,7 @@ enum AgentSessionTodoSummaryLogic {
 
 struct AgentSessionTodoSummaryRow: View {
     let summary: AgentSessionTodoSummary
+    var baseFontSize: CGFloat = AgentSettingsStore.chatBaseFontSizeDefault
 
     var body: some View {
         HStack(spacing: 5) {
@@ -782,11 +789,19 @@ struct AgentSessionTodoSummaryRow: View {
                 .foregroundStyle(tint)
                 .frame(width: 12)
             Text("\(summary.completed)/\(summary.total)")
-                .font(.system(size: 9, weight: .semibold, design: .monospaced))
+                .font(AgentDesign.chatSupportingFont(
+                    baseFontSize: baseFontSize,
+                    visualMinimum: 9,
+                    weight: .semibold,
+                    design: .monospaced
+                ))
                 .foregroundStyle(tint)
                 .monospacedDigit()
             Text(summary.text)
-                .font(.system(size: 10))
+                .font(AgentDesign.chatSupportingFont(
+                    baseFontSize: baseFontSize,
+                    visualMinimum: 10
+                ))
                 .foregroundStyle(.secondary)
                 .lineLimit(1)
                 .truncationMode(.tail)
@@ -837,15 +852,20 @@ struct AgentSessionTodoSummaryContainer: View {
     let session: AgentSession
     let runtime: AgentRuntime?
     let fallbackSummary: AgentSessionTodoSummary
+    var baseFontSize: CGFloat = AgentSettingsStore.chatBaseFontSizeDefault
 
     var body: some View {
         if let runtime {
             ObservedAgentSessionTodoSummaryRow(
                 runtime: runtime,
-                fallbackSummary: fallbackSummary
+                fallbackSummary: fallbackSummary,
+                baseFontSize: baseFontSize
             )
         } else {
-            AgentSessionTodoSummaryRow(summary: fallbackSummary)
+            AgentSessionTodoSummaryRow(
+                summary: fallbackSummary,
+                baseFontSize: baseFontSize
+            )
         }
     }
 }
@@ -853,10 +873,12 @@ struct AgentSessionTodoSummaryContainer: View {
 private struct ObservedAgentSessionTodoSummaryRow: View {
     @ObservedObject var runtime: AgentRuntime
     let fallbackSummary: AgentSessionTodoSummary
+    let baseFontSize: CGFloat
 
     var body: some View {
         AgentSessionTodoSummaryRow(
-            summary: AgentSessionTodoSummaryLogic.summary(for: runtime.session) ?? fallbackSummary
+            summary: AgentSessionTodoSummaryLogic.summary(for: runtime.session) ?? fallbackSummary,
+            baseFontSize: baseFontSize
         )
     }
 }

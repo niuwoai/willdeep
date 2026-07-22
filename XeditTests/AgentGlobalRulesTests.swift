@@ -264,6 +264,54 @@ struct AgentGlobalRulesTests {
         #expect(prepared.consume(for: .uploadToRemote, now: now) == nil)
     }
 
+    @Test
+    func zmodemLocalProcessDrainsOutputBeforeFinishingAndRejectsLateRemoteBytes() throws {
+        let tempDir = try makeTemporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: tempDir) }
+        let payload = Data((0..<(512 * 1_024)).map { UInt8($0 % 251) })
+        let payloadURL = tempDir.appendingPathComponent("zmodem-output.bin")
+        try payload.write(to: payloadURL)
+
+        let completion = DispatchSemaphore(value: 0)
+        let receivedLock = NSLock()
+        var received = Data()
+        var receivedCountAtFinish = -1
+        let session = try TerminalZModemProcessSession(
+            executable: "/bin/cat",
+            arguments: [payloadURL.path],
+            currentDirectory: nil,
+            sendToRemote: { bytes in
+                receivedLock.lock()
+                received.append(contentsOf: bytes)
+                receivedLock.unlock()
+            },
+            finish: { _ in
+                receivedLock.lock()
+                receivedCountAtFinish = received.count
+                receivedLock.unlock()
+                completion.signal()
+            }
+        )
+
+        session.start()
+        #expect(completion.wait(timeout: .now() + 10) == .success)
+
+        receivedLock.lock()
+        let finalReceived = received
+        let finalCountAtFinish = receivedCountAtFinish
+        receivedLock.unlock()
+        #expect(finalReceived == payload)
+        #expect(finalCountAtFinish == payload.count)
+        #expect(isProcessExited(session.writeRemoteBytes(Array("prompt".utf8))))
+    }
+
+    private func isProcessExited(_ result: TerminalZModemRemoteWriteResult) -> Bool {
+        if case .processExited = result {
+            return true
+        }
+        return false
+    }
+
     private func isUploadDirection(_ direction: TerminalZModemDirection) -> Bool {
         if case .uploadToRemote = direction {
             return true

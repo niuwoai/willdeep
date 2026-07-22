@@ -121,4 +121,23 @@ extension L10n {
             return String(format: template, index, status, text)
         }
     }
+
+    enum AgentActivity {
+        static let analyzing = String(localized: "agent-activity.stage.analyzing", defaultValue: "Analyzing the request")
+        static let building = String(localized: "agent-activity.stage.building", defaultValue: "Building the changes")
+        static let editing = String(localized: "agent-activity.stage.editing", defaultValue: "Preparing the implementation")
+        static let inspecting = String(localized: "agent-activity.stage.inspecting", defaultValue: "Inspecting the implementation")
+        static let planning = String(localized: "agent-activity.stage.planning", defaultValue: "Planning the next step")
+        static let running = String(localized: "agent-activity.stage.running", defaultValue: "Running the next step")
+        static let searching = String(localized: "agent-activity.stage.searching", defaultValue: "Searching relevant code")
+        static let verifying = String(localized: "agent-activity.stage.verifying", defaultValue: "Verifying the changes")
+
+        static func earlierOperations(_ count: Int) -> String {
+            let template = String(
+                localized: "agent-activity.earlier-operations",
+                defaultValue: "%lld earlier operations completed"
+            )
+            return String(format: template, count)
+        }
+    }
 }

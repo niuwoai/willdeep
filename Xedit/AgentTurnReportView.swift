@@ -64,11 +64,11 @@ struct AgentTurnReportCard: View {
                 .foregroundStyle(.blue)
             VStack(alignment: .leading, spacing: 2) {
                 Text(L10n.Transcript.turnReportTitle)
-                    .font(AgentDesign.titleFont)
+                    .agentChatSupportingFont(weight: .semibold)
                 Text(isExpanded
                     ? L10n.Transcript.turnReportSubtitle(report.modelID, report.providerName)
                     : collapsedSummary)
-                    .font(AgentDesign.secondaryFont)
+                    .agentChatSupportingFont()
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
                     .truncationMode(.middle)
@@ -150,20 +150,20 @@ struct AgentTurnReportCard: View {
                     VStack(alignment: .leading, spacing: 2) {
                         HStack(spacing: 5) {
                             Text(call.toolName)
-                                .font(AgentDesign.secondaryFont)
+                                .agentChatSupportingFont()
                                 .lineLimit(1)
                             Text(statusLabel(for: call.status))
-                                .font(AgentDesign.captionFont)
+                                .agentChatSupportingFont()
                                 .foregroundStyle(.secondary)
                             if let approval = call.approvalSource {
                                 Text(approvalLabel(for: approval))
-                                    .font(AgentDesign.captionFont)
+                                    .agentChatSupportingFont()
                                     .foregroundStyle(.secondary)
                             }
                         }
                         if let sandbox = call.arguments["_sandbox"]?.stringValue() {
                             Text(L10n.Transcript.turnReportSandbox(sandbox))
-                                .font(AgentDesign.captionFont)
+                                .agentChatSupportingFont()
                                 .foregroundStyle(.secondary)
                                 .lineLimit(1)
                         }
@@ -176,11 +176,11 @@ struct AgentTurnReportCard: View {
     private var recallSection: some View {
         VStack(alignment: .leading, spacing: 5) {
             Text(L10n.Transcript.turnReportRecallSection)
-                .font(AgentDesign.captionFont)
+                .agentChatSupportingFont(weight: .semibold)
                 .foregroundStyle(.secondary)
             if let utilization = recallUtilizationLine {
                 Text(utilization)
-                    .font(AgentDesign.captionFont)
+                    .agentChatSupportingFont()
                     .foregroundStyle(.secondary)
             }
             if let recallSnapshot = report.recallSnapshot {
@@ -192,21 +192,21 @@ struct AgentTurnReportCard: View {
                         VStack(alignment: .leading, spacing: 2) {
                             HStack(spacing: 5) {
                                 Text(item.kind == .memory ? L10n.Transcript.turnReportRecallMemory : L10n.Transcript.turnReportRecallSkill)
-                                    .font(AgentDesign.captionFont)
+                                    .agentChatSupportingFont()
                                     .foregroundStyle(.secondary)
                                 if let score = item.score {
                                     Text(L10n.Transcript.turnReportRecallScore(String(format: "%.2f", score)))
-                                        .font(AgentDesign.captionFont)
+                                        .agentChatSupportingFont()
                                         .foregroundStyle(.secondary)
                                 }
                             }
                             Text(item.title)
-                                .font(AgentDesign.captionFont)
+                                .agentChatSupportingFont()
                                 .foregroundStyle(.secondary)
                                 .lineLimit(2)
                             if !item.detail.isEmpty {
                                 Text(item.detail)
-                                    .font(AgentDesign.captionFont)
+                                    .agentChatSupportingFont()
                                     .foregroundStyle(.secondary)
                                     .lineLimit(1)
                             }
@@ -236,12 +236,12 @@ struct AgentTurnReportCard: View {
         switch AgentSelfLearning.recallItemLinkStatus(item, events: report.learningEvents) {
         case .linked:
             Label(L10n.Transcript.learningRecallLinkedTag, systemImage: "link")
-                .font(AgentDesign.captionFont)
+                .agentChatSupportingFont()
                 .foregroundStyle(.green)
                 .labelStyle(.titleAndIcon)
         case .nearMiss(let reason):
             Text(reason)
-                .font(AgentDesign.captionFont)
+                .agentChatSupportingFont()
                 .foregroundStyle(.orange)
                 .lineLimit(1)
         case .unrelated:
@@ -252,7 +252,7 @@ struct AgentTurnReportCard: View {
     private var learningSection: some View {
         VStack(alignment: .leading, spacing: 5) {
             Text(L10n.Transcript.turnReportLearningSection)
-                .font(AgentDesign.captionFont)
+                .agentChatSupportingFont(weight: .semibold)
                 .foregroundStyle(.secondary)
             ForEach(report.learningEvents.prefix(3)) { event in
                 HStack(spacing: 6) {
@@ -260,7 +260,7 @@ struct AgentTurnReportCard: View {
                         .font(.system(size: 10, weight: .medium))
                         .foregroundStyle(.purple)
                     Text(learningLine(for: event))
-                        .font(AgentDesign.captionFont)
+                        .agentChatSupportingFont()
                         .foregroundStyle(.secondary)
                         .lineLimit(1)
                 }
@@ -278,10 +278,10 @@ struct AgentTurnReportCard: View {
     private func metric(_ title: String, _ value: String) -> some View {
         VStack(alignment: .leading, spacing: 2) {
             Text(value)
-                .font(AgentDesign.secondaryFont.weight(.semibold))
+                .agentChatSupportingFont(weight: .semibold)
                 .lineLimit(1)
             Text(title)
-                .font(AgentDesign.captionFont)
+                .agentChatSupportingFont()
                 .foregroundStyle(.secondary)
                 .lineLimit(1)
         }
@@ -290,7 +290,7 @@ struct AgentTurnReportCard: View {
 
     private func labelChip(_ text: String, color: Color) -> some View {
         Text(text)
-            .font(AgentDesign.captionFont)
+            .agentChatSupportingFont()
             .padding(.horizontal, 6)
             .padding(.vertical, 2)
             .background(color.opacity(0.12))

@@ -309,12 +309,12 @@ enum AgentChatHistoryRenderer {
         // `bodyFont` / `monoFont` follow the user's chat-base size
         // knob (Q1=A) — they're used for message prose, plain tool
         // outputs, fenced code blocks, and inline-Markdown spans.
-        // `chromeMonoFont` is the fixed-size mono used for tool-call
-        // group summaries; chrome doesn't grow with body text.
+        // Tool-call summaries and other gray status chrome share the body
+        // size floor; hierarchy now comes from color/weight, not tiny text.
         let bodyFont = NSFont.systemFont(ofSize: baseFontSize)
         let monoFont = NSFont.monospacedSystemFont(ofSize: baseFontSize, weight: .regular)
-        let chromeMonoFont = NSFont.monospacedSystemFont(ofSize: NSFont.systemFontSize, weight: .regular)
-        let headerFont = NSFont.systemFont(ofSize: 11, weight: .semibold)
+        let chromeMonoFont = NSFont.monospacedSystemFont(ofSize: baseFontSize, weight: .regular)
+        let headerFont = NSFont.systemFont(ofSize: baseFontSize, weight: .semibold)
         let assistantStatusFont = bodyFont
         let bodyColor = NSColor.labelColor
         let assistantStatusColor = NSColor.tertiaryLabelColor
@@ -334,7 +334,12 @@ enum AgentChatHistoryRenderer {
             $0.role == .assistant && (!$0.content.isEmpty || !$0.toolCalls.isEmpty)
         }?.id
         let assistantTurnPresentations = AgentAssistantTurnGrouping.presentations(
-            in: assistantTurnContextMessages
+            in: assistantTurnContextMessages,
+            visibleAssistantMessageIDs: Set(
+                messages.lazy
+                    .filter { $0.role == .assistant }
+                    .map(\.id)
+            )
         )
         let activeUserMessageID = isAssistantTurnActive
             ? assistantTurnContextMessages.reversed().first(where: { $0.role == .user })?.id
@@ -351,7 +356,7 @@ enum AgentChatHistoryRenderer {
                     event,
                     content: message.content,
                     to: result,
-                    font: NSFont.systemFont(ofSize: 12),
+                    font: bodyFont,
                     color: secondaryColor
                 )
                 index += 1
@@ -471,6 +476,9 @@ enum AgentChatHistoryRenderer {
             } else {
                 body = displaySourceContent
             }
+            let activityHeadline = message.role == .assistant
+                ? AgentActivityHeadlinePresentation.make(from: body)
+                : nil
 
             let hasUserTextBubbleContent = message.role == .user
                 && (!message.textAttachments.isEmpty || !body.isEmpty)
@@ -541,6 +549,13 @@ enum AgentChatHistoryRenderer {
                             font: bodyFont,
                             color: bodyColor
                         )
+                    } else if let activityHeadline {
+                        appendActivityHeadline(
+                            activityHeadline,
+                            to: result,
+                            font: bodyFont,
+                            color: secondaryColor
+                        )
                     } else {
                         appendMarkdownBody(
                             body,
@@ -567,7 +582,8 @@ enum AgentChatHistoryRenderer {
                         progressPresentation,
                         id: progressID,
                         isExpanded: expandedProgressBlockIDs.contains(progressID),
-                        showsPlanAction: progressPlan != nil
+                        showsPlanAction: progressPlan != nil,
+                        baseFontSize: baseFontSize
                     ))
                 }
                 let bodyRange = NSRange(location: bodyStart, length: result.length - bodyStart)
@@ -671,6 +687,7 @@ enum AgentChatHistoryRenderer {
                 || turnPresentation?.isLastVisibleMessage(footerMessage) == true
             if isAssistantTurnFooter,
                !isActiveAssistantTurn,
+               activityHeadline == nil,
                shouldShowFooter(for: message, body: body) {
                 let messageBodyEnd = result.length
                 result.append(NSAttributedString(string: "\n", attributes: [.font: bodyFont]))
@@ -681,6 +698,7 @@ enum AgentChatHistoryRenderer {
                     isVisible: message.role != .user || isHoveredUserMessage,
                     turnReportToolCount: latestTurnReportToolCount,
                     layoutWidth: layoutWidth,
+                    baseFontSize: baseFontSize,
                     to: result
                 )
                 if hasMessageBubbleContent && inlineToolCalls.isEmpty {

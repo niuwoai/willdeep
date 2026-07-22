@@ -515,7 +515,7 @@ extension AppState {
         persistActiveAgentSession()
 
         let goalTurnEndContract = agentInteractionMode == .goal
-            ? "At the end of every reply, emit both exactly one ```progress fenced block and exactly one ```goal-check fenced block in the same reply, even when either block contains no changes."
+            ? "At the end of every reply, first give a compact Goal round delivery summary containing only verified outcomes, material changes, validation, and any genuine blocker or next action; omit command transcripts, failed attempts, raw tool output, and step-by-step narration. Then emit both exactly one ```progress fenced block and exactly one ```goal-check fenced block in the same reply, even when either block contains no changes."
             : "At the end of each reply, emit exactly one ```progress fenced block with the latest status of every step touched."
         let prompt = """
         Plan approved. Execute the complete plan step by step. Do not treat an outline, sample, first file, \
@@ -963,28 +963,89 @@ extension AppState {
         }
     }
 
-    /// Cancel the in-flight response and every active workflow owned by the
-    /// current session. Queued messages are kept and the next one is
-    /// dispatched automatically. Use `clearAgentQueue` to drop them.
+    /// Stop the newest in-flight turn while preserving streamed output. Work
+    /// started by older turns is deliberately out of scope: a long-lived dev
+    /// server must not die because the user interrupted a later answer.
     func stopAgentResponse() {
         guard let runtime = activeRuntime else { return }
+        if let activeTurnID = runtime.activeTurnID,
+           runtime.userStoppedTurnID == activeTurnID {
+            return
+        }
         if runtime.goalTurnRecoveryCheckpoint != nil {
             runtime.goalTurnRecoveryCheckpoint = nil
             persistAgentSession(runtime: runtime, touchUpdatedAt: false, moveToFront: false)
         }
+        let stoppedTurnID = runtime.activeTurnID
+        let stoppedTurnStartedAt = runtime.turnStartedAt
         let activeWorkflowIDs = runtime.messages.compactMap { message -> UUID? in
             guard let report = message.workflowReport,
                   report.status == .planning || report.status == .running else { return nil }
+            if let stoppedTurnStartedAt, report.startedAt < stoppedTurnStartedAt {
+                return nil
+            }
             return report.id
         }
         for reportID in activeWorkflowIDs {
             cancelWorkflow(reportID: reportID, runtimeID: runtime.id)
         }
         guard runtime.isResponding else { return }
+
+        let subagentStopCount: Int
+        let liveJobs: [AgentBackgroundJob]
+        if let stoppedTurnID {
+            subagentStopCount = agentSubagentRegistry.cancelRunning(
+                forParentRuntime: runtime.id,
+                originatingTurnID: stoppedTurnID
+            )
+            liveJobs = agentJobRegistry.aliveJobs(
+                forRuntime: runtime.id,
+                originatingTurnID: stoppedTurnID
+            )
+            runtime.userStoppedTurnID = stoppedTurnID
+        } else {
+            subagentStopCount = 0
+            liveJobs = []
+        }
+
+        runtime.errorMessage = nil
+        runtime.errorDetails = nil
+        runtime.errorRequiresSomeIMLogin = false
+        let immediateStoppedCount = activeWorkflowIDs.count + subagentStopCount
+        let eventContent: String
+        if liveJobs.isEmpty {
+            eventContent = immediateStoppedCount > 0
+                ? L10n.Composer.stoppedAndCleanedUp(immediateStoppedCount)
+                : L10n.Composer.stopped
+        } else {
+            eventContent = L10n.Composer.stoppedCheckingProcesses(liveJobs.count)
+        }
+        let stopEventID = appendStoppedTurnEvent(to: runtime, content: eventContent)
+
         closeBlockingAgentToolDecision(for: runtime, reason: "Response stopped")
         runtime.shouldConsumeQueueAfterStop = !runtime.queuedMessages.isEmpty
         runtime.requestTask?.cancel()
         scheduleQueuedMessageConsumptionAfterCancellation(for: runtime)
+
+        if !liveJobs.isEmpty, let stoppedTurnID {
+            let candidates = liveJobs.map {
+                AgentStopJobCandidate(
+                    id: $0.id,
+                    displayHandle: $0.displayHandle,
+                    command: $0.command
+                )
+            }
+            let latestRequest = runtime.messages.last(where: { $0.isOperatorInput })?.content ?? ""
+            startStoppedTurnProcessCleanup(
+                runtime: runtime,
+                turnID: stoppedTurnID,
+                eventID: stopEventID,
+                candidates: candidates,
+                configuration: runtime.activeTurnConfiguration,
+                userRequest: latestRequest,
+                alreadyStoppedCount: immediateStoppedCount
+            )
+        }
     }
 
     func scheduleQueuedMessageConsumptionAfterCancellation(for runtime: AgentRuntime) {
@@ -1005,6 +1066,9 @@ extension AppState {
             runtime.isResponding = false
             runtime.turnStartedAt = nil
             runtime.requestTask = nil
+            runtime.activeTurnID = nil
+            runtime.activeTurnConfiguration = nil
+            runtime.userStoppedTurnID = nil
             runtime.shouldConsumeQueueAfterStop = false
             runtime.currentTurnAttachedSkills = []
             runtime.goalTurnRecoveryCheckpoint = nil
@@ -1623,6 +1687,10 @@ extension AppState {
         // cancellation propagates.
         if let doomed = agentRuntimes[id] {
             doomed.requestTask?.cancel()
+            for cleanupTask in doomed.stopCleanupTasks.values {
+                cleanupTask.cancel()
+            }
+            doomed.stopCleanupTasks.removeAll()
             cancelAllWorkflows(for: doomed)
             doomed.toolDecisionWaiter?.resume(returning: .denied(reason: "Session deleted"))
             doomed.toolDecisionWaiter = nil

@@ -386,6 +386,29 @@ nonisolated enum L10n {
         static let skillPickerNoMatches = String(localized: "composer.skill-picker.no-matches", defaultValue: "No matching skills")
         static let skillPickerSearchPlaceholder = String(localized: "composer.skill-picker.search-placeholder", defaultValue: "Search skills...")
         static let stopHelp = String(localized: "composer.stop.help", defaultValue: "Stop the current Agent turn")
+        static let stopped = String(localized: "composer.stop.stopped", defaultValue: "Stopped generating.")
+        static func stoppedCheckingProcesses(_ count: Int) -> String {
+            let template = String(
+                localized: "composer.stop.checking-processes",
+                defaultValue: "Stopped generating. Checking %lld process(es) started by this turn…"
+            )
+            return String(format: template, count)
+        }
+        static func stoppedAndCleanedUp(_ count: Int) -> String {
+            let template = String(
+                localized: "composer.stop.cleaned-up",
+                defaultValue: "Stopped generating and stopped %lld related task(s) or process(es) from this turn."
+            )
+            return String(format: template, count)
+        }
+        static let stoppedProcessesKept = String(
+            localized: "composer.stop.processes-kept",
+            defaultValue: "Stopped generating. Current-turn processes were left running because they still need to continue."
+        )
+        static let stoppedProcessesFinished = String(
+            localized: "composer.stop.processes-finished",
+            defaultValue: "Stopped generating. Related current-turn processes had already finished."
+        )
         static let overflowHelp = String(localized: "composer.overflow.help", defaultValue: "More settings: plugins and experts")
         static let overflowTitle = String(localized: "composer.overflow.title", defaultValue: "More settings")
         static let overflowWorkspace = String(localized: "composer.overflow.workspace", defaultValue: "Workspace")

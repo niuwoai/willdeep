@@ -232,10 +232,12 @@ final class AppState: ObservableObject {
     var cachedJudgeHistoryBuiltAt: Date?
     /// User-tunable base font size (in points) for the Agent chat
     /// transcript body — applies to user/assistant message prose and
-    /// rendered Markdown blocks. Tool-call summaries, footers, and
-    /// composer chrome keep their fixed AgentDesign sizes. Range and
-    /// default come from AgentSettingsStore so the UI clamp and the
-    /// persisted clamp can't drift.
+    /// rendered Markdown blocks. Supporting chat chrome (tool summaries,
+    /// progress/status rows, footers, dashboard captions, and composer
+    /// context labels) treats this value as its visual minimum, preserving
+    /// hierarchy with color and weight instead of unreadably small text.
+    /// Range and default come from AgentSettingsStore so the UI clamp and
+    /// the persisted clamp can't drift.
     @Published var agentChatBaseFontSize: CGFloat = AgentSettingsStore.loadAgentChatBaseFontSize() {
         didSet {
             let clamped = AgentSettingsStore.clampChatBaseFontSize(agentChatBaseFontSize)

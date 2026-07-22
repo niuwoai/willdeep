@@ -62,6 +62,7 @@ nonisolated enum AgentMessageSource: String, Codable, Equatable {
 /// as chat context.
 nonisolated enum AgentTranscriptEvent: String, Codable, Equatable {
     case modelChanged
+    case responseStopped
 }
 
 nonisolated enum AgentImageAttachmentSource: String, Codable, Equatable, Sendable {
@@ -731,7 +732,8 @@ nonisolated struct AgentAssistantTurnPresentation {
 nonisolated enum AgentAssistantTurnGrouping {
     static func presentations(
         in messages: [AgentMessage],
-        aggregatesCopyContent: Bool = true
+        aggregatesCopyContent: Bool = true,
+        visibleAssistantMessageIDs: Set<AgentMessage.ID>? = nil
     ) -> [AgentMessage.ID: AgentAssistantTurnPresentation] {
         var result: [AgentMessage.ID: AgentAssistantTurnPresentation] = [:]
         var userMessage: AgentMessage?
@@ -743,6 +745,7 @@ nonisolated enum AgentAssistantTurnGrouping {
                     userMessage: userMessage,
                     assistantMessages: assistantMessages,
                     aggregatesCopyContent: aggregatesCopyContent,
+                    visibleAssistantMessageIDs: visibleAssistantMessageIDs,
                     to: &result
                 )
                 userMessage = message
@@ -755,6 +758,7 @@ nonisolated enum AgentAssistantTurnGrouping {
             userMessage: userMessage,
             assistantMessages: assistantMessages,
             aggregatesCopyContent: aggregatesCopyContent,
+            visibleAssistantMessageIDs: visibleAssistantMessageIDs,
             to: &result
         )
         return result
@@ -772,9 +776,13 @@ nonisolated enum AgentAssistantTurnGrouping {
         userMessage: AgentMessage?,
         assistantMessages: [AgentMessage],
         aggregatesCopyContent: Bool,
+        visibleAssistantMessageIDs: Set<AgentMessage.ID>?,
         to result: inout [AgentMessage.ID: AgentAssistantTurnPresentation]
     ) {
-        let visibleMessages = assistantMessages.filter(isVisibleAssistantMessage)
+        let visibleMessages = assistantMessages.filter { message in
+            isVisibleAssistantMessage(message)
+                && (visibleAssistantMessageIDs?.contains(message.id) ?? true)
+        }
         guard let first = visibleMessages.first, let last = visibleMessages.last else { return }
         let presentation = AgentAssistantTurnPresentation(
             userMessageID: userMessage?.id,
@@ -806,7 +814,12 @@ nonisolated enum AgentAssistantTurnGrouping {
         var summary = visibleMessages[visibleMessages.count - 1]
         if aggregatesCopyContent {
             summary.content = visibleMessages
-                .map(\.copyableContent)
+                .map { message in
+                    AgentTurnProgressPresentation.extract(
+                        from: message.copyableContent,
+                        plan: nil
+                    ).visibleContent
+                }
                 .filter { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
                 .joined(separator: "\n\n")
         }

@@ -50,8 +50,9 @@ nonisolated struct AgentTurnProgressPresentation: Equatable {
         var visibleLines: [String] = []
         var updates: [Int: AgentPlan.StepStatus] = [:]
         var progressBody: [String] = []
-        var isInsideProgressBlock = false
+        var activeProtocolBlock: String?
         var foundProgressBlock = false
+        var foundGoalCheckBlock = false
 
         func applyProgressBody() {
             for line in progressBody {
@@ -63,11 +64,13 @@ nonisolated struct AgentTurnProgressPresentation: Equatable {
 
         for line in lines {
             let trimmed = line.trimmingCharacters(in: .whitespacesAndNewlines)
-            if isInsideProgressBlock {
+            if let protocolBlock = activeProtocolBlock {
                 if trimmed.hasPrefix("```") {
-                    applyProgressBody()
-                    isInsideProgressBlock = false
-                } else {
+                    if protocolBlock == "progress" {
+                        applyProgressBody()
+                    }
+                    activeProtocolBlock = nil
+                } else if protocolBlock == "progress" {
                     progressBody.append(line)
                 }
                 continue
@@ -75,19 +78,24 @@ nonisolated struct AgentTurnProgressPresentation: Equatable {
 
             if isProgressFenceStart(trimmed) {
                 foundProgressBlock = true
-                isInsideProgressBlock = true
+                activeProtocolBlock = "progress"
+                continue
+            }
+            if isGoalCheckFenceStart(trimmed) {
+                foundGoalCheckBlock = true
+                activeProtocolBlock = "goal-check"
                 continue
             }
             visibleLines.append(line)
         }
 
-        if isInsideProgressBlock {
+        if activeProtocolBlock == "progress" {
             applyProgressBody()
         }
 
-        guard foundProgressBlock else { return (content, nil) }
+        guard foundProgressBlock || foundGoalCheckBlock else { return (content, nil) }
         let visibleContent = normalizedVisibleContent(visibleLines.joined(separator: "\n"))
-        guard !updates.isEmpty else { return (visibleContent, nil) }
+        guard foundProgressBlock, !updates.isEmpty else { return (visibleContent, nil) }
 
         let items = updates.keys.sorted().compactMap { index -> Item? in
             guard let status = updates[index] else { return nil }
@@ -111,6 +119,14 @@ nonisolated struct AgentTurnProgressPresentation: Equatable {
             .trimmingCharacters(in: .whitespacesAndNewlines)
             .lowercased()
         return info == "progress"
+    }
+
+    private static func isGoalCheckFenceStart(_ trimmed: String) -> Bool {
+        guard trimmed.hasPrefix("```") else { return false }
+        let info = trimmed.dropFirst(3)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .lowercased()
+        return info == "goal-check"
     }
 
     private static func parseUpdate(_ rawLine: String) -> (Int, AgentPlan.StepStatus)? {
@@ -144,6 +160,7 @@ nonisolated struct AgentTurnProgressPresentation: Equatable {
 
 struct AgentTurnProgressView: View {
     let presentation: AgentTurnProgressPresentation
+    let baseFontSize: CGFloat
     let showsPlanAction: Bool
     let onShowPlan: () -> Void
 
@@ -151,11 +168,13 @@ struct AgentTurnProgressView: View {
 
     init(
         presentation: AgentTurnProgressPresentation,
+        baseFontSize: CGFloat = AgentSettingsStore.chatBaseFontSizeDefault,
         showsPlanAction: Bool = false,
         initiallyExpanded: Bool = false,
         onShowPlan: @escaping () -> Void = {}
     ) {
         self.presentation = presentation
+        self.baseFontSize = baseFontSize
         self.showsPlanAction = showsPlanAction
         self.onShowPlan = onShowPlan
         _isExpanded = State(initialValue: initiallyExpanded)
@@ -196,7 +215,7 @@ struct AgentTurnProgressView: View {
                     Button(action: onShowPlan) {
                         HStack(spacing: 6) {
                             Text(L10n.AgentTurnProgress.viewFullPlan)
-                                .font(.system(size: 12, weight: .medium))
+                                .font(supportingFont(visualMinimum: 12, weight: .medium))
                             Spacer(minLength: 0)
                             Image(systemName: "chevron.right")
                                 .font(.system(size: 9, weight: .semibold))
@@ -226,7 +245,7 @@ struct AgentTurnProgressView: View {
                 .font(.system(size: 11, weight: .semibold))
                 .foregroundStyle(.secondary)
             Text(L10n.AgentTurnProgress.title)
-                .font(.system(size: 12, weight: .semibold))
+                .font(supportingFont(visualMinimum: 12, weight: .semibold))
                 .foregroundStyle(.secondary)
 
             statusMetric(
@@ -270,7 +289,7 @@ struct AgentTurnProgressView: View {
                 .font(.system(size: 10, weight: .semibold))
                 .foregroundStyle(color)
             Text(text)
-                .font(.system(size: 11, weight: .medium))
+                .font(supportingFont(visualMinimum: 11, weight: .medium))
                 .foregroundStyle(.secondary)
                 .monospacedDigit()
         }
@@ -283,16 +302,16 @@ struct AgentTurnProgressView: View {
                 .foregroundStyle(detailColor(for: item.status))
                 .frame(width: 16, height: 18)
             Text("\(item.index)")
-                .font(.system(size: 11, weight: .semibold, design: .monospaced))
+                .font(supportingFont(visualMinimum: 11, weight: .semibold, design: .monospaced))
                 .foregroundStyle(.secondary)
                 .frame(minWidth: 16, alignment: .trailing)
             Text(displayTitle(for: item))
-                .font(.system(size: 12, weight: .medium))
+                .font(supportingFont(visualMinimum: 12, weight: .medium))
                 .foregroundStyle(.primary)
                 .fixedSize(horizontal: false, vertical: true)
             Spacer(minLength: 8)
             Text(statusLabel(for: item.status))
-                .font(.system(size: 11, weight: .medium))
+                .font(supportingFont(visualMinimum: 11, weight: .medium))
                 .foregroundStyle(detailColor(for: item.status))
         }
         .padding(.horizontal, 12)
@@ -333,6 +352,19 @@ struct AgentTurnProgressView: View {
             ? L10n.AgentTurnProgress.stepNumber(item.index)
             : item.title
     }
+
+    private func supportingFont(
+        visualMinimum: CGFloat = 0,
+        weight: Font.Weight = .regular,
+        design: Font.Design = .default
+    ) -> Font {
+        AgentDesign.chatSupportingFont(
+            baseFontSize: baseFontSize,
+            visualMinimum: visualMinimum,
+            weight: weight,
+            design: design
+        )
+    }
 }
 
 enum AgentTurnProgressHistoryRenderer {
@@ -343,19 +375,27 @@ enum AgentTurnProgressHistoryRenderer {
         _ presentation: AgentTurnProgressPresentation,
         id: String,
         isExpanded: Bool,
-        showsPlanAction: Bool
+        showsPlanAction: Bool,
+        baseFontSize: CGFloat = AgentSettingsStore.chatBaseFontSizeDefault
     ) -> NSAttributedString {
         let result = NSMutableAttributedString()
-        appendHeader(presentation, id: id, isExpanded: isExpanded, to: result)
+        let textFontSize = AgentDesign.chatSupportingFontSize(baseFontSize: baseFontSize)
+        appendHeader(
+            presentation,
+            id: id,
+            isExpanded: isExpanded,
+            textFontSize: textFontSize,
+            to: result
+        )
 
         if isExpanded {
             for item in presentation.detailItems {
                 result.append(NSAttributedString(string: "\n"))
-                appendDetail(item, to: result)
+                appendDetail(item, textFontSize: textFontSize, to: result)
             }
             if showsPlanAction {
                 result.append(NSAttributedString(string: "\n"))
-                appendShowPlan(to: result)
+                appendShowPlan(textFontSize: textFontSize, to: result)
             }
         }
 
@@ -373,9 +413,10 @@ enum AgentTurnProgressHistoryRenderer {
         _ presentation: AgentTurnProgressPresentation,
         id: String,
         isExpanded: Bool,
+        textFontSize: CGFloat,
         to result: NSMutableAttributedString
     ) {
-        let font = NSFont.systemFont(ofSize: 11, weight: .medium)
+        let font = NSFont.systemFont(ofSize: textFontSize, weight: .medium)
         let secondary = NSColor.secondaryLabelColor
         let start = result.length
         result.append(symbolAttachmentString(
@@ -449,6 +490,7 @@ enum AgentTurnProgressHistoryRenderer {
 
     private static func appendDetail(
         _ item: AgentTurnProgressPresentation.Item,
+        textFontSize: CGFloat,
         to result: NSMutableAttributedString
     ) {
         let color: NSColor = item.status == .failed ? .systemRed : .systemBlue
@@ -464,7 +506,7 @@ enum AgentTurnProgressHistoryRenderer {
             : item.title
         result.append(label(
             "  \(item.index) · \(title)  ",
-            font: NSFont.systemFont(ofSize: 11, weight: .medium),
+            font: NSFont.systemFont(ofSize: textFontSize, weight: .medium),
             color: NSColor.labelColor
         ))
         let status = item.status == .failed
@@ -472,19 +514,26 @@ enum AgentTurnProgressHistoryRenderer {
             : L10n.AgentTurnProgress.statusInProgress
         result.append(label(
             status,
-            font: NSFont.systemFont(ofSize: 10, weight: .medium),
+            font: NSFont.systemFont(ofSize: textFontSize, weight: .medium),
             color: color
         ))
     }
 
-    private static func appendShowPlan(to result: NSMutableAttributedString) {
+    private static func appendShowPlan(
+        textFontSize: CGFloat,
+        to result: NSMutableAttributedString
+    ) {
         let start = result.length
         result.append(label(
             L10n.AgentTurnProgress.viewFullPlan,
-            font: NSFont.systemFont(ofSize: 11, weight: .medium),
+            font: NSFont.systemFont(ofSize: textFontSize, weight: .medium),
             color: NSColor.secondaryLabelColor
         ))
-        result.append(label("  ", font: NSFont.systemFont(ofSize: 11), color: .secondaryLabelColor))
+        result.append(label(
+            "  ",
+            font: NSFont.systemFont(ofSize: textFontSize),
+            color: .secondaryLabelColor
+        ))
         result.append(symbolAttachmentString(
             named: "chevron.right",
             fallback: ">",

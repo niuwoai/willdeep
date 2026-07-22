@@ -139,6 +139,10 @@ extension AppState {
         runtime.isResponding = true
         runtime.turnStartedAt = Date()
         runtime.currentTurnAttachedSkills = attachedSkills
+        let turnID = UUID()
+        runtime.activeTurnID = turnID
+        runtime.activeTurnConfiguration = configuration
+        runtime.userStoppedTurnID = nil
         let providerSlotClaim = claimProviderSlot(for: runtime, providerID: providerID)
 
         // The user's message was already appended and persisted to disk
@@ -170,6 +174,11 @@ extension AppState {
                 runtime.isResponding = false
                 runtime.turnStartedAt = nil
                 runtime.requestTask = nil
+                if runtime.activeTurnID == turnID {
+                    runtime.activeTurnID = nil
+                    runtime.activeTurnConfiguration = nil
+                    runtime.userStoppedTurnID = nil
+                }
                 runtime.goalTurnRecoveryCheckpoint = nil
                 runtime.shouldConsumeQueueAfterStop = false
                 self.persistAgentSession(runtime: runtime)
@@ -183,10 +192,36 @@ extension AppState {
                 }
                 return
             } catch {
+                if Self.isStoppedTurnCancellation(error, runtime: runtime, turnID: turnID) {
+                    let shouldConsumeQueueAfterStop = runtime.shouldConsumeQueueAfterStop
+                    runtime.isResponding = false
+                    runtime.turnStartedAt = nil
+                    runtime.requestTask = nil
+                    runtime.activeTurnID = nil
+                    runtime.activeTurnConfiguration = nil
+                    runtime.userStoppedTurnID = nil
+                    runtime.goalTurnRecoveryCheckpoint = nil
+                    runtime.shouldConsumeQueueAfterStop = false
+                    self.persistAgentSession(runtime: runtime)
+                    self.releaseProviderSlot(
+                        for: runtime,
+                        claimID: providerSlotClaim.id,
+                        providerID: providerID
+                    )
+                    if shouldConsumeQueueAfterStop {
+                        self.consumeNextQueuedMessageIfNeeded(for: runtime)
+                    }
+                    return
+                }
                 self.setAgentError(error, for: runtime)
                 runtime.isResponding = false
                 runtime.turnStartedAt = nil
                 runtime.requestTask = nil
+                if runtime.activeTurnID == turnID {
+                    runtime.activeTurnID = nil
+                    runtime.activeTurnConfiguration = nil
+                    runtime.userStoppedTurnID = nil
+                }
                 runtime.goalTurnRecoveryCheckpoint = nil
                 self.persistAgentSession(runtime: runtime)
                 self.releaseProviderSlot(
@@ -200,7 +235,8 @@ extension AppState {
             await self.runAgentLoop(
                 for: runtime,
                 configuration: configuration,
-                providerSlotClaimID: providerSlotClaim.id
+                providerSlotClaimID: providerSlotClaim.id,
+                turnID: turnID
             )
         }
     }
@@ -375,6 +411,10 @@ extension AppState {
         runtime.latestComputerUseActivity = nil
         runtime.isResponding = true
         runtime.turnStartedAt = Date()
+        let turnID = UUID()
+        runtime.activeTurnID = turnID
+        runtime.activeTurnConfiguration = configuration
+        runtime.userStoppedTurnID = nil
         let providerSlotClaim = claimProviderSlot(for: runtime, providerID: providerID)
 
         runtime.requestTask = Task { [weak self, weak runtime] in
@@ -386,7 +426,8 @@ extension AppState {
             await self.runAgentLoop(
                 for: runtime,
                 configuration: configuration,
-                providerSlotClaimID: providerSlotClaim.id
+                providerSlotClaimID: providerSlotClaim.id,
+                turnID: turnID
             )
         }
     }
@@ -419,6 +460,13 @@ extension AppState {
     func clearAgentConversation() {
         agentRequestTask?.cancel()
         if let runtime = activeRuntime {
+            for cleanupTask in runtime.stopCleanupTasks.values {
+                cleanupTask.cancel()
+            }
+            runtime.stopCleanupTasks.removeAll()
+            runtime.activeTurnID = nil
+            runtime.activeTurnConfiguration = nil
+            runtime.userStoppedTurnID = nil
             cancelAllWorkflows(for: runtime)
             let runtimeID = runtime.id
             agentSubagentRegistry.cancelAll(forParentRuntime: runtimeID)
@@ -467,7 +515,8 @@ extension AppState {
     func runAgentLoop(
         for runtime: AgentRuntime,
         configuration: AgentConfiguration,
-        providerSlotClaimID: UUID
+        providerSlotClaimID: UUID,
+        turnID: UUID
     ) async {
         // This turn just went live (isResponding was set true by the caller).
         // Refresh the same-checkout collision hint so the foreground composer
@@ -479,6 +528,11 @@ extension AppState {
             runtime.isResponding = false
             runtime.turnStartedAt = nil
             runtime.requestTask = nil
+            if runtime.activeTurnID == turnID {
+                runtime.activeTurnID = nil
+                runtime.activeTurnConfiguration = nil
+                runtime.userStoppedTurnID = nil
+            }
             runtime.goalTurnRecoveryCheckpoint = nil
             runtime.shouldConsumeQueueAfterStop = false
             // Turn finished — one fewer concurrent worker on this checkout.
@@ -583,6 +637,9 @@ extension AppState {
                 managedJudgeExplicitTier = resolution.persistedFloorTier
                 runtime.raiseManagedFloor(to: resolution.persistedFloorTier, reason: resolution.verdict.reason)
             }
+        }
+        if runtime.activeTurnID == turnID {
+            runtime.activeTurnConfiguration = turnConfiguration
         }
 
         // `var` so a managed output-quality failure can swap in an escalated
@@ -969,15 +1026,22 @@ extension AppState {
                 streamBuffer.flushPending()
             } catch is CancellationError {
                 streamBuffer.flushPending()
-                if let index = runtime.messages.firstIndex(where: { $0.id == assistantID }),
-                   runtime.messages[index].content.isEmpty,
-                   runtime.messages[index].toolCalls.isEmpty {
-                    runtime.messages.remove(at: index)
-                    AgentContextBuilder.removeDanglingTurnContextCarrier(from: &runtime.messages)
-                }
+                finalizeInterruptedAssistantMessage(
+                    id: assistantID,
+                    in: runtime,
+                    startedAt: turnStartedAt
+                )
                 return
             } catch {
                 streamBuffer.flushPending()
+                if Self.isStoppedTurnCancellation(error, runtime: runtime, turnID: turnID) {
+                    finalizeInterruptedAssistantMessage(
+                        id: assistantID,
+                        in: runtime,
+                        startedAt: turnStartedAt
+                    )
+                    return
+                }
                 setAgentError(error, for: runtime)
                 if let index = runtime.messages.firstIndex(where: { $0.id == assistantID }),
                    runtime.messages[index].content.isEmpty,
@@ -1490,6 +1554,7 @@ extension AppState {
                     workspaceLocation: workspaceLocation,
                     runtimeDescriptor: remoteRuntimeDescriptor,
                     runtimeID: runtime.id,
+                    turnID: runtime.activeTurnID,
                     jobRegistry: agentJobRegistry,
                     mediaTaskRegistry: agentMediaTaskRegistry,
                     shortDramaStore: agentShortDramaStore,
@@ -1658,6 +1723,21 @@ extension AppState {
                         images: result.images,
                         outcomeStatus: .succeeded
                     )
+                } catch is CancellationError {
+                    workspaceMutationLease = nil
+                    if let index = runtime.toolCalls.firstIndex(where: { $0.id == recordID }) {
+                        runtime.toolCalls[index].status = .denied
+                        runtime.toolCalls[index].errorMessage = "Response stopped"
+                    }
+                    appendToolMessage(
+                        for: runtime,
+                        toolCallID: call.externalID,
+                        payload: "Tool execution stopped with the current Agent turn.",
+                        source: .systemNotice,
+                        outcomeStatus: .denied,
+                        errorMessage: "Response stopped"
+                    )
+                    return
                 } catch {
                     // Deinit unlocks and closes the cross-process flock.
                     // This is a no-op for ordinary, unguarded tools.
@@ -2353,7 +2433,8 @@ extension AppState {
                     workspaceURL: workspaceURL,
                     runtimeDescriptor: runtimeDescriptor,
                     workspaceLocation: workspaceLocation,
-                    parentRuntimeID: runtime.id
+                    parentRuntimeID: runtime.id,
+                    originatingTurnID: runtime.activeTurnID
                 )
                 finishRecord(
                     status: .succeeded,

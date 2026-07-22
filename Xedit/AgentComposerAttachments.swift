@@ -203,7 +203,7 @@ struct QueueBadge: View {
                 Image(systemName: "hourglass")
                     .font(.system(size: 9))
                 Text("\(appState.agentQueuedMessages.count) queued")
-                    .font(AgentDesign.captionFont)
+                    .agentChatSupportingFont()
             }
             .foregroundStyle(.orange)
             .padding(.horizontal, 6)

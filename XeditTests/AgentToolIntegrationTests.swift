@@ -1529,6 +1529,65 @@ extension WillDeepTests {
         #expect(segments[0].kind.groupTitle(3) == "已运行 3 条命令")
     }
 
+    @Test("provider status headlines become localized activity phases")
+    func testProviderStatusHeadlinePresentation() {
+        let planning = AgentActivityHeadlinePresentation.make(
+            from: "Planning font size clamping implementation"
+        )
+        let verifying = AgentActivityHeadlinePresentation.make(
+            from: "Verifying activity timeline snapshots"
+        )
+
+        #expect(planning?.title == L10n.AgentActivity.planning)
+        #expect(planning?.systemImage == "list.bullet.clipboard")
+        #expect(verifying?.title == L10n.AgentActivity.verifying)
+        #expect(AgentActivityHeadlinePresentation.make(from: "Planning is useful for every project.") == nil)
+        #expect(AgentActivityHeadlinePresentation.make(from: "普通的中文回答正文") == nil)
+    }
+
+    @Test("live tool rows show useful file context without exposing command bodies")
+    func testLiveToolRowPresentationKeepsCommandPrivate() {
+        let file = AgentToolActivityRowPresentation(call: makeCall(
+            "read_file",
+            arguments: ["path": .string("/tmp/Xedit/AgentToolCallGrouping.swift")]
+        ))
+        let command = AgentToolActivityRowPresentation(call: makeCall(
+            "run_command",
+            arguments: [
+                "cwd": .string("/tmp/Xedit"),
+                "command": .string("deploy --token super-sensitive-value"),
+            ]
+        ))
+
+        #expect(file.title == "已读取文件")
+        #expect(file.detail == "AgentToolCallGrouping.swift")
+        #expect(command.title == "已运行命令")
+        #expect(command.detail == "Xedit 工作区")
+        #expect(command.detail?.contains("super-sensitive-value") == false)
+    }
+
+    @Test("live activity timeline keeps recent rows and never hides approvals")
+    func testLiveActivityTimelineBoundsCompletedRows() {
+        var calls = (0..<12).map { index in
+            makeCall(
+                "read_file",
+                arguments: ["path": .string("file-\(index).swift")]
+            )
+        }
+        let approval = makeCall("run_command", status: .pendingApproval)
+        calls.insert(approval, at: 1)
+
+        let presentation = AgentLiveActivityTimelinePresentation(
+            calls: calls,
+            maximumDetailedRows: 4
+        )
+
+        #expect(presentation.visibleCalls.count == 5)
+        #expect(presentation.visibleCalls.contains(where: { $0.id == approval.id }))
+        #expect(presentation.hiddenOperationCount == 8)
+        #expect(presentation.visibleCalls.suffix(4).map(\.id) == calls.suffix(4).map(\.id))
+    }
+
     @Test("AgentToolCallGrouping merges visible terminal operations")
     func testToolCallGroupingMergesVisibleTerminalOperations() {
         let calls = [

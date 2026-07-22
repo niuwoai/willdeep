@@ -10,6 +10,180 @@
 
 import Foundation
 
+/// Converts terse provider-authored status headlines (for example
+/// `Planning font size clamping implementation`) into a stable, localized
+/// phase label. The remainder is deliberately not shown: it is often raw
+/// reasoning, not user-facing copy, and may switch languages or expose noisy
+/// implementation fragments while streaming.
+nonisolated struct AgentActivityHeadlinePresentation: Equatable {
+    let title: String
+    let systemImage: String
+
+    static var analyzing: Self {
+        Self(title: L10n.AgentActivity.analyzing, systemImage: "sparkles")
+    }
+
+    static func make(from content: String) -> Self? {
+        let normalized = content
+            .replacingOccurrences(of: "\t", with: " ")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !normalized.isEmpty,
+              normalized.count <= 180,
+              normalized.split(whereSeparator: \.isNewline).count == 1,
+              ![".", "!", "?", "。", "！", "？"].contains(where: { normalized.hasSuffix($0) }) else {
+            return nil
+        }
+
+        let firstWord = normalized
+            .split(whereSeparator: { $0.isWhitespace || $0 == ":" })
+            .first
+            .map(String.init)?
+            .lowercased()
+            .trimmingCharacters(in: CharacterSet(charactersIn: "-–—"))
+
+        switch firstWord {
+        case "planning", "plan":
+            return Self(title: L10n.AgentActivity.planning, systemImage: "list.bullet.clipboard")
+        case "inspecting", "examining", "reviewing", "analyzing", "analysing":
+            return Self(title: L10n.AgentActivity.inspecting, systemImage: "doc.text.magnifyingglass")
+        case "searching", "locating", "finding", "reading":
+            return Self(title: L10n.AgentActivity.searching, systemImage: "magnifyingglass")
+        case "editing", "implementing", "updating", "fixing", "refactoring":
+            return Self(title: L10n.AgentActivity.editing, systemImage: "square.and.pencil")
+        case "testing", "verifying", "validating", "checking":
+            return Self(title: L10n.AgentActivity.verifying, systemImage: "checkmark.circle")
+        case "building", "compiling", "packaging":
+            return Self(title: L10n.AgentActivity.building, systemImage: "hammer")
+        case "running", "executing":
+            return Self(title: L10n.AgentActivity.running, systemImage: "terminal")
+        default:
+            return nil
+        }
+    }
+}
+
+struct AgentToolActivityRowPresentation: Identifiable, Equatable {
+    let id: UUID
+    let title: String
+    let detail: String?
+    let systemImage: String
+    let status: AgentToolCallStatus
+
+    init(call: AgentToolCall) {
+        id = call.id
+        status = call.status
+        systemImage = Self.systemImage(for: call)
+        title = Self.statusTitle(for: call)
+        detail = Self.detail(for: call)
+    }
+
+    private static func statusTitle(for call: AgentToolCall) -> String {
+        let operation = operationName(for: call.toolName)
+        switch call.status {
+        case .running:
+            return "正在\(operation)"
+        case .succeeded:
+            return "已\(operation)"
+        case .failed:
+            return "\(operation)失败"
+        case .denied:
+            return "已跳过\(operation)"
+        case .pendingApproval, .awaitingConfirm:
+            return "等待确认：\(operation)"
+        case .awaitingUserAnswer:
+            return "等待你的回复"
+        }
+    }
+
+    private static func operationName(for toolName: String) -> String {
+        switch toolName {
+        case "read_file": return "读取文件"
+        case "list_directory": return "浏览目录"
+        case "grep_files", "search_files": return "搜索代码"
+        case "git_status": return "查看 Git 状态"
+        case "run_command": return "运行命令"
+        case "terminal_snapshot": return "读取终端快照"
+        case "terminal_send_command": return "发送终端命令"
+        case "terminal_send_control": return "发送终端控制键"
+        case "edit_file": return "编辑文件"
+        case "create_file": return "创建文件"
+        case "apply_patch": return "应用补丁"
+        default: return AgentToolDisplay.name(for: toolName)
+        }
+    }
+
+    private static func systemImage(for call: AgentToolCall) -> String {
+        switch call.toolName {
+        case "read_file": return "book.pages"
+        case "list_directory": return "folder"
+        case "grep_files", "search_files": return "magnifyingglass"
+        case "edit_file", "create_file", "apply_patch": return "pencil"
+        default: return AgentToolKind.of(call).groupIcon
+        }
+    }
+
+    private static func detail(for call: AgentToolCall) -> String? {
+        switch call.toolName {
+        case "read_file", "list_directory", "edit_file", "create_file":
+            return fileName(call.arguments["path"]?.stringValue())
+        case "grep_files":
+            return compact(call.arguments["pattern"]?.stringValue())
+                ?? fileName(call.arguments["path"]?.stringValue())
+        case "search_files":
+            return compact(call.arguments["query"]?.stringValue())
+                ?? fileName(call.arguments["path"]?.stringValue())
+        case "run_command":
+            return fileName(call.arguments["cwd"]?.stringValue()).map { "\($0) 工作区" }
+        case "terminal_send_control":
+            return call.arguments["control"]?.stringValue().map(AgentToolDisplay.controlLabel(for:))
+        case "web_fetch":
+            guard let rawURL = call.arguments["url"]?.stringValue(),
+                  let host = URL(string: rawURL)?.host else { return nil }
+            return host
+        case "spawn_agent":
+            return compact(call.arguments["label"]?.stringValue())
+        default:
+            return nil
+        }
+    }
+
+    private static func fileName(_ path: String?) -> String? {
+        guard let path else { return nil }
+        let trimmed = path.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return nil }
+        let name = URL(fileURLWithPath: trimmed).lastPathComponent
+        return name.isEmpty ? compact(trimmed) : name
+    }
+
+    private static func compact(_ value: String?) -> String? {
+        guard let value else { return nil }
+        let normalized = AgentSecretStore.redactPlaceholders(in: value)
+            .replacingOccurrences(of: "\n", with: " ")
+            .replacingOccurrences(of: "\t", with: " ")
+            .replacingOccurrences(of: "\\s+", with: " ", options: .regularExpression)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !normalized.isEmpty else { return nil }
+        guard normalized.count > 90 else { return normalized }
+        return String(normalized.prefix(90)) + "…"
+    }
+}
+
+struct AgentLiveActivityTimelinePresentation {
+    static let maximumDetailedRows = 8
+
+    let hiddenOperationCount: Int
+    let visibleCalls: [AgentToolCall]
+
+    init(calls: [AgentToolCall], maximumDetailedRows: Int = Self.maximumDetailedRows) {
+        let boundedMaximum = max(1, maximumDetailedRows)
+        let recentIDs = Set(calls.suffix(boundedMaximum).map(\.id))
+        let interactiveIDs = Set(calls.lazy.filter { $0.status.isBlockingForUserDecision }.map(\.id))
+        let visibleIDs = recentIDs.union(interactiveIDs)
+        visibleCalls = calls.filter { visibleIDs.contains($0.id) }
+        hiddenOperationCount = calls.count - visibleCalls.count
+    }
+}
+
 /// Coarse category used purely for grouping. ask_user and patch
 /// proposals are intentionally outside the grouped families — they
 /// need explicit user interaction and must always render full-size.

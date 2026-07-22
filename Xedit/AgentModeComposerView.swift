@@ -1752,7 +1752,7 @@ struct AgentChatStatusBar: View {
                 }
             }
         }
-        .font(AgentDesign.captionFont)
+        .agentChatSupportingFont()
         .foregroundStyle(.secondary)
         .padding(.horizontal, 18)
         .frame(height: AgentDesign.statusBarHeight)

@@ -21,10 +21,22 @@ import SwiftUI
 
 // MARK: - Stats dashboard
 
+enum AgentModelUsageTableLayout {
+    static let horizontalInset: CGFloat = 8
+    static let columnSpacing: CGFloat = 8
+    static let tokensWidth: CGFloat = 120
+    static let cacheWidth: CGFloat = 56
+    static let costWidth: CGFloat = 72
+}
+
 struct AgentStatsDashboard: View {
     @EnvironmentObject var appState: AppState
-    @State private var selectedTab: DashboardTab = .overview
+    @State private var selectedTab: DashboardTab
     @State private var range: DashboardRange = .all
+
+    init(initialTab: DashboardTab = .overview) {
+        _selectedTab = State(initialValue: initialTab)
+    }
 
     enum DashboardTab: String, CaseIterable, Identifiable {
         case overview = "Overview"
@@ -108,7 +120,11 @@ struct AgentStatsDashboard: View {
                 ForEach(DashboardTab.allCases) { tab in
                     Button { selectedTab = tab } label: {
                         Text(tab.title)
-                            .font(.system(size: 12, weight: selectedTab == tab ? .semibold : .regular))
+                            .font(AgentDesign.chatSupportingFont(
+                                baseFontSize: appState.agentChatBaseFontSize,
+                                visualMinimum: 12,
+                                weight: selectedTab == tab ? .semibold : .regular
+                            ))
                             .padding(.horizontal, 10)
                             .padding(.vertical, 4)
                             .background(
@@ -128,7 +144,11 @@ struct AgentStatsDashboard: View {
                 ForEach(DashboardRange.allCases) { value in
                     Button { range = value } label: {
                         Text(value.title)
-                            .font(.system(size: 11, weight: range == value ? .semibold : .regular))
+                            .font(AgentDesign.chatSupportingFont(
+                                baseFontSize: appState.agentChatBaseFontSize,
+                                visualMinimum: 11,
+                                weight: range == value ? .semibold : .regular
+                            ))
                             .padding(.horizontal, 8)
                             .padding(.vertical, 3)
                             .foregroundStyle(range == value ? .primary : .secondary)
@@ -201,13 +221,13 @@ struct AgentStatsDashboard: View {
         return VStack(alignment: .leading, spacing: 9) {
             HStack {
                 Text(L10n.StatsDashboard.activityTitle)
-                    .font(.system(size: 12, weight: .semibold))
+                    .font(supportingFont(visualMinimum: 12, weight: .semibold))
                 Spacer(minLength: 0)
                 Text(L10n.StatsDashboard.activitySummary(
                     formatCompact(overview.messageCount),
                     stats.hasAnyRealUsage ? formatTokens(overview.totalTokens) : "≈\(formatTokens(overview.totalTokens))"
                 ))
-                    .font(.system(size: 10))
+                    .font(supportingFont(visualMinimum: 10))
                     .foregroundStyle(.secondary)
             }
 
@@ -259,7 +279,7 @@ struct AgentStatsDashboard: View {
         let stats = overview
         return VStack(alignment: .leading, spacing: 8) {
             Text(L10n.StatsDashboard.insightsTitle)
-                .font(.system(size: 12, weight: .semibold))
+                .font(supportingFont(visualMinimum: 12, weight: .semibold))
             DashboardInsightRow(
                 title: L10n.StatsDashboard.insightSessions,
                 value: formatCompact(stats.sessionCount)
@@ -288,10 +308,10 @@ struct AgentStatsDashboard: View {
     private var capabilitySection: some View {
         VStack(alignment: .leading, spacing: 8) {
             Text(L10n.StatsDashboard.capabilitiesTitle)
-                .font(.system(size: 12, weight: .semibold))
+                .font(supportingFont(visualMinimum: 12, weight: .semibold))
             if capabilityRows.isEmpty {
                 Text(L10n.StatsDashboard.capabilitiesEmpty)
-                    .font(.system(size: 11))
+                    .font(supportingFont(visualMinimum: 11))
                     .foregroundStyle(.secondary)
                     .frame(minHeight: 68, alignment: .leading)
             } else {
@@ -302,11 +322,11 @@ struct AgentStatsDashboard: View {
                             .foregroundStyle(appState.editorSettings.interfaceSkin.palette.accent)
                             .frame(width: 16)
                         Text(row.capability.title)
-                            .font(.system(size: 11))
+                            .font(supportingFont(visualMinimum: 11))
                             .lineLimit(1)
                         Spacer(minLength: 0)
                         Text(L10n.StatsDashboard.callCount(formatCompact(row.callCount)))
-                            .font(.system(size: 10))
+                            .font(supportingFont(visualMinimum: 10))
                             .foregroundStyle(.secondary)
                     }
                 }
@@ -319,7 +339,7 @@ struct AgentStatsDashboard: View {
         return Group {
             if rows.isEmpty {
                 Text(L10n.ModelUsage.empty)
-                    .font(.caption)
+                    .font(supportingFont())
                     .foregroundStyle(.secondary)
                     .frame(maxWidth: .infinity, minHeight: 112, alignment: .center)
             } else {
@@ -341,63 +361,66 @@ struct AgentStatsDashboard: View {
     }
 
     private var modelUsageHeader: some View {
-        HStack(spacing: 8) {
+        HStack(spacing: AgentModelUsageTableLayout.columnSpacing) {
             Text(L10n.ModelUsage.headerModel)
                 .frame(maxWidth: .infinity, alignment: .leading)
             Text(L10n.ModelUsage.headerTokens)
-                .frame(width: 120, alignment: .trailing)
+                .frame(width: AgentModelUsageTableLayout.tokensWidth, alignment: .trailing)
             Text(L10n.ModelUsage.headerCache)
-                .frame(width: 56, alignment: .trailing)
+                .frame(width: AgentModelUsageTableLayout.cacheWidth, alignment: .trailing)
             Text(L10n.ModelUsage.headerCost)
-                .frame(width: 72, alignment: .trailing)
+                .frame(width: AgentModelUsageTableLayout.costWidth, alignment: .trailing)
         }
-        .font(.system(size: 10, weight: .medium))
+        .font(supportingFont(visualMinimum: 10, weight: .medium))
         .foregroundStyle(.secondary)
+        // Rows use the same inset for their tinted card background. Keeping
+        // the header on that exact inner track aligns every column edge.
+        .padding(.horizontal, AgentModelUsageTableLayout.horizontalInset)
     }
 
     private func modelUsageRow(_ row: AgentModelUsageRow) -> some View {
-        HStack(alignment: .top, spacing: 8) {
+        HStack(alignment: .top, spacing: AgentModelUsageTableLayout.columnSpacing) {
             VStack(alignment: .leading, spacing: 3) {
                 HStack(spacing: 6) {
                     Text(row.providerName)
-                        .font(.system(size: 10, weight: .semibold))
+                        .font(supportingFont(visualMinimum: 10, weight: .semibold))
                         .foregroundStyle(.secondary)
                         .padding(.horizontal, 6)
                         .padding(.vertical, 2)
                         .background(Color.secondary.opacity(0.10))
                         .clipShape(RoundedRectangle(cornerRadius: 4))
                     Text(row.modelID)
-                        .font(.system(size: 12, weight: .semibold))
+                        .font(supportingFont(visualMinimum: 12, weight: .semibold))
                         .foregroundStyle(.primary)
                         .lineLimit(1)
                         .truncationMode(.middle)
                         .help(row.modelID)
                 }
                 Text(modelUsageSubtitle(row))
-                    .font(.system(size: 10))
+                    .font(supportingFont(visualMinimum: 10))
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
 
             Text("\(formatTokens(row.promptTokens)) / \(formatTokens(row.completionTokens))")
-                .font(.system(size: 11, weight: .medium, design: .monospaced))
+                .font(supportingFont(visualMinimum: 11, weight: .medium, design: .monospaced))
                 .foregroundStyle(.primary)
-                .frame(width: 120, alignment: .trailing)
+                .frame(width: AgentModelUsageTableLayout.tokensWidth, alignment: .trailing)
                 .help(L10n.ModelUsage.tokensHelp(formatTokens(row.promptTokens), formatTokens(row.completionTokens)))
 
             Text(formatPercent(row.cacheHitRate))
-                .font(.system(size: 11, weight: .medium, design: .monospaced))
+                .font(supportingFont(visualMinimum: 11, weight: .medium, design: .monospaced))
                 .foregroundStyle(row.cachedPromptTokens > 0 ? .primary : .secondary)
-                .frame(width: 56, alignment: .trailing)
+                .frame(width: AgentModelUsageTableLayout.cacheWidth, alignment: .trailing)
 
             Text(formatCost(row))
-                .font(.system(size: 11, weight: .semibold, design: .monospaced))
+                .font(supportingFont(visualMinimum: 11, weight: .semibold, design: .monospaced))
                 .foregroundStyle(row.estimatedCostUSD == nil ? .secondary : .primary)
-                .frame(width: 72, alignment: .trailing)
+                .frame(width: AgentModelUsageTableLayout.costWidth, alignment: .trailing)
         }
         .padding(.vertical, 6)
-        .padding(.horizontal, 8)
+        .padding(.horizontal, AgentModelUsageTableLayout.horizontalInset)
         .background(Color.secondary.opacity(0.055))
         .clipShape(RoundedRectangle(cornerRadius: 6))
     }
@@ -436,7 +459,7 @@ struct AgentStatsDashboard: View {
         return Group {
             if let text {
                 Text(text)
-                    .font(.caption2)
+                    .font(supportingFont())
                     .foregroundStyle(.secondary)
             }
         }
@@ -470,7 +493,7 @@ struct AgentStatsDashboard: View {
         return Group {
             if ratio > 0.05 {
                 Text(funFactString(ratio: ratio))
-                    .font(.caption2)
+                    .font(supportingFont())
                     .foregroundStyle(.secondary)
             } else {
                 Color.clear.frame(height: 0)
@@ -518,6 +541,19 @@ struct AgentStatsDashboard: View {
         let display = hour == 0 ? 12 : (hour > 12 ? hour - 12 : hour)
         return "\(display) \(suffix)"
     }
+
+    private func supportingFont(
+        visualMinimum: CGFloat = 0,
+        weight: Font.Weight = .regular,
+        design: Font.Design = .default
+    ) -> Font {
+        AgentDesign.chatSupportingFont(
+            baseFontSize: appState.agentChatBaseFontSize,
+            visualMinimum: visualMinimum,
+            weight: weight,
+            design: design
+        )
+    }
 }
 
 struct StatCell: View {
@@ -529,12 +565,19 @@ struct StatCell: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 2) {
             Text(title)
-                .font(.system(size: 10))
+                .font(AgentDesign.chatSupportingFont(
+                    baseFontSize: appState.agentChatBaseFontSize,
+                    visualMinimum: 10
+                ))
                 .foregroundStyle(.secondary)
                 .lineLimit(1)
                 .truncationMode(.tail)
             Text(value)
-                .font(.system(size: 16, weight: .semibold))
+                .font(AgentDesign.chatSupportingFont(
+                    baseFontSize: appState.agentChatBaseFontSize,
+                    visualMinimum: 16,
+                    weight: .semibold
+                ))
                 .foregroundStyle(.primary)
                 .lineLimit(1)
                 .truncationMode(.middle)
@@ -548,18 +591,26 @@ struct StatCell: View {
 }
 
 private struct DashboardMetric: View {
+    @EnvironmentObject var appState: AppState
     let title: String
     let value: String
 
     var body: some View {
         VStack(spacing: 3) {
             Text(value)
-                .font(.system(size: 15, weight: .semibold))
+                .font(AgentDesign.chatSupportingFont(
+                    baseFontSize: appState.agentChatBaseFontSize,
+                    visualMinimum: 15,
+                    weight: .semibold
+                ))
                 .foregroundStyle(.primary)
                 .lineLimit(1)
                 .truncationMode(.middle)
             Text(title)
-                .font(.system(size: 9))
+                .font(AgentDesign.chatSupportingFont(
+                    baseFontSize: appState.agentChatBaseFontSize,
+                    visualMinimum: 9
+                ))
                 .foregroundStyle(.secondary)
                 .lineLimit(1)
                 .truncationMode(.tail)
@@ -574,18 +625,26 @@ private struct DashboardMetric: View {
 }
 
 private struct DashboardInsightRow: View {
+    @EnvironmentObject var appState: AppState
     let title: String
     let value: String
 
     var body: some View {
         HStack(spacing: 8) {
             Text(title)
-                .font(.system(size: 11))
+                .font(AgentDesign.chatSupportingFont(
+                    baseFontSize: appState.agentChatBaseFontSize,
+                    visualMinimum: 11
+                ))
                 .foregroundStyle(.secondary)
                 .lineLimit(1)
             Spacer(minLength: 0)
             Text(value)
-                .font(.system(size: 11, weight: .medium))
+                .font(AgentDesign.chatSupportingFont(
+                    baseFontSize: appState.agentChatBaseFontSize,
+                    visualMinimum: 11,
+                    weight: .medium
+                ))
                 .foregroundStyle(.primary)
                 .lineLimit(1)
                 .truncationMode(.middle)
@@ -673,7 +732,7 @@ struct AgentRunningTasksRow: View {
             runningIcon
                 .frame(width: 14, height: 14)
             Text(label)
-                .font(AgentDesign.secondaryFont)
+                .agentChatSupportingFont()
                 .foregroundStyle(.secondary)
             Spacer(minLength: 0)
         }

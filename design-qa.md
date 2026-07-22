@@ -1,3 +1,119 @@
+# Design QA：Goal 回合交付小结
+
+## 验收范围
+
+- source visual truth：`/var/folders/np/rjc0y5w52x324x21pv6g33440000gp/T/codex-clipboard-db8cbb21-50dd-4472-8de0-10381fba0474.png`（773 × 578 px）。
+- implementation screenshot：`/private/tmp/Xedit-goal-round-summary-design-qa.png`（773 × 578 pt @2×，同视口缩放为 1× 比较）。
+- 同画布对比：`/private/tmp/willdeep-goal-round-summary-comparison-rc16.png`（左右各 773 × 578 px）。
+- state：浅色外观、14pt 聊天正文、一个已结束的 Goal 用户回合；原始回合包含两次中间阶段输出、一次终端工具调用、一份最终交付小结，以及 `progress` / `goal-check` 内部协议。
+
+## 修正记录
+
+1. Goal 运行中继续展示实时语义活动；当当前 Provider/工具循环结束后，再按最近一条用户输入划分回合并收束历史，不提前隐藏执行反馈。
+2. 已结束回合只保留最后一条实质性交付小结；先于小结生成的图片和文本附件作为真实产物继续保留。若 Provider 没有给出交付小结，则保留最后一条活动状态作为失败兜底，避免整个回合变成空白。
+3. `progress` / `goal-check` 块只从展示副本和复制内容移除，避免小结下方再渲染重复的进度卡；原始消息、工具调用和协议块不修改，审计、重试、恢复与模型上下文仍可读取。
+4. 回合顶部“已处理”时长、底部 Token/模型统计和复制内容继续从完整原始回合聚合；最终小结即使不是原始第一条 assistant 消息，也保持单一回合头尾层级。
+5. Goal 提示词契约明确要求最终 prose 以结果开头，只写已验证结果、重要变更、验证结论和真实阻塞/下一步，不复述命令、失败尝试、原始工具输出或逐步施工笔记。
+
+## Required Fidelity Surfaces
+
+- Fonts and typography：沿用生产聊天正文 14pt 下限；“已处理”与用量页脚使用现有次级层级，不新增过小字号。
+- Spacing and layout rhythm：参考图和实现均为顶部单一回合处理条、正文交付小结、底部轻量回合元数据；没有插入命令卡、尝试日志或第二张进度容器。
+- Colors and visual tokens：继续使用当前皮肤正文、次级文字、分隔线、代码底色和 accent token，没有新增硬编码产品颜色。
+- Image quality and asset fidelity：实现截图由真实生产 `AgentChatHistoryNSTextView` Retina 渲染生成；同画布比较统一缩放到 773 × 578 px，没有替代素材或模拟组件。
+- Copy and content：最终小结保留结果、本次推进和验证三类可审阅信息；内部协议与中间施工记录不进入可见正文或复制文本。
+
+## Findings
+
+同画布左侧为 Codex Goal 结束态参考，右侧为 WillDeep 生产 TextKit 实现。两者都以一条轻量“已处理”回合头开始，并将聊天正文集中在最终交付小结；WillDeep 保留既有 Token/重试页脚，但不再展示中间阶段、失败尝试、命令正文或重复“本轮进度”卡。未发现裁切、错位、过小字体、重复容器，或丢失最终小结的问题；没有未解决的 P0、P1 或 P2 差异。
+
+## 验证
+
+- 113 项四套定向测试通过，覆盖 Goal 收口、单条/多条回复协议隐藏与提示词交付契约；其中 72 项 `AgentChatHistoryRendererTests` 通过。
+- 生产截图和 773 × 578 同画布对比已打开检查；实现保留完整回合计量，原始消息数组未被修改。
+- 版本目标：`1.193.0-rc16`，Build 76。
+
+final result: passed
+
+---
+
+# Design QA：语义化 Agent 状态时间线
+
+## 验收范围
+
+- source visual truth：`/var/folders/np/rjc0y5w52x324x21pv6g33440000gp/T/codex-clipboard-447b9304-4350-452c-a692-20342343cf53.png`、`/var/folders/np/rjc0y5w52x324x21pv6g33440000gp/T/codex-clipboard-bbc6fddd-975f-48d0-b316-81312de63828.png`。
+- implementation screenshot：`/tmp/Xedit-activity-timeline-design-qa.png`。
+- 同画布对比：`/tmp/willdeep-activity-timeline-comparison-rc16.png`。
+- state：Rice Paper 浅色皮肤、14pt 聊天正文；三个已完成动作、一个运行中命令，以及一条当前验证阶段。
+
+## 修正记录
+
+1. 当前回合由“同类工具全量聚合 + 带框大卡片”改为轻量时间线：最近动作逐条显示语义图标、状态动词与安全上下文，较早动作收束为一行完成计数。
+2. 等待确认、危险确认与用户回答不会进入数量折叠，继续展示完整的交互卡；失败动作使用橙色语义反馈，运行中动作保留进度指示。
+3. Provider 输出的 `Planning / Inspecting / Searching / Editing / Verifying / Building / Running` 等阶段短句转换为本地化阶段标题；原始英文剩余文本和 reasoning 正文不再展示。
+4. 命令动作只显示工作区名称，不把命令正文带进紧凑状态行，避免 Token、密码或参数在默认折叠态意外暴露。
+
+## Required Fidelity Surfaces
+
+- Fonts and typography：状态标题和动作行均服从聊天正文字号下限，以字重和次级色区分层级。
+- Spacing and layout rhythm：动作行保持 7pt 垂直节奏、15pt 语义图标轨道，并与助手正文内容列对齐；不再出现包围整组动作的大边框。
+- Colors and visual tokens：运行中使用当前皮肤 accent，完成/跳过使用系统次级文字，失败使用系统橙色；未增加产品专属硬编码颜色。
+- Image quality and asset fidelity：全部语义图标来自 SF Symbols；快照由真实生产 SwiftUI 组件生成。
+- Copy and content：阶段标题进入英中 i18n 字典；工具动作保留具体文件名、搜索词或工作区名，命令正文保持折叠。
+
+## Findings
+
+同画布由左至右依次为 Codex 参考、WillDeep 旧状态和生产组件新实现。新实现恢复了参考图的语义图标轨道和逐条动作层级，同时比旧状态明确消除了裸 `Planning …` 英文；完成态退居次级色、运行态保持正文权重和微型进度，未发现裁切、错位、过小字体或新增大边框。没有未解决的 P0、P1 或 P2 问题。
+
+## 验证
+
+- 77 项定向测试通过：覆盖阶段短句归一、动作明细边界、审批保留、命令隐私、生产状态时间线快照及聊天历史渲染；补跑视觉快照套件同样通过。
+- Debug 编译通过；`Localizable.xcstrings` 通过 JSON 与 Xcode String Catalog 编译校验。
+- 版本目标：`1.193.0-rc16`，Build 76。
+
+final result: passed
+
+---
+
+# Design QA：聊天正文下限字号与模型用量表对齐
+
+## 验收范围
+
+- 字号参考图：`/var/folders/np/rjc0y5w52x324x21pv6g33440000gp/T/codex-clipboard-c1d6e84c-4f95-4c37-8045-395730fdc683.png`（1174 × 938 px）。
+- 表格参考图：`/var/folders/np/rjc0y5w52x324x21pv6g33440000gp/T/codex-clipboard-472d3924-a0b8-471b-94e8-27855ea59ca6.png`（607 × 334 px）。
+- 生产组件截图：`/tmp/Xedit-new-chat-typography-design-qa.png`（700 × 650 pt @2×）、`/tmp/Xedit-sidebar-design-qa.png`（228 × 606 pt @2×）、`/tmp/Xedit-command-group-design-qa/model-switch-command-group-implementation.png`（1126 × 220 pt @2×）、`/tmp/Xedit-model-usage-table-design-qa.png`（700 × 410 pt @2×）。
+- 同画布对比：`/tmp/willdeep-typography-comparison-rc16.png`、`/tmp/willdeep-model-table-comparison-rc16.png`。
+- 状态：Rice Paper 浅色皮肤、聊天正文 14pt、简体中文、已有历史会话与用量快照；实现截图用确定性的真实 SwiftUI/TextKit 生产组件夹具，参考图则来自用户的实时 App 状态，因此数据内容不同，但布局表面和字号状态一致。
+
+## 修正记录
+
+1. 新增统一的聊天辅助字号规则：统计卡标签、指标说明、能力计数、Composer 上下文、侧栏计划/目标进度、工具摘要、运行进度、灰色处理状态和消息页脚均以用户配置的聊天正文字号为下限。
+2. 扩展到新装空态说明、排队消息、长消息截断、历史折叠、运行任务、回合报告与学习事件；层级改由半粗字重、语义色与容器间距表达。
+3. 模型用量表抽出共享的列轨道常量；表头和正文统一使用 8pt 水平内边距、8pt 列间距，以及 120/56/72pt 的输入输出、缓存、费用列宽。
+4. 生产组件复渲染后，四列表头与数据的右边缘落在同一轨道；Provider/模型列的左边缘也与行内内容一致。
+
+## Required Fidelity Surfaces
+
+- Fonts and typography：所有用户可见辅助文字不小于 14pt 测试正文；14–20pt 用户设置由 Agent 根视图环境向下传递，灰色状态不再退回 9–12pt。
+- Spacing and layout rhythm：统计卡保持原圆角和分区节奏；模型表格仅统一列轨道，不改变滚动、行间距和卡片内纵向结构。
+- Colors and visual tokens：继续读取当前皮肤的 panel、control、hairline、accent 与语义前景色，没有新增硬编码产品颜色。
+- Image quality and asset fidelity：图标继续使用 SF Symbols；截图由真实 Retina SwiftUI/TextKit 渲染生成，没有替代素材。
+- Copy and content：沿用现有 i18n 字典；本次不新增用户可见文案。
+
+## Findings
+
+没有未解决的 P0、P1 或 P2 问题。字号对比确认原先最小的统计说明、Composer 标签、侧栏进度和灰色历史状态均达到正文下限；表格聚焦对比确认四列标题与正文共用同一组水平轨道。
+
+## 验证
+
+- `AgentSidebarListVisualMetricsTests` 通过，包含字号下限、共享表格列宽和三张生产 SwiftUI 快照。
+- `AgentChatHistoryRendererTests` 的生产 TextKit 快照确认工具摘要、模型切换和灰色处理状态使用正文下限。
+- 版本目标：`1.193.0-rc16`，Build 76。
+
+final result: passed
+
+---
+
 # Design QA：稳定思考文字与用户决策等待态
 
 ## 验收范围

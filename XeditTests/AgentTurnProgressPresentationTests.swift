@@ -67,6 +67,39 @@ struct AgentTurnProgressPresentationTests {
         #expect(extraction.presentation == nil)
     }
 
+    @Test("Goal 自检协议不会作为聊天正文显示")
+    func hidesGoalCheckProtocolWithOrWithoutProgress() {
+        let goalOnly = AgentTurnProgressPresentation.extract(
+            from: """
+            本轮验证已通过。
+
+            ```goal-check
+            1: done
+            ```
+            """,
+            plan: nil
+        )
+        #expect(goalOnly.visibleContent == "本轮验证已通过。")
+        #expect(goalOnly.presentation == nil)
+
+        let withProgress = AgentTurnProgressPresentation.extract(
+            from: """
+            已完成交付。
+
+            ```progress
+            1: done
+            ```
+
+            ```goal-check
+            1: done
+            ```
+            """,
+            plan: nil
+        )
+        #expect(withProgress.visibleContent == "已完成交付。")
+        #expect(withProgress.presentation?.items.map(\.status) == [.done])
+    }
+
     @Test("TextKit 历史渲染为可展开摘要而不是代码块")
     func historyRendererUsesProgressSurface() throws {
         let message = AgentMessage(

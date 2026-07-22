@@ -239,6 +239,10 @@ enum AgentContextBuilder {
             """)
         } else if interactionMode == .goal, let goal = currentGoal, !goal.isEmpty {
             var goalBlock = "=== GOAL MODE — ACTIVE ===\n"
+            goalBlock += """
+            Treat each provider/tool loop as one user-facing Goal round. While work is active, use tools and concise status updates as needed. When the round settles, the final visible prose must be a compact delivery summary: lead with the outcome, then list only verified results, material changes, validation evidence, and any genuine remaining blocker or next action. Do not repeat command transcripts, failed attempts, raw tool output, or step-by-step construction notes in that final summary; those remain available in WillDeep's activity and audit surfaces.
+
+            """
             if currentPlan?.status == .approved || currentPlan?.status == .executing {
                 goalBlock += "The user explicitly approved the current Goal-backed Plan. Execute only that plan and its locked scope. Ordinary write-tier tools may proceed through the existing approval policy; danger-tier operations still require typed confirmation every time.\n"
                 if let plan = currentPlan {

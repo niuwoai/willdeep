@@ -1,6 +1,6 @@
 # WillDeep Product Overview
 
-> Last updated: 2026-07-22 | Current version: v1.193.0-rc13
+> Last updated: 2026-07-22 | Current version: v1.193.0-rc16
 
 ## Positioning
 
@@ -11,6 +11,18 @@ Official product domain: [willdeep.com](https://willdeep.com).
 WillDeep is configured for non-App-Store distribution without App Sandbox so it can access local project files with fewer permission interruptions.
 
 ## 架构概览
+
+- **Goal 回合交付收口（1.193.0-rc16）** —— Goal 执行中的读取、搜索、编辑和命令继续以语义活动实时展示；同一用户回合结束后，聊天历史只保留最终交付小结与真实图片/文档产物，不再堆叠 Provider 阶段短句、中间尝试、命令正文或内部进度协议。处理时长、Token 与模型信息仍按完整回合聚合，原始消息和工具记录继续服务于审计、重试、任务面板及模型上下文。
+
+- **语义化回合活动时间线（1.193.0-rc16）** —— 当前回合不再把所有工具动作塞进一个带框汇总卡：最近操作按读取、搜索、编辑、命令等语义逐条显示，较早操作仅保留计数摘要，审批仍保持完整交互。Provider 输出的 `Planning / Inspecting / Verifying` 等原始阶段短句会转换成本地化阶段标题，不再把裸英文或整段 reasoning 混进聊天正文。
+
+- **聊天辅助信息字号与模型表格轨道（1.193.0-rc16）** —— 新聊天统计、侧边栏进度、Composer 上下文标签，以及聊天正文中的灰色工具/运行/附件/页脚提示均以用户配置的聊天正文字号为下限；信息层级通过字重、颜色和容器关系表达，不再依赖 9–12pt 小字。模型用量表的表头与正文共享 Provider/模型、输入/输出、缓存和费用四列轨道，避免标题与数据左右错位。
+
+- **侧边栏 ZMODEM 收尾恢复（1.193.0-rc15）** —— 本地 `rz` 子进程退出时会在同一串行队列排空最后一段协议输出，再结束桥接；退出边界之后到达的远端提示符会恢复交给终端显示，避免 `sz` 卡在收尾阶段或命令完成后没有 shell 提示符。
+
+- **停止回合与进程归属（1.193.0-rc14）** —— Composer 停止会保留已流式输出的正文与思考，以对话事件反馈停止结果；前台命令随本轮中断，后台 job、子代理和 workflow 记录精确回合归属，AI 清理裁判只可选择最新被停止回合的候选，旧回合启动的 dev server 与 watcher 不受影响。
+
+- **确认卡窄宽度适配（1.193.0-rc14）** —— 命令确认卡会依据聊天区真实可用宽度切换横向或纵向信息布局，长命令在卡片内部滚动；右侧终端等侧边栏打开时，卡片、元数据和底部操作按钮仍完整可见。
 
 - **钥匙串签名隔离与按需读取（1.193.0-rc11）** —— Provider API Key、Agent/MCP 凭据在 Debug 与 Release 构建间使用独立 Keychain service，正式版继续沿用既有命名空间；模型选择只读取当前 Provider，只有当前项不可用时才逐项寻找兜底，避免打开模型面板就扫描历史凭据并反复触发访问确认。
 

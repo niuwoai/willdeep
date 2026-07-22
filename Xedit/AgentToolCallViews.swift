@@ -161,6 +161,11 @@ nonisolated enum AgentConfirmationReviewMetrics {
     static let sectionSpacing: CGFloat = 14
     static let dividerThickness: CGFloat = 1
     static let horizontalMinimumWidth: CGFloat = 700
+    /// `ViewThatFits` receives the width after the notice's outer padding has
+    /// already been removed. Give the horizontal candidate a real minimum
+    /// intrinsic width so flexible Spacers cannot make it falsely claim that
+    /// it fits in a narrowed chat column.
+    static let horizontalContentMinimumWidth = horizontalMinimumWidth - (contentPadding * 2)
     static let commandViewportHeight: CGFloat = 72
     static let commandVisibleLineCount = 3
     static let actionButtonHeight: CGFloat = 28
@@ -380,14 +385,18 @@ struct AgentToolCallGroup: View {
                 HStack(spacing: 7) {
                     if !status.isEmpty {
                         Text(status)
-                            .font(.caption2)
+                            .font(AgentDesign.chatSupportingFont(
+                                baseFontSize: appState.agentChatBaseFontSize
+                            ))
                             .foregroundStyle(.secondary)
                             .lineLimit(1)
                             .fixedSize(horizontal: true, vertical: false)
                     }
                     if let previewSummary {
                         Text(previewSummary)
-                            .font(.caption2)
+                            .font(AgentDesign.chatSupportingFont(
+                                baseFontSize: appState.agentChatBaseFontSize
+                            ))
                             .foregroundStyle(.secondary)
                             .lineLimit(1)
                             .truncationMode(.middle)
@@ -492,6 +501,144 @@ struct AgentToolCallGroup: View {
     }
 }
 
+/// Live, phase-aware activity surface for the current assistant turn. The
+/// newest calls remain individually legible while older calls collapse into
+/// one quiet summary. Interactive approvals keep their full controls.
+struct AgentLiveActivityTimeline: View {
+    @EnvironmentObject var appState: AppState
+    let calls: [AgentToolCall]
+
+    var body: some View {
+        let presentation = AgentLiveActivityTimelinePresentation(calls: calls)
+        VStack(alignment: .leading, spacing: 7) {
+            if presentation.hiddenOperationCount > 0 {
+                AgentActivityTimelineSummaryRow(count: presentation.hiddenOperationCount)
+            }
+            ForEach(presentation.visibleCalls) { call in
+                if call.status.isBlockingForUserDecision {
+                    AgentToolCallCard(call: call)
+                } else {
+                    AgentToolActivityTimelineRow(
+                        presentation: AgentToolActivityRowPresentation(call: call),
+                        errorDetail: call.errorMessage
+                    )
+                }
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .accessibilityIdentifier("agent-live-activity-timeline")
+    }
+}
+
+private struct AgentActivityTimelineSummaryRow: View {
+    @EnvironmentObject var appState: AppState
+    let count: Int
+
+    var body: some View {
+        HStack(spacing: 8) {
+            Image(systemName: "ellipsis.circle")
+                .font(.system(size: 12, weight: .regular))
+                .frame(width: 15)
+            Text(L10n.AgentActivity.earlierOperations(count))
+                .font(AgentDesign.chatSupportingFont(
+                    baseFontSize: appState.agentChatBaseFontSize
+                ))
+                .lineLimit(1)
+            Spacer(minLength: 0)
+        }
+        .foregroundStyle(Color(nsColor: .tertiaryLabelColor))
+    }
+}
+
+private struct AgentToolActivityTimelineRow: View {
+    @EnvironmentObject var appState: AppState
+    let presentation: AgentToolActivityRowPresentation
+    let errorDetail: String?
+
+    var body: some View {
+        HStack(alignment: .firstTextBaseline, spacing: 8) {
+            Image(systemName: presentation.systemImage)
+                .font(.system(size: 12, weight: .regular))
+                .foregroundStyle(iconColor)
+                .frame(width: 15)
+            Text(presentation.title)
+                .font(AgentDesign.chatSupportingFont(
+                    baseFontSize: appState.agentChatBaseFontSize,
+                    weight: .medium
+                ))
+                .foregroundStyle(titleColor)
+                .lineLimit(1)
+                .fixedSize(horizontal: true, vertical: false)
+            if let detail = presentation.detail {
+                Text(detail)
+                    .font(AgentDesign.chatSupportingFont(
+                        baseFontSize: appState.agentChatBaseFontSize
+                    ))
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+            }
+            if presentation.status == .running {
+                ProgressView()
+                    .controlSize(.small)
+                    .scaleEffect(0.58)
+                    .frame(width: 13, height: 13)
+            }
+            Spacer(minLength: 0)
+        }
+        .frame(minHeight: 20)
+        .help(errorDetail ?? presentation.title)
+        .accessibilityElement(children: .combine)
+    }
+
+    private var iconColor: Color {
+        switch presentation.status {
+        case .running, .pendingApproval, .awaitingConfirm, .awaitingUserAnswer:
+            return appState.editorSettings.interfaceSkin.palette.accent
+        case .failed:
+            return .orange
+        case .succeeded, .denied:
+            return Color(nsColor: .secondaryLabelColor)
+        }
+    }
+
+    private var titleColor: Color {
+        switch presentation.status {
+        case .running:
+            return .primary
+        case .failed:
+            return .orange
+        case .pendingApproval, .awaitingConfirm, .awaitingUserAnswer:
+            return appState.editorSettings.interfaceSkin.palette.accent
+        case .succeeded, .denied:
+            return Color(nsColor: .secondaryLabelColor)
+        }
+    }
+}
+
+struct AgentActivityHeadlineView: View {
+    let presentation: AgentActivityHeadlinePresentation
+    let baseFontSize: CGFloat
+
+    var body: some View {
+        HStack(spacing: 8) {
+            Image(systemName: presentation.systemImage)
+                .font(.system(size: 12, weight: .regular))
+                .frame(width: 15)
+            Text(presentation.title)
+                .font(AgentDesign.chatSupportingFont(
+                    baseFontSize: baseFontSize,
+                    weight: .medium
+                ))
+                .lineLimit(1)
+            Spacer(minLength: 0)
+        }
+        .foregroundStyle(Color(nsColor: .secondaryLabelColor))
+        .frame(maxWidth: .infinity, minHeight: 20, alignment: .leading)
+        .accessibilityLabel(presentation.title)
+    }
+}
+
 struct AgentToolCallCard: View {
     @EnvironmentObject var appState: AppState
     let call: AgentToolCall
@@ -513,24 +660,36 @@ struct AgentToolCallCard: View {
                         .foregroundStyle(iconColor)
                         .frame(width: 14)
                     Text(AgentToolDisplay.name(for: call.toolName))
-                        .font(.system(size: 11, weight: .semibold))
+                        .font(AgentDesign.chatSupportingFont(
+                            baseFontSize: appState.agentChatBaseFontSize,
+                            visualMinimum: 11,
+                            weight: .semibold
+                        ))
                         .lineLimit(1)
                         .fixedSize(horizontal: true, vertical: false)
                         .help(call.toolName)
                     Text(argumentsSummary)
-                        .font(.caption2)
+                        .font(AgentDesign.chatSupportingFont(
+                            baseFontSize: appState.agentChatBaseFontSize
+                        ))
                         .foregroundStyle(.secondary)
                         .lineLimit(isInteractive ? 2 : 1)
                         .truncationMode(.middle)
                         .frame(maxWidth: .infinity, alignment: .leading)
                     Text(statusText)
-                        .font(.caption2)
+                        .font(AgentDesign.chatSupportingFont(
+                            baseFontSize: appState.agentChatBaseFontSize
+                        ))
                         .foregroundStyle(statusColor)
                         .lineLimit(1)
                         .fixedSize(horizontal: true, vertical: false)
                     if let label = approvalSourceLabel {
                         Text(label)
-                            .font(.system(size: 9, weight: .semibold))
+                            .font(AgentDesign.chatSupportingFont(
+                                baseFontSize: appState.agentChatBaseFontSize,
+                                visualMinimum: 9,
+                                weight: .semibold
+                            ))
                             .padding(.horizontal, 5)
                             .padding(.vertical, 1)
                             .background(Color.green.opacity(0.12))
@@ -559,7 +718,11 @@ struct AgentToolCallCard: View {
                         .font(.system(size: 9, weight: .semibold))
                         .foregroundStyle(.purple)
                     Text(badge)
-                        .font(.system(size: 10, weight: .medium))
+                        .font(AgentDesign.chatSupportingFont(
+                            baseFontSize: appState.agentChatBaseFontSize,
+                            visualMinimum: 10,
+                            weight: .medium
+                        ))
                         .foregroundStyle(.secondary)
                         .lineLimit(1)
                         .truncationMode(.middle)
@@ -820,11 +983,15 @@ struct AgentToolCallCard: View {
                         .lineSpacing(3)
                         .foregroundStyle(palette.primaryText)
                         .textSelection(.enabled)
-                        .fixedSize(horizontal: false, vertical: true)
+                        .fixedSize(horizontal: true, vertical: true)
                         .padding(12)
-                        .frame(maxWidth: .infinity, alignment: .leading)
                 }
-                .frame(height: AgentConfirmationReviewMetrics.commandViewportHeight)
+                .frame(
+                    minWidth: 0,
+                    maxWidth: .infinity,
+                    minHeight: AgentConfirmationReviewMetrics.commandViewportHeight,
+                    maxHeight: AgentConfirmationReviewMetrics.commandViewportHeight
+                )
                 .background(palette.controlFill.opacity(0.72))
                 .clipShape(
                     RoundedRectangle(
@@ -852,6 +1019,10 @@ struct AgentToolCallCard: View {
                 Spacer(minLength: 4)
                 authorizationExplanationButton(descriptor)
             }
+            .frame(
+                minWidth: AgentConfirmationReviewMetrics.horizontalContentMinimumWidth,
+                alignment: .leading
+            )
             VStack(alignment: .leading, spacing: 10) {
                 authorizationMetadataRows(descriptor.metadata)
                 authorizationExplanationButton(descriptor)
@@ -962,6 +1133,10 @@ struct AgentToolCallCard: View {
                 Spacer(minLength: 16)
                 authorizationActions(descriptor)
             }
+            .frame(
+                minWidth: AgentConfirmationReviewMetrics.horizontalContentMinimumWidth,
+                alignment: .leading
+            )
             VStack(alignment: .leading, spacing: 16) {
                 authorizationDecisionCopy(descriptor)
                 authorizationActions(descriptor)

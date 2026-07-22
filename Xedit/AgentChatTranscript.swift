@@ -373,28 +373,18 @@ struct AgentChatTranscript: View {
                         // the final assistant result rather than a log
                         // dump of the execution path.
                         if let activeToolPresentation,
-                           let messageID = activeToolPresentation.anchorMessageID {
-                            let segments = AgentToolCallGrouping.livePresentationSegments(
-                                activeToolPresentation.calls
-                            )
-                            if !segments.isEmpty {
-                                VStack(alignment: .leading, spacing: 8) {
-                                    ForEach(segments) { segment in
-                                        AgentToolCallGroup(calls: segment.calls)
-                                    }
-                                }
+                           let messageID = activeToolPresentation.anchorMessageID,
+                           !activeToolPresentation.calls.isEmpty {
+                                AgentLiveActivityTimeline(calls: activeToolPresentation.calls)
                                 .id(toolGroupScrollID(for: messageID))
-                                // Keep detailed working/error cards visually
-                                // separate from the compact inline summary.
-                                .padding(.top, 28)
+                                // Keep the current activity close enough to
+                                // the prose that it reads as one chronological
+                                // turn, without merging into the paragraph.
+                                .padding(.top, 10)
                                 .padding(.bottom, 6)
-                                // Tool activity belongs to the assistant turn.
-                                // Align its card edge with the assistant body
-                                // instead of the transcript viewport edge.
                                 .padding(.leading, AgentChatHistoryLayoutMetrics.assistantContentHeadIndent)
                                 .padding(.trailing, AgentChatHistoryLayoutMetrics.assistantContentTailInset)
                                 .frame(maxWidth: AgentDesign.chatMaxContentWidth, alignment: .leading)
-                            }
                         }
                     }
 
@@ -673,7 +663,7 @@ struct AgentChatTranscript: View {
     }
 
     private var visibleMessages: [AgentMessage] {
-        appState.agentMessages.compactMap { message in
+        let visible = appState.agentMessages.compactMap { message in
             // `.system` is reserved for host-injected notices (e.g.
             // background-task completion); the user reads those via the
             // right-side jobs drawer, not the transcript.
@@ -692,6 +682,11 @@ struct AgentChatTranscript: View {
             }
             return resultPresentationMessage(message)
         }
+        guard appState.agentInteractionMode == .goal,
+              !appState.isAgentResponding else {
+            return visible
+        }
+        return AgentGoalTranscriptPresentation.settledMessages(from: visible)
     }
 
     private func scrollToBottom(using proxy: ScrollViewProxy) {
@@ -879,7 +874,7 @@ struct AgentChatTranscript: View {
                     .font(.system(size: 10, weight: .medium))
                     .foregroundStyle(.secondary)
                 Text(L10n.Transcript.messageTruncatedText(String(AgentChatTranscript.messageContentRenderCap), String(omittedLength)))
-                    .font(AgentDesign.secondaryFont)
+                    .agentChatSupportingFont()
                     .foregroundStyle(.secondary)
                 Spacer(minLength: 0)
                 Image(systemName: "arrow.up.right.square")
@@ -919,11 +914,11 @@ struct AgentChatTranscript: View {
                         .font(.system(size: 11, weight: .medium))
                         .foregroundStyle(.secondary)
                     Text(L10n.Transcript.olderHistoryText(String(omittedCount)))
-                        .font(AgentDesign.secondaryFont)
+                        .agentChatSupportingFont()
                         .foregroundStyle(.secondary)
                     Spacer(minLength: 0)
                     Text(L10n.Transcript.olderHistoryPreviewLimit(String(Self.olderHistoryPreviewCharacterCap)))
-                        .font(.system(size: 10))
+                        .agentChatSupportingFont()
                         .foregroundStyle(.tertiary)
                     Image(systemName: isOlderHistoryPreviewExpanded ? "chevron.up" : "chevron.down")
                         .font(.system(size: 11, weight: .medium))

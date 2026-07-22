@@ -1010,7 +1010,8 @@ extension AgentChatHistoryNSTextView: NSTextViewDelegate {
         let replacement = AgentChatHistoryFooterChrome.copyButton(
             copied: copied,
             message: message,
-            paragraphStyle: paragraphStyle
+            paragraphStyle: paragraphStyle,
+            baseFontSize: currentBaseFontSize
         )
         textStorage.beginEditing()
         textStorage.replaceCharacters(in: range, with: replacement)

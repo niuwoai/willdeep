@@ -410,6 +410,7 @@ struct AgentMessageFooter: View {
     /// edge as the bubble.
     let alignment: HorizontalAlignment
     var showsUserTimestamp = false
+    var baseFontSize: CGFloat = AgentSettingsStore.chatBaseFontSizeDefault
 
     @State private var didJustCopy = false
 
@@ -419,7 +420,7 @@ struct AgentMessageFooter: View {
 
             if message.role == .user && showsUserTimestamp {
                 Text(formatTimestamp(message.createdAt))
-                    .font(.system(size: 11))
+                    .font(supportingFont(weight: .regular))
                     .foregroundStyle(.secondary)
             }
 
@@ -458,7 +459,15 @@ struct AgentMessageFooter: View {
     }
 
     private var footerTextFont: Font {
-        .system(size: 11, weight: .medium)
+        supportingFont(weight: .medium)
+    }
+
+    private func supportingFont(weight: Font.Weight) -> Font {
+        AgentDesign.chatSupportingFont(
+            baseFontSize: baseFontSize,
+            visualMinimum: 11,
+            weight: weight
+        )
     }
 
     private func footerMetric(icon: String, text: String) -> some View {
@@ -584,12 +593,15 @@ private struct QueuedMessageRow: View {
                             .font(.system(size: 10))
                             .foregroundStyle(.orange)
                         Text(L10n.QueuedMessage.label)
-                            .font(AgentDesign.captionFont)
+                            .font(AgentDesign.chatSupportingFont(
+                                baseFontSize: baseFontSize,
+                                weight: .semibold
+                            ))
                             .foregroundStyle(.orange)
                             .textCase(.uppercase)
                     }
                     Text(previewText)
-                        .font(.system(size: max(11, min(baseFontSize, 13))))
+                        .font(AgentDesign.chatSupportingFont(baseFontSize: baseFontSize))
                         .foregroundStyle(.secondary)
                         .lineLimit(1)
                         .truncationMode(.tail)
@@ -690,7 +702,7 @@ struct AgentChatEmptyState: View {
                     .frame(maxWidth: 560)
             } else {
                 Text(subtitle)
-                    .font(AgentDesign.secondaryFont)
+                    .agentChatSupportingFont()
                     .foregroundStyle(.secondary)
                     .multilineTextAlignment(.center)
                     .frame(maxWidth: 360)

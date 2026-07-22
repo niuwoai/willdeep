@@ -112,6 +112,17 @@ final class AgentJobRegistry: ObservableObject {
     /// each other's notifications.
     private var pendingCompletionEvents: [UUID: [UUID]] = [:]
 
+    /// Runtime id answers "which conversation?"; this side table answers the
+    /// narrower Stop question: "which exact turn created it?". Keeping the
+    /// token host-only avoids changing the public/persisted job snapshot.
+    private var originatingTurnIDs: [UUID: UUID] = [:]
+
+    /// Jobs killed as part of a user Stop already receive a local transcript
+    /// acknowledgement. Suppress their normal completion wake-up so the app
+    /// does not immediately start another model turn just to announce the
+    /// same kill a second time.
+    private var suppressedCompletionJobIDs: Set<UUID> = []
+
     /// Optional host hook for UI paths that need to surface a finished
     /// background job without waiting for the next model turn.
     var onJobFinished: ((AgentBackgroundJob) -> Void)?
@@ -131,6 +142,7 @@ final class AgentJobRegistry: ObservableObject {
         command: String,
         workingDirectory: URL?,
         runtimeID: UUID,
+        turnID: UUID? = nil,
         timeoutSeconds: Double?,
         sandboxMode: AgentSandboxMode = .readOnly,
         runtimeDisplayName: String? = nil,
@@ -149,6 +161,9 @@ final class AgentJobRegistry: ObservableObject {
         let id = UUID()
         let shortID = String(id.uuidString.prefix(6)).lowercased()
         let workingDirectoryPath = workingDirectory?.path
+        if let turnID {
+            originatingTurnIDs[id] = turnID
+        }
 
         let process = Process()
         let launch = AgentSandboxPolicy.shellLaunch(
@@ -241,12 +256,7 @@ final class AgentJobRegistry: ObservableObject {
                 guard let processBox else { return }
                 if processBox.process.isRunning {
                     processBox.markTimedOut()
-                    processBox.process.terminate()
-                    Self.lifecycleQueue.asyncAfter(deadline: .now() + 2) {
-                        if processBox.process.isRunning {
-                            Darwin.kill(processBox.process.processIdentifier, SIGKILL)
-                        }
-                    }
+                    AgentProcessSupport.terminateProcessTree(processBox.process)
                 }
             }
             Self.lifecycleQueue.asyncAfter(
@@ -303,6 +313,16 @@ final class AgentJobRegistry: ObservableObject {
         jobs.filter { $0.runtimeID == runtimeID && $0.isAlive }
     }
 
+    /// Alive shell jobs created by one exact Agent turn. Older jobs in the
+    /// same conversation — especially dev servers and watchers — are excluded.
+    func aliveJobs(forRuntime runtimeID: UUID, originatingTurnID turnID: UUID) -> [AgentBackgroundJob] {
+        jobs.filter {
+            $0.runtimeID == runtimeID
+                && $0.isAlive
+                && originatingTurnIDs[$0.id] == turnID
+        }
+    }
+
     func job(id: UUID) -> AgentBackgroundJob? {
         jobs.first(where: { $0.id == id })
     }
@@ -355,10 +375,18 @@ final class AgentJobRegistry: ObservableObject {
     func kill(id: UUID) -> Bool {
         guard let proc = processes[id], proc.process.isRunning else { return false }
         proc.markExplicitKill()
-        proc.process.terminate()
-        Self.lifecycleQueue.asyncAfter(deadline: .now() + 2) { [weak proc] in
-            guard let proc, proc.process.isRunning else { return }
-            Darwin.kill(proc.process.processIdentifier, SIGKILL)
+        AgentProcessSupport.terminateProcessTree(proc.process)
+        return true
+    }
+
+    /// Stop-cleanup variant: same TERM→KILL lifecycle, but without creating a
+    /// background completion that wakes the just-stopped conversation.
+    @discardableResult
+    func killForStoppedTurn(id: UUID) -> Bool {
+        suppressedCompletionJobIDs.insert(id)
+        guard kill(id: id) else {
+            suppressedCompletionJobIDs.remove(id)
+            return false
         }
         return true
     }
@@ -426,6 +454,8 @@ final class AgentJobRegistry: ObservableObject {
         for entry in removable.prefix(drop) {
             jobs.removeAll(where: { $0.id == entry.element.id })
             processes.removeValue(forKey: entry.element.id)
+            originatingTurnIDs.removeValue(forKey: entry.element.id)
+            suppressedCompletionJobIDs.remove(entry.element.id)
         }
     }
 
@@ -451,10 +481,12 @@ final class AgentJobRegistry: ObservableObject {
         updated.outputByteCount = processes[id]?.collector.byteCount ?? 0
         jobs[index] = updated
 
-        pendingCompletionEvents[updated.runtimeID, default: []].append(id)
-
-        AgentToolApprovalNotifier.notifyJobFinished(job: updated)
-        onJobFinished?(updated)
+        let suppressCompletion = suppressedCompletionJobIDs.remove(id) != nil
+        if !suppressCompletion {
+            pendingCompletionEvents[updated.runtimeID, default: []].append(id)
+            AgentToolApprovalNotifier.notifyJobFinished(job: updated)
+            onJobFinished?(updated)
+        }
     }
 }
 

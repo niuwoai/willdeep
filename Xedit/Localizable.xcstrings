@@ -2548,6 +2548,70 @@
         }
       }
     },
+    "agent-activity.earlier-operations" : {
+      "comment" : "compact summary shown before the most recent detailed tool activity rows",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "%lld earlier operations completed" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "此前已完成 %lld 项操作" } }
+      }
+    },
+    "agent-activity.stage.analyzing" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Analyzing the request" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "正在分析问题" } }
+      }
+    },
+    "agent-activity.stage.building" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Building the changes" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "正在构建修改" } }
+      }
+    },
+    "agent-activity.stage.editing" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Preparing the implementation" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "正在整理实现方案" } }
+      }
+    },
+    "agent-activity.stage.inspecting" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Inspecting the implementation" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "正在检查相关实现" } }
+      }
+    },
+    "agent-activity.stage.planning" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Planning the next step" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "正在规划下一步" } }
+      }
+    },
+    "agent-activity.stage.running" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Running the next step" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "正在执行下一步" } }
+      }
+    },
+    "agent-activity.stage.searching" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Searching relevant code" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "正在查找相关代码" } }
+      }
+    },
+    "agent-activity.stage.verifying" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Verifying the changes" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "正在验证修改" } }
+      }
+    },
     "agent-panel.session-save-failed" : {
       "comment" : "error card body when writing the session JSON to disk fails",
       "extractionState" : "manual",
@@ -9245,6 +9309,11 @@
         }
       }
     },
+    "composer.stop.stopped" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Stopped generating." } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "已停止继续生成。" } } } },
+    "composer.stop.checking-processes" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Stopped generating. Checking %lld process(es) started by this turn…" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "已停止继续生成，正在检查本轮启动的 %lld 个进程…" } } } },
+    "composer.stop.cleaned-up" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Stopped generating and stopped %lld related task(s) or process(es) from this turn." } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "已停止继续生成，本轮的 %lld 个相关任务或进程也已停止。" } } } },
+    "composer.stop.processes-kept" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Stopped generating. Current-turn processes were left running because they still need to continue." } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "已停止继续生成；本轮进程仍需继续，未执行终止。" } } } },
+    "composer.stop.processes-finished" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Stopped generating. Related current-turn processes had already finished." } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "已停止继续生成；本轮相关进程已自行结束。" } } } },
     "composer.workspace.choose-folder" : {
       "comment" : "Composer workspace picker menu item",
       "extractionState" : "manual",
