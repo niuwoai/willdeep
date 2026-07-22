@@ -6,8 +6,8 @@
 //  AgentModeView.swift in rc42.
 //
 //  The transcript owns three orthogonal subsystems:
-//   - History collapsing: the bottom `renderedMessageCap` messages are
-//     rendered live; anything older falls behind a disclosure card that
+//   - History collapsing: a large recent window of messages is rendered
+//     inline; only very long sessions fall behind a disclosure card that
 //     opens the full transcript in a standalone reader window.
 //   - Per-message truncation: messages longer than `messageContentRenderCap`
 //     characters get a "view full content" affordance instead of inlining
@@ -771,11 +771,11 @@ struct AgentChatTranscript: View {
 
     /// How many messages the in-pane transcript renders at once.
     /// Anything older falls behind the "older history" disclosure
-    /// and is reachable via the standalone reader window. History is
-    /// baked into a single incrementally-laid-out NSTextView (not a
-    /// LazyVStack), so a larger window doesn't reintroduce the long-list
-    /// freeze; per-message size is still capped by messageContentRenderCap.
-    private static let renderedMessageCap = 60
+    /// and is reachable via the standalone reader window. Since the
+    /// settled history is baked into a single incrementally-laid-out
+    /// NSTextView (not a SwiftUI bubble per message), keep a Codex-like
+    /// amount of recent conversation visible before archiving kicks in.
+    static let renderedMessageCap = 240
 
     /// Per-message content size cap (in characters). Any message with
     /// content longer than this gets a start/end preview in the chat
@@ -792,7 +792,7 @@ struct AgentChatTranscript: View {
     /// Character cap for the inline older-history text preview. Full
     /// history remains available through the standalone reader, but the
     /// default expansion should stay cheap for very long sessions.
-    static let olderHistoryPreviewCharacterCap = 4_000
+    static let olderHistoryPreviewCharacterCap = 12_000
 
     /// Returns the message unchanged when its content fits, or a preview
     /// copy when it doesn't. Long previews preserve both the beginning

@@ -33,6 +33,12 @@ struct AgentChatHistoryRendererTests {
     }
 
     @Test
+    func chatPaneRetainsCodexSizedRecentHistoryBeforeArchiving() {
+        #expect(AgentChatTranscript.renderedMessageCap == 240)
+        #expect(AgentChatTranscript.olderHistoryPreviewCharacterCap == 12_000)
+    }
+
+    @Test
     func transcriptLayoutWidthUsesStableEightPointBuckets() {
         #expect(AgentChatHistoryLayoutMetrics.layoutWidthBucket == 8)
         #expect(AgentChatHistoryLayoutMetrics.resolvedLayoutWidth(900) == 896)

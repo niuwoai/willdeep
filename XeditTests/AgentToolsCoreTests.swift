@@ -1023,6 +1023,58 @@ struct AgentToolsCoreTests {
     }
 
     @Test
+    func alwaysAllowSuggestionOffersReusableShellCategories() {
+        let kubernetesRollout = AgentToolAuthorization.suggestedPersistentSignature(
+            toolName: "terminal_send_command",
+            arguments: [
+                "command": .string("kubectl -n tokenhub set image deployment/tokenhub tokenhub=harbor.example/tokenhub:1.2.3 && kubectl -n tokenhub rollout status deployment/tokenhub")
+            ]
+        )
+        #expect(kubernetesRollout == "shell_category:kubernetes")
+
+        let curlGet = AgentToolAuthorization.suggestedPersistentSignature(
+            toolName: "run_command",
+            arguments: ["command": .string("curl -L https://example.com/status")]
+        )
+        #expect(curlGet == "shell_category:http_get")
+
+        let readOnlyInspection = AgentToolAuthorization.suggestedPersistentSignature(
+            toolName: "terminal_send_command",
+            arguments: ["command": .string("cat README.md && echo done && ps aux")]
+        )
+        #expect(readOnlyInspection == "shell_category:read_only_inspection")
+
+        let curlPost = AgentToolAuthorization.suggestedPersistentSignature(
+            toolName: "run_command",
+            arguments: ["command": .string("curl -X POST https://example.com/deploy")]
+        )
+        #expect(curlPost == nil)
+    }
+
+    @Test
+    func alwaysAllowMatchingAcceptsSavedShellCategoriesAndLegacyExactSignatures() {
+        let kubernetesSignatures = AgentToolAuthorization.matchingSignatures(
+            toolName: "terminal_send_command",
+            arguments: ["command": .string("kubectl get pods -n tokenhub")]
+        )
+        #expect(kubernetesSignatures.contains("shell_category:kubernetes"))
+        #expect(kubernetesSignatures.contains("terminal_command:kubectl get pods -n tokenhub"))
+
+        let exactSignatures = AgentToolAuthorization.matchingSignatures(
+            toolName: "terminal_send_command",
+            arguments: ["command": .string("systemctl status nginx --no-pager")]
+        )
+        #expect(exactSignatures == ["terminal_command:systemctl status nginx --no-pager"])
+    }
+
+    @Test
+    func artifactFileActionsIdentifyTextPreviewCandidatesByExtension() {
+        #expect(AgentArtifactFileActions.isTextFile(URL(fileURLWithPath: "/tmp/report.md")))
+        #expect(AgentArtifactFileActions.isSidePanelPreviewCandidate(URL(fileURLWithPath: "/tmp/main.swift")))
+        #expect(!AgentArtifactFileActions.isTextFile(URL(fileURLWithPath: "/tmp/frame.png")))
+    }
+
+    @Test
     func existingAlwaysAllowSignatureContractRemainsStableForComplexCommands() {
         let command = "go test ./... -run TestApprovalPolicy -count=1 -timeout=8m"
         #expect(AgentToolAuthorization.signature(

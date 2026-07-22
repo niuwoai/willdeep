@@ -245,6 +245,38 @@ enum AgentCommandAuthorization {
         return tokenAllowsBareSignature(executable) ? executable : nil
     }
 
+    nonisolated static func reusableCategorySignature(for command: String) -> String? {
+        let segments = shellSegments(from: command)
+        guard !segments.isEmpty else { return nil }
+
+        let tokenizedSegments = segments.compactMap { segment -> [String]? in
+            guard let rawTokens = shellTokens(from: segment) else { return nil }
+            return commandTokensSkippingEnvironmentAssignments(rawTokens)
+        }
+        guard tokenizedSegments.count == segments.count,
+              !tokenizedSegments.contains(where: \.isEmpty) else {
+            return nil
+        }
+
+        if tokenizedSegments.allSatisfy(isKubernetesOrHarmlessCompanionSegment),
+           tokenizedSegments.contains(where: isKubernetesSegment) {
+            return "shell_category:kubernetes"
+        }
+
+        if tokenizedSegments.count == 1,
+           isCurlGetSegment(tokenizedSegments[0]),
+           !containsShellRedirectionOrPipe(command) {
+            return "shell_category:http_get"
+        }
+
+        if tokenizedSegments.allSatisfy(isReadOnlyInspectionSegment),
+           !containsShellRedirectionOrPipe(command) {
+            return "shell_category:read_only_inspection"
+        }
+
+        return nil
+    }
+
     nonisolated static func displayName(for command: String) -> String {
         signature(for: command) ?? command.trimmingCharacters(in: .whitespacesAndNewlines)
     }
@@ -301,6 +333,79 @@ enum AgentCommandAuthorization {
 
     nonisolated private static func tokenAllowsBareSignature(_ token: String) -> Bool {
         ["ls", "pwd"].contains(token)
+    }
+
+    nonisolated private static func shellSegments(from command: String) -> [String] {
+        command
+            .replacingOccurrences(of: "&&", with: "\n")
+            .replacingOccurrences(of: "||", with: "\n")
+            .split { $0 == "\n" || $0 == ";" }
+            .map { String($0).trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+    }
+
+    nonisolated private static func executableName(from tokens: [String]) -> String? {
+        guard let head = tokens.first else { return nil }
+        return URL(fileURLWithPath: head).lastPathComponent.lowercased()
+    }
+
+    nonisolated private static func isKubernetesSegment(_ tokens: [String]) -> Bool {
+        guard let executable = executableName(from: tokens) else { return false }
+        return ["kubectl", "k", "oc"].contains(executable)
+    }
+
+    nonisolated private static func isKubernetesOrHarmlessCompanionSegment(_ tokens: [String]) -> Bool {
+        if isKubernetesSegment(tokens) { return true }
+        guard let executable = executableName(from: tokens) else { return false }
+        return ["echo", "printf"].contains(executable)
+    }
+
+    nonisolated private static func isReadOnlyInspectionSegment(_ tokens: [String]) -> Bool {
+        guard let executable = executableName(from: tokens) else { return false }
+        return [
+            "cat", "command", "echo", "head", "less", "ls", "more", "nl",
+            "printf", "ps", "pwd", "tail", "type", "wc", "whereis", "which"
+        ].contains(executable)
+    }
+
+    nonisolated private static func isCurlGetSegment(_ tokens: [String]) -> Bool {
+        guard executableName(from: tokens) == "curl" else { return false }
+        var explicitMethod: String?
+        var hasRequestBody = false
+        var index = 1
+        let bodyFlags: Set<String> = [
+            "-d", "--data", "--data-raw", "--data-binary", "--data-ascii",
+            "--data-urlencode", "-F", "--form", "--form-string", "--json",
+            "-T", "--upload-file"
+        ]
+        while index < tokens.count {
+            let token = tokens[index]
+            let lower = token.lowercased()
+            if lower == "-x" || lower == "--request" {
+                if index + 1 < tokens.count {
+                    explicitMethod = tokens[index + 1].trimmingCharacters(in: .whitespacesAndNewlines)
+                }
+                index += 2
+                continue
+            }
+            if lower.hasPrefix("-x"), lower.count > 2 {
+                explicitMethod = String(token.dropFirst(2))
+            } else if lower.hasPrefix("--request=") {
+                explicitMethod = String(token.dropFirst("--request=".count))
+            } else if lower == "-i" || lower == "--head" {
+                explicitMethod = "HEAD"
+            } else if bodyFlags.contains(lower) || bodyFlags.contains(where: { lower.hasPrefix($0 + "=") }) {
+                hasRequestBody = true
+            }
+            index += 1
+        }
+        guard !hasRequestBody else { return false }
+        let method = explicitMethod?.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
+        return method == nil || method == "GET" || method == "HEAD"
+    }
+
+    nonisolated private static func containsShellRedirectionOrPipe(_ command: String) -> Bool {
+        command.contains("|") || command.contains(">") || command.contains("<")
     }
 
     /// Trim once and check non-empty, used by MCP signature derivation.
@@ -446,14 +551,12 @@ enum AgentToolAuthorization {
         toolName: String,
         arguments: [String: AgentJSONValue]
     ) -> String? {
-        guard let signature = signature(toolName: toolName, arguments: arguments) else {
-            return nil
-        }
+        let baseSignature = signature(toolName: toolName, arguments: arguments)
 
         switch toolName {
         case "run_command", "terminal_send_command":
             guard let command = arguments["command"]?.stringValue(),
-                  commandLooksReusable(command) else {
+                  !command.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
                 return nil
             }
             if toolName == "terminal_send_command",
@@ -463,7 +566,14 @@ enum AgentToolAuthorization {
                 // reusable-looking `rz` or `sz`.
                 return nil
             }
+            if let category = AgentCommandAuthorization.reusableCategorySignature(for: command) {
+                return category
+            }
+            guard let signature = baseSignature else { return nil }
+            guard commandLooksReusable(command) else { return nil }
+            return signature
         case "lark_cli":
+            guard let signature = baseSignature else { return nil }
             let cliArguments = AgentLarkCLI.normalizedArguments(
                 arguments["arguments"]?.stringArrayValue() ?? []
             )
@@ -471,11 +581,10 @@ enum AgentToolAuthorization {
                   cliArguments.allSatisfy({ $0.count <= 80 }) else {
                 return nil
             }
+            return signature
         default:
-            break
+            return baseSignature
         }
-
-        return signature
     }
 
     /// Cheap, deterministic first-pass for the approval UI. The safety judge
@@ -583,6 +692,20 @@ enum AgentToolAuthorization {
         default:
             return nil
         }
+    }
+
+    static func matchingSignatures(toolName: String, arguments: [String: AgentJSONValue]) -> [String] {
+        var result: [String] = []
+        if ["run_command", "terminal_send_command"].contains(toolName),
+           let command = arguments["command"]?.stringValue(),
+           let category = AgentCommandAuthorization.reusableCategorySignature(for: command) {
+            result.append(category)
+        }
+        if let signature = signature(toolName: toolName, arguments: arguments) {
+            result.append(signature)
+        }
+        var seen: Set<String> = []
+        return result.filter { seen.insert($0).inserted }
     }
 
     static func signature(for call: AgentToolCall) -> String? {

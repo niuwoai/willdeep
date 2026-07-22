@@ -2218,7 +2218,7 @@ struct AgentToolCallCard: View {
 
     private var borderColor: Color {
         if isAuthorizationNotice {
-            return appState.editorSettings.interfaceSkin.palette.hairline
+            return Color.clear
         }
         switch call.status {
         case .pendingApproval, .awaitingConfirm: return appState.editorSettings.interfaceSkin.palette.hairline

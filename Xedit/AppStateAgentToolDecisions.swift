@@ -119,10 +119,12 @@ extension AppState {
         risk: AgentToolRisk
     ) -> Bool {
         guard risk == .write,
-              let signature = AgentToolAuthorization.signature(toolName: toolName, arguments: arguments) else {
+              !agentAlwaysAllowedCommands.isEmpty else {
             return false
         }
-        return agentAlwaysAllowedCommands.contains { $0.commandSignature == signature }
+        let signatures = Set(AgentToolAuthorization.matchingSignatures(toolName: toolName, arguments: arguments))
+        guard !signatures.isEmpty else { return false }
+        return agentAlwaysAllowedCommands.contains { signatures.contains($0.commandSignature) }
     }
 
     /// Resolve auto-approval for a write-tier tool call. Returns the

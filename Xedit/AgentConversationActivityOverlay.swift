@@ -391,8 +391,10 @@ private struct AgentArtifactActivityCard: View {
                 }
                 Divider()
                 ForEach(urls.prefix(6), id: \.path) { url in
-                    Button(url.lastPathComponent) {
-                        open(url)
+                    Menu {
+                        AgentArtifactFileContextMenu(fileURL: url)
+                    } label: {
+                        Text(url.lastPathComponent)
                     }
                 }
             } label: {
@@ -410,6 +412,17 @@ private struct AgentArtifactActivityCard: View {
             AgentActivityCardDismissButton(action: onDismiss)
         }
         .agentActivityCardSurface(isSelected: isSelected)
+        .contextMenu {
+            if urls.count == 1, let url = urls.first {
+                AgentArtifactFileContextMenu(fileURL: url)
+            } else {
+                ForEach(urls.prefix(12), id: \.path) { url in
+                    Menu(url.lastPathComponent) {
+                        AgentArtifactFileContextMenu(fileURL: url)
+                    }
+                }
+            }
+        }
         .cursor(.arrow)
     }
 

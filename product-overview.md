@@ -1,6 +1,6 @@
 # WillDeep Product Overview
 
-> Last updated: 2026-07-22 | Current version: v1.193.0-rc16
+> Last updated: 2026-07-22 | Current version: v1.193.0-rc18
 
 ## Positioning
 
@@ -11,6 +11,10 @@ Official product domain: [willdeep.com](https://willdeep.com).
 WillDeep is configured for non-App-Store distribution without App Sandbox so it can access local project files with fewer permission interruptions.
 
 ## 架构概览
+
+- **产物动作与授权确认收口（1.193.0-rc18）** —— Agent 顶部产物卡的每个文件都支持默认 App、Finder、内置编辑器与侧边栏 Preview 等就地动作；终端/工具授权卡移除最外层描边，永久允许规则从单条长命令扩展到 Kubernetes、curl GET/HEAD、只读查看命令等可复用分类，同时保留旧精确签名兼容。
+
+- **聊天历史长窗口保留（1.193.0-rc17）** —— 聊天区默认内联保留最近 240 条可见消息，只有极长会话才折到“对话前面还有多条消息”的顶部卡片；旧历史卡展开预览提升到 12,000 字，完整 transcript reader 仍作为长会话兜底。单条流式消息的预览保护保持独立，避免超长输出拖慢 SwiftUI 布局。
 
 - **Goal 回合交付收口（1.193.0-rc16）** —— Goal 执行中的读取、搜索、编辑和命令继续以语义活动实时展示；同一用户回合结束后，聊天历史只保留最终交付小结与真实图片/文档产物，不再堆叠 Provider 阶段短句、中间尝试、命令正文或内部进度协议。处理时长、Token 与模型信息仍按完整回合聚合，原始消息和工具记录继续服务于审计、重试、任务面板及模型上下文。
 

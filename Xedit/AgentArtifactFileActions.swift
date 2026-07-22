@@ -26,6 +26,14 @@ struct AgentArtifactOpenWithApplication: Identifiable, Hashable {
 }
 
 enum AgentArtifactFileActions {
+    private static let textFileExtensions: Set<String> = [
+        "bash", "c", "cc", "conf", "cpp", "css", "csv", "env", "go",
+        "h", "hpp", "htm", "html", "ini", "java", "js", "json", "jsonl",
+        "jsx", "log", "m", "md", "markdown", "mm", "plist", "rb", "rs",
+        "sh", "sql", "swift", "toml", "ts", "tsx", "txt", "xml", "yaml",
+        "yml", "zsh"
+    ]
+
     static func openDefault(_ fileURL: URL) {
         guard FileManager.default.fileExists(atPath: fileURL.path) else {
             NSSound.beep()
@@ -91,9 +99,29 @@ enum AgentArtifactFileActions {
                 lhs.displayName.localizedCaseInsensitiveCompare(rhs.displayName) == .orderedAscending
             }
     }
+
+    static func isTextFile(_ fileURL: URL) -> Bool {
+        let pathExtension = fileURL.pathExtension.lowercased()
+        if textFileExtensions.contains(pathExtension) {
+            return true
+        }
+        if let type = try? fileURL.resourceValues(forKeys: [.contentTypeKey]).contentType {
+            return type.conforms(to: .text) ||
+                type.conforms(to: .utf8PlainText) ||
+                type.conforms(to: .sourceCode) ||
+                type.conforms(to: .json) ||
+                type.conforms(to: .xml)
+        }
+        return false
+    }
+
+    static func isSidePanelPreviewCandidate(_ fileURL: URL) -> Bool {
+        isTextFile(fileURL)
+    }
 }
 
 struct AgentArtifactFileContextMenu: View {
+    @EnvironmentObject private var appState: AppState
     let fileURL: URL
 
     var body: some View {
@@ -101,6 +129,22 @@ struct AgentArtifactFileContextMenu: View {
             AgentArtifactFileActions.openDefault(fileURL)
         } label: {
             Label("用默认 App 打开", systemImage: "arrow.up.right.square")
+        }
+
+        if AgentArtifactFileActions.isTextFile(fileURL) {
+            Button {
+                appState.openAgentReferencedFile(fileURL.path)
+            } label: {
+                Label("用内置编辑器打开", systemImage: "doc.text")
+            }
+        }
+
+        if AgentArtifactFileActions.isSidePanelPreviewCandidate(fileURL) {
+            Button {
+                appState.previewAgentArtifactFileInSidePanel(fileURL)
+            } label: {
+                Label("在侧边栏预览", systemImage: "sidebar.right")
+            }
         }
 
         Menu {

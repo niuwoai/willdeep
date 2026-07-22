@@ -1086,6 +1086,20 @@ final class AppState: ObservableObject {
         agentSidePanelRequest = AgentSidePanelOpenRequest(kind: panelKind, file: standardized)
     }
 
+    /// Explicit Preview action for generated artifacts. Unlike the default
+    /// artifact click path, this does not switch changed files to Diff: the
+    /// user asked to preview the concrete artifact in the side panel.
+    func previewAgentArtifactFileInSidePanel(_ url: URL) {
+        let standardized = url.standardizedFileURL
+        guard Self.existingFile(at: standardized),
+              AgentArtifactFileActions.isSidePanelPreviewCandidate(standardized) else {
+            NSSound.beep()
+            return
+        }
+        registerRecentFile(standardized)
+        agentSidePanelRequest = AgentSidePanelOpenRequest(kind: .preview, file: standardized)
+    }
+
     private func resolveAgentReferencedFileURL(_ rawPath: String) -> URL? {
         let path = Self.agentFilePathWithoutLineSuffix(rawPath)
 
