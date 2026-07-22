@@ -628,60 +628,15 @@ struct PlanStatusPill: View {
     }
 }
 
-// MARK: - Breathing indicator
-
-/// 持续脉动的"还在输出"信号：参考 Claude Code 输出区底部那枚跳动小图标。
-/// 一个 sparkle 在 scale 0.82↔1.18、opacity 0.55↔1.0 之间循环呼吸，
-/// 任何时候只要 agent 还在 turn 里（包括等首 token、流式 tokens、调用工具
-/// 等待返回）就显示；turn 结束 → 视图消失。所以"消失"本身就是"输出停了"
-/// 的语义信号，配合现有的 footer 时间戳和 worktree 卡片读起来很清楚。
-///
-/// 设计取舍：
-///   - 故意只一个 sparkle，避免和 `AgentMessageView` 助手头像上的
-///     sparkles（多角星）撞图；这里要单点纯几何呼吸感。
-///   - 动画**必须**用 `symbolEffect(.breathe)` 而不是
-///     `withAnimation(.repeatForever)` 驱动：symbol effect 由渲染
-///     服务器播放，主线程零参与；repeatForever 隐式动画则每帧产生
-///     一次 SwiftUI 图事务，曾联手 App 顶层 @FocusedObject 把空闲
-///     CPU 钉到 98%（1.58.0-rc9 修复，本文件所有脉动同此约束）。
-///   - 不显示文案。"正在思考"状态行已经在等首 token 那段时间承担解释职责，
-///     真的开始流式输出后状态行会自动让位，呼吸 icon 接力到底。
-struct AgentBreathingIndicator: View {
-    var body: some View {
-        icon
-            .frame(width: 22, height: 22)
-            .frame(maxWidth: .infinity, alignment: .center)
-            .padding(.top, 6)
-            .padding(.bottom, 2)
-            .accessibilityLabel("Agent 正在输出")
-    }
-
-    @ViewBuilder
-    private var icon: some View {
-        if #available(macOS 15.0, *) {
-            Image(systemName: "sparkle")
-                .font(.system(size: 14, weight: .semibold))
-                .foregroundStyle(Color.accentColor)
-                .symbolEffect(.breathe)
-        } else {
-            Image(systemName: "sparkle")
-                .font(.system(size: 14, weight: .semibold))
-                .foregroundStyle(Color.accentColor)
-        }
-    }
-}
-
 // MARK: - Running tasks row
 
 /// Claude Code 式「✳ 1 running task」状态行：长任务（前台工具阻塞、
 /// 后台编译作业）运行期间，transcript 底部用脉动星号 + 计数文案告诉
 /// 用户"输出停了是因为在等任务，不是卡死了"。
 ///
-/// 与 `AgentBreathingIndicator` 的分工：
-///   - 呼吸 icon = "模型还在 turn 里"（等首 token / 流式中），无任务语义；
-///   - 本行 = "有具体任务在跑"，且**turn 结束后只要后台作业还活着就
-///     继续显示**——这是参照 Claude 界面的关键：它的 "1 running task"
-///     在回复完成后依然挂着，直到任务退出。
+/// 与普通文字计时的分工：本行表示"有具体任务在跑"，且**turn 结束后
+/// 只要后台作业还活着就继续显示**——这是参照 Claude 界面的关键：
+/// 它的 "1 running task" 在回复完成后依然挂着，直到任务退出。
 ///
 /// 两者同一时刻只显示一个（任务行优先），由挂载方的条件分支保证，
 /// 避免底部出现两枚动画互相打架。`onTap` 由 AgentPanelView 注入，
@@ -714,7 +669,7 @@ struct AgentRunningTasksRow: View {
     private var rowContent: some View {
         HStack(spacing: 7) {
             // 脉动必须走 symbolEffect（渲染服务器驱动），禁用
-            // withAnimation(.repeatForever) —— 见 AgentBreathingIndicator 注释。
+            // withAnimation(.repeatForever)，避免主线程持续产生 SwiftUI 事务。
             runningIcon
                 .frame(width: 14, height: 14)
             Text(label)

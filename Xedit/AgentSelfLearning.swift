@@ -297,7 +297,10 @@ enum AgentSelfLearning {
         workspaceURL: URL?,
         skillSettings: AgentSkillSettings = AgentSkillSettingsStore.load().normalized
     ) -> AgentSelfLearningAudit? {
-        guard let latestUser = runtime.messages.last(where: { $0.role == .user }) else {
+        // isOperatorInput: hidden host carriers are `.user` role; feeding
+        // their turn-context reminder into learning would store host prompt
+        // scaffolding as if the human said it.
+        guard let latestUser = runtime.messages.last(where: { $0.isOperatorInput }) else {
             return nil
         }
         let recentAssistantText = runtime.messages

@@ -248,6 +248,10 @@ final class AppState: ObservableObject {
     }
     /// Persisted Agent-mode chat sessions, newest-updated first.
     @Published var agentSessions: [AgentSession] = []
+    /// Launch catalog loading is asynchronous. The Agent window uses this
+    /// edge to run Goal recovery only after every persisted candidate is
+    /// visible, avoiding a race with the initial empty in-memory list.
+    @Published private(set) var hasLoadedAgentSessionCatalog = false
     /// Set only when a metadata-only sidebar row can no longer be
     /// materialized from disk. The row is deliberately retained so a
     /// recovered JSON file can reconnect without losing its visible title.
@@ -711,6 +715,7 @@ final class AppState: ObservableObject {
             var sessionsByID = Dictionary(uniqueKeysWithValues: persistedSessions.map { ($0.id, $0) })
             for session in self.agentSessions { sessionsByID[session.id] = session }
             self.agentSessions = sessionsByID.values.sorted { $0.updatedAt > $1.updatedAt }
+            self.hasLoadedAgentSessionCatalog = true
 
             // Empty placeholders are filtered by sidebar visibility instead
             // of being deleted from disk. Automatic deletion previously made

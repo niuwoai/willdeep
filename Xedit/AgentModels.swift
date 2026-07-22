@@ -7,6 +7,21 @@
 
 import Foundation
 
+/// Durable marker for a Goal-backed model turn that was live when the app
+/// process stopped. It is armed before provider dispatch and cleared only
+/// after the turn reaches a normal terminal path or the user explicitly
+/// stops it. A surviving marker therefore authorizes one safe launch-time
+/// continuation without treating every merely-incomplete Plan as runnable.
+nonisolated struct AgentGoalTurnRecoveryCheckpoint: Codable, Equatable, Identifiable {
+    let id: UUID
+    let startedAt: Date
+
+    init(id: UUID = UUID(), startedAt: Date = Date()) {
+        self.id = id
+        self.startedAt = startedAt
+    }
+}
+
 /// A persisted Agent conversation. Lives as one JSON file under the app's
 /// Application Support directory. `workspaceLocation` is the canonical
 /// workspace binding; `workspaceRootPath` remains for local legacy sessions.
@@ -91,6 +106,10 @@ nonisolated struct AgentSession: Identifiable, Codable, Equatable {
     /// Host-owned evidence ledger for Goal Teams planning. Optional and
     /// tolerantly decoded so sessions written before this feature remain valid.
     var goalPlanningState: AgentGoalPlanningState?
+    /// Non-nil only while an approved Goal-backed Plan turn is expected to be
+    /// alive. Surviving app termination makes the session eligible for one
+    /// launch recovery; explicit Stop and normal turn completion clear it.
+    var goalTurnRecoveryCheckpoint: AgentGoalTurnRecoveryCheckpoint?
     /// Recent automatic learning outcomes for this session. These are
     /// product-visible audit events for memory, skill, and MCP discovery
     /// actions captured at turn end.
@@ -160,6 +179,7 @@ nonisolated struct AgentSession: Identifiable, Codable, Equatable {
         currentPlan: AgentPlan? = nil,
         currentGoal: AgentGoal? = nil,
         goalPlanningState: AgentGoalPlanningState? = nil,
+        goalTurnRecoveryCheckpoint: AgentGoalTurnRecoveryCheckpoint? = nil,
         learningEvents: [AgentLearningEvent] = [],
         latestTurnRecall: AgentTurnRecallSnapshot? = nil,
         documentAttachments: [AgentFileAttachment] = [],
@@ -197,6 +217,7 @@ nonisolated struct AgentSession: Identifiable, Codable, Equatable {
         self.currentPlan = currentPlan
         self.currentGoal = currentGoal
         self.goalPlanningState = goalPlanningState
+        self.goalTurnRecoveryCheckpoint = goalTurnRecoveryCheckpoint
         self.learningEvents = learningEvents
         self.latestTurnRecall = latestTurnRecall
         self.documentAttachments = documentAttachments
@@ -270,7 +291,7 @@ nonisolated struct AgentSession: Identifiable, Codable, Equatable {
         case id, title, workspaceRootPath, workspaceLocation, sidebarWorkspaceRootPath, localWorkspaceIdentity, modelID
         case providerID, providerDisplayName, managedRouting
         case createdAt, updatedAt, messages, contextSummary, contextSummaryThroughMessageID
-        case didEditFiles, agentEditedPaths, agentArtifactPaths, interactionMode, approvalMode, executionAgent, activeExperts, currentPlan, currentGoal, goalPlanningState, learningEvents, latestTurnRecall, documentAttachments, knowledgeFolders, documentTaskMode, redactSensitiveAttachmentContent, sidePanelState
+        case didEditFiles, agentEditedPaths, agentArtifactPaths, interactionMode, approvalMode, executionAgent, activeExperts, currentPlan, currentGoal, goalPlanningState, goalTurnRecoveryCheckpoint, learningEvents, latestTurnRecall, documentAttachments, knowledgeFolders, documentTaskMode, redactSensitiveAttachmentContent, sidePanelState
         case pinnedAt, archivedAt, titleIsUserSet
     }
 
@@ -320,6 +341,10 @@ nonisolated struct AgentSession: Identifiable, Codable, Equatable {
                 arbitration: .init(status: .interrupted, errorMessage: "malformed persisted planning state")
             )
         }
+        self.goalTurnRecoveryCheckpoint = try c.decodeIfPresent(
+            AgentGoalTurnRecoveryCheckpoint.self,
+            forKey: .goalTurnRecoveryCheckpoint
+        )
         self.learningEvents = try c.decodeIfPresent([AgentLearningEvent].self, forKey: .learningEvents) ?? []
         self.latestTurnRecall = try c.decodeIfPresent(AgentTurnRecallSnapshot.self, forKey: .latestTurnRecall)
         self.documentAttachments = try c.decodeIfPresent([AgentFileAttachment].self, forKey: .documentAttachments) ?? []

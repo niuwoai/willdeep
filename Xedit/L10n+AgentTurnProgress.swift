@@ -83,5 +83,42 @@ extension L10n {
             )
             return String(format: template, index)
         }
+
+        static func composerStepCount(_ current: Int, _ total: Int) -> String {
+            let template = String(
+                localized: "agent-turn-progress.composer-step-count",
+                defaultValue: "Step %1$d of %2$d"
+            )
+            return String(format: template, current, total)
+        }
+
+        static let composerHelp = String(
+            localized: "agent-turn-progress.composer-help",
+            defaultValue: "Show all task steps"
+        )
+
+        static func composerAccessibility(
+            _ current: Int,
+            _ total: Int,
+            _ text: String
+        ) -> String {
+            let template = String(
+                localized: "agent-turn-progress.composer-accessibility",
+                defaultValue: "Step %1$d of %2$d: %3$@"
+            )
+            return String(format: template, current, total, text)
+        }
+
+        static func composerItemAccessibility(
+            _ index: Int,
+            _ status: String,
+            _ text: String
+        ) -> String {
+            let template = String(
+                localized: "agent-turn-progress.composer-item-accessibility",
+                defaultValue: "Step %1$d, %2$@: %3$@"
+            )
+            return String(format: template, index, status, text)
+        }
     }
 }

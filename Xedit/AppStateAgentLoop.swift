@@ -41,6 +41,23 @@ extension AppState {
     ) {
         resolvePendingAgentPatchProposalsBeforeNewMessage(for: runtime)
 
+        let shouldArmGoalRecovery = AgentGoalLaunchRecoveryPolicy.shouldArmExecutionCheckpoint(
+            interactionMode: runtime.interactionMode,
+            executionAgent: runtime.executionAgent,
+            goal: runtime.currentGoal,
+            plan: runtime.currentPlan
+        )
+        let didChangeGoalRecoveryCheckpoint: Bool
+        if shouldArmGoalRecovery, runtime.goalTurnRecoveryCheckpoint == nil {
+            runtime.goalTurnRecoveryCheckpoint = AgentGoalTurnRecoveryCheckpoint()
+            didChangeGoalRecoveryCheckpoint = true
+        } else if !shouldArmGoalRecovery, runtime.goalTurnRecoveryCheckpoint != nil {
+            runtime.goalTurnRecoveryCheckpoint = nil
+            didChangeGoalRecoveryCheckpoint = true
+        } else {
+            didChangeGoalRecoveryCheckpoint = false
+        }
+
         reconcileSomeIMProviderFromSharedSession()
         ensureActiveProviderIsUsableForChatSelection()
         repairSomeIMProviderCredentialsForTurnIfNeeded(for: runtime)
@@ -60,6 +77,9 @@ extension AppState {
         if let existingUserMessageID,
            let existing = runtime.messages.first(where: { $0.id == existingUserMessageID }) {
             userMessage = existing
+            if didChangeGoalRecoveryCheckpoint {
+                persistAgentSession(runtime: runtime, touchUpdatedAt: false, moveToFront: false)
+            }
         } else {
             userMessage = AgentMessage(
                 role: .user,
@@ -83,6 +103,7 @@ extension AppState {
         // a provider slot nor start a turn.
         guard !someIMLoginRequiredForTurn(for: runtime, providerID: providerID) else {
             runtime.isAwaitingProviderSlot = false
+            runtime.goalTurnRecoveryCheckpoint = nil
             setSomeIMLoginRequiredError(for: runtime)
             persistAgentSession(runtime: runtime)
             return
@@ -149,6 +170,7 @@ extension AppState {
                 runtime.isResponding = false
                 runtime.turnStartedAt = nil
                 runtime.requestTask = nil
+                runtime.goalTurnRecoveryCheckpoint = nil
                 runtime.shouldConsumeQueueAfterStop = false
                 self.persistAgentSession(runtime: runtime)
                 self.releaseProviderSlot(
@@ -165,6 +187,7 @@ extension AppState {
                 runtime.isResponding = false
                 runtime.turnStartedAt = nil
                 runtime.requestTask = nil
+                runtime.goalTurnRecoveryCheckpoint = nil
                 self.persistAgentSession(runtime: runtime)
                 self.releaseProviderSlot(
                     for: runtime,
@@ -456,6 +479,7 @@ extension AppState {
             runtime.isResponding = false
             runtime.turnStartedAt = nil
             runtime.requestTask = nil
+            runtime.goalTurnRecoveryCheckpoint = nil
             runtime.shouldConsumeQueueAfterStop = false
             // Turn finished — one fewer concurrent worker on this checkout.
             refreshAgentWorkspaceCollision()
@@ -506,8 +530,12 @@ extension AppState {
         if runtime.managedRouting != nil,
            configuration.providerID == AgentProviderPreset.someIMID {
             let floor = runtime.managedRouting?.minimumTier ?? .low
+            // isOperatorInput: hidden host carriers (empty content, per-turn
+            // context reminders) are `.user` role but must never stand in for
+            // what the human actually asked — a wake-up turn would otherwise
+            // send the judge an empty message.
             let judgeInput = SomeIMRouteJudgeInput(
-                latestUserMessage: runtime.messages.last(where: { $0.role == .user })?.content ?? "",
+                latestUserMessage: runtime.messages.last(where: { $0.isOperatorInput })?.content ?? "",
                 workspaceAvailable: runtime.workspaceLocation != nil || (runtime.workspaceRootPath?.isEmpty == false),
                 selectedFileLanguage: openedFileURL.flatMap { $0.pathExtension.isEmpty ? nil : $0.pathExtension },
                 interactionMode: "\(runtime.interactionMode)",
@@ -615,14 +643,14 @@ extension AppState {
         var consecutivePlanRepliesWithoutProgress = 0
         var didAdvancePlanSinceLastContinuationDecision = false
         let designToCodeToolCallBaseline = runtime.toolCalls.count
-        let latestUserImages = runtime.messages.last(where: { $0.role == .user })?.images ?? []
+        let latestUserImages = runtime.messages.last(where: { $0.isOperatorInput })?.images ?? []
         let requiresDesignToCodeAcceptance = workspaceURL != nil && AgentDesignToCode.isActive(
             skills: runtime.currentTurnAttachedSkills,
             images: latestUserImages
         )
         var designToCodeGateContinuationCount = 0
 
-        for _ in 0..<Self.maxAgentToolRounds {
+        for toolRound in 0..<Self.maxAgentToolRounds {
             // `run_workflow` is asynchronous, but unlike the workflow card its
             // final report must return to the model that delegated the work.
             // Consume the owning runtime's pending ids into normal system
@@ -823,10 +851,15 @@ extension AppState {
                 assembledPrompt += "\n\n\(memoryContextBlock)"
             }
             let promptComponents = AgentContextBuilder.requestComponents(from: assembledPrompt)
+            // allowRefresh only on the dispatch's first round: rounds 2+ of
+            // the same tool loop keep already-sent history byte-stable, and
+            // mid-turn notices (plan continuation, design gate, background
+            // completions) must not each spawn another full-context carrier.
             AgentContextBuilder.attachTurnContextIfNeeded(
                 promptComponents.turnContext,
                 to: &runtime.messages,
-                insertingBefore: assistantID
+                insertingBefore: assistantID,
+                allowRefresh: toolRound == 0
             )
             let systemPrompt = AgentLocalModelPrompting.applyLanguageInstruction(
                 to: promptComponents.systemPrompt,
@@ -989,7 +1022,7 @@ extension AppState {
                        || !(runtime.messages[index].reasoningContent ?? "").isEmpty {
                     let assistantText = runtime.messages[index].content
                     let reasoningText = runtime.messages[index].reasoningContent
-                    let latestUserMessage = runtime.messages.last(where: { $0.role == .user })?.content ?? ""
+                    let latestUserMessage = runtime.messages.last(where: { $0.isOperatorInput })?.content ?? ""
                     let qualityConfig = turnConfiguration
                     let qualityContext = someIMContext
                     let decision = await SomeIMManagedRouting.outputQuality(

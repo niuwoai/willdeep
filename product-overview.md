@@ -1,6 +1,6 @@
 # WillDeep Product Overview
 
-> Last updated: 2026-07-21 | Current version: v1.192.0-rc20
+> Last updated: 2026-07-21 | Current version: v1.193.0-rc8
 
 ## Positioning
 
@@ -11,6 +11,20 @@ Official product domain: [willdeep.com](https://willdeep.com).
 WillDeep is configured for non-App-Store distribution without App Sandbox so it can access local project files with fewer permission interruptions.
 
 ## 架构概览
+
+- **Agent 壁纸全窗口覆盖（1.193.0-rc7）** —— Agent 壁纸层延伸到 macOS 全尺寸透明标题栏及窗口底部安全区，前景会话、输入框和状态栏仍保持在安全布局区内，不再露出白色边带。
+
+- **Editor 标点原样保真（1.193.0-rc6）** —— Editor 明确关闭 macOS 智能引号、智能破折号、文本替换、拼写纠正和智能插入删除；粘贴或输入 JSON、代码、命令时不再把 ASCII 半角标点改写为弯引号等排版字符，复制出去的内容与编辑器文本保持一致。
+
+- **Goal 退出后续接（1.193.0-rc5）** —— 原生 Goal Plan 执行期间持久化一次性恢复检查点；退出后重新打开 WillDeep，会在原会话、原工作区和原模型上从未完成步骤继续。被中断的 Goal Teams 规划会重新创建规划代次，而普通未完成、手动停止、待确认、已归档、已完成和真实阻塞状态保持暂停；恢复前先核对已有副作用，授权与确认门禁不变。
+
+- **Agent 思考状态稳定化（1.193.0-rc4）** —— 自主回合统一显示左对齐的“正在思考 · 时长”文字计时，首个正文 token 到达后不再切换为居中呼吸星星；等待用户确认、授权或回答时不显示额外活动标记，仅保留交互卡片。
+
+- **终端活动摘要对齐（1.193.0-rc3）** —— 历史区“已执行 N 次终端操作”等紧凑活动摘要与助手正文共用 32pt 左缩进和 18pt 右收口，不再比正文向左错开 10pt。
+
+- **命令活动聚合与模型切换提示收束（1.193.0-rc2）** —— 同一用户回合即使被 provider 拆成多条 assistant 消息、期间发生模型切换，所有 `run_command` 仍汇总为一个可展开的“已运行 N 条命令”组；历史消息只保留正文和事件，不再重复命令摘要。模型切换提示的左右发丝线各限制为 96pt，宽窗口下不再横贯整个对话区。
+
+- **Composer 任务进度浮层（1.193.0-rc1）** —— Agent 执行计划或 Goal 清单时，输入框上方显示紧凑的“第 N / M 步”胶囊；悬停可临时展开、点击可固定完整步骤列表，逐项展示待处理、执行中、完成、跳过和失败状态。计划状态优先于 Goal 状态，提议中或已拒绝的计划不会占用进度位。
 
 - **Editor 中文输入法组合保护（1.192.0-rc20）** —— Editor 在拼音等输入法存在 marked text 时暂停 SwiftUI 文本回写、脏状态发布、光标/括号刷新和语法高亮，并取消已经排队或正在回调的整段高亮；候选文字提交后再恢复正常同步与高亮，避免 TextKit 全量替换提前结束组合态、留下原始拼音。
 

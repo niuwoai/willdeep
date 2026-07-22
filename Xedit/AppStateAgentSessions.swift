@@ -387,7 +387,10 @@ extension AppState {
         cancelAgentPlanModeSuggestion()
         agentInteractionMode = mode
         if mode != .plan { agentCurrentPlan = nil }
-        if mode != .goal { agentCurrentGoal = nil }
+        if mode != .goal {
+            agentCurrentGoal = nil
+            activeRuntime?.goalTurnRecoveryCheckpoint = nil
+        }
         persistActiveAgentSession()
     }
 
@@ -462,6 +465,7 @@ extension AppState {
     func rejectAgentPlan() {
         guard let runtime = activeRuntime else { return }
         agentCurrentPlan = nil
+        runtime.goalTurnRecoveryCheckpoint = nil
         persistActiveAgentSession()
         if agentInteractionMode == .goal {
             _ = startAgentGoalPlanningIfNeeded(for: runtime, forceRestart: true)
@@ -486,6 +490,13 @@ extension AppState {
         if agentInteractionMode == .goal, var state = activeRuntime?.goalPlanningState {
             state.phase = .executing
             activeRuntime?.goalPlanningState = state
+        }
+        if agentInteractionMode == .goal,
+           activeRuntime?.goalTurnRecoveryCheckpoint == nil {
+            // Approval may be queued behind a still-finishing synthesis turn.
+            // Persist the user's execution intent now so an app exit before
+            // queue consumption can still recover the approved Plan.
+            activeRuntime?.goalTurnRecoveryCheckpoint = AgentGoalTurnRecoveryCheckpoint()
         }
         persistActiveAgentSession()
 
@@ -518,6 +529,7 @@ extension AppState {
         guard var plan = agentCurrentPlan else { return }
         plan.status = .done
         agentCurrentPlan = plan
+        activeRuntime?.goalTurnRecoveryCheckpoint = nil
         persistActiveAgentSession()
         if let runtime = activeRuntime {
             prepareNextAgentGoalPlanningCycleIfNeeded(for: runtime)
@@ -534,6 +546,7 @@ extension AppState {
         // Drop the existing plan so the next turn's system prompt
         // sends the "you must emit a ```plan block" instructions.
         agentCurrentPlan = nil
+        activeRuntime?.goalTurnRecoveryCheckpoint = nil
         persistActiveAgentSession()
 
         let trimmed = note.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -783,6 +796,7 @@ extension AppState {
             runtime.currentGoal = nil
             runtime.currentPlan = nil
             runtime.goalPlanningState = nil
+            runtime.goalTurnRecoveryCheckpoint = nil
             if previousGoal != nil {
                 runtime.currentGoalEditedAt = Date()
             }
@@ -813,6 +827,7 @@ extension AppState {
             runtime.currentGoalEditedAt = Date()
             runtime.currentPlan = nil
             runtime.goalPlanningState = nil
+            runtime.goalTurnRecoveryCheckpoint = nil
         }
         persistActiveAgentSession()
         enqueueGoalUpdateNoticeIfNeeded(for: runtime, previousGoal: previousGoal, updatedGoal: updatedGoal)
@@ -928,6 +943,10 @@ extension AppState {
     /// dispatched automatically. Use `clearAgentQueue` to drop them.
     func stopAgentResponse() {
         guard let runtime = activeRuntime else { return }
+        if runtime.goalTurnRecoveryCheckpoint != nil {
+            runtime.goalTurnRecoveryCheckpoint = nil
+            persistAgentSession(runtime: runtime, touchUpdatedAt: false, moveToFront: false)
+        }
         let activeWorkflowIDs = runtime.messages.compactMap { message -> UUID? in
             guard let report = message.workflowReport,
                   report.status == .planning || report.status == .running else { return nil }
@@ -963,6 +982,7 @@ extension AppState {
             runtime.requestTask = nil
             runtime.shouldConsumeQueueAfterStop = false
             runtime.currentTurnAttachedSkills = []
+            runtime.goalTurnRecoveryCheckpoint = nil
             self.persistAgentSession(runtime: runtime)
             if let claim {
                 self.releaseProviderSlot(
@@ -1155,7 +1175,7 @@ extension AppState {
         // and there has to be one in `agentRuntimes` for those writes
         // to land somewhere.
         let newRuntime = AgentRuntime(session: session)
-        seedNewSessionModelOverride(for: newRuntime)
+        seedPersistedSessionModelOverride(for: newRuntime)
         agentRuntimes[session.id] = newRuntime
         activeAgentSessionID = session.id
         subscribeToActiveRuntime()
@@ -1210,7 +1230,7 @@ extension AppState {
         )
         agentSessions.insert(session, at: 0)
         let newRuntime = AgentRuntime(session: session)
-        seedNewSessionModelOverride(for: newRuntime)
+        seedPersistedSessionModelOverride(for: newRuntime)
         agentRuntimes[session.id] = newRuntime
         activeAgentSessionID = session.id
         subscribeToActiveRuntime()
@@ -1458,14 +1478,7 @@ extension AppState {
         // disk session needs this seeded.
         if let runtime = activeRuntime {
             let session = runtime.session
-            if runtime.managedRouting != nil {
-                // Managed session: the model is resolved per-turn by the
-                // judge, so there is no single override to seed.
-                runtime.sessionModelOverride = nil
-            } else {
-                let routedModel = agentConfiguration.normalized.model(for: .interactive)
-                runtime.sessionModelOverride = session.modelID == routedModel ? nil : session.modelID
-            }
+            seedPersistedSessionModelOverride(for: runtime)
             syncWorkspaceContext(for: session)
             refreshAgentGitWorktrees()
             autoSummarizeTitleIfPlaceholder(runtime)
@@ -2151,7 +2164,10 @@ extension AppState {
         return activeAgentModelID
     }
 
-    private func seedNewSessionModelOverride(for runtime: AgentRuntime) {
+    /// Rebuild the runtime-only model override from the persisted session.
+    /// Launch recovery uses the same path as an explicit sidebar selection so
+    /// a background-resumed Goal continues on its original concrete model.
+    func seedPersistedSessionModelOverride(for runtime: AgentRuntime) {
         guard runtime.managedRouting == nil else {
             runtime.sessionModelOverride = nil
             return

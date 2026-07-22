@@ -121,6 +121,21 @@ final class WillDeepTextView: NSTextView {
         static let plainText = "__plain_text"
     }
 
+    /// NSTextView inherits macOS writing assistance defaults, including smart
+    /// quotes and text replacement. Those defaults are useful for prose but
+    /// corrupt source text (for example, ASCII quotes can become curly quotes).
+    /// Keep the editor byte-faithful even though syntax highlighting requires
+    /// rich-text mode.
+    func configureCodeEditingBehavior() {
+        isAutomaticQuoteSubstitutionEnabled = false
+        isAutomaticDashSubstitutionEnabled = false
+        isAutomaticTextReplacementEnabled = false
+        isAutomaticSpellingCorrectionEnabled = false
+        smartInsertDeleteEnabled = false
+        isAutomaticDataDetectionEnabled = false
+        isAutomaticLinkDetectionEnabled = false
+    }
+
     override func menu(for event: NSEvent) -> NSMenu? {
         let menu = super.menu(for: event) ?? NSMenu()
         if let request = codeActionRequest(at: event) {

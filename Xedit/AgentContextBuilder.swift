@@ -480,10 +480,31 @@ enum AgentContextBuilder {
         return copy
     }
 
+    /// Stable prefix identifying a full per-turn context reminder in a user
+    /// message's `modelContext`. Used to find superseded snapshots without
+    /// matching the placeholder below.
+    static let turnContextReminderHeader = "<system-reminder>\nThe host supplied this per-turn context."
+
+    /// What an earlier turn's full context is rewritten to once a newer turn
+    /// attaches its own. Deterministic (no timestamps) so replays stay
+    /// byte-identical after the one-time rewrite. Keeping only the newest
+    /// snapshot bounds hidden-context growth to one copy per session instead
+    /// of one per turn (a full snapshot can run ~18K characters).
+    static let supersededTurnContextPlaceholder = """
+    <system-reminder>
+    Per-turn context that was delivered here in an earlier turn has been superseded by the latest turn's context.
+    </system-reminder>
+    """
+
+    /// Attach `turnContext` to the persisted history so the request and every
+    /// future replay share bytes. `allowRefresh` must be true only on the
+    /// first round of a dispatch: later rounds of the same tool loop keep the
+    /// already-sent history byte-stable and never re-attach.
     static func attachTurnContextIfNeeded(
         _ turnContext: String,
         to messages: inout [AgentMessage],
-        insertingBefore anchorID: AgentMessage.ID? = nil
+        insertingBefore anchorID: AgentMessage.ID? = nil,
+        allowRefresh: Bool = true
     ) {
         let trimmed = turnContext.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
@@ -495,6 +516,19 @@ enum AgentContextBuilder {
         \(trimmed)
         </system-reminder>
         """
+        // Reclaim every older full snapshot the moment a new one is written.
+        // This rewrites at most one turn's worth of already-cached prefix (the
+        // provider cache breaks at the newest attach point anyway) and keeps
+        // conflicting stale mode instructions (an old "PLAN MODE — ACTIVE"
+        // block after the plan was approved) out of the model's view.
+        func supersedePriorContexts(excluding excludedID: AgentMessage.ID?) {
+            for index in messages.indices
+            where messages[index].role == .user
+                && messages[index].id != excludedID
+                && messages[index].modelContext?.hasPrefix(turnContextReminderHeader) == true {
+                messages[index].modelContext = supersededTurnContextPlaceholder
+            }
+        }
         func insertCarrier() {
             let carrier = AgentMessage(
                 role: .user,
@@ -507,6 +541,7 @@ enum AgentContextBuilder {
             } else {
                 messages.append(carrier)
             }
+            supersedePriorContexts(excluding: carrier.id)
         }
 
         guard let userIndex = messages.lastIndex(where: { $0.role == .user }) else {
@@ -517,19 +552,25 @@ enum AgentContextBuilder {
             .trimmingCharacters(in: .whitespacesAndNewlines)
         if existingContext?.isEmpty != false {
             messages[userIndex].modelContext = reminder
+            supersedePriorContexts(excluding: messages[userIndex].id)
             return
         }
-        // The last user message already carries an earlier turn's context.
-        // If a persisted `.system` notice arrived after it (background job /
-        // workflow / plan continuation), the model-facing history surfaces
-        // that notice as the newest user message — attaching only to a
-        // request copy would leave this turn's context out of the persisted
-        // history and change replayed bytes next turn. Persist a hidden
-        // host carrier instead so request and replay stay identical.
+        // The last user message already carries a delivered context. Rounds
+        // after the first must not touch history at all.
+        guard allowRefresh else { return }
+        // Two reasons to persist a fresh hidden carrier on a new dispatch:
+        // - a persisted `.system` notice arrived after the last user message
+        //   (background job / workflow / plan continuation wake-up) — the
+        //   model-facing history surfaces that notice as the newest user
+        //   message, so the context must follow it;
+        // - the turn context itself changed (mode switch / retry without a
+        //   new user message) — reusing the frozen snapshot would run the
+        //   turn under stale instructions (e.g. missing PLAN MODE).
         let hasSystemNoticeAfterUser = messages[(userIndex + 1)...].contains {
             $0.role == .system && !$0.isLocalTranscriptEvent
         }
-        if hasSystemNoticeAfterUser {
+        let contextChanged = existingContext != reminder
+        if hasSystemNoticeAfterUser || contextChanged {
             insertCarrier()
         }
     }

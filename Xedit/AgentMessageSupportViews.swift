@@ -90,7 +90,7 @@ enum AgentLongTokenBreaker {
 /// `AgentStreamingCursorPolicy.inactivityTimeout`.
 /// 闪烁必须走 symbolEffect（渲染服务器驱动），禁用
 /// withAnimation(.repeatForever) —— 那会让 SwiftUI 每帧跑一次图事务，
-/// 见 AgentBreathingIndicator 注释（1.58.0-rc9 CPU 修复）。
+/// 避免状态装饰触发持续的主线程布局与图事务。
 struct AgentStreamingCursor: View {
     var body: some View {
         Image(systemName: "rectangle.portrait.fill")

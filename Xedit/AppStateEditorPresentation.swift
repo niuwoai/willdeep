@@ -46,6 +46,25 @@ extension AppState {
         }
     }
 
+    /// Stable text activity indicator for the lifetime of an autonomous turn.
+    /// Unlike `shouldShowAgentThinkingIndicator`, this intentionally remains
+    /// visible after the first assistant token arrives so the transcript never
+    /// swaps the elapsed-time label for a centered animation. Interactive tool
+    /// cards already explain that the agent is waiting for the user, so those
+    /// states suppress the activity label entirely.
+    var shouldShowAgentActivityTextIndicator: Bool {
+        guard isAgentResponding, !isCompressingAgentContext else { return false }
+        return !isAgentWaitingForUserDecision
+    }
+
+    /// A confirm / approval / answer card is the authoritative activity
+    /// surface while the turn is blocked on the user. Generic thinking and
+    /// running-task markers stay hidden even if another tool or background job
+    /// remains alive, so no star competes with the requested decision.
+    var isAgentWaitingForUserDecision: Bool {
+        agentToolCalls.contains { $0.status.isBlockingForUserDecision }
+    }
+
     /// 「正在思考」状态行下方的实时正文：当前流式 assistant 占位消息
     /// 正在累积的 reasoningContent。生命周期与指示器完全一致——首个
     /// 正文 token / 工具调用到达后思考正文消失，由正式正文原位接替。

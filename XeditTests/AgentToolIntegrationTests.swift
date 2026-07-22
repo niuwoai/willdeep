@@ -81,7 +81,7 @@ struct AgentContextBuilderPromptTests {
             components.turnContext,
             to: [AgentMessage(role: .user, content: "Fix A.swift")]
         )
-        let firstTurnModelContent = history[0].modelContent
+        #expect(history[0].modelContent.contains("<untrusted-current-file>"))
         history[0] = try JSONDecoder().decode(
             AgentMessage.self,
             from: JSONEncoder().encode(history[0])
@@ -95,9 +95,21 @@ struct AgentContextBuilderPromptTests {
         #expect(components.turnContext.contains("<untrusted-current-file>"))
         #expect(components.turnContext.contains("&lt;/system-reminder&gt;"))
         #expect(history[0].content == "Fix A.swift")
-        #expect(history[0].modelContent.contains("<system-reminder>") == true)
-        #expect(history[0].modelContent == firstTurnModelContent)
+        // The newest attach supersedes the earlier turn's full snapshot with
+        // the deterministic placeholder — only one full copy per session.
+        #expect(history[0].modelContext == AgentContextBuilder.supersededTurnContextPlaceholder)
+        #expect(!history[0].modelContent.contains("<untrusted-current-file>"))
         #expect(history.last?.modelContent.contains("Second turn context") == true)
+    }
+
+    /// Build the message array shape of an earlier turn whose user message
+    /// carries a real full turn-context reminder (header must match what
+    /// `attachTurnContextIfNeeded` writes, so supersession finds it).
+    private func historyWithDeliveredContext(_ context: String) -> [AgentMessage] {
+        var messages = [AgentMessage(role: .user, content: "Run the job")]
+        AgentContextBuilder.attachTurnContextIfNeeded(context, to: &messages)
+        messages.append(AgentMessage(role: .assistant, content: "Started."))
+        return messages
     }
 
     @Test("notification-only wake-up persists turn context on a hidden host carrier")
@@ -106,12 +118,9 @@ struct AgentContextBuilderPromptTests {
         // turn's context, a background-job notice arrived after it, and the
         // streaming placeholder is the array tail.
         let placeholder = AgentMessage(role: .assistant, content: "")
-        var messages: [AgentMessage] = [
-            AgentMessage(role: .user, content: "Run the job", modelContext: "<system-reminder>old context</system-reminder>"),
-            AgentMessage(role: .assistant, content: "Started."),
-            AgentMessage(role: .system, content: "Background job finished."),
-            placeholder
-        ]
+        var messages = historyWithDeliveredContext("Earlier turn context")
+        messages.append(AgentMessage(role: .system, content: "Background job finished."))
+        messages.append(placeholder)
         AgentContextBuilder.attachTurnContextIfNeeded(
             "Wakeup turn context",
             to: &messages,
@@ -125,27 +134,61 @@ struct AgentContextBuilderPromptTests {
         #expect(carrier.content.isEmpty)
         #expect(carrier.modelContext?.contains("Wakeup turn context") == true)
         #expect(messages.last?.id == placeholder.id)
-        // The operator message keeps its earlier turn's context untouched.
-        #expect(messages[0].modelContext == "<system-reminder>old context</system-reminder>")
+        // The operator message's earlier full snapshot is reclaimed.
+        #expect(messages[0].modelContext == AgentContextBuilder.supersededTurnContextPlaceholder)
 
         // Round 2 of the same turn must not add a second carrier.
         AgentContextBuilder.attachTurnContextIfNeeded(
             "Wakeup turn context",
             to: &messages,
-            insertingBefore: placeholder.id
+            insertingBefore: placeholder.id,
+            allowRefresh: false
         )
         #expect(messages.count == 5)
     }
 
-    @Test("continuation without a new notice reuses the persisted turn context")
-    func testAttachTurnContextSkipsWhenNoNoticeFollowsUser() {
-        var messages: [AgentMessage] = [
-            AgentMessage(role: .user, content: "Fix it", modelContext: "<system-reminder>old context</system-reminder>"),
-            AgentMessage(role: .assistant, content: "Working.")
-        ]
-        AgentContextBuilder.attachTurnContextIfNeeded("Newer context", to: &messages)
+    @Test("unchanged context without a notice is not re-attached")
+    func testAttachTurnContextSkipsWhenContextUnchanged() {
+        var messages = historyWithDeliveredContext("Same context")
+        let contextBefore = messages[0].modelContext
+        AgentContextBuilder.attachTurnContextIfNeeded("Same context", to: &messages)
         #expect(messages.count == 2)
-        #expect(messages[0].modelContext == "<system-reminder>old context</system-reminder>")
+        #expect(messages[0].modelContext == contextBefore)
+    }
+
+    @Test("changed context on a fresh dispatch inserts a refresh carrier")
+    func testAttachTurnContextRefreshesOnChangedContext() {
+        // Mode switch / retry without a new user message: the frozen snapshot
+        // would run the turn under stale instructions, so a carrier delivers
+        // the new context and reclaims the old snapshot.
+        var messages = historyWithDeliveredContext("Old mode context")
+        AgentContextBuilder.attachTurnContextIfNeeded("PLAN MODE context", to: &messages)
+        #expect(messages.count == 3)
+        #expect(messages.last?.isHostInstruction == true)
+        #expect(messages.last?.modelContext?.contains("PLAN MODE context") == true)
+        #expect(messages[0].modelContext == AgentContextBuilder.supersededTurnContextPlaceholder)
+        // Exactly one full snapshot survives in the whole history.
+        let fullSnapshots = messages.filter {
+            $0.modelContext?.hasPrefix(AgentContextBuilder.turnContextReminderHeader) == true
+        }
+        #expect(fullSnapshots.count == 1)
+    }
+
+    @Test("rounds after the first never mutate history")
+    func testAttachTurnContextLaterRoundsAreNoOps() {
+        var messages = historyWithDeliveredContext("Old context")
+        // Even with a mid-turn notice AND a changed context, allowRefresh:
+        // false (rounds 2+) must leave history untouched — mid-turn notices
+        // must not each spawn another full-context carrier.
+        messages.append(AgentMessage(role: .system, content: "Plan continuation notice."))
+        let snapshot = messages.map(\.modelContext)
+        AgentContextBuilder.attachTurnContextIfNeeded(
+            "Changed context",
+            to: &messages,
+            allowRefresh: false
+        )
+        #expect(messages.count == 3)
+        #expect(messages.map(\.modelContext) == snapshot)
     }
 
     @Test("model content preserves visible whitespace when no hidden blocks exist")
@@ -1427,10 +1470,11 @@ extension WillDeepTests {
     private func makeCall(
         _ name: String,
         status: AgentToolCallStatus = .succeeded,
-        arguments: [String: AgentJSONValue] = [:]
+        arguments: [String: AgentJSONValue] = [:],
+        messageID: UUID = UUID()
     ) -> AgentToolCall {
         AgentToolCall(
-            messageID: UUID(),
+            messageID: messageID,
             externalID: UUID().uuidString,
             toolName: name,
             arguments: arguments,
@@ -1512,6 +1556,105 @@ extension WillDeepTests {
         #expect(segments[2].kind == .runCommand)
         #expect(segments[2].count == 1)
         #expect(segments[1].title == "已读取 1 个文件 · 已搜索代码")
+    }
+
+    @Test("live presentation coalesces commands split by other tool kinds")
+    func testLivePresentationCoalescesCommandsAcrossSegments() {
+        let calls = [
+            makeCall("run_command"),
+            makeCall("read_file"),
+            makeCall("run_command"),
+            makeCall("grep_files"),
+            makeCall("run_command")
+        ]
+
+        let segments = AgentToolCallGrouping.livePresentationSegments(calls)
+
+        #expect(segments.count == 3)
+        #expect(segments[0].kind == .runCommand)
+        #expect(segments[0].count == 3)
+        #expect(segments[1].kind == .fileExploration)
+        #expect(segments[2].kind == .fileExploration)
+    }
+
+    @Test("active turn combines commands from provider-split assistant messages")
+    func testActiveTurnToolCallsCombineAcrossAssistantMessages() throws {
+        let firstAssistantID = UUID()
+        let secondAssistantID = UUID()
+        let thirdAssistantID = UUID()
+        let firstRawCalls = [
+            AgentMessageToolCall(externalID: "first-1", toolName: "run_command", argumentsJSON: "{}"),
+            AgentMessageToolCall(externalID: "first-2", toolName: "run_command", argumentsJSON: "{}")
+        ]
+        let messages = [
+            AgentMessage(role: .user, content: "检查一下"),
+            AgentMessage(id: firstAssistantID, role: .assistant, content: "", toolCalls: firstRawCalls),
+            AgentMessage(
+                role: .system,
+                content: "模型已切换",
+                transcriptEvent: .modelChanged
+            ),
+            AgentMessage(
+                id: secondAssistantID,
+                role: .assistant,
+                content: "继续检查。",
+                toolCalls: [
+                    AgentMessageToolCall(externalID: "second-1", toolName: "run_command", argumentsJSON: "{}")
+                ]
+            ),
+            AgentMessage(
+                id: thirdAssistantID,
+                role: .assistant,
+                content: "",
+                toolCalls: [
+                    AgentMessageToolCall(externalID: "third-1", toolName: "run_command", argumentsJSON: "{}")
+                ]
+            )
+        ]
+        let calls = [
+            makeCall("run_command", messageID: firstAssistantID),
+            makeCall("run_command", messageID: firstAssistantID),
+            makeCall("run_command", messageID: secondAssistantID),
+            makeCall("run_command", status: .running, messageID: thirdAssistantID)
+        ]
+
+        let presentation = try #require(AgentActiveTurnToolCallPresentation.make(
+            messages: messages,
+            toolCalls: calls,
+            isResponding: true
+        ))
+
+        #expect(presentation.messageIDs == [firstAssistantID, secondAssistantID, thirdAssistantID])
+        #expect(presentation.calls.count == 4)
+        #expect(presentation.hidingToolCalls(in: messages[1]).toolCalls.isEmpty)
+        #expect(presentation.hidingToolCalls(in: messages[2]) == messages[2])
+        #expect(presentation.hidingToolCalls(in: messages[3]).content == "继续检查。")
+        #expect(presentation.hidingToolCalls(in: messages[3]).toolCalls.isEmpty)
+    }
+
+    @Test("active turn aggregation never crosses the latest user input")
+    func testActiveTurnToolCallsStopAtLatestUserInput() throws {
+        let previousMessageID = UUID()
+        let currentMessageID = UUID()
+        let messages = [
+            AgentMessage(role: .user, content: "第一轮"),
+            AgentMessage(id: previousMessageID, role: .assistant, content: "旧结果"),
+            AgentMessage(role: .user, content: "第二轮"),
+            AgentMessage(id: currentMessageID, role: .assistant, content: "新结果")
+        ]
+        let calls = [
+            makeCall("run_command", messageID: previousMessageID),
+            makeCall("run_command", status: .running, messageID: currentMessageID)
+        ]
+
+        let presentation = try #require(AgentActiveTurnToolCallPresentation.make(
+            messages: messages,
+            toolCalls: calls,
+            isResponding: true
+        ))
+
+        #expect(presentation.messageIDs == [currentMessageID])
+        #expect(presentation.calls.count == 1)
     }
 
     @Test("AgentToolActivitySummary counts exploration searches and commands")

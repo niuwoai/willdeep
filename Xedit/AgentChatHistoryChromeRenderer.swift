@@ -790,9 +790,12 @@ extension AgentChatHistoryRenderer {
         style.lineSpacing = 1
         style.paragraphSpacingBefore = 2
         style.paragraphSpacing = 1
-        style.headIndent = 22
-        style.firstLineHeadIndent = 22
-        style.tailIndent = -22
+        // Keep the compact activity summary on the same content column as
+        // the assistant prose above it. A bespoke 22 pt inset used to place
+        // this label 10 pt left of the 32 pt assistant body edge.
+        style.headIndent = AgentChatHistoryLayoutMetrics.assistantContentHeadIndent
+        style.firstLineHeadIndent = AgentChatHistoryLayoutMetrics.assistantContentHeadIndent
+        style.tailIndent = -AgentChatHistoryLayoutMetrics.assistantContentTailInset
         return style
     }
 

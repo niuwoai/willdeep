@@ -154,6 +154,7 @@ struct EditorView: NSViewRepresentable {
         textView.isEditable = true
         textView.isRichText = true
         textView.importsGraphics = false
+        textView.configureCodeEditingBehavior()
         textView.allowsUndo = true
         textView.textContainerInset = NSSize(width: 12, height: 8)
         textView.textContainer?.lineFragmentPadding = 0

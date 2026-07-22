@@ -571,6 +571,22 @@ extension WillDeepTests {
     }
 
     @MainActor
+    @Test("editor disables writing assistance that mutates source punctuation")
+    func testEditorDisablesSourceMutatingWritingAssistance() {
+        let textView = WillDeepTextView(frame: .zero)
+
+        textView.configureCodeEditingBehavior()
+
+        #expect(textView.isAutomaticQuoteSubstitutionEnabled == false)
+        #expect(textView.isAutomaticDashSubstitutionEnabled == false)
+        #expect(textView.isAutomaticTextReplacementEnabled == false)
+        #expect(textView.isAutomaticSpellingCorrectionEnabled == false)
+        #expect(textView.smartInsertDeleteEnabled == false)
+        #expect(textView.isAutomaticDataDetectionEnabled == false)
+        #expect(textView.isAutomaticLinkDetectionEnabled == false)
+    }
+
+    @MainActor
     @Test("editor Command-arrow follows macOS line navigation")
     func testEditorCommandArrowMovesToLineBoundary() throws {
         let textView = WillDeepTextView(frame: .zero)

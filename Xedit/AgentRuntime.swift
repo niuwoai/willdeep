@@ -101,6 +101,7 @@ final class AgentRuntime: ObservableObject, Identifiable {
     @Published var pendingPlanModeSuggestion: AgentPlanModeSuggestion?
     @Published var currentGoal: AgentGoal?
     @Published var goalPlanningState: AgentGoalPlanningState?
+    @Published var goalTurnRecoveryCheckpoint: AgentGoalTurnRecoveryCheckpoint?
     /// Runtime-only guard for mid-turn manual goal edits. If the user edits
     /// the goal while an old request is already in flight, that older reply's
     /// trailing `goal-check` block must not be applied to the new checklist.
@@ -242,6 +243,7 @@ final class AgentRuntime: ObservableObject, Identifiable {
         self.activeExperts = session.activeExperts
         self.currentPlan = session.currentPlan
         self.currentGoal = session.currentGoal
+        self.goalTurnRecoveryCheckpoint = session.goalTurnRecoveryCheckpoint
         let restoredGoalPlanningState = session.goalPlanningState?.normalizedForRestore(
             currentPlan: session.currentPlan,
             currentGoal: session.currentGoal
@@ -391,6 +393,7 @@ final class AgentRuntime: ObservableObject, Identifiable {
         session.currentPlan = currentPlan
         session.currentGoal = currentGoal
         session.goalPlanningState = goalPlanningState
+        session.goalTurnRecoveryCheckpoint = goalTurnRecoveryCheckpoint
         session.learningEvents = learningEvents
         session.latestTurnRecall = latestTurnRecall
         session.documentAttachments = documentAttachments

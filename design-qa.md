@@ -1,3 +1,151 @@
+# Design QA：稳定思考文字与用户决策等待态
+
+## 验收范围
+
+- source visual truth：`/var/folders/np/rjc0y5w52x324x21pv6g33440000gp/T/codex-clipboard-60065014-8964-46b9-b8ea-a9ed51e4835f.png`、`/var/folders/np/rjc0y5w52x324x21pv6g33440000gp/T/codex-clipboard-b90b8b96-ce5f-489b-835b-1dd72b58838f.png`
+- implementation screenshot：`/tmp/Xedit-thinking-status-design-qa/implementation.png`
+- 同画布对比：`build/visual-qa/thinking-status/thinking-status-comparison.png`
+- viewport：两个 478 × 96pt 状态并排，以 Retina 2× 渲染；对比图上行为用户参考，下行为真实生产组件
+- state：左侧为自主回合已运行 4m 35s，右侧为等待用户授权且另有一项运行中任务
+
+## 修正记录
+
+1. 删除居中的独立星星等待标记，避免它与“正在思考 · 时长”在同一回合交替出现并造成布局闪动。
+2. 新增统一的回合活动状态组件，侧栏与主聊天共用同一判断：自主执行期间持续显示文字计时，不再因首个 assistant token 到达而切换展示形式。
+3. 等待确认、授权或用户回答时不渲染通用思考状态；对应交互卡片本身继续说明阻塞原因，避免重复反馈。
+4. 上下文压缩与正在运行的具体任务继续使用各自的专用状态，不与通用文字行叠加。
+
+## Required Fidelity Surfaces
+
+- Fonts and typography：继续使用生产环境的系统小字号与次级文本层级，计时与参考图保持同一行。
+- Spacing and layout rhythm：文字沿助手正文内容列左对齐；用户决策等待态保留原布局空间，不出现居中图标跳动。
+- Colors and visual tokens：实现完全读取 Rice Paper 皮肤背景与现有次级文字 token，没有新增硬编码界面颜色。
+- Image quality and asset fidelity：移除造成切换的 SF Symbol；对比图由真实 SwiftUI 组件 Retina 快照缩放至逻辑尺寸生成。
+- Copy and content：沿用 i18n 文案“正在思考”，仅追加既有时长格式；等待授权时不增加重复提示。
+
+## Findings
+
+没有未解决的 P0、P1 或 P2 差异。实现图左侧稳定显示“正在思考 · 4m 35s”；右侧即使同时存在运行中任务，用户决策状态仍为空，不再出现参考图中的居中星星或任务星号。
+
+## 验证
+
+- 235 项 `WillDeepTests` 定向测试通过，覆盖思考、确认、授权、用户回答与压缩状态判断。
+- 1 项真实 SwiftUI 视觉测试通过，覆盖固定文字状态和用户决策留白状态。
+- 版本一致性目标：`1.193.0-rc5`，Build 65。
+
+final result: passed
+
+---
+
+# Design QA：终端活动摘要与正文对齐
+
+## 验收范围
+
+- source visual truth：`/var/folders/np/rjc0y5w52x324x21pv6g33440000gp/T/codex-clipboard-bc07f357-acc3-4320-aebb-5bc28fef4f5c.png`
+- implementation screenshot：`/tmp/Xedit-terminal-summary-alignment-design-qa/implementation.png`
+- viewport：参考图完整视口 587 × 263 px；聚焦对比统一为 587 × 142 px，浅色外观
+- state：助手正文两段，随后显示“已执行 4 次终端操作”的折叠摘要
+
+## 对比证据
+
+- 同画布聚焦对比：`build/visual-qa/terminal-summary-alignment/terminal-summary-alignment-comparison.png`
+- 完整参考图已检查正文、摘要和上下文节奏；问题只涉及同一内容列的水平起点，因此聚焦区域足以清楚判断。
+- 上半部分参考图中正文起点为约 50px、摘要起点为约 40px；下半部分修正后的真实 TextKit 渲染中两者均从约 50px 起始。
+
+## 修正记录
+
+1. 初始实现的工具摘要使用固定 22pt `headIndent`，助手正文使用统一的 32pt `assistantContentHeadIndent`，造成肉眼可见的 10pt 左偏。
+2. 工具摘要改为复用助手正文的 32pt 左缩进和 18pt 右收口，不改字号、颜色、折叠行为或点击能力。
+3. 修正后重新渲染，并同时验证段落样式和 TextKit 字形包围盒；正文与摘要的 `minX` 差值小于 0.5pt。
+
+## Required Fidelity Surfaces
+
+- Fonts and typography：保持现有 14pt 助手正文与 11pt 中等字重摘要层级，未引入字体漂移。
+- Spacing and layout rhythm：正文与摘要共用同一 32pt 左内容列，原有纵向间距保持不变。
+- Colors and visual tokens：沿用现有正文色、次级摘要色和分隔线 token；测试渲染采用生产 `linkTextAttributes`。
+- Image quality and asset fidelity：本次界面不包含新增图像素材；同画布 PNG 保持原始宽度并使用 Retina 实现截图缩放到 1×。
+- Copy and content：文案保持“已执行 4 次终端操作”，仅修正布局。
+
+## Findings
+
+没有未解决的 P0、P1 或 P2 差异。实现截图底部的复制/重试图标来自测试载体的可见 footer 状态，不属于本次摘要对齐区域，也不影响生产界面的正文列。
+
+## 验证
+
+- 67 项 `AgentChatHistoryRendererTests` 通过。
+- 版本一致性检查通过：`1.193.0-rc3`，Build 63。
+
+final result: passed
+
+---
+
+# Design QA：模型切换短分隔线与命令聚合
+
+## 验收范围
+
+- 参考图：`/var/folders/np/rjc0y5w52x324x21pv6g33440000gp/T/codex-clipboard-dbe0b1e4-7b6f-46c3-9c0b-71ee39515108.png`
+- 实现位置：macOS 原生 Agent 对话历史与当前回合工具活动组
+- 对比视口：上下两块均为 1126 × 220 px；上方为参考图顶部同尺寸裁切，下方为真实 TextKit 生产组件渲染
+- 状态：浅色外观、同一用户回合累计 26 条命令、期间从 `deepseek-v4-flash` 切换到 `deepseek-v4-pro`
+
+## 实现证据
+
+- 同画布对比：`build/visual-qa/model-switch-command-group/model-switch-command-group-comparison.png`
+- 真实组件渲染：`/tmp/Xedit-command-group-design-qa/model-switch-command-group-implementation.png`
+- 自动化断言：命令摘要只出现一次并显示“已运行 26 条命令”；模型切换事件只出现一次。
+
+## 对比与修正记录
+
+1. 参考图中模型切换线横贯接近整个 1126px 对话区，并把同一轮命令拆成 16、8、2 三组。
+2. 实现将模型切换提示左右线段分别限制为 96pt，同时保留居中图标、模型名和原事件顺序。
+3. 当前回合工具调用按最新用户输入划定边界，跨 provider 消息收集；历史 TextKit 消息只隐藏已由实时组接管的工具 payload，正文与模型切换事件保持原位。
+4. 实时分组会把被文件探索等其他工具穿插的 `run_command` 再合并为一个命令段；下一条用户输入开始后不会继承上一轮命令。
+
+## 结论
+
+没有未解决的 P0、P1 或 P2 视觉问题。66 项聊天历史渲染测试通过，命令聚合定向测试覆盖跨消息、跨事件与用户回合边界。
+
+final result: passed
+
+---
+
+# Design QA：Composer 任务进度浮层
+
+## 验收范围
+
+- 参考图：`/var/folders/np/rjc0y5w52x324x21pv6g33440000gp/T/codex-clipboard-e290ab86-a0ff-46b7-bbae-0fdeea5a1413.png`
+- 实现位置：macOS 原生 Agent Composer，输入框正上方
+- 参考视口：779 × 299，浅色外观，5 步计划的第 1 步执行中
+- 实现视口：779pt 宽的真实 Composer 渲染，以及 1373 × 768 的真实 WillDeep 窗口
+
+## 实现证据
+
+- 聚焦对比：`build/visual-qa/composer-progress/reference-vs-implementation-focused.png`
+- 完整布局对比：`build/visual-qa/composer-progress/reference-vs-implementation-full.png`
+- 真实窗口折叠态：`build/visual-qa/composer-progress/native-collapsed.png`
+- 真实窗口点击展开态：`build/visual-qa/composer-progress/native-expanded.png`
+
+## 行为验证
+
+- 折叠态在辅助功能树中暴露为 `agent.composer.task-progress`，描述为“第 1 / 5 步：审查并提交现有改动”。
+- 点击胶囊后出现原生 popover，并暴露 `agent.composer.task-progress.panel`；5 个步骤及“进行中/待处理”状态完整可读。
+- 再次点击胶囊后 popover 关闭；点击固定状态与关闭状态均通过 Computer Use 在临时 Debug QA 状态下实测，验收后已移除状态注入代码。
+- 悬停进入会展开浮层，离开胶囊与浮层 240ms 后关闭；点击固定时不受悬停离开影响。
+- 已完成、跳过、失败、显式执行中、推断执行中、计划优先和 Goal 回退均由自动化测试覆盖。
+
+## 对比与修正记录
+
+1. 初版浮层宽度 276pt、行高 28pt，且当前行带灰底；与参考图相比过宽、过重。
+2. 第二轮移除当前行底色，将行高收至 24pt、垂直间距收至 3pt，并减弱非当前文本。
+3. 最终将浮层宽度收至 196pt；同画布聚焦对比中，列表密度、圆角、状态圆点与胶囊位置已贴近参考图，同时保留 WillDeep 既有皮肤色与原生 popover 箭头。
+4. 完整布局对比确认胶囊保持在 Composer 水平中心，不挤压附件、模型、模式、审批与发送控制。
+
+## 结论
+
+final result: passed
+
+---
+
 # 独立“已安排”任务中心 Design QA
 
 - source visual truth: `/Users/rocky/Sites/Xedit/artifacts/design-qa/scheduled-tasks/reference.png`

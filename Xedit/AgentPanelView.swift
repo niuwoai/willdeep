@@ -148,26 +148,8 @@ struct AgentPanelView: View {
                         )
                     }
 
-                    if appState.shouldShowAgentThinkingIndicator {
-                        AgentThinkingDivider()
-                    }
-
-                    // 底部活动指示（参照 Claude Code）：有任务在跑就显示
-                    // 「✳ N 个任务运行中」（点击展开右侧 jobs 抽屉），turn
-                    // 结束后只要后台作业还活着就继续显示；没有任务但 turn
-                    // 还在跑则退回纯呼吸 icon。
-                    if !appState.isCompressingAgentContext {
-                        let runningTasks = appState.agentRunningTaskCount
-                        if runningTasks > 0 {
-                            AgentRunningTasksRow(
-                                count: runningTasks,
-                                detail: appState.agentRunningTaskSummary
-                            ) {
-                                isJobsDrawerOpen = true
-                            }
-                        } else if appState.isAgentResponding && !appState.shouldShowAgentThinkingIndicator {
-                            AgentBreathingIndicator()
-                        }
+                    AgentTurnActivityStatusView {
+                        isJobsDrawerOpen = true
                     }
 
                     if appState.isCompressingAgentContext {
@@ -452,6 +434,39 @@ struct AgentThinkingDivider: View {
                     .padding(.top, AgentChatHistoryLayoutMetrics.assistantStatusDividerBottomSpacing)
                     .padding(.bottom, 8)
                     .accessibilityLabel(L10n.AgentPanel.thinkingPreviewAccessibility)
+            }
+        }
+    }
+}
+
+/// Single source of truth for the transcript's bottom activity feedback.
+/// Concrete tasks take priority; otherwise an autonomous turn keeps the same
+/// elapsed-time text from first token to last. User-decision and compression
+/// states intentionally render nothing here because their dedicated surfaces
+/// already explain what is blocking progress.
+struct AgentTurnActivityStatusView: View {
+    @EnvironmentObject var appState: AppState
+    var leadingInset: CGFloat = 0
+    var trailingInset: CGFloat = 0
+    var onRunningTasksTap: (() -> Void)? = nil
+
+    @ViewBuilder
+    var body: some View {
+        if !appState.isCompressingAgentContext,
+           !appState.isAgentWaitingForUserDecision {
+            let runningTasks = appState.agentRunningTaskCount
+            if runningTasks > 0 {
+                AgentRunningTasksRow(
+                    count: runningTasks,
+                    isAgentTurnActive: appState.isAgentResponding,
+                    detail: appState.agentRunningTaskSummary,
+                    onTap: onRunningTasksTap
+                )
+            } else if appState.shouldShowAgentActivityTextIndicator {
+                AgentThinkingDivider(
+                    leadingInset: leadingInset,
+                    trailingInset: trailingInset
+                )
             }
         }
     }

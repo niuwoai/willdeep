@@ -44,6 +44,25 @@ struct AgentChatHistoryRendererTests {
     }
 
     @Test
+    func modelSwitchDividerUsesShortArmsInsteadOfViewportWideRules() throws {
+        let segments = AgentChatHistoryLayoutMetrics.transcriptEventDividerSegments(
+            textMinX: 360,
+            textMaxX: 640,
+            usableWidth: 1_000
+        )
+
+        #expect(segments.count == 2)
+        let leading = try #require(segments.first)
+        let trailing = try #require(segments.last)
+        #expect(leading.end - leading.start == AgentChatHistoryLayoutMetrics.transcriptEventDividerArmLength)
+        #expect(trailing.end - trailing.start == AgentChatHistoryLayoutMetrics.transcriptEventDividerArmLength)
+        #expect(leading.start > 0)
+        #expect(trailing.end < 1_000)
+        #expect(leading.end == 360 - AgentChatHistoryLayoutMetrics.transcriptEventDividerGap)
+        #expect(trailing.start == 640 + AgentChatHistoryLayoutMetrics.transcriptEventDividerGap)
+    }
+
+    @Test
     func longMessagePreviewKeepsHeadAndTail() {
         let content = String(repeating: "A", count: 120)
             + "MIDDLE_SHOULD_BE_OMITTED"
@@ -1001,7 +1020,7 @@ struct AgentChatHistoryRendererTests {
     }
 
     @Test
-    func latestAssistantCollapsesTerminalToolSummaries() {
+    func latestAssistantCollapsesTerminalToolSummaries() throws {
         let message = AgentMessage(
             role: .assistant,
             content: "Redis 关键调不在尾行。",
@@ -1024,6 +1043,22 @@ struct AgentChatHistoryRendererTests {
         #expect(rendered.string.contains("已执行 2 次终端操作"))
         #expect(!rendered.string.contains("已调用 terminal send command"))
         #expect(!rendered.string.contains("已调用 terminal snapshot"))
+
+        let bodyRange = (rendered.string as NSString).range(of: "Redis 关键调不在尾行。")
+        let summaryRange = (rendered.string as NSString).range(of: "已执行 2 次终端操作")
+        let bodyStyle = try #require(rendered.attribute(
+            .paragraphStyle,
+            at: bodyRange.location,
+            effectiveRange: nil
+        ) as? NSParagraphStyle)
+        let summaryStyle = try #require(rendered.attribute(
+            .paragraphStyle,
+            at: summaryRange.location,
+            effectiveRange: nil
+        ) as? NSParagraphStyle)
+        #expect(summaryStyle.headIndent == bodyStyle.headIndent)
+        #expect(summaryStyle.firstLineHeadIndent == bodyStyle.firstLineHeadIndent)
+        #expect(summaryStyle.tailIndent == bodyStyle.tailIndent)
     }
 
     @Test
@@ -1483,6 +1518,175 @@ struct AgentChatHistoryRendererTests {
         view.cacheDisplay(in: view.bounds, to: bitmap)
         let png = try #require(bitmap.representation(using: .png, properties: [:]))
         try png.write(to: URL(fileURLWithPath: outputPath), options: .atomic)
+    }
+
+    @Test
+    @MainActor
+    func rendersShortModelSwitchDividerAndMergedCommandsForDesignQA() throws {
+        let outputDirectory = URL(
+            fileURLWithPath: ProcessInfo.processInfo.environment[
+                "WILLDEEP_COMMAND_GROUP_QA_OUTPUT"
+            ] ?? "/tmp/Xedit-command-group-design-qa",
+            isDirectory: true
+        )
+        try FileManager.default.createDirectory(
+            at: outputDirectory,
+            withIntermediateDirectories: true
+        )
+
+        let commandCalls = (1...26).map { index in
+            AgentMessageToolCall(
+                externalID: "command-\(index)",
+                toolName: "run_command",
+                argumentsJSON: #"{"command":"check-step-\#(index)"}"#
+            )
+        }
+        let messages = [
+            AgentMessage(role: .assistant, content: "", toolCalls: commandCalls),
+            AgentMessage(
+                role: .system,
+                content: L10n.AgentModelPicker.modelChanged(
+                    from: "deepseek-v4-flash",
+                    to: "deepseek-v4-pro"
+                ),
+                transcriptEvent: .modelChanged
+            ),
+            AgentMessage(role: .assistant, content: "继续分析运行结果。")
+        ]
+        let view = AgentChatHistoryNSTextView()
+        view.drawsBackground = true
+        view.backgroundColor = .white
+        view.textContainerInset = NSSize(width: 40, height: 24)
+        view.frame = NSRect(x: 0, y: 0, width: 1_126, height: 220)
+        view.textContainer?.size = NSSize(width: 1_046, height: CGFloat.greatestFiniteMagnitude)
+        view.applyMessages(
+            messages,
+            isDark: false,
+            assistantTurnContextMessages: messages,
+            baseFontSize: 14
+        )
+        view.layoutSubtreeIfNeeded()
+
+        #expect(occurrences(of: "已运行 26 条命令", in: view.string) == 1)
+        #expect(occurrences(of: "模型已从", in: view.string) == 1)
+
+        let implementationURL = outputDirectory.appendingPathComponent(
+            "model-switch-command-group-implementation.png"
+        )
+        let bitmap = try #require(view.bitmapImageRepForCachingDisplay(in: view.bounds))
+        view.cacheDisplay(in: view.bounds, to: bitmap)
+        let png = try #require(bitmap.representation(using: .png, properties: [:]))
+        try png.write(to: implementationURL, options: .atomic)
+
+        guard let referencePath = ProcessInfo.processInfo.environment[
+            "WILLDEEP_COMMAND_GROUP_QA_REFERENCE"
+        ],
+        let reference = NSImage(contentsOfFile: referencePath),
+        let implementation = NSImage(contentsOf: implementationURL) else {
+            return
+        }
+
+        let panelSize = NSSize(width: 1_126, height: 220)
+        let comparison = NSImage(size: NSSize(width: panelSize.width, height: panelSize.height * 2))
+        comparison.lockFocus()
+        NSColor.white.setFill()
+        NSRect(origin: .zero, size: comparison.size).fill()
+        let referenceCrop = NSRect(
+            x: 0,
+            y: max(0, reference.size.height - panelSize.height),
+            width: reference.size.width,
+            height: min(panelSize.height, reference.size.height)
+        )
+        reference.draw(
+            in: NSRect(x: 0, y: panelSize.height, width: panelSize.width, height: panelSize.height),
+            from: referenceCrop,
+            operation: .copy,
+            fraction: 1
+        )
+        implementation.draw(
+            in: NSRect(origin: .zero, size: panelSize),
+            from: NSRect(origin: .zero, size: implementation.size),
+            operation: .copy,
+            fraction: 1
+        )
+        comparison.unlockFocus()
+        let comparisonTIFF = try #require(comparison.tiffRepresentation)
+        let comparisonBitmap = try #require(NSBitmapImageRep(data: comparisonTIFF))
+        let comparisonPNG = try #require(comparisonBitmap.representation(using: .png, properties: [:]))
+        try comparisonPNG.write(
+            to: outputDirectory.appendingPathComponent(
+                "model-switch-command-group-comparison.png"
+            ),
+            options: .atomic
+        )
+    }
+
+    @Test
+    @MainActor
+    func rendersTerminalSummaryAlignedWithAssistantBodyForDesignQA() throws {
+        let outputDirectory = URL(
+            fileURLWithPath: "/tmp/Xedit-terminal-summary-alignment-design-qa",
+            isDirectory: true
+        )
+        try FileManager.default.createDirectory(
+            at: outputDirectory,
+            withIntermediateDirectories: true
+        )
+        let terminalCalls = (1...4).map { index in
+            AgentMessageToolCall(
+                externalID: "terminal-operation-\(index)",
+                toolName: "terminal_snapshot",
+                argumentsJSON: #"{"max_chars":2000}"#
+            )
+        }
+        let message = AgentMessage(
+            role: .assistant,
+            content: """
+            明白，让我先看下侧边栏终端当前状态。
+
+            终端的 K8s master 节点上，直接更新 Deployment 镜像。
+            """,
+            toolCalls: terminalCalls
+        )
+        let view = AgentChatHistoryNSTextView()
+        view.drawsBackground = true
+        view.backgroundColor = .white
+        view.textContainerInset = NSSize(width: 18, height: 16)
+        view.textContainer?.lineFragmentPadding = 0
+        view.linkTextAttributes = [
+            .underlineStyle: 0,
+            .cursor: NSCursor.arrow,
+        ]
+        view.frame = NSRect(x: 0, y: 0, width: 587, height: 142)
+        view.textContainer?.size = NSSize(width: 551, height: CGFloat.greatestFiniteMagnitude)
+        view.applyMessages([message], isDark: false, baseFontSize: 14)
+        view.layoutSubtreeIfNeeded()
+
+        let bodyRange = (view.string as NSString).range(of: "明白，让我先看下侧边栏终端当前状态。")
+        let summaryRange = (view.string as NSString).range(of: "已执行 4 次终端操作")
+        let bodyGlyphRange = try #require(view.layoutManager?.glyphRange(
+            forCharacterRange: bodyRange,
+            actualCharacterRange: nil
+        ))
+        let summaryGlyphRange = try #require(view.layoutManager?.glyphRange(
+            forCharacterRange: summaryRange,
+            actualCharacterRange: nil
+        ))
+        let bodyRect = try #require(view.layoutManager?.boundingRect(
+            forGlyphRange: bodyGlyphRange,
+            in: view.textContainer!
+        ))
+        let summaryRect = try #require(view.layoutManager?.boundingRect(
+            forGlyphRange: summaryGlyphRange,
+            in: view.textContainer!
+        ))
+        #expect(abs(bodyRect.minX - summaryRect.minX) < 0.5)
+
+        let outputURL = outputDirectory.appendingPathComponent("implementation.png")
+        let bitmap = try #require(view.bitmapImageRepForCachingDisplay(in: view.bounds))
+        view.cacheDisplay(in: view.bounds, to: bitmap)
+        let png = try #require(bitmap.representation(using: .png, properties: [:]))
+        try png.write(to: outputURL, options: .atomic)
     }
 
     @Test

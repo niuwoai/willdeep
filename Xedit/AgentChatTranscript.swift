@@ -246,6 +246,11 @@ struct AgentChatTranscript: View {
                         let allVisible = visibleMessages
                         let searchingConversation = isConversationSearchActive
                         let rendered = searchingConversation ? allVisible : renderedMessages(from: allVisible)
+                        let activeToolPresentation = AgentActiveTurnToolCallPresentation.make(
+                            messages: appState.agentMessages,
+                            toolCalls: appState.agentToolCalls,
+                            isResponding: appState.isAgentResponding
+                        )
                         let omitted = searchingConversation ? 0 : allVisible.count - rendered.count
                         if omitted > 0 {
                             transcriptOlderHistoryCard(
@@ -255,7 +260,11 @@ struct AgentChatTranscript: View {
                         }
 
                         let streamingMessageID = searchingConversation ? nil : currentStreamingMessageID
-                        let history = historyMessages(rendered: rendered, streamingID: streamingMessageID)
+                        let history = historyMessages(
+                            rendered: rendered,
+                            streamingID: streamingMessageID,
+                            activeToolPresentation: activeToolPresentation
+                        )
                         if !history.isEmpty {
                             AgentChatHistoryTextView(
                                 messages: history,
@@ -363,28 +372,28 @@ struct AgentChatTranscript: View {
                         // history summary so the transcript reads like
                         // the final assistant result rather than a log
                         // dump of the execution path.
-                        ForEach(toolCallGroupMessageIDs(in: rendered), id: \.self) { messageID in
-                            let calls = toolCalls(for: messageID)
-                            if !calls.isEmpty {
-                                let segments = AgentToolCallGrouping.livePresentationSegments(calls)
-                                if !segments.isEmpty {
-                                    VStack(alignment: .leading, spacing: 8) {
-                                        ForEach(segments) { segment in
-                                            AgentToolCallGroup(calls: segment.calls)
-                                        }
+                        if let activeToolPresentation,
+                           let messageID = activeToolPresentation.anchorMessageID {
+                            let segments = AgentToolCallGrouping.livePresentationSegments(
+                                activeToolPresentation.calls
+                            )
+                            if !segments.isEmpty {
+                                VStack(alignment: .leading, spacing: 8) {
+                                    ForEach(segments) { segment in
+                                        AgentToolCallGroup(calls: segment.calls)
                                     }
-                                    .id(toolGroupScrollID(for: messageID))
-                                    // Keep detailed working/error cards visually
-                                    // separate from the compact inline summary.
-                                    .padding(.top, 28)
-                                    .padding(.bottom, 6)
-                                    // Tool activity belongs to the assistant turn.
-                                    // Align its card edge with the assistant body
-                                    // instead of the transcript viewport edge.
-                                    .padding(.leading, AgentChatHistoryLayoutMetrics.assistantContentHeadIndent)
-                                    .padding(.trailing, AgentChatHistoryLayoutMetrics.assistantContentTailInset)
-                                    .frame(maxWidth: AgentDesign.chatMaxContentWidth, alignment: .leading)
                                 }
+                                .id(toolGroupScrollID(for: messageID))
+                                // Keep detailed working/error cards visually
+                                // separate from the compact inline summary.
+                                .padding(.top, 28)
+                                .padding(.bottom, 6)
+                                // Tool activity belongs to the assistant turn.
+                                // Align its card edge with the assistant body
+                                // instead of the transcript viewport edge.
+                                .padding(.leading, AgentChatHistoryLayoutMetrics.assistantContentHeadIndent)
+                                .padding(.trailing, AgentChatHistoryLayoutMetrics.assistantContentTailInset)
+                                .frame(maxWidth: AgentDesign.chatMaxContentWidth, alignment: .leading)
                             }
                         }
                     }
@@ -407,7 +416,7 @@ struct AgentChatTranscript: View {
                     // 消息已发出、但还没抢到 provider 并发槽（同一 provider
                     // 已有 perProviderConcurrencyLimit 个 turn 在跑，比如多
                     // 会话/双开/routine 并发）时，dispatch 走排队分支、
-                    // isResponding 仍为 false，下面的 thinking / 呼吸指示都不会
+                    // isResponding 仍为 false，下面的思考文字计时不会
                     // 亮。若这里不补一行，用户只看到自己的消息、界面像死了，
                     // 直到某个槽空出来 drain 才「又开始输出」。参照侧栏
                     // AgentPanelView 的同款提示。
@@ -421,37 +430,13 @@ struct AgentChatTranscript: View {
                             .frame(maxWidth: AgentDesign.chatMaxContentWidth)
                     }
 
-                    // 底部活动指示，两档（参照 Claude Code）：
-                    //  - 有任务在跑（前台工具阻塞 / 后台作业存活）→
-                    //    「✳ N 个任务运行中」状态行；turn 结束后只要后台
-                    //    作业还活着就继续挂着，解释"输出停了在等任务"。
-                    //  - 否则 turn 还在跑 → 纯呼吸 icon（等首 token / 流式中）。
-                    // Reasoning 直接占用正文位置。首个正式正文 token 到达
-                    // 时 shouldShowAgentThinkingIndicator 会在同一批发布中
-                    // 变为 false，下面的整块思考正文原子退场，正式回答
-                    // 接替它，不做淡入淡出或双层交叉渲染。
-                    if appState.shouldShowAgentThinkingIndicator {
-                        AgentThinkingDivider(
-                            leadingInset: AgentChatHistoryLayoutMetrics.assistantContentHeadIndent,
-                            trailingInset: AgentChatHistoryLayoutMetrics.assistantContentTailInset
-                        )
-                            .frame(maxWidth: AgentDesign.chatMaxContentWidth)
-                    }
-
-                    if !appState.isCompressingAgentContext {
-                        let runningTasks = appState.agentRunningTaskCount
-                        if runningTasks > 0 {
-                            AgentRunningTasksRow(
-                                count: runningTasks,
-                                isAgentTurnActive: appState.isAgentResponding,
-                                detail: appState.agentRunningTaskSummary
-                            )
-                                .frame(maxWidth: AgentDesign.chatMaxContentWidth, alignment: .leading)
-                        } else if appState.isAgentResponding && !appState.shouldShowAgentThinkingIndicator {
-                            AgentBreathingIndicator()
-                                .frame(maxWidth: AgentDesign.chatMaxContentWidth)
-                        }
-                    }
+                    // 任务运行、固定文字计时与交互等待的显示优先级由同一
+                    // 组件裁决，主对话和侧栏不会再走出两套状态。
+                    AgentTurnActivityStatusView(
+                        leadingInset: AgentChatHistoryLayoutMetrics.assistantContentHeadIndent,
+                        trailingInset: AgentChatHistoryLayoutMetrics.assistantContentTailInset
+                    )
+                        .frame(maxWidth: AgentDesign.chatMaxContentWidth, alignment: .leading)
 
                     if appState.isCompressingAgentContext {
                         AgentContextCompressionDivider(
@@ -846,13 +831,17 @@ struct AgentChatTranscript: View {
     /// history view — everything except the currently-streaming
     /// assistant message (that one is rendered as its own SwiftUI
     /// bubble so markdown + streaming cursor stay live).
-    private func historyMessages(rendered: [AgentMessage], streamingID: AgentMessage.ID?) -> [AgentMessage] {
-        rendered.filter { message in
-            if message.id == streamingID { return false }
+    private func historyMessages(
+        rendered: [AgentMessage],
+        streamingID: AgentMessage.ID?,
+        activeToolPresentation: AgentActiveTurnToolCallPresentation?
+    ) -> [AgentMessage] {
+        rendered.compactMap { message in
+            if message.id == streamingID { return nil }
             // 运行中的 workflow 卡片由下方的 SwiftUI 工作态表面渲染,
             // 不进 TextKit 历史(避免同一条消息出现两次)。
-            if isActiveWorkflowMessage(message) { return false }
-            return true
+            if isActiveWorkflowMessage(message) { return nil }
+            return activeToolPresentation?.hidingToolCalls(in: message) ?? message
         }
     }
 
@@ -866,23 +855,6 @@ struct AgentChatTranscript: View {
 
     private func activeWorkflowMessages(in rendered: [AgentMessage]) -> [AgentMessage] {
         rendered.filter(isActiveWorkflowMessage)
-    }
-
-    /// Show detailed, expandable SwiftUI tool cards only while they are
-    /// part of the active working state. Older or fully-settled calls
-    /// remain visible in the TextKit history summary, which gives us the
-    /// Codex-like split: live execution gets rich progress, completed
-    /// turns collapse into a cleaned-up transcript.
-    private func toolCallGroupMessageIDs(in rendered: [AgentMessage]) -> [AgentMessage.ID] {
-        guard let latest = rendered.reversed().first(where: { message in
-            let calls = toolCalls(for: message.id)
-            guard !calls.isEmpty else { return false }
-            if appState.isAgentResponding { return true }
-            return calls.contains(where: isWorkingToolCall)
-        }) else {
-            return []
-        }
-        return [latest.id]
     }
 
     /// Slice the bottom `renderedMessageCap` messages out of the

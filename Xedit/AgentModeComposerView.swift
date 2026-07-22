@@ -85,6 +85,12 @@ struct AgentChatComposer: View {
                     .transition(.opacity.combined(with: .move(edge: .bottom)))
                 }
 
+                if let progress = taskProgressSnapshot {
+                    AgentComposerTaskProgressControl(snapshot: progress)
+                        .frame(maxWidth: AgentDesign.chatMaxContentWidth)
+                        .transition(.opacity.combined(with: .move(edge: .bottom)))
+                }
+
                 ComposerCard(onUserEdit: { oldValue, newValue in
                     if appState.agentPendingPlanModeSuggestion != nil,
                        newValue != oldValue {
@@ -169,6 +175,14 @@ struct AgentChatComposer: View {
                     || call.status == .awaitingConfirm
                     || call.status == .awaitingUserAnswer
             }
+    }
+
+    private var taskProgressSnapshot: AgentComposerTaskProgressSnapshot? {
+        return AgentComposerTaskProgressSnapshot.preferred(
+            plan: appState.agentCurrentPlan,
+            goal: appState.agentCurrentGoal,
+            isResponding: appState.isAgentResponding
+        )
     }
 
     private func planFingerprint(_ plan: AgentPlan) -> String {

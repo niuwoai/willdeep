@@ -114,6 +114,44 @@ struct WillDeepTests {
     }
 
     @MainActor
+    @Test("agent activity stays textual and hides for user decisions")
+    func testAgentActivityTextIndicatorState() {
+        let appState = AppState()
+        appState.startNewAgentSession()
+        appState.isAgentResponding = true
+        appState.agentMessages = [AgentMessage(role: .assistant, content: "Streaming response")]
+
+        // The text indicator remains after visible output starts instead of
+        // being replaced by the former centered sparkle.
+        #expect(appState.shouldShowAgentThinkingIndicator == false)
+        #expect(appState.shouldShowAgentActivityTextIndicator == true)
+
+        for status in [
+            AgentToolCallStatus.pendingApproval,
+            .awaitingConfirm,
+            .awaitingUserAnswer
+        ] {
+            appState.agentToolCalls = [
+                AgentToolCall(
+                    messageID: UUID(),
+                    externalID: UUID().uuidString,
+                    toolName: "ask_user",
+                    arguments: [:],
+                    risk: .userInput,
+                    status: status
+                )
+            ]
+            #expect(appState.isAgentWaitingForUserDecision == true)
+            #expect(appState.shouldShowAgentActivityTextIndicator == false)
+        }
+
+        appState.agentToolCalls = []
+        #expect(appState.isAgentWaitingForUserDecision == false)
+        appState.isCompressingAgentContext = true
+        #expect(appState.shouldShowAgentActivityTextIndicator == false)
+    }
+
+    @MainActor
     @Test("goal running status bar only shows during an active goal turn")
     func testGoalRunningStatusBarVisibility() {
         let appState = AppState()

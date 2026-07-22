@@ -236,9 +236,81 @@ enum AgentToolCallGrouping {
     /// that segment succeeds, but remain visible for running, interactive,
     /// failed, or denied states where the details still matter.
     static func livePresentationSegments(_ calls: [AgentToolCall]) -> [AgentToolCallSegment] {
-        group(calls).filter { segment in
-            guard segment.kind == .terminalOperation else { return true }
-            return segment.calls.contains { $0.status != .succeeded }
+        let commandCalls = calls.filter { AgentToolKind.of($0) == .runCommand }
+        var emittedCommandGroup = false
+        return group(calls).compactMap { segment in
+            if segment.kind == .runCommand {
+                guard !emittedCommandGroup else { return nil }
+                emittedCommandGroup = true
+                return AgentToolCallSegment(kind: .runCommand, calls: commandCalls)
+            }
+            guard segment.kind == .terminalOperation else { return segment }
+            return segment.calls.contains { $0.status != .succeeded } ? segment : nil
+        }
+    }
+}
+
+/// One presentation model for all tool calls emitted after the latest user
+/// input. Providers may split a single assistant turn into several messages
+/// (and a model-switch notice can land between those messages). The transcript
+/// should still show one growing activity group instead of repeating
+/// "已运行 N 条命令" for every provider chunk.
+struct AgentActiveTurnToolCallPresentation: Equatable {
+    let messageIDs: [AgentMessage.ID]
+    let calls: [AgentToolCall]
+
+    var anchorMessageID: AgentMessage.ID? {
+        messageIDs.first
+    }
+
+    private var messageIDSet: Set<AgentMessage.ID> {
+        Set(messageIDs)
+    }
+
+    static func make(
+        messages: [AgentMessage],
+        toolCalls: [AgentToolCall],
+        isResponding: Bool
+    ) -> AgentActiveTurnToolCallPresentation? {
+        let turnStart = messages.lastIndex(where: { $0.role == .user })
+            .map { messages.index(after: $0) }
+            ?? messages.startIndex
+        let assistantMessageIDs = Set(messages[turnStart...].lazy.compactMap { message in
+            message.role == .assistant ? message.id : nil
+        })
+        let activeCalls = toolCalls.filter { assistantMessageIDs.contains($0.messageID) }
+        guard !activeCalls.isEmpty else { return nil }
+        guard isResponding || activeCalls.contains(where: { isWorking($0.status) }) else {
+            return nil
+        }
+
+        var seenMessageIDs = Set<AgentMessage.ID>()
+        let orderedMessageIDs = activeCalls.compactMap { call -> AgentMessage.ID? in
+            seenMessageIDs.insert(call.messageID).inserted ? call.messageID : nil
+        }
+        return AgentActiveTurnToolCallPresentation(
+            messageIDs: orderedMessageIDs,
+            calls: activeCalls
+        )
+    }
+
+    /// Keep prose and event notices in TextKit history while removing only the
+    /// tool-call payloads now owned by the single live SwiftUI activity group.
+    func hidingToolCalls(in message: AgentMessage) -> AgentMessage {
+        guard messageIDSet.contains(message.id), !message.toolCalls.isEmpty else {
+            return message
+        }
+        var copy = message
+        copy.toolCalls = []
+        return copy
+    }
+
+    private static func isWorking(_ status: AgentToolCallStatus) -> Bool {
+        switch status {
+        case .pendingApproval, .awaitingConfirm, .awaitingUserAnswer, .running:
+            return true
+        case .succeeded, .failed, .denied:
+            return false
         }
     }
 }
