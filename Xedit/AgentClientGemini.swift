@@ -19,8 +19,11 @@
 //      threads everything through `AgentMessageToolCall.externalID`
 //      (OpenAI-flavoured `call_xxx`); on the encode side we look up
 //      the matching tool name by id, on the decode side we synthesize
-//      stable IDs (`gemini_fcall_<index>`) so upstream code keeps
-//      working without special-casing the provider.
+//      stable IDs (`gemini_fcall_<nonce>_<index>`, nonce unique per
+//      response stream) so upstream code keeps working without
+//      special-casing the provider. The nonce keeps ids unique across
+//      assistant turns — a bare per-stream index would collide from one
+//      turn to the next and mispair functionResponse names in history.
 //    • Schema types use ALL_CAPS string enums (`STRING` / `INTEGER` /
 //      `BOOLEAN` / `OBJECT` / `ARRAY`), not the lowercase JSON Schema
 //      shape OpenAI / Anthropic use.
@@ -264,6 +267,11 @@ struct GeminiAdapter {
         /// which stream the args JSON in fragments), so we just hold
         /// onto the parsed value.
         var functionCalls: [Int: PendingFunctionCall] = [:]
+        /// Baked into every synthesized call id for this response stream.
+        /// Without it every assistant turn restarts at `gemini_fcall_0`,
+        /// and the first-occurrence-wins id→name history map resolves later
+        /// turns' slot-0 calls to whichever tool the session used first.
+        let callIDNonce = GeminiAdapter.makeCallIDNonce()
         var emittedSignature = ""
         /// True once the stream carries a real signal (text, a function
         /// call, or a finishReason). A 2xx stream that closes with none of
@@ -325,7 +333,7 @@ struct GeminiAdapter {
         }
 
         if sawFunctionCallChange {
-            let snapshot = Self.snapshot(of: state.functionCalls)
+            let snapshot = Self.snapshot(of: state.functionCalls, nonce: state.callIDNonce)
             let signature = Self.signature(of: snapshot)
             if signature != state.emittedSignature {
                 state.emittedSignature = signature
@@ -351,8 +359,8 @@ struct GeminiAdapter {
                     prompt: prompt,
                     completion: completion,
                     total: total,
-                    cachedPrompt: usage.cachedContentTokenCount ?? 0,
-                    cacheWritePrompt: 0,
+                    cachedPrompt: usage.cachedContentTokenCount,
+                    cacheWritePrompt: nil,
                     reasoning: usage.thoughtsTokenCount ?? 0
                 ))
             }
@@ -377,7 +385,7 @@ struct GeminiAdapter {
         }
     }
 
-    private static func snapshot(of pending: [Int: PendingFunctionCall]) -> [AgentMessageToolCall] {
+    private static func snapshot(of pending: [Int: PendingFunctionCall], nonce: String) -> [AgentMessageToolCall] {
         pending.keys.sorted().map { idx in
             let entry = pending[idx]!
             // Synthesize a stable id so the rest of the app can keep
@@ -385,11 +393,22 @@ struct GeminiAdapter {
             // `gemini_fcall_` prefix makes it grep-friendly when
             // debugging chat history JSON.
             return AgentMessageToolCall(
-                externalID: "gemini_fcall_\(idx)",
+                externalID: syntheticToolCallID(nonce: nonce, index: idx),
                 toolName: entry.name,
                 argumentsJSON: entry.argumentsJSON
             )
         }
+    }
+
+    /// Globally unique per response stream (the nonce), stable within it
+    /// (generated once per stream, so streaming snapshots keep identical
+    /// ids and persisted history replays byte-identically).
+    nonisolated static func syntheticToolCallID(nonce: String, index: Int) -> String {
+        "gemini_fcall_\(nonce)_\(index)"
+    }
+
+    nonisolated static func makeCallIDNonce() -> String {
+        String(UUID().uuidString.prefix(8)).lowercased()
     }
 
     private static func signature(of calls: [AgentMessageToolCall]) -> String {

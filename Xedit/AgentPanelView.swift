@@ -148,26 +148,8 @@ struct AgentPanelView: View {
                         )
                     }
 
-                    if appState.shouldShowAgentThinkingIndicator {
-                        AgentThinkingDivider()
-                    }
-
-                    // 底部活动指示（参照 Claude Code）：有任务在跑就显示
-                    // 「✳ N 个任务运行中」（点击展开右侧 jobs 抽屉），turn
-                    // 结束后只要后台作业还活着就继续显示；没有任务但 turn
-                    // 还在跑则退回纯呼吸 icon。
-                    if !appState.isCompressingAgentContext {
-                        let runningTasks = appState.agentRunningTaskCount
-                        if runningTasks > 0 {
-                            AgentRunningTasksRow(
-                                count: runningTasks,
-                                detail: appState.agentRunningTaskSummary
-                            ) {
-                                isJobsDrawerOpen = true
-                            }
-                        } else if appState.isAgentResponding && !appState.shouldShowAgentThinkingIndicator {
-                            AgentBreathingIndicator()
-                        }
+                    AgentTurnActivityStatusView {
+                        isJobsDrawerOpen = true
                     }
 
                     if appState.isCompressingAgentContext {
@@ -409,6 +391,9 @@ struct AgentThinkingDivider: View {
     var trailingInset: CGFloat = 0
 
     var body: some View {
+        let phase = appState.agentLiveThinkingPreview.map {
+            AgentActivityHeadlinePresentation.make(from: $0) ?? .analyzing
+        }
         VStack(spacing: 0) {
             // When we have a turn start timestamp, render a live ticker so the
             // user can see the seconds advance — proof that the request hasn't
@@ -417,10 +402,11 @@ struct AgentThinkingDivider: View {
             if let startedAt = appState.agentTurnStartedAt {
                 TimelineView(.periodic(from: startedAt, by: 1)) { context in
                     AgentInlineStatusDivider(
-                        text: L10n.AgentPanel.thinking,
+                        text: phase?.title ?? L10n.AgentPanel.thinking,
                         trailing: formatThinkingElapsed(
                             context.date.timeIntervalSince(startedAt)
                         ),
+                        systemImage: phase?.systemImage,
                         showsSeparator: false,
                         leadingInset: leadingInset,
                         trailingInset: trailingInset
@@ -428,30 +414,49 @@ struct AgentThinkingDivider: View {
                 }
             } else {
                 AgentInlineStatusDivider(
-                    text: L10n.AgentPanel.thinking,
+                    text: phase?.title ?? L10n.AgentPanel.thinking,
+                    systemImage: phase?.systemImage,
                     showsSeparator: false,
                     leadingInset: leadingInset,
                     trailingInset: trailingInset
                 )
             }
 
-            // Reasoning 与正式回答共用同一套正文渲染和流式节流。首个
-            // 正文 token 到达时，AgentStreamingMessageBuffer 会原子提交
-            // 两类增量；父视图随后一次性用回答替换这里，不做交叉淡入。
-            if let reasoning = appState.agentLiveThinkingPreview {
-                AgentAssistantMarkdownBody(
-                    content: reasoning,
-                    isStreaming: true,
-                    baseFontSize: appState.agentChatBaseFontSize,
-                    showsStreamingCursor: false,
-                    rendersStreamingMarkdown: true
+            // Raw reasoning is intentionally never rendered. A known
+            // provider phase is folded into the single status line above;
+            // unknown traces use the generic localized analysis phase.
+        }
+    }
+}
+
+/// Single source of truth for the transcript's bottom activity feedback.
+/// Concrete tasks take priority; otherwise an autonomous turn keeps the same
+/// elapsed-time text from first token to last. User-decision and compression
+/// states intentionally render nothing here because their dedicated surfaces
+/// already explain what is blocking progress.
+struct AgentTurnActivityStatusView: View {
+    @EnvironmentObject var appState: AppState
+    var leadingInset: CGFloat = 0
+    var trailingInset: CGFloat = 0
+    var onRunningTasksTap: (() -> Void)? = nil
+
+    @ViewBuilder
+    var body: some View {
+        if !appState.isCompressingAgentContext,
+           !appState.isAgentWaitingForUserDecision {
+            let runningTasks = appState.agentRunningTaskCount
+            if runningTasks > 0 {
+                AgentRunningTasksRow(
+                    count: runningTasks,
+                    isAgentTurnActive: appState.isAgentResponding,
+                    detail: appState.agentRunningTaskSummary,
+                    onTap: onRunningTasksTap
                 )
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(.leading, leadingInset)
-                    .padding(.trailing, trailingInset)
-                    .padding(.top, AgentChatHistoryLayoutMetrics.assistantStatusDividerBottomSpacing)
-                    .padding(.bottom, 8)
-                    .accessibilityLabel(L10n.AgentPanel.thinkingPreviewAccessibility)
+            } else if appState.shouldShowAgentActivityTextIndicator {
+                AgentThinkingDivider(
+                    leadingInset: leadingInset,
+                    trailingInset: trailingInset
+                )
             }
         }
     }
@@ -494,6 +499,7 @@ private func formatThinkingElapsed(_ seconds: TimeInterval) -> String {
 // "waiting for a provider slot" queue hint renders consistently in both the
 // sidebar and the main chat.
 struct AgentInlineStatusDivider: View {
+    @Environment(\.agentChatSupportingBaseFontSize) private var baseFontSize
     let text: String
     /// Optional trailing caption rendered next to the label — used by the
     /// thinking status to show live elapsed seconds.
@@ -516,21 +522,21 @@ struct AgentInlineStatusDivider: View {
             HStack(spacing: AgentInlineStatusLayout.labelSpacing) {
                 if let systemImage {
                     Image(systemName: systemImage)
-                        .font(.caption.weight(.medium))
+                        .font(.system(size: max(12, baseFontSize - 1), weight: .medium))
                         .frame(
                             width: AgentInlineStatusLayout.iconSize,
                             height: AgentInlineStatusLayout.iconSize
                         )
                 }
                 Text(text)
-                    .font(.caption)
+                    .font(AgentDesign.chatSupportingFont(baseFontSize: baseFontSize))
                     .lineLimit(1)
                 if let trailing {
                     Text("·")
-                        .font(.caption)
+                        .font(AgentDesign.chatSupportingFont(baseFontSize: baseFontSize))
                         .opacity(0.7)
                     Text(trailing)
-                        .font(.caption.monospacedDigit())
+                        .font(AgentDesign.chatSupportingFont(baseFontSize: baseFontSize).monospacedDigit())
                         .lineLimit(1)
                 }
                 Spacer(minLength: 0)

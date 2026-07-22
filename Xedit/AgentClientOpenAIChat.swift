@@ -261,6 +261,13 @@ struct OpenAIChatAdapter {
             "stream": false,
             "max_tokens": maxTokens,
             "temperature": 0,
+            // The judge contract requires a non-thinking run: hidden
+            // reasoning eats the small budget before the JSON verdict.
+            // Today that only holds because the server-side judge alias
+            // happens to be a non-thinking model — pin it client-side too.
+            // DeepSeek-family backends honor enable_thinking; providers
+            // that don't know the field ignore it.
+            "enable_thinking": false,
             "messages": [
                 ["role": "system", "content": systemPrompt],
                 ["role": "user", "content": userPayload]
@@ -282,7 +289,14 @@ struct OpenAIChatAdapter {
                   let choice = decoded.choices.first else {
                 return nil
             }
-            return choice.message.content
+            if let content = choice.message.content,
+               !content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                return content
+            }
+            // A thinking backend that slipped past enable_thinking may park
+            // the verdict JSON inside reasoning_content with an empty
+            // content — salvage it instead of reporting judge-unavailable.
+            return choice.message.reasoningContent
         } catch {
             return nil
         }
@@ -716,12 +730,12 @@ private struct ChatCompletionChunk: Decodable {
         let prompt_tokens_details: PromptTokensDetails?
         let completion_tokens_details: CompletionTokensDetails?
 
-        var cachedPromptTokens: Int {
-            prompt_tokens_details?.cached_tokens ?? prompt_cache_hit_tokens ?? 0
+        var cachedPromptTokens: Int? {
+            prompt_tokens_details?.cached_tokens ?? prompt_cache_hit_tokens
         }
 
-        var cacheWritePromptTokens: Int {
-            prompt_cache_miss_tokens ?? 0
+        var cacheWritePromptTokens: Int? {
+            prompt_cache_miss_tokens
         }
 
         var reasoningTokens: Int {
@@ -807,5 +821,11 @@ private struct JudgmentResponse: Decodable {
         /// fallback to manual approval. Optional lets us surface the real
         /// state ("empty reply") to the judge log instead.
         let content: String?
+        let reasoningContent: String?
+
+        enum CodingKeys: String, CodingKey {
+            case content
+            case reasoningContent = "reasoning_content"
+        }
     }
 }

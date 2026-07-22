@@ -41,8 +41,8 @@ enum AgentClientEvent {
         prompt: Int,
         completion: Int,
         total: Int,
-        cachedPrompt: Int,
-        cacheWritePrompt: Int,
+        cachedPrompt: Int?,
+        cacheWritePrompt: Int?,
         reasoning: Int
     )
 }

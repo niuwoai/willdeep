@@ -41,6 +41,23 @@ extension AppState {
     ) {
         resolvePendingAgentPatchProposalsBeforeNewMessage(for: runtime)
 
+        let shouldArmGoalRecovery = AgentGoalLaunchRecoveryPolicy.shouldArmExecutionCheckpoint(
+            interactionMode: runtime.interactionMode,
+            executionAgent: runtime.executionAgent,
+            goal: runtime.currentGoal,
+            plan: runtime.currentPlan
+        )
+        let didChangeGoalRecoveryCheckpoint: Bool
+        if shouldArmGoalRecovery, runtime.goalTurnRecoveryCheckpoint == nil {
+            runtime.goalTurnRecoveryCheckpoint = AgentGoalTurnRecoveryCheckpoint()
+            didChangeGoalRecoveryCheckpoint = true
+        } else if !shouldArmGoalRecovery, runtime.goalTurnRecoveryCheckpoint != nil {
+            runtime.goalTurnRecoveryCheckpoint = nil
+            didChangeGoalRecoveryCheckpoint = true
+        } else {
+            didChangeGoalRecoveryCheckpoint = false
+        }
+
         reconcileSomeIMProviderFromSharedSession()
         ensureActiveProviderIsUsableForChatSelection()
         repairSomeIMProviderCredentialsForTurnIfNeeded(for: runtime)
@@ -60,6 +77,9 @@ extension AppState {
         if let existingUserMessageID,
            let existing = runtime.messages.first(where: { $0.id == existingUserMessageID }) {
             userMessage = existing
+            if didChangeGoalRecoveryCheckpoint {
+                persistAgentSession(runtime: runtime, touchUpdatedAt: false, moveToFront: false)
+            }
         } else {
             userMessage = AgentMessage(
                 role: .user,
@@ -83,6 +103,7 @@ extension AppState {
         // a provider slot nor start a turn.
         guard !someIMLoginRequiredForTurn(for: runtime, providerID: providerID) else {
             runtime.isAwaitingProviderSlot = false
+            runtime.goalTurnRecoveryCheckpoint = nil
             setSomeIMLoginRequiredError(for: runtime)
             persistAgentSession(runtime: runtime)
             return
@@ -118,6 +139,10 @@ extension AppState {
         runtime.isResponding = true
         runtime.turnStartedAt = Date()
         runtime.currentTurnAttachedSkills = attachedSkills
+        let turnID = UUID()
+        runtime.activeTurnID = turnID
+        runtime.activeTurnConfiguration = configuration
+        runtime.userStoppedTurnID = nil
         let providerSlotClaim = claimProviderSlot(for: runtime, providerID: providerID)
 
         // The user's message was already appended and persisted to disk
@@ -149,6 +174,12 @@ extension AppState {
                 runtime.isResponding = false
                 runtime.turnStartedAt = nil
                 runtime.requestTask = nil
+                if runtime.activeTurnID == turnID {
+                    runtime.activeTurnID = nil
+                    runtime.activeTurnConfiguration = nil
+                    runtime.userStoppedTurnID = nil
+                }
+                runtime.goalTurnRecoveryCheckpoint = nil
                 runtime.shouldConsumeQueueAfterStop = false
                 self.persistAgentSession(runtime: runtime)
                 self.releaseProviderSlot(
@@ -161,10 +192,37 @@ extension AppState {
                 }
                 return
             } catch {
+                if Self.isStoppedTurnCancellation(error, runtime: runtime, turnID: turnID) {
+                    let shouldConsumeQueueAfterStop = runtime.shouldConsumeQueueAfterStop
+                    runtime.isResponding = false
+                    runtime.turnStartedAt = nil
+                    runtime.requestTask = nil
+                    runtime.activeTurnID = nil
+                    runtime.activeTurnConfiguration = nil
+                    runtime.userStoppedTurnID = nil
+                    runtime.goalTurnRecoveryCheckpoint = nil
+                    runtime.shouldConsumeQueueAfterStop = false
+                    self.persistAgentSession(runtime: runtime)
+                    self.releaseProviderSlot(
+                        for: runtime,
+                        claimID: providerSlotClaim.id,
+                        providerID: providerID
+                    )
+                    if shouldConsumeQueueAfterStop {
+                        self.consumeNextQueuedMessageIfNeeded(for: runtime)
+                    }
+                    return
+                }
                 self.setAgentError(error, for: runtime)
                 runtime.isResponding = false
                 runtime.turnStartedAt = nil
                 runtime.requestTask = nil
+                if runtime.activeTurnID == turnID {
+                    runtime.activeTurnID = nil
+                    runtime.activeTurnConfiguration = nil
+                    runtime.userStoppedTurnID = nil
+                }
+                runtime.goalTurnRecoveryCheckpoint = nil
                 self.persistAgentSession(runtime: runtime)
                 self.releaseProviderSlot(
                     for: runtime,
@@ -177,7 +235,8 @@ extension AppState {
             await self.runAgentLoop(
                 for: runtime,
                 configuration: configuration,
-                providerSlotClaimID: providerSlotClaim.id
+                providerSlotClaimID: providerSlotClaim.id,
+                turnID: turnID
             )
         }
     }
@@ -352,6 +411,10 @@ extension AppState {
         runtime.latestComputerUseActivity = nil
         runtime.isResponding = true
         runtime.turnStartedAt = Date()
+        let turnID = UUID()
+        runtime.activeTurnID = turnID
+        runtime.activeTurnConfiguration = configuration
+        runtime.userStoppedTurnID = nil
         let providerSlotClaim = claimProviderSlot(for: runtime, providerID: providerID)
 
         runtime.requestTask = Task { [weak self, weak runtime] in
@@ -363,7 +426,8 @@ extension AppState {
             await self.runAgentLoop(
                 for: runtime,
                 configuration: configuration,
-                providerSlotClaimID: providerSlotClaim.id
+                providerSlotClaimID: providerSlotClaim.id,
+                turnID: turnID
             )
         }
     }
@@ -396,6 +460,13 @@ extension AppState {
     func clearAgentConversation() {
         agentRequestTask?.cancel()
         if let runtime = activeRuntime {
+            for cleanupTask in runtime.stopCleanupTasks.values {
+                cleanupTask.cancel()
+            }
+            runtime.stopCleanupTasks.removeAll()
+            runtime.activeTurnID = nil
+            runtime.activeTurnConfiguration = nil
+            runtime.userStoppedTurnID = nil
             cancelAllWorkflows(for: runtime)
             let runtimeID = runtime.id
             agentSubagentRegistry.cancelAll(forParentRuntime: runtimeID)
@@ -444,7 +515,8 @@ extension AppState {
     func runAgentLoop(
         for runtime: AgentRuntime,
         configuration: AgentConfiguration,
-        providerSlotClaimID: UUID
+        providerSlotClaimID: UUID,
+        turnID: UUID
     ) async {
         // This turn just went live (isResponding was set true by the caller).
         // Refresh the same-checkout collision hint so the foreground composer
@@ -456,6 +528,12 @@ extension AppState {
             runtime.isResponding = false
             runtime.turnStartedAt = nil
             runtime.requestTask = nil
+            if runtime.activeTurnID == turnID {
+                runtime.activeTurnID = nil
+                runtime.activeTurnConfiguration = nil
+                runtime.userStoppedTurnID = nil
+            }
+            runtime.goalTurnRecoveryCheckpoint = nil
             runtime.shouldConsumeQueueAfterStop = false
             // Turn finished — one fewer concurrent worker on this checkout.
             refreshAgentWorkspaceCollision()
@@ -503,11 +581,23 @@ extension AppState {
         // still owns every release path.
         var turnConfiguration = configuration
         var managedRouteDecision: AgentManagedRouteDecision?
+        // The judge's explicit complexity verdict (nil on fallback turns).
+        // Floor writes later in the turn — including the output-quality
+        // escalation — must derive from this, never from a hedge-inflated
+        // effective tier.
+        var managedJudgeExplicitTier: AgentManagedCapabilityTier?
         if runtime.managedRouting != nil,
            configuration.providerID == AgentProviderPreset.someIMID {
             let floor = runtime.managedRouting?.minimumTier ?? .low
+            // isOperatorInput: hidden host carriers (empty content, per-turn
+            // context reminders) are `.user` role but must never stand in for
+            // what the human actually asked — a wake-up turn would otherwise
+            // send the judge an empty message.
+            let latestOperatorMessage = runtime.messages.last(where: { $0.isOperatorInput })
             let judgeInput = SomeIMRouteJudgeInput(
-                latestUserMessage: runtime.messages.last(where: { $0.role == .user })?.content ?? "",
+                latestUserMessage: latestOperatorMessage?.content ?? "",
+                hasImages: latestOperatorMessage?.images.isEmpty == false,
+                hasTextAttachments: latestOperatorMessage?.textAttachments.isEmpty == false,
                 workspaceAvailable: runtime.workspaceLocation != nil || (runtime.workspaceRootPath?.isEmpty == false),
                 selectedFileLanguage: openedFileURL.flatMap { $0.pathExtension.isEmpty ? nil : $0.pathExtension },
                 interactionMode: "\(runtime.interactionMode)",
@@ -539,10 +629,17 @@ extension AppState {
                 didFallback: resolution.usedFallback
             )
             // Only a real judge verdict raises the persisted floor — a network
-            // fallback must not lock the session into a high tier.
+            // fallback must not lock the session into a high tier. Use the
+            // judge's explicit tier, not `effectiveTier`: the low-confidence
+            // conservative escalation applies to this turn's model choice only
+            // and must never be written into the only-goes-up floor.
             if !resolution.usedFallback {
-                runtime.raiseManagedFloor(to: resolution.effectiveTier, reason: resolution.verdict.reason)
+                managedJudgeExplicitTier = resolution.persistedFloorTier
+                runtime.raiseManagedFloor(to: resolution.persistedFloorTier, reason: resolution.verdict.reason)
             }
+        }
+        if runtime.activeTurnID == turnID {
+            runtime.activeTurnConfiguration = turnConfiguration
         }
 
         // `var` so a managed output-quality failure can swap in an escalated
@@ -612,14 +709,14 @@ extension AppState {
         var consecutivePlanRepliesWithoutProgress = 0
         var didAdvancePlanSinceLastContinuationDecision = false
         let designToCodeToolCallBaseline = runtime.toolCalls.count
-        let latestUserImages = runtime.messages.last(where: { $0.role == .user })?.images ?? []
+        let latestUserImages = runtime.messages.last(where: { $0.isOperatorInput })?.images ?? []
         let requiresDesignToCodeAcceptance = workspaceURL != nil && AgentDesignToCode.isActive(
             skills: runtime.currentTurnAttachedSkills,
             images: latestUserImages
         )
         var designToCodeGateContinuationCount = 0
 
-        for _ in 0..<Self.maxAgentToolRounds {
+        for toolRound in 0..<Self.maxAgentToolRounds {
             // `run_workflow` is asynchronous, but unlike the workflow card its
             // final report must return to the model that delegated the work.
             // Consume the owning runtime's pending ids into normal system
@@ -751,7 +848,7 @@ extension AppState {
             // "what's on screen right now".
             let promptProfile = AgentSystemPromptProfile.automatic(for: configuration)
             let activeExperts = runtime.activeExperts
-            var systemPrompt = AgentContextBuilder.systemPrompt(
+            var assembledPrompt = AgentContextBuilder.systemPrompt(
                 rootDirectory: workspaceURL,
                 openedFileURL: openedFileURL,
                 fileContent: fileContent,
@@ -772,7 +869,7 @@ extension AppState {
             if let remoteRuntimeDescriptor,
                case .remote(_, let remotePath) = workspaceLocation {
                 let transportLabel = remoteRuntimeDescriptor.transport == .daemon ? "daemon" : "SSH"
-                systemPrompt += """
+                assembledPrompt += """
 
                 === REMOTE WORKSPACE (\(transportLabel)) ===
                 - Runtime: \(remoteRuntimeDescriptor.displayName) (\(remoteRuntimeDescriptor.sshTarget))
@@ -795,32 +892,43 @@ extension AppState {
                 """
             }
             if activeExperts.contains(.shortDrama), let latestImageChoice = runtime.latestImageChoice {
-                systemPrompt += "\n\n\(latestImageChoice.systemPromptBlock)"
+                assembledPrompt += "\n\n\(latestImageChoice.systemPromptBlock)"
             }
             if let latestImageEditSubmission = runtime.latestImageEditSubmission {
                 // Image-edit submission follow-up anchors live in AgentImageEditSubmission:
                 // review_item_id: \(reviewItemID)
                 // resolve_review_tool: short_drama_resolve_review_item
                 // item_id=\(reviewItemID)
-                systemPrompt += "\n\n\(latestImageEditSubmission.systemPromptBlock)"
+                assembledPrompt += "\n\n\(latestImageEditSubmission.systemPromptBlock)"
             }
             if let latestMediaTaskCompletion = runtime.latestMediaTaskCompletion {
-                systemPrompt += "\n\n\(latestMediaTaskCompletion.systemPromptBlock)"
+                assembledPrompt += "\n\n\(latestMediaTaskCompletion.systemPromptBlock)"
             }
             if let latestMediaTaskRefresh = runtime.latestMediaTaskRefresh {
-                systemPrompt += "\n\n\(latestMediaTaskRefresh.systemPromptBlock)"
+                assembledPrompt += "\n\n\(latestMediaTaskRefresh.systemPromptBlock)"
             }
             if let latestMediaImport = runtime.latestMediaImport {
-                systemPrompt += "\n\n\(latestMediaImport.systemPromptBlock)"
+                assembledPrompt += "\n\n\(latestMediaImport.systemPromptBlock)"
             }
             if let latestWidgetToolAction = runtime.latestWidgetToolAction {
-                systemPrompt += "\n\n\(latestWidgetToolAction.systemPromptBlock)"
+                assembledPrompt += "\n\n\(latestWidgetToolAction.systemPromptBlock)"
             }
             if let memoryContextBlock {
-                systemPrompt += "\n\n\(memoryContextBlock)"
+                assembledPrompt += "\n\n\(memoryContextBlock)"
             }
-            systemPrompt = AgentLocalModelPrompting.applyLanguageInstruction(
-                to: systemPrompt,
+            let promptComponents = AgentContextBuilder.requestComponents(from: assembledPrompt)
+            // allowRefresh only on the dispatch's first round: rounds 2+ of
+            // the same tool loop keep already-sent history byte-stable, and
+            // mid-turn notices (plan continuation, design gate, background
+            // completions) must not each spawn another full-context carrier.
+            AgentContextBuilder.attachTurnContextIfNeeded(
+                promptComponents.turnContext,
+                to: &runtime.messages,
+                insertingBefore: assistantID,
+                allowRefresh: toolRound == 0
+            )
+            let systemPrompt = AgentLocalModelPrompting.applyLanguageInstruction(
+                to: promptComponents.systemPrompt,
                 configuration: configuration
             )
             let cacheDiagnostics = AgentContextBuilder.cacheDiagnostics(
@@ -838,6 +946,11 @@ extension AppState {
                 contextSummaryThroughMessageID: runtime.contextSummaryThroughMessageID,
                 excludingMessageID: assistantID
             )
+            // No second attach on the request copy: `attachTurnContextIfNeeded`
+            // above already persisted this turn's context onto `runtime.messages`
+            // (setting the fresh user message's modelContext, or inserting a
+            // hidden host carrier on notification-only wake-ups), so the
+            // model-facing history and the next turn's replay share bytes.
             let collapsedHistory = Self.collapseOldToolResults(in: history)
             let requestMessages = [AgentMessage(role: .system, content: systemPrompt)] + collapsedHistory
 
@@ -879,8 +992,8 @@ extension AppState {
                                     runtime.messages[index].usageTokens = total
                                     runtime.messages[index].promptTokens = prompt > 0 ? prompt : nil
                                     runtime.messages[index].completionTokens = completion > 0 ? completion : nil
-                                    runtime.messages[index].cachedPromptTokens = cachedPrompt > 0 ? cachedPrompt : nil
-                                    runtime.messages[index].cacheWritePromptTokens = cacheWritePrompt > 0 ? cacheWritePrompt : nil
+                                    runtime.messages[index].cachedPromptTokens = cachedPrompt
+                                    runtime.messages[index].cacheWritePromptTokens = cacheWritePrompt
                                     runtime.messages[index].reasoningTokens = reasoning > 0 ? reasoning : nil
                                 }
                             }
@@ -913,19 +1026,28 @@ extension AppState {
                 streamBuffer.flushPending()
             } catch is CancellationError {
                 streamBuffer.flushPending()
-                if let index = runtime.messages.firstIndex(where: { $0.id == assistantID }),
-                   runtime.messages[index].content.isEmpty,
-                   runtime.messages[index].toolCalls.isEmpty {
-                    runtime.messages.remove(at: index)
-                }
+                finalizeInterruptedAssistantMessage(
+                    id: assistantID,
+                    in: runtime,
+                    startedAt: turnStartedAt
+                )
                 return
             } catch {
                 streamBuffer.flushPending()
+                if Self.isStoppedTurnCancellation(error, runtime: runtime, turnID: turnID) {
+                    finalizeInterruptedAssistantMessage(
+                        id: assistantID,
+                        in: runtime,
+                        startedAt: turnStartedAt
+                    )
+                    return
+                }
                 setAgentError(error, for: runtime)
                 if let index = runtime.messages.firstIndex(where: { $0.id == assistantID }),
                    runtime.messages[index].content.isEmpty,
                    runtime.messages[index].toolCalls.isEmpty {
                     runtime.messages.remove(at: index)
+                    AgentContextBuilder.removeDanglingTurnContextCarrier(from: &runtime.messages)
                 }
                 return
             }
@@ -975,7 +1097,7 @@ extension AppState {
                        || !(runtime.messages[index].reasoningContent ?? "").isEmpty {
                     let assistantText = runtime.messages[index].content
                     let reasoningText = runtime.messages[index].reasoningContent
-                    let latestUserMessage = runtime.messages.last(where: { $0.role == .user })?.content ?? ""
+                    let latestUserMessage = runtime.messages.last(where: { $0.isOperatorInput })?.content ?? ""
                     let qualityConfig = turnConfiguration
                     let qualityContext = someIMContext
                     let decision = await SomeIMManagedRouting.outputQuality(
@@ -1002,7 +1124,20 @@ extension AppState {
                         client = AgentClient(configuration: turnConfiguration, someIMContext: someIMContext)
                         let escalatedTier = SomeIMManagedModel.tier(of: escalatedModel)
                         if let escalatedTier {
-                            runtime.raiseManagedFloor(to: escalatedTier, reason: "output-quality:\(decision.failureType)")
+                            // Cap the persisted floor at one step above the
+                            // judge's EXPLICIT verdict. The retry model itself
+                            // may climb from a hedge-inflated tier (low judged
+                            // with low confidence → turn ran high → retry runs
+                            // premium), but locking the session at premium when
+                            // the judge never said high defeats the
+                            // hedge-stays-per-turn rule.
+                            let floorTier: AgentManagedCapabilityTier
+                            if let judgeTier = managedJudgeExplicitTier {
+                                floorTier = min(escalatedTier, judgeTier.next ?? judgeTier)
+                            } else {
+                                floorTier = escalatedTier
+                            }
+                            runtime.raiseManagedFloor(to: floorTier, reason: "output-quality:\(decision.failureType)")
                         }
                         runtime.noteManagedSelectedModel(escalatedModel)
                         // Carry the escalation into this turn's route metadata so
@@ -1041,6 +1176,7 @@ extension AppState {
                    runtime.messages[index].toolCalls.isEmpty,
                    (runtime.messages[index].reasoningContent ?? "").isEmpty {
                     runtime.messages.remove(at: index)
+                    AgentContextBuilder.removeDanglingTurnContextCarrier(from: &runtime.messages)
                     // Zero-event streams already throw `emptyStream` from the
                     // adapter and surface via the catch path. This is the
                     // other empty case — the stream finished cleanly but the
@@ -1058,7 +1194,13 @@ extension AppState {
                 }
 
                 let planStatusesBeforeReply = runtime.currentPlan?.steps.map(\.status)
-                captureAgentPlanFromLatestMessage(for: runtime)
+                let planCaptureOutcome = captureAgentPlanFromLatestMessage(for: runtime)
+                if planCaptureOutcome == .proposalRejectedNeedsRetry {
+                    // A correction notice listing the validation failures was
+                    // appended; give the model an immediate round to resend
+                    // the proposal instead of ending the turn deadlocked.
+                    continue
+                }
                 captureAgentGoalEvaluationFromLatestMessage(for: runtime)
                 prepareNextAgentGoalPlanningCycleIfNeeded(for: runtime)
                 let planStatusesAfterReply = runtime.currentPlan?.steps.map(\.status)
@@ -1412,6 +1554,7 @@ extension AppState {
                     workspaceLocation: workspaceLocation,
                     runtimeDescriptor: remoteRuntimeDescriptor,
                     runtimeID: runtime.id,
+                    turnID: runtime.activeTurnID,
                     jobRegistry: agentJobRegistry,
                     mediaTaskRegistry: agentMediaTaskRegistry,
                     shortDramaStore: agentShortDramaStore,
@@ -1580,6 +1723,21 @@ extension AppState {
                         images: result.images,
                         outcomeStatus: .succeeded
                     )
+                } catch is CancellationError {
+                    workspaceMutationLease = nil
+                    if let index = runtime.toolCalls.firstIndex(where: { $0.id == recordID }) {
+                        runtime.toolCalls[index].status = .denied
+                        runtime.toolCalls[index].errorMessage = "Response stopped"
+                    }
+                    appendToolMessage(
+                        for: runtime,
+                        toolCallID: call.externalID,
+                        payload: "Tool execution stopped with the current Agent turn.",
+                        source: .systemNotice,
+                        outcomeStatus: .denied,
+                        errorMessage: "Response stopped"
+                    )
+                    return
                 } catch {
                     // Deinit unlocks and closes the cross-process flock.
                     // This is a no-op for ordinary, unguarded tools.
@@ -2275,7 +2433,8 @@ extension AppState {
                     workspaceURL: workspaceURL,
                     runtimeDescriptor: runtimeDescriptor,
                     workspaceLocation: workspaceLocation,
-                    parentRuntimeID: runtime.id
+                    parentRuntimeID: runtime.id,
+                    originatingTurnID: runtime.activeTurnID
                 )
                 finishRecord(
                     status: .succeeded,

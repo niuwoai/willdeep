@@ -44,6 +44,25 @@ struct AgentChatHistoryRendererTests {
     }
 
     @Test
+    func modelSwitchDividerUsesShortArmsInsteadOfViewportWideRules() throws {
+        let segments = AgentChatHistoryLayoutMetrics.transcriptEventDividerSegments(
+            textMinX: 360,
+            textMaxX: 640,
+            usableWidth: 1_000
+        )
+
+        #expect(segments.count == 2)
+        let leading = try #require(segments.first)
+        let trailing = try #require(segments.last)
+        #expect(leading.end - leading.start == AgentChatHistoryLayoutMetrics.transcriptEventDividerArmLength)
+        #expect(trailing.end - trailing.start == AgentChatHistoryLayoutMetrics.transcriptEventDividerArmLength)
+        #expect(leading.start > 0)
+        #expect(trailing.end < 1_000)
+        #expect(leading.end == 360 - AgentChatHistoryLayoutMetrics.transcriptEventDividerGap)
+        #expect(trailing.start == 640 + AgentChatHistoryLayoutMetrics.transcriptEventDividerGap)
+    }
+
+    @Test
     func longMessagePreviewKeepsHeadAndTail() {
         let content = String(repeating: "A", count: 120)
             + "MIDDLE_SHOULD_BE_OMITTED"
@@ -83,6 +102,31 @@ struct AgentChatHistoryRendererTests {
             #expect(style.lineSpacing == AgentChatHistoryLayoutMetrics.bodyLineSpacing)
             #expect(style.paragraphSpacing == 0)
         }
+    }
+
+    @Test
+    func providerActivityHeadlineIsLocalizedAndKeepsItsSemanticIcon() {
+        let message = AgentMessage(
+            role: .assistant,
+            content: "Planning font size clamping implementation"
+        )
+
+        let rendered = AgentChatHistoryRenderer.render(
+            messages: [message],
+            isDark: false,
+            baseFontSize: 14
+        )
+
+        #expect(rendered.string.contains(L10n.AgentActivity.planning))
+        #expect(rendered.string.contains("Planning font size clamping implementation") == false)
+        var hasSemanticIcon = false
+        rendered.enumerateAttribute(
+            .attachment,
+            in: NSRange(location: 0, length: rendered.length)
+        ) { value, _, _ in
+            hasSemanticIcon = hasSemanticIcon || value != nil
+        }
+        #expect(hasSemanticIcon)
     }
 
     @Test
@@ -788,7 +832,7 @@ struct AgentChatHistoryRendererTests {
     }
 
     @Test
-    func collapsesAndExpandsConsecutiveToolCalls() {
+    func collapsesAndExpandsConsecutiveToolCalls() throws {
         let firstID = UUID()
         let secondID = UUID()
         let messages = [
@@ -818,15 +862,30 @@ struct AgentChatHistoryRendererTests {
             )
         ]
 
-        let collapsed = AgentChatHistoryRenderer.render(messages: messages, isDark: false)
+        let baseFontSize: CGFloat = 18
+        let collapsed = AgentChatHistoryRenderer.render(
+            messages: messages,
+            isDark: false,
+            baseFontSize: baseFontSize
+        )
         #expect(collapsed.string.contains("已读取 1 个文件 · 已运行 1 条命令"))
         #expect(!collapsed.string.contains("tool  read_file"))
+        let summaryRange = (collapsed.string as NSString).range(
+            of: "已读取 1 个文件 · 已运行 1 条命令"
+        )
+        let summaryFont = try #require(collapsed.attribute(
+            .font,
+            at: summaryRange.location,
+            effectiveRange: nil
+        ) as? NSFont)
+        #expect(summaryFont.pointSize == baseFontSize)
 
         let groupID = "\(firstID.uuidString):\(secondID.uuidString)"
         let expanded = AgentChatHistoryRenderer.render(
             messages: messages,
             isDark: false,
-            expandedToolGroupIDs: [groupID]
+            expandedToolGroupIDs: [groupID],
+            baseFontSize: baseFontSize
         )
         #expect(expanded.string.contains("已读取 1 个文件 · 已运行 1 条命令"))
         #expect(!expanded.string.contains("▾"))
@@ -1001,7 +1060,7 @@ struct AgentChatHistoryRendererTests {
     }
 
     @Test
-    func latestAssistantCollapsesTerminalToolSummaries() {
+    func latestAssistantCollapsesTerminalToolSummaries() throws {
         let message = AgentMessage(
             role: .assistant,
             content: "Redis 关键调不在尾行。",
@@ -1024,6 +1083,22 @@ struct AgentChatHistoryRendererTests {
         #expect(rendered.string.contains("已执行 2 次终端操作"))
         #expect(!rendered.string.contains("已调用 terminal send command"))
         #expect(!rendered.string.contains("已调用 terminal snapshot"))
+
+        let bodyRange = (rendered.string as NSString).range(of: "Redis 关键调不在尾行。")
+        let summaryRange = (rendered.string as NSString).range(of: "已执行 2 次终端操作")
+        let bodyStyle = try #require(rendered.attribute(
+            .paragraphStyle,
+            at: bodyRange.location,
+            effectiveRange: nil
+        ) as? NSParagraphStyle)
+        let summaryStyle = try #require(rendered.attribute(
+            .paragraphStyle,
+            at: summaryRange.location,
+            effectiveRange: nil
+        ) as? NSParagraphStyle)
+        #expect(summaryStyle.headIndent == bodyStyle.headIndent)
+        #expect(summaryStyle.firstLineHeadIndent == bodyStyle.firstLineHeadIndent)
+        #expect(summaryStyle.tailIndent == bodyStyle.tailIndent)
     }
 
     @Test
@@ -1171,7 +1246,7 @@ struct AgentChatHistoryRendererTests {
             at: tokenRange.location,
             effectiveRange: nil
         ) as? NSFont)
-        #expect(tokenFont.pointSize >= 11)
+        #expect(tokenFont.pointSize == bodyFont.pointSize)
 
         let retryRange = (rendered.string as NSString).range(of: "↻")
         let retryFont = try #require(rendered.attribute(
@@ -1205,6 +1280,71 @@ struct AgentChatHistoryRendererTests {
             copiedParagraphStyle.tailIndent
                 == -AgentChatHistoryLayoutMetrics.assistantContentTailInset
         )
+    }
+
+    @Test
+    func assistantTurnFooterAggregatesOnlyCurrentUserTurnAndShowsCacheRate() throws {
+        let firstUser = AgentMessage(role: .user, content: "first")
+        let firstRequest = AgentMessage(
+            role: .assistant,
+            content: "checking",
+            usageTokens: 1_100,
+            promptTokens: 1_000,
+            completionTokens: 100,
+            cachedPromptTokens: 400
+        )
+        let secondRequest = AgentMessage(
+            role: .assistant,
+            content: "done",
+            usageTokens: 3_200,
+            promptTokens: 3_000,
+            completionTokens: 200,
+            cachedPromptTokens: 2_000
+        )
+        let secondUser = AgentMessage(role: .user, content: "second")
+        let nextTurnRequest = AgentMessage(
+            role: .assistant,
+            content: "next",
+            usageTokens: 550,
+            promptTokens: 500,
+            completionTokens: 50,
+            cachedPromptTokens: 100
+        )
+        let messages = [firstUser, firstRequest, secondRequest, secondUser, nextTurnRequest]
+        let presentations = AgentAssistantTurnGrouping.presentations(in: messages)
+        let firstSummary = try #require(presentations[secondRequest.id]?.summaryMessage)
+        let nextSummary = try #require(presentations[nextTurnRequest.id]?.summaryMessage)
+
+        #expect(firstSummary.promptTokens == 4_000)
+        #expect(firstSummary.completionTokens == 300)
+        #expect(firstSummary.cachedPromptTokens == 2_400)
+        #expect(
+            AgentChatMessageMetrics.tokenSummary(for: firstSummary)
+                == "4.0k/300 · \(L10n.MessageFooter.cacheRate("60%"))"
+        )
+        #expect(nextSummary.promptTokens == 500)
+        #expect(AgentChatMessageMetrics.cacheHitRate(for: nextSummary) == 0.2)
+    }
+
+    @Test
+    func assistantTurnFooterFormatsMillionScaleTokensWithTwoDecimals() {
+        let message = AgentMessage(
+            role: .assistant,
+            content: "done",
+            usageTokens: 26_769_300,
+            promptTokens: 26_725_800,
+            completionTokens: 43_500
+        )
+        let boundaryMessage = AgentMessage(
+            role: .assistant,
+            content: "boundary",
+            usageTokens: 1_999_500,
+            promptTokens: 1_000_000,
+            completionTokens: 999_500
+        )
+
+        #expect(AgentChatMessageMetrics.tokenSummary(for: message) == "26.73M/43.5k")
+        #expect(AgentChatMessageMetrics.tokenSummary(for: boundaryMessage) == "1.00M/999.5k")
     }
 
     @Test
@@ -1260,6 +1400,214 @@ struct AgentChatHistoryRendererTests {
             value: "first update",
             in: rendered
         ) == nil)
+    }
+
+    @Test
+    func settledGoalTurnKeepsOnlyArtifactsAndFinalDeliverySummary() throws {
+        let startedAt = Date(timeIntervalSince1970: 1_500)
+        let user = AgentMessage(role: .user, content: "完成整个目标", createdAt: startedAt)
+        let phase = AgentMessage(
+            role: .assistant,
+            content: "Planning the implementation",
+            promptTokens: 100,
+            completionTokens: 10,
+            elapsedSeconds: 2,
+            createdAt: startedAt.addingTimeInterval(1)
+        )
+        let failedAttempt = AgentMessage(
+            role: .assistant,
+            content: "第一次尝试失败，准备换一种做法。",
+            promptTokens: 200,
+            completionTokens: 20,
+            elapsedSeconds: 3,
+            createdAt: startedAt.addingTimeInterval(4)
+        )
+        let artifact = AgentMessage(
+            role: .assistant,
+            content: "",
+            images: [AgentImageAttachment(mimeType: "image/png", dataBase64: Self.tinyPNGBase64)],
+            createdAt: startedAt.addingTimeInterval(7)
+        )
+        let final = AgentMessage(
+            role: .assistant,
+            content: """
+            完成了，目标已经交付。
+
+            - 修改已落盘
+            - 验证已通过
+
+            ```goal-check
+            1: done
+            ```
+            """,
+            promptTokens: 300,
+            completionTokens: 30,
+            elapsedSeconds: 4,
+            createdAt: startedAt.addingTimeInterval(8)
+        )
+        let raw = [user, phase, failedAttempt, artifact, final]
+        let compacted = AgentGoalTranscriptPresentation.settledMessages(from: raw)
+
+        #expect(compacted.map(\.id) == [user.id, artifact.id, final.id])
+        #expect(raw.contains(where: { $0.id == failedAttempt.id }))
+        #expect(raw.last?.content.contains("goal-check") == true)
+        #expect(compacted.last?.content.contains("goal-check") == false)
+
+        let rendered = AgentChatHistoryRenderer.render(
+            messages: compacted,
+            isDark: false,
+            assistantTurnContextMessages: raw
+        )
+        #expect(rendered.string.contains("完成了，目标已经交付"))
+        #expect(!rendered.string.contains("第一次尝试失败"))
+        #expect(!rendered.string.contains("Planning the implementation"))
+        #expect(!rendered.string.contains("goal-check"))
+        #expect(attributeCount(.agentChatHistoryAssistantStatusDividerColor, in: rendered) == 1)
+        #expect(occurrences(of: "600/60", in: rendered.string) == 1)
+        #expect(firstAttributeRange(
+            .agentChatHistoryMessageCopyText,
+            value: """
+            完成了，目标已经交付。
+
+            - 修改已落盘
+            - 验证已通过
+            """,
+            in: rendered
+        ) != nil)
+    }
+
+    @Test
+    func settledGoalTurnFallsBackToLatestActivityWhenNoSummaryExists() {
+        let user = AgentMessage(role: .user, content: "继续")
+        let planning = AgentMessage(role: .assistant, content: "Planning next pass")
+        let verifying = AgentMessage(role: .assistant, content: "Verifying current files")
+
+        let compacted = AgentGoalTranscriptPresentation.settledMessages(
+            from: [user, planning, verifying]
+        )
+
+        #expect(compacted.map(\.id) == [user.id, verifying.id])
+    }
+
+    @Test
+    func settledGoalTurnSanitizesProtocolWhenThereIsOnlyOneAssistantMessage() {
+        let user = AgentMessage(role: .user, content: "交付")
+        let final = AgentMessage(
+            role: .assistant,
+            content: """
+            已完成。
+
+            ```progress
+            1: done
+            ```
+            """,
+            toolCalls: [AgentMessageToolCall(
+                externalID: "goal-settled-command",
+                toolName: "terminal_send_command",
+                argumentsJSON: #"{"command":"swift test"}"#
+            )]
+        )
+
+        let compacted = AgentGoalTranscriptPresentation.settledMessages(from: [user, final])
+
+        #expect(compacted.map(\.id) == [user.id, final.id])
+        #expect(compacted.last?.content == "已完成。")
+        #expect(compacted.last?.toolCalls.isEmpty == true)
+        #expect(final.content.contains("```progress"))
+        #expect(final.toolCalls.count == 1)
+    }
+
+    @Test
+    @MainActor
+    func rendersSettledGoalRoundSummaryForDesignQA() throws {
+        let startedAt = Date(timeIntervalSince1970: 4_000)
+        let user = AgentMessage(role: .user, content: "完成 Goal 回合", createdAt: startedAt)
+        let raw = [
+            user,
+            AgentMessage(
+                role: .assistant,
+                content: "Planning Goal transcript presentation",
+                promptTokens: 12_000,
+                completionTokens: 40,
+                elapsedSeconds: 120,
+                createdAt: startedAt.addingTimeInterval(1)
+            ),
+            AgentMessage(
+                role: .assistant,
+                content: "第一次渲染没有收口，正在调整历史分组。",
+                toolCalls: [AgentMessageToolCall(
+                    externalID: "goal-design-qa-command",
+                    toolName: "terminal_send_command",
+                    argumentsJSON: #"{"command":"swift test"}"#
+                )],
+                promptTokens: 14_000,
+                completionTokens: 80,
+                elapsedSeconds: 180,
+                createdAt: startedAt.addingTimeInterval(121)
+            ),
+            AgentMessage(
+                role: .assistant,
+                content: """
+                完成了，Goal 回合现在会在结束后收束为交付小结。
+
+                结果：
+
+                - 执行中的读取、搜索、编辑和命令仍会实时展示。
+                - 回合结束后只保留最终结果与生成的图片、文档等真实产物。
+                - 中间尝试、命令正文和内部 `goal-check` 协议不再堆在聊天区。
+
+                本次推进：
+
+                - 处理时长、Token 与模型信息继续按完整回合聚合。
+                - 原始消息和工具记录没有删除，审计、重试和任务面板仍可使用。
+
+                验证通过：
+
+                - Goal 历史收口、产物保留、失败兜底与协议隐藏回归测试通过。
+
+                ```progress
+                1: done
+                ```
+
+                ```goal-check
+                1: done
+                ```
+                """,
+                promptTokens: 18_000,
+                completionTokens: 620,
+                elapsedSeconds: 468,
+                createdAt: startedAt.addingTimeInterval(302)
+            ),
+        ]
+        let compacted = AgentGoalTranscriptPresentation.settledMessages(from: raw)
+            .filter { $0.role == .assistant }
+        let view = AgentChatHistoryNSTextView()
+        view.drawsBackground = true
+        view.backgroundColor = .white
+        view.textContainerInset = NSSize(width: 32, height: 24)
+        view.frame = NSRect(x: 0, y: 0, width: 773, height: 578)
+        view.textContainer?.size = NSSize(width: 709, height: CGFloat.greatestFiniteMagnitude)
+        view.applyMessages(
+            compacted,
+            isDark: false,
+            assistantTurnContextMessages: raw,
+            baseFontSize: 14
+        )
+
+        #expect(view.string.contains("完成了，Goal 回合现在会在结束后收束为交付小结"))
+        #expect(!view.string.contains("第一次渲染没有收口"))
+        #expect(!view.string.contains("swift test"))
+        #expect(!view.string.contains("1: done"))
+        #expect(!view.string.contains(L10n.AgentTurnProgress.title))
+
+        let outputPath = ProcessInfo.processInfo.environment[
+            "WILLDEEP_GOAL_SUMMARY_DESIGN_QA_OUTPUT"
+        ] ?? "/private/tmp/Xedit-goal-round-summary-design-qa.png"
+        view.layoutSubtreeIfNeeded()
+        let bitmap = try #require(view.bitmapImageRepForCachingDisplay(in: view.bounds))
+        view.cacheDisplay(in: view.bounds, to: bitmap)
+        let png = try #require(bitmap.representation(using: .png, properties: [:]))
+        try png.write(to: URL(fileURLWithPath: outputPath), options: .atomic)
     }
 
     @Test
@@ -1418,6 +1766,175 @@ struct AgentChatHistoryRendererTests {
         view.cacheDisplay(in: view.bounds, to: bitmap)
         let png = try #require(bitmap.representation(using: .png, properties: [:]))
         try png.write(to: URL(fileURLWithPath: outputPath), options: .atomic)
+    }
+
+    @Test
+    @MainActor
+    func rendersShortModelSwitchDividerAndMergedCommandsForDesignQA() throws {
+        let outputDirectory = URL(
+            fileURLWithPath: ProcessInfo.processInfo.environment[
+                "WILLDEEP_COMMAND_GROUP_QA_OUTPUT"
+            ] ?? "/tmp/Xedit-command-group-design-qa",
+            isDirectory: true
+        )
+        try FileManager.default.createDirectory(
+            at: outputDirectory,
+            withIntermediateDirectories: true
+        )
+
+        let commandCalls = (1...26).map { index in
+            AgentMessageToolCall(
+                externalID: "command-\(index)",
+                toolName: "run_command",
+                argumentsJSON: #"{"command":"check-step-\#(index)"}"#
+            )
+        }
+        let messages = [
+            AgentMessage(role: .assistant, content: "", toolCalls: commandCalls),
+            AgentMessage(
+                role: .system,
+                content: L10n.AgentModelPicker.modelChanged(
+                    from: "deepseek-v4-flash",
+                    to: "deepseek-v4-pro"
+                ),
+                transcriptEvent: .modelChanged
+            ),
+            AgentMessage(role: .assistant, content: "继续分析运行结果。")
+        ]
+        let view = AgentChatHistoryNSTextView()
+        view.drawsBackground = true
+        view.backgroundColor = .white
+        view.textContainerInset = NSSize(width: 40, height: 24)
+        view.frame = NSRect(x: 0, y: 0, width: 1_126, height: 220)
+        view.textContainer?.size = NSSize(width: 1_046, height: CGFloat.greatestFiniteMagnitude)
+        view.applyMessages(
+            messages,
+            isDark: false,
+            assistantTurnContextMessages: messages,
+            baseFontSize: 14
+        )
+        view.layoutSubtreeIfNeeded()
+
+        #expect(occurrences(of: "已运行 26 条命令", in: view.string) == 1)
+        #expect(occurrences(of: "模型已从", in: view.string) == 1)
+
+        let implementationURL = outputDirectory.appendingPathComponent(
+            "model-switch-command-group-implementation.png"
+        )
+        let bitmap = try #require(view.bitmapImageRepForCachingDisplay(in: view.bounds))
+        view.cacheDisplay(in: view.bounds, to: bitmap)
+        let png = try #require(bitmap.representation(using: .png, properties: [:]))
+        try png.write(to: implementationURL, options: .atomic)
+
+        guard let referencePath = ProcessInfo.processInfo.environment[
+            "WILLDEEP_COMMAND_GROUP_QA_REFERENCE"
+        ],
+        let reference = NSImage(contentsOfFile: referencePath),
+        let implementation = NSImage(contentsOf: implementationURL) else {
+            return
+        }
+
+        let panelSize = NSSize(width: 1_126, height: 220)
+        let comparison = NSImage(size: NSSize(width: panelSize.width, height: panelSize.height * 2))
+        comparison.lockFocus()
+        NSColor.white.setFill()
+        NSRect(origin: .zero, size: comparison.size).fill()
+        let referenceCrop = NSRect(
+            x: 0,
+            y: max(0, reference.size.height - panelSize.height),
+            width: reference.size.width,
+            height: min(panelSize.height, reference.size.height)
+        )
+        reference.draw(
+            in: NSRect(x: 0, y: panelSize.height, width: panelSize.width, height: panelSize.height),
+            from: referenceCrop,
+            operation: .copy,
+            fraction: 1
+        )
+        implementation.draw(
+            in: NSRect(origin: .zero, size: panelSize),
+            from: NSRect(origin: .zero, size: implementation.size),
+            operation: .copy,
+            fraction: 1
+        )
+        comparison.unlockFocus()
+        let comparisonTIFF = try #require(comparison.tiffRepresentation)
+        let comparisonBitmap = try #require(NSBitmapImageRep(data: comparisonTIFF))
+        let comparisonPNG = try #require(comparisonBitmap.representation(using: .png, properties: [:]))
+        try comparisonPNG.write(
+            to: outputDirectory.appendingPathComponent(
+                "model-switch-command-group-comparison.png"
+            ),
+            options: .atomic
+        )
+    }
+
+    @Test
+    @MainActor
+    func rendersTerminalSummaryAlignedWithAssistantBodyForDesignQA() throws {
+        let outputDirectory = URL(
+            fileURLWithPath: "/tmp/Xedit-terminal-summary-alignment-design-qa",
+            isDirectory: true
+        )
+        try FileManager.default.createDirectory(
+            at: outputDirectory,
+            withIntermediateDirectories: true
+        )
+        let terminalCalls = (1...4).map { index in
+            AgentMessageToolCall(
+                externalID: "terminal-operation-\(index)",
+                toolName: "terminal_snapshot",
+                argumentsJSON: #"{"max_chars":2000}"#
+            )
+        }
+        let message = AgentMessage(
+            role: .assistant,
+            content: """
+            明白，让我先看下侧边栏终端当前状态。
+
+            终端的 K8s master 节点上，直接更新 Deployment 镜像。
+            """,
+            toolCalls: terminalCalls
+        )
+        let view = AgentChatHistoryNSTextView()
+        view.drawsBackground = true
+        view.backgroundColor = .white
+        view.textContainerInset = NSSize(width: 18, height: 16)
+        view.textContainer?.lineFragmentPadding = 0
+        view.linkTextAttributes = [
+            .underlineStyle: 0,
+            .cursor: NSCursor.arrow,
+        ]
+        view.frame = NSRect(x: 0, y: 0, width: 587, height: 142)
+        view.textContainer?.size = NSSize(width: 551, height: CGFloat.greatestFiniteMagnitude)
+        view.applyMessages([message], isDark: false, baseFontSize: 14)
+        view.layoutSubtreeIfNeeded()
+
+        let bodyRange = (view.string as NSString).range(of: "明白，让我先看下侧边栏终端当前状态。")
+        let summaryRange = (view.string as NSString).range(of: "已执行 4 次终端操作")
+        let bodyGlyphRange = try #require(view.layoutManager?.glyphRange(
+            forCharacterRange: bodyRange,
+            actualCharacterRange: nil
+        ))
+        let summaryGlyphRange = try #require(view.layoutManager?.glyphRange(
+            forCharacterRange: summaryRange,
+            actualCharacterRange: nil
+        ))
+        let bodyRect = try #require(view.layoutManager?.boundingRect(
+            forGlyphRange: bodyGlyphRange,
+            in: view.textContainer!
+        ))
+        let summaryRect = try #require(view.layoutManager?.boundingRect(
+            forGlyphRange: summaryGlyphRange,
+            in: view.textContainer!
+        ))
+        #expect(abs(bodyRect.minX - summaryRect.minX) < 0.5)
+
+        let outputURL = outputDirectory.appendingPathComponent("implementation.png")
+        let bitmap = try #require(view.bitmapImageRepForCachingDisplay(in: view.bounds))
+        view.cacheDisplay(in: view.bounds, to: bitmap)
+        let png = try #require(bitmap.representation(using: .png, properties: [:]))
+        try png.write(to: outputURL, options: .atomic)
     }
 
     @Test

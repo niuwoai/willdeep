@@ -430,23 +430,13 @@ struct AgentMessageBubble: View {
     }
 
     private var tokenSummary: String? {
-        if let prompt = message.promptTokens, let completion = message.completionTokens {
-            return "\(formatTokens(prompt))/\(formatTokens(completion))"
-        }
-        if let total = message.usageTokens, total > 0 {
-            return formatTokens(total)
-        }
-        return nil
+        AgentChatMessageMetrics.tokenSummary(for: message)
     }
 
     private func formatElapsed(_ seconds: Double) -> String {
         if seconds < 10 { return String(format: "%.1fs", seconds) }
         if seconds < 60 { return String(format: "%.0fs", seconds) }
         return "\(Int(seconds) / 60)m\(Int(seconds) % 60)s"
-    }
-
-    private func formatTokens(_ count: Int) -> String {
-        count >= 1000 ? String(format: "%.1fk", Double(count) / 1000.0) : String(count)
     }
 
     private func copyToClipboard() {

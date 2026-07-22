@@ -38,6 +38,10 @@ struct AgentWindowRootView: View {
                     // position. ObjectIdentifier is stable for an
                     // AppState's lifetime.
                     .id(ObjectIdentifier(appState))
+                    .task(id: appState.hasLoadedAgentSessionCatalog) {
+                        guard appState.hasLoadedAgentSessionCatalog else { return }
+                        appState.resumeInterruptedGoalSessionsAfterLaunch()
+                    }
             } else {
                 // rc12 兜底:理论上不会走到(`ensureHeadlessFallback`
                 // 在 onAppear 已经 mint),但万一在 onAppear 跑之前 SwiftUI

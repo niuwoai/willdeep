@@ -134,6 +134,7 @@ final class TerminalZModemBridge {
     private weak var terminalView: AgentLocalProcessTerminalView?
     private var detector = TerminalZModemDetector()
     private var session: TerminalZModemProcessSession?
+    private var sessionToken: UUID?
     private var preparedSelection = TerminalZModemPreparedSelection()
 
     init(terminalView: AgentLocalProcessTerminalView) {
@@ -151,8 +152,24 @@ final class TerminalZModemBridge {
     func handleRemoteBytes(_ bytes: [UInt8]) -> Bool {
         guard !bytes.isEmpty else { return true }
         if let session {
-            session.writeRemoteBytes(bytes)
-            return true
+            switch session.writeRemoteBytes(bytes) {
+            case .accepted:
+                return true
+            case .processExited:
+                // The local rz/sz process has already completed. Bytes that
+                // arrive after that boundary belong to the restored remote
+                // shell (normally its prompt), so let the terminal render
+                // them instead of swallowing them into a closed pipe.
+                self.session = nil
+                return false
+            case .failed:
+                self.session = nil
+                sessionToken = nil
+                terminalView?.cancelRemoteZModem(
+                    message: "WillDeep ZMODEM connection to the local lrzsz process failed."
+                )
+                return true
+            }
         }
         guard let start = detector.detect(in: bytes) else { return false }
         if !start.displayPrefix.isEmpty {
@@ -215,6 +232,7 @@ final class TerminalZModemBridge {
         initialBytes: [UInt8]
     ) {
         guard let terminalView else { return }
+        let token = UUID()
         do {
             let newSession = try TerminalZModemProcessSession(
                 executable: command,
@@ -225,22 +243,34 @@ final class TerminalZModemBridge {
                 },
                 finish: { [weak self] exitCode in
                     Task { @MainActor [weak self] in
-                        self?.finishSession(exitCode: exitCode)
+                        self?.finishSession(token: token, exitCode: exitCode)
                     }
                 }
             )
             session = newSession
+            sessionToken = token
             newSession.start()
             if !initialBytes.isEmpty {
-                newSession.writeRemoteBytes(initialBytes)
+                switch newSession.writeRemoteBytes(initialBytes) {
+                case .accepted:
+                    break
+                case .processExited, .failed:
+                    session = nil
+                    sessionToken = nil
+                    terminalView.cancelRemoteZModem(
+                        message: "WillDeep ZMODEM local lrzsz process ended before the transfer started."
+                    )
+                }
             }
         } catch {
             terminalView.cancelRemoteZModem(message: "WillDeep ZMODEM failed to start local lrzsz: \(error.localizedDescription)")
         }
     }
 
-    private func finishSession(exitCode: Int32?) {
+    private func finishSession(token: UUID, exitCode: Int32?) {
+        guard sessionToken == token else { return }
         session = nil
+        sessionToken = nil
         if let exitCode, exitCode != 0 {
             terminalView?.displayZModemStatus("WillDeep ZMODEM finished with exit code \(exitCode).")
         }
@@ -307,13 +337,23 @@ final class TerminalZModemBridge {
     }
 }
 
-private final class TerminalZModemProcessSession {
+enum TerminalZModemRemoteWriteResult {
+    case accepted
+    case processExited
+    case failed
+}
+
+final class TerminalZModemProcessSession {
     private let process: Process
     private let inputPipe = Pipe()
     private let outputPipe = Pipe()
     private let errorPipe = Pipe()
     private let sendToRemote: ([UInt8]) -> Void
     private let finish: (Int32?) -> Void
+    private let outputQueue = DispatchQueue(label: "com.willdeep.terminal.zmodem-output")
+    private let stateLock = NSLock()
+    private var acceptingRemoteBytes = false
+    private var didFinish = false
 
     init(
         executable: String,
@@ -335,32 +375,92 @@ private final class TerminalZModemProcessSession {
 
     func start() {
         outputPipe.fileHandleForReading.readabilityHandler = { [weak self] handle in
-            let data = handle.availableData
-            guard !data.isEmpty else { return }
-            self?.sendToRemote(Array(data))
+            self?.outputQueue.async { [weak self] in
+                guard let self else { return }
+                let data = handle.availableData
+                guard !data.isEmpty else { return }
+                self.sendToRemote(Array(data))
+            }
         }
         errorPipe.fileHandleForReading.readabilityHandler = { handle in
             _ = handle.availableData
         }
         process.terminationHandler = { [weak self] process in
-            self?.outputPipe.fileHandleForReading.readabilityHandler = nil
-            self?.errorPipe.fileHandleForReading.readabilityHandler = nil
-            self?.finish(process.terminationStatus)
+            self?.processTerminated(exitCode: process.terminationStatus)
         }
+        setAcceptingRemoteBytes(true)
         do {
             try process.run()
         } catch {
-            finish(-1)
+            setAcceptingRemoteBytes(false)
+            outputPipe.fileHandleForReading.readabilityHandler = nil
+            errorPipe.fileHandleForReading.readabilityHandler = nil
+            finishOnce(-1)
         }
     }
 
-    func writeRemoteBytes(_ bytes: [UInt8]) {
-        guard !bytes.isEmpty else { return }
+    func writeRemoteBytes(_ bytes: [UInt8]) -> TerminalZModemRemoteWriteResult {
+        guard !bytes.isEmpty else { return .accepted }
+        guard isAcceptingRemoteBytes, process.isRunning else {
+            setAcceptingRemoteBytes(false)
+            return .processExited
+        }
         do {
             try inputPipe.fileHandleForWriting.write(contentsOf: Data(bytes))
+            return .accepted
         } catch {
-            process.terminate()
+            let wasRunning = process.isRunning
+            setAcceptingRemoteBytes(false)
+            if wasRunning {
+                process.terminate()
+                return .failed
+            }
+            return .processExited
         }
+    }
+
+    private var isAcceptingRemoteBytes: Bool {
+        stateLock.lock()
+        defer { stateLock.unlock() }
+        return acceptingRemoteBytes
+    }
+
+    private func setAcceptingRemoteBytes(_ accepting: Bool) {
+        stateLock.lock()
+        acceptingRemoteBytes = accepting
+        stateLock.unlock()
+    }
+
+    private func processTerminated(exitCode: Int32) {
+        setAcceptingRemoteBytes(false)
+        try? inputPipe.fileHandleForWriting.close()
+        let outputHandle = outputPipe.fileHandleForReading
+        outputHandle.readabilityHandler = nil
+        errorPipe.fileHandleForReading.readabilityHandler = nil
+
+        // Process.terminationHandler may run before FileHandle has delivered
+        // the final stdout callback. Drain the pipe on the same serial queue
+        // as ordinary reads, then signal completion. ZMODEM's ZFIN/OO tail
+        // must reach the remote sz/rz process or its shell never resumes.
+        outputQueue.async { [weak self] in
+            guard let self else { return }
+            let trailingData = outputHandle.readDataToEndOfFile()
+            if !trailingData.isEmpty {
+                self.sendToRemote(Array(trailingData))
+            }
+            self.finishOnce(exitCode)
+        }
+    }
+
+    private func finishOnce(_ exitCode: Int32?) {
+        stateLock.lock()
+        guard !didFinish else {
+            stateLock.unlock()
+            return
+        }
+        didFinish = true
+        stateLock.unlock()
+        finish(exitCode)
     }
 }
 

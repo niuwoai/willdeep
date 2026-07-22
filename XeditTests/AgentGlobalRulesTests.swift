@@ -32,7 +32,11 @@ struct AgentGlobalRulesTests {
 
     @Test
     func defaultRulesTemplateContainsCodexStrictRules() {
-        #expect(AgentGlobalRulesStore.defaultRulesTemplate.contains("# Codex 规则（严格条款）"))
+        // The template constrains "this AI assistant", never a named third
+        // party — a model reading "these rules bind Codex" can reasonably
+        // conclude they do not bind WillDeep Agent.
+        #expect(AgentGlobalRulesStore.defaultRulesTemplate.contains("# 全局规则（严格条款）"))
+        #expect(!AgentGlobalRulesStore.defaultRulesTemplate.contains("Codex"))
         #expect(AgentGlobalRulesStore.defaultRulesTemplate.contains("所有对用户的回复一律使用**简体中文**"))
         #expect(AgentGlobalRulesStore.defaultRulesTemplate.contains("前端与后端版本号必须保持一致"))
         #expect(AgentGlobalRulesStore.defaultRulesTemplate.contains("默认避免使用管道"))
@@ -57,6 +61,20 @@ struct AgentGlobalRulesTests {
         #expect(injected.count < raw.count)
         #expect(injected.contains("[truncated]"))
         #expect(AgentGlobalRulesStore.loadRules(settings: AgentGlobalRulesSettings(isEnabled: false, filePath: rulesURL.path)) == nil)
+    }
+
+    @Test
+    func savingRulesInvalidatesThePromptInjectionCache() throws {
+        let tempDir = try makeTemporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: tempDir) }
+
+        let rulesURL = tempDir.appendingPathComponent("CLAUDE.md")
+        let settings = AgentGlobalRulesSettings(isEnabled: true, filePath: rulesURL.path)
+        try AgentGlobalRulesStore.saveRules("first rule", settings: settings)
+        #expect(AgentGlobalRulesStore.loadRules(settings: settings) == "first rule")
+
+        try AgentGlobalRulesStore.saveRules("second rule", settings: settings)
+        #expect(AgentGlobalRulesStore.loadRules(settings: settings) == "second rule")
     }
 
     @Test
@@ -244,6 +262,54 @@ struct AgentGlobalRulesTests {
         prepared.prepare(.upload(files: [fileURL]), now: now)
         #expect(prepared.consume(for: .uploadToRemote, now: now) == .upload(files: [fileURL]))
         #expect(prepared.consume(for: .uploadToRemote, now: now) == nil)
+    }
+
+    @Test
+    func zmodemLocalProcessDrainsOutputBeforeFinishingAndRejectsLateRemoteBytes() throws {
+        let tempDir = try makeTemporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: tempDir) }
+        let payload = Data((0..<(512 * 1_024)).map { UInt8($0 % 251) })
+        let payloadURL = tempDir.appendingPathComponent("zmodem-output.bin")
+        try payload.write(to: payloadURL)
+
+        let completion = DispatchSemaphore(value: 0)
+        let receivedLock = NSLock()
+        var received = Data()
+        var receivedCountAtFinish = -1
+        let session = try TerminalZModemProcessSession(
+            executable: "/bin/cat",
+            arguments: [payloadURL.path],
+            currentDirectory: nil,
+            sendToRemote: { bytes in
+                receivedLock.lock()
+                received.append(contentsOf: bytes)
+                receivedLock.unlock()
+            },
+            finish: { _ in
+                receivedLock.lock()
+                receivedCountAtFinish = received.count
+                receivedLock.unlock()
+                completion.signal()
+            }
+        )
+
+        session.start()
+        #expect(completion.wait(timeout: .now() + 10) == .success)
+
+        receivedLock.lock()
+        let finalReceived = received
+        let finalCountAtFinish = receivedCountAtFinish
+        receivedLock.unlock()
+        #expect(finalReceived == payload)
+        #expect(finalCountAtFinish == payload.count)
+        #expect(isProcessExited(session.writeRemoteBytes(Array("prompt".utf8))))
+    }
+
+    private func isProcessExited(_ result: TerminalZModemRemoteWriteResult) -> Bool {
+        if case .processExited = result {
+            return true
+        }
+        return false
     }
 
     private func isUploadDirection(_ direction: TerminalZModemDirection) -> Bool {

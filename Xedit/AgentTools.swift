@@ -24,6 +24,89 @@ enum AgentProcessSupport {
         process.terminationHandler = nil
     }
 
+    /// Terminate the shell and every descendant it launched. Killing only the
+    /// Foundation `Process` frequently leaves `sh -c` children alive (and the
+    /// inherited stdout pipe open), so a stopped command can otherwise keep
+    /// consuming resources until its original timeout.
+    nonisolated static func terminateProcessTree(
+        _ process: Process,
+        gracePeriod: TimeInterval = 2
+    ) {
+        let rootPID = process.processIdentifier
+        guard rootPID > 0 else { return }
+        let trackedPIDs = descendantPIDs(of: rootPID) + [rootPID]
+        let trackedIdentities = trackedPIDs.compactMap(ProcessIdentity.init(pid:))
+        for pid in trackedPIDs {
+            _ = Darwin.kill(pid, SIGTERM)
+        }
+        DispatchQueue.global(qos: .userInitiated).asyncAfter(deadline: .now() + gracePeriod) {
+            for identity in trackedIdentities where identity.stillMatchesCurrentProcess {
+                _ = Darwin.kill(identity.pid, SIGKILL)
+            }
+        }
+    }
+
+    /// Protect the delayed SIGKILL from PID reuse: a short-lived child may
+    /// exit after TERM and macOS may recycle its pid before the grace period.
+    private nonisolated struct ProcessIdentity: Sendable {
+        let pid: pid_t
+        let startSeconds: UInt64
+        let startMicroseconds: UInt64
+
+        init?(pid: pid_t) {
+            guard let info = Self.info(for: pid) else { return nil }
+            self.pid = pid
+            startSeconds = info.pbi_start_tvsec
+            startMicroseconds = info.pbi_start_tvusec
+        }
+
+        var stillMatchesCurrentProcess: Bool {
+            guard let info = Self.info(for: pid) else { return false }
+            return info.pbi_start_tvsec == startSeconds
+                && info.pbi_start_tvusec == startMicroseconds
+        }
+
+        private static func info(for pid: pid_t) -> proc_bsdinfo? {
+            var info = proc_bsdinfo()
+            let byteCount = withUnsafeMutablePointer(to: &info) { pointer in
+                proc_pidinfo(
+                    pid,
+                    PROC_PIDTBSDINFO,
+                    0,
+                    pointer,
+                    Int32(MemoryLayout<proc_bsdinfo>.size)
+                )
+            }
+            guard byteCount == MemoryLayout<proc_bsdinfo>.size else { return nil }
+            return info
+        }
+    }
+
+    /// libproc reports PID counts (not byte counts); recurse before appending
+    /// each child so signals travel deepest-first.
+    private nonisolated static func descendantPIDs(of rootPID: pid_t) -> [pid_t] {
+        var visited: Set<pid_t> = [rootPID]
+        var result: [pid_t] = []
+
+        func collect(parentPID: pid_t) {
+            let capacity = proc_listchildpids(parentPID, nil, 0)
+            guard capacity > 0 else { return }
+            var children = [pid_t](repeating: 0, count: Int(capacity))
+            let count = children.withUnsafeMutableBytes { buffer in
+                proc_listchildpids(parentPID, buffer.baseAddress, Int32(buffer.count))
+            }
+            guard count > 0 else { return }
+            for childPID in children.prefix(Int(count)) where childPID > 0 {
+                guard visited.insert(childPID).inserted else { continue }
+                collect(parentPID: childPID)
+                result.append(childPID)
+            }
+        }
+
+        collect(parentPID: rootPID)
+        return result
+    }
+
     private nonisolated final class Waiter: @unchecked Sendable {
         private let lock = NSLock()
         private var continuation: CheckedContinuation<Void, Never>?
@@ -654,6 +737,7 @@ enum AgentToolRunner {
                         command: command,
                         workingDirectory: root,
                         runtimeID: runtimeID,
+                        turnID: context.turnID,
                         timeoutSeconds: bgTimeout,
                         sandboxMode: context.sandboxMode,
                         displayCommand: AgentSecretStore.redact(command, secretValues: context.secretRedactionValues),
@@ -682,8 +766,11 @@ enum AgentToolRunner {
             )
         }
 
-        let outcome = await Task.detached(priority: .userInitiated) { () -> CommandOutcome in
+        try Task.checkCancellation()
+        let cancellationController = ForegroundCommandCancellationController()
+        let commandTask = Task.detached(priority: .userInitiated) { () -> CommandOutcome in
             let process = Process()
+            defer { cancellationController.clear(process) }
             let launch = AgentSandboxPolicy.shellLaunch(
                 command: command,
                 mode: context.sandboxMode,
@@ -724,6 +811,7 @@ enum AgentToolRunner {
             }
             do {
                 try process.run()
+                cancellationController.bind(process)
             } catch {
                 try? stdoutPipe.fileHandleForReading.close()
                 try? stdoutPipe.fileHandleForWriting.close()
@@ -743,12 +831,7 @@ enum AgentToolRunner {
             let timeoutWorkItem = DispatchWorkItem {
                 runState.markTimedOut()
                 if process.isRunning {
-                    process.terminate()
-                }
-                DispatchQueue.global(qos: .utility).asyncAfter(deadline: .now() + 2) {
-                    if process.isRunning {
-                        kill(process.processIdentifier, SIGKILL)
-                    }
+                    AgentProcessSupport.terminateProcessTree(process)
                 }
             }
             DispatchQueue.global(qos: .utility).asyncAfter(deadline: .now() + timeout, execute: timeoutWorkItem)
@@ -771,7 +854,14 @@ enum AgentToolRunner {
                 timedOut: runState.didTimeout,
                 launchFailed: false
             )
-        }.value
+        }
+        let outcome = await withTaskCancellationHandler {
+            await commandTask.value
+        } onCancel: {
+            commandTask.cancel()
+            cancellationController.cancel()
+        }
+        try Task.checkCancellation()
 
         if outcome.launchFailed {
             throw AgentToolError.commandFailed(-1, outcome.stderr)
@@ -1902,6 +1992,48 @@ enum AgentToolRunner {
             let value = timedOut
             lock.unlock()
             return value
+        }
+    }
+
+    /// Bridges structured Task cancellation to Foundation.Process. Without
+    /// this, stopping an Agent turn only cancelled the awaiter while the shell
+    /// kept running until its timeout and continued consuming resources.
+    private nonisolated final class ForegroundCommandCancellationController: @unchecked Sendable {
+        private let lock = NSLock()
+        private var process: Process?
+        private var isCancelled = false
+
+        func bind(_ process: Process) {
+            lock.lock()
+            self.process = process
+            let shouldCancel = isCancelled
+            lock.unlock()
+            if shouldCancel {
+                terminate(process)
+            }
+        }
+
+        func clear(_ process: Process) {
+            lock.lock()
+            if self.process === process {
+                self.process = nil
+            }
+            lock.unlock()
+        }
+
+        func cancel() {
+            lock.lock()
+            isCancelled = true
+            let process = process
+            lock.unlock()
+            if let process {
+                terminate(process)
+            }
+        }
+
+        private func terminate(_ process: Process) {
+            guard process.isRunning else { return }
+            AgentProcessSupport.terminateProcessTree(process)
         }
     }
 

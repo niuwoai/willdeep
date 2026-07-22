@@ -1010,7 +1010,8 @@ extension AgentChatHistoryNSTextView: NSTextViewDelegate {
         let replacement = AgentChatHistoryFooterChrome.copyButton(
             copied: copied,
             message: message,
-            paragraphStyle: paragraphStyle
+            paragraphStyle: paragraphStyle,
+            baseFontSize: currentBaseFontSize
         )
         textStorage.beginEditing()
         textStorage.replaceCharacters(in: range, with: replacement)
@@ -1047,6 +1048,34 @@ enum AgentChatHistoryLayoutMetrics {
     /// AppKit/SwiftUI compositing resolves this neutral overlay to #F0F0F0
     /// on the white reference surface.
     static let assistantStatusDividerOpacity: Double = 0.075
+    /// Model-switch notices are inline milestones, not section separators.
+    /// Keep the hairlines close to the label so they do not span the entire
+    /// conversation column on a wide window.
+    static let transcriptEventDividerGap: CGFloat = 12
+    static let transcriptEventDividerArmLength: CGFloat = 96
+
+    static func transcriptEventDividerSegments(
+        textMinX: CGFloat,
+        textMaxX: CGFloat,
+        usableWidth: CGFloat
+    ) -> [(start: CGFloat, end: CGFloat)] {
+        let leadingEnd = max(0, textMinX - transcriptEventDividerGap)
+        let trailingStart = min(usableWidth, textMaxX + transcriptEventDividerGap)
+        var segments: [(start: CGFloat, end: CGFloat)] = []
+        if leadingEnd > 0 {
+            segments.append((
+                start: max(0, leadingEnd - transcriptEventDividerArmLength),
+                end: leadingEnd
+            ))
+        }
+        if trailingStart < usableWidth {
+            segments.append((
+                start: trailingStart,
+                end: min(usableWidth, trailingStart + transcriptEventDividerArmLength)
+            ))
+        }
+        return segments
+    }
     /// Inline-code chips may sit after a single proportional-font space.
     /// Keep the horizontal expansion below that space's advance so a
     /// one-glyph chip such as `/` cannot paint over the preceding text.
@@ -1290,18 +1319,17 @@ private final class AgentChatHistoryBubbleLayoutManager: NSLayoutManager {
             guard NSIntersectionRange(glyphRange, glyphsToShow).length > 0 else { return }
             self.enumerateLineFragments(forGlyphRange: glyphRange) { lineFragmentRect, usedRect, textContainer, _, _ in
                 let width = self.usableWidth(for: textContainer, fallback: lineFragmentRect.width)
-                let leadingEnd = max(0, usedRect.minX - 12)
-                let trailingStart = min(width, usedRect.maxX + 12)
+                let segments = AgentChatHistoryLayoutMetrics.transcriptEventDividerSegments(
+                    textMinX: usedRect.minX,
+                    textMaxX: usedRect.maxX,
+                    usableWidth: width
+                )
                 let y = origin.y + lineFragmentRect.midY
                 NSColor.separatorColor.withAlphaComponent(0.35).setStroke()
                 let path = NSBezierPath()
-                if leadingEnd > 0 {
-                    path.move(to: NSPoint(x: origin.x, y: y))
-                    path.line(to: NSPoint(x: origin.x + leadingEnd, y: y))
-                }
-                if trailingStart < width {
-                    path.move(to: NSPoint(x: origin.x + trailingStart, y: y))
-                    path.line(to: NSPoint(x: origin.x + width, y: y))
+                for segment in segments {
+                    path.move(to: NSPoint(x: origin.x + segment.start, y: y))
+                    path.line(to: NSPoint(x: origin.x + segment.end, y: y))
                 }
                 path.lineWidth = 1
                 path.stroke()

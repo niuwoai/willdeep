@@ -102,7 +102,7 @@ extension AppState {
     ) -> [AgentLearningEvent] {
         guard memoryState.settings.normalized.isMemoryEnabled,
               memoryState.settings.normalized.autoSummaryEnabled,
-              let latestUser = runtime.messages.last(where: { $0.role == .user }),
+              let latestUser = runtime.messages.last(where: { $0.isOperatorInput }),
               let assistant = runtime.messages.last(where: {
                   $0.role == .assistant
                       && $0.createdAt >= latestUser.createdAt

@@ -24,6 +24,7 @@ module WillDeepRelease
   DEFAULT_OSS_PREFIX = "mac-apps"
   DEFAULT_OSS_PUBLIC_BASE_URL = "https://img.niuwoai.com"
   DEFAULT_CONTROL_PLANE_BASE_URL = "https://some.im/api/v1"
+  RELEASE_NOTES_URL = "https://some.im/zh/products/willdeep/changelog"
 
   PRODUCT_NAME = "WillDeep"
   PROJECT_NAME = "Xedit.xcodeproj"
@@ -437,6 +438,11 @@ module WillDeepRelease
             "-scheme", SCHEME,
             "-destination", "platform=macOS",
             "-only-testing:#{TEST_BUNDLE}",
+            "-derivedDataPath", @paths[:derived_data],
+            "-clonedSourcePackagesDirPath", @paths[:source_packages],
+            "-allowProvisioningUpdates",
+            "CODE_SIGN_STYLE=Automatic",
+            "DEVELOPMENT_TEAM=#{@options[:team_id]}",
             "-resultBundlePath", @paths[:test_result]
           ],
           allowed_secret_keys: BUILD_SECRET_KEYS
@@ -705,7 +711,7 @@ module WillDeepRelease
         minimum_version: "",
         minimum_system_version: "13.7",
         download_url: public_url(version_key),
-        release_notes_url: "https://some.im/zh/products/willdeep",
+        release_notes_url: RELEASE_NOTES_URL,
         release_notes: release_notes_for_current_version,
         sha256: Digest::SHA256.file(@paths[:dmg]).hexdigest,
         ed_signature: @sparkle_ed_signature,

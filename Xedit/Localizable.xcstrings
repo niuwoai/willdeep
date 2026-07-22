@@ -5,6 +5,10 @@
     "agent-workspace-collision.isolate.help" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Create a separate Git worktree and move this conversation there so it no longer shares the checkout" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "创建独立的 Git worktree，并将当前会话的运行目录移入其中；会话仍保留在原工作区" } } } },
     "agent-workspace-collision.warning" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Another %d session(s) are working in this same folder — edits may overwrite each other." } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "另有 %d 个会话正在此目录中工作，修改可能互相覆盖。" } } } },
     "agent-turn-progress.collapsed" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Collapsed" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "已折叠" } } } },
+    "agent-turn-progress.composer-accessibility" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Step %1$d of %2$d: %3$@" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "第 %1$d / %2$d 步：%3$@" } } } },
+    "agent-turn-progress.composer-help" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Show all task steps" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "查看全部任务步骤" } } } },
+    "agent-turn-progress.composer-item-accessibility" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Step %1$d, %2$@: %3$@" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "第 %1$d 步，%2$@：%3$@" } } } },
+    "agent-turn-progress.composer-step-count" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Step %1$d of %2$d" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "第 %1$d / %2$d 步" } } } },
     "agent-turn-progress.completed" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "%d done" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "完成 %d 项" } } } },
     "agent-turn-progress.expanded" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Expanded" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "已展开" } } } },
     "agent-turn-progress.failed" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "%d failed" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "失败 %d 项" } } } },
@@ -2542,6 +2546,70 @@
             "value" : "已包含选区 · 工具可用"
           }
         }
+      }
+    },
+    "agent-activity.earlier-operations" : {
+      "comment" : "compact summary shown before the most recent detailed tool activity rows",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "%lld earlier operations completed" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "此前已完成 %lld 项操作" } }
+      }
+    },
+    "agent-activity.stage.analyzing" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Analyzing the request" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "正在分析问题" } }
+      }
+    },
+    "agent-activity.stage.building" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Building the changes" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "正在构建修改" } }
+      }
+    },
+    "agent-activity.stage.editing" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Preparing the implementation" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "正在整理实现方案" } }
+      }
+    },
+    "agent-activity.stage.inspecting" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Inspecting the implementation" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "正在检查相关实现" } }
+      }
+    },
+    "agent-activity.stage.planning" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Planning the next step" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "正在规划下一步" } }
+      }
+    },
+    "agent-activity.stage.running" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Running the next step" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "正在执行下一步" } }
+      }
+    },
+    "agent-activity.stage.searching" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Searching relevant code" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "正在查找相关代码" } }
+      }
+    },
+    "agent-activity.stage.verifying" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Verifying the changes" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "正在验证修改" } }
       }
     },
     "agent-panel.session-save-failed" : {
@@ -9052,8 +9120,8 @@
     "composer.design-to-code.prompt" : {
       "extractionState" : "manual",
       "localizations" : {
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "Implement the attached UI completely in the current workspace using the existing project stack. Write the production code directly, build and run it, then use Browser or Computer Use to capture the real result and compare it with the source. Keep correcting material differences until visual acceptance passes." } },
-        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "请使用当前项目已有技术栈，把附图中的界面完整实现到当前工作区。直接写入生产代码、构建并运行，然后使用浏览器或 Computer Use 捕获真实结果并与原图比较；如有明显差异，继续修正，直到视觉验收通过。" } }
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Implement the attached UI completely in the current workspace using the existing project stack. Write the production code directly, build and run it, then use Browser or Computer Use to capture the real result and compare it with the source. Make at most three focused correction passes; then report any remaining material differences instead of looping." } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "请使用当前项目已有技术栈，把附图中的界面完整实现到当前工作区。直接写入生产代码、构建并运行，然后使用浏览器或 Computer Use 捕获真实结果并与原图比较；最多进行三轮有针对性的修正，之后应报告仍存在的明显差异，不要无限循环。" } }
       }
     },
     "composer.knowledge-folder.apply-exclusions" : {
@@ -9241,6 +9309,11 @@
         }
       }
     },
+    "composer.stop.stopped" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Stopped generating." } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "已停止继续生成。" } } } },
+    "composer.stop.checking-processes" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Stopped generating. Checking %lld process(es) started by this turn…" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "已停止继续生成，正在检查本轮启动的 %lld 个进程…" } } } },
+    "composer.stop.cleaned-up" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Stopped generating and stopped %lld related task(s) or process(es) from this turn." } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "已停止继续生成，本轮的 %lld 个相关任务或进程也已停止。" } } } },
+    "composer.stop.processes-kept" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Stopped generating. Current-turn processes were left running because they still need to continue." } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "已停止继续生成；本轮进程仍需继续，未执行终止。" } } } },
+    "composer.stop.processes-finished" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Stopped generating. Related current-turn processes had already finished." } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "已停止继续生成；本轮相关进程已自行结束。" } } } },
     "composer.workspace.choose-folder" : {
       "comment" : "Composer workspace picker menu item",
       "extractionState" : "manual",
@@ -12398,6 +12471,24 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "选择标签页 %@"
+          }
+        }
+      }
+    },
+    "message-footer.cache-rate" : {
+      "comment" : "assistant turn footer cache hit rate; %@ is a percentage",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "cache %@"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "缓存 %@"
           }
         }
       }
@@ -15991,6 +16082,8 @@
         }
       }
     },
+    "settings.agent-behavior.anthropic-max-output-tokens" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Anthropic reply limit" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "Anthropic 回复上限" } } } },
+    "settings.agent-behavior.anthropic-max-output-tokens-description" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Maximum tokens a single Anthropic reply may produce (max_tokens). Default 32K keeps long documents and large refactor replies from truncating; legacy Claude 3.x models are automatically clamped to their lower API caps." } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "单次 Anthropic 回复允许生成的最大 token 数（max_tokens）。默认 32K，长文档与大型重构回复不再被截断；旧的 Claude 3.x 系列会自动收紧到其 API 上限。" } } } },
     "settings.agent-behavior.concurrency-description" : {
       "extractionState" : "manual",
       "localizations" : {

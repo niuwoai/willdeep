@@ -201,7 +201,12 @@ struct AgentModeMessageView: View {
             if !message.content.isEmpty || !message.textAttachments.isEmpty || !message.images.isEmpty {
                 // Keep the row below the input in layout so the transcript
                 // never jumps; only its metadata and actions fade in.
-                AgentMessageFooter(message: message, alignment: .trailing, showsUserTimestamp: true)
+                AgentMessageFooter(
+                    message: message,
+                    alignment: .trailing,
+                    showsUserTimestamp: true,
+                    baseFontSize: baseFontSize
+                )
                     .padding(.top, AgentChatHistoryLayoutMetrics.userFooterTopSpacing)
                     .padding(.trailing, AgentChatHistoryLayoutMetrics.userBubbleHorizontalPadding)
                     .padding(.bottom, AgentChatHistoryLayoutMetrics.userFooterBottomSpacing)
@@ -224,10 +229,11 @@ struct AgentModeMessageView: View {
     // an unterminated ``` block at EOF, so streaming code blocks show up
     // correctly while still being typed.
     private var assistantContent: some View {
-        Group {
+        let activityHeadline = AgentActivityHeadlinePresentation.make(from: message.content)
+        return Group {
             if !message.content.isEmpty || !message.images.isEmpty {
                 VStack(alignment: .leading, spacing: 0) {
-                    if showsAssistantTurnHeader {
+                    if showsAssistantTurnHeader, activityHeadline == nil {
                         Text(AgentChatMessageMetrics.assistantStatus(
                             for: assistantTurnPresentation?.summaryMessage ?? message,
                             isStreaming: isStreamingThisMessage
@@ -250,13 +256,20 @@ struct AgentModeMessageView: View {
 
                     VStack(alignment: .leading, spacing: 10) {
                         if !message.content.isEmpty {
-                            AgentAssistantMarkdownBody(
-                                content: message.content,
-                                isStreaming: isStreamingThisMessage,
-                                baseFontSize: baseFontSize,
-                                progressPlan: progressPlan,
-                                onShowPlan: onShowPlan
-                            )
+                            if let activityHeadline {
+                                AgentActivityHeadlineView(
+                                    presentation: activityHeadline,
+                                    baseFontSize: baseFontSize
+                                )
+                            } else {
+                                AgentAssistantMarkdownBody(
+                                    content: message.content,
+                                    isStreaming: isStreamingThisMessage,
+                                    baseFontSize: baseFontSize,
+                                    progressPlan: progressPlan,
+                                    onShowPlan: onShowPlan
+                                )
+                            }
                         }
                         if !message.images.isEmpty {
                             AgentGeneratedImageStrip(
@@ -271,10 +284,13 @@ struct AgentModeMessageView: View {
                     // `.finishedTurn`, so the row would briefly read
                     // "copy · — · —" and then update. Wait until the
                     // turn settles.
-                    if !isStreamingThisMessage && showsAssistantTurnFooter {
+                    if !isStreamingThisMessage,
+                       activityHeadline == nil,
+                       showsAssistantTurnFooter {
                         AgentMessageFooter(
                             message: assistantTurnPresentation?.summaryMessage ?? message,
-                            alignment: .leading
+                            alignment: .leading,
+                            baseFontSize: baseFontSize
                         )
                             .padding(.top, 8)
                     }
@@ -410,6 +426,7 @@ struct AgentAssistantMarkdownBody: View {
             if let presentation = extraction.presentation {
                 AgentTurnProgressView(
                     presentation: presentation,
+                    baseFontSize: baseFontSize,
                     showsPlanAction: progressPlan != nil,
                     onShowPlan: onShowPlan
                 )

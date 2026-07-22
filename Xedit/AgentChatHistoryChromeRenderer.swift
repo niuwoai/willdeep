@@ -19,7 +19,9 @@ extension AgentChatHistoryRenderer {
         let start = result.length
         switch event {
         case .modelChanged:
-            result.append(transcriptEventIconToken())
+            result.append(transcriptEventIconToken(systemName: "cube"))
+        case .responseStopped:
+            result.append(transcriptEventIconToken(systemName: "stop.circle"))
         }
         result.append(NSAttributedString(
             string: "  " + content,
@@ -40,6 +42,22 @@ extension AgentChatHistoryRenderer {
             ],
             range: range
         )
+    }
+
+    static func appendActivityHeadline(
+        _ presentation: AgentActivityHeadlinePresentation,
+        to result: NSMutableAttributedString,
+        font: NSFont,
+        color: NSColor
+    ) {
+        result.append(transcriptEventIconToken(systemName: presentation.systemImage))
+        result.append(NSAttributedString(
+            string: "  " + presentation.title,
+            attributes: [
+                .font: NSFont.systemFont(ofSize: font.pointSize, weight: .medium),
+                .foregroundColor: color,
+            ]
+        ))
     }
 
     static func appendHeader(
@@ -345,7 +363,10 @@ extension AgentChatHistoryRenderer {
         result.append(NSAttributedString(
             string: titleText,
             attributes: [
-                .font: NSFont.systemFont(ofSize: 11, weight: .medium),
+                // `monoFont` is created from the configured chat body size.
+                // Reuse its point size for the collapsed title so this helper
+                // cannot silently fall back to the old 11pt chrome font.
+                .font: NSFont.systemFont(ofSize: monoFont.pointSize, weight: .medium),
                 .foregroundColor: secondaryColor,
                 .link: "agent-chat-history-tool-group",
                 .agentChatHistoryToolGroupID: group.id,
@@ -408,7 +429,7 @@ extension AgentChatHistoryRenderer {
             result.append(NSAttributedString(
                 string: label,
                 attributes: [
-                    .font: NSFont.systemFont(ofSize: 12, weight: .medium),
+                    .font: NSFont.systemFont(ofSize: font.pointSize, weight: .medium),
                     .foregroundColor: secondaryColor,
                     .underlineStyle: 0,
                     .link: AgentChatHistoryTextAttachmentLink.value,
@@ -443,7 +464,7 @@ extension AgentChatHistoryRenderer {
                 result.append(NSAttributedString(
                     string: "▧ Image attachment",
                     attributes: [
-                        .font: NSFont.systemFont(ofSize: 12, weight: .medium),
+                        .font: NSFont.systemFont(ofSize: font.pointSize, weight: .medium),
                         .foregroundColor: secondaryColor,
                     ]
                 ))
@@ -503,6 +524,7 @@ extension AgentChatHistoryRenderer {
         isVisible: Bool = true,
         turnReportToolCount: Int? = nil,
         layoutWidth: CGFloat = AgentChatHistoryLayoutMetrics.defaultTranscriptWidth,
+        baseFontSize: CGFloat = AgentSettingsStore.chatBaseFontSizeDefault,
         to result: NSMutableAttributedString
     ) {
         let start = result.length
@@ -511,34 +533,44 @@ extension AgentChatHistoryRenderer {
         // together until hover.
         let hideStart = start
         if message.role == .user {
-            result.append(AgentChatHistoryFooterChrome.label(formatTimestamp(message.createdAt)))
-            result.append(AgentChatHistoryFooterChrome.separator)
+            result.append(AgentChatHistoryFooterChrome.label(
+                formatTimestamp(message.createdAt),
+                baseFontSize: baseFontSize
+            ))
+            result.append(AgentChatHistoryFooterChrome.separator(baseFontSize: baseFontSize))
         }
         result.append(AgentChatHistoryFooterChrome.copyButton(
             copied: false,
             message: message.copyableContent,
-            isVisible: isVisible
+            isVisible: isVisible,
+            baseFontSize: baseFontSize
         ))
 
         if message.role == .assistant {
             if let summary = AgentChatMessageMetrics.tokenSummary(for: message) {
-                result.append(AgentChatHistoryFooterChrome.separator)
-                result.append(AgentChatHistoryFooterChrome.label(summary))
+                result.append(AgentChatHistoryFooterChrome.separator(baseFontSize: baseFontSize))
+                result.append(AgentChatHistoryFooterChrome.label(summary, baseFontSize: baseFontSize))
             }
             if let route = message.managedRoute {
-                result.append(AgentChatHistoryFooterChrome.separator)
-                result.append(AgentChatHistoryFooterChrome.label(route.footerChipText))
+                result.append(AgentChatHistoryFooterChrome.separator(baseFontSize: baseFontSize))
+                result.append(AgentChatHistoryFooterChrome.label(
+                    route.footerChipText,
+                    baseFontSize: baseFontSize
+                ))
             }
             // 1.103.0-rc11: turn-report 图标(原 AgentTurnPostStrip 左侧)
             // 折进 footer,跟 copy/tokens/retry 同一行;只挂在最后一条
             // assistant 上,无工具调用的轮(toolCount==0)与历史轮都不显示。
             if isLatestAssistant, let count = turnReportToolCount, count > 0 {
-                result.append(AgentChatHistoryFooterChrome.separator)
-                result.append(AgentChatHistoryFooterChrome.reportButton(count: count))
+                result.append(AgentChatHistoryFooterChrome.separator(baseFontSize: baseFontSize))
+                result.append(AgentChatHistoryFooterChrome.reportButton(
+                    count: count,
+                    baseFontSize: baseFontSize
+                ))
             }
             if isLatestAssistant {
-                result.append(AgentChatHistoryFooterChrome.separator)
-                result.append(AgentChatHistoryFooterChrome.retryButton())
+                result.append(AgentChatHistoryFooterChrome.separator(baseFontSize: baseFontSize))
+                result.append(AgentChatHistoryFooterChrome.retryButton(baseFontSize: baseFontSize))
             }
         }
 
@@ -608,9 +640,9 @@ extension AgentChatHistoryRenderer {
         return NSAttributedString(attachment: attachment)
     }
 
-    private static func transcriptEventIconToken() -> NSAttributedString {
+    private static func transcriptEventIconToken(systemName: String) -> NSAttributedString {
         let attachment = NSTextAttachment()
-        if let image = NSImage(systemSymbolName: "cube", accessibilityDescription: nil)?
+        if let image = NSImage(systemSymbolName: systemName, accessibilityDescription: nil)?
             .withSymbolConfiguration(NSImage.SymbolConfiguration(pointSize: 12, weight: .regular)) {
             attachment.image = image
             attachment.bounds = NSRect(x: 0, y: -2, width: 13, height: 13)
@@ -790,9 +822,12 @@ extension AgentChatHistoryRenderer {
         style.lineSpacing = 1
         style.paragraphSpacingBefore = 2
         style.paragraphSpacing = 1
-        style.headIndent = 22
-        style.firstLineHeadIndent = 22
-        style.tailIndent = -22
+        // Keep the compact activity summary on the same content column as
+        // the assistant prose above it. A bespoke 22 pt inset used to place
+        // this label 10 pt left of the 32 pt assistant body edge.
+        style.headIndent = AgentChatHistoryLayoutMetrics.assistantContentHeadIndent
+        style.firstLineHeadIndent = AgentChatHistoryLayoutMetrics.assistantContentHeadIndent
+        style.tailIndent = -AgentChatHistoryLayoutMetrics.assistantContentTailInset
         return style
     }
 

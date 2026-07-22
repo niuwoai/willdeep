@@ -67,7 +67,8 @@ struct BugHuntWorkflow: WorkflowDefinition {
                - **file:line** — what's wrong
                - **failure mode** — what breaks, under what input
                - **fix sketch** — the smallest correct change
-            4. If you find nothing, say so plainly in one sentence.
+            4. If you find nothing, reply with exactly this sentinel and \
+               nothing else: NOTHING FOUND
             """
         }
 
@@ -81,7 +82,13 @@ struct BugHuntWorkflow: WorkflowDefinition {
         )
 
         let nonEmptyFindings = zip(files, hunterResults).compactMap { path, result -> String? in
-            guard let result, !result.lowercased().contains("nothing found") else { return nil }
+            // Prefix match on the mandated sentinel: a loose `contains` also
+            // dropped real findings that merely mentioned the phrase, while
+            // free-form "no bugs here" replies (or non-English ones) slipped
+            // through as findings.
+            guard let result else { return nil }
+            let normalized = result.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
+            guard !normalized.hasPrefix("NOTHING FOUND") else { return nil }
             return "## `\(path)`\n\n\(result)"
         }
 

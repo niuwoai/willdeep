@@ -239,6 +239,8 @@ nonisolated enum AgentSessionStore {
         let activeExperts: Set<AgentExpert>
         let currentPlan: AgentPlan?
         let currentGoal: AgentGoal?
+        let goalPlanningState: AgentGoalPlanningState?
+        let goalTurnRecoveryCheckpoint: AgentGoalTurnRecoveryCheckpoint?
         let learningEvents: [AgentLearningEvent]
         let latestTurnRecall: AgentTurnRecallSnapshot?
         let pinnedAt: Date?
@@ -251,7 +253,7 @@ nonisolated enum AgentSessionStore {
             case providerID, providerDisplayName
             case createdAt, updatedAt, messages
             case didEditFiles, agentEditedPaths, interactionMode, approvalMode, executionAgent, activeExperts
-            case currentPlan, currentGoal, learningEvents, latestTurnRecall
+            case currentPlan, currentGoal, goalPlanningState, goalTurnRecoveryCheckpoint, learningEvents, latestTurnRecall
             case pinnedAt, archivedAt, titleIsUserSet
         }
 
@@ -277,6 +279,11 @@ nonisolated enum AgentSessionStore {
             activeExperts = try c.decodeIfPresent(Set<AgentExpert>.self, forKey: .activeExperts) ?? []
             currentPlan = try c.decodeIfPresent(AgentPlan.self, forKey: .currentPlan)
             currentGoal = try c.decodeIfPresent(AgentGoal.self, forKey: .currentGoal)
+            goalPlanningState = try? c.decodeIfPresent(AgentGoalPlanningState.self, forKey: .goalPlanningState)
+            goalTurnRecoveryCheckpoint = try c.decodeIfPresent(
+                AgentGoalTurnRecoveryCheckpoint.self,
+                forKey: .goalTurnRecoveryCheckpoint
+            )
             learningEvents = try c.decodeIfPresent([AgentLearningEvent].self, forKey: .learningEvents) ?? []
             latestTurnRecall = try c.decodeIfPresent(AgentTurnRecallSnapshot.self, forKey: .latestTurnRecall)
             pinnedAt = try c.decodeIfPresent(Date.self, forKey: .pinnedAt)
@@ -310,6 +317,8 @@ nonisolated enum AgentSessionStore {
                 activeExperts: activeExperts,
                 currentPlan: currentPlan,
                 currentGoal: currentGoal,
+                goalPlanningState: goalPlanningState,
+                goalTurnRecoveryCheckpoint: goalTurnRecoveryCheckpoint,
                 learningEvents: learningEvents,
                 latestTurnRecall: latestTurnRecall,
                 pinnedAt: pinnedAt,

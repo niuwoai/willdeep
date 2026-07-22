@@ -120,6 +120,10 @@ struct AgentToolContext {
     /// tools to scope jobs to the originating session. Nil in
     /// non-conversational call paths (tests, ad-hoc skill harness).
     let runtimeID: UUID?
+    /// Stable id of the Agent turn that initiated this tool call. Background
+    /// work records it separately from `runtimeID` so a user Stop targets only
+    /// work created by the latest turn.
+    let turnID: UUID?
     /// Shared background-job registry. Nil in non-app call paths;
     /// when nil, `run_command` with `run_in_background: true` falls
     /// back to the foreground path so behavior is still defined.
@@ -181,6 +185,7 @@ struct AgentToolContext {
         workspaceLocation: WorkspaceLocation? = nil,
         runtimeDescriptor: RuntimeDescriptor? = nil,
         runtimeID: UUID? = nil,
+        turnID: UUID? = nil,
         jobRegistry: AgentJobRegistry? = nil,
         mediaTaskRegistry: AgentMediaTaskRegistry? = nil,
         shortDramaStore: AgentShortDramaStore? = nil,
@@ -200,6 +205,7 @@ struct AgentToolContext {
         self.workspaceLocation = workspaceLocation ?? rootDirectory.map { .local(path: $0.standardizedFileURL.path) }
         self.runtimeDescriptor = runtimeDescriptor
         self.runtimeID = runtimeID
+        self.turnID = turnID
         self.jobRegistry = jobRegistry
         self.mediaTaskRegistry = mediaTaskRegistry
         self.shortDramaStore = shortDramaStore
@@ -246,6 +252,7 @@ struct AgentToolContext {
             workspaceLocation: workspaceLocation,
             runtimeDescriptor: runtimeDescriptor,
             runtimeID: runtimeID,
+            turnID: turnID,
             jobRegistry: jobRegistry,
             mediaTaskRegistry: mediaTaskRegistry,
             shortDramaStore: shortDramaStore,

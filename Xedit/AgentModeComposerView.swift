@@ -85,6 +85,12 @@ struct AgentChatComposer: View {
                     .transition(.opacity.combined(with: .move(edge: .bottom)))
                 }
 
+                if let progress = taskProgressSnapshot {
+                    AgentComposerTaskProgressControl(snapshot: progress)
+                        .frame(maxWidth: AgentDesign.chatMaxContentWidth)
+                        .transition(.opacity.combined(with: .move(edge: .bottom)))
+                }
+
                 ComposerCard(onUserEdit: { oldValue, newValue in
                     if appState.agentPendingPlanModeSuggestion != nil,
                        newValue != oldValue {
@@ -169,6 +175,14 @@ struct AgentChatComposer: View {
                     || call.status == .awaitingConfirm
                     || call.status == .awaitingUserAnswer
             }
+    }
+
+    private var taskProgressSnapshot: AgentComposerTaskProgressSnapshot? {
+        return AgentComposerTaskProgressSnapshot.preferred(
+            plan: appState.agentCurrentPlan,
+            goal: appState.agentCurrentGoal,
+            isResponding: appState.isAgentResponding
+        )
     }
 
     private func planFingerprint(_ plan: AgentPlan) -> String {
@@ -693,41 +707,33 @@ private struct ComposerCard: View {
             AgentComposerRunContextBar()
 
             if !appState.agentPendingImages.isEmpty {
-                HStack(alignment: .center, spacing: 8) {
-                    Button {
-                        appState.preparePendingImagesForDesignToCode()
-                    } label: {
-                        VStack(alignment: .leading, spacing: 2) {
-                            HStack(spacing: 5) {
-                                Image(systemName: "wand.and.stars")
-                                Text(L10n.Composer.designToCodeAction)
-                                    .fontWeight(.semibold)
-                            }
-                            .foregroundStyle(palette.accent)
-                            Text(L10n.Composer.designToCodeActionDetail)
-                                .foregroundStyle(.secondary)
-                                .lineLimit(1)
-                        }
-                        .font(.system(size: 11))
-                        .padding(.horizontal, 10)
-                        .padding(.vertical, 6)
-                        .background(
-                            RoundedRectangle(cornerRadius: 9, style: .continuous)
-                                .fill(palette.accent.opacity(0.10))
-                        )
-                        .overlay {
-                            RoundedRectangle(cornerRadius: 9, style: .continuous)
-                                .stroke(palette.accent.opacity(0.18), lineWidth: 1)
-                        }
-                    }
-                    .buttonStyle(.plain)
-                    .frame(width: 250, alignment: .leading)
-                    .layoutPriority(2)
-                    .help(L10n.Composer.designToCodeHelp)
+                VStack(alignment: .leading, spacing: 3) {
                     AgentComposerImageStrip(images: appState.agentPendingImages) { id in
                         appState.removeAgentImage(id: id)
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)
+
+                    Button {
+                        appState.preparePendingImagesForDesignToCode()
+                    } label: {
+                        HStack(spacing: 4) {
+                            Image(systemName: "wand.and.stars")
+                                .foregroundStyle(palette.accent)
+                            Text(L10n.Composer.designToCodeAction)
+                                .fontWeight(.medium)
+                                .foregroundStyle(palette.accent)
+                            Text("·")
+                                .foregroundStyle(.tertiary)
+                            Text(L10n.Composer.designToCodeActionDetail)
+                                .foregroundStyle(.secondary)
+                                .lineLimit(1)
+                        }
+                        .font(.system(size: 10))
+                        .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .fixedSize(horizontal: true, vertical: false)
+                    .help(L10n.Composer.designToCodeHelp)
                 }
             }
 
@@ -1746,7 +1752,7 @@ struct AgentChatStatusBar: View {
                 }
             }
         }
-        .font(AgentDesign.captionFont)
+        .agentChatSupportingFont()
         .foregroundStyle(.secondary)
         .padding(.horizontal, 18)
         .frame(height: AgentDesign.statusBarHeight)

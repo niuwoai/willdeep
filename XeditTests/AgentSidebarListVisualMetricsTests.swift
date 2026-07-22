@@ -14,6 +14,13 @@ struct AgentSidebarListVisualMetricsTests {
         #expect(AgentDesign.sidebarWorkspaceGroupSpacing == 6)
         #expect(AgentDesign.sidebarAutomationFontSize == AgentDesign.sidebarRowFontSize)
         #expect(AgentDesign.sidebarSessionTrailingActionsWidth == 40)
+        #expect(AgentDesign.chatSupportingFontSize(baseFontSize: 14, visualMinimum: 9) == 14)
+        #expect(AgentDesign.chatSupportingFontSize(baseFontSize: 18, visualMinimum: 15) == 18)
+        #expect(AgentModelUsageTableLayout.horizontalInset == 8)
+        #expect(AgentModelUsageTableLayout.columnSpacing == 8)
+        #expect(AgentModelUsageTableLayout.tokensWidth == 120)
+        #expect(AgentModelUsageTableLayout.cacheWidth == 56)
+        #expect(AgentModelUsageTableLayout.costWidth == 72)
     }
 
     @Test("workspace and conversation titles share the Codex text column")
@@ -115,13 +122,22 @@ struct AgentSidebarListVisualMetricsTests {
             ),
         ]
         let now = Date(timeIntervalSince1970: 1_784_070_000)
+        var plannedSession = makeSession(
+            title: "调整图层面板展开方式",
+            workspace: "/tmp/83d",
+            updatedAt: now.addingTimeInterval(-900),
+            pinnedAt: now.addingTimeInterval(-120)
+        )
+        plannedSession.currentPlan = AgentPlan(
+            status: .executing,
+            steps: [
+                .init(text: "检查侧栏与聊天字号", status: .done),
+                .init(text: "统一状态提示字号", status: .done),
+                .init(text: "完成设计验收", status: .inProgress),
+            ]
+        )
         appState.agentSessions = [
-            makeSession(
-                title: "调整图层面板展开方式",
-                workspace: "/tmp/83d",
-                updatedAt: now.addingTimeInterval(-900),
-                pinnedAt: now.addingTimeInterval(-120)
-            ),
+            plannedSession,
             makeSession(title: "更新版本号", workspace: "/tmp/83d", updatedAt: now.addingTimeInterval(-800)),
             makeSession(title: "83d-go 里，帮我检查接口", workspace: "/tmp/83d", updatedAt: now.addingTimeInterval(-700)),
             makeSession(
@@ -142,6 +158,175 @@ struct AgentSidebarListVisualMetricsTests {
             .frame(width: size.width, height: size.height)
             .background(appState.editorSettings.interfaceSkin.sidebarBackground)
             .preferredColorScheme(.light)
+        let hostingView = NSHostingView(rootView: root)
+        hostingView.frame = NSRect(origin: .zero, size: size)
+        hostingView.layoutSubtreeIfNeeded()
+
+        let bitmap = try #require(hostingView.bitmapImageRepForCachingDisplay(in: hostingView.bounds))
+        hostingView.cacheDisplay(in: hostingView.bounds, to: bitmap)
+        let png = try #require(bitmap.representation(using: .png, properties: [:]))
+        try png.write(to: URL(fileURLWithPath: outputPath), options: .atomic)
+    }
+
+    @Test("render production new-chat typography surfaces for design QA")
+    @MainActor
+    func renderNewChatTypographyForDesignQA() throws {
+        let outputPath = ProcessInfo.processInfo.environment["WILLDEEP_TYPOGRAPHY_QA_OUTPUT"]
+            ?? "/tmp/Xedit-new-chat-typography-design-qa.png"
+
+        var settings = EditorSettings.default
+        settings.interfaceSkinID = EditorInterfaceSkin.ricePaper.id
+        let appState = AppState(editorSettings: settings)
+        appState.agentChatBaseFontSize = 14
+        appState.agentSessions = [
+            makeSession(
+                title: "统一聊天界面的辅助字号",
+                workspace: "/tmp/Xedit",
+                updatedAt: Date(timeIntervalSince1970: 1_784_070_000)
+            )
+        ]
+        appState.hasLoadedAgentUsageSnapshots = true
+        appState.agentUsageSnapshots = typographyUsageSnapshots()
+
+        let size = NSSize(width: 700, height: 650)
+        let root = VStack(spacing: 24) {
+            AgentChatEmptyState()
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+
+            VStack(alignment: .leading, spacing: 12) {
+                AgentComposerRunContextBar()
+                Text(L10n.Composer.inputPlaceholder)
+                    .font(AgentDesign.chatSupportingFont(
+                        baseFontSize: appState.agentChatBaseFontSize
+                    ))
+                    .foregroundStyle(.secondary)
+            }
+            .padding(16)
+            .background(
+                RoundedRectangle(cornerRadius: 14)
+                    .fill(appState.editorSettings.interfaceSkin.palette.panelFill)
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 14)
+                    .stroke(appState.editorSettings.interfaceSkin.palette.hairline, lineWidth: 1)
+            )
+        }
+        .padding(32)
+        .environmentObject(appState)
+        .frame(width: size.width, height: size.height)
+        .background(appState.editorSettings.interfaceSkin.windowBackground)
+        .preferredColorScheme(.light)
+        let hostingView = NSHostingView(rootView: root)
+        hostingView.frame = NSRect(origin: .zero, size: size)
+        hostingView.layoutSubtreeIfNeeded()
+
+        let bitmap = try #require(hostingView.bitmapImageRepForCachingDisplay(in: hostingView.bounds))
+        hostingView.cacheDisplay(in: hostingView.bounds, to: bitmap)
+        let png = try #require(bitmap.representation(using: .png, properties: [:]))
+        try png.write(to: URL(fileURLWithPath: outputPath), options: .atomic)
+    }
+
+    @Test("render aligned production model-usage table for design QA")
+    @MainActor
+    func renderAlignedModelUsageTableForDesignQA() throws {
+        let outputPath = ProcessInfo.processInfo.environment["WILLDEEP_MODEL_TABLE_QA_OUTPUT"]
+            ?? "/tmp/Xedit-model-usage-table-design-qa.png"
+
+        var settings = EditorSettings.default
+        settings.interfaceSkinID = EditorInterfaceSkin.ricePaper.id
+        let appState = AppState(editorSettings: settings)
+        appState.agentChatBaseFontSize = 14
+        appState.hasLoadedAgentUsageSnapshots = true
+        appState.agentUsageSnapshots = typographyUsageSnapshots()
+
+        let size = NSSize(width: 700, height: 410)
+        let root = AgentStatsDashboard(initialTab: .models)
+            .environmentObject(appState)
+            .padding(24)
+            .frame(width: size.width, height: size.height)
+            .background(appState.editorSettings.interfaceSkin.windowBackground)
+            .preferredColorScheme(.light)
+        let hostingView = NSHostingView(rootView: root)
+        hostingView.frame = NSRect(origin: .zero, size: size)
+        hostingView.layoutSubtreeIfNeeded()
+
+        let bitmap = try #require(hostingView.bitmapImageRepForCachingDisplay(in: hostingView.bounds))
+        hostingView.cacheDisplay(in: hostingView.bounds, to: bitmap)
+        let png = try #require(bitmap.representation(using: .png, properties: [:]))
+        try png.write(to: URL(fileURLWithPath: outputPath), options: .atomic)
+    }
+
+    @Test("render the production live activity timeline for design QA")
+    @MainActor
+    func renderLiveActivityTimelineForDesignQA() throws {
+        let outputPath = ProcessInfo.processInfo.environment["WILLDEEP_ACTIVITY_TIMELINE_QA_OUTPUT"]
+            ?? "/tmp/Xedit-activity-timeline-design-qa.png"
+
+        var settings = EditorSettings.default
+        settings.interfaceSkinID = EditorInterfaceSkin.ricePaper.id
+        let appState = AppState(editorSettings: settings)
+        appState.agentChatBaseFontSize = 14
+        let messageID = UUID()
+        let calls = [
+            AgentToolCall(
+                messageID: messageID,
+                externalID: "read-1",
+                toolName: "read_file",
+                arguments: ["path": .string("Xedit/AgentToolCallGrouping.swift")],
+                risk: .read,
+                status: .succeeded
+            ),
+            AgentToolCall(
+                messageID: messageID,
+                externalID: "search-1",
+                toolName: "grep_files",
+                arguments: ["pattern": .string("agentLiveThinkingPreview")],
+                risk: .read,
+                status: .succeeded
+            ),
+            AgentToolCall(
+                messageID: messageID,
+                externalID: "edit-1",
+                toolName: "edit_file",
+                arguments: ["path": .string("Xedit/AgentMessageView.swift")],
+                risk: .write,
+                status: .succeeded
+            ),
+            AgentToolCall(
+                messageID: messageID,
+                externalID: "test-1",
+                toolName: "run_command",
+                arguments: [
+                    "cwd": .string("/Users/rocky/Sites/Xedit"),
+                    "command": .string("xcodebuild test"),
+                ],
+                risk: .read,
+                status: .running
+            ),
+        ]
+
+        let size = NSSize(width: 760, height: 360)
+        let root = VStack(alignment: .leading, spacing: 14) {
+            Text("我已经确认状态展示的问题来自过度聚合，以及模型原始阶段文案直接混进正文。现在正在收敛渲染层级并补回归测试。")
+                .font(.system(size: appState.agentChatBaseFontSize))
+                .lineSpacing(3)
+                .fixedSize(horizontal: false, vertical: true)
+
+            AgentLiveActivityTimeline(calls: calls)
+
+            AgentActivityHeadlineView(
+                presentation: AgentActivityHeadlinePresentation(
+                    title: "正在验证修改",
+                    systemImage: "checkmark.circle"
+                ),
+                baseFontSize: appState.agentChatBaseFontSize
+            )
+        }
+        .padding(32)
+        .environmentObject(appState)
+        .frame(width: size.width, height: size.height, alignment: .topLeading)
+        .background(appState.editorSettings.interfaceSkin.windowBackground)
+        .preferredColorScheme(.light)
         let hostingView = NSHostingView(rootView: root)
         hostingView.frame = NSRect(origin: .zero, size: size)
         hostingView.layoutSubtreeIfNeeded()
@@ -261,5 +446,43 @@ struct AgentSidebarListVisualMetricsTests {
             messages: [AgentMessage(role: .user, content: title, createdAt: updatedAt)],
             pinnedAt: pinnedAt
         )
+    }
+
+    private func typographyUsageSnapshots() -> [AgentUsageSessionSnapshot] {
+        let now = Date(timeIntervalSince1970: 1_784_070_000)
+        return (0..<18).map { index in
+            let createdAt = now.addingTimeInterval(TimeInterval(-index * 43_200))
+            return AgentUsageSessionSnapshot(
+                id: UUID(),
+                modelID: index.isMultiple(of: 2) ? "gpt-5.6-sol" : "deepseek-v4-flash",
+                providerID: index.isMultiple(of: 2) ? "some.im" : "deepseek",
+                providerDisplayName: index.isMultiple(of: 2) ? "some.im" : "DeepSeek",
+                createdAt: createdAt,
+                updatedAt: createdAt.addingTimeInterval(1_800),
+                messages: [
+                    AgentUsageMessageSnapshot(
+                        role: .user,
+                        contentCharacterCount: 120 + index,
+                        usageTokens: 860 + index * 13,
+                        promptTokens: 540 + index * 7,
+                        completionTokens: 320 + index * 6,
+                        createdAt: createdAt
+                    ),
+                    AgentUsageMessageSnapshot(
+                        role: .assistant,
+                        contentCharacterCount: 640 + index * 4,
+                        reasoningCharacterCount: 180,
+                        toolCallNames: ["run_command", "apply_patch", "read_file"],
+                        usageTokens: 2_400 + index * 41,
+                        promptTokens: 1_500 + index * 23,
+                        completionTokens: 900 + index * 18,
+                        createdAt: createdAt.addingTimeInterval(900)
+                    ),
+                ],
+                workspaceIdentifier: index.isMultiple(of: 3) ? "local:/tmp/Xedit" : "local:/tmp/WillDeep",
+                editedFileCount: 2 + index % 4,
+                artifactCount: index % 3
+            )
+        }
     }
 }

@@ -13,6 +13,7 @@
 import Testing
 import Foundation
 import AppKit
+import SwiftUI
 @testable import WillDeep
 
 private final class InvalidationSpyLayoutManager: NSLayoutManager {
@@ -35,6 +36,15 @@ private final class InvalidationSpyLayoutManager: NSLayoutManager {
     ) {
         layoutInvalidations.append(charRange)
         super.invalidateLayout(forCharacterRange: charRange, actualCharacterRange: actualCharRange)
+    }
+}
+
+private final class EditorIMEBindingSpy {
+    var text: String
+    var editCount = 0
+
+    init(text: String) {
+        self.text = text
     }
 }
 
@@ -170,5 +180,54 @@ extension WillDeepTests {
             range: NSRange(location: 0, length: storage.length)
         )
         #expect(appliedAfterCommit == [NSRange(location: 3, length: 1)])
+    }
+
+    @Test("editor defers binding and syntax highlighting during IME composition")
+    @MainActor
+    func testEditorDefersDocumentUpdatesDuringMarkedText() async throws {
+        let spy = EditorIMEBindingSpy(text: "abc")
+        let editor = EditorView(
+            text: Binding(
+                get: { spy.text },
+                set: { spy.text = $0 }
+            ),
+            language: .swift,
+            detectedLanguage: .swift,
+            settings: .default,
+            activeTabID: nil,
+            onEdit: { spy.editCount += 1 }
+        )
+        let coordinator = editor.makeCoordinator()
+        let (textView, _) = Self.makeLiveEditorTextSystem(
+            text: spy.text,
+            font: EditorSettings.default.editorFont()
+        )
+
+        textView.setSelectedRange(NSRange(location: 3, length: 0))
+        textView.setMarkedText(
+            "ni",
+            selectedRange: NSRange(location: 0, length: 2),
+            replacementRange: NSRange(location: NSNotFound, length: 0)
+        )
+        try #require(textView.hasMarkedText())
+
+        coordinator.textDidChange(
+            Notification(name: NSText.didChangeNotification, object: textView)
+        )
+        try await Task.sleep(nanoseconds: 600_000_000)
+
+        #expect(textView.hasMarkedText())
+        #expect(textView.string == "abcni")
+        #expect(spy.text == "abc")
+        #expect(spy.editCount == 0)
+
+        textView.unmarkText()
+        coordinator.textDidChange(
+            Notification(name: NSText.didChangeNotification, object: textView)
+        )
+
+        #expect(!textView.hasMarkedText())
+        #expect(spy.text == "abcni")
+        #expect(spy.editCount == 1)
     }
 }

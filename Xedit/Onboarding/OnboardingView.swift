@@ -178,6 +178,7 @@ struct OnboardingView: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+        .focusable(false)
         .allowsHitTesting(isReachable)
         .accessibilityIdentifier("onboarding.step.\(stepAccessibilityName(step))")
     }

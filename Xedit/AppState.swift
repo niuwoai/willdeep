@@ -232,10 +232,12 @@ final class AppState: ObservableObject {
     var cachedJudgeHistoryBuiltAt: Date?
     /// User-tunable base font size (in points) for the Agent chat
     /// transcript body — applies to user/assistant message prose and
-    /// rendered Markdown blocks. Tool-call summaries, footers, and
-    /// composer chrome keep their fixed AgentDesign sizes. Range and
-    /// default come from AgentSettingsStore so the UI clamp and the
-    /// persisted clamp can't drift.
+    /// rendered Markdown blocks. Supporting chat chrome (tool summaries,
+    /// progress/status rows, footers, dashboard captions, and composer
+    /// context labels) treats this value as its visual minimum, preserving
+    /// hierarchy with color and weight instead of unreadably small text.
+    /// Range and default come from AgentSettingsStore so the UI clamp and
+    /// the persisted clamp can't drift.
     @Published var agentChatBaseFontSize: CGFloat = AgentSettingsStore.loadAgentChatBaseFontSize() {
         didSet {
             let clamped = AgentSettingsStore.clampChatBaseFontSize(agentChatBaseFontSize)
@@ -248,6 +250,10 @@ final class AppState: ObservableObject {
     }
     /// Persisted Agent-mode chat sessions, newest-updated first.
     @Published var agentSessions: [AgentSession] = []
+    /// Launch catalog loading is asynchronous. The Agent window uses this
+    /// edge to run Goal recovery only after every persisted candidate is
+    /// visible, avoiding a race with the initial empty in-memory list.
+    @Published private(set) var hasLoadedAgentSessionCatalog = false
     /// Set only when a metadata-only sidebar row can no longer be
     /// materialized from disk. The row is deliberately retained so a
     /// recovered JSON file can reconnect without losing its visible title.
@@ -336,8 +342,8 @@ final class AppState: ObservableObject {
     /// Same invalidation rules as `agentTokenEstimateCache`. Not @Published.
     var agentBaselineEstimateCache: (messageCount: Int, sessionID: AgentSession.ID?, value: Int, at: Date)?
 
-    /// Memo for `estimatedAgentSystemMessage` — the single `system` message
-    /// (prompt skeleton + retrieved memory). Both `estimatedAgentTokens` and
+    /// Memo for the estimated request prompt split: stable `system` message
+    /// plus per-turn context appended to the latest user message. Both `estimatedAgentTokens` and
     /// `estimatedAgentBaselineTokens` independently build it, so on a session
     /// switch (which misses BOTH value caches at once) the full system-prompt
     /// construction + memory retrieval ran twice on the main thread inside the
@@ -345,7 +351,13 @@ final class AppState: ObservableObject {
     /// build across the two estimators halves it. Same (messageCount,
     /// sessionID, 1s) invalidation as the value caches above, so it inherits
     /// their precision tradeoff and adds no new staleness. Not @Published.
-    var agentSystemMessageCache: (messageCount: Int, sessionID: AgentSession.ID?, value: AgentMessage, at: Date)?
+    var agentSystemMessageCache: (
+        messageCount: Int,
+        sessionID: AgentSession.ID?,
+        systemMessage: AgentMessage,
+        turnContext: String,
+        at: Date
+    )?
 
     /// Active Agent-mode session id. nil means "scratch" — Editor-mode
     /// chat keeps working without forcing a session to exist.
@@ -705,6 +717,7 @@ final class AppState: ObservableObject {
             var sessionsByID = Dictionary(uniqueKeysWithValues: persistedSessions.map { ($0.id, $0) })
             for session in self.agentSessions { sessionsByID[session.id] = session }
             self.agentSessions = sessionsByID.values.sorted { $0.updatedAt > $1.updatedAt }
+            self.hasLoadedAgentSessionCatalog = true
 
             // Empty placeholders are filtered by sidebar visibility instead
             // of being deleted from disk. Automatic deletion previously made

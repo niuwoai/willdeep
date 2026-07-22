@@ -245,6 +245,18 @@ extension AppState {
             return .workspaceAccess
         }
         if approvalMode == .workspaceAccess {
+            // User-pinned always-allow signatures still count in Workspace
+            // Access — the mode narrows AUTOMATIC approval to the workspace
+            // whitelist, it does not revoke explicit user pins. Anything
+            // else (including a pinned MCP tool whose server was later
+            // demoted to untrusted) stays manual; the static-classifier /
+            // LLM-judge chain below is intentionally unreachable here.
+            let pinnedMCPDemoted = toolName == "call_mcp_tool"
+                && (arguments["server"]?.stringValue()).map { !AgentMCPSettingsStore.isServerTrusted(name: $0) } == true
+            if isAgentToolCallAlwaysAllowed(toolName: toolName, arguments: arguments, risk: risk),
+               !pinnedMCPDemoted {
+                return .alwaysAllowList
+            }
             return nil
         }
 

@@ -70,6 +70,11 @@ struct WorkspaceWallpaperBackground: View {
             }
         }
         .clipped()
+        // The Agent window uses a full-size transparent title bar. Without
+        // opting the wallpaper itself out of the window safe area, SwiftUI
+        // leaves the rounded-corner/titlebar/bottom insets painted by the
+        // window background. Foreground content still keeps its safe layout.
+        .ignoresSafeArea()
         .task(id: settings.windowBackgroundImagePath) {
             backgroundImage = nil
             guard let path = settings.windowBackgroundImagePath else { return }

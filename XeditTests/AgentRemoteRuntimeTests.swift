@@ -10,10 +10,14 @@ import Testing
 @Suite(.serialized)
 @MainActor
 struct AgentRemoteRuntimeTests {
-    @Test("debug and release runtime tokens use isolated Keychain services")
-    func runtimeTokenKeychainServicesAreIsolated() {
+    @Test("debug and release secrets use isolated Keychain services")
+    func keychainServicesAreIsolated() {
         #expect(RemoteRuntimeSecretStore.serviceName(debugBuild: true) == "com.willdeep.agent.debug")
         #expect(RemoteRuntimeSecretStore.serviceName(debugBuild: false) == "com.willdeep.agent")
+        #expect(AgentSettingsStore.serviceName(debugBuild: true) == "com.willdeep.agent.debug")
+        #expect(AgentSettingsStore.serviceName(debugBuild: false) == "com.willdeep.agent")
+        #expect(AgentCredentialStore.serviceName(debugBuild: true) == "com.willdeep.credentials.debug")
+        #expect(AgentCredentialStore.serviceName(debugBuild: false) == "com.willdeep.credentials")
     }
 
     @Test("runtime store starts empty without seeding personal SSH hosts")

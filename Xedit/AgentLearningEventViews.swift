@@ -40,9 +40,9 @@ struct AgentLearningEventsCard: View {
                     .foregroundStyle(.purple)
                 VStack(alignment: .leading, spacing: 2) {
                     Text(L10n.Transcript.learningCardTitle)
-                        .font(AgentDesign.titleFont)
+                        .agentChatSupportingFont(weight: .semibold)
                     Text(L10n.Transcript.learningCardSubtitle(String(activeEvents.count)))
-                        .font(AgentDesign.secondaryFont)
+                        .agentChatSupportingFont()
                         .foregroundStyle(.secondary)
                 }
                 Spacer(minLength: 0)
@@ -80,7 +80,7 @@ struct AgentLearningEventsCard: View {
 
             if capItems && activeEvents.count > visibleEvents.count {
                 Text(L10n.Transcript.learningMore(String(activeEvents.count - visibleEvents.count)))
-                    .font(AgentDesign.secondaryFont)
+                    .agentChatSupportingFont()
                     .foregroundStyle(.secondary)
             }
         }
@@ -130,23 +130,23 @@ private struct AgentLearningEventRow: View {
             VStack(alignment: .leading, spacing: 4) {
                 HStack(spacing: 6) {
                     Text(kindLabel)
-                        .font(AgentDesign.captionFont)
+                        .agentChatSupportingFont(weight: .semibold)
                         .foregroundStyle(tint)
                     Text(statusLabel)
-                        .font(AgentDesign.captionFont)
+                        .agentChatSupportingFont()
                         .foregroundStyle(.secondary)
                     confidenceTag
                     Spacer(minLength: 0)
                 }
 
                 Text(event.title)
-                    .font(AgentDesign.secondaryFont)
+                    .agentChatSupportingFont()
                     .foregroundStyle(.primary)
                     .lineLimit(2)
 
                 if !event.detail.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                     Text(event.detail)
-                        .font(AgentDesign.captionFont)
+                        .agentChatSupportingFont()
                         .foregroundStyle(.secondary)
                         .lineLimit(4)
                         .textSelection(.enabled)
@@ -164,7 +164,7 @@ private struct AgentLearningEventRow: View {
                             .lineLimit(2)
                             .textSelection(.enabled)
                     }
-                    .font(AgentDesign.captionFont)
+                    .agentChatSupportingFont()
                     .foregroundStyle(.secondary)
                     .padding(.top, 2)
                 }
@@ -266,8 +266,7 @@ private struct AgentLearningEventRow: View {
 
     private var confidenceTag: some View {
         Text(AgentLearningActionPresentation.confidence(for: event).shortLabel)
-            .font(AgentDesign.captionFont)
-            .fontWeight(.semibold)
+            .agentChatSupportingFont(weight: .semibold)
             .foregroundStyle(confidenceTint)
             .padding(.horizontal, 5)
             .padding(.vertical, 1)
@@ -317,11 +316,10 @@ private struct AgentLearningActionSummary: View {
                 Image(systemName: actionIcon)
                     .font(.system(size: 10, weight: .semibold))
                 Text(AgentLearningActionPresentation.label(for: action?.kind ?? .saveMemory))
-                    .font(AgentDesign.captionFont)
-                    .fontWeight(.medium)
+                    .agentChatSupportingFont(weight: .medium)
                 if action?.requiresUserConfirmation == true {
                     Text(L10n.Transcript.learningActionNeedsConfirmation)
-                        .font(AgentDesign.captionFont)
+                        .agentChatSupportingFont()
                         .foregroundStyle(.orange)
                 }
             }
@@ -329,7 +327,7 @@ private struct AgentLearningActionSummary: View {
 
             ForEach(secondaryLines, id: \.self) { line in
                 Text(line)
-                    .font(AgentDesign.captionFont)
+                    .agentChatSupportingFont()
                     .foregroundStyle(.secondary)
                     .lineLimit(2)
                     .textSelection(.enabled)

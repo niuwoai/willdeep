@@ -33,6 +33,20 @@ extension AppState {
     /// 带 memo：消息条数 / 会话不变时 1 秒内直接回缓存值——这是个给
     /// 状态栏圆环看的估算值，不需要逐 token 精确；全量重算的成本见
     /// `agentTokenEstimateCache` 的注释。
+    /// The tool set the next real request will actually send — filtered by
+    /// active experts / interaction mode / executor, exactly like the loop's
+    /// streamChat call. Estimating with the full registry counted the
+    /// short-drama, chrome, and delegated-CLI blocks that are usually
+    /// absent, overstating the ring and tripping 75% auto-compression early.
+    var estimatedAgentToolset: [AgentToolDescriptor] {
+        guard let runtime = activeRuntime else { return AgentToolRegistry.all }
+        return AgentToolRegistry.tools(
+            activeExperts: runtime.activeExperts,
+            interactionMode: runtime.interactionMode,
+            executionAgent: runtime.executionAgent
+        )
+    }
+
     var estimatedAgentTokens: Int {
         let now = Date()
         let messageCount = agentMessages.count
@@ -44,7 +58,7 @@ extension AppState {
             return cached.value
         }
         let requestMessages = estimatedAgentRequestMessages
-        let tools = AgentToolRegistry.all
+        let tools = estimatedAgentToolset
         let value = Self.estimateAgentTokens(messages: requestMessages, tools: tools)
         agentTokenEstimateCache = (messageCount, sessionID, value, now)
         return value
@@ -68,13 +82,19 @@ extension AppState {
         return agentConfiguration.normalized.routingLabel
     }
 
-    /// The single `system` message the model receives: the prompt骨架 plus
-    /// any retrieved memory. Split out of `estimatedAgentRequestMessages`
+    /// The stable `system` message the model receives. Per-turn workspace,
+    /// mode, file, selection, and memory context is attached to the latest
+    /// user message by `estimatedAgentPromptComponents`. Split out of
+    /// `estimatedAgentRequestMessages`
     /// so the composer ring can price the conversation-free baseline with
-    /// the *exact* same system content (memory included), which makes the
-    /// baseline cancel cleanly out of `used` → the ring tracks only what the
-    /// conversation adds.
+    /// the exact same stable system content, which makes the baseline cancel
+    /// cleanly out of `used`; dynamic turn context is intentionally counted
+    /// with the conversation that carries it.
     var estimatedAgentSystemMessage: AgentMessage {
+        estimatedAgentPromptComponents.systemMessage
+    }
+
+    private var estimatedAgentPromptComponents: (systemMessage: AgentMessage, turnContext: String) {
         let now = Date()
         let messageCount = agentMessages.count
         let sessionID = activeAgentSessionID
@@ -82,23 +102,32 @@ extension AppState {
            cached.messageCount == messageCount,
            cached.sessionID == sessionID,
            now.timeIntervalSince(cached.at) < 1.0 {
-            return cached.value
+            return (cached.systemMessage, cached.turnContext)
         }
-        let message = buildEstimatedAgentSystemMessage()
-        agentSystemMessageCache = (messageCount, sessionID, message, now)
-        return message
+        let prompt = buildEstimatedAgentPromptComponents()
+        agentSystemMessageCache = (
+            messageCount,
+            sessionID,
+            prompt.systemMessage,
+            prompt.turnContext,
+            now
+        )
+        return prompt
     }
 
-    /// Uncached construction behind `estimatedAgentSystemMessage`. Builds the
+    /// Uncached construction behind `estimatedAgentPromptComponents`. Builds the
     /// full system prompt and runs memory retrieval (both touch UserDefaults /
     /// project rules), so callers must go through the cached accessor above —
     /// this is the expensive path the switch used to run twice.
-    private func buildEstimatedAgentSystemMessage() -> AgentMessage {
+    private func buildEstimatedAgentPromptComponents() -> (
+        systemMessage: AgentMessage,
+        turnContext: String
+    ) {
         let promptProfile = AgentSystemPromptProfile.automatic(
             modelID: activeAgentModelID,
             providerID: agentConfiguration.normalized.providerID
         )
-        var systemPrompt = AgentContextBuilder.systemPrompt(
+        var assembledPrompt = AgentContextBuilder.systemPrompt(
             rootDirectory: rootDirectory,
             openedFileURL: openedFileURL,
             fileContent: fileContent,
@@ -126,9 +155,19 @@ extension AppState {
             selectedText: selectedText
         )
         if let memoryContext = AgentMemoryEngine.contextBlock(for: memoryResults) {
-            systemPrompt += "\n\n\(memoryContext)"
+            assembledPrompt += "\n\n\(memoryContext)"
         }
-        return AgentMessage(role: .system, content: systemPrompt)
+        let components = AgentContextBuilder.requestComponents(from: assembledPrompt)
+        var configuration = agentConfiguration.normalized
+        configuration.model = activeAgentModelID
+        let systemPrompt = AgentLocalModelPrompting.applyLanguageInstruction(
+            to: components.systemPrompt,
+            configuration: configuration
+        )
+        return (
+            AgentMessage(role: .system, content: systemPrompt),
+            components.turnContext
+        )
     }
 
     var estimatedAgentRequestMessages: [AgentMessage] {
@@ -142,9 +181,15 @@ extension AppState {
             contextSummaryThroughMessageID: activeRuntime?.contextSummaryThroughMessageID
         )
         let collapsedHistory = Self.collapseOldToolResults(in: modelFacing)
-        return AgentClient.providerReadyMessages([
-            estimatedAgentSystemMessage
-        ] + collapsedHistory, supportsImages: agentConfiguration.normalized.supportsImageInput)
+        let prompt = estimatedAgentPromptComponents
+        let contextualHistory = AgentContextBuilder.appendingTurnContext(
+            prompt.turnContext,
+            to: collapsedHistory
+        )
+        return AgentClient.providerReadyMessages(
+            [prompt.systemMessage] + contextualHistory,
+            supportsImages: agentConfiguration.normalized.supportsImageInput
+        )
     }
 
     /// Fixed overhead present before the user sends a single message: the
@@ -165,7 +210,7 @@ extension AppState {
         }
         let value = Self.estimateAgentTokens(
             messages: [estimatedAgentSystemMessage],
-            tools: AgentToolRegistry.all
+            tools: estimatedAgentToolset
         )
         agentBaselineEstimateCache = (messageCount, sessionID, value, now)
         return value

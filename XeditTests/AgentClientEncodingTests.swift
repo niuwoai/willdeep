@@ -320,6 +320,131 @@ struct AgentClientEncodingTests {
     }
 }
 
+@Suite
+struct GeminiToolCallIDTests {
+
+    /// Gemini pairs functionResponse to functionCall by name, resolved
+    /// through the id→name history map. Ids therefore must be unique across
+    /// assistant turns — a bare per-stream index restarts at 0 every turn
+    /// and makes first-occurrence-wins resolve later slot-0 calls to
+    /// whichever tool the session used first.
+    @Test
+    func syntheticIDsAreUniquePerStreamNonce() {
+        let nonceA = GeminiAdapter.makeCallIDNonce()
+        let nonceB = GeminiAdapter.makeCallIDNonce()
+        #expect(nonceA != nonceB)
+        #expect(
+            GeminiAdapter.syntheticToolCallID(nonce: nonceA, index: 0)
+                != GeminiAdapter.syntheticToolCallID(nonce: nonceB, index: 0)
+        )
+        #expect(GeminiAdapter.syntheticToolCallID(nonce: nonceA, index: 0).hasPrefix("gemini_fcall_"))
+    }
+
+    @Test
+    func historyMapResolvesSameSlotAcrossTurnsToDifferentTools() {
+        let turnOne = AgentMessage(
+            role: .assistant,
+            content: "",
+            toolCalls: [AgentMessageToolCall(
+                externalID: GeminiAdapter.syntheticToolCallID(nonce: "aaaa1111", index: 0),
+                toolName: "read_file",
+                argumentsJSON: "{}"
+            )]
+        )
+        let turnTwo = AgentMessage(
+            role: .assistant,
+            content: "",
+            toolCalls: [AgentMessageToolCall(
+                externalID: GeminiAdapter.syntheticToolCallID(nonce: "bbbb2222", index: 0),
+                toolName: "run_command",
+                argumentsJSON: "{}"
+            )]
+        )
+        let map = GeminiAdapter.buildToolCallIDMap(from: [turnOne, turnTwo])
+        #expect(map[turnOne.toolCalls[0].externalID] == "read_file")
+        #expect(map[turnTwo.toolCalls[0].externalID] == "run_command")
+    }
+}
+
+@Suite
+struct AnthropicMaxOutputTokensTests {
+
+    @Test
+    func modernModelsTakeTheConfiguredValue() {
+        #expect(AnthropicMessagesAdapter.maxOutputTokens(forModel: "claude-fable-5", configured: 32_768) == 32_768)
+        #expect(AnthropicMessagesAdapter.maxOutputTokens(forModel: "claude-opus-4-8", configured: 32_768) == 32_768)
+        #expect(AnthropicMessagesAdapter.maxOutputTokens(forModel: "claude-sonnet-5", configured: 64_000) == 64_000)
+    }
+
+    @Test
+    func legacyClaude3FamiliesAreClampedToTheirAPICaps() {
+        // Values above these caps are a hard 400 from Anthropic, so the
+        // user's configured limit must never reach the wire unclamped.
+        #expect(AnthropicMessagesAdapter.maxOutputTokens(forModel: "claude-3-opus-20240229", configured: 32_768) == 4096)
+        #expect(AnthropicMessagesAdapter.maxOutputTokens(forModel: "claude-3-haiku-20240307", configured: 32_768) == 4096)
+        #expect(AnthropicMessagesAdapter.maxOutputTokens(forModel: "claude-3-5-sonnet-20241022", configured: 32_768) == 8192)
+        #expect(AnthropicMessagesAdapter.maxOutputTokens(forModel: "claude-3-7-sonnet-20250219", configured: 32_768) == 8192)
+        // A configured value below the cap passes through untouched.
+        #expect(AnthropicMessagesAdapter.maxOutputTokens(forModel: "claude-3-5-sonnet-20241022", configured: 2048) == 2048)
+    }
+
+    @Test
+    func storeClampsToConfiguredBounds() {
+        #expect(AgentSettingsStore.clampAnthropicMaxOutputTokens(1) == AgentSettingsStore.anthropicMaxOutputTokensMin)
+        #expect(AgentSettingsStore.clampAnthropicMaxOutputTokens(1_000_000) == AgentSettingsStore.anthropicMaxOutputTokensMax)
+        #expect(AgentSettingsStore.clampAnthropicMaxOutputTokens(32_768) == 32_768)
+        #expect(AgentSettingsStore.anthropicMaxOutputTokensDefault == 32_768)
+    }
+}
+
+@Suite
+struct AgentContextCompressionSplitTests {
+
+    /// A raw `count - keepRecent` split can land between an assistant's
+    /// tool_calls and its results; providerReadyMessages then silently drops
+    /// the orphan results. The pairing-aware split walks the tail start back
+    /// to the issuing assistant.
+    @Test
+    func splitNeverOrphansToolResults() {
+        let messages: [AgentMessage] = [
+            AgentMessage(role: .user, content: "u1"),
+            AgentMessage(role: .assistant, content: "a1"),
+            AgentMessage(role: .user, content: "u2"),
+            AgentMessage(
+                role: .assistant,
+                content: "",
+                toolCalls: [AgentMessageToolCall(externalID: "call_1", toolName: "read_file", argumentsJSON: "{}")]
+            ),
+            AgentMessage(role: .tool, content: "result 1"),
+            AgentMessage(role: .tool, content: "result 2"),
+            AgentMessage(role: .assistant, content: "done")
+        ]
+        // keepRecent 3 → raw tail start 4 (an orphan tool result); snap back
+        // to index 3 so the issuing assistant travels with its results.
+        #expect(AppState.compressionTailStart(messages: messages, keepRecent: 3) == 3)
+        // keepRecent 2 → raw tail start 5 (still a tool result) → same snap.
+        #expect(AppState.compressionTailStart(messages: messages, keepRecent: 2) == 3)
+        // Already-safe boundaries are unchanged.
+        #expect(AppState.compressionTailStart(messages: messages, keepRecent: 4) == 3)
+        #expect(AppState.compressionTailStart(messages: messages, keepRecent: 1) == 6)
+    }
+
+    @Test
+    func splitReturnsZeroWhenNothingCompressibleRemains() {
+        // Head would be empty after snapping — caller skips compression.
+        let messages: [AgentMessage] = [
+            AgentMessage(
+                role: .assistant,
+                content: "",
+                toolCalls: [AgentMessageToolCall(externalID: "call_1", toolName: "grep_files", argumentsJSON: "{}")]
+            ),
+            AgentMessage(role: .tool, content: "result"),
+            AgentMessage(role: .assistant, content: "done")
+        ]
+        #expect(AppState.compressionTailStart(messages: messages, keepRecent: 2) == 0)
+    }
+}
+
 // MARK: - Helpers
 
 private func parseJSONObject(_ data: Data) throws -> [String: Any] {

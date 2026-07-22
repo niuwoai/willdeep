@@ -549,3 +549,61 @@ struct AgentManagedRouteDecisionTests {
         #expect(decoded.managedRoute == nil)
     }
 }
+
+@Suite
+struct SomeIMRouteFloorPersistenceTests {
+
+    @Test
+    func lowConfidenceEscalationStaysPerTurnAndNeverRaisesFloor() {
+        let verdict = SomeIMRouteJudgeVerdict(
+            domain: .general, complexity: .low, confidence: 0.1, reason: "unsure"
+        )
+        let resolution = SomeIMManagedRouting.resolution(
+            for: verdict, floor: .low, usedFallback: false, hasCodingPlan: false
+        )
+        // The hedge escalates this turn's model choice…
+        #expect(resolution.effectiveTier == .high)
+        // …but must never be eligible for the only-goes-up persisted floor.
+        #expect(resolution.persistedFloorTier == .low)
+    }
+
+    @Test
+    func explicitHighVerdictStillRaisesFloor() {
+        let verdict = SomeIMRouteJudgeVerdict(
+            domain: .coding, complexity: .high, confidence: 0.9, reason: "hard task"
+        )
+        let resolution = SomeIMManagedRouting.resolution(
+            for: verdict, floor: .low, usedFallback: false, hasCodingPlan: false
+        )
+        #expect(resolution.effectiveTier == .high)
+        #expect(resolution.persistedFloorTier == .high)
+    }
+
+    @Test
+    func judgePromptTemplateDoesNotAnchorCopyableConfidence() {
+        let prompt = SomeIMManagedRouting.judgeSystemPrompt()
+        // No copyable numeric anchor in either direction: 0.0 trips the
+        // escalation every turn (fail-expensive), a high literal like 0.92
+        // silently disables the hedge (fail-open). The placeholder is
+        // deliberately invalid JSON so a verbatim copy falls back cleanly.
+        #expect(!prompt.contains("\"confidence\":0.0"))
+        #expect(!prompt.contains("\"confidence\":0.92"))
+        #expect(prompt.contains("\"confidence\":<"))
+        #expect(prompt.contains("数字字面量"))
+    }
+
+    @Test
+    func missingConfidenceDefaultsToFailSafeZero() {
+        // A judge that omits confidence gets the per-turn conservative
+        // escalation, not silent full trust.
+        let verdict = SomeIMManagedRouting.decodeVerdict(
+            fromRaw: #"{"domain":"general","complexity":"low"}"#
+        )
+        #expect(verdict?.confidence == 0.0)
+        let resolution = SomeIMManagedRouting.resolution(
+            for: verdict!, floor: .low, usedFallback: false, hasCodingPlan: false
+        )
+        #expect(resolution.effectiveTier == .high)
+        #expect(resolution.persistedFloorTier == .low)
+    }
+}

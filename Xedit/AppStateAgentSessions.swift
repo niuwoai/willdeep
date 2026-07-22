@@ -100,27 +100,41 @@ extension AppState {
     }
 
     @discardableResult
-    func materializeProviderLibraryAPIKeys() -> Bool {
-        var library = agentProviderLibrary
-        var changed = false
-        for entry in library.entries where !entry.apiKeyLoaded {
-            changed = AgentSettingsStore.materializeProviderLibraryAPIKey(in: &library, id: entry.id) || changed
-        }
-        guard changed else { return false }
-        agentProviderLibrary = library
-        return true
-    }
-
-    @discardableResult
     func ensureActiveProviderIsUsableForChatSelection() -> Bool {
         var library = agentProviderLibrary
-        for entry in library.entries where !entry.apiKeyLoaded {
-            _ = AgentSettingsStore.materializeProviderLibraryAPIKey(in: &library, id: entry.id)
-        }
         let authenticated = SomeIMIntegrationStore.hasAuthenticatedSessionForAutomaticDefaults()
-        let changedActive = library.ensureActiveEntryIsUsableForChatSelection(
-            isSomeIMAuthenticated: authenticated
+
+        // The active provider is the only credential needed on the normal
+        // path. Loading every saved provider here made merely opening the
+        // model picker query dozens of historical Keychain rows, multiplying
+        // access-control prompts when Debug and Release signatures differed.
+        _ = AgentSettingsStore.materializeProviderLibraryAPIKey(
+            in: &library,
+            id: library.active?.id
         )
+        if library.active?.isUsableForChatSelection(
+            isSomeIMAuthenticated: authenticated
+        ) == true {
+            guard library != agentProviderLibrary else { return false }
+            agentProviderLibrary = library
+            return false
+        }
+
+        // Only a genuinely unusable active provider needs fallback discovery.
+        // Materialize candidates one at a time and stop at the first usable
+        // entry instead of touching the entire Keychain namespace.
+        let originalActiveID = library.activeID
+        for entry in library.entries where entry.id != library.active?.id {
+            _ = AgentSettingsStore.materializeProviderLibraryAPIKey(in: &library, id: entry.id)
+            guard let candidate = library.entries.first(where: { $0.id == entry.id }),
+                  candidate.isUsableForChatSelection(
+                    isSomeIMAuthenticated: authenticated
+                  ) else { continue }
+            library.activeID = candidate.id
+            break
+        }
+
+        let changedActive = library.activeID != originalActiveID
         guard library != agentProviderLibrary else { return changedActive }
         agentProviderLibrary = library
         return changedActive
@@ -387,7 +401,10 @@ extension AppState {
         cancelAgentPlanModeSuggestion()
         agentInteractionMode = mode
         if mode != .plan { agentCurrentPlan = nil }
-        if mode != .goal { agentCurrentGoal = nil }
+        if mode != .goal {
+            agentCurrentGoal = nil
+            activeRuntime?.goalTurnRecoveryCheckpoint = nil
+        }
         persistActiveAgentSession()
     }
 
@@ -462,6 +479,7 @@ extension AppState {
     func rejectAgentPlan() {
         guard let runtime = activeRuntime else { return }
         agentCurrentPlan = nil
+        runtime.goalTurnRecoveryCheckpoint = nil
         persistActiveAgentSession()
         if agentInteractionMode == .goal {
             _ = startAgentGoalPlanningIfNeeded(for: runtime, forceRestart: true)
@@ -487,10 +505,17 @@ extension AppState {
             state.phase = .executing
             activeRuntime?.goalPlanningState = state
         }
+        if agentInteractionMode == .goal,
+           activeRuntime?.goalTurnRecoveryCheckpoint == nil {
+            // Approval may be queued behind a still-finishing synthesis turn.
+            // Persist the user's execution intent now so an app exit before
+            // queue consumption can still recover the approved Plan.
+            activeRuntime?.goalTurnRecoveryCheckpoint = AgentGoalTurnRecoveryCheckpoint()
+        }
         persistActiveAgentSession()
 
         let goalTurnEndContract = agentInteractionMode == .goal
-            ? "At the end of every reply, emit both exactly one ```progress fenced block and exactly one ```goal-check fenced block in the same reply, even when either block contains no changes."
+            ? "At the end of every reply, first give a compact Goal round delivery summary containing only verified outcomes, material changes, validation, and any genuine blocker or next action; omit command transcripts, failed attempts, raw tool output, and step-by-step narration. Then emit both exactly one ```progress fenced block and exactly one ```goal-check fenced block in the same reply, even when either block contains no changes."
             : "At the end of each reply, emit exactly one ```progress fenced block with the latest status of every step touched."
         let prompt = """
         Plan approved. Execute the complete plan step by step. Do not treat an outline, sample, first file, \
@@ -518,6 +543,7 @@ extension AppState {
         guard var plan = agentCurrentPlan else { return }
         plan.status = .done
         agentCurrentPlan = plan
+        activeRuntime?.goalTurnRecoveryCheckpoint = nil
         persistActiveAgentSession()
         if let runtime = activeRuntime {
             prepareNextAgentGoalPlanningCycleIfNeeded(for: runtime)
@@ -534,6 +560,7 @@ extension AppState {
         // Drop the existing plan so the next turn's system prompt
         // sends the "you must emit a ```plan block" instructions.
         agentCurrentPlan = nil
+        activeRuntime?.goalTurnRecoveryCheckpoint = nil
         persistActiveAgentSession()
 
         let trimmed = note.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -576,31 +603,42 @@ extension AppState {
         captureAgentPlanFromLatestMessage(for: runtime)
     }
 
-    func captureAgentPlanFromLatestMessage(for runtime: AgentRuntime) {
-        guard runtime.interactionMode == .plan || runtime.interactionMode == .goal else { return }
+    @discardableResult
+    func captureAgentPlanFromLatestMessage(for runtime: AgentRuntime) -> AgentGoalProposalCaptureOutcome {
+        guard runtime.interactionMode == .plan || runtime.interactionMode == .goal else { return .noProposal }
         guard let last = runtime.messages.last(where: { $0.role == .assistant && !$0.content.isEmpty }) else {
-            return
+            return .noProposal
         }
-        if let parsed = AgentPlanParser.extract(from: last.content),
-           runtime.interactionMode == .plan
-            || (runtime.goalPlanningState?.phase == .readyForProposal
-                && AgentGoalPlanProposalValidator.validates(
+        if let parsed = AgentPlanParser.extract(from: last.content) {
+            if runtime.interactionMode == .plan {
+                runtime.currentPlan = parsed
+                return .captured
+            }
+            if runtime.goalPlanningState?.phase == .readyForProposal {
+                let failures = AgentGoalPlanProposalValidator.validationFailures(
                     content: last.content,
                     plan: parsed,
                     generationID: runtime.goalPlanningState?.generationID
-                )) {
-            runtime.currentPlan = parsed
-            if runtime.interactionMode == .goal, var state = runtime.goalPlanningState {
-                state.phase = .awaitingApproval
-                runtime.goalPlanningState = state
+                )
+                if failures.isEmpty {
+                    runtime.currentPlan = parsed
+                    if var state = runtime.goalPlanningState {
+                        state.phase = .awaitingApproval
+                        runtime.goalPlanningState = state
+                    }
+                    return .captured
+                }
+                // A proposal the model clearly attempted but that fails
+                // validation must not vanish silently — feed the reasons
+                // back (bounded) or surface a blocked state to the user.
+                return requestAgentGoalProposalCorrection(for: runtime, failures: failures)
             }
-            return
         }
         if let existing = runtime.currentPlan,
            existing.status == .approved || existing.status == .executing || existing.status == .done {
             applyAgentPlanProgressFromLatestMessage(for: runtime, existingPlan: existing)
-            return
         }
+        return .noProposal
     }
 
     func applyAgentPlanProgressFromLatestMessage(for runtime: AgentRuntime, existingPlan: AgentPlan) {
@@ -783,6 +821,7 @@ extension AppState {
             runtime.currentGoal = nil
             runtime.currentPlan = nil
             runtime.goalPlanningState = nil
+            runtime.goalTurnRecoveryCheckpoint = nil
             if previousGoal != nil {
                 runtime.currentGoalEditedAt = Date()
             }
@@ -813,6 +852,7 @@ extension AppState {
             runtime.currentGoalEditedAt = Date()
             runtime.currentPlan = nil
             runtime.goalPlanningState = nil
+            runtime.goalTurnRecoveryCheckpoint = nil
         }
         persistActiveAgentSession()
         enqueueGoalUpdateNoticeIfNeeded(for: runtime, previousGoal: previousGoal, updatedGoal: updatedGoal)
@@ -923,24 +963,89 @@ extension AppState {
         }
     }
 
-    /// Cancel the in-flight response and every active workflow owned by the
-    /// current session. Queued messages are kept and the next one is
-    /// dispatched automatically. Use `clearAgentQueue` to drop them.
+    /// Stop the newest in-flight turn while preserving streamed output. Work
+    /// started by older turns is deliberately out of scope: a long-lived dev
+    /// server must not die because the user interrupted a later answer.
     func stopAgentResponse() {
         guard let runtime = activeRuntime else { return }
+        if let activeTurnID = runtime.activeTurnID,
+           runtime.userStoppedTurnID == activeTurnID {
+            return
+        }
+        if runtime.goalTurnRecoveryCheckpoint != nil {
+            runtime.goalTurnRecoveryCheckpoint = nil
+            persistAgentSession(runtime: runtime, touchUpdatedAt: false, moveToFront: false)
+        }
+        let stoppedTurnID = runtime.activeTurnID
+        let stoppedTurnStartedAt = runtime.turnStartedAt
         let activeWorkflowIDs = runtime.messages.compactMap { message -> UUID? in
             guard let report = message.workflowReport,
                   report.status == .planning || report.status == .running else { return nil }
+            if let stoppedTurnStartedAt, report.startedAt < stoppedTurnStartedAt {
+                return nil
+            }
             return report.id
         }
         for reportID in activeWorkflowIDs {
             cancelWorkflow(reportID: reportID, runtimeID: runtime.id)
         }
         guard runtime.isResponding else { return }
+
+        let subagentStopCount: Int
+        let liveJobs: [AgentBackgroundJob]
+        if let stoppedTurnID {
+            subagentStopCount = agentSubagentRegistry.cancelRunning(
+                forParentRuntime: runtime.id,
+                originatingTurnID: stoppedTurnID
+            )
+            liveJobs = agentJobRegistry.aliveJobs(
+                forRuntime: runtime.id,
+                originatingTurnID: stoppedTurnID
+            )
+            runtime.userStoppedTurnID = stoppedTurnID
+        } else {
+            subagentStopCount = 0
+            liveJobs = []
+        }
+
+        runtime.errorMessage = nil
+        runtime.errorDetails = nil
+        runtime.errorRequiresSomeIMLogin = false
+        let immediateStoppedCount = activeWorkflowIDs.count + subagentStopCount
+        let eventContent: String
+        if liveJobs.isEmpty {
+            eventContent = immediateStoppedCount > 0
+                ? L10n.Composer.stoppedAndCleanedUp(immediateStoppedCount)
+                : L10n.Composer.stopped
+        } else {
+            eventContent = L10n.Composer.stoppedCheckingProcesses(liveJobs.count)
+        }
+        let stopEventID = appendStoppedTurnEvent(to: runtime, content: eventContent)
+
         closeBlockingAgentToolDecision(for: runtime, reason: "Response stopped")
         runtime.shouldConsumeQueueAfterStop = !runtime.queuedMessages.isEmpty
         runtime.requestTask?.cancel()
         scheduleQueuedMessageConsumptionAfterCancellation(for: runtime)
+
+        if !liveJobs.isEmpty, let stoppedTurnID {
+            let candidates = liveJobs.map {
+                AgentStopJobCandidate(
+                    id: $0.id,
+                    displayHandle: $0.displayHandle,
+                    command: $0.command
+                )
+            }
+            let latestRequest = runtime.messages.last(where: { $0.isOperatorInput })?.content ?? ""
+            startStoppedTurnProcessCleanup(
+                runtime: runtime,
+                turnID: stoppedTurnID,
+                eventID: stopEventID,
+                candidates: candidates,
+                configuration: runtime.activeTurnConfiguration,
+                userRequest: latestRequest,
+                alreadyStoppedCount: immediateStoppedCount
+            )
+        }
     }
 
     func scheduleQueuedMessageConsumptionAfterCancellation(
@@ -969,8 +1074,12 @@ extension AppState {
             runtime.isResponding = false
             runtime.turnStartedAt = nil
             runtime.requestTask = nil
+            runtime.activeTurnID = nil
+            runtime.activeTurnConfiguration = nil
+            runtime.userStoppedTurnID = nil
             runtime.shouldConsumeQueueAfterStop = false
             runtime.currentTurnAttachedSkills = []
+            runtime.goalTurnRecoveryCheckpoint = nil
             self.persistAgentSession(runtime: runtime)
             if let claim {
                 self.releaseProviderSlot(
@@ -1163,7 +1272,7 @@ extension AppState {
         // and there has to be one in `agentRuntimes` for those writes
         // to land somewhere.
         let newRuntime = AgentRuntime(session: session)
-        seedNewSessionModelOverride(for: newRuntime)
+        seedPersistedSessionModelOverride(for: newRuntime)
         agentRuntimes[session.id] = newRuntime
         activeAgentSessionID = session.id
         subscribeToActiveRuntime()
@@ -1218,7 +1327,7 @@ extension AppState {
         )
         agentSessions.insert(session, at: 0)
         let newRuntime = AgentRuntime(session: session)
-        seedNewSessionModelOverride(for: newRuntime)
+        seedPersistedSessionModelOverride(for: newRuntime)
         agentRuntimes[session.id] = newRuntime
         activeAgentSessionID = session.id
         subscribeToActiveRuntime()
@@ -1466,14 +1575,7 @@ extension AppState {
         // disk session needs this seeded.
         if let runtime = activeRuntime {
             let session = runtime.session
-            if runtime.managedRouting != nil {
-                // Managed session: the model is resolved per-turn by the
-                // judge, so there is no single override to seed.
-                runtime.sessionModelOverride = nil
-            } else {
-                let routedModel = agentConfiguration.normalized.model(for: .interactive)
-                runtime.sessionModelOverride = session.modelID == routedModel ? nil : session.modelID
-            }
+            seedPersistedSessionModelOverride(for: runtime)
             syncWorkspaceContext(for: session)
             refreshAgentGitWorktrees()
             autoSummarizeTitleIfPlaceholder(runtime)
@@ -1593,6 +1695,10 @@ extension AppState {
         // cancellation propagates.
         if let doomed = agentRuntimes[id] {
             doomed.requestTask?.cancel()
+            for cleanupTask in doomed.stopCleanupTasks.values {
+                cleanupTask.cancel()
+            }
+            doomed.stopCleanupTasks.removeAll()
             cancelAllWorkflows(for: doomed)
             doomed.toolDecisionWaiter?.resume(returning: .denied(reason: "Session deleted"))
             doomed.toolDecisionWaiter = nil
@@ -2159,7 +2265,10 @@ extension AppState {
         return activeAgentModelID
     }
 
-    private func seedNewSessionModelOverride(for runtime: AgentRuntime) {
+    /// Rebuild the runtime-only model override from the persisted session.
+    /// Launch recovery uses the same path as an explicit sidebar selection so
+    /// a background-resumed Goal continues on its original concrete model.
+    func seedPersistedSessionModelOverride(for runtime: AgentRuntime) {
         guard runtime.managedRouting == nil else {
             runtime.sessionModelOverride = nil
             return

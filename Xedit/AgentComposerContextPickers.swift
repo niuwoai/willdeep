@@ -29,7 +29,9 @@ struct AgentComposerRunContextBar: View {
             Image(systemName: "arrow.triangle.branch")
                 .font(.system(size: 10, weight: .semibold))
             Text(appState.agentWorkspaceGitStatus.branchName ?? L10n.ComposerWorkspace.noBranch)
-                .font(AgentDesign.secondaryFont)
+                .font(AgentDesign.chatSupportingFont(
+                    baseFontSize: appState.agentChatBaseFontSize
+                ))
                 .lineLimit(1)
                 .truncationMode(.middle)
         }
@@ -72,7 +74,9 @@ struct AgentRunLocationPickerPill: View {
                 Text(isPrimaryWorkspace
                     ? L10n.ComposerWorkspace.localRun
                     : L10n.ComposerWorkspace.newWorktreeRun)
-                    .font(AgentDesign.secondaryFont)
+                    .font(AgentDesign.chatSupportingFont(
+                        baseFontSize: appState.agentChatBaseFontSize
+                    ))
                 Image(systemName: "chevron.down")
                     .font(.system(size: 8, weight: .semibold))
             }
@@ -138,7 +142,11 @@ struct AgentApprovalModePickerPill: View {
                 Image(systemName: appState.agentApprovalMode.symbol)
                     .font(.system(size: 10, weight: .semibold))
                 Text(appState.agentApprovalMode.displayName)
-                    .font(.system(size: 11, weight: .medium))
+                    .font(AgentDesign.chatSupportingFont(
+                        baseFontSize: appState.agentChatBaseFontSize,
+                        visualMinimum: 11,
+                        weight: .medium
+                    ))
                     .lineLimit(1)
                 Image(systemName: "chevron.down")
                     .font(.system(size: 8, weight: .bold))

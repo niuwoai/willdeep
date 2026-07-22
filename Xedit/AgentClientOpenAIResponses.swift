@@ -436,8 +436,8 @@ struct OpenAIResponsesAdapter {
                             prompt: prompt,
                             completion: completion,
                             total: total,
-                            cachedPrompt: usage.input_tokens_details?.cached_tokens ?? 0,
-                            cacheWritePrompt: 0,
+                            cachedPrompt: usage.input_tokens_details?.cached_tokens,
+                            cacheWritePrompt: nil,
                             reasoning: usage.output_tokens_details?.reasoning_tokens ?? 0
                         ))
                     }

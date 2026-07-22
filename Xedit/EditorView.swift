@@ -154,6 +154,7 @@ struct EditorView: NSViewRepresentable {
         textView.isEditable = true
         textView.isRichText = true
         textView.importsGraphics = false
+        textView.configureCodeEditingBehavior()
         textView.allowsUndo = true
         textView.textContainerInset = NSSize(width: 12, height: 8)
         textView.textContainer?.lineFragmentPadding = 0
@@ -246,6 +247,12 @@ struct EditorView: NSViewRepresentable {
         guard let textView = nsView.documentView as? WillDeepTextView else { return }
 
         context.coordinator.parent = self
+        // NSTextView owns the marked-text buffer while a CJK input method is
+        // composing. Any SwiftUI-driven appearance/text/highlight refresh in
+        // that window can rewrite text storage or selection and prematurely
+        // commit the raw pinyin. The commit emits another update/textDidChange,
+        // so defer all representable updates until AppKit ends composition.
+        guard !textView.hasMarkedText() else { return }
         configureTextViewGeometry(textView, in: nsView)
 
         let langChanged = context.coordinator.currentLanguage != language
@@ -506,6 +513,15 @@ struct EditorView: NSViewRepresentable {
 
         func textDidChange(_ notification: Notification) {
             guard let textView = notification.object as? WillDeepTextView else { return }
+            // Marked text is AppKit-owned provisional input, not document
+            // content yet. Publishing it to SwiftUI or scheduling a whole
+            // text-storage replacement cancels the IME candidate session and
+            // leaves raw pinyin in the editor. Invalidate any highlight already
+            // in flight; the committed textDidChange will run the normal path.
+            guard !textView.hasMarkedText() else {
+                cancelPendingHighlightForIMEComposition()
+                return
+            }
             textView.invalidateFoldableGuidesCache()
             textView.clearFoldedScopes()
             parent.text = textView.string
@@ -523,9 +539,16 @@ struct EditorView: NSViewRepresentable {
         func textViewDidChangeSelection(_ notification: Notification) {
             guard let textView = notification.object as? WillDeepTextView else { return }
             textView.invalidateCurrentLineHighlight()
+            guard !textView.hasMarkedText() else { return }
             publishCursorPosition(for: textView)
             applyBracketHighlight(to: textView)
             refreshEditorChrome(for: textView, redrawTextView: false)
+        }
+
+        private func cancelPendingHighlightForIMEComposition() {
+            highlightWorkItem?.cancel()
+            viewportHighlightWorkItem?.cancel()
+            highlightGeneration += 1
         }
 
         @objc func visibleRectDidChange(_ notification: Notification) {

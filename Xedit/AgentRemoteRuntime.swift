@@ -217,6 +217,7 @@ struct SSHRuntimeBackend: AgentRemoteRuntimeBackend {
                     command: sshCommand,
                     workingDirectory: nil,
                     runtimeID: runtimeID,
+                    turnID: context.turnID,
                     timeoutSeconds: bgTimeout,
                     runtimeDisplayName: descriptor.displayName,
                     runtimeIDForDisplay: descriptor.id

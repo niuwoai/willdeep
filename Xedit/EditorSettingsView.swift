@@ -65,6 +65,7 @@ struct EditorSettingsView: View {
     // 后立刻更新缓存触发 UI 重算。
     @State private var planDangerScanEnabled: Bool = AgentSettingsStore.loadPlanAutoExecuteDangerScanEnabled()
     @State private var planSilentlyApprovedForWorkspace: Bool = false
+    @State private var anthropicMaxOutputTokens: Double = Double(AgentSettingsStore.loadAnthropicMaxOutputTokens())
 
     var body: some View {
         HStack(spacing: 0) {
@@ -412,6 +413,29 @@ struct EditorSettingsView: View {
                 Text(L10n.Settings.AgentBehavior.concurrencyDescription)
                     .font(.caption)
                     .foregroundStyle(.secondary)
+
+                HStack {
+                    Text(L10n.Settings.AgentBehavior.anthropicMaxOutputTokens)
+                    Spacer()
+                    Text("\(Int(anthropicMaxOutputTokens))")
+                        .monospacedDigit()
+                        .foregroundStyle(.secondary)
+                }
+                Slider(
+                    value: Binding(
+                        get: { anthropicMaxOutputTokens },
+                        set: { newValue in
+                            anthropicMaxOutputTokens = newValue
+                            AgentSettingsStore.saveAnthropicMaxOutputTokens(Int(newValue))
+                        }
+                    ),
+                    in: Double(AgentSettingsStore.anthropicMaxOutputTokensMin)
+                        ... Double(AgentSettingsStore.anthropicMaxOutputTokensMax),
+                    step: 1024
+                )
+                Text(L10n.Settings.AgentBehavior.anthropicMaxOutputTokensDescription)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
             }
 
             Section(L10n.Settings.sectionAgentAppearance) {
@@ -445,6 +469,7 @@ struct EditorSettingsView: View {
             planSilentlyApprovedForWorkspace = AgentSettingsStore.loadPlanAutoExecuteSilently(
                 workspacePath: appState.rootDirectory?.path
             )
+            anthropicMaxOutputTokens = Double(AgentSettingsStore.loadAnthropicMaxOutputTokens())
         }
         .onCompatibleChange(of: appState.agentConfiguration) { _, _ in
             // External writes (e.g. fetchModels picking a default) should

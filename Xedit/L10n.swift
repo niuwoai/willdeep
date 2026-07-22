@@ -291,7 +291,7 @@ nonisolated enum L10n {
         static let designToCodeAction = String(localized: "composer.design-to-code.action", defaultValue: "Generate UI code")
         static let designToCodeActionDetail = String(localized: "composer.design-to-code.action-detail", defaultValue: "Build · run · visual acceptance")
         static let designToCodeHelp = String(localized: "composer.design-to-code.help", defaultValue: "Implement the attached UI in this workspace, then verify it with Browser or Computer Use")
-        static let designToCodePrompt = String(localized: "composer.design-to-code.prompt", defaultValue: "Implement the attached UI completely in the current workspace using the existing project stack. Write the production code directly, build and run it, then use Browser or Computer Use to capture the real result and compare it with the source. Keep correcting material differences until visual acceptance passes.")
+        static let designToCodePrompt = String(localized: "composer.design-to-code.prompt", defaultValue: "Implement the attached UI completely in the current workspace using the existing project stack. Write the production code directly, build and run it, then use Browser or Computer Use to capture the real result and compare it with the source. Make at most three focused correction passes; then report any remaining material differences instead of looping.")
         static let enableSessionDocument = String(localized: "composer.attachment.session-enable", defaultValue: "Include in future turns")
         static let removeSessionDocument = String(localized: "composer.attachment.session-remove", defaultValue: "Remove from this conversation")
         static let removeAttachmentHelp = String(localized: "composer.attachment.remove-help", defaultValue: "Remove attachment")
@@ -386,6 +386,29 @@ nonisolated enum L10n {
         static let skillPickerNoMatches = String(localized: "composer.skill-picker.no-matches", defaultValue: "No matching skills")
         static let skillPickerSearchPlaceholder = String(localized: "composer.skill-picker.search-placeholder", defaultValue: "Search skills...")
         static let stopHelp = String(localized: "composer.stop.help", defaultValue: "Stop the current Agent turn")
+        static let stopped = String(localized: "composer.stop.stopped", defaultValue: "Stopped generating.")
+        static func stoppedCheckingProcesses(_ count: Int) -> String {
+            let template = String(
+                localized: "composer.stop.checking-processes",
+                defaultValue: "Stopped generating. Checking %lld process(es) started by this turn…"
+            )
+            return String(format: template, count)
+        }
+        static func stoppedAndCleanedUp(_ count: Int) -> String {
+            let template = String(
+                localized: "composer.stop.cleaned-up",
+                defaultValue: "Stopped generating and stopped %lld related task(s) or process(es) from this turn."
+            )
+            return String(format: template, count)
+        }
+        static let stoppedProcessesKept = String(
+            localized: "composer.stop.processes-kept",
+            defaultValue: "Stopped generating. Current-turn processes were left running because they still need to continue."
+        )
+        static let stoppedProcessesFinished = String(
+            localized: "composer.stop.processes-finished",
+            defaultValue: "Stopped generating. Related current-turn processes had already finished."
+        )
         static let overflowHelp = String(localized: "composer.overflow.help", defaultValue: "More settings: plugins and experts")
         static let overflowTitle = String(localized: "composer.overflow.title", defaultValue: "More settings")
         static let overflowWorkspace = String(localized: "composer.overflow.workspace", defaultValue: "Workspace")
@@ -995,6 +1018,10 @@ nonisolated enum L10n {
     }
 
     enum MessageFooter {
+        static func cacheRate(_ percentage: String) -> String {
+            let template = String(localized: "message-footer.cache-rate", defaultValue: "cache %@")
+            return String(format: template, percentage)
+        }
         static let copied = String(localized: "message-footer.copied", defaultValue: "Copied")
         static let copy = String(localized: "message-footer.copy", defaultValue: "Copy message")
         static let copyAccessibility = String(localized: "message-footer.copy-accessibility", defaultValue: "Copy message")
@@ -1784,6 +1811,8 @@ nonisolated enum L10n {
             static let titleModelDescription = String(localized: "settings.agent-behavior.title-model-description", defaultValue: "A short one-shot completion summarizes each new chat into a ≤12-char title after the first assistant reply. Set a cheap/fast model here (e.g. `deepseek-chat`, `gpt-4o-mini`, `qwen-turbo`) to avoid burning Pro tokens on titling. Empty → falls back to the active provider's Flash model.")
             static let toolApprovalDescription = String(localized: "settings.agent-behavior.tool-approval-description", defaultValue: "Read-only shell commands in the built-in allowlist (cat, head, tail, ls, find without -delete/-exec, git diff/log/status/show, rg, grep, wc, file, stat, which, pwd, echo, …) run without asking. Commands outside the allowlist are passed to a one-shot LLM judge running on the active provider's **Flash** model (cheap & fast — never Pro), and only YES verdicts auto-run. Destructive patterns (rm, sudo, git push --force, git reset --hard, …) still require typing \"confirm\".")
             static let concurrencyDescription = String(localized: "settings.agent-behavior.concurrency-description", defaultValue: "Cap on simultaneous Agent turns per provider. Each provider has its own quota — running 3 DashScope sessions doesn't block OpenAI sessions. When the cap is hit, new dispatches queue (FIFO) and drain as turns finish. Raising the cap immediately promotes queued work; lowering it just stops promoting new ones (running turns are never aborted). Default 3 is conservative — bump up if your provider's rate limit comfortably allows.")
+            static let anthropicMaxOutputTokens = String(localized: "settings.agent-behavior.anthropic-max-output-tokens", defaultValue: "Anthropic reply limit")
+            static let anthropicMaxOutputTokensDescription = String(localized: "settings.agent-behavior.anthropic-max-output-tokens-description", defaultValue: "Maximum tokens a single Anthropic reply may produce (max_tokens). Default 32K keeps long documents and large refactor replies from truncating; legacy Claude 3.x models are automatically clamped to their lower API caps.")
             static func agentAppearanceDescription(_ a1: String, _ a2: String) -> String {
                 let template = String(localized: "settings.agent-behavior.appearance-description", defaultValue: "Base size (pt) for Agent chat message body and rendered Markdown blocks (paragraphs, lists, quotes, fenced code, tables). Tool-call summaries, footers, message headers, and composer chrome keep their fixed sizes — this knob is about reading the conversation, not resizing the whole UI. Default is 14 pt; range %1$@ – %2$@ pt.")
                 return String(format: template, a1, a2)

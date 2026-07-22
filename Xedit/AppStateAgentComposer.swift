@@ -557,6 +557,7 @@ extension AppState {
             workspaceLocation: workspaceLocation,
             runtimeDescriptor: remoteRuntimeDescriptor,
             runtimeID: runtime.id,
+            turnID: runtime.activeTurnID,
             jobRegistry: agentJobRegistry,
             mediaTaskRegistry: agentMediaTaskRegistry,
             shortDramaStore: agentShortDramaStore,

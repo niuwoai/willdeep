@@ -40,7 +40,11 @@ struct AgentExecutionPickerPill: View {
                 Image(systemName: selectedAgent.symbol)
                     .font(.system(size: 10, weight: .semibold))
                 Text(selectedAgent.displayName)
-                    .font(.system(size: 11, weight: .medium))
+                    .font(AgentDesign.chatSupportingFont(
+                        baseFontSize: appState.agentChatBaseFontSize,
+                        visualMinimum: 11,
+                        weight: .medium
+                    ))
                     .lineLimit(1)
                 Image(systemName: "chevron.down")
                     .font(.system(size: 8, weight: .bold))
@@ -106,7 +110,11 @@ struct AgentModePickerPill: View {
                 Image(systemName: appState.agentInteractionMode.symbol)
                     .font(.system(size: 10, weight: .semibold))
                 Text(appState.agentInteractionMode.displayName)
-                    .font(.system(size: 11, weight: .medium))
+                    .font(AgentDesign.chatSupportingFont(
+                        baseFontSize: appState.agentChatBaseFontSize,
+                        visualMinimum: 11,
+                        weight: .medium
+                    ))
                 Image(systemName: "chevron.down")
                     .font(.system(size: 8, weight: .bold))
             }

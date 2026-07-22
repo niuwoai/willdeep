@@ -37,7 +37,10 @@ struct AgentConfirmationVisualTests {
         var settings = EditorSettings.default
         settings.interfaceSkinID = EditorInterfaceSkin.ricePaper.id
         let appState = AppState(editorSettings: settings)
-        let call = commandConfirmationCall(status: .awaitingConfirm)
+        let call = commandConfirmationCall(
+            status: .awaitingConfirm,
+            toolName: "terminal_send_command"
+        )
 
         let wideSize = try render(
             call: call,
@@ -45,18 +48,32 @@ struct AgentConfirmationVisualTests {
             width: 1_040,
             outputURL: outputDirectory.appendingPathComponent("command-confirmation-wide.png")
         )
+        let mediumSize = try render(
+            call: call,
+            appState: appState,
+            width: 520,
+            outputURL: outputDirectory.appendingPathComponent("command-confirmation-medium.png")
+        )
         let narrowSize = try render(
             call: call,
             appState: appState,
-            width: 620,
+            width: 400,
             outputURL: outputDirectory.appendingPathComponent("command-confirmation-narrow.png")
         )
 
-        #expect(wideSize.height <= narrowSize.height)
+        #expect(wideSize.height <= mediumSize.height)
+        #expect(mediumSize.height <= narrowSize.height)
         #expect(wideSize.width == 1_040)
-        #expect(narrowSize.width == 620)
+        #expect(mediumSize.width == 520)
+        #expect(narrowSize.width == 400)
         #expect(AgentConfirmationReviewMetrics.usesHorizontalLayout(availableWidth: 1_040))
-        #expect(!AgentConfirmationReviewMetrics.usesHorizontalLayout(availableWidth: 620))
+        #expect(!AgentConfirmationReviewMetrics.usesHorizontalLayout(availableWidth: 520))
+        #expect(!AgentConfirmationReviewMetrics.usesHorizontalLayout(availableWidth: 400))
+        #expect(
+            AgentConfirmationReviewMetrics.horizontalContentMinimumWidth
+                == AgentConfirmationReviewMetrics.horizontalMinimumWidth
+                    - (AgentConfirmationReviewMetrics.contentPadding * 2)
+        )
         #expect(AgentConfirmationReviewMetrics.commandVisibleLineCount == 3)
         #expect(AgentApprovalActionMetrics.minimumButtonHeight == 36)
         #expect(AgentConfirmationReviewMetrics.actionButtonHeight == 28)
@@ -112,12 +129,13 @@ struct AgentConfirmationVisualTests {
     }
 
     private func commandConfirmationCall(
-        status: AgentToolCallStatus
+        status: AgentToolCallStatus,
+        toolName: String = "run_command"
     ) -> AgentToolCall {
         AgentToolCall(
             messageID: UUID(),
             externalID: "command-confirmation-design-qa",
-            toolName: "run_command",
+            toolName: toolName,
             arguments: [
                 "command": .string(
                     "find 剧本 -name '*.md' | sort -t'第' -k2 -n | while read file; "

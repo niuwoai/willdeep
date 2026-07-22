@@ -175,5 +175,7 @@ struct AgentGoalChecklistParserTests {
         #expect(prompt.contains("Turn-end self-check (REQUIRED on every Goal-mode assistant reply after the goal is defined)"))
         #expect(prompt.contains("Goal self-check"))
         #expect(prompt.contains("# no changes"))
+        #expect(prompt.contains("compact delivery summary"))
+        #expect(prompt.contains("Do not repeat command transcripts, failed attempts, raw tool output"))
     }
 }

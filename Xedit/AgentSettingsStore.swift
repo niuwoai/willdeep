@@ -46,6 +46,7 @@ enum AgentSettingsStore {
     private static let autoApproveKey = "com.willdeep.agentSettings.autoApproveSafeCommands.v1"
     private static let perProviderConcurrencyKey = "com.willdeep.agentSettings.perProviderConcurrencyLimit.v1"
     private static let chatBaseFontSizeKey = "com.willdeep.agentSettings.chatBaseFontSize.v1"
+    private static let anthropicMaxOutputTokensKey = "com.willdeep.agentSettings.anthropicMaxOutputTokens.v1"
     private static let webSearchProviderKey = "com.willdeep.agentSettings.webSearchProvider.v1"
     private static let localModelSettingsKey = "com.willdeep.agentSettings.localModelSettings.v1"
     /// Global toggle: 关掉后 plan 自动执行 banner 不再做 destructive keyword
@@ -67,7 +68,8 @@ enum AgentSettingsStore {
     /// JSON-encoded `AgentProviderLibrary` minus the API keys, which
     /// live in Keychain under the entry's UUID.
     private static let providerLibraryKey = "com.willdeep.agentSettings.providerLibrary.v1"
-    private static let defaultKeychainService = "com.willdeep.agent"
+    private static let releaseKeychainService = "com.willdeep.agent"
+    private static let debugKeychainService = "com.willdeep.agent.debug"
     private static let keychainAccount = "openai-compatible-api-key"
     private static let imageKeychainAccount = "openai-compatible-image-description-api-key"
     /// Keychain account prefix for per-entry library keys
@@ -80,8 +82,8 @@ enum AgentSettingsStore {
 
     /// Test-only override for the Keychain service name. Production code
     /// never touches this — it stays nil and `keychainService` returns
-    /// `defaultKeychainService`. The unit tests that exercise AppState
-    /// fire its @Published didSets, which transitively call
+    /// the service selected for the current build configuration. The unit
+    /// tests that exercise AppState fire its @Published didSets, which transitively call
     /// `saveAPIKey` and `saveProviderLibrary`; without this override
     /// those tests would write fixture API keys (e.g. fixtures named
     /// `test-fixture-deepseek-key`) into the *real* developer-machine
@@ -107,7 +109,18 @@ enum AgentSettingsStore {
     nonisolated(unsafe) private static var xctestKeychainStorage: [String: String] = [:]
 
     private static var keychainService: String {
-        testKeychainServiceOverride ?? defaultKeychainService
+        if let testKeychainServiceOverride {
+            return testKeychainServiceOverride
+        }
+        #if DEBUG
+        return serviceName(debugBuild: true)
+        #else
+        return serviceName(debugBuild: false)
+        #endif
+    }
+
+    static func serviceName(debugBuild: Bool) -> String {
+        debugBuild ? debugKeychainService : releaseKeychainService
     }
 
     private static var isRunningUnderXCTest: Bool {
@@ -364,6 +377,31 @@ enum AgentSettingsStore {
     static func saveAgentChatBaseFontSize(_ size: CGFloat) {
         let clamped = clampChatBaseFontSize(size)
         defaults.set(Double(clamped), forKey: chatBaseFontSizeKey)
+    }
+
+    /// Upper bound for a single Anthropic reply (`max_tokens` is mandatory
+    /// on that API). Default 32K so long-form replies stop truncating with
+    /// finish_reason=length; legacy Claude 3.x models are clamped lower at
+    /// request time (`AnthropicAdapter.maxOutputTokens(forModel:)`).
+    static let anthropicMaxOutputTokensMin = 1_024
+    static let anthropicMaxOutputTokensMax = 128_000
+    static let anthropicMaxOutputTokensDefault = 32_768
+
+    static func loadAnthropicMaxOutputTokens() -> Int {
+        if defaults.object(forKey: anthropicMaxOutputTokensKey) == nil {
+            return anthropicMaxOutputTokensDefault
+        }
+        let stored = defaults.integer(forKey: anthropicMaxOutputTokensKey)
+        guard stored > 0 else { return anthropicMaxOutputTokensDefault }
+        return clampAnthropicMaxOutputTokens(stored)
+    }
+
+    static func saveAnthropicMaxOutputTokens(_ value: Int) {
+        defaults.set(clampAnthropicMaxOutputTokens(value), forKey: anthropicMaxOutputTokensKey)
+    }
+
+    static func clampAnthropicMaxOutputTokens(_ value: Int) -> Int {
+        max(anthropicMaxOutputTokensMin, min(anthropicMaxOutputTokensMax, value))
     }
 
     static func clampChatBaseFontSize(_ size: CGFloat) -> CGFloat {
@@ -775,7 +813,8 @@ enum AgentSettingsStore {
 
 enum AgentCredentialStore {
     nonisolated static let referencePrefix = "keychain://"
-    nonisolated private static let defaultKeychainService = "com.willdeep.credentials"
+    nonisolated private static let releaseKeychainService = "com.willdeep.credentials"
+    nonisolated private static let debugKeychainService = "com.willdeep.credentials.debug"
 
     nonisolated(unsafe) private static var testKeychainServiceOverride: String?
     nonisolated(unsafe) private static var testKeychainStorage: [String: String]?
@@ -784,7 +823,18 @@ enum AgentCredentialStore {
     nonisolated(unsafe) private static var testSaveCounts: [String: Int] = [:]
 
     nonisolated private static var keychainService: String {
-        testKeychainServiceOverride ?? defaultKeychainService
+        if let testKeychainServiceOverride {
+            return testKeychainServiceOverride
+        }
+        #if DEBUG
+        return serviceName(debugBuild: true)
+        #else
+        return serviceName(debugBuild: false)
+        #endif
+    }
+
+    nonisolated static func serviceName(debugBuild: Bool) -> String {
+        debugBuild ? debugKeychainService : releaseKeychainService
     }
 
     nonisolated private static var isRunningUnderXCTest: Bool {

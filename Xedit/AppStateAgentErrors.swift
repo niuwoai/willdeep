@@ -204,6 +204,10 @@ extension AppState {
         runtime.errorRequiresSomeIMLogin = false
         runtime.isResponding = true
         runtime.turnStartedAt = Date()
+        let turnID = UUID()
+        runtime.activeTurnID = turnID
+        runtime.activeTurnConfiguration = configuration
+        runtime.userStoppedTurnID = nil
         let providerSlotClaim = claimProviderSlot(
             for: runtime,
             providerID: configuration.providerID
@@ -219,7 +223,8 @@ extension AppState {
             await self.runAgentLoop(
                 for: runtime,
                 configuration: configuration,
-                providerSlotClaimID: providerSlotClaim.id
+                providerSlotClaimID: providerSlotClaim.id,
+                turnID: turnID
             )
         }
     }

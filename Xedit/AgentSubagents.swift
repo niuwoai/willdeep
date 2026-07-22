@@ -111,6 +111,11 @@ final class AgentSubagentRegistry: ObservableObject {
 
     private var tasks: [UUID: Task<Void, Never>] = [:]
     private var pendingReports: [UUID: [UUID]] = [:]
+    /// Exact parent turn that created each background run. This is narrower
+    /// than `parentRuntimeID` and prevents Stop from cancelling subagents that
+    /// intentionally outlived an older turn.
+    private var originatingTurnIDs: [UUID: UUID] = [:]
+    private var suppressedReportRunIDs: Set<UUID> = []
     /// Goal-planning runs are aggregated by their host coordinator. Their
     /// individual completions must never enter the generic parent wake queue.
     private var coordinatorOwnedRunIDs: Set<UUID> = []
@@ -161,6 +166,7 @@ final class AgentSubagentRegistry: ObservableObject {
         runtimeDescriptor: RuntimeDescriptor? = nil,
         workspaceLocation: WorkspaceLocation? = nil,
         parentRuntimeID: UUID,
+        originatingTurnID: UUID? = nil,
         someIMContext: SomeIMRequestContext? = nil,
         outputSchema: AgentStructuredSchema? = nil,
         queuesParentReport: Bool = true
@@ -180,6 +186,9 @@ final class AgentSubagentRegistry: ObservableObject {
             startedAt: Date()
         )
         runs.insert(run, at: 0)
+        if let originatingTurnID {
+            originatingTurnIDs[id] = originatingTurnID
+        }
         if !queuesParentReport {
             coordinatorOwnedRunIDs.insert(id)
         }
@@ -288,11 +297,12 @@ final class AgentSubagentRegistry: ObservableObject {
 
         let parentID = runs[index].parentRuntimeID
         let coordinatorOwned = coordinatorOwnedRunIDs.contains(id)
-        if !coordinatorOwned {
+        let suppressReport = suppressedReportRunIDs.remove(id) != nil
+        if !coordinatorOwned && !suppressReport {
             pendingReports[parentID, default: []].append(id)
         }
         evictOldFinishedRuns(forParentRuntime: parentID)
-        if let finished = runs.first(where: { $0.id == id }) {
+        if !suppressReport, let finished = runs.first(where: { $0.id == id }) {
             onRunFinished?(finished)
         }
     }
@@ -324,6 +334,28 @@ final class AgentSubagentRegistry: ObservableObject {
         }
     }
 
+    /// Cancel only background subagents born in the stopped turn. Returns the
+    /// number signalled so the host can provide one concise acknowledgement.
+    @discardableResult
+    func cancelRunning(
+        forParentRuntime runtimeID: UUID,
+        originatingTurnID turnID: UUID,
+        suppressReports: Bool = true
+    ) -> Int {
+        let matches = runs.filter {
+            $0.parentRuntimeID == runtimeID
+                && $0.status == .running
+                && originatingTurnIDs[$0.id] == turnID
+        }
+        if suppressReports {
+            suppressedReportRunIDs.formUnion(matches.map(\.id))
+        }
+        for run in matches {
+            tasks[run.id]?.cancel()
+        }
+        return matches.count
+    }
+
     /// Retire one Goal-planning generation synchronously so a replacement
     /// generation can claim the same three per-session concurrency slots.
     /// Late task completions remain coordinator-owned and are ignored by the
@@ -343,6 +375,10 @@ final class AgentSubagentRegistry: ObservableObject {
         let toEvict = Set(finished.suffix(finished.count - Self.historyLimit).map(\.id))
         runs.removeAll { toEvict.contains($0.id) }
         coordinatorOwnedRunIDs.subtract(toEvict)
+        for id in toEvict {
+            originatingTurnIDs.removeValue(forKey: id)
+            suppressedReportRunIDs.remove(id)
+        }
     }
 }
 

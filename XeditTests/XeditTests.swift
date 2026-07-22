@@ -114,6 +114,44 @@ struct WillDeepTests {
     }
 
     @MainActor
+    @Test("agent activity stays textual and hides for user decisions")
+    func testAgentActivityTextIndicatorState() {
+        let appState = AppState()
+        appState.startNewAgentSession()
+        appState.isAgentResponding = true
+        appState.agentMessages = [AgentMessage(role: .assistant, content: "Streaming response")]
+
+        // The text indicator remains after visible output starts instead of
+        // being replaced by the former centered sparkle.
+        #expect(appState.shouldShowAgentThinkingIndicator == false)
+        #expect(appState.shouldShowAgentActivityTextIndicator == true)
+
+        for status in [
+            AgentToolCallStatus.pendingApproval,
+            .awaitingConfirm,
+            .awaitingUserAnswer
+        ] {
+            appState.agentToolCalls = [
+                AgentToolCall(
+                    messageID: UUID(),
+                    externalID: UUID().uuidString,
+                    toolName: "ask_user",
+                    arguments: [:],
+                    risk: .userInput,
+                    status: status
+                )
+            ]
+            #expect(appState.isAgentWaitingForUserDecision == true)
+            #expect(appState.shouldShowAgentActivityTextIndicator == false)
+        }
+
+        appState.agentToolCalls = []
+        #expect(appState.isAgentWaitingForUserDecision == false)
+        appState.isCompressingAgentContext = true
+        #expect(appState.shouldShowAgentActivityTextIndicator == false)
+    }
+
+    @MainActor
     @Test("goal running status bar only shows during an active goal turn")
     func testGoalRunningStatusBarVisibility() {
         let appState = AppState()
@@ -1312,7 +1350,9 @@ struct WillDeepTests {
             "recent assistant answer",
         ])
         #expect(modelHistory.count == 3)
-        #expect(modelHistory.first?.role == .system)
+        #expect(modelHistory.first?.role == .user)
+        #expect(modelHistory.first?.source == .hostInstruction)
+        #expect(modelHistory.first?.content.contains("<untrusted-conversation-summary>") == true)
         #expect(modelHistory.first?.content.contains("summary of older turns") == true)
         #expect(modelHistory.dropFirst().map(\.id) == [recentUser.id, recentAssistant.id])
         #expect(modelHistory.contains(where: { $0.content == "old user turn" }) == false)
@@ -2449,7 +2489,7 @@ struct WillDeepTests {
         #expect(AgentToolRegistry.descriptor(for: "call_mcp_tool")?.risk == .write)
     }
 
-    @Test("collapseOldToolResults protects current-round tool messages and summarizes older tool payloads")
+    @Test("collapseOldToolResults keeps tool-result bytes stable across later turns")
     func testCollapseOldToolResults() {
         var messages: [AgentMessage] = []
         messages.append(AgentMessage(role: .user, content: "Find foo earlier"))
@@ -2457,7 +2497,7 @@ struct WillDeepTests {
             messages.append(AgentMessage(role: .assistant, content: "step \(index)"))
             messages.append(AgentMessage(
                 role: .tool,
-                content: String(repeating: "x", count: 500),
+                content: String(repeating: "x", count: 3_000),
                 toolCallID: "call_\(index)"
             ))
         }
@@ -2467,25 +2507,24 @@ struct WillDeepTests {
         ]))
         messages.append(AgentMessage(
             role: .tool,
-            content: String(repeating: "y", count: 500),
+            content: String(repeating: "y", count: 3_000),
             toolCallID: "call_current"
         ))
 
         let collapsed = AppState.collapseOldToolResults(in: messages, keepRecentToolMessages: 2)
+        let afterAnotherTurn = AppState.collapseOldToolResults(
+            in: messages + [AgentMessage(role: .user, content: "One more request")],
+            keepRecentToolMessages: 2
+        )
         let toolMessages = collapsed.filter { $0.role == .tool }
+        let laterToolMessages = afterAnotherTurn.filter { $0.role == .tool }
         #expect(toolMessages.count == 6)
 
         let summarizedCount = toolMessages.filter {
             $0.content.hasPrefix("[tool result summarized for model context")
         }.count
-        #expect(summarizedCount == 3)
-
-        // The latest two old tool messages plus the current-round tool
-        // result should remain at full length.
-        let untouched = toolMessages.suffix(3)
-        for message in untouched {
-            #expect(message.content.count == 500)
-        }
+        #expect(summarizedCount == 6)
+        #expect(toolMessages.map(\.content) == laterToolMessages.map(\.content))
     }
 
     @Test("agent tool runner refuses paths outside the workspace")

@@ -53,7 +53,7 @@ enum AppLocale {
     /// 多语言变体。
     static var systemPromptDirective: String {
         """
-        User's preferred language: \(displayName) (\(languageTag)). Reply to the user, write memory entries created via add_memory, generate skill content via create_user_skill, draft ask_user questions, and produce any other user-facing artifact in this language unless the user explicitly asks for another.
+        User's preferred language: \(displayName) (\(languageTag)). Reply to the user, write memory entries created via add_memory, generate skill content via create_user_skill, draft ask_user questions, and produce any other user-facing artifact in this language unless the user explicitly asks for another. If the user's global or project rules specify a reply language, those rules win over this locale default.
         """
     }
 }

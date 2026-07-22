@@ -94,6 +94,7 @@ struct AgentModeView: View {
                     .frame(width: 0, height: 0)
                 }
         }
+        .environment(\.agentChatSupportingBaseFontSize, appState.agentChatBaseFontSize)
     }
 
     @ViewBuilder
@@ -636,4 +637,71 @@ enum AgentDesign {
     static let sidebarRowFont = Font.system(size: sidebarRowFontSize)
     static let sidebarWorkspaceFont = Font.system(size: sidebarRowFontSize)
     static let sidebarAutomationFont = Font.system(size: sidebarAutomationFontSize)
+
+    /// Supporting text inside the chat experience must never become smaller
+    /// than the user's configured conversation body. Visual hierarchy should
+    /// come from weight and semantic color instead of tiny type.
+    static func chatSupportingFontSize(
+        baseFontSize: CGFloat,
+        visualMinimum: CGFloat = 0
+    ) -> CGFloat {
+        max(AgentSettingsStore.clampChatBaseFontSize(baseFontSize), visualMinimum)
+    }
+
+    static func chatSupportingFont(
+        baseFontSize: CGFloat,
+        visualMinimum: CGFloat = 0,
+        weight: Font.Weight = .regular,
+        design: Font.Design = .default
+    ) -> Font {
+        .system(
+            size: chatSupportingFontSize(
+                baseFontSize: baseFontSize,
+                visualMinimum: visualMinimum
+            ),
+            weight: weight,
+            design: design
+        )
+    }
+}
+
+private struct AgentChatSupportingBaseFontSizeKey: EnvironmentKey {
+    static let defaultValue = AgentSettingsStore.chatBaseFontSizeDefault
+}
+
+extension EnvironmentValues {
+    var agentChatSupportingBaseFontSize: CGFloat {
+        get { self[AgentChatSupportingBaseFontSizeKey.self] }
+        set { self[AgentChatSupportingBaseFontSizeKey.self] = newValue }
+    }
+}
+
+private struct AgentChatSupportingFontModifier: ViewModifier {
+    @Environment(\.agentChatSupportingBaseFontSize) private var baseFontSize
+    let visualMinimum: CGFloat
+    let weight: Font.Weight
+    let design: Font.Design
+
+    func body(content: Content) -> some View {
+        content.font(AgentDesign.chatSupportingFont(
+            baseFontSize: baseFontSize,
+            visualMinimum: visualMinimum,
+            weight: weight,
+            design: design
+        ))
+    }
+}
+
+extension View {
+    func agentChatSupportingFont(
+        visualMinimum: CGFloat = 0,
+        weight: Font.Weight = .regular,
+        design: Font.Design = .default
+    ) -> some View {
+        modifier(AgentChatSupportingFontModifier(
+            visualMinimum: visualMinimum,
+            weight: weight,
+            design: design
+        ))
+    }
 }

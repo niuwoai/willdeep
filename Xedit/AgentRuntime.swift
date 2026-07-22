@@ -101,6 +101,7 @@ final class AgentRuntime: ObservableObject, Identifiable {
     @Published var pendingPlanModeSuggestion: AgentPlanModeSuggestion?
     @Published var currentGoal: AgentGoal?
     @Published var goalPlanningState: AgentGoalPlanningState?
+    @Published var goalTurnRecoveryCheckpoint: AgentGoalTurnRecoveryCheckpoint?
     /// Runtime-only guard for mid-turn manual goal edits. If the user edits
     /// the goal while an old request is already in flight, that older reply's
     /// trailing `goal-check` block must not be applied to the new checklist.
@@ -166,6 +167,23 @@ final class AgentRuntime: ObservableObject, Identifiable {
     /// when idle. Cancelled when the session is closed or the user
     /// stops the response.
     var requestTask: Task<Void, Never>?
+    /// Stable ownership token for work started by the active turn. Background
+    /// jobs and subagents inherit it so Stop can clean up only the newest
+    /// turn without touching an older dev server or watcher in this session.
+    var activeTurnID: UUID?
+    /// The already-resolved configuration for the active turn. Stop cleanup
+    /// reuses this in-memory value for its lightweight process decision and
+    /// therefore does not re-scan Keychain credentials.
+    var activeTurnConfiguration: AgentConfiguration?
+    /// Set before cancelling the provider task. Some URLSession transports
+    /// surface an intentional stop as `URLError.cancelled` instead of
+    /// `CancellationError`; the turn id lets the loop distinguish that from
+    /// an unrelated network failure.
+    var userStoppedTurnID: UUID?
+    /// Host-side cleanup can outlive the provider stream briefly while an AI
+    /// judge decides which jobs from each stopped turn to terminate. Keep one
+    /// task per turn so stopping a newer turn cannot strand an older cleanup.
+    var stopCleanupTasks: [UUID: Task<Void, Never>] = [:]
     /// Provider slot claimed by the currently running turn. The id lets
     /// forced queue handoff release a stuck turn's slot without letting that
     /// cancelled turn later release a newer turn's slot.
@@ -242,6 +260,7 @@ final class AgentRuntime: ObservableObject, Identifiable {
         self.activeExperts = session.activeExperts
         self.currentPlan = session.currentPlan
         self.currentGoal = session.currentGoal
+        self.goalTurnRecoveryCheckpoint = session.goalTurnRecoveryCheckpoint
         let restoredGoalPlanningState = session.goalPlanningState?.normalizedForRestore(
             currentPlan: session.currentPlan,
             currentGoal: session.currentGoal
@@ -391,6 +410,7 @@ final class AgentRuntime: ObservableObject, Identifiable {
         session.currentPlan = currentPlan
         session.currentGoal = currentGoal
         session.goalPlanningState = goalPlanningState
+        session.goalTurnRecoveryCheckpoint = goalTurnRecoveryCheckpoint
         session.learningEvents = learningEvents
         session.latestTurnRecall = latestTurnRecall
         session.documentAttachments = documentAttachments

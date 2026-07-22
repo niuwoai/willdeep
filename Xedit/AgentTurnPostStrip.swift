@@ -68,7 +68,7 @@ struct AgentTurnPostStrip: View {
                     }
                 }
                 Text("来源")
-                    .font(AgentDesign.captionFont)
+                    .agentChatSupportingFont()
                     .lineLimit(1)
             }
             .foregroundStyle(.secondary)
@@ -98,7 +98,7 @@ struct AgentTurnPostStrip: View {
                     Image(systemName: "brain.head.profile")
                         .font(.system(size: 12, weight: .medium))
                     Text(L10n.Transcript.postTurnLearningOneLiner(String(learningEvents.count)))
-                        .font(AgentDesign.captionFont)
+                        .agentChatSupportingFont()
                         .lineLimit(1)
                         .truncationMode(.middle)
                 }

@@ -12,6 +12,25 @@ struct OnboardingFlowTests {
         #expect(OnboardingStep.provider.previous == .someIM)
     }
 
+    @Test("navigation rows stay out of the keyboard focus chain")
+    func navigationRowsAreNotFocusable() throws {
+        let repositoryRoot = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+        let sourceURL = repositoryRoot
+            .appendingPathComponent("Xedit", isDirectory: true)
+            .appendingPathComponent("Onboarding", isDirectory: true)
+            .appendingPathComponent("OnboardingView.swift")
+        let source = try String(contentsOf: sourceURL, encoding: .utf8)
+        let navigationRow = try #require(source.range(of: "private func navigationRow(for step: OnboardingStep)"))
+        let trailingSource = source[navigationRow.lowerBound...]
+        let buttonStyle = try #require(trailingSource.range(of: ".buttonStyle(.plain)"))
+        let focusPolicy = try #require(trailingSource.range(of: ".focusable(false)"))
+
+        #expect(focusPolicy.lowerBound > buttonStyle.lowerBound)
+        #expect(trailingSource.distance(from: buttonStyle.lowerBound, to: focusPolicy.lowerBound) < 80)
+    }
+
     @Test("render the redesigned onboarding welcome screen")
     @MainActor
     func renderWelcomeForDesignQA() throws {

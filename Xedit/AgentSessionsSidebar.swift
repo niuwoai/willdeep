@@ -539,10 +539,14 @@ struct AgentSessionsSidebar: View {
                         .help(L10n.Sidebar.sessionMenuRename)
                     AgentSessionApprovalBadge(
                         session: session,
-                        runtime: observedRuntime
+                        runtime: observedRuntime,
+                        baseFontSize: appState.agentChatBaseFontSize
                     )
                     Spacer(minLength: 0)
-                    AgentSessionModeBadges(session: displaySession)
+                    AgentSessionModeBadges(
+                        session: displaySession,
+                        baseFontSize: appState.agentChatBaseFontSize
+                    )
                     // Codex keeps ordinary rows visually quiet: no leading
                     // bullet and no always-on timestamp. Runtime state moves
                     // to the trailing edge, where it only becomes visible for
@@ -559,7 +563,8 @@ struct AgentSessionsSidebar: View {
                     AgentSessionTodoSummaryContainer(
                         session: displaySession,
                         runtime: observedRuntime,
-                        fallbackSummary: todoSummary
+                        fallbackSummary: todoSummary,
+                        baseFontSize: appState.agentChatBaseFontSize
                     )
                 }
             }

@@ -32,6 +32,7 @@ struct AgentSessionPersistenceTests {
         #expect(session.interactionMode == .normal)
         #expect(session.currentPlan == nil)
         #expect(session.currentGoal == nil)
+        #expect(session.goalTurnRecoveryCheckpoint == nil)
         #expect(session.latestTurnRecall == nil)
         #expect(session.contextSummary == nil)
         #expect(session.contextSummaryThroughMessageID == nil)
@@ -62,6 +63,10 @@ struct AgentSessionPersistenceTests {
             ]
         )
         let sidePanelLastViewedAt = Date(timeIntervalSince1970: 760_000_100)
+        let recoveryCheckpoint = AgentGoalTurnRecoveryCheckpoint(
+            id: UUID(uuidString: "55555555-5555-5555-5555-555555555555")!,
+            startedAt: Date(timeIntervalSince1970: 760_000_050)
+        )
         let original = AgentSession(
             title: "Persistence work",
             workspaceRootPath: "/Users/test/.willdeep/worktrees/proj/task",
@@ -76,6 +81,7 @@ struct AgentSessionPersistenceTests {
             interactionMode: .plan,
             currentPlan: plan,
             currentGoal: goal,
+            goalTurnRecoveryCheckpoint: recoveryCheckpoint,
             latestTurnRecall: AgentTurnRecallSnapshot(
                 createdAt: Date(timeIntervalSince1970: 760_000_000),
                 query: "release workflow",
@@ -123,6 +129,7 @@ struct AgentSessionPersistenceTests {
         #expect(decoded.currentGoal?.checklist.count == 2)
         #expect(decoded.currentGoal?.checklist.first?.done == true)
         #expect(decoded.currentGoal?.checklist.last?.done == false)
+        #expect(decoded.goalTurnRecoveryCheckpoint == recoveryCheckpoint)
         #expect(decoded.messages.first?.content == "keep the visible transcript")
         #expect(decoded.contextSummary == "summary used only for model context")
         #expect(decoded.contextSummaryThroughMessageID == UUID(uuidString: "44444444-4444-4444-4444-444444444444"))
