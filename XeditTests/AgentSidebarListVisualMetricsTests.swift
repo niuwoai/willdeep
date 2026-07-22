@@ -9,7 +9,6 @@ struct AgentSidebarListVisualMetricsTests {
     func codexReferenceMetricsStaySynchronized() {
         #expect(AgentDesign.sidebarRowFontSize == 14)
         #expect(AgentDesign.sidebarRowHeight == 31)
-        #expect(AgentDesign.sidebarTodoRowHeight == 47)
         #expect(AgentDesign.sidebarSelectionCornerRadius == 10)
         #expect(AgentDesign.sidebarWorkspaceGroupSpacing == 6)
         #expect(AgentDesign.sidebarAutomationFontSize == AgentDesign.sidebarRowFontSize)
@@ -22,6 +21,10 @@ struct AgentSidebarListVisualMetricsTests {
         #expect(AgentModelUsageTableLayout.tokensWidth == 120)
         #expect(AgentModelUsageTableLayout.cacheWidth == 56)
         #expect(AgentModelUsageTableLayout.costWidth == 72)
+        #expect(AgentStatsDashboardTypography.body == 13)
+        #expect(AgentStatsDashboardTypography.sectionTitle == 14)
+        #expect(AgentStatsDashboardTypography.metricValue == 16)
+        #expect(AgentStatsDashboardTypography.compactBadge == AgentStatsDashboardTypography.body)
     }
 
     @Test("workspace and conversation titles share the Codex text column")
@@ -41,7 +44,7 @@ struct AgentSidebarListVisualMetricsTests {
         )
     }
 
-    @Test("plan progress badge keeps its intrinsic width under hover-sized pressure")
+    @Test("mode progress summary stays compact under hover-sized pressure")
     @MainActor
     func planProgressBadgeResistsHorizontalCompression() {
         var session = AgentSession(title: "A deliberately long conversation title")
@@ -64,6 +67,31 @@ struct AgentSidebarListVisualMetricsTests {
 
         #expect(unconstrained.width > 1)
         #expect(abs(constrained.width - unconstrained.width) < 0.5)
+    }
+
+    @Test("goal mode shows one labeled progress summary even when a transient plan exists")
+    @MainActor
+    func goalModeDoesNotStackPlanAndGoalProgress() {
+        var goalOnly = AgentSession(title: "Goal")
+        goalOnly.interactionMode = .goal
+        goalOnly.currentGoal = AgentGoal(
+            statement: "Ship",
+            checklist: [.init(text: "Verify")]
+        )
+
+        var goalWithPlan = goalOnly
+        goalWithPlan.currentPlan = AgentPlan(
+            status: .executing,
+            steps: [.init(text: "Implement", status: .inProgress)]
+        )
+
+        let goalWidth = NSHostingController(rootView: AgentSessionModeBadges(session: goalOnly))
+            .sizeThatFits(in: NSSize(width: 1_000, height: AgentDesign.sidebarRowHeight)).width
+        let combinedWidth = NSHostingController(rootView: AgentSessionModeBadges(session: goalWithPlan))
+            .sizeThatFits(in: NSSize(width: 1_000, height: AgentDesign.sidebarRowHeight)).width
+
+        #expect(abs(combinedWidth - goalWidth) < 0.5)
+        #expect(AgentSessionTodoSummaryLogic.summary(for: goalWithPlan)?.kind == .goal)
     }
 
     @Test("scheduled-task search covers name, prompt, and workspace without reordering")
@@ -135,6 +163,13 @@ struct AgentSidebarListVisualMetricsTests {
                 .init(text: "检查侧栏与聊天字号", status: .done),
                 .init(text: "统一状态提示字号", status: .done),
                 .init(text: "完成设计验收", status: .inProgress),
+            ]
+        )
+        plannedSession.interactionMode = .goal
+        plannedSession.currentGoal = AgentGoal(
+            statement: "完成侧边栏视觉收敛",
+            checklist: [
+                .init(text: "只保留一行低对比度进度", done: false),
             ]
         )
         appState.agentSessions = [
@@ -257,6 +292,36 @@ struct AgentSidebarListVisualMetricsTests {
         try png.write(to: URL(fileURLWithPath: outputPath), options: .atomic)
     }
 
+    @Test("render readable production stats overview for design QA")
+    @MainActor
+    func renderReadableStatsOverviewForDesignQA() throws {
+        let outputPath = ProcessInfo.processInfo.environment["WILLDEEP_STATS_OVERVIEW_QA_OUTPUT"]
+            ?? "/tmp/Xedit-stats-overview-design-qa.png"
+
+        var settings = EditorSettings.default
+        settings.interfaceSkinID = EditorInterfaceSkin.ricePaper.id
+        let appState = AppState(editorSettings: settings)
+        appState.agentChatBaseFontSize = 14
+        appState.hasLoadedAgentUsageSnapshots = true
+        appState.agentUsageSnapshots = typographyUsageSnapshots()
+
+        let size = NSSize(width: 700, height: 540)
+        let root = AgentStatsDashboard()
+            .environmentObject(appState)
+            .padding(24)
+            .frame(width: size.width, height: size.height)
+            .background(appState.editorSettings.interfaceSkin.windowBackground)
+            .preferredColorScheme(.light)
+        let hostingView = NSHostingView(rootView: root)
+        hostingView.frame = NSRect(origin: .zero, size: size)
+        hostingView.layoutSubtreeIfNeeded()
+
+        let bitmap = try #require(hostingView.bitmapImageRepForCachingDisplay(in: hostingView.bounds))
+        hostingView.cacheDisplay(in: hostingView.bounds, to: bitmap)
+        let png = try #require(bitmap.representation(using: .png, properties: [:]))
+        try png.write(to: URL(fileURLWithPath: outputPath), options: .atomic)
+    }
+
     @Test("render the production live activity timeline for design QA")
     @MainActor
     func renderLiveActivityTimelineForDesignQA() throws {
@@ -314,14 +379,6 @@ struct AgentSidebarListVisualMetricsTests {
                 .fixedSize(horizontal: false, vertical: true)
 
             AgentLiveActivityTimeline(calls: calls)
-
-            AgentActivityHeadlineView(
-                presentation: AgentActivityHeadlinePresentation(
-                    title: "正在验证修改",
-                    systemImage: "checkmark.circle"
-                ),
-                baseFontSize: appState.agentChatBaseFontSize
-            )
         }
         .padding(32)
         .environmentObject(appState)

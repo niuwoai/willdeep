@@ -502,31 +502,68 @@ struct AgentToolCallGroup: View {
 }
 
 /// Live, phase-aware activity surface for the current assistant turn. The
-/// newest calls remain individually legible while older calls collapse into
-/// one quiet summary. Interactive approvals keep their full controls.
+/// current operation is one quiet disclosure row by default. Expanding it
+/// reveals the recent timeline. Interactive approvals keep their full controls.
 struct AgentLiveActivityTimeline: View {
     @EnvironmentObject var appState: AppState
     let calls: [AgentToolCall]
+    @State private var isExpanded = false
 
     var body: some View {
         let presentation = AgentLiveActivityTimelinePresentation(calls: calls)
+        let detailCallIDs = Set(presentation.detailCalls(isExpanded: isExpanded).map(\.id))
         VStack(alignment: .leading, spacing: 7) {
-            if presentation.hiddenOperationCount > 0 {
+            if isExpanded, presentation.hiddenOperationCount > 0 {
                 AgentActivityTimelineSummaryRow(count: presentation.hiddenOperationCount)
             }
             ForEach(presentation.visibleCalls) { call in
                 if call.status.isBlockingForUserDecision {
                     AgentToolCallCard(call: call)
-                } else {
-                    AgentToolActivityTimelineRow(
-                        presentation: AgentToolActivityRowPresentation(call: call),
-                        errorDetail: call.errorMessage
-                    )
+                } else if detailCallIDs.contains(call.id) {
+                    if call.id == presentation.disclosureCall?.id,
+                       presentation.hasExpandableDetails {
+                        AgentActivityTimelineDisclosureRow(call: call, isExpanded: $isExpanded)
+                    } else {
+                        AgentToolActivityTimelineRow(
+                            presentation: AgentToolActivityRowPresentation(call: call),
+                            errorDetail: call.errorMessage
+                        )
+                    }
                 }
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .accessibilityIdentifier("agent-live-activity-timeline")
+    }
+}
+
+private struct AgentActivityTimelineDisclosureRow: View {
+    let call: AgentToolCall
+    @Binding var isExpanded: Bool
+
+    var body: some View {
+        Button {
+            withAnimation(.easeInOut(duration: 0.16)) {
+                isExpanded.toggle()
+            }
+        } label: {
+            HStack(spacing: 6) {
+                AgentToolActivityTimelineRow(
+                    presentation: AgentToolActivityRowPresentation(call: call),
+                    errorDetail: call.errorMessage
+                )
+                Image(systemName: isExpanded ? "chevron.down" : "chevron.right")
+                    .font(.system(size: 9, weight: .semibold))
+                    .foregroundStyle(Color(nsColor: .tertiaryLabelColor))
+                    .frame(width: 12, height: 12)
+            }
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .cursor(.pointingHand)
+        .help(isExpanded ? L10n.ToolCard.collapse : L10n.ToolCard.expand)
+        .accessibilityLabel(AgentToolActivityRowPresentation(call: call).title)
+        .accessibilityHint(isExpanded ? L10n.ToolCard.collapse : L10n.ToolCard.expand)
     }
 }
 

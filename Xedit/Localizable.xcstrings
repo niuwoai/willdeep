@@ -2552,8 +2552,8 @@
       "comment" : "compact summary shown before the most recent detailed tool activity rows",
       "extractionState" : "manual",
       "localizations" : {
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "%lld earlier operations completed" } },
-        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "此前已完成 %lld 项操作" } }
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "%lld earlier operations" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "此前还有 %lld 项操作" } }
       }
     },
     "agent-activity.stage.analyzing" : {

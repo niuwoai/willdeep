@@ -77,6 +77,9 @@ struct AgentModeMessageView: View {
     var onReferenceGeneratedImage: (String) -> Void = { _ in }
     var progressPlan: AgentPlan? = nil
     var onShowPlan: () -> Void = {}
+    /// The live tool disclosure already communicates the current phase. Avoid
+    /// rendering a second one-line provider headline directly above it.
+    var suppressesActivityHeadline = false
     @State private var isHoveringUserMessage = false
     @Environment(\.colorScheme) private var colorScheme
 
@@ -230,8 +233,10 @@ struct AgentModeMessageView: View {
     // correctly while still being typed.
     private var assistantContent: some View {
         let activityHeadline = AgentActivityHeadlinePresentation.make(from: message.content)
+        let showsMessageText = !message.content.isEmpty
+            && (activityHeadline == nil || !suppressesActivityHeadline)
         return Group {
-            if !message.content.isEmpty || !message.images.isEmpty {
+            if showsMessageText || !message.images.isEmpty {
                 VStack(alignment: .leading, spacing: 0) {
                     if showsAssistantTurnHeader, activityHeadline == nil {
                         Text(AgentChatMessageMetrics.assistantStatus(
@@ -255,8 +260,8 @@ struct AgentModeMessageView: View {
                     }
 
                     VStack(alignment: .leading, spacing: 10) {
-                        if !message.content.isEmpty {
-                            if let activityHeadline {
+                        if showsMessageText {
+                            if let activityHeadline, !suppressesActivityHeadline {
                                 AgentActivityHeadlineView(
                                     presentation: activityHeadline,
                                     baseFontSize: baseFontSize

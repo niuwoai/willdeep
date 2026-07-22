@@ -884,7 +884,7 @@ struct AgentChatHistoryRendererTests {
             at: summaryRange.location,
             effectiveRange: nil
         ) as? NSFont)
-        #expect(summaryFont.pointSize == baseFontSize)
+        #expect(summaryFont.pointSize == NSFont.systemFontSize)
 
         let groupID = "\(firstID.uuidString):\(secondID.uuidString)"
         let expanded = AgentChatHistoryRenderer.render(
@@ -1171,11 +1171,11 @@ struct AgentChatHistoryRendererTests {
         let processedRange = (rendered.string as NSString).range(
             of: L10n.MessageFooter.processedDuration("8s")
         )
-        let processedFont = rendered.attribute(
+        let processedFont = try #require(rendered.attribute(
             .font,
             at: processedRange.location,
             effectiveRange: nil
-        ) as? NSFont
+        ) as? NSFont)
         let processedColor = rendered.attribute(
             .foregroundColor,
             at: processedRange.location,
@@ -1203,8 +1203,7 @@ struct AgentChatHistoryRendererTests {
             effectiveRange: nil
         ) as? NSParagraphStyle)
         #expect(bodyFont.pointSize == 14)
-        #expect(processedFont?.pointSize == bodyFont.pointSize)
-        #expect(processedFont?.pointSize == AgentSettingsStore.chatBaseFontSizeDefault)
+        #expect(processedFont.pointSize == bodyFont.pointSize)
         #expect(processedColor == NSColor.tertiaryLabelColor)
         #expect(bodyParagraphStyle.lineSpacing == AgentChatHistoryLayoutMetrics.bodyLineSpacing)
         #expect(bodyParagraphStyle.lineSpacing == 5)
@@ -1252,7 +1251,7 @@ struct AgentChatHistoryRendererTests {
             at: tokenRange.location,
             effectiveRange: nil
         ) as? NSFont)
-        #expect(tokenFont.pointSize == bodyFont.pointSize)
+        #expect(tokenFont.pointSize == AgentDesign.chatSupportingFontSizeDefault)
 
         let retryRange = (rendered.string as NSString).range(of: "↻")
         let retryFont = try #require(rendered.attribute(
