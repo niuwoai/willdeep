@@ -1030,8 +1030,14 @@ struct AgentTerminalViewRepresentable: NSViewRepresentable {
     }
 
     func updateNSView(_ nsView: AgentLocalProcessTerminalView, context: Context) {
-        DispatchQueue.main.async {
-            nsView.refreshVisibleTerminalDisplay()
-        }
+        // Deliberately empty. This used to force a refresh on every SwiftUI
+        // render pass — but the panel's TimelineView re-evaluates the whole
+        // body every second, so the terminal was being forced through
+        // layout continuously. Combined with the un-debounced resize →
+        // SIGWINCH chain, a layout that wobbled across a cell-height
+        // boundary made the remote shell redraw its prompt mid-screen and
+        // bake mixed-generation rows into the buffer. Mount-time refresh
+        // (makeNSView above + viewDidMoveToWindow) is sufficient; data
+        // arrival already schedules its own display pass.
     }
 }

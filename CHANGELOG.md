@@ -1,7 +1,21 @@
 # Changelog
 
-> 当前文件保留最新版本（1.193.0-rc18 至 1.109.0-rc340）。
+> 当前文件保留最新版本（1.193.0-rc19 至 1.109.0-rc340）。
 > 更早的 1000 个版本已移至 [CHANGELOG-ARCHIVE.md](CHANGELOG-ARCHIVE.md)。
+
+## 1.193.0-rc19 - 2026-07-22
+
+### Fixed
+
+- 修复侧边栏终端"光标停在中屏、下方还有更新内容、提示符行混着两代文本"的显示错乱。诊断结论：渲染管线无辜（feed→updateDisplay→draw 已证明不可能持久错帧），错乱内容是被真实写进 buffer 的——根因是 app 侧把终端逼进了 resize 风暴：`updateNSView` 随面板每秒重算的 TimelineView 每次渲染都强制刷新，`refreshVisibleTerminalDisplay` 又在每个 PTY chunk 上同步 `layoutSubtreeIfNeeded`，布局在行高边界一抖就触发 `terminal.resize` + 立即 SIGWINCH，本地 reflow 搬移光标叠加远端 readline 的"上移+CR+重印提示符（不清行尾）"重绘，混代行就此固化。修复三件套：
+  - `updateNSView` 不再逐次渲染强刷（挂载路径 makeNSView/viewDidMoveToWindow 保留刷新，数据到达本就自排显示）；
+  - `refreshVisibleTerminalDisplay` 热路径去掉强制同步 layout（仅 viewDidMoveToWindow 重挂时保留）；
+  - 终端几何变化加 120ms 防抖：尺寸风暴合并为一次"稳定尺寸"提交（PTY winsize/SIGWINCH、快照镜像、process delegate 三者一起），过渡期的退化尺寸（cols/rows < 2）直接忽略。
+- 版本号从 **1.193.0-rc18** 递增为 **1.193.0-rc19**，内部构建号从 **78** 递增为 **79**；App、Go agent、Help、Helper、浏览器扩展、README、响应头契约与产品文档保持一致。
+
+### Tests
+
+- 新增 caret-模型不变量测试（WINCH 式"上移+CR+重印提示符"序列后 caret 可见行必须等于模型光标行）、winsize 防抖测试（尺寸突发合并为一次稳定提交、退化尺寸不传播）、ZMODEM 检测器负样本测试（纯文本 `rz`/`**B`/kubectl 输出不触发吞流、二进制头跨 chunk 拆分的现状行为锁定）。
 
 ## 1.193.0-rc18 - 2026-07-22
 

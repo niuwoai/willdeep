@@ -987,16 +987,27 @@ final class AgentLocalProcessTerminalView: TerminalView, TerminalViewDelegate, L
     override func viewDidMoveToWindow() {
         super.viewDidMoveToWindow()
         DispatchQueue.main.async { [weak self] in
-            self?.refreshVisibleTerminalDisplay()
+            guard let self else { return }
+            // Remount is the one place a forced layout is warranted: the
+            // SwiftUI representable may have handed us a stale frame while
+            // detached. Everywhere else (per-chunk refresh) forcing layout
+            // is actively harmful — see refreshVisibleTerminalDisplay.
+            self.needsLayout = true
+            self.layoutSubtreeIfNeeded()
+            self.refreshVisibleTerminalDisplay()
         }
     }
 
     func refreshVisibleTerminalDisplay() {
-        needsLayout = true
-        layoutSubtreeIfNeeded()
+        // No forced layout here. This runs after EVERY PTY chunk; a
+        // synchronous layoutSubtreeIfNeeded on that hot path let any
+        // transient SwiftUI geometry wobble (panel animation, recording bar,
+        // divider drag) reach setFrameSize → terminal.resize → SIGWINCH
+        // mid-stream. The local reflow plus the remote shell's redraw-on-
+        // WINCH then bake mixed-generation rows and a mid-screen cursor into
+        // the buffer — the "stale content below the cursor" bug.
         needsDisplay = true
         setNeedsDisplay(bounds)
-        superview?.needsDisplay = true
 
         // SwiftTerm renders its caret in a separate child view. AppKit
         // invalidation redraws terminal cells but does not reposition that
@@ -1025,14 +1036,44 @@ final class AgentLocalProcessTerminalView: TerminalView, TerminalViewDelegate, L
         process.send(data: data)
     }
 
+    /// Debounce window for geometry propagation. SwiftUI mount animations
+    /// and divider drags emit a burst of transient sizes; every one used to
+    /// go straight to the PTY as a SIGWINCH, and interactive remotes (bash /
+    /// readline) redraw their prompt on each — against a locally reflowed
+    /// buffer whose row mapping no longer matches, leaving mixed-generation
+    /// rows behind. Only the settled size is worth telling the child about.
+    private static let winsizeDebounce: TimeInterval = 0.12
+    private var pendingWinsizeItem: DispatchWorkItem?
+
     func sizeChanged(source: TerminalView, newCols: Int, newRows: Int) {
+        // Transitional degenerate sizes (collapsing panes, zero frames
+        // during remount) must never reach the child process or the mirror.
+        guard newCols >= 2, newRows >= 2 else { return }
+        pendingWinsizeItem?.cancel()
+        let item = DispatchWorkItem { [weak self] in
+            guard let self else { return }
+            self.pendingWinsizeItem = nil
+            self.commitWindowSize()
+        }
+        pendingWinsizeItem = item
+        DispatchQueue.main.asyncAfter(deadline: .now() + Self.winsizeDebounce, execute: item)
+    }
+
+    /// Push the CURRENT settled geometry (not the possibly stale values a
+    /// debounced call captured) to the PTY, the snapshot mirror, and the
+    /// process delegate.
+    private func commitWindowSize() {
+        let live = getTerminal()
+        let cols = live.cols
+        let rows = live.rows
+        guard cols >= 2, rows >= 2 else { return }
         if process.running {
             var size = getWindowSize()
             _ = PseudoTerminalHelpers.setWinSize(masterPtyDescriptor: process.childfd, windowSize: &size)
         }
         // Keep the mirror's wrapping in step with what the user sees.
-        snapshotMirror.resize(cols: newCols, rows: newRows)
-        processDelegate?.sizeChanged(source: self, newCols: newCols, newRows: newRows)
+        snapshotMirror.resize(cols: cols, rows: rows)
+        processDelegate?.sizeChanged(source: self, newCols: cols, newRows: rows)
     }
 
     func setTerminalTitle(source: TerminalView, title: String) {

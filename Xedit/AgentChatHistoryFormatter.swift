@@ -309,12 +309,13 @@ enum AgentChatHistoryRenderer {
         // `bodyFont` / `monoFont` follow the user's chat-base size
         // knob (Q1=A) — they're used for message prose, plain tool
         // outputs, fenced code blocks, and inline-Markdown spans.
-        // Tool-call summaries and other gray status chrome share the body
-        // size floor; hierarchy now comes from color/weight, not tiny text.
+        // Message prose follows the user's body-size setting. Tool summaries
+        // and section labels keep their compact AppKit scale so metadata does
+        // not visually compete with the conversation itself.
         let bodyFont = NSFont.systemFont(ofSize: baseFontSize)
         let monoFont = NSFont.monospacedSystemFont(ofSize: baseFontSize, weight: .regular)
-        let chromeMonoFont = NSFont.monospacedSystemFont(ofSize: baseFontSize, weight: .regular)
-        let headerFont = NSFont.systemFont(ofSize: baseFontSize, weight: .semibold)
+        let chromeMonoFont = NSFont.monospacedSystemFont(ofSize: NSFont.systemFontSize, weight: .regular)
+        let headerFont = NSFont.systemFont(ofSize: 11, weight: .semibold)
         let assistantStatusFont = bodyFont
         let bodyColor = NSColor.labelColor
         let assistantStatusColor = NSColor.tertiaryLabelColor

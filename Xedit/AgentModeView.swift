@@ -633,19 +633,24 @@ enum AgentDesign {
     static let bodyFont = Font.system(size: 13)
     static let secondaryFont = Font.system(size: 11)
     static let captionFont = Font.system(size: 10)
+    static let chatSupportingFontSizeDefault: CGFloat = 11
     static let sidebarSectionFont = Font.system(size: 11, weight: .semibold)
     static let sidebarRowFont = Font.system(size: sidebarRowFontSize)
     static let sidebarWorkspaceFont = Font.system(size: sidebarRowFontSize)
     static let sidebarAutomationFont = Font.system(size: sidebarAutomationFontSize)
 
-    /// Supporting text inside the chat experience must never become smaller
-    /// than the user's configured conversation body. Visual hierarchy should
-    /// come from weight and semantic color instead of tiny type.
+    /// Keep chat chrome subordinate to message prose. The body-size setting
+    /// controls conversation content only; applying it to every label made
+    /// dashboards, pills, metadata, and placeholders collapse into one large
+    /// typographic tier. Callers can still request a larger semantic minimum
+    /// for values and headings.
     static func chatSupportingFontSize(
         baseFontSize: CGFloat,
         visualMinimum: CGFloat = 0
     ) -> CGFloat {
-        max(AgentSettingsStore.clampChatBaseFontSize(baseFontSize), visualMinimum)
+        let clampedBodySize = AgentSettingsStore.clampChatBaseFontSize(baseFontSize)
+        let supportingSize = min(clampedBodySize, chatSupportingFontSizeDefault)
+        return max(supportingSize, visualMinimum)
     }
 
     static func chatSupportingFont(
