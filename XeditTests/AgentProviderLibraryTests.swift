@@ -175,6 +175,42 @@ struct AgentProviderLibraryTests {
         #expect(loaded.entries.first(where: { $0.id == inactive.id })?.apiKeyLoaded == true)
     }
 
+    @MainActor
+    @Test("usable active provider does not materialize inactive credentials")
+    func activeProviderSelectionKeepsInactiveCredentialsLazy() throws {
+        let sandbox = KeychainSandbox()
+        _ = sandbox
+
+        let active = AgentProviderEntry(
+            providerID: "openai",
+            baseURL: "https://api.openai.com/v1",
+            apiKey: "sk-active",
+            flashPrimary: "gpt-4.1-mini",
+            proPrimary: "gpt-4.1"
+        )
+        let inactive = AgentProviderEntry(
+            providerID: "deepseek",
+            baseURL: "https://api.deepseek.com",
+            apiKey: "sk-inactive",
+            flashPrimary: "deepseek-v4-flash",
+            proPrimary: "deepseek-v4-pro"
+        )
+        AgentSettingsStore.saveProviderLibrary(
+            AgentProviderLibrary(entries: [active, inactive], activeID: active.id)
+        )
+
+        let appState = AppState()
+        #expect(appState.agentProviderLibrary.active?.id == active.id)
+        #expect(try #require(appState.agentProviderLibrary.entries.first {
+            $0.id == inactive.id
+        }).apiKeyLoaded == false)
+
+        #expect(!appState.ensureActiveProviderIsUsableForChatSelection())
+        #expect(try #require(appState.agentProviderLibrary.entries.first {
+            $0.id == inactive.id
+        }).apiKeyLoaded == false)
+    }
+
     // MARK: - Bug fix: stale model name from previous provider
 
     @Test

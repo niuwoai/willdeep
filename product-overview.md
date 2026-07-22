@@ -1,6 +1,6 @@
 # WillDeep Product Overview
 
-> Last updated: 2026-07-22 | Current version: v1.193.0-rc10
+> Last updated: 2026-07-22 | Current version: v1.193.0-rc11
 
 ## Positioning
 
@@ -11,6 +11,10 @@ Official product domain: [willdeep.com](https://willdeep.com).
 WillDeep is configured for non-App-Store distribution without App Sandbox so it can access local project files with fewer permission interruptions.
 
 ## 架构概览
+
+- **钥匙串签名隔离与按需读取（1.193.0-rc11）** —— Provider API Key、Agent/MCP 凭据在 Debug 与 Release 构建间使用独立 Keychain service，正式版继续沿用既有命名空间；模型选择只读取当前 Provider，只有当前项不可用时才逐项寻找兜底，避免打开模型面板就扫描历史凭据并反复触发访问确认。
+
+- **思考状态单一呈现（1.193.0-rc11）** —— 主聊天记录末尾不再额外插入“正在思考 · 时长”，执行期间只保留紧贴输入框上方的语义活动条，避免同一状态上下重复显示。
 
 - **Agent 壁纸全窗口覆盖（1.193.0-rc7）** —— Agent 壁纸层延伸到 macOS 全尺寸透明标题栏及窗口底部安全区，前景会话、输入框和状态栏仍保持在安全布局区内，不再露出白色边带。
 

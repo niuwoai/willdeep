@@ -2306,7 +2306,6 @@ struct ModelPickerPill: View {
     private func prepareModelPanel() {
         appState.reconcileSomeIMProviderFromSharedSession()
         appState.ensureActiveProviderIsUsableForChatSelection()
-        appState.materializeProviderLibraryAPIKeys()
         refreshMenuSnapshot()
         searchText = ""
         selectedTierFilter = .all

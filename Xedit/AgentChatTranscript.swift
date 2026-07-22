@@ -430,14 +430,6 @@ struct AgentChatTranscript: View {
                             .frame(maxWidth: AgentDesign.chatMaxContentWidth)
                     }
 
-                    // 任务运行、固定文字计时与交互等待的显示优先级由同一
-                    // 组件裁决，主对话和侧栏不会再走出两套状态。
-                    AgentTurnActivityStatusView(
-                        leadingInset: AgentChatHistoryLayoutMetrics.assistantContentHeadIndent,
-                        trailingInset: AgentChatHistoryLayoutMetrics.assistantContentTailInset
-                    )
-                        .frame(maxWidth: AgentDesign.chatMaxContentWidth, alignment: .leading)
-
                     if appState.isCompressingAgentContext {
                         AgentContextCompressionDivider(
                             leadingInset: AgentChatHistoryLayoutMetrics.assistantContentHeadIndent,

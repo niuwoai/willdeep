@@ -100,27 +100,41 @@ extension AppState {
     }
 
     @discardableResult
-    func materializeProviderLibraryAPIKeys() -> Bool {
-        var library = agentProviderLibrary
-        var changed = false
-        for entry in library.entries where !entry.apiKeyLoaded {
-            changed = AgentSettingsStore.materializeProviderLibraryAPIKey(in: &library, id: entry.id) || changed
-        }
-        guard changed else { return false }
-        agentProviderLibrary = library
-        return true
-    }
-
-    @discardableResult
     func ensureActiveProviderIsUsableForChatSelection() -> Bool {
         var library = agentProviderLibrary
-        for entry in library.entries where !entry.apiKeyLoaded {
-            _ = AgentSettingsStore.materializeProviderLibraryAPIKey(in: &library, id: entry.id)
-        }
         let authenticated = SomeIMIntegrationStore.hasAuthenticatedSessionForAutomaticDefaults()
-        let changedActive = library.ensureActiveEntryIsUsableForChatSelection(
-            isSomeIMAuthenticated: authenticated
+
+        // The active provider is the only credential needed on the normal
+        // path. Loading every saved provider here made merely opening the
+        // model picker query dozens of historical Keychain rows, multiplying
+        // access-control prompts when Debug and Release signatures differed.
+        _ = AgentSettingsStore.materializeProviderLibraryAPIKey(
+            in: &library,
+            id: library.active?.id
         )
+        if library.active?.isUsableForChatSelection(
+            isSomeIMAuthenticated: authenticated
+        ) == true {
+            guard library != agentProviderLibrary else { return false }
+            agentProviderLibrary = library
+            return false
+        }
+
+        // Only a genuinely unusable active provider needs fallback discovery.
+        // Materialize candidates one at a time and stop at the first usable
+        // entry instead of touching the entire Keychain namespace.
+        let originalActiveID = library.activeID
+        for entry in library.entries where entry.id != library.active?.id {
+            _ = AgentSettingsStore.materializeProviderLibraryAPIKey(in: &library, id: entry.id)
+            guard let candidate = library.entries.first(where: { $0.id == entry.id }),
+                  candidate.isUsableForChatSelection(
+                    isSomeIMAuthenticated: authenticated
+                  ) else { continue }
+            library.activeID = candidate.id
+            break
+        }
+
+        let changedActive = library.activeID != originalActiveID
         guard library != agentProviderLibrary else { return changedActive }
         agentProviderLibrary = library
         return changedActive

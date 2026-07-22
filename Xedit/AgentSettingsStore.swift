@@ -67,7 +67,8 @@ enum AgentSettingsStore {
     /// JSON-encoded `AgentProviderLibrary` minus the API keys, which
     /// live in Keychain under the entry's UUID.
     private static let providerLibraryKey = "com.willdeep.agentSettings.providerLibrary.v1"
-    private static let defaultKeychainService = "com.willdeep.agent"
+    private static let releaseKeychainService = "com.willdeep.agent"
+    private static let debugKeychainService = "com.willdeep.agent.debug"
     private static let keychainAccount = "openai-compatible-api-key"
     private static let imageKeychainAccount = "openai-compatible-image-description-api-key"
     /// Keychain account prefix for per-entry library keys
@@ -80,8 +81,8 @@ enum AgentSettingsStore {
 
     /// Test-only override for the Keychain service name. Production code
     /// never touches this — it stays nil and `keychainService` returns
-    /// `defaultKeychainService`. The unit tests that exercise AppState
-    /// fire its @Published didSets, which transitively call
+    /// the service selected for the current build configuration. The unit
+    /// tests that exercise AppState fire its @Published didSets, which transitively call
     /// `saveAPIKey` and `saveProviderLibrary`; without this override
     /// those tests would write fixture API keys (e.g. fixtures named
     /// `test-fixture-deepseek-key`) into the *real* developer-machine
@@ -107,7 +108,18 @@ enum AgentSettingsStore {
     nonisolated(unsafe) private static var xctestKeychainStorage: [String: String] = [:]
 
     private static var keychainService: String {
-        testKeychainServiceOverride ?? defaultKeychainService
+        if let testKeychainServiceOverride {
+            return testKeychainServiceOverride
+        }
+        #if DEBUG
+        return serviceName(debugBuild: true)
+        #else
+        return serviceName(debugBuild: false)
+        #endif
+    }
+
+    static func serviceName(debugBuild: Bool) -> String {
+        debugBuild ? debugKeychainService : releaseKeychainService
     }
 
     private static var isRunningUnderXCTest: Bool {
@@ -775,7 +787,8 @@ enum AgentSettingsStore {
 
 enum AgentCredentialStore {
     nonisolated static let referencePrefix = "keychain://"
-    nonisolated private static let defaultKeychainService = "com.willdeep.credentials"
+    nonisolated private static let releaseKeychainService = "com.willdeep.credentials"
+    nonisolated private static let debugKeychainService = "com.willdeep.credentials.debug"
 
     nonisolated(unsafe) private static var testKeychainServiceOverride: String?
     nonisolated(unsafe) private static var testKeychainStorage: [String: String]?
@@ -784,7 +797,18 @@ enum AgentCredentialStore {
     nonisolated(unsafe) private static var testSaveCounts: [String: Int] = [:]
 
     nonisolated private static var keychainService: String {
-        testKeychainServiceOverride ?? defaultKeychainService
+        if let testKeychainServiceOverride {
+            return testKeychainServiceOverride
+        }
+        #if DEBUG
+        return serviceName(debugBuild: true)
+        #else
+        return serviceName(debugBuild: false)
+        #endif
+    }
+
+    nonisolated static func serviceName(debugBuild: Bool) -> String {
+        debugBuild ? debugKeychainService : releaseKeychainService
     }
 
     nonisolated private static var isRunningUnderXCTest: Bool {

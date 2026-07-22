@@ -1,7 +1,20 @@
 # Changelog
 
-> 当前文件保留最新版本（1.193.0-rc10 至 1.109.0-rc340）。
+> 当前文件保留最新版本（1.193.0-rc11 至 1.109.0-rc340）。
 > 更早的 1000 个版本已移至 [CHANGELOG-ARCHIVE.md](CHANGELOG-ARCHIVE.md)。
+
+## 1.193.0-rc11 - 2026-07-22
+
+### Fixed
+
+- Provider API Key 与 Agent/MCP 凭据按 Debug/Release 构建隔离 Keychain service；Release 保留既有服务名和凭据，Debug 改用 `.debug` 命名空间，避免 Apple Development 与 Developer ID 签名轮流访问同一条目时持续弹出钥匙串密码确认。
+- Provider 可用性检查改为先只物化当前项；仅当当前 Provider 确实不可用时，才按顺序读取候选项并在首个可用项停止。打开模型面板不再批量读取全部历史 Provider 凭据。
+- 移除主聊天记录末尾重复的“正在思考 · 时长”状态，只保留紧贴输入框上方的绿色语义活动条。
+- 版本号从 **1.193.0-rc10** 递增为 **1.193.0-rc11**，内部构建号从 **70** 递增为 **71**；App、Go agent、Help、Helper、浏览器扩展、README、响应头契约与产品文档保持一致。
+
+### Tests
+
+- 新增 Debug/Release Keychain service 映射断言、非活动 Provider 保持懒加载断言，以及主聊天记录不再挂载重复思考状态的结构回归；视觉 QA 改为渲染输入框活动条。
 
 ## 1.193.0-rc10 - 2026-07-22
 

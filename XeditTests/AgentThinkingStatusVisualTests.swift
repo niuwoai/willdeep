@@ -6,8 +6,21 @@ import Testing
 
 @Suite
 struct AgentThinkingStatusVisualTests {
+    @Test("full transcript omits duplicate thinking status")
+    func fullTranscriptOmitsDuplicateThinkingStatus() throws {
+        let repositoryRoot = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+        let source = try String(
+            contentsOf: repositoryRoot.appendingPathComponent("Xedit/AgentChatTranscript.swift"),
+            encoding: .utf8
+        )
+
+        #expect(!source.contains("AgentTurnActivityStatusView("))
+    }
+
     @MainActor
-    @Test("render stable thinking text and empty user-decision status for design QA")
+    @Test("render composer-attached thinking status for design QA")
     func renderThinkingStatusForDesignQA() throws {
         let outputPath = ProcessInfo.processInfo.environment[
             "XEDIT_THINKING_STATUS_QA_OUTPUT"
@@ -107,10 +120,7 @@ struct AgentThinkingStatusVisualTests {
     ) -> some View {
         ZStack(alignment: .topLeading) {
             appState.editorSettings.interfaceSkin.windowBackground
-            AgentTurnActivityStatusView(
-                leadingInset: AgentChatHistoryLayoutMetrics.assistantContentHeadIndent,
-                trailingInset: AgentChatHistoryLayoutMetrics.assistantContentTailInset
-            )
+            AgentSemanticActivityStatusLine(style: .composer)
                 .environmentObject(appState)
                 .padding(.top, 18)
         }
