@@ -1,7 +1,14 @@
 # Changelog
 
-> 当前文件保留最新版本（1.193.0-rc12 至 1.109.0-rc340）。
+> 当前文件保留最新版本（1.193.0-rc13 至 1.109.0-rc340）。
 > 更早的 1000 个版本已移至 [CHANGELOG-ARCHIVE.md](CHANGELOG-ARCHIVE.md)。
+
+## 1.193.0-rc13 - 2026-07-22
+
+### Tests
+
+- compact 与 extended 两档稳定提示词补上字节级哈希护栏（`compactPrefixSnapshotHash` / `extendedPrefixSnapshotHash`），与 standard 档共用同一套快照流程：三档中任何一档的意外文本漂移（合并冲突吃掉半句、误删段落）现在都会在测试层被拦下；有意修改提示词时需 bump `stablePrefixVersion` 并按测试失败输出重录三个哈希。
+- 版本号从 **1.193.0-rc12** 递增为 **1.193.0-rc13**，内部构建号从 **72** 递增为 **73**；App、Go agent、Help、Helper、浏览器扩展、README、响应头契约与产品文档保持一致。
 
 ## 1.193.0-rc12 - 2026-07-22
 

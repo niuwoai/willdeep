@@ -81,7 +81,15 @@ enum AgentContextBuilder {
     private static let maxRulesCharacters = 6_000
     private static let dynamicContextMarker = "=== Dynamic Turn Context ==="
     static let stablePrefixVersion = "willdeep-agent-system-v10"
+    /// Byte-level snapshot hashes for all three prompt profiles (computed
+    /// with the fixed test locale directive). Intentional prompt edits must
+    /// bump `stablePrefixVersion` and re-record every affected hash — run
+    /// the snapshot tests once to get the new values from the failure
+    /// output. Without all three, compact/extended drift (a merge eating
+    /// half a sentence) ships silently.
     static let stablePrefixSnapshotHash = "1c50613cc69ab722"
+    static let compactPrefixSnapshotHash = "d01f3a3c008861a8"
+    static let extendedPrefixSnapshotHash = "f33454f5f4c00616"
 
     static func systemPrompt(
         rootDirectory: URL?,

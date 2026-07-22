@@ -64,6 +64,38 @@ struct AgentContextBuilderPromptTests {
         #expect(diagnostics.hash == AgentContextBuilder.stablePrefixSnapshotHash)
     }
 
+    @Test("compact and extended prompt texts carry their own hash guards")
+    func testCompactAndExtendedPromptSnapshotHashes() {
+        // standard was the only guarded profile for a long time — drift in
+        // the other two (a merge conflict eating half a sentence) shipped
+        // silently. Same fixed locale directive as the standard snapshot.
+        let compact = AgentContextBuilder.stableSystemPromptPrefix(
+            toolsEnabled: true,
+            promptProfile: .compact,
+            localeDirective: "Locale directive snapshot."
+        )
+        #expect(
+            AgentContextBuilder.cacheDiagnostics(
+                for: compact,
+                toolsEnabled: true,
+                promptProfile: .compact
+            ).hash == AgentContextBuilder.compactPrefixSnapshotHash
+        )
+
+        let extended = AgentContextBuilder.stableSystemPromptPrefix(
+            toolsEnabled: true,
+            promptProfile: .extended,
+            localeDirective: "Locale directive snapshot."
+        )
+        #expect(
+            AgentContextBuilder.cacheDiagnostics(
+                for: extended,
+                toolsEnabled: true,
+                promptProfile: .extended
+            ).hash == AgentContextBuilder.extendedPrefixSnapshotHash
+        )
+    }
+
     @Test("request prompt keeps dynamic context out of system and appends it to user")
     func testRequestPromptSplitsDynamicTurnContext() throws {
         let assembled = AgentContextBuilder.systemPrompt(
