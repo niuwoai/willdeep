@@ -73,7 +73,11 @@ extension AppState {
             if let restrictTo, !restrictTo.contains(path) {
                 return nil
             }
-            let stats = lineStats[path] ?? AgentLineChangeStats(added: nil, deleted: nil)
+            let stats = lineStats[path]
+                ?? (kind == .untracked
+                    ? untrackedTextLineStats(path: path, repositoryRoot: repositoryRoot)
+                    : nil)
+                ?? AgentLineChangeStats(added: nil, deleted: nil)
             let hasNumstatEntry = lineStats[path] != nil
             guard shouldIncludeAgentWorktreeChange(
                 kind: kind,
@@ -90,6 +94,36 @@ extension AppState {
         }
 
         return AgentWorktreeChangeSummary(repositoryRoot: repositoryRoot, files: files)
+    }
+
+    nonisolated static func untrackedTextLineStats(
+        path: String,
+        repositoryRoot: URL
+    ) -> AgentLineChangeStats? {
+        let fileURL = repositoryRoot.appendingPathComponent(path).standardizedFileURL
+        let rootPath = repositoryRoot.standardizedFileURL.path
+        guard fileURL.path.hasPrefix(rootPath + "/") else { return nil }
+
+        let keys: Set<URLResourceKey> = [.isRegularFileKey, .isSymbolicLinkKey, .fileSizeKey]
+        guard let values = try? fileURL.resourceValues(forKeys: keys),
+              values.isRegularFile == true,
+              values.isSymbolicLink != true,
+              let fileSize = values.fileSize,
+              fileSize <= worktreeDiffPreviewMaxUntrackedFileBytes,
+              let data = try? Data(contentsOf: fileURL, options: [.mappedIfSafe]),
+              let text = String(data: data, encoding: .utf8) else {
+            return nil
+        }
+
+        let newlineCount = text.utf8.reduce(into: 0) { count, byte in
+            if byte == 0x0A {
+                count += 1
+            }
+        }
+        let added = text.isEmpty || text.hasSuffix("\n")
+            ? newlineCount
+            : newlineCount + 1
+        return AgentLineChangeStats(added: added, deleted: 0)
     }
 
     nonisolated static func shouldIncludeAgentWorktreeChange(

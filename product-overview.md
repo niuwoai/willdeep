@@ -1,6 +1,6 @@
 # WillDeep Product Overview
 
-> Last updated: 2026-07-23 | Current version: v1.194.0-rc8
+> Last updated: 2026-07-23 | Current version: v1.194.0-rc14
 
 ## Positioning
 
@@ -11,6 +11,18 @@ Official product domain: [willdeep.com](https://willdeep.com).
 WillDeep is configured for non-App-Store distribution without App Sandbox so it can access local project files with fewer permission interruptions.
 
 ## 架构概览
+
+- **来源 favicon 合并与回退（1.194.0-rc14）** —— 来源入口按站点域名合并重复图标，优先读取网站 favicon，失败时使用公共图标服务回退；具体来源链接仍完整保留在弹窗中。
+
+- **辅助文字同尺度分层（1.194.0-rc13）** —— 对话中的文件结果、来源、工作区状态等辅助信息默认使用 13pt 可读字号，主次关系优先通过颜色和字重表达，减少依赖小号字体。
+
+- **Git 统计与渐进 Diff（1.194.0-rc12）** —— 未跟踪文本文件按实际逻辑行计入增删统计；逐文件审阅首屏只渲染前 100 行，用户可按批次继续展开，避免大文档首次打开就铺满界面。
+
+- **来源弹窗直接操作（1.194.0-rc11）** —— 引用来源列表不再自动进入单项焦点态，用户可直接点击任意来源打开，避免首项出现与实际操作无关的强调边框。
+
+- **Composer 进度胶囊按轮次收束（1.194.0-rc10）** —— “第 N / N 步”胶囊仅在当前响应仍有未完成计划或 Goal 步骤时显示；轮次结束、清单完成或用户进入下一轮对话后，不再复用上一轮的完成进度。
+
+- **本轮进度卡正文间距（1.194.0-rc9）** —— 历史消息与流式消息中的“本轮进度”卡统一增加正文上方留白，避免进度摘要紧贴上一段回复，同时保持卡片本身的紧凑密度。
 
 - **Codex 风格逐文件 Git 审阅（1.194.0-rc8）** —— 右侧审阅面板默认以逐文件卡片展示 Diff，文件头包含路径和增删统计，可逐项或一键折叠/展开；补丁正文提供旧/新双行号、语义增删底色与“未修改 N 行”收束条，同时保留范围切换、文件列表、单文件详情和提交/推送闭环。
 

@@ -35,6 +35,14 @@ extension L10n {
             return String(format: template, a1)
         }
 
+        static func showMoreLines(_ a1: String) -> String {
+            let template = String(
+                localized: "agent-git-review.show-more-lines",
+                defaultValue: "Show more (%@ lines remaining)"
+            )
+            return String(format: template, a1)
+        }
+
         static func commitSucceededPushFailed(_ a1: String) -> String {
             let template = String(
                 localized: "agent-git-review.commit-succeeded-push-failed",

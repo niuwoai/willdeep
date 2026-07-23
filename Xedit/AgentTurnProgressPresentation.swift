@@ -11,6 +11,10 @@
 import AppKit
 import SwiftUI
 
+nonisolated enum AgentTurnProgressLayoutMetrics {
+    static let contentSpacing: CGFloat = 14
+}
+
 nonisolated struct AgentTurnProgressPresentation: Equatable {
     struct Item: Identifiable, Equatable {
         let index: Int

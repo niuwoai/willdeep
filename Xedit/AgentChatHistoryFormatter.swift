@@ -575,7 +575,11 @@ enum AgentChatHistoryRenderer {
                     if result.length > bodyStart {
                         result.append(NSAttributedString(
                             string: "\n",
-                            attributes: [.font: NSFont.systemFont(ofSize: 6)]
+                            attributes: [
+                                .font: NSFont.systemFont(
+                                    ofSize: AgentTurnProgressLayoutMetrics.contentSpacing
+                                ),
+                            ]
                         ))
                     }
                     let progressID = message.id.uuidString

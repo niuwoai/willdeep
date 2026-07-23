@@ -7,11 +7,20 @@
 
 import SwiftUI
 
+nonisolated enum AgentGitReviewFileCardsMetrics {
+    static let visibleLineBatchSize = 100
+
+    static func nextVisibleLineCount(current: Int, total: Int) -> Int {
+        min(total, current + visibleLineBatchSize)
+    }
+}
+
 struct AgentGitReviewFileCardsView: View {
     let snapshot: AgentGitReviewSnapshot
     let palette: EditorInterfaceSkinPalette
     @Binding var collapsedPaths: Set<String>
     let openFile: (AgentFileChangeSummary) -> Void
+    @State private var visibleLineCounts: [String: Int] = [:]
 
     private var document: AgentGitReviewDiffDocument {
         AgentGitReviewDiffDocument.parse(
@@ -30,6 +39,11 @@ struct AgentGitReviewFileCardsView: View {
                         isCollapsed: collapsedPaths.contains(file.path),
                         toggleCollapsed: {
                             toggle(file.path)
+                        },
+                        visibleLineCount: visibleLineCounts[file.path]
+                            ?? AgentGitReviewFileCardsMetrics.visibleLineBatchSize,
+                        showMore: {
+                            showMoreRows(for: file)
                         },
                         openFile: {
                             openFile(file.change)
@@ -50,6 +64,15 @@ struct AgentGitReviewFileCardsView: View {
             collapsedPaths.insert(path)
         }
     }
+
+    private func showMoreRows(for file: AgentGitReviewDiffFile) {
+        let current = visibleLineCounts[file.path]
+            ?? AgentGitReviewFileCardsMetrics.visibleLineBatchSize
+        visibleLineCounts[file.path] = AgentGitReviewFileCardsMetrics.nextVisibleLineCount(
+            current: current,
+            total: file.rows.count
+        )
+    }
 }
 
 private struct AgentGitReviewFileCard: View {
@@ -57,6 +80,8 @@ private struct AgentGitReviewFileCard: View {
     let palette: EditorInterfaceSkinPalette
     let isCollapsed: Bool
     let toggleCollapsed: () -> Void
+    let visibleLineCount: Int
+    let showMore: () -> Void
     let openFile: () -> Void
 
     var body: some View {
@@ -129,12 +154,27 @@ private struct AgentGitReviewFileCard: View {
     private var diffRows: some View {
         ScrollView(.horizontal, showsIndicators: false) {
             LazyVStack(alignment: .leading, spacing: 0) {
-                ForEach(Array(file.rows.enumerated()), id: \.offset) { _, row in
+                ForEach(Array(file.rows.prefix(visibleLineCount).enumerated()), id: \.offset) { _, row in
                     AgentGitReviewDiffRowView(row: row, palette: palette)
+                }
+                if remainingLineCount > 0 {
+                    Button(action: showMore) {
+                        Text(L10n.AgentGitReview.showMoreLines(String(remainingLineCount)))
+                            .font(.system(size: 10, weight: .medium))
+                            .foregroundStyle(.secondary)
+                            .frame(minWidth: 480, minHeight: 30, alignment: .center)
+                            .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .focusable(false)
                 }
             }
             .frame(minWidth: 480, alignment: .leading)
         }
+    }
+
+    private var remainingLineCount: Int {
+        max(0, file.rows.count - visibleLineCount)
     }
 
     private var statusColor: Color {

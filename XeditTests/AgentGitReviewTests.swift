@@ -89,6 +89,19 @@ struct AgentGitReviewTests {
         ])
     }
 
+    @Test("逐文件 Diff 初始只显示 100 行并按批次展开")
+    func limitsInitialDiffRows() {
+        #expect(AgentGitReviewFileCardsMetrics.visibleLineBatchSize == 100)
+        #expect(
+            AgentGitReviewFileCardsMetrics.nextVisibleLineCount(current: 100, total: 275)
+                == 200
+        )
+        #expect(
+            AgentGitReviewFileCardsMetrics.nextVisibleLineCount(current: 200, total: 275)
+                == 275
+        )
+    }
+
     @Test("范围快照区分未暂存、已暂存与上一轮提交")
     func loadsScopedSnapshots() throws {
         let repository = try makeRepository()
@@ -118,6 +131,10 @@ struct AgentGitReviewTests {
         #expect(Set(unstaged.changes.files.map(\.path)) == [
             "unstaged.txt", "untracked.txt",
         ])
+        #expect(uncommitted.changes.change(for: "untracked.txt")?.addedLines == 1)
+        #expect(uncommitted.changes.change(for: "untracked.txt")?.deletedLines == 0)
+        #expect(unstaged.changes.change(for: "untracked.txt")?.addedLines == 1)
+        #expect(unstaged.changes.change(for: "untracked.txt")?.deletedLines == 0)
         #expect(staged.changes.files.map(\.path) == ["staged.txt"])
         #expect(Set(lastCommit.changes.files.map(\.path)) == [
             "staged.txt", "unstaged.txt",

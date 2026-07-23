@@ -915,6 +915,7 @@
     "agent-git-review.scope.unstaged" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Unstaged" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "未暂存" } } } },
     "agent-git-review.show-combined-diff" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Show file review" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "显示逐文件审阅" } } } },
     "agent-git-review.show-file-list" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Show changed files" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "显示已更改文件" } } } },
+    "agent-git-review.show-more-lines" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Show more (%@ lines remaining)" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "显示更多（剩余 %@ 行）" } } } },
     "agent-git-review.unmodified-lines" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "%@ unmodified lines" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "%@ 行未修改" } } } },
     "agent-image-editor.brush-mode-picker" : {
       "comment" : "Segmented picker label for the brush paint mode in the image mask editor",

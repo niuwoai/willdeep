@@ -404,7 +404,7 @@ struct AgentAssistantMarkdownBody: View {
 
     var body: some View {
         let extraction = AgentTurnProgressPresentation.extract(from: content, plan: progressPlan)
-        VStack(alignment: .leading, spacing: 10) {
+        VStack(alignment: .leading, spacing: AgentTurnProgressLayoutMetrics.contentSpacing) {
             if !extraction.visibleContent.isEmpty {
                 if isStreaming {
                     AgentAssistantStreamingBody(

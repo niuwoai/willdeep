@@ -150,4 +150,40 @@ struct AgentTurnReportTests {
         #expect(report.recallSnapshot?.items.map(\.kind) == [.memory, .skill])
         #expect(report.learningEvents.map(\.title) == ["Created user skill"])
     }
+
+    @Test
+    func sourceIconsMergeDuplicateHostsAndProvideFaviconFallback() throws {
+        let references = [
+            AgentSourceReference(
+                title: "First",
+                url: "https://example.com/a",
+                toolName: "web_search"
+            ),
+            AgentSourceReference(
+                title: "Duplicate host",
+                url: "https://www.example.com/b",
+                toolName: "web_search"
+            ),
+            AgentSourceReference(
+                title: "Other",
+                url: "https://docs.example.org/guide",
+                toolName: "web_search"
+            ),
+        ]
+
+        let icons = AgentSourceReferencePresentation.iconReferences(
+            from: references,
+            limit: 8
+        )
+        #expect(icons.map(\.url) == [
+            "https://example.com/a",
+            "https://docs.example.org/guide",
+        ])
+
+        let candidates = AgentSourceReferencePresentation.faviconCandidates(
+            for: try #require(icons.first)
+        )
+        #expect(candidates.first?.absoluteString == "https://example.com/favicon.ico")
+        #expect(candidates.last?.host == "icons.duckduckgo.com")
+    }
 }

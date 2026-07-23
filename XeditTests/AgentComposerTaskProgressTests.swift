@@ -71,13 +71,11 @@ struct AgentComposerTaskProgressTests {
         let active = try #require(
             AgentComposerTaskProgressSnapshot.make(plan: plan, isResponding: true)
         )
-        let idle = try #require(
-            AgentComposerTaskProgressSnapshot.make(plan: plan, isResponding: false)
-        )
+        let idle = AgentComposerTaskProgressSnapshot.make(plan: plan, isResponding: false)
 
         #expect(active.currentIndex == 1)
         #expect(active.items.map(\.status) == [.active, .pending])
-        #expect(idle.items.map(\.status) == [.pending, .pending])
+        #expect(idle == nil)
     }
 
     @Test("失败步骤成为当前步骤并标记阻塞")
@@ -92,12 +90,56 @@ struct AgentComposerTaskProgressTests {
         )
 
         let snapshot = try #require(
-            AgentComposerTaskProgressSnapshot.make(plan: plan, isResponding: false)
+            AgentComposerTaskProgressSnapshot.make(plan: plan, isResponding: true)
         )
 
         #expect(snapshot.currentIndex == 2)
         #expect(snapshot.currentItem?.text == "验证失败")
         #expect(snapshot.isBlocked)
+    }
+
+    @Test("轮次结束或计划完成后不再显示进度胶囊")
+    func hidesProgressOutsideActiveExecution() {
+        let unfinishedPlan = AgentPlan(
+            status: .executing,
+            steps: [
+                .init(text: "已完成", status: .done),
+                .init(text: "等待处理", status: .pending),
+            ]
+        )
+        let completedPlan = AgentPlan(
+            status: .done,
+            steps: [
+                .init(text: "第一步", status: .done),
+                .init(text: "第二步", status: .done),
+            ]
+        )
+        let completedStepsWithoutFinalStatus = AgentPlan(
+            status: .executing,
+            steps: [
+                .init(text: "第一步", status: .done),
+                .init(text: "第二步", status: .skipped),
+            ]
+        )
+
+        #expect(
+            AgentComposerTaskProgressSnapshot.make(
+                plan: unfinishedPlan,
+                isResponding: false
+            ) == nil
+        )
+        #expect(
+            AgentComposerTaskProgressSnapshot.make(
+                plan: completedPlan,
+                isResponding: true
+            ) == nil
+        )
+        #expect(
+            AgentComposerTaskProgressSnapshot.make(
+                plan: completedStepsWithoutFinalStatus,
+                isResponding: true
+            ) == nil
+        )
     }
 
     @Test("提议中与已拒绝计划不占用 composer 进度位")
@@ -244,7 +286,7 @@ struct AgentComposerTaskProgressTests {
         #expect(focusedSize.width == 420)
         #expect(focusedSize.height > 190)
         #expect(fullSize.width == 779)
-        #expect(fullSize.height > 150)
+        #expect(fullSize.height > 120)
     }
 
     @MainActor

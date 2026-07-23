@@ -322,7 +322,7 @@ private struct AgentComposerWorktreeSummaryBar: View {
                 Text("-\(appState.agentWorktreeChanges.totalDeletedLines)")
                     .foregroundStyle(.red)
             }
-            .font(.system(size: 12, weight: .medium, design: .monospaced))
+            .font(.system(size: 13, weight: .medium))
             .monospacedDigit()
             .padding(.horizontal, 12)
             .frame(height: 28)

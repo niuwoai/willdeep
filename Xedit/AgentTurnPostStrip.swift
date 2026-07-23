@@ -21,6 +21,48 @@
 import SwiftUI
 import AppKit
 
+nonisolated enum AgentSourceReferencePresentation {
+    static func iconReferences(
+        from references: [AgentSourceReference],
+        limit: Int
+    ) -> [AgentSourceReference] {
+        var seenHosts = Set<String>()
+        var result: [AgentSourceReference] = []
+        for reference in references {
+            let host = normalizedHost(reference.host)
+            guard !host.isEmpty, seenHosts.insert(host).inserted else { continue }
+            result.append(reference)
+            if result.count == limit { break }
+        }
+        return result
+    }
+
+    static func faviconCandidates(for reference: AgentSourceReference) -> [URL] {
+        let host = reference.host.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !host.isEmpty else { return [] }
+
+        var candidates: [URL] = []
+        if var components = URLComponents(string: reference.url) {
+            components.path = "/favicon.ico"
+            components.query = nil
+            components.fragment = nil
+            if let directURL = components.url {
+                candidates.append(directURL)
+            }
+        }
+        if let escapedHost = host.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed),
+           let fallbackURL = URL(string: "https://icons.duckduckgo.com/ip3/\(escapedHost).ico") {
+            candidates.append(fallbackURL)
+        }
+        return candidates
+    }
+
+    private static func normalizedHost(_ rawHost: String) -> String {
+        let host = rawHost.lowercased()
+        return host.hasPrefix("www.") ? String(host.dropFirst(4)) : host
+    }
+}
+
 struct AgentTurnPostStrip: View {
     // 1.103.0-rc11: report 入参保留只为外部 call site 兼容,内部不再渲染;
     // doc.text + 计数已搬进 TextKit footer chrome,跟 copy/clock/tokens 同一行。
@@ -58,12 +100,16 @@ struct AgentTurnPostStrip: View {
     @ViewBuilder
     private var sourcesButton: some View {
         let references = sourceReferences
+        let iconReferences = AgentSourceReferencePresentation.iconReferences(
+            from: references,
+            limit: 8
+        )
         Button {
             showSources.toggle()
         } label: {
             HStack(spacing: 6) {
                 HStack(spacing: -4) {
-                    ForEach(Array(references.prefix(8).enumerated()), id: \.element.id) { _, reference in
+                    ForEach(iconReferences) { reference in
                         AgentSourceReferenceIcon(reference: reference, size: 16)
                     }
                 }
@@ -181,6 +227,7 @@ private struct AgentSourceReferenceRow: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+        .focusable(false)
         .help(reference.url)
     }
 
@@ -202,6 +249,7 @@ private struct AgentSourceReferenceRow: View {
 private struct AgentSourceReferenceIcon: View {
     let reference: AgentSourceReference
     let size: CGFloat
+    @State private var candidateIndex = 0
 
     var body: some View {
         ZStack {
@@ -214,7 +262,10 @@ private struct AgentSourceReferenceIcon: View {
                         image
                             .resizable()
                             .scaledToFit()
-                    case .failure, .empty:
+                    case .failure:
+                        fallback
+                            .onAppear(perform: advanceFaviconCandidate)
+                    case .empty:
                         fallback
                     @unknown default:
                         fallback
@@ -231,6 +282,9 @@ private struct AgentSourceReferenceIcon: View {
             RoundedRectangle(cornerRadius: 4, style: .continuous)
                 .stroke(Color.primary.opacity(0.10), lineWidth: 0.5)
         )
+        .onChange(of: reference.id) { _ in
+            candidateIndex = 0
+        }
     }
 
     private var fallback: some View {
@@ -240,7 +294,14 @@ private struct AgentSourceReferenceIcon: View {
     }
 
     private var faviconURL: URL? {
-        guard !reference.host.isEmpty else { return nil }
-        return URL(string: "https://\(reference.host)/favicon.ico")
+        let candidates = AgentSourceReferencePresentation.faviconCandidates(for: reference)
+        guard candidates.indices.contains(candidateIndex) else { return nil }
+        return candidates[candidateIndex]
+    }
+
+    private func advanceFaviconCandidate() {
+        let candidates = AgentSourceReferencePresentation.faviconCandidates(for: reference)
+        guard candidateIndex + 1 < candidates.count else { return }
+        candidateIndex += 1
     }
 }

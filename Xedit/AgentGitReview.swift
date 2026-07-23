@@ -170,10 +170,19 @@ enum AgentGitReviewLoader {
 
         let paths = Set(kinds.keys).union(numstat.keys)
         let files = paths.map { path in
-            AgentFileChangeSummary(
+            let kind = kinds[path] ?? .modified
+            let lineStats = numstat[path]
+                ?? (kind == .untracked
+                    ? AppState.untrackedTextLineStats(
+                        path: path,
+                        repositoryRoot: repositoryRoot
+                    )
+                    : nil)
+                ?? AgentLineChangeStats(added: nil, deleted: nil)
+            return AgentFileChangeSummary(
                 path: path,
-                kind: kinds[path] ?? .modified,
-                lineStats: numstat[path] ?? AgentLineChangeStats(added: nil, deleted: nil)
+                kind: kind,
+                lineStats: lineStats
             )
         }
         return AgentWorktreeChangeSummary(repositoryRoot: repositoryRoot, files: files)

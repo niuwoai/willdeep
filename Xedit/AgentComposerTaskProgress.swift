@@ -51,6 +51,8 @@ nonisolated struct AgentComposerTaskProgressSnapshot: Equatable {
         goal: AgentGoal?,
         isResponding: Bool
     ) -> Self? {
+        guard isResponding else { return nil }
+
         if let planSnapshot = make(plan: plan, isResponding: isResponding) {
             return planSnapshot
         }
@@ -58,10 +60,12 @@ nonisolated struct AgentComposerTaskProgressSnapshot: Equatable {
     }
 
     static func make(plan: AgentPlan?, isResponding: Bool) -> Self? {
-        guard let plan,
+        guard isResponding,
+              let plan,
               !plan.steps.isEmpty,
               plan.status != .proposed,
-              plan.status != .rejected else {
+              plan.status != .rejected,
+              plan.status != .done else {
             return nil
         }
 
@@ -91,7 +95,8 @@ nonisolated struct AgentComposerTaskProgressSnapshot: Equatable {
         let completedCount = items.filter { item in
             item.status == .done || item.status == .skipped
         }.count
-        let isComplete = plan.status == .done || completedCount == items.count
+        guard completedCount < items.count else { return nil }
+
         let currentZeroBasedIndex = firstExplicitActiveIndex
             ?? firstFailedIndex
             ?? firstPendingIndex
@@ -103,15 +108,21 @@ nonisolated struct AgentComposerTaskProgressSnapshot: Equatable {
             items: items,
             currentIndex: currentZeroBasedIndex + 1,
             completedCount: completedCount,
-            isComplete: isComplete,
+            isComplete: false,
             isBlocked: firstFailedIndex != nil
         )
     }
 
     static func make(goal: AgentGoal?, isResponding: Bool) -> Self? {
-        guard let goal, !goal.checklist.isEmpty else { return nil }
+        guard isResponding,
+              let goal,
+              !goal.checklist.isEmpty else {
+            return nil
+        }
 
         let firstOpenIndex = goal.checklist.firstIndex { !$0.done }
+        guard firstOpenIndex != nil else { return nil }
+
         let items = goal.checklist.enumerated().map { offset, item in
             Item(
                 id: item.id,
@@ -122,7 +133,6 @@ nonisolated struct AgentComposerTaskProgressSnapshot: Equatable {
             )
         }
         let completedCount = goal.checklist.filter(\.done).count
-        let isComplete = completedCount == items.count
         let currentZeroBasedIndex = firstOpenIndex ?? items.indices.last ?? 0
 
         return Self(
@@ -130,7 +140,7 @@ nonisolated struct AgentComposerTaskProgressSnapshot: Equatable {
             items: items,
             currentIndex: currentZeroBasedIndex + 1,
             completedCount: completedCount,
-            isComplete: isComplete,
+            isComplete: false,
             isBlocked: false
         )
     }

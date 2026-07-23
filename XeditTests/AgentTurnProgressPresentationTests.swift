@@ -12,6 +12,11 @@ import Testing
 @Suite("Agent 本轮进度界面")
 @MainActor
 struct AgentTurnProgressPresentationTests {
+    @Test("正文与本轮进度卡保留清晰间距")
+    func progressCardKeepsDistanceFromBody() {
+        #expect(AgentTurnProgressLayoutMetrics.contentSpacing == 14)
+    }
+
     @Test("隐藏 progress 协议并合并本轮最后状态")
     func extractsAndMergesProgressBlocks() throws {
         let plan = AgentPlan(
