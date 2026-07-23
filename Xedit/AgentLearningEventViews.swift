@@ -37,7 +37,7 @@ struct AgentLearningEventsCard: View {
             HStack(spacing: 8) {
                 Image(systemName: "brain.head.profile")
                     .font(.system(size: 13, weight: .semibold))
-                    .foregroundStyle(.purple)
+                    .foregroundStyle(Color.accentColor)
                 VStack(alignment: .leading, spacing: 2) {
                     Text(L10n.Transcript.learningCardTitle)
                         .agentChatSupportingFont(weight: .semibold)

@@ -151,7 +151,7 @@ struct AgentTurnPostStrip: View {
                         .lineLimit(1)
                         .truncationMode(.middle)
                 }
-                .foregroundStyle(.purple)
+                .foregroundStyle(Color.accentColor)
             }
             .buttonStyle(.plain)
             .help(L10n.Transcript.postTurnLearningTooltip)
