@@ -2,9 +2,9 @@
 //  AIPipeBootstrap.swift
 //  WillDeep
 //
-//  Keeps AIPipe crash/log reporting optional at runtime. The API key
-//  must come from the environment or an external Info.plist injection;
-//  never commit it into source.
+//  Keeps AIPipe crash/log reporting optional at runtime. Release builds
+//  compile the API configuration from a generated DerivedData source file;
+//  credentials are never committed to the repository.
 //
 
 import AppKit
@@ -61,6 +61,7 @@ enum AIPipeBootstrap {
 
     static func initialize(
         environment: [String: String] = ProcessInfo.processInfo.environment,
+        compiledConfiguration: AIPipeBuildConfiguration = .generated,
         infoDictionary: [String: Any] = Bundle.main.infoDictionary ?? [:],
         reportingInitializer: (AIPipeConfig) -> Void = { config in
             AIPipe.initialize(with: config)
@@ -69,6 +70,7 @@ enum AIPipeBootstrap {
     ) {
         guard let apiKey = firstNonEmpty(
             environment["AIPIPE_API_KEY"],
+            compiledConfiguration.apiKey,
             infoDictionary["AIPipeAPIKey"] as? String
         ) else {
             return
@@ -76,6 +78,7 @@ enum AIPipeBootstrap {
 
         let endpoint = firstNonEmpty(
             environment["AIPIPE_ENDPOINT"],
+            compiledConfiguration.endpoint,
             infoDictionary["AIPipeEndpoint"] as? String
         ) ?? defaultEndpoint
 
@@ -86,6 +89,7 @@ enum AIPipeBootstrap {
         config.format = "macos"
         config.topic = firstNonEmpty(
             environment["AIPIPE_TOPIC"],
+            compiledConfiguration.topic,
             infoDictionary["AIPipeTopic"] as? String
         )
         config.enabled = true
@@ -104,5 +108,21 @@ enum AIPipeBootstrap {
 
     private static func isUnexpandedBuildSetting(_ value: String) -> Bool {
         value.hasPrefix("$(") && value.hasSuffix(")")
+    }
+}
+
+struct AIPipeBuildConfiguration {
+    let apiKey: String
+    let endpoint: String
+    let topic: String
+
+    static let empty = AIPipeBuildConfiguration(apiKey: "", endpoint: "", topic: "")
+
+    static var generated: AIPipeBuildConfiguration {
+        AIPipeBuildConfiguration(
+            apiKey: AIPipeGeneratedBuildConfiguration.apiKey,
+            endpoint: AIPipeGeneratedBuildConfiguration.endpoint,
+            topic: AIPipeGeneratedBuildConfiguration.topic
+        )
     }
 }

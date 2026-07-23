@@ -1,6 +1,6 @@
 # WillDeep Product Overview
 
-> Last updated: 2026-07-23 | Current version: v1.195.0-rc8
+> Last updated: 2026-07-23 | Current version: v1.195.0-rc9
 
 ## Positioning
 
@@ -11,6 +11,8 @@ Official product domain: [willdeep.com](https://willdeep.com).
 WillDeep is configured for non-App-Store distribution without App Sandbox so it can access local project files with fewer permission interruptions.
 
 ## 架构概览
+
+- **AIPipe 构建期二进制配置（1.195.0-rc9）** —— 发布构建从环境变量或本机 `.env.local` 读取 AIPipe API Key、endpoint 与 topic，在 DerivedData 中生成不入库的 Swift 常量并参与可执行文件编译；启动时优先读取运行环境覆盖，其次使用编译配置，Info.plist 只作为旧构建兼容兜底。
 
 - **AIPipe 启动上报恢复（1.195.0-rc8）** —— App 启动时会从进程环境或构建期注入的 Info.plist 读取 AIPipe Key，使用可配置 endpoint/topic 初始化启用状态的 SDK 并记录启动事件；无 Key 或构建占位符未展开时不初始化。退出流程继续主动 flush，降低正常关闭时的日志丢失。
 

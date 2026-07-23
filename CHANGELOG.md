@@ -1,7 +1,19 @@
 # Changelog
 
-> 当前文件保留最新版本（1.195.0-rc8 至 1.109.0-rc340）。
+> 当前文件保留最新版本（1.195.0-rc9 至 1.109.0-rc340）。
 > 更早的 1000 个版本已移至 [CHANGELOG-ARCHIVE.md](CHANGELOG-ARCHIVE.md)。
+
+## 1.195.0-rc9 - 2026-07-23
+
+### Changed
+
+- AIPipe API Key、endpoint 与 topic 改由构建阶段从环境变量或 `.env.local` 读取，生成 DerivedData 内的 Swift 常量并编入可执行文件；Release 包不再依赖 `Info.plist` 携带 AIPipe 凭据。
+- AIPipe 初始化优先级调整为运行环境、编译配置、Info.plist 兼容兜底，确保本地覆盖能力和旧构建兼容性保持不变。
+- 版本号从 **1.195.0-rc8** 递增为 **1.195.0-rc9**，内部构建号从 **114** 递增为 **115**；App、Go agent、Help、Helper、浏览器扩展、README、响应头契约与产品文档保持一致。
+
+### Tests
+
+- 新增构建凭据生成器契约测试，并扩展 AIPipe 初始化测试，覆盖编译配置启用上报、环境变量优先级与无凭据关闭路径。
 
 ## 1.195.0-rc8 - 2026-07-23
 

@@ -510,13 +510,14 @@ module WillDeepRelease
 
     def verify_exported_app
       @runner.run!(["codesign", "--verify", "--deep", "--strict", "--verbose=4", @paths[:app]])
-      _stdout, _stderr, status = Open3.capture3(
-        "/usr/libexec/PlistBuddy",
-        "-c", "Print :WillDeepSomeIMClientLoginSecret",
-        File.join(@paths[:app], "Contents", "Info.plist")
-      )
-      if status.success?
-        raise ReleaseError, "拒绝发布：WillDeepSomeIMClientLoginSecret 不应出现在 Info.plist"
+      info_plist = File.join(@paths[:app], "Contents", "Info.plist")
+      %w[WillDeepSomeIMClientLoginSecret AIPipeAPIKey].each do |key|
+        _stdout, _stderr, status = Open3.capture3(
+          "/usr/libexec/PlistBuddy",
+          "-c", "Print :#{key}",
+          info_plist
+        )
+        raise ReleaseError, "拒绝发布：#{key} 不应出现在 Info.plist" if status.success?
       end
     end
 
