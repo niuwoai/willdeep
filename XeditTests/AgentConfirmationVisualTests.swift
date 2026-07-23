@@ -63,6 +63,7 @@ struct AgentConfirmationVisualTests {
 
         #expect(wideSize.height <= mediumSize.height)
         #expect(mediumSize.height <= narrowSize.height)
+        #expect(mediumSize.height < 400)
         #expect(wideSize.width == 1_040)
         #expect(mediumSize.width == 520)
         #expect(narrowSize.width == 400)
@@ -127,12 +128,13 @@ struct AgentConfirmationVisualTests {
         #expect(!AgentCompactAuthorizationMetrics.usesHorizontalActions(availableWidth: 480))
     }
 
-    @Test("思考状态让图标与背景同步轻量呼吸")
+    @Test("思考状态只让图标与背景呼吸，计时保持稳定")
     func thinkingAnimationStaysSubtle() {
         #expect(AgentThinkingAnimationMetrics.minimumScale >= 0.85)
         #expect(AgentThinkingAnimationMetrics.maximumScale <= 1.09)
         #expect(AgentThinkingAnimationMetrics.duration >= 1.2)
         #expect(AgentThinkingAnimationMetrics.maximumBackgroundOpacity <= 0.12)
+        #expect(!AgentThinkingAnimationMetrics.animatesElapsedTime)
         #expect(
             AgentThinkingAnimationMetrics.maximumBackgroundOpacity
                 - AgentThinkingAnimationMetrics.minimumBackgroundOpacity

@@ -36,6 +36,9 @@ extension AgentChatHistoryRenderer {
         style.alignment = .center
         style.lineSpacing = 1
         style.paragraphSpacing = 2
+        style.headIndent = AgentChatHistoryLayoutMetrics.assistantContentHeadIndent
+        style.firstLineHeadIndent = AgentChatHistoryLayoutMetrics.assistantContentHeadIndent
+        style.tailIndent = -AgentChatHistoryLayoutMetrics.assistantContentTailInset
         result.addAttributes(
             [
                 .paragraphStyle: style,

@@ -33,37 +33,49 @@ struct WillDeepTests {
 
     @Test("agent session sidebar auto-hides only below responsive width")
     func testAgentSessionSidebarAutoHideThreshold() {
-        let sidePanelMinimumWidth: CGFloat = 240
+        let minimumSidePanelWidth: CGFloat = 240
 
         #expect(AgentModeResponsiveLayout.shouldAutoHideSessionsSidebar(
             totalWidth: 799,
             userPrefersVisible: true,
             activeSidePanel: nil,
-            sidePanelMinimumWidth: sidePanelMinimumWidth
+            activeSidePanelWidth: minimumSidePanelWidth
         ) == true)
         #expect(AgentModeResponsiveLayout.shouldAutoHideSessionsSidebar(
             totalWidth: 800,
             userPrefersVisible: true,
             activeSidePanel: nil,
-            sidePanelMinimumWidth: sidePanelMinimumWidth
+            activeSidePanelWidth: minimumSidePanelWidth
         ) == false)
         #expect(AgentModeResponsiveLayout.shouldAutoHideSessionsSidebar(
             totalWidth: 600,
             userPrefersVisible: false,
             activeSidePanel: nil,
-            sidePanelMinimumWidth: sidePanelMinimumWidth
+            activeSidePanelWidth: minimumSidePanelWidth
         ) == false)
         #expect(AgentModeResponsiveLayout.shouldAutoHideSessionsSidebar(
             totalWidth: 1_039,
             userPrefersVisible: true,
             activeSidePanel: .backgroundTasks,
-            sidePanelMinimumWidth: sidePanelMinimumWidth
+            activeSidePanelWidth: minimumSidePanelWidth
         ) == true)
         #expect(AgentModeResponsiveLayout.shouldAutoHideSessionsSidebar(
             totalWidth: 1_040,
             userPrefersVisible: true,
             activeSidePanel: .backgroundTasks,
-            sidePanelMinimumWidth: sidePanelMinimumWidth
+            activeSidePanelWidth: minimumSidePanelWidth
+        ) == false)
+        #expect(AgentModeResponsiveLayout.shouldAutoHideSessionsSidebar(
+            totalWidth: 1_399,
+            userPrefersVisible: true,
+            activeSidePanel: .terminal,
+            activeSidePanelWidth: 600
+        ) == true)
+        #expect(AgentModeResponsiveLayout.shouldAutoHideSessionsSidebar(
+            totalWidth: 1_400,
+            userPrefersVisible: true,
+            activeSidePanel: .terminal,
+            activeSidePanelWidth: 600
         ) == false)
     }
 

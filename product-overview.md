@@ -1,6 +1,6 @@
 # WillDeep Product Overview
 
-> Last updated: 2026-07-23 | Current version: v1.194.0-rc21
+> Last updated: 2026-07-23 | Current version: v1.195.0-rc4
 
 ## Positioning
 
@@ -11,6 +11,16 @@ Official product domain: [willdeep.com](https://willdeep.com).
 WillDeep is configured for non-App-Store distribution without App Sandbox so it can access local project files with fewer permission interruptions.
 
 ## 架构概览
+
+- **新回合消息顺序与 Markdown 稳定（1.195.0-rc4）** —— 发送新消息后，只有创建时间属于当前 provider 回合的 assistant 消息才进入流式渲染；占位消息尚未建立时，上一轮回答继续留在富文本历史区，新用户消息按原顺序立即显示，避免旧回答代码围栏退化成纯文本或遮住新输入。
+
+- **活动提示稳定与正文对齐（1.195.0-rc3）** —— 思考状态继续保留星形图标和绿色背景的轻量呼吸，但经过时间完全脱离动画事务、每秒稳定刷新；终端发送确认卡的三项提示按实际内容宽度优先横排，窄窗口才自动换成多行；模型切换提示及其前后短线与助手正文共用左右缩进。
+
+- **统计面板信息层级重构（1.195.0-rc2）** —— “概览”以交付物为首要结论，把任务轮次、改动文件、工具调用和连续天数收进同一摘要带；活动热力格缩小并收紧间距、移除多余图例。“模型”页增加费用、输入/输出 Token 和缓存命中率摘要，并用轻量分隔线组织模型明细，整体采用暖白底与青绿色强调，提升重点和留白。
+
+- **外部执行器双重验收控制面（1.195.0-rc1）** —— Claude Code、Codex CLI、Cursor Agent 与 Cline CLI 的 Composer 委托和 Goal 模式原生调用统一进入宿主任务契约：限制目标、验收标准、允许路径、禁止动作、验证命令、超时和最多三轮尝试。执行器先提交逐项证据包，再由全新只读执行器上下文复核，最后由 WillDeep 独立重跑安全检查并审计变更边界；失败会携带具体问题有限返工，仍未通过则拒绝交付。每轮阶段、证据、变更文件和验收结论持久化到会话，并在右侧监督栏实时展示。
+
+- **系统交互通知本地化（1.195.0-rc1）** —— 授权、确认、问答以及后台任务系统通知跟随系统语言显示，终端、文件、浏览器和电脑操作等常见工具使用面向用户的名称，不再直接暴露内部 snake_case ID；未知扩展工具仍保留原始 ID 方便排查。
 
 - **Composer 移除排队图标（1.194.0-rc20）** —— Agent 响应期间不再在语音与停止操作之间常驻显示蓝色排队按钮，减少底部操作拥挤；已有排队消息管理与快捷提交能力保持可用。
 

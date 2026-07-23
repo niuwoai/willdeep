@@ -1,3 +1,51 @@
+# Design QA：活动计时、终端确认提示与模型切换分隔线
+
+## 验收范围
+
+- source visual truth：
+  - `/var/folders/np/rjc0y5w52x324x21pv6g33440000gp/T/codex-clipboard-3ebdf657-15d7-4a07-887a-0e113f495a05.png`（606 × 59 px，思考状态计时）。
+  - `/var/folders/np/rjc0y5w52x324x21pv6g33440000gp/T/codex-clipboard-04d3be4e-44aa-4266-aefe-4f7b6a442eb4.png`（549 × 437 px，终端发送确认）。
+  - `/var/folders/np/rjc0y5w52x324x21pv6g33440000gp/T/codex-clipboard-40f28dce-900b-4069-a30c-b19d9bc49876.png`（604 × 462 px，模型切换提示）。
+- implementation screenshot：
+  - `/tmp/Xedit-confirmation-design-qa/command-confirmation-medium.png`（520 × 387 pt，Retina 2×）。
+  - `/tmp/Xedit-confirmation-design-qa/command-confirmation-wide.png`（1040 × 333 pt，Retina 2×）。
+  - `/tmp/Xedit-confirmation-design-qa/command-confirmation-narrow.png`（400 × 387 pt，Retina 2×）。
+  - `/tmp/Xedit-command-group-design-qa/model-switch-command-group-implementation.png`（1126 × 220 pt，Retina 2×）。
+- 同画布对比：
+  - `/tmp/xedit-confirmation-comparison.png`（1006 × 387 px；左侧用户参考，右侧 520pt 生产组件）。
+  - `/tmp/xedit-model-switch-comparison.png`（1126 × 220 px；上方用户参考，下面为生产 TextKit 实现）。
+- state：Rice Paper 浅色皮肤、简体中文、终端发送待确认状态，以及夹在两段助手正文之间的模型切换事件。
+
+## 修正记录
+
+1. 思考状态的呼吸动画从整行容器下放到星形图标和绿色背景；右侧经过时间显式脱离动画事务，只按计时器直接刷新。
+2. 终端确认卡的元数据横排候选改为按三枚提示胶囊的实际固有宽度参与 `ViewThatFits`，520pt 与 400pt 视口均能保持单行；只有真实内容超过可用宽度时才回退纵排。
+3. 模型切换提示段落复用助手正文的左右缩进；前方分隔线从正文左边界开始，后方分隔线在正文右边界结束，标签两侧继续保留 12pt 间隔。
+4. 回归测试增加计时不参与呼吸动画、确认卡中等宽度高度上限、模型提示段落缩进，以及分隔线两端精确贴齐正文列的断言。
+
+## Required Fidelity Surfaces
+
+- Fonts and typography：沿用既有状态、提示胶囊、模型事件和助手正文的系统字号、字重及等宽计时格式，没有引入新的字号层级。
+- Spacing and layout rhythm：终端提示在可用空间内优先单行；模型切换标签保持居中，分隔线外端与助手正文左右边界严格共线。
+- Colors and visual tokens：继续读取当前皮肤的 accent、secondary text、selection fill 与 hairline token，没有新增硬编码产品色。
+- Image quality and asset fidelity：提示图标继续使用现有 SF Symbols；实现截图由真实 SwiftUI/TextKit 生产组件在 Retina 2× 下生成。
+- Copy and content：没有新增用户可见文案；所有现有文本继续走本地化资源。
+
+## Findings
+
+同画布对比确认：终端确认卡由参考图的三行提示收束为一行，且没有压缩、裁切或遮挡；模型切换提示由参考图中越出正文列的分隔线，修正为左右外端分别贴齐助手正文边界。动态计时不适合用单帧截图判断，因此以动画作用域代码和回归断言验证；文字、标签与经过时间均不再继承无限动画。没有未解决的 P0、P1 或 P2 视觉差异。
+
+## 验证
+
+- `AgentConfirmationVisualTests`：4 项通过，覆盖三种宽度、多皮肤快照、计时动画策略与 520pt 单行布局高度门槛。
+- `AgentChatHistoryRendererTests`：77 项通过，覆盖模型提示正文缩进、分隔线左右边界和生产 TextKit 快照。
+- 参考图与实现图已经分别放进两个同画布比较文件并打开检查。
+- `ruby scripts/version_consistency.rb` 通过，当前工作区版本为 `1.195.0-rc4`；`git diff --check` 通过。
+
+final result: passed
+
+---
+
 # Design QA：Codex 风格逐文件 Diff 卡片
 
 ## 验收范围

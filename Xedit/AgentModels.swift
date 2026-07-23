@@ -92,6 +92,10 @@ nonisolated struct AgentSession: Identifiable, Codable, Equatable {
     /// Which execution backend the composer should use for the next
     /// user turn. Defaults to WillDeep's native agent loop.
     var executionAgent: AgentExecutionAgent
+    /// Durable contracts, evidence, retries, and acceptance verdicts for
+    /// external coding-agent work. WillDeep owns this ledger; delegated CLIs
+    /// can contribute evidence but cannot rewrite the contract or verdict.
+    var delegatedTaskRuns: [AgentDelegatedTaskRun]
     /// Per-session opt-in specialist packs. Default empty keeps broad,
     /// domain-specific tools out of ordinary chats until the user turns
     /// an expert on.
@@ -175,6 +179,7 @@ nonisolated struct AgentSession: Identifiable, Codable, Equatable {
         interactionMode: AgentInteractionMode = .normal,
         approvalMode: AgentApprovalMode = .smart,
         executionAgent: AgentExecutionAgent = .willDeep,
+        delegatedTaskRuns: [AgentDelegatedTaskRun] = [],
         activeExperts: Set<AgentExpert> = [],
         currentPlan: AgentPlan? = nil,
         currentGoal: AgentGoal? = nil,
@@ -213,6 +218,7 @@ nonisolated struct AgentSession: Identifiable, Codable, Equatable {
         self.interactionMode = interactionMode
         self.approvalMode = approvalMode
         self.executionAgent = executionAgent
+        self.delegatedTaskRuns = delegatedTaskRuns
         self.activeExperts = activeExperts
         self.currentPlan = currentPlan
         self.currentGoal = currentGoal
@@ -291,7 +297,7 @@ nonisolated struct AgentSession: Identifiable, Codable, Equatable {
         case id, title, workspaceRootPath, workspaceLocation, sidebarWorkspaceRootPath, localWorkspaceIdentity, modelID
         case providerID, providerDisplayName, managedRouting
         case createdAt, updatedAt, messages, contextSummary, contextSummaryThroughMessageID
-        case didEditFiles, agentEditedPaths, agentArtifactPaths, interactionMode, approvalMode, executionAgent, activeExperts, currentPlan, currentGoal, goalPlanningState, goalTurnRecoveryCheckpoint, learningEvents, latestTurnRecall, documentAttachments, knowledgeFolders, documentTaskMode, redactSensitiveAttachmentContent, sidePanelState
+        case didEditFiles, agentEditedPaths, agentArtifactPaths, interactionMode, approvalMode, executionAgent, delegatedTaskRuns, activeExperts, currentPlan, currentGoal, goalPlanningState, goalTurnRecoveryCheckpoint, learningEvents, latestTurnRecall, documentAttachments, knowledgeFolders, documentTaskMode, redactSensitiveAttachmentContent, sidePanelState
         case pinnedAt, archivedAt, titleIsUserSet
     }
 
@@ -319,6 +325,10 @@ nonisolated struct AgentSession: Identifiable, Codable, Equatable {
         self.interactionMode = try c.decodeIfPresent(AgentInteractionMode.self, forKey: .interactionMode) ?? .normal
         self.approvalMode = try c.decodeIfPresent(AgentApprovalMode.self, forKey: .approvalMode) ?? .smart
         self.executionAgent = try c.decodeIfPresent(AgentExecutionAgent.self, forKey: .executionAgent) ?? .willDeep
+        self.delegatedTaskRuns = try c.decodeIfPresent(
+            [AgentDelegatedTaskRun].self,
+            forKey: .delegatedTaskRuns
+        ) ?? []
         self.activeExperts = try c.decodeIfPresent(Set<AgentExpert>.self, forKey: .activeExperts) ?? []
         self.currentPlan = try c.decodeIfPresent(AgentPlan.self, forKey: .currentPlan)
         self.currentGoal = try c.decodeIfPresent(AgentGoal.self, forKey: .currentGoal)
@@ -861,6 +871,21 @@ nonisolated enum AgentExecutionAgent: String, Codable, CaseIterable, Identifiabl
         case .codexCLI: return "workspaceWrite"
         case .cursorAgent: return "default"
         case .clineCLI: return "act"
+        }
+    }
+
+    init?(delegatedToolName: String) {
+        switch delegatedToolName {
+        case "claude_code":
+            self = .claudeCode
+        case "codex_cli":
+            self = .codexCLI
+        case "cursor_agent":
+            self = .cursorAgent
+        case "cline_cli":
+            self = .clineCLI
+        default:
+            return nil
         }
     }
 }

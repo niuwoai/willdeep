@@ -67,9 +67,9 @@ enum AgentToolApprovalNotifier {
         switch job.status {
         case .completed: statusWord = "exit 0"
         case .failed: statusWord = "exit \(job.exitCode ?? -1)"
-        case .killed: statusWord = "killed"
-        case .timedOut: statusWord = "timed out"
-        case .launchFailed: statusWord = "launch failed"
+        case .killed: statusWord = L10n.AgentJobs.statusKilled
+        case .timedOut: statusWord = L10n.AgentJobs.statusTimedOut
+        case .launchFailed: statusWord = L10n.AgentJobs.statusLaunchFailed
         case .running: return // shouldn't happen — we only fire on finish
         }
         let content = UNMutableNotificationContent()
@@ -132,18 +132,18 @@ enum AgentToolApprovalNotifier {
         center.add(request, withCompletionHandler: nil)
     }
 
-    private static func titleText(for status: AgentToolCallStatus) -> String {
+    static func titleText(for status: AgentToolCallStatus) -> String {
         switch status {
-        case .pendingApproval: return "Agent 需要授权"
-        case .awaitingConfirm: return "Agent 需要确认"
-        case .awaitingUserAnswer: return "Agent 在等你回答"
-        default: return "Agent 需要你"
+        case .pendingApproval: return L10n.AgentNotifications.approvalTitle
+        case .awaitingConfirm: return L10n.AgentNotifications.confirmationTitle
+        case .awaitingUserAnswer: return L10n.AgentNotifications.answerTitle
+        default: return L10n.AgentNotifications.attentionTitle
         }
     }
 
     /// Returns the notification body, or nil if the status doesn't
     /// warrant a notification (running / succeeded / failed / denied).
-    private static func bodyText(
+    static func bodyText(
         for toolName: String,
         arguments: [String: AgentJSONValue],
         status: AgentToolCallStatus
@@ -162,7 +162,7 @@ enum AgentToolApprovalNotifier {
     /// commands we surface just the program (and its subcommand for wrappers
     /// like `git`/`go`), never the full argument line, which used to spill
     /// long paths and flags into the notification.
-    private static func descriptor(toolName: String, arguments: [String: AgentJSONValue]) -> String {
+    static func descriptor(toolName: String, arguments: [String: AgentJSONValue]) -> String {
         if toolName == "run_command", let command = arguments["command"]?.stringValue() {
             return commandSummary(command)
         }
@@ -173,9 +173,43 @@ enum AgentToolApprovalNotifier {
         }
         if let path = arguments["path"]?.stringValue() {
             // Just the filename, not the whole path.
-            return "\(toolName) · \((path as NSString).lastPathComponent)"
+            return L10n.AgentNotifications.toolWithFile(
+                localizedToolName(for: toolName),
+                fileName: (path as NSString).lastPathComponent
+            )
         }
-        return toolName
+        return localizedToolName(for: toolName)
+    }
+
+    private static func localizedToolName(for toolName: String) -> String {
+        switch toolName {
+        case "run_command":
+            return L10n.AgentNotifications.toolRunCommand
+        case "terminal_send_command":
+            return L10n.AgentNotifications.toolTerminalCommand
+        case "terminal_send_control":
+            return L10n.AgentNotifications.toolTerminalControl
+        case "edit_file":
+            return L10n.AgentNotifications.toolEditFile
+        case "create_file":
+            return L10n.AgentNotifications.toolCreateFile
+        case "apply_patch":
+            return L10n.AgentNotifications.toolApplyPatch
+        case "web_fetch":
+            return L10n.AgentNotifications.toolFetchWebpage
+        case "ask_user":
+            return L10n.AgentNotifications.toolAskUser
+        default:
+            if toolName.hasPrefix("computer_use_") {
+                return L10n.AgentNotifications.toolComputerUse
+            }
+            if toolName.hasPrefix("chrome_") || toolName.hasPrefix("browser_") {
+                return L10n.AgentNotifications.toolBrowserControl
+            }
+            // Preserve unknown provider/MCP tool IDs so the notification is
+            // still actionable for diagnostics instead of inventing a label.
+            return toolName
+        }
     }
 
     private static func notificationTitle(for job: AgentBackgroundJob) -> String {
@@ -196,7 +230,11 @@ enum AgentToolApprovalNotifier {
     /// e.g. `git commit -m "..."` → `git commit`, `mkdir -p a/b/c` → `mkdir`.
     private static func commandSummary(_ command: String) -> String {
         let tokens = SafeCommand.tokenize(command)
-        guard let head = tokens.first else { return command.isEmpty ? "命令" : truncated(command, limit: 40) }
+        guard let head = tokens.first else {
+            return command.isEmpty
+                ? L10n.AgentNotifications.command
+                : truncated(command, limit: 40)
+        }
         let wrappers: Set<String> = [
             "git", "go", "npm", "pnpm", "yarn", "cargo", "make", "swift",
             "python", "python3", "node", "ruby", "rake", "docker", "kubectl", "brew"

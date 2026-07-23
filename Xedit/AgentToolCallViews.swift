@@ -1066,10 +1066,7 @@ struct AgentToolCallCard: View {
                     authorizationExplanationButton(title: explanationTitle)
                 }
             }
-            .frame(
-                minWidth: AgentConfirmationReviewMetrics.horizontalContentMinimumWidth,
-                alignment: .leading
-            )
+            .fixedSize(horizontal: true, vertical: false)
             VStack(alignment: .leading, spacing: 10) {
                 authorizationMetadataRows(descriptor.metadata)
                 if let explanationTitle = descriptor.explanationTitle {

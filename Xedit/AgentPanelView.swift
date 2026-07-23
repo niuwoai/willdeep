@@ -564,6 +564,7 @@ nonisolated enum AgentThinkingAnimationMetrics {
     static let duration: TimeInterval = 1.4
     static let minimumBackgroundOpacity = 0.075
     static let maximumBackgroundOpacity = 0.115
+    static let animatesElapsedTime = false
 }
 
 private struct AgentInlineStatusIcon: View {

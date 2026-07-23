@@ -27,7 +27,15 @@ struct AgentSidebarListVisualMetricsTests {
         #expect(AgentStatsDashboardTypography.body == 13)
         #expect(AgentStatsDashboardTypography.sectionTitle == 14)
         #expect(AgentStatsDashboardTypography.metricValue == 16)
+        #expect(AgentStatsDashboardTypography.heroValue == 34)
+        #expect(AgentStatsDashboardTypography.heroLabel == 16)
+        #expect(AgentStatsDashboardTypography.modelSummaryValue == 24)
         #expect(AgentStatsDashboardTypography.compactBadge == AgentStatsDashboardTypography.body)
+        #expect(AgentStatsDashboardLayout.panelPadding == 18)
+        #expect(AgentStatsDashboardLayout.summaryCornerRadius == 10)
+        #expect(AgentStatsDashboardLayout.heatmapCellSize == 8)
+        #expect(AgentStatsDashboardLayout.heatmapCellSpacing == 1.5)
+        #expect(AgentStatsDashboardLayout.maximumHeatmapWeeks == 52)
     }
 
     @Test("workspace and conversation titles share the Codex text column")

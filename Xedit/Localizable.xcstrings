@@ -1,6 +1,33 @@
 {
   "sourceLanguage" : "en",
   "strings" : {
+    "delegated-task.acceptance-passed-attempt" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Executor self-review and WillDeep acceptance passed on attempt %d." } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "执行器自验收与 WillDeep 二次验收已在第 %d 次执行通过。" } } } },
+    "delegated-task.acceptance-unavailable" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "No acceptance verdict is available." } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "未能取得验收结论。" } } } },
+    "delegated-task.accepted" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Accepted" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "验收通过" } } } },
+    "delegated-task.attempt" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Attempt %1$d / %2$d" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "第 %1$d / %2$d 次执行" } } } },
+    "delegated-task.changed-file-count" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "%d changed file(s)" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "%d 个变更文件" } } } },
+    "delegated-task.changed-files" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Changed files" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "变更文件" } } } },
+    "delegated-task.failed" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Delegated task failed" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "委托任务失败" } } } },
+    "delegated-task.finding-count" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "%d acceptance finding(s)" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "%d 个验收问题" } } } },
+    "delegated-task.findings" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Findings" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "验收问题" } } } },
+    "delegated-task.host-rerun" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "WillDeep verification rerun" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "WillDeep 独立复跑" } } } },
+    "delegated-task.interrupted" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "WillDeep restarted before this delegated task finished." } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "WillDeep 重启时该委托任务尚未完成，已标记为中断。" } } } },
+    "delegated-task.no-execution-output" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "No executor output was captured." } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "未捕获到执行器输出。" } } } },
+    "delegated-task.no-safe-verification-command" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "No safe verification command was supplied; structural acceptance still ran." } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "执行器未提供可安全复跑的命令；WillDeep 仍已完成结构化验收。" } } } },
+    "delegated-task.no-tasks" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "No delegated task ledger yet" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "暂无外部委托验收台账" } } } },
+    "delegated-task.phase.cancelled" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Cancelled" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "已取消" } } } },
+    "delegated-task.phase.contracted" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Contracted" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "契约已建立" } } } },
+    "delegated-task.phase.executing" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Executing" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "执行中" } } } },
+    "delegated-task.phase.failed" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Failed" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "失败" } } } },
+    "delegated-task.phase.ready-for-delivery" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Accepted" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "验收通过" } } } },
+    "delegated-task.phase.rework-required" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Rework required" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "需要定点返工" } } } },
+    "delegated-task.phase.self-verifying" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Executor reviewing" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "执行器独立验收中" } } } },
+    "delegated-task.phase.willdeep-verifying" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "WillDeep verifying" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "WillDeep 二次验收中" } } } },
+    "delegated-task.rejected" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Rejected" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "验收未通过" } } } },
+    "delegated-task.rework" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Point rework" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "定点返工" } } } },
+    "delegated-task.section-title" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Delegated acceptance" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "外部委托验收" } } } },
+    "delegated-task.self-review" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Self review" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "执行器独立验收" } } } },
+    "delegated-task.unsafe-verification-command" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "WillDeep refused to rerun a command outside the safe verification boundary." } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "该命令超出安全复跑边界，WillDeep 已拒绝执行。" } } } },
     "agent-workspace-collision.isolate" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Isolate in worktree" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "隔离到 worktree" } } } },
     "agent-workspace-collision.isolate.help" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Create a separate Git worktree and move this conversation there so it no longer shares the checkout" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "创建独立的 Git worktree，并将当前会话的运行目录移入其中；会话仍保留在原工作区" } } } },
     "agent-workspace-collision.warning" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Another %d session(s) are working in this same folder — edits may overwrite each other." } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "另有 %d 个会话正在此目录中工作，修改可能互相覆盖。" } } } },
@@ -2159,6 +2186,22 @@
         }
       }
     },
+    "agent-notification.command" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Command" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "命令" } } } },
+    "agent-notification.interaction.answer-title" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Agent is waiting for your answer" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "Agent 在等你回答" } } } },
+    "agent-notification.interaction.approval-title" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Agent needs authorization" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "Agent 需要授权" } } } },
+    "agent-notification.interaction.attention-title" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Agent needs your attention" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "Agent 需要你处理" } } } },
+    "agent-notification.interaction.confirmation-title" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Agent needs confirmation" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "Agent 需要确认" } } } },
+    "agent-notification.tool.apply-patch" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Apply patch" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "应用补丁" } } } },
+    "agent-notification.tool.ask-user" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Answer Agent question" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "回答 Agent 问题" } } } },
+    "agent-notification.tool.browser-control" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Control browser" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "操作浏览器" } } } },
+    "agent-notification.tool.computer-use" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Use computer" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "操作电脑" } } } },
+    "agent-notification.tool.create-file" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Create file" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "创建文件" } } } },
+    "agent-notification.tool.edit-file" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Edit file" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "编辑文件" } } } },
+    "agent-notification.tool.fetch-webpage" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Fetch webpage" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "读取网页" } } } },
+    "agent-notification.tool.run-command" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Run command" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "运行命令" } } } },
+    "agent-notification.tool.terminal-command" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Send command to terminal" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "终端执行命令" } } } },
+    "agent-notification.tool.terminal-control" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Control terminal" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "发送终端控制键" } } } },
+    "agent-notification.tool-with-file" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "%1$@ · %2$@" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "%1$@ · %2$@" } } } },
     "agent-jobs.collapse-help" : {
       "comment" : "Tooltip on the close button inside the background-jobs drawer",
       "extractionState" : "manual",
@@ -12930,6 +12973,48 @@
             "value" : "输入 / 输出"
           }
         }
+      }
+    },
+    "model-usage.summary.count" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "%1$@ models · %2$@ providers" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "%1$@ 个模型 · %2$@ 个提供方" } }
+      }
+    },
+    "model-usage.summary.estimated-cost" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Estimated cost" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "预估费用" } }
+      }
+    },
+    "model-usage.summary.highest-cache" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Highest cache" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "最高缓存" } }
+      }
+    },
+    "model-usage.summary.input-tokens" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Input tokens" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "输入 Token" } }
+      }
+    },
+    "model-usage.summary.output-tokens" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Output tokens" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "输出 Token" } }
+      }
+    },
+    "model-usage.title" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Model usage" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "模型消耗" } }
       }
     },
     "model-usage.messages" : {

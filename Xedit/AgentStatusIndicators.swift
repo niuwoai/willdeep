@@ -35,11 +35,23 @@ enum AgentStatsDashboardTypography {
     static let body: CGFloat = 13
     static let sectionTitle: CGFloat = 14
     static let metricValue: CGFloat = 16
+    static let heroValue: CGFloat = 34
+    static let heroLabel: CGFloat = 16
+    static let modelSummaryValue: CGFloat = 24
     static let compactBadge: CGFloat = 13
+}
+
+enum AgentStatsDashboardLayout {
+    static let panelPadding: CGFloat = 18
+    static let summaryCornerRadius: CGFloat = 10
+    static let heatmapCellSize: CGFloat = 8
+    static let heatmapCellSpacing: CGFloat = 1.5
+    static let maximumHeatmapWeeks = 52
 }
 
 struct AgentStatsDashboard: View {
     @EnvironmentObject var appState: AppState
+    @Environment(\.colorScheme) private var colorScheme
     @State private var selectedTab: DashboardTab
     @State private var range: DashboardRange = .all
 
@@ -94,7 +106,7 @@ struct AgentStatsDashboard: View {
                     .frame(maxWidth: .infinity, minHeight: 160)
             }
         }
-        .padding(22)
+        .padding(AgentStatsDashboardLayout.panelPadding)
         .background(
             RoundedRectangle(cornerRadius: 14)
                 .fill(palette.panelFill)
@@ -109,14 +121,15 @@ struct AgentStatsDashboard: View {
     }
 
     private var dashboardContent: some View {
-        VStack(alignment: .leading, spacing: 18) {
+        VStack(alignment: .leading, spacing: 14) {
             tabBar
             if selectedTab == .overview {
-                metricStrip
+                overviewSummaryBand
                 activitySection
                 detailSections
                 funFact
             } else {
+                modelSummaryBand
                 modelUsageList
             }
         }
@@ -138,11 +151,11 @@ struct AgentStatsDashboard: View {
                             .padding(.vertical, 6)
                             .background(
                                 selectedTab == tab
-                                    ? AnyShapeStyle(appState.editorSettings.interfaceSkin.palette.controlFill)
+                                    ? AnyShapeStyle(dashboardSelectionFill)
                                     : AnyShapeStyle(Color.clear)
                             )
-                            .foregroundStyle(selectedTab == tab ? .primary : .secondary)
-                            .clipShape(RoundedRectangle(cornerRadius: 6))
+                            .foregroundStyle(selectedTab == tab ? dashboardAccent : Color.secondary)
+                            .clipShape(RoundedRectangle(cornerRadius: 7))
                     }
                     .buttonStyle(.plain)
                 }
@@ -160,7 +173,9 @@ struct AgentStatsDashboard: View {
                             ))
                             .padding(.horizontal, 9)
                             .padding(.vertical, 5)
-                            .foregroundStyle(range == value ? .primary : .secondary)
+                            .background(range == value ? dashboardSelectionFill : Color.clear)
+                            .foregroundStyle(range == value ? dashboardAccent : Color.secondary)
+                            .clipShape(RoundedRectangle(cornerRadius: 7))
                     }
                     .buttonStyle(.plain)
                 }
@@ -196,36 +211,65 @@ struct AgentStatsDashboard: View {
         }.filter { !$0.messages.isEmpty }
     }
 
-    private var metricStrip: some View {
+    private var overviewSummaryBand: some View {
         let stats = overview
-        return HStack(spacing: 0) {
-            DashboardMetric(
+        return HStack(spacing: 12) {
+            HStack(alignment: .firstTextBaseline, spacing: 7) {
+                Text(formatCompact(stats.artifactCount))
+                    .font(supportingFont(
+                        visualMinimum: AgentStatsDashboardTypography.heroValue,
+                        weight: .semibold
+                    ))
+                    .foregroundStyle(dashboardAccent)
+                Text(L10n.StatsDashboard.metricArtifacts)
+                    .font(supportingFont(
+                        visualMinimum: AgentStatsDashboardTypography.heroLabel,
+                        weight: .semibold
+                    ))
+                    .foregroundStyle(.primary)
+            }
+            .fixedSize(horizontal: true, vertical: false)
+
+            Divider()
+                .frame(height: 44)
+
+            DashboardSummaryFact(
                 title: L10n.StatsDashboard.metricTaskTurns,
                 value: formatCompact(stats.userTurnCount)
             )
-            DashboardMetric(
-                title: L10n.StatsDashboard.metricToolCalls,
-                value: formatCompact(stats.toolCallCount)
-            )
-            DashboardMetric(
+            DashboardSummaryFact(
                 title: L10n.StatsDashboard.metricFilesChanged,
                 value: formatCompact(stats.editedFileCount)
             )
-            DashboardMetric(
-                title: L10n.StatsDashboard.metricArtifacts,
-                value: formatCompact(stats.artifactCount)
+            DashboardSummaryFact(
+                title: L10n.StatsDashboard.metricToolCalls,
+                value: formatCompact(stats.toolCallCount)
             )
-            DashboardMetric(
-                title: L10n.StatsDashboard.metricCurrentStreak,
-                value: L10n.StatsDashboard.dayCount("\(stats.currentStreak)"),
-                showsDivider: false
-            )
+
+            Spacer(minLength: 2)
+
+            Divider()
+                .frame(height: 44)
+
+            VStack(alignment: .trailing, spacing: 2) {
+                Text(L10n.StatsDashboard.metricCurrentStreak)
+                    .font(supportingFont(visualMinimum: AgentStatsDashboardTypography.body))
+                    .foregroundStyle(.secondary)
+                Text(L10n.StatsDashboard.dayCount("\(stats.currentStreak)"))
+                    .font(supportingFont(
+                        visualMinimum: AgentStatsDashboardTypography.metricValue,
+                        weight: .semibold
+                    ))
+                    .foregroundStyle(dashboardAccent)
+            }
+            .fixedSize(horizontal: true, vertical: false)
         }
-        .padding(.vertical, 10)
-        .background(appState.editorSettings.interfaceSkin.palette.controlFill.opacity(0.24))
-        .clipShape(RoundedRectangle(cornerRadius: 11))
+        .padding(.horizontal, 14)
+        .padding(.vertical, 11)
+        .background(dashboardSummaryFill)
+        .clipShape(RoundedRectangle(cornerRadius: AgentStatsDashboardLayout.summaryCornerRadius))
         .overlay(
-            RoundedRectangle(cornerRadius: 11)
+            RoundedRectangle(cornerRadius: AgentStatsDashboardLayout.summaryCornerRadius)
                 .stroke(appState.editorSettings.interfaceSkin.palette.hairline, lineWidth: 1)
         )
     }
@@ -249,8 +293,8 @@ struct AgentStatsDashboard: View {
             }
 
             GeometryReader { proxy in
-                let cellSize: CGFloat = 10
-                let cellSpacing: CGFloat = 3
+                let cellSize = AgentStatsDashboardLayout.heatmapCellSize
+                let cellSpacing = AgentStatsDashboardLayout.heatmapCellSpacing
                 let weekCount = heatmapWeekCount(
                     for: proxy.size.width,
                     cellSize: cellSize,
@@ -263,7 +307,7 @@ struct AgentStatsDashboard: View {
                     ForEach(Array(cells.enumerated()), id: \.offset) { _, column in
                         VStack(spacing: cellSpacing) {
                             ForEach(column) { cell in
-                                RoundedRectangle(cornerRadius: 2)
+                                RoundedRectangle(cornerRadius: 1.5)
                                     .fill(color(for: cell.count, peak: maxCount))
                                     .frame(width: cellSize, height: cellSize)
                                     .help(L10n.HeatmapCell.tooltip(cellDateLabel(cell.date), String(cell.count)))
@@ -278,15 +322,16 @@ struct AgentStatsDashboard: View {
     }
 
     private var heatmapHeight: CGFloat {
-        let cellSize: CGFloat = 10
-        let cellSpacing: CGFloat = 3
+        let cellSize = AgentStatsDashboardLayout.heatmapCellSize
+        let cellSpacing = AgentStatsDashboardLayout.heatmapCellSpacing
         return 7 * cellSize + 6 * cellSpacing
     }
 
     private var detailSections: some View {
-        HStack(alignment: .top, spacing: 24) {
+        HStack(alignment: .top, spacing: 18) {
             insightSection
                 .frame(maxWidth: .infinity, alignment: .leading)
+            Divider()
             capabilitySection
                 .frame(maxWidth: .infinity, alignment: .leading)
         }
@@ -338,11 +383,11 @@ struct AgentStatsDashboard: View {
                     .foregroundStyle(.secondary)
                     .frame(minHeight: 68, alignment: .leading)
             } else {
-                ForEach(capabilityRows.prefix(5)) { row in
+                ForEach(Array(capabilityRows.prefix(5).enumerated()), id: \.element.id) { index, row in
                     HStack(spacing: 7) {
                         Image(systemName: row.capability.systemImage)
                             .font(.system(size: AgentStatsDashboardTypography.body, weight: .medium))
-                            .foregroundStyle(appState.editorSettings.interfaceSkin.palette.accent)
+                            .foregroundStyle(index == 0 ? dashboardAccent : Color.secondary)
                             .frame(width: 16)
                         Text(row.capability.title)
                             .font(supportingFont(visualMinimum: AgentStatsDashboardTypography.body))
@@ -350,7 +395,7 @@ struct AgentStatsDashboard: View {
                         Spacer(minLength: 0)
                         Text(L10n.StatsDashboard.callCount(formatCompact(row.callCount)))
                             .font(supportingFont(visualMinimum: AgentStatsDashboardTypography.body))
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(index == 0 ? dashboardAccent : Color.secondary)
                     }
                 }
             }
@@ -366,21 +411,105 @@ struct AgentStatsDashboard: View {
                     .foregroundStyle(.secondary)
                     .frame(maxWidth: .infinity, minHeight: 112, alignment: .center)
             } else {
-                VStack(alignment: .leading, spacing: 8) {
-                    modelUsageHeader
+                VStack(alignment: .leading, spacing: 9) {
+                    HStack(alignment: .firstTextBaseline) {
+                        Text(L10n.ModelUsage.title)
+                            .font(supportingFont(
+                                visualMinimum: AgentStatsDashboardTypography.sectionTitle,
+                                weight: .semibold
+                            ))
+                        Spacer(minLength: 0)
+                        Text(L10n.ModelUsage.summaryCount(
+                            formatCompact(rows.count),
+                            formatCompact(Set(rows.map(\.providerID)).count)
+                        ))
+                            .font(supportingFont(visualMinimum: AgentStatsDashboardTypography.body))
+                            .foregroundStyle(.secondary)
+                    }
+
                     ScrollView {
-                        VStack(alignment: .leading, spacing: 8) {
-                            ForEach(rows) { row in
+                        VStack(alignment: .leading, spacing: 0) {
+                            modelUsageHeader
+                                .padding(.vertical, 8)
+                            Divider()
+                            ForEach(Array(rows.enumerated()), id: \.element.id) { index, row in
                                 modelUsageRow(row)
+                                if index < rows.count - 1 {
+                                    Divider()
+                                        .padding(.horizontal, AgentModelUsageTableLayout.horizontalInset)
+                                }
                             }
                         }
-                        .padding(.vertical, 1)
+                        .background(dashboardSummaryFill.opacity(0.55))
+                        .clipShape(RoundedRectangle(cornerRadius: AgentStatsDashboardLayout.summaryCornerRadius))
+                        .overlay(
+                            RoundedRectangle(cornerRadius: AgentStatsDashboardLayout.summaryCornerRadius)
+                                .stroke(appState.editorSettings.interfaceSkin.palette.hairline, lineWidth: 1)
+                        )
                     }
-                    .frame(maxHeight: 220)
+                    .frame(maxHeight: 240)
                     modelUsageFootnote(rows)
                 }
             }
         }
+    }
+
+    private var modelSummaryBand: some View {
+        let rows = modelUsageRows
+        return HStack(spacing: 12) {
+            VStack(alignment: .leading, spacing: 2) {
+                Text(totalEstimatedCostLabel(rows))
+                    .font(supportingFont(
+                        visualMinimum: AgentStatsDashboardTypography.modelSummaryValue,
+                        weight: .semibold,
+                        design: .monospaced
+                    ))
+                    .foregroundStyle(dashboardAccent)
+                Text(L10n.ModelUsage.summaryEstimatedCost)
+                    .font(supportingFont(visualMinimum: AgentStatsDashboardTypography.body))
+                    .foregroundStyle(.secondary)
+            }
+            .fixedSize(horizontal: true, vertical: false)
+
+            Divider()
+                .frame(height: 44)
+
+            ModelUsageSummaryFact(
+                title: L10n.ModelUsage.summaryInputTokens,
+                value: formatTokens(rows.reduce(0) { $0 + $1.promptTokens })
+            )
+            ModelUsageSummaryFact(
+                title: L10n.ModelUsage.summaryOutputTokens,
+                value: formatTokens(rows.reduce(0) { $0 + $1.completionTokens })
+            )
+
+            Spacer(minLength: 2)
+
+            Divider()
+                .frame(height: 44)
+
+            VStack(alignment: .trailing, spacing: 2) {
+                Text(L10n.ModelUsage.summaryHighestCache)
+                    .font(supportingFont(visualMinimum: AgentStatsDashboardTypography.body))
+                    .foregroundStyle(.secondary)
+                Text(formatPercent(rows.map(\.cacheHitRate).max() ?? 0))
+                    .font(supportingFont(
+                        visualMinimum: AgentStatsDashboardTypography.metricValue,
+                        weight: .semibold,
+                        design: .monospaced
+                    ))
+                    .foregroundStyle(dashboardAccent)
+            }
+            .fixedSize(horizontal: true, vertical: false)
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 11)
+        .background(dashboardSummaryFill)
+        .clipShape(RoundedRectangle(cornerRadius: AgentStatsDashboardLayout.summaryCornerRadius))
+        .overlay(
+            RoundedRectangle(cornerRadius: AgentStatsDashboardLayout.summaryCornerRadius)
+                .stroke(appState.editorSettings.interfaceSkin.palette.hairline, lineWidth: 1)
+        )
     }
 
     private var modelUsageHeader: some View {
@@ -399,35 +528,25 @@ struct AgentStatsDashboard: View {
             weight: .medium
         ))
         .foregroundStyle(.secondary)
-        // Rows use the same inset for their tinted card background. Keeping
-        // the header on that exact inner track aligns every column edge.
         .padding(.horizontal, AgentModelUsageTableLayout.horizontalInset)
     }
 
     private func modelUsageRow(_ row: AgentModelUsageRow) -> some View {
         HStack(alignment: .top, spacing: AgentModelUsageTableLayout.columnSpacing) {
             VStack(alignment: .leading, spacing: 3) {
-                HStack(spacing: 6) {
-                    Text(row.providerName)
-                        .font(supportingFont(
-                            visualMinimum: AgentStatsDashboardTypography.compactBadge,
-                            weight: .semibold
-                        ))
-                        .foregroundStyle(.secondary)
-                        .padding(.horizontal, 6)
-                        .padding(.vertical, 2)
-                        .background(Color.secondary.opacity(0.10))
-                        .clipShape(RoundedRectangle(cornerRadius: 4))
-                    Text(row.modelID)
-                        .font(supportingFont(
-                            visualMinimum: AgentStatsDashboardTypography.body,
-                            weight: .semibold
-                        ))
-                        .foregroundStyle(.primary)
-                        .lineLimit(1)
-                        .truncationMode(.middle)
-                        .help(row.modelID)
-                }
+                Text(row.providerName)
+                    .font(supportingFont(visualMinimum: AgentStatsDashboardTypography.compactBadge))
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                Text(row.modelID)
+                    .font(supportingFont(
+                        visualMinimum: AgentStatsDashboardTypography.body,
+                        weight: .semibold
+                    ))
+                    .foregroundStyle(.primary)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+                    .help(row.modelID)
                 Text(modelUsageSubtitle(row))
                     .font(supportingFont(visualMinimum: AgentStatsDashboardTypography.body))
                     .foregroundStyle(.secondary)
@@ -460,13 +579,11 @@ struct AgentStatsDashboard: View {
                     weight: .semibold,
                     design: .monospaced
                 ))
-                .foregroundStyle(row.estimatedCostUSD == nil ? .secondary : .primary)
+                .foregroundStyle(row.estimatedCostUSD == nil ? Color.secondary : dashboardAccent)
                 .frame(width: AgentModelUsageTableLayout.costWidth, alignment: .trailing)
         }
-        .padding(.vertical, 6)
+        .padding(.vertical, 9)
         .padding(.horizontal, AgentModelUsageTableLayout.horizontalInset)
-        .background(Color.secondary.opacity(0.055))
-        .clipShape(RoundedRectangle(cornerRadius: 6))
     }
 
     private func modelUsageSubtitle(_ row: AgentModelUsageRow) -> String {
@@ -516,13 +633,16 @@ struct AgentStatsDashboard: View {
         guard stride > 0 else { return minimumWeekCount }
 
         let fittingColumns = Int((availableWidth + spacing) / stride)
-        return max(minimumWeekCount, fittingColumns)
+        return min(
+            AgentStatsDashboardLayout.maximumHeatmapWeeks,
+            max(minimumWeekCount, fittingColumns)
+        )
     }
 
     private func color(for count: Int, peak: Int) -> Color {
-        guard count > 0, peak > 0 else { return Color.secondary.opacity(0.12) }
+        guard count > 0, peak > 0 else { return dashboardHeatmapInactive }
         let intensity = min(1.0, Double(count) / Double(peak))
-        return Color.accentColor.opacity(0.25 + 0.6 * intensity)
+        return dashboardAccent.opacity(0.28 + 0.68 * intensity)
     }
 
     private func cellDateLabel(_ date: Date) -> String {
@@ -572,7 +692,23 @@ struct AgentStatsDashboard: View {
 
     private func formatCost(_ row: AgentModelUsageRow) -> String {
         guard let cost = row.estimatedCostUSD else { return L10n.ModelUsage.costUnknown }
-        let prefix = row.hasEstimatedUsage ? "≈" : ""
+        return formatCostValue(cost, estimated: row.hasEstimatedUsage)
+    }
+
+    private func totalEstimatedCostLabel(_ rows: [AgentModelUsageRow]) -> String {
+        let pricedRows = rows.compactMap { row -> (Double, Bool)? in
+            guard let cost = row.estimatedCostUSD else { return nil }
+            return (cost, row.hasEstimatedUsage)
+        }
+        guard !pricedRows.isEmpty else { return L10n.ModelUsage.costUnknown }
+        return formatCostValue(
+            pricedRows.reduce(0) { $0 + $1.0 },
+            estimated: pricedRows.contains { $0.1 }
+        )
+    }
+
+    private func formatCostValue(_ cost: Double, estimated: Bool) -> String {
+        let prefix = estimated ? "≈" : ""
         if cost < 0.01 {
             return "\(prefix)$\(String(format: "%.4f", cost))"
         }
@@ -584,6 +720,30 @@ struct AgentStatsDashboard: View {
         let suffix = hour < 12 ? "AM" : "PM"
         let display = hour == 0 ? 12 : (hour > 12 ? hour - 12 : hour)
         return "\(display) \(suffix)"
+    }
+
+    private var dashboardAccent: Color {
+        colorScheme == .dark
+            ? Color(red: 0.32, green: 0.76, blue: 0.68)
+            : Color(red: 0.03, green: 0.50, blue: 0.45)
+    }
+
+    private var dashboardSelectionFill: Color {
+        colorScheme == .dark
+            ? dashboardAccent.opacity(0.15)
+            : Color(red: 0.90, green: 0.95, blue: 0.93)
+    }
+
+    private var dashboardSummaryFill: Color {
+        colorScheme == .dark
+            ? appState.editorSettings.interfaceSkin.palette.controlFill.opacity(0.30)
+            : Color(red: 0.985, green: 0.985, blue: 0.975)
+    }
+
+    private var dashboardHeatmapInactive: Color {
+        colorScheme == .dark
+            ? Color.secondary.opacity(0.16)
+            : Color(red: 0.89, green: 0.94, blue: 0.92)
     }
 
     private func supportingFont(
@@ -634,14 +794,13 @@ struct StatCell: View {
     }
 }
 
-private struct DashboardMetric: View {
+private struct DashboardSummaryFact: View {
     @EnvironmentObject var appState: AppState
     let title: String
     let value: String
-    var showsDivider = true
 
     var body: some View {
-        VStack(spacing: 3) {
+        VStack(alignment: .leading, spacing: 2) {
             Text(value)
                 .font(AgentDesign.chatSupportingFont(
                     baseFontSize: appState.agentChatBaseFontSize,
@@ -660,14 +819,35 @@ private struct DashboardMetric: View {
                 .lineLimit(1)
                 .truncationMode(.tail)
         }
-        .frame(maxWidth: .infinity)
-        .padding(.horizontal, 5)
-        .overlay(alignment: .trailing) {
-            if showsDivider {
-                Divider()
-                    .padding(.vertical, 3)
-            }
+        .fixedSize(horizontal: true, vertical: false)
+    }
+}
+
+private struct ModelUsageSummaryFact: View {
+    @EnvironmentObject var appState: AppState
+    let title: String
+    let value: String
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text(value)
+                .font(AgentDesign.chatSupportingFont(
+                    baseFontSize: appState.agentChatBaseFontSize,
+                    visualMinimum: AgentStatsDashboardTypography.metricValue,
+                    weight: .semibold,
+                    design: .monospaced
+                ))
+                .foregroundStyle(.primary)
+                .lineLimit(1)
+            Text(title)
+                .font(AgentDesign.chatSupportingFont(
+                    baseFontSize: appState.agentChatBaseFontSize,
+                    visualMinimum: AgentStatsDashboardTypography.body
+                ))
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
         }
+        .fixedSize(horizontal: true, vertical: false)
     }
 }
 

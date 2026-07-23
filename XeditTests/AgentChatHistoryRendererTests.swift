@@ -39,6 +39,60 @@ struct AgentChatHistoryRendererTests {
     }
 
     @Test
+    func startingNewTurnDoesNotReusePreviousAssistantAsStreamingMessage() {
+        let previousUser = AgentMessage(
+            role: .user,
+            content: "上一轮问题",
+            createdAt: Date(timeIntervalSince1970: 100)
+        )
+        let previousAssistant = AgentMessage(
+            role: .assistant,
+            content: "```bash\nprevious-command\n```",
+            createdAt: Date(timeIntervalSince1970: 101)
+        )
+        let currentUser = AgentMessage(
+            role: .user,
+            content: "新消息",
+            createdAt: Date(timeIntervalSince1970: 102)
+        )
+
+        let selectedID = AgentStreamingMessageSelection.currentAssistantID(
+            in: [previousUser, previousAssistant, currentUser],
+            isResponding: true,
+            turnStartedAt: Date(timeIntervalSince1970: 103)
+        )
+
+        #expect(selectedID == nil)
+    }
+
+    @Test
+    func currentTurnAssistantBecomesStreamingMessageAfterItIsAppended() {
+        let previousAssistant = AgentMessage(
+            role: .assistant,
+            content: "上一轮回答",
+            createdAt: Date(timeIntervalSince1970: 101)
+        )
+        let currentUser = AgentMessage(
+            role: .user,
+            content: "新消息",
+            createdAt: Date(timeIntervalSince1970: 102)
+        )
+        let currentAssistant = AgentMessage(
+            role: .assistant,
+            content: "正在回答",
+            createdAt: Date(timeIntervalSince1970: 104)
+        )
+
+        let selectedID = AgentStreamingMessageSelection.currentAssistantID(
+            in: [previousAssistant, currentUser, currentAssistant],
+            isResponding: true,
+            turnStartedAt: Date(timeIntervalSince1970: 103)
+        )
+
+        #expect(selectedID == currentAssistant.id)
+    }
+
+    @Test
     func transcriptLayoutWidthUsesStableEightPointBuckets() {
         #expect(AgentChatHistoryLayoutMetrics.layoutWidthBucket == 8)
         #expect(AgentChatHistoryLayoutMetrics.resolvedLayoutWidth(900) == 896)
@@ -50,7 +104,7 @@ struct AgentChatHistoryRendererTests {
     }
 
     @Test
-    func modelSwitchDividerUsesShortArmsInsteadOfViewportWideRules() throws {
+    func modelSwitchDividerEdgesAlignWithAssistantBodyColumn() throws {
         let segments = AgentChatHistoryLayoutMetrics.transcriptEventDividerSegments(
             textMinX: 360,
             textMaxX: 640,
@@ -60,12 +114,33 @@ struct AgentChatHistoryRendererTests {
         #expect(segments.count == 2)
         let leading = try #require(segments.first)
         let trailing = try #require(segments.last)
-        #expect(leading.end - leading.start == AgentChatHistoryLayoutMetrics.transcriptEventDividerArmLength)
-        #expect(trailing.end - trailing.start == AgentChatHistoryLayoutMetrics.transcriptEventDividerArmLength)
-        #expect(leading.start > 0)
-        #expect(trailing.end < 1_000)
+        #expect(leading.start == AgentChatHistoryLayoutMetrics.assistantContentHeadIndent)
+        #expect(
+            trailing.end
+                == 1_000 - AgentChatHistoryLayoutMetrics.assistantContentTailInset
+        )
         #expect(leading.end == 360 - AgentChatHistoryLayoutMetrics.transcriptEventDividerGap)
         #expect(trailing.start == 640 + AgentChatHistoryLayoutMetrics.transcriptEventDividerGap)
+    }
+
+    @Test
+    func modelSwitchNoticeSharesAssistantBodyInsets() throws {
+        let message = AgentMessage(
+            role: .system,
+            content: "模型已从 deepseek-v4-flash 更改为 gpt-5.6-sol。",
+            transcriptEvent: .modelChanged
+        )
+        let rendered = AgentChatHistoryRenderer.render(messages: [message], isDark: false)
+        let noticeRange = (rendered.string as NSString).range(of: "模型已从")
+        let style = try #require(rendered.attribute(
+            .paragraphStyle,
+            at: noticeRange.location,
+            effectiveRange: nil
+        ) as? NSParagraphStyle)
+
+        #expect(style.headIndent == AgentChatHistoryLayoutMetrics.assistantContentHeadIndent)
+        #expect(style.firstLineHeadIndent == AgentChatHistoryLayoutMetrics.assistantContentHeadIndent)
+        #expect(style.tailIndent == -AgentChatHistoryLayoutMetrics.assistantContentTailInset)
     }
 
     @Test

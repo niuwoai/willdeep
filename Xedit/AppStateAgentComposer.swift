@@ -324,6 +324,18 @@ extension AppState {
         runtime.messages.append(userMessage)
         runtime.latestTurnRecall = nil
 
+        let delegatedContract = AgentDelegatedTaskControl.makeContract(
+            objective: text,
+            executor: executionAgent,
+            goal: runtime.currentGoal
+        )
+        runtime.delegatedTaskRuns.insert(
+            AgentDelegatedTaskRun(contract: delegatedContract),
+            at: 0
+        )
+        if runtime.delegatedTaskRuns.count > 20 {
+            runtime.delegatedTaskRuns.removeLast(runtime.delegatedTaskRuns.count - 20)
+        }
         let prompt = delegatedAgentPrompt(
             userText: text,
             conversationMessages: runtime.messages,
@@ -332,9 +344,14 @@ extension AppState {
             imageDescriptions: nil,
             imageFilePaths: [],
             executionAgent: executionAgent,
-            workspaceLocation: runtime.workspaceLocation ?? runtime.workspaceRootPath.map { .local(path: $0) }
+            workspaceLocation: runtime.workspaceLocation ?? runtime.workspaceRootPath.map { .local(path: $0) },
+            contract: delegatedContract
         )
-        let arguments = Self.delegatedAgentArguments(prompt: prompt, executionAgent: executionAgent)
+        let arguments = Self.delegatedAgentArguments(
+            prompt: prompt,
+            executionAgent: executionAgent,
+            contract: delegatedContract
+        )
         let externalID = "composer-\(executionAgent.rawValue)-\(UUID().uuidString)"
         let assistantMessage = AgentMessage(
             role: .assistant,
@@ -371,6 +388,7 @@ extension AppState {
                 textAttachments: textAttachments,
                 images: images,
                 executionAgent: executionAgent,
+                delegatedRunID: delegatedContract.id,
                 recordID: recordID,
                 externalID: externalID,
                 runtime: runtime
@@ -386,6 +404,7 @@ extension AppState {
         textAttachments: [AgentTextAttachment],
         images: [AgentImageAttachment],
         executionAgent: AgentExecutionAgent,
+        delegatedRunID: UUID,
         recordID: AgentToolCall.ID,
         externalID: String,
         runtime: AgentRuntime
@@ -397,6 +416,11 @@ extension AppState {
         do {
             workspaceURL = try runtime.localWorkspaceURLForOptimisticUse()
         } catch {
+            updateDelegatedTaskRun(id: delegatedRunID, runtime: runtime) { run in
+                run.phase = .failed
+                run.finishedAt = Date()
+                run.lastError = error.localizedDescription
+            }
             finishDelegatedAgentRecord(
                 runtime: runtime,
                 recordID: recordID,
@@ -455,7 +479,11 @@ extension AppState {
                 imageDescriptions: imageDescriptions,
                 imageFilePaths: delegatedImageBundle?.fileURLs.map(\.path) ?? [],
                 executionAgent: executionAgent,
-                workspaceLocation: workspaceLocation
+                workspaceLocation: workspaceLocation,
+                contract: delegatedTaskRun(
+                    id: delegatedRunID,
+                    runtime: runtime
+                )?.contract
             )
             arguments["prompt"] = .string(prompt)
             if let delegatedImageBundle {
@@ -491,6 +519,11 @@ extension AppState {
             risk: risk,
             isActive: runtime.isPlanGateActive
         ) {
+            updateDelegatedTaskRun(id: delegatedRunID, runtime: runtime) { run in
+                run.phase = .cancelled
+                run.finishedAt = Date()
+                run.lastError = "Plan approval required"
+            }
             finishDelegatedAgentRecord(
                 runtime: runtime,
                 recordID: recordID,
@@ -514,7 +547,14 @@ extension AppState {
                 status: .pendingApproval
             )
             let decision = await awaitToolDecision(for: runtime, forCallID: recordID)
-            if Task.isCancelled { return }
+            if Task.isCancelled {
+                updateDelegatedTaskRun(id: delegatedRunID, runtime: runtime) { run in
+                    run.phase = .cancelled
+                    run.finishedAt = Date()
+                    run.lastError = L10n.DelegatedTask.interrupted
+                }
+                return
+            }
             if case .denied(let reason) = decision {
                 AgentSandboxAuditLog.append(
                     toolName: toolName,
@@ -523,6 +563,11 @@ extension AppState {
                     approvalSource: nil,
                     outcome: "denied"
                 )
+                updateDelegatedTaskRun(id: delegatedRunID, runtime: runtime) { run in
+                    run.phase = .cancelled
+                    run.finishedAt = Date()
+                    run.lastError = reason
+                }
                 finishDelegatedAgentRecord(
                     runtime: runtime,
                     recordID: recordID,
@@ -570,27 +615,32 @@ extension AppState {
         )
 
         do {
-            let result = try await AgentToolRunner.run(
-                name: toolName,
-                arguments: arguments,
-                context: context
+            let outcome = try await runDelegatedTaskWithAcceptance(
+                toolName: toolName,
+                initialArguments: arguments,
+                executionAgent: executionAgent,
+                delegatedRunID: delegatedRunID,
+                runtime: runtime,
+                context: context,
+                workspaceURL: workspaceURL,
+                baselineTask: baselineTask
             )
             AgentSandboxAuditLog.append(
                 toolName: toolName,
                 arguments: arguments,
                 decision: sandboxDecision,
                 approvalSource: approvalSource,
-                outcome: "succeeded"
+                outcome: outcome.accepted ? "accepted" : "acceptance_failed"
             )
             finishDelegatedAgentRecord(
                 runtime: runtime,
                 recordID: recordID,
                 externalID: externalID,
                 executionAgent: executionAgent,
-                status: .succeeded,
-                result: result,
-                errorMessage: nil,
-                toolPayload: result.payload
+                status: outcome.accepted ? .succeeded : .failed,
+                result: outcome.result,
+                errorMessage: outcome.accepted ? nil : outcome.errorMessage,
+                toolPayload: outcome.result.payload
             )
             refreshDelegatedAgentWorktreeInBackground(
                 runtimeID: runtime.id,
@@ -598,6 +648,11 @@ extension AppState {
                 baselineTask: baselineTask
             )
         } catch is CancellationError {
+            updateDelegatedTaskRun(id: delegatedRunID, runtime: runtime) { run in
+                run.phase = .cancelled
+                run.finishedAt = Date()
+                run.lastError = "Cancelled"
+            }
             finishDelegatedAgentRecord(
                 runtime: runtime,
                 recordID: recordID,
@@ -614,6 +669,11 @@ extension AppState {
                 runtime: runtime,
                 workspaceURL: workspaceURL
             ) ?? error.localizedDescription
+            updateDelegatedTaskRun(id: delegatedRunID, runtime: runtime) { run in
+                run.phase = .failed
+                run.finishedAt = Date()
+                run.lastError = errorMessage
+            }
             AgentSandboxAuditLog.append(
                 toolName: toolName,
                 arguments: arguments,
@@ -632,6 +692,315 @@ extension AppState {
                 toolPayload: "Tool error: \(errorMessage)"
             )
         }
+    }
+
+    struct DelegatedAcceptanceOutcome {
+        let accepted: Bool
+        let result: AgentToolResult
+        let errorMessage: String?
+    }
+
+    @MainActor
+    func runDelegatedTaskWithAcceptance(
+        toolName: String,
+        initialArguments: [String: AgentJSONValue],
+        executionAgent: AgentExecutionAgent,
+        delegatedRunID: UUID,
+        runtime: AgentRuntime,
+        context: AgentToolContext,
+        workspaceURL: URL?,
+        baselineTask: Task<AgentWorktreeSnapshot, Never>?
+    ) async throws -> DelegatedAcceptanceOutcome {
+        guard let contract = delegatedTaskRun(id: delegatedRunID, runtime: runtime)?.contract else {
+            let result = try await AgentToolRunner.run(
+                name: toolName,
+                arguments: initialArguments,
+                context: context
+            )
+            return DelegatedAcceptanceOutcome(accepted: true, result: result, errorMessage: nil)
+        }
+
+        var arguments = initialArguments
+        var lastExecutionResult: AgentToolResult?
+        var lastAcceptance: AgentDelegatedWillDeepAcceptance?
+
+        for attempt in 1...contract.maxAttempts {
+            updateDelegatedTaskRun(id: delegatedRunID, runtime: runtime) { run in
+                run.phase = .executing
+                run.attempt = attempt
+                run.startedAt = run.startedAt ?? Date()
+                run.finishedAt = nil
+                run.lastError = nil
+            }
+
+            let executionResult = try await AgentToolRunner.run(
+                name: toolName,
+                arguments: arguments,
+                context: context
+            )
+            lastExecutionResult = executionResult
+
+            let currentSnapshot = await Self.loadAgentWorktreeSnapshot(
+                for: workspaceURL,
+                captureArtifactFiles: true
+            )
+            let baselineSnapshot = await baselineTask?.value ?? AgentWorktreeSnapshot(
+                status: GitRepositoryStatus(),
+                changes: AgentWorktreeChangeSummary(),
+                fingerprint: "",
+                fileSignatures: [:]
+            )
+            let changedPaths = Self.agentWorktreePathsChangedSinceBaseline(
+                baseline: baselineSnapshot,
+                current: currentSnapshot
+            ).sorted()
+
+            updateDelegatedTaskRun(id: delegatedRunID, runtime: runtime) { run in
+                run.phase = .selfVerifying
+                run.changedPaths = changedPaths
+            }
+
+            let executorEvidence: AgentDelegatedExecutorEvidence?
+            if contract.requiresFreshSelfReview {
+                let reviewPrompt = AgentDelegatedTaskControl.freshReviewPrompt(
+                    contract: contract,
+                    changedPaths: changedPaths,
+                    executionOutput: executionResult.payload
+                )
+                var reviewArguments = Self.delegatedAgentArguments(
+                    prompt: reviewPrompt,
+                    executionAgent: executionAgent
+                )
+                reviewArguments["permission_mode"] = .string("plan")
+                reviewArguments["run_in_background"] = .bool(false)
+                reviewArguments["use_visible_terminal"] = .bool(true)
+                reviewArguments["visible_terminal_label"] = .string(
+                    "\(executionAgent.displayName) · \(L10n.DelegatedTask.selfReview)"
+                )
+                reviewArguments["timeout_seconds"] = .number(Double(contract.timeoutSeconds))
+                let reviewResult = try? await AgentToolRunner.run(
+                    name: toolName,
+                    arguments: reviewArguments,
+                    context: context
+                )
+                executorEvidence = reviewResult.flatMap {
+                    AgentDelegatedTaskControl.parseExecutorEvidence(from: $0.payload)
+                }
+            } else {
+                executorEvidence = AgentDelegatedTaskControl.parseExecutorEvidence(
+                    from: executionResult.payload
+                )
+            }
+
+            updateDelegatedTaskRun(id: delegatedRunID, runtime: runtime) { run in
+                run.executorEvidence = executorEvidence
+                run.phase = .willDeepVerifying
+            }
+
+            let rerunChecks = await runDelegatedWillDeepVerification(
+                contract: contract,
+                evidence: executorEvidence,
+                context: context,
+                workspaceURL: workspaceURL
+            )
+            let acceptance = AgentDelegatedTaskControl.structuralAcceptance(
+                contract: contract,
+                evidence: executorEvidence,
+                changedPaths: changedPaths,
+                rerunChecks: rerunChecks
+            )
+            lastAcceptance = acceptance
+
+            updateDelegatedTaskRun(id: delegatedRunID, runtime: runtime) { run in
+                run.willDeepAcceptance = acceptance
+                run.phase = acceptance.accepted ? .readyForDelivery : .reworkRequired
+                run.finishedAt = acceptance.accepted ? Date() : nil
+                run.lastError = acceptance.accepted ? nil : acceptance.summary
+            }
+
+            if acceptance.accepted {
+                let payload = Self.delegatedAcceptedPayload(
+                    executionAgent: executionAgent,
+                    executionResult: executionResult,
+                    acceptance: acceptance,
+                    attempt: attempt
+                )
+                return DelegatedAcceptanceOutcome(
+                    accepted: true,
+                    result: AgentToolResult(
+                        summary: "\(executionAgent.displayName) · \(L10n.DelegatedTask.accepted)",
+                        payload: payload
+                    ),
+                    errorMessage: nil
+                )
+            }
+
+            guard attempt < contract.maxAttempts else { break }
+            arguments["prompt"] = .string(
+                AgentDelegatedTaskControl.reworkPrompt(
+                    contract: contract,
+                    findings: acceptance.findings,
+                    attempt: attempt
+                )
+            )
+            arguments["visible_terminal_label"] = .string(
+                "\(executionAgent.displayName) · \(L10n.DelegatedTask.rework)"
+            )
+        }
+
+        let executionResult = lastExecutionResult ?? AgentToolResult(
+            summary: L10n.DelegatedTask.failed,
+            payload: L10n.DelegatedTask.noExecutionOutput
+        )
+        let acceptance = lastAcceptance ?? AgentDelegatedWillDeepAcceptance(
+            accepted: false,
+            summary: L10n.DelegatedTask.acceptanceUnavailable,
+            checks: [],
+            findings: [L10n.DelegatedTask.acceptanceUnavailable],
+            verifiedAt: Date()
+        )
+        updateDelegatedTaskRun(id: delegatedRunID, runtime: runtime) { run in
+            run.phase = .failed
+            run.finishedAt = Date()
+            run.lastError = acceptance.summary
+        }
+        let findings = acceptance.findings.enumerated()
+            .map { "\($0.offset + 1). \($0.element)" }
+            .joined(separator: "\n")
+        let payload = """
+        \(executionResult.payload)
+
+        --- WillDeep acceptance ---
+        \(acceptance.summary)
+        \(findings)
+        """
+        return DelegatedAcceptanceOutcome(
+            accepted: false,
+            result: AgentToolResult(
+                summary: "\(executionAgent.displayName) · \(L10n.DelegatedTask.rejected)",
+                payload: payload
+            ),
+            errorMessage: acceptance.summary
+        )
+    }
+
+    @MainActor
+    private func runDelegatedWillDeepVerification(
+        contract: AgentDelegatedTaskContract,
+        evidence: AgentDelegatedExecutorEvidence?,
+        context: AgentToolContext,
+        workspaceURL: URL?
+    ) async -> [AgentDelegatedHostCheck] {
+        let commands = AgentDelegatedTaskControl.verificationCommands(
+            contract: contract,
+            evidence: evidence
+        )
+        guard !commands.isEmpty else {
+            return [
+                AgentDelegatedHostCheck(
+                    id: "host-rerun",
+                    label: L10n.DelegatedTask.hostRerun,
+                    status: .skipped,
+                    detail: L10n.DelegatedTask.noSafeVerificationCommand
+                )
+            ]
+        }
+
+        var checks: [AgentDelegatedHostCheck] = []
+        for (offset, command) in commands.enumerated() {
+            guard AgentDelegatedTaskControl.isSafeVerificationCommand(
+                command,
+                workspaceURL: workspaceURL
+            ) else {
+                checks.append(
+                    AgentDelegatedHostCheck(
+                        id: "host-rerun-\(offset + 1)",
+                        label: L10n.DelegatedTask.hostRerun,
+                        status: .inconclusive,
+                        detail: L10n.DelegatedTask.unsafeVerificationCommand,
+                        command: command
+                    )
+                )
+                continue
+            }
+            let decision = AgentSandboxPolicy.commandDecision(
+                command: command,
+                rootDirectory: workspaceURL
+            )
+            do {
+                let result = try await AgentToolRunner.run(
+                    name: "run_command",
+                    arguments: [
+                        "command": .string(command),
+                        "run_in_background": .bool(false),
+                        "timeout_seconds": .number(900)
+                    ],
+                    context: context.withSandboxMode(decision.mode)
+                )
+                checks.append(
+                    AgentDelegatedHostCheck(
+                        id: "host-rerun-\(offset + 1)",
+                        label: L10n.DelegatedTask.hostRerun,
+                        status: .passed,
+                        detail: result.summary,
+                        command: command,
+                        exitCode: 0
+                    )
+                )
+            } catch {
+                checks.append(
+                    AgentDelegatedHostCheck(
+                        id: "host-rerun-\(offset + 1)",
+                        label: L10n.DelegatedTask.hostRerun,
+                        status: .failed,
+                        detail: error.localizedDescription,
+                        command: command
+                    )
+                )
+            }
+        }
+        return checks
+    }
+
+    private func delegatedTaskRun(
+        id: UUID,
+        runtime: AgentRuntime
+    ) -> AgentDelegatedTaskRun? {
+        runtime.delegatedTaskRuns.first(where: { $0.id == id })
+    }
+
+    func updateDelegatedTaskRun(
+        id: UUID,
+        runtime: AgentRuntime,
+        update: (inout AgentDelegatedTaskRun) -> Void
+    ) {
+        guard let index = runtime.delegatedTaskRuns.firstIndex(where: { $0.id == id }) else {
+            return
+        }
+        update(&runtime.delegatedTaskRuns[index])
+        persistAgentSession(runtime: runtime)
+    }
+
+    nonisolated private static func delegatedAcceptedPayload(
+        executionAgent: AgentExecutionAgent,
+        executionResult: AgentToolResult,
+        acceptance: AgentDelegatedWillDeepAcceptance,
+        attempt: Int
+    ) -> String {
+        let handoff = delegatedAgentFinalResponse(from: executionResult.payload)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        let body = handoff.isEmpty
+            ? delegatedAgentVisibleOutputFallback(executionResult.payload)
+            : handoff
+        return """
+        \(executionResult.payload)
+
+        WILLDEEP_FINAL_RESPONSE_BEGIN
+        \(body)
+
+        \(L10n.DelegatedTask.acceptancePassed(attempt))
+        WILLDEEP_FINAL_RESPONSE_END
+        """
     }
 
     private func diagnoseDelegatedLocalWorkspaceIfNeeded(
@@ -830,7 +1199,8 @@ extension AppState {
     static func delegatedExecutionAgent(
         forBackgroundJobCommand command: String
     ) -> AgentExecutionAgent? {
-        guard command.contains("WillDeep Delegated Executor Context Package v1") else {
+        guard command.contains("WillDeep Delegated Executor Context Package v2")
+                || command.contains("WillDeep Delegated Executor Context Package v1") else {
             return nil
         }
         for executionAgent in AgentExecutionAgent.allCases where executionAgent.toolName != nil {
@@ -1005,19 +1375,23 @@ extension AppState {
         imageDescriptions: String?,
         imageFilePaths: [String],
         executionAgent: AgentExecutionAgent,
-        workspaceLocation: WorkspaceLocation?
+        workspaceLocation: WorkspaceLocation?,
+        contract: AgentDelegatedTaskContract? = nil
     ) -> String {
         var blocks: [String] = [
             """
-            WillDeep Delegated Executor Context Package v1
+            WillDeep Delegated Executor Context Package v2
 
             You are being invoked from WillDeep Composer as the selected execution agent: \(executionAgent.displayName).
-            Work on the user's task end-to-end in the current workspace. If you change files, run the most relevant verification you can and summarize what changed.
+            Work on the user's task end-to-end in the current workspace. WillDeep owns the task contract, supervises execution, runs an independent fresh review, and performs the final acceptance gate.
             Keep raw logs, long command output, and implementation scratch notes outside the final response block. WillDeep keeps the full tool output separately; the main conversation should only receive a compact user-facing answer.
 
             At the end of your stdout, emit exactly one final response block by writing `WILLDEEP_FINAL_RESPONSE_BEGIN`, then your concise user-facing answer, then `WILLDEEP_FINAL_RESPONSE_END`. Do not copy placeholder text.
             """
         ]
+        if let contract {
+            blocks.append(AgentDelegatedTaskControl.executorInstructions(contract: contract))
+        }
         if let path = workspaceLocation?.path, !path.isEmpty {
             blocks.append("Workspace: \(path)")
         }
@@ -1068,7 +1442,8 @@ extension AppState {
 
     static func delegatedAgentArguments(
         prompt: String,
-        executionAgent: AgentExecutionAgent
+        executionAgent: AgentExecutionAgent,
+        contract: AgentDelegatedTaskContract? = nil
     ) -> [String: AgentJSONValue] {
         var arguments: [String: AgentJSONValue] = [
             "prompt": .string(prompt),
@@ -1078,6 +1453,14 @@ extension AppState {
         ]
         if let permissionMode = executionAgent.defaultPermissionMode {
             arguments["permission_mode"] = .string(permissionMode)
+        }
+        if let contract {
+            arguments["delegated_task_id"] = .string(contract.id.uuidString)
+            arguments["max_attempts"] = .number(Double(contract.maxAttempts))
+            arguments["timeout_seconds"] = .number(Double(contract.timeoutSeconds))
+            arguments["verification_policy"] = .string(
+                contract.requiresFreshSelfReview ? "double" : "self"
+            )
         }
         return arguments
     }

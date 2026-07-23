@@ -1,6 +1,6 @@
 # Agent Harness Improvement Priorities
 
-> Last updated: 2026-07-23 | Current version: v1.194.0-rc21
+> Last updated: 2026-07-23 | Current version: v1.195.0-rc4
 
 这份文档用于回答一个核心问题：一个 harness 级 Agent 要继续变强，哪些问题必须优先解决。
 
@@ -23,7 +23,7 @@
 
 ## P0：执行自主性
 
-当前状态：依赖安装、构建、测试、后台任务和远端 runtime 已经能通过工具链执行；TLS/临时网络错误有重试；沙箱和审批链路能区分 read/write/danger。
+当前状态：依赖安装、构建、测试、后台任务和远端 runtime 已经能通过工具链执行；TLS/临时网络错误有重试；沙箱和审批链路能区分 read/write/danger。1.195.0-rc1 起，Claude Code、Codex CLI、Cursor Agent 与 Cline CLI 的 Composer 委托及 Goal 模式原生调用统一受任务契约约束，执行器先提交证据并由全新只读上下文复核，WillDeep 再独立检查变更边界与安全验证命令；失败最多返工三轮，未通过不交付，完整阶段与证据持久化并显示在监督栏。
 
 仍然不好：真实任务里只要遇到工具缺失、依赖安装失败、远端环境不完整、证书/代理波动，就容易退化成“让用户本地执行”。Harness 级 Agent 应该先自查环境、自己重试、自己给出可执行修复路径，只有凭据、危险操作或外部安装才交给用户确认。
 

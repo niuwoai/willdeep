@@ -21,6 +21,7 @@ struct AgentTaskMonitorRail: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
                 monitorSection
+                delegatedTasksSection
                 todoSection
                 deliverablesSection
                 workFilesSection
@@ -128,6 +129,24 @@ struct AgentTaskMonitorRail: View {
                     }
                 }
                 .padding(.top, 4)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var delegatedTasksSection: some View {
+        AgentRailSection(
+            title: L10n.DelegatedTask.sectionTitle,
+            systemImage: "person.2.badge.gearshape"
+        ) {
+            if delegatedTaskRuns.isEmpty {
+                AgentRailEmptyRow(text: L10n.DelegatedTask.noTasks)
+            } else {
+                VStack(alignment: .leading, spacing: 9) {
+                    ForEach(delegatedTaskRuns.prefix(3)) { run in
+                        AgentRailDelegatedTaskRow(run: run)
+                    }
+                }
             }
         }
     }
@@ -245,6 +264,10 @@ struct AgentTaskMonitorRail: View {
     private var runtimeJobs: [AgentBackgroundJob] {
         guard let runtimeID = appState.activeAgentSessionID else { return [] }
         return appState.agentJobRegistry.jobs(forRuntime: runtimeID)
+    }
+
+    private var delegatedTaskRuns: [AgentDelegatedTaskRun] {
+        appState.activeRuntime?.delegatedTaskRuns ?? []
     }
 
     private var visibleMediaTasks: [AgentMediaTask] {
@@ -635,6 +658,7 @@ struct AgentSemanticActivityStatusLine: View {
                     .font(.system(size: 12, weight: .semibold))
                     .foregroundStyle(phase.tint)
                     .scaleEffect(iconScale)
+                    .animation(breathingAnimation, value: isBreathingExpanded)
                 Text(phase.label)
                     .font(.system(size: 12, weight: .semibold))
                     .foregroundStyle(phase.tint)
@@ -645,6 +669,11 @@ struct AgentSemanticActivityStatusLine: View {
                         .font(.system(size: 12, weight: .semibold, design: .monospaced))
                         .foregroundStyle(phase.tint.opacity(0.82))
                         .monospacedDigit()
+                        .transaction { transaction in
+                            if !AgentThinkingAnimationMetrics.animatesElapsedTime {
+                                transaction.animation = nil
+                            }
+                        }
                 }
             }
             .padding(.horizontal, style == .composer ? 12 : 0)
@@ -654,6 +683,7 @@ struct AgentSemanticActivityStatusLine: View {
                 if style == .composer {
                     RoundedRectangle(cornerRadius: 8, style: .continuous)
                         .fill(phase.tint.opacity(backgroundOpacity))
+                        .animation(breathingAnimation, value: isBreathingExpanded)
                 }
             }
             .overlay {
@@ -662,7 +692,6 @@ struct AgentSemanticActivityStatusLine: View {
                         .stroke(phase.tint.opacity(0.16), lineWidth: 1)
                 }
             }
-            .animation(breathingAnimation, value: isBreathingExpanded)
             .onAppear(perform: updateBreathingState)
             .onChange(of: reduceMotion) { _ in
                 updateBreathingState()
@@ -1219,6 +1248,115 @@ private struct AgentRailJobRow: View {
         let remaining = total % 60
         if minutes < 60 { return "\(minutes)m \(remaining)s" }
         return "\(minutes / 60)h \(minutes % 60)m"
+    }
+}
+
+private struct AgentRailDelegatedTaskRow: View {
+    let run: AgentDelegatedTaskRun
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(alignment: .firstTextBaseline, spacing: 7) {
+                Image(systemName: phaseSymbol)
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(phaseTint)
+                    .frame(width: 16)
+                Text(run.contract.executorName)
+                    .font(.system(size: 12, weight: .semibold))
+                    .lineLimit(1)
+                Spacer(minLength: 4)
+                Text(L10n.DelegatedTask.phase(run.phase))
+                    .font(.caption2.weight(.semibold))
+                    .foregroundStyle(phaseTint)
+            }
+
+            Text(run.contract.objective)
+                .font(.system(size: 11))
+                .foregroundStyle(.secondary)
+                .lineLimit(2)
+
+            HStack(spacing: 8) {
+                Label(
+                    L10n.DelegatedTask.attempt(
+                        max(run.attempt, run.phase == .contracted ? 0 : 1),
+                        run.contract.maxAttempts
+                    ),
+                    systemImage: "arrow.triangle.2.circlepath"
+                )
+                Label(
+                    L10n.DelegatedTask.changedFileCount(run.changedPaths.count),
+                    systemImage: "doc.badge.ellipsis"
+                )
+                if let findings = run.willDeepAcceptance?.findings.count, findings > 0 {
+                    Label(
+                        L10n.DelegatedTask.findingCount(findings),
+                        systemImage: "exclamationmark.triangle"
+                    )
+                    .foregroundStyle(.orange)
+                }
+            }
+            .font(.caption2)
+            .foregroundStyle(.tertiary)
+            .labelStyle(.titleAndIcon)
+
+            if let finding = run.willDeepAcceptance?.findings.first {
+                Text(finding)
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(2)
+            } else if let error = run.lastError, !error.isEmpty {
+                Text(error)
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(2)
+            }
+        }
+        .padding(8)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(phaseTint.opacity(0.06))
+        .clipShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 7, style: .continuous)
+                .stroke(phaseTint.opacity(0.16), lineWidth: 1)
+        )
+    }
+
+    private var phaseSymbol: String {
+        switch run.phase {
+        case .contracted:
+            return "doc.badge.gearshape"
+        case .executing:
+            return "hammer"
+        case .selfVerifying:
+            return "person.crop.circle.badge.checkmark"
+        case .willDeepVerifying:
+            return "checkmark.shield"
+        case .reworkRequired:
+            return "arrow.uturn.backward.circle"
+        case .readyForDelivery:
+            return "checkmark.seal.fill"
+        case .failed:
+            return "xmark.octagon.fill"
+        case .cancelled:
+            return "stop.circle"
+        }
+    }
+
+    private var phaseTint: Color {
+        switch run.phase {
+        case .contracted:
+            return .secondary
+        case .executing, .selfVerifying, .willDeepVerifying:
+            return .blue
+        case .reworkRequired:
+            return .orange
+        case .readyForDelivery:
+            return .green
+        case .failed:
+            return .red
+        case .cancelled:
+            return .secondary
+        }
     }
 }
 

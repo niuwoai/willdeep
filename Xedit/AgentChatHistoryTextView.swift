@@ -1048,30 +1048,30 @@ enum AgentChatHistoryLayoutMetrics {
     /// AppKit/SwiftUI compositing resolves this neutral overlay to #F0F0F0
     /// on the white reference surface.
     static let assistantStatusDividerOpacity: Double = 0.075
-    /// Model-switch notices are inline milestones, not section separators.
-    /// Keep the hairlines close to the label so they do not span the entire
-    /// conversation column on a wide window.
+    /// Model-switch notices are inline milestones whose divider edges follow
+    /// the same readable column as assistant prose.
     static let transcriptEventDividerGap: CGFloat = 12
-    static let transcriptEventDividerArmLength: CGFloat = 96
 
     static func transcriptEventDividerSegments(
         textMinX: CGFloat,
         textMaxX: CGFloat,
         usableWidth: CGFloat
     ) -> [(start: CGFloat, end: CGFloat)] {
-        let leadingEnd = max(0, textMinX - transcriptEventDividerGap)
-        let trailingStart = min(usableWidth, textMaxX + transcriptEventDividerGap)
+        let contentMinX = min(usableWidth, assistantContentHeadIndent)
+        let contentMaxX = max(contentMinX, usableWidth - assistantContentTailInset)
+        let leadingEnd = max(contentMinX, textMinX - transcriptEventDividerGap)
+        let trailingStart = min(contentMaxX, textMaxX + transcriptEventDividerGap)
         var segments: [(start: CGFloat, end: CGFloat)] = []
-        if leadingEnd > 0 {
+        if leadingEnd > contentMinX {
             segments.append((
-                start: max(0, leadingEnd - transcriptEventDividerArmLength),
+                start: contentMinX,
                 end: leadingEnd
             ))
         }
-        if trailingStart < usableWidth {
+        if trailingStart < contentMaxX {
             segments.append((
                 start: trailingStart,
-                end: min(usableWidth, trailingStart + transcriptEventDividerArmLength)
+                end: contentMaxX
             ))
         }
         return segments

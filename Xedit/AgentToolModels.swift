@@ -270,6 +270,30 @@ struct AgentToolContext {
         )
     }
 
+    func withSandboxMode(_ mode: AgentSandboxMode) -> AgentToolContext {
+        AgentToolContext(
+            rootDirectory: rootDirectory,
+            workspaceLocation: workspaceLocation,
+            runtimeDescriptor: runtimeDescriptor,
+            runtimeID: runtimeID,
+            turnID: turnID,
+            jobRegistry: jobRegistry,
+            mediaTaskRegistry: mediaTaskRegistry,
+            shortDramaStore: shortDramaStore,
+            sessionQueueSnapshotProvider: sessionQueueSnapshotProvider,
+            workspaceSessionsSnapshotProvider: workspaceSessionsSnapshotProvider,
+            sessionTitleSuggestionProvider: sessionTitleSuggestionProvider,
+            sandboxMode: mode,
+            patchProposalSink: patchProposalSink,
+            editableContentProvider: editableContentProvider,
+            patchAutoApplySource: patchAutoApplySource,
+            terminalController: terminalController,
+            sessionRenameSink: sessionRenameSink,
+            workspaceChangeSink: workspaceChangeSink,
+            secretRedactionValues: secretRedactionValues
+        )
+    }
+
     private static func uniqueNonEmpty(_ values: [String]) -> [String] {
         var seen = Set<String>()
         var result: [String] = []

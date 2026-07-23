@@ -95,7 +95,7 @@ struct AgentModeView: View {
                 totalWidth: proxy.size.width,
                 userPrefersVisible: sessionsSidebarVisible,
                 activeSidePanel: appState.agentSidePanelKind,
-                sidePanelMinimumWidth: CGFloat(sidePanelWidthRange.lowerBound)
+                activeSidePanelWidth: CGFloat(currentSidePanelWidth)
             )
             mainContent(totalWidth: proxy.size.width, isSidebarAutoHidden: autoHidden)
                 .background {
@@ -481,17 +481,20 @@ private struct AgentSessionsSidebarWindowChromeToggle: NSViewRepresentable {
 
 enum AgentModeResponsiveLayout {
     /// Base width where chat + composer still feel usable with the session list.
-    /// Add the minimum right-panel width when that panel is open.
+    /// Add the right panel's live width when that panel is open. Using only
+    /// its minimum width meant a terminal widened by dragging could crush the
+    /// queue and composer while the session list incorrectly stayed visible.
     static let sidebarAutoHideBaseWidth: CGFloat = 800
 
     static func shouldAutoHideSessionsSidebar(
         totalWidth: CGFloat,
         userPrefersVisible: Bool,
         activeSidePanel: AgentSidePanelKind?,
-        sidePanelMinimumWidth: CGFloat
+        activeSidePanelWidth: CGFloat
     ) -> Bool {
         guard userPrefersVisible, totalWidth > 0 else { return false }
-        let threshold = sidebarAutoHideBaseWidth + (activeSidePanel == nil ? 0 : sidePanelMinimumWidth)
+        let panelWidth = activeSidePanel == nil ? 0 : max(activeSidePanelWidth, 0)
+        let threshold = sidebarAutoHideBaseWidth + panelWidth
         return totalWidth < threshold
     }
 }

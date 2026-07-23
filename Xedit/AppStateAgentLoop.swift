@@ -1620,6 +1620,61 @@ extension AppState {
                         return appliedPath
                     }
                 )
+                var effectiveArguments = argsDict
+                var delegatedControl: (
+                    executionAgent: AgentExecutionAgent,
+                    runID: UUID,
+                    baselineTask: Task<AgentWorktreeSnapshot, Never>?
+                )?
+                if let executionAgent = AgentExecutionAgent(
+                    delegatedToolName: call.toolName
+                ), let objective = argsDict["prompt"]?.stringValue()?
+                    .trimmingCharacters(in: .whitespacesAndNewlines),
+                    !objective.isEmpty {
+                    let contract = AgentDelegatedTaskControl.makeContract(
+                        objective: objective,
+                        executor: executionAgent,
+                        goal: runtime.currentGoal
+                    )
+                    runtime.delegatedTaskRuns.insert(
+                        AgentDelegatedTaskRun(contract: contract),
+                        at: 0
+                    )
+                    if runtime.delegatedTaskRuns.count > 20 {
+                        runtime.delegatedTaskRuns.removeLast(
+                            runtime.delegatedTaskRuns.count - 20
+                        )
+                    }
+                    effectiveArguments["prompt"] = .string(
+                        """
+                        \(objective)
+
+                        \(AgentDelegatedTaskControl.executorInstructions(contract: contract))
+                        """
+                    )
+                    effectiveArguments["run_in_background"] = .bool(false)
+                    effectiveArguments["use_visible_terminal"] = .bool(true)
+                    effectiveArguments["visible_terminal_label"] = .string(
+                        "\(executionAgent.displayName) · \(L10n.DelegatedTask.sectionTitle)"
+                    )
+                    effectiveArguments["timeout_seconds"] = .number(
+                        Double(contract.timeoutSeconds)
+                    )
+                    let delegatedBaselineTask = workspaceURL.map { workspaceURL in
+                        Task.detached(priority: .utility) {
+                            await Self.loadAgentWorktreeSnapshot(
+                                for: workspaceURL,
+                                captureArtifactFiles: true
+                            )
+                        }
+                    }
+                    delegatedControl = (
+                        executionAgent: executionAgent,
+                        runID: contract.id,
+                        baselineTask: delegatedBaselineTask
+                    )
+                    persistAgentSession(runtime: runtime)
+                }
                 let guardedMutation: AgentGuardedGitMutation? = {
                     guard call.toolName == "run_command",
                           let command = argsDict["command"]?.stringValue() else {
@@ -1677,11 +1732,49 @@ extension AppState {
                         }
                     }
 
-                    let result = try await AgentToolRunner.run(
-                        name: call.toolName,
-                        arguments: argsDict,
-                        context: context
-                    )
+                    let result: AgentToolResult
+                    if let delegatedControl {
+                        let outcome = try await runDelegatedTaskWithAcceptance(
+                            toolName: call.toolName,
+                            initialArguments: effectiveArguments,
+                            executionAgent: delegatedControl.executionAgent,
+                            delegatedRunID: delegatedControl.runID,
+                            runtime: runtime,
+                            context: context,
+                            workspaceURL: workspaceURL,
+                            baselineTask: delegatedControl.baselineTask
+                        )
+                        guard outcome.accepted else {
+                            anyDenied = true
+                            if let index = runtime.toolCalls.firstIndex(where: { $0.id == recordID }) {
+                                runtime.toolCalls[index].status = .failed
+                                runtime.toolCalls[index].result = outcome.result
+                                runtime.toolCalls[index].errorMessage = outcome.errorMessage
+                            }
+                            AgentSandboxAuditLog.append(
+                                toolName: call.toolName,
+                                arguments: effectiveArguments,
+                                decision: sandboxDecision,
+                                approvalSource: autoApproval,
+                                outcome: "acceptance_failed"
+                            )
+                            appendToolMessage(
+                                for: runtime,
+                                toolCallID: call.externalID,
+                                payload: outcome.result.payload,
+                                outcomeStatus: .failed,
+                                errorMessage: outcome.errorMessage
+                            )
+                            continue
+                        }
+                        result = outcome.result
+                    } else {
+                        result = try await AgentToolRunner.run(
+                            name: call.toolName,
+                            arguments: effectiveArguments,
+                            context: context
+                        )
+                    }
                     withExtendedLifetime(workspaceMutationLease) {}
                     // Release before doing UI bookkeeping; only the verified
                     // mutation itself belongs inside the repository lease.
@@ -1725,6 +1818,16 @@ extension AppState {
                     )
                 } catch is CancellationError {
                     workspaceMutationLease = nil
+                    if let delegatedControl {
+                        updateDelegatedTaskRun(
+                            id: delegatedControl.runID,
+                            runtime: runtime
+                        ) { run in
+                            run.phase = .cancelled
+                            run.finishedAt = Date()
+                            run.lastError = "Response stopped"
+                        }
+                    }
                     if let index = runtime.toolCalls.firstIndex(where: { $0.id == recordID }) {
                         runtime.toolCalls[index].status = .denied
                         runtime.toolCalls[index].errorMessage = "Response stopped"
@@ -1748,6 +1851,16 @@ extension AppState {
                         workspaceURL: workspaceURL
                     )
                     let errorMessage = workspaceIssue ?? error.localizedDescription
+                    if let delegatedControl {
+                        updateDelegatedTaskRun(
+                            id: delegatedControl.runID,
+                            runtime: runtime
+                        ) { run in
+                            run.phase = .failed
+                            run.finishedAt = Date()
+                            run.lastError = errorMessage
+                        }
+                    }
                     if let index = runtime.toolCalls.firstIndex(where: { $0.id == recordID }) {
                         runtime.toolCalls[index].status = .failed
                         runtime.toolCalls[index].errorMessage = errorMessage

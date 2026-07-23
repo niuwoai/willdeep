@@ -93,6 +93,7 @@ final class AgentRuntime: ObservableObject, Identifiable {
     @Published var interactionMode: AgentInteractionMode = .normal
     @Published var approvalMode: AgentApprovalMode = .smart
     @Published var executionAgent: AgentExecutionAgent = .willDeep
+    @Published var delegatedTaskRuns: [AgentDelegatedTaskRun] = []
     @Published var activeExperts: Set<AgentExpert> = []
     @Published var currentPlan: AgentPlan?
     /// Runtime-only pre-dispatch prompt for complex Normal-mode tasks.
@@ -257,6 +258,7 @@ final class AgentRuntime: ObservableObject, Identifiable {
         self.interactionMode = session.interactionMode
         self.approvalMode = session.approvalMode
         self.executionAgent = session.executionAgent
+        self.delegatedTaskRuns = session.delegatedTaskRuns.map(Self.normalizingInterruptedDelegatedTask)
         self.activeExperts = session.activeExperts
         self.currentPlan = session.currentPlan
         self.currentGoal = session.currentGoal
@@ -301,6 +303,17 @@ final class AgentRuntime: ObservableObject, Identifiable {
             report.consultation = consultation
         }
         normalized.workflowReport = report
+        return normalized
+    }
+
+    private static func normalizingInterruptedDelegatedTask(
+        _ taskRun: AgentDelegatedTaskRun
+    ) -> AgentDelegatedTaskRun {
+        guard !taskRun.phase.isTerminal else { return taskRun }
+        var normalized = taskRun
+        normalized.phase = .cancelled
+        normalized.finishedAt = normalized.finishedAt ?? Date()
+        normalized.lastError = normalized.lastError ?? L10n.DelegatedTask.interrupted
         return normalized
     }
 
@@ -406,6 +419,7 @@ final class AgentRuntime: ObservableObject, Identifiable {
         session.interactionMode = interactionMode
         session.approvalMode = approvalMode
         session.executionAgent = executionAgent
+        session.delegatedTaskRuns = delegatedTaskRuns
         session.activeExperts = activeExperts
         session.currentPlan = currentPlan
         session.currentGoal = currentGoal

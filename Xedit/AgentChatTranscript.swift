@@ -166,6 +166,28 @@ struct AgentOlderHistoryPreview {
     }
 }
 
+/// Resolves the assistant message owned by the currently active provider turn.
+///
+/// `isResponding` becomes true before `runAgentLoop` appends its first
+/// assistant placeholder. During that short window, blindly selecting the
+/// conversation's last assistant message pulls the previous completed answer
+/// out of TextKit history and re-renders it as live plain text. Besides exposing
+/// Markdown fences, that also places the newly appended user message above the
+/// old answer, making the send look lost. The turn start timestamp is the
+/// boundary that distinguishes a new live message from settled history.
+nonisolated enum AgentStreamingMessageSelection {
+    static func currentAssistantID(
+        in messages: [AgentMessage],
+        isResponding: Bool,
+        turnStartedAt: Date?
+    ) -> AgentMessage.ID? {
+        guard isResponding, let turnStartedAt else { return nil }
+        return messages.last(where: {
+            $0.role == .assistant && $0.createdAt >= turnStartedAt
+        })?.id
+    }
+}
+
 struct AgentChatTranscript: View {
     @EnvironmentObject var appState: AppState
     private static let bottomScrollID = "agent-chat-transcript-bottom"
@@ -781,8 +803,11 @@ struct AgentChatTranscript: View {
     /// reference to AppState — see the comment on that view for the
     /// AttributeGraph cost story.
     private var currentStreamingMessageID: AgentMessage.ID? {
-        guard appState.isAgentResponding else { return nil }
-        return appState.agentMessages.last(where: { $0.role == .assistant })?.id
+        AgentStreamingMessageSelection.currentAssistantID(
+            in: appState.agentMessages,
+            isResponding: appState.isAgentResponding,
+            turnStartedAt: appState.agentTurnStartedAt
+        )
     }
 
     private func currentAssistantTurnPresentation(
