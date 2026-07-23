@@ -186,6 +186,7 @@ struct EditorSettingsView: View {
     private func settingsPage(for tab: EditorSettingsTab) -> some View {
         switch tab {
         case .updates: updatesSettings
+        case .editing: editingSettings
         case .typography: typographySettings
         case .appearance: appearanceSettings
         case .background: backgroundSettings
@@ -438,27 +439,6 @@ struct EditorSettingsView: View {
                     .foregroundStyle(.secondary)
             }
 
-            Section(L10n.Settings.sectionAgentAppearance) {
-                HStack {
-                    Text(L10n.Settings.chatBaseFontSize)
-                    Spacer()
-                    Text("\(Int(appState.agentChatBaseFontSize.rounded())) pt")
-                        .monospacedDigit()
-                        .foregroundStyle(.secondary)
-                }
-                Slider(
-                    value: Binding(
-                        get: { Double(appState.agentChatBaseFontSize) },
-                        set: { appState.agentChatBaseFontSize = CGFloat($0.rounded()) }
-                    ),
-                    in: Double(AgentSettingsStore.chatBaseFontSizeMin)
-                        ... Double(AgentSettingsStore.chatBaseFontSizeMax),
-                    step: 1
-                )
-                Text(L10n.Settings.AgentBehavior.agentAppearanceDescription("\(Int(AgentSettingsStore.chatBaseFontSizeMin))", "\(Int(AgentSettingsStore.chatBaseFontSizeMax))"))
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
         }
         .formStyle(.grouped)
         .onAppear {

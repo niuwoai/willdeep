@@ -24966,6 +24966,13 @@
         "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "软件更新" } }
       }
     },
+    "settings.section.agent-chat-text" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Agent Chat Text" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "Agent 聊天文本" } }
+      }
+    },
     "settings.section.agent-appearance" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -27485,6 +27492,13 @@
       "localizations" : {
         "en" : { "stringUnit" : { "state" : "translated", "value" : "Background" } },
         "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "背景" } }
+      }
+    },
+    "settings.tab.editing" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Editing" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "编辑" } }
       }
     },
     "settings.tab.connectors" : {

@@ -175,27 +175,28 @@ struct ContentView: View {
                     }
                     .frame(minWidth: 400, minHeight: 400)
                 } else if appState.activeTab != nil {
-                    if !appState.isFocusModeEnabled {
-                        EditorTabBar(
-                            tabs: appState.tabs,
-                            activeTabID: appState.activeTabID,
-                            // Reserve room on the right for the floating
-                            // Agent-mode toggle so the rightmost tab's
-                            // close button doesn't slip under it.
-                            leadingReserve: tabBarLeadingReserve,
-                            trailingReserve: shouldShowEnterAgentButton ? 72 : 0,
-                            onSelect: { appState.activateTab(id: $0) },
-                            onClose: { appState.closeTab(id: $0) },
-                            onDoubleClick: { id in
-                                appState.activateTab(id: id)
-                                toggleEditorMaximized()
-                            }
-                        )
-                        .overlay(alignment: .trailing) {
-                            if shouldShowEnterAgentButton {
-                                EnterAgentModeButton()
-                                    .padding(.trailing, 12)
-                            }
+                    // 专注模式也保留标签栏:一是切换 tab 的入口不能消失,
+                    // 二是它自带红绿灯避让(leadingReserve),没有它正文
+                    // 首行会顶进窗口关闭/最小化按钮底下。
+                    EditorTabBar(
+                        tabs: appState.tabs,
+                        activeTabID: appState.activeTabID,
+                        // Reserve room on the right for the floating
+                        // Agent-mode toggle so the rightmost tab's
+                        // close button doesn't slip under it.
+                        leadingReserve: tabBarLeadingReserve,
+                        trailingReserve: shouldShowEnterAgentButton ? 72 : 0,
+                        onSelect: { appState.activateTab(id: $0) },
+                        onClose: { appState.closeTab(id: $0) },
+                        onDoubleClick: { id in
+                            appState.activateTab(id: id)
+                            toggleEditorMaximized()
+                        }
+                    )
+                    .overlay(alignment: .trailing) {
+                        if shouldShowEnterAgentButton {
+                            EnterAgentModeButton()
+                                .padding(.trailing, 12)
                         }
                     }
 
