@@ -118,7 +118,6 @@ struct AgentMemoryProjectScopeTests {
     func candidatesCarryReadableProjectPath() throws {
         let records = AgentMemoryEngine.candidates(
             fromUser: "记住：这个项目每次改版本号必须同步 CHANGELOG。",
-            assistantText: "",
             rootDirectory: rootA
         )
         let projectCandidate = try #require(records.first { $0.scope == .project })

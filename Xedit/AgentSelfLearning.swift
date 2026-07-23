@@ -319,8 +319,14 @@ enum AgentSelfLearning {
                 .map(\.id)
         )
         let calls = runtime.toolCalls.filter { relevantAssistantIDs.contains($0.messageID) }
-        let memoryContents = automaticSelfLearningMemories(from: evidenceText)
-        let mcpSuggestion = automaticMCPSuggestion(from: evidenceText)
+        // 框架规则类候选只看用户原话：assistant 措辞里"建议/以后/自动"
+        // 这类词天天出现，拿混合证据喂关键词匹配会让每个回合都误产
+        // 学习事件（1.195.0-rc11 实测），所以强意图闸只对用户文本生效。
+        let memoryContents = automaticSelfLearningMemories(fromUserText: latestUser.modelContent)
+        let mcpSuggestion = automaticMCPSuggestion(
+            userText: latestUser.modelContent,
+            evidenceText: evidenceText
+        )
         let explicitSkillDirective = containsExplicitSkillCreationSignal(evidenceText)
         let skillCandidate = automaticSkillCandidate(
             userText: latestUser.modelContent,
@@ -765,40 +771,21 @@ enum AgentSelfLearning {
         .joined(separator: " ")
     }
 
-    static func automaticMCPCapabilityGapMemory(from text: String) -> String? {
-        let lower = text.lowercased()
-        let mentionsExternalCapability = [
-            "mcp", "connector", "plugin", "integration", "external system",
-            "连接器", "插件", "外部系统", "集成", "第三方"
-        ].contains { lower.contains($0) }
-        let mentionsLearning = [
-            "memory", "skill", "自学习", "记忆", "技能"
-        ].contains { lower.contains($0) }
-        let asksForProactivity = [
-            "自动", "自主", "必要", "建议", "安装", "搜索", "以后", "下次",
-            "proactive", "suggest", "install", "search", "when needed"
-        ].contains { lower.contains($0) }
-        guard (mentionsExternalCapability || mentionsLearning) && asksForProactivity else {
-            return nil
-        }
-        return "Agent should proactively save necessary memory, create reusable skills when workflows repeat, and search or suggest MCP servers when an external integration is missing; installing MCP servers or adding credentials still requires explicit user confirmation."
-    }
-
-    static func automaticSelfLearningMemories(from text: String) -> [String] {
+    static func automaticSelfLearningMemories(fromUserText text: String) -> [String] {
         let lower = text.lowercased()
         var memories: [String] = []
-        if let generalPolicy = automaticMCPCapabilityGapMemory(from: text) {
-            appendUnique(generalPolicy, to: &memories)
-        }
         // 1.85.0-rc16:加一道 strong-intent 闸 —— 用户得明确说「以后 /
         // 记住 / 偏好 / always / never / from now on / preference / rule」
         // 之类带「持久化意图」的词,才允许进入下面这几条 framework 规则
         // 的匹配。原先只要文本里出现「memory + 自动」这样弱关联的 2 词
         // 组合就触发,误报严重(基本每次随便聊都会蹦出一堆 candidate)。
+        //
+        // 1.195.0-rc12:输入收紧为用户原话(不再混入 assistant 文本),
+        // 并移除不受闸门约束的「general policy」硬编码套话 —— 那句
+        // "Agent should proactively save necessary memory..." 曾在普通
+        // 开发会话里被 assistant 的日常用词反复触发,存下来也只是把
+        // 产品自己的运行策略当经验,零信息量。
         guard hasStrongDurableIntent(in: lower) else {
-            if let externalGap = automaticExternalIntegrationGapMemory(from: text) {
-                appendUnique(externalGap, to: &memories)
-            }
             return memories
         }
         if containsAny(["memory", "记忆"], in: lower),
@@ -821,9 +808,6 @@ enum AgentSelfLearning {
                 "Agent should inspect configured MCP servers before giving up on an external integration, search MCP candidates when none fit, and suggest a user-confirmed install/configuration path instead of silently omitting the capability.",
                 to: &memories
             )
-        }
-        if let externalGap = automaticExternalIntegrationGapMemory(from: text) {
-            appendUnique(externalGap, to: &memories)
         }
         return memories
     }
@@ -848,31 +832,59 @@ enum AgentSelfLearning {
         )
     }
 
-    static func automaticExternalIntegrationGapMemory(from text: String) -> String? {
-        let lower = text.lowercased()
-        let blocked = containsAny(
-            [
-                "cannot access", "can't access", "unable to access", "not configured",
-                "not installed", "missing", "no configured", "unavailable",
-                "无法访问", "不能访问", "没有配置", "未配置", "缺少", "不可用", "需要用户手动"
-            ],
-            in: lower
-        )
-        guard blocked, let capability = detectedExternalCapability(in: lower) else { return nil }
-        return "When a task needs \(capability) and the current harness lacks a configured tool, Agent should list configured MCP servers, search MCP candidates, and suggest a user-approved MCP install/configuration before asking the user to handle discovery manually."
+    private static let integrationBlockedSignals = [
+        "cannot access", "can't access", "unable to access", "not configured",
+        "not installed", "no configured", "unavailable",
+        "无法访问", "不能访问", "没有配置", "未配置", "不可用", "需要用户手动"
+    ]
+
+    /// 阻塞词之外，还要求同句出现"集成语境"词——"缺少一个字段""missing
+    /// test coverage"这类日常表述带着 database/browser 等能力词满天飞，
+    /// 没有集成语境时不允许把普通开发对话推断成"缺外部集成"。
+    private static let integrationContextTerms = [
+        "integration", "mcp", "connector", "tool", "access", "plugin",
+        "集成", "连接器", "插件", "工具", "访问"
+    ]
+
+    /// 会话内去重：同一条建议（同 kind + 同标题 + 同内容）在一个会话里
+    /// 只出现一次。此前每个回合末的自动扫描都可能重复产出同一条 MCP
+    /// 建议/框架规则，popover 反复弹同样的内容是"学习太频繁"观感的主因之一。
+    nonisolated static func dedupedNewEvents(
+        _ events: [AgentLearningEvent],
+        existing: [AgentLearningEvent]
+    ) -> [AgentLearningEvent] {
+        var seen = Set(existing.map(learningEventDedupeKey))
+        var fresh: [AgentLearningEvent] = []
+        for event in events where seen.insert(learningEventDedupeKey(event)).inserted {
+            fresh.append(event)
+        }
+        return fresh
     }
 
-    static func automaticMCPSuggestion(from text: String) -> AgentSelfLearningMCPSuggestion? {
-        let lower = text.lowercased()
-        let blocked = containsAny(
-            [
-                "cannot access", "can't access", "unable to access", "not configured",
-                "not installed", "missing", "no configured", "unavailable",
-                "无法访问", "不能访问", "没有配置", "未配置", "缺少", "不可用", "需要用户手动"
-            ],
-            in: lower
-        )
-        if blocked, let capability = detectedExternalCapability(in: lower) {
+    private nonisolated static func learningEventDedupeKey(_ event: AgentLearningEvent) -> String {
+        "\(event.kind.rawValue)|\(event.title)|\(event.detail)"
+    }
+
+    static func learningSentences(in text: String) -> [String] {
+        text.components(separatedBy: CharacterSet(charactersIn: "\n。.!?；;"))
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+    }
+
+    static func automaticMCPSuggestion(
+        userText: String,
+        evidenceText: String
+    ) -> AgentSelfLearningMCPSuggestion? {
+        // 1.195.0-rc12:阻塞信号、能力词、集成语境词必须同句共现。此前
+        // 全文任意位置的「缺少/missing」配上任意位置的「数据库/mysql」就
+        // 触发建议 —— 普通排障对话（"该表缺少索引"）天天中招。
+        for sentence in learningSentences(in: evidenceText) {
+            let lower = sentence.lowercased()
+            guard containsAny(integrationBlockedSignals, in: lower),
+                  containsAny(integrationContextTerms, in: lower),
+                  let capability = detectedExternalCapability(in: lower) else {
+                continue
+            }
             return mcpSuggestion(
                 capability: capability,
                 ecosystem: capability,
@@ -880,12 +892,15 @@ enum AgentSelfLearning {
             )
         }
 
+        // 泛化的「帮我做 MCP 发现」只认用户原话；assistant 提到
+        // 插件/集成/建议不算数。
+        let lowerUser = userText.lowercased()
         let asksForMCPDiscovery = containsAny(
             ["mcp", "connector", "plugin", "连接器", "插件", "外部系统", "集成"],
-            in: lower
+            in: lowerUser
         ) && containsAny(
             ["搜索", "建议", "安装", "必要", "缺少", "search", "suggest", "install", "missing", "when needed"],
-            in: lower
+            in: lowerUser
         )
         guard asksForMCPDiscovery else { return nil }
         return mcpSuggestion(

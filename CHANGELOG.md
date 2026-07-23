@@ -1,7 +1,26 @@
 # Changelog
 
-> 当前文件保留最新版本（1.195.0-rc11 至 1.109.0-rc340）。
+> 当前文件保留最新版本（1.195.0-rc12 至 1.109.0-rc340）。
 > 更早的 1000 个版本已移至 [CHANGELOG-ARCHIVE.md](CHANGELOG-ARCHIVE.md)。
+
+## 1.195.0-rc12 - 2026-07-24
+
+### Fixed
+
+- 大幅降低自学习的触发频率并提高建议价值门槛（用户实测"随便一句话就弹学习，学的全是废话"）：
+  - 框架规则类记忆建议（"Agent should call add_memory/create_user_skill/inspect MCP…"）只认**用户原话**——此前判定文本混入最近 3 条 assistant 消息，助手行文里的"建议/以后/自动/集成"天天把关键词闸门撞开；并删除完全不受强意图闸约束的硬编码套话 "Agent should proactively save necessary memory…"（截图实锤的噪声源，存下来只是把产品自身运行策略当经验）。
+  - MCP 发现建议要求**阻塞词、能力词、集成语境词同句共现**——此前全文任意位置"缺少/missing"配任意位置"数据库/mysql"即触发（普通排障对话"该表缺少索引"即中招）；"帮我做 MCP 发现"类泛化指令只认用户原话。同时删除与 MCP 建议事件重复的 external-integration-gap 套话记忆。
+  - 自动记忆候选只从**用户句子**里抽取（不再挖 assistant 回复，杜绝把 markdown 表格行拍成记忆），标记词表剔除高误报词（"use "/"should"/"遇到"/"自动"/"自主"/"workflow"/"skill"/"mcp"）。
+  - 学习事件按（类型+标题+内容）**会话内去重**，同一条建议不再每回合重复弹 popover。
+  - 清理无调用方的 `AgentMemoryState.addAutomaticMemories`（rc16 改为 draft 审批制后遗留的死代码）。
+
+### Changed
+
+- 版本号从 **1.195.0-rc11** 递增为 **1.195.0-rc12**，内部构建号从 **117** 递增为 **118**；App、Go agent、Help、Helper、浏览器扩展、README、响应头契约与产品文档保持一致。
+
+### Tests
+
+- `AgentSelfLearningTests` 更新到新签名并新增回归：排障对话/跨句阻塞词不触发 MCP 建议、日常用户消息不触发框架规则、会话内重复建议被去重；移除已删函数的旧断言。
 
 ## 1.195.0-rc11 - 2026-07-24
 

@@ -157,7 +157,6 @@ struct AgentMemoryStoreTests {
         let projectID = try #require(AgentMemoryEngine.projectFingerprint(for: root))
         let records = AgentMemoryEngine.candidates(
             fromUser: "记住：这个项目每次改代码必须同步更新 CHANGELOG 和版本号。",
-            assistantText: "好的，我会遵守这个项目规则。",
             rootDirectory: root
         )
 

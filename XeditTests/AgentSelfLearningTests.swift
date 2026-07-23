@@ -155,7 +155,7 @@ struct AgentSelfLearningTests {
         // 真实触发条件。原文本作为弱信号在新阈值下应该被过滤掉,这才
         // 是想要的行为。
         let memories = AgentSelfLearning.automaticSelfLearningMemories(
-            from: "以后请实现自学习：自动地添加必要的 memory，自主地添加必要的 skill，必要时搜索和建议安装 mcp。"
+            fromUserText: "以后请实现自学习：自动地添加必要的 memory，自主地添加必要的 skill，必要时搜索和建议安装 mcp。"
         )
 
         #expect(memories.contains { $0.contains("add_memory") })
@@ -169,32 +169,81 @@ struct AgentSelfLearningTests {
         // 拦下来,不应该出现。externalGap memory 是另外一道闸,这条
         // 测试文本不包含「cannot access」之类,所以整体返回空。
         let memories = AgentSelfLearning.automaticSelfLearningMemories(
-            from: "我们顺手聊聊 memory、skill 和 mcp 这几个概念,看看怎么用。"
+            fromUserText: "我们顺手聊聊 memory、skill 和 mcp 这几个概念,看看怎么用。"
         )
         #expect(memories.isEmpty)
     }
 
     @Test
-    func automaticExternalIntegrationGapCreatesMCPDiscoveryMemory() throws {
-        let memory = try #require(AgentSelfLearning.automaticExternalIntegrationGapMemory(
-            from: "I cannot access GitHub pull request review threads because no configured integration is available."
-        ))
-
-        #expect(memory.contains("GitHub"))
-        #expect(memory.contains("list configured MCP servers"))
-        #expect(memory.contains("suggest a user-approved MCP"))
-    }
-
-    @Test
     func automaticMCPSuggestionProducesConcreteSearchQuery() throws {
         let suggestion = try #require(AgentSelfLearning.automaticMCPSuggestion(
-            from: "I cannot access GitHub pull request review threads because no configured integration is available."
+            userText: "帮我看看这个 PR。",
+            evidenceText: "I cannot access GitHub pull request review threads because no configured integration is available."
         ))
 
         #expect(suggestion.capability == "GitHub")
         #expect(suggestion.searchQuery.contains("GitHub"))
         #expect(suggestion.searchQuery.contains("MCP server"))
         #expect(suggestion.reason.contains("no configured integration"))
+    }
+
+    @Test
+    func automaticMCPSuggestionIgnoresOrdinaryTroubleshootingChatter() {
+        // rc12 回归:此前全文任意位置「缺少/missing」+ 任意位置能力词就
+        // 触发建议——普通排障对话天天中招(用户实测截图:数据库运维会话
+        // 蹦出"为 database access 建议 MCP 发现")。阻塞词、能力词、集成
+        // 语境词现在必须同句共现。
+        #expect(AgentSelfLearning.automaticMCPSuggestion(
+            userText: "帮我在侧边栏终端里更新 tokenhub 实例到新版本。",
+            evidenceText: "该表缺少一个索引。\n我建议先修复 MySQL 的慢查询,数据库压力会明显下降。"
+        ) == nil)
+        // 阻塞词和能力词分属两句 → 不触发。
+        #expect(AgentSelfLearning.automaticMCPSuggestion(
+            userText: "继续。",
+            evidenceText: "当前环境没有配置这个工具。\nGitHub 的 PR 在另一个仓库里。"
+        ) == nil)
+        // assistant 提到"建议安装插件"不算用户要求 MCP 发现。
+        #expect(AgentSelfLearning.automaticMCPSuggestion(
+            userText: "好的。",
+            evidenceText: "建议安装一个浏览器插件来做集成测试。"
+        ) == nil)
+    }
+
+    @Test
+    func automaticSelfLearningMemoriesIgnoreAssistantStylePhrasing() {
+        // 框架规则族现在只认用户原话;这段典型的 assistant 措辞若被误当
+        // 输入,闸门("以后")会开、规则会全触发——签名收紧后调用方只会
+        // 传用户消息,这里守住"日常用户消息不触发"。
+        let memories = AgentSelfLearning.automaticSelfLearningMemories(
+            fromUserText: "我说的是在侧边栏终端中更新这个 tokenhub 的实例到 0.191.0-rc12 这个版本"
+        )
+        #expect(memories.isEmpty)
+    }
+
+    @Test
+    func learningEventsDedupeWithinSession() {
+        let event = AgentLearningEvent(
+            kind: .mcpSuggestion,
+            status: .suggested,
+            title: "为 database access 建议 MCP 发现",
+            detail: "Search query: database access MCP server"
+        )
+        var duplicate = event
+        duplicate.id = UUID()
+
+        let fresh = AgentSelfLearning.dedupedNewEvents([event, duplicate], existing: [])
+        #expect(fresh.count == 1)
+
+        let repeatNextTurn = AgentSelfLearning.dedupedNewEvents([duplicate], existing: [event])
+        #expect(repeatNextTurn.isEmpty)
+
+        let differentDetail = AgentLearningEvent(
+            kind: .mcpSuggestion,
+            status: .suggested,
+            title: "为 database access 建议 MCP 发现",
+            detail: "Search query: postgres MCP server"
+        )
+        #expect(AgentSelfLearning.dedupedNewEvents([differentDetail], existing: [event]).count == 1)
     }
 
     @Test
@@ -310,7 +359,6 @@ struct AgentSelfLearningTests {
     func automaticMemoryCandidatesUnderstandPreferenceWording() {
         let records = AgentMemoryEngine.candidates(
             fromUser: "我希望以后遇到 TLS 证书错误时，默认先自动重试 5 次。",
-            assistantText: "明白，我会把这个偏好沉淀为后续执行策略。",
             rootDirectory: nil
         )
 
