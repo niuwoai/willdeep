@@ -69,6 +69,28 @@ struct AgentChatHistoryRendererTests {
     }
 
     @Test
+    func stoppedResponseNoticeHasNoSymbolAttachment() {
+        let message = AgentMessage(
+            role: .system,
+            content: "用户已停止生成",
+            transcriptEvent: .responseStopped
+        )
+        let rendered = AgentChatHistoryRenderer.render(messages: [message], isDark: false)
+        var attachmentCount = 0
+        rendered.enumerateAttribute(
+            .attachment,
+            in: NSRange(location: 0, length: rendered.length)
+        ) { value, _, _ in
+            if value != nil {
+                attachmentCount += 1
+            }
+        }
+
+        #expect(rendered.string.contains("用户已停止生成"))
+        #expect(attachmentCount == 0)
+    }
+
+    @Test
     func longMessagePreviewKeepsHeadAndTail() {
         let content = String(repeating: "A", count: 120)
             + "MIDDLE_SHOULD_BE_OMITTED"

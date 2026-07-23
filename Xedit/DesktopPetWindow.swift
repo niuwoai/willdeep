@@ -775,11 +775,11 @@ struct DesktopPetOverlayView: View {
                 date: context.date
             )
 
-            HStack(alignment: .bottom, spacing: -4) {
+            HStack(alignment: .center, spacing: -4) {
                 if manager.presentation.isMessageBubbleVisible {
                     if manager.isMessageBubbleCollapsed {
                         collapsedMessageIndicator
-                            .offset(x: 4, y: -82)
+                            .offset(x: 4)
                     } else {
                         messageBubble
                     }

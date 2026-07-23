@@ -386,7 +386,10 @@ nonisolated enum L10n {
         static let skillPickerNoMatches = String(localized: "composer.skill-picker.no-matches", defaultValue: "No matching skills")
         static let skillPickerSearchPlaceholder = String(localized: "composer.skill-picker.search-placeholder", defaultValue: "Search skills...")
         static let stopHelp = String(localized: "composer.stop.help", defaultValue: "Stop the current Agent turn")
-        static let stopped = String(localized: "composer.stop.stopped", defaultValue: "Stopped generating.")
+        static let stopped = String(
+            localized: "composer.stop.stopped",
+            defaultValue: "The user stopped generation."
+        )
         static func stoppedCheckingProcesses(_ count: Int) -> String {
             let template = String(
                 localized: "composer.stop.checking-processes",

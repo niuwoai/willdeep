@@ -237,7 +237,7 @@ nonisolated struct AgentApprovalNoticeDescriptor: Equatable {
     let subtitle: String
     let detailTitle: String
     let metadata: [String]
-    let explanationTitle: String
+    let explanationTitle: String?
     let decisionTitle: String
     let decisionSubtitle: String
     let declineTitle: String
@@ -272,7 +272,7 @@ nonisolated enum AgentApprovalNoticeCopy {
                 subtitle: "命令会出现在侧边栏终端中，并在确认后执行。",
                 detailTitle: "即将发送",
                 metadata: terminalMetadata(arguments: arguments),
-                explanationTitle: "查看终端详情",
+                explanationTitle: nil,
                 decisionTitle: "发送到这个终端吗？",
                 decisionSubtitle: "执行过程和结果会继续显示在侧边栏。",
                 declineTitle: "暂不发送",
@@ -285,7 +285,7 @@ nonisolated enum AgentApprovalNoticeCopy {
                 subtitle: "控制键会立即发送到当前会话绑定的终端。",
                 detailTitle: "控制键",
                 metadata: ["侧边栏终端", "发送后立即生效"],
-                explanationTitle: "查看终端详情",
+                explanationTitle: nil,
                 decisionTitle: "发送这个控制键吗？",
                 decisionSubtitle: "终端会保持可见，便于你继续操作。",
                 declineTitle: "暂不发送",
@@ -1055,8 +1055,10 @@ struct AgentToolCallCard: View {
         ViewThatFits(in: .horizontal) {
             HStack(spacing: 8) {
                 authorizationMetadataChips(descriptor.metadata)
-                Spacer(minLength: 4)
-                authorizationExplanationButton(descriptor)
+                if let explanationTitle = descriptor.explanationTitle {
+                    Spacer(minLength: 4)
+                    authorizationExplanationButton(title: explanationTitle)
+                }
             }
             .frame(
                 minWidth: AgentConfirmationReviewMetrics.horizontalContentMinimumWidth,
@@ -1064,7 +1066,9 @@ struct AgentToolCallCard: View {
             )
             VStack(alignment: .leading, spacing: 10) {
                 authorizationMetadataRows(descriptor.metadata)
-                authorizationExplanationButton(descriptor)
+                if let explanationTitle = descriptor.explanationTitle {
+                    authorizationExplanationButton(title: explanationTitle)
+                }
             }
         }
     }
@@ -1109,9 +1113,7 @@ struct AgentToolCallCard: View {
         }
     }
 
-    private func authorizationExplanationButton(
-        _ descriptor: AgentApprovalNoticeDescriptor
-    ) -> some View {
+    private func authorizationExplanationButton(title: String) -> some View {
         let palette = appState.editorSettings.interfaceSkin.palette
         return Button {
             loadApprovalExplanation()
@@ -1126,7 +1128,7 @@ struct AgentToolCallCard: View {
                     Image(systemName: "sparkles")
                         .font(.system(size: 10, weight: .semibold))
                 }
-                Text(approvalExplanation == nil ? descriptor.explanationTitle : "重新查看说明")
+                Text(approvalExplanation == nil ? title : "重新查看说明")
                     .font(.system(size: 11, weight: .semibold))
             }
             .foregroundStyle(palette.accent)

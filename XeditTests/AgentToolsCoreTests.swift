@@ -911,6 +911,8 @@ struct AgentToolsCoreTests {
         #expect(listTabs?.risk == .read)
         #expect(selectTab?.risk == .read)
         #expect(selectTab?.parameters.contains(where: { $0.name == "terminal_tab_id" && $0.required }) == true)
+        #expect(sendCommand?.description.contains("OMIT terminal_tab_id") == true)
+        #expect(sendCommand?.description.contains("stale UUID") == true)
         #expect(snapshot?.description.contains("ACTIVE Agent Terminal side-panel tab") == true)
         #expect(sendCommand?.description.contains("never send a local-intended command into an SSH tab") == true)
         #expect(sendCommand?.parameters.contains(where: { $0.name == "zmodem_upload_paths" && $0.type == .stringArray }) == true)

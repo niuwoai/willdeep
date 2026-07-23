@@ -13,6 +13,8 @@ struct AgentSidebarListVisualMetricsTests {
         #expect(AgentDesign.sidebarWorkspaceGroupSpacing == 6)
         #expect(AgentDesign.sidebarAutomationFontSize == AgentDesign.sidebarRowFontSize)
         #expect(AgentDesign.sidebarSessionTrailingActionsWidth == 40)
+        #expect(AgentDesign.liveActivityTopSpacing == 6)
+        #expect(AgentDesign.liveActivityTopSpacing < AgentDesign.messageVerticalSpacing)
         #expect(AgentDesign.chatSupportingFontSize(baseFontSize: 14, visualMinimum: 9) == 11)
         #expect(AgentDesign.chatSupportingFontSize(baseFontSize: 18, visualMinimum: 15) == 15)
         #expect(AgentDesign.chatSupportingFontSize(baseFontSize: 11) == 11)
@@ -374,7 +376,7 @@ struct AgentSidebarListVisualMetricsTests {
         ]
 
         let size = NSSize(width: 760, height: 360)
-        let root = VStack(alignment: .leading, spacing: 14) {
+        let root = VStack(alignment: .leading, spacing: AgentDesign.liveActivityTopSpacing) {
             Text("我已经确认状态展示的问题来自过度聚合，以及模型原始阶段文案直接混进正文。现在正在收敛渲染层级并补回归测试。")
                 .font(.system(size: appState.agentChatBaseFontSize))
                 .lineSpacing(3)

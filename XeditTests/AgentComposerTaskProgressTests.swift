@@ -32,9 +32,30 @@ struct AgentComposerTaskProgressTests {
         #expect(snapshot.currentIndex == 2)
         #expect(snapshot.completedCount == 2)
         #expect(snapshot.totalCount == 5)
+        #expect(snapshot.progressFraction == 0.4)
         #expect(snapshot.items.map(\.status) == [.done, .active, .pending, .skipped, .pending])
         #expect(!snapshot.isComplete)
         #expect(!snapshot.isBlocked)
+    }
+
+    @Test("圆环按当前步骤占总步骤的比例显示进度")
+    func progressRingUsesCurrentStepPercentage() throws {
+        let plan = AgentPlan(
+            status: .executing,
+            steps: (1...7).map { index in
+                AgentPlan.Step(
+                    text: "步骤 \(index)",
+                    status: index < 3 ? .done : (index == 3 ? .inProgress : .pending)
+                )
+            }
+        )
+
+        let snapshot = try #require(
+            AgentComposerTaskProgressSnapshot.make(plan: plan, isResponding: true)
+        )
+
+        #expect(snapshot.currentIndex == 3)
+        #expect(abs(snapshot.progressFraction - (3.0 / 7.0)) < 0.000_001)
     }
 
     @Test("后端尚未上报 in-progress 时推断首个待办为当前步骤")

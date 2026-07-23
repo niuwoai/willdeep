@@ -710,6 +710,7 @@ struct AgentAuthorizationNoticeTests {
         #expect(terminal.approveTitle == "发送到终端")
         #expect(terminal.metadata.contains("侧边栏可见"))
         #expect(terminal.metadata.contains("指定终端标签"))
+        #expect(terminal.explanationTitle == nil)
 
         let web = AgentApprovalNoticeCopy.descriptor(
             toolName: "web_fetch",

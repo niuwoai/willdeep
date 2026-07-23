@@ -36,6 +36,11 @@ nonisolated struct AgentComposerTaskProgressSnapshot: Equatable {
 
     var totalCount: Int { items.count }
 
+    var progressFraction: CGFloat {
+        guard totalCount > 0 else { return 0 }
+        return min(max(CGFloat(currentIndex) / CGFloat(totalCount), 0), 1)
+    }
+
     var currentItem: Item? {
         guard items.indices.contains(currentIndex - 1) else { return nil }
         return items[currentIndex - 1]
@@ -216,9 +221,18 @@ struct AgentComposerTaskProgressControl: View {
                 .font(.system(size: 12, weight: .semibold))
                 .foregroundStyle(Color.orange)
         } else {
-            Circle()
-                .stroke(palette.accent.opacity(0.38), lineWidth: 2)
-                .frame(width: 11, height: 11)
+            ZStack {
+                Circle()
+                    .stroke(palette.accent.opacity(0.24), lineWidth: 2)
+                Circle()
+                    .trim(from: 0, to: snapshot.progressFraction)
+                    .stroke(
+                        palette.accent.opacity(0.88),
+                        style: StrokeStyle(lineWidth: 2, lineCap: .round)
+                    )
+                    .rotationEffect(.degrees(-90))
+            }
+            .frame(width: 11, height: 11)
         }
     }
 

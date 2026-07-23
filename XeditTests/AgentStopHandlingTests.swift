@@ -92,6 +92,7 @@ struct AgentStopHandlingTests {
         #expect(runtime.errorMessage == nil)
         #expect(runtime.messages.contains(where: { $0.content == "已经输出的内容" }))
         #expect(runtime.messages.last?.transcriptEvent == .responseStopped)
+        #expect(runtime.messages.last?.content == L10n.Composer.stopped)
         #expect(runtime.userStoppedTurnID == turnID)
     }
 

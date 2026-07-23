@@ -969,6 +969,69 @@ struct WillDeepTests {
     }
 
     @MainActor
+    @Test("terminal command reports a stale explicit tab without rerouting")
+    func testTerminalCommandRejectsStaleExplicitTabWithoutRerouting() throws {
+        let controller = AgentInteractiveTerminalController()
+        let settings = EditorTerminalSettings.default
+        let sessionID = UUID()
+        let visible = controller.openLocalTab(
+            originAgentSessionID: sessionID,
+            workingDirectory: FileManager.default.temporaryDirectory.path,
+            settings: settings,
+            skin: nil
+        )
+        defer { controller.closeTab(id: visible.id) }
+
+        let staleTabID = UUID()
+        do {
+            _ = try controller.sendApprovedCommand(
+                "echo should-not-run",
+                targetTabID: staleTabID,
+                sessionID: sessionID
+            )
+            Issue.record("expected a stale explicit terminal id to fail safely")
+        } catch let error as AgentToolError {
+            let message = error.errorDescription ?? ""
+            #expect(message.contains("no longer open"))
+            #expect(message.contains("Nothing was executed"))
+            #expect(message.contains("retry without terminal_tab_id"))
+        }
+        #expect(controller.activeTabID == visible.id)
+        #expect(visible.recentCommands.isEmpty)
+    }
+
+    @MainActor
+    @Test("terminal command explains when its approved tab exited")
+    func testTerminalCommandExplainsExitedApprovedTab() throws {
+        let controller = AgentInteractiveTerminalController()
+        let settings = EditorTerminalSettings.default
+        let sessionID = UUID()
+        let tab = controller.openLocalTab(
+            originAgentSessionID: sessionID,
+            workingDirectory: FileManager.default.temporaryDirectory.path,
+            settings: settings,
+            skin: nil
+        )
+        tab.terminate()
+        defer { controller.closeTab(id: tab.id) }
+
+        do {
+            _ = try controller.sendApprovedCommand(
+                "echo should-not-run",
+                targetTabID: tab.id,
+                sessionID: sessionID
+            )
+            Issue.record("expected an exited approved terminal tab to fail safely")
+        } catch let error as AgentToolError {
+            let message = error.errorDescription ?? ""
+            #expect(message.contains("exited before the command could be sent"))
+            #expect(message.contains("Nothing was executed"))
+            #expect(message.contains("terminal_snapshot"))
+        }
+        #expect(tab.recentCommands.isEmpty)
+    }
+
+    @MainActor
     @Test("no open tabs yields guidance; any open tab routes for every conversation")
     func testSnapshotGuidanceWithoutTabsAndActiveTabFallback() throws {
         let controller = AgentInteractiveTerminalController()

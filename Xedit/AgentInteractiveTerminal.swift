@@ -2433,14 +2433,36 @@ final class AgentInteractiveTerminalController: ObservableObject {
     ) throws -> AgentTerminalTab {
         if let targetTabID {
             guard let exact = tab(id: targetTabID) else {
-                throw AgentToolError.invalidArgument("Unknown Agent Terminal tab id: \(targetTabID.uuidString).")
+                throw AgentToolError.invalidArgument(
+                    "Agent Terminal tab \(targetTabID.uuidString) is no longer open. "
+                        + "The tab list may have changed while approval was pending. "
+                        + "Nothing was executed. "
+                        + "Call terminal_list_tabs, read the active tab with terminal_snapshot, "
+                        + "then retry without terminal_tab_id when continuing in the visible tab."
+                )
+            }
+            if opensLocalTabIfNeeded, !exact.isRunning {
+                throw AgentToolError.invalidArgument(
+                    "Agent Terminal tab \"\(exact.title)\" exited before the command could be sent. "
+                        + "Nothing was executed. Restart or switch the visible terminal, call "
+                        + "terminal_snapshot again, then retry without a stale terminal_tab_id."
+                )
             }
             return exact
         }
         if let active = activeTab, isImplicitlyRoutable(active) {
+            if opensLocalTabIfNeeded, !active.isRunning {
+                throw AgentToolError.invalidArgument(
+                    "The active Agent Terminal tab \"\(active.title)\" exited before the command "
+                        + "could be sent. Nothing was executed. Restart or switch the visible "
+                        + "terminal, then call terminal_snapshot and retry."
+                )
+            }
             return active
         }
-        if let fallback = tabs.last(where: isImplicitlyRoutable) {
+        if let fallback = tabs.last(where: { tab in
+            isImplicitlyRoutable(tab) && (!opensLocalTabIfNeeded || tab.isRunning)
+        }) {
             return fallback
         }
         guard opensLocalTabIfNeeded,

@@ -9363,7 +9363,7 @@
         }
       }
     },
-    "composer.stop.stopped" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Stopped generating." } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "已停止继续生成。" } } } },
+    "composer.stop.stopped" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "The user stopped generation." } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "用户已停止生成" } } } },
     "composer.stop.checking-processes" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Stopped generating. Checking %lld process(es) started by this turn…" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "已停止继续生成，正在检查本轮启动的 %lld 个进程…" } } } },
     "composer.stop.cleaned-up" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Stopped generating and stopped %lld related task(s) or process(es) from this turn." } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "已停止继续生成，本轮的 %lld 个相关任务或进程也已停止。" } } } },
     "composer.stop.processes-kept" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Stopped generating. Current-turn processes were left running because they still need to continue." } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "已停止继续生成；本轮进程仍需继续，未执行终止。" } } } },

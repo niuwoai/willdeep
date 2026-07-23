@@ -378,10 +378,16 @@ struct AgentChatTranscript: View {
                            !activeToolPresentation.calls.isEmpty {
                                 AgentLiveActivityTimeline(calls: activeToolPresentation.calls)
                                 .id(toolGroupScrollID(for: messageID))
-                                // Keep the current activity close enough to
-                                // the prose that it reads as one chronological
-                                // turn, without merging into the paragraph.
-                                .padding(.top, 10)
+                                // The parent transcript reserves 20 pt between
+                                // separate messages. This activity belongs to
+                                // the prose immediately above, so cancel that
+                                // turn gap and restore a normal 6 pt line
+                                // rhythm instead.
+                                .padding(
+                                    .top,
+                                    AgentDesign.liveActivityTopSpacing
+                                        - AgentDesign.messageVerticalSpacing
+                                )
                                 .padding(.bottom, 6)
                                 .padding(.leading, AgentChatHistoryLayoutMetrics.assistantContentHeadIndent)
                                 .padding(.trailing, AgentChatHistoryLayoutMetrics.assistantContentTailInset)

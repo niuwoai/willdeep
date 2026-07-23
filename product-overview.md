@@ -1,6 +1,6 @@
 # WillDeep Product Overview
 
-> Last updated: 2026-07-23 | Current version: v1.194.0-rc2
+> Last updated: 2026-07-23 | Current version: v1.194.0-rc5
 
 ## Positioning
 
@@ -11,6 +11,12 @@ Official product domain: [willdeep.com](https://willdeep.com).
 WillDeep is configured for non-App-Store distribution without App Sandbox so it can access local project files with fewer permission interruptions.
 
 ## 架构概览
+
+- **桌宠、步骤进度与停止反馈细节（1.194.0-rc5）** —— 桌宠消息卡与宠物垂直居中；Composer 步骤圆环按当前步骤占总步骤的比例展示进度；用户主动停止回复时只显示“用户已停止生成”，不再附带停止符号。
+
+- **终端确认信息收敛（1.194.0-rc4）** —— 终端确认卡中的可见性、目标标签和中断方式优先在一行内展示，窄视口才退回多行；移除与卡片现有命令、终端目标和风险说明重复的“查看终端详情”入口。
+
+- **终端发送可靠性与活动行距（1.194.0-rc3）** —— 继续操作当前可见终端时，Agent 默认不再把快照中的一次性 `terminal_tab_id` 固定进审批请求，避免用户确认期间标签状态变化导致发送失败；只有明确操作非当前标签时才使用刚刷新的显式 ID。标签已关闭或进程已退出时会明确说明“命令未执行”并给出重新列举、快照与重试路径，不会静默改投其他终端。当前工具活动与其上方正文改用 6pt 正常行距，不再叠加完整的消息间距。
 
 - **终端活跃标签路由、标签工具与主机标识提取（1.194.0-rc1）** —— 终端工具默认作用于用户当前看到的活跃标签：`terminal_snapshot` / `terminal_send_command` / `terminal_send_control` 不再走会话绑定表，显式 `terminal_tab_id` 仍可一次性指向其他标签且不抢占活跃标签；新增 `terminal_list_tabs` 与 `terminal_select_tab` 让 Agent 按用户指令列出并切换终端标签。新开标签仍从属于打开它的会话（会话切换激活、会话关闭清理），委托 `/bin/sh` 池标签不会成为隐式目标。「开始录制」在没有可用标签时自动激活或新开本地 Shell；「验证主机」升级为「提取主机标识」，向标签内实际 Shell（含手动 SSH）发送兼容 Debian/Ubuntu/macOS 的探测命令，展示 hostname/IP/系统并把标签重命名为主机名。
 

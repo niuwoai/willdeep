@@ -20,11 +20,12 @@ extension AgentChatHistoryRenderer {
         switch event {
         case .modelChanged:
             result.append(transcriptEventIconToken(systemName: "cube"))
+            result.append(NSAttributedString(string: "  "))
         case .responseStopped:
-            result.append(transcriptEventIconToken(systemName: "stop.circle"))
+            break
         }
         result.append(NSAttributedString(
-            string: "  " + content,
+            string: content,
             attributes: [
                 .font: font,
                 .foregroundColor: color,

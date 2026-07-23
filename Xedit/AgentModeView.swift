@@ -599,6 +599,10 @@ enum AgentDesign {
     static let chatHorizontalInset: CGFloat = 26
     static let userMessageMaxWidthRatio: CGFloat = 0.78
     static let messageVerticalSpacing: CGFloat = 20
+    /// Live tool activity belongs to the assistant prose immediately above
+    /// it, so it uses normal line rhythm instead of the full inter-message
+    /// gap reserved for separate chat turns.
+    static let liveActivityTopSpacing: CGFloat = 6
     static let composerHeight: CGFloat = 124
     static let headerHeight: CGFloat = 44
     static let statusBarHeight: CGFloat = 26
