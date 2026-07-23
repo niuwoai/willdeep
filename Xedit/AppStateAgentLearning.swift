@@ -103,7 +103,7 @@ extension AppState {
         guard memoryState.settings.normalized.isMemoryEnabled,
               memoryState.settings.normalized.autoSummaryEnabled,
               let latestUser = runtime.messages.last(where: { $0.isOperatorInput }),
-              let assistant = runtime.messages.last(where: {
+              runtime.messages.contains(where: {
                   $0.role == .assistant
                       && $0.createdAt >= latestUser.createdAt
                       && !$0.modelContent.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
@@ -115,9 +115,11 @@ extension AppState {
         // 抽取逻辑),拍成 [AgentMemoryDraft] 挂到 LearningEvent 上,等用户
         // 在 popover 里按 Approve 才真正写入。详见 [AgentMemoryDraft](Xedit/AgentSelfLearning.swift)
         // + [AppState.applyAgentMemoryDrafts](Xedit/AppStateAgentLearning.swift)。
+        // 1.195.0-rc12:候选只从用户原话里挖。assistant 文本里
+        // "use X / should / 自动"这类词天天出现，之前连回复里的表格行
+        // （"数据库自动运维"命中"自动"）都会被拍成记忆建议。
         let candidates = AgentMemoryEngine.candidates(
             fromUser: latestUser.modelContent,
-            assistantText: assistant.modelContent,
             rootDirectory: workspaceURL,
             now: Date()
         )
@@ -189,9 +191,15 @@ extension AppState {
         let meaningfulEvents = events.filter {
             !$0.title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
         }
-        guard !meaningfulEvents.isEmpty else { return }
-        runtime.learningEvents = Array((meaningfulEvents + runtime.learningEvents).prefix(24))
-        AgentLearningReviewStore.enqueue(events: meaningfulEvents, sessionID: runtime.id)
+        // 同一会话里重复的建议（同 kind/标题/内容）不再二次入列——回合末
+        // 自动扫描每轮都跑，没有这道闸同一条 MCP 建议会反复弹 popover。
+        let freshEvents = AgentSelfLearning.dedupedNewEvents(
+            meaningfulEvents,
+            existing: runtime.learningEvents
+        )
+        guard !freshEvents.isEmpty else { return }
+        runtime.learningEvents = Array((freshEvents + runtime.learningEvents).prefix(24))
+        AgentLearningReviewStore.enqueue(events: freshEvents, sessionID: runtime.id)
     }
 
     static func oneLine(_ text: String, limit: Int) -> String {

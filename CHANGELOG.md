@@ -1,25 +1,67 @@
 # Changelog
 
-> 当前文件保留最新版本（1.195.0-rc11 至 1.109.0-rc340）。
+> 当前文件保留最新版本（1.195.0-rc13 至 1.109.0-rc340）。
 > 更早的 1000 个版本已移至 [CHANGELOG-ARCHIVE.md](CHANGELOG-ARCHIVE.md)。
+
+## 1.195.0-rc13 - 2026-07-24
+
+### Fixed
+
+- 加固三组负载敏感的 flaky 测试，修复 `release_mac_app.rb` 全量并行（1497 用例）时随机红、单独跑必过、两次阻断发布管线的问题：
+  - `AgentStopHandlingTests`「cancelling a foreground command terminates its process promptly」：耗时改为从 `task.cancel()` 起算（进程 spawn 在 fork 风暴下不受测试控制），阈值从 3 秒放宽到 15 秒——仍远低于 `sleep 30` 自然结束与 35 秒超时，"TERM 及时生效"的语义不丢（满载实测该用例总耗时 4.4–5.1 秒，旧阈值每轮必红）。
+  - `AgentQueueModeTests.queuedMessageCancellationFallbackReleasesStuckTurnSlot`：`scheduleQueuedMessageConsumptionAfterCancellation` 改为返回内部 Task（`@discardableResult`，生产调用方行为不变），测试显式 `await` fallback 扫描完成后再断言，删除满载下等不到扫描执行的 3 秒盲轮询。
+  - git 类测试（`GitWorktreeCoreTests` / `AgentGitReviewTests`）随机互扰的根因是 `AppState.gitCommandTimeout` 默认 5 秒在满载 fork/exec 拥塞下被随机击穿，`runGit` 超时静默返回空串导致断言缺文件且失败集合每轮不同；现检测到 XCTest 环境时统一放宽到 60 秒，产品运行时仍为 5 秒。临时仓库本就按 UUID 隔离，无共享状态，两个 suite 保持既有 `.serialized` 不变。
+- 恢复 rc10 为解锁发布而删除的「Terminal host-verification popover cannot auto-focus its copy action」焦点巡检覆盖：锚点从已不存在的 `Button(action: copyAction)` 更新为 1.194.0-rc1 重构后 `AgentHostIdentityPopover` 的 `tab.extractHostIdentity()` 按钮，`.buttonStyle(.plain)` 后紧跟 `.focusable(false)` 的焦点策略校验原样保留。
+- 修复 `AgentHeaderEditorEntryTests` 被 `--skip-tests` 发布漏检的死断言：rc10 起菜单项写法变为 `Button(L10n.Menu.viewShowEditor, action: showEditorAction)`，断言放宽为前缀匹配，「Editor 入口只在应用菜单」的语义不变。
+- 版本号从 **1.195.0-rc12** 递增为 **1.195.0-rc13**，内部构建号从 **118** 递增为 **119**；App、Go agent、Help、Helper、浏览器扩展、README、响应头契约与产品文档保持一致。
+
+## 1.195.0-rc12 - 2026-07-24
+
+### Fixed
+
+- 大幅降低自学习的触发频率并提高建议价值门槛（用户实测"随便一句话就弹学习，学的全是废话"）：
+  - 框架规则类记忆建议（"Agent should call add_memory/create_user_skill/inspect MCP…"）只认**用户原话**——此前判定文本混入最近 3 条 assistant 消息，助手行文里的"建议/以后/自动/集成"天天把关键词闸门撞开；并删除完全不受强意图闸约束的硬编码套话 "Agent should proactively save necessary memory…"（截图实锤的噪声源，存下来只是把产品自身运行策略当经验）。
+  - MCP 发现建议要求**阻塞词、能力词、集成语境词同句共现**——此前全文任意位置"缺少/missing"配任意位置"数据库/mysql"即触发（普通排障对话"该表缺少索引"即中招）；"帮我做 MCP 发现"类泛化指令只认用户原话。同时删除与 MCP 建议事件重复的 external-integration-gap 套话记忆。
+  - 自动记忆候选只从**用户句子**里抽取（不再挖 assistant 回复，杜绝把 markdown 表格行拍成记忆），标记词表剔除高误报词（"use "/"should"/"遇到"/"自动"/"自主"/"workflow"/"skill"/"mcp"）。
+  - 学习事件按（类型+标题+内容）**会话内去重**，同一条建议不再每回合重复弹 popover。
+  - 清理无调用方的 `AgentMemoryState.addAutomaticMemories`（rc16 改为 draft 审批制后遗留的死代码）。
+
+### Changed
+
+- 版本号从 **1.195.0-rc11** 递增为 **1.195.0-rc12**，内部构建号从 **117** 递增为 **118**；App、Go agent、Help、Helper、浏览器扩展、README、响应头契约与产品文档保持一致。
+
+### Tests
+
+- `AgentSelfLearningTests` 更新到新签名并新增回归：排障对话/跨句阻塞词不触发 MCP 建议、日常用户消息不触发框架规则、会话内重复建议被去重；移除已删函数的旧断言。
 
 ## 1.195.0-rc11 - 2026-07-24
 
 ### Fixed
 
-- 加固三组负载敏感的 flaky 测试，修复 `release_mac_app.rb` 全量并行（1495 用例）时随机红、单独跑必过、两次阻断发布管线的问题：
-  - `AgentStopHandlingTests`「cancelling a foreground command terminates its process promptly」：耗时改为从 `task.cancel()` 起算（进程 spawn 在 fork 风暴下不受测试控制），阈值从 3 秒放宽到 15 秒——仍远低于 `sleep 30` 自然结束与 35 秒超时，"TERM 及时生效"的语义不丢。
-  - `AgentQueueModeTests.queuedMessageCancellationFallbackReleasesStuckTurnSlot`：`scheduleQueuedMessageConsumptionAfterCancellation` 改为返回内部 Task（`@discardableResult`，生产调用方行为不变），测试显式 `await` fallback 扫描完成后再断言，删除满载下等不到扫描执行的 3 秒盲轮询。
-  - git 类测试（`GitWorktreeCoreTests` / `AgentGitReviewTests`）随机互扰的根因是 `AppState.gitCommandTimeout` 默认 5 秒在满载 fork/exec 拥塞下被随机击穿，`runGit` 超时静默返回空串导致断言缺文件且失败集合每轮不同；现检测到 XCTest 环境时统一放宽到 60 秒，产品运行时仍为 5 秒。临时仓库本就按 UUID 隔离，无共享状态，两个 suite 保持既有 `.serialized` 不变。
-- 修复两个被 `--skip-tests` 发布漏检的确定性测试回归（源码扫描断言未跟随功能改动）：`AgentHeaderEditorEntryTests` 锚定的菜单项写法已在 rc10 变为 `Button(L10n.Menu.viewShowEditor, action: showEditorAction)`，断言放宽为前缀匹配；`AgentSidePanelFocusPolicyTests` 锚定的 `Button(action: copyAction)` 已在 1.194.0-rc1 重构为 `AgentHostIdentityPopover` 的 `tab.extractHostIdentity()` 按钮，锚点同步更新，`.buttonStyle(.plain)` 后紧跟 `.focusable(false)` 的焦点策略校验保持不变。
-- 版本号从 **1.195.0-rc10** 递增为 **1.195.0-rc11**，内部构建号从 **116** 递增为 **117**；App、Go agent、Help、Helper、浏览器扩展、README、响应头契约与产品文档保持一致。
-
-## 1.195.0-rc10 - 2026-07-24
+- 恢复 composer 上方的活动状态条：rc6 曾把「纯响应期」从显示条件里拿掉、且无可识别动作标题时不再兜底，导致不产出状态标题的模型（如 glm-5.2）在工具卡片结算后整个回合再无任何"正在做什么"的反馈（只剩静态的"处理中"页脚）。现在回合响应期间状态条常驻：有可识别 provider 动作时显示其标题，否则回退到泛化"思考中"，两者都带从左到右的扫光动画与回合计时。任务监督栏（rail）维持 rc6 的克制，只显示明确状态、不参与兜底。
 
 ### Changed
 
-- 打开 Editor 窗口的默认快捷键从 **⌥⌘E** 改为 **⇧⌘E**（Shift+Command+E），与「Show Editor」菜单项一致。
-- 新增两个内置备用快捷键 **⌥⌘E** 与 **⌃⌘E** 也能打开（或聚焦）独立 Editor 窗口——用零尺寸隐藏承接按钮承载额外键位，因为 SwiftUI 单个 `Button` 只能绑定一个 `.keyboardShortcut`；三者触发同一个 `showEditor()` 动作。旧的 ⌥⌘E 肌肉记忆得以保留，避免默认键变更后断链。
+- 打开 Editor 窗口的默认快捷键从 **⌥⌘E** 改为 **⇧⌘E**（Shift+Command+E），与「Show Editor」菜单项一致。（合并自 main 分支同期改动）
+- 新增两个内置备用快捷键 **⌥⌘E** 与 **⌃⌘E** 也能打开（或聚焦）独立 Editor 窗口——用零尺寸隐藏承接按钮承载额外键位，因为 SwiftUI 单个 `Button` 只能绑定一个 `.keyboardShortcut`；三者触发同一个 `showEditor()` 动作。旧的 ⌥⌘E 肌肉记忆得以保留，避免默认键变更后断链。（合并自 main 分支同期改动）
+- 版本号从 **1.195.0-rc10** 递增为 **1.195.0-rc11**，内部构建号从 **116** 递增为 **117**；App、Go agent、Help、Helper、浏览器扩展、README、响应头契约与产品文档保持一致。
+
+### Tests
+
+- `AgentThinkingStatusVisualTests` 更新：断言响应期 composer 状态条必须显示（rc6 的反向断言移除），新增源码巡检守住"思考中兜底存在且仅限 composer 样式、监督栏不兜底"的边界。
+
+## 1.195.0-rc10 - 2026-07-24
+
+### Fixed
+
+- 移除过时的源码巡检测试「Terminal host-verification popover cannot auto-focus its copy action」：1.194.0-rc1 已把「验证宿主」弹层整体替换为「提取宿主身份」，`Button(action: copyAction)` 不复存在，该用例自那以后必红并阻断发布管线（CI 停摆期间未被发现）。同套件的 `sidePanelChromeControlsAreNotFocusable` 仍在全量巡检侧栏 chrome 控件的 `.focusable(false)` 焦点策略，覆盖不受影响。
+
+### Tests
+
+- `AgentToolIntegrationTests.swift`（3496 行，超 3000 行硬限）按主题拆分为七个文件：prompt 快照守卫、队列任务工具、some.im 浏览器登录、工具调用分组/审批展示、命令安全分类、用量统计与工具集成本体；所有 @Suite/@Test 语义与断言保持不变，complexity_guard 恢复 hard=0。
+
+### Changed
+
 - 版本号从 **1.195.0-rc9** 递增为 **1.195.0-rc10**，内部构建号从 **115** 递增为 **116**；App、Go agent、Help、Helper、浏览器扩展、README、响应头契约与产品文档保持一致。
 
 ## 1.195.0-rc9 - 2026-07-23

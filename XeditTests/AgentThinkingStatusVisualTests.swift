@@ -19,28 +19,64 @@ struct AgentThinkingStatusVisualTests {
         #expect(!source.contains("AgentTurnActivityStatusView("))
     }
 
-    @Test("pure provider response does not add a generic composer status")
-    func pureResponseOmitsGenericComposerStatus() {
+    @Test("composer status stays visible for the whole responding turn")
+    func composerStatusStaysVisibleWhileResponding() {
+        // rc6 曾在纯响应期隐藏这条状态——不产出可识别动作标题的模型
+        // （glm-5.2 等）在工具卡片结算后就再无任何"正在做什么"的反馈。
+        // 回合进行中 composer 上方必须始终有活动状态条。
+        #expect(AgentComposerActivityStatusPolicy.shouldShow(
+            isResponding: true,
+            isCompressingContext: false,
+            runningTaskCount: 0,
+            isWaitingForUserDecision: false
+        ))
         #expect(!AgentComposerActivityStatusPolicy.shouldShow(
+            isResponding: false,
             isCompressingContext: false,
             runningTaskCount: 0,
             isWaitingForUserDecision: false
         ))
         #expect(AgentComposerActivityStatusPolicy.shouldShow(
+            isResponding: false,
             isCompressingContext: true,
             runningTaskCount: 0,
             isWaitingForUserDecision: false
         ))
         #expect(AgentComposerActivityStatusPolicy.shouldShow(
+            isResponding: false,
             isCompressingContext: false,
             runningTaskCount: 1,
             isWaitingForUserDecision: false
         ))
         #expect(AgentComposerActivityStatusPolicy.shouldShow(
+            isResponding: false,
             isCompressingContext: false,
             runningTaskCount: 0,
             isWaitingForUserDecision: true
         ))
+    }
+
+    @Test("composer keeps a generic thinking fallback while the rail stays explicit")
+    func composerThinkingFallbackScopedToComposerStyle() throws {
+        let repositoryRoot = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+        let source = try String(
+            contentsOf: repositoryRoot.appendingPathComponent("Xedit/AgentTaskMonitorRail.swift"),
+            encoding: .utf8
+        )
+
+        // 泛化"思考中"兜底必须存在（composer 条在纯响应期的反馈），
+        // 且必须被 style == .composer 守卫——任务监督栏维持 rc6 的
+        // "只显示明确状态"约束，不得跟着兜底。
+        let fallback = try #require(
+            source.range(of: #"AgentActivityPhase(label: "思考中""#)
+        )
+        let guardRange = try #require(
+            source.range(of: "guard style == .composer else { return nil }")
+        )
+        #expect(guardRange.lowerBound < fallback.lowerBound)
+        #expect(source.distance(from: guardRange.lowerBound, to: fallback.lowerBound) < 120)
     }
 
     @MainActor

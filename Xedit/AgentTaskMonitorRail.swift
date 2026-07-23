@@ -696,9 +696,11 @@ struct AgentSemanticActivityStatusLine: View {
     }
 
     private var shouldAnimateCurrentAction: Bool {
+        // 有可识别动作标题时扫光，没有时泛化"思考中"兜底同样扫光——
+        // 进行中反馈由动画文字承担，所以只要回合在响应且不处于压缩/
+        // 等待用户决定这类静态状态，就保持动画。
         guard appState.isAgentResponding,
               !appState.isCompressingAgentContext,
-              appState.agentCurrentActivityHeadline != nil,
               !appState.agentToolCalls.contains(where: { call in
                   call.status == .pendingApproval
                       || call.status == .awaitingConfirm
@@ -725,14 +727,18 @@ struct AgentSemanticActivityStatusLine: View {
             return AgentActivityPhase(label: "任务运行中", systemImage: "play.circle", tint: .green)
         }
         if appState.isAgentResponding {
-            guard let headline = appState.agentCurrentActivityHeadline else {
-                return nil
+            if let headline = appState.agentCurrentActivityHeadline {
+                return AgentActivityPhase(
+                    label: headline.liveTitle,
+                    systemImage: headline.systemImage,
+                    tint: .secondary
+                )
             }
-            return AgentActivityPhase(
-                label: headline.liveTitle,
-                systemImage: headline.systemImage,
-                tint: .secondary
-            )
+            // 没有可识别的 provider 动作标题时，composer 条回退到泛化
+            // "思考中"——不产出状态标题的模型在纯响应期也要有活动反馈。
+            // 任务监督栏（.rail）维持 rc6 的克制：只显示明确状态，不兜底。
+            guard style == .composer else { return nil }
+            return AgentActivityPhase(label: "思考中", systemImage: "brain", tint: .secondary)
         }
         return AgentActivityPhase(label: "空闲", systemImage: "checkmark.circle", tint: .secondary)
     }

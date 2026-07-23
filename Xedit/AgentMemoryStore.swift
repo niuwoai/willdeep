@@ -405,14 +405,16 @@ nonisolated enum AgentMemoryEngine {
         return "\(trimmed[..<end]) [truncated]"
     }
 
+    /// 1.195.0-rc12:只挖用户原话。记忆的价值在于"用户确立过什么"，
+    /// assistant 的行文里 should/use/自动 这类标记词密度极高，挖它等于
+    /// 每回合都把回复片段（甚至 markdown 表格行）拍成候选。
     static func candidates(
         fromUser userText: String,
-        assistantText: String,
         rootDirectory: URL?,
         now: Date = Date()
     ) -> [AgentMemoryRecord] {
         let projectID = projectFingerprint(for: rootDirectory)
-        let chunks = candidateSentences(from: userText) + candidateSentences(from: assistantText)
+        let chunks = candidateSentences(from: userText)
         var seen = Set<String>()
         return chunks.compactMap { raw in
             let sanitized = AgentMemorySanitizer.sanitize(raw)
@@ -531,11 +533,14 @@ nonisolated enum AgentMemoryEngine {
     }
 
     private static func candidateSentences(from text: String) -> [String] {
+        // 1.195.0-rc12:剔除高误报标记("use "/"should"/"遇到"/"自动"/
+        // "自主"/"workflow"/"skill"/"mcp")——它们在普通技术讨论里出现率
+        // 太高,留下的都是承载持久化意图的词。
         let markers = [
-            "remember", "记住", "以后", "always", "never", "must", "should",
-            "prefer", "use ", "don't", "不要", "必须", "统一", "规则", "约定",
-            "希望", "默认", "优先", "每次", "下次", "遇到", "自动", "自主",
-            "workflow", "skill", "mcp", "whenever", "next time", "by default"
+            "remember", "记住", "以后", "always", "never", "must",
+            "prefer", "don't", "不要", "必须", "统一", "规则", "约定",
+            "希望", "默认", "优先", "每次", "下次",
+            "whenever", "next time", "by default", "from now on"
         ]
         return text
             .components(separatedBy: CharacterSet(charactersIn: "\n。.!?；;"))
@@ -717,24 +722,6 @@ final class AgentMemoryState: ObservableObject {
         guard !normalized.content.isEmpty else { return }
         memories.insert(normalized, at: 0)
         mergeDuplicateMemories()
-    }
-
-    func addAutomaticMemories(
-        fromUser userText: String,
-        assistantText: String,
-        rootDirectory: URL?,
-        now: Date = Date()
-    ) {
-        guard settings.normalized.isMemoryEnabled, settings.normalized.autoSummaryEnabled else { return }
-        let candidates = AgentMemoryEngine.candidates(
-            fromUser: userText,
-            assistantText: assistantText,
-            rootDirectory: rootDirectory,
-            now: now
-        )
-        guard !candidates.isEmpty else { return }
-        memories = (candidates + memories).deduplicatedByMemoryID()
-        mergeDuplicateMemories(now: now)
     }
 
     func updateMemory(
