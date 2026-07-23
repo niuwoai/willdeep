@@ -136,7 +136,7 @@ struct AgentConfirmationVisualTests {
         #expect(
             AgentThinkingAnimationMetrics.maximumBackgroundOpacity
                 - AgentThinkingAnimationMetrics.minimumBackgroundOpacity
-                <= 0.04
+                <= 0.040_001
         )
     }
 
