@@ -1506,12 +1506,13 @@ struct AgentSidePanelFilesView: View {
 
 struct AgentSidePanelPlanView: View {
     @EnvironmentObject var appState: AppState
+    @State private var isPlanExpanded = true
 
     var body: some View {
         Group {
             if let plan = appState.agentCurrentPlan {
                 ScrollView {
-                    AgentPlanCard(plan: plan)
+                    AgentPlanCard(plan: plan, isExpanded: $isPlanExpanded)
                         .padding(12)
                 }
             } else {

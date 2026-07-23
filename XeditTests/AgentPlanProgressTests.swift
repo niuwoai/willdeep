@@ -293,6 +293,37 @@ struct AgentPlanProgressTests {
         #expect(AgentPlanStepLayoutMetrics.indexColumnWidth >= ceil(doubleDigitWidth))
     }
 
+    @Test("plan card opens for approval and starts collapsed during execution")
+    func planCardInitialExpansionFollowsApprovalNeed() {
+        #expect(AgentPlanCardExpansionPolicy.initiallyExpanded(for: .proposed))
+        #expect(!AgentPlanCardExpansionPolicy.initiallyExpanded(for: .approved))
+        #expect(!AgentPlanCardExpansionPolicy.initiallyExpanded(for: .executing))
+        #expect(!AgentPlanCardExpansionPolicy.initiallyExpanded(for: .done))
+    }
+
+    @Test("plan card collapses only when a new assistant round appears")
+    func planCardCollapsesForNewAssistantRound() {
+        let previousID = UUID()
+        let nextID = UUID()
+
+        #expect(!AgentPlanCardExpansionPolicy.shouldCollapseForAssistantRound(
+            previousMessageID: previousID,
+            currentMessageID: nil
+        ))
+        #expect(!AgentPlanCardExpansionPolicy.shouldCollapseForAssistantRound(
+            previousMessageID: previousID,
+            currentMessageID: previousID
+        ))
+        #expect(AgentPlanCardExpansionPolicy.shouldCollapseForAssistantRound(
+            previousMessageID: previousID,
+            currentMessageID: nextID
+        ))
+        #expect(AgentPlanCardExpansionPolicy.shouldCollapseForAssistantRound(
+            previousMessageID: nil,
+            currentMessageID: nextID
+        ))
+    }
+
     @Test("approved plan with unfinished work continues automatically")
     func unfinishedApprovedPlanContinuesAutomatically() {
         let plan = AgentPlan(

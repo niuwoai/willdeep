@@ -37,70 +37,101 @@ enum AgentPlanStepLayoutMetrics {
     static let indexColumnWidth: CGFloat = 30
 }
 
+nonisolated enum AgentPlanCardExpansionPolicy {
+    static func initiallyExpanded(for status: AgentPlan.Status) -> Bool {
+        status == .proposed
+    }
+
+    static func shouldCollapseForAssistantRound(
+        previousMessageID: AgentMessage.ID?,
+        currentMessageID: AgentMessage.ID?
+    ) -> Bool {
+        guard let currentMessageID else { return false }
+        return currentMessageID != previousMessageID
+    }
+}
+
 // MARK: - Plan card
 
 struct AgentPlanCard: View {
     @EnvironmentObject var appState: AppState
     let plan: AgentPlan
+    @Binding var isExpanded: Bool
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
-            HStack(spacing: 8) {
-                Image(systemName: "list.number")
-                    .font(.system(size: 11, weight: .semibold))
-                    .foregroundStyle(.orange)
-                Text(L10n.PlanCard.header)
-                    .font(.system(size: 11, weight: .semibold))
-                    .textCase(.uppercase)
-                    .foregroundStyle(.secondary)
-                PlanStatusPill(status: plan.status)
-                Spacer(minLength: 0)
-            }
-
-            if !plan.summary.isEmpty {
-                Text(plan.summary)
-                    .font(.system(size: 12))
-                    .foregroundStyle(.secondary)
-            }
-
-            VStack(alignment: .leading, spacing: 4) {
-                ForEach(Array(plan.steps.enumerated()), id: \.element.id) { index, step in
-                    AgentPlanStepRow(
-                        index: index + 1,
-                        step: step,
-                        interactive: plan.status != .proposed && plan.status != .rejected,
-                        onCycle: { next in
-                            appState.setAgentPlanStepStatus(id: step.id, status: next)
-                        }
-                    )
+            Button {
+                withAnimation(.easeInOut(duration: 0.18)) {
+                    isExpanded.toggle()
                 }
-            }
-
-            if plan.status == .proposed {
-                // rc16:Reject 在左、Approve 在右(borderedProminent),对齐
-                // macOS「拒绝远离主操作位」防误触习惯。
+            } label: {
                 HStack(spacing: 8) {
-                    Button(L10n.PlanCard.rejectButton) { appState.rejectAgentPlan() }
-                        .buttonStyle(.bordered)
-                        .controlSize(.small)
-                    Button(L10n.PlanCard.approveButton) { appState.approveAgentPlan() }
-                        .buttonStyle(.borderedProminent)
-                        .controlSize(.small)
+                    Image(systemName: "list.number")
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundStyle(.orange)
+                    Text(L10n.PlanCard.header)
+                        .font(.system(size: 11, weight: .semibold))
+                        .textCase(.uppercase)
+                        .foregroundStyle(.secondary)
+                    PlanStatusPill(status: plan.status)
                     Spacer(minLength: 0)
-                    Text(L10n.PlanCard.infoText)
-                        .font(.system(size: 10))
+                    Image(systemName: isExpanded ? "chevron.up" : "chevron.down")
+                        .font(.system(size: 9, weight: .semibold))
                         .foregroundStyle(.secondary)
                 }
-            } else if plan.status == .approved || plan.status == .executing {
-                Button(L10n.PlanCard.markCompleteButton) { appState.completeAgentPlan() }
-                    .buttonStyle(.bordered)
-                    .controlSize(.small)
+                .contentShape(Rectangle())
             }
+            .buttonStyle(.plain)
+            .help(isExpanded ? L10n.PlanCard.collapseHelp : L10n.PlanCard.expandHelp)
+            .accessibilityLabel(L10n.PlanCard.header)
+            .accessibilityValue(isExpanded ? L10n.PlanCard.expanded : L10n.PlanCard.collapsed)
 
-            // Always offer a way to revise mid-execution — useful when
-            // the agent's plan diverged from what the user actually
-            // wanted, or when a constraint emerges partway through.
-            AgentPlanRevisionRow()
+            if isExpanded {
+                if !plan.summary.isEmpty {
+                    Text(plan.summary)
+                        .font(.system(size: 12))
+                        .foregroundStyle(.secondary)
+                }
+
+                VStack(alignment: .leading, spacing: 4) {
+                    ForEach(Array(plan.steps.enumerated()), id: \.element.id) { index, step in
+                        AgentPlanStepRow(
+                            index: index + 1,
+                            step: step,
+                            interactive: plan.status != .proposed && plan.status != .rejected,
+                            onCycle: { next in
+                                appState.setAgentPlanStepStatus(id: step.id, status: next)
+                            }
+                        )
+                    }
+                }
+
+                if plan.status == .proposed {
+                    // rc16:Reject 在左、Approve 在右(borderedProminent),对齐
+                    // macOS「拒绝远离主操作位」防误触习惯。
+                    HStack(spacing: 8) {
+                        Button(L10n.PlanCard.rejectButton) { appState.rejectAgentPlan() }
+                            .buttonStyle(.bordered)
+                            .controlSize(.small)
+                        Button(L10n.PlanCard.approveButton) { appState.approveAgentPlan() }
+                            .buttonStyle(.borderedProminent)
+                            .controlSize(.small)
+                        Spacer(minLength: 0)
+                        Text(L10n.PlanCard.infoText)
+                            .font(.system(size: 10))
+                            .foregroundStyle(.secondary)
+                    }
+                } else if plan.status == .approved || plan.status == .executing {
+                    Button(L10n.PlanCard.markCompleteButton) { appState.completeAgentPlan() }
+                        .buttonStyle(.bordered)
+                        .controlSize(.small)
+                }
+
+                // Always offer a way to revise mid-execution — useful when
+                // the agent's plan diverged from what the user actually
+                // wanted, or when a constraint emerges partway through.
+                AgentPlanRevisionRow()
+            }
         }
         .padding(12)
         .background(

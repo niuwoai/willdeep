@@ -892,6 +892,30 @@
         }
       }
     },
+    "agent-git-review.commit" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Commit" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "提交" } } } },
+    "agent-git-review.commit-and-push" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Commit and Push" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "提交并推送" } } } },
+    "agent-git-review.commit-and-push-succeeded" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Commit created and pushed." } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "已提交并推送。" } } } },
+    "agent-git-review.commit-message-placeholder" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Commit message…" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "提交信息…" } } } },
+    "agent-git-review.commit-message-required" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Enter a commit message." } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "请输入提交信息。" } } } },
+    "agent-git-review.commit-succeeded" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Commit created." } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "提交成功。" } } } },
+    "agent-git-review.commit-succeeded-push-failed" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Commit created, but push failed: %@" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "提交成功，但推送失败：%@" } } } },
+    "agent-git-review.collapse-all-files" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Collapse all files" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "折叠全部文件" } } } },
+    "agent-git-review.detached" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "detached" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "游离分支" } } } },
+    "agent-git-review.empty.last-commit" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "No commit is available to review." } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "当前没有可审阅的提交。" } } } },
+    "agent-git-review.empty.staged" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "No staged changes." } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "没有已暂存的更改。" } } } },
+    "agent-git-review.empty.unstaged" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "No unstaged changes." } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "没有未暂存的更改。" } } } },
+    "agent-git-review.expand-all-files" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Expand all files" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "展开全部文件" } } } },
+    "agent-git-review.include-unstaged" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Include unstaged changes" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "包含未暂存的更改" } } } },
+    "agent-git-review.jump-to-file" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Jump to file" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "跳转到文件" } } } },
+    "agent-git-review.open-file-diff" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Open file diff" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "打开文件差异" } } } },
+    "agent-git-review.overview-too-large" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "The combined diff is above the review panel display budget." } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "合并差异超过审阅面板的展示上限。" } } } },
+    "agent-git-review.scope.last-commit" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Last commit" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "上一轮提交" } } } },
+    "agent-git-review.scope.staged" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Staged" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "已暂存" } } } },
+    "agent-git-review.scope.uncommitted" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Uncommitted" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "未提交" } } } },
+    "agent-git-review.scope.unstaged" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Unstaged" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "未暂存" } } } },
+    "agent-git-review.show-combined-diff" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Show file review" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "显示逐文件审阅" } } } },
+    "agent-git-review.show-file-list" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Show changed files" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "显示已更改文件" } } } },
+    "agent-git-review.unmodified-lines" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "%@ unmodified lines" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "%@ 行未修改" } } } },
     "agent-image-editor.brush-mode-picker" : {
       "comment" : "Segmented picker label for the brush paint mode in the image mask editor",
       "extractionState" : "manual",
@@ -3258,13 +3282,13 @@
         "en" : {
           "stringUnit" : {
             "state" : "new",
-            "value" : "Diff"
+            "value" : "Review"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Diff"
+            "value" : "审阅"
           }
         }
       }
@@ -14975,6 +14999,78 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "同意"
+          }
+        }
+      }
+    },
+    "plan-card.collapse-help" : {
+      "comment" : "tooltip for collapsing the current plan card",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Collapse plan"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "收起计划"
+          }
+        }
+      }
+    },
+    "plan-card.collapsed" : {
+      "comment" : "accessibility value for a collapsed plan card",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Collapsed"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已收起"
+          }
+        }
+      }
+    },
+    "plan-card.expand-help" : {
+      "comment" : "tooltip for expanding the current plan card",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Expand plan"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "展开计划"
+          }
+        }
+      }
+    },
+    "plan-card.expanded" : {
+      "comment" : "accessibility value for an expanded plan card",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Expanded"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已展开"
           }
         }
       }

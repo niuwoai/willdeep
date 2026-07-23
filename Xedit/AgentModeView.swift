@@ -290,6 +290,7 @@ struct AgentModeView: View {
             // was supplied.
             if request.kind == .diff {
                 appState.agentSidePanelSelectedFile = request.file
+                sidePanelWidth = max(sidePanelWidth, AgentDesign.reviewPanelPreferredWidth)
             } else if let url = request.file {
                 appState.agentSidePanelSelectedFile = url
             }
@@ -599,6 +600,9 @@ enum AgentDesign {
     static let chatHorizontalInset: CGFloat = 26
     static let userMessageMaxWidthRatio: CGFloat = 0.78
     static let messageVerticalSpacing: CGFloat = 20
+    /// A readable baseline for side-by-side Git review. Small windows still
+    /// clamp this value through `panelWidthCap`.
+    static let reviewPanelPreferredWidth: Double = 520
     /// Live tool activity belongs to the assistant prose immediately above
     /// it, so it uses normal line rhythm instead of the full inter-message
     /// gap reserved for separate chat turns.

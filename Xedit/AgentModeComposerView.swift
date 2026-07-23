@@ -310,58 +310,35 @@ private struct AgentComposerWorktreeSummaryBar: View {
     @EnvironmentObject var appState: AppState
 
     var body: some View {
-        HStack(spacing: 6) {
-            Text(L10n.AgentWorktreeSummary.filesChanged(appState.agentWorktreeChanges.fileCount))
-                .font(.system(size: 12, weight: .medium))
-                .foregroundStyle(.secondary)
-                .lineLimit(1)
-
-            Text("+\(appState.agentWorktreeChanges.totalAddedLines)")
-                .foregroundStyle(.green)
-            Text("-\(appState.agentWorktreeChanges.totalDeletedLines)")
-                .foregroundStyle(.red)
-
-            Spacer(minLength: 8)
-
-            Button {
-                appState.showAgentWorktreeDiff()
-            } label: {
-                HStack(spacing: 5) {
-                    if appState.isAgentWorktreeDiffPreviewLoading {
-                        ProgressView()
-                            .controlSize(.mini)
-                    }
-                    Text(appState.isAgentWorktreeDiffPreviewLoading
-                         ? L10n.AgentWorktreeSummary.preparingReview
-                         : L10n.AgentWorktreeSummary.review)
-                }
-                .font(.system(size: 12, weight: .medium))
+        Button {
+            appState.agentSidePanelRequest = AgentSidePanelOpenRequest(kind: .diff)
+        } label: {
+            HStack(spacing: 6) {
+                Text(L10n.AgentWorktreeSummary.filesChanged(appState.agentWorktreeChanges.fileCount))
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                Text("+\(appState.agentWorktreeChanges.totalAddedLines)")
+                    .foregroundStyle(.green)
+                Text("-\(appState.agentWorktreeChanges.totalDeletedLines)")
+                    .foregroundStyle(.red)
             }
-            .buttonStyle(.plain)
-            .focusable(false)
-            .foregroundStyle(.primary)
-            .disabled(appState.isAgentWorktreeDiffPreviewLoading)
-            .help(L10n.AgentWorktreeSummary.reviewHelp)
-
-            Button {
-                withAnimation(.easeInOut(duration: 0.16)) {
-                    appState.isAgentWorktreeChangeCardExpanded.toggle()
-                }
-            } label: {
-                Image(systemName: appState.isAgentWorktreeChangeCardExpanded ? "chevron.down" : "chevron.up")
-                    .font(.system(size: 10, weight: .semibold))
-                    .frame(width: 18, height: 18)
-                    .contentShape(Rectangle())
-            }
-            .buttonStyle(.plain)
-            .focusable(false)
-            .foregroundStyle(.secondary)
-            .help(appState.isAgentWorktreeChangeCardExpanded ? "收起已变更文件列表" : "展开已变更文件列表")
+            .font(.system(size: 12, weight: .medium, design: .monospaced))
+            .monospacedDigit()
+            .padding(.horizontal, 12)
+            .frame(height: 28)
+            .background(
+                Capsule(style: .continuous)
+                    .fill(appState.editorSettings.interfaceSkin.palette.controlFill.opacity(0.72))
+            )
+            .overlay(
+                Capsule(style: .continuous)
+                    .strokeBorder(Color.primary.opacity(0.09), lineWidth: 1)
+            )
+            .contentShape(Capsule(style: .continuous))
         }
-        .font(.system(size: 12, weight: .medium, design: .monospaced))
-        .monospacedDigit()
-        .padding(.horizontal, 12)
-        .frame(height: 24)
+        .buttonStyle(.plain)
+        .focusable(false)
+        .help(L10n.AgentWorktreeSummary.reviewHelp)
     }
 }
 

@@ -1,3 +1,43 @@
+# Design QA：Codex 风格 Git 审阅与提交
+
+## 验收范围
+
+- source visual truth：`/var/folders/np/rjc0y5w52x324x21pv6g33440000gp/T/codex-clipboard-e7c744dd-0d6e-41ba-940a-8df6cf89dd07.png`（576 × 807 px）。
+- implementation screenshot：`/var/folders/np/rjc0y5w52x324x21pv6g33440000gp/T/com.openai.sky.CUAService/WillDeep Screenshot 2026-07-23 at 1.05.35 PM.jpeg`（1361 × 768 px）。
+- 同画布聚焦对比：`.local-cache/design-qa-git-review-comparison-final.png`（1152 × 807 px；左右各 576 × 807 px）。
+- state：浅色 Rice Paper 皮肤、Xedit 工作区、右侧 520pt 审阅面板、上一轮提交范围；另以未提交范围实测提交弹层。
+
+## 修正记录
+
+1. Composer 的文件数与增删行合并为单一胶囊入口，点击后直接打开右侧审阅面板，不再先弹出独立 Diff sheet。
+2. 审阅默认展示合并 Diff；顶部可切换未提交、未暂存、已暂存、上一轮提交，并提供文件跳转、合并/列表视图、单文件详情与刷新。
+3. 面板打开时采用 520pt 可读宽度基线；Diff 使用 12pt 等宽字，新增文件起点采用半粗字体与皮肤控制底色，增删行保留语义色与轻背景。
+4. 底部提交入口展示当前分支与增删统计；弹层包含提交信息、是否包含未暂存更改、提交和提交并推送。空文案时两个操作保持禁用。
+5. 提交服务区分“本地提交成功”和“推送失败”，不会把已经成功的本地提交误报为整体失败；所有用户可见文案进入英中 i18n。
+
+## Required Fidelity Surfaces
+
+- Fonts and typography：参考图和实现均使用等宽 Diff 字体；实现由 11pt 提升至 12pt，文件起点使用半粗字，工具栏统计保持紧凑但可读。
+- Spacing and layout rhythm：右侧面板以对话并排方式打开；顶部范围/统计/跳转/视图操作单行排列，正文占据剩余高度，提交入口固定在底部。
+- Colors and visual tokens：面板、控制底色、分隔线和正文读取当前皮肤 token；新增/删除继续使用既有绿/红语义色，没有引入新的产品色。
+- Image quality and asset fidelity：图标使用 SF Symbols；截图来自真实 Debug App 与真实 Git 仓库状态，没有模拟组件。
+- Copy and content：审阅范围、空态、提交结果和推送失败均有英中本地化；分支、文件路径与统计来自实际 Git 命令。
+
+## Findings
+
+同画布左侧是 Codex 的逐文件审阅，右侧是 WillDeep 的合并 Diff。实现保留了参考中最关键的“右侧直接审阅、范围统计、文件定位和语义增删色”，同时沿用 WillDeep 的皮肤背景；合并视图用文件起点强调行补足连续 Diff 的层级，文件列表和单文件模式则承担更细粒度导航。真实窗口中未发现裁切、工具栏拥挤、过小字体或提交弹层遮挡关键操作的问题，没有未解决的 P0、P1 或 P2 视觉差异。
+
+## 验证
+
+- Computer Use 实测右侧审阅、范围切换、真实合并 Diff 与提交弹层；没有触发提交或推送。
+- Git 审阅与 Diff 性能两套定向测试此前共 15 项通过；最终样式修改后的 App 目标编译通过。
+- 最终三套定向测试重跑被仓库现存的 `AgentPlanProgressTests` 缺失 `AgentPlanCardExpansionPolicy` 编译错误阻断；该错误不在本次 Git 审阅改动范围。
+- 版本一致性、复杂度硬门槛与 `git diff --check` 均通过；本功能在 `1.194.0-rc6` / Build 91 引入，当前工作区已同步后续计划卡修复至 `1.194.0-rc7` / Build 92。
+
+final result: passed
+
+---
+
 # Design QA：Goal 回合交付小结
 
 ## 验收范围

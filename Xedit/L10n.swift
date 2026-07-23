@@ -879,7 +879,7 @@ nonisolated enum L10n {
 
     enum AgentSidePanel {
         static let preview = String(localized: "agent-side-panel.preview", defaultValue: "Preview")
-        static let diff = String(localized: "agent-side-panel.diff", defaultValue: "Diff")
+        static let diff = String(localized: "agent-side-panel.diff", defaultValue: "Review")
         static let files = String(localized: "agent-side-panel.files", defaultValue: "Files")
         static let terminal = String(localized: "agent-side-panel.terminal", defaultValue: "Terminal")
         static let backgroundTasks = String(localized: "agent-side-panel.background-tasks", defaultValue: "Background tasks")
@@ -1084,6 +1084,10 @@ nonisolated enum L10n {
 
     enum PlanCard {
         static let approveButton = String(localized: "plan-card.approve-button", defaultValue: "Approve")
+        static let collapseHelp = String(localized: "plan-card.collapse-help", defaultValue: "Collapse plan")
+        static let collapsed = String(localized: "plan-card.collapsed", defaultValue: "Collapsed")
+        static let expandHelp = String(localized: "plan-card.expand-help", defaultValue: "Expand plan")
+        static let expanded = String(localized: "plan-card.expanded", defaultValue: "Expanded")
         static let header = String(localized: "plan-card.header", defaultValue: "Plan")
         static let infoText = String(localized: "plan-card.info-text", defaultValue: "Plan mode blocks writes until you Approve.")
         static let markCompleteButton = String(localized: "plan-card.mark-complete-button", defaultValue: "Mark plan complete")

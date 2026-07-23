@@ -162,12 +162,14 @@ struct AgentSidePanelDiffPerformanceTests {
 
     @Test("TextKit diff keeps native foreground and line background colors")
     func appKitDiffKeepsNativeColors() throws {
-        let diff = "-old\n+new\n@@ -1 +1 @@\n context"
+        #expect(AgentDiffColorizer.fontSize == 12)
+        let diff = "diff --git a/a.swift b/a.swift\n-old\n+new\n@@ -1 +1 @@\n context"
         let rendered = AgentDiffColorizer.appKitAttributed(
             diff,
             palette: EditorInterfaceSkin.mistForest.palette
         ).value
         let source = rendered.string as NSString
+        let fileHeaderRange = source.range(of: "diff --git")
         let deletionRange = source.range(of: "-old")
         let additionRange = source.range(of: "+new")
         let hunkRange = source.range(of: "@@ -1 +1 @@")
@@ -188,6 +190,16 @@ struct AgentSidePanelDiffPerformanceTests {
             at: additionRange.location,
             effectiveRange: nil
         ) as? NSColor
+        let fileHeaderBackground = rendered.attribute(
+            .backgroundColor,
+            at: fileHeaderRange.location,
+            effectiveRange: nil
+        ) as? NSColor
+        let fileHeaderFont = rendered.attribute(
+            .font,
+            at: fileHeaderRange.location,
+            effectiveRange: nil
+        ) as? NSFont
         let hunkForeground = rendered.attribute(
             .foregroundColor,
             at: hunkRange.location,
@@ -197,16 +209,20 @@ struct AgentSidePanelDiffPerformanceTests {
         #expect(deletionForeground != additionForeground)
         #expect(deletionBackground != nil)
         #expect(additionBackground != nil)
+        #expect(fileHeaderBackground != nil)
+        #expect(fileHeaderFont?.pointSize == AgentDiffColorizer.fontSize)
         #expect(hunkForeground == NSColor(EditorInterfaceSkin.mistForest.palette.accent))
     }
 
-    @Test("Diff panel is file-first and uses non-contiguous TextKit layout")
+    @Test("Diff panel uses bounded Git loading and non-contiguous TextKit layout")
     func diffPanelAvoidsWholeDocumentSwiftUILayout() throws {
         let source = try Self.source(named: "AgentSidePanelDiffView.swift")
+        let loaderSource = try Self.source(named: "AgentGitReview.swift")
 
         #expect(source.contains("LazyVStack(spacing: 0)"))
-        #expect(source.contains("loadAgentWorktreeChangeSummary(status: status)"))
-        #expect(source.contains("loadUntrackedDiffPreviewSection"))
+        #expect(source.contains("AgentGitReviewLoader.load("))
+        #expect(loaderSource.contains("loadAgentWorktreeChangeSummary(status: status)"))
+        #expect(loaderSource.contains("loadUntrackedDiffPreviewSection"))
         #expect(source.contains(".onCompatibleChange(of: appState.agentSidePanelSelectedFile)"))
         #expect(source.contains("selectRequestedFile(appState.agentSidePanelSelectedFile"))
         #expect(source.contains("NSTextView.scrollableTextView()"))

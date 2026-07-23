@@ -1,6 +1,6 @@
 # WillDeep Product Overview
 
-> Last updated: 2026-07-23 | Current version: v1.194.0-rc5
+> Last updated: 2026-07-23 | Current version: v1.194.0-rc8
 
 ## Positioning
 
@@ -11,6 +11,12 @@ Official product domain: [willdeep.com](https://willdeep.com).
 WillDeep is configured for non-App-Store distribution without App Sandbox so it can access local project files with fewer permission interruptions.
 
 ## 架构概览
+
+- **Codex 风格逐文件 Git 审阅（1.194.0-rc8）** —— 右侧审阅面板默认以逐文件卡片展示 Diff，文件头包含路径和增删统计，可逐项或一键折叠/展开；补丁正文提供旧/新双行号、语义增删底色与“未修改 N 行”收束条，同时保留范围切换、文件列表、单文件详情和提交/推送闭环。
+
+- **计划卡可收起与轮次自动归位（1.194.0-rc7）** —— 对话顶部的当前计划卡可通过标题行双向展开/收起；历史与当前回复中的“查看完整计划”会先展开再定位。新的 AI 输出轮次开始时，执行中的计划自动收起，待审批的新计划仍默认展开以保留批准/拒绝入口。
+
+- **Git 变更审阅与提交闭环（1.194.0-rc6）** —— Composer 通过“文件数 + 增删行”的单一胶囊入口打开右侧审阅面板；面板以 520pt 可读宽度和分文件强调行展示 Diff，支持未提交、未暂存、已暂存、上一轮提交范围，提供合并 Diff、文件跳转、文件列表、单文件详情，以及可选暂存的提交/提交并推送流程。
 
 - **桌宠、步骤进度与停止反馈细节（1.194.0-rc5）** —— 桌宠消息卡与宠物垂直居中；Composer 步骤圆环按当前步骤占总步骤的比例展示进度；用户主动停止回复时只显示“用户已停止生成”，不再附带停止符号。
 

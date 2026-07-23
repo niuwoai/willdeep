@@ -236,12 +236,14 @@ extension AppState {
     nonisolated static func runGit(
         arguments: [String],
         in repositoryRoot: URL,
-        allowedExitStatuses: Set<Int32> = [0]
+        allowedExitStatuses: Set<Int32> = [0],
+        timeout: TimeInterval = gitCommandTimeout
     ) -> String {
         let result = runGitCommand(
             arguments: arguments,
             in: repositoryRoot,
-            allowedExitStatuses: allowedExitStatuses
+            allowedExitStatuses: allowedExitStatuses,
+            timeout: timeout
         )
         return result.succeeded ? result.stdout : ""
     }
@@ -249,7 +251,8 @@ extension AppState {
     nonisolated static func runGitCommand(
         arguments: [String],
         in repositoryRoot: URL,
-        allowedExitStatuses: Set<Int32> = [0]
+        allowedExitStatuses: Set<Int32> = [0],
+        timeout: TimeInterval = gitCommandTimeout
     ) -> GitCommandResult {
         let process = Process()
         let stdoutPipe = Pipe()
@@ -300,7 +303,7 @@ extension AppState {
                 }
             }
         }
-        DispatchQueue.global(qos: .utility).asyncAfter(deadline: .now() + gitCommandTimeout, execute: timeoutWorkItem)
+        DispatchQueue.global(qos: .utility).asyncAfter(deadline: .now() + timeout, execute: timeoutWorkItem)
 
         process.waitUntilExit()
         timeoutWorkItem.cancel()

@@ -184,6 +184,7 @@ struct AgentChatTranscript: View {
     @State private var conversationSearchMatchCount = 0
     @State private var conversationSearchActiveIndex = 0
     @State private var isFollowingTranscriptBottom = true
+    @State private var isCurrentPlanExpanded = false
 
     var body: some View {
         ZStack(alignment: .topTrailing) {
@@ -209,9 +210,18 @@ struct AgentChatTranscript: View {
                     }
                     if (appState.agentInteractionMode == .plan || appState.agentInteractionMode == .goal),
                        let plan = appState.agentCurrentPlan {
-                        AgentPlanCard(plan: plan)
+                        AgentPlanCard(plan: plan, isExpanded: $isCurrentPlanExpanded)
                             .id("agent-current-plan")
                             .frame(maxWidth: AgentDesign.chatMaxContentWidth, alignment: .leading)
+                            .onAppear {
+                                isCurrentPlanExpanded =
+                                    AgentPlanCardExpansionPolicy.initiallyExpanded(for: plan.status)
+                            }
+                            .onCompatibleChange(of: plan.status) { _, newStatus in
+                                if AgentPlanCardExpansionPolicy.initiallyExpanded(for: newStatus) {
+                                    isCurrentPlanExpanded = true
+                                }
+                            }
                     }
 
                     if appState.agentMessages.isEmpty && localConfirmationPreviewCalls.isEmpty {
@@ -286,6 +296,7 @@ struct AgentChatTranscript: View {
                                 onOpenAttachmentCitation: appState.openAgentAttachmentCitation,
                                 progressPlan: appState.agentCurrentPlan,
                                 onShowPlan: {
+                                    isCurrentPlanExpanded = true
                                     withAnimation(.easeInOut(duration: 0.2)) {
                                         proxy.scrollTo("agent-current-plan", anchor: .top)
                                     }
@@ -349,6 +360,7 @@ struct AgentChatTranscript: View {
                                 onReferenceGeneratedImage: appState.appendGeneratedImageReferenceToAgentInput,
                                 progressPlan: appState.agentCurrentPlan,
                                 onShowPlan: {
+                                    isCurrentPlanExpanded = true
                                     withAnimation(.easeInOut(duration: 0.2)) {
                                         proxy.scrollTo("agent-current-plan", anchor: .top)
                                     }
@@ -558,6 +570,15 @@ struct AgentChatTranscript: View {
                           !isConversationSearchActive,
                           isFollowingTranscriptBottom else { return }
                     scrollToBottom(using: proxy)
+                }
+                .onCompatibleChange(of: currentStreamingMessageID) { previousID, currentID in
+                    guard AgentPlanCardExpansionPolicy.shouldCollapseForAssistantRound(
+                        previousMessageID: previousID,
+                        currentMessageID: currentID
+                    ) else { return }
+                    withAnimation(.easeInOut(duration: 0.18)) {
+                        isCurrentPlanExpanded = false
+                    }
                 }
 
             // 切走 app 再切回来时,SwiftUI 会重新布局 ScrollView,默认

@@ -15,14 +15,21 @@ import SwiftUI
 struct AgentSidePanelDiffView: View {
     @EnvironmentObject private var appState: AppState
     @State private var state: LoadState = .idle
+    @State private var scope: AgentGitReviewScope = .uncommitted
     @State private var selectedPath: String?
     @State private var detailState: DetailState = .idle
+    @State private var showsFileList = false
+    @State private var showsCommitPopover = false
+    @State private var commitMessage = ""
+    @State private var includesUnstagedChanges = true
+    @State private var commitState: CommitState = .idle
+    @State private var collapsedPaths: Set<String> = []
     @State private var refreshTick = 0
 
     private enum LoadState {
         case idle
         case loading
-        case loaded(AgentSidePanelDiffSnapshot)
+        case loaded(AgentGitReviewSnapshot)
         case empty
         case noWorkspace
         case notRepo
@@ -35,13 +42,23 @@ struct AgentSidePanelDiffView: View {
         case unavailable(String)
     }
 
+    private enum CommitState {
+        case idle
+        case running
+        case finished(AgentGitCommitOutcome)
+    }
+
     var body: some View {
         VStack(spacing: 0) {
             toolbar
             Divider().opacity(0.5)
             content
+            if canShowCommitBar {
+                Divider().opacity(0.5)
+                commitBar
+            }
         }
-        .task(id: refreshTick) {
+        .task(id: "\(scope.rawValue)-\(refreshTick)") {
             await reloadFileList()
         }
         .task(id: selectedPath) {
@@ -70,26 +87,92 @@ struct AgentSidePanelDiffView: View {
                 .help(L10n.AgentSidePanel.diffBackToFiles)
             }
 
-            Group {
-                if let selectedChange {
-                    Text(selectedChange.path)
-                } else {
-                    switch state {
-                    case .loaded(let snapshot):
-                        Text(L10n.AgentSidePanel.diffSummary(Self.dateFormatter.string(from: snapshot.loadedAt)))
-                    case .loading:
-                        Text(L10n.AgentSidePanel.diffLoading)
-                    default:
-                        Text(" ")
+            if let selectedChange {
+                Text(selectedChange.path)
+                    .font(AgentDesign.captionFont)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+            } else {
+                Menu {
+                    ForEach(AgentGitReviewScope.allCases) { candidate in
+                        Button {
+                            selectScope(candidate)
+                        } label: {
+                            if candidate == scope {
+                                Label(candidate.title, systemImage: "checkmark")
+                            } else {
+                                Text(candidate.title)
+                            }
+                        }
                     }
+                } label: {
+                    HStack(spacing: 4) {
+                        Text(scope.title)
+                        Image(systemName: "chevron.down")
+                            .font(.system(size: 8, weight: .semibold))
+                    }
+                    .font(.system(size: 12, weight: .semibold))
                 }
+                .menuStyle(.borderlessButton)
+                .fixedSize()
             }
-            .font(AgentDesign.captionFont)
-            .foregroundStyle(.secondary)
-            .lineLimit(1)
-            .truncationMode(.middle)
 
             Spacer(minLength: 0)
+
+            if case .loaded(let snapshot) = state {
+                HStack(spacing: 4) {
+                    Text("+\(snapshot.changes.totalAddedLines)")
+                        .foregroundStyle(.green)
+                    Text("-\(snapshot.changes.totalDeletedLines)")
+                        .foregroundStyle(.red)
+                }
+                .font(.system(size: 11, weight: .medium, design: .monospaced))
+                .monospacedDigit()
+
+                Menu {
+                    ForEach(snapshot.changes.files) { change in
+                        Button {
+                            select(change: change, in: snapshot)
+                        } label: {
+                            Text(change.path)
+                        }
+                    }
+                } label: {
+                    Image(systemName: "doc.text.magnifyingglass")
+                }
+                .menuStyle(.borderlessButton)
+                .fixedSize()
+                .help(L10n.AgentGitReview.jumpToFile)
+
+                Button {
+                    selectedPath = nil
+                    detailState = .idle
+                    showsFileList.toggle()
+                } label: {
+                    Image(systemName: showsFileList ? "doc.text" : "list.bullet")
+                }
+                .buttonStyle(.borderless)
+                .focusable(false)
+                .help(showsFileList
+                    ? L10n.AgentGitReview.showCombinedDiff
+                    : L10n.AgentGitReview.showFileList)
+
+                if !showsFileList, selectedPath == nil {
+                    Button {
+                        toggleAllFiles(in: snapshot)
+                    } label: {
+                        Image(systemName: allFilesCollapsed(in: snapshot)
+                            ? "rectangle.expand.vertical"
+                            : "rectangle.compress.vertical")
+                    }
+                    .buttonStyle(.borderless)
+                    .focusable(false)
+                    .help(allFilesCollapsed(in: snapshot)
+                        ? L10n.AgentGitReview.expandAllFiles
+                        : L10n.AgentGitReview.collapseAllFiles)
+                }
+            }
 
             Button {
                 clearSelection()
@@ -112,13 +195,15 @@ struct AgentSidePanelDiffView: View {
         case .idle, .loading:
             progress
         case .loaded(let snapshot):
-            if selectedPath == nil {
+            if selectedPath != nil {
+                diffDetail
+            } else if showsFileList {
                 fileList(snapshot)
             } else {
-                diffDetail
+                overview(snapshot)
             }
         case .empty:
-            placeholder(systemImage: "checkmark.seal", text: L10n.AgentSidePanel.diffEmpty)
+            placeholder(systemImage: "checkmark.seal", text: emptyMessage)
         case .noWorkspace:
             AgentSidePanelWorkspaceRequiredView()
         case .notRepo:
@@ -126,7 +211,7 @@ struct AgentSidePanelDiffView: View {
         }
     }
 
-    private func fileList(_ snapshot: AgentSidePanelDiffSnapshot) -> some View {
+    private func fileList(_ snapshot: AgentGitReviewSnapshot) -> some View {
         let changes = snapshot.changes
         return VStack(spacing: 0) {
             HStack(spacing: 8) {
@@ -150,10 +235,7 @@ struct AgentSidePanelDiffView: View {
                 LazyVStack(spacing: 0) {
                     ForEach(changes.files) { change in
                         Button {
-                            selectedPath = change.path
-                            appState.agentSidePanelSelectedFile = snapshot.repositoryRoot
-                                .appendingPathComponent(change.path)
-                                .standardizedFileURL
+                            select(change: change, in: snapshot)
                         } label: {
                             AgentSidePanelDiffFileRow(change: change)
                         }
@@ -165,6 +247,39 @@ struct AgentSidePanelDiffView: View {
                             .padding(.leading, 34)
                     }
                 }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func overview(_ snapshot: AgentGitReviewSnapshot) -> some View {
+        if snapshot.overviewDiff.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            placeholder(systemImage: "checkmark.seal", text: emptyMessage)
+        } else {
+            let palette = appState.editorSettings.interfaceSkin.palette
+            let document = AgentGitReviewDiffDocument.parse(
+                snapshot.overviewDiff,
+                changes: snapshot.changes
+            )
+            if document.files.isEmpty {
+                AgentSidePanelColoredDiffView(
+                    diff: snapshot.overviewDiff,
+                    cacheKey: [
+                        appState.editorSettings.interfaceSkin.id,
+                        snapshot.scope.rawValue,
+                        String(snapshot.loadedAt.timeIntervalSinceReferenceDate),
+                    ].joined(separator: "|"),
+                    palette: palette
+                )
+            } else {
+                AgentGitReviewFileCardsView(
+                    snapshot: snapshot,
+                    palette: palette,
+                    collapsedPaths: $collapsedPaths,
+                    openFile: { change in
+                        select(change: change, in: snapshot)
+                    }
+                )
             }
         }
     }
@@ -226,23 +341,21 @@ struct AgentSidePanelDiffView: View {
         }
         state = .loading
 
+        let requestedScope = scope
         let result = await Task.detached(priority: .userInitiated) {
-            let status = AppState.loadGitStatus(for: root)
-            guard status.isRepository else { return LoadState.notRepo }
-            let changes = AppState.loadAgentWorktreeChangeSummary(status: status)
-            guard !changes.isEmpty, let repositoryRoot = status.repositoryRoot else {
-                return LoadState.empty
+            guard let snapshot = AgentGitReviewLoader.load(
+                workspaceRoot: root,
+                scope: requestedScope
+            ) else {
+                let status = AppState.loadGitStatus(for: root)
+                return status.isRepository ? LoadState.empty : LoadState.notRepo
             }
-            return LoadState.loaded(
-                AgentSidePanelDiffSnapshot(
-                    repositoryRoot: repositoryRoot,
-                    changes: changes,
-                    loadedAt: Date()
-                )
-            )
+            return snapshot.changes.isEmpty
+                ? LoadState.empty
+                : LoadState.loaded(snapshot)
         }.value
 
-        guard !Task.isCancelled else { return }
+        guard !Task.isCancelled, scope == requestedScope else { return }
         state = result
         if case .loaded(let snapshot) = result {
             selectRequestedFile(appState.agentSidePanelSelectedFile, in: snapshot)
@@ -260,51 +373,27 @@ struct AgentSidePanelDiffView: View {
         }
         let requestedPath = change.path
         detailState = .loading
+        let requestedScope = scope
 
         let result = await Task.detached(priority: .userInitiated) {
-            if change.kind != .untracked {
-                let fileURL = snapshot.repositoryRoot
-                    .appendingPathComponent(change.path)
-                    .standardizedFileURL
-                if let fileSize = AppState.fileSize(at: fileURL),
-                   let reason = AgentSidePanelDiffLimiter.fileUnavailableReason(
-                       byteCount: fileSize
-                   ) {
-                    return DetailState.unavailable(reason)
-                }
-            }
-
-            let rawDiff: String
-            if change.kind == .untracked {
-                switch AppState.loadUntrackedDiffPreviewSection(
-                    change,
-                    repositoryRoot: snapshot.repositoryRoot
-                ) {
-                case .diff(let diff):
-                    rawDiff = diff
-                case .summaryReason(let reason):
-                    return DetailState.unavailable(reason)
-                }
-            } else {
-                rawDiff = AppState.runGit(
-                    arguments: ["diff", "--no-ext-diff", "HEAD", "--", change.path],
-                    in: snapshot.repositoryRoot
+            switch AgentGitReviewLoader.loadDetail(
+                scope: requestedScope,
+                change: change,
+                repositoryRoot: snapshot.repositoryRoot
+            ) {
+            case .text(let rawDiff):
+                return DetailState.loaded(
+                    text: rawDiff,
+                    cacheKey: "\(snapshot.loadedAt.timeIntervalSinceReferenceDate)|\(requestedPath)"
                 )
-            }
-
-            guard !rawDiff.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
-                return DetailState.unavailable(L10n.AgentSidePanel.diffFileUnavailable)
-            }
-            if let reason = AgentSidePanelDiffLimiter.unavailableReason(for: rawDiff) {
+            case .unavailable(let reason):
                 return DetailState.unavailable(reason)
             }
-            return DetailState.loaded(
-                text: rawDiff,
-                cacheKey: "\(snapshot.loadedAt.timeIntervalSinceReferenceDate)|\(requestedPath)"
-            )
         }.value
 
-        guard !Task.isCancelled, selectedPath == requestedPath else { return }
+        guard !Task.isCancelled,
+              scope == requestedScope,
+              selectedPath == requestedPath else { return }
         detailState = result
     }
 
@@ -319,11 +408,39 @@ struct AgentSidePanelDiffView: View {
         selectRequestedFile(file, in: snapshot)
     }
 
-    private func selectRequestedFile(_ file: URL?, in snapshot: AgentSidePanelDiffSnapshot) {
+    private func selectRequestedFile(_ file: URL?, in snapshot: AgentGitReviewSnapshot) {
         selectedPath = file.flatMap {
             AgentSidePanelDiffSelection.relativePath(for: $0, changes: snapshot.changes)
         }
         detailState = .idle
+    }
+
+    private func select(change: AgentFileChangeSummary, in snapshot: AgentGitReviewSnapshot) {
+        selectedPath = change.path
+        showsFileList = false
+        appState.agentSidePanelSelectedFile = snapshot.repositoryRoot
+            .appendingPathComponent(change.path)
+            .standardizedFileURL
+    }
+
+    private func selectScope(_ newScope: AgentGitReviewScope) {
+        guard scope != newScope else { return }
+        scope = newScope
+        selectedPath = nil
+        detailState = .idle
+        showsFileList = false
+        collapsedPaths = []
+        appState.agentSidePanelSelectedFile = nil
+    }
+
+    private func allFilesCollapsed(in snapshot: AgentGitReviewSnapshot) -> Bool {
+        let paths = Set(snapshot.changes.files.map(\.path))
+        return !paths.isEmpty && paths.isSubset(of: collapsedPaths)
+    }
+
+    private func toggleAllFiles(in snapshot: AgentGitReviewSnapshot) {
+        let paths = Set(snapshot.changes.files.map(\.path))
+        collapsedPaths = allFilesCollapsed(in: snapshot) ? [] : paths
     }
 
     private func resolveWorkspaceRoot() -> URL? {
@@ -333,17 +450,173 @@ struct AgentSidePanelDiffView: View {
         return appState.rootDirectory?.standardizedFileURL
     }
 
-    private static let dateFormatter: DateFormatter = {
-        let formatter = DateFormatter()
-        formatter.dateFormat = "HH:mm:ss"
-        return formatter
-    }()
-}
+    private var canShowCommitBar: Bool {
+        guard scope != .lastCommit,
+              case .loaded = state else { return false }
+        return true
+    }
 
-private struct AgentSidePanelDiffSnapshot {
-    let repositoryRoot: URL
-    let changes: AgentWorktreeChangeSummary
-    let loadedAt: Date
+    private var emptyMessage: String {
+        switch scope {
+        case .uncommitted: return L10n.AgentSidePanel.diffEmpty
+        case .unstaged: return L10n.AgentGitReview.unstagedEmpty
+        case .staged: return L10n.AgentGitReview.stagedEmpty
+        case .lastCommit: return L10n.AgentGitReview.lastCommitEmpty
+        }
+    }
+
+    private var commitBar: some View {
+        HStack(spacing: 8) {
+            if case .loaded(let snapshot) = state {
+                Image(systemName: "arrow.triangle.branch")
+                    .foregroundStyle(.secondary)
+                Text(snapshot.branchName)
+                    .font(.system(size: 11, design: .monospaced))
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+            }
+
+            Spacer(minLength: 0)
+
+            Button {
+                commitState = .idle
+                showsCommitPopover.toggle()
+            } label: {
+                Label(L10n.AgentGitReview.commit, systemImage: "arrow.down.doc")
+                    .font(.system(size: 12, weight: .semibold))
+            }
+            .buttonStyle(.borderedProminent)
+            .controlSize(.small)
+            .focusable(false)
+            .popover(isPresented: $showsCommitPopover, arrowEdge: .bottom) {
+                commitPopover
+            }
+        }
+        .padding(.horizontal, 12)
+        .frame(height: 42)
+    }
+
+    private var commitPopover: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(spacing: 8) {
+                Image(systemName: "arrow.triangle.branch")
+                    .foregroundStyle(.secondary)
+                Text(commitBranchName)
+                    .font(.system(size: 12, weight: .medium, design: .monospaced))
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+                Spacer(minLength: 0)
+                if case .loaded(let snapshot) = state {
+                    Text("+\(snapshot.changes.totalAddedLines)")
+                        .foregroundStyle(.green)
+                    Text("-\(snapshot.changes.totalDeletedLines)")
+                        .foregroundStyle(.red)
+                }
+            }
+            .font(.system(size: 11, weight: .medium, design: .monospaced))
+
+            ZStack(alignment: .topLeading) {
+                if commitMessage.isEmpty {
+                    Text(L10n.AgentGitReview.commitMessagePlaceholder)
+                        .font(.system(size: 12))
+                        .foregroundStyle(.tertiary)
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 8)
+                        .allowsHitTesting(false)
+                }
+                TextEditor(text: $commitMessage)
+                    .font(.system(size: 12))
+                    .scrollContentBackground(.hidden)
+                    .padding(2)
+            }
+            .frame(width: 310, height: 68)
+            .background(
+                RoundedRectangle(cornerRadius: 7, style: .continuous)
+                    .fill(appState.editorSettings.interfaceSkin.palette.controlFill.opacity(0.62))
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 7, style: .continuous)
+                    .strokeBorder(Color.primary.opacity(0.1), lineWidth: 1)
+            )
+
+            Toggle(
+                L10n.AgentGitReview.includeUnstaged,
+                isOn: $includesUnstagedChanges
+            )
+            .toggleStyle(.checkbox)
+            .font(.system(size: 12))
+
+            if case .finished(let outcome) = commitState {
+                Label(
+                    outcome.message,
+                    systemImage: outcome.commitCreated ? "checkmark.circle.fill" : "exclamationmark.triangle.fill"
+                )
+                .font(.system(size: 11))
+                .foregroundStyle(outcome.commitCreated ? Color.green : Color.orange)
+                .fixedSize(horizontal: false, vertical: true)
+            }
+
+            HStack(spacing: 8) {
+                Button(L10n.AgentGitReview.commit) {
+                    performCommit(pushAfterCommit: false)
+                }
+                .buttonStyle(.borderedProminent)
+                .keyboardShortcut(.return, modifiers: .command)
+
+                Button(L10n.AgentGitReview.commitAndPush) {
+                    performCommit(pushAfterCommit: true)
+                }
+                .buttonStyle(.bordered)
+
+                if case .running = commitState {
+                    ProgressView()
+                        .controlSize(.small)
+                }
+            }
+            .controlSize(.small)
+            .disabled(commitMessage.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || isCommitting)
+        }
+        .padding(14)
+        .frame(width: 340)
+    }
+
+    private var commitBranchName: String {
+        guard case .loaded(let snapshot) = state else {
+            return L10n.AgentGitReview.detached
+        }
+        return snapshot.branchName
+    }
+
+    private var isCommitting: Bool {
+        if case .running = commitState { return true }
+        return false
+    }
+
+    private func performCommit(pushAfterCommit: Bool) {
+        guard case .loaded(let snapshot) = state, !isCommitting else { return }
+        let root = snapshot.repositoryRoot
+        let message = commitMessage
+        let includeUnstaged = includesUnstagedChanges
+        commitState = .running
+
+        Task {
+            let outcome = await Task.detached(priority: .userInitiated) {
+                AgentGitCommitService.commit(
+                    repositoryRoot: root,
+                    message: message,
+                    includeUnstaged: includeUnstaged,
+                    pushAfterCommit: pushAfterCommit
+                )
+            }.value
+            commitState = .finished(outcome)
+            guard outcome.commitCreated else { return }
+            commitMessage = ""
+            appState.refreshGitStatus()
+            appState.refreshActiveAgentWorktreeChanges()
+            refreshTick &+= 1
+        }
+    }
 }
 
 /// Resolves a requested absolute file URL back to the exact relative path in
@@ -585,11 +858,14 @@ enum AgentSidePanelDiffLimiter {
 /// attributed string because the AppKit surface no longer inherits a SwiftUI
 /// `.font` modifier.
 enum AgentDiffColorizer {
+    nonisolated static let fontSize: CGFloat = 12
+
     struct AppKitResult: @unchecked Sendable {
         let value: NSAttributedString
     }
 
-    private enum LineKind {
+    nonisolated private enum LineKind: Equatable {
+        case fileHeader
         case addition
         case deletion
         case hunk
@@ -610,13 +886,14 @@ enum AgentDiffColorizer {
         let hunk = palette.accent
         let meta = palette.secondaryText
         let context = palette.previewInk
-        let font = Font.system(size: 11, design: .monospaced)
+        let font = Font.system(size: fontSize, design: .monospaced)
+        let headerFont = Font.system(size: fontSize, weight: .semibold, design: .monospaced)
 
         var result = AttributedString()
         let lines = diff.components(separatedBy: "\n")
         for (index, line) in lines.enumerated() {
             var piece = AttributedString(line)
-            piece.font = font
+            piece.font = lineKind(line) == .fileHeader ? headerFont : font
             piece.foregroundColor = color(
                 for: lineKind(line),
                 addition: addition,
@@ -649,14 +926,15 @@ enum AgentDiffColorizer {
         let hunk = NSColor(palette.accent)
         let meta = NSColor(palette.secondaryText)
         let context = NSColor(palette.previewInk)
-        let font = NSFont.monospacedSystemFont(ofSize: 11, weight: .regular)
+        let font = NSFont.monospacedSystemFont(ofSize: fontSize, weight: .regular)
+        let headerFont = NSFont.monospacedSystemFont(ofSize: fontSize, weight: .semibold)
         let result = NSMutableAttributedString()
         let lines = diff.components(separatedBy: "\n")
 
         for (index, line) in lines.enumerated() {
             let kind = lineKind(line)
             var attributes: [NSAttributedString.Key: Any] = [
-                .font: font,
+                .font: kind == .fileHeader ? headerFont : font,
                 .foregroundColor: appKitColor(
                     for: kind,
                     addition: addition,
@@ -667,6 +945,8 @@ enum AgentDiffColorizer {
                 ),
             ]
             switch kind {
+            case .fileHeader:
+                attributes[.backgroundColor] = NSColor(palette.controlFill)
             case .addition:
                 attributes[.backgroundColor] = addition.withAlphaComponent(0.12)
             case .deletion:
@@ -687,6 +967,7 @@ enum AgentDiffColorizer {
     }
 
     nonisolated private static func lineKind(_ line: String) -> LineKind {
+        if line.hasPrefix("diff --git ") { return .fileHeader }
         if line.hasPrefix("@@") { return .hunk }
         if line.hasPrefix("+++") || line.hasPrefix("---")
             || line.hasPrefix("diff ") || line.hasPrefix("index ")
@@ -709,6 +990,7 @@ enum AgentDiffColorizer {
         context: Color
     ) -> Color {
         switch kind {
+        case .fileHeader: return context
         case .addition: return addition
         case .deletion: return deletion
         case .hunk: return hunk
@@ -726,6 +1008,7 @@ enum AgentDiffColorizer {
         context: NSColor
     ) -> NSColor {
         switch kind {
+        case .fileHeader: return context
         case .addition: return addition
         case .deletion: return deletion
         case .hunk: return hunk

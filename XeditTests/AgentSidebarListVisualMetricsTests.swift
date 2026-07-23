@@ -15,6 +15,7 @@ struct AgentSidebarListVisualMetricsTests {
         #expect(AgentDesign.sidebarSessionTrailingActionsWidth == 40)
         #expect(AgentDesign.liveActivityTopSpacing == 6)
         #expect(AgentDesign.liveActivityTopSpacing < AgentDesign.messageVerticalSpacing)
+        #expect(AgentDesign.reviewPanelPreferredWidth == 520)
         #expect(AgentDesign.chatSupportingFontSize(baseFontSize: 14, visualMinimum: 9) == 11)
         #expect(AgentDesign.chatSupportingFontSize(baseFontSize: 18, visualMinimum: 15) == 15)
         #expect(AgentDesign.chatSupportingFontSize(baseFontSize: 11) == 11)
