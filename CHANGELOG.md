@@ -1,7 +1,21 @@
 # Changelog
 
-> 当前文件保留最新版本（1.195.0-rc9 至 1.109.0-rc340）。
+> 当前文件保留最新版本（1.195.0-rc10 至 1.109.0-rc340）。
 > 更早的 1000 个版本已移至 [CHANGELOG-ARCHIVE.md](CHANGELOG-ARCHIVE.md)。
+
+## 1.195.0-rc10 - 2026-07-24
+
+### Fixed
+
+- 移除过时的源码巡检测试「Terminal host-verification popover cannot auto-focus its copy action」：1.194.0-rc1 已把「验证宿主」弹层整体替换为「提取宿主身份」，`Button(action: copyAction)` 不复存在，该用例自那以后必红并阻断发布管线（CI 停摆期间未被发现）。同套件的 `sidePanelChromeControlsAreNotFocusable` 仍在全量巡检侧栏 chrome 控件的 `.focusable(false)` 焦点策略，覆盖不受影响。
+
+### Tests
+
+- `AgentToolIntegrationTests.swift`（3496 行，超 3000 行硬限）按主题拆分为七个文件：prompt 快照守卫、队列任务工具、some.im 浏览器登录、工具调用分组/审批展示、命令安全分类、用量统计与工具集成本体；所有 @Suite/@Test 语义与断言保持不变，complexity_guard 恢复 hard=0。
+
+### Changed
+
+- 版本号从 **1.195.0-rc9** 递增为 **1.195.0-rc10**，内部构建号从 **115** 递增为 **116**；App、Go agent、Help、Helper、浏览器扩展、README、响应头契约与产品文档保持一致。
 
 ## 1.195.0-rc9 - 2026-07-23
 

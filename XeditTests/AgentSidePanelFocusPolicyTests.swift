@@ -39,20 +39,6 @@ struct AgentSidePanelFocusPolicyTests {
         }
     }
 
-    @Test("Terminal host-verification popover cannot auto-focus its copy action")
-    func hostVerificationCopyActionIsNotFocusable() throws {
-        let source = try Self.source(named: "AgentSidePanelTerminalView.swift")
-        let copyAction = try #require(
-            source.range(of: "Button(action: copyAction)")
-        )
-        let trailingSource = source[copyAction.lowerBound...]
-        let buttonStyle = try #require(trailingSource.range(of: ".buttonStyle(.plain)"))
-        let focusPolicy = try #require(trailingSource.range(of: ".focusable(false)"))
-
-        #expect(focusPolicy.lowerBound > buttonStyle.lowerBound)
-        #expect(trailingSource.distance(from: buttonStyle.lowerBound, to: focusPolicy.lowerBound) < 80)
-    }
-
     @Test("Terminal shortcut rows fit three entries without a circled play button")
     func terminalShortcutRowsStayCompact() throws {
         #expect(TerminalRecordingMetrics.visibleHistoryRows == 3)
