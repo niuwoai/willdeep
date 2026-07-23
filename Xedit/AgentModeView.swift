@@ -11,6 +11,12 @@ import SwiftUI
 import AppKit
 import UniformTypeIdentifiers
 
+nonisolated enum AgentSidePanelResizeMetrics {
+    /// Comfortable pointer target while preserving a visually thin divider.
+    static let hitTargetWidth: CGFloat = 12
+    static let lineWidth: CGFloat = 1
+}
+
 struct AgentModeView: View {
     @EnvironmentObject var appState: AppState
     @State private var sidebarWidth: CGFloat = 230
@@ -57,7 +63,9 @@ struct AgentModeView: View {
             // 面板宽度现在会随窗口宽度自适应封顶(见 panelWidthCap),
             // 窗口下限只需保证「最窄面板」放得下,不再跟着持久化宽度
             // 走 —— 也就免了拖拽提交后反复改写 contentMinSize。
-            + (appState.agentSidePanelKind != nil ? CGFloat(sidePanelWidthRange.lowerBound) : 0)
+            + (appState.agentSidePanelKind != nil
+                ? CGFloat(sidePanelWidthRange.lowerBound) + AgentSidePanelResizeMetrics.hitTargetWidth
+                : 0)
         return max(content, Self.absoluteMinContentWidth)
     }
 
@@ -72,7 +80,11 @@ struct AgentModeView: View {
     /// 列被裁得没法看。窗口拉大后自动恢复到用户拖出来的偏好宽度。
     private func panelWidthCap(totalWidth: CGFloat, isSidebarVisible: Bool) -> Double {
         guard totalWidth > 0 else { return sidePanelWidthRange.upperBound }
-        let available = Double(totalWidth - sidebarOccupiedWidth(isSidebarVisible: isSidebarVisible) - 1)
+        let available = Double(
+            totalWidth
+                - sidebarOccupiedWidth(isSidebarVisible: isSidebarVisible)
+                - AgentSidePanelResizeMetrics.hitTargetWidth
+        )
             - Double(chatColumnComfortWidth)
         return min(sidePanelWidthRange.upperBound, max(sidePanelWidthRange.lowerBound, available))
     }
@@ -112,7 +124,13 @@ struct AgentModeView: View {
         let panelWidth = min(currentSidePanelWidth, cap)
         let isResizingPanel = liveSidePanelWidth != nil
         let hasWallpaper = appState.editorSettings.hasConfiguredAgentWallpaper
-        let frozenChatWidth = max(totalWidth - occupiedSidebarWidth - 1 - CGFloat(committedPanelWidth), 0)
+        let frozenChatWidth = max(
+            totalWidth
+                - occupiedSidebarWidth
+                - AgentSidePanelResizeMetrics.hitTargetWidth
+                - CGFloat(committedPanelWidth),
+            0
+        )
         // `.backgroundTasks` remains decodable for persisted sessions, but it
         // is never a renderable destination after the monitor rail redesign.
         let activeSidePanel: AgentSidePanelKind? = if appState.agentPrimaryDestination == .scheduledTasks {
@@ -517,9 +535,9 @@ private struct AgentWindowMinWidthSetter: NSViewRepresentable {
     }
 }
 
-/// Thin draggable divider between the chat content and the right side
-/// panel. Shows a resize cursor on hover and drives `width` (clamped to
-/// `range`). The panel sits on the right, so dragging left widens it.
+/// Draggable boundary between the chat content and the right side panel.
+/// The pointer target is deliberately wider than the 1pt visual rule so a
+/// normal mouse crossing can acquire it without pixel-perfect aiming.
 private struct AgentSidePanelResizeHandle: View {
     @Binding var width: Double
     let range: ClosedRange<Double>
@@ -530,17 +548,26 @@ private struct AgentSidePanelResizeHandle: View {
     @State private var isDragging = false
 
     var body: some View {
-        Divider()
-            .overlay(
-                Rectangle()
-                    .fill(Color.clear)
-                    .frame(width: 7)
-                    .contentShape(Rectangle())
+        ZStack {
+            Rectangle()
+                .fill(
+                    isHovering || isDragging
+                        ? Color.accentColor.opacity(0.7)
+                        : Color(nsColor: .separatorColor).opacity(0.7)
+                )
+                .frame(width: AgentSidePanelResizeMetrics.lineWidth)
+        }
+            .frame(width: AgentSidePanelResizeMetrics.hitTargetWidth)
+            .frame(maxHeight: .infinity)
+            .contentShape(Rectangle())
+            .background(
+                isHovering || isDragging
+                    ? Color.accentColor.opacity(0.08)
+                    : Color.clear
             )
-            .background(isHovering || isDragging ? Color.accentColor.opacity(0.25) : Color.clear)
             .onHover { hovering in
                 isHovering = hovering
-                // 快速拖动时鼠标会瞬时冲出 7pt 热区再被布局追上,hover
+                // 快速拖动时鼠标会瞬时冲出热区再被布局追上,hover
                 // 会 true/false 高频翻转;若照常 push/pop,光标就在箭头
                 // ↔ 左右缩放之间闪。拖拽期间光标交给 onChanged 钉住。
                 guard !isDragging else { return }

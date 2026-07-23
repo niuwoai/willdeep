@@ -1,6 +1,6 @@
 # WillDeep Product Overview
 
-> Last updated: 2026-07-23 | Current version: v1.194.0-rc14
+> Last updated: 2026-07-23 | Current version: v1.194.0-rc20
 
 ## Positioning
 
@@ -11,6 +11,18 @@ Official product domain: [willdeep.com](https://willdeep.com).
 WillDeep is configured for non-App-Store distribution without App Sandbox so it can access local project files with fewer permission interruptions.
 
 ## 架构概览
+
+- **Composer 移除排队图标（1.194.0-rc20）** —— Agent 响应期间不再在语音与停止操作之间常驻显示蓝色排队按钮，减少底部操作拥挤；已有排队消息管理与快捷提交能力保持可用。
+
+- **Composer 尺寸与分栏拖拽稳定（1.194.0-rc19）** —— Composer 固定占满聊天内容列，不再随空/非空草稿对应的按钮组合改变宽度；聊天区与右侧终端/工具面板的 1pt 分隔线拥有独立的 12pt 拖拽热区，正常移动鼠标即可捕获。
+
+- **产物“打开方式”不卡主线程（1.194.0-rc18）** —— 产物右键菜单按文件内容类型缓存可用 App 与展示名称，并停止在 SwiftUI `body` 中同步读取每个 App 的真实图标，避免 LaunchServices 与 `syspolicyd` 被反复触发导致界面持续高 CPU。
+
+- **思考状态轻量呼吸（1.194.0-rc17）** —— 进行中的思考状态让左侧星形图标在 86%–108% 之间缓慢往复缩放，并让绿色背景做同步的轻微明暗变化；文字与计时保持稳定，系统开启“减弱动态效果”时自动停用动画。
+
+- **来源入口正文对齐（1.194.0-rc16）** —— 轮次末尾“来源”与学习入口共用助手正文的左右文本列缩进，不再贴近对话区外沿。
+
+- **终端发送描边确认（1.194.0-rc15）** —— “发送到终端”使用透明背景、强调色外框与正文色文字，降低确认页操作区的视觉重量；其他高风险确认仍保留实心主按钮。
 
 - **来源 favicon 合并与回退（1.194.0-rc14）** —— 来源入口按站点域名合并重复图标，优先读取网站 favicon，失败时使用公共图标服务回退；具体来源链接仍完整保留在弹窗中。
 

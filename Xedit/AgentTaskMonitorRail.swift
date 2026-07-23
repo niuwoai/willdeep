@@ -624,6 +624,8 @@ struct AgentSemanticActivityStatusLine: View {
     }
 
     @EnvironmentObject var appState: AppState
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var isBreathingExpanded = false
     var style: Style
 
     var body: some View {
@@ -632,6 +634,7 @@ struct AgentSemanticActivityStatusLine: View {
                 Image(systemName: phase.systemImage)
                     .font(.system(size: 12, weight: .semibold))
                     .foregroundStyle(phase.tint)
+                    .scaleEffect(iconScale)
                 Text(phase.label)
                     .font(.system(size: 12, weight: .semibold))
                     .foregroundStyle(phase.tint)
@@ -650,7 +653,7 @@ struct AgentSemanticActivityStatusLine: View {
             .background {
                 if style == .composer {
                     RoundedRectangle(cornerRadius: 8, style: .continuous)
-                        .fill(phase.tint.opacity(0.10))
+                        .fill(phase.tint.opacity(backgroundOpacity))
                 }
             }
             .overlay {
@@ -659,7 +662,54 @@ struct AgentSemanticActivityStatusLine: View {
                         .stroke(phase.tint.opacity(0.16), lineWidth: 1)
                 }
             }
+            .animation(breathingAnimation, value: isBreathingExpanded)
+            .onAppear(perform: updateBreathingState)
+            .onChange(of: reduceMotion) { _ in
+                updateBreathingState()
+            }
+            .onChange(of: shouldBreathe) { _ in
+                updateBreathingState()
+            }
         }
+    }
+
+    private var shouldBreathe: Bool {
+        guard appState.isAgentResponding,
+              !appState.isCompressingAgentContext,
+              appState.agentRunningTaskCount == 0,
+              !appState.agentToolCalls.contains(where: { call in
+                  call.status == .pendingApproval
+                      || call.status == .awaitingConfirm
+                      || call.status == .awaitingUserAnswer
+                      || call.status == .running
+              }) else {
+            return false
+        }
+        return true
+    }
+
+    private var iconScale: CGFloat {
+        guard shouldBreathe, !reduceMotion else { return 1 }
+        return isBreathingExpanded
+            ? AgentThinkingAnimationMetrics.maximumScale
+            : AgentThinkingAnimationMetrics.minimumScale
+    }
+
+    private var backgroundOpacity: Double {
+        guard style == .composer, shouldBreathe, !reduceMotion else { return 0.10 }
+        return isBreathingExpanded
+            ? AgentThinkingAnimationMetrics.maximumBackgroundOpacity
+            : AgentThinkingAnimationMetrics.minimumBackgroundOpacity
+    }
+
+    private var breathingAnimation: Animation? {
+        guard shouldBreathe, !reduceMotion else { return nil }
+        return .easeInOut(duration: AgentThinkingAnimationMetrics.duration)
+            .repeatForever(autoreverses: true)
+    }
+
+    private func updateBreathingState() {
+        isBreathingExpanded = shouldBreathe && !reduceMotion
     }
 
     private var phase: AgentActivityPhase {

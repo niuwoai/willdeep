@@ -92,7 +92,10 @@ struct AgentTurnPostStrip: View {
                 learningButton
                 Spacer(minLength: 0)
             }
-            .padding(.horizontal, 4)
+            // Keep the source/learning strip on the same text column as
+            // assistant prose in both TextKit history and live messages.
+            .padding(.leading, AgentChatHistoryLayoutMetrics.assistantContentHeadIndent)
+            .padding(.trailing, AgentChatHistoryLayoutMetrics.assistantContentTailInset)
             .padding(.vertical, 6)
         }
     }

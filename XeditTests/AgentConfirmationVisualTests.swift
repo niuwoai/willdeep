@@ -79,6 +79,18 @@ struct AgentConfirmationVisualTests {
         #expect(AgentConfirmationReviewMetrics.actionButtonHeight == 28)
         #expect(AgentConfirmationReviewMetrics.actionButtonMaxWidth == 124)
         #expect(AgentConfirmationReviewMetrics.actionButtonSpacing == 12)
+        #expect(
+            AgentApprovalNoticeCopy.descriptor(
+                toolName: "terminal_send_command",
+                arguments: [:]
+            ).usesOutlinedApproveAction
+        )
+        #expect(
+            !AgentApprovalNoticeCopy.descriptor(
+                toolName: "run_command",
+                arguments: [:]
+            ).usesOutlinedApproveAction
+        )
     }
 
     @Test("render Codex-style Computer Use and browser authorizations")
@@ -113,6 +125,19 @@ struct AgentConfirmationVisualTests {
         #expect(AgentCompactAuthorizationMetrics.minimumButtonHeight == 22)
         #expect(AgentCompactAuthorizationMetrics.usesHorizontalActions(availableWidth: 714))
         #expect(!AgentCompactAuthorizationMetrics.usesHorizontalActions(availableWidth: 480))
+    }
+
+    @Test("思考状态让图标与背景同步轻量呼吸")
+    func thinkingAnimationStaysSubtle() {
+        #expect(AgentThinkingAnimationMetrics.minimumScale >= 0.85)
+        #expect(AgentThinkingAnimationMetrics.maximumScale <= 1.09)
+        #expect(AgentThinkingAnimationMetrics.duration >= 1.2)
+        #expect(AgentThinkingAnimationMetrics.maximumBackgroundOpacity <= 0.12)
+        #expect(
+            AgentThinkingAnimationMetrics.maximumBackgroundOpacity
+                - AgentThinkingAnimationMetrics.minimumBackgroundOpacity
+                <= 0.04
+        )
     }
 
     private func designQAOutputDirectory() throws -> URL {

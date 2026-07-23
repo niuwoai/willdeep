@@ -407,6 +407,7 @@ struct AgentThinkingDivider: View {
                             context.date.timeIntervalSince(startedAt)
                         ),
                         systemImage: phase?.systemImage,
+                        animatesIcon: true,
                         showsSeparator: false,
                         leadingInset: leadingInset,
                         trailingInset: trailingInset
@@ -416,6 +417,7 @@ struct AgentThinkingDivider: View {
                 AgentInlineStatusDivider(
                     text: phase?.title ?? L10n.AgentPanel.thinking,
                     systemImage: phase?.systemImage,
+                    animatesIcon: true,
                     showsSeparator: false,
                     leadingInset: leadingInset,
                     trailingInset: trailingInset
@@ -505,6 +507,7 @@ struct AgentInlineStatusDivider: View {
     /// thinking status to show live elapsed seconds.
     var trailing: String? = nil
     var systemImage: String? = nil
+    var animatesIcon = false
     var showsSeparator = true
     var leadingInset: CGFloat = 0
     var trailingInset: CGFloat = 0
@@ -521,8 +524,11 @@ struct AgentInlineStatusDivider: View {
             }
             HStack(spacing: AgentInlineStatusLayout.labelSpacing) {
                 if let systemImage {
-                    Image(systemName: systemImage)
-                        .font(.system(size: max(12, baseFontSize - 1), weight: .medium))
+                    AgentInlineStatusIcon(
+                        systemImage: systemImage,
+                        size: max(12, baseFontSize - 1),
+                        isBreathing: animatesIcon
+                    )
                         .frame(
                             width: AgentInlineStatusLayout.iconSize,
                             height: AgentInlineStatusLayout.iconSize
@@ -549,6 +555,50 @@ struct AgentInlineStatusDivider: View {
         .padding(.top, AgentInlineStatusLayout.topPadding)
         .padding(.bottom, AgentInlineStatusLayout.bottomPadding)
         .accessibilityLabel(trailing.map { "\(text) · \($0)" } ?? text)
+    }
+}
+
+nonisolated enum AgentThinkingAnimationMetrics {
+    static let minimumScale: CGFloat = 0.86
+    static let maximumScale: CGFloat = 1.08
+    static let duration: TimeInterval = 1.4
+    static let minimumBackgroundOpacity = 0.075
+    static let maximumBackgroundOpacity = 0.115
+}
+
+private struct AgentInlineStatusIcon: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    let systemImage: String
+    let size: CGFloat
+    let isBreathing: Bool
+    @State private var isExpanded = false
+
+    var body: some View {
+        Image(systemName: systemImage)
+            .font(.system(size: size, weight: .medium))
+            .scaleEffect(iconScale)
+            .animation(breathingAnimation, value: isExpanded)
+            .onAppear(perform: updateAnimationState)
+            .onChange(of: reduceMotion) { _ in
+                updateAnimationState()
+            }
+    }
+
+    private var iconScale: CGFloat {
+        guard isBreathing, !reduceMotion else { return 1 }
+        return isExpanded
+            ? AgentThinkingAnimationMetrics.maximumScale
+            : AgentThinkingAnimationMetrics.minimumScale
+    }
+
+    private var breathingAnimation: Animation? {
+        guard isBreathing, !reduceMotion else { return nil }
+        return .easeInOut(duration: AgentThinkingAnimationMetrics.duration)
+            .repeatForever(autoreverses: true)
+    }
+
+    private func updateAnimationState() {
+        isExpanded = isBreathing && !reduceMotion
     }
 }
 

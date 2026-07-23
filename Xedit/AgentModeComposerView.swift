@@ -106,6 +106,12 @@ struct AgentChatComposer: View {
                         dismissedPlanFingerprint = planFingerprint(plan)
                     }
                 })
+                // Keep the card tied to the chat column instead of its
+                // bottom control row's intrinsic width. The control row
+                // changes when the draft crosses empty ↔ non-empty (queue /
+                // send actions appear), and without this expanding frame the
+                // whole composer visibly grows after the first character.
+                .frame(maxWidth: .infinity)
                 .frame(maxWidth: AgentDesign.chatMaxContentWidth)
             }
             .frame(maxWidth: .infinity)

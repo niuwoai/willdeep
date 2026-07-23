@@ -1,3 +1,44 @@
+# Design QA：Codex 风格逐文件 Diff 卡片
+
+## 验收范围
+
+- source visual truth：`/var/folders/np/rjc0y5w52x324x21pv6g33440000gp/T/codex-clipboard-e7c744dd-0d6e-41ba-940a-8df6cf89dd07.png`（576 × 807 px）。
+- implementation screenshot：`.local-cache/design-qa-git-review-file-cards.png`（1361 × 768 px，真实 Debug App）。
+- 聚焦实现截图：`.local-cache/design-qa-git-review-file-cards-focused.png`（576 × 807 px）。
+- 同画布对比：`.local-cache/design-qa-codex-vs-willdeep-file-cards.png`（1152 × 807 px；左侧 Codex，右侧 WillDeep）。
+- state：Rice Paper 浅色皮肤、Xedit 工作区、未提交范围、一个 `.gitignore` 文件，右侧审阅面板默认展开逐文件卡片。
+
+## 修正记录
+
+1. 默认合并文本改为逐文件卡片；文件头固定展示路径、增删统计与打开单文件差异入口。
+2. 每个文件可独立展开或折叠；工具栏提供全部展开/全部折叠，保留范围切换、文件跳转、列表视图和刷新。
+3. Diff 正文新增旧/新双行号轨道；新增、删除和上下文行使用语义底色，折叠区显示“未修改 N 行”。
+4. 解析层过滤 `diff --git`、`index`、`---`、`+++` 等 Git 元数据，仅把可审阅内容交给卡片；无法结构化解析时继续回退到原 TextKit 预览。
+5. 新增解析测试，覆盖文件路径、首段折叠、双行号递进、上下文、新增与删除。
+
+## Required Fidelity Surfaces
+
+- Fonts and typography：文件路径与统计保持紧凑正文层级；Diff 使用 12pt 等宽字，旧/新行号使用独立次级色轨道。
+- Spacing and layout rhythm：文件头、折叠行和正文形成稳定纵向节奏；内容不再混成一段连续长文本。
+- Colors and visual tokens：继续读取 Rice Paper 皮肤 token；新增/删除使用既有绿/红语义色与低对比底色。
+- Image quality and asset fidelity：文件、折叠和打开入口均使用 SF Symbols；实现截图来自真实 Debug App 和真实 Git 状态。
+- Copy and content：全部新增文案进入英中 i18n；路径、行号、统计与折叠数量来自真实 Diff。
+
+## Findings
+
+同画布对比确认两侧都具备逐文件标题、独立增删统计、双行号、未修改行折叠和语义增删色。WillDeep 沿用半透明 Rice Paper 背景，因此整体比 Codex 白底更柔和，但结构层级、默认审阅路径和信息密度已经对齐。未发现裁切、错位、路径缺失、行号漂移或无法识别的操作入口；没有未解决的 P0、P1 或 P2 视觉差异。
+
+## 验证
+
+- Computer Use 实测真实未提交 Diff 的默认逐文件卡片、文件头、折叠段、双行号与增删底色。
+- Debug App 签名构建通过；Git 审阅与 Diff 性能两套定向测试共 16 项通过。
+- 版本一致性、复杂度硬门槛与 `git diff --check` 均通过；版本目标为 `1.194.0-rc8` / Build 93。
+- 参考图与实现截图已放入同一 1152 × 807 px 画布并打开检查。
+
+final result: passed
+
+---
+
 # Design QA：Codex 风格 Git 审阅与提交
 
 ## 验收范围

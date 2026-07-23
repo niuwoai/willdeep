@@ -186,4 +186,10 @@ struct AgentTurnReportTests {
         #expect(candidates.first?.absoluteString == "https://example.com/favicon.ico")
         #expect(candidates.last?.host == "icons.duckduckgo.com")
     }
+
+    @Test("来源入口与助手正文使用同一文本列")
+    func sourceStripUsesAssistantBodyAlignment() {
+        #expect(AgentChatHistoryLayoutMetrics.assistantContentHeadIndent == 32)
+        #expect(AgentChatHistoryLayoutMetrics.assistantContentTailInset == 18)
+    }
 }

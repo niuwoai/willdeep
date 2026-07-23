@@ -5,9 +5,9 @@
 //  Small composer chrome split out of AgentModeComposerView.swift in
 //  rc42: three buttons sitting around the text editor —
 //   - `AttachButton`: "+" image/document attachment trigger
-//   - `SendStopButton`: sends normally when idle; while the agent is
-//     busy, the arrow queues the composer text and a separate red stop
-//     disc interrupts the active turn.
+//   - `SendStopButton`: sends normally when idle and becomes the red stop
+//     disc while the agent is busy. Follow-up queueing remains available
+//     through composer submit shortcuts without a competing always-on icon.
 //   - `QueueBadge`: orange hourglass pill that shows up while
 //     `appState.agentQueuedMessages` is non-empty, with a menu to clear.
 //
@@ -53,23 +53,6 @@ struct SendStopButton: View {
 
     var body: some View {
         HStack(spacing: 6) {
-            if appState.isAgentResponding, canSend {
-                Button {
-                    appState.sendAgentMessage()
-                } label: {
-                    Circle()
-                        .fill(Color.accentColor)
-                        .frame(width: 26, height: 26)
-                        .overlay(
-                            Image(systemName: "text.line.last.and.arrowtriangle.forward")
-                                .font(.system(size: 11, weight: .bold))
-                                .foregroundStyle(.white)
-                        )
-                }
-                .buttonStyle(.plain)
-                .help(L10n.Composer.queueSendHelp)
-            }
-
             Button {
                 if appState.isAgentResponding {
                     appState.stopAgentResponse()

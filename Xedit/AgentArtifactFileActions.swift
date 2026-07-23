@@ -9,23 +9,58 @@ import AppKit
 import SwiftUI
 import UniformTypeIdentifiers
 
-struct AgentArtifactOpenWithApplication: Identifiable, Hashable {
+nonisolated struct AgentArtifactOpenWithApplication: Identifiable, Hashable, Sendable {
     let url: URL
+    let displayName: String
 
     var id: String { url.path }
 
-    var displayName: String {
-        Bundle(url: url)?.object(forInfoDictionaryKey: "CFBundleDisplayName") as? String
-            ?? Bundle(url: url)?.object(forInfoDictionaryKey: "CFBundleName") as? String
+    init(url: URL) {
+        self.url = url
+        let bundle = Bundle(url: url)
+        displayName = bundle?.object(forInfoDictionaryKey: "CFBundleDisplayName") as? String
+            ?? bundle?.object(forInfoDictionaryKey: "CFBundleName") as? String
             ?? url.deletingPathExtension().lastPathComponent
     }
+}
 
-    var icon: NSImage {
-        NSWorkspace.shared.icon(forFile: url.path)
+nonisolated final class AgentArtifactOpenWithApplicationCache: @unchecked Sendable {
+    private final class Entry {
+        let applications: [AgentArtifactOpenWithApplication]
+
+        init(applications: [AgentArtifactOpenWithApplication]) {
+            self.applications = applications
+        }
+    }
+
+    private let storage = NSCache<NSString, Entry>()
+
+    init(countLimit: Int = 64) {
+        storage.countLimit = countLimit
+    }
+
+    func applications(
+        for cacheKey: String,
+        load: () -> [AgentArtifactOpenWithApplication]
+    ) -> [AgentArtifactOpenWithApplication] {
+        let key = cacheKey as NSString
+        if let cached = storage.object(forKey: key) {
+            return cached.applications
+        }
+
+        let loaded = load()
+        storage.setObject(Entry(applications: loaded), forKey: key)
+        return loaded
+    }
+
+    func removeAll() {
+        storage.removeAllObjects()
     }
 }
 
 enum AgentArtifactFileActions {
+    private static let openWithApplicationCache = AgentArtifactOpenWithApplicationCache()
+
     private static let textFileExtensions: Set<String> = [
         "bash", "c", "cc", "conf", "cpp", "css", "csv", "env", "go",
         "h", "hpp", "htm", "html", "ini", "java", "js", "json", "jsonl",
@@ -93,11 +128,26 @@ enum AgentArtifactFileActions {
     }
 
     static func openWithApplications(for fileURL: URL) -> [AgentArtifactOpenWithApplication] {
-        NSWorkspace.shared.urlsForApplications(toOpen: fileURL)
-            .map(AgentArtifactOpenWithApplication.init(url:))
-            .sorted { lhs, rhs in
-                lhs.displayName.localizedCaseInsensitiveCompare(rhs.displayName) == .orderedAscending
-            }
+        openWithApplicationCache.applications(
+            for: openWithApplicationsCacheKey(for: fileURL)
+        ) {
+            NSWorkspace.shared.urlsForApplications(toOpen: fileURL)
+                .map(AgentArtifactOpenWithApplication.init(url:))
+                .sorted { lhs, rhs in
+                    lhs.displayName.localizedCaseInsensitiveCompare(rhs.displayName) == .orderedAscending
+                }
+        }
+    }
+
+    static func openWithApplicationsCacheKey(for fileURL: URL) -> String {
+        let pathExtension = fileURL.pathExtension.lowercased()
+        if let contentType = UTType(filenameExtension: pathExtension) {
+            return "content-type:\(contentType.identifier)"
+        }
+        if !pathExtension.isEmpty {
+            return "extension:\(pathExtension)"
+        }
+        return "filename:\(fileURL.lastPathComponent.lowercased())"
     }
 
     static func isTextFile(_ fileURL: URL) -> Bool {
@@ -155,7 +205,7 @@ struct AgentArtifactFileContextMenu: View {
                     Label {
                         Text(application.displayName)
                     } icon: {
-                        Image(nsImage: application.icon)
+                        Image(systemName: "app")
                     }
                 }
             }

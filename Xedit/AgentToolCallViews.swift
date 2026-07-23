@@ -242,6 +242,7 @@ nonisolated struct AgentApprovalNoticeDescriptor: Equatable {
     let decisionSubtitle: String
     let declineTitle: String
     let approveTitle: String
+    let usesOutlinedApproveAction: Bool
 }
 
 /// Tool-specific copy for the shared authorization notice. Keep this free of
@@ -263,7 +264,8 @@ nonisolated enum AgentApprovalNoticeCopy {
                 decisionTitle: "要继续吗？",
                 decisionSubtitle: "你可以随时查看后续执行结果。",
                 declineTitle: "暂不执行",
-                approveTitle: "继续"
+                approveTitle: "继续",
+                usesOutlinedApproveAction: false
             )
         case "terminal_send_command":
             return AgentApprovalNoticeDescriptor(
@@ -276,7 +278,8 @@ nonisolated enum AgentApprovalNoticeCopy {
                 decisionTitle: "发送到这个终端吗？",
                 decisionSubtitle: "执行过程和结果会继续显示在侧边栏。",
                 declineTitle: "暂不发送",
-                approveTitle: "发送到终端"
+                approveTitle: "发送到终端",
+                usesOutlinedApproveAction: true
             )
         case "terminal_send_control":
             return AgentApprovalNoticeDescriptor(
@@ -289,7 +292,8 @@ nonisolated enum AgentApprovalNoticeCopy {
                 decisionTitle: "发送这个控制键吗？",
                 decisionSubtitle: "终端会保持可见，便于你继续操作。",
                 declineTitle: "暂不发送",
-                approveTitle: "发送"
+                approveTitle: "发送",
+                usesOutlinedApproveAction: false
             )
         case "web_fetch":
             return AgentApprovalNoticeDescriptor(
@@ -302,7 +306,8 @@ nonisolated enum AgentApprovalNoticeCopy {
                 decisionTitle: "允许这次访问吗？",
                 decisionSubtitle: "不会提交表单或修改网页内容。",
                 declineTitle: "暂不访问",
-                approveTitle: "本次允许"
+                approveTitle: "本次允许",
+                usesOutlinedApproveAction: false
             )
         default:
             let displayName = AgentToolDisplay.name(for: toolName)
@@ -316,7 +321,8 @@ nonisolated enum AgentApprovalNoticeCopy {
                 decisionTitle: "允许这一步吗？",
                 decisionSubtitle: "操作结果会继续显示在当前对话中。",
                 declineTitle: "暂不允许",
-                approveTitle: "允许"
+                approveTitle: "允许",
+                usesOutlinedApproveAction: false
             )
         }
     }
@@ -1222,16 +1228,11 @@ struct AgentToolCallCard: View {
                     .cursor(.arrow)
                     .frame(maxWidth: AgentConfirmationReviewMetrics.actionButtonMaxWidth)
 
-                    Button {
-                        approveAuthorizationNotice()
-                    } label: {
-                        approvalActionLabel(descriptor.approveTitle, systemImage: "arrow.right")
-                    }
-                    .buttonStyle(.borderedProminent)
-                    .approvalButtonBorderShape(cornerRadius: AgentApprovalActionMetrics.cornerRadius)
-                    .tint(palette.accent)
-                    .cursor(.arrow)
-                    .frame(maxWidth: AgentConfirmationReviewMetrics.actionButtonMaxWidth)
+                    authorizationApproveButton(
+                        descriptor,
+                        accent: palette.accent,
+                        primaryText: palette.primaryText
+                    )
                 }
                 .controlSize(.regular)
 
@@ -1245,6 +1246,31 @@ struct AgentToolCallCard: View {
                     .cursor(.arrow)
                 }
             }
+        }
+    }
+
+    @ViewBuilder
+    private func authorizationApproveButton(
+        _ descriptor: AgentApprovalNoticeDescriptor,
+        accent: Color,
+        primaryText: Color
+    ) -> some View {
+        let button = Button {
+            approveAuthorizationNotice()
+        } label: {
+            approvalActionLabel(descriptor.approveTitle, systemImage: "arrow.right")
+        }
+        .approvalButtonBorderShape(cornerRadius: AgentApprovalActionMetrics.cornerRadius)
+        .tint(accent)
+        .cursor(.arrow)
+        .frame(maxWidth: AgentConfirmationReviewMetrics.actionButtonMaxWidth)
+
+        if descriptor.usesOutlinedApproveAction {
+            button
+                .buttonStyle(.bordered)
+                .foregroundStyle(primaryText)
+        } else {
+            button.buttonStyle(.borderedProminent)
         }
     }
 
