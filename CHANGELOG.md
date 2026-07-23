@@ -1,9 +1,9 @@
 # Changelog
 
-> 当前文件保留最新版本（1.195.0-rc13 至 1.109.0-rc340）。
+> 当前文件保留最新版本（1.195.0-rc14 至 1.109.0-rc340）。
 > 更早的 1000 个版本已移至 [CHANGELOG-ARCHIVE.md](CHANGELOG-ARCHIVE.md)。
 
-## 1.195.0-rc13 - 2026-07-24
+## 1.195.0-rc14 - 2026-07-24
 
 ### Fixed
 
@@ -14,7 +14,25 @@
   - 同族低频路径：满载 fork 风暴下 `process.run()`（posix_spawn）可能瞬态失败（EAGAIN），同样被 `runGit` 吞成空串（合并验证轮实测击中 worktree diff preview 用例一次）；`runGitCommand` 现对 spawn 失败做最多 2 次带退避重试，真正跑起来后的失败（非零退出、超时）不重试、语义不变。
 - 恢复 rc10 为解锁发布而删除的「Terminal host-verification popover cannot auto-focus its copy action」焦点巡检覆盖：锚点从已不存在的 `Button(action: copyAction)` 更新为 1.194.0-rc1 重构后 `AgentHostIdentityPopover` 的 `tab.extractHostIdentity()` 按钮，`.buttonStyle(.plain)` 后紧跟 `.focusable(false)` 的焦点策略校验原样保留。
 - 修复 `AgentHeaderEditorEntryTests` 被 `--skip-tests` 发布漏检的死断言：rc10 起菜单项写法变为 `Button(L10n.Menu.viewShowEditor, action: showEditorAction)`，断言放宽为前缀匹配，「Editor 入口只在应用菜单」的语义不变。
+- 版本号从 **1.195.0-rc13** 递增为 **1.195.0-rc14**，内部构建号从 **119** 递增为 **120**；App、Go agent、Help、Helper、浏览器扩展、README、响应头契约与产品文档保持一致。
+
+## 1.195.0-rc13 - 2026-07-24
+
+### Changed
+
+- 设置窗口信息架构重组：新增顶层「编辑」标签，收拢编辑行为类设置——行号显示、当前行高亮（原混在「外观」的玻璃效果区）与保存行为（去尾随空白、末行换行，原藏在「工作区」）；「格式与外观」标签保持皮肤/主题/壁纸/字体排印，并把 **Agent 聊天字号**从「AI → Agent」提供商设置深处移入「字体排印」页，与编辑器文本、工作区文本并列成三段。深链（`EditorSettingsTab`）全部保留，旧入口自动解析到新分组。
+
+### Fixed
+
+- 专注模式不再隐藏编辑器标签栏：此前进入专注模式正文首行会顶进窗口红绿灯按钮底下（标签栏自带的红绿灯避让随栏一起消失），且无法切换标签。现在专注模式保留标签栏，只隐藏侧栏/检查器/终端等其余 chrome。
+
+### Changed
+
 - 版本号从 **1.195.0-rc12** 递增为 **1.195.0-rc13**，内部构建号从 **118** 递增为 **119**；App、Go agent、Help、Helper、浏览器扩展、README、响应头契约与产品文档保持一致。
+
+### Tests
+
+- `SettingsInformationArchitectureTests` 更新到新分组结构（含「编辑」组断言）；`EditorTabBarFocusPolicyTests` 新增源码巡检钉住"专注模式不得隐藏 EditorTabBar"。
 
 ## 1.195.0-rc12 - 2026-07-24
 

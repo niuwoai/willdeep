@@ -73,6 +73,7 @@ private struct CompatibleChangeModifier<Value: Equatable>: ViewModifier {
 
 enum EditorSettingsTab: Hashable {
     case updates
+    case editing
     case typography
     case appearance
     case background
@@ -103,6 +104,7 @@ extension EditorSettingsTab {
     var group: SettingsGroup {
         switch self {
         case .updates: return .general
+        case .editing: return .editing
         case .typography, .appearance, .background: return .formatAndAppearance
         case .workspace: return .workspace
         case .agent, .memory, .rules: return .ai
@@ -121,6 +123,7 @@ extension EditorSettingsTab {
     var shortTitle: String {
         switch self {
         case .updates: return L10n.Settings.tabUpdates
+        case .editing: return L10n.Settings.tabEditing
         case .typography: return L10n.Settings.tabTypography
         case .appearance: return L10n.Settings.tabAppearance
         case .background: return L10n.Settings.tabBackground
@@ -148,6 +151,7 @@ extension EditorSettingsTab {
 /// groups with more than one pane render a second-level segmented picker.
 enum SettingsGroup: Hashable, CaseIterable, Identifiable {
     case general
+    case editing
     case formatAndAppearance
     case workspace
     case ai
@@ -166,6 +170,7 @@ enum SettingsGroup: Hashable, CaseIterable, Identifiable {
     var tabs: [EditorSettingsTab] {
         switch self {
         case .general: return [.updates]
+        case .editing: return [.editing]
         case .formatAndAppearance: return [.appearance, .background, .typography]
         case .workspace: return [.workspace]
         case .pet: return [.pet]
@@ -182,6 +187,7 @@ enum SettingsGroup: Hashable, CaseIterable, Identifiable {
     var title: String {
         switch self {
         case .general: return L10n.Settings.groupGeneral
+        case .editing: return L10n.Settings.tabEditing
         case .formatAndAppearance: return L10n.Settings.groupFormatAndAppearance
         case .workspace: return L10n.Settings.tabWorkspace
         case .pet: return L10n.DesktopPet.settingsTabTitle
@@ -198,6 +204,7 @@ enum SettingsGroup: Hashable, CaseIterable, Identifiable {
     var icon: String {
         switch self {
         case .general: return "gearshape"
+        case .editing: return "pencil.line"
         case .formatAndAppearance: return "paintbrush"
         case .workspace: return "folder"
         case .pet: return "pawprint.fill"

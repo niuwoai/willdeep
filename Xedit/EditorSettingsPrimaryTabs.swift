@@ -88,6 +88,48 @@ extension EditorSettingsView {
                     }
                 }
             }
+
+            // Agent 聊天字号原本埋在「AI → Agent」提供商设置深处，属于
+            // 字体/格式类偏好，移到字体排印页与编辑器/工作区文本并列。
+            Section(L10n.Settings.sectionAgentChatText) {
+                HStack {
+                    Text(L10n.Settings.chatBaseFontSize)
+                    Spacer()
+                    Text("\(Int(appState.agentChatBaseFontSize.rounded())) pt")
+                        .monospacedDigit()
+                        .foregroundStyle(.secondary)
+                }
+                Slider(
+                    value: Binding(
+                        get: { Double(appState.agentChatBaseFontSize) },
+                        set: { appState.agentChatBaseFontSize = CGFloat($0.rounded()) }
+                    ),
+                    in: Double(AgentSettingsStore.chatBaseFontSizeMin)
+                        ... Double(AgentSettingsStore.chatBaseFontSizeMax),
+                    step: 1
+                )
+                Text(L10n.Settings.AgentBehavior.agentAppearanceDescription("\(Int(AgentSettingsStore.chatBaseFontSizeMin))", "\(Int(AgentSettingsStore.chatBaseFontSizeMax))"))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .formStyle(.grouped)
+    }
+
+    /// 「编辑」标签：编辑行为类设置的唯一归属——此前行号/当前行高亮混在
+    /// 「外观」的玻璃效果区、保存行为躲在「工作区」里，编辑相关偏好没有
+    /// 一个明确的家。
+    var editingSettings: some View {
+        Form {
+            Section(L10n.Settings.sectionEditor) {
+                Toggle(L10n.Settings.toggleShowLineNumbers, isOn: setting(\.showsLineNumbers))
+                Toggle(L10n.Settings.toggleHighlightCurrentLine, isOn: setting(\.highlightsCurrentLine))
+            }
+
+            Section(L10n.Settings.sectionSave) {
+                Toggle(L10n.Settings.toggleTrimTrailingWhitespace, isOn: setting(\.trimsTrailingWhitespaceOnSave))
+                Toggle(L10n.Settings.toggleEnsureFinalNewline, isOn: setting(\.ensuresFinalNewlineOnSave))
+            }
         }
         .formStyle(.grouped)
     }
@@ -252,9 +294,8 @@ extension EditorSettingsView {
 
     @ViewBuilder
     var editorSurfaceSection: some View {
+        // 行号/当前行高亮已迁往「编辑」标签；这里只留纯外观的玻璃效果。
         Section(L10n.Settings.sectionEditor) {
-            Toggle(L10n.Settings.toggleShowLineNumbers, isOn: setting(\.showsLineNumbers))
-            Toggle(L10n.Settings.toggleHighlightCurrentLine, isOn: setting(\.highlightsCurrentLine))
             Toggle(L10n.Settings.toggleGlassEditorBackground, isOn: setting(\.editorGlassEnabled))
 
             Picker(L10n.Settings.labelGlassMaterial, selection: setting(\.editorGlassMaterial)) {
@@ -302,10 +343,6 @@ extension EditorSettingsView {
                 }
             }
 
-            Section(L10n.Settings.sectionSave) {
-                Toggle(L10n.Settings.toggleTrimTrailingWhitespace, isOn: setting(\.trimsTrailingWhitespaceOnSave))
-                Toggle(L10n.Settings.toggleEnsureFinalNewline, isOn: setting(\.ensuresFinalNewlineOnSave))
-            }
         }
         .formStyle(.grouped)
     }
