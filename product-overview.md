@@ -1,6 +1,6 @@
 # WillDeep Product Overview
 
-> Last updated: 2026-07-23 | Current version: v1.195.0-rc4
+> Last updated: 2026-07-23 | Current version: v1.195.0-rc5
 
 ## Positioning
 
@@ -11,6 +11,8 @@ Official product domain: [willdeep.com](https://willdeep.com).
 WillDeep is configured for non-App-Store distribution without App Sandbox so it can access local project files with fewer permission interruptions.
 
 ## 架构概览
+
+- **模型切换分隔线边界对齐（1.195.0-rc5）** —— 模型切换提示继续居中展示，但前方分隔线从助手正文左边界开始，后方分隔线在正文右边界结束；提示文字和两侧线段共享同一可读内容列。
 
 - **新回合消息顺序与 Markdown 稳定（1.195.0-rc4）** —— 发送新消息后，只有创建时间属于当前 provider 回合的 assistant 消息才进入流式渲染；占位消息尚未建立时，上一轮回答继续留在富文本历史区，新用户消息按原顺序立即显示，避免旧回答代码围栏退化成纯文本或遮住新输入。
 
