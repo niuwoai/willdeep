@@ -15,11 +15,17 @@ import UniformTypeIdentifiers
 
 nonisolated enum AgentComposerActivityStatusPolicy {
     static func shouldShow(
+        isResponding: Bool,
         isCompressingContext: Bool,
         runningTaskCount: Int,
         isWaitingForUserDecision: Bool
     ) -> Bool {
-        isCompressingContext
+        // rc6 曾把 isResponding 从这里拿掉（只显示"可识别动作"），结果
+        // 不产出可识别状态标题的模型（如 glm-5.2）在纯响应期整条消失：
+        // 工具卡片已结算、composer 上方却没有任何"正在做什么"的反馈。
+        // 回合进行中必须始终有一条活动状态兜底。
+        isResponding
+            || isCompressingContext
             || runningTaskCount > 0
             || isWaitingForUserDecision
     }
@@ -186,6 +192,7 @@ struct AgentChatComposer: View {
 
     private var shouldShowActivityStatus: Bool {
         AgentComposerActivityStatusPolicy.shouldShow(
+            isResponding: appState.isAgentResponding,
             isCompressingContext: appState.isCompressingAgentContext,
             runningTaskCount: appState.agentRunningTaskCount,
             isWaitingForUserDecision: appState.isAgentWaitingForUserDecision

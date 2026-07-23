@@ -106,6 +106,54 @@ extension WillDeepTests {
         #expect(glyphRange.length > 0)
     }
 
+    // Regression coverage for the per-keystroke CJK pass narrowing (1.195.0-rc10):
+    // the live pass now applies fallback fonts only to the edited line's range,
+    // and `cjkScalarRanges` walks just that UTF-16 slice rather than the whole
+    // document. This test pins the two invariants that keep the narrowing safe:
+    // (1) a limited range never rewrites CJK outside it, and (2) the returned
+    // applied ranges carry the correct absolute offsets (not slice-relative).
+    @Test("limited-range CJK fallback rewrites only the requested range with correct offsets")
+    @MainActor
+    func testLimitedRangeCJKFallbackStaysWithinRange() throws {
+        let baseFont = try #require(NSFont(name: "Menlo-Regular", size: 13))
+        let cjkCapableFont = try #require(NSFont(name: "HiraginoSansGB-W3", size: 13))
+
+        // Two CJK lines. We only ask the pass to touch the second line, mirroring
+        // a keystroke landing on line 2 of a multi-line document.
+        let firstLine = "\u{4F60}\u{597D}\n"           // 你好\n  (UTF-16 length 3)
+        let secondLine = "\u{4E16}\u{754C}"            // 世界     (UTF-16 length 2)
+        let attributed = NSMutableAttributedString(
+            string: firstLine + secondLine,
+            attributes: [.font: cjkCapableFont]
+        )
+        let source = attributed.string
+        let secondLineRange = NSRange(location: (firstLine as NSString).length, length: (secondLine as NSString).length)
+
+        let applied = SyntaxHighlighter.applyEditorCJKFallbackFonts(
+            to: attributed,
+            source: source,
+            defaultFont: baseFont,
+            range: secondLineRange
+        )
+
+        // Only the second line was rewritten, and its reported range is absolute.
+        #expect(applied == [secondLineRange])
+
+        let fullRange = NSRange(location: 0, length: attributed.length)
+        for applied in applied {
+            #expect(NSIntersectionRange(applied, secondLineRange) == applied)
+            #expect(NSMaxRange(applied) <= NSMaxRange(fullRange))
+        }
+
+        // Second line now carries the fallback font…
+        let secondFont = attributed.attribute(.font, at: secondLineRange.location, effectiveRange: nil) as? NSFont
+        #expect(secondFont == cjkCapableFont.editorCJKFallbackFont())
+
+        // …while the first line, outside the requested range, is untouched.
+        let firstFont = attributed.attribute(.font, at: 0, effectiveRange: nil) as? NSFont
+        #expect(firstFont == cjkCapableFont)
+    }
+
     @Test("live CJK fallback pass is a no-op for ASCII and for already-fixed text")
     @MainActor
     func testLiveCJKFallbackPassSkipsAsciiAndAlreadyFixedText() throws {
