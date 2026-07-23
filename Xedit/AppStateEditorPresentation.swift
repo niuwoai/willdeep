@@ -79,6 +79,36 @@ extension AppState {
         return reasoning
     }
 
+    /// Complete one-line action headline for the active provider turn.
+    /// This is intentionally stricter than a generic reasoning preview: only
+    /// known phase-led status lines are eligible for the visible sweep effect.
+    var agentCurrentActivityHeadline: AgentActivityHeadlinePresentation? {
+        guard isAgentResponding else { return nil }
+        if let lastMessage = agentMessages.last,
+           lastMessage.role == .assistant,
+           let headline = AgentActivityHeadlinePresentation.make(from: lastMessage.content) {
+            return headline
+        }
+        return agentLiveThinkingPreview.flatMap {
+            AgentActivityHeadlinePresentation.make(from: $0)
+        }
+    }
+
+    /// Show a detached action row only while the provider action has not yet
+    /// appeared in the visible assistant message. Once it is inline, a second
+    /// bottom row would duplicate both the action and its activity feedback.
+    var shouldShowDetachedAgentCurrentActivityIndicator: Bool {
+        guard shouldShowAgentActivityTextIndicator,
+              agentCurrentActivityHeadline != nil else {
+            return false
+        }
+        guard let lastMessage = agentMessages.last,
+              lastMessage.role == .assistant else {
+            return true
+        }
+        return AgentActivityHeadlinePresentation.make(from: lastMessage.content) == nil
+    }
+
     /// Claude Code 式「✳ N running task」计数：正在执行的前台工具调用
     /// + 本会话仍存活的后台作业。
     ///

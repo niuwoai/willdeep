@@ -507,9 +507,8 @@ struct AgentChatTranscript: View {
                     )
                     .frame(maxWidth: AgentDesign.chatMaxContentWidth, alignment: .leading)
 
-                    // 排队消息钉在 transcript 最底部 —— 紧贴 composer
-                    // 上方的「思考中」状态条,让"已排队"和"正在处理"在
-                    // 视觉上挨在一起,而不是飘在中间被其它卡片隔开。
+                    // 排队消息钉在 transcript 最底部，紧贴 composer 的
+                    // 当前动作/任务状态区域，避免被其它卡片隔开。
                     if !appState.agentQueuedMessages.isEmpty {
                         QueuedMessagesList(
                             messages: appState.agentQueuedMessages,

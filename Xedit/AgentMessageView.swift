@@ -264,7 +264,8 @@ struct AgentModeMessageView: View {
                             if let activityHeadline, !suppressesActivityHeadline {
                                 AgentActivityHeadlineView(
                                     presentation: activityHeadline,
-                                    baseFontSize: baseFontSize
+                                    baseFontSize: baseFontSize,
+                                    isActive: isStreamingThisMessage
                                 )
                             } else {
                                 AgentAssistantMarkdownBody(

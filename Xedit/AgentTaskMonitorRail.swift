@@ -647,101 +647,69 @@ struct AgentSemanticActivityStatusLine: View {
     }
 
     @EnvironmentObject var appState: AppState
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    @State private var isBreathingExpanded = false
     var style: Style
 
+    @ViewBuilder
     var body: some View {
-        TimelineView(.periodic(from: .now, by: 1.0)) { context in
-            HStack(spacing: 7) {
-                Image(systemName: phase.systemImage)
-                    .font(.system(size: 12, weight: .semibold))
-                    .foregroundStyle(phase.tint)
-                    .scaleEffect(iconScale)
-                    .animation(breathingAnimation, value: isBreathingExpanded)
-                Text(phase.label)
-                    .font(.system(size: 12, weight: .semibold))
-                    .foregroundStyle(phase.tint)
-                    .lineLimit(1)
-                if let startedAt = appState.agentTurnStartedAt, appState.isAgentResponding {
-                    Spacer(minLength: 4)
-                    Text(Self.formatElapsed(context.date.timeIntervalSince(startedAt)))
-                        .font(.system(size: 12, weight: .semibold, design: .monospaced))
-                        .foregroundStyle(phase.tint.opacity(0.82))
-                        .monospacedDigit()
-                        .transaction { transaction in
-                            if !AgentThinkingAnimationMetrics.animatesElapsedTime {
-                                transaction.animation = nil
+        if let phase {
+            TimelineView(.periodic(from: .now, by: 1.0)) { context in
+                HStack(spacing: 7) {
+                    Image(systemName: phase.systemImage)
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundStyle(phase.tint)
+                    AgentActivitySweepLabel(
+                        text: phase.label,
+                        font: .system(size: 12, weight: .semibold),
+                        isActive: shouldAnimateCurrentAction,
+                        baseColor: phase.tint
+                    )
+                    if let startedAt = appState.agentTurnStartedAt, appState.isAgentResponding {
+                        Spacer(minLength: 4)
+                        Text(Self.formatElapsed(context.date.timeIntervalSince(startedAt)))
+                            .font(.system(size: 12, weight: .semibold, design: .monospaced))
+                            .foregroundStyle(phase.tint.opacity(0.82))
+                            .monospacedDigit()
+                            .transaction { transaction in
+                                if !AgentActivitySweepMetrics.animatesElapsedTime {
+                                    transaction.animation = nil
+                                }
                             }
-                        }
+                    }
                 }
-            }
-            .padding(.horizontal, style == .composer ? 12 : 0)
-            .frame(height: style == .composer ? 26 : nil)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .background {
-                if style == .composer {
-                    RoundedRectangle(cornerRadius: 8, style: .continuous)
-                        .fill(phase.tint.opacity(backgroundOpacity))
-                        .animation(breathingAnimation, value: isBreathingExpanded)
+                .padding(.horizontal, style == .composer ? 12 : 0)
+                .frame(height: style == .composer ? 26 : nil)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background {
+                    if style == .composer {
+                        RoundedRectangle(cornerRadius: 8, style: .continuous)
+                            .fill(phase.tint.opacity(0.10))
+                    }
                 }
-            }
-            .overlay {
-                if style == .composer {
-                    RoundedRectangle(cornerRadius: 8, style: .continuous)
-                        .stroke(phase.tint.opacity(0.16), lineWidth: 1)
+                .overlay {
+                    if style == .composer {
+                        RoundedRectangle(cornerRadius: 8, style: .continuous)
+                            .stroke(phase.tint.opacity(0.16), lineWidth: 1)
+                    }
                 }
-            }
-            .onAppear(perform: updateBreathingState)
-            .onChange(of: reduceMotion) { _ in
-                updateBreathingState()
-            }
-            .onChange(of: shouldBreathe) { _ in
-                updateBreathingState()
             }
         }
     }
 
-    private var shouldBreathe: Bool {
+    private var shouldAnimateCurrentAction: Bool {
         guard appState.isAgentResponding,
               !appState.isCompressingAgentContext,
-              appState.agentRunningTaskCount == 0,
+              appState.agentCurrentActivityHeadline != nil,
               !appState.agentToolCalls.contains(where: { call in
                   call.status == .pendingApproval
                       || call.status == .awaitingConfirm
                       || call.status == .awaitingUserAnswer
-                      || call.status == .running
               }) else {
             return false
         }
         return true
     }
 
-    private var iconScale: CGFloat {
-        guard shouldBreathe, !reduceMotion else { return 1 }
-        return isBreathingExpanded
-            ? AgentThinkingAnimationMetrics.maximumScale
-            : AgentThinkingAnimationMetrics.minimumScale
-    }
-
-    private var backgroundOpacity: Double {
-        guard style == .composer, shouldBreathe, !reduceMotion else { return 0.10 }
-        return isBreathingExpanded
-            ? AgentThinkingAnimationMetrics.maximumBackgroundOpacity
-            : AgentThinkingAnimationMetrics.minimumBackgroundOpacity
-    }
-
-    private var breathingAnimation: Animation? {
-        guard shouldBreathe, !reduceMotion else { return nil }
-        return .easeInOut(duration: AgentThinkingAnimationMetrics.duration)
-            .repeatForever(autoreverses: true)
-    }
-
-    private func updateBreathingState() {
-        isBreathingExpanded = shouldBreathe && !reduceMotion
-    }
-
-    private var phase: AgentActivityPhase {
+    private var phase: AgentActivityPhase? {
         if appState.isCompressingAgentContext {
             return AgentActivityPhase(label: "压缩上下文中", systemImage: "arrow.down.forward.and.arrow.up.backward", tint: .purple)
         }
@@ -757,7 +725,14 @@ struct AgentSemanticActivityStatusLine: View {
             return AgentActivityPhase(label: "任务运行中", systemImage: "play.circle", tint: .green)
         }
         if appState.isAgentResponding {
-            return AgentActivityPhase(label: appState.agentLiveThinkingPreview == nil ? "思考中" : "反思中", systemImage: "sparkles", tint: .green)
+            guard let headline = appState.agentCurrentActivityHeadline else {
+                return nil
+            }
+            return AgentActivityPhase(
+                label: headline.liveTitle,
+                systemImage: headline.systemImage,
+                tint: .secondary
+            )
         }
         return AgentActivityPhase(label: "空闲", systemImage: "checkmark.circle", tint: .secondary)
     }

@@ -13,6 +13,18 @@ import UniformTypeIdentifiers
 
 // MARK: - Composer
 
+nonisolated enum AgentComposerActivityStatusPolicy {
+    static func shouldShow(
+        isCompressingContext: Bool,
+        runningTaskCount: Int,
+        isWaitingForUserDecision: Bool
+    ) -> Bool {
+        isCompressingContext
+            || runningTaskCount > 0
+            || isWaitingForUserDecision
+    }
+}
+
 struct AgentChatComposer: View {
     @EnvironmentObject var appState: AppState
     @FocusState private var inputFocused: Bool
@@ -173,14 +185,11 @@ struct AgentChatComposer: View {
     }
 
     private var shouldShowActivityStatus: Bool {
-        appState.isAgentResponding
-            || appState.isCompressingAgentContext
-            || appState.agentRunningTaskCount > 0
-            || appState.agentToolCalls.contains { call in
-                call.status == .pendingApproval
-                    || call.status == .awaitingConfirm
-                    || call.status == .awaitingUserAnswer
-            }
+        AgentComposerActivityStatusPolicy.shouldShow(
+            isCompressingContext: appState.isCompressingAgentContext,
+            runningTaskCount: appState.agentRunningTaskCount,
+            isWaitingForUserDecision: appState.isAgentWaitingForUserDecision
+        )
     }
 
     private var taskProgressSnapshot: AgentComposerTaskProgressSnapshot? {

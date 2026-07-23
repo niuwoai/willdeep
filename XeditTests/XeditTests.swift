@@ -1335,10 +1335,19 @@ struct WillDeepTests {
             AgentMessage(role: .assistant, content: "", reasoningContent: "先读取文件，再分析调用链")
         )
         #expect(appState.agentLiveThinkingPreview == "先读取文件，再分析调用链")
+        #expect(appState.agentCurrentActivityHeadline == nil)
 
-        // 首个正文 token 到达 → 指示器整体消失，预览跟着消失
-        appState.agentMessages[1].content = "好的"
+        // 已知阶段开头的一行正文成为当前动作，保留完整可见标题。
+        appState.agentMessages[1].content = "Planning Swift enum extensions"
         #expect(appState.agentLiveThinkingPreview == nil)
+        #expect(
+            appState.agentCurrentActivityHeadline?.liveTitle
+                == "Planning Swift enum extensions"
+        )
+
+        // 普通回答正文不冒充动作标题。
+        appState.agentMessages[1].content = "好的"
+        #expect(appState.agentCurrentActivityHeadline == nil)
 
         // turn 结束后即使 reasoning 还挂在消息上也不再预览
         appState.agentMessages[1].content = ""

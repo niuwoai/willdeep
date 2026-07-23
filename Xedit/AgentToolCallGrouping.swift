@@ -10,17 +10,21 @@
 
 import Foundation
 
-/// Converts terse provider-authored status headlines (for example
-/// `Planning font size clamping implementation`) into a stable, localized
-/// phase label. The remainder is deliberately not shown: it is often raw
-/// reasoning, not user-facing copy, and may switch languages or expose noisy
-/// implementation fragments while streaming.
+/// Recognizes terse provider-authored status headlines (for example
+/// `Planning font size clamping implementation`). Settled history keeps the
+/// stable localized phase title, while the active SwiftUI surface may show the
+/// complete one-line action so users can see exactly what is moving forward.
 nonisolated struct AgentActivityHeadlinePresentation: Equatable {
     let title: String
+    let liveTitle: String
     let systemImage: String
 
     static var analyzing: Self {
-        Self(title: L10n.AgentActivity.analyzing, systemImage: "sparkles")
+        Self(
+            title: L10n.AgentActivity.analyzing,
+            liveTitle: L10n.AgentActivity.analyzing,
+            systemImage: "sparkles"
+        )
     }
 
     static func make(from content: String) -> Self? {
@@ -43,22 +47,57 @@ nonisolated struct AgentActivityHeadlinePresentation: Equatable {
 
         switch firstWord {
         case "planning", "plan":
-            return Self(title: L10n.AgentActivity.planning, systemImage: "list.bullet.clipboard")
+            return Self(
+                title: L10n.AgentActivity.planning,
+                liveTitle: liveTitle(normalized, fallback: L10n.AgentActivity.planning),
+                systemImage: "list.bullet.clipboard"
+            )
         case "inspecting", "examining", "reviewing", "analyzing", "analysing":
-            return Self(title: L10n.AgentActivity.inspecting, systemImage: "doc.text.magnifyingglass")
+            return Self(
+                title: L10n.AgentActivity.inspecting,
+                liveTitle: liveTitle(normalized, fallback: L10n.AgentActivity.inspecting),
+                systemImage: "doc.text.magnifyingglass"
+            )
         case "searching", "locating", "finding", "reading":
-            return Self(title: L10n.AgentActivity.searching, systemImage: "magnifyingglass")
+            return Self(
+                title: L10n.AgentActivity.searching,
+                liveTitle: liveTitle(normalized, fallback: L10n.AgentActivity.searching),
+                systemImage: "magnifyingglass"
+            )
         case "editing", "implementing", "updating", "fixing", "refactoring":
-            return Self(title: L10n.AgentActivity.editing, systemImage: "square.and.pencil")
+            return Self(
+                title: L10n.AgentActivity.editing,
+                liveTitle: liveTitle(normalized, fallback: L10n.AgentActivity.editing),
+                systemImage: "square.and.pencil"
+            )
         case "testing", "verifying", "validating", "checking":
-            return Self(title: L10n.AgentActivity.verifying, systemImage: "checkmark.circle")
+            return Self(
+                title: L10n.AgentActivity.verifying,
+                liveTitle: liveTitle(normalized, fallback: L10n.AgentActivity.verifying),
+                systemImage: "checkmark.circle"
+            )
         case "building", "compiling", "packaging":
-            return Self(title: L10n.AgentActivity.building, systemImage: "hammer")
+            return Self(
+                title: L10n.AgentActivity.building,
+                liveTitle: liveTitle(normalized, fallback: L10n.AgentActivity.building),
+                systemImage: "hammer"
+            )
         case "running", "executing":
-            return Self(title: L10n.AgentActivity.running, systemImage: "terminal")
+            return Self(
+                title: L10n.AgentActivity.running,
+                liveTitle: liveTitle(normalized, fallback: L10n.AgentActivity.running),
+                systemImage: "terminal"
+            )
         default:
             return nil
         }
+    }
+
+    private static func liveTitle(_ normalized: String, fallback: String) -> String {
+        let wordCount = normalized.split(whereSeparator: {
+            $0.isWhitespace || $0 == ":"
+        }).count
+        return wordCount > 1 ? normalized : fallback
     }
 }
 

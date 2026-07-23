@@ -21,8 +21,8 @@ struct AgentTaskMonitorSnapshot: Equatable {
     var learningDigest: [String]
 
     var isAgentActivityActive: Bool {
-        // 「思考中」(`isAgentResponding` 但没有任何 tool / 后台任务) 是日
-        // 常状态,不应触发任务监控自动展开。只把有实质动作的状态算
+        // 纯 provider 响应(`isAgentResponding` 但没有任何 tool / 后台
+        // 任务)是日常状态，不应触发任务监控自动展开。只把有实质动作的状态算
         // 作 active:正在压缩上下文、有后台任务在跑、或有 tool 在等审
         // 批 / 等确认 / 等回答 / 正在执行。
         isCompressingContext

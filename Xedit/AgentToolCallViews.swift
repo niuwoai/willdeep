@@ -664,23 +664,37 @@ private struct AgentToolActivityTimelineRow: View {
 struct AgentActivityHeadlineView: View {
     let presentation: AgentActivityHeadlinePresentation
     let baseFontSize: CGFloat
+    var isActive = false
+    var sweepProgressOverride: CGFloat? = nil
 
     var body: some View {
         HStack(spacing: 8) {
-            Image(systemName: presentation.systemImage)
-                .font(.system(size: 12, weight: .regular))
-                .frame(width: 15)
-            Text(presentation.title)
-                .font(AgentDesign.chatSupportingFont(
-                    baseFontSize: baseFontSize,
-                    weight: .medium
-                ))
-                .lineLimit(1)
+            if isActive {
+                AgentActivitySweepLabel(
+                    text: presentation.liveTitle,
+                    font: AgentDesign.chatSupportingFont(
+                        baseFontSize: baseFontSize,
+                        weight: .medium
+                    ),
+                    isActive: true,
+                    progressOverride: sweepProgressOverride
+                )
+            } else {
+                Image(systemName: presentation.systemImage)
+                    .font(.system(size: 12, weight: .regular))
+                    .frame(width: 15)
+                Text(presentation.title)
+                    .font(AgentDesign.chatSupportingFont(
+                        baseFontSize: baseFontSize,
+                        weight: .medium
+                    ))
+                    .lineLimit(1)
+            }
             Spacer(minLength: 0)
         }
         .foregroundStyle(Color(nsColor: .secondaryLabelColor))
         .frame(maxWidth: .infinity, minHeight: 20, alignment: .leading)
-        .accessibilityLabel(presentation.title)
+        .accessibilityLabel(isActive ? presentation.liveTitle : presentation.title)
     }
 }
 

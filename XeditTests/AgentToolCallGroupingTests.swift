@@ -149,8 +149,10 @@ extension WillDeepTests {
         )
 
         #expect(planning?.title == L10n.AgentActivity.planning)
+        #expect(planning?.liveTitle == "Planning font size clamping implementation")
         #expect(planning?.systemImage == "list.bullet.clipboard")
         #expect(verifying?.title == L10n.AgentActivity.verifying)
+        #expect(verifying?.liveTitle == "Verifying activity timeline snapshots")
         #expect(AgentActivityHeadlinePresentation.make(from: "Planning is useful for every project.") == nil)
         #expect(AgentActivityHeadlinePresentation.make(from: "普通的中文回答正文") == nil)
     }

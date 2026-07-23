@@ -385,57 +385,30 @@ struct AgentContextCompressionDivider: View {
     }
 }
 
-struct AgentThinkingDivider: View {
+struct AgentCurrentActionDivider: View {
     @EnvironmentObject var appState: AppState
     var leadingInset: CGFloat = 0
     var trailingInset: CGFloat = 0
 
+    @ViewBuilder
     var body: some View {
-        let phase = appState.agentLiveThinkingPreview.map {
-            AgentActivityHeadlinePresentation.make(from: $0) ?? .analyzing
-        }
-        VStack(spacing: 0) {
-            // When we have a turn start timestamp, render a live ticker so the
-            // user can see the seconds advance — proof that the request hasn't
-            // silently hung. When we don't (e.g. legacy code paths that don't
-            // stamp the start), fall back to the static label.
-            if let startedAt = appState.agentTurnStartedAt {
-                TimelineView(.periodic(from: startedAt, by: 1)) { context in
-                    AgentInlineStatusDivider(
-                        text: phase?.title ?? L10n.AgentPanel.thinking,
-                        trailing: formatThinkingElapsed(
-                            context.date.timeIntervalSince(startedAt)
-                        ),
-                        systemImage: phase?.systemImage,
-                        animatesIcon: true,
-                        showsSeparator: false,
-                        leadingInset: leadingInset,
-                        trailingInset: trailingInset
-                    )
-                }
-            } else {
-                AgentInlineStatusDivider(
-                    text: phase?.title ?? L10n.AgentPanel.thinking,
-                    systemImage: phase?.systemImage,
-                    animatesIcon: true,
-                    showsSeparator: false,
-                    leadingInset: leadingInset,
-                    trailingInset: trailingInset
-                )
-            }
-
-            // Raw reasoning is intentionally never rendered. A known
-            // provider phase is folded into the single status line above;
-            // unknown traces use the generic localized analysis phase.
+        if let headline = appState.agentCurrentActivityHeadline {
+            AgentInlineStatusDivider(
+                text: headline.liveTitle,
+                animatesTextSweep: true,
+                showsSeparator: false,
+                leadingInset: leadingInset,
+                trailingInset: trailingInset
+            )
         }
     }
 }
 
 /// Single source of truth for the transcript's bottom activity feedback.
-/// Concrete tasks take priority; otherwise an autonomous turn keeps the same
-/// elapsed-time text from first token to last. User-decision and compression
-/// states intentionally render nothing here because their dedicated surfaces
-/// already explain what is blocking progress.
+/// Concrete tasks take priority; otherwise only a recognized current action
+/// headline is shown. User-decision and compression states intentionally
+/// render nothing here because their dedicated surfaces already explain what
+/// is blocking progress.
 struct AgentTurnActivityStatusView: View {
     @EnvironmentObject var appState: AppState
     var leadingInset: CGFloat = 0
@@ -454,8 +427,8 @@ struct AgentTurnActivityStatusView: View {
                     detail: appState.agentRunningTaskSummary,
                     onTap: onRunningTasksTap
                 )
-            } else if appState.shouldShowAgentActivityTextIndicator {
-                AgentThinkingDivider(
+            } else if appState.shouldShowDetachedAgentCurrentActivityIndicator {
+                AgentCurrentActionDivider(
                     leadingInset: leadingInset,
                     trailingInset: trailingInset
                 )
@@ -482,32 +455,16 @@ private struct AgentPanelTranscriptItem: Identifiable {
     }
 }
 
-private func formatThinkingElapsed(_ seconds: TimeInterval) -> String {
-    let total = max(0, Int(seconds))
-    if total < 60 {
-        return "\(total)s"
-    }
-    let minutes = total / 60
-    let remaining = total % 60
-    if minutes < 60 {
-        return "\(minutes)m \(remaining)s"
-    }
-    let hours = minutes / 60
-    let mm = minutes % 60
-    return "\(hours)h \(mm)m"
-}
-
 // Shared with the full-screen transcript (`AgentChatTranscript`) so the
 // "waiting for a provider slot" queue hint renders consistently in both the
 // sidebar and the main chat.
 struct AgentInlineStatusDivider: View {
     @Environment(\.agentChatSupportingBaseFontSize) private var baseFontSize
     let text: String
-    /// Optional trailing caption rendered next to the label — used by the
-    /// thinking status to show live elapsed seconds.
+    /// Optional trailing caption rendered next to the label.
     var trailing: String? = nil
     var systemImage: String? = nil
-    var animatesIcon = false
+    var animatesTextSweep = false
     var showsSeparator = true
     var leadingInset: CGFloat = 0
     var trailingInset: CGFloat = 0
@@ -524,19 +481,25 @@ struct AgentInlineStatusDivider: View {
             }
             HStack(spacing: AgentInlineStatusLayout.labelSpacing) {
                 if let systemImage {
-                    AgentInlineStatusIcon(
-                        systemImage: systemImage,
-                        size: max(12, baseFontSize - 1),
-                        isBreathing: animatesIcon
-                    )
+                    Image(systemName: systemImage)
+                        .font(.system(size: max(12, baseFontSize - 1), weight: .medium))
                         .frame(
                             width: AgentInlineStatusLayout.iconSize,
                             height: AgentInlineStatusLayout.iconSize
                         )
                 }
-                Text(text)
-                    .font(AgentDesign.chatSupportingFont(baseFontSize: baseFontSize))
-                    .lineLimit(1)
+                let labelFont = AgentDesign.chatSupportingFont(baseFontSize: baseFontSize)
+                if animatesTextSweep {
+                    AgentActivitySweepLabel(
+                        text: text,
+                        font: labelFont,
+                        isActive: true
+                    )
+                } else {
+                    Text(text)
+                        .font(labelFont)
+                        .lineLimit(1)
+                }
                 if let trailing {
                     Text("·")
                         .font(AgentDesign.chatSupportingFont(baseFontSize: baseFontSize))
@@ -558,48 +521,84 @@ struct AgentInlineStatusDivider: View {
     }
 }
 
-nonisolated enum AgentThinkingAnimationMetrics {
-    static let minimumScale: CGFloat = 0.86
-    static let maximumScale: CGFloat = 1.08
-    static let duration: TimeInterval = 1.4
-    static let minimumBackgroundOpacity = 0.075
-    static let maximumBackgroundOpacity = 0.115
+nonisolated enum AgentActivitySweepMetrics {
+    static let sweepDuration: TimeInterval = 1.25
+    static let pauseDuration: TimeInterval = 0.65
+    static let minimumBandWidth: CGFloat = 36
+    static let bandWidthFraction: CGFloat = 0.38
+    static let baseOpacity = 0.58
     static let animatesElapsedTime = false
+
+    static func progress(elapsed: TimeInterval) -> CGFloat {
+        let cycleDuration = sweepDuration + pauseDuration
+        guard cycleDuration > 0 else { return 0 }
+        let normalizedElapsed = max(0, elapsed)
+            .truncatingRemainder(dividingBy: cycleDuration)
+        guard normalizedElapsed <= sweepDuration else {
+            return 1.25
+        }
+        return CGFloat(normalizedElapsed / sweepDuration)
+    }
 }
 
-private struct AgentInlineStatusIcon: View {
+struct AgentActivitySweepLabel: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    let systemImage: String
-    let size: CGFloat
-    let isBreathing: Bool
-    @State private var isExpanded = false
+    let text: String
+    let font: Font
+    var isActive: Bool
+    var progressOverride: CGFloat? = nil
+    var baseColor = Color(nsColor: .secondaryLabelColor)
+    @State private var animationStartedAt = Date()
 
     var body: some View {
-        Image(systemName: systemImage)
-            .font(.system(size: size, weight: .medium))
-            .scaleEffect(iconScale)
-            .animation(breathingAnimation, value: isExpanded)
-            .onAppear(perform: updateAnimationState)
-            .onChange(of: reduceMotion) { _ in
-                updateAnimationState()
+        Text(text)
+            .font(font)
+            .foregroundStyle(baseColor.opacity(AgentActivitySweepMetrics.baseOpacity))
+            .lineLimit(1)
+            .overlay {
+                if isActive, !reduceMotion {
+                    if let progressOverride {
+                        sweepLayer(progress: progressOverride)
+                    } else {
+                        TimelineView(.animation(minimumInterval: 1.0 / 30.0)) { context in
+                            sweepLayer(progress: AgentActivitySweepMetrics.progress(
+                                elapsed: context.date.timeIntervalSince(animationStartedAt)
+                            ))
+                        }
+                    }
+                }
             }
+            .onChange(of: text) { _ in
+                animationStartedAt = Date()
+            }
+            .accessibilityLabel(text)
     }
 
-    private var iconScale: CGFloat {
-        guard isBreathing, !reduceMotion else { return 1 }
-        return isExpanded
-            ? AgentThinkingAnimationMetrics.maximumScale
-            : AgentThinkingAnimationMetrics.minimumScale
-    }
-
-    private var breathingAnimation: Animation? {
-        guard isBreathing, !reduceMotion else { return nil }
-        return .easeInOut(duration: AgentThinkingAnimationMetrics.duration)
-            .repeatForever(autoreverses: true)
-    }
-
-    private func updateAnimationState() {
-        isExpanded = isBreathing && !reduceMotion
+    private func sweepLayer(progress: CGFloat) -> some View {
+        GeometryReader { proxy in
+            let bandWidth = max(
+                AgentActivitySweepMetrics.minimumBandWidth,
+                proxy.size.width * AgentActivitySweepMetrics.bandWidthFraction
+            )
+            LinearGradient(
+                colors: [
+                    .clear,
+                    Color(nsColor: .labelColor).opacity(0.12),
+                    Color(nsColor: .labelColor).opacity(0.96),
+                    Color(nsColor: .labelColor).opacity(0.12),
+                    .clear,
+                ],
+                startPoint: .leading,
+                endPoint: .trailing
+            )
+            .frame(width: bandWidth, height: proxy.size.height)
+            .offset(x: -bandWidth + progress * (proxy.size.width + bandWidth))
+        }
+        .mask(alignment: .leading) {
+            Text(text)
+                .font(font)
+                .lineLimit(1)
+        }
     }
 }
 

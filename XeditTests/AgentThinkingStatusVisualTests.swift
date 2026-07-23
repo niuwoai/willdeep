@@ -19,22 +19,89 @@ struct AgentThinkingStatusVisualTests {
         #expect(!source.contains("AgentTurnActivityStatusView("))
     }
 
+    @Test("pure provider response does not add a generic composer status")
+    func pureResponseOmitsGenericComposerStatus() {
+        #expect(!AgentComposerActivityStatusPolicy.shouldShow(
+            isCompressingContext: false,
+            runningTaskCount: 0,
+            isWaitingForUserDecision: false
+        ))
+        #expect(AgentComposerActivityStatusPolicy.shouldShow(
+            isCompressingContext: true,
+            runningTaskCount: 0,
+            isWaitingForUserDecision: false
+        ))
+        #expect(AgentComposerActivityStatusPolicy.shouldShow(
+            isCompressingContext: false,
+            runningTaskCount: 1,
+            isWaitingForUserDecision: false
+        ))
+        #expect(AgentComposerActivityStatusPolicy.shouldShow(
+            isCompressingContext: false,
+            runningTaskCount: 0,
+            isWaitingForUserDecision: true
+        ))
+    }
+
     @MainActor
-    @Test("render composer-attached thinking status for design QA")
-    func renderThinkingStatusForDesignQA() throws {
+    @Test("current action has exactly one transcript owner")
+    func currentActionHasOneTranscriptOwner() {
+        let appState = AppState()
+        appState.startNewAgentSession()
+        appState.isAgentResponding = true
+        appState.agentMessages = [
+            AgentMessage(role: .user, content: "继续"),
+            AgentMessage(
+                role: .assistant,
+                content: "",
+                reasoningContent: "Planning Swift enum extensions"
+            ),
+        ]
+
+        #expect(appState.shouldShowDetachedAgentCurrentActivityIndicator)
+
+        appState.agentMessages[1].content = "Planning Swift enum extensions"
+        #expect(appState.agentCurrentActivityHeadline != nil)
+        #expect(!appState.shouldShowDetachedAgentCurrentActivityIndicator)
+
+        appState.agentMessages[1].content = "普通回答正文"
+        #expect(appState.agentCurrentActivityHeadline == nil)
+        #expect(!appState.shouldShowDetachedAgentCurrentActivityIndicator)
+    }
+
+    @Test("task monitor has no generic provider fallback")
+    func taskMonitorHasNoGenericProviderFallback() throws {
+        let repositoryRoot = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+        let source = try String(
+            contentsOf: repositoryRoot.appendingPathComponent("Xedit/AgentTaskMonitorRail.swift"),
+            encoding: .utf8
+        )
+
+        #expect(!source.contains("agentCurrentActivityHeadline ?? .analyzing"))
+    }
+
+    @MainActor
+    @Test("render current action sweep phases for design QA")
+    func renderCurrentActionSweepForDesignQA() throws {
         let outputPath = ProcessInfo.processInfo.environment[
             "XEDIT_THINKING_STATUS_QA_OUTPUT"
-        ] ?? "/tmp/Xedit-thinking-status-design-qa/implementation.png"
+        ] ?? "/tmp/Xedit-activity-sweep-design-qa/implementation.png"
 
-        let activeState = makeActiveState()
-        let decisionState = makeDecisionState()
-        let paneWidth: CGFloat = 478
-        let paneHeight: CGFloat = 96
-        let root = HStack(spacing: 0) {
-            statusPane(appState: activeState, width: paneWidth, height: paneHeight)
-            statusPane(appState: decisionState, width: paneWidth, height: paneHeight)
+        let presentation = try #require(AgentActivityHeadlinePresentation.make(
+            from: "Planning Swift enum extensions"
+        ))
+        #expect(presentation.liveTitle == "Planning Swift enum extensions")
+
+        let paneWidth: CGFloat = 744
+        let paneHeight: CGFloat = 70
+        let root = VStack(spacing: 0) {
+            sweepPane(presentation: presentation, progress: 0.05)
+            sweepPane(presentation: presentation, progress: 0.50)
+            sweepPane(presentation: presentation, progress: 0.95)
         }
-        .frame(width: paneWidth * 2, height: paneHeight)
+        .frame(width: paneWidth, height: paneHeight * 3)
         .preferredColorScheme(.light)
 
         let hostingView = NSHostingView(rootView: root)
@@ -42,8 +109,8 @@ struct AgentThinkingStatusVisualTests {
         hostingView.frame = NSRect(
             x: 0,
             y: 0,
-            width: paneWidth * 2,
-            height: paneHeight
+            width: paneWidth,
+            height: paneHeight * 3
         )
         hostingView.layoutSubtreeIfNeeded()
 
@@ -59,71 +126,27 @@ struct AgentThinkingStatusVisualTests {
         )
         try png.write(to: outputURL, options: .atomic)
 
-        #expect(bitmap.size.width == paneWidth * 2)
-        #expect(bitmap.size.height == paneHeight)
-        #expect(bitmap.pixelsWide >= Int(paneWidth * 2))
-        #expect(bitmap.pixelsHigh >= Int(paneHeight))
+        #expect(bitmap.size.width == paneWidth)
+        #expect(bitmap.size.height == paneHeight * 3)
+        #expect(bitmap.pixelsWide >= Int(paneWidth))
+        #expect(bitmap.pixelsHigh >= Int(paneHeight * 3))
     }
 
-    @MainActor
-    private func makeActiveState() -> AppState {
-        var settings = EditorSettings.default
-        settings.interfaceSkinID = EditorInterfaceSkin.ricePaper.id
-        let appState = AppState(editorSettings: settings)
-        appState.startNewAgentSession()
-        appState.isAgentResponding = true
-        appState.agentTurnStartedAt = Date(timeIntervalSinceNow: -275)
-        appState.agentMessages = [
-            AgentMessage(role: .assistant, content: "Streaming response")
-        ]
-        return appState
-    }
-
-    @MainActor
-    private func makeDecisionState() -> AppState {
-        var settings = EditorSettings.default
-        settings.interfaceSkinID = EditorInterfaceSkin.ricePaper.id
-        let appState = AppState(editorSettings: settings)
-        appState.startNewAgentSession()
-        appState.isAgentResponding = true
-        appState.agentTurnStartedAt = Date(timeIntervalSinceNow: -275)
-        appState.agentMessages = [
-            AgentMessage(role: .assistant, content: "Waiting for approval")
-        ]
-        appState.agentToolCalls = [
-            AgentToolCall(
-                messageID: UUID(),
-                externalID: UUID().uuidString,
-                toolName: "run_command",
-                arguments: [:],
-                risk: .write,
-                status: .pendingApproval
-            ),
-            AgentToolCall(
-                messageID: UUID(),
-                externalID: UUID().uuidString,
-                toolName: "background_build",
-                arguments: [:],
-                risk: .read,
-                status: .running
-            )
-        ]
-        #expect(appState.agentRunningTaskCount == 1)
-        return appState
-    }
-
-    @MainActor
-    private func statusPane(
-        appState: AppState,
-        width: CGFloat,
-        height: CGFloat
+    private func sweepPane(
+        presentation: AgentActivityHeadlinePresentation,
+        progress: CGFloat
     ) -> some View {
         ZStack(alignment: .topLeading) {
-            appState.editorSettings.interfaceSkin.windowBackground
-            AgentSemanticActivityStatusLine(style: .composer)
-                .environmentObject(appState)
-                .padding(.top, 18)
+            EditorInterfaceSkin.ricePaper.windowBackground
+            AgentActivityHeadlineView(
+                presentation: presentation,
+                baseFontSize: 14,
+                isActive: true,
+                sweepProgressOverride: progress
+            )
+            .padding(.horizontal, 18)
+            .padding(.top, 22)
         }
-        .frame(width: width, height: height)
+        .frame(width: 744, height: 70)
     }
 }

@@ -128,18 +128,19 @@ struct AgentConfirmationVisualTests {
         #expect(!AgentCompactAuthorizationMetrics.usesHorizontalActions(availableWidth: 480))
     }
 
-    @Test("思考状态只让图标与背景呼吸，计时保持稳定")
-    func thinkingAnimationStaysSubtle() {
-        #expect(AgentThinkingAnimationMetrics.minimumScale >= 0.85)
-        #expect(AgentThinkingAnimationMetrics.maximumScale <= 1.09)
-        #expect(AgentThinkingAnimationMetrics.duration >= 1.2)
-        #expect(AgentThinkingAnimationMetrics.maximumBackgroundOpacity <= 0.12)
-        #expect(!AgentThinkingAnimationMetrics.animatesElapsedTime)
-        #expect(
-            AgentThinkingAnimationMetrics.maximumBackgroundOpacity
-                - AgentThinkingAnimationMetrics.minimumBackgroundOpacity
-                <= 0.040_001
-        )
+    @Test("当前动作文字从左向右扫光，计时保持稳定")
+    func currentActionSweepStaysSubtle() {
+        #expect(AgentActivitySweepMetrics.sweepDuration >= 1.0)
+        #expect(AgentActivitySweepMetrics.pauseDuration >= 0.5)
+        #expect(AgentActivitySweepMetrics.bandWidthFraction <= 0.4)
+        #expect(AgentActivitySweepMetrics.progress(elapsed: 0) == 0)
+        #expect(AgentActivitySweepMetrics.progress(
+            elapsed: AgentActivitySweepMetrics.sweepDuration / 2
+        ) == 0.5)
+        #expect(AgentActivitySweepMetrics.progress(
+            elapsed: AgentActivitySweepMetrics.sweepDuration + 0.1
+        ) > 1)
+        #expect(!AgentActivitySweepMetrics.animatesElapsedTime)
     }
 
     private func designQAOutputDirectory() throws -> URL {

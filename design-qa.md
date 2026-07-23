@@ -1,3 +1,85 @@
+# Design QA：重复“思考中”状态收口
+
+## 验收范围
+
+- source visual truth：`/var/folders/np/rjc0y5w52x324x21pv6g33440000gp/T/codex-clipboard-e1843f61-1483-46dd-8dac-f9061aa660ce.png`（552 × 105 px，绿色“思考中”胶囊与经过时间）。
+- implementation screenshot：`/tmp/xedit-single-current-action-implementation.png`（552 × 105 px，唯一当前动作扫光相位）。
+- 同画布对比：`/tmp/xedit-duplicate-thinking-comparison.png`（552 × 210 px；上方为重复状态问题，下方为单一当前动作实现）。
+- state：浅色 Rice Paper 皮肤、Agent 正在响应、完整 Provider 动作 `Planning Swift enum extensions` 已进入 assistant 消息。
+
+## 修正记录
+
+1. 当前动作进入 assistant 消息后，底部临时动作行立即停止渲染；同一动作不会再同时由消息和底部状态拥有。
+2. 临时动作行仅用于 assistant 消息尚未出现、但 reasoning 已提供可识别动作的短暂阶段，并移除独立经过时间。
+3. 普通 Provider 响应不再触发 Composer 状态；任务监督栏也不再用泛化“思考中/分析请求”兜底。
+4. 上下文压缩、真实运行任务、等待审批或问答等明确状态继续保留，不影响必要的阻塞反馈。
+
+## Required Fidelity Surfaces
+
+- Fonts and typography：继续沿用当前动作 14pt 辅助字体，完整动作保持单行。
+- Spacing and layout rhythm：删除整条绿色胶囊后，当前动作回到 assistant 正文列，不保留空壳或额外垂直间距。
+- Colors and visual tokens：当前动作使用 secondary label 与局部扫光；不再使用泛化状态的绿色底色、描边和星形图标。
+- Image quality and asset fidelity：实现截图由生产 SwiftUI 当前动作组件生成，并与用户截图置于同一 552px 画布检查。
+- Copy and content：不新增固定文案；只有通过严格识别的 Provider 当前动作可以进入动画状态。
+
+## Findings
+
+同画布对比确认：问题态中的绿色“思考中”胶囊、右侧经过时间以及第二套状态容器均已移除，替换为正文列内唯一的当前动作扫光。动作进入消息前后由明确的互斥条件接管，因此不会再出现 35 分钟与 15 分钟两套计时交替。没有未解决的 P0、P1 或 P2 视觉差异。
+
+## 验证
+
+- `AgentThinkingStatusVisualTests` 与 `AgentConfirmationVisualTests`：9 项通过，包含“当前动作只有一个 transcript owner”和“任务监督栏无泛化 Provider 兜底”。
+- 生产 SwiftUI 编译、签名及测试运行成功。
+- `ruby scripts/version_consistency.rb` 与 `git diff --check` 通过，当前工作区版本为 `1.195.0-rc6` / Build 112。
+
+final result: passed
+
+---
+
+# Design QA：当前动作文字扫光
+
+## 验收范围
+
+- source visual truth：`/var/folders/np/rjc0y5w52x324x21pv6g33440000gp/T/codex-clipboard-d6c49c38-bc9b-4b13-b3c2-1c2c7a2d9d82.png`（743 × 210 px，Codex 当前动作文字扫光）。
+- implementation screenshot：
+  - `/tmp/Xedit-activity-sweep-design-qa/implementation.png`（744 × 210 pt，Retina 2×）。
+  - `/tmp/Xedit-activity-sweep-design-qa/implementation-1x.png`（744 × 210 px，三个确定扫光相位）。
+- 同画布对比：
+  - `/tmp/xedit-activity-sweep-comparison.png`（744 × 420 px；上方为用户参考，下方为三个实现相位）。
+  - `/tmp/xedit-activity-sweep-focused-comparison.png`（744 × 125 px；聚焦参考动作行与实现中间相位）。
+- state：Rice Paper 浅色皮肤、14pt 辅助字体、`Planning Swift enum extensions` 当前动作，以及扫光早期、中部和末端三个确定相位。
+
+## 修正记录
+
+1. 可识别的 Provider 当前动作保留完整单行标题，不再只折叠成泛化的本地化阶段词。
+2. 活跃动作文字增加从左到右的窄带扫光；底层文字保持低对比静态可读，扫光周期后留出短暂停顿。
+3. 经过时间、图标和背景不参与扫光；系统开启“减弱动态效果”后自动停用动画。
+4. 纯 Provider 响应不再额外显示 Composer 泛化“思考中”；上下文压缩、后台任务和等待用户决定继续显示各自明确状态。
+5. 历史动作仍使用静态的本地化阶段标题，避免已经完成的记录持续闪动。
+
+## Required Fidelity Surfaces
+
+- Fonts and typography：沿用聊天辅助文字的系统字体与字号；活动标题保持单行，完整展示 Provider 当前动作。
+- Spacing and layout rhythm：文字左边界沿用助手正文列；扫光只在字形遮罩内移动，不改变布局宽度和基线。
+- Colors and visual tokens：底字、扫光高光继续读取系统 label/secondary label 颜色，没有新增硬编码产品色。
+- Image quality and asset fidelity：动画完全由生产 SwiftUI 组件渲染；三个相位快照来自同一组件，不使用替代图片。
+- Copy and content：没有新增固定 UI 文案；Provider 动作只在通过严格阶段词和单行规则后展示，历史标题继续走 i18n。
+
+## Findings
+
+同画布对比确认：实现与参考都以低对比单行动作文字作为活跃反馈，并通过局部高对比带从左向右扫过字形；实现额外保留 Rice Paper 皮肤背景，但没有改变文字列、字号层级或信息密度。经过时间没有继承动画，纯响应也不会再叠加“思考中”。没有未解决的 P0、P1 或 P2 视觉差异。
+
+## 验证
+
+- `AgentThinkingStatusVisualTests` 与 `AgentConfirmationVisualTests`：7 项通过，覆盖三相位快照、扫光周期、静态计时和纯响应状态策略。
+- `AgentChatHistoryRendererTests`：77 项通过，确认历史阶段标题与消息渲染路径保持稳定。
+- 参考图与实现图已放进同画布比较文件并打开检查。
+- `ruby scripts/version_consistency.rb` 与 `git diff --check` 通过，当前工作区版本为 `1.195.0-rc5` / Build 111。
+
+final result: passed
+
+---
+
 # Design QA：活动计时、终端确认提示与模型切换分隔线
 
 ## 验收范围
