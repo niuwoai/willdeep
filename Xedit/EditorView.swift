@@ -1376,14 +1376,27 @@ struct EditorView: NSViewRepresentable {
             }
 
             let source = textView.string
+            let nsSource = source as NSString
             let fullRange = NSRange(location: 0, length: textStorage.length)
             let targetRange: NSRange
-            if textStorage.length < Self.viewportHighlightThreshold {
-                targetRange = fullRange
-            } else if let visibleRange = visibleHighlightRange(in: textView) {
-                targetRange = visibleRange
+            // Per-keystroke, only re-apply CJK fallback fonts to the line(s) the
+            // edit touched, never the whole document. Earlier this used
+            // `fullRange` for files < 100KB, which meant every keypress in a
+            // several-thousand-character CJK file re-scanned and re-attributed
+            // the entire text on the main thread — the primary source of typing
+            // lag (and why CJK typing felt heavier than ASCII). The insertion
+            // point sits at the just-committed edit, so its line range covers the
+            // characters that need fallback fonts; a debounced full highlight
+            // (`scheduleHighlight`) still corrects anything outside this window.
+            if let visibleRange = visibleHighlightRange(in: textView) {
+                let editedLineRange = nsSource.lineRange(for: NSIntersectionRange(textView.selectedRange(), fullRange))
+                // On large files stay within the viewport; on small ones the
+                // edited line is enough and far cheaper than the viewport.
+                targetRange = textStorage.length < Self.viewportHighlightThreshold
+                    ? editedLineRange
+                    : NSIntersectionRange(visibleRange, fullRange)
             } else {
-                targetRange = (source as NSString).lineRange(for: NSIntersectionRange(textView.selectedRange(), fullRange))
+                targetRange = nsSource.lineRange(for: NSIntersectionRange(textView.selectedRange(), fullRange))
             }
 
             SyntaxHighlighter.applyLiveEditorCJKFallbackFonts(

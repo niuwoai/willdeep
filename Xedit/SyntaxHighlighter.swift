@@ -1563,8 +1563,20 @@ enum SyntaxHighlighter {
     private static func cjkScalarRanges(in source: String, limiting range: NSRange) -> [NSRange] {
         guard !source.isEmpty, range.length > 0 else { return [] }
 
+        // Only walk the UTF-16 substring that `range` covers — never the whole
+        // document. CJK detection is per-scalar with no cross-boundary context,
+        // so scanning just the limited slice is equivalent to filtering a
+        // full-document scan, but its cost is O(range.length) instead of
+        // O(source.length). This is the difference between a per-keystroke pass
+        // touching the edited line vs. re-scanning the entire file every keypress.
+        let nsSource = source as NSString
+        let bounded = NSIntersectionRange(range, NSRange(location: 0, length: nsSource.length))
+        guard bounded.length > 0 else { return [] }
+        let slice = nsSource.substring(with: bounded)
+        let base = bounded.location
+
         var result: [NSRange] = []
-        var utf16Location = 0
+        var utf16Location = base
         var currentStart: Int?
         var currentLength = 0
 
@@ -1576,11 +1588,9 @@ enum SyntaxHighlighter {
             currentLength = 0
         }
 
-        for scalar in source.unicodeScalars {
+        for scalar in slice.unicodeScalars {
             let scalarLength = String(scalar).utf16.count
-            let scalarRange = NSRange(location: utf16Location, length: scalarLength)
-            let insideLimit = NSIntersectionRange(scalarRange, range).length == scalarLength
-            if insideLimit, isCJKScalar(scalar) {
+            if isCJKScalar(scalar) {
                 if currentStart == nil {
                     currentStart = utf16Location
                 }
