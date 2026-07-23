@@ -849,8 +849,8 @@ struct WillDeepTests {
     }
 
     @MainActor
-    @Test("terminal tools route by conversation binding instead of active tab")
-    func testTerminalToolsRouteByConversationBinding() throws {
+    @Test("terminal tools follow the active tab for every conversation")
+    func testTerminalToolsFollowActiveTab() throws {
         let controller = AgentInteractiveTerminalController()
         let settings = EditorTerminalSettings.default
         let sessionA = UUID()
@@ -873,12 +873,17 @@ struct WillDeepTests {
         }
 
         #expect(controller.activeTabID == tabB.id)
-        #expect(controller.boundTabID(for: sessionA) == tabA.id)
-        #expect(try controller.rawSnapshot(sessionID: sessionA).tabID == tabA.id)
+        #expect(controller.ownedTabID(for: sessionA) == tabA.id)
+        // Both conversations read the tab the user is currently looking at.
+        #expect(try controller.rawSnapshot(sessionID: sessionA).tabID == tabB.id)
         #expect(try controller.rawSnapshot(sessionID: sessionB).tabID == tabB.id)
 
-        controller.activateTab(id: tabB.id, bindingTo: sessionA)
-        #expect(controller.boundTabID(for: sessionA) == tabB.id)
+        controller.activateTab(id: tabA.id)
+        #expect(try controller.rawSnapshot(sessionID: sessionB).tabID == tabA.id)
+
+        // terminal_select_tab surface: switches routing and the visible tab.
+        _ = try controller.selectTab(id: tabB.id)
+        #expect(controller.activeTabID == tabB.id)
         #expect(try controller.rawSnapshot(sessionID: sessionA).tabID == tabB.id)
     }
 
@@ -902,7 +907,7 @@ struct WillDeepTests {
             settings: settings,
             skin: nil
         )
-        let tabBID = try #require(controller.boundTabID(for: sessionB))
+        let tabBID = try #require(controller.ownedTabID(for: sessionB))
         defer {
             controller.closeTab(id: tabA.id)
             controller.closeTab(id: tabBID)
@@ -912,9 +917,9 @@ struct WillDeepTests {
         #expect(controller.tabs.count == 2)
         #expect(controller.tab(id: tabBID)?.originAgentSessionID == sessionB)
 
-        controller.activateBoundTab(for: sessionA)
+        controller.activateOwnedTab(for: sessionA)
         #expect(controller.activeTabID == tabA.id)
-        controller.activateBoundTab(for: sessionB)
+        controller.activateOwnedTab(for: sessionB)
         #expect(controller.activeTabID == tabBID)
 
         controller.ensureAtLeastOneTab(
@@ -927,45 +932,58 @@ struct WillDeepTests {
     }
 
     @MainActor
-    @Test("explicit terminal tab id overrides conversation binding")
-    func testExplicitTerminalTabIDOverridesConversationBinding() throws {
+    @Test("explicit terminal tab id overrides the active tab without moving it")
+    func testExplicitTerminalTabIDOverridesActiveTab() throws {
         let controller = AgentInteractiveTerminalController()
         let settings = EditorTerminalSettings.default
         let sessionID = UUID()
-        let bound = controller.openLocalTab(
+        let other = controller.openLocalTab(
             originAgentSessionID: sessionID,
             workingDirectory: FileManager.default.temporaryDirectory.path,
             settings: settings,
             skin: nil
         )
-        let exact = controller.openLocalTab(
+        let active = controller.openLocalTab(
             originAgentSessionID: UUID(),
             workingDirectory: FileManager.default.temporaryDirectory.path,
             settings: settings,
             skin: nil
         )
         defer {
-            controller.closeTab(id: bound.id)
-            controller.closeTab(id: exact.id)
+            controller.closeTab(id: other.id)
+            controller.closeTab(id: active.id)
         }
 
-        #expect(try controller.rawSnapshot(targetTabID: exact.id, sessionID: sessionID).tabID == exact.id)
-        // An explicit one-off read of another tab must not move an existing
-        // binding — later unqualified calls still hit the bound tab.
-        #expect(controller.boundTabID(for: sessionID) == bound.id)
-        #expect(try controller.rawSnapshot(sessionID: sessionID).tabID == bound.id)
+        #expect(controller.activeTabID == active.id)
+        #expect(try controller.rawSnapshot(targetTabID: other.id, sessionID: sessionID).tabID == other.id)
+        // An explicit one-off read of another tab must not steal the active
+        // tab — later unqualified calls still hit what the user sees.
+        #expect(controller.activeTabID == active.id)
+        #expect(try controller.rawSnapshot(sessionID: sessionID).tabID == active.id)
         #expect(throws: AgentToolError.self) {
             _ = try controller.rawSnapshot(targetTabID: UUID(), sessionID: sessionID)
+        }
+        #expect(throws: AgentToolError.self) {
+            _ = try controller.selectTab(id: UUID())
         }
     }
 
     @MainActor
-    @Test("unbound conversation gets open-tab guidance and binds via explicit tab id")
-    func testUnboundConversationSnapshotListsOpenTabsAndBindsExplicitTarget() throws {
+    @Test("no open tabs yields guidance; any open tab routes for every conversation")
+    func testSnapshotGuidanceWithoutTabsAndActiveTabFallback() throws {
         let controller = AgentInteractiveTerminalController()
         let settings = EditorTerminalSettings.default
         let sessionA = UUID()
         let sessionB = UUID()
+
+        do {
+            _ = try controller.rawSnapshot(sessionID: sessionB)
+            Issue.record("expected empty-panel snapshot to throw the no-tab guidance error")
+        } catch let error as AgentToolError {
+            let message = error.errorDescription ?? ""
+            #expect(message.contains("no open tabs"))
+        }
+
         let tabA = controller.openLocalTab(
             originAgentSessionID: sessionA,
             workingDirectory: FileManager.default.temporaryDirectory.path,
@@ -974,21 +992,41 @@ struct WillDeepTests {
         )
         defer { controller.closeTab(id: tabA.id) }
 
-        do {
-            _ = try controller.rawSnapshot(sessionID: sessionB)
-            Issue.record("expected unbound snapshot to throw the open-tab guidance error")
-        } catch let error as AgentToolError {
-            let message = error.errorDescription ?? ""
-            #expect(message.contains(tabA.id.uuidString))
-            #expect(message.contains("[currently visible to the user]"))
-            #expect(message.contains("Do NOT tell the user the side panel or terminal is closed"))
+        // Another conversation reads the visible tab instead of erroring.
+        #expect(try controller.rawSnapshot(sessionID: sessionB).tabID == tabA.id)
+    }
+
+    @MainActor
+    @Test("start recording opens a local shell tab when none is usable")
+    func testStartRecordingOpensLocalTabWhenNoneUsable() throws {
+        let controller = AgentInteractiveTerminalController()
+        let settings = EditorTerminalSettings.default
+        let sessionID = UUID()
+        controller.defaultLocalTabProvider = { requested in
+            (settings, FileManager.default.temporaryDirectory.path, requested ?? sessionID, nil)
         }
 
-        // Explicitly targeting the confirmed tab binds it while the session
-        // has no binding, so follow-up calls may omit terminal_tab_id.
-        #expect(try controller.rawSnapshot(targetTabID: tabA.id, sessionID: sessionB).tabID == tabA.id)
-        #expect(controller.boundTabID(for: sessionB) == tabA.id)
-        #expect(try controller.rawSnapshot(sessionID: sessionB).tabID == tabA.id)
+        #expect(controller.tabs.isEmpty)
+        controller.startRecordingActiveTab()
+
+        let created = try #require(controller.tabs.first)
+        defer { controller.closeTab(id: created.id) }
+        #expect(controller.tabs.count == 1)
+        #expect(created.kind == .localShell)
+        #expect(created.originAgentSessionID == sessionID)
+        #expect(controller.activeTabID == created.id)
+        #expect(controller.isRecording)
+        controller.stopRecording()
+        #expect(!controller.isRecording)
+    }
+
+    @Test("host identity probe hides its output marker from the echoed command")
+    func testHostIdentityProbeCommandHidesMarker() {
+        let command = AgentTerminalTab.hostIdentityProbeCommand
+        #expect(!command.contains(AgentTerminalTab.hostIdentityMarker))
+        #expect(command.contains("hostname"))
+        #expect(command.contains("os-release"))
+        #expect(command.contains("sw_vers"))
     }
 
     @MainActor

@@ -105,9 +105,9 @@ struct AgentSidePanelFocusPolicyTests {
         #expect(source.contains("dismissedCardKeys.insert"))
     }
 
-    @Test("Render host-verification popover for design QA")
+    @Test("Render host-identity popover for design QA")
     @MainActor
-    func renderHostVerificationPopoverForDesignQA() throws {
+    func renderHostIdentityPopoverForDesignQA() throws {
         let defaultOutputURL = URL(fileURLWithPath: #filePath)
             .deletingLastPathComponent()
             .deletingLastPathComponent()
@@ -118,11 +118,16 @@ struct AgentSidePanelFocusPolicyTests {
             atPath: URL(fileURLWithPath: outputPath).deletingLastPathComponent().path
         ) else { return }
 
-        let size = NSSize(width: 330, height: 156)
-        let root = AgentHostVerificationPopover(
-            hostnameCommandCopied: false,
-            palette: EditorInterfaceSkin.system.palette,
-            copyAction: {}
+        let size = NSSize(width: 330, height: 220)
+        let tab = AgentTerminalTab(
+            kind: .localShell,
+            originAgentSessionID: nil,
+            title: "Shell 1",
+            settings: EditorTerminalSettings.default
+        )
+        let root = AgentHostIdentityPopover(
+            tab: tab,
+            palette: EditorInterfaceSkin.system.palette
         )
         .frame(width: size.width, height: size.height, alignment: .top)
         .preferredColorScheme(.light)

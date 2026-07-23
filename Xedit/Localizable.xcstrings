@@ -4005,20 +4005,110 @@
         }
       }
     },
-    "agent-terminal.session.copy-hostname-command" : {
-      "comment" : "Button that copies the hostname verification command from the local terminal identity popover",
+    "agent-terminal.session.extract-host-identity" : {
+      "comment" : "Button that probes the terminal tab's live shell for hostname/IP/OS and renames the tab",
       "extractionState" : "manual",
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Copy hostname command"
+            "value" : "Extract host identity"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "复制 hostname 命令"
+            "value" : "提取主机标识"
+          }
+        }
+      }
+    },
+    "agent-terminal.session.extracting-host-identity" : {
+      "comment" : "Progress label while the host identity probe waits for terminal output",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Extracting…"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "提取中…"
+          }
+        }
+      }
+    },
+    "agent-terminal.session.host-identity-hint" : {
+      "comment" : "Explains what the host identity probe sends and that it renames the tab",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sends a hostname/IP/OS probe into this tab's live shell (including a manual SSH session) and renames the tab to the hostname."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "向当前标签页的实际 Shell（包括手动 SSH 会话）发送 hostname/IP/系统探测命令，并把标签名改为主机名。"
+          }
+        }
+      }
+    },
+    "agent-terminal.session.host-identity-hostname" : {
+      "comment" : "Label for the extracted hostname row",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Hostname"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "主机名"
+          }
+        }
+      }
+    },
+    "agent-terminal.session.host-identity-ip" : {
+      "comment" : "Label for the extracted IP address row",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "IP"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "IP"
+          }
+        }
+      }
+    },
+    "agent-terminal.session.host-identity-os" : {
+      "comment" : "Label for the extracted operating system row",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "System"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "系统"
           }
         }
       }
@@ -4036,24 +4126,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "已退出"
-          }
-        }
-      }
-    },
-    "agent-terminal.session.hostname-command-copied" : {
-      "comment" : "Confirmation shown after copying the hostname verification command",
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Copied"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "已复制"
           }
         }
       }
@@ -4134,26 +4206,8 @@
         }
       }
     },
-    "agent-terminal.session.verify-host" : {
-      "comment" : "Disclosure button for local terminal host identity guidance",
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Verify host"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "验证主机"
-          }
-        }
-      }
-    },
     "agent-terminal.session.verify-host-title" : {
-      "comment" : "Title of the local terminal host identity guidance popover",
+      "comment" : "Title of the terminal host identity popover",
       "extractionState" : "manual",
       "localizations" : {
         "en" : {
@@ -4165,7 +4219,7 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "主机身份"
+            "value" : "主机标识"
           }
         }
       }

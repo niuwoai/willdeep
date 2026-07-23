@@ -1,6 +1,6 @@
 # WillDeep Product Overview
 
-> Last updated: 2026-07-22 | Current version: v1.193.0-rc25
+> Last updated: 2026-07-23 | Current version: v1.194.0-rc1
 
 ## Positioning
 
@@ -11,6 +11,8 @@ Official product domain: [willdeep.com](https://willdeep.com).
 WillDeep is configured for non-App-Store distribution without App Sandbox so it can access local project files with fewer permission interruptions.
 
 ## 架构概览
+
+- **终端活跃标签路由、标签工具与主机标识提取（1.194.0-rc1）** —— 终端工具默认作用于用户当前看到的活跃标签：`terminal_snapshot` / `terminal_send_command` / `terminal_send_control` 不再走会话绑定表，显式 `terminal_tab_id` 仍可一次性指向其他标签且不抢占活跃标签；新增 `terminal_list_tabs` 与 `terminal_select_tab` 让 Agent 按用户指令列出并切换终端标签。新开标签仍从属于打开它的会话（会话切换激活、会话关闭清理），委托 `/bin/sh` 池标签不会成为隐式目标。「开始录制」在没有可用标签时自动激活或新开本地 Shell；「验证主机」升级为「提取主机标识」，向标签内实际 Shell（含手动 SSH）发送兼容 Debian/Ubuntu/macOS 的探测命令，展示 hostname/IP/系统并把标签重命名为主机名。
 
 - **统计面板可读字号与结构分层（1.193.0-rc25）** —— 新聊天统计面板以 13pt 作为可见正文与辅助信息基线，分区标题和关键数字分别使用 14pt、16pt；信息层级主要依靠字重、颜色、留白、描边与分隔线表达，不再依赖 9–11pt 小号文字。概览与模型用量页签采用同一套可读尺度。
 

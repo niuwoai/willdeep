@@ -85,6 +85,8 @@ enum AgentChatToolSummaryFormatter {
             preferredKeys = ["control"]
         case "terminal_snapshot":
             preferredKeys = ["max_chars", "include_recent_commands"]
+        case "terminal_select_tab":
+            preferredKeys = ["terminal_tab_id"]
         case "grep_files":
             preferredKeys = ["pattern", "include", "path"]
         case "search_files":

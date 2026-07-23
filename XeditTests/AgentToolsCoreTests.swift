@@ -899,6 +899,8 @@ struct AgentToolsCoreTests {
         let listShortcuts = AgentToolRegistry.descriptor(for: "terminal_list_shortcuts")
         let createShortcut = AgentToolRegistry.descriptor(for: "terminal_create_shortcut")
         let editShortcut = AgentToolRegistry.descriptor(for: "terminal_edit_shortcut")
+        let listTabs = AgentToolRegistry.descriptor(for: "terminal_list_tabs")
+        let selectTab = AgentToolRegistry.descriptor(for: "terminal_select_tab")
 
         #expect(snapshot?.risk == .read)
         #expect(sendCommand?.risk == .write)
@@ -906,7 +908,10 @@ struct AgentToolsCoreTests {
         #expect(listShortcuts?.risk == .read)
         #expect(createShortcut?.risk == .write)
         #expect(editShortcut?.risk == .write)
-        #expect(snapshot?.description.contains("current conversation's bound Agent Terminal tab") == true)
+        #expect(listTabs?.risk == .read)
+        #expect(selectTab?.risk == .read)
+        #expect(selectTab?.parameters.contains(where: { $0.name == "terminal_tab_id" && $0.required }) == true)
+        #expect(snapshot?.description.contains("ACTIVE Agent Terminal side-panel tab") == true)
         #expect(sendCommand?.description.contains("never send a local-intended command into an SSH tab") == true)
         #expect(sendCommand?.parameters.contains(where: { $0.name == "zmodem_upload_paths" && $0.type == .stringArray }) == true)
         #expect(sendCommand?.parameters.contains(where: { $0.name == "zmodem_download_directory" && $0.type == .string }) == true)
@@ -1173,7 +1178,9 @@ struct AgentToolsCoreTests {
         for toolName in ["terminal_snapshot", "terminal_send_command", "terminal_send_control"] {
             let descriptor = AgentToolRegistry.descriptor(for: toolName)
             #expect(descriptor?.parameters.contains(where: { $0.name == "terminal_tab_id" }) == true)
-            #expect(descriptor?.description.contains("Never guesses") == true)
+            // Default routing follows the ACTIVE side-panel tab; the explicit
+            // terminal_tab_id parameter stays as the one-off override.
+            #expect(descriptor?.description.contains("ACTIVE") == true)
         }
     }
 

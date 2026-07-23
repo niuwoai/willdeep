@@ -205,6 +205,10 @@ enum AgentToolRunner {
                 result = try await AgentTerminalTools.sendCommand(arguments: activeArguments, context: activeContext)
             case "terminal_send_control":
                 result = try await AgentTerminalTools.sendControl(arguments: activeArguments, context: activeContext)
+            case "terminal_list_tabs":
+                result = try await AgentTerminalTools.listTabs(arguments: activeArguments, context: activeContext)
+            case "terminal_select_tab":
+                result = try await AgentTerminalTools.selectTab(arguments: activeArguments, context: activeContext)
             case "create_file":
                 result = try await createFile(arguments: activeArguments, context: activeContext)
             case "edit_file":

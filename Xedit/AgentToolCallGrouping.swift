@@ -105,6 +105,8 @@ struct AgentToolActivityRowPresentation: Identifiable, Equatable {
         case "terminal_snapshot": return "读取终端快照"
         case "terminal_send_command": return "发送终端命令"
         case "terminal_send_control": return "发送终端控制键"
+        case "terminal_list_tabs": return "列出终端标签"
+        case "terminal_select_tab": return "切换终端标签"
         case "edit_file": return "编辑文件"
         case "create_file": return "创建文件"
         case "apply_patch": return "应用补丁"
@@ -399,7 +401,8 @@ extension AgentToolKind {
 nonisolated enum AgentTerminalToolNames {
     static func isVisibleTerminalOperation(_ toolName: String) -> Bool {
         switch toolName {
-        case "terminal_snapshot", "terminal_send_command", "terminal_send_control":
+        case "terminal_snapshot", "terminal_send_command", "terminal_send_control",
+             "terminal_list_tabs", "terminal_select_tab":
             return true
         default:
             return false

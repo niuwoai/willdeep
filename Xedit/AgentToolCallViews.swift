@@ -55,6 +55,8 @@ nonisolated enum AgentToolDisplay {
         "terminal_edit_shortcut": "编辑终端捷径",
         "terminal_send_command": "终端执行命令",
         "terminal_send_control": "终端控制键",
+        "terminal_list_tabs": "终端标签列表",
+        "terminal_select_tab": "切换终端标签",
         "create_file": "创建文件",
         "edit_file": "编辑文件",
         "apply_patch": "应用补丁",
