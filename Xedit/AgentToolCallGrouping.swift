@@ -105,6 +105,8 @@ struct AgentToolActivityRowPresentation: Identifiable, Equatable {
         case "terminal_snapshot": return "读取终端快照"
         case "terminal_send_command": return "发送终端命令"
         case "terminal_send_control": return "发送终端控制键"
+        case "terminal_list_tabs": return "列出终端标签"
+        case "terminal_select_tab": return "切换终端标签"
         case "edit_file": return "编辑文件"
         case "create_file": return "创建文件"
         case "apply_patch": return "应用补丁"
@@ -169,18 +171,87 @@ struct AgentToolActivityRowPresentation: Identifiable, Equatable {
 }
 
 struct AgentLiveActivityTimelinePresentation {
-    static let maximumDetailedRows = 8
+    /// The live transcript should show just enough recent work to explain
+    /// what is happening now. A longer execution log is still represented by
+    /// the quiet earlier-operations summary instead of being expanded inline.
+    static let maximumDetailedRows = 3
 
     let hiddenOperationCount: Int
     let visibleCalls: [AgentToolCall]
 
+    var disclosureCall: AgentToolCall? {
+        visibleCalls.last(where: { !$0.status.isBlockingForUserDecision })
+    }
+
+    var hasExpandableDetails: Bool {
+        hiddenOperationCount > 0
+            || visibleCalls.filter { !$0.status.isBlockingForUserDecision }.count > 1
+    }
+
+    func detailCalls(isExpanded: Bool) -> [AgentToolCall] {
+        let nonBlockingCalls = visibleCalls.filter { !$0.status.isBlockingForUserDecision }
+        return isExpanded ? nonBlockingCalls : Array(nonBlockingCalls.suffix(1))
+    }
+
     init(calls: [AgentToolCall], maximumDetailedRows: Int = Self.maximumDetailedRows) {
         let boundedMaximum = max(1, maximumDetailedRows)
-        let recentIDs = Set(calls.suffix(boundedMaximum).map(\.id))
-        let interactiveIDs = Set(calls.lazy.filter { $0.status.isBlockingForUserDecision }.map(\.id))
+        let displayCalls = Self.hidingRecoveredFileEditFailures(in: calls)
+        let recentIDs = Set(displayCalls.suffix(boundedMaximum).map(\.id))
+        let interactiveIDs = Set(displayCalls.lazy.filter { $0.status.isBlockingForUserDecision }.map(\.id))
         let visibleIDs = recentIDs.union(interactiveIDs)
-        visibleCalls = calls.filter { visibleIDs.contains($0.id) }
+        visibleCalls = displayCalls.filter { visibleIDs.contains($0.id) }
         hiddenOperationCount = calls.count - visibleCalls.count
+    }
+
+    /// A failed exact-string edit is useful while it is unresolved. Once a
+    /// later successful edit (or an explicit mutation command) touches the
+    /// same path, keeping the failed attempt in the live rows only makes a
+    /// recovered turn look broken. It remains counted in the compact earlier
+    /// summary and in the persisted transcript for auditability.
+    private static func hidingRecoveredFileEditFailures(
+        in calls: [AgentToolCall]
+    ) -> [AgentToolCall] {
+        calls.enumerated().compactMap { index, call in
+            guard call.status == .failed,
+                  call.toolName == "edit_file",
+                  let path = normalizedPath(call.arguments["path"]?.stringValue()) else {
+                return call
+            }
+            let wasRecovered = calls.dropFirst(index + 1).contains { laterCall in
+                successfulMutation(laterCall, touches: path)
+            }
+            return wasRecovered ? nil : call
+        }
+    }
+
+    private static func successfulMutation(
+        _ call: AgentToolCall,
+        touches path: String
+    ) -> Bool {
+        guard call.status == .succeeded else { return false }
+        switch call.toolName {
+        case "edit_file", "create_file":
+            return normalizedPath(call.arguments["path"]?.stringValue()) == path
+        case "apply_patch":
+            return call.arguments["diff"]?.stringValue()?.contains(path) == true
+        case "run_command":
+            guard let command = call.arguments["command"]?.stringValue(),
+                  command.contains(path) else { return false }
+            let normalizedCommand = command.lowercased()
+            return ["sed ", "perl ", "ruby ", "python ", "apply_patch", "git apply"]
+                .contains(where: normalizedCommand.contains)
+        default:
+            return false
+        }
+    }
+
+    private static func normalizedPath(_ rawPath: String?) -> String? {
+        guard let rawPath else { return nil }
+        var path = rawPath.trimmingCharacters(in: .whitespacesAndNewlines)
+        while path.hasPrefix("./") {
+            path.removeFirst(2)
+        }
+        return path.isEmpty ? nil : path
     }
 }
 
@@ -330,7 +401,8 @@ extension AgentToolKind {
 nonisolated enum AgentTerminalToolNames {
     static func isVisibleTerminalOperation(_ toolName: String) -> Bool {
         switch toolName {
-        case "terminal_snapshot", "terminal_send_command", "terminal_send_control":
+        case "terminal_snapshot", "terminal_send_command", "terminal_send_control",
+             "terminal_list_tabs", "terminal_select_tab":
             return true
         default:
             return false

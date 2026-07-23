@@ -11,9 +11,11 @@
 //  reaps tabs that sit idle for too long.
 //
 //  Agent tools (terminal_snapshot / terminal_send_command /
-//  terminal_send_control) operate on an exact/session-bound tab. The
-//  selected UI tab is presentation state only; tool routing never guesses
-//  from whichever tab happens to be active.
+//  terminal_send_control) follow the ACTIVE side-panel tab — the one the
+//  user currently sees — unless an explicit terminal_tab_id targets another
+//  tab. terminal_select_tab switches the active tab. Tabs remember which
+//  Agent session opened them (originAgentSessionID) for grouping and
+//  cleanup, but routing is driven by tab visibility, not session binding.
 //
 
 import AppKit
@@ -92,6 +94,16 @@ struct AgentTerminalRawSnapshot: Sendable {
     /// up before capture even if a resize hasn't reflowed it yet.
     let cols: Int
     let rows: Int
+}
+
+/// Result of the "提取主机标识" probe: what machine the tab's shell is
+/// actually talking to right now (a local tab may contain a manual SSH
+/// session, so this is read from the live shell, not from tab metadata).
+struct AgentTerminalHostIdentity: Equatable {
+    var hostname: String
+    var ipAddress: String
+    var operatingSystem: String
+    var capturedAt: Date
 }
 
 enum AgentTerminalControl: String, CaseIterable {
@@ -1222,6 +1234,8 @@ final class AgentTerminalTab: ObservableObject, Identifiable, AgentTerminalProce
     @Published private(set) var shortcutPlaybackState: TerminalShortcutPlaybackState?
     @Published private(set) var shortcutBadgeTitle: String?
     @Published private(set) var isAutomationBusy = false
+    @Published private(set) var hostIdentity: AgentTerminalHostIdentity?
+    @Published private(set) var isExtractingHostIdentity = false
 
     /// Last moment the tab saw user input or fresh process output. Drives
     /// the idle reaper. Not @Published — sampled by a timer, not the UI.
@@ -1230,6 +1244,7 @@ final class AgentTerminalTab: ObservableObject, Identifiable, AgentTerminalProce
     private let maxRecentCommands = 20
     private var recorder: TerminalShortcutRecorder?
     private var shortcutPlaybackTask: Task<Void, Never>?
+    private var hostIdentityTask: Task<Void, Never>?
 
     init(
         id: UUID = UUID(),
@@ -1344,6 +1359,9 @@ final class AgentTerminalTab: ObservableObject, Identifiable, AgentTerminalProce
         cancelRecording()
         shortcutPlaybackTask?.cancel()
         shortcutPlaybackTask = nil
+        hostIdentityTask?.cancel()
+        hostIdentityTask = nil
+        isExtractingHostIdentity = false
         finishShortcutPlayback(status: .cancelled(reason: "terminal_stopped"))
         terminalView.terminate()
         isRunning = false
@@ -1462,6 +1480,66 @@ final class AgentTerminalTab: ObservableObject, Identifiable, AgentTerminalProce
         let trimmed = title.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return nil }
         return String(trimmed.prefix(24))
+    }
+
+    // MARK: Host identity extraction ("提取主机标识")
+
+    /// Output marker assembled at runtime so the echoed probe command line
+    /// never contains the literal string the parser scans for.
+    nonisolated static let hostIdentityMarker = "WD_HOST" + "IDENT"
+
+    /// One POSIX-compatible line that prints marker|hostname|ip|os on
+    /// Debian/Ubuntu (and most Linuxes) as well as macOS. Runs in whatever
+    /// shell the tab currently talks to — including a manual SSH session —
+    /// which is exactly the point: identify the real host behind the tab.
+    nonisolated static let hostIdentityProbeCommand =
+        #"printf '%s|%s|%s|%s\n' "WD_HOST""IDENT" "$(hostname)" "$( (hostname -I 2>/dev/null || ipconfig getifaddr en0 2>/dev/null) | awk '{print $1; exit}' )" "$( (. /etc/os-release 2>/dev/null && printf %s "$PRETTY_NAME") || sw_vers -productName 2>/dev/null || uname -s )""#
+
+    /// Send the identity probe into the tab's live shell, poll the snapshot
+    /// mirror for the marker line, then adopt the hostname as the tab title.
+    func extractHostIdentity() {
+        guard isRunning, !isAutomationBusy, !isExtractingHostIdentity else { return }
+        isExtractingHostIdentity = true
+        recordCommand(Self.hostIdentityProbeCommand)
+        lastActivity = Date()
+        terminalView.send(txt: Self.hostIdentityProbeCommand + "\n")
+        hostIdentityTask?.cancel()
+        hostIdentityTask = Task { [weak self] in
+            // Up to ~8s to cover slow remote shells inside the tab.
+            for _ in 0..<20 {
+                try? await Task.sleep(nanoseconds: 400_000_000)
+                guard !Task.isCancelled, let self, self.isExtractingHostIdentity else { return }
+                guard let identity = self.parseHostIdentityFromScreen() else { continue }
+                self.hostIdentity = identity
+                if !identity.hostname.isEmpty {
+                    self.title = String(identity.hostname.prefix(40))
+                }
+                self.isExtractingHostIdentity = false
+                return
+            }
+            self?.isExtractingHostIdentity = false
+        }
+    }
+
+    private func parseHostIdentityFromScreen() -> AgentTerminalHostIdentity? {
+        let source = snapshotSource()
+        source.mirror.resize(cols: source.cols, rows: source.rows)
+        let viewport = source.mirror.captureViewport()
+        let markerPrefix = Self.hostIdentityMarker + "|"
+        for line in viewport.split(separator: "\n", omittingEmptySubsequences: true).reversed() {
+            let trimmed = line.trimmingCharacters(in: .whitespaces)
+            guard trimmed.hasPrefix(markerPrefix) else { continue }
+            let fields = trimmed.dropFirst(markerPrefix.count).components(separatedBy: "|")
+            guard let hostname = fields.first?.trimmingCharacters(in: .whitespaces),
+                  !hostname.isEmpty else { continue }
+            return AgentTerminalHostIdentity(
+                hostname: hostname,
+                ipAddress: fields.count > 1 ? fields[1].trimmingCharacters(in: .whitespaces) : "",
+                operatingSystem: fields.count > 2 ? fields[2].trimmingCharacters(in: .whitespaces) : "",
+                capturedAt: Date()
+            )
+        }
+        return nil
     }
 
     // MARK: Agent-tool surface
@@ -1654,9 +1732,6 @@ final class AgentInteractiveTerminalController: ObservableObject {
 
     @Published private(set) var tabs: [AgentTerminalTab] = []
     @Published var activeTabID: UUID?
-    /// Stable routing table for terminal tools and delegated coding agents.
-    /// A session keeps its terminal binding while the user views another tab.
-    @Published private(set) var boundTabIDsBySession: [UUID: UUID] = [:]
     /// Default runtime for new SSH tabs.
     @Published var selectedRuntimeID: UUID?
     @Published private(set) var shortcuts: [TerminalShortcut] = TerminalShortcutStore.load()
@@ -1693,15 +1768,12 @@ final class AgentInteractiveTerminalController: ObservableObject {
         tabs.first { $0.id == id }
     }
 
-    func boundTabID(for sessionID: UUID?) -> UUID? {
-        guard let sessionID,
-              let tabID = boundTabIDsBySession[sessionID],
-              tab(id: tabID) != nil else { return nil }
-        return tabID
-    }
-
-    func isTab(_ tabID: UUID, boundTo sessionID: UUID?) -> Bool {
-        boundTabID(for: sessionID) == tabID
+    /// The most recent tab this session opened. Ownership only groups tabs
+    /// per conversation for bootstrap/cleanup; command routing follows the
+    /// active tab instead.
+    func ownedTabID(for sessionID: UUID?) -> UUID? {
+        guard let sessionID else { return nil }
+        return tabs.last(where: { $0.originAgentSessionID == sessionID })?.id
     }
 
     var recordingTabID: UUID? {
@@ -1800,21 +1872,15 @@ final class AgentInteractiveTerminalController: ObservableObject {
         tabSubscriptions[tab.id] = cancellable
         tabs.append(tab)
         activeTabID = tab.id
-        if let sessionID = tab.originAgentSessionID {
-            boundTabIDsBySession[sessionID] = tab.id
-        }
     }
 
-    func activateTab(id: UUID, bindingTo sessionID: UUID?) {
+    func activateTab(id: UUID) {
         guard tab(id: id) != nil else { return }
         activeTabID = id
-        if let sessionID {
-            boundTabIDsBySession[sessionID] = id
-        }
     }
 
-    func activateBoundTab(for sessionID: UUID?) {
-        guard let tabID = boundTabID(for: sessionID) else { return }
+    func activateOwnedTab(for sessionID: UUID?) {
+        guard let tabID = ownedTabID(for: sessionID) else { return }
         activeTabID = tabID
     }
 
@@ -1839,16 +1905,6 @@ final class AgentInteractiveTerminalController: ObservableObject {
         tabSubscriptions[id]?.cancel()
         tabSubscriptions[id] = nil
         tabs.remove(at: index)
-        let affectedSessions = boundTabIDsBySession.compactMap { sessionID, tabID in
-            tabID == id ? sessionID : nil
-        }
-        for sessionID in affectedSessions {
-            if let replacement = tabs.last(where: { $0.originAgentSessionID == sessionID }) {
-                boundTabIDsBySession[sessionID] = replacement.id
-            } else {
-                boundTabIDsBySession[sessionID] = nil
-            }
-        }
         if activeTabID == id {
             activeTabID = tabs.last?.id
         }
@@ -1861,11 +1917,29 @@ final class AgentInteractiveTerminalController: ObservableObject {
         ids.forEach(closeTab)
     }
 
+    /// Start recording in the active tab. Without a usable active tab this
+    /// falls back to a running local shell — activating it — or opens a
+    /// fresh local shell tab, so the record button never dead-ends on an
+    /// empty or exited panel.
     func startRecordingActiveTab() {
-        guard recordingTabID == nil,
-              let tab = activeTab,
-              tab.isRunning else { return }
-        tab.startRecording()
+        guard recordingTabID == nil else { return }
+        if let tab = activeTab, tab.isRunning, !tab.kind.isDelegatedShell, !tab.isAutomationBusy {
+            tab.startRecording()
+            return
+        }
+        if let localTab = tabs.last(where: { $0.kind == .localShell && $0.isRunning && !$0.isAutomationBusy }) {
+            activeTabID = localTab.id
+            localTab.startRecording()
+            return
+        }
+        guard let config = defaultLocalTabProvider?(nil) else { return }
+        let created = openLocalTab(
+            originAgentSessionID: config.originAgentSessionID,
+            workingDirectory: config.workingDirectory,
+            settings: config.settings,
+            skin: config.skin
+        )
+        created.startRecording()
     }
 
     func stopRecording() {
@@ -2197,10 +2271,10 @@ final class AgentInteractiveTerminalController: ObservableObject {
         return String(decoding: event.bytes, as: UTF8.self)
     }
 
-    /// Make sure the current conversation has a live terminal binding. A
-    /// different conversation's existing tab must not become the implicit
-    /// fallback, otherwise opening the panel leaks that tab's screen and SSH
-    /// state into a fresh conversation.
+    /// Make sure the current conversation owns a terminal tab. A different
+    /// conversation's existing tab must not become the implicit default,
+    /// otherwise opening the panel leaks that tab's screen and SSH state
+    /// into a fresh conversation.
     func ensureAtLeastOneTab(
         originAgentSessionID: UUID?,
         workingDirectory: String?,
@@ -2208,11 +2282,7 @@ final class AgentInteractiveTerminalController: ObservableObject {
         skin: TerminalSkinColors?
     ) {
         if let originAgentSessionID {
-            if boundTabID(for: originAgentSessionID) != nil {
-                return
-            }
-            if let originated = tabs.last(where: { $0.originAgentSessionID == originAgentSessionID }) {
-                boundTabIDsBySession[originAgentSessionID] = originated.id
+            if ownedTabID(for: originAgentSessionID) != nil {
                 return
             }
         } else if !tabs.isEmpty {
@@ -2246,7 +2316,7 @@ final class AgentInteractiveTerminalController: ObservableObject {
                 settings: settings,
                 skin: skin
             )
-            activateBoundTab(for: originAgentSessionID)
+            activateOwnedTab(for: originAgentSessionID)
         }
         applyAppearanceToAll(settings, skin: skin)
     }
@@ -2290,7 +2360,7 @@ final class AgentInteractiveTerminalController: ObservableObject {
         }
     }
 
-    // MARK: Agent-tool surface (operate on an exact/session-bound tab)
+    // MARK: Agent-tool surface (explicit tab id, else the active tab)
 
     /// Cheap main-actor metadata for the `terminal_snapshot` tool, plus the
     /// off-main mirror the tool reads the actual screen from. Throws a clear,
@@ -2350,6 +2420,12 @@ final class AgentInteractiveTerminalController: ObservableObject {
         return try tab.sendApprovedControl(control)
     }
 
+    /// Routing: an explicit terminal_tab_id wins; otherwise terminal tools
+    /// follow the ACTIVE side-panel tab — the one the user currently sees.
+    /// Delegated /bin/sh pool tabs and automation-busy tabs are never
+    /// implicit targets; explicitly targeting one is still allowed for
+    /// reads. An explicit one-off target does not change the active tab —
+    /// terminal_select_tab is the intentional way to switch it.
     private func tabForToolUse(
         targetTabID: UUID?,
         sessionID: UUID?,
@@ -2359,58 +2435,58 @@ final class AgentInteractiveTerminalController: ObservableObject {
             guard let exact = tab(id: targetTabID) else {
                 throw AgentToolError.invalidArgument("Unknown Agent Terminal tab id: \(targetTabID.uuidString).")
             }
-            // A user-confirmed explicit tab becomes the conversation's bound
-            // tab when it has none yet, so follow-up calls that omit
-            // terminal_tab_id keep hitting the confirmed tab instead of
-            // silently opening a fresh local shell. An existing binding is
-            // never moved by an explicit one-off read of another tab.
-            if let sessionID, boundTabID(for: sessionID) == nil {
-                boundTabIDsBySession[sessionID] = exact.id
-            }
             return exact
         }
-        if let boundID = boundTabID(for: sessionID), let bound = tab(id: boundID) {
-            return bound
+        if let active = activeTab, isImplicitlyRoutable(active) {
+            return active
         }
-        if let sessionID,
-           let originated = tabs.last(where: { $0.originAgentSessionID == sessionID }) {
-            boundTabIDsBySession[sessionID] = originated.id
-            return originated
+        if let fallback = tabs.last(where: isImplicitlyRoutable) {
+            return fallback
         }
         guard opensLocalTabIfNeeded,
               let config = defaultLocalTabProvider?(sessionID) else {
-            throw AgentToolError.invalidArgument(unboundTabGuidance())
+            throw AgentToolError.invalidArgument(noRoutableTabGuidance())
         }
-        let created = openLocalTab(
+        return openLocalTab(
             originAgentSessionID: config.originAgentSessionID,
             workingDirectory: config.workingDirectory,
             settings: config.settings,
             skin: config.skin
         )
-        if let sessionID {
-            boundTabIDsBySession[sessionID] = created.id
-        }
-        return created
     }
 
-    /// Guidance for the model when a conversation has no bound terminal tab.
-    /// The side panel being open with someone else's tab used to surface as a
-    /// bare "no tab is bound" error, which agents relayed as "the side panel
-    /// is not open" — gaslighting users who could see it right there. Instead,
-    /// enumerate the open tabs so the agent can ask the user one concrete
-    /// confirmation question and retry with terminal_tab_id.
-    private func unboundTabGuidance() -> String {
+    private func isImplicitlyRoutable(_ tab: AgentTerminalTab) -> Bool {
+        !tab.kind.isDelegatedShell && !tab.isAutomationBusy
+    }
+
+    /// Make the given tab the active side-panel tab so subsequent terminal
+    /// tools (and the user's own typing) target it. Surface for the
+    /// terminal_select_tab tool.
+    @discardableResult
+    func selectTab(id: UUID) throws -> AgentTerminalTab {
+        guard let selected = tab(id: id) else {
+            throw AgentToolError.invalidArgument("Unknown Agent Terminal tab id: \(id.uuidString).")
+        }
+        activeTabID = selected.id
+        return selected
+    }
+
+    /// Guidance for the model when no tab can be routed to implicitly. A
+    /// bare error used to be relayed as "the side panel is not open" —
+    /// gaslighting users who could see it right there. Enumerate what is
+    /// actually open so the agent can retry with terminal_tab_id.
+    private func noRoutableTabGuidance() -> String {
         guard !tabs.isEmpty else {
-            return "No terminal tab is bound to this conversation and the Agent Terminal side panel has no open tabs. Open a tab in the side panel, or use terminal_send_command which opens a local shell for this conversation automatically."
+            return "The Agent Terminal side panel has no open tabs. Open one in the side panel, or use terminal_send_command which opens a local shell automatically."
         }
         let tabLines = tabs.map { tab -> String in
             let visibleMark = tab.id == activeTabID ? " [currently visible to the user]" : ""
             return "- terminal_tab_id \(tab.id.uuidString): \"\(tab.title)\", \(tab.runtimeTarget)\(visibleMark)"
         }
         return """
-        No terminal tab is bound to this conversation yet, but the Agent Terminal side panel is open with \(tabs.count) tab(s):
+        Only delegated automation tabs are currently open in the Agent Terminal side panel, so there is no implicit target:
         \(tabLines.joined(separator: "\n"))
-        Do NOT tell the user the side panel or terminal is closed. Ask the user one concrete confirmation question — usually whether to use the currently visible tab — then retry with that terminal_tab_id. Explicitly targeting a tab also binds it to this conversation while it has no binding, so later calls may omit terminal_tab_id.
+        Do NOT tell the user the side panel or terminal is closed. Use terminal_send_command to open a local shell, or explicitly target one of the tabs above with terminal_tab_id.
         """
     }
 

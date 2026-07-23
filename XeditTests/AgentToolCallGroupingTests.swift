@@ -13,14 +13,18 @@ import Foundation
 
 @Suite
 struct AgentToolCallGroupingPresentationTests {
-    private func makeCall(_ name: String) -> AgentToolCall {
+    private func makeCall(
+        _ name: String,
+        status: AgentToolCallStatus = .running,
+        arguments: [String: AgentJSONValue] = [:]
+    ) -> AgentToolCall {
         AgentToolCall(
             messageID: UUID(),
             externalID: UUID().uuidString,
             toolName: name,
-            arguments: [:],
+            arguments: arguments,
             risk: .read,
-            status: .running
+            status: status
         )
     }
 
@@ -35,6 +39,70 @@ struct AgentToolCallGroupingPresentationTests {
             AgentToolKind.of(makeCall("spawn_agent")).delegatedActivityLabel(progress: " 第 5/12 轮 · 11 次工具 ")
                 == "委派给子代理 · 第 5/12 轮 · 11 次工具"
         )
+    }
+
+    @Test("live activity timeline hides a failed exact edit after the same file is repaired")
+    func liveActivityTimelineCompactsRecoveredEditFailure() {
+        let path = "deploy/k8s/tokenhub-deployment.yaml"
+        let failedEdit = makeCall(
+            "edit_file",
+            status: .failed,
+            arguments: ["path": .string(path)]
+        )
+        let repairedByCommand = makeCall(
+            "run_command",
+            status: .succeeded,
+            arguments: [
+                "command": .string("sed -i '' 's/old/new/' \(path)"),
+            ]
+        )
+
+        let presentation = AgentLiveActivityTimelinePresentation(
+            calls: [failedEdit, repairedByCommand],
+            maximumDetailedRows: 4
+        )
+
+        #expect(presentation.visibleCalls.map { $0.id } == [repairedByCommand.id])
+        #expect(presentation.hiddenOperationCount == 1)
+    }
+
+    @Test("live activity timeline keeps an unresolved edit failure visible")
+    func liveActivityTimelineKeepsUnresolvedEditFailure() {
+        let failedEdit = makeCall(
+            "edit_file",
+            status: .failed,
+            arguments: ["path": .string("deploy/k8s/tokenhub-deployment.yaml")]
+        )
+        let unrelatedSuccess = makeCall(
+            "run_command",
+            status: .succeeded,
+            arguments: ["command": .string("git status --short")]
+        )
+
+        let presentation = AgentLiveActivityTimelinePresentation(
+            calls: [failedEdit, unrelatedSuccess],
+            maximumDetailedRows: 4
+        )
+
+        #expect(presentation.visibleCalls.map { $0.id } == [failedEdit.id, unrelatedSuccess.id])
+        #expect(presentation.hiddenOperationCount == 0)
+    }
+
+    @Test("live activity timeline defaults to one row and expands recent details")
+    func liveActivityTimelineUsesSingleDisclosureRowByDefault() {
+        let calls = (0..<5).map { index in
+            makeCall(
+                "read_file",
+                status: .succeeded,
+                arguments: ["path": .string("file-\(index).swift")]
+            )
+        }
+        let presentation = AgentLiveActivityTimelinePresentation(calls: calls)
+
+        #expect(presentation.detailCalls(isExpanded: false).count == 1)
+        #expect(presentation.detailCalls(isExpanded: false).first?.id == calls.last?.id)
+        #expect(presentation.detailCalls(isExpanded: true).map(\.id) == calls.suffix(3).map(\.id))
+        #expect(presentation.hasExpandableDetails)
     }
 }
 

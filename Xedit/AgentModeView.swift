@@ -608,7 +608,6 @@ enum AgentDesign {
     // not drift independently.
     static let sidebarRowFontSize: CGFloat = 14
     static let sidebarRowHeight: CGFloat = 31
-    static let sidebarTodoRowHeight: CGFloat = 47
     static let sidebarWorkspaceHorizontalInset: CGFloat = 18
     static let sidebarWorkspaceIconSize: CGFloat = 14
     static let sidebarWorkspaceIconToTitleSpacing: CGFloat = 8

@@ -144,31 +144,45 @@ enum AgentToolRegistry {
         ),
         AgentToolDescriptor(
             name: "terminal_snapshot",
-            description: "Read the latest live visible screen of the current conversation's bound Agent Terminal tab, or the exact terminal_tab_id when supplied. Never guesses from the UI's active tab. Returns the tab id, cursor row/column, and exact current cursor line. The screen marks the cursor line with `=>`; lines above it may be prior output from before SSH or directory changes. Local tabs can contain nested manual SSH, so verify host/cwd before machine-specific claims. If no tab is bound to this conversation, the error lists every open side-panel tab: never claim the side panel is closed — confirm the intended tab with the user and retry with terminal_tab_id. Read-only; redacts common secrets.",
+            description: "Read the latest live visible screen of the ACTIVE Agent Terminal side-panel tab (the one the user currently sees), or the exact terminal_tab_id when supplied. Returns the tab id, cursor row/column, and exact current cursor line. The screen marks the cursor line with `=>`; lines above it may be prior output from before SSH or directory changes. Local tabs can contain nested manual SSH, so verify host/cwd before machine-specific claims. Use terminal_list_tabs to enumerate open tabs and terminal_select_tab to switch the active tab. Read-only; redacts common secrets.",
             risk: .read,
             parameters: [
                 AgentToolParameter(name: "max_characters", type: .integer, description: "Maximum characters from the latest visible screen to return. Defaults to 6000, capped at 12000.", required: false),
-                AgentToolParameter(name: "terminal_tab_id", type: .string, description: "Optional exact terminal tab UUID. Omit to use the tab bound to this conversation.", required: false)
+                AgentToolParameter(name: "terminal_tab_id", type: .string, description: "Optional exact terminal tab UUID. Omit to read the active side-panel tab.", required: false)
             ]
         ),
         AgentToolDescriptor(
             name: "terminal_send_command",
-            description: "Type one command line into the VISIBLE Agent Terminal tab bound to this conversation (or the exact terminal_tab_id) and press Enter, so the user sees it run live. Never guesses from the active UI tab. Use this ONLY when the user EXPLICITLY asks for execution in the side-panel terminal. Before sending a machine-specific command, use terminal_snapshot to confirm whether the bound tab is local or SSH and which host/user it shows; never send a local-intended command into an SSH tab. Avoid heredoc, here-string, `cat > file`, `echo > file`, or similar pasted multi-line file writes by default; prefer create_file/edit_file/apply_patch, run_command, or explicit transfer tools. WillDeep supports rz/sz ZMODEM with zmodem_upload_paths and zmodem_download_directory. For all ordinary shell work not explicitly requested in the visible terminal, use run_command. If no tab is bound yet, WillDeep opens a local shell for this conversation. Requires user approval and does not read hidden/password input.",
+            description: "Type one command line into the ACTIVE Agent Terminal side-panel tab (the one the user currently sees; or the exact terminal_tab_id) and press Enter, so the user sees it run live. Use this ONLY when the user EXPLICITLY asks for execution in the side-panel terminal. Before sending a machine-specific command, use terminal_snapshot to confirm whether the active tab is local or SSH and which host/user it shows; never send a local-intended command into an SSH tab. To operate a different tab, switch with terminal_select_tab (after terminal_list_tabs) or pass terminal_tab_id. Avoid heredoc, here-string, `cat > file`, `echo > file`, or similar pasted multi-line file writes by default; prefer create_file/edit_file/apply_patch, run_command, or explicit transfer tools. WillDeep supports rz/sz ZMODEM with zmodem_upload_paths and zmodem_download_directory. For all ordinary shell work not explicitly requested in the visible terminal, use run_command. If no usable tab is open, WillDeep opens a local shell tab owned by this conversation. Requires user approval and does not read hidden/password input.",
             risk: .write,
             parameters: [
                 AgentToolParameter(name: "command", type: .string, description: "Command line to send, without a trailing newline. WillDeep appends Enter after approval.", required: true),
-                AgentToolParameter(name: "terminal_tab_id", type: .string, description: "Optional exact terminal tab UUID. Omit to use or create the tab bound to this conversation.", required: false),
+                AgentToolParameter(name: "terminal_tab_id", type: .string, description: "Optional exact terminal tab UUID. Omit to target the active side-panel tab (a local shell is opened when none is usable).", required: false),
                 AgentToolParameter(name: "zmodem_upload_paths", type: .stringArray, description: "Optional local files to upload when this command starts remote rz. Relative paths resolve from the workspace root. The ZMODEM bridge uses them once instead of opening the macOS file picker.", required: false),
                 AgentToolParameter(name: "zmodem_download_directory", type: .string, description: "Optional local directory for files received when this command starts remote sz. Relative paths resolve from the workspace root. The ZMODEM bridge uses it once instead of opening the macOS folder picker.", required: false)
             ]
         ),
         AgentToolDescriptor(
             name: "terminal_send_control",
-            description: "Send a whitelisted control key to the current conversation's bound Agent Terminal tab, or the exact terminal_tab_id when supplied. Never guesses from the UI's active tab. Requires user approval; use ctrl_c to interrupt a foreground command, enter to submit the current line, or escape to cancel terminal UI modes.",
+            description: "Send a whitelisted control key to the ACTIVE Agent Terminal side-panel tab, or the exact terminal_tab_id when supplied. Requires user approval; use ctrl_c to interrupt a foreground command, enter to submit the current line, or escape to cancel terminal UI modes.",
             risk: .write,
             parameters: [
                 AgentToolParameter(name: "control", type: .string, description: "One of: ctrl_c, enter, escape.", required: true),
-                AgentToolParameter(name: "terminal_tab_id", type: .string, description: "Optional exact terminal tab UUID. Omit to use or create the tab bound to this conversation.", required: false)
+                AgentToolParameter(name: "terminal_tab_id", type: .string, description: "Optional exact terminal tab UUID. Omit to target the active side-panel tab.", required: false)
+            ]
+        ),
+        AgentToolDescriptor(
+            name: "terminal_list_tabs",
+            description: "List every open Agent Terminal side-panel tab: terminal_tab_id, title, kind (local/ssh/delegated), target, running state, whether it is the ACTIVE tab that terminal tools target by default, and whether this conversation opened it. Read-only. Use before terminal_select_tab or an explicit terminal_tab_id.",
+            risk: .read,
+            parameters: []
+        ),
+        AgentToolDescriptor(
+            name: "terminal_select_tab",
+            description: "Make an open Agent Terminal tab the ACTIVE side-panel tab. Terminal tools called without terminal_tab_id target the active tab, so select the intended tab first when the user asks to operate a specific terminal. The user sees the switch immediately in the side panel. Get tab ids from terminal_list_tabs or terminal_snapshot.",
+            risk: .read,
+            parameters: [
+                AgentToolParameter(name: "terminal_tab_id", type: .string, description: "Terminal tab UUID to activate, from terminal_list_tabs.", required: true)
             ]
         ),
         AgentToolDescriptor(

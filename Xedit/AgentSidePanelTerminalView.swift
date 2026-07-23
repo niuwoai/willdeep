@@ -16,7 +16,6 @@ private enum SessionIdentityMetrics {
     static let dividerHeight: CGFloat = 18
     static let dividerPadding: CGFloat = 8
     static let popoverWidth: CGFloat = 330
-    static let hostnameCommand = "hostname"
 }
 
 enum TerminalRecordingMetrics {
@@ -45,8 +44,7 @@ private struct AgentSidePanelTerminalContentView: View {
     @ObservedObject var controller: AgentInteractiveTerminalController
     @State private var renameDraft: TerminalShortcutRenameDraft?
     @State private var bootstrapTask: Task<Void, Never>?
-    @State private var showsHostVerificationPopover = false
-    @State private var hostnameCommandCopied = false
+    @State private var showsHostIdentityPopover = false
 
     private var settings: EditorTerminalSettings {
         appState.editorTerminalSettings.normalized()
@@ -127,8 +125,7 @@ private struct AgentSidePanelTerminalContentView: View {
             scheduleTerminalBootstrap()
         }
         .onCompatibleChange(of: controller.activeTabID) { _, _ in
-            showsHostVerificationPopover = false
-            hostnameCommandCopied = false
+            showsHostIdentityPopover = false
         }
     }
 
@@ -243,7 +240,8 @@ private struct AgentSidePanelTerminalContentView: View {
         }
         .buttonStyle(.plain)
         .focusable(false)
-        .disabled(controller.activeTab?.isRunning != true && !controller.isRecording)
+        // Never disabled while idle: starting a recording with no usable
+        // tab opens (or activates) a local shell tab automatically.
         .help(controller.isRecording ? L10n.AgentTerminal.stopRecording : L10n.AgentTerminal.startRecording)
     }
 
@@ -479,7 +477,7 @@ private struct AgentSidePanelTerminalContentView: View {
 
     private func tabChip(_ tab: AgentTerminalTab) -> some View {
         let isActive = controller.activeTabID == tab.id
-        let isBound = controller.isTab(tab.id, boundTo: appState.activeAgentSessionID)
+        let isOwned = isOpenedByCurrentSession(tab)
         return HStack(spacing: 5) {
             Image(systemName: tab.kind.isSSH ? "network" : "terminal")
                 .font(.system(size: 9))
@@ -495,7 +493,7 @@ private struct AgentSidePanelTerminalContentView: View {
             if let shortcutBadgeTitle = tab.shortcutBadgeTitle {
                 shortcutBadge(shortcutBadgeTitle, isActive: isActive)
             }
-            if isBound {
+            if isOwned {
                 Image(systemName: "link")
                     .font(.system(size: 8, weight: .semibold))
                     .foregroundStyle(interfacePalette.accent)
@@ -524,7 +522,7 @@ private struct AgentSidePanelTerminalContentView: View {
         .help(tabTooltip(tab))
         .contentShape(Rectangle())
         .onTapGesture {
-            controller.activateTab(id: tab.id, bindingTo: appState.activeAgentSessionID)
+            controller.activateTab(id: tab.id)
         }
     }
 
@@ -622,10 +620,8 @@ private struct AgentSidePanelTerminalContentView: View {
 
                 sessionStatusPill(tab)
 
-                if !tab.kind.isSSH {
-                    sessionIdentityDivider
-                    hostVerificationButton
-                }
+                sessionIdentityDivider
+                hostIdentityButton(tab)
             } else {
                 Text(L10n.AgentTerminal.disconnectedRuntime)
                     .font(.system(size: 11, weight: .medium))
@@ -662,19 +658,18 @@ private struct AgentSidePanelTerminalContentView: View {
             )
     }
 
-    private var hostVerificationButton: some View {
+    private func hostIdentityButton(_ tab: AgentTerminalTab) -> some View {
         Button {
-            hostnameCommandCopied = false
-            showsHostVerificationPopover.toggle()
+            showsHostIdentityPopover.toggle()
         } label: {
             HStack(spacing: 5) {
                 Image(systemName: "shield")
                     .font(.system(size: 10, weight: .semibold))
-                Text(L10n.AgentTerminal.sessionVerifyHost)
+                Text(L10n.AgentTerminal.sessionExtractHostIdentity)
                     .font(.system(size: 10, weight: .semibold))
                 Image(systemName: "chevron.down")
                     .font(.system(size: 7, weight: .bold))
-                    .rotationEffect(.degrees(showsHostVerificationPopover ? 180 : 0))
+                    .rotationEffect(.degrees(showsHostIdentityPopover ? 180 : 0))
             }
             .foregroundStyle(interfacePalette.secondaryAccent)
             .padding(.horizontal, 8)
@@ -690,25 +685,10 @@ private struct AgentSidePanelTerminalContentView: View {
         }
         .buttonStyle(.plain)
         .focusable(false)
-        .help(L10n.AgentTerminal.localSessionCaution)
-        .popover(isPresented: $showsHostVerificationPopover, arrowEdge: .bottom) {
-            hostVerificationPopover
+        .help(L10n.AgentTerminal.sessionHostIdentityHint)
+        .popover(isPresented: $showsHostIdentityPopover, arrowEdge: .bottom) {
+            AgentHostIdentityPopover(tab: tab, palette: interfacePalette)
         }
-    }
-
-    private var hostVerificationPopover: some View {
-        AgentHostVerificationPopover(
-            hostnameCommandCopied: hostnameCommandCopied,
-            palette: interfacePalette,
-            copyAction: copyHostnameCommand
-        )
-    }
-
-    private func copyHostnameCommand() {
-        let pasteboard = NSPasteboard.general
-        pasteboard.clearContents()
-        pasteboard.setString(SessionIdentityMetrics.hostnameCommand, forType: .string)
-        hostnameCommandCopied = true
     }
 
     // MARK: Terminal surface
@@ -907,10 +887,9 @@ private struct AgentSidePanelTerminalContentView: View {
     }()
 }
 
-struct AgentHostVerificationPopover: View {
-    let hostnameCommandCopied: Bool
+struct AgentHostIdentityPopover: View {
+    @ObservedObject var tab: AgentTerminalTab
     let palette: EditorInterfaceSkinPalette
-    let copyAction: () -> Void
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -923,23 +902,44 @@ struct AgentHostVerificationPopover: View {
                     .foregroundStyle(palette.primaryText)
             }
 
-            Text(L10n.AgentTerminal.localSessionCaution)
+            Text(L10n.AgentTerminal.sessionHostIdentityHint)
                 .font(.system(size: 12, weight: .regular))
                 .foregroundStyle(palette.primaryText)
                 .fixedSize(horizontal: false, vertical: true)
+
+            if let identity = tab.hostIdentity {
+                VStack(alignment: .leading, spacing: 6) {
+                    identityRow(L10n.AgentTerminal.sessionHostIdentityHostname, identity.hostname)
+                    identityRow(L10n.AgentTerminal.sessionHostIdentityIP, identity.ipAddress)
+                    identityRow(L10n.AgentTerminal.sessionHostIdentityOS, identity.operatingSystem)
+                }
+                .padding(10)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(
+                    RoundedRectangle(cornerRadius: 7, style: .continuous)
+                        .fill(palette.controlFill.opacity(0.6))
+                )
+            }
 
             Rectangle()
                 .fill(palette.hairline)
                 .frame(height: 1)
 
-            Button(action: copyAction) {
+            Button {
+                tab.extractHostIdentity()
+            } label: {
                 HStack(spacing: 7) {
-                    Image(systemName: hostnameCommandCopied ? "checkmark" : "doc.on.doc")
-                        .font(.system(size: 11, weight: .semibold))
+                    if tab.isExtractingHostIdentity {
+                        ProgressView()
+                            .controlSize(.small)
+                    } else {
+                        Image(systemName: "wand.and.stars")
+                            .font(.system(size: 11, weight: .semibold))
+                    }
                     Text(
-                        hostnameCommandCopied
-                            ? L10n.AgentTerminal.sessionHostnameCommandCopied
-                            : L10n.AgentTerminal.sessionCopyHostnameCommand
+                        tab.isExtractingHostIdentity
+                            ? L10n.AgentTerminal.sessionExtractingHostIdentity
+                            : L10n.AgentTerminal.sessionExtractHostIdentity
                     )
                     .font(.system(size: 11, weight: .semibold))
                     Spacer(minLength: 0)
@@ -958,11 +958,26 @@ struct AgentHostVerificationPopover: View {
             }
             .buttonStyle(.plain)
             .focusable(false)
+            .disabled(!tab.isRunning || tab.isExtractingHostIdentity || tab.isAutomationBusy)
         }
         .padding(14)
         .frame(width: SessionIdentityMetrics.popoverWidth)
         .background(palette.panelFill)
         .focusable(false)
+    }
+
+    private func identityRow(_ label: String, _ value: String) -> some View {
+        HStack(alignment: .firstTextBaseline, spacing: 8) {
+            Text(label)
+                .font(.system(size: 11, weight: .semibold))
+                .foregroundStyle(palette.secondaryText)
+                .frame(width: 64, alignment: .leading)
+            Text(value.isEmpty ? "—" : value)
+                .font(.system(size: 11, weight: .medium, design: .monospaced))
+                .foregroundStyle(palette.primaryText)
+                .textSelection(.enabled)
+                .lineLimit(2)
+        }
     }
 }
 

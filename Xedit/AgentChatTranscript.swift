@@ -352,7 +352,8 @@ struct AgentChatTranscript: View {
                                     withAnimation(.easeInOut(duration: 0.2)) {
                                         proxy.scrollTo("agent-current-plan", anchor: .top)
                                     }
-                                }
+                                },
+                                suppressesActivityHeadline: activeToolPresentation?.calls.isEmpty == false
                             )
                                 .id(streamingMessage.id)
                                 .frame(maxWidth: AgentDesign.chatMaxContentWidth, alignment: .leading)

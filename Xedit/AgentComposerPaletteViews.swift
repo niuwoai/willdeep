@@ -642,32 +642,26 @@ private struct SkillPickerRow: View {
 
 // MARK: - Sidebar session mode badges
 
-/// Tiny right-aligned indicators on each session row that summarise the
-/// session's plan/goal progress at a glance. Plan badge shows
-/// `done/total`; goal badge shows `done/total` of the checklist. Skipped
-/// here for sessions in Normal mode or with empty plan/goal so we don't
-/// add visual noise to ordinary chats.
+/// One quiet, right-aligned progress summary for the session's active mode.
+/// The current step remains available in the tooltip; keeping it out of a
+/// second row preserves the sidebar's navigation rhythm. Only work that
+/// needs attention receives an accent color.
 struct AgentSessionModeBadges: View {
     let session: AgentSession
+    var runtime: AgentRuntime? = nil
     var baseFontSize: CGFloat = AgentSettingsStore.chatBaseFontSizeDefault
 
     var body: some View {
-        HStack(spacing: 4) {
-            if let plan = session.currentPlan, !plan.steps.isEmpty {
-                badge(
-                    symbol: "list.number",
-                    color: planBadgeColor(plan),
-                    text: planProgress(plan),
-                    help: planHelp(plan)
+        Group {
+            if let runtime {
+                ObservedAgentSessionModeBadges(
+                    runtime: runtime,
+                    baseFontSize: baseFontSize
                 )
-            }
-            if let goal = session.currentGoal, !goal.checklist.isEmpty {
-                let doneCount = goal.checklist.filter(\.done).count
-                badge(
-                    symbol: "target",
-                    color: doneCount == goal.checklist.count ? .green : .accentColor,
-                    text: "\(doneCount)/\(goal.checklist.count)",
-                    help: goal.statement.isEmpty ? "Goal progress" : goal.statement
+            } else {
+                AgentSessionModeBadgeContent(
+                    session: session,
+                    baseFontSize: baseFontSize
                 )
             }
         }
@@ -676,47 +670,73 @@ struct AgentSessionModeBadges: View {
         // session title instead of squeezing the SF Symbol and progress text.
         .fixedSize(horizontal: true, vertical: false)
     }
+}
 
-    @ViewBuilder
-    private func badge(symbol: String, color: Color, text: String, help: String) -> some View {
-        HStack(spacing: 2) {
-            Image(systemName: symbol)
-                .font(.system(size: 8, weight: .semibold))
-            Text(text)
+private struct ObservedAgentSessionModeBadges: View {
+    @ObservedObject var runtime: AgentRuntime
+    let baseFontSize: CGFloat
+
+    var body: some View {
+        AgentSessionModeBadgeContent(
+            session: runtime.session,
+            baseFontSize: baseFontSize
+        )
+    }
+}
+
+private struct AgentSessionModeBadgeContent: View {
+    let session: AgentSession
+    let baseFontSize: CGFloat
+
+    var body: some View {
+        if let summary = AgentSessionTodoSummaryLogic.summary(for: session) {
+            badge(summary)
+        }
+    }
+
+    private func badge(_ summary: AgentSessionTodoSummary) -> some View {
+        HStack(spacing: 3) {
+            Text(modeName(summary.kind))
                 .font(AgentDesign.chatSupportingFont(
                     baseFontSize: baseFontSize,
                     visualMinimum: 9,
-                    weight: .semibold,
+                    weight: .medium
+                ))
+            Text("\(summary.completed)/\(summary.total)")
+                .font(AgentDesign.chatSupportingFont(
+                    baseFontSize: baseFontSize,
+                    visualMinimum: 9,
+                    weight: .medium,
                     design: .monospaced
                 ))
+                .monospacedDigit()
         }
-        .padding(.horizontal, 5)
-        .padding(.vertical, 1)
-        .foregroundStyle(color)
-        .background(color.opacity(0.12), in: Capsule(style: .continuous))
-        .help(help)
+        .foregroundStyle(summary.isBlocked ? Color.orange : Color.secondary)
+        .help(summaryHelp(summary))
+        .accessibilityLabel(Text(summaryHelp(summary)))
     }
 
-    private func planProgress(_ plan: AgentPlan) -> String {
-        let done = plan.steps.filter { $0.status == .done }.count
-        return "\(done)/\(plan.steps.count)"
-    }
-
-    private func planBadgeColor(_ plan: AgentPlan) -> Color {
-        switch plan.status {
-        case .proposed, .rejected: return .orange
-        case .approved, .executing: return .accentColor
-        case .done: return .green
+    private func modeName(_ kind: AgentSessionTodoSummary.Kind) -> String {
+        switch kind {
+        case .plan: return L10n.InteractionMode.plan
+        case .goal: return L10n.InteractionMode.goal
         }
     }
 
-    private func planHelp(_ plan: AgentPlan) -> String {
-        switch plan.status {
-        case .proposed: return "Plan awaiting approval"
-        case .approved: return "Plan approved, not started"
-        case .executing: return "Plan executing"
-        case .done: return "Plan complete"
-        case .rejected: return "Plan rejected"
+    private func summaryHelp(_ summary: AgentSessionTodoSummary) -> String {
+        switch summary.kind {
+        case .plan:
+            return L10n.Sidebar.sessionTodoPlanTooltip(
+                "\(summary.completed)",
+                "\(summary.total)",
+                summary.text
+            )
+        case .goal:
+            return L10n.Sidebar.sessionTodoGoalTooltip(
+                "\(summary.completed)",
+                "\(summary.total)",
+                summary.text
+            )
         }
     }
 }
@@ -734,6 +754,17 @@ nonisolated struct AgentSessionTodoSummary: Equatable {
 
 enum AgentSessionTodoSummaryLogic {
     static func summary(for session: AgentSession) -> AgentSessionTodoSummary? {
+        if session.interactionMode == .goal,
+           let goal = session.currentGoal,
+           !goal.checklist.isEmpty {
+            return goalSummary(goal)
+        }
+        if session.interactionMode == .plan,
+           let plan = session.currentPlan,
+           !plan.steps.isEmpty,
+           plan.status != .rejected {
+            return planSummary(plan)
+        }
         if let plan = session.currentPlan,
            !plan.steps.isEmpty,
            plan.status != .rejected {
@@ -774,111 +805,6 @@ enum AgentSessionTodoSummaryLogic {
             text: current.text,
             isBlocked: false,
             isComplete: completed == goal.checklist.count
-        )
-    }
-}
-
-struct AgentSessionTodoSummaryRow: View {
-    let summary: AgentSessionTodoSummary
-    var baseFontSize: CGFloat = AgentSettingsStore.chatBaseFontSizeDefault
-
-    var body: some View {
-        HStack(spacing: 5) {
-            Image(systemName: iconName)
-                .font(.system(size: 8, weight: .semibold))
-                .foregroundStyle(tint)
-                .frame(width: 12)
-            Text("\(summary.completed)/\(summary.total)")
-                .font(AgentDesign.chatSupportingFont(
-                    baseFontSize: baseFontSize,
-                    visualMinimum: 9,
-                    weight: .semibold,
-                    design: .monospaced
-                ))
-                .foregroundStyle(tint)
-                .monospacedDigit()
-            Text(summary.text)
-                .font(AgentDesign.chatSupportingFont(
-                    baseFontSize: baseFontSize,
-                    visualMinimum: 10
-                ))
-                .foregroundStyle(.secondary)
-                .lineLimit(1)
-                .truncationMode(.tail)
-            Spacer(minLength: 0)
-        }
-        .padding(.leading, 20)
-        .help(helpText)
-        .accessibilityLabel(Text(helpText))
-    }
-
-    private var iconName: String {
-        if summary.isComplete { return "checkmark.circle.fill" }
-        if summary.isBlocked { return "exclamationmark.circle.fill" }
-        switch summary.kind {
-        case .plan: return "circle.dotted"
-        case .goal: return "target"
-        }
-    }
-
-    private var tint: Color {
-        if summary.isComplete { return .green }
-        if summary.isBlocked { return .orange }
-        switch summary.kind {
-        case .plan: return .accentColor
-        case .goal: return .purple
-        }
-    }
-
-    private var helpText: String {
-        switch summary.kind {
-        case .plan:
-            return L10n.Sidebar.sessionTodoPlanTooltip(
-                "\(summary.completed)",
-                "\(summary.total)",
-                summary.text
-            )
-        case .goal:
-            return L10n.Sidebar.sessionTodoGoalTooltip(
-                "\(summary.completed)",
-                "\(summary.total)",
-                summary.text
-            )
-        }
-    }
-}
-
-struct AgentSessionTodoSummaryContainer: View {
-    let session: AgentSession
-    let runtime: AgentRuntime?
-    let fallbackSummary: AgentSessionTodoSummary
-    var baseFontSize: CGFloat = AgentSettingsStore.chatBaseFontSizeDefault
-
-    var body: some View {
-        if let runtime {
-            ObservedAgentSessionTodoSummaryRow(
-                runtime: runtime,
-                fallbackSummary: fallbackSummary,
-                baseFontSize: baseFontSize
-            )
-        } else {
-            AgentSessionTodoSummaryRow(
-                summary: fallbackSummary,
-                baseFontSize: baseFontSize
-            )
-        }
-    }
-}
-
-private struct ObservedAgentSessionTodoSummaryRow: View {
-    @ObservedObject var runtime: AgentRuntime
-    let fallbackSummary: AgentSessionTodoSummary
-    let baseFontSize: CGFloat
-
-    var body: some View {
-        AgentSessionTodoSummaryRow(
-            summary: AgentSessionTodoSummaryLogic.summary(for: runtime.session) ?? fallbackSummary,
-            baseFontSize: baseFontSize
         )
     }
 }

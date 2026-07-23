@@ -126,7 +126,10 @@ struct AgentRecentSessionEdgeRail: View {
                         .lineLimit(1)
                         .truncationMode(.tail)
                         .layoutPriority(1)
-                    AgentSessionModeBadges(session: displaySession)
+                    AgentSessionModeBadges(
+                        session: displaySession,
+                        runtime: observedRuntime
+                    )
                 }
 
                 Spacer(minLength: 0)

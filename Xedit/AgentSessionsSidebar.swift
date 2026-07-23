@@ -507,69 +507,58 @@ struct AgentSessionsSidebar: View {
         let isHovered = (hoveredSessionID == session.id)
         let observedRuntime = appState.agentRuntimes[session.id]
         let displaySession = observedRuntime?.session ?? session
-        let todoSummary = AgentSessionTodoSummaryLogic.summary(for: displaySession)
 
         Button {
             appState.selectAgentSession(id: session.id)
         } label: {
-            VStack(alignment: .leading, spacing: 2) {
-                HStack(spacing: 6) {
-                    if activeScheduledTaskCount(for: session) > 0 {
-                        Image(systemName: "clock.fill")
-                            .font(.system(size: 9, weight: .semibold))
-                            .foregroundStyle(palette.accent)
-                            .help(L10n.Sidebar.hasActiveScheduledTasksTooltip)
-                    }
-                    Text(session.title)
-                        .font(AgentDesign.sidebarRowFont)
-                        .foregroundStyle(palette.primaryText.opacity(
-                            isActive ? 1 : AgentDesign.sidebarPrimaryTextOpacity
-                        ))
-                        .lineLimit(1)
-                        .truncationMode(.tail)
-                        // sidebar 收窄时:title 优先保留(给它 priority 1),
-                        // badge / 时间 chip / trailing actions 走默认 0,
-                        // SwiftUI 会先压缩低优先级元素,而不是把 title 压到
-                        // 一个字符然后留一堆空白给 chrome。
-                        .layoutPriority(1)
-                        // Double-click the title to rename — same dialog as the
-                        // context-menu "Rename". Takes priority over the row
-                        // button's single-click select for two-tap sequences.
-                        .onTapGesture(count: 2) { presentRenameAlert(for: session) }
-                        .help(L10n.Sidebar.sessionMenuRename)
-                    AgentSessionApprovalBadge(
-                        session: session,
-                        runtime: observedRuntime,
-                        baseFontSize: appState.agentChatBaseFontSize
-                    )
-                    Spacer(minLength: 0)
-                    AgentSessionModeBadges(
-                        session: displaySession,
-                        baseFontSize: appState.agentChatBaseFontSize
-                    )
-                    // Codex keeps ordinary rows visually quiet: no leading
-                    // bullet and no always-on timestamp. Runtime state moves
-                    // to the trailing edge, where it only becomes visible for
-                    // the active/running/waiting session.
-                    AgentSessionRowStatusDot(
-                        runtime: observedRuntime,
-                        isActive: isActive,
-                        accentColor: palette.accent
-                    )
-                    .opacity(isHovered ? 0 : 1)
-                    sessionRowTrailingActions(session: session, isHovered: isHovered)
+            HStack(spacing: 6) {
+                if activeScheduledTaskCount(for: session) > 0 {
+                    Image(systemName: "clock.fill")
+                        .font(.system(size: 9, weight: .semibold))
+                        .foregroundStyle(palette.accent)
+                        .help(L10n.Sidebar.hasActiveScheduledTasksTooltip)
                 }
-                if let todoSummary {
-                    AgentSessionTodoSummaryContainer(
-                        session: displaySession,
-                        runtime: observedRuntime,
-                        fallbackSummary: todoSummary,
-                        baseFontSize: appState.agentChatBaseFontSize
-                    )
-                }
+                Text(session.title)
+                    .font(AgentDesign.sidebarRowFont)
+                    .foregroundStyle(palette.primaryText.opacity(
+                        isActive ? 1 : AgentDesign.sidebarPrimaryTextOpacity
+                    ))
+                    .lineLimit(1)
+                    .truncationMode(.tail)
+                    // sidebar 收窄时:title 优先保留(给它 priority 1),
+                    // progress / trailing actions 走默认 0，SwiftUI 会先
+                    // 压缩 chrome，而不是把标题压到只剩一个字符。
+                    .layoutPriority(1)
+                    // Double-click the title to rename — same dialog as the
+                    // context-menu "Rename". Takes priority over the row
+                    // button's single-click select for two-tap sequences.
+                    .onTapGesture(count: 2) { presentRenameAlert(for: session) }
+                    .help(L10n.Sidebar.sessionMenuRename)
+                AgentSessionApprovalBadge(
+                    session: session,
+                    runtime: observedRuntime,
+                    baseFontSize: appState.agentChatBaseFontSize
+                )
+                Spacer(minLength: 0)
+                AgentSessionModeBadges(
+                    session: displaySession,
+                    runtime: observedRuntime,
+                    baseFontSize: appState.agentChatBaseFontSize
+                )
+                // Codex keeps ordinary rows visually quiet: no leading
+                // bullet and no always-on timestamp. Runtime state moves
+                // to the trailing edge, where it only becomes visible for
+                // the active/running/waiting session.
+                AgentSessionRowStatusDot(
+                    runtime: observedRuntime,
+                    isActive: isActive,
+                    accentColor: palette.accent
+                )
+                .opacity(isHovered ? 0 : 1)
+                sessionRowTrailingActions(session: session, isHovered: isHovered)
             }
             .padding(.horizontal, contentHorizontalInset)
-            .frame(height: todoSummary == nil ? AgentDesign.sidebarRowHeight : AgentDesign.sidebarTodoRowHeight)
+            .frame(height: AgentDesign.sidebarRowHeight)
             .contentShape(Rectangle())
             .background(
                 RoundedRectangle(

@@ -326,6 +326,63 @@ enum AgentTerminalTools {
         }
     }
 
+    static func listTabs(arguments: [String: AgentJSONValue], context: AgentToolContext) async throws -> AgentToolResult {
+        guard let controller = context.terminalController else {
+            throw AgentToolError.invalidArgument("Agent Terminal is not available in this context.")
+        }
+        let sessionID = context.runtimeID
+        let summaries = await MainActor.run {
+            controller.tabs.map { tab in
+                tabSummary(tab, isActive: controller.activeTabID == tab.id, sessionID: sessionID)
+            }
+        }
+        let payload = try jsonString(summaries)
+        return AgentToolResult(
+            summary: "terminal tabs: \(summaries.count)",
+            payload: payload
+        )
+    }
+
+    static func selectTab(arguments: [String: AgentJSONValue], context: AgentToolContext) async throws -> AgentToolResult {
+        guard let controller = context.terminalController else {
+            throw AgentToolError.invalidArgument("Agent Terminal is not available in this context.")
+        }
+        guard let tabID = try terminalTabID(arguments) else {
+            throw AgentToolError.missingArgument("terminal_tab_id")
+        }
+        let selectedTitle = try await MainActor.run {
+            try controller.selectTab(id: tabID).title
+        }
+        return AgentToolResult(
+            summary: "terminal tab activated: \(selectedTitle)",
+            payload: "Activated Agent Terminal tab \"\(selectedTitle)\" (\(tabID.uuidString)). Terminal tools without terminal_tab_id now target this tab, and the user sees it in the side panel."
+        )
+    }
+
+    @MainActor
+    private static func tabSummary(
+        _ tab: AgentTerminalTab,
+        isActive: Bool,
+        sessionID: UUID?
+    ) -> [String: Any] {
+        let kind: String
+        switch tab.kind {
+        case .localShell: kind = "local"
+        case .delegatedShell: kind = "delegated"
+        case .ssh: kind = "ssh"
+        }
+        return [
+            "terminal_tab_id": tab.id.uuidString,
+            "title": tab.title,
+            "kind": kind,
+            "target": tab.runtimeTarget,
+            "is_active": isActive,
+            "is_running": tab.isRunning,
+            "is_automation_busy": tab.isAutomationBusy,
+            "opened_by_this_conversation": sessionID != nil && tab.originAgentSessionID == sessionID
+        ]
+    }
+
     private static func terminalTabID(_ arguments: [String: AgentJSONValue]) throws -> UUID? {
         guard let raw = arguments["terminal_tab_id"]?.stringValue()?
             .trimmingCharacters(in: .whitespacesAndNewlines), !raw.isEmpty else {

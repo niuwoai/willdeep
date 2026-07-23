@@ -704,6 +704,11 @@ private struct AgentActivityCardLabel: View {
         }
         .padding(.leading, 11)
         .padding(.vertical, 9)
+        // The whole artifact summary is a button, not selectable prose.
+        // Disable inherited text selection so hovering its title/subtitle
+        // never replaces the expected arrow with an I-beam cursor.
+        .textSelection(.disabled)
+        .cursor(.arrow)
     }
 }
 
