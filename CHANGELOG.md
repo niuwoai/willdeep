@@ -1,7 +1,19 @@
 # Changelog
 
-> 当前文件保留最新版本（1.195.0-rc6 至 1.109.0-rc340）。
+> 当前文件保留最新版本（1.195.0-rc7 至 1.109.0-rc340）。
 > 更早的 1000 个版本已移至 [CHANGELOG-ARCHIVE.md](CHANGELOG-ARCHIVE.md)。
+
+## 1.195.0-rc7 - 2026-07-23
+
+### Fixed
+
+- 恢复 AIPipe 启动上报：存在有效 `AIPIPE_API_KEY` 环境变量或 `AIPipeAPIKey` Info.plist 配置时，应用会初始化启用状态的 SDK 并记录启动事件；缺少 Key 或仍是未展开的 `$(...)` 占位符时继续保持关闭。
+- AIPipe 初始化入口支持注入无网络副作用的测试替身，确保环境变量优先级、Info.plist 回退、默认 endpoint 与无效 Key 拦截均可回归验证。
+- 版本号从 **1.195.0-rc6** 递增为 **1.195.0-rc7**，内部构建号从 **112** 递增为 **113**；App、Go agent、Help、Helper、浏览器扩展、README、响应头契约与产品文档保持一致。
+
+### Tests
+
+- 新增 3 项 `AIPipeBootstrapTests`，覆盖环境变量启用、Info.plist 启用与缺失/未展开 Key 不初始化。
 
 ## 1.195.0-rc6 - 2026-07-23
 

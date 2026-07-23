@@ -1,6 +1,6 @@
 # WillDeep Product Overview
 
-> Last updated: 2026-07-23 | Current version: v1.195.0-rc6
+> Last updated: 2026-07-23 | Current version: v1.195.0-rc7
 
 ## Positioning
 
@@ -11,6 +11,8 @@ Official product domain: [willdeep.com](https://willdeep.com).
 WillDeep is configured for non-App-Store distribution without App Sandbox so it can access local project files with fewer permission interruptions.
 
 ## 架构概览
+
+- **AIPipe 启动上报恢复（1.195.0-rc7）** —— App 启动时会从进程环境或构建期注入的 Info.plist 读取 AIPipe Key，使用可配置 endpoint/topic 初始化启用状态的 SDK 并记录启动事件；无 Key 或构建占位符未展开时不初始化。退出流程继续主动 flush，降低正常关闭时的日志丢失。
 
 - **当前动作单一状态源（1.195.0-rc6）** —— 可识别的 Provider 动作在 assistant 消息出现前可使用一条临时扫光行，动作进入消息后立即由消息接管，不再保留第二条底部状态；普通 Provider 响应和任务监督栏也不再回退到泛化“思考中”，从结构上消除两套计时在同一位置交替显示。
 

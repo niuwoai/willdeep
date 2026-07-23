@@ -58,14 +58,15 @@ final class WillDeepAppDelegate: NSObject, NSApplicationDelegate {
 
 enum AIPipeBootstrap {
     private static let defaultEndpoint = "https://17push.com/api/v1"
-    private static let reportingEnabled = false
 
     static func initialize(
         environment: [String: String] = ProcessInfo.processInfo.environment,
-        infoDictionary: [String: Any] = Bundle.main.infoDictionary ?? [:]
+        infoDictionary: [String: Any] = Bundle.main.infoDictionary ?? [:],
+        reportingInitializer: (AIPipeConfig) -> Void = { config in
+            AIPipe.initialize(with: config)
+            AIPipe.log(withLevel: "INFO", content: "WillDeep started")
+        }
     ) {
-        guard reportingEnabled else { return }
-
         guard let apiKey = firstNonEmpty(
             environment["AIPIPE_API_KEY"],
             infoDictionary["AIPipeAPIKey"] as? String
@@ -88,8 +89,7 @@ enum AIPipeBootstrap {
             infoDictionary["AIPipeTopic"] as? String
         )
         config.enabled = true
-        AIPipe.initialize(with: config)
-        AIPipe.log(withLevel: "INFO", content: "WillDeep started")
+        reportingInitializer(config)
     }
 
     private static func firstNonEmpty(_ values: String?...) -> String? {
