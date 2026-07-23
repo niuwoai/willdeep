@@ -305,7 +305,9 @@ struct AgentSidebarListVisualMetricsTests {
         appState.hasLoadedAgentUsageSnapshots = true
         appState.agentUsageSnapshots = typographyUsageSnapshots()
 
-        let size = NSSize(width: 700, height: 540)
+        // 608pt outer width minus the 24pt test padding on both sides leaves
+        // the production 560pt dashboard width used by AgentChatEmptyState.
+        let size = NSSize(width: 608, height: 540)
         let root = AgentStatsDashboard()
             .environmentObject(appState)
             .padding(24)
