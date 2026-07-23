@@ -220,7 +220,7 @@ struct AgentStatsDashboard: View {
                         visualMinimum: AgentStatsDashboardTypography.heroValue,
                         weight: .semibold
                     ))
-                    .foregroundStyle(dashboardAccent)
+                    .foregroundStyle(.primary)
                 Text(L10n.StatsDashboard.metricArtifacts)
                     .font(supportingFont(
                         visualMinimum: AgentStatsDashboardTypography.heroLabel,
@@ -260,7 +260,7 @@ struct AgentStatsDashboard: View {
                         visualMinimum: AgentStatsDashboardTypography.metricValue,
                         weight: .semibold
                     ))
-                    .foregroundStyle(dashboardAccent)
+                    .foregroundStyle(.primary)
             }
             .fixedSize(horizontal: true, vertical: false)
         }
@@ -722,28 +722,30 @@ struct AgentStatsDashboard: View {
         return "\(display) \(suffix)"
     }
 
+    // Codex 视觉皮肤：强调色从原 teal 绿改为 Codex 的蓝
+    // (#3B6FE0 一族)。数据结构与布局不变,只对齐配色/高亮。
     private var dashboardAccent: Color {
         colorScheme == .dark
-            ? Color(red: 0.32, green: 0.76, blue: 0.68)
-            : Color(red: 0.03, green: 0.50, blue: 0.45)
+            ? Color(red: 0.44, green: 0.62, blue: 0.96)
+            : Color(red: 0.23, green: 0.44, blue: 0.88)
     }
 
     private var dashboardSelectionFill: Color {
         colorScheme == .dark
-            ? dashboardAccent.opacity(0.15)
-            : Color(red: 0.90, green: 0.95, blue: 0.93)
+            ? dashboardAccent.opacity(0.16)
+            : Color(red: 0.92, green: 0.95, blue: 0.99)
     }
 
     private var dashboardSummaryFill: Color {
         colorScheme == .dark
             ? appState.editorSettings.interfaceSkin.palette.controlFill.opacity(0.30)
-            : Color(red: 0.985, green: 0.985, blue: 0.975)
+            : Color(red: 0.985, green: 0.986, blue: 0.992)
     }
 
     private var dashboardHeatmapInactive: Color {
         colorScheme == .dark
             ? Color.secondary.opacity(0.16)
-            : Color(red: 0.89, green: 0.94, blue: 0.92)
+            : Color(red: 0.91, green: 0.93, blue: 0.97)
     }
 
     private func supportingFont(
