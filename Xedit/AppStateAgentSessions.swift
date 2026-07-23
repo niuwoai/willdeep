@@ -1048,11 +1048,14 @@ extension AppState {
         }
     }
 
+    // 返回内部 Task 供测试显式 await 完成信号(满载并行时盲轮询等不到
+    // fallback 扫描跑完);生产调用方直接忽略返回值,行为不变。
+    @discardableResult
     func scheduleQueuedMessageConsumptionAfterCancellation(
         for runtime: AgentRuntime,
         fallbackPollAttempts: Int = 20,
         fallbackPollIntervalNanoseconds: UInt64 = 150_000_000
-    ) {
+    ) -> Task<Void, Never> {
         Task { @MainActor [weak self, weak runtime] in
             for _ in 0..<fallbackPollAttempts {
                 if fallbackPollIntervalNanoseconds > 0 {

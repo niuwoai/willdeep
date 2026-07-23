@@ -1431,15 +1431,13 @@ struct AgentQueueModeTests {
         runtime.shouldConsumeQueueAfterStop = true
         runtime.requestTask = Task {}
 
-        state.scheduleQueuedMessageConsumptionAfterCancellation(
+        // 显式等 fallback Task 跑完再断言;之前 3 秒盲轮询在满载全并行时
+        // 等不到扫描执行,断言先于回收发生而随机失败。
+        await state.scheduleQueuedMessageConsumptionAfterCancellation(
             for: runtime,
             fallbackPollAttempts: 1,
             fallbackPollIntervalNanoseconds: 0
-        )
-        let deadline = Date().addingTimeInterval(3)
-        while Date() < deadline, runtime.isResponding || runtime.requestTask != nil || runtime.currentProviderSlotClaim != nil {
-            try? await Task.sleep(nanoseconds: 100_000_000)
-        }
+        ).value
 
         #expect(runtime.isResponding == false)
         #expect(runtime.turnStartedAt == nil)

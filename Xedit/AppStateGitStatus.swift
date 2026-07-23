@@ -258,7 +258,17 @@ extension AppState {
     }
 
     nonisolated static let maxGitOutputBytes = 512 * 1024
-    nonisolated static let gitCommandTimeout: TimeInterval = 5
+    // 5 秒是交互式 UI 刷新可接受的上限;但 XeditTests 1495 用例全并行时
+    // fork/exec 与磁盘被打爆,git 进程随机超过 5 秒被 terminate,runGit
+    // 静默返回空串,git 类测试的失败集合因此每轮不同。测试进程内统一放宽,
+    // 产品运行时行为不变。
+    nonisolated static let gitCommandTimeout: TimeInterval = {
+        let environment = ProcessInfo.processInfo.environment
+        let isRunningTests = environment["XCTestConfigurationFilePath"] != nil
+            || environment["XCTestSessionIdentifier"] != nil
+            || environment["XCTestBundlePath"] != nil
+        return isRunningTests ? 60 : 5
+    }()
     nonisolated static let worktreeDiffPreviewMaxFiles = 40
     nonisolated static let worktreeDiffPreviewMaxChangedLines = 1_200
     nonisolated static let worktreeDiffPreviewMaxUTF8Bytes = 96 * 1024

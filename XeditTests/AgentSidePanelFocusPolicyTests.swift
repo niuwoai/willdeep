@@ -39,11 +39,13 @@ struct AgentSidePanelFocusPolicyTests {
         }
     }
 
-    @Test("Terminal host-verification popover cannot auto-focus its copy action")
+    @Test("Terminal host-identity popover cannot auto-focus its action button")
     func hostVerificationCopyActionIsNotFocusable() throws {
+        // 1.194.0-rc1 起 host 验证 popover 重构为 AgentHostIdentityPopover,
+        // 复制命令按钮换成了「提取主机身份」按钮;锚点跟随现源码。
         let source = try Self.source(named: "AgentSidePanelTerminalView.swift")
         let copyAction = try #require(
-            source.range(of: "Button(action: copyAction)")
+            source.range(of: "tab.extractHostIdentity()")
         )
         let trailingSource = source[copyAction.lowerBound...]
         let buttonStyle = try #require(trailingSource.range(of: ".buttonStyle(.plain)"))

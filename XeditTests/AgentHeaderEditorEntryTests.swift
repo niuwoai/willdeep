@@ -19,7 +19,9 @@ struct AgentHeaderEditorEntryTests {
         #expect(!headerSource.contains("sidePanelMenu"))
         #expect(!headerSource.contains("Image(systemName: \"ellipsis\")"))
         #expect(headerSource.contains("ForEach(visibleKinds)"))
-        #expect(appSource.contains("Button(L10n.Menu.viewShowEditor)"))
+        // rc10 起菜单项写法为 Button(L10n.Menu.viewShowEditor, action: showEditorAction),
+        // 不再闭合在同一个括号里;只锚定「Editor 入口在应用菜单」这一语义。
+        #expect(appSource.contains("Button(L10n.Menu.viewShowEditor"))
         #expect(appSource.contains("appState?.showEditor()"))
     }
 

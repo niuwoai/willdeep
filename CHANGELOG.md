@@ -1,7 +1,18 @@
 # Changelog
 
-> 当前文件保留最新版本（1.195.0-rc10 至 1.109.0-rc340）。
+> 当前文件保留最新版本（1.195.0-rc11 至 1.109.0-rc340）。
 > 更早的 1000 个版本已移至 [CHANGELOG-ARCHIVE.md](CHANGELOG-ARCHIVE.md)。
+
+## 1.195.0-rc11 - 2026-07-24
+
+### Fixed
+
+- 加固三组负载敏感的 flaky 测试，修复 `release_mac_app.rb` 全量并行（1495 用例）时随机红、单独跑必过、两次阻断发布管线的问题：
+  - `AgentStopHandlingTests`「cancelling a foreground command terminates its process promptly」：耗时改为从 `task.cancel()` 起算（进程 spawn 在 fork 风暴下不受测试控制），阈值从 3 秒放宽到 15 秒——仍远低于 `sleep 30` 自然结束与 35 秒超时，"TERM 及时生效"的语义不丢。
+  - `AgentQueueModeTests.queuedMessageCancellationFallbackReleasesStuckTurnSlot`：`scheduleQueuedMessageConsumptionAfterCancellation` 改为返回内部 Task（`@discardableResult`，生产调用方行为不变），测试显式 `await` fallback 扫描完成后再断言，删除满载下等不到扫描执行的 3 秒盲轮询。
+  - git 类测试（`GitWorktreeCoreTests` / `AgentGitReviewTests`）随机互扰的根因是 `AppState.gitCommandTimeout` 默认 5 秒在满载 fork/exec 拥塞下被随机击穿，`runGit` 超时静默返回空串导致断言缺文件且失败集合每轮不同；现检测到 XCTest 环境时统一放宽到 60 秒，产品运行时仍为 5 秒。临时仓库本就按 UUID 隔离，无共享状态，两个 suite 保持既有 `.serialized` 不变。
+- 修复两个被 `--skip-tests` 发布漏检的确定性测试回归（源码扫描断言未跟随功能改动）：`AgentHeaderEditorEntryTests` 锚定的菜单项写法已在 rc10 变为 `Button(L10n.Menu.viewShowEditor, action: showEditorAction)`，断言放宽为前缀匹配；`AgentSidePanelFocusPolicyTests` 锚定的 `Button(action: copyAction)` 已在 1.194.0-rc1 重构为 `AgentHostIdentityPopover` 的 `tab.extractHostIdentity()` 按钮，锚点同步更新，`.buttonStyle(.plain)` 后紧跟 `.focusable(false)` 的焦点策略校验保持不变。
+- 版本号从 **1.195.0-rc10** 递增为 **1.195.0-rc11**，内部构建号从 **116** 递增为 **117**；App、Go agent、Help、Helper、浏览器扩展、README、响应头契约与产品文档保持一致。
 
 ## 1.195.0-rc10 - 2026-07-24
 
