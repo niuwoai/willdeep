@@ -2168,6 +2168,7 @@ nonisolated enum L10n {
             static let fetchModels = String(localized: "settings.provider.fetch-models", defaultValue: "Fetch Models")
             static let fetchingModels = String(localized: "settings.provider.fetching-models", defaultValue: "Fetching…")
             static let alternatesHint = String(localized: "settings.provider.alternates-hint", defaultValue: "One model id per line — surfaces in the chat picker as one-click switches.")
+            static let showAlternatesToggle = String(localized: "settings.provider.show-alternates-toggle", defaultValue: "Show alternate models")
             static let pickFromFetched = String(localized: "settings.provider.pick-from-fetched", defaultValue: "Pick from fetched models")
             static let hideKey = String(localized: "settings.provider.hide-key", defaultValue: "Hide key")
             static let showKey = String(localized: "settings.provider.show-key", defaultValue: "Show key")

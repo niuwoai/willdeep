@@ -254,6 +254,11 @@ private struct AgentProviderEntryEditor: View {
     @State private var isModelsExpanded: Bool = true
     @State private var isRoutingExpanded: Bool = false
     @State private var isProtocolHelpExpanded: Bool = false
+    /// 备选模型是进阶用法：多数服务商只填一个主模型。默认收起那两个
+    /// 大 TextEditor，用一个开关按需展开。加载 entry 时若已存在备选内容
+    /// 就强制打开——绝不隐藏用户已经填过 / 系统已塞入(如 vision 模型)的
+    /// 备选，只清理空框占地。
+    @State private var showsAlternates: Bool = false
 
     private let labelWidth: CGFloat = 110
 
@@ -502,14 +507,23 @@ private struct AgentProviderEntryEditor: View {
                     modelGroup(
                         title: "Flash",
                         primaryBinding: $flashPrimary,
-                        alternatesBinding: $flashAlternatesText
+                        alternatesBinding: $flashAlternatesText,
+                        showsAlternates: showsAlternates || !flashAlternatesText.isEmpty
                     )
                     Divider()
                     modelGroup(
                         title: "Pro",
                         primaryBinding: $proPrimary,
-                        alternatesBinding: $proAlternatesText
+                        alternatesBinding: $proAlternatesText,
+                        showsAlternates: showsAlternates || !proAlternatesText.isEmpty
                     )
+                    Toggle(isOn: $showsAlternates) {
+                        Text(L10n.Settings.Provider.showAlternatesToggle)
+                            .font(.system(size: 12))
+                            .foregroundStyle(.secondary)
+                    }
+                    .toggleStyle(.checkbox)
+                    .padding(.leading, labelWidth + 8)
                 }
                 .padding(.vertical, 6)
                 .padding(.horizontal, 4)
@@ -645,35 +659,38 @@ private struct AgentProviderEntryEditor: View {
     private func modelGroup(
         title: String,
         primaryBinding: Binding<String>,
-        alternatesBinding: Binding<String>
+        alternatesBinding: Binding<String>,
+        showsAlternates: Bool
     ) -> some View {
         VStack(alignment: .leading, spacing: 8) {
             fieldRow(L10n.Settings.Provider.primarySuffix(title)) {
                 modelField(text: primaryBinding)
             }
-            HStack(alignment: .top, spacing: 8) {
-                Text(L10n.Settings.Provider.alternatesSuffix(title))
-                    .font(.system(size: 12))
-                    .foregroundStyle(.secondary)
-                    .frame(width: labelWidth, alignment: .trailing)
-                VStack(alignment: .leading, spacing: 4) {
-                    TextEditor(text: alternatesBinding)
-                        .font(.system(size: 12, design: .monospaced))
-                        .scrollContentBackground(.hidden)
-                        .padding(4)
-                        .frame(minHeight: 52, maxHeight: 88)
-                        .background(Color(nsColor: .textBackgroundColor))
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 5)
-                                .stroke(Color.secondary.opacity(0.3), lineWidth: 1)
-                        )
-                        .clipShape(RoundedRectangle(cornerRadius: 5))
-                        .onCompatibleChange(of: alternatesBinding.wrappedValue) { _, _ in commit() }
-                    Text(L10n.Settings.Provider.alternatesHint)
-                        .font(.caption2)
+            if showsAlternates {
+                HStack(alignment: .top, spacing: 8) {
+                    Text(L10n.Settings.Provider.alternatesSuffix(title))
+                        .font(.system(size: 12))
                         .foregroundStyle(.secondary)
+                        .frame(width: labelWidth, alignment: .trailing)
+                    VStack(alignment: .leading, spacing: 4) {
+                        TextEditor(text: alternatesBinding)
+                            .font(.system(size: 12, design: .monospaced))
+                            .scrollContentBackground(.hidden)
+                            .padding(4)
+                            .frame(minHeight: 52, maxHeight: 88)
+                            .background(Color(nsColor: .textBackgroundColor))
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 5)
+                                    .stroke(Color.secondary.opacity(0.3), lineWidth: 1)
+                            )
+                            .clipShape(RoundedRectangle(cornerRadius: 5))
+                            .onCompatibleChange(of: alternatesBinding.wrappedValue) { _, _ in commit() }
+                        Text(L10n.Settings.Provider.alternatesHint)
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
                 }
-                .frame(maxWidth: .infinity, alignment: .leading)
             }
         }
     }
@@ -709,6 +726,8 @@ private struct AgentProviderEntryEditor: View {
         flashAlternatesText = entry.flashAlternates.joined(separator: "\n")
         proPrimary = entry.proPrimary
         proAlternatesText = entry.proAlternates.joined(separator: "\n")
+        // 已有备选内容的服务商加载时直接展开，避免"填过的备选看不见"。
+        showsAlternates = !entry.flashAlternates.isEmpty || !entry.proAlternates.isEmpty
         routingMode = entry.routingMode
         customKindOverride = entry.customKindOverride
     }
