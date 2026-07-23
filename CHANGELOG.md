@@ -11,6 +11,7 @@
   - `AgentStopHandlingTests`「cancelling a foreground command terminates its process promptly」：耗时改为从 `task.cancel()` 起算（进程 spawn 在 fork 风暴下不受测试控制），阈值从 3 秒放宽到 15 秒——仍远低于 `sleep 30` 自然结束与 35 秒超时，"TERM 及时生效"的语义不丢（满载实测该用例总耗时 4.4–5.1 秒，旧阈值每轮必红）。
   - `AgentQueueModeTests.queuedMessageCancellationFallbackReleasesStuckTurnSlot`：`scheduleQueuedMessageConsumptionAfterCancellation` 改为返回内部 Task（`@discardableResult`，生产调用方行为不变），测试显式 `await` fallback 扫描完成后再断言，删除满载下等不到扫描执行的 3 秒盲轮询。
   - git 类测试（`GitWorktreeCoreTests` / `AgentGitReviewTests`）随机互扰的根因是 `AppState.gitCommandTimeout` 默认 5 秒在满载 fork/exec 拥塞下被随机击穿，`runGit` 超时静默返回空串导致断言缺文件且失败集合每轮不同；现检测到 XCTest 环境时统一放宽到 60 秒，产品运行时仍为 5 秒。临时仓库本就按 UUID 隔离，无共享状态，两个 suite 保持既有 `.serialized` 不变。
+  - 同族低频路径：满载 fork 风暴下 `process.run()`（posix_spawn）可能瞬态失败（EAGAIN），同样被 `runGit` 吞成空串（合并验证轮实测击中 worktree diff preview 用例一次）；`runGitCommand` 现对 spawn 失败做最多 2 次带退避重试，真正跑起来后的失败（非零退出、超时）不重试、语义不变。
 - 恢复 rc10 为解锁发布而删除的「Terminal host-verification popover cannot auto-focus its copy action」焦点巡检覆盖：锚点从已不存在的 `Button(action: copyAction)` 更新为 1.194.0-rc1 重构后 `AgentHostIdentityPopover` 的 `tab.extractHostIdentity()` 按钮，`.buttonStyle(.plain)` 后紧跟 `.focusable(false)` 的焦点策略校验原样保留。
 - 修复 `AgentHeaderEditorEntryTests` 被 `--skip-tests` 发布漏检的死断言：rc10 起菜单项写法变为 `Button(L10n.Menu.viewShowEditor, action: showEditorAction)`，断言放宽为前缀匹配，「Editor 入口只在应用菜单」的语义不变。
 - 版本号从 **1.195.0-rc12** 递增为 **1.195.0-rc13**，内部构建号从 **118** 递增为 **119**；App、Go agent、Help、Helper、浏览器扩展、README、响应头契约与产品文档保持一致。

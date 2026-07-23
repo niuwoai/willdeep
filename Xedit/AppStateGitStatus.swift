@@ -298,6 +298,31 @@ extension AppState {
         allowedExitStatuses: Set<Int32> = [0],
         timeout: TimeInterval = gitCommandTimeout
     ) -> GitCommandResult {
+        // 满载(全并行测试、系统 fork 风暴)时 posix_spawn 可能瞬态失败
+        // (EAGAIN),process.run() 抛错会被 runGit 吞成空串,表现为"git 没
+        // 输出"的随机假象。spawn 失败带退避重试;真正跑起来后的失败(非零
+        // 退出、超时)不重试,语义不变。
+        var attempt = 0
+        while true {
+            let result = runGitCommandOnce(
+                arguments: arguments,
+                in: repositoryRoot,
+                allowedExitStatuses: allowedExitStatuses,
+                timeout: timeout
+            )
+            let spawnFailed = result.status == -1 && !result.timedOut
+            guard spawnFailed, attempt < 2 else { return result }
+            attempt += 1
+            Thread.sleep(forTimeInterval: 0.05 * Double(attempt))
+        }
+    }
+
+    private nonisolated static func runGitCommandOnce(
+        arguments: [String],
+        in repositoryRoot: URL,
+        allowedExitStatuses: Set<Int32>,
+        timeout: TimeInterval
+    ) -> GitCommandResult {
         let process = Process()
         let stdoutPipe = Pipe()
         let stderrPipe = Pipe()
