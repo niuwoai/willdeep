@@ -1,7 +1,21 @@
 # Changelog
 
-> 当前文件保留最新版本（1.195.0-rc16 至 1.109.0-rc340）。
+> 当前文件保留最新版本（1.195.0-rc17 至 1.109.0-rc340）。
 > 更早的 1000 个版本已移至 [CHANGELOG-ARCHIVE.md](CHANGELOG-ARCHIVE.md)。
+
+## 1.195.0-rc17 - 2026-07-24
+
+### Fixed
+
+- 「当前正在做什么」实时状态行补齐 Codex 式宽松兜底（用户参照 Codex 提出）：此前 transcript 底部的扫光动作行只认少数英文阶段动词（Planning/Verifying…），认不出就整行消失——中文 reasoning 或不吐标准状态句的模型全程无实时反馈。现在识别不出阶段动词时，取模型 reasoning 流的**最新一行原话**（剥 markdown 前缀、超 140 字符截断）作为扫光文本，阶段名记为"思考下一步"；配合 rc16 的已完成步骤分行时间流，形成"已完成 N 步（静态）→ 正在进行这一步（模型原话 + 扫光动画）"的完整 Codex 式动态。可见回复正文仍不参与状态扫光（正文首个 token 到达后 reasoning 预览即消失），composer 状态条同步受益（有 reasoning 时显示模型原话，无 reasoning 时保持"思考中"兜底）。
+
+### Changed
+
+- 版本号从 **1.195.0-rc16** 递增为 **1.195.0-rc17**，内部构建号从 **122** 递增为 **123**；App、Go agent、Help、Helper、浏览器扩展、README、响应头契约与产品文档保持一致。
+
+### Tests
+
+- 新增 `makeLive(fromReasoning:)` 回归（可识别行照常命中语义阶段、中文原话宽松兜底、markdown 剥除、超长截断、空内容拒绝）与 AppState 级"未识别 reasoning 仍有实时动作行、正文开始后让位"断言。
 
 ## 1.195.0-rc16 - 2026-07-24
 

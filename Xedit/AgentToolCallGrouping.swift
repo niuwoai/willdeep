@@ -99,6 +99,42 @@ nonisolated struct AgentActivityHeadlinePresentation: Equatable {
         }).count
         return wordCount > 1 ? normalized : fallback
     }
+
+    /// Codex 式实时状态:从 reasoning 流里取最新一行非空文本作为当前
+    /// 动作。先尝试严格的阶段动词识别(拿到语义图标和本地化阶段名);
+    /// 识别不出时宽松兜底——模型自己的原话就是最好的"正在做什么",
+    /// 不再因为不匹配英文动词表而整行消失。
+    ///
+    /// 只允许喂 reasoning 预览:正文首个 token 到达后调用方的预览即为
+    /// nil,可见回复文本永远不会被当成状态行扫光。
+    static func makeLive(fromReasoning reasoning: String) -> Self? {
+        guard let line = latestStatusLine(in: reasoning) else { return nil }
+        if let recognized = make(from: line) { return recognized }
+        return Self(
+            title: L10n.AgentActivity.thinking,
+            liveTitle: line,
+            systemImage: "ellipsis.bubble"
+        )
+    }
+
+    private static func latestStatusLine(in reasoning: String) -> String? {
+        let line = reasoning
+            .split(whereSeparator: \.isNewline)
+            .reversed()
+            .lazy
+            .map { candidate in
+                candidate
+                    .trimmingCharacters(in: .whitespaces)
+                    .trimmingCharacters(in: CharacterSet(charactersIn: "#>*-–—•`"))
+                    .trimmingCharacters(in: .whitespaces)
+            }
+            .first(where: { $0.count >= 4 })
+        guard var candidate = line else { return nil }
+        if candidate.count > 140 {
+            candidate = String(candidate.prefix(140)) + "…"
+        }
+        return candidate
+    }
 }
 
 struct AgentToolActivityRowPresentation: Identifiable, Equatable {

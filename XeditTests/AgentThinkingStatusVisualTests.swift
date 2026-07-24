@@ -105,6 +105,33 @@ struct AgentThinkingStatusVisualTests {
         #expect(!appState.shouldShowDetachedAgentCurrentActivityIndicator)
     }
 
+    @MainActor
+    @Test("unrecognized reasoning still surfaces a live current action")
+    func unrecognizedReasoningKeepsLiveCurrentAction() {
+        let appState = AppState()
+        appState.startNewAgentSession()
+        appState.isAgentResponding = true
+        appState.agentMessages = [
+            AgentMessage(role: .user, content: "更新 tokenhub"),
+            AgentMessage(
+                role: .assistant,
+                content: "",
+                reasoningContent: "先前的推理片段\n先核对镜像 tag，再决定是否回滚"
+            ),
+        ]
+
+        let headline = appState.agentCurrentActivityHeadline
+        #expect(headline?.title == L10n.AgentActivity.thinking)
+        #expect(headline?.liveTitle == "先核对镜像 tag，再决定是否回滚")
+        #expect(appState.shouldShowDetachedAgentCurrentActivityIndicator)
+
+        // 正文首个 token 到达后 reasoning 预览消失,live 行让位给正文,
+        // 可见回复文本永远不会被当成状态扫光。
+        appState.agentMessages[1].content = "开始执行。"
+        #expect(appState.agentCurrentActivityHeadline == nil)
+        #expect(!appState.shouldShowDetachedAgentCurrentActivityIndicator)
+    }
+
     @Test("task monitor has no generic provider fallback")
     func taskMonitorHasNoGenericProviderFallback() throws {
         let repositoryRoot = URL(fileURLWithPath: #filePath)

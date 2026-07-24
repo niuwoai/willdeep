@@ -186,6 +186,36 @@ extension WillDeepTests {
         #expect(AgentActivityHeadlinePresentation.make(from: "普通的中文回答正文") == nil)
     }
 
+    @Test("live headline falls back to the model's own reasoning line")
+    func testLiveHeadlineLooseFallbackFromReasoning() throws {
+        // 多行 reasoning:最新一行是可识别动作 → 语义阶段照常命中。
+        let recognized = try #require(AgentActivityHeadlinePresentation.makeLive(
+            fromReasoning: "Earlier context that scrolled by\nPlanning immediate refresh on incomplete identity"
+        ))
+        #expect(recognized.title == L10n.AgentActivity.planning)
+        #expect(recognized.liveTitle == "Planning immediate refresh on incomplete identity")
+
+        // 识别不出阶段动词 → Codex 式宽松兜底,模型原话直接上扫光。
+        let loose = try #require(AgentActivityHeadlinePresentation.makeLive(
+            fromReasoning: "先前的推理片段\n需要先核对 tokenhub 的镜像 tag 再决定回滚点"
+        ))
+        #expect(loose.title == L10n.AgentActivity.thinking)
+        #expect(loose.liveTitle == "需要先核对 tokenhub 的镜像 tag 再决定回滚点")
+        #expect(loose.systemImage == "ellipsis.bubble")
+
+        // 超长行截断,markdown 前缀剥除,空内容返回 nil。
+        let long = try #require(AgentActivityHeadlinePresentation.makeLive(
+            fromReasoning: String(repeating: "长", count: 200)
+        ))
+        #expect(long.liveTitle.count == 141)
+        #expect(long.liveTitle.hasSuffix("…"))
+        let unmarked = try #require(AgentActivityHeadlinePresentation.makeLive(
+            fromReasoning: "## 正在比对配置差异"
+        ))
+        #expect(unmarked.liveTitle == "正在比对配置差异")
+        #expect(AgentActivityHeadlinePresentation.makeLive(fromReasoning: "  \n- \n") == nil)
+    }
+
     @Test("live tool rows show useful file context without exposing command bodies")
     func testLiveToolRowPresentationKeepsCommandPrivate() {
         let file = AgentToolActivityRowPresentation(call: makeCall(

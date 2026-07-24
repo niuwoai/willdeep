@@ -80,8 +80,10 @@ extension AppState {
     }
 
     /// Complete one-line action headline for the active provider turn.
-    /// This is intentionally stricter than a generic reasoning preview: only
-    /// known phase-led status lines are eligible for the visible sweep effect.
+    /// Visible reply text is still held to the strict phase-led format;
+    /// the reasoning stream additionally gets a Codex 式宽松兜底——识别
+    /// 不出阶段动词时,模型 reasoning 的最新一行原样作为 live 标题参与
+    /// 扫光,"正在进行的这一步"在任何模型下都持续有内容。
     var agentCurrentActivityHeadline: AgentActivityHeadlinePresentation? {
         guard isAgentResponding else { return nil }
         if let lastMessage = agentMessages.last,
@@ -90,7 +92,7 @@ extension AppState {
             return headline
         }
         return agentLiveThinkingPreview.flatMap {
-            AgentActivityHeadlinePresentation.make(from: $0)
+            AgentActivityHeadlinePresentation.makeLive(fromReasoning: $0)
         }
     }
 

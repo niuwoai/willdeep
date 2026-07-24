@@ -130,6 +130,7 @@ extension L10n {
         static let planning = String(localized: "agent-activity.stage.planning", defaultValue: "Planning the next step")
         static let running = String(localized: "agent-activity.stage.running", defaultValue: "Running the next step")
         static let searching = String(localized: "agent-activity.stage.searching", defaultValue: "Searching relevant code")
+        static let thinking = String(localized: "agent-activity.stage.thinking", defaultValue: "Thinking through the next step")
         static let verifying = String(localized: "agent-activity.stage.verifying", defaultValue: "Verifying the changes")
 
         static func earlierOperations(_ count: Int) -> String {
