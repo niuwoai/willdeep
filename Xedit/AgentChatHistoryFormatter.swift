@@ -118,6 +118,10 @@ enum AgentChatHistoryRenderer {
         hasher.combine(m.id)
         hasher.combine(m.role.rawValue)
         hasher.combine(m.content)
+        // The transcript-event kind drives the rendered icon (e.g. Plan
+        // notice vs model-change), so two same-content notices with
+        // different events must not collide onto one cached render.
+        hasher.combine(m.transcriptEvent?.rawValue)
         hasher.combine(m.images.count)
         for image in m.images {
             hasher.combine(image.id)

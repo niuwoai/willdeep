@@ -544,6 +544,10 @@ struct AnthropicMessagesAdapter {
         for message in messages {
             switch message.role {
             case .system:
+                // Local-only transcript markers (model-changed, auto-Plan
+                // notice, …) ride as `.system` for rendering but must never
+                // enter the model's system prompt.
+                if message.isLocalTranscriptEvent { continue }
                 let content = message.modelContent.trimmingCharacters(in: .whitespacesAndNewlines)
                 if !content.isEmpty { systemBlobs.append(content) }
 

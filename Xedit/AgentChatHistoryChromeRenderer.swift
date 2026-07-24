@@ -23,6 +23,9 @@ extension AgentChatHistoryRenderer {
             result.append(NSAttributedString(string: "  "))
         case .responseStopped:
             break
+        case .autoPlanModeEntered:
+            result.append(transcriptEventIconToken(systemName: "list.number"))
+            result.append(NSAttributedString(string: "  "))
         }
         result.append(NSAttributedString(
             string: content,

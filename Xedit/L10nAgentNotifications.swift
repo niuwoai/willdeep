@@ -25,6 +25,14 @@ extension L10n {
             localized: "agent-notification.interaction.attention-title",
             defaultValue: "Agent needs your attention"
         )
+        static let planSuggestionTitle = String(
+            localized: "agent-notification.plan-suggestion.title",
+            defaultValue: "A task may need Plan mode"
+        )
+        static let planSuggestionBody = String(
+            localized: "agent-notification.plan-suggestion.body",
+            defaultValue: "Return to confirm whether to enter Plan mode before starting."
+        )
         static let command = String(
             localized: "agent-notification.command",
             defaultValue: "Command"

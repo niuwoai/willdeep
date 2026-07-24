@@ -100,6 +100,10 @@ final class AgentRuntime: ObservableObject, Identifiable {
     /// Keeping it per session prevents one chat's countdown from appearing
     /// after the user switches to another conversation.
     @Published var pendingPlanModeSuggestion: AgentPlanModeSuggestion?
+    /// True while a locally-ambiguous input is parked awaiting the flash
+    /// judge's verdict. Drives the composer's input-field spinner and blocks
+    /// repeated sends from sneaking past the preflight.
+    @Published var isAskingPlanModeFlash: Bool = false
     @Published var currentGoal: AgentGoal?
     @Published var goalPlanningState: AgentGoalPlanningState?
     @Published var goalTurnRecoveryCheckpoint: AgentGoalTurnRecoveryCheckpoint?
@@ -202,6 +206,10 @@ final class AgentRuntime: ObservableObject, Identifiable {
     /// also renders its own per-second progress, but auto-resolution must not
     /// depend on the composer currently being mounted on screen.
     var planModeSuggestionAutoResolveTask: Task<Void, Never>?
+    /// In-flight flash-judge task for the `.askFlash` preflight band. Task
+    /// handle only (not @Published); cancelled/cleared alongside the
+    /// suggestion state.
+    var planModeFlashJudgeTask: Task<Void, Never>?
     /// Skills that were explicitly attached to the in-flight user turn.
     /// They are cleared/overwritten on the next dispatch and used only
     /// to explain turn recall in reports.

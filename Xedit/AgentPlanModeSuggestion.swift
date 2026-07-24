@@ -13,9 +13,22 @@ nonisolated struct AgentPlanModeSuggestion: Equatable, Identifiable {
     let id = UUID()
 }
 
+/// Which action the pre-dispatch preflight recommends for a given input.
+///
+/// - `skip`: not complex enough (or the user opted out) — send normally.
+/// - `askFlash`: locally ambiguous (1...2 points) — ask a lightweight flash
+///   model whether Plan mode is worth suggesting.
+/// - `suggest`: locally confident (>= `minimumScore`) — surface the banner
+///   directly without spending a round-trip on the flash judge.
+nonisolated enum AgentPlanModeSuggestionBand: Equatable {
+    case skip
+    case askFlash
+    case suggest
+}
+
 nonisolated enum AgentPlanModeSuggestionPolicy {
     static let minimumScore = 3
-    static let autoResolutionSeconds = 8
+    static let autoResolutionSeconds = 15
 
     private static let optOutHints = [
         "不要 plan", "不用 plan", "别进 plan", "直接执行", "直接做",
@@ -46,16 +59,19 @@ nonisolated enum AgentPlanModeSuggestionPolicy {
         "and update", "and add", "and fix", "and implement", "as well as"
     ]
 
-    static func shouldSuggest(
+    /// Local, deterministic complexity score. Returns `nil` when the user
+    /// explicitly opted out of Plan mode (an unconditional "send normally"),
+    /// which is distinct from a plain score of 0.
+    static func score(
         userText: String,
         attachmentCount: Int = 0,
         includesWorkspaceOverview: Bool = false
-    ) -> Bool {
+    ) -> Int? {
         let normalized = userText
             .trimmingCharacters(in: .whitespacesAndNewlines)
             .lowercased()
-        guard !normalized.isEmpty else { return false }
-        guard !optOutHints.contains(where: normalized.contains) else { return false }
+        guard !normalized.isEmpty else { return 0 }
+        guard !optOutHints.contains(where: normalized.contains) else { return nil }
 
         var score = 0
 
@@ -94,6 +110,42 @@ nonisolated enum AgentPlanModeSuggestionPolicy {
             score += 1
         }
 
-        return score >= minimumScore
+        return score
+    }
+
+    /// Maps the local score into the three-way preflight decision.
+    ///
+    /// - `>= minimumScore` (3): locally confident → `.suggest` (no flash call).
+    /// - `1...2`: locally ambiguous → `.askFlash`.
+    /// - `0` or opt-out (`score == nil`): `.skip`.
+    static func band(
+        userText: String,
+        attachmentCount: Int = 0,
+        includesWorkspaceOverview: Bool = false
+    ) -> AgentPlanModeSuggestionBand {
+        guard let score = score(
+            userText: userText,
+            attachmentCount: attachmentCount,
+            includesWorkspaceOverview: includesWorkspaceOverview
+        ) else {
+            return .skip
+        }
+        if score >= minimumScore { return .suggest }
+        if score >= 1 { return .askFlash }
+        return .skip
+    }
+
+    /// Back-compatible boolean preflight: true only when the local score is
+    /// confident enough to suggest Plan mode outright (the `.suggest` band).
+    static func shouldSuggest(
+        userText: String,
+        attachmentCount: Int = 0,
+        includesWorkspaceOverview: Bool = false
+    ) -> Bool {
+        band(
+            userText: userText,
+            attachmentCount: attachmentCount,
+            includesWorkspaceOverview: includesWorkspaceOverview
+        ) == .suggest
     }
 }
