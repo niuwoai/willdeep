@@ -178,6 +178,16 @@ final class AppState: ObservableObject {
     /// The center-column destination in Agent mode. Scheduled tasks use a
     /// dedicated page instead of expanding an unbounded list in the sidebar.
     @Published var agentPrimaryDestination: AgentPrimaryDestination = .conversation
+    /// One-shot request to expand the floating plan card in the conversation
+    /// activity overlay. The transcript footer's "查看计划" affordance bumps
+    /// this token; `AgentConversationActivityOverlay` observes it and sets its
+    /// plan card to expanded. Pure UI transient — never persisted.
+    @Published var agentPlanOverlayExpandRequestToken: Int = 0
+    /// One-shot request to collapse the floating plan card. The transcript
+    /// bumps this when a new assistant round begins so the plan folds away
+    /// while the agent works, matching the old inline-card behaviour. Pure UI
+    /// transient — never persisted.
+    @Published var agentPlanOverlayCollapseRequestToken: Int = 0
     /// One-shot request to open a scheduled task's detail. A transcript
     /// scheduled-task card sets the routine id; the scheduled-tasks page
     /// observes it, opens that routine's editor sheet, then clears it.
@@ -304,6 +314,11 @@ final class AppState: ObservableObject {
     /// In-flight multi-expert consultations. Keyed by the transcript report
     /// id so the specialized card can stop exactly its own orchestration.
     var agentConsultationTasks: [UUID: Task<Void, Never>] = [:]
+
+    /// Maps each in-flight consultation (report id) to the runtime that owns
+    /// it, so the "already running" guard and the composer's disabled state
+    /// are scoped per session instead of blocking every other conversation.
+    var agentConsultationRuntimeByReport: [UUID: UUID] = [:]
 
     /// rc1 scaffold for v1.49's concurrent runtimes. One entry per
     /// session that the user has touched this launch. AppState still

@@ -8,9 +8,33 @@ import Testing
 
 @Suite
 struct AgentPlanModeSuggestionPolicyTests {
-    @Test("auto-resolution keeps the requested eight-second window")
+    @Test("auto-resolution keeps the requested fifteen-second window")
     func autoResolutionWindow() {
-        #expect(AgentPlanModeSuggestionPolicy.autoResolutionSeconds == 8)
+        #expect(AgentPlanModeSuggestionPolicy.autoResolutionSeconds == 15)
+    }
+
+    @Test("locally-confident tasks land in the .suggest band")
+    func confidentTaskSuggestsBand() {
+        let task = "请重构认证模块，同时完成数据库迁移，并补充单元测试。"
+        #expect(AgentPlanModeSuggestionPolicy.band(userText: task) == .suggest)
+    }
+
+    @Test("mildly complex tasks defer to the flash judge")
+    func ambiguousTaskAsksFlash() {
+        // A single strong-complexity hint scores 2 → ambiguous → askFlash.
+        #expect(AgentPlanModeSuggestionPolicy.band(userText: "帮我重构这个函数") == .askFlash)
+    }
+
+    @Test("trivial tasks skip both the banner and the flash judge")
+    func trivialTaskSkips() {
+        #expect(AgentPlanModeSuggestionPolicy.band(userText: "现在几点了") == .skip)
+    }
+
+    @Test("explicit opt-out skips even the flash judge")
+    func optOutSkipsBand() {
+        let task = "直接做，不要 Plan：重构前后端认证并补充集成测试。"
+        #expect(AgentPlanModeSuggestionPolicy.band(userText: task) == .skip)
+        #expect(AgentPlanModeSuggestionPolicy.score(userText: task) == nil)
     }
 
     @Test("simple local tasks do not interrupt with a Plan suggestion")

@@ -51,13 +51,28 @@ struct AgentChatComposer: View {
                         .frame(maxWidth: AgentDesign.chatMaxContentWidth)
                 }
 
-                if !appState.agentWorkspaceCollision.isEmpty {
-                    AgentComposerWorkspaceCollisionCard()
-                        .frame(maxWidth: AgentDesign.chatMaxContentWidth)
+                // 顶部胶囊行：文件变更统计 +「第 N/M 步」并排靠左，两枚都是
+                // intrinsic 宽度的 Capsule，不撑满整行。全宽的长条状态卡片
+                // （会话碰撞、等待确认/思考中）另起行排在其下方，避免固定宽度
+                // 胶囊与全宽长条混在同一竖列里对齐错位、观感交叠。
+                let showsSummaryPill = !appState.agentWorktreeChanges.isEmpty
+                let stepProgress = taskProgressSnapshot
+                if showsSummaryPill || stepProgress != nil {
+                    HStack(spacing: 6) {
+                        if showsSummaryPill {
+                            AgentComposerWorktreeSummaryBar()
+                        }
+                        if let stepProgress {
+                            AgentComposerTaskProgressControl(snapshot: stepProgress)
+                                .transition(.opacity.combined(with: .move(edge: .bottom)))
+                        }
+                        Spacer(minLength: 0)
+                    }
+                    .frame(maxWidth: AgentDesign.chatMaxContentWidth)
                 }
 
-                if !appState.agentWorktreeChanges.isEmpty {
-                    AgentComposerWorktreeSummaryBar()
+                if shouldShowWorkspaceCollision {
+                    AgentComposerWorkspaceCollisionCard()
                         .frame(maxWidth: AgentDesign.chatMaxContentWidth)
                 }
 
@@ -101,12 +116,6 @@ struct AgentChatComposer: View {
                     .frame(maxWidth: AgentDesign.chatMaxContentWidth)
                     .id(planFingerprint(plan))
                     .transition(.opacity.combined(with: .move(edge: .bottom)))
-                }
-
-                if let progress = taskProgressSnapshot {
-                    AgentComposerTaskProgressControl(snapshot: progress)
-                        .frame(maxWidth: AgentDesign.chatMaxContentWidth)
-                        .transition(.opacity.combined(with: .move(edge: .bottom)))
                 }
 
                 ComposerCard(onUserEdit: { oldValue, newValue in
@@ -188,6 +197,20 @@ struct AgentChatComposer: View {
             return nil
         }
         return plan
+    }
+
+    /// 是否显示「另有会话在此目录工作」碰撞提示条。碰撞事实由
+    /// `agentWorkspaceCollision` 实时反映，但这条警告只在**新会话的前 3 轮**
+    /// 露面——用户在开头几轮已经看到过、也点过（或忽略过）「隔离到 worktree」，
+    /// 之后一直杵在 composer 顶部只是噪声。轮数按当前 active session 已发出的
+    /// 用户消息数计（与 `AgentUsageStats` 数 `role == .user` 的口径一致）；切
+    /// 到别的会话时 `agentMessages` 自动带出新会话的消息数，天然重新计数。
+    private var shouldShowWorkspaceCollision: Bool {
+        guard !appState.agentWorkspaceCollision.isEmpty else { return false }
+        let userTurnCount = appState.agentMessages.reduce(into: 0) { count, message in
+            if message.role == .user { count += 1 }
+        }
+        return userTurnCount <= 3
     }
 
     private var shouldShowActivityStatus: Bool {
@@ -1407,9 +1430,16 @@ private struct ConsultationButton: View {
     }
 
     private var canStart: Bool {
-        !appState.agentInput.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-            && !appState.isAgentResponding
-            && !appState.hasActiveAgentConsultation
+        guard !appState.agentInput.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+              !appState.isAgentResponding else {
+            return false
+        }
+        // Only disable when *this* conversation already has a consultation
+        // running; other sessions' roundtables must not gate this button.
+        if let runtimeID = appState.activeRuntime?.id {
+            return !appState.hasActiveAgentConsultation(runtimeID: runtimeID)
+        }
+        return true
     }
 }
 

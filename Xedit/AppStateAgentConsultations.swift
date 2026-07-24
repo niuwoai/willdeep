@@ -27,7 +27,7 @@ extension AppState {
             agentErrorMessage = WorkflowError.noActiveRuntime.errorDescription
             return false
         }
-        guard agentConsultationTasks.isEmpty else {
+        guard !hasActiveAgentConsultation(runtimeID: runtime.id) else {
             agentErrorMessage = L10n.Consultation.alreadyRunning
             return false
         }
@@ -138,8 +138,10 @@ extension AppState {
                 self.persistWorkflowRuntime(runtimeID: runtimeID)
             }
             self.agentConsultationTasks[report.id] = nil
+            self.agentConsultationRuntimeByReport[report.id] = nil
         }
         agentConsultationTasks[report.id] = consultationTask
+        agentConsultationRuntimeByReport[report.id] = runtimeID
         return true
     }
 
@@ -147,8 +149,11 @@ extension AppState {
         agentConsultationTasks[reportID]?.cancel()
     }
 
-    var hasActiveAgentConsultation: Bool {
-        !agentConsultationTasks.isEmpty
+    /// Whether the given runtime currently has a consultation in flight.
+    /// Scoped per session so one conversation's roundtable does not disable
+    /// the consultation button in every other open conversation.
+    func hasActiveAgentConsultation(runtimeID: UUID) -> Bool {
+        agentConsultationRuntimeByReport.values.contains(runtimeID)
     }
 
     func workflowReport(id: UUID, runtimeID: UUID) -> WorkflowReport? {

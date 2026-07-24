@@ -7,6 +7,7 @@
 
 import Combine
 import Foundation
+import Network
 
 @MainActor
 final class AgentMobileGatewayDesktopPeer: ObservableObject {
@@ -28,6 +29,13 @@ final class AgentMobileGatewayDesktopPeer: ObservableObject {
     private static let reconnectBaseDelay: UInt64 = 750_000_000  // 750ms
     private static let reconnectMaxDelay: UInt64 = 30_000_000_000  // 30s
     private var appStateCancellable: AnyCancellable?
+    /// 监听系统网络路径。断线后原本只能等指数退避 tick（最长 30s）才重连；
+    /// 网络切换 / 睡眠唤醒后路径一旦恢复 satisfied，就取消退避、立即重连，
+    /// 把「手机总是能连上」的空窗从 30s 压到数秒。仅在 relay/LAN 连接活跃
+    /// 期间运行，`disconnect` 时停掉。
+    private var pathMonitor: NWPathMonitor?
+    private var lastPathSatisfied = false
+    private static let pathMonitorQueue = DispatchQueue(label: "com.willdeep.mobileGateway.pathMonitor")
     private var snapshotTask: Task<Void, Never>?
     private var messageEventState = AgentMobileGatewayMessageEventState()
     private let encoder: JSONEncoder
@@ -51,6 +59,7 @@ final class AgentMobileGatewayDesktopPeer: ObservableObject {
         reconnectWebSocketURL = websocketURL(from: baseURL)
         reconnectToken = desktopToken
         reconnectSession = session
+        startPathMonitor()
         open(webSocketURL: websocketURL(from: baseURL), token: desktopToken, session: session)
     }
 
@@ -61,12 +70,14 @@ final class AgentMobileGatewayDesktopPeer: ObservableObject {
         reconnectWebSocketURL = relayWebSocketURL(from: baseURL, room: room)
         reconnectToken = relayToken
         reconnectSession = session
+        startPathMonitor()
         open(webSocketURL: reconnectWebSocketURL, token: relayToken, session: session)
     }
 
     func disconnect() {
         shouldReconnect = false
         isRelayConnection = false
+        stopPathMonitor()
         reconnectTask?.cancel()
         reconnectTask = nil
         snapshotTask?.cancel()
@@ -226,6 +237,50 @@ final class AgentMobileGatewayDesktopPeer: ObservableObject {
             self.reconnectTask = nil
             self.open(webSocketURL: webSocketURL, token: token, session: self.reconnectSession)
         }
+    }
+
+    // MARK: - Network path monitoring
+
+    private func startPathMonitor() {
+        // 复用同一个 monitor —— 两个 connect 方法都会调，避免重复创建。
+        guard pathMonitor == nil else { return }
+        let monitor = NWPathMonitor()
+        // 初始状态未知，按「不满足」起步，这样第一次 satisfied 会是一次
+        // 明确的上升沿。真正的首连由 connect/connectRelay 自己发起。
+        lastPathSatisfied = false
+        monitor.pathUpdateHandler = { [weak self] path in
+            let satisfied = path.status == .satisfied
+            Task { @MainActor [weak self] in
+                self?.handlePathUpdate(satisfied: satisfied)
+            }
+        }
+        monitor.start(queue: Self.pathMonitorQueue)
+        pathMonitor = monitor
+    }
+
+    private func stopPathMonitor() {
+        pathMonitor?.cancel()
+        pathMonitor = nil
+        lastPathSatisfied = false
+    }
+
+    /// 只在网络路径「从不满足 → 满足」的上升沿、且当前未连接时，取消退避、
+    /// 立即重连。避免在已 satisfied 状态下每次路径细节抖动都硬拨一次。
+    private func handlePathUpdate(satisfied: Bool) {
+        let rose = satisfied && !lastPathSatisfied
+        lastPathSatisfied = satisfied
+        guard rose,
+              shouldReconnect,
+              !isConnected,
+              let webSocketURL = reconnectWebSocketURL,
+              let token = reconnectToken else {
+            return
+        }
+        // 网络刚回来：清掉正在挂起的退避、把失败计数归零，马上重连。
+        reconnectTask?.cancel()
+        reconnectTask = nil
+        consecutiveFailures = 0
+        open(webSocketURL: webSocketURL, token: token, session: reconnectSession)
     }
 
     private func websocketURL(from baseURL: URL) -> URL? {

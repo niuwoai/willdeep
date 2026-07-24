@@ -1,6 +1,6 @@
 # WillDeep Product Overview
 
-> Last updated: 2026-07-24 | Current version: v1.195.0-rc20
+> Last updated: 2026-07-24 | Current version: v1.196.0-rc2
 
 ## Positioning
 
@@ -11,6 +11,8 @@ Official product domain: [willdeep.com](https://willdeep.com).
 WillDeep is configured for non-App-Store distribution without App Sandbox so it can access local project files with fewer permission interruptions.
 
 ## 架构概览
+
+- **失败命令可独立审计（1.195.0-rc21）** —— 当前回合的活动时间流为每条失败的 `run_command` 提供独立展开入口；点击后直接显示完整命令、工作目录、已捕获输出，以及包含退出码和 stderr 的失败原因，不再只能看到不可点击的“运行命令失败”摘要。
 
 - **补丁审批结果实时回流（1.195.0-rc20）** —— 手动补丁工具会暂停当前工具结果与下一轮模型请求，直到用户在卡片上选择 Apply 或 Reject；最终状态同时回写工具消息与实时工具记录后再继续上游模型，避免文件已经应用、模型却仍读取旧 `pending` 状态而重复要求审批。
 

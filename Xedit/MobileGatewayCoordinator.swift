@@ -295,12 +295,11 @@ final class MobileGatewayCoordinator: ObservableObject {
         if case .starting = state {
             return
         }
-        switch settings.transportMode {
-        case .relay:
-            await startRelayPeer()
-        case .lanGateway:
-            await startLanGateway()
-        }
+        // 1.195.0-rc22：手机网关只保留互联网中继一条线，开机即连、常驻在线。
+        // 局域网(`lanGateway` + Go 子进程)整条线暂不提供 —— `startLanGateway()`
+        // 及其配套私有方法保留为 dormant 代码，不再有任何调用路径。真要恢复
+        // 局域网直连时再把这里改回按 `settings.transportMode` 分派即可。
+        await startRelayPeer()
     }
 
     /// Relay transport (default): no local process. The Swift desktop peer
@@ -347,6 +346,11 @@ final class MobileGatewayCoordinator: ObservableObject {
         pairingPayload = Self.relayPairingPayload(for: settings, relayToken: relayToken)
     }
 
+    /// Dormant since 1.195.0-rc22: the LAN gateway transport is not exposed in
+    /// the UI anymore (relay is the only mode). Kept intact — with its Go
+    /// child-process launch, port probing and pairing HTTP control plane — so
+    /// LAN direct-connect can be re-enabled later without rewriting it. No live
+    /// call path reaches this today; `start()` always dials the relay.
     private func startLanGateway() async {
         guard process == nil else {
             await refresh()

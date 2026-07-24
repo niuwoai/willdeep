@@ -168,7 +168,10 @@ enum AgentGitReviewLoader {
             }
         }
 
+        // 与 loadAgentWorktreeChangeSummary 一致:隐藏缓存 / 构建目录
+        // (.gocache/ 等)里的文件不计入变更,避免未跟踪缓存海量灌爆列表。
         let paths = Set(kinds.keys).union(numstat.keys)
+            .filter { !AppState.isHiddenCacheWorktreePath($0) }
         let files = paths.map { path in
             let kind = kinds[path] ?? .modified
             let lineStats = numstat[path]

@@ -31,5 +31,14 @@ extension L10n {
         static func countdownText(secondsRemaining: Int) -> String {
             String(format: countdownHint, secondsRemaining)
         }
+
+        static let autoEnteredNoticeFormat = String(
+            localized: "plan-mode-suggestion.auto-entered-notice",
+            defaultValue: "Complex task — asked whether to enter Plan mode; auto-entered after %d seconds without confirmation."
+        )
+
+        static func autoEnteredNotice(seconds: Int) -> String {
+            String(format: autoEnteredNoticeFormat, seconds)
+        }
     }
 }

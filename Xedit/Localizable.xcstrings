@@ -1,6 +1,8 @@
 {
   "sourceLanguage" : "en",
   "strings" : {
+    "agent-notification.plan-suggestion.body" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Return to confirm whether to enter Plan mode before starting." } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "回到 App 确认是否先进入 Plan 模式再执行。" } } } },
+    "agent-notification.plan-suggestion.title" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "A task may need Plan mode" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "有任务建议进入 Plan 模式" } } } },
     "delegated-task.acceptance-passed-attempt" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Executor self-review and WillDeep acceptance passed on attempt %d." } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "执行器自验收与 WillDeep 二次验收已在第 %d 次执行通过。" } } } },
     "delegated-task.acceptance-unavailable" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "No acceptance verdict is available." } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "未能取得验收结论。" } } } },
     "delegated-task.accepted" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Accepted" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "验收通过" } } } },
@@ -122,6 +124,7 @@
     "agent-model-picker.upgrade-to" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Upgrade this conversation to %@" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "本会话升至 %@" } } } },
     "agent-model-picker.view-all" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "View all models" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "查看全部模型" } } } },
     "agent-model-picker.view-plans" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "View Plans" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "查看套餐" } } } },
+    "plan-mode-suggestion.auto-entered-notice" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Complex task — asked whether to enter Plan mode; auto-entered after %d seconds without confirmation." } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "复杂任务，已询问是否进入 Plan 模式；超过 %d 秒未确认，已自动进入 Plan 模式。" } } } },
     "plan-mode-suggestion.continue-normally" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Continue normally" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "直接执行" } } } },
     "plan-mode-suggestion.countdown-hint" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Entering Plan mode in %ds…" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "%d 秒后自动进入 Plan 模式…" } } } },
     "plan-mode-suggestion.enter-plan" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Enter Plan" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "进入 Plan" } } } },
@@ -2671,6 +2674,13 @@
       "localizations" : {
         "en" : { "stringUnit" : { "state" : "translated", "value" : "Searching relevant code" } },
         "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "正在查找相关代码" } }
+      }
+    },
+    "agent-activity.stage.thinking" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Thinking through the next step" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "思考下一步" } }
       }
     },
     "agent-activity.stage.verifying" : {

@@ -272,11 +272,8 @@ final class AgentChatHistoryNSTextView: NSTextView {
 
     override func mouseUp(with event: NSEvent) {
         super.mouseUp(with: event)
-        guard let selectedText = currentSelectedConversationText() else {
-            dismissSelectionAction()
-            return
-        }
-        showSelectionAction(selectedText: selectedText)
+        // 气泡的显示/隐藏统一交给 textViewDidChangeSelection（选区落定的权威回调）。
+        // 拖拽选区时结束的 mouseUp 会被 NSTextView 内部跟踪循环吞掉，这里不再依赖它触发。
     }
 
     override func menu(for event: NSEvent) -> NSMenu? {
@@ -523,6 +520,15 @@ final class AgentChatHistoryNSTextView: NSTextView {
                 hasher.combine(tc.externalID)
                 hasher.combine(tc.toolName)
                 hasher.combine(tc.argumentsJSON.count)
+            }
+            // Keep the streaming-hot-path fingerprint in sync with the
+            // renderer cache key: a resolved tool receipt must invalidate
+            // this early-exit, otherwise the ✓/✗ badge is skipped.
+            if let receipts = m.settledToolReceipts {
+                for (callID, status) in receipts.sorted(by: { $0.key < $1.key }) {
+                    hasher.combine(callID)
+                    hasher.combine(status.rawValue)
+                }
             }
         }
         for message in assistantTurnContextMessages
@@ -791,6 +797,17 @@ private final class AgentChatSelectionActionView: NSVisualEffectView {
 }
 
 extension AgentChatHistoryNSTextView: NSTextViewDelegate {
+    // 选区落定的权威回调：拖拽选区时 NSTextView 的内部事件跟踪循环会吞掉结束的 mouseUp，
+    // 单靠重写 mouseUp 无法在「按下→拖选→松开」路径上弹出气泡。这里改为监听选区变化，
+    // 无论选区由鼠标拖拽、双击选词还是键盘 shift 选中，AppKit 都会回调。
+    func textViewDidChangeSelection(_ notification: Notification) {
+        guard let selectedText = currentSelectedConversationText() else {
+            dismissSelectionAction()
+            return
+        }
+        showSelectionAction(selectedText: selectedText)
+    }
+
     func textView(_ textView: NSTextView, clickedOnLink link: Any, at charIndex: Int) -> Bool {
         guard let textStorage,
               charIndex >= 0,
@@ -1129,7 +1146,7 @@ enum AgentChatHistoryLayoutMetrics {
     static let userFooterTrailingInset: CGFloat = 10
     static let userFooterTopSpacing: CGFloat = 8
     static let userFooterBottomSpacing: CGFloat = 8
-    static let userImageToBubbleSpacing: CGFloat = 8
+    static let userImageToBubbleSpacing: CGFloat = 14
     static let userMessageElementSpacing: CGFloat = 4
     /// Reuse TextKit renders while the window moves within a small width
     /// interval. Flooring keeps the rendered content inside the actual view;

@@ -42,7 +42,15 @@ enum AgentNetworkSupport {
         (Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String) ?? "unknown"
     }()
 
-    static let userAgentHeaderValue: String = "WillDeep/\(appVersionHeaderValue) (macOS)"
+    /// Unified client identity sent on every outgoing HTTP request (the
+    /// `User-Agent`). Form: `some.im/WillDeep-{version} (macOS)` — e.g.
+    /// `some.im/WillDeep-1.195.0-rc22 (macOS)`. The `some.im/` prefix brands
+    /// the request as coming from a some.im-family client; the version lets the
+    /// backend / reverse-proxy logs bucket a build. Every request that goes
+    /// through `applyStandardHeaders` (all some.im login/customer/balance/model
+    /// requests included) picks this up. Keep this the single source of truth —
+    /// `AppUpdateChecker` reuses it rather than re-deriving its own UA.
+    static let userAgentHeaderValue: String = "some.im/WillDeep-\(appVersionHeaderValue) (macOS)"
 
     /// some.im managed-routing context header names. Values come from the
     /// Agent session (see `SomeIMRequestContext`) and are only attached to

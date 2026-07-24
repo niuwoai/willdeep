@@ -1807,7 +1807,8 @@ extension AppState {
                         await refreshGitStatusAfterAgentTool(
                             for: runtime,
                             workspaceURL: workspaceURL,
-                            baselineSnapshot: turnBaselineSnapshot
+                            baselineSnapshot: turnBaselineSnapshot,
+                            producesArtifacts: Self.toolProducesSessionArtifacts(call.toolName)
                         )
                     }
                     appendToolMessage(

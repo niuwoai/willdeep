@@ -118,6 +118,10 @@ enum AgentChatHistoryRenderer {
         hasher.combine(m.id)
         hasher.combine(m.role.rawValue)
         hasher.combine(m.content)
+        // The transcript-event kind drives the rendered icon (e.g. Plan
+        // notice vs model-change), so two same-content notices with
+        // different events must not collide onto one cached render.
+        hasher.combine(m.transcriptEvent?.rawValue)
         hasher.combine(m.images.count)
         for image in m.images {
             hasher.combine(image.id)
@@ -156,6 +160,16 @@ enum AgentChatHistoryRenderer {
             hasher.combine(call.externalID)
             hasher.combine(call.toolName)
             hasher.combine(call.argumentsJSON)
+        }
+        // Tool outcome receipts are a render-time projection, not part of
+        // toolCalls above. Without them in the key, a call resolving
+        // running → succeeded/failed keeps the stale (badge-less) cached
+        // render, so the ✓/✗ verdict never appears.
+        if let receipts = m.settledToolReceipts {
+            for (callID, status) in receipts.sorted(by: { $0.key < $1.key }) {
+                hasher.combine(callID)
+                hasher.combine(status.rawValue)
+            }
         }
         // Workflow 卡片消息的 content 恒为空,全部展示数据挂在
         // workflowReport 上。不进 hash 的话 engine mutate report
@@ -673,9 +687,16 @@ enum AgentChatHistoryRenderer {
                         ]
                     ))
                 }
+                let inlineReceipts = inlineToolMessages.reduce(
+                    into: [String: AgentToolCallStatus]()
+                ) { acc, msg in
+                    guard let receipts = msg.settledToolReceipts else { return }
+                    acc.merge(receipts) { _, new in new }
+                }
                 let inlineGroup = ToolCallHistoryGroup(
                     inlineMessageIDs: inlineToolMessages.map(\.id),
-                    calls: inlineToolCalls
+                    calls: inlineToolCalls,
+                    receipts: inlineReceipts
                 )
                 appendToolCallGroup(
                     inlineGroup,
@@ -750,19 +771,58 @@ enum AgentChatHistoryRenderer {
     struct ToolCallHistoryGroup {
         let id: String
         let calls: [AgentMessageToolCall]
+        /// Terminal receipts (externalID → 成/败/拒) harvested from the
+        /// sibling `.tool` result messages upstream. Empty for legacy
+        /// sessions or in-flight groups; drives the ✓/✗ outcome badge.
+        let receipts: [String: AgentToolCallStatus]
 
-        init(messages: [AgentMessage], calls: [AgentMessageToolCall]? = nil) {
+        init(
+            messages: [AgentMessage],
+            calls: [AgentMessageToolCall]? = nil
+        ) {
             id = messages.map { $0.id.uuidString }.joined(separator: ":")
             self.calls = calls ?? messages.flatMap(\.toolCalls)
+            self.receipts = Self.mergedReceipts(from: messages)
         }
 
         /// Tool calls that came in *alongside* an assistant message's
         /// prose (not as a separate tool-call-only assistant turn).
         /// Keyed by the host message id so expand/collapse state is
         /// stable across re-renders of the same conversation.
-        init(inlineMessageIDs: [UUID], calls: [AgentMessageToolCall]) {
+        init(
+            inlineMessageIDs: [UUID],
+            calls: [AgentMessageToolCall],
+            receipts: [String: AgentToolCallStatus] = [:]
+        ) {
             id = "inline:" + inlineMessageIDs.map(\.uuidString).joined(separator: ":")
             self.calls = calls
+            self.receipts = receipts
+        }
+
+        private static func mergedReceipts(
+            from messages: [AgentMessage]
+        ) -> [String: AgentToolCallStatus] {
+            var merged: [String: AgentToolCallStatus] = [:]
+            for message in messages {
+                guard let receipts = message.settledToolReceipts else { continue }
+                merged.merge(receipts) { _, new in new }
+            }
+            return merged
+        }
+
+        /// One-line outcome for the whole group: any failure/denial wins
+        /// (that's what the user most needs to see), otherwise ✓ if every
+        /// resolved call succeeded, else nil (nothing resolved → no badge).
+        var outcomeBadge: String? {
+            guard !receipts.isEmpty else { return nil }
+            let statuses = receipts.values
+            let failed = statuses.filter { $0 == .failed }.count
+            let denied = statuses.filter { $0 == .denied }.count
+            let succeeded = statuses.filter { $0 == .succeeded }.count
+            if failed > 0 { return "✗ \(failed) 失败" }
+            if denied > 0 { return "✗ \(denied) 已拒绝" }
+            if succeeded > 0 { return "✓ 完成" }
+            return nil
         }
     }
 

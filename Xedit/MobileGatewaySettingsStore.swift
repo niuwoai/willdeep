@@ -116,7 +116,10 @@ struct MobileGatewaySettings: Codable, Equatable {
             ? Self.legacyDefaultRelayRoom
             : defaultRelayRoom.trimmingCharacters(in: .whitespacesAndNewlines)
         return MobileGatewaySettings(
-            transportMode: transportMode,
+            // 1.195.0-rc22：手机网关固定走互联网中继。任何旧持久化里遗留的
+            // `lanGateway`、或手动改过 JSON 的值，归一化时都强制回到 `.relay`，
+            // 保证「开机自连中继」这条唯一线路不被历史配置污染。
+            transportMode: .relay,
             host: host.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? "0.0.0.0" : host.trimmingCharacters(in: .whitespacesAndNewlines),
             port: min(max(port, mobileGatewayPortRange.lowerBound), mobileGatewayPortRange.upperBound),
             desktopName: desktopName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty

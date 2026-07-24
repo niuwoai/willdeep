@@ -106,14 +106,37 @@ extension AppState {
             if runtime.pendingPlanModeSuggestion != nil {
                 return
             }
-            if AgentPlanModeSuggestionPolicy.shouldSuggest(
+            // Same guard for the flash-judge window: a second Return while we
+            // are still asking the judge must not dispatch behind its back.
+            if runtime.isAskingPlanModeFlash {
+                return
+            }
+            let attachmentCount = images.count + textAttachments.count + pendingFiles.count + skills.count
+            switch AgentPlanModeSuggestionPolicy.band(
                 userText: userText,
-                attachmentCount: images.count + textAttachments.count + pendingFiles.count + skills.count,
+                attachmentCount: attachmentCount,
                 includesWorkspaceOverview: includeWorkspaceOverview
             ) {
+            case .suggest:
                 runtime.pendingPlanModeSuggestion = AgentPlanModeSuggestion()
                 scheduleAgentPlanModeSuggestionAutoResolution(for: runtime)
+                notifyPlanModeSuggestionIfBackgrounded(for: runtime)
                 return
+            case .askFlash:
+                startPlanModeFlashJudge(
+                    for: runtime,
+                    userText: userText,
+                    attachmentCount: attachmentCount,
+                    includesWorkspaceOverview: includeWorkspaceOverview,
+                    localScore: AgentPlanModeSuggestionPolicy.score(
+                        userText: userText,
+                        attachmentCount: attachmentCount,
+                        includesWorkspaceOverview: includeWorkspaceOverview
+                    ) ?? 0
+                )
+                return
+            case .skip:
+                break
             }
         }
         clearAgentPlanModeSuggestion(for: runtime)
@@ -217,14 +240,101 @@ extension AppState {
         ]
     }
 
-    func resolveAgentPlanModeSuggestion(enterPlanMode: Bool) {
+    func resolveAgentPlanModeSuggestion(enterPlanMode: Bool, autoResolved: Bool = false) {
         guard let runtime = activeRuntime,
               runtime.pendingPlanModeSuggestion != nil else { return }
         clearAgentPlanModeSuggestion(for: runtime)
         if enterPlanMode {
             setAgentInteractionMode(.plan)
+            // Only the timeout path leaves a transcript trail — a manual
+            // choice is self-explanatory and needs no note.
+            if autoResolved {
+                appendAutoPlanModeEnteredNotice(to: runtime)
+            }
         }
         sendAgentMessage(allowPlanModeSuggestion: false)
+    }
+
+    @MainActor
+    private func appendAutoPlanModeEnteredNotice(to runtime: AgentRuntime) {
+        let event = AgentMessage(
+            role: .system,
+            content: L10n.PlanModeSuggestion.autoEnteredNotice(
+                seconds: AgentPlanModeSuggestionPolicy.autoResolutionSeconds
+            ),
+            transcriptEvent: .autoPlanModeEntered
+        )
+        runtime.messages.append(event)
+        persistAgentSession(runtime: runtime, touchUpdatedAt: false, moveToFront: false)
+    }
+
+    /// Ask the flash judge whether a locally-ambiguous input warrants Plan
+    /// mode. Parks the send behind an input-field spinner; on the verdict we
+    /// either surface the banner or dispatch normally. Non-some.im providers
+    /// (no judge model) and any failure fall through to a normal send.
+    private func startPlanModeFlashJudge(
+        for runtime: AgentRuntime,
+        userText: String,
+        attachmentCount: Int,
+        includesWorkspaceOverview: Bool,
+        localScore: Int
+    ) {
+        runtime.planModeFlashJudgeTask?.cancel()
+        let configuration = configurationForCurrentTurn(for: runtime)
+        // The judge runs on the some.im "someim-judge" alias; without a
+        // some.im provider there is no judge to ask, so send normally.
+        guard configuration.providerID == AgentProviderPreset.someIMID else {
+            sendAgentMessage(allowPlanModeSuggestion: false)
+            return
+        }
+        runtime.isAskingPlanModeFlash = true
+        let workspaceAvailable = runtime.workspaceLocation != nil
+            || (runtime.workspaceRootPath?.isEmpty == false)
+        let someIMContext = SomeIMRequestContext(
+            sessionID: runtime.id.uuidString,
+            workspaceID: AgentWorkspaceIdentityStore.workspaceID(
+                forWorkspaceKey: Self.managedWorkspaceKey(for: runtime)
+            )
+        )
+        let judgeClient = AgentClient(configuration: configuration, someIMContext: someIMContext)
+
+        runtime.planModeFlashJudgeTask = Task { [weak self, weak runtime] in
+            let suggest = await AgentPlanModeFlashJudge.shouldSuggest(
+                userText: userText,
+                attachmentCount: attachmentCount,
+                includesWorkspaceOverview: includesWorkspaceOverview,
+                workspaceAvailable: workspaceAvailable,
+                localScore: localScore
+            ) { system, user, maxTokens in
+                await judgeClient.routeJudge(
+                    model: SomeIMManagedModel.judge,
+                    systemPrompt: system,
+                    userPayload: user,
+                    maxTokens: maxTokens
+                )
+            }
+            // Mirror the auto-resolution guards: bail if cancelled, the app or
+            // runtime went away, the user switched sessions, or the wait was
+            // already cleared out from under us.
+            guard !Task.isCancelled,
+                  let self,
+                  let runtime,
+                  self.activeRuntime === runtime,
+                  runtime.isAskingPlanModeFlash else { return }
+            runtime.isAskingPlanModeFlash = false
+            runtime.planModeFlashJudgeTask = nil
+            if suggest {
+                runtime.pendingPlanModeSuggestion = AgentPlanModeSuggestion()
+                self.scheduleAgentPlanModeSuggestionAutoResolution(for: runtime)
+                self.notifyPlanModeSuggestionIfBackgrounded(for: runtime)
+            } else {
+                self.sendAgentMessage(allowPlanModeSuggestion: false)
+            }
+        }
+    }
+
+    private func notifyPlanModeSuggestionIfBackgrounded(for runtime: AgentRuntime) {
+        AgentToolApprovalNotifier.notifyPlanModeSuggestionIfBackgrounded(runtimeID: runtime.id)
     }
 
     func cancelAgentPlanModeSuggestion() {
@@ -242,7 +352,7 @@ extension AppState {
                   let runtime,
                   self.activeRuntime === runtime,
                   runtime.pendingPlanModeSuggestion != nil else { return }
-            self.resolveAgentPlanModeSuggestion(enterPlanMode: true)
+            self.resolveAgentPlanModeSuggestion(enterPlanMode: true, autoResolved: true)
         }
     }
 
@@ -250,6 +360,9 @@ extension AppState {
         runtime.planModeSuggestionAutoResolveTask?.cancel()
         runtime.planModeSuggestionAutoResolveTask = nil
         runtime.pendingPlanModeSuggestion = nil
+        runtime.planModeFlashJudgeTask?.cancel()
+        runtime.planModeFlashJudgeTask = nil
+        runtime.isAskingPlanModeFlash = false
     }
 
     func dispatchAgentMessageUsingSelectedExecutor(

@@ -279,6 +279,29 @@ struct GitWorktreeCoreTests {
         #expect(!AppState.isAgentSessionArtifactPath("Sources/NewView.swift"))
     }
 
+    @Test("only explicit deliverable-producing tools whitelist directory-diff artifacts")
+    func testToolArtifactWhitelistIsNarrow() {
+        // Explicit workspace deliverables: short-drama exports write
+        // JSON/MD/CSV/HTML packages into the working directory.
+        #expect(AppState.toolProducesSessionArtifacts("short_drama_export_plan_template"))
+        #expect(AppState.toolProducesSessionArtifacts("short_drama_export_production_package"))
+
+        // Process / work-file tools must NOT scoop their output into the
+        // artifact rail, no matter what extension they happen to write.
+        #expect(!AppState.toolProducesSessionArtifacts("create_file"))
+        #expect(!AppState.toolProducesSessionArtifacts("edit_file"))
+        #expect(!AppState.toolProducesSessionArtifacts("apply_patch"))
+        #expect(!AppState.toolProducesSessionArtifacts("run_command"))
+        #expect(!AppState.toolProducesSessionArtifacts("claude_code"))
+        #expect(!AppState.toolProducesSessionArtifacts("change_workspace"))
+
+        // Media generation registers deliverables explicitly and downloads
+        // outside the workspace, so it never relies on the diff whitelist.
+        #expect(!AppState.toolProducesSessionArtifacts("generate_image"))
+        #expect(!AppState.toolProducesSessionArtifacts("generate_video_from_image"))
+        #expect(!AppState.toolProducesSessionArtifacts("create_media_task"))
+    }
+
     @Test("artifact inventory finds git-ignored deliverables and prunes transient trees")
     func testArtifactInventoryIsIndependentFromGitStatus() throws {
         let root = FileManager.default.temporaryDirectory
@@ -567,6 +590,28 @@ struct GitWorktreeCoreTests {
             lineStats: AgentLineChangeStats(added: nil, deleted: nil),
             hasNumstatEntry: false
         ) == true)
+    }
+
+    @Test("hidden cache directories are excluded from worktree diff, real hidden dirs kept")
+    func testHiddenCacheWorktreePathFiltering() {
+        // 命中:隐藏缓存 / 构建目录里的文件应被排除。
+        #expect(AppState.isHiddenCacheWorktreePath(".gocache/00/00a2cd1c40c562c4705deaab1a66b0a46e28bf5") == true)
+        #expect(AppState.isHiddenCacheWorktreePath(".venv/lib/python3.12/site-packages/foo.py") == true)
+        #expect(AppState.isHiddenCacheWorktreePath("sub/.mypy_cache/3.12/module.data.json") == true)
+        #expect(AppState.isHiddenCacheWorktreePath(".gradle/caches/modules-2/x.jar") == true)
+        #expect(AppState.isHiddenCacheWorktreePath("frontend/.next/static/chunks/main.js") == true)
+        // 大小写不敏感。
+        #expect(AppState.isHiddenCacheWorktreePath(".GoCache/aa/bb") == true)
+
+        // 放行:用户可能真在改的隐藏配置目录,以及仓库根下的隐藏文件。
+        #expect(AppState.isHiddenCacheWorktreePath(".github/workflows/ci.yml") == false)
+        #expect(AppState.isHiddenCacheWorktreePath(".claude/agents/foo.md") == false)
+        #expect(AppState.isHiddenCacheWorktreePath(".vscode/settings.json") == false)
+        #expect(AppState.isHiddenCacheWorktreePath(".gitignore") == false)
+        #expect(AppState.isHiddenCacheWorktreePath(".env") == false)
+        #expect(AppState.isHiddenCacheWorktreePath("Xedit/AppStateGitStatus.swift") == false)
+        // 只按目录段匹配:名为 .gocache 的顶层文件(无目录段)不误伤。
+        #expect(AppState.isHiddenCacheWorktreePath(".gocache") == false)
     }
 
     @Test("git worktree porcelain parser captures branches and prunable rows")

@@ -206,7 +206,6 @@ struct AgentChatTranscript: View {
     @State private var conversationSearchMatchCount = 0
     @State private var conversationSearchActiveIndex = 0
     @State private var isFollowingTranscriptBottom = true
-    @State private var isCurrentPlanExpanded = false
 
     var body: some View {
         ZStack(alignment: .topTrailing) {
@@ -230,21 +229,10 @@ struct AgentChatTranscript: View {
                         AgentGoalPlanningCard(state: planningState)
                             .frame(maxWidth: AgentDesign.chatMaxContentWidth, alignment: .leading)
                     }
-                    if (appState.agentInteractionMode == .plan || appState.agentInteractionMode == .goal),
-                       let plan = appState.agentCurrentPlan {
-                        AgentPlanCard(plan: plan, isExpanded: $isCurrentPlanExpanded)
-                            .id("agent-current-plan")
-                            .frame(maxWidth: AgentDesign.chatMaxContentWidth, alignment: .leading)
-                            .onAppear {
-                                isCurrentPlanExpanded =
-                                    AgentPlanCardExpansionPolicy.initiallyExpanded(for: plan.status)
-                            }
-                            .onCompatibleChange(of: plan.status) { _, newStatus in
-                                if AgentPlanCardExpansionPolicy.initiallyExpanded(for: newStatus) {
-                                    isCurrentPlanExpanded = true
-                                }
-                            }
-                    }
+                    // Plan card no longer sits inline here — it floats in the
+                    // conversation activity overlay (top-trailing), collapsed by
+                    // default, alongside the artifact / media / dev-server cards.
+                    // See AgentConversationActivityOverlay.
 
                     if appState.agentMessages.isEmpty && localConfirmationPreviewCalls.isEmpty {
                         AgentChatEmptyState()
@@ -318,10 +306,9 @@ struct AgentChatTranscript: View {
                                 onOpenAttachmentCitation: appState.openAgentAttachmentCitation,
                                 progressPlan: appState.agentCurrentPlan,
                                 onShowPlan: {
-                                    isCurrentPlanExpanded = true
-                                    withAnimation(.easeInOut(duration: 0.2)) {
-                                        proxy.scrollTo("agent-current-plan", anchor: .top)
-                                    }
+                                    // Plan card floats in the activity overlay now;
+                                    // bump the token so the overlay expands it.
+                                    appState.agentPlanOverlayExpandRequestToken += 1
                                 },
                                 searchQuery: conversationSearchQuery,
                                 activeSearchMatchIndex: conversationSearchActiveIndex,
@@ -382,10 +369,9 @@ struct AgentChatTranscript: View {
                                 onReferenceGeneratedImage: appState.appendGeneratedImageReferenceToAgentInput,
                                 progressPlan: appState.agentCurrentPlan,
                                 onShowPlan: {
-                                    isCurrentPlanExpanded = true
-                                    withAnimation(.easeInOut(duration: 0.2)) {
-                                        proxy.scrollTo("agent-current-plan", anchor: .top)
-                                    }
+                                    // Plan card floats in the activity overlay now;
+                                    // bump the token so the overlay expands it.
+                                    appState.agentPlanOverlayExpandRequestToken += 1
                                 },
                                 suppressesActivityHeadline: activeToolPresentation?.calls.isEmpty == false
                             )
@@ -597,9 +583,9 @@ struct AgentChatTranscript: View {
                         previousMessageID: previousID,
                         currentMessageID: currentID
                     ) else { return }
-                    withAnimation(.easeInOut(duration: 0.18)) {
-                        isCurrentPlanExpanded = false
-                    }
+                    // Plan card floats in the activity overlay now; fold it away
+                    // when a new assistant round begins.
+                    appState.agentPlanOverlayCollapseRequestToken += 1
                 }
 
             // 切走 app 再切回来时,SwiftUI 会重新布局 ScrollView,默认
@@ -712,6 +698,12 @@ struct AgentChatTranscript: View {
     }
 
     private var visibleMessages: [AgentMessage] {
+        // The `.tool` result messages get filtered out of the transcript
+        // below, but they carry the persisted `toolCallStatus` (成/败/拒)
+        // for each call. Harvest them first, keyed by the tool_call id, so
+        // a settled intent line ("我要做 X") can render a "✓ 成 / ✗ 败"
+        // receipt next to the action it triggered.
+        let toolReceipts = toolReceiptsByCallID(in: appState.agentMessages)
         let visible = appState.agentMessages.compactMap { message in
             // `.system` is reserved for host-injected notices (e.g.
             // background-task completion); the user reads those via the
@@ -729,7 +721,7 @@ struct AgentChatTranscript: View {
                   !isSettledToolCallOnlyMessage(message) else {
                 return nil
             }
-            return resultPresentationMessage(message)
+            return resultPresentationMessage(message, receipts: toolReceipts)
         }
         guard appState.agentInteractionMode == .goal,
               !appState.isAgentResponding else {
@@ -770,15 +762,51 @@ struct AgentChatTranscript: View {
         return !toolCalls(for: message.id).contains(where: isWorkingToolCall)
     }
 
-    private func resultPresentationMessage(_ message: AgentMessage) -> AgentMessage {
+    /// Collect the persisted terminal status of every finished tool call,
+    /// keyed by its `toolCallID`. The `.tool` result messages own this
+    /// truth (`toolCallStatus`); assistant intent lines reference the same
+    /// id via `AgentMessageToolCall.externalID`. Pending/running calls are
+    /// skipped so an in-flight action never renders a premature receipt.
+    private func toolReceiptsByCallID(
+        in messages: [AgentMessage]
+    ) -> [String: AgentToolCallStatus] {
+        var receipts: [String: AgentToolCallStatus] = [:]
+        for message in messages where message.role == .tool {
+            guard let callID = message.toolCallID,
+                  let status = message.toolCallStatus,
+                  !status.isBlockingForUserDecision,
+                  status != .running else {
+                continue
+            }
+            receipts[callID] = status
+        }
+        return receipts
+    }
+
+    private func resultPresentationMessage(
+        _ message: AgentMessage,
+        receipts: [String: AgentToolCallStatus]
+    ) -> AgentMessage {
         guard message.role == .assistant,
               !message.toolCalls.isEmpty,
               !appState.isAgentResponding,
               !toolCalls(for: message.id).contains(where: isWorkingToolCall) else {
             return message
         }
+        // Previously this cleared `toolCalls` entirely, so a settled intent
+        // line lost every trace of the action it triggered. Keep the calls
+        // and attach their terminal receipts (✓/✗) instead — the history
+        // renderer projects these into a per-group outcome badge. Only
+        // calls with a known terminal status contribute a receipt; if none
+        // resolved (e.g. legacy sessions without `.tool` status), the map
+        // stays nil and rendering falls back to the old behaviour.
         var copy = message
-        copy.toolCalls = []
+        let resolved = copy.toolCalls.reduce(into: [String: AgentToolCallStatus]()) { acc, call in
+            if let status = receipts[call.externalID] {
+                acc[call.externalID] = status
+            }
+        }
+        copy.settledToolReceipts = resolved.isEmpty ? nil : resolved
         return copy
     }
 

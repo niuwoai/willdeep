@@ -176,6 +176,12 @@ extension AppState {
         set { activeRuntime?.pendingPlanModeSuggestion = newValue }
     }
 
+    /// True while the active session is waiting on the Plan-mode flash judge.
+    /// Drives the composer send-button spinner.
+    var agentIsAskingPlanModeFlash: Bool {
+        activeRuntime?.isAskingPlanModeFlash ?? false
+    }
+
     /// Currently-pinned goal for Goal mode.
     var agentCurrentGoal: AgentGoal? {
         get { activeRuntime?.currentGoal }

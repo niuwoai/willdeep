@@ -14,38 +14,80 @@ import SwiftUI
 struct AgentConversationActivityOverlay: View {
     @EnvironmentObject private var appState: AppState
     @State private var dismissedCardKeys: Set<String> = []
+    /// Floating plan card fold state — replaces the old transcript-inline
+    /// `isCurrentPlanExpanded`. Collapsed by default; only auto-expands while
+    /// the plan is `.proposed` (awaiting approval) or when the footer's
+    /// "查看计划" affordance requests it via `agentPlanOverlayExpandRequestToken`.
+    @State private var isPlanExpanded = false
 
     private var snapshot: AgentConversationActivitySnapshot {
         AgentConversationActivitySnapshot.capture(from: appState)
     }
 
+    /// The current plan, only when Plan/Goal mode has one to show.
+    private var visiblePlan: AgentPlan? {
+        guard appState.agentInteractionMode == .plan
+            || appState.agentInteractionMode == .goal else { return nil }
+        return appState.agentCurrentPlan
+    }
+
     var body: some View {
         let snapshot = snapshot
+        let plan = visiblePlan
         let artifactKey = snapshot.artifactDismissalKey
         let mediaKey = snapshot.mediaDismissalKey
         let devServerKey = snapshot.devServerDismissalKey
         let showsArtifacts = artifactKey.map { !dismissedCardKeys.contains($0) } ?? false
         let showsMedia = mediaKey.map { !dismissedCardKeys.contains($0) } ?? false
         let showsDevServer = devServerKey.map { !dismissedCardKeys.contains($0) } ?? false
-        if showsArtifacts || showsMedia || showsDevServer {
+        if plan != nil || showsArtifacts || showsMedia || showsDevServer {
             VStack(alignment: .trailing, spacing: 6) {
+                // Plan card sits on top — it's the execution gate and the most
+                // important thing to keep in view.
+                if let plan {
+                    AgentPlanCard(plan: plan, isExpanded: $isPlanExpanded, floating: true)
+                        .frame(
+                            width: isPlanExpanded
+                                ? AgentConversationActivityDesign.planExpandedWidth
+                                : AgentConversationActivityDesign.cardWidth,
+                            alignment: .trailing
+                        )
+                        .onAppear {
+                            isPlanExpanded =
+                                AgentPlanCardExpansionPolicy.initiallyExpanded(for: plan.status)
+                        }
+                        .onCompatibleChange(of: plan.status) { _, newStatus in
+                            if AgentPlanCardExpansionPolicy.initiallyExpanded(for: newStatus) {
+                                isPlanExpanded = true
+                            }
+                        }
+                        .onCompatibleChange(of: appState.agentPlanOverlayExpandRequestToken) { _, _ in
+                            withAnimation(.easeInOut(duration: 0.18)) { isPlanExpanded = true }
+                        }
+                        .onCompatibleChange(of: appState.agentPlanOverlayCollapseRequestToken) { _, _ in
+                            withAnimation(.easeInOut(duration: 0.18)) { isPlanExpanded = false }
+                        }
+                }
                 if showsArtifacts, let artifactKey {
                     AgentArtifactActivityCard(urls: snapshot.sessionArtifacts) {
                         dismissedCardKeys.insert(artifactKey)
                     }
+                    .frame(width: AgentConversationActivityDesign.cardWidth)
                 }
                 if showsMedia, let mediaSummary = snapshot.mediaSummary, let mediaKey {
                     AgentMediaActivityCard(summary: mediaSummary) {
                         dismissedCardKeys.insert(mediaKey)
                     }
+                    .frame(width: AgentConversationActivityDesign.cardWidth)
                 }
                 if showsDevServer, let devServerSummary = snapshot.devServerSummary, let devServerKey {
                     AgentDevServerActivityCard(summary: devServerSummary) {
                         dismissedCardKeys.insert(devServerKey)
                     }
+                    .frame(width: AgentConversationActivityDesign.cardWidth)
                 }
             }
-            .frame(width: AgentConversationActivityDesign.cardWidth, alignment: .trailing)
+            .frame(alignment: .trailing)
             .transition(.move(edge: .trailing).combined(with: .opacity))
             .animation(.easeOut(duration: 0.18), value: snapshot.identityDigest)
         }
@@ -790,6 +832,9 @@ private enum AgentConversationActivityFileKind {
 
 private enum AgentConversationActivityDesign {
     static let cardWidth: CGFloat = 214
+    /// Plan card widens when expanded so step text, approve/reject buttons and
+    /// the replan row aren't crammed into the 214pt collapsed rail width.
+    static let planExpandedWidth: CGFloat = 320
     static let borderColor = Color(nsColor: .separatorColor)
 }
 

@@ -32,14 +32,10 @@ struct MobileGatewaySettingsView: View {
             // After that it stays alive for this app session so a paired
             // phone keeps working after Settings is closed.
             Section(L10n.Settings.MobileGateway.controlSection) {
-                Picker(L10n.Settings.MobileGateway.transportModeLabel, selection: transportModeBinding) {
-                    Text(L10n.Settings.MobileGateway.transportModeRelay).tag(MobileGatewayTransportMode.relay)
-                    Text(L10n.Settings.MobileGateway.transportModeLanGateway).tag(MobileGatewayTransportMode.lanGateway)
-                }
-                .pickerStyle(.segmented)
-                Text(draft.transportMode == .relay
-                     ? L10n.Settings.MobileGateway.transportModeRelayCaption
-                     : L10n.Settings.MobileGateway.transportModeLanGatewayCaption)
+                // 1.195.0-rc22：手机网关固定走互联网中继，且在 App 启动时就
+                // 常驻连接（见 MobileGatewayAutostart）。原本的「互联网中继 /
+                // 局域网」二选一切换已移除；这里只展示中继状态。
+                Text(L10n.Settings.MobileGateway.transportModeRelayCaption)
                     .font(.caption)
                     .foregroundStyle(.secondary)
 
@@ -86,7 +82,7 @@ struct MobileGatewaySettingsView: View {
             // else (IP / port / executable) is diagnostics, tucked behind
             // the advanced toggle below.
             Section(L10n.Settings.MobileGateway.pairingSection) {
-                if let payload = coordinator.pairingPayload,
+                if coordinator.pairingPayload != nil,
                    let qrText = coordinator.pairingQRCodeText {
                     VStack(spacing: 12) {
                         SettingsQRCodeView(
@@ -95,19 +91,12 @@ struct MobileGatewaySettingsView: View {
                             unavailableText: L10n.Settings.MobileGateway.qrUnavailable,
                             pointSize: 220
                         )
-                        Text(coordinator.isRelayMode
-                             ? L10n.Settings.MobileGateway.scanHintRelay
-                             : L10n.Settings.MobileGateway.scanHint)
+                        // Relay 固定模式：token 长期有效，撤销靠轮换房间+token，
+                        // 没有配对倒计时可显示。
+                        Text(L10n.Settings.MobileGateway.scanHintRelay)
                             .font(.caption)
                             .foregroundStyle(.secondary)
                             .multilineTextAlignment(.center)
-                        // Relay tokens are long-lived (rotate to revoke), so
-                        // there's no meaningful pairing-token countdown to show.
-                        if !coordinator.isRelayMode {
-                            LabeledContent(L10n.Settings.MobileGateway.expiresLabel) {
-                                Text(payload.expiresAt, style: .relative)
-                            }
-                        }
                         HStack(spacing: 8) {
                             Button(L10n.Settings.MobileGateway.copyPayloadButton) {
                                 NSPasteboard.general.clearContents()
@@ -116,9 +105,7 @@ struct MobileGatewaySettingsView: View {
                             Button {
                                 Task { await coordinator.rotatePairingPayload() }
                             } label: {
-                                Label(coordinator.isRelayMode
-                                      ? L10n.Settings.MobileGateway.rotateRelayButton
-                                      : L10n.Settings.MobileGateway.refreshPairingButton,
+                                Label(L10n.Settings.MobileGateway.rotateRelayButton,
                                       systemImage: "arrow.clockwise")
                             }
                         }
@@ -239,40 +226,12 @@ struct MobileGatewaySettingsView: View {
             }
 
             Section(L10n.Settings.MobileGateway.devicesSection) {
-                if coordinator.isRelayMode {
-                    // The relay bus authenticates with a single shared room
-                    // token; there's no per-device registry to list or revoke.
-                    Text(L10n.Settings.MobileGateway.devicesRelayNote)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                } else if coordinator.devices.isEmpty {
-                    Text(L10n.Settings.MobileGateway.noDevices)
-                        .foregroundStyle(.secondary)
-                } else {
-                    ForEach(coordinator.devices) { device in
-                        HStack(spacing: 12) {
-                            VStack(alignment: .leading, spacing: 3) {
-                                Text(device.name)
-                                    .font(.headline)
-                                Text(deviceSubtitle(device))
-                                    .font(.caption)
-                                    .foregroundStyle(.secondary)
-                            }
-                            Spacer()
-                            if device.isRevoked {
-                                Text(L10n.Settings.MobileGateway.revoked)
-                                    .font(.caption)
-                                    .foregroundStyle(.secondary)
-                            } else {
-                                Button(role: .destructive) {
-                                    Task { await coordinator.revokeDevice(device) }
-                                } label: {
-                                    Label(L10n.Settings.MobileGateway.revokeButton, systemImage: "xmark.circle")
-                                }
-                            }
-                        }
-                    }
-                }
+                // 中继总线用单一的共享房间 token 认证，没有按设备的注册表可
+                // 列举或吊销 —— 要注销某台手机，去轮换房间+token（上面的按钮），
+                // 所有已配对设备都需重新扫码。
+                Text(L10n.Settings.MobileGateway.devicesRelayNote)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
             }
         }
         .formStyle(.grouped)
@@ -344,23 +303,6 @@ struct MobileGatewaySettingsView: View {
         saveDraft()
     }
 
-    private var transportModeBinding: Binding<MobileGatewayTransportMode> {
-        Binding(
-            get: { draft.transportMode },
-            set: { newMode in
-                guard newMode != draft.transportMode else { return }
-                draft.transportMode = newMode
-                saveDraft()
-                // Restart so the new transport takes over immediately: relay
-                // tears down any Go process; lanGateway launches it.
-                Task {
-                    coordinator.stop()
-                    await coordinator.start()
-                }
-            }
-        )
-    }
-
     private func syncDraftFromCoordinator() {
         draft = coordinator.settings
         portText = String(draft.port)
@@ -369,13 +311,6 @@ struct MobileGatewaySettingsView: View {
     private func startGatewayIfSelected() {
         guard settingsNavigation.selectedTab == .mobileGateway else { return }
         Task { await coordinator.start() }
-    }
-
-    private func deviceSubtitle(_ device: MobileGatewayDevice) -> String {
-        if let lastConnectedAt = device.lastConnectedAt {
-            return L10n.Settings.MobileGateway.lastConnected(lastConnectedAt.formatted(date: .abbreviated, time: .shortened))
-        }
-        return L10n.Settings.MobileGateway.createdAt(device.createdAt.formatted(date: .abbreviated, time: .shortened))
     }
 }
 

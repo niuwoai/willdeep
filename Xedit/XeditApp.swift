@@ -68,6 +68,12 @@ private struct SettingsRootView: View {
                 EditorSettingsView()
                     .environmentObject(appState)
                     .id(ObjectIdentifier(appState))
+                    // 设置窗口是独立 scene，不吃 ContentView 那条
+                    // `.preferredColorScheme`。浅色皮肤（淡雾森林/水墨宣纸）
+                    // 下若系统是 dark，设置窗口仍是深色外观，语义色/材质控件
+                    // 与皮肤浅底冲突、文字看不清。这里让设置窗口也跟随皮肤明暗。
+                    .tint(appState.editorSettings.interfaceSkin.palette.accent)
+                    .preferredColorScheme(appState.editorSettings.interfaceSkin.preferredColorScheme)
             } else {
                 Color.clear
             }

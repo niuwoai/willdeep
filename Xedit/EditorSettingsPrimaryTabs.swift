@@ -528,8 +528,17 @@ private struct InterfaceSkinCard: View {
             .padding(10)
             .frame(maxWidth: .infinity, minHeight: 132, maxHeight: 132, alignment: .topLeading)
             .background(
+                // 卡片自铺一层「不透明」的皮肤窗口底色，再叠半透明 panelFill。
+                // panelFill 是半透明的，若直接画在系统窗口材质上，dark 模式下
+                // 背后的深色会透上来，浅色皮肤（淡雾森林/水墨宣纸）的深色文字
+                // 就糊在暗背景上看不见。先铺不透明底 → 每张卡片都是自成一体的
+                // 皮肤缩影，文字对比度不再受设置窗口系统外观影响。
                 RoundedRectangle(cornerRadius: 8)
-                    .fill(skin.palette.panelFill)
+                    .fill(skin.windowBackground)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 8)
+                            .fill(skin.palette.panelFill)
+                    )
             )
             .overlay(
                 RoundedRectangle(cornerRadius: 8)

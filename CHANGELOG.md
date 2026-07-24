@@ -1,7 +1,129 @@
 # Changelog
 
-> 当前文件保留最新版本（1.195.0-rc20 至 1.109.0-rc340）。
+> 当前文件保留最新版本（1.196.0-rc2 至 1.109.0-rc340）。
 > 更早的 1000 个版本已移至 [CHANGELOG-ARCHIVE.md](CHANGELOG-ARCHIVE.md)。
+
+## 1.196.0-rc2 - 2026-07-24
+
+### Fixed
+
+- 修复 **diff 预览把 `.gocache/` 等隐藏缓存目录整个灌进变更统计**、导致「2514 个文件 / 5487 行超阈值」直接触发降级、把用户真正关心的改动淹没在文件摘要外的问题。根因：`AppStateGitStatus.swift` 的 `loadAgentWorktreeChangeSummary` 用 `git status --porcelain=v1 -uall` 收集变更，`-uall` 会把未被 `.gitignore` 忽略的未跟踪目录（如 `.gocache/`）**递归展开成成百上千个文件**，而收集侧只按变更类型（added/untracked…）过滤，**没有任何按路径/隐藏目录的过滤**。
+- 修法：新增 `AppState.isHiddenCacheWorktreePath(_:)` 与白名单 `hiddenCacheDirectoryNames`（`.gocache`/`.cache`/`.gradle`/`.venv`/`.mypy_cache`/`.pytest_cache`/`.ruff_cache`/`.tox`/`.terraform`/`.next`/`.nuxt`/`.svelte-kit`/`.parcel-cache`/`.turbo`/`.yarn`/`.pnpm-store`/`.sass-cache`/`.dart_tool`），在 `loadAgentWorktreeChangeSummary` 与 `AgentGitReview.loadChanges` 两条收集路径里跳过「路径任意**目录段**命中白名单」的文件。
+- 刻意用**白名单**而非「凡以 `.` 开头的目录一律排除」：`.github`、`.claude`、`.vscode` 这类隐藏目录里放的常是用户真在改的配置，一刀切会误伤；仓库根下以 `.` 开头的**单个文件**（`.gitignore`、`.env`）也不受影响——只按目录段匹配、大小写不敏感。
+- 版本号从 **1.196.0-rc1** 递增为 **1.196.0-rc2**，内部构建号从 **135** 递增为 **136**，Help 与 Computer Use Helper 构建号从 **52** 递增为 **53**；App、Go agent、Help、Helper、浏览器扩展、README、响应头契约与产品文档保持一致。
+
+### Tests
+
+- 新增 `testHiddenCacheWorktreePathFiltering`，锁定「`.gocache`/`.venv`/`.mypy_cache`/`.gradle`/`.next` 等隐藏缓存目录段被排除，`.github`/`.claude`/`.vscode` 及根下 `.gitignore`/`.env` 放行，大小写不敏感，且名为 `.gocache` 的顶层文件不误伤」这一不变量。
+
+## 1.196.0-rc1 - 2026-07-24
+
+### Added
+
+- Agent 聊天历史里**每个已结束的「意图句」后面现在都带一枚成/败回执章**。此前一轮里 Agent 吐出的「让我运行下一个生成器」「让我核实一下 OpenAPI 规范」「让我进行最后一次全面验证」等**过程性意图句**是普通 `.assistant` 正文，turn 一结束被烘焙进 TextKit 历史时，它触发的工具执行结果被系统性抹掉——用户只看到「我要去干 X」，看不到「X 到底干成没干成」，满屏悬而未决、心里没底。
+- 根因：已结束历史里承载工具终态的 `.tool` 结果消息（带 `toolCallStatus` 成/败/拒）在 `AgentChatTranscript` 的 `visibleMessages` 中被整条 `guard` 过滤掉，而意图句上挂的 `toolCalls` 又在 `resultPresentationMessage` 里被 `copy.toolCalls = []` 清空。两道闸门叠加，结果从没进过渲染管线。
+- 修法：`AgentChatTranscript.settledTranscriptMessages` 先从被过滤的 `.tool` 消息里按 `toolCallID` 收集每个调用的终态，注入意图句一个**非持久化的瞬态字段** `AgentMessage.settledToolReceipts`（不进 CodingKeys，零落盘风险）；`AgentChatHistoryRenderer.ToolCallHistoryGroup` 据此计算整组回执 `outcomeBadge`（任一失败/拒绝优先展示，否则全成 `✓ 完成`），由 chrome 渲染器拼在折叠工具组行尾——失败态用醒目红色 + 半粗字重。意图句下面因此恢复了折叠工具组行（默认折叠、点击展开看参数），行尾即 `✓ 完成` / `✗ N 失败` / `✗ N 已拒绝`。
+- 同步修复活动态 `AgentToolCallViews.statusSummary`：此前**全部成功时返回空串**——最该给用户确定感的「工具全干成了」状态在 UI 上竟是什么都不显示，现改为明确的 `✓ 全部完成`；运行中/失败/拒绝各状态也统一加上 `✓`/`✗` 前缀。
+- 缓存正确性：`settledToolReceipts` 纳入 `AgentChatHistoryRenderer` 渲染缓存 key 与 `AgentChatHistoryTextView` 流式热路径指纹，确保工具从 `running → succeeded/failed` 时回执章能即时刷新、不命中旧的无章缓存。
+- 约束：本次只对**当前/新会话**生效（内存态 `.tool` 结果在手）。旧落盘会话虽也持久化了 `toolCallStatus`，本轮不做回填，维持现状。
+- 新增 `AgentToolReceiptRenderingTests`（9 个用例）覆盖 `outcomeBadge` 成/败/拒/混合/空判定、端到端渲染断言 ✓/✗ 出现，以及回执变更触发渲染缓存失效。
+- 版本号从 **1.195.0-rc28** 递增为 **1.196.0-rc1**（feat 提 MINOR 位并重置 rc），内部构建号从 **134** 递增为 **135**，Help 与 Computer Use Helper 构建号从 **51** 递增为 **52**；App、Go agent、Help、Helper、浏览器扩展、README、响应头契约与产品文档保持一致。
+
+## 1.195.0-rc28 - 2026-07-24
+
+### Fixed
+
+- 修复 **dark 模式下「淡雾森林」「水墨宣纸」两个浅色皮肤看不到文字**的问题。根因有二：(1) 设置窗口是独立的 `Settings` scene（`XeditApp.swift` 的 `SettingsRootView`），并**没有**施加 `ContentView` / `AgentWindowRootView` 上那条 `.preferredColorScheme(skin.preferredColorScheme)`——系统处于 dark 时，设置窗口整体仍是深色外观；(2) 皮肤卡片 `InterfaceSkinCard`（`EditorSettingsPrimaryTabs.swift`）的背景用的是**半透明** `panelFill`（如淡雾森林 `Color.white.opacity(0.58)`、水墨宣纸 `opacity(0.52)`），直接画在系统深色窗口材质上时深色透上来，浅色皮肤那套**固定深色**的 `primaryText`（淡雾森林深墨绿、水墨宣纸近黑）就糊在暗背景上、对比度不足看不见。其余皮肤要么本身是深色（文字浅）、要么是 `.system`（跟随系统），所以只有这两个浅色皮肤翻车。
+- 修法一（卡片自兜底）：`InterfaceSkinCard` 背景先铺一层**不透明**的皮肤窗口底色（`skin.windowBackground` 渐变），再叠原来的半透明 `panelFill`。这样每张卡片都是自成一体的皮肤缩影，文字对比度不再受设置窗口系统外观影响。
+- 修法二（设置窗口整体跟随皮肤）：给 `SettingsRootView` 里的 `EditorSettingsView` 补上 `.tint(skin.palette.accent)` 与 `.preferredColorScheme(skin.preferredColorScheme)`，让设置窗口的明暗与所选皮肤一致，从源头消除系统外观与浅色皮肤冲突。
+- 版本号从 **1.195.0-rc27** 递增为 **1.195.0-rc28**，内部构建号从 **133** 递增为 **134**，Help 与 Computer Use Helper 构建号从 **50** 递增为 **51**；App、Go agent、Help、Helper、浏览器扩展、README、响应头契约与产品文档保持一致。
+
+## 1.195.0-rc27 - 2026-07-24
+
+### Fixed
+
+- 修复聊天记录里「本轮进度」卡片**收起态**紧贴上方正文、上下没有间距的问题。此前 `applyProgressBlockVerticalMargins`（`AgentChatHistoryTextView.swift` 的 chrome 渲染）无条件把「首段加 12pt 上边距」和「末段加 10pt 下边距」拆成两次 `paragraphStyle` 写入。展开态卡片是多段落（表头 + 明细行 + 查看完整计划），首段末段分属不同 paragraph，两次写入互不干扰，间距正常；但**收起态整张卡片只有表头一行、只有一个 paragraph**，于是第二次写入的末段样式（`paragraphSpacingBefore` 为默认 0）直接覆盖了第一次的 12pt 上边距，导致卡片顶着上方文字、毫无留白。
+- 现改为参照代码块 / 表格块的处理方式：当卡片首段与末段是同一 paragraph（即收起态）时，把上边距 12pt 与下边距 10pt 合并写进**同一个** `paragraphStyle`，不再互相覆盖；多段落的展开态维持原先的拆分写法。收起、展开两态上下留白现在一致。
+
+### Changed
+
+- 计划模式（Plan / Goal）的**计划卡从对话正文流顶部改为悬浮到右上角**，与「产物 / 媒体 / Dev Server」活动卡竖排共处（`AgentConversationActivityOverlay`），共用同款 `.regularMaterial` 圆角外壳、描边与阴影；**默认收起**，点击卡头在收起 / 展开间切换。此前计划卡平铺在 `AgentChatTranscript` 的 `ScrollView` 顶部，会占布局高度、随消息滚动、并把正文往下挤。
+- 计划卡**收起时贴 214pt**（与其余活动卡同宽、竖排整齐），**展开时放宽到 320pt**，让步骤文本、Approve / Reject / Mark Complete 按钮与 Replan 行不至于挤成一团。完成的计划项仍以绿色对勾（`checkmark.circle.fill`）呈现，步骤状态可点按循环（pending → in_progress → done → skipped）等既有交互不变。
+- `AgentPlanCard` 新增 `floating` 开关：悬浮上下文（对话活动区）去掉原橙色半透明底 / 橙色描边、改用与产物卡一致的 material 外壳；对话内联挂载点已移除，侧栏（`AgentSidePanelPlanView`）仍保留橙色外观不受影响。
+- 展开 / 收起状态改由 `AppState` 上两个一次性触发令牌驱动（`agentPlanOverlayExpandRequestToken` / `agentPlanOverlayCollapseRequestToken`，纯 UI 瞬态、不落盘）：transcript footer 的「查看计划」由原来的 `scrollTo` 定位改为 bump 展开令牌让悬浮卡展开；助手每开新一轮回复时 bump 收起令牌自动折叠计划卡，沿用原「新回合自动收起」行为。
+- 版本号从 **1.195.0-rc26** 递增为 **1.195.0-rc27**，内部构建号从 **132** 递增为 **133**，Help 与 Computer Use Helper 构建号从 **49** 递增为 **50**；App、Go agent、Help、Helper、浏览器扩展、README、响应头契约与产品文档保持一致。
+
+## 1.195.0-rc26 - 2026-07-24
+
+### Fixed
+
+- 修复会话「产物」栏把**所有写盘文件都当成产物**的误判。此前判据完全不看是哪个工具、以何种意图产生：只要一次工具执行后工作目录里「新出现」一个文件、扩展名命中白名单（md/pdf/png/json/zip 等）、且不在 build/cache 目录，就无差别并入 `agentArtifactPaths`——导致 `run_command` 跑测试/脚本顺手落盘的 `.json`/`.txt`、`create_file`/`edit_file`/`apply_patch` 改的源码、乃至 `git checkout` 检出的文件都被错塞进「产物」栏，还挤占了本该属于「工作文件」栏的位置（两栏互斥）。
+- 现改为**只认显式交付物**：给 `refreshGitStatusAfterAgentTool` 增加 `producesArtifacts` 参数，仅当刚跑完的工具属于「显式生成用户交付物」的白名单（`AppState.toolProducesSessionArtifacts`）时，才从目录 diff 里采集新文件作为产物；其余工具（源码编辑、`run_command`、切工作区、委派 CLI 子 Agent 等）照常更新「工作文件」与 worktree 变更，但一律不并入产物栏。
+- 白名单刻意收窄，当前只含真正把交付物写进工作目录的短剧导出工具（`short_drama_export_plan_template`、`short_drama_export_production_package`）。生图/生视频/媒体导入等**不**依赖此路径——它们通过 `AgentMediaTaskRegistry` 显式登记产物并下载到 `~/Downloads/WillDeep-*`（工作目录之外），走的是独立的媒体任务产物通路，不受本次改动影响。
+- 版本号从 **1.195.0-rc25** 递增为 **1.195.0-rc26**，内部构建号从 **131** 递增为 **132**，Help 与 Computer Use Helper 构建号从 **48** 递增为 **49**；App、Go agent、Help、Helper、浏览器扩展、README、响应头契约与产品文档保持一致。
+
+### Tests
+
+- 新增 `toolProducesSessionArtifacts` 白名单测试，锁定「只有短剧导出类工具能从目录 diff 采集产物」这一不变量：验证 `create_file`/`edit_file`/`apply_patch`/`run_command`/`claude_code`/`change_workspace` 以及生图/生视频/媒体任务工具均不进产物栏。
+
+## 1.195.0-rc25 - 2026-07-24
+
+### Changed
+
+- 调整 Agent 授权/确认卡片里 primary（继续 / 允许 / 为本次会话允许）按钮的视觉：从原来的实心填充（`.borderedProminent`）改为 **实线边框、内部不填充颜色** 的描边样式（accent 色 1.5pt 描边 + 透明背景 + accent 色文字）。新增共用的 `AgentApprovalOutlinedButtonStyle`，覆盖三处入口——软性授权通知（`run_command`「继续」等）、双列「命令确认」review 的「允许」、以及对话内紧凑授权条的「为本次会话允许」，风格统一。`AgentApprovalNoticeDescriptor.usesOutlinedApproveAction` 字段保留（仍描述各工具语义、被视觉测试引用），但 primary 渲染不再依赖它——所有 primary 一律走描边样式。
+- 版本号从 **1.195.0-rc24** 递增为 **1.195.0-rc25**，内部构建号从 **130** 递增为 **131**，Help 与 Computer Use Helper 构建号从 **47** 递增为 **48**；App、Go agent、Help、Helper、浏览器扩展、README、响应头契约与产品文档保持一致。
+
+## 1.195.0-rc24 - 2026-07-24
+
+### Fixed
+
+- 修复聊天记录里「图文混发」用户消息的贴合问题：用户同时发送图片和文字时，图片与其下方文字气泡此前几乎贴在一起、缺少呼吸感。现将「图片段落 → 文字气泡」的垂直间距 `userImageToBubbleSpacing` 从 **8pt** 调大到 **14pt**，三条渲染路径（TextKit 段落 `paragraphSpacing`、SwiftUI 遗留路径 `AgentMessageView` 与 `AgentPanelCards` 的 `.padding(.bottom)`）复用同一常量、间距保持一致。
+- 版本号从 **1.195.0-rc23** 递增为 **1.195.0-rc24**，内部构建号从 **129** 递增为 **130**，Help 与 Computer Use Helper 构建号从 **46** 递增为 **47**；App、Go agent、Help、Helper、浏览器扩展、README、响应头契约与产品文档保持一致。
+
+## 1.195.0-rc23 - 2026-07-24
+
+### Changed
+
+- 统一所有对外 HTTP 请求的 client 标识（`User-Agent`）为 `some.im/WillDeep-{version} (macOS)`（如 `some.im/WillDeep-1.195.0-rc23 (macOS)`）：`some.im/` 前缀标明请求来自 some.im 系客户端，版本号便于服务端与反代日志按构建分桶。所有走 `AgentNetworkSupport.applyStandardHeaders` 的请求（含全部 some.im 登录/customer/余额/模型/媒体请求）即时生效。
+- 更新检查请求原本自行拼装同款 UA、未复用中心常量，现改为复用 `AgentNetworkSupport.userAgentHeaderValue`，client 标识全仓库单一事实来源。
+- some.im 的 `client_id`（登录/OAuth 约定的固定标识 `willdeep`）与 OpenRouter 榜单署名 `X-Title` 维持不变，不受本次统一影响。
+- 版本号从 **1.195.0-rc22** 递增为 **1.195.0-rc23**，内部构建号从 **128** 递增为 **129**，Help 与 Computer Use Helper 构建号从 **45** 递增为 **46**；App、Go agent、Help、Helper、浏览器扩展、README、响应头契约与产品文档保持一致。
+
+### Tests
+
+- 新增 client 标识格式测试，锁定 `User-Agent` 为 `some.im/WillDeep-{version} (macOS)`、含运行时版本、不再出现旧的 `WillDeep/{version}` 形态，并验证 `applyStandardHeaders` 确将其写入出站请求。
+
+## 1.195.0-rc22 - 2026-07-24
+
+### Changed
+
+- 手机网关现在固定走互联网中继，并在 App 启动时就自动连接、常驻在线，不再需要打开「设置 → 账户与设备 → 手机网关」才拉起连接——配对过的手机在任何网络下都能连上桌面，显著提升可用性。
+- 「连接方式（互联网中继 / 局域网）」二选一切换及「应用并重启」的模式切换用途已从界面移除；设置页回归纯中继形态，只展示中继状态、配对二维码与轮换按钮。
+- 中继连接改由全局单点（`MobileGatewayAutostart`）维持：无论开多少个编辑器窗口，整个进程只保持一份中继连接，避免多窗口向同一房间重复拨号、重复推送。
+- 任何历史持久化或手动改写的 `lanGateway` 配置在归一化时都会强制回到中继，保证唯一线路不被旧配置污染；局域网（Go 子进程）相关代码保留为 dormant，暂不提供，日后可恢复。
+- 合并 `codex/ui-activity-polish-rc25`：「当前正在做什么」实时状态行补齐 Codex 式宽松兜底（用户参照 Codex 提出）。此前 transcript 底部的扫光动作行只认少数英文阶段动词（Planning/Verifying…），认不出就整行消失——中文 reasoning 或不吐标准状态句的模型全程无实时反馈。现在识别不出阶段动词时，取模型 reasoning 流的最新一行原话（剥 markdown 前缀、超 140 字符截断）作为扫光文本，阶段名记为“思考下一步”；可见回复正文仍不参与状态扫光，composer 状态条同步受益。（该功能原以 rc17/rc19 独立编号提交，合并进 rc22 版本线，原版本号不再单列。）
+
+### Fixed
+
+- 手机网关桌面 peer 新增系统网络路径监听（`NWPathMonitor`）：网络切换或 Mac 睡眠唤醒后，网络路径一旦恢复即立即重连，把「掉线到重新在线」的空窗从最长约 30 秒的指数退避压缩到数秒，无网络事件时仍保留指数退避兜底。
+- 版本号从 **1.195.0-rc21** 递增为 **1.195.0-rc22**，内部构建号从 **127** 递增为 **128**，Help 与 Computer Use Helper 构建号从 **44** 递增为 **45**；App、Go agent、Help、Helper、浏览器扩展、README、响应头契约与产品文档保持一致。
+
+### Tests
+
+- 新增测试锁定：`lanGateway` 配置解码后归一化强制回到 `.relay`，以及经 store 落盘再读回也恒为中继，防止局域网线路被历史配置意外重新激活。
+- 随 `codex/ui-activity-polish-rc25` 合入 `makeLive(fromReasoning:)` 回归（可识别行照常命中语义阶段、中文原话宽松兜底、markdown 剥除、超长截断、空内容拒绝）与实时动作行断言。
+
+## 1.195.0-rc21 - 2026-07-24
+
+### Fixed
+
+- 修复当前回合活动时间流中的“运行命令失败”只能显示为静态摘要、无法点击查看命令和失败原因的问题。
+- 每条失败命令现在都能独立展开，展示完整命令、工作目录、已捕获输出，以及包含退出码与 stderr 的错误信息；若失败命令同时是时间流的折叠入口，首次展开也会保留最近活动上下文。
+- 版本号从 **1.195.0-rc20** 递增为 **1.195.0-rc21**，内部构建号从 **126** 递增为 **127**，Help 与 Computer Use Helper 构建号从 **43** 递增为 **44**；App、Go agent、Help、Helper、浏览器扩展、README、响应头契约与产品文档保持一致。
+
+### Tests
+
+- 新增失败命令详情呈现测试，锁定命令、工作目录、输出和退出原因在时间流详情中可供审计。
 
 ## 1.195.0-rc20 - 2026-07-24
 
