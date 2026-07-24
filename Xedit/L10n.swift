@@ -197,6 +197,14 @@ nonisolated enum L10n {
         static let viewDocumentAction = String(localized: "roundtable.view-document", defaultValue: "View document")
         static let failedNote = String(localized: "roundtable.failed-note", defaultValue: "This discussion ended with an error.")
         static let cancelledNote = String(localized: "roundtable.cancelled-note", defaultValue: "This discussion was cancelled.")
+        static let examplesTitle = String(localized: "roundtable.examples-title", defaultValue: "Try one of these")
+        static let example1 = String(localized: "roundtable.example-1", defaultValue: "Should I quit my job to become an indie developer?")
+        static let example2 = String(localized: "roundtable.example-2", defaultValue: "Should my product use freemium or one-time pricing?")
+        static let example3 = String(localized: "roundtable.example-3", defaultValue: "Is switching to AI engineering at 35 realistic?")
+        static let example4 = String(localized: "roundtable.example-4", defaultValue: "Should I keep renting or buy a home now?")
+
+        /// 主页展示的示例议题(点一下填进输入框)。
+        static let exampleTopics: [String] = [example1, example2, example3, example4]
     }
 
     enum Automation {

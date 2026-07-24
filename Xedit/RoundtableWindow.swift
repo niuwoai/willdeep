@@ -86,6 +86,7 @@ struct RoundtableHomeView: View {
             VStack(alignment: .leading, spacing: 20) {
                 header
                 composer
+                examplesSection
                 historySection
             }
             .padding(24)
@@ -99,8 +100,8 @@ struct RoundtableHomeView: View {
         HStack(alignment: .top) {
             VStack(alignment: .leading, spacing: 6) {
                 HStack(spacing: 10) {
-                    Image(systemName: "person.3.sequence")
-                        .font(.system(size: 22))
+                    Image(systemName: "bubble.left.and.bubble.right")
+                        .font(.system(size: 19))
                         .foregroundStyle(.tint)
                     Text(L10n.Roundtable.windowTitle)
                         .font(.system(size: 20, weight: .semibold))
@@ -154,6 +155,39 @@ struct RoundtableHomeView: View {
         .padding(16)
         .background(RoundedRectangle(cornerRadius: 12).fill(Color(nsColor: .textBackgroundColor)))
         .overlay(RoundedRectangle(cornerRadius: 12).stroke(Color.secondary.opacity(0.18), lineWidth: 1))
+    }
+
+    /// 示例议题:点一下把话题填进输入框(不直接发起,留给用户改)。
+    private var examplesSection: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Label(L10n.Roundtable.examplesTitle, systemImage: "sparkles")
+                .font(.system(size: 12))
+                .foregroundStyle(.secondary)
+            ForEach(L10n.Roundtable.exampleTopics, id: \.self) { example in
+                Button {
+                    topic = example
+                } label: {
+                    HStack(spacing: 8) {
+                        Image(systemName: "text.bubble")
+                            .font(.system(size: 12))
+                            .foregroundStyle(.tint)
+                        Text(example)
+                            .font(.system(size: 13))
+                            .foregroundStyle(.primary)
+                            .lineLimit(1)
+                        Spacer(minLength: 0)
+                        Image(systemName: "arrow.up.left")
+                            .font(.system(size: 10))
+                            .foregroundStyle(.tertiary)
+                    }
+                    .padding(.horizontal, 12).padding(.vertical, 9)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(RoundedRectangle(cornerRadius: 10).fill(Color.secondary.opacity(0.06)))
+                    .overlay(RoundedRectangle(cornerRadius: 10).stroke(Color.secondary.opacity(0.12), lineWidth: 1))
+                }
+                .buttonStyle(.plain)
+            }
+        }
     }
 
     private var historySection: some View {

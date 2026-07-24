@@ -280,7 +280,7 @@ struct AgentSessionsSidebar: View {
             // 专家圆桌:切到嵌入的 .roundtable 目的地(和「已安排」同级,不切主
             // Agent 会话流);嵌入页内还提供「弹出到独立窗口」入口。
             SidebarActionRow(
-                icon: "person.3.sequence",
+                icon: "bubble.left.and.bubble.right",
                 title: L10n.Roundtable.sidebarEntry,
                 shortcut: nil,
                 isSelected: appState.agentPrimaryDestination == .roundtable
