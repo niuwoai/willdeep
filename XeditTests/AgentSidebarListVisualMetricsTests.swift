@@ -24,17 +24,22 @@ struct AgentSidebarListVisualMetricsTests {
         #expect(AgentModelUsageTableLayout.tokensWidth == 120)
         #expect(AgentModelUsageTableLayout.cacheWidth == 56)
         #expect(AgentModelUsageTableLayout.costWidth == 72)
-        #expect(AgentStatsDashboardTypography.body == 13)
+        #expect(AgentStatsDashboardTypography.body == 14)
         #expect(AgentStatsDashboardTypography.sectionTitle == 14)
-        #expect(AgentStatsDashboardTypography.metricValue == 16)
+        #expect(AgentStatsDashboardTypography.metricValue == 15)
+        #expect(AgentStatsDashboardTypography.metricLabel == 13)
+        #expect(AgentStatsDashboardTypography.profileName == 22)
+        #expect(AgentStatsDashboardTypography.profileMeta == 13)
         #expect(AgentStatsDashboardTypography.heroValue == 34)
         #expect(AgentStatsDashboardTypography.heroLabel == 16)
         #expect(AgentStatsDashboardTypography.modelSummaryValue == 24)
         #expect(AgentStatsDashboardTypography.compactBadge == AgentStatsDashboardTypography.body)
-        #expect(AgentStatsDashboardLayout.panelPadding == 18)
-        #expect(AgentStatsDashboardLayout.summaryCornerRadius == 10)
+        #expect(AgentStatsDashboardLayout.panelPadding == 0)
+        #expect(AgentStatsDashboardLayout.profileAvatarSize == 80)
+        #expect(AgentStatsDashboardLayout.summaryCornerRadius == 15)
+        #expect(AgentStatsDashboardLayout.metricStripHeight == 61)
         #expect(AgentStatsDashboardLayout.heatmapCellSize == 8)
-        #expect(AgentStatsDashboardLayout.heatmapCellSpacing == 1.5)
+        #expect(AgentStatsDashboardLayout.heatmapCellSpacing == 3)
         #expect(AgentStatsDashboardLayout.maximumHeatmapWeeks == 52)
     }
 
@@ -235,7 +240,7 @@ struct AgentSidebarListVisualMetricsTests {
         appState.hasLoadedAgentUsageSnapshots = true
         appState.agentUsageSnapshots = typographyUsageSnapshots()
 
-        let size = NSSize(width: 700, height: 650)
+        let size = NSSize(width: 700, height: 780)
         let root = VStack(spacing: 24) {
             AgentChatEmptyState()
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -316,13 +321,13 @@ struct AgentSidebarListVisualMetricsTests {
         appState.hasLoadedAgentUsageSnapshots = true
         appState.agentUsageSnapshots = typographyUsageSnapshots()
 
-        // 608pt outer width minus the 24pt test padding on both sides leaves
-        // the production 560pt dashboard width used by AgentChatEmptyState.
-        let size = NSSize(width: 608, height: 540)
+        // 608pt outer width minus the 20pt test padding on both sides leaves
+        // the production 568pt dashboard width used by AgentChatEmptyState.
+        let size = NSSize(width: 608, height: 740)
         let root = AgentStatsDashboard()
             .environmentObject(appState)
-            .padding(24)
-            .frame(width: size.width, height: size.height)
+            .padding(EdgeInsets(top: 44, leading: 20, bottom: 0, trailing: 20))
+            .frame(width: size.width, height: size.height, alignment: .top)
             .background(appState.editorSettings.interfaceSkin.windowBackground)
             .preferredColorScheme(.light)
         let hostingView = NSHostingView(rootView: root)
@@ -543,7 +548,13 @@ struct AgentSidebarListVisualMetricsTests {
                         role: .assistant,
                         contentCharacterCount: 640 + index * 4,
                         reasoningCharacterCount: 180,
-                        toolCallNames: ["run_command", "apply_patch", "read_file"],
+                        toolCallNames: [
+                            "run_command",
+                            "apply_patch",
+                            "read_file",
+                            "browser_click",
+                            "image_generation",
+                        ],
                         usageTokens: 2_400 + index * 41,
                         promptTokens: 1_500 + index * 23,
                         completionTokens: 900 + index * 18,

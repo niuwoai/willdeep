@@ -971,11 +971,11 @@ struct AgentChatHistoryRendererTests {
             isDark: false,
             baseFontSize: baseFontSize
         )
-        #expect(collapsed.string.contains("已读取 1 个文件 · 已运行 1 条命令"))
+        #expect(collapsed.string.contains("已读取 1 个文件\n"))
+        #expect(collapsed.string.contains("已运行 1 条命令"))
+        #expect(!collapsed.string.contains("已读取 1 个文件 · 已运行 1 条命令"))
         #expect(!collapsed.string.contains("tool  read_file"))
-        let summaryRange = (collapsed.string as NSString).range(
-            of: "已读取 1 个文件 · 已运行 1 条命令"
-        )
+        let summaryRange = (collapsed.string as NSString).range(of: "已读取 1 个文件")
         let summaryFont = try #require(collapsed.attribute(
             .font,
             at: summaryRange.location,
@@ -990,7 +990,8 @@ struct AgentChatHistoryRendererTests {
             expandedToolGroupIDs: [groupID],
             baseFontSize: baseFontSize
         )
-        #expect(expanded.string.contains("已读取 1 个文件 · 已运行 1 条命令"))
+        #expect(expanded.string.contains("已读取 1 个文件\n"))
+        #expect(expanded.string.contains("已运行 1 条命令"))
         #expect(!expanded.string.contains("▾"))
         #expect(expanded.string.contains("tool  run_command  command: ls /Users/rocky/Sites/Teamify && git status --short"))
         #expect(expanded.string.contains("tool  read_file  path: /Users/rocky/Sites/Teamify/README.md"))
@@ -1028,9 +1029,9 @@ struct AgentChatHistoryRendererTests {
         ]
 
         let collapsed = AgentChatHistoryRenderer.render(messages: messages, isDark: false)
-        let summary = "已读取 1 个文件 · 已运行 1 条命令"
-        #expect(collapsed.string.contains(summary))
-        #expect(collapsed.string.components(separatedBy: summary).count - 1 == 1)
+        #expect(collapsed.string.components(separatedBy: "已读取 1 个文件").count - 1 == 1)
+        #expect(collapsed.string.components(separatedBy: "已运行 1 条命令").count - 1 == 1)
+        #expect(!collapsed.string.contains("已读取 1 个文件 · 已运行 1 条命令"))
 
         let groupID = "inline:\(proseID.uuidString):\(followupID.uuidString)"
         let expanded = AgentChatHistoryRenderer.render(
@@ -2013,7 +2014,9 @@ struct AgentChatHistoryRendererTests {
         view.layoutSubtreeIfNeeded()
 
         let bodyRange = (view.string as NSString).range(of: "明白，让我先看下侧边栏终端当前状态。")
-        let summaryRange = (view.string as NSString).range(of: "已执行 4 次终端操作")
+        let summaryRange = (view.string as NSString).range(
+            of: "\u{FFFC}  已执行 4 次终端操作"
+        )
         let bodyGlyphRange = try #require(view.layoutManager?.glyphRange(
             forCharacterRange: bodyRange,
             actualCharacterRange: nil
@@ -2033,6 +2036,94 @@ struct AgentChatHistoryRendererTests {
         #expect(abs(bodyRect.minX - summaryRect.minX) < 0.5)
 
         let outputURL = outputDirectory.appendingPathComponent("implementation.png")
+        let bitmap = try #require(view.bitmapImageRepForCachingDisplay(in: view.bounds))
+        view.cacheDisplay(in: view.bounds, to: bitmap)
+        let png = try #require(bitmap.representation(using: .png, properties: [:]))
+        try png.write(to: outputURL, options: .atomic)
+    }
+
+    @Test
+    @MainActor
+    func rendersIconLedToolActivityTimelineForDesignQA() throws {
+        let outputURL = URL(
+            fileURLWithPath: ProcessInfo.processInfo.environment[
+                "WILLDEEP_TOOL_ACTIVITY_QA_OUTPUT"
+            ] ?? "/tmp/Xedit-tool-activity-timeline-design-qa/implementation.png"
+        )
+        try FileManager.default.createDirectory(
+            at: outputURL.deletingLastPathComponent(),
+            withIntermediateDirectories: true
+        )
+
+        var calls: [AgentMessageToolCall] = []
+        calls += (1...5).map { index in
+            AgentMessageToolCall(
+                externalID: "read-\(index)",
+                toolName: "read_file",
+                argumentsJSON: #"{"path":"Xedit/File-\#(index).swift"}"#
+            )
+        }
+        calls += (1...4).map { index in
+            AgentMessageToolCall(
+                externalID: "directory-\(index)",
+                toolName: "list_directory",
+                argumentsJSON: #"{"path":"Xedit/Section-\#(index)"}"#
+            )
+        }
+        calls += (1...4).map { index in
+            AgentMessageToolCall(
+                externalID: "search-\(index)",
+                toolName: "grep_files",
+                argumentsJSON: #"{"pattern":"activity-\#(index)"}"#
+            )
+        }
+        calls.append(AgentMessageToolCall(
+            externalID: "git-status",
+            toolName: "git_status",
+            argumentsJSON: "{}"
+        ))
+        calls += (1...3).map { index in
+            AgentMessageToolCall(
+                externalID: "command-\(index)",
+                toolName: "run_command",
+                argumentsJSON: #"{"command":"verify-step-\#(index)"}"#
+            )
+        }
+
+        let message = AgentMessage(
+            role: .assistant,
+            content: "我已经核对了工具活动摘要。下面按操作类型分行展示，便于快速扫读当前回合做过什么。",
+            toolCalls: calls
+        )
+        let view = AgentChatHistoryNSTextView()
+        view.drawsBackground = true
+        view.backgroundColor = .white
+        view.textContainerInset = NSSize(width: 18, height: 16)
+        view.textContainer?.lineFragmentPadding = 0
+        view.linkTextAttributes = [
+            .underlineStyle: 0,
+            .cursor: NSCursor.arrow,
+        ]
+        view.frame = NSRect(x: 0, y: 0, width: 684, height: 319)
+        view.textContainer?.size = NSSize(
+            width: 648,
+            height: CGFloat.greatestFiniteMagnitude
+        )
+        view.applyMessages([message], isDark: false, baseFontSize: 14)
+        view.layoutSubtreeIfNeeded()
+
+        let expectedRows = [
+            "已读取 5 个文件",
+            "已浏览 4 个目录",
+            "已搜索代码 4 次",
+            "已查看 Git 状态",
+            "已运行 3 条命令",
+        ]
+        for row in expectedRows {
+            #expect(view.string.contains(row))
+        }
+        #expect(!view.string.contains("已读取 5 个文件 · 已浏览 4 个目录"))
+
         let bitmap = try #require(view.bitmapImageRepForCachingDisplay(in: view.bounds))
         view.cacheDisplay(in: view.bounds, to: bitmap)
         let png = try #require(bitmap.representation(using: .png, properties: [:]))

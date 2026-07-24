@@ -363,19 +363,48 @@ extension AgentChatHistoryRenderer {
         secondaryColor: NSColor
     ) {
         let start = result.length
-        let titleText = AgentChatToolSummaryFormatter.collapsedTitle(for: group.calls)
-        result.append(NSAttributedString(
-            string: titleText,
-            attributes: [
-                // `monoFont` is created from the configured chat body size.
-                // Reuse its point size for the collapsed title so this helper
-                // cannot silently fall back to the old 11pt chrome font.
-                .font: NSFont.systemFont(ofSize: monoFont.pointSize, weight: .medium),
-                .foregroundColor: secondaryColor,
-                .link: "agent-chat-history-tool-group",
-                .agentChatHistoryToolGroupID: group.id,
+        let items = AgentCollapsedToolActivitySummary.items(for: group.calls)
+        let displayItems = items.isEmpty
+            ? [
+                AgentCollapsedToolActivitySummary.Item(
+                    systemImage: "wrench.and.screwdriver",
+                    text: AgentChatToolSummaryFormatter.collapsedTitle(for: group.calls)
+                )
             ]
-        ))
+            : items
+
+        for (index, item) in displayItems.enumerated() {
+            if index > 0 {
+                result.append(NSAttributedString(
+                    string: "\n",
+                    attributes: [.font: monoFont]
+                ))
+            }
+            let rowStart = result.length
+            result.append(symbolAttachmentString(
+                named: item.systemImage,
+                fallback: "•",
+                pointSize: max(11, monoFont.pointSize - 1),
+                color: secondaryColor
+            ))
+            result.append(NSAttributedString(
+                string: "  \(item.text)",
+                attributes: [
+                    // `monoFont` is created from the configured chat body size.
+                    // Reuse its point size so the activity timeline follows
+                    // the user's chat font preference.
+                    .font: NSFont.systemFont(ofSize: monoFont.pointSize, weight: .regular),
+                    .foregroundColor: secondaryColor,
+                ]
+            ))
+            result.addAttributes(
+                [
+                    .link: "agent-chat-history-tool-group",
+                    .agentChatHistoryToolGroupID: group.id,
+                ],
+                range: NSRange(location: rowStart, length: result.length - rowStart)
+            )
+        }
         result.addAttribute(
             .paragraphStyle,
             value: toolGroupHeaderParagraphStyle(),
@@ -823,9 +852,9 @@ extension AgentChatHistoryRenderer {
     private static func toolGroupHeaderParagraphStyle() -> NSParagraphStyle {
         let style = NSMutableParagraphStyle()
         style.alignment = .left
-        style.lineSpacing = 1
+        style.lineSpacing = 3
         style.paragraphSpacingBefore = 2
-        style.paragraphSpacing = 1
+        style.paragraphSpacing = 4
         // Keep the compact activity summary on the same content column as
         // the assistant prose above it. A bespoke 22 pt inset used to place
         // this label 10 pt left of the 32 pt assistant body edge.

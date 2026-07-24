@@ -183,6 +183,11 @@ enum AgentChatToolSummaryFormatter {
 /// live SwiftUI tool group use this formatter so privacy does not depend on
 /// which rendering path happens to be active.
 enum AgentCollapsedToolActivitySummary {
+    struct Item: Equatable {
+        let systemImage: String
+        let text: String
+    }
+
     private struct InputCall {
         let identity: String
         let toolName: String
@@ -205,7 +210,11 @@ enum AgentCollapsedToolActivitySummary {
     ]
 
     static func text(for calls: [AgentMessageToolCall]) -> String? {
-        text(for: calls.map { call in
+        text(for: items(for: calls))
+    }
+
+    static func items(for calls: [AgentMessageToolCall]) -> [Item] {
+        items(for: calls.map { call in
             InputCall(
                 identity: call.externalID,
                 toolName: call.toolName,
@@ -215,7 +224,11 @@ enum AgentCollapsedToolActivitySummary {
     }
 
     static func text(for calls: [AgentToolCall]) -> String? {
-        text(for: calls.map { call in
+        text(for: items(for: calls))
+    }
+
+    static func items(for calls: [AgentToolCall]) -> [Item] {
+        items(for: calls.map { call in
             InputCall(
                 identity: call.id.uuidString,
                 toolName: call.toolName,
@@ -224,8 +237,13 @@ enum AgentCollapsedToolActivitySummary {
         })
     }
 
-    private static func text(for calls: [InputCall]) -> String? {
-        guard !calls.isEmpty else { return nil }
+    private static func text(for items: [Item]) -> String? {
+        guard !items.isEmpty else { return nil }
+        return items.map(\.text).joined(separator: " · ")
+    }
+
+    private static func items(for calls: [InputCall]) -> [Item] {
+        guard !calls.isEmpty else { return [] }
 
         var createdFiles = PathCounter()
         var editedFiles = PathCounter()
@@ -279,39 +297,112 @@ enum AgentCollapsedToolActivitySummary {
             }
         }
 
-        var parts: [String] = []
-        appendCount(createdFiles.count, singular: "生成了 1 个文件", plural: "生成了 %d 个文件", to: &parts)
-        appendCount(editedFiles.count, singular: "修改了 1 个文件", plural: "修改了 %d 个文件", to: &parts)
-        appendCount(readImages.count, singular: "读取了 1 张图片", plural: "读取了 %d 张图片", to: &parts)
-        appendCount(readFiles.count, singular: "已读取 1 个文件", plural: "已读取 %d 个文件", to: &parts)
-        appendCount(listedDirectories.count, singular: "已浏览 1 个目录", plural: "已浏览 %d 个目录", to: &parts)
+        var items: [Item] = []
+        appendCount(
+            createdFiles.count,
+            systemImage: "doc.badge.plus",
+            singular: "生成了 1 个文件",
+            plural: "生成了 %d 个文件",
+            to: &items
+        )
+        appendCount(
+            editedFiles.count,
+            systemImage: "pencil",
+            singular: "修改了 1 个文件",
+            plural: "修改了 %d 个文件",
+            to: &items
+        )
+        appendCount(
+            readImages.count,
+            systemImage: "photo.on.rectangle",
+            singular: "读取了 1 张图片",
+            plural: "读取了 %d 张图片",
+            to: &items
+        )
+        appendCount(
+            readFiles.count,
+            systemImage: "book.pages",
+            singular: "已读取 1 个文件",
+            plural: "已读取 %d 个文件",
+            to: &items
+        )
+        appendCount(
+            listedDirectories.count,
+            systemImage: "folder",
+            singular: "已浏览 1 个目录",
+            plural: "已浏览 %d 个目录",
+            to: &items
+        )
         if searchCount > 0 {
-            parts.append(searchCount == 1 ? "已搜索代码" : "已搜索代码 \(searchCount) 次")
+            items.append(Item(
+                systemImage: "magnifyingglass",
+                text: searchCount == 1 ? "已搜索代码" : "已搜索代码 \(searchCount) 次"
+            ))
         }
         if gitStatusCount > 0 {
-            parts.append(gitStatusCount == 1 ? "已查看 Git 状态" : "已查看 Git 状态 \(gitStatusCount) 次")
+            items.append(Item(
+                systemImage: "arrow.triangle.branch",
+                text: gitStatusCount == 1 ? "已查看 Git 状态" : "已查看 Git 状态 \(gitStatusCount) 次"
+            ))
         }
-        appendCount(commandCount, singular: "已运行 1 条命令", plural: "已运行 %d 条命令", to: &parts)
-        appendCount(terminalOperationCount, singular: "已执行 1 次终端操作", plural: "已执行 %d 次终端操作", to: &parts)
-        appendCount(generatedImageCount, singular: "生成了 1 张图片", plural: "生成了 %d 张图片", to: &parts)
-        appendCount(editedImageCount, singular: "处理了 1 张图片", plural: "处理了 %d 张图片", to: &parts)
-        appendCount(screenshotCount, singular: "截取了 1 张图片", plural: "截取了 %d 张图片", to: &parts)
+        appendCount(
+            commandCount,
+            systemImage: "terminal",
+            singular: "已运行 1 条命令",
+            plural: "已运行 %d 条命令",
+            to: &items
+        )
+        appendCount(
+            terminalOperationCount,
+            systemImage: "terminal",
+            singular: "已执行 1 次终端操作",
+            plural: "已执行 %d 次终端操作",
+            to: &items
+        )
+        appendCount(
+            generatedImageCount,
+            systemImage: "photo.badge.plus",
+            singular: "生成了 1 张图片",
+            plural: "生成了 %d 张图片",
+            to: &items
+        )
+        appendCount(
+            editedImageCount,
+            systemImage: "slider.horizontal.3",
+            singular: "处理了 1 张图片",
+            plural: "处理了 %d 张图片",
+            to: &items
+        )
+        appendCount(
+            screenshotCount,
+            systemImage: "camera",
+            singular: "截取了 1 张图片",
+            plural: "截取了 %d 张图片",
+            to: &items
+        )
 
         if fallbackCallCount > 0 {
             let fallback = "执行了 \(fallbackCallCount) 次工具调用"
-            parts.append(parts.isEmpty ? fallback : "另\(fallback)")
+            items.append(Item(
+                systemImage: "wrench.and.screwdriver",
+                text: items.isEmpty ? fallback : "另\(fallback)"
+            ))
         }
-        return parts.joined(separator: " · ")
+        return items
     }
 
     private static func appendCount(
         _ count: Int,
+        systemImage: String,
         singular: String,
         plural: String,
-        to parts: inout [String]
+        to items: inout [Item]
     ) {
         guard count > 0 else { return }
-        parts.append(count == 1 ? singular : String(format: plural, count))
+        items.append(Item(
+            systemImage: systemImage,
+            text: count == 1 ? singular : String(format: plural, count)
+        ))
     }
 
     private static func argumentsDictionary(from json: String) -> [String: Any] {

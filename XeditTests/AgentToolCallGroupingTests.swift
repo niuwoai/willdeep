@@ -104,6 +104,35 @@ struct AgentToolCallGroupingPresentationTests {
         #expect(presentation.detailCalls(isExpanded: true).map(\.id) == calls.suffix(3).map(\.id))
         #expect(presentation.hasExpandableDetails)
     }
+
+    @Test("settled tool activity exposes one icon-led row per operation family")
+    func settledToolActivityBuildsReadableRows() {
+        let calls = [
+            makeCall("read_file", arguments: ["path": .string("README.md")]),
+            makeCall("read_file", arguments: ["path": .string("CHANGELOG.md")]),
+            makeCall("list_directory", arguments: ["path": .string("Xedit")]),
+            makeCall("grep_files", arguments: ["pattern": .string("Agent")]),
+            makeCall("git_status"),
+            makeCall("run_command", arguments: ["command": .string("git diff --stat")]),
+        ]
+
+        let items = AgentCollapsedToolActivitySummary.items(for: calls)
+
+        #expect(items.map(\.text) == [
+            "已读取 2 个文件",
+            "已浏览 1 个目录",
+            "已搜索代码",
+            "已查看 Git 状态",
+            "已运行 1 条命令",
+        ])
+        #expect(items.map(\.systemImage) == [
+            "book.pages",
+            "folder",
+            "magnifyingglass",
+            "arrow.triangle.branch",
+            "terminal",
+        ])
+    }
 }
 
 extension WillDeepTests {

@@ -1,3 +1,86 @@
+# Design QA：Codex 风格工具活动时间流
+
+## 验收范围
+
+- source visual truth：`/var/folders/np/rjc0y5w52x324x21pv6g33440000gp/T/codex-clipboard-50879e52-cf6e-47f3-9e44-95013e65f1e3.png`（684 × 319 px）。
+- implementation screenshot：`/tmp/Xedit-tool-activity-timeline-design-qa/implementation.png`（684 × 319 pt，Retina 2×）。
+- 同尺寸实现图：`/tmp/Xedit-tool-activity-timeline-design-qa/implementation-684x319.png`（684 × 319 px）。
+- 同画布对比：`/tmp/Xedit-tool-activity-timeline-design-qa/comparison.png`（1368 × 319 px；左侧 Codex，右侧 WillDeep）。
+- state：浅色背景、14pt 聊天字号、已结束 assistant 回合；样例含读取 5 个文件、浏览 4 个目录、搜索代码 4 次、查看 Git 状态和运行 3 条命令。
+
+## 修正记录
+
+1. 已结束回合的工具摘要从点号分隔的单行长句改为逐操作族分行展示，解决窄聊天列中信息拥挤、无法快速扫读的问题。
+2. 每行使用语义化 SF Symbols，图标、常规字重次要文字和正文列左边界保持一致；行距与段后距形成稳定的轻量时间流。
+3. 点击任一活动行继续展开同一工具组的原始详情；折叠态仍只显示聚合计数，不暴露文件路径、搜索词和命令正文。
+4. 第一轮回归发现旧对齐测试仍以纯文字左边界为锚点，已改为用“图标 + 文字”完整行对齐助手正文；最终生产截图无裁切或基线漂移。
+5. 最终轮将活动文字从中等字重调为常规字重，并把生产快照改为参考图原始 684 × 319 视口后完成同画布复核。
+
+## Required Fidelity Surfaces
+
+- Fonts and typography：活动文字使用聊天正文同字号的系统常规字重，灰阶弱于助手正文；计数与现有聚合文案保持一致。
+- Spacing and layout rhythm：每个操作族独占一行，图标与文字基线稳定，整体沿用 WillDeep 助手正文列宽和内边距。
+- Colors and visual tokens：图标与文字共用系统 secondary label 颜色，不新增硬编码产品色；浅色背景继续服从现有聊天皮肤。
+- Image quality and asset fidelity：图标全部来自原生 SF Symbols；生产 TextKit Retina 截图按 2× 精确缩放到参考尺寸，没有拉伸或替代资产。
+- Copy and content：沿用现有工具聚合文案与隐私规则；没有新增对外固定文案，也没有把路径、搜索条件或命令写进折叠态。
+
+## Findings
+
+同画布对比确认：参考与实现都使用“语义图标 + 低对比活动文字”的逐行结构，主要操作能够按行快速扫描；实现保留 WillDeep 既有的 32pt 助手正文列缩进、已处理状态和回合尾部操作，这是产品现有聊天框架，不属于本次摘要结构偏差。当前没有未解决的 P0、P1 或 P2 视觉差异。
+
+## 验证
+
+- `AgentChatHistoryRendererTests` 与 `AgentToolCallGroupingPresentationTests`：83 项通过，覆盖分行语义、图标映射、折叠/展开、隐私、正文对齐和生产截图。
+- 参考图与实现图已在同一 1368 × 319 px 画布中以原始尺寸打开检查。
+- `ruby scripts/version_consistency.rb` 与 `git diff --check` 通过，当前版本为 `1.195.0-rc16` / Build 122。
+- 本次涉及的 Swift 文件均低于 3000 行；仓库级复杂度巡检仍报告既有 `Xedit/L10n.swift` 为 3021 行，该文件不在本次工具摘要改动范围。
+
+final result: passed
+
+---
+
+# Design QA：Codex 新聊天个人信息卡
+
+## 验收范围
+
+- source visual truth：`/var/folders/np/rjc0y5w52x324x21pv6g33440000gp/T/codex-clipboard-6dc8680f-e0e0-4b18-ae96-b67fa9be1881.png`（584 × 740 px）。
+- implementation screenshot：`artifacts/design-qa/codex-profile-card/implementation-pass2.png`（608 × 740 pt，Retina 2×）。
+- 同尺寸实现图：`artifacts/design-qa/codex-profile-card/implementation-pass2-normalized.png`（584 × 740 px）。
+- 同画布对比：`artifacts/design-qa/codex-profile-card/comparison-pass2.png`（1168 × 740 px；左侧 Codex，右侧 WillDeep）。
+- state：Rice Paper 浅色皮肤、简体中文、固定用量测试数据、每日 Token 活动、未登录头像回退态。生产环境会读取真实 some.im 头像、账号与套餐。
+
+## 修正记录
+
+1. 新聊天页改为单张无外框的个人信息卡，按参考图复刻头像、姓名、账号、套餐、五项指标、Token 热力图、活动洞察与常用插件。
+2. 指标条使用 568pt 宽度、61pt 高度、15pt 圆角和五等分结构；头像为 80pt，整体顶部与参考图保持 44pt 节奏。
+3. Token 活动采用 52 周 × 7 天热力图，并提供每日、每周、累计三种可操作模式；月份标签按 12 个月均匀排布。
+4. 活动洞察与常用插件均显示五行真实统计；图标使用 SF Symbols 和既有能力映射，数据为空时保留本地化空态。
+5. 点击累计 Token 可进入原有模型用量详情，并提供返回入口，因此复刻新卡片没有丢失旧功能。
+6. 第一轮对比发现热力图偏窄、底部行距偏密、插件样例不足；第二轮已将格子间距、内容宽度、详情行距和五行数据校准。
+
+## Required Fidelity Surfaces
+
+- Fonts and typography：头像、姓名、账号、指标、标题和详情字号层级与参考一致；所有新增文案均进入英中 i18n。
+- Spacing and layout rhythm：头像顶部、指标条、热力图、月份与底部双栏的主锚点误差控制在约 0–2pt。
+- Colors and visual tokens：金色头像与蓝色热力图复刻参考；背景、细线和次级文字继续读取当前 Rice Paper 皮肤 token。
+- Image quality and asset fidelity：生产态优先加载真实账号头像，失败时使用姓名首字母回退；插件图标来自系统 SF Symbols，没有伪造图片资产。
+- Copy and content：标签与参考图一致，数值全部来自实际会话、Token、推理、工具调用和连续活跃数据。
+
+## Findings
+
+第二轮同画布比对确认，头像、五项指标条、Token 标题与控制、52 周网格、月份轴、活动洞察及五行插件列表已在同一 584 × 740 视口内对齐。WillDeep 保留用户当前选择的 Rice Paper 米色背景，而参考图为纯白背景；这是现有皮肤约束，不属于结构偏差。个人身份与用量数值不同来自真实数据源，不应硬编码成截图内容。当前没有未解决的 P0、P1 或 P2 视觉差异。
+
+## 验证
+
+- `AgentSidebarListVisualMetricsTests`：12 项通过，包含生产新聊天信息卡截图。
+- `TestMobileGatewayHealthIncludesVersionHeaders`：通过，确认服务端响应头与当前版本一致。
+- 参考图与实现图已放入同一 1168 × 740 px 画布，并以原始尺寸打开检查；单卡本身足够紧凑且全部文本可读，无需额外局部裁图。
+- 版本、变更记录和产品概览已同步至 `1.195.0-rc15` / Build 121。
+
+final result: passed
+
+---
+
 # Design QA：重复“思考中”状态收口
 
 ## 验收范围
