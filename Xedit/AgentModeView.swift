@@ -163,6 +163,8 @@ struct AgentModeView: View {
             VStack(spacing: 0) {
                 if appState.agentPrimaryDestination == .scheduledTasks {
                     AgentScheduledTasksPage()
+                } else if appState.agentPrimaryDestination == .roundtable {
+                    RoundtableEmbeddedView()
                 } else {
                     AgentChatHeader(
                         sidePanel: sidePanelBinding,

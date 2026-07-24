@@ -2,9 +2,11 @@
 //  RoundtableWindow.swift
 //  WillDeep
 //
-//  专家圆桌独立窗口的三个视图:主页(发起/历史)、讨论中(气泡+态势看板)、
-//  文档(终稿+导出)。照 AgentWindowRootView 的范式从 EditorAppStateRegistry
-//  取 AppState,不自建、不 attach registry。
+//  专家圆桌的三个视图:主页(发起/历史)、讨论中(气泡+态势看板)、文档(终稿
+//  +导出)。同一套视图既能装进独立窗口(RoundtableWindowRootView,从
+//  EditorAppStateRegistry 取 AppState),也能嵌入主窗口的 .roundtable 目的地
+//  (RoundtableEmbeddedView,直接用环境里的 AppState)。所以导航栏用「页内
+//  chrome」而不是 `.toolbar` —— 后者在嵌入宿主里会挂到主窗口工具栏上。
 //
 
 import SwiftUI
@@ -17,7 +19,25 @@ enum RoundtableRoute: Equatable {
     case document(runtimeID: UUID, reportID: UUID)
 }
 
-// MARK: - 根视图
+/// 三个页面的共享路由器。宿主(独立窗口 / 嵌入页)各自持有 route 状态,把
+/// 「弹出到独立窗口」的动作(仅嵌入宿主提供)通过 onDetach 传进主页。
+struct RoundtableRouter: View {
+    @Binding var route: RoundtableRoute
+    var onDetach: (() -> Void)?
+
+    var body: some View {
+        switch route {
+        case .home:
+            RoundtableHomeView(route: $route, onDetach: onDetach)
+        case let .discussion(runtimeID, reportID):
+            RoundtableDiscussionView(route: $route, runtimeID: runtimeID, reportID: reportID)
+        case let .document(runtimeID, reportID):
+            RoundtableDocumentView(route: $route, runtimeID: runtimeID, reportID: reportID)
+        }
+    }
+}
+
+// MARK: - 独立窗口宿主
 
 struct RoundtableWindowRootView: View {
     @ObservedObject private var registry = EditorAppStateRegistry.shared
@@ -26,7 +46,7 @@ struct RoundtableWindowRootView: View {
     var body: some View {
         Group {
             if let appState = registry.current {
-                content(appState: appState)
+                RoundtableRouter(route: $route)
                     .environmentObject(appState)
                     .tint(appState.editorSettings.interfaceSkin.palette.accent)
                     .preferredColorScheme(appState.editorSettings.interfaceSkin.preferredColorScheme)
@@ -36,17 +56,19 @@ struct RoundtableWindowRootView: View {
         }
         .frame(minWidth: 720, minHeight: 520)
     }
+}
 
-    @ViewBuilder
-    private func content(appState: AppState) -> some View {
-        switch route {
-        case .home:
-            RoundtableHomeView(route: $route)
-        case let .discussion(runtimeID, reportID):
-            RoundtableDiscussionView(route: $route, runtimeID: runtimeID, reportID: reportID)
-        case let .document(runtimeID, reportID):
-            RoundtableDocumentView(route: $route, runtimeID: runtimeID, reportID: reportID)
-        }
+// MARK: - 嵌入主窗口宿主(.roundtable 目的地)
+
+struct RoundtableEmbeddedView: View {
+    @Environment(\.openWindow) private var openWindow
+    @State private var route: RoundtableRoute = .home
+
+    var body: some View {
+        RoundtableRouter(route: $route, onDetach: {
+            openWindow(id: RoundtableWindowID.value)
+        })
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 }
 
@@ -55,6 +77,7 @@ struct RoundtableWindowRootView: View {
 struct RoundtableHomeView: View {
     @EnvironmentObject var appState: AppState
     @Binding var route: RoundtableRoute
+    var onDetach: (() -> Void)?
     @State private var topic: String = ""
     @State private var history: [AgentRoundtableReport] = []
 
@@ -73,17 +96,29 @@ struct RoundtableHomeView: View {
     }
 
     private var header: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            HStack(spacing: 10) {
-                Image(systemName: "person.3.sequence")
-                    .font(.system(size: 22))
-                    .foregroundStyle(.tint)
-                Text(L10n.Roundtable.windowTitle)
-                    .font(.system(size: 20, weight: .semibold))
+        HStack(alignment: .top) {
+            VStack(alignment: .leading, spacing: 6) {
+                HStack(spacing: 10) {
+                    Image(systemName: "person.3.sequence")
+                        .font(.system(size: 22))
+                        .foregroundStyle(.tint)
+                    Text(L10n.Roundtable.windowTitle)
+                        .font(.system(size: 20, weight: .semibold))
+                }
+                Text(L10n.Roundtable.homeTagline)
+                    .font(.system(size: 13))
+                    .foregroundStyle(.secondary)
             }
-            Text(L10n.Roundtable.homeTagline)
-                .font(.system(size: 13))
+            Spacer(minLength: 0)
+            if let onDetach {
+                Button(action: onDetach) {
+                    Label(L10n.Roundtable.detachAction, systemImage: "macwindow.on.rectangle")
+                        .font(.system(size: 12))
+                }
+                .buttonStyle(.plain)
                 .foregroundStyle(.secondary)
+                .help(L10n.Roundtable.detachAction)
+            }
         }
     }
 
@@ -222,6 +257,8 @@ private struct RoundtableHistoryRow: View {
             badge(L10n.Roundtable.statusConverged, .green)
         case .failed, .cancelled:
             badge(L10n.Roundtable.statusFailed, .red)
+        case .awaitingUser:
+            badge(L10n.Roundtable.statusAwaiting, .orange)
         default:
             badge(L10n.Roundtable.statusRunning, .orange)
         }
@@ -250,21 +287,25 @@ struct RoundtableDiscussionView: View {
         appState.workflowReport(id: reportID, runtimeID: runtimeID)?.roundtable
     }
 
+    private var phase: AgentRoundtableReport.Phase? { report?.phase }
+    private var isAwaiting: Bool { phase == .awaitingUser }
+    private var isTerminal: Bool {
+        phase == .completed || phase == .failed || phase == .cancelled
+    }
+
+    /// 暂停等答复时,发起反问的那条专家消息(即最后一条消息)携带的可点选项。
+    private var awaitingOptions: [String] {
+        guard isAwaiting else { return [] }
+        return report?.messages.last(where: { ($0.pendingUserOptions?.isEmpty == false) })?
+            .pendingUserOptions ?? []
+    }
+
     var body: some View {
         HStack(spacing: 0) {
             conversation
             Divider()
             RoundtableDashboard(report: report)
                 .frame(width: 240)
-        }
-        .toolbar {
-            ToolbarItem(placement: .navigation) {
-                Button {
-                    route = .home
-                } label: {
-                    Label(L10n.Roundtable.backAction, systemImage: "chevron.left")
-                }
-            }
         }
     }
 
@@ -287,7 +328,15 @@ struct RoundtableDiscussionView: View {
     }
 
     private var header: some View {
-        HStack {
+        HStack(spacing: 10) {
+            Button {
+                route = .home
+            } label: {
+                Label(L10n.Roundtable.backAction, systemImage: "chevron.left")
+                    .labelStyle(.iconOnly)
+                    .font(.system(size: 14, weight: .medium))
+            }
+            .buttonStyle(.plain)
             Text(report?.displayTitle ?? "")
                 .font(.system(size: 15, weight: .medium))
                 .lineLimit(1)
@@ -303,33 +352,80 @@ struct RoundtableDiscussionView: View {
         .padding(.horizontal, 16).padding(.vertical, 10)
     }
 
+    @ViewBuilder
     private var footer: some View {
-        VStack(spacing: 8) {
-            HStack(spacing: 8) {
-                TextField(L10n.Roundtable.hostPlaceholder, text: $hostInput)
-                    .textFieldStyle(.plain)
-                    .padding(.horizontal, 10).padding(.vertical, 8)
-                    .background(RoundedRectangle(cornerRadius: 8).fill(Color(nsColor: .textBackgroundColor)))
-                Button(L10n.Roundtable.sendAction, action: sendHost)
-                    .buttonStyle(.borderedProminent)
-                    .disabled(hostInput.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-            }
-            if report?.phase == .completed || report?.converged == true {
+        VStack(alignment: .leading, spacing: 8) {
+            switch phase {
+            case .completed:
                 Button {
                     route = .document(runtimeID: runtimeID, reportID: reportID)
                 } label: {
-                    Label(L10n.Roundtable.convergedHint, systemImage: "checkmark.seal")
-                        .font(.system(size: 12))
+                    Label(L10n.Roundtable.viewDocumentAction, systemImage: "doc.text")
+                        .font(.system(size: 13, weight: .medium))
                 }
-                .buttonStyle(.plain)
-                .foregroundStyle(.green)
+                .buttonStyle(.borderedProminent)
+            case .failed:
+                Label(L10n.Roundtable.failedNote, systemImage: "exclamationmark.triangle")
+                    .font(.system(size: 12))
+                    .foregroundStyle(.red)
+            case .cancelled:
+                Label(L10n.Roundtable.cancelledNote, systemImage: "stop.circle")
+                    .font(.system(size: 12))
+                    .foregroundStyle(.secondary)
+            default:
+                if isAwaiting {
+                    awaitingBanner
+                }
+                inputRow
             }
         }
         .padding(.horizontal, 16).padding(.vertical, 10)
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
-    private func sendHost() {
-        appState.appendRoundtableUserMessage(runtimeID: runtimeID, reportID: reportID, content: hostInput)
+    private var awaitingBanner: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Label(L10n.Roundtable.awaitingBanner, systemImage: "hand.raised")
+                .font(.system(size: 12, weight: .medium))
+                .foregroundStyle(.orange)
+            if !awaitingOptions.isEmpty {
+                VStack(alignment: .leading, spacing: 6) {
+                    ForEach(Array(awaitingOptions.enumerated()), id: \.offset) { _, option in
+                        Button {
+                            send(option)
+                        } label: {
+                            Text(option)
+                                .font(.system(size: 12))
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .padding(.horizontal, 10).padding(.vertical, 7)
+                                .background(RoundedRectangle(cornerRadius: 8).fill(Color.orange.opacity(0.10)))
+                                .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.orange.opacity(0.35), lineWidth: 1))
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+            }
+        }
+    }
+
+    private var inputRow: some View {
+        HStack(spacing: 8) {
+            TextField(isAwaiting ? L10n.Roundtable.answerPlaceholder : L10n.Roundtable.hostPlaceholder,
+                      text: $hostInput)
+                .textFieldStyle(.plain)
+                .padding(.horizontal, 10).padding(.vertical, 8)
+                .background(RoundedRectangle(cornerRadius: 8).fill(Color(nsColor: .textBackgroundColor)))
+                .onSubmit { send(hostInput) }
+            Button(L10n.Roundtable.sendAction) { send(hostInput) }
+                .buttonStyle(.borderedProminent)
+                .disabled(hostInput.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+        }
+    }
+
+    private func send(_ content: String) {
+        let trimmed = content.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty, !isTerminal else { return }
+        appState.submitRoundtableUserReply(runtimeID: runtimeID, reportID: reportID, content: trimmed)
         hostInput = ""
     }
 }
@@ -482,35 +578,48 @@ struct RoundtableDocumentView: View {
     }
 
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 16) {
-                if let document = report?.finalDocument, !document.isEmpty {
-                    Text(LocalizedStringKey(document))
-                        .font(.system(size: 14))
-                        .textSelection(.enabled)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                } else {
-                    Text(L10n.Roundtable.statusRunning)
-                        .foregroundStyle(.secondary)
+        VStack(spacing: 0) {
+            chrome
+            Divider()
+            ScrollView {
+                VStack(alignment: .leading, spacing: 10) {
+                    if let document = report?.finalDocument, !document.isEmpty {
+                        ForEach(Array(MarkdownPreviewParser.blocks(from: document).enumerated()), id: \.offset) { _, block in
+                            MarkdownPreviewBlockView(block: block)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                        }
+                    } else {
+                        Text(L10n.Roundtable.statusRunning)
+                            .foregroundStyle(.secondary)
+                    }
                 }
-            }
-            .padding(24)
-            .frame(maxWidth: 720, alignment: .leading)
-            .frame(maxWidth: .infinity)
-        }
-        .toolbar {
-            ToolbarItem(placement: .navigation) {
-                Button { route = .home } label: {
-                    Label(L10n.Roundtable.backAction, systemImage: "chevron.left")
-                }
-            }
-            ToolbarItem(placement: .primaryAction) {
-                Button(action: export) {
-                    Label(L10n.Roundtable.exportAction, systemImage: "square.and.arrow.down")
-                }
-                .disabled((report?.finalDocument ?? "").isEmpty)
+                .padding(24)
+                .frame(maxWidth: 720, alignment: .leading)
+                .frame(maxWidth: .infinity)
             }
         }
+    }
+
+    private var chrome: some View {
+        HStack(spacing: 10) {
+            Button { route = .home } label: {
+                Label(L10n.Roundtable.backAction, systemImage: "chevron.left")
+                    .labelStyle(.iconOnly)
+                    .font(.system(size: 14, weight: .medium))
+            }
+            .buttonStyle(.plain)
+            Text(report?.displayTitle ?? "")
+                .font(.system(size: 15, weight: .medium))
+                .lineLimit(1)
+            Spacer()
+            Button(action: export) {
+                Label(L10n.Roundtable.exportAction, systemImage: "square.and.arrow.down")
+                    .font(.system(size: 13))
+            }
+            .buttonStyle(.bordered)
+            .disabled((report?.finalDocument ?? "").isEmpty)
+        }
+        .padding(.horizontal, 16).padding(.vertical, 10)
     }
 
     private func export() {

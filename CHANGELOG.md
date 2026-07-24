@@ -1,7 +1,25 @@
 # Changelog
 
-> 当前文件保留最新版本（1.197.0-rc1 至 1.109.0-rc340）。
+> 当前文件保留最新版本（1.198.0-rc1 至 1.109.0-rc340）。
 > 更早的 1000 个版本已移至 [CHANGELOG-ARCHIVE.md](CHANGELOG-ARCHIVE.md)。
+
+## 1.198.0-rc1 - 2026-07-24
+
+### Added
+
+- **专家圆桌·交互追问闭环**：专家在讨论中判断「缺关键信息、不问主持人就没法给有价值意见」时，可以发起一次反问——讨论**暂停**到「等你答复」（`.awaitingUser`），右下角气泡下方弹出橙色横幅与 2-3 个可点选项，你点选项或自由作答后讨论**自动续跑**。专家发言结构化输出新增 `needsUserInput` / `userOptions` 两个字段驱动这条闭环，并在 prompt 里明确「信息足够时不要滥用反问打断讨论」。
+- **可暂停/续跑的编排引擎**：`AgentRoundtableEngine.run()` 改为返回 `awaitingUser` / `completed` 两态，推荐专家、导播开场、逐轮发言、轮末小结、终稿五个阶段**全部按落盘状态幂等**——续跑时跳过已开场/已发言的专家与已出小结的轮次，只补剩下的，绝不重复已完成的阶段，也不会拿失败噪声重跑。答复后由 `submitRoundtableUserReply` 重启一次驱动接着往下跑。
+- **应用内嵌入入口**：侧边栏「专家圆桌」不再只能开独立窗口，改为切到与「已安排」同级的嵌入目的地（`AgentPrimaryDestination.roundtable`），在主窗口内直接讨论；嵌入页仍不干扰主 Agent 会话流。嵌入页主页右上角提供「弹出到独立窗口」按钮，两个宿主共享同一份 AppState 与讨论状态。为兼容两种宿主，讨论/文档页的返回、导出改为「页内 chrome」而非 `.toolbar`。
+
+### Changed
+
+- 圆桌**终稿文档**从占位式 `LocalizedStringKey` 拼接改为复用编辑器的 `MarkdownPreviewParser` + `MarkdownPreviewBlockView` **真渲染**：二级标题、列表、表格、代码块与编辑器视觉一致。
+- 讨论页 **footer 按阶段区分**：讨论中/等答复显示输入框（占位随阶段切换），收敛后只留「查看文档」按钮，失败/取消显示对应说明，不再让输入框在已结束的讨论上空转。
+- 版本号从 **1.197.0-rc1** 递增为 **1.198.0-rc1**（feat 提 MINOR 位并重置 rc），内部构建号从 **139** 递增为 **140**，Help 与 Computer Use Helper 构建号从 **56** 递增为 **57**；App、Go agent、Help、Helper、浏览器扩展、README、响应头契约与产品文档保持一致。
+
+### Tests
+
+- `AgentRoundtableTests` 新增 3 个用例（共 17 个）：无 `needsUserInput` 时不发起反问、带选项时过滤空白选项、`needsUserInput` 为 true 但无选项时按「自由作答」处理，锁定交互追问闭环的结构化解析不变量。
 
 ## 1.197.0-rc1 - 2026-07-24
 

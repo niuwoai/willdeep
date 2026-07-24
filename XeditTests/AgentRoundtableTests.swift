@@ -105,6 +105,33 @@ struct AgentRoundtableTests {
         #expect(osr.suggestion == "建议")
     }
 
+    // MARK: - 专家反问(交互追问闭环)
+
+    @Test("expert payload without needsUserInput does not ask user")
+    func testDefaultDoesNotAskUser() {
+        let payload = RoundtableExpertPayload(topic: "议题", stance: "support", arguments: nil, suggestion: nil, speaking: "常规发言")
+        #expect(payload.asksUser == false)
+        #expect(payload.resolvedUserOptions.isEmpty)
+    }
+
+    @Test("expert payload with needsUserInput asks user and parses options")
+    func testAsksUserWithOptions() {
+        let raw = #"{"topic":"预算","stance":"undecided","speaking":"你打算投入多少?","needsUserInput":true,"userOptions":["10万以内","10-50万","","  "]}"#
+        let payload = AgentRoundtableEngine.decodeExpert(raw)
+        #expect(payload != nil)
+        #expect(payload?.asksUser == true)
+        // 空白选项被过滤。
+        #expect(payload?.resolvedUserOptions == ["10万以内", "10-50万"])
+    }
+
+    @Test("needsUserInput true with no options still asks user (free-form answer)")
+    func testAsksUserWithoutOptions() {
+        let raw = #"{"topic":"方向","stance":"neutral","speaking":"能说说你的真实目标吗?","needsUserInput":true}"#
+        let payload = AgentRoundtableEngine.decodeExpert(raw)
+        #expect(payload?.asksUser == true)
+        #expect(payload?.resolvedUserOptions.isEmpty == true)
+    }
+
     // MARK: - 推荐 payload
 
     @Test("recommendation resolves valid roles and dedupes")

@@ -56,15 +56,24 @@ final class AgentRoundtableEngine {
 
     // MARK: - 主流程
 
-    /// 从议题开始跑到收敛出文档。返回终稿 Markdown。
-    func run() async throws -> String {
-        try await recommendAndOpen()
-        try await discussUntilConverged()
-        return try await synthesize()
+    /// 单次驱动的结果:要么在专家反问处暂停等主持人答复,要么收敛出终稿。
+    enum RunResult: Equatable {
+        case awaitingUser
+        case completed(String)
     }
 
-    /// 推荐专家 + 导播开场。若已推荐过(用户手动改过专家)则跳过推荐。
-    private func recommendAndOpen() async throws {
+    /// 从当前状态往下推进到下一个暂停点或终稿。每个阶段都按落盘状态幂等,
+    /// 支持「专家反问 → 暂停 → 主持人答复 → 续跑」反复驱动同一场圆桌。
+    func run() async throws -> RunResult {
+        try await ensureRecommendedAndOpened()
+        if try await discuss() == .awaitingUser {
+            return .awaitingUser
+        }
+        return .completed(try await synthesize())
+    }
+
+    /// 推荐专家 + 导播开场,均幂等:已推荐/已开场则跳过(续跑不重复)。
+    private func ensureRecommendedAndOpened() async throws {
         var report = try requireReport()
 
         if report.experts.isEmpty {
@@ -81,39 +90,54 @@ final class AgentRoundtableEngine {
             throw AgentRoundtableError.recommendationFailed
         }
 
-        setPhase(.opening)
-        let opening = try await runChair(
-            AgentRoundtablePromptBuilder.opening(topic: report.topic, experts: report.experts)
-        )
-        appendMessage(.init(speaker: .chair, round: 0, content: opening))
+        // 开场只做一次:round 0 的导播消息已存在则跳过。
+        if !hasChairMessage(round: 0) {
+            setPhase(.opening)
+            let opening = try await runChair(
+                AgentRoundtablePromptBuilder.opening(topic: report.topic, experts: report.experts)
+            )
+            appendMessage(.init(speaker: .chair, round: 0, content: opening))
+        }
     }
 
-    /// 多轮讨论,每轮末让导播判断收敛。收敛或达轮数上限即停。
-    private func discussUntilConverged() async throws {
-        var totalExpertTurns = 0
+    private enum DiscussOutcome { case awaitingUser, finished }
+
+    /// 多轮讨论,可从任意暂停点续跑。收敛或达轮数上限即结束;专家反问则
+    /// 暂停到 .awaitingUser 等主持人答复。
+    private func discuss() async throws -> DiscussOutcome {
+        if try requireReport().converged { return .finished }
+
         for round in 1...AgentRoundtableReport.maxRounds {
             try Task.checkCancellation()
+            // 已出过轮末小结的轮次 = 已完整处理,续跑时跳过。
+            if hasChairMessage(round: round) { continue }
+
             let report = try requireReport()
             mutate {
                 $0.phase = .discussing
                 $0.currentRound = round
             }
 
-            var successThisRound = 0
-            for role in report.experts {
+            // 本轮已发言(含失败)的专家不再重复;续跑时只补剩下的。
+            let spoken = spokenRoles(inRound: round)
+            for role in report.experts where !spoken.contains(role) {
                 try Task.checkCancellation()
                 let transcript = AgentRoundtablePromptBuilder.transcript(currentMessages())
                 do {
                     let payload = try await runExpert(topic: report.topic, role: role, round: round, transcript: transcript)
-                    totalExpertTurns += 1
-                    successThisRound += 1
                     appendMessage(.init(
                         speaker: .expert,
                         role: role,
                         round: round,
                         content: payload.speaking,
-                        osr: payload.toOSR()
+                        osr: payload.toOSR(),
+                        pendingUserOptions: payload.asksUser ? payload.resolvedUserOptions : nil
                     ))
+                    // 专家发起反问:暂停讨论,交回给主持人答复后再续跑。
+                    if payload.asksUser {
+                        setPhase(.awaitingUser)
+                        return .awaitingUser
+                    }
                 } catch is CancellationError {
                     throw CancellationError()
                 } catch {
@@ -128,7 +152,7 @@ final class AgentRoundtableEngine {
             }
 
             // 本轮全败保护(照会诊):不让终稿基于失败噪声下结论。
-            if successThisRound == 0 {
+            if successfulExpertCount(inRound: round) == 0 {
                 throw AgentRoundtableError.allExpertsFailed
             }
 
@@ -144,12 +168,16 @@ final class AgentRoundtableEngine {
                 break
             }
         }
-        _ = totalExpertTurns
+        return .finished
     }
 
-    /// 生成终稿文档。
+    /// 生成终稿文档。已有终稿则直接返回(幂等,续跑不重复生成)。
     private func synthesize() async throws -> String {
         let report = try requireReport()
+        if let existing = report.finalDocument, !existing.isEmpty {
+            if report.phase != .completed { mutate { $0.phase = .completed } }
+            return existing
+        }
         setPhase(.synthesizing)
         let document = try await runChair(
             AgentRoundtablePromptBuilder.finalDocument(
@@ -332,6 +360,26 @@ final class AgentRoundtableEngine {
 
     private func currentMessages() -> [RoundtableMessage] {
         currentReport?.messages ?? []
+    }
+
+    /// 某一轮是否已有导播消息(round 0 = 开场,round ≥ 1 = 轮末小结)。
+    /// 幂等续跑靠它判断阶段是否已完成。
+    private func hasChairMessage(round: Int) -> Bool {
+        currentMessages().contains { $0.speaker == .chair && $0.round == round }
+    }
+
+    /// 某一轮已经发过言(含失败)的专家角色集合,续跑时用来跳过。
+    private func spokenRoles(inRound round: Int) -> Set<AgentRoundtableExpertRole> {
+        Set(currentMessages()
+            .filter { $0.speaker == .expert && $0.round == round }
+            .compactMap(\.role))
+    }
+
+    /// 某一轮成功发言(非失败)的专家条数,用于本轮全败保护。
+    private func successfulExpertCount(inRound round: Int) -> Int {
+        currentMessages().filter {
+            $0.speaker == .expert && $0.round == round && $0.isError != true
+        }.count
     }
 
     private func setPhase(_ phase: AgentRoundtableReport.Phase) {

@@ -190,6 +190,13 @@ nonisolated enum L10n {
         static let newDiscussion = String(localized: "roundtable.new", defaultValue: "New discussion")
         static let convergedHint = String(localized: "roundtable.converged-hint", defaultValue: "The discussion has converged")
         static let roundLabelFormat = String(localized: "roundtable.round-format", defaultValue: "Round %d")
+        static let detachAction = String(localized: "roundtable.detach", defaultValue: "Open in new window")
+        static let statusAwaiting = String(localized: "roundtable.status.awaiting", defaultValue: "Awaiting you")
+        static let awaitingBanner = String(localized: "roundtable.awaiting-banner", defaultValue: "An expert is waiting for your input")
+        static let answerPlaceholder = String(localized: "roundtable.answer-placeholder", defaultValue: "Type your answer, or pick an option above…")
+        static let viewDocumentAction = String(localized: "roundtable.view-document", defaultValue: "View document")
+        static let failedNote = String(localized: "roundtable.failed-note", defaultValue: "This discussion ended with an error.")
+        static let cancelledNote = String(localized: "roundtable.cancelled-note", defaultValue: "This discussion was cancelled.")
     }
 
     enum Automation {

@@ -11,6 +11,7 @@ import SwiftUI
 enum AgentPrimaryDestination: Equatable {
     case conversation
     case scheduledTasks
+    case roundtable
 }
 
 enum AgentScheduledTasksFilter {

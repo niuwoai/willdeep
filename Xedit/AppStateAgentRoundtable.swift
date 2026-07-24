@@ -2,9 +2,13 @@
 //  AppStateAgentRoundtable.swift
 //  WillDeep
 //
-//  专家圆桌的启动/取消/历史读取,挂在 AppState 上。每场圆桌 = 一个独立的
+//  专家圆桌的启动/续跑/取消/历史读取,挂在 AppState 上。每场圆桌 = 一个独立的
 //  AgentSession(不激活、不干扰主 Agent 会话流),里面挂一条
 //  WorkflowReport.roundtable,天然复用 AgentSessionStore 落盘与 loadAll 读取。
+//
+//  引擎(AgentRoundtableEngine.run)每次驱动会推进到「专家反问暂停」或「收敛出
+//  终稿」两个终点之一。反问暂停时不落终态,等主持人答复后 submitRoundtableUserReply
+//  会重启一次驱动续跑 —— 引擎按落盘状态幂等,不会重复已完成的阶段。
 //
 
 import Foundation
@@ -15,7 +19,7 @@ extension AppState {
     fileprivate static let roundtableWorkspaceKey = "willdeep.roundtable"
 
     /// 发起一场新的圆桌讨论。返回承载它的 session id 供 UI 跟踪。
-    /// 不切 activeAgentSessionID —— 圆桌活在独立窗口里,不该动主 Agent 会话。
+    /// 不切 activeAgentSessionID —— 圆桌活在独立窗口/嵌入页里,不该动主 Agent 会话。
     @discardableResult
     func startAgentRoundtable(topic: String) -> UUID? {
         let trimmed = topic.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -52,36 +56,77 @@ extension AppState {
         AgentSessionStore.saveAsync(session)
         persistWorkflowRuntime(runtimeID: session.id)
 
-        let runtimeID = session.id
-        let turnConfiguration = configurationForCurrentTurn(for: runtime)
-        let someIMContext: SomeIMRequestContext? = {
-            guard turnConfiguration.providerID == AgentProviderPreset.someIMID else { return nil }
-            let workspaceID = AgentWorkspaceIdentityStore.workspaceID(
-                forWorkspaceKey: Self.roundtableWorkspaceKey
+        driveRoundtable(reportID: report.id, runtimeID: session.id)
+        return session.id
+    }
+
+    func stopAgentRoundtable(reportID: UUID) {
+        agentRoundtableTasks[reportID]?.cancel()
+    }
+
+    /// 主持人答复专家反问,或作为主持人插话。追加为 .user 消息;若讨论正停在
+    /// 「等答复」(.awaitingUser)且没有在跑的驱动,则重启一次续跑。
+    func submitRoundtableUserReply(runtimeID: UUID, reportID: UUID, content: String) {
+        let trimmed = content.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+
+        var wasAwaiting = false
+        updateWorkflowReport(id: reportID, runtimeID: runtimeID) { item in
+            guard var roundtable = item.roundtable else { return }
+            wasAwaiting = roundtable.phase == .awaitingUser
+            roundtable.messages.append(
+                RoundtableMessage(speaker: .user, round: roundtable.currentRound, content: trimmed)
             )
-            return SomeIMRequestContext(sessionID: runtimeID.uuidString, workspaceID: workspaceID)
-        }()
+            roundtable.updatedAt = Date()
+            item.roundtable = roundtable
+        }
+        persistWorkflowRuntime(runtimeID: runtimeID)
+
+        // 只有在「等答复」且当前没有活跃驱动时才续跑,避免重复启动。
+        if wasAwaiting, agentRoundtableTasks[reportID] == nil {
+            driveRoundtable(reportID: reportID, runtimeID: runtimeID)
+        }
+    }
+
+    /// 兼容旧调用名:等价于 submitRoundtableUserReply。
+    func appendRoundtableUserMessage(runtimeID: UUID, reportID: UUID, content: String) {
+        submitRoundtableUserReply(runtimeID: runtimeID, reportID: reportID, content: content)
+    }
+
+    // MARK: - 驱动引擎(首跑 / 续跑共用)
+
+    /// 启动一次圆桌驱动:跑引擎到暂停点或终稿,并按结果落状态。首跑与续跑
+    /// 共用同一条路径,靠引擎的幂等性保证续跑不重复已完成阶段。
+    private func driveRoundtable(reportID: UUID, runtimeID: UUID) {
+        guard let (configuration, someIMContext) = roundtableTurnContext(runtimeID: runtimeID) else { return }
 
         let task = Task { @MainActor [weak self] in
             guard let self else { return }
             let engine = AgentRoundtableEngine(
-                reportID: report.id,
+                reportID: reportID,
                 runtimeID: runtimeID,
-                configuration: turnConfiguration,
+                configuration: configuration,
                 someIMContext: someIMContext,
                 appState: self
             )
             do {
-                let document = try await engine.run()
+                let result = try await engine.run()
                 guard !Task.isCancelled else { throw CancellationError() }
-                self.updateWorkflowReport(id: report.id, runtimeID: runtimeID) { item in
-                    item.status = .done
-                    item.summary = document
-                    item.finishedAt = Date()
+                switch result {
+                case .completed(let document):
+                    self.updateWorkflowReport(id: reportID, runtimeID: runtimeID) { item in
+                        item.status = .done
+                        item.summary = document
+                        item.finishedAt = Date()
+                    }
+                case .awaitingUser:
+                    // 停在等主持人答复:保持 running,不落终态,phase 已由引擎置为
+                    // .awaitingUser。答复后 submitRoundtableUserReply 会再驱动一次。
+                    break
                 }
                 self.persistWorkflowRuntime(runtimeID: runtimeID)
             } catch is CancellationError {
-                self.updateWorkflowReport(id: report.id, runtimeID: runtimeID) { item in
+                self.updateWorkflowReport(id: reportID, runtimeID: runtimeID) { item in
                     item.status = .cancelled
                     item.finishedAt = Date()
                     if var detail = item.roundtable {
@@ -91,7 +136,7 @@ extension AppState {
                 }
                 self.persistWorkflowRuntime(runtimeID: runtimeID)
             } catch {
-                self.updateWorkflowReport(id: report.id, runtimeID: runtimeID) { item in
+                self.updateWorkflowReport(id: reportID, runtimeID: runtimeID) { item in
                     item.status = .failed
                     item.finishedAt = Date()
                     item.summary = error.localizedDescription
@@ -102,31 +147,28 @@ extension AppState {
                 }
                 self.persistWorkflowRuntime(runtimeID: runtimeID)
             }
-            self.agentRoundtableTasks[report.id] = nil
+            self.agentRoundtableTasks[reportID] = nil
         }
-        agentRoundtableTasks[report.id] = task
-        return runtimeID
+        agentRoundtableTasks[reportID] = task
     }
 
-    func stopAgentRoundtable(reportID: UUID) {
-        agentRoundtableTasks[reportID]?.cancel()
-    }
-
-    /// 用户答复专家的反问,或作为主持人插话:把用户消息追加进 transcript。
-    /// (首版:追加为 .user 消息;后续可触发续跑 —— 见 UI 层。)
-    func appendRoundtableUserMessage(runtimeID: UUID, reportID: UUID, content: String) {
-        let trimmed = content.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else { return }
-        updateWorkflowReport(id: reportID, runtimeID: runtimeID) { item in
-            guard var roundtable = item.roundtable else { return }
-            roundtable.messages.append(
-                RoundtableMessage(speaker: .user, round: roundtable.currentRound, content: trimmed)
+    /// 为一次圆桌驱动组装本轮 configuration 与(若走 some.im)请求上下文。
+    private func roundtableTurnContext(
+        runtimeID: UUID
+    ) -> (AgentConfiguration, SomeIMRequestContext?)? {
+        guard let runtime = agentRuntimes[runtimeID] else { return nil }
+        let configuration = configurationForCurrentTurn(for: runtime)
+        let someIMContext: SomeIMRequestContext? = {
+            guard configuration.providerID == AgentProviderPreset.someIMID else { return nil }
+            let workspaceID = AgentWorkspaceIdentityStore.workspaceID(
+                forWorkspaceKey: Self.roundtableWorkspaceKey
             )
-            roundtable.updatedAt = Date()
-            item.roundtable = roundtable
-        }
-        persistWorkflowRuntime(runtimeID: runtimeID)
+            return SomeIMRequestContext(sessionID: runtimeID.uuidString, workspaceID: workspaceID)
+        }()
+        return (configuration, someIMContext)
     }
+
+    // MARK: - 历史
 
     /// 读取所有历史圆桌报告(从内存 runtime + 已落盘会话)。给主页历史列表用。
     func loadRoundtableHistory() -> [AgentRoundtableReport] {
