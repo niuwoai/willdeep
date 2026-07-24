@@ -41,6 +41,36 @@ struct AgentToolCallGroupingPresentationTests {
         )
     }
 
+    @Test("delegated agent activity uses the system accent color")
+    func delegatedAgentActivityUsesSystemAccentColor() throws {
+        let repositoryRoot = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+        let monitorSource = try String(
+            contentsOf: repositoryRoot.appendingPathComponent("Xedit/AgentTaskMonitorRail.swift"),
+            encoding: .utf8
+        )
+        let toolCardSource = try String(
+            contentsOf: repositoryRoot.appendingPathComponent("Xedit/AgentToolCallViews.swift"),
+            encoding: .utf8
+        )
+
+        #expect(
+            monitorSource.contains(
+                #"AgentActivityPhase(label: label, systemImage: "person.2", tint: .accentColor)"#
+            )
+        )
+        #expect(
+            toolCardSource.contains(
+                """
+                Image(systemName: "person.2.fill")
+                                        .font(.system(size: 9, weight: .semibold))
+                                        .foregroundStyle(Color.accentColor)
+                """
+            )
+        )
+    }
+
     @Test("live activity timeline hides a failed exact edit after the same file is repaired")
     func liveActivityTimelineCompactsRecoveredEditFailure() {
         let path = "deploy/k8s/tokenhub-deployment.yaml"

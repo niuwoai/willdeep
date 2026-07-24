@@ -1,6 +1,6 @@
 # WillDeep Product Overview
 
-> Last updated: 2026-07-24 | Current version: v1.195.0-rc17
+> Last updated: 2026-07-24 | Current version: v1.195.0-rc18
 
 ## Positioning
 
@@ -11,6 +11,8 @@ Official product domain: [willdeep.com](https://willdeep.com).
 WillDeep is configured for non-App-Store distribution without App Sandbox so it can access local project files with fewer permission interruptions.
 
 ## 架构概览
+
+- **子代理委派跟随系统强调色（1.195.0-rc18）** —— Composer 上方“委派给子代理”活动条及工具卡内的子代理徽标不再写死紫色，文字、图标、浅色背景与描边统一跟随 macOS 系统强调色。
 
 - **Token 热力图单日用量提示（1.195.0-rc17）** —— 新聊天信息卡的 52 周热力图改为按每天真实或估算 Token 总量着色；鼠标悬停任意格子会显示本地化日期与当天 Token 用量，提示数据同时作为辅助功能标签，不再出现标题写 Token、格子却统计消息条数的口径错位。统计面板文案门面同步拆入独立文件，使主 `L10n.swift` 恢复到 3000 行硬限制以内。
 

@@ -766,7 +766,7 @@ struct AgentSemanticActivityStatusLine: View {
             // motion, not a frozen spinner. Only spawn_agent sets this;
             // external-CLI delegations leave it nil and still name who is doing the work.
             let label = AgentToolKind.of(call).delegatedActivityLabel(progress: call.subagentProgress) ?? "委派中"
-            return AgentActivityPhase(label: label, systemImage: "person.2", tint: .purple)
+            return AgentActivityPhase(label: label, systemImage: "person.2", tint: .accentColor)
         case .askUser:
             return AgentActivityPhase(label: "等待你回答", systemImage: "bubble.left.and.text.bubble.right", tint: .orange)
         case .other:
