@@ -73,6 +73,11 @@ extension AppState {
             if let restrictTo, !restrictTo.contains(path) {
                 return nil
             }
+            // 隐藏缓存 / 构建目录(.gocache/ 等)里的文件不计入变更,避免
+            // 未跟踪缓存海量灌爆 diff 预览、把真正的改动挤到降级摘要外。
+            if isHiddenCacheWorktreePath(path) {
+                return nil
+            }
             let stats = lineStats[path]
                 ?? (kind == .untracked
                     ? untrackedTextLineStats(path: path, repositoryRoot: repositoryRoot)
@@ -142,6 +147,30 @@ extension AppState {
             return true
         case .modified:
             return false
+        }
+    }
+
+    /// 已知的「隐藏缓存 / 构建产物」目录名(小写)。这些目录以 `.` 开头、
+    /// 往往没进 `.gitignore`,一旦被 `git status -uall` 递归展开就会灌进
+    /// 成百上千个未跟踪文件(如 `.gocache/00/…`),把 diff 预览的文件数 /
+    /// 行数直接顶穿阈值、触发降级,淹没用户真正关心的改动。
+    ///
+    /// 刻意用**白名单**而非「凡以 `.` 开头的目录一律排除」:`.github`、
+    /// `.claude`、`.vscode` 这类隐藏目录里放的常是用户真在改的配置,不能
+    /// 误伤。仓库根下以 `.` 开头的**单个文件**(`.gitignore`、`.env`)也不
+    /// 受影响——这里只按**目录段**匹配。
+    nonisolated static let hiddenCacheDirectoryNames: Set<String> = [
+        ".gocache", ".cache", ".gradle", ".venv", ".mypy_cache",
+        ".pytest_cache", ".ruff_cache", ".tox", ".terraform",
+        ".next", ".nuxt", ".svelte-kit", ".parcel-cache", ".turbo",
+        ".yarn", ".pnpm-store", ".sass-cache", ".dart_tool",
+    ]
+
+    /// 路径的任意一段命中 `hiddenCacheDirectoryNames` 即视为隐藏缓存路径,
+    /// diff 预览收集时跳过。按目录段(`/` 切分)匹配,不匹配根下隐藏文件。
+    nonisolated static func isHiddenCacheWorktreePath(_ path: String) -> Bool {
+        path.split(separator: "/").dropLast().contains { segment in
+            hiddenCacheDirectoryNames.contains(segment.lowercased())
         }
     }
 

@@ -521,6 +521,15 @@ final class AgentChatHistoryNSTextView: NSTextView {
                 hasher.combine(tc.toolName)
                 hasher.combine(tc.argumentsJSON.count)
             }
+            // Keep the streaming-hot-path fingerprint in sync with the
+            // renderer cache key: a resolved tool receipt must invalidate
+            // this early-exit, otherwise the ✓/✗ badge is skipped.
+            if let receipts = m.settledToolReceipts {
+                for (callID, status) in receipts.sorted(by: { $0.key < $1.key }) {
+                    hasher.combine(callID)
+                    hasher.combine(status.rawValue)
+                }
+            }
         }
         for message in assistantTurnContextMessages
             where message.role == .user || message.role == .assistant {
@@ -1137,7 +1146,7 @@ enum AgentChatHistoryLayoutMetrics {
     static let userFooterTrailingInset: CGFloat = 10
     static let userFooterTopSpacing: CGFloat = 8
     static let userFooterBottomSpacing: CGFloat = 8
-    static let userImageToBubbleSpacing: CGFloat = 8
+    static let userImageToBubbleSpacing: CGFloat = 14
     static let userMessageElementSpacing: CGFloat = 4
     /// Reuse TextKit renders while the window moves within a small width
     /// interval. Flooring keeps the rendered content inside the actual view;

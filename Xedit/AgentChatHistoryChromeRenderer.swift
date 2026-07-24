@@ -400,6 +400,21 @@ extension AgentChatHistoryRenderer {
                     .foregroundColor: secondaryColor,
                 ]
             ))
+            // Outcome receipt (✓ 完成 / ✗ N 失败) rides at the tail of the
+            // last activity row so every settled intent line ends with a
+            // clear "did it succeed" verdict instead of a dangling "我要做 X".
+            // Failures/denials get a warning tint; success stays secondary
+            // so the transcript doesn't turn into a wall of green.
+            if index == displayItems.count - 1, let badge = group.outcomeBadge {
+                let isFailure = badge.hasPrefix("✗")
+                result.append(NSAttributedString(
+                    string: "  · \(badge)",
+                    attributes: [
+                        .font: NSFont.systemFont(ofSize: monoFont.pointSize, weight: isFailure ? .semibold : .regular),
+                        .foregroundColor: isFailure ? NSColor.systemRed : secondaryColor,
+                    ]
+                ))
+            }
             result.addAttributes(
                 [
                     .link: "agent-chat-history-tool-group",
@@ -751,6 +766,23 @@ extension AgentChatHistoryRenderer {
         let firstParagraph = ns.paragraphRange(for: NSRange(location: progressRange.location, length: 0))
         let lastLocation = max(progressRange.location, NSMaxRange(progressRange) - 1)
         let lastParagraph = ns.paragraphRange(for: NSRange(location: lastLocation, length: 0))
+
+        // Collapsed progress cards are a single paragraph (the header line has
+        // no trailing newline). In that case the first/last ranges coincide, so
+        // the top margin and bottom margin must live on ONE style — otherwise the
+        // second addAttribute overwrites the first and the card hugs the text
+        // above it. Only the expanded, multi-paragraph card can split the two.
+        if firstParagraph == lastParagraph {
+            let style = baseStyle.mutableCopy() as? NSMutableParagraphStyle ?? NSMutableParagraphStyle()
+            style.paragraphSpacingBefore = 12
+            style.paragraphSpacing = 10
+            attributed.addAttribute(
+                .paragraphStyle,
+                value: style,
+                range: NSIntersectionRange(firstParagraph, progressRange)
+            )
+            return
+        }
 
         let firstStyle = baseStyle.mutableCopy() as? NSMutableParagraphStyle ?? NSMutableParagraphStyle()
         firstStyle.paragraphSpacingBefore = 12

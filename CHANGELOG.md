@@ -1,7 +1,37 @@
 # Changelog
 
-> 当前文件保留最新版本（1.195.0-rc25 至 1.109.0-rc340）。
+> 当前文件保留最新版本（1.196.0-rc1 至 1.109.0-rc340）。
 > 更早的 1000 个版本已移至 [CHANGELOG-ARCHIVE.md](CHANGELOG-ARCHIVE.md)。
+
+## 1.196.0-rc1 - 2026-07-24
+
+### Added
+
+- Agent 聊天历史里**每个已结束的「意图句」后面现在都带一枚成/败回执章**。此前一轮里 Agent 吐出的「让我运行下一个生成器」「让我核实一下 OpenAPI 规范」「让我进行最后一次全面验证」等**过程性意图句**是普通 `.assistant` 正文，turn 一结束被烘焙进 TextKit 历史时，它触发的工具执行结果被系统性抹掉——用户只看到「我要去干 X」，看不到「X 到底干成没干成」，满屏悬而未决、心里没底。
+- 根因：已结束历史里承载工具终态的 `.tool` 结果消息（带 `toolCallStatus` 成/败/拒）在 `AgentChatTranscript` 的 `visibleMessages` 中被整条 `guard` 过滤掉，而意图句上挂的 `toolCalls` 又在 `resultPresentationMessage` 里被 `copy.toolCalls = []` 清空。两道闸门叠加，结果从没进过渲染管线。
+- 修法：`AgentChatTranscript.settledTranscriptMessages` 先从被过滤的 `.tool` 消息里按 `toolCallID` 收集每个调用的终态，注入意图句一个**非持久化的瞬态字段** `AgentMessage.settledToolReceipts`（不进 CodingKeys，零落盘风险）；`AgentChatHistoryRenderer.ToolCallHistoryGroup` 据此计算整组回执 `outcomeBadge`（任一失败/拒绝优先展示，否则全成 `✓ 完成`），由 chrome 渲染器拼在折叠工具组行尾——失败态用醒目红色 + 半粗字重。意图句下面因此恢复了折叠工具组行（默认折叠、点击展开看参数），行尾即 `✓ 完成` / `✗ N 失败` / `✗ N 已拒绝`。
+- 同步修复活动态 `AgentToolCallViews.statusSummary`：此前**全部成功时返回空串**——最该给用户确定感的「工具全干成了」状态在 UI 上竟是什么都不显示，现改为明确的 `✓ 全部完成`；运行中/失败/拒绝各状态也统一加上 `✓`/`✗` 前缀。
+- 缓存正确性：`settledToolReceipts` 纳入 `AgentChatHistoryRenderer` 渲染缓存 key 与 `AgentChatHistoryTextView` 流式热路径指纹，确保工具从 `running → succeeded/failed` 时回执章能即时刷新、不命中旧的无章缓存。
+- 约束：本次只对**当前/新会话**生效（内存态 `.tool` 结果在手）。旧落盘会话虽也持久化了 `toolCallStatus`，本轮不做回填，维持现状。
+- 新增 `AgentToolReceiptRenderingTests`（9 个用例）覆盖 `outcomeBadge` 成/败/拒/混合/空判定、端到端渲染断言 ✓/✗ 出现，以及回执变更触发渲染缓存失效。
+- 版本号从 **1.195.0-rc28** 递增为 **1.196.0-rc1**（feat 提 MINOR 位并重置 rc），内部构建号从 **134** 递增为 **135**，Help 与 Computer Use Helper 构建号从 **51** 递增为 **52**；App、Go agent、Help、Helper、浏览器扩展、README、响应头契约与产品文档保持一致。
+
+## 1.195.0-rc28 - 2026-07-24
+
+### Fixed
+
+- 修复 **dark 模式下「淡雾森林」「水墨宣纸」两个浅色皮肤看不到文字**的问题。根因有二：(1) 设置窗口是独立的 `Settings` scene（`XeditApp.swift` 的 `SettingsRootView`），并**没有**施加 `ContentView` / `AgentWindowRootView` 上那条 `.preferredColorScheme(skin.preferredColorScheme)`——系统处于 dark 时，设置窗口整体仍是深色外观；(2) 皮肤卡片 `InterfaceSkinCard`（`EditorSettingsPrimaryTabs.swift`）的背景用的是**半透明** `panelFill`（如淡雾森林 `Color.white.opacity(0.58)`、水墨宣纸 `opacity(0.52)`），直接画在系统深色窗口材质上时深色透上来，浅色皮肤那套**固定深色**的 `primaryText`（淡雾森林深墨绿、水墨宣纸近黑）就糊在暗背景上、对比度不足看不见。其余皮肤要么本身是深色（文字浅）、要么是 `.system`（跟随系统），所以只有这两个浅色皮肤翻车。
+- 修法一（卡片自兜底）：`InterfaceSkinCard` 背景先铺一层**不透明**的皮肤窗口底色（`skin.windowBackground` 渐变），再叠原来的半透明 `panelFill`。这样每张卡片都是自成一体的皮肤缩影，文字对比度不再受设置窗口系统外观影响。
+- 修法二（设置窗口整体跟随皮肤）：给 `SettingsRootView` 里的 `EditorSettingsView` 补上 `.tint(skin.palette.accent)` 与 `.preferredColorScheme(skin.preferredColorScheme)`，让设置窗口的明暗与所选皮肤一致，从源头消除系统外观与浅色皮肤冲突。
+- 版本号从 **1.195.0-rc27** 递增为 **1.195.0-rc28**，内部构建号从 **133** 递增为 **134**，Help 与 Computer Use Helper 构建号从 **50** 递增为 **51**；App、Go agent、Help、Helper、浏览器扩展、README、响应头契约与产品文档保持一致。
+
+## 1.195.0-rc27 - 2026-07-24
+
+### Fixed
+
+- 修复聊天记录里「本轮进度」卡片**收起态**紧贴上方正文、上下没有间距的问题。此前 `applyProgressBlockVerticalMargins`（`AgentChatHistoryTextView.swift` 的 chrome 渲染）无条件把「首段加 12pt 上边距」和「末段加 10pt 下边距」拆成两次 `paragraphStyle` 写入。展开态卡片是多段落（表头 + 明细行 + 查看完整计划），首段末段分属不同 paragraph，两次写入互不干扰，间距正常；但**收起态整张卡片只有表头一行、只有一个 paragraph**，于是第二次写入的末段样式（`paragraphSpacingBefore` 为默认 0）直接覆盖了第一次的 12pt 上边距，导致卡片顶着上方文字、毫无留白。
+- 现改为参照代码块 / 表格块的处理方式：当卡片首段与末段是同一 paragraph（即收起态）时，把上边距 12pt 与下边距 10pt 合并写进**同一个** `paragraphStyle`，不再互相覆盖；多段落的展开态维持原先的拆分写法。收起、展开两态上下留白现在一致。
+- 版本号从 **1.195.0-rc26** 递增为 **1.195.0-rc27**，内部构建号从 **132** 递增为 **133**，Help 与 Computer Use Helper 构建号从 **49** 递增为 **50**；App、Go agent、Help、Helper、浏览器扩展、README、响应头契约与产品文档保持一致。
 
 ## 1.195.0-rc26 - 2026-07-24
 

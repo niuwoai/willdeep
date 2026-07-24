@@ -531,6 +531,16 @@ nonisolated struct AgentMessage: Identifiable, Codable, Equatable {
     var scheduledTask: AgentScheduledTaskCard?
     let createdAt: Date
 
+    /// Transient per-tool-call outcome receipts (externalID → 终态),
+    /// keyed by `AgentMessageToolCall.externalID`. Populated only at
+    /// render time by `AgentChatTranscript` from the sibling `.tool`
+    /// result messages (which carry `toolCallStatus`), so the settled
+    /// TextKit history can show "✓ 成 / ✗ 败" next to each intent line
+    /// instead of a bare "我要做 X". Deliberately **not** in CodingKeys:
+    /// this is a presentation projection, never persisted — the source of
+    /// truth is the `.tool` message's own persisted `toolCallStatus`.
+    var settledToolReceipts: [String: AgentToolCallStatus]? = nil
+
     nonisolated init(
         id: UUID = UUID(),
         role: AgentRole,

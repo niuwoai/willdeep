@@ -71,7 +71,7 @@ struct AgentChatComposer: View {
                     .frame(maxWidth: AgentDesign.chatMaxContentWidth)
                 }
 
-                if !appState.agentWorkspaceCollision.isEmpty {
+                if shouldShowWorkspaceCollision {
                     AgentComposerWorkspaceCollisionCard()
                         .frame(maxWidth: AgentDesign.chatMaxContentWidth)
                 }
@@ -197,6 +197,20 @@ struct AgentChatComposer: View {
             return nil
         }
         return plan
+    }
+
+    /// 是否显示「另有会话在此目录工作」碰撞提示条。碰撞事实由
+    /// `agentWorkspaceCollision` 实时反映，但这条警告只在**新会话的前 3 轮**
+    /// 露面——用户在开头几轮已经看到过、也点过（或忽略过）「隔离到 worktree」，
+    /// 之后一直杵在 composer 顶部只是噪声。轮数按当前 active session 已发出的
+    /// 用户消息数计（与 `AgentUsageStats` 数 `role == .user` 的口径一致）；切
+    /// 到别的会话时 `agentMessages` 自动带出新会话的消息数，天然重新计数。
+    private var shouldShowWorkspaceCollision: Bool {
+        guard !appState.agentWorkspaceCollision.isEmpty else { return false }
+        let userTurnCount = appState.agentMessages.reduce(into: 0) { count, message in
+            if message.role == .user { count += 1 }
+        }
+        return userTurnCount <= 3
     }
 
     private var shouldShowActivityStatus: Bool {

@@ -712,6 +712,12 @@ struct AgentChatTranscript: View {
     }
 
     private var visibleMessages: [AgentMessage] {
+        // The `.tool` result messages get filtered out of the transcript
+        // below, but they carry the persisted `toolCallStatus` (成/败/拒)
+        // for each call. Harvest them first, keyed by the tool_call id, so
+        // a settled intent line ("我要做 X") can render a "✓ 成 / ✗ 败"
+        // receipt next to the action it triggered.
+        let toolReceipts = toolReceiptsByCallID(in: appState.agentMessages)
         let visible = appState.agentMessages.compactMap { message in
             // `.system` is reserved for host-injected notices (e.g.
             // background-task completion); the user reads those via the
@@ -729,7 +735,7 @@ struct AgentChatTranscript: View {
                   !isSettledToolCallOnlyMessage(message) else {
                 return nil
             }
-            return resultPresentationMessage(message)
+            return resultPresentationMessage(message, receipts: toolReceipts)
         }
         guard appState.agentInteractionMode == .goal,
               !appState.isAgentResponding else {
@@ -770,15 +776,51 @@ struct AgentChatTranscript: View {
         return !toolCalls(for: message.id).contains(where: isWorkingToolCall)
     }
 
-    private func resultPresentationMessage(_ message: AgentMessage) -> AgentMessage {
+    /// Collect the persisted terminal status of every finished tool call,
+    /// keyed by its `toolCallID`. The `.tool` result messages own this
+    /// truth (`toolCallStatus`); assistant intent lines reference the same
+    /// id via `AgentMessageToolCall.externalID`. Pending/running calls are
+    /// skipped so an in-flight action never renders a premature receipt.
+    private func toolReceiptsByCallID(
+        in messages: [AgentMessage]
+    ) -> [String: AgentToolCallStatus] {
+        var receipts: [String: AgentToolCallStatus] = [:]
+        for message in messages where message.role == .tool {
+            guard let callID = message.toolCallID,
+                  let status = message.toolCallStatus,
+                  !status.isBlockingForUserDecision,
+                  status != .running else {
+                continue
+            }
+            receipts[callID] = status
+        }
+        return receipts
+    }
+
+    private func resultPresentationMessage(
+        _ message: AgentMessage,
+        receipts: [String: AgentToolCallStatus]
+    ) -> AgentMessage {
         guard message.role == .assistant,
               !message.toolCalls.isEmpty,
               !appState.isAgentResponding,
               !toolCalls(for: message.id).contains(where: isWorkingToolCall) else {
             return message
         }
+        // Previously this cleared `toolCalls` entirely, so a settled intent
+        // line lost every trace of the action it triggered. Keep the calls
+        // and attach their terminal receipts (✓/✗) instead — the history
+        // renderer projects these into a per-group outcome badge. Only
+        // calls with a known terminal status contribute a receipt; if none
+        // resolved (e.g. legacy sessions without `.tool` status), the map
+        // stays nil and rendering falls back to the old behaviour.
         var copy = message
-        copy.toolCalls = []
+        let resolved = copy.toolCalls.reduce(into: [String: AgentToolCallStatus]()) { acc, call in
+            if let status = receipts[call.externalID] {
+                acc[call.externalID] = status
+            }
+        }
+        copy.settledToolReceipts = resolved.isEmpty ? nil : resolved
         return copy
     }
 
