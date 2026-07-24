@@ -279,6 +279,29 @@ struct GitWorktreeCoreTests {
         #expect(!AppState.isAgentSessionArtifactPath("Sources/NewView.swift"))
     }
 
+    @Test("only explicit deliverable-producing tools whitelist directory-diff artifacts")
+    func testToolArtifactWhitelistIsNarrow() {
+        // Explicit workspace deliverables: short-drama exports write
+        // JSON/MD/CSV/HTML packages into the working directory.
+        #expect(AppState.toolProducesSessionArtifacts("short_drama_export_plan_template"))
+        #expect(AppState.toolProducesSessionArtifacts("short_drama_export_production_package"))
+
+        // Process / work-file tools must NOT scoop their output into the
+        // artifact rail, no matter what extension they happen to write.
+        #expect(!AppState.toolProducesSessionArtifacts("create_file"))
+        #expect(!AppState.toolProducesSessionArtifacts("edit_file"))
+        #expect(!AppState.toolProducesSessionArtifacts("apply_patch"))
+        #expect(!AppState.toolProducesSessionArtifacts("run_command"))
+        #expect(!AppState.toolProducesSessionArtifacts("claude_code"))
+        #expect(!AppState.toolProducesSessionArtifacts("change_workspace"))
+
+        // Media generation registers deliverables explicitly and downloads
+        // outside the workspace, so it never relies on the diff whitelist.
+        #expect(!AppState.toolProducesSessionArtifacts("generate_image"))
+        #expect(!AppState.toolProducesSessionArtifacts("generate_video_from_image"))
+        #expect(!AppState.toolProducesSessionArtifacts("create_media_task"))
+    }
+
     @Test("artifact inventory finds git-ignored deliverables and prunes transient trees")
     func testArtifactInventoryIsIndependentFromGitStatus() throws {
         let root = FileManager.default.temporaryDirectory

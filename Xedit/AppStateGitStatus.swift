@@ -660,7 +660,8 @@ extension AppState {
     func refreshGitStatusAfterAgentTool(
         for runtime: AgentRuntime,
         workspaceURL: URL?,
-        baselineSnapshot: AgentWorktreeSnapshot
+        baselineSnapshot: AgentWorktreeSnapshot,
+        producesArtifacts: Bool = false
     ) async {
         guard let workspaceURL else {
             refreshGitStatus()
@@ -676,10 +677,18 @@ extension AppState {
             baseline: baselineSnapshot,
             current: snapshot
         )
-        let createdArtifactPaths = Self.agentArtifactPathsCreatedSinceBaseline(
-            baseline: baselineSnapshot,
-            current: snapshot
-        )
+        // Artifacts are only harvested from the directory diff when the tool
+        // that just ran is an explicit deliverable-producing tool. Source edits
+        // (create_file / edit_file / apply_patch), run_command side effects,
+        // git checkouts and delegated sub-agent runs all move files too, but
+        // those are process/work files — not conversation deliverables — so we
+        // must not scoop their output into the artifact rail.
+        let createdArtifactPaths = producesArtifacts
+            ? Self.agentArtifactPathsCreatedSinceBaseline(
+                baseline: baselineSnapshot,
+                current: snapshot
+            )
+            : []
         let attributedPaths = runtime.agentEditedPaths.union(changedPaths)
 
         let filteredChanges = snapshot.changes.filtering(paths: attributedPaths)
@@ -880,6 +889,28 @@ extension AppState {
         return path.split(separator: "/").contains { component in
             transientComponents.contains(component.lowercased())
         }
+    }
+
+    /// Whitelist of tools that produce genuine, user-facing deliverables into
+    /// the workspace directory — the only tools whose newly created files may
+    /// be surfaced on the artifact rail via the directory diff.
+    ///
+    /// Deliberately narrow: writing a file is not the same as producing a
+    /// deliverable. `create_file` / `edit_file` / `apply_patch` are source
+    /// edits, `run_command`落盘 is a side effect, delegated CLI agents mutate
+    /// the tree as part of their work — all belong under Work Files, not here.
+    ///
+    /// Note: image/video generation and most media tools do NOT appear here.
+    /// They register deliverables explicitly through `AgentMediaTaskRegistry`
+    /// and download into `~/Downloads/WillDeep-*` (outside the workspace), so
+    /// they never rely on this diff-based path. Only the short-drama export
+    /// tools write deliverables into the workspace itself.
+    nonisolated static func toolProducesSessionArtifacts(_ toolName: String) -> Bool {
+        let deliverableTools: Set<String> = [
+            "short_drama_export_plan_template",
+            "short_drama_export_production_package"
+        ]
+        return deliverableTools.contains(toolName)
     }
 
     /// Artifact is a conversation-created, user-consumable document or media

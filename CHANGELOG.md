@@ -1,7 +1,34 @@
 # Changelog
 
-> 当前文件保留最新版本（1.195.0-rc23 至 1.109.0-rc340）。
+> 当前文件保留最新版本（1.195.0-rc25 至 1.109.0-rc340）。
 > 更早的 1000 个版本已移至 [CHANGELOG-ARCHIVE.md](CHANGELOG-ARCHIVE.md)。
+
+## 1.195.0-rc26 - 2026-07-24
+
+### Fixed
+
+- 修复会话「产物」栏把**所有写盘文件都当成产物**的误判。此前判据完全不看是哪个工具、以何种意图产生：只要一次工具执行后工作目录里「新出现」一个文件、扩展名命中白名单（md/pdf/png/json/zip 等）、且不在 build/cache 目录，就无差别并入 `agentArtifactPaths`——导致 `run_command` 跑测试/脚本顺手落盘的 `.json`/`.txt`、`create_file`/`edit_file`/`apply_patch` 改的源码、乃至 `git checkout` 检出的文件都被错塞进「产物」栏，还挤占了本该属于「工作文件」栏的位置（两栏互斥）。
+- 现改为**只认显式交付物**：给 `refreshGitStatusAfterAgentTool` 增加 `producesArtifacts` 参数，仅当刚跑完的工具属于「显式生成用户交付物」的白名单（`AppState.toolProducesSessionArtifacts`）时，才从目录 diff 里采集新文件作为产物；其余工具（源码编辑、`run_command`、切工作区、委派 CLI 子 Agent 等）照常更新「工作文件」与 worktree 变更，但一律不并入产物栏。
+- 白名单刻意收窄，当前只含真正把交付物写进工作目录的短剧导出工具（`short_drama_export_plan_template`、`short_drama_export_production_package`）。生图/生视频/媒体导入等**不**依赖此路径——它们通过 `AgentMediaTaskRegistry` 显式登记产物并下载到 `~/Downloads/WillDeep-*`（工作目录之外），走的是独立的媒体任务产物通路，不受本次改动影响。
+- 版本号从 **1.195.0-rc25** 递增为 **1.195.0-rc26**，内部构建号从 **131** 递增为 **132**，Help 与 Computer Use Helper 构建号从 **48** 递增为 **49**；App、Go agent、Help、Helper、浏览器扩展、README、响应头契约与产品文档保持一致。
+
+### Tests
+
+- 新增 `toolProducesSessionArtifacts` 白名单测试，锁定「只有短剧导出类工具能从目录 diff 采集产物」这一不变量：验证 `create_file`/`edit_file`/`apply_patch`/`run_command`/`claude_code`/`change_workspace` 以及生图/生视频/媒体任务工具均不进产物栏。
+
+## 1.195.0-rc25 - 2026-07-24
+
+### Changed
+
+- 调整 Agent 授权/确认卡片里 primary（继续 / 允许 / 为本次会话允许）按钮的视觉：从原来的实心填充（`.borderedProminent`）改为 **实线边框、内部不填充颜色** 的描边样式（accent 色 1.5pt 描边 + 透明背景 + accent 色文字）。新增共用的 `AgentApprovalOutlinedButtonStyle`，覆盖三处入口——软性授权通知（`run_command`「继续」等）、双列「命令确认」review 的「允许」、以及对话内紧凑授权条的「为本次会话允许」，风格统一。`AgentApprovalNoticeDescriptor.usesOutlinedApproveAction` 字段保留（仍描述各工具语义、被视觉测试引用），但 primary 渲染不再依赖它——所有 primary 一律走描边样式。
+- 版本号从 **1.195.0-rc24** 递增为 **1.195.0-rc25**，内部构建号从 **130** 递增为 **131**，Help 与 Computer Use Helper 构建号从 **47** 递增为 **48**；App、Go agent、Help、Helper、浏览器扩展、README、响应头契约与产品文档保持一致。
+
+## 1.195.0-rc24 - 2026-07-24
+
+### Fixed
+
+- 修复聊天记录里「图文混发」用户消息的贴合问题：用户同时发送图片和文字时，图片与其下方文字气泡此前几乎贴在一起、缺少呼吸感。现将「图片段落 → 文字气泡」的垂直间距 `userImageToBubbleSpacing` 从 **8pt** 调大到 **14pt**，三条渲染路径（TextKit 段落 `paragraphSpacing`、SwiftUI 遗留路径 `AgentMessageView` 与 `AgentPanelCards` 的 `.padding(.bottom)`）复用同一常量、间距保持一致。
+- 版本号从 **1.195.0-rc23** 递增为 **1.195.0-rc24**，内部构建号从 **129** 递增为 **130**，Help 与 Computer Use Helper 构建号从 **46** 递增为 **47**；App、Go agent、Help、Helper、浏览器扩展、README、响应头契约与产品文档保持一致。
 
 ## 1.195.0-rc23 - 2026-07-24
 

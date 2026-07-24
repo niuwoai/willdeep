@@ -51,13 +51,28 @@ struct AgentChatComposer: View {
                         .frame(maxWidth: AgentDesign.chatMaxContentWidth)
                 }
 
-                if !appState.agentWorkspaceCollision.isEmpty {
-                    AgentComposerWorkspaceCollisionCard()
-                        .frame(maxWidth: AgentDesign.chatMaxContentWidth)
+                // 顶部胶囊行：文件变更统计 +「第 N/M 步」并排靠左，两枚都是
+                // intrinsic 宽度的 Capsule，不撑满整行。全宽的长条状态卡片
+                // （会话碰撞、等待确认/思考中）另起行排在其下方，避免固定宽度
+                // 胶囊与全宽长条混在同一竖列里对齐错位、观感交叠。
+                let showsSummaryPill = !appState.agentWorktreeChanges.isEmpty
+                let stepProgress = taskProgressSnapshot
+                if showsSummaryPill || stepProgress != nil {
+                    HStack(spacing: 6) {
+                        if showsSummaryPill {
+                            AgentComposerWorktreeSummaryBar()
+                        }
+                        if let stepProgress {
+                            AgentComposerTaskProgressControl(snapshot: stepProgress)
+                                .transition(.opacity.combined(with: .move(edge: .bottom)))
+                        }
+                        Spacer(minLength: 0)
+                    }
+                    .frame(maxWidth: AgentDesign.chatMaxContentWidth)
                 }
 
-                if !appState.agentWorktreeChanges.isEmpty {
-                    AgentComposerWorktreeSummaryBar()
+                if !appState.agentWorkspaceCollision.isEmpty {
+                    AgentComposerWorkspaceCollisionCard()
                         .frame(maxWidth: AgentDesign.chatMaxContentWidth)
                 }
 
@@ -101,12 +116,6 @@ struct AgentChatComposer: View {
                     .frame(maxWidth: AgentDesign.chatMaxContentWidth)
                     .id(planFingerprint(plan))
                     .transition(.opacity.combined(with: .move(edge: .bottom)))
-                }
-
-                if let progress = taskProgressSnapshot {
-                    AgentComposerTaskProgressControl(snapshot: progress)
-                        .frame(maxWidth: AgentDesign.chatMaxContentWidth)
-                        .transition(.opacity.combined(with: .move(edge: .bottom)))
                 }
 
                 ComposerCard(onUserEdit: { oldValue, newValue in
