@@ -557,10 +557,7 @@ extension AppState {
         }
         let baselineTask = workspaceURL.map { workspaceURL in
             Task.detached(priority: .utility) {
-                await Self.loadAgentWorktreeSnapshot(
-                    for: workspaceURL,
-                    captureArtifactFiles: true
-                )
+                await Self.loadAgentWorktreeSnapshot(for: workspaceURL)
             }
         }
 
@@ -854,8 +851,7 @@ extension AppState {
             lastExecutionResult = executionResult
 
             let currentSnapshot = await Self.loadAgentWorktreeSnapshot(
-                for: workspaceURL,
-                captureArtifactFiles: true
+                for: workspaceURL
             )
             let baselineSnapshot = await baselineTask?.value ?? AgentWorktreeSnapshot(
                 status: GitRepositoryStatus(),

@@ -602,6 +602,7 @@ struct GitWorktreeCoreTests {
         #expect(AppState.isHiddenCacheWorktreePath("frontend/.next/static/chunks/main.js") == true)
         // 大小写不敏感。
         #expect(AppState.isHiddenCacheWorktreePath(".GoCache/aa/bb") == true)
+        #expect(AppState.isHiddenCacheWorktreePath(".gocache/") == true)
 
         // 放行:用户可能真在改的隐藏配置目录,以及仓库根下的隐藏文件。
         #expect(AppState.isHiddenCacheWorktreePath(".github/workflows/ci.yml") == false)

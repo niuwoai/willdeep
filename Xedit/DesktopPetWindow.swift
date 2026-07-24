@@ -770,7 +770,11 @@ struct DesktopPetOverlayView: View {
     }
 
     var body: some View {
-        TimelineView(.animation) { context in
+        // A desktop pet does not need to redraw at a 120 Hz ProMotion refresh
+        // rate. Capping the animation schedule at 30 fps keeps motion smooth
+        // at this small size while preventing an always-on window from
+        // consuming a measurable fraction of one CPU core.
+        TimelineView(.animation(minimumInterval: 1.0 / 30.0)) { context in
             let animation = DesktopPetAnimationValues(
                 mood: displayMood,
                 date: context.date

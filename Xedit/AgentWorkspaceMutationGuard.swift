@@ -358,6 +358,7 @@ nonisolated enum AgentWorkspaceRevisionCapture {
         "MERGE_HEAD", "CHERRY_PICK_HEAD", "REVERT_HEAD", "BISECT_LOG",
         "rebase-apply", "rebase-merge"
     ]
+    private static let maximumHashPathsPerGitInvocation = 256
 
     static func capture(for directoryURL: URL?) async -> AgentWorkspaceRevision? {
         guard let directoryURL else { return nil }
@@ -375,7 +376,15 @@ nonisolated enum AgentWorkspaceRevisionCapture {
         guard let repositoryRoot = AppState.findGitRepositoryRoot(startingAt: directoryURL) else {
             return nil
         }
-        let status = AppState.loadGitStatus(for: repositoryRoot)
+        // The mutation guard only needs a deterministic repository revision,
+        // not one status row per untracked file. `-unormal` keeps an
+        // untracked directory as one entry; directoryDigest still detects
+        // changes inside legitimate directories, while hidden caches can be
+        // rejected before they are recursively expanded.
+        let status = AppState.loadGitStatus(
+            for: repositoryRoot,
+            enumerateUntrackedFiles: false
+        )
         let head = gitOutput(
             arguments: ["rev-parse", "--verify", "HEAD"],
             in: repositoryRoot,
@@ -393,14 +402,52 @@ nonisolated enum AgentWorkspaceRevisionCapture {
         )
 
         var fileStates: [String: String] = [:]
-        for (path, kind) in status.entries {
+        var regularFilePaths: [(path: String, kind: GitFileStatusKind)] = []
+        for (path, kind) in status.entries.sorted(by: { $0.key < $1.key }) {
             let url = repositoryRoot.appendingPathComponent(path).standardizedFileURL
             let rootPath = repositoryRoot.standardizedFileURL.path
             guard url.path == rootPath || url.path.hasPrefix(rootPath + "/") else {
                 fileStates[path] = "\(kind.rawValue)|outside-repository"
                 continue
             }
-            fileStates[path] = "\(kind.rawValue)|\(pathState(at: url))"
+            guard FileManager.default.fileExists(atPath: url.path) else {
+                fileStates[path] = "\(kind.rawValue)|missing"
+                continue
+            }
+            let values = try? url.resourceValues(
+                forKeys: [.isDirectoryKey, .isRegularFileKey, .isSymbolicLinkKey]
+            )
+            // Build caches can contain tens of thousands of untracked files.
+            // Git's normal untracked mode reports a top-level directory
+            // without a trailing slash, so use the resource type to preserve
+            // the distinction from a legitimate top-level file named
+            // `.gocache`.
+            let cacheProbePath = values?.isDirectory == true ? path + "/" : path
+            guard !AppState.isHiddenCacheWorktreePath(cacheProbePath) else { continue }
+
+            if values?.isRegularFile == true, values?.isSymbolicLink != true {
+                regularFilePaths.append((path: path, kind: kind))
+            } else {
+                fileStates[path] = "\(kind.rawValue)|\(pathState(at: url))"
+            }
+        }
+
+        // Hash regular files in bounded batches inside Git's native
+        // implementation. The previous Swift loop opened every file and fed
+        // it through CryptoKit separately; on a dirty workspace that occupied
+        // a utility worker for most of every model round. `hash-object
+        // --no-filters` preserves exact byte-level drift detection (including
+        // same-size edits) while avoiding per-file FileHandle/Data churn.
+        let contentDigests = batchedFileDigests(
+            relativePaths: regularFilePaths.map(\.path),
+            repositoryRoot: repositoryRoot
+        )
+        for item in regularFilePaths {
+            let digest = contentDigests[item.path]
+                ?? ((try? fileDigest(
+                    at: repositoryRoot.appendingPathComponent(item.path)
+                )) ?? "unreadable")
+            fileStates[item.path] = "\(item.kind.rawValue)|file:\(digest)"
         }
 
         let operationState = operationMarkers.map { marker -> String in
@@ -460,6 +507,43 @@ nonisolated enum AgentWorkspaceRevisionCapture {
             return URL(fileURLWithPath: trimmed).standardizedFileURL
         }
         return repositoryRoot.appendingPathComponent(trimmed).standardizedFileURL
+    }
+
+    static func batchedFileDigests(
+        relativePaths: [String],
+        repositoryRoot: URL
+    ) -> [String: String] {
+        guard !relativePaths.isEmpty else { return [:] }
+
+        var result: [String: String] = [:]
+        var startIndex = 0
+        while startIndex < relativePaths.count {
+            let endIndex = min(
+                startIndex + maximumHashPathsPerGitInvocation,
+                relativePaths.count
+            )
+            let paths = Array(relativePaths[startIndex..<endIndex])
+            let commandResult = AppState.runGitCommand(
+                arguments: ["hash-object", "--no-filters", "--"] + paths,
+                in: repositoryRoot
+            )
+            guard commandResult.succeeded else {
+                startIndex = endIndex
+                continue
+            }
+            let hashes = commandResult.stdout
+                .split(separator: "\n", omittingEmptySubsequences: true)
+                .map(String.init)
+            guard hashes.count == paths.count else {
+                startIndex = endIndex
+                continue
+            }
+            for (path, hash) in zip(paths, hashes) {
+                result[path] = hash
+            }
+            startIndex = endIndex
+        }
+        return result
     }
 
     private static func pathState(at url: URL) -> String {
