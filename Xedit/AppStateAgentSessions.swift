@@ -2239,7 +2239,7 @@ extension AppState {
     /// explicitly choose a concrete model for the current conversation.
     /// Existing historical conversations are never rewritten; login
     /// reconciliation may only adopt an empty chat.
-    private func defaultSomeIMManagedRoutingState() -> AgentManagedRoutingState? {
+    func defaultSomeIMManagedRoutingState() -> AgentManagedRoutingState? {
         guard SomeIMIntegrationStore.hasAuthenticatedSessionForAutomaticDefaults(),
               agentProviderLibrary.active?.providerID == AgentProviderPreset.someIMID,
               AgentSettingsStore.loadDefaultModelModePreference().usesManagedRoutingForNewSessions else {
@@ -2248,7 +2248,7 @@ extension AppState {
         return AgentManagedRoutingState()
     }
 
-    private func defaultAgentModelIDForNewSession(
+    func defaultAgentModelIDForNewSession(
         managedRouting: AgentManagedRoutingState?
     ) -> String? {
         if managedRouting != nil {

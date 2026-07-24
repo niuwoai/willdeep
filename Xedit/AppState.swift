@@ -315,6 +315,10 @@ final class AppState: ObservableObject {
     /// id so the specialized card can stop exactly its own orchestration.
     var agentConsultationTasks: [UUID: Task<Void, Never>] = [:]
 
+    /// In-flight expert roundtables. Keyed by the roundtable report id so the
+    /// roundtable window can stop exactly its own orchestration.
+    var agentRoundtableTasks: [UUID: Task<Void, Never>] = [:]
+
     /// Maps each in-flight consultation (report id) to the runtime that owns
     /// it, so the "already running" guard and the composer's disabled state
     /// are scoped per session instead of blocking every other conversation.

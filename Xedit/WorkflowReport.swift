@@ -84,6 +84,9 @@ nonisolated struct WorkflowReport: Codable, Equatable, Identifiable {
     /// Present only for the multi-expert consultation workflow. The generic
     /// workflow fields remain intact so older cards and decoders stay valid.
     var consultation: AgentConsultationReport?
+    /// Present only for the expert-roundtable workflow. Optional so older
+    /// cards written before roundtable existed decode unchanged.
+    var roundtable: AgentRoundtableReport?
 
     init(
         id: UUID = UUID(),
@@ -96,7 +99,8 @@ nonisolated struct WorkflowReport: Codable, Equatable, Identifiable {
         finishedAt: Date? = nil,
         totalUsageTokens: Int = 0,
         summary: String = "",
-        consultation: AgentConsultationReport? = nil
+        consultation: AgentConsultationReport? = nil,
+        roundtable: AgentRoundtableReport? = nil
     ) {
         self.id = id
         self.workflowName = workflowName
@@ -109,6 +113,7 @@ nonisolated struct WorkflowReport: Codable, Equatable, Identifiable {
         self.totalUsageTokens = totalUsageTokens
         self.summary = summary
         self.consultation = consultation
+        self.roundtable = roundtable
     }
 
     var elapsedSeconds: TimeInterval {
