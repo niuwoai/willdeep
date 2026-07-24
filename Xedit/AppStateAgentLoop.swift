@@ -1588,7 +1588,7 @@ extension AppState {
                         sandboxDecision: sandboxDecision
                     ),
                     patchProposalSink: { title, diff, applyImmediately in
-                        try self.enqueueAgentPatchProposal(
+                        let proposal = try self.enqueueAgentPatchProposal(
                             for: runtime,
                             messageID: assistantID,
                             title: title,
@@ -1596,6 +1596,7 @@ extension AppState {
                             autoApplySource: patchAutoApplySource,
                             applyImmediately: applyImmediately
                         )
+                        return await self.awaitAgentPatchDecision(proposal, runtime: runtime)
                     },
                     // edit_file matches old_string against the same content
                     // the patch applier will later apply to (open tab buffer

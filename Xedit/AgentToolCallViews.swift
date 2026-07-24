@@ -528,7 +528,16 @@ struct AgentLiveActivityTimeline: View {
                 if call.status.isBlockingForUserDecision {
                     AgentToolCallCard(call: call)
                 } else if detailCallIDs.contains(call.id) {
-                    if call.id == presentation.disclosureCall?.id,
+                    if call.status == .failed,
+                       call.toolName == "run_command",
+                       AgentFailedCommandDetailPresentation(call: call).hasDetails {
+                        AgentFailedCommandActivityRow(
+                            call: call,
+                            expandsTimeline: call.id == presentation.disclosureCall?.id
+                                && presentation.hasExpandableDetails,
+                            isTimelineExpanded: $isExpanded
+                        )
+                    } else if call.id == presentation.disclosureCall?.id,
                        presentation.hasExpandableDetails {
                         AgentActivityTimelineDisclosureRow(call: call, isExpanded: $isExpanded)
                     } else {
@@ -542,6 +551,92 @@ struct AgentLiveActivityTimeline: View {
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .accessibilityIdentifier("agent-live-activity-timeline")
+    }
+}
+
+private struct AgentFailedCommandActivityRow: View {
+    @EnvironmentObject var appState: AppState
+    let call: AgentToolCall
+    let expandsTimeline: Bool
+    @Binding var isTimelineExpanded: Bool
+    @State private var showsDetails = false
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: showsDetails ? 7 : 0) {
+            Button {
+                withAnimation(.easeInOut(duration: 0.16)) {
+                    showsDetails.toggle()
+                    if showsDetails, expandsTimeline {
+                        isTimelineExpanded = true
+                    }
+                }
+            } label: {
+                HStack(spacing: 6) {
+                    AgentToolActivityTimelineRow(
+                        presentation: AgentToolActivityRowPresentation(call: call),
+                        errorDetail: call.errorMessage
+                    )
+                    Image(systemName: showsDetails ? "chevron.down" : "chevron.right")
+                        .font(.system(size: 9, weight: .semibold))
+                        .foregroundStyle(Color(nsColor: .tertiaryLabelColor))
+                        .frame(width: 12, height: 12)
+                }
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .cursor(.pointingHand)
+            .help(showsDetails ? L10n.ToolCard.collapse : L10n.ToolCard.expand)
+
+            if showsDetails {
+                AgentFailedCommandDetailView(
+                    presentation: AgentFailedCommandDetailPresentation(call: call)
+                )
+                .padding(.leading, 23)
+                .transition(.opacity.combined(with: .move(edge: .top)))
+            }
+        }
+        .accessibilityElement(children: .contain)
+    }
+}
+
+private struct AgentFailedCommandDetailView: View {
+    let presentation: AgentFailedCommandDetailPresentation
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 7) {
+            if let command = presentation.command {
+                detailBlock(title: L10n.ToolCard.command, text: command)
+            }
+            if let workingDirectory = presentation.workingDirectory {
+                detailBlock(title: L10n.ToolCard.arguments, text: "cwd: \(workingDirectory)")
+            }
+            if let output = presentation.output {
+                detailBlock(title: L10n.ToolCard.output, text: output)
+            }
+            if let error = presentation.error {
+                detailBlock(title: L10n.ToolCard.error, text: error)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private func detailBlock(title: String, text: String) -> some View {
+        VStack(alignment: .leading, spacing: 3) {
+            Text(title)
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+            ScrollView([.horizontal, .vertical]) {
+                Text(text)
+                    .font(.system(size: 11, design: .monospaced))
+                    .textSelection(.enabled)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .padding(6)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .frame(maxHeight: 120)
+            .background(Color(nsColor: .textBackgroundColor))
+            .clipShape(RoundedRectangle(cornerRadius: 5))
+        }
     }
 }
 

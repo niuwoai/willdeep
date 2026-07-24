@@ -11,11 +11,16 @@ import Foundation
 
 enum SomeIMAccountRefreshPolicy {
     nonisolated static let staleAfter: TimeInterval = 120
+    nonisolated static let profileStaleAfter: TimeInterval = 900
     nonisolated static let minimumDelay: TimeInterval = 240
     nonisolated static let maximumDelay: TimeInterval = 420
 
     nonisolated static func shouldRefresh(_ account: SomeIMAccount?, now: Date = Date()) -> Bool {
         guard let account else { return false }
+        guard let profileUpdatedAt = account.profileUpdatedAt else { return true }
+        if now.timeIntervalSince(profileUpdatedAt) >= profileStaleAfter {
+            return true
+        }
         return now.timeIntervalSince(account.lastUpdatedAt) >= staleAfter
     }
 

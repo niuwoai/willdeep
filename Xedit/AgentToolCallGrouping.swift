@@ -209,6 +209,31 @@ struct AgentToolActivityRowPresentation: Identifiable, Equatable {
     }
 }
 
+nonisolated struct AgentFailedCommandDetailPresentation: Equatable {
+    let command: String?
+    let workingDirectory: String?
+    let output: String?
+    let error: String?
+
+    init(call: AgentToolCall) {
+        command = Self.nonEmpty(call.arguments["command"]?.stringValue())
+            .map(AgentSecretStore.redactPlaceholders(in:))
+        workingDirectory = Self.nonEmpty(call.arguments["cwd"]?.stringValue())
+        output = Self.nonEmpty(call.result?.payload)
+        error = Self.nonEmpty(call.errorMessage)
+    }
+
+    var hasDetails: Bool {
+        command != nil || workingDirectory != nil || output != nil || error != nil
+    }
+
+    private static func nonEmpty(_ value: String?) -> String? {
+        guard let value else { return nil }
+        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? nil : trimmed
+    }
+}
+
 struct AgentLiveActivityTimelinePresentation {
     /// The live transcript should show just enough recent work to explain
     /// what is happening now. A longer execution log is still represented by

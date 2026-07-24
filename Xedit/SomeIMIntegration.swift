@@ -665,6 +665,9 @@ struct SomeIMAccount: Codable, Equatable {
     var creditsPerUSD: Int
     var defaultModel: String
     var lastUpdatedAt: Date
+    /// 最近一次成功获取 some.im 客户资料（昵称、头像）的时间。
+    /// 与余额更新时间分离，避免模型响应里的余额快照阻止资料补全。
+    var profileUpdatedAt: Date? = nil
     /// 服务端余额快照的账本/预占变更时间（Unix 微秒）。只用于余额合并排序，
     /// 与本机抓取时间 `lastUpdatedAt` 分离，避免客户端时钟偏差造成新旧误判。
     var creditsUpdatedAtMicros: Int64? = nil
@@ -1103,6 +1106,7 @@ enum SomeIMClient {
             creditsPerUSD: 100000,
             defaultModel: previous?.defaultModel ?? SomeIMIntegrationSettings.defaultTextModel,
             lastUpdatedAt: Date(),
+            profileUpdatedAt: profile == nil ? previous?.profileUpdatedAt : Date(),
             creditsUpdatedAtMicros: decoded.balance_updated_at_unix_micros.flatMap(Int64.init)
         )
         return SomeIMIntegrationStore.saveRefreshedAccount(account)
@@ -1764,16 +1768,19 @@ enum SomeIMClient {
 
         func account(fallbackEmail: String, fallbackModel: String) -> SomeIMAccount {
             let balance = balance_usd?.trimmingCharacters(in: .whitespacesAndNewlines).nonEmpty ?? "0"
+            let normalizedNickname = nickname?.trimmingCharacters(in: .whitespacesAndNewlines).nonEmpty
+            let normalizedAvatarURL = avatar_url?.trimmingCharacters(in: .whitespacesAndNewlines).nonEmpty
             return SomeIMAccount(
                 email: email?.trimmingCharacters(in: .whitespacesAndNewlines).nonEmpty ?? fallbackEmail.trimmingCharacters(in: .whitespacesAndNewlines),
-                nickname: nickname?.trimmingCharacters(in: .whitespacesAndNewlines).nonEmpty,
-                avatarURL: avatar_url?.trimmingCharacters(in: .whitespacesAndNewlines).nonEmpty,
+                nickname: normalizedNickname,
+                avatarURL: normalizedAvatarURL,
                 tenantID: tenant_id?.trimmingCharacters(in: .whitespacesAndNewlines).nonEmpty,
                 balanceUSD: balance,
                 credits: credits?.trimmingCharacters(in: .whitespacesAndNewlines).nonEmpty ?? SomeIMClient.credits(fromUSD: balance),
                 creditsPerUSD: credits_per_usd ?? 100000,
                 defaultModel: default_model?.trimmingCharacters(in: .whitespacesAndNewlines).nonEmpty ?? fallbackModel,
-                lastUpdatedAt: Date()
+                lastUpdatedAt: Date(),
+                profileUpdatedAt: normalizedNickname == nil && normalizedAvatarURL == nil ? nil : Date()
             )
         }
     }

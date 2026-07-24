@@ -380,6 +380,160 @@ extension WillDeepTests {
         #expect(try String(contentsOf: manualFileURL, encoding: .utf8) == "let value = 1\n")
     }
 
+    @Test("manual patch Apply resumes the tool and rewrites stale pending feedback")
+    @MainActor
+    func testManualPatchApplyResumesToolWithAppliedFeedback() async throws {
+        let workspace = FileManager.default.temporaryDirectory
+            .appendingPathComponent("willdeep_patch_decision_sync_\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: workspace, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: workspace) }
+
+        let fileURL = workspace.appendingPathComponent("Pending.swift")
+        try "let value = 1\n".write(to: fileURL, atomically: true, encoding: .utf8)
+
+        let appState = AppState(rootDirectory: workspace)
+        let existingIDs = Set(appState.agentSessions.map(\.id))
+        let session = appState.startNewAgentSession()
+        defer {
+            for id in appState.agentSessions.map(\.id) where !existingIDs.contains(id) {
+                AgentSessionStore.delete(id: id)
+            }
+        }
+        let runtime = try #require(appState.agentRuntimes[session.id])
+        let messageID = UUID()
+        let proposal = try appState.enqueueAgentPatchProposal(
+            for: runtime,
+            messageID: messageID,
+            title: "Pending update",
+            diff: """
+            --- a/Pending.swift
+            +++ b/Pending.swift
+            @@ -1 +1 @@
+            -let value = 1
+            +let value = 2
+            """
+        )
+        #expect(proposal.status == .pending)
+
+        let externalID = "call_patch_decision_sync"
+        let pendingPayload = """
+        A patch card is shown inline in the chat, right below your message.
+
+        Patch ID: \(proposal.id.uuidString)
+        Title: Pending update
+        Patch status: pending. No files were modified; the user must click Apply.
+        Files:
+        - Pending.swift
+        """
+        runtime.messages.append(
+            AgentMessage(
+                role: .tool,
+                content: pendingPayload,
+                toolCallID: externalID,
+                toolCallStatus: .succeeded
+            )
+        )
+        runtime.toolCalls.append(
+            AgentToolCall(
+                messageID: messageID,
+                externalID: externalID,
+                toolName: "apply_patch",
+                arguments: [:],
+                risk: .read,
+                status: .succeeded,
+                result: AgentToolResult(summary: "patch queued: 1 file", payload: pendingPayload)
+            )
+        )
+
+        let waiter = Task { @MainActor in
+            await appState.awaitAgentPatchDecision(proposal, runtime: runtime)
+        }
+        for _ in 0..<20 where runtime.patchDecisionWaiters[proposal.id] == nil {
+            await Task.yield()
+        }
+        #expect(runtime.patchDecisionWaiters[proposal.id] != nil)
+
+        appState.applyAgentPatchProposal(id: proposal.id)
+        let resolved = await waiter.value
+
+        #expect(resolved.status == .applied)
+        #expect(try String(contentsOf: fileURL, encoding: .utf8) == "let value = 2\n")
+        let toolMessage = try #require(runtime.messages.last(where: { $0.toolCallID == externalID }))
+        #expect(toolMessage.content.contains("Patch status: applied"))
+        #expect(toolMessage.content.contains("do not ask for approval again"))
+        #expect(!toolMessage.content.contains("Patch status: pending"))
+        let toolCall = try #require(runtime.toolCalls.last(where: { $0.externalID == externalID }))
+        #expect(toolCall.result?.summary == "patch applied: 1 file")
+        #expect(toolCall.result?.payload.contains("No further approval is required") == true)
+    }
+
+    @Test("manual patch approval reaches the provider as an applied tool result")
+    @MainActor
+    func testManualPatchApprovalReturnsAppliedToolResult() async throws {
+        let workspace = FileManager.default.temporaryDirectory
+            .appendingPathComponent("willdeep_patch_tool_wait_\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: workspace, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: workspace) }
+
+        let fileURL = workspace.appendingPathComponent("Pending.swift")
+        try "let value = 1\n".write(to: fileURL, atomically: true, encoding: .utf8)
+        let appState = AppState(rootDirectory: workspace)
+        let existingIDs = Set(appState.agentSessions.map(\.id))
+        let session = appState.startNewAgentSession()
+        defer {
+            for id in appState.agentSessions.map(\.id) where !existingIDs.contains(id) {
+                AgentSessionStore.delete(id: id)
+            }
+        }
+        let runtime = try #require(appState.agentRuntimes[session.id])
+        let messageID = UUID()
+        let toolTask = Task { @MainActor in
+            try await AgentToolRunner.run(
+                name: "apply_patch",
+                arguments: [
+                    "title": .string("Pending update"),
+                    "diff": .string("""
+                    --- a/Pending.swift
+                    +++ b/Pending.swift
+                    @@ -1 +1 @@
+                    -let value = 1
+                    +let value = 2
+                    """)
+                ],
+                context: AgentToolContext(
+                    rootDirectory: workspace,
+                    patchProposalSink: { title, diff, _ in
+                        let proposal = try appState.enqueueAgentPatchProposal(
+                            for: runtime,
+                            messageID: messageID,
+                            title: title,
+                            diff: diff
+                        )
+                        return await appState.awaitAgentPatchDecision(proposal, runtime: runtime)
+                    }
+                )
+            )
+        }
+
+        for _ in 0..<100 where runtime.patchProposals.isEmpty {
+            await Task.yield()
+        }
+        let proposal = try #require(runtime.patchProposals.first)
+        for _ in 0..<20 where runtime.patchDecisionWaiters[proposal.id] == nil {
+            await Task.yield()
+        }
+        #expect(try String(contentsOf: fileURL, encoding: .utf8) == "let value = 1\n")
+
+        appState.applyAgentPatchProposal(id: proposal.id)
+        let result = try await toolTask.value
+
+        #expect(result.summary == "patch applied: 1 file")
+        #expect(result.payload.contains("Patch status: applied"))
+        #expect(result.payload.contains("No further approval is required"))
+        #expect(!result.payload.contains("Patch status: pending"))
+        #expect(try String(contentsOf: fileURL, encoding: .utf8) == "let value = 2\n")
+    }
+
     @Test("apply_patch is advertised in extended prompt and tool registry")
     func testApplyPatchPromptAndRegistrySurface() {
         let descriptor = AgentToolRegistry.descriptor(for: "apply_patch")

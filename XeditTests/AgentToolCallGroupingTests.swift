@@ -118,6 +118,31 @@ struct AgentToolCallGroupingPresentationTests {
         #expect(presentation.hiddenOperationCount == 0)
     }
 
+    @Test("failed command details preserve command cwd output and exit reason")
+    func failedCommandDetailsRemainInspectable() {
+        var call = makeCall(
+            "run_command",
+            status: .failed,
+            arguments: [
+                "command": .string("yarn test"),
+                "cwd": .string("/tmp/WillDeep"),
+            ]
+        )
+        call.result = AgentToolResult(
+            summary: "command failed",
+            payload: "Tests: 1 failed"
+        )
+        call.errorMessage = "Command exited with status 1: assertion failed"
+
+        let details = AgentFailedCommandDetailPresentation(call: call)
+
+        #expect(details.command == "yarn test")
+        #expect(details.workingDirectory == "/tmp/WillDeep")
+        #expect(details.output == "Tests: 1 failed")
+        #expect(details.error == "Command exited with status 1: assertion failed")
+        #expect(details.hasDetails)
+    }
+
     @Test("live activity timeline defaults to one row and expands recent details")
     func liveActivityTimelineUsesSingleDisclosureRowByDefault() {
         let calls = (0..<5).map { index in

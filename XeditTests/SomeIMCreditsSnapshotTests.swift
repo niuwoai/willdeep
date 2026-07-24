@@ -42,6 +42,7 @@ struct SomeIMCreditsSnapshotTests {
             creditsPerUSD: 100_000,
             defaultModel: "someim-auto-flash",
             lastUpdatedAt: Date(timeIntervalSince1970: 1_784_100_000),
+            profileUpdatedAt: Date(timeIntervalSince1970: 1_784_099_000),
             creditsUpdatedAtMicros: 200
         )
 
@@ -55,6 +56,7 @@ struct SomeIMCreditsSnapshotTests {
         #expect(applied.credits == "300")
         #expect(applied.balanceUSD == "0.003")
         #expect(applied.creditsUpdatedAtMicros == 201)
+        #expect(applied.profileUpdatedAt == account.profileUpdatedAt)
     }
 
     @Test("slower balance refresh may update identity but never versioned credits")
@@ -99,12 +101,33 @@ struct SomeIMCreditsSnapshotTests {
             credits: "100000",
             creditsPerUSD: 100_000,
             defaultModel: "someim-auto-flash",
-            lastUpdatedAt: now.addingTimeInterval(-119)
+            lastUpdatedAt: now.addingTimeInterval(-119),
+            profileUpdatedAt: now
         )
         #expect(!SomeIMAccountRefreshPolicy.shouldRefresh(account, now: now))
         account.lastUpdatedAt = now.addingTimeInterval(-120)
         #expect(SomeIMAccountRefreshPolicy.shouldRefresh(account, now: now))
         #expect(SomeIMAccountRefreshPolicy.nextDelay(randomUnit: 0) == 240)
         #expect(SomeIMAccountRefreshPolicy.nextDelay(randomUnit: 1) == 420)
+    }
+
+    @Test("missing or stale profile refreshes independently from recent balance")
+    func profileRefreshPolicyUsesIndependentTimestamp() {
+        let now = Date(timeIntervalSince1970: 2_000)
+        var account = SomeIMAccount(
+            email: "user@example.invalid",
+            tenantID: nil,
+            balanceUSD: "1",
+            credits: "100000",
+            creditsPerUSD: 100_000,
+            defaultModel: "someim-auto-flash",
+            lastUpdatedAt: now
+        )
+
+        #expect(SomeIMAccountRefreshPolicy.shouldRefresh(account, now: now))
+        account.profileUpdatedAt = now.addingTimeInterval(-899)
+        #expect(!SomeIMAccountRefreshPolicy.shouldRefresh(account, now: now))
+        account.profileUpdatedAt = now.addingTimeInterval(-900)
+        #expect(SomeIMAccountRefreshPolicy.shouldRefresh(account, now: now))
     }
 }

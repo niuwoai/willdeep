@@ -629,23 +629,29 @@ enum AgentToolRunner {
         let fileList = files.map { "- \($0)" }.joined(separator: "\n")
         let fileLabel = files.count == 1 ? "1 file" : "\(files.count) files"
         let statusLine: String
+        let placementLine: String
+        let summaryPrefix: String
         switch proposal.status {
         case .applied:
             statusLine = "Patch status: applied. The existing patch applier wrote the changes to disk."
+            placementLine = "Changes written to disk. No further approval is required for this patch."
+            summaryPrefix = "patch applied"
         case .failed:
             statusLine = "Patch status: failed\(proposal.statusMessage.map { ": \($0)" } ?? ".")"
+            placementLine = "The patch was approved, but applying it failed. Diagnose the failure before retrying."
+            summaryPrefix = "patch failed"
         case .rejected:
             statusLine = "Patch status: rejected."
+            placementLine = "The user rejected this patch. Do not apply it unless the user explicitly asks again."
+            summaryPrefix = "patch rejected"
         case .pending:
             statusLine = "Patch status: pending. No files were modified; the user must click Apply on the patch card in the chat before this patch writes to disk."
+            placementLine = "A patch card is shown inline in the chat, right below your message — there is NO separate side / review panel. The user reviews and clicks Apply there. Do NOT tell the user to look in a right-side panel."
+            summaryPrefix = "patch queued"
         }
 
-        let placementLine = proposal.status == .applied
-            ? "Changes written to disk — no review was needed (new files, clean tracked files, and auto-apply modes write immediately)."
-            : "A patch card is shown inline in the chat, right below your message — there is NO separate side / review panel. The user reviews and clicks Apply there. Do NOT tell the user to look in a right-side panel."
-
         return AgentToolResult(
-            summary: proposal.status == .applied ? "patch applied: \(fileLabel)" : "patch queued: \(fileLabel)",
+            summary: "\(summaryPrefix): \(fileLabel)",
             payload: """
             \(placementLine)
 

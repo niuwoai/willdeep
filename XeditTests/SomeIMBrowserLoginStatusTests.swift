@@ -215,6 +215,68 @@ struct SomeIMBrowserLoginStatusTests {
         #expect(SomeIMIntegrationStore.loadSessionToken() == "session-test-current-payload")
     }
 
+    @Test("account refresh hydrates nickname and avatar from current some.im profile")
+    @MainActor
+    func testAccountRefreshHydratesCurrentSomeIMProfile() async throws {
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.protocolClasses = [SomeIMBrowserLoginMockURLProtocol.self]
+        let session = URLSession(configuration: configuration)
+        configureWritableSomeIMSessionStoreForTest()
+        SomeIMIntegrationStore.logout()
+        SomeIMIntegrationStore._setTestSharedAPIKeyWithoutNotification("sk-test-profile")
+        #expect(SomeIMIntegrationStore.saveSessionToken("session-test-profile"))
+        defer {
+            session.invalidateAndCancel()
+            SomeIMBrowserLoginMockURLProtocol.handler = nil
+            SomeIMIntegrationStore.logout()
+            restoreSomeIMSessionStoreAfterTest()
+        }
+
+        SomeIMBrowserLoginMockURLProtocol.handler = { request in
+            let response = HTTPURLResponse(
+                url: request.url!,
+                statusCode: 200,
+                httpVersion: nil,
+                headerFields: ["Content-Type": "application/json"]
+            )!
+            switch request.url?.path {
+            case "/v1/account/balance":
+                #expect(request.value(forHTTPHeaderField: "Authorization") == "Bearer sk-test-profile")
+                let body = #"{"tenant_id":"tenant-profile","currency":"USD","balance":"41.8","balance_updated_at_unix_micros":"123"}"#.data(using: .utf8)!
+                return (response, body)
+            case "/api/v1/customer/me":
+                #expect(request.value(forHTTPHeaderField: "Authorization") == "Bearer session-test-profile")
+                let body = """
+                {
+                  "code": 0,
+                  "data": {
+                    "tenant": {"id": "tenant-profile"},
+                    "user": {
+                      "email": "profile@example.com",
+                      "nickname": "hey",
+                      "avatar_url": "https://img.niuwoai.com/avatar.png"
+                    }
+                  }
+                }
+                """.data(using: .utf8)!
+                return (response, body)
+            default:
+                throw URLError(.unsupportedURL)
+            }
+        }
+
+        let account = try await SomeIMClient.fetchAccountBalance(
+            settings: SomeIMIntegrationSettings(baseURL: "https://some.im/v1"),
+            apiKey: "sk-test-profile",
+            session: session
+        )
+
+        #expect(account.email == "profile@example.com")
+        #expect(account.nickname == "hey")
+        #expect(account.avatarURL == "https://img.niuwoai.com/avatar.png")
+        #expect(account.profileUpdatedAt != nil)
+    }
+
     @Test("browser login status accepts flat credentials without nested account")
     @MainActor
     func testBrowserLoginStatusAcceptsFlatCredentialsWithoutNestedAccount() async throws {

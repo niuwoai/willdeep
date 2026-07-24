@@ -10,9 +10,13 @@ import Foundation
 
 extension AppState {
     func rejectAgentPatchProposal(id: AgentPatchProposal.ID) {
-        guard let index = agentPatchProposals.firstIndex(where: { $0.id == id }) else { return }
-        agentPatchProposals[index].status = .rejected
-        agentPatchProposals[index].statusMessage = "Rejected"
+        guard let runtime = activeRuntime,
+              let index = runtime.patchProposals.firstIndex(where: { $0.id == id }) else { return }
+        runtime.patchProposals[index].status = .rejected
+        runtime.patchProposals[index].statusMessage = "Rejected"
+        synchronizeAgentPatchDecision(runtime.patchProposals[index], in: runtime)
+        resumeAgentPatchDecisionWaiter(id: id, runtime: runtime)
+        persistAgentSession(runtime: runtime)
     }
 
     @discardableResult
@@ -24,6 +28,8 @@ extension AppState {
         for index in runtime.patchProposals.indices where runtime.patchProposals[index].status == .pending {
             runtime.patchProposals[index].status = .rejected
             runtime.patchProposals[index].statusMessage = statusMessage
+            synchronizeAgentPatchDecision(runtime.patchProposals[index], in: runtime)
+            resumeAgentPatchDecisionWaiter(id: runtime.patchProposals[index].id, runtime: runtime)
             rejectedCount += 1
         }
         if rejectedCount > 0 {
@@ -58,6 +64,8 @@ extension AppState {
             )
             runtime.patchProposals[index].status = outcome.status
             runtime.patchProposals[index].statusMessage = outcome.message
+            synchronizeAgentPatchDecision(runtime.patchProposals[index], in: runtime)
+            resumeAgentPatchDecisionWaiter(id: runtime.patchProposals[index].id, runtime: runtime)
             resolvedCount += 1
         }
 
@@ -116,11 +124,162 @@ extension AppState {
     }
 
     func applyAgentPatchProposal(id: AgentPatchProposal.ID) {
-        guard let index = agentPatchProposals.firstIndex(where: { $0.id == id }) else { return }
+        guard let runtime = activeRuntime,
+              let index = runtime.patchProposals.firstIndex(where: { $0.id == id }) else { return }
 
-        let outcome = resolveAgentPatchApplication(agentPatchProposals[index].diff, appliedMessage: "Applied")
-        agentPatchProposals[index].status = outcome.status
-        agentPatchProposals[index].statusMessage = outcome.message
+        let outcome = resolveAgentPatchApplication(
+            runtime.patchProposals[index].diff,
+            runtime: runtime,
+            appliedMessage: "Applied"
+        )
+        runtime.patchProposals[index].status = outcome.status
+        runtime.patchProposals[index].statusMessage = outcome.message
+        synchronizeAgentPatchDecision(runtime.patchProposals[index], in: runtime)
+        resumeAgentPatchDecisionWaiter(id: id, runtime: runtime)
+        persistAgentSession(runtime: runtime)
+    }
+
+    /// Wait for the inline patch card to be resolved before returning the tool
+    /// result to the provider. Previously `apply_patch` returned "pending"
+    /// immediately, so the next provider request could already be in flight
+    /// when the user clicked Apply and would still ask for the same approval.
+    func awaitAgentPatchDecision(
+        _ proposal: AgentPatchProposal,
+        runtime: AgentRuntime
+    ) async -> AgentPatchProposal {
+        guard proposal.status == .pending else { return proposal }
+        return await withTaskCancellationHandler {
+            await withCheckedContinuation { continuation in
+                guard let current = runtime.patchProposals.first(where: { $0.id == proposal.id }) else {
+                    continuation.resume(returning: proposal)
+                    return
+                }
+                guard current.status == .pending else {
+                    continuation.resume(returning: current)
+                    return
+                }
+                if Task.isCancelled {
+                    var cancelled = current
+                    cancelled.status = .rejected
+                    cancelled.statusMessage = "Response stopped before patch approval"
+                    continuation.resume(returning: cancelled)
+                    return
+                }
+                runtime.patchDecisionWaiters[proposal.id] = continuation
+            }
+        } onCancel: {
+            Task { @MainActor [weak runtime] in
+                guard let runtime,
+                      let continuation = runtime.patchDecisionWaiters.removeValue(forKey: proposal.id) else {
+                    return
+                }
+                var cancelled = runtime.patchProposals.first(where: { $0.id == proposal.id }) ?? proposal
+                cancelled.status = .rejected
+                cancelled.statusMessage = "Response stopped before patch approval"
+                continuation.resume(returning: cancelled)
+            }
+        }
+    }
+
+    private func resumeAgentPatchDecisionWaiter(
+        id: AgentPatchProposal.ID,
+        runtime: AgentRuntime
+    ) {
+        guard let continuation = runtime.patchDecisionWaiters.removeValue(forKey: id),
+              let proposal = runtime.patchProposals.first(where: { $0.id == id }) else {
+            return
+        }
+        continuation.resume(returning: proposal)
+    }
+
+    /// Keep both copies of a completed tool result honest: the live tool-call
+    /// ledger used by the UI and the persisted role=tool message replayed to
+    /// the provider on later turns. This also repairs proposals created by
+    /// older builds whose original result already said "pending".
+    private func synchronizeAgentPatchDecision(
+        _ proposal: AgentPatchProposal,
+        in runtime: AgentRuntime
+    ) {
+        let patchIDLine = "Patch ID: \(proposal.id.uuidString)"
+        for index in runtime.messages.indices
+            where runtime.messages[index].role == .tool
+                && runtime.messages[index].content.contains(patchIDLine) {
+            runtime.messages[index].content = patchDecisionPayload(
+                replacing: runtime.messages[index].content,
+                with: proposal
+            )
+        }
+
+        for index in runtime.toolCalls.indices {
+            guard let result = runtime.toolCalls[index].result,
+                  result.payload.contains(patchIDLine) else {
+                continue
+            }
+            runtime.toolCalls[index].result = AgentToolResult(
+                summary: patchDecisionSummary(replacing: result.summary, with: proposal.status),
+                payload: patchDecisionPayload(replacing: result.payload, with: proposal),
+                references: result.references,
+                images: result.images
+            )
+        }
+    }
+
+    private func patchDecisionSummary(
+        replacing summary: String,
+        with status: AgentPatchStatus
+    ) -> String {
+        let prefix: String
+        switch status {
+        case .pending:
+            prefix = "patch queued:"
+        case .applied:
+            prefix = "patch applied:"
+        case .rejected:
+            prefix = "patch rejected:"
+        case .failed:
+            prefix = "patch failed:"
+        }
+        guard let separator = summary.firstIndex(of: ":") else {
+            return "\(prefix.dropLast()) patch"
+        }
+        return prefix + summary[summary.index(after: separator)...]
+    }
+
+    private func patchDecisionPayload(
+        replacing payload: String,
+        with proposal: AgentPatchProposal
+    ) -> String {
+        let placement: String
+        let statusLine: String
+        switch proposal.status {
+        case .pending:
+            return payload
+        case .applied:
+            placement = "Changes written to disk after user approval. No further approval is required for this patch."
+            statusLine = "Patch status: applied. The user already approved this patch; do not ask for approval again."
+        case .rejected:
+            placement = "The user rejected this patch. Do not apply it unless the user explicitly asks again."
+            statusLine = "Patch status: rejected."
+        case .failed:
+            placement = "The user approved this patch, but applying it failed. Diagnose the failure before retrying."
+            statusLine = "Patch status: failed: \(proposal.statusMessage ?? "unknown error")"
+        }
+
+        return payload
+            .components(separatedBy: .newlines)
+            .map { line in
+                let trimmed = line.trimmingCharacters(in: .whitespaces)
+                let indentation = line.prefix { $0 == " " || $0 == "\t" }
+                if trimmed.hasPrefix("Patch status:") {
+                    return String(indentation) + statusLine
+                }
+                if trimmed.hasPrefix("A patch card is shown inline")
+                    || trimmed.hasPrefix("Changes written to disk") {
+                    return String(indentation) + placement
+                }
+                return line
+            }
+            .joined(separator: "\n")
     }
 
     /// Apply `diff`, folding a benign "already applied" outcome into

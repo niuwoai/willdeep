@@ -1,6 +1,6 @@
 # WillDeep Product Overview
 
-> Last updated: 2026-07-24 | Current version: v1.195.0-rc18
+> Last updated: 2026-07-24 | Current version: v1.195.0-rc20
 
 ## Positioning
 
@@ -11,6 +11,10 @@ Official product domain: [willdeep.com](https://willdeep.com).
 WillDeep is configured for non-App-Store distribution without App Sandbox so it can access local project files with fewer permission interruptions.
 
 ## 架构概览
+
+- **补丁审批结果实时回流（1.195.0-rc20）** —— 手动补丁工具会暂停当前工具结果与下一轮模型请求，直到用户在卡片上选择 Apply 或 Reject；最终状态同时回写工具消息与实时工具记录后再继续上游模型，避免文件已经应用、模型却仍读取旧 `pending` 状态而重复要求审批。
+
+- **some.im 账户资料独立刷新（1.195.0-rc19）** —— 侧边栏账号的昵称与头像使用独立于余额快照的刷新时间；旧缓存或缺失资料会立即调用 `customer/me` 补全，之后按低频周期重新校验，模型响应更新余额时不再阻断个人资料同步。
 
 - **子代理委派跟随系统强调色（1.195.0-rc18）** —— Composer 上方“委派给子代理”活动条及工具卡内的子代理徽标不再写死紫色，文字、图标、浅色背景与描边统一跟随 macOS 系统强调色。
 

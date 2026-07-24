@@ -224,6 +224,10 @@ final class AgentRuntime: ObservableObject, Identifiable {
     /// This closes the race where the UI card accepts a click but the
     /// continuation slot is not ready yet, leaving an apparently dead card.
     var pendingToolDecisions: [AgentToolCall.ID: AgentToolDecision] = [:]
+    /// A proposal-only edit suspends its tool result until the user resolves
+    /// the inline patch card. This prevents the provider from receiving a
+    /// stale "pending" result while the user's Apply click is still in flight.
+    var patchDecisionWaiters: [AgentPatchProposal.ID: CheckedContinuation<AgentPatchProposal, Never>] = [:]
     /// Runtime-only grants created by the Codex-style “allow for this
     /// conversation” action. These deliberately do not enter AgentSession or
     /// disk persistence: closing/reopening the conversation asks again.
