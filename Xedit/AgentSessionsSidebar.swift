@@ -549,13 +549,20 @@ struct AgentSessionsSidebar: View {
                 // bullet and no always-on timestamp. Runtime state moves
                 // to the trailing edge, where it only becomes visible for
                 // the active/running/waiting session.
+                //
+                // The active dot stays LAST — to the right of every other
+                // row icon (mode badge, pin.fill, …) — so "this session is
+                // live" always reads as the final marker on the row. It and
+                // the hover-revealed pin/archive actions are mutually
+                // exclusive (dot hides on hover, actions appear), so their
+                // trailing slots don't fight for width.
+                sessionRowTrailingActions(session: session, isHovered: isHovered)
                 AgentSessionRowStatusDot(
                     runtime: observedRuntime,
                     isActive: isActive,
                     accentColor: palette.accent
                 )
                 .opacity(isHovered ? 0 : 1)
-                sessionRowTrailingActions(session: session, isHovered: isHovered)
             }
             .padding(.horizontal, contentHorizontalInset)
             .frame(height: AgentDesign.sidebarRowHeight)

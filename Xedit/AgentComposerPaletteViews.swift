@@ -695,31 +695,23 @@ private struct AgentSessionModeBadgeContent: View {
     }
 
     private func badge(_ summary: AgentSessionTodoSummary) -> some View {
-        HStack(spacing: 3) {
-            Text(modeName(summary.kind))
-                .font(AgentDesign.chatSupportingFont(
-                    baseFontSize: baseFontSize,
-                    visualMinimum: 9,
-                    weight: .medium
-                ))
-            Text("\(summary.completed)/\(summary.total)")
-                .font(AgentDesign.chatSupportingFont(
-                    baseFontSize: baseFontSize,
-                    visualMinimum: 9,
-                    weight: .medium,
-                    design: .monospaced
-                ))
-                .monospacedDigit()
-        }
-        .foregroundStyle(summary.isBlocked ? Color.orange : Color.secondary)
-        .help(summaryHelp(summary))
-        .accessibilityLabel(Text(summaryHelp(summary)))
+        // A single mode icon replaces the wordy "计划 x/x" / "目标 x/x"
+        // label so plan/goal rows keep their sidebar rhythm and stop
+        // stealing width from the session title. Progress stays in the
+        // tooltip. The icon is sized to the title's cap height (not scaled
+        // down) so its strokes read at the same visual weight as the
+        // surrounding text, and it stays a quiet grey in every state.
+        Image(systemName: modeIcon(summary.kind))
+            .font(.system(size: max(11, baseFontSize), weight: .regular))
+            .foregroundStyle(Color.primary.opacity(0.55))
+            .help(summaryHelp(summary))
+            .accessibilityLabel(Text(summaryHelp(summary)))
     }
 
-    private func modeName(_ kind: AgentSessionTodoSummary.Kind) -> String {
+    private func modeIcon(_ kind: AgentSessionTodoSummary.Kind) -> String {
         switch kind {
-        case .plan: return L10n.InteractionMode.plan
-        case .goal: return L10n.InteractionMode.goal
+        case .plan: return "checklist"
+        case .goal: return "target"
         }
     }
 
