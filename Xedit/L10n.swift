@@ -186,6 +186,12 @@ nonisolated enum L10n {
         static let dashboardTitle = String(localized: "roundtable.dashboard", defaultValue: "Board")
         static let stanceSpectrum = String(localized: "roundtable.stance-spectrum", defaultValue: "Stance spectrum")
         static let exportAction = String(localized: "roundtable.export", defaultValue: "Export")
+        static let documentSavedAction = String(localized: "roundtable.document-saved-action", defaultValue: "Saved")
+        static let documentSaveRetry = String(localized: "roundtable.document-save-retry", defaultValue: "Retry")
+        static func documentSaveFailed(_ a1: String) -> String {
+            let template = String(localized: "roundtable.document-save-failed-format", defaultValue: "Couldn’t save the Markdown file automatically: %@")
+            return String(format: template, a1)
+        }
         static let backAction = String(localized: "roundtable.back", defaultValue: "Back")
         static let newDiscussion = String(localized: "roundtable.new", defaultValue: "New discussion")
         static let convergedHint = String(localized: "roundtable.converged-hint", defaultValue: "The discussion has converged")

@@ -124,10 +124,42 @@ extension AppState {
                 guard !Task.isCancelled else { throw CancellationError() }
                 switch result {
                 case .completed(let document):
+                    let title = self.workflowReport(
+                        id: reportID,
+                        runtimeID: runtimeID
+                    )?.roundtable?.displayTitle ?? "roundtable"
                     self.updateWorkflowReport(id: reportID, runtimeID: runtimeID) { item in
                         item.status = .done
                         item.summary = document
                         item.finishedAt = Date()
+                    }
+                    do {
+                        let fileURL = try RoundtableDocumentExporter.persist(
+                            reportID: reportID,
+                            title: title,
+                            markdown: document
+                        )
+                        self.updateWorkflowReport(id: reportID, runtimeID: runtimeID) { item in
+                            guard var detail = item.roundtable else { return }
+                            detail.finalDocumentFilePath = fileURL.path
+                            detail.finalDocumentWriteError = nil
+                            detail.updatedAt = Date()
+                            item.roundtable = detail
+                        }
+                    } catch {
+                        let description = error.localizedDescription
+                        NSLog(
+                            "Roundtable document persist failed report=%@ error=%@",
+                            reportID.uuidString,
+                            description
+                        )
+                        self.updateWorkflowReport(id: reportID, runtimeID: runtimeID) { item in
+                            guard var detail = item.roundtable else { return }
+                            detail.finalDocumentFilePath = nil
+                            detail.finalDocumentWriteError = description
+                            detail.updatedAt = Date()
+                            item.roundtable = detail
+                        }
                     }
                 case .awaitingUser:
                     // 停在等主持人答复:保持 running,不落终态,phase 已由引擎置为

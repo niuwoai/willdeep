@@ -609,14 +609,27 @@ struct RoundtableDocumentView: View {
         appState.workflowReport(id: reportID, runtimeID: runtimeID)?.roundtable
     }
 
+    private var normalizedDocument: String {
+        AgentRoundtableDocumentNormalizer.normalize(report?.finalDocument ?? "")
+    }
+
+    private var persistedDocumentURL: URL? {
+        guard let path = report?.finalDocumentFilePath, !path.isEmpty else { return nil }
+        let url = URL(fileURLWithPath: path)
+        return FileManager.default.fileExists(atPath: url.path) ? url : nil
+    }
+
     var body: some View {
         VStack(spacing: 0) {
             chrome
             Divider()
+            if let error = report?.finalDocumentWriteError, persistedDocumentURL == nil {
+                documentWriteErrorBanner(error)
+            }
             ScrollView {
                 VStack(alignment: .leading, spacing: 10) {
-                    if let document = report?.finalDocument, !document.isEmpty {
-                        ForEach(Array(MarkdownPreviewParser.blocks(from: document).enumerated()), id: \.offset) { _, block in
+                    if !normalizedDocument.isEmpty {
+                        ForEach(Array(MarkdownPreviewParser.blocks(from: normalizedDocument).enumerated()), id: \.offset) { _, block in
                             MarkdownPreviewBlockView(block: block)
                                 .frame(maxWidth: .infinity, alignment: .leading)
                         }
@@ -629,6 +642,9 @@ struct RoundtableDocumentView: View {
                 .frame(maxWidth: 720, alignment: .leading)
                 .frame(maxWidth: .infinity)
             }
+        }
+        .task(id: report?.finalDocument) {
+            persistDocumentIfNeeded()
         }
     }
 
@@ -644,18 +660,97 @@ struct RoundtableDocumentView: View {
                 .font(.system(size: 15, weight: .medium))
                 .lineLimit(1)
             Spacer()
+            if let url = persistedDocumentURL {
+                Button {
+                    RoundtableDocumentExporter.reveal(url)
+                } label: {
+                    Label(
+                        L10n.Roundtable.documentSavedAction,
+                        systemImage: "checkmark.circle.fill"
+                    )
+                    .font(.system(size: 13))
+                }
+                .buttonStyle(.bordered)
+                .tint(.green)
+                .help(url.path)
+            }
             Button(action: export) {
                 Label(L10n.Roundtable.exportAction, systemImage: "square.and.arrow.down")
                     .font(.system(size: 13))
             }
             .buttonStyle(.bordered)
-            .disabled((report?.finalDocument ?? "").isEmpty)
+            .disabled(normalizedDocument.isEmpty)
         }
         .padding(.horizontal, 16).padding(.vertical, 10)
     }
 
+    private func documentWriteErrorBanner(_ error: String) -> some View {
+        HStack(spacing: 8) {
+            Image(systemName: "exclamationmark.triangle.fill")
+                .foregroundStyle(.orange)
+            Text(L10n.Roundtable.documentSaveFailed(error))
+                .font(.system(size: 12))
+                .foregroundStyle(.secondary)
+                .lineLimit(2)
+            Spacer(minLength: 8)
+            Button(L10n.Roundtable.documentSaveRetry) {
+                persistDocumentIfNeeded(force: true)
+            }
+            .buttonStyle(.bordered)
+            .controlSize(.small)
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 8)
+        .background(.orange.opacity(0.08))
+    }
+
     private func export() {
-        guard let report, let document = report.finalDocument, !document.isEmpty else { return }
-        RoundtableDocumentExporter.export(title: report.displayTitle, markdown: document)
+        guard let report, !normalizedDocument.isEmpty else { return }
+        RoundtableDocumentExporter.export(
+            title: report.displayTitle,
+            markdown: normalizedDocument
+        )
+    }
+
+    private func persistDocumentIfNeeded(force: Bool = false) {
+        guard let report, !normalizedDocument.isEmpty else { return }
+        if !force, persistedDocumentURL != nil, normalizedDocument == report.finalDocument {
+            return
+        }
+
+        do {
+            let url = try RoundtableDocumentExporter.persist(
+                reportID: reportID,
+                title: report.displayTitle,
+                markdown: normalizedDocument
+            )
+            appState.updateWorkflowReport(id: reportID, runtimeID: runtimeID) { item in
+                guard var detail = item.roundtable else { return }
+                detail.finalDocument = normalizedDocument
+                detail.finalDocumentFilePath = url.path
+                detail.finalDocumentWriteError = nil
+                detail.updatedAt = Date()
+                item.summary = normalizedDocument
+                item.roundtable = detail
+            }
+            appState.persistWorkflowRuntime(runtimeID: runtimeID)
+        } catch {
+            let description = error.localizedDescription
+            NSLog(
+                "Roundtable document backfill failed report=%@ error=%@",
+                reportID.uuidString,
+                description
+            )
+            appState.updateWorkflowReport(id: reportID, runtimeID: runtimeID) { item in
+                guard var detail = item.roundtable else { return }
+                detail.finalDocument = normalizedDocument
+                detail.finalDocumentFilePath = nil
+                detail.finalDocumentWriteError = description
+                detail.updatedAt = Date()
+                item.summary = normalizedDocument
+                item.roundtable = detail
+            }
+            appState.persistWorkflowRuntime(runtimeID: runtimeID)
+        }
     }
 }

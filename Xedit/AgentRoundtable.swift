@@ -310,6 +310,10 @@ nonisolated struct AgentRoundtableReport: Codable, Equatable, Sendable {
     var currentRound: Int
     var converged: Bool
     var finalDocument: String?
+    /// WillDeep 自动落盘后的 Markdown 文件路径。可选字段兼容旧报告。
+    var finalDocumentFilePath: String?
+    /// 自动落盘失败时保留错误，文档仍可在界面阅读和手动导出。
+    var finalDocumentWriteError: String?
     /// 当前正在组织观点、即将发言的专家。可选字段兼容旧报告。
     var activeExpert: AgentRoundtableExpertRole?
     var createdAt: Date
@@ -325,6 +329,8 @@ nonisolated struct AgentRoundtableReport: Codable, Equatable, Sendable {
         currentRound: Int = 0,
         converged: Bool = false,
         finalDocument: String? = nil,
+        finalDocumentFilePath: String? = nil,
+        finalDocumentWriteError: String? = nil,
         activeExpert: AgentRoundtableExpertRole? = nil,
         createdAt: Date = Date(),
         updatedAt: Date = Date()
@@ -338,6 +344,8 @@ nonisolated struct AgentRoundtableReport: Codable, Equatable, Sendable {
         self.currentRound = currentRound
         self.converged = converged
         self.finalDocument = finalDocument
+        self.finalDocumentFilePath = finalDocumentFilePath
+        self.finalDocumentWriteError = finalDocumentWriteError
         self.activeExpert = activeExpert
         self.createdAt = createdAt
         self.updatedAt = updatedAt
@@ -348,6 +356,154 @@ nonisolated struct AgentRoundtableReport: Codable, Equatable, Sendable {
 
     var displayTitle: String {
         title.isEmpty ? topic : title
+    }
+}
+
+// MARK: - 终稿 Markdown 规范化
+
+/// 主模型偶尔会把终稿包进 ` ```markdown ` 围栏，甚至先输出“我是只读代理，
+/// 请父 agent 写文件”一类执行环境话术。圆桌终稿本质是内容，不应把这些包装
+/// 当成文档正文或代码块展示。新终稿入库前规范化，旧会话也在展示/导出时复用。
+nonisolated enum AgentRoundtableDocumentNormalizer {
+    private static let markdownFenceLanguages = Set(["markdown", "md", ""])
+    private static let handoffMarkers = [
+        "只读代理", "只读子代理", "无法直接写", "不能直接写", "请父 agent", "请父agent",
+        "请将上述内容写入", "请将以上内容写入",
+        "read-only agent", "readonly agent", "cannot write", "unable to write",
+        "parent agent",
+    ]
+
+    static func normalize(_ output: String) -> String {
+        var text = output.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !text.isEmpty else { return "" }
+
+        if let fencedMarkdown = outerMarkdownFence(in: text) {
+            text = fencedMarkdown
+        }
+
+        text = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        let lines = text.components(separatedBy: .newlines)
+        if let firstHeadingIndex = lines.firstIndex(where: {
+            $0.trimmingCharacters(in: .whitespaces).hasPrefix("#")
+        }) {
+            let preamble = lines[..<firstHeadingIndex].joined(separator: "\n").lowercased()
+            if handoffMarkers.contains(where: { preamble.contains($0) }) {
+                text = lines[firstHeadingIndex...].joined(separator: "\n")
+            }
+        }
+
+        text = removeOrphanedFenceAndHandoffSuffix(from: text)
+        text = removeOuterFenceLines(from: text)
+        text = removeLeadingDocumentTitle(from: text)
+        return text.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    /// 只解包“覆盖整份输出”的围栏。文档正文内部可能合法包含无语言代码块，
+    /// 不能为了修外层围栏反而把整篇文档裁成其中一段示例代码。
+    private static func outerMarkdownFence(in text: String) -> String? {
+        let lines = text.components(separatedBy: .newlines)
+        var candidates: [String] = []
+        var index = 0
+
+        while index < lines.count {
+            let trimmed = lines[index].trimmingCharacters(in: .whitespaces)
+            guard trimmed.hasPrefix("```") else {
+                index += 1
+                continue
+            }
+
+            let language = String(trimmed.dropFirst(3))
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+                .lowercased()
+            guard markdownFenceLanguages.contains(language) else {
+                index += 1
+                continue
+            }
+
+            let bodyStart = index + 1
+            var bodyEnd = bodyStart
+            while bodyEnd < lines.count {
+                if lines[bodyEnd].trimmingCharacters(in: .whitespaces).hasPrefix("```") {
+                    let preamble = lines[..<index].joined(separator: "\n")
+                    let suffix = lines[(bodyEnd + 1)...].joined(separator: "\n")
+                    let normalizedPreamble = preamble
+                        .trimmingCharacters(in: .whitespacesAndNewlines)
+                        .lowercased()
+                    let normalizedSuffix = suffix
+                        .trimmingCharacters(in: .whitespacesAndNewlines)
+                        .lowercased()
+                    let isKnownPreamble = handoffMarkers.contains {
+                        normalizedPreamble.contains($0)
+                    }
+                    let isKnownSuffix = handoffMarkers.contains {
+                        normalizedSuffix.contains($0)
+                    }
+                    let surroundsWholeOutput = (
+                        normalizedPreamble.isEmpty || isKnownPreamble
+                    ) && (
+                        normalizedSuffix.isEmpty || isKnownSuffix
+                    )
+                    if surroundsWholeOutput {
+                        candidates.append(lines[bodyStart..<bodyEnd].joined(separator: "\n"))
+                    }
+                    index = bodyEnd
+                    break
+                }
+                bodyEnd += 1
+            }
+            index += 1
+        }
+
+        return candidates.max(by: { $0.count < $1.count })
+    }
+
+    /// 兼容曾被旧版部分清洗过的会话：开头话术和起始围栏已被移除，
+    /// 但文末仍可能留下闭合围栏以及“请写入文件”的交接说明。
+    private static func removeOrphanedFenceAndHandoffSuffix(from text: String) -> String {
+        let lines = text.components(separatedBy: .newlines)
+        guard let fenceIndex = lines.lastIndex(where: {
+            $0.trimmingCharacters(in: .whitespaces).hasPrefix("```")
+        }) else { return text }
+
+        let prefix = lines[..<fenceIndex].joined(separator: "\n")
+        let suffix = lines[(fenceIndex + 1)...]
+            .joined(separator: "\n")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .lowercased()
+        let prefixHasDocumentHeading = prefix.components(separatedBy: .newlines).contains {
+            $0.trimmingCharacters(in: .whitespaces).hasPrefix("## ")
+        }
+        let suffixIsKnownHandoff = handoffMarkers.contains { suffix.contains($0) }
+        guard prefixHasDocumentHeading, suffixIsKnownHandoff else { return text }
+        return prefix
+    }
+
+    private static func removeOuterFenceLines(from text: String) -> String {
+        var lines = text.components(separatedBy: .newlines)
+        if lines.first?.trimmingCharacters(in: .whitespaces).hasPrefix("```") == true {
+            lines.removeFirst()
+        }
+        if lines.last?.trimmingCharacters(in: .whitespaces).hasPrefix("```") == true {
+            lines.removeLast()
+        }
+        return lines.joined(separator: "\n")
+    }
+
+    /// 文档页已有独立标题栏，导出器也会写入规范 H1；移除模型重复生成的 H1，
+    /// 保留从 H2 开始的决策文档结构。
+    private static func removeLeadingDocumentTitle(from text: String) -> String {
+        var lines = text.components(separatedBy: .newlines)
+        guard let firstContentIndex = lines.firstIndex(where: {
+            !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        }) else { return "" }
+
+        let first = lines[firstContentIndex].trimmingCharacters(in: .whitespaces)
+        guard first.hasPrefix("# "), !first.hasPrefix("## ") else { return text }
+        lines.remove(at: firstContentIndex)
+        while lines.first?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == true {
+            lines.removeFirst()
+        }
+        return lines.joined(separator: "\n")
     }
 }
 
@@ -534,7 +690,8 @@ nonisolated enum AgentRoundtablePromptBuilder {
     static func finalDocument(topic: String, transcript: String) -> String {
         boundedPacket([
             "你是这场专家圆桌的主持人,现在讨论已经收敛,请把整场讨论沉淀成一份给用户带走的决策文档。",
-            "文档用 Markdown,结构如下(用二级标题):",
+            "只返回 Markdown 正文。不要调用工具,不要声称自己无法写文件或是只读代理,不要要求父 agent/其他代理代写,不要使用 ```markdown 或其他代码围栏包裹全文。",
+            "直接从「## 核心结论」开始,结构如下(用二级标题):",
             "## 核心结论 —— 一段话,给出这场讨论最终收敛到的建议。",
             "## 各方立场 —— 逐个专家列出其核心主张(一行一位)。",
             "## 已达成共识 —— 要点列表。",
