@@ -2673,6 +2673,13 @@
         "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "正在查找相关代码" } }
       }
     },
+    "agent-activity.stage.thinking" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Thinking through the next step" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "思考下一步" } }
+      }
+    },
     "agent-activity.stage.verifying" : {
       "extractionState" : "manual",
       "localizations" : {
