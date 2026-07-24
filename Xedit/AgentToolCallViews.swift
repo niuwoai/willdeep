@@ -775,7 +775,7 @@ struct AgentToolCallCard: View {
                 HStack(spacing: 5) {
                     Image(systemName: "person.2.fill")
                         .font(.system(size: 9, weight: .semibold))
-                        .foregroundStyle(.purple)
+                        .foregroundStyle(Color.accentColor)
                     Text(badge)
                         .font(AgentDesign.chatSupportingFont(
                             baseFontSize: appState.agentChatBaseFontSize,

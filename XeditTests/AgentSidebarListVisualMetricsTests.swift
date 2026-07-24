@@ -43,6 +43,14 @@ struct AgentSidebarListVisualMetricsTests {
         #expect(AgentStatsDashboardLayout.maximumHeatmapWeeks == 52)
     }
 
+    @Test("Token activity tooltip includes the hovered day and its usage")
+    func tokenActivityTooltipCarriesDailyUsage() {
+        let tooltip = L10n.HeatmapCell.tooltip("7月10日", "10.3亿")
+
+        #expect(tooltip.contains("7月10日"))
+        #expect(tooltip.contains("10.3亿"))
+    }
+
     @Test("workspace and conversation titles share the Codex text column")
     func titleColumnsAlign() {
         let workspaceTitleX = AgentDesign.sidebarWorkspaceHorizontalInset
