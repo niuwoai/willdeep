@@ -31,13 +31,30 @@ struct MobileGatewayCoordinatorTests {
         #expect(MobileGatewaySettingsStore.load(defaults: defaults).transportMode == .relay)
     }
 
+    /// 1.195.0-rc22：手机网关固定走互联网中继。旧持久化里遗留的 `lanGateway`
+    /// 值仍能被解码（枚举保留），但归一化后必须强制回到 `.relay`，保证「开机
+    /// 自连中继」这条唯一线路不被历史配置污染。
     @Test
-    func explicitLanGatewayModeRoundTripsThroughDecodeAndNormalize() throws {
+    func lanGatewayModeDecodesButNormalizesBackToRelay() throws {
         let payload: [String: Any] = ["transportMode": "lanGateway", "host": "0.0.0.0"]
         let data = try JSONSerialization.data(withJSONObject: payload)
         let decoded = try JSONDecoder().decode(MobileGatewaySettings.self, from: data)
+        // 解码保真：枚举本身没删。
         #expect(decoded.transportMode == .lanGateway)
-        #expect(decoded.normalized.transportMode == .lanGateway)
+        // 归一化强制回中继。
+        #expect(decoded.normalized.transportMode == .relay)
+    }
+
+    /// 通过 store 落盘再读回也必须是中继：手动改过 JSON 或旧版本写入的
+    /// `lanGateway` 不能再让运行时进入局域网模式。
+    @Test
+    func storedLanGatewaySettingsLoadBackAsRelay() throws {
+        let defaults = try #require(UserDefaults(suiteName: "willdeep-mobile-gateway-forcerelay-\(UUID().uuidString)"))
+        let payload: [String: Any] = ["transportMode": "lanGateway", "host": "0.0.0.0", "port": 8877]
+        let data = try JSONSerialization.data(withJSONObject: payload)
+        defaults.set(data, forKey: "com.willdeep.mobileGateway.settings.v1")
+
+        #expect(MobileGatewaySettingsStore.load(defaults: defaults).transportMode == .relay)
     }
 
     @Test

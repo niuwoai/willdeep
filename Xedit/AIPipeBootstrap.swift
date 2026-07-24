@@ -28,6 +28,10 @@ final class WillDeepAppDelegate: NSObject, NSApplicationDelegate {
         MainActor.assumeIsolated {
             FnPushToTalkMonitor.shared.install()
             VoiceModelLifecycleController.shared.install()
+            // 手机网关(互联网中继)开机自连并常驻：不再等用户打开设置页，
+            // 保证配对过的手机在任何网络下都能连上桌面。全局单点，多窗口只
+            // 维持一份中继连接。
+            MobileGatewayAutostart.shared.startIfNeeded()
         }
     }
 
