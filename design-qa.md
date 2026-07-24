@@ -1,3 +1,50 @@
+# Design QA：专家圆桌沉浸式讨论工作台
+
+## 验收范围
+
+- source visual truth：用户提供的截图 1–3；本轮主对照采用 `/Users/rocky/.codex/attachments/59199210-ca31-47de-9806-ac723a1e76f7/image-2.png`（775 × 575 px）。
+- implementation screenshots：
+  - `design-qa-evidence/roundtable-release-final-active-1.199.0-rc1.jpg`（735 × 768 px；真实模型选出四位专家后的发言预告态）。
+  - `design-qa-evidence/roundtable-release-full-1.199.0-rc1.jpg`（735 × 768 px；真实模型完成三位专家发言后的立场与信号态）。
+  - `design-qa-evidence/roundtable-release-quote-draft-1.199.0-rc1.jpg`（735 × 768 px；划词引用进入输入草稿态）。
+- 同画布对比：
+  - `design-qa-evidence/roundtable-reference-vs-release-1.199.0-rc1.png`（1470 × 768 px；左侧参考稿，右侧发言预告态）。
+  - `design-qa-evidence/roundtable-reference-vs-release-populated-1.199.0-rc1.png`（1470 × 768 px；左侧参考稿，右侧完整讨论态）。
+- state：简体中文、浅色皮肤、签名 arm64 Release、真实 DeepSeek 模型讨论；议题为「产品首发应该邀请制灰度还是公开发布？」。
+
+## 修正记录
+
+1. 讨论流重构为有身份层级的专家卡片：六位专家均有唯一姓名、角色、强调色和真人感头像，页头与右侧专家席同步呈现。
+2. 专家开始推理时，讨论顶部立即显示「XX 专家即将发言」提示，并点亮头像与专家席状态；等待阶段不再像界面卡住。
+3. 支持、反对、中立、待定通过标签、图标、色轨与背景多重编码；右侧看板同步呈现阶段进度、立场比例、专家状态和实时 OSR 信号。
+4. 输入区调整为约三行高度，Return 直接发起讨论或发送发言，Shift/Option/Control + Return 输入换行。
+5. 每条专家发言支持整段引用；正文使用原生可选文本，划选片段后出现「引用所选文字」，引用来源与片段会进入草稿、已发送消息及持久化 transcript。
+6. 第一轮真实 Release 验收发现多段导播文案可能保留 Markdown `**` 标记；最终轮改为逐行解析 Markdown，生产界面复核后标记已消失。
+
+## Required Fidelity Surfaces
+
+- Fonts and typography：沿用 WillDeep 原生系统字体；专家姓名、职业、立场、正文、行动建议和态势信号形成清晰层级，长文保持可读行宽。
+- Spacing and layout rhythm：讨论主体与态势看板为稳定双栏；头像、卡片、输入区、右栏组件使用一致圆角、间距与对齐，三行输入不会挤压发送区。
+- Colors and visual tokens：支持/反对/中立/待定采用绿/红/蓝/灰语义色；皮肤背景、描边和次级文字继续读取现有主题 token。
+- Image quality and asset fidelity：六张头像均为独立生成并以 1254 × 1254 原图进入资产目录，圆形裁切下主体清晰，没有占位图或表情符号。
+- Copy and content：所有新增对外文案、姓名、职业与立场均进入中英文 i18n；真实讨论内容由模型生成，没有用演示文本冒充生产结果。
+
+## Findings
+
+同画布对比确认：实现继承参考稿的「明确专家身份 + 语义化立场卡 + 右侧态势看板」核心结构，并在 WillDeep 既有侧边栏与窗口框架内补充了发言预告、专家席实时状态、OSR 信号和引用草稿。参考稿更接近独立画布，生产实现保留现有应用导航，这是宿主结构差异；核心讨论区的信息密度、色彩层级和可操作性已达到或超过参考稿。当前没有未解决的 P0、P1 或 P2 视觉差异。
+
+## 验证
+
+- 最终签名 arm64 Release 构建成功，并保持 `/tmp/xedit-roundtable-release-derived/Build/Products/Release/WillDeep.app` 打开供验收。
+- `AgentRoundtableTests`：21 项通过，覆盖引用持久化、旧会话兼容、专家身份资产、Markdown 渲染和视觉夹具。
+- `scripts/roundtable_interaction_contract_test.rb`：9 项通过；版本一致性与 i18n 覆盖检查通过。
+- 真实 Release 交互已验证：Return 发起讨论、专家发言预告、三位专家完成发言后立场看板更新、划词引用片段进入引用草稿并随用户发言持久化。
+- 参考稿与两种生产状态已放进同一画布逐项复核；最终多段 Markdown 修复后重新构建并查看生产 Release。
+
+final result: passed
+
+---
+
 # Design QA：Codex 风格工具活动时间流
 
 ## 验收范围

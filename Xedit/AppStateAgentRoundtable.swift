@@ -66,7 +66,12 @@ extension AppState {
 
     /// 主持人答复专家反问,或作为主持人插话。追加为 .user 消息;若讨论正停在
     /// 「等答复」(.awaitingUser)且没有在跑的驱动,则重启一次续跑。
-    func submitRoundtableUserReply(runtimeID: UUID, reportID: UUID, content: String) {
+    func submitRoundtableUserReply(
+        runtimeID: UUID,
+        reportID: UUID,
+        content: String,
+        quote: RoundtableQuoteReference? = nil
+    ) {
         let trimmed = content.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
 
@@ -75,7 +80,12 @@ extension AppState {
             guard var roundtable = item.roundtable else { return }
             wasAwaiting = roundtable.phase == .awaitingUser
             roundtable.messages.append(
-                RoundtableMessage(speaker: .user, round: roundtable.currentRound, content: trimmed)
+                RoundtableMessage(
+                    speaker: .user,
+                    round: roundtable.currentRound,
+                    content: trimmed,
+                    quote: quote
+                )
             )
             roundtable.updatedAt = Date()
             item.roundtable = roundtable
@@ -131,6 +141,7 @@ extension AppState {
                     item.finishedAt = Date()
                     if var detail = item.roundtable {
                         detail.phase = .cancelled
+                        detail.activeExpert = nil
                         item.roundtable = detail
                     }
                 }
@@ -142,6 +153,7 @@ extension AppState {
                     item.summary = error.localizedDescription
                     if var detail = item.roundtable {
                         detail.phase = .failed
+                        detail.activeExpert = nil
                         item.roundtable = detail
                     }
                 }

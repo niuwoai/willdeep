@@ -125,25 +125,22 @@ struct RoundtableHomeView: View {
 
     private var composer: some View {
         VStack(alignment: .leading, spacing: 10) {
-            TextEditor(text: $topic)
-                .font(.system(size: 15))
-                .frame(minHeight: 64)
-                .scrollContentBackground(.hidden)
-                .overlay(alignment: .topLeading) {
-                    if topic.isEmpty {
-                        Text(L10n.Roundtable.topicPlaceholder)
-                            .font(.system(size: 15))
-                            .foregroundStyle(.tertiary)
-                            .padding(.top, 8)
-                            .padding(.leading, 5)
-                            .allowsHitTesting(false)
-                    }
-                }
+            RoundtableComposerTextView(
+                text: $topic,
+                placeholder: L10n.Roundtable.topicPlaceholder,
+                onSubmit: start
+            )
+            .frame(height: 78)
             Divider()
             HStack {
-                Label(L10n.Roundtable.recommendHint, systemImage: "sparkles")
-                    .font(.system(size: 12))
-                    .foregroundStyle(.tertiary)
+                VStack(alignment: .leading, spacing: 2) {
+                    Label(L10n.Roundtable.recommendHint, systemImage: "sparkles")
+                        .font(.system(size: 12))
+                        .foregroundStyle(.secondary)
+                    Text(L10n.Roundtable.submitShortcutHint)
+                        .font(.system(size: 10.5))
+                        .foregroundStyle(.tertiary)
+                }
                 Spacer()
                 Button(action: start) {
                     Label(L10n.Roundtable.startAction, systemImage: "arrow.right")
@@ -153,8 +150,9 @@ struct RoundtableHomeView: View {
             }
         }
         .padding(16)
-        .background(RoundedRectangle(cornerRadius: 12).fill(Color(nsColor: .textBackgroundColor)))
-        .overlay(RoundedRectangle(cornerRadius: 12).stroke(Color.secondary.opacity(0.18), lineWidth: 1))
+        .background(RoundedRectangle(cornerRadius: 14).fill(Color(nsColor: .textBackgroundColor)))
+        .overlay(RoundedRectangle(cornerRadius: 14).stroke(Color.accentColor.opacity(0.28), lineWidth: 1))
+        .shadow(color: Color.black.opacity(0.08), radius: 12, y: 5)
     }
 
     /// 示例议题:点一下把话题填进输入框(不直接发起,留给用户改)。
@@ -310,7 +308,7 @@ private struct RoundtableHistoryRow: View {
 
 // MARK: - 讨论中
 
-struct RoundtableDiscussionView: View {
+private struct LegacyRoundtableDiscussionView: View {
     @EnvironmentObject var appState: AppState
     @Binding var route: RoundtableRoute
     let runtimeID: UUID
@@ -338,7 +336,7 @@ struct RoundtableDiscussionView: View {
         HStack(spacing: 0) {
             conversation
             Divider()
-            RoundtableDashboard(report: report)
+            LegacyRoundtableDashboard(report: report)
                 .frame(width: 240)
         }
     }
@@ -350,7 +348,7 @@ struct RoundtableDiscussionView: View {
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 14) {
                     ForEach(report?.messages ?? [], id: \.id) { message in
-                        RoundtableBubble(message: message)
+                        LegacyRoundtableBubble(message: message)
                     }
                 }
                 .padding(16)
@@ -464,7 +462,7 @@ struct RoundtableDiscussionView: View {
     }
 }
 
-private struct RoundtableBubble: View {
+private struct LegacyRoundtableBubble: View {
     let message: RoundtableMessage
 
     var body: some View {
@@ -540,7 +538,7 @@ private struct RoundtableBubble: View {
 
 // MARK: - 态势看板
 
-private struct RoundtableDashboard: View {
+private struct LegacyRoundtableDashboard: View {
     let report: AgentRoundtableReport?
 
     var body: some View {

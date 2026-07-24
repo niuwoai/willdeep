@@ -35,16 +35,44 @@ nonisolated enum AgentRoundtableExpertRole: String, Codable, CaseIterable, Ident
 
     var id: String { rawValue }
 
+    /// 角色称谓与姓名拆开，讨论气泡和态势看板可以建立更清晰的身份层级。
+    var roleTitle: String {
+        switch self {
+        case .product: return String(localized: "roundtable.expert.product.role", defaultValue: "Product Manager")
+        case .architecture: return String(localized: "roundtable.expert.architecture.role", defaultValue: "Technical Architect")
+        case .finance: return String(localized: "roundtable.expert.finance.role", defaultValue: "Financial Advisor")
+        case .risk: return String(localized: "roundtable.expert.risk.role", defaultValue: "Risk Analyst")
+        case .strategy: return String(localized: "roundtable.expert.strategy.role", defaultValue: "Strategy Advisor")
+        case .psychology: return String(localized: "roundtable.expert.psychology.role", defaultValue: "Psychology Coach")
+        }
+    }
+
+    var personalName: String {
+        switch self {
+        case .product: return String(localized: "roundtable.expert.product.name", defaultValue: "Lin Yue")
+        case .architecture: return String(localized: "roundtable.expert.architecture.name", defaultValue: "Chen Zhou")
+        case .finance: return String(localized: "roundtable.expert.finance.name", defaultValue: "Su Ming")
+        case .risk: return String(localized: "roundtable.expert.risk.name", defaultValue: "He Jin")
+        case .strategy: return String(localized: "roundtable.expert.strategy.name", defaultValue: "Jiang Du")
+        case .psychology: return String(localized: "roundtable.expert.psychology.name", defaultValue: "Bai Hua")
+        }
+    }
+
     /// 用户可见的中文角色名(会被本地化层覆盖为对应语言,见 L10n.Roundtable)。
     /// 这里给一个稳定的兜底显示名。
     var displayName: String {
+        "\(roleTitle) · \(personalName)"
+    }
+
+    /// Assets.xcassets 里的统一风格专家肖像。
+    var avatarAssetName: String {
         switch self {
-        case .product: return "产品经理 · 林越"
-        case .architecture: return "技术架构师 · 陈舟"
-        case .finance: return "财务顾问 · 苏明"
-        case .risk: return "风险分析师 · 何谨"
-        case .strategy: return "战略顾问 · 江渡"
-        case .psychology: return "心理教练 · 白桦"
+        case .product: return "RoundtableProduct"
+        case .architecture: return "RoundtableArchitecture"
+        case .finance: return "RoundtableFinance"
+        case .risk: return "RoundtableRisk"
+        case .strategy: return "RoundtableStrategy"
+        case .psychology: return "RoundtablePsychology"
         }
     }
 
@@ -149,10 +177,14 @@ nonisolated struct RoundtableOSR: Codable, Equatable, Sendable {
 
         var displayName: String {
             switch self {
-            case .support: return "支持"
-            case .oppose: return "反对"
-            case .neutral: return "中立"
-            case .undecided: return "待定"
+            case .support:
+                return String(localized: "roundtable.stance.support", defaultValue: "Support")
+            case .oppose:
+                return String(localized: "roundtable.stance.oppose", defaultValue: "Oppose")
+            case .neutral:
+                return String(localized: "roundtable.stance.neutral", defaultValue: "Neutral")
+            case .undecided:
+                return String(localized: "roundtable.stance.undecided", defaultValue: "Undecided")
             }
         }
     }
@@ -193,6 +225,14 @@ nonisolated struct RoundtableOSR: Codable, Equatable, Sendable {
 
 // MARK: - 讨论消息
 
+/// 主持人引用某位专家时持久化的引用卡片。既支持整段引用，也支持划词引用。
+nonisolated struct RoundtableQuoteReference: Codable, Equatable, Sendable {
+    var messageID: UUID
+    var speakerName: String
+    var excerpt: String
+    var isSelection: Bool
+}
+
 nonisolated struct RoundtableMessage: Codable, Equatable, Identifiable, Sendable {
     enum Speaker: String, Codable, Sendable {
         case chair   // 导播/主持归纳
@@ -210,6 +250,8 @@ nonisolated struct RoundtableMessage: Codable, Equatable, Identifiable, Sendable
     var isError: Bool?
     /// 专家中途反问用户时的可点选项(非空表示这条消息在等用户答复)。
     var pendingUserOptions: [String]?
+    /// 主持人发言引用的原消息/选段。可选字段保证旧会话继续解码。
+    var quote: RoundtableQuoteReference?
 
     init(
         id: UUID = UUID(),
@@ -220,7 +262,8 @@ nonisolated struct RoundtableMessage: Codable, Equatable, Identifiable, Sendable
         createdAt: Date = Date(),
         osr: RoundtableOSR? = nil,
         isError: Bool = false,
-        pendingUserOptions: [String]? = nil
+        pendingUserOptions: [String]? = nil,
+        quote: RoundtableQuoteReference? = nil
     ) {
         self.id = id
         self.speaker = speaker
@@ -231,6 +274,7 @@ nonisolated struct RoundtableMessage: Codable, Equatable, Identifiable, Sendable
         self.osr = osr
         self.isError = isError
         self.pendingUserOptions = pendingUserOptions
+        self.quote = quote
     }
 
     /// 气泡上方显示的说话人名。
@@ -266,6 +310,8 @@ nonisolated struct AgentRoundtableReport: Codable, Equatable, Sendable {
     var currentRound: Int
     var converged: Bool
     var finalDocument: String?
+    /// 当前正在组织观点、即将发言的专家。可选字段兼容旧报告。
+    var activeExpert: AgentRoundtableExpertRole?
     var createdAt: Date
     var updatedAt: Date
 
@@ -279,6 +325,7 @@ nonisolated struct AgentRoundtableReport: Codable, Equatable, Sendable {
         currentRound: Int = 0,
         converged: Bool = false,
         finalDocument: String? = nil,
+        activeExpert: AgentRoundtableExpertRole? = nil,
         createdAt: Date = Date(),
         updatedAt: Date = Date()
     ) {
@@ -291,6 +338,7 @@ nonisolated struct AgentRoundtableReport: Codable, Equatable, Sendable {
         self.currentRound = currentRound
         self.converged = converged
         self.finalDocument = finalDocument
+        self.activeExpert = activeExpert
         self.createdAt = createdAt
         self.updatedAt = updatedAt
     }
@@ -506,7 +554,10 @@ nonisolated enum AgentRoundtablePromptBuilder {
         let source = excludeErrors ? messages.filter { $0.isError != true } : messages
         let rendered = source.map { message in
             let status = message.isError == true ? " · 失败" : ""
-            return "[第 \(message.round) 轮 · \(message.speakerName)\(status)]\n\(message.content)"
+            let quote = message.quote.map {
+                "\n[引用 \($0.speakerName)\($0.isSelection ? "的选段" : "的发言")] \($0.excerpt)"
+            } ?? ""
+            return "[第 \(message.round) 轮 · \(message.speakerName)\(status)]\(quote)\n\(message.content)"
         }.joined(separator: "\n\n")
         return String(rendered.suffix(maxPacketCharacters))
     }

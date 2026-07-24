@@ -9,6 +9,8 @@
 
 import Testing
 import Foundation
+import AppKit
+import SwiftUI
 @testable import WillDeep
 
 @Suite
@@ -178,6 +180,66 @@ struct AgentRoundtableTests {
         #expect(!clean.contains("失败了"))
     }
 
+    @Test("quoted expert selection survives persistence and enters transcript")
+    func testQuotePersistenceAndTranscript() throws {
+        let sourceID = UUID()
+        let quote = RoundtableQuoteReference(
+            messageID: sourceID,
+            speakerName: "林越",
+            excerpt: "先验证最痛的那个场景",
+            isSelection: true
+        )
+        let message = RoundtableMessage(
+            speaker: .user,
+            round: 1,
+            content: "我同意，先做小范围验证。",
+            quote: quote
+        )
+
+        let encoded = try JSONEncoder().encode(message)
+        let decoded = try JSONDecoder().decode(RoundtableMessage.self, from: encoded)
+        #expect(decoded.quote == quote)
+
+        let transcript = AgentRoundtablePromptBuilder.transcript([decoded])
+        #expect(transcript.contains("引用 林越的选段"))
+        #expect(transcript.contains("先验证最痛的那个场景"))
+        #expect(transcript.contains("我同意，先做小范围验证。"))
+    }
+
+    @Test("old messages and reports decode without quote or active expert")
+    func testBackwardCompatibleOptionalFields() throws {
+        let messageJSON = """
+        {
+          "id": "\(UUID().uuidString)",
+          "speaker": "expert",
+          "role": "product",
+          "round": 1,
+          "content": "旧会话发言",
+          "createdAt": 0,
+          "isError": false
+        }
+        """.data(using: .utf8)!
+        let message = try JSONDecoder().decode(RoundtableMessage.self, from: messageJSON)
+        #expect(message.quote == nil)
+
+        let reportJSON = """
+        {
+          "id": "\(UUID().uuidString)",
+          "topic": "旧议题",
+          "title": "旧讨论",
+          "phase": "discussing",
+          "experts": ["product", "risk"],
+          "messages": [],
+          "currentRound": 1,
+          "converged": false,
+          "createdAt": 0,
+          "updatedAt": 0
+        }
+        """.data(using: .utf8)!
+        let report = try JSONDecoder().decode(AgentRoundtableReport.self, from: reportJSON)
+        #expect(report.activeExpert == nil)
+    }
+
     // MARK: - 专家池不变量
 
     @Test("expert roster has six roles with distinct personas")
@@ -193,5 +255,133 @@ struct AgentRoundtableTests {
         // 人设互不相同(防复制粘贴趋同)。
         let personas = Set(all.map(\.systemPersona))
         #expect(personas.count == 6)
+
+        let names = Set(all.map(\.personalName))
+        let titles = Set(all.map(\.roleTitle))
+        let avatarAssets = Set(all.map(\.avatarAssetName))
+        #expect(names.count == 6)
+        #expect(titles.count == 6)
+        #expect(avatarAssets.count == 6)
+    }
+
+    @Test("expert markdown is rendered without exposing source markers")
+    func testExpertMarkdownRenderer() {
+        let rendered = RoundtableMarkdownTextRenderer.attributedString(
+            from: "先看 **核心风险**，再执行 `灰度发布`。\n\n**下一轮建议：** 分层抽样。"
+        )
+        #expect(rendered.string == "先看 核心风险，再执行 灰度发布。\n\n下一轮建议： 分层抽样。")
+        #expect(!rendered.string.contains("**"))
+
+        let boldRange = (rendered.string as NSString).range(of: "核心风险")
+        let boldFont = rendered.attribute(.font, at: boldRange.location, effectiveRange: nil) as? NSFont
+        #expect(boldFont?.fontDescriptor.symbolicTraits.contains(.bold) == true)
+
+        let codeRange = (rendered.string as NSString).range(of: "灰度发布")
+        let codeFont = rendered.attribute(.font, at: codeRange.location, effectiveRange: nil) as? NSFont
+        #expect(codeFont?.fontDescriptor.symbolicTraits.contains(.monoSpace) == true)
+    }
+
+    @MainActor
+    @Test("discussion visual fixture renders at product viewport")
+    func testDiscussionVisualFixtureRenders() throws {
+        let productMessageID = UUID()
+        let report = AgentRoundtableReport(
+            topic: "我们的新产品应该先快速发布，还是继续打磨两个月？",
+            title: "发布时机与产品质量",
+            phase: .discussing,
+            experts: [.product, .risk, .finance, .architecture],
+            messages: [
+                .init(
+                    speaker: .chair,
+                    round: 0,
+                    content: "今天我们不争论“快还是慢”本身，而是判断现在的风险是否可控、验证目标是否清楚。请各位把取舍摆到桌面上。"
+                ),
+                .init(
+                    id: productMessageID,
+                    speaker: .expert,
+                    role: .product,
+                    round: 1,
+                    content: "我支持先发布一个边界清晰的版本。@何谨，风险不是继续等待就会自动消失；如果连最痛的场景都没让真实用户碰过，再打磨两个月很可能只是团队自我感动。",
+                    osr: .init(
+                        topic: "是否先验证真实需求",
+                        stance: .support,
+                        arguments: ["真实使用比内部判断更可靠"],
+                        suggestion: "限定一类用户和一个核心场景，两周内小范围上线。"
+                    )
+                ),
+                .init(
+                    speaker: .expert,
+                    role: .risk,
+                    round: 1,
+                    content: "我反对直接面向全部用户发布。@林越，我同意要验证，但当前数据回滚和权限隔离还没有演练，出一次事故会把早期口碑烧掉。",
+                    osr: .init(
+                        topic: "发布风险是否可逆",
+                        stance: .oppose,
+                        arguments: ["回滚链路未经演练", "权限边界仍不清楚"],
+                        suggestion: "先做邀请制灰度，并把一键回滚作为上线门槛。"
+                    )
+                ),
+                .init(
+                    speaker: .expert,
+                    role: .finance,
+                    round: 1,
+                    content: "我保持中立。多打磨两个月的机会成本不低，但如果灰度范围可控，试错成本也能封顶。关键是先给这轮实验设预算和停止条件。",
+                    osr: .init(
+                        topic: "试错成本与机会成本",
+                        stance: .neutral,
+                        arguments: ["两个月人力成本明确", "灰度损失可封顶"],
+                        suggestion: "设定四周预算上限和三个停止指标。"
+                    )
+                ),
+                .init(
+                    speaker: .user,
+                    round: 1,
+                    content: "我接受邀请制灰度，请继续讨论首批用户和回滚门槛。",
+                    quote: .init(
+                        messageID: productMessageID,
+                        speakerName: "产品经理 · 林越",
+                        excerpt: "限定一类用户和一个核心场景，两周内小范围上线。",
+                        isSelection: true
+                    )
+                ),
+            ],
+            currentRound: 2,
+            activeExpert: .architecture
+        )
+        let appState = AppState()
+        let view = RoundtableDiscussionView(
+            route: .constant(.discussion(runtimeID: UUID(), reportID: report.id)),
+            runtimeID: UUID(),
+            reportID: report.id,
+            previewReport: report
+        )
+        .environmentObject(appState)
+        .frame(width: 980, height: 720)
+
+        let hostingView = NSHostingView(rootView: view)
+        hostingView.frame = NSRect(x: 0, y: 0, width: 980, height: 720)
+        let window = NSWindow(
+            contentRect: hostingView.frame,
+            styleMask: [.borderless],
+            backing: .buffered,
+            defer: false
+        )
+        window.contentView = hostingView
+        hostingView.layoutSubtreeIfNeeded()
+
+        guard let bitmap = hostingView.bitmapImageRepForCachingDisplay(in: hostingView.bounds) else {
+            Issue.record("Could not allocate bitmap for Expert Roundtable visual fixture")
+            return
+        }
+        hostingView.cacheDisplay(in: hostingView.bounds, to: bitmap)
+        guard let png = bitmap.representation(using: .png, properties: [:]) else {
+            Issue.record("Could not encode Expert Roundtable visual fixture")
+            return
+        }
+        let output = URL(fileURLWithPath: NSTemporaryDirectory())
+            .appendingPathComponent("willdeep-roundtable-design-preview.png")
+        try png.write(to: output, options: .atomic)
+        #expect(png.count > 20_000)
+        #expect(FileManager.default.fileExists(atPath: output.path))
     }
 }
