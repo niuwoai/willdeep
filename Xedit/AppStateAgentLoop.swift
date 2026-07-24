@@ -670,8 +670,7 @@ extension AppState {
             AgentRuntimeStore.descriptor(id: $0)
         }
         let turnBaselineSnapshot = await Self.loadAgentWorktreeSnapshot(
-            for: workspaceURL,
-            captureArtifactFiles: true
+            for: workspaceURL
         )
         if workspaceURL != nil {
             runtime.worktreeChanges = turnBaselineSnapshot.changes.filtering(paths: runtime.agentEditedPaths)
@@ -1663,10 +1662,7 @@ extension AppState {
                     )
                     let delegatedBaselineTask = workspaceURL.map { workspaceURL in
                         Task.detached(priority: .utility) {
-                            await Self.loadAgentWorktreeSnapshot(
-                                for: workspaceURL,
-                                captureArtifactFiles: true
-                            )
+                            await Self.loadAgentWorktreeSnapshot(for: workspaceURL)
                         }
                     }
                     delegatedControl = (
@@ -1731,6 +1727,16 @@ extension AppState {
                                 activeSessions: activeSessionTitles
                             )
                         }
+                    }
+
+                    let producesArtifacts = Self.toolProducesSessionArtifacts(call.toolName)
+                    var toolBaselineSnapshot = turnBaselineSnapshot
+                    if producesArtifacts, let workspaceURL {
+                        toolBaselineSnapshot.artifactFileSignatures = await Task.detached(
+                            priority: .utility
+                        ) {
+                            Self.agentArtifactFileSignatures(in: workspaceURL)
+                        }.value
                     }
 
                     let result: AgentToolResult
@@ -1807,8 +1813,8 @@ extension AppState {
                         await refreshGitStatusAfterAgentTool(
                             for: runtime,
                             workspaceURL: workspaceURL,
-                            baselineSnapshot: turnBaselineSnapshot,
-                            producesArtifacts: Self.toolProducesSessionArtifacts(call.toolName)
+                            baselineSnapshot: toolBaselineSnapshot,
+                            producesArtifacts: producesArtifacts
                         )
                     }
                     appendToolMessage(

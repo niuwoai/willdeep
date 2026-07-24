@@ -169,7 +169,11 @@ extension AppState {
     /// 路径的任意一段命中 `hiddenCacheDirectoryNames` 即视为隐藏缓存路径,
     /// diff 预览收集时跳过。按目录段(`/` 切分)匹配,不匹配根下隐藏文件。
     nonisolated static func isHiddenCacheWorktreePath(_ path: String) -> Bool {
-        path.split(separator: "/").dropLast().contains { segment in
+        let components = path.split(separator: "/")
+        let directoryComponentCount = path.hasSuffix("/")
+            ? components.count
+            : max(components.count - 1, 0)
+        return components.prefix(directoryComponentCount).contains { segment in
             hiddenCacheDirectoryNames.contains(segment.lowercased())
         }
     }
@@ -700,7 +704,7 @@ extension AppState {
         let targetDirectory = workspaceURL.standardizedFileURL
         let snapshot = await Self.loadAgentWorktreeSnapshot(
             for: targetDirectory,
-            captureArtifactFiles: true
+            captureArtifactFiles: producesArtifacts
         )
         let changedPaths = Self.agentWorktreePathsChangedSinceBaseline(
             baseline: baselineSnapshot,

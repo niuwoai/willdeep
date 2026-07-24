@@ -106,6 +106,18 @@ struct AgentWorkspaceMutationGuardTests {
         }
         #expect(committed.difference(from: staged).headChanged)
 
+        let cacheDirectory = base.appendingPathComponent(".gocache/00", isDirectory: true)
+        try FileManager.default.createDirectory(at: cacheDirectory, withIntermediateDirectories: true)
+        try "transient\n".write(
+            to: cacheDirectory.appendingPathComponent("build-cache"),
+            atomically: true,
+            encoding: .utf8
+        )
+        guard let cacheOnly = await AgentWorkspaceRevisionCapture.capture(for: base) else {
+            throw TestError.missingRevision
+        }
+        #expect(cacheOnly == committed)
+
         let untracked = base.appendingPathComponent("Notes.txt")
         try "first\n".write(to: untracked, atomically: true, encoding: .utf8)
         guard let untrackedFirst = await AgentWorkspaceRevisionCapture.capture(for: base) else {
@@ -118,6 +130,50 @@ struct AgentWorkspaceMutationGuardTests {
             throw TestError.missingRevision
         }
         #expect(untrackedOther.difference(from: untrackedFirst).changedPaths == ["Notes.txt"])
+    }
+
+    @Test("regular file hashing is batched without weakening content detection")
+    func regularFileHashingUsesBoundedGitBatches() throws {
+        let base = FileManager.default.temporaryDirectory
+            .appendingPathComponent("willdeep_workspace_hash_batch_\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: base, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: base) }
+
+        try requireGit(["init"], in: base)
+        let paths = (0..<300).map { index in
+            String(format: "Sources/File%03d.swift", index)
+        }
+        try FileManager.default.createDirectory(
+            at: base.appendingPathComponent("Sources", isDirectory: true),
+            withIntermediateDirectories: true
+        )
+        for path in paths {
+            try "let value = 1\n".write(
+                to: base.appendingPathComponent(path),
+                atomically: true,
+                encoding: .utf8
+            )
+        }
+
+        let first = AgentWorkspaceRevisionCapture.batchedFileDigests(
+            relativePaths: paths,
+            repositoryRoot: base
+        )
+        #expect(first.count == paths.count)
+
+        let changedPath = paths[257]
+        try "let value = 2\n".write(
+            to: base.appendingPathComponent(changedPath),
+            atomically: true,
+            encoding: .utf8
+        )
+        let second = AgentWorkspaceRevisionCapture.batchedFileDigests(
+            relativePaths: paths,
+            repositoryRoot: base
+        )
+        #expect(second.count == paths.count)
+        #expect(first[changedPath] != second[changedPath])
+        #expect(first[paths[0]] == second[paths[0]])
     }
 
     @Test("repository lease serializes concurrent mutation attempts")

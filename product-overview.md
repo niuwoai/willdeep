@@ -1,6 +1,6 @@
 # WillDeep Product Overview
 
-> Last updated: 2026-07-24 | Current version: v1.196.0-rc2
+> Last updated: 2026-07-24 | Current version: v1.196.0-rc3
 
 ## Positioning
 
@@ -11,6 +11,8 @@ Official product domain: [willdeep.com](https://willdeep.com).
 WillDeep is configured for non-App-Store distribution without App Sandbox so it can access local project files with fewer permission interruptions.
 
 ## 架构概览
+
+- **工作区快照与桌宠采样热点降载（1.196.0-rc3）** —— Agent 每轮的工作区修订捕获改用 `git status -unormal`，避免预先展开整棵未跟踪目录；普通文件按最多 256 个路径批量调用 `git hash-object --no-filters`，替代逐文件 Swift SHA-256 与文件句柄往返，同时保留同尺寸内容变化检测。隐藏缓存目录不再进入修订快照，产物目录树只在真正可能生成产物的工具执行前按需扫描；桌宠动画刷新率封顶为 30 FPS，降低空闲时的持续 CPU 占用。
 
 - **失败命令可独立审计（1.195.0-rc21）** —— 当前回合的活动时间流为每条失败的 `run_command` 提供独立展开入口；点击后直接显示完整命令、工作目录、已捕获输出，以及包含退出码和 stderr 的失败原因，不再只能看到不可点击的“运行命令失败”摘要。
 
