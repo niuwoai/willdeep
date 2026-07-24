@@ -206,7 +206,6 @@ struct AgentChatTranscript: View {
     @State private var conversationSearchMatchCount = 0
     @State private var conversationSearchActiveIndex = 0
     @State private var isFollowingTranscriptBottom = true
-    @State private var isCurrentPlanExpanded = false
 
     var body: some View {
         ZStack(alignment: .topTrailing) {
@@ -230,21 +229,10 @@ struct AgentChatTranscript: View {
                         AgentGoalPlanningCard(state: planningState)
                             .frame(maxWidth: AgentDesign.chatMaxContentWidth, alignment: .leading)
                     }
-                    if (appState.agentInteractionMode == .plan || appState.agentInteractionMode == .goal),
-                       let plan = appState.agentCurrentPlan {
-                        AgentPlanCard(plan: plan, isExpanded: $isCurrentPlanExpanded)
-                            .id("agent-current-plan")
-                            .frame(maxWidth: AgentDesign.chatMaxContentWidth, alignment: .leading)
-                            .onAppear {
-                                isCurrentPlanExpanded =
-                                    AgentPlanCardExpansionPolicy.initiallyExpanded(for: plan.status)
-                            }
-                            .onCompatibleChange(of: plan.status) { _, newStatus in
-                                if AgentPlanCardExpansionPolicy.initiallyExpanded(for: newStatus) {
-                                    isCurrentPlanExpanded = true
-                                }
-                            }
-                    }
+                    // Plan card no longer sits inline here — it floats in the
+                    // conversation activity overlay (top-trailing), collapsed by
+                    // default, alongside the artifact / media / dev-server cards.
+                    // See AgentConversationActivityOverlay.
 
                     if appState.agentMessages.isEmpty && localConfirmationPreviewCalls.isEmpty {
                         AgentChatEmptyState()
@@ -318,10 +306,9 @@ struct AgentChatTranscript: View {
                                 onOpenAttachmentCitation: appState.openAgentAttachmentCitation,
                                 progressPlan: appState.agentCurrentPlan,
                                 onShowPlan: {
-                                    isCurrentPlanExpanded = true
-                                    withAnimation(.easeInOut(duration: 0.2)) {
-                                        proxy.scrollTo("agent-current-plan", anchor: .top)
-                                    }
+                                    // Plan card floats in the activity overlay now;
+                                    // bump the token so the overlay expands it.
+                                    appState.agentPlanOverlayExpandRequestToken += 1
                                 },
                                 searchQuery: conversationSearchQuery,
                                 activeSearchMatchIndex: conversationSearchActiveIndex,
@@ -382,10 +369,9 @@ struct AgentChatTranscript: View {
                                 onReferenceGeneratedImage: appState.appendGeneratedImageReferenceToAgentInput,
                                 progressPlan: appState.agentCurrentPlan,
                                 onShowPlan: {
-                                    isCurrentPlanExpanded = true
-                                    withAnimation(.easeInOut(duration: 0.2)) {
-                                        proxy.scrollTo("agent-current-plan", anchor: .top)
-                                    }
+                                    // Plan card floats in the activity overlay now;
+                                    // bump the token so the overlay expands it.
+                                    appState.agentPlanOverlayExpandRequestToken += 1
                                 },
                                 suppressesActivityHeadline: activeToolPresentation?.calls.isEmpty == false
                             )
@@ -597,9 +583,9 @@ struct AgentChatTranscript: View {
                         previousMessageID: previousID,
                         currentMessageID: currentID
                     ) else { return }
-                    withAnimation(.easeInOut(duration: 0.18)) {
-                        isCurrentPlanExpanded = false
-                    }
+                    // Plan card floats in the activity overlay now; fold it away
+                    // when a new assistant round begins.
+                    appState.agentPlanOverlayCollapseRequestToken += 1
                 }
 
             // 切走 app 再切回来时,SwiftUI 会重新布局 ScrollView,默认

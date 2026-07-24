@@ -44,6 +44,13 @@
 
 - 修复聊天记录里「本轮进度」卡片**收起态**紧贴上方正文、上下没有间距的问题。此前 `applyProgressBlockVerticalMargins`（`AgentChatHistoryTextView.swift` 的 chrome 渲染）无条件把「首段加 12pt 上边距」和「末段加 10pt 下边距」拆成两次 `paragraphStyle` 写入。展开态卡片是多段落（表头 + 明细行 + 查看完整计划），首段末段分属不同 paragraph，两次写入互不干扰，间距正常；但**收起态整张卡片只有表头一行、只有一个 paragraph**，于是第二次写入的末段样式（`paragraphSpacingBefore` 为默认 0）直接覆盖了第一次的 12pt 上边距，导致卡片顶着上方文字、毫无留白。
 - 现改为参照代码块 / 表格块的处理方式：当卡片首段与末段是同一 paragraph（即收起态）时，把上边距 12pt 与下边距 10pt 合并写进**同一个** `paragraphStyle`，不再互相覆盖；多段落的展开态维持原先的拆分写法。收起、展开两态上下留白现在一致。
+
+### Changed
+
+- 计划模式（Plan / Goal）的**计划卡从对话正文流顶部改为悬浮到右上角**，与「产物 / 媒体 / Dev Server」活动卡竖排共处（`AgentConversationActivityOverlay`），共用同款 `.regularMaterial` 圆角外壳、描边与阴影；**默认收起**，点击卡头在收起 / 展开间切换。此前计划卡平铺在 `AgentChatTranscript` 的 `ScrollView` 顶部，会占布局高度、随消息滚动、并把正文往下挤。
+- 计划卡**收起时贴 214pt**（与其余活动卡同宽、竖排整齐），**展开时放宽到 320pt**，让步骤文本、Approve / Reject / Mark Complete 按钮与 Replan 行不至于挤成一团。完成的计划项仍以绿色对勾（`checkmark.circle.fill`）呈现，步骤状态可点按循环（pending → in_progress → done → skipped）等既有交互不变。
+- `AgentPlanCard` 新增 `floating` 开关：悬浮上下文（对话活动区）去掉原橙色半透明底 / 橙色描边、改用与产物卡一致的 material 外壳；对话内联挂载点已移除，侧栏（`AgentSidePanelPlanView`）仍保留橙色外观不受影响。
+- 展开 / 收起状态改由 `AppState` 上两个一次性触发令牌驱动（`agentPlanOverlayExpandRequestToken` / `agentPlanOverlayCollapseRequestToken`，纯 UI 瞬态、不落盘）：transcript footer 的「查看计划」由原来的 `scrollTo` 定位改为 bump 展开令牌让悬浮卡展开；助手每开新一轮回复时 bump 收起令牌自动折叠计划卡，沿用原「新回合自动收起」行为。
 - 版本号从 **1.195.0-rc26** 递增为 **1.195.0-rc27**，内部构建号从 **132** 递增为 **133**，Help 与 Computer Use Helper 构建号从 **49** 递增为 **50**；App、Go agent、Help、Helper、浏览器扩展、README、响应头契约与产品文档保持一致。
 
 ## 1.195.0-rc26 - 2026-07-24
