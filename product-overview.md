@@ -1,6 +1,6 @@
 # WillDeep Product Overview
 
-> Last updated: 2026-07-24 | Current version: v1.199.0-rc1
+> Last updated: 2026-07-25 | Current version: v1.199.0-rc2
 
 ## Positioning
 
@@ -11,6 +11,8 @@ Official product domain: [willdeep.com](https://willdeep.com).
 WillDeep is configured for non-App-Store distribution without App Sandbox so it can access local project files with fewer permission interruptions.
 
 ## 架构概览
+
+- **专家圆桌终稿规范化与自动落盘（1.199.0-rc2）** —— 圆桌主持人生成终稿后，WillDeep 会剥离模型偶发输出的“只读代理/请父 agent 写文件”等执行环境话术，自动解开包裹全文的 Markdown 围栏并去掉重复 H1，再交给现有 Markdown 预览组件按标题、列表、强调和表格正常渲染。规范终稿会自动写入 Application Support 下按报告隔离的 `.md` 文件，文档页显示「已自动保存」并可在 Finder 中定位；旧会话进入文档页时同样会自动修复、回填文件，失败则保留可读正文、给出错误与重试入口。
 
 - **专家圆桌沉浸式讨论与引用（1.199.0-rc1）** —— 圆桌讨论升级为有明确专家身份的原生工作台：六位领域专家各有姓名、职责、专属强调色和统一生成风格头像；模型开始组织观点时，发言流与右侧专家席会提前提示「XX 专家要发言了」。发言卡用语义色、图标和标签突出支持/反对/中立/待定，态势看板实时展示阶段进度、立场比例、专家状态与 OSR 信号。主页及讨论区使用约三行高输入框，Return 提交、修饰键 + Return 换行；主持人既可引用专家整段发言，也可划选一段原生文本引用，引用关系随消息落盘并进入后续模型上下文。
 

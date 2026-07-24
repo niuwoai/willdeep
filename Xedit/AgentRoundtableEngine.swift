@@ -184,14 +184,20 @@ final class AgentRoundtableEngine {
         }
         setPhase(.synthesizing)
         mutate { $0.activeExpert = nil }
-        let document = try await runChair(
+        let rawDocument = try await runChair(
             AgentRoundtablePromptBuilder.finalDocument(
                 topic: report.topic,
                 transcript: AgentRoundtablePromptBuilder.transcript(currentMessages(), excludeErrors: true)
             )
         )
+        let document = AgentRoundtableDocumentNormalizer.normalize(rawDocument)
+        guard !document.isEmpty else {
+            throw AgentRoundtableError.emptyChairOutput
+        }
         mutate {
             $0.finalDocument = document
+            $0.finalDocumentFilePath = nil
+            $0.finalDocumentWriteError = nil
             $0.phase = .completed
         }
         return document

@@ -1,3 +1,34 @@
+# Design QA：专家圆桌终稿 Markdown 与自动落盘
+
+## 验收范围
+
+- source visual truth：`/var/folders/np/rjc0y5w52x324x21pv6g33440000gp/T/codex-clipboard-c5ec9457-d4f3-4472-84f4-5ac228cafbc0.png`（用户报告的只读话术与 Markdown 代码块问题）。
+- implementation screenshot：`design-qa-evidence/roundtable-document-release-1.199.0-rc2.jpg`（953 × 768 px；真实历史圆桌在签名 arm64 Release 中完成迁移后的文档页）。
+- 同画布对比：`design-qa-evidence/roundtable-document-reference-vs-release-1.199.0-rc2.png`（1906 × 768 px；左侧问题截图，右侧修复后的 Release）。
+- state：简体中文、浅色皮肤、真实历史报告「35岁转行AI工程师，靠谱吗？」；该报告先经历原始脏输出，再经历一次部分规范化，用于验证连续迁移兼容。
+
+## 修正记录
+
+1. 终稿生成、旧会话展示、自动保存和手动导出统一走 Markdown 规范化，移除“只读子代理/请父 agent 写文件”等交接话术、包裹全文的围栏和重复 H1。
+2. 兼容围栏外仍附带“请将上述内容写入”的模型尾注，以及旧版本已移除开头但遗留闭合围栏的部分迁移状态。
+3. 结论页面复用现有 Markdown 预览组件渲染标题、粗体、列表和分隔线，不再把整份报告当代码块。
+4. 终稿自动写入 Application Support 下按报告 ID 隔离的 `.md` 文件，页面顶部显示「已自动保存」并可在 Finder 中定位；写入错误不会覆盖正文。
+
+## Findings
+
+同画布对比确认：问题态中的只读免责声明、`markdown` 标签、复制代码控件、紫色源码标记和原始反引号均已消失；修复态从「核心结论」直接开始，以标题、段落、项目符号和编号列表展示。顶部出现绿色「已自动保存」，真实会话 JSON 与磁盘 `.md` 均已清除交接话术、围栏和尾注，文件首行是规范 H1，随后包含 `## 核心结论`。当前没有未解决的 P0、P1 或 P2 视觉差异。
+
+## 验证
+
+- `AgentRoundtableTests`：25 项通过，覆盖原始脏输出、部分迁移残留、正常 Markdown 保真和真实 `.md` 写入。
+- `1.199.0-rc2` / Build 143 签名 arm64 Release 构建成功；本机开发证书链未被系统信任，因此严格 `codesign --verify` 返回 `CSSMERR_TP_NOT_TRUSTED`，包内签名标识、Team ID、Hardened Runtime 与 SHA-256 CodeDirectory 均可读取。
+- 真实历史报告已在 Release 中打开：页面只含渲染后的正文并显示「已自动保存」；会话持久化字段、文件存在性、H1/H2 结构与清理结果均通过只读脚本核验。
+- 参考问题截图与最终 Release 已放入同一 1906 × 768 px 画布并以原始尺寸复核。
+
+final result: passed
+
+---
+
 # Design QA：专家圆桌沉浸式讨论工作台
 
 ## 验收范围

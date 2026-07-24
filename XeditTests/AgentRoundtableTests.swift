@@ -238,6 +238,8 @@ struct AgentRoundtableTests {
         """.data(using: .utf8)!
         let report = try JSONDecoder().decode(AgentRoundtableReport.self, from: reportJSON)
         #expect(report.activeExpert == nil)
+        #expect(report.finalDocumentFilePath == nil)
+        #expect(report.finalDocumentWriteError == nil)
     }
 
     // MARK: - 专家池不变量
@@ -279,6 +281,102 @@ struct AgentRoundtableTests {
         let codeRange = (rendered.string as NSString).range(of: "灰度发布")
         let codeFont = rendered.attribute(.font, at: codeRange.location, effectiveRange: nil) as? NSFont
         #expect(codeFont?.fontDescriptor.symbolicTraits.contains(.monoSpace) == true)
+    }
+
+    @Test("final document unwraps markdown fence and removes read-only handoff")
+    func testFinalDocumentNormalization() {
+        let raw = """
+        由于我是只读子代理，无法直接写文件。以下是完整的决策文档，请父 agent 写入结论文件：
+
+        ```markdown
+        # 35 岁转行 AI 工程师 —— 专家圆桌决策文档
+
+        ## 核心结论
+
+        建议先完成 **12 周验证**，再决定是否全职转行。
+
+        ## 建议的下一步
+
+        - 完成一个可公开演示的项目
+        - 访谈三位从业者
+        ```
+        说明：正文已经完成，请将上述内容写入结论文件。
+        """
+
+        let normalized = AgentRoundtableDocumentNormalizer.normalize(raw)
+        #expect(normalized.hasPrefix("## 核心结论"))
+        #expect(normalized.contains("**12 周验证**"))
+        #expect(normalized.contains("- 完成一个可公开演示的项目"))
+        #expect(!normalized.contains("只读子代理"))
+        #expect(!normalized.contains("父 agent"))
+        #expect(!normalized.contains("请将上述内容写入"))
+        #expect(!normalized.contains("```"))
+        #expect(!normalized.contains("# 35 岁转行"))
+    }
+
+    @Test("partially normalized document removes orphan fence and handoff suffix")
+    func testPartiallyNormalizedFinalDocumentNormalization() {
+        let raw = """
+        ## 核心结论
+
+        建议先小步验证。
+        ```
+
+        ---
+
+        **说明：** 请将上述内容写入结论文件。
+        """
+
+        let normalized = AgentRoundtableDocumentNormalizer.normalize(raw)
+        #expect(normalized == "## 核心结论\n\n建议先小步验证。")
+    }
+
+    @Test("normal final document keeps native markdown structure")
+    func testNormalFinalDocumentPreserved() {
+        let markdown = """
+        ## 核心结论
+
+        保持 **小步验证**。
+
+        ```
+        示例代码块不能吃掉整份文档
+        ```
+
+        ## 待你决策
+
+        1. 时间投入
+        2. 风险上限
+        """
+        #expect(AgentRoundtableDocumentNormalizer.normalize(markdown) == markdown)
+    }
+
+    @MainActor
+    @Test("final document persists as a real markdown file")
+    func testFinalDocumentPersistence() throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("roundtable-document-\(UUID().uuidString)", isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        let url = try RoundtableDocumentExporter.persist(
+            reportID: UUID(),
+            title: "转行决策",
+            markdown: """
+            ```markdown
+            # 重复标题
+
+            ## 核心结论
+
+            建议先验证。
+            ```
+            """,
+            rootDirectory: root
+        )
+        let saved = try String(contentsOf: url, encoding: .utf8)
+        #expect(FileManager.default.fileExists(atPath: url.path))
+        #expect(url.pathExtension == "md")
+        #expect(saved.hasPrefix("# 转行决策\n\n## 核心结论"))
+        #expect(!saved.contains("```"))
+        #expect(!saved.contains("# 重复标题"))
     }
 
     @MainActor
