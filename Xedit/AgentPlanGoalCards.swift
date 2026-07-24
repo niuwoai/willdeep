@@ -57,6 +57,11 @@ struct AgentPlanCard: View {
     @EnvironmentObject var appState: AppState
     let plan: AgentPlan
     @Binding var isExpanded: Bool
+    /// When floating in the conversation activity overlay, drop the orange
+    /// tinted surface for the shared `.regularMaterial` card chrome so the plan
+    /// card matches the artifact / media / dev-server cards stacked beside it.
+    /// The transcript-inline and side-panel mounts keep the orange surface.
+    var floating: Bool = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
@@ -134,14 +139,31 @@ struct AgentPlanCard: View {
             }
         }
         .padding(12)
-        .background(
+        .background(planCardBackground)
+        .overlay(planCardBorder)
+        .shadow(color: floating ? Color.black.opacity(0.055) : .clear, radius: floating ? 7 : 0, x: 0, y: floating ? 2 : 0)
+    }
+
+    @ViewBuilder
+    private var planCardBackground: some View {
+        if floating {
+            RoundedRectangle(cornerRadius: 9, style: .continuous)
+                .fill(.regularMaterial)
+        } else {
             RoundedRectangle(cornerRadius: 10, style: .continuous)
                 .fill(Color.orange.opacity(0.08))
-        )
-        .overlay(
+        }
+    }
+
+    @ViewBuilder
+    private var planCardBorder: some View {
+        if floating {
+            RoundedRectangle(cornerRadius: 9, style: .continuous)
+                .stroke(Color(nsColor: .separatorColor).opacity(0.58), lineWidth: 1)
+        } else {
             RoundedRectangle(cornerRadius: 10, style: .continuous)
                 .stroke(Color.orange.opacity(0.35), lineWidth: 1)
-        )
+        }
     }
 }
 
