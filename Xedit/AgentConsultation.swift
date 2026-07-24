@@ -736,10 +736,16 @@ final class AgentConsultationEngine {
                 }
             }
 
-            guard successfulExpertTurns > 0 else {
-                throw AgentConsultationError.allExpertsFailed
+            // 每一轮都必须至少有一个专家成功发言，否则本轮 transcript 只剩 error 消息，
+            // 拿去写终稿等于让主席基于失败噪声下结论。分两种情形显式报错，不再静默 break。
+            if successfulThisRound == 0 {
+                if successfulExpertTurns == 0 {
+                    // 首轮（或此前从未成功过）全军覆没：整场没有任何可用素材。
+                    throw AgentConsultationError.allExpertsFailed
+                }
+                // 中途某一整轮全部失败：此前有过成功发言，但本轮塌方，无法继续推进。
+                throw AgentConsultationError.groupRoundAllExpertsFailed(round: round)
             }
-            if successfulThisRound == 0 { break }
             if round < totalRounds {
                 mutateConsultation { $0.phase = .groupModeration }
                 let current = try requireCurrentConsultation()
@@ -827,18 +833,26 @@ final class AgentConsultationEngine {
         }
     }
 
+    /// 主席（WillDeep 本体）是编排里的单点：任一阶段返回空就会让此前已完成的多轮专家评审全部作废。
+    /// provider 偶发返回空是常见抖动，这里给一次重试兜底，两次都空才真正报错。
     private func runChair(_ prompt: String) async throws -> String {
-        let outcome = try await AgentSubagentRunner.run(
-            prompt: prompt,
-            configuration: configuration,
-            workspaceURL: workspaceURL,
-            runtimeDescriptor: runtimeDescriptor,
-            workspaceLocation: workspaceLocation,
-            someIMContext: someIMContext
-        )
-        let output = outcome.report.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !output.isEmpty else { throw AgentConsultationError.emptyChairOutput }
-        return String(output.prefix(AgentConsultationPromptBuilder.maxSectionCharacters))
+        let maxAttempts = 2
+        for _ in 1...maxAttempts {
+            try Task.checkCancellation()
+            let outcome = try await AgentSubagentRunner.run(
+                prompt: prompt,
+                configuration: configuration,
+                workspaceURL: workspaceURL,
+                runtimeDescriptor: runtimeDescriptor,
+                workspaceLocation: workspaceLocation,
+                someIMContext: someIMContext
+            )
+            let output = outcome.report.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !output.isEmpty {
+                return String(output.prefix(AgentConsultationPromptBuilder.maxSectionCharacters))
+            }
+        }
+        throw AgentConsultationError.emptyChairOutput
     }
 
     private func runExpertRound(
@@ -961,6 +975,7 @@ nonisolated enum AgentConsultationError: Error, LocalizedError {
     case invalidConfiguration
     case reportUnavailable
     case allExpertsFailed
+    case groupRoundAllExpertsFailed(round: Int)
     case emptyChairOutput
     case emptyExpertOutput(AgentConsultationExpertKind)
 
@@ -972,6 +987,9 @@ nonisolated enum AgentConsultationError: Error, LocalizedError {
             return String(localized: "consultation.error.report-unavailable", defaultValue: "The consultation report is no longer available.")
         case .allExpertsFailed:
             return String(localized: "consultation.error.all-experts-failed", defaultValue: "All external experts failed before producing a usable first-round review.")
+        case .groupRoundAllExpertsFailed(let round):
+            let template = String(localized: "consultation.error.group-round-all-failed", defaultValue: "Every expert failed in round %d, so the roundtable cannot continue.")
+            return String(format: template, round)
         case .emptyChairOutput:
             return String(localized: "consultation.error.empty-chair", defaultValue: "WillDeep chair returned an empty synthesis.")
         case .emptyExpertOutput(let kind):
