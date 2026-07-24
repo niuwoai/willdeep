@@ -154,13 +154,13 @@ nonisolated enum L10n {
     }
 
     enum Expert {
-        static let pickerHelp = String(localized: "expert.picker-help", defaultValue: "Activate specialist tool packs for this session.")
-        static let pickerLabel = String(localized: "expert.picker-label", defaultValue: "Experts")
+        static let pickerHelp = String(localized: "expert.picker-help", defaultValue: "Activate skill packs for this session.")
+        static let pickerLabel = String(localized: "expert.picker-label", defaultValue: "Skill Packs")
         static func pickerLabelActive(_ a1: String) -> String {
-            let template = String(localized: "expert.picker-label.active", defaultValue: "Experts %@")
+            let template = String(localized: "expert.picker-label.active", defaultValue: "Skill Packs %@")
             return String(format: template, a1)
         }
-        static let lockedNotice = String(localized: "expert.locked-notice", defaultValue: "After an expert joins the conversation, it cannot be turned off for this session.")
+        static let lockedNotice = String(localized: "expert.locked-notice", defaultValue: "After a skill pack joins the conversation, it cannot be turned off for this session.")
         static let shortDrama = String(localized: "expert.short-drama", defaultValue: "Short Drama")
         static let shortDramaSummary = String(localized: "expert.short-drama.summary", defaultValue: "Enable short-drama planning, storyboard, media task, and production-package tools.")
         static let browserOps = String(localized: "expert.browser-ops", defaultValue: "Browser Ops")

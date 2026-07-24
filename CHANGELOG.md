@@ -1,7 +1,15 @@
 # Changelog
 
-> 当前文件保留最新版本（1.196.0-rc3 至 1.109.0-rc340）。
+> 当前文件保留最新版本（1.196.0-rc4 至 1.109.0-rc340）。
 > 更早的 1000 个版本已移至 [CHANGELOG-ARCHIVE.md](CHANGELOG-ARCHIVE.md)。
+
+## 1.196.0-rc4 - 2026-07-24
+
+### Changed
+
+- 把 composer「更多设置」面板里的**「专家」分区改名为「技能包」**（英文 `Experts` → `Skill Packs`），消除与「多专家会诊」里「会诊专家」的命名混淆。两者本是完全无关的概念：会诊专家是外部 CLI 评审者（Claude Code/Codex/Cursor），而这里的「技能包」（`AgentExpert`：短剧制作/Browser Ops/Web Programming）本质是**工具能力开关**，改名后语义准确、不再撞词。
+- 涉及文案：分区标题、激活态标题（`技能包 %@`）、说明「为当前会话激活技能包。」、锁定提示，以及 `activate_expert` 工具显示名「激活专家」→「激活技能包」。仅改面向用户的中英文案与一处注释，不动枚举名 `AgentExpert`、方法名、工具 key `activate_expert` 等代码契约。
+- 版本号从 **1.196.0-rc3** 递增为 **1.196.0-rc4**，内部构建号从 **137** 递增为 **138**，Help 与 Computer Use Helper 构建号从 **54** 递增为 **55**；App、Go agent、Help、Helper、浏览器扩展、README、响应头契约与产品文档保持一致。
 
 ## 1.196.0-rc3 - 2026-07-24
 

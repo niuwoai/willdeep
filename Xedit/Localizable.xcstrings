@@ -11025,13 +11025,13 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Activate specialist tool packs for this session."
+            "value" : "Activate skill packs for this session."
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "为当前会话激活专家工具包。"
+            "value" : "为当前会话激活技能包。"
           }
         }
       }
@@ -11043,13 +11043,13 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Experts"
+            "value" : "Skill Packs"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "专家"
+            "value" : "技能包"
           }
         }
       }
@@ -11061,13 +11061,13 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Experts %@"
+            "value" : "Skill Packs %@"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "专家 %@"
+            "value" : "技能包 %@"
           }
         }
       }
@@ -11079,13 +11079,13 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "After an expert joins the conversation, it cannot be turned off for this session."
+            "value" : "After a skill pack joins the conversation, it cannot be turned off for this session."
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "专家介入对话后，本会话内就不能再关闭。"
+            "value" : "技能包介入对话后，本会话内就不能再关闭。"
           }
         }
       }

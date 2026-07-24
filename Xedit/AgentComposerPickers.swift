@@ -386,7 +386,7 @@ struct ComposerAdaptiveControlStrip: View {
     // 在三套布局变体间按窗口宽度挑一套显示，代价是**每次重渲染都要把每个
     // 变体整建一遍来测量**——composer pill 重建因此成为主线程热点（打字、
     // 窗口切换、焦点变化都中招，采样里占主线程大头）。现在常用的四个
-    // （Workspace / Model / Mode / Approval）固定展示，其余（插件 / 专家）
+    // （Workspace / Model / Mode / Approval）固定展示，其余（插件 / 技能包）
     // 固定收进「更多 …」弹层。执行器固定在输入框顶部上下文栏右侧。
     // 布局不再随宽度变化，每次重建只建一套。
     var body: some View {
