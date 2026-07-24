@@ -1,7 +1,20 @@
 # Changelog
 
-> 当前文件保留最新版本（1.195.0-rc22 至 1.109.0-rc340）。
+> 当前文件保留最新版本（1.195.0-rc23 至 1.109.0-rc340）。
 > 更早的 1000 个版本已移至 [CHANGELOG-ARCHIVE.md](CHANGELOG-ARCHIVE.md)。
+
+## 1.195.0-rc23 - 2026-07-24
+
+### Changed
+
+- 统一所有对外 HTTP 请求的 client 标识（`User-Agent`）为 `some.im/WillDeep-{version} (macOS)`（如 `some.im/WillDeep-1.195.0-rc23 (macOS)`）：`some.im/` 前缀标明请求来自 some.im 系客户端，版本号便于服务端与反代日志按构建分桶。所有走 `AgentNetworkSupport.applyStandardHeaders` 的请求（含全部 some.im 登录/customer/余额/模型/媒体请求）即时生效。
+- 更新检查请求原本自行拼装同款 UA、未复用中心常量，现改为复用 `AgentNetworkSupport.userAgentHeaderValue`，client 标识全仓库单一事实来源。
+- some.im 的 `client_id`（登录/OAuth 约定的固定标识 `willdeep`）与 OpenRouter 榜单署名 `X-Title` 维持不变，不受本次统一影响。
+- 版本号从 **1.195.0-rc22** 递增为 **1.195.0-rc23**，内部构建号从 **128** 递增为 **129**，Help 与 Computer Use Helper 构建号从 **45** 递增为 **46**；App、Go agent、Help、Helper、浏览器扩展、README、响应头契约与产品文档保持一致。
+
+### Tests
+
+- 新增 client 标识格式测试，锁定 `User-Agent` 为 `some.im/WillDeep-{version} (macOS)`、含运行时版本、不再出现旧的 `WillDeep/{version}` 形态，并验证 `applyStandardHeaders` 确将其写入出站请求。
 
 ## 1.195.0-rc22 - 2026-07-24
 
