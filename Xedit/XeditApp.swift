@@ -42,6 +42,14 @@ struct WillDeepApp: App {
             WillDeepCommands()
         }
 
+        // 专家圆桌:独立单例窗口。照 Agent 窗口,不 attach
+        // EditorAppStateRegistry(避免污染 registry.current);从
+        // registry.current 取当前 AppState。
+        Window(L10n.Roundtable.windowTitle, id: RoundtableWindowID.value) {
+            RoundtableWindowRootView()
+        }
+        .defaultSize(width: 980, height: 720)
+
         Settings {
             SettingsRootView()
         }
@@ -92,6 +100,10 @@ enum AgentWindowID {
 
 enum EditorWindowID {
     static let value = "editor-window"
+}
+
+enum RoundtableWindowID {
+    static let value = "roundtable-window"
 }
 
 /// Agent 窗口在前台时发的标记。⌘N 是 app 全局命令，靠这个分流：

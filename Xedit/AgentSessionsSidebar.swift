@@ -106,6 +106,7 @@ enum AgentSidebarSessionPlacement {
 
 struct AgentSessionsSidebar: View {
     @EnvironmentObject var appState: AppState
+    @Environment(\.openWindow) private var openWindow
     @State private var expandedWorkspaces = AgentSidebarWorkspaceStateStore.load(.expandedWorkspaces)
     /// Workspace keys the user has manually collapsed by clicking the
     /// folder icon — the whole group hides every session row and only
@@ -275,6 +276,10 @@ struct AgentSessionsSidebar: View {
                 appState.agentPrimaryDestination = .scheduledTasks
                 appState.agentSidePanelKind = nil
                 appState.agentSidePanelRequest = nil
+            }
+            // 专家圆桌:开独立窗口(不切主 Agent 会话流)。
+            SidebarActionRow(icon: "person.3.sequence", title: L10n.Roundtable.sidebarEntry, shortcut: nil) {
+                openWindow(id: RoundtableWindowID.value)
             }
         }
     }

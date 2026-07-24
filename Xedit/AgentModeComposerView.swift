@@ -943,9 +943,8 @@ private struct ComposerCard: View {
             HStack(spacing: 6) {
                 AttachButton(action: attachFilesFromPanel)
                 ComposerAdaptiveControlStrip()
-                ConsultationButton {
-                    isConsultationSheetPresented = true
-                }
+                // 「多专家会诊」入口已移除,能力升级为独立的「专家圆桌」窗口
+                // (侧边栏入口)。会诊引擎/sheet/类型保留,圆桌复用其编排原语。
                 Spacer(minLength: 0)
                 if !appState.agentQueuedMessages.isEmpty {
                     QueueBadge()

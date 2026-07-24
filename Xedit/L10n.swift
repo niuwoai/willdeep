@@ -169,6 +169,29 @@ nonisolated enum L10n {
         static let webCodingSummary = String(localized: "expert.web-coding.summary", defaultValue: "Enable screenshot-to-UI, local HTML/CSS/image previews, browser QA, and dev-server orchestration.")
     }
 
+    enum Roundtable {
+        static let windowTitle = String(localized: "roundtable.window-title", defaultValue: "Expert Roundtable")
+        static let sidebarEntry = String(localized: "roundtable.sidebar-entry", defaultValue: "Expert Roundtable")
+        static let homeTagline = String(localized: "roundtable.home-tagline", defaultValue: "Pose a question and let experts from different fields discuss it, then converge into a document.")
+        static let topicPlaceholder = String(localized: "roundtable.topic-placeholder", defaultValue: "What do you want to discuss?")
+        static let startAction = String(localized: "roundtable.start", defaultValue: "Start discussion")
+        static let recommendHint = String(localized: "roundtable.recommend-hint", defaultValue: "Experts are recommended after you enter a topic")
+        static let historyTitle = String(localized: "roundtable.history", defaultValue: "Past discussions")
+        static let emptyHistory = String(localized: "roundtable.empty-history", defaultValue: "No discussions yet. Start your first one above.")
+        static let statusConverged = String(localized: "roundtable.status.converged", defaultValue: "Converged")
+        static let statusRunning = String(localized: "roundtable.status.running", defaultValue: "In progress")
+        static let statusFailed = String(localized: "roundtable.status.failed", defaultValue: "Failed")
+        static let hostPlaceholder = String(localized: "roundtable.host-placeholder", defaultValue: "Chime in as host, or ask a follow-up…")
+        static let sendAction = String(localized: "roundtable.send", defaultValue: "Send")
+        static let dashboardTitle = String(localized: "roundtable.dashboard", defaultValue: "Board")
+        static let stanceSpectrum = String(localized: "roundtable.stance-spectrum", defaultValue: "Stance spectrum")
+        static let exportAction = String(localized: "roundtable.export", defaultValue: "Export")
+        static let backAction = String(localized: "roundtable.back", defaultValue: "Back")
+        static let newDiscussion = String(localized: "roundtable.new", defaultValue: "New discussion")
+        static let convergedHint = String(localized: "roundtable.converged-hint", defaultValue: "The discussion has converged")
+        static let roundLabelFormat = String(localized: "roundtable.round-format", defaultValue: "Round %d")
+    }
+
     enum Automation {
         static let cancel = String(localized: "automation.cancel", defaultValue: "Cancel")
         static let createTitle = String(localized: "automation.create-title", defaultValue: "New Automation")
