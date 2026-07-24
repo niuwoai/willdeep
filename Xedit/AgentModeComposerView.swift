@@ -1407,9 +1407,16 @@ private struct ConsultationButton: View {
     }
 
     private var canStart: Bool {
-        !appState.agentInput.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-            && !appState.isAgentResponding
-            && !appState.hasActiveAgentConsultation
+        guard !appState.agentInput.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+              !appState.isAgentResponding else {
+            return false
+        }
+        // Only disable when *this* conversation already has a consultation
+        // running; other sessions' roundtables must not gate this button.
+        if let runtimeID = appState.activeRuntime?.id {
+            return !appState.hasActiveAgentConsultation(runtimeID: runtimeID)
+        }
+        return true
     }
 }
 

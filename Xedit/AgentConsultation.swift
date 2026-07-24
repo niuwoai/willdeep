@@ -500,8 +500,19 @@ nonisolated enum AgentConsultationPromptBuilder {
         ])
     }
 
-    static func groupTranscript(_ messages: [AgentConsultationReport.GroupMessage]) -> String {
-        let rendered = messages.map { message in
+    /// - Parameter excludeErrors: When true, drops expert turns that failed
+    ///   (their content is just an error description, not a review). Pass true
+    ///   for the final-synthesis transcript so the chair's conclusion is not
+    ///   skewed by failure noise; leave false mid-round so later speakers can
+    ///   still see that an expert dropped out that round.
+    static func groupTranscript(
+        _ messages: [AgentConsultationReport.GroupMessage],
+        excludeErrors: Bool = false
+    ) -> String {
+        let source = excludeErrors
+            ? messages.filter { $0.isError != true }
+            : messages
+        let rendered = source.map { message in
             let speaker = message.expertKind?.displayName ?? "WillDeep"
             let status = message.isError == true ? " · ERROR" : ""
             return "[Round \(message.round) · \(speaker)\(status)]\n\(message.content)"
@@ -770,7 +781,8 @@ final class AgentConsultationEngine {
             AgentConsultationPromptBuilder.groupFinal(
                 task: consultation.task,
                 transcript: AgentConsultationPromptBuilder.groupTranscript(
-                    consultation.effectiveGroupMessages
+                    consultation.effectiveGroupMessages,
+                    excludeErrors: true
                 )
             )
         )

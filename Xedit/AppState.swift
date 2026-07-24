@@ -305,6 +305,11 @@ final class AppState: ObservableObject {
     /// id so the specialized card can stop exactly its own orchestration.
     var agentConsultationTasks: [UUID: Task<Void, Never>] = [:]
 
+    /// Maps each in-flight consultation (report id) to the runtime that owns
+    /// it, so the "already running" guard and the composer's disabled state
+    /// are scoped per session instead of blocking every other conversation.
+    var agentConsultationRuntimeByReport: [UUID: UUID] = [:]
+
     /// rc1 scaffold for v1.49's concurrent runtimes. One entry per
     /// session that the user has touched this launch. AppState still
     /// owns every `@Published agent*` field for now — rc2 starts
