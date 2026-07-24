@@ -1,6 +1,6 @@
 # WillDeep Product Overview
 
-> Last updated: 2026-07-24 | Current version: v1.198.0-rc2
+> Last updated: 2026-07-24 | Current version: v1.199.0-rc1
 
 ## Positioning
 
@@ -11,6 +11,8 @@ Official product domain: [willdeep.com](https://willdeep.com).
 WillDeep is configured for non-App-Store distribution without App Sandbox so it can access local project files with fewer permission interruptions.
 
 ## 架构概览
+
+- **专家圆桌沉浸式讨论与引用（1.199.0-rc1）** —— 圆桌讨论升级为有明确专家身份的原生工作台：六位领域专家各有姓名、职责、专属强调色和统一生成风格头像；模型开始组织观点时，发言流与右侧专家席会提前提示「XX 专家要发言了」。发言卡用语义色、图标和标签突出支持/反对/中立/待定，态势看板实时展示阶段进度、立场比例、专家状态与 OSR 信号。主页及讨论区使用约三行高输入框，Return 提交、修饰键 + Return 换行；主持人既可引用专家整段发言，也可划选一段原生文本引用，引用关系随消息落盘并进入后续模型上下文。
 
 - **工作区快照与桌宠采样热点降载（1.196.0-rc3）** —— Agent 每轮的工作区修订捕获改用 `git status -unormal`，避免预先展开整棵未跟踪目录；普通文件按最多 256 个路径批量调用 `git hash-object --no-filters`，替代逐文件 Swift SHA-256 与文件句柄往返，同时保留同尺寸内容变化检测。隐藏缓存目录不再进入修订快照，产物目录树只在真正可能生成产物的工具执行前按需扫描；桌宠动画刷新率封顶为 30 FPS，降低空闲时的持续 CPU 占用。
 

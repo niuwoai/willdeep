@@ -123,6 +123,7 @@ final class AgentRoundtableEngine {
             for role in report.experts where !spoken.contains(role) {
                 try Task.checkCancellation()
                 let transcript = AgentRoundtablePromptBuilder.transcript(currentMessages())
+                mutate { $0.activeExpert = role }
                 do {
                     let payload = try await runExpert(topic: report.topic, role: role, round: round, transcript: transcript)
                     appendMessage(.init(
@@ -133,14 +134,17 @@ final class AgentRoundtableEngine {
                         osr: payload.toOSR(),
                         pendingUserOptions: payload.asksUser ? payload.resolvedUserOptions : nil
                     ))
+                    mutate { $0.activeExpert = nil }
                     // 专家发起反问:暂停讨论,交回给主持人答复后再续跑。
                     if payload.asksUser {
                         setPhase(.awaitingUser)
                         return .awaitingUser
                     }
                 } catch is CancellationError {
+                    mutate { $0.activeExpert = nil }
                     throw CancellationError()
                 } catch {
+                    mutate { $0.activeExpert = nil }
                     appendMessage(.init(
                         speaker: .expert,
                         role: role,
@@ -179,6 +183,7 @@ final class AgentRoundtableEngine {
             return existing
         }
         setPhase(.synthesizing)
+        mutate { $0.activeExpert = nil }
         let document = try await runChair(
             AgentRoundtablePromptBuilder.finalDocument(
                 topic: report.topic,
