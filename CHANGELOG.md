@@ -1,7 +1,20 @@
 # Changelog
 
-> 当前文件保留最新版本（1.196.0-rc1 至 1.109.0-rc340）。
+> 当前文件保留最新版本（1.196.0-rc2 至 1.109.0-rc340）。
 > 更早的 1000 个版本已移至 [CHANGELOG-ARCHIVE.md](CHANGELOG-ARCHIVE.md)。
+
+## 1.196.0-rc2 - 2026-07-24
+
+### Fixed
+
+- 修复 **diff 预览把 `.gocache/` 等隐藏缓存目录整个灌进变更统计**、导致「2514 个文件 / 5487 行超阈值」直接触发降级、把用户真正关心的改动淹没在文件摘要外的问题。根因：`AppStateGitStatus.swift` 的 `loadAgentWorktreeChangeSummary` 用 `git status --porcelain=v1 -uall` 收集变更，`-uall` 会把未被 `.gitignore` 忽略的未跟踪目录（如 `.gocache/`）**递归展开成成百上千个文件**，而收集侧只按变更类型（added/untracked…）过滤，**没有任何按路径/隐藏目录的过滤**。
+- 修法：新增 `AppState.isHiddenCacheWorktreePath(_:)` 与白名单 `hiddenCacheDirectoryNames`（`.gocache`/`.cache`/`.gradle`/`.venv`/`.mypy_cache`/`.pytest_cache`/`.ruff_cache`/`.tox`/`.terraform`/`.next`/`.nuxt`/`.svelte-kit`/`.parcel-cache`/`.turbo`/`.yarn`/`.pnpm-store`/`.sass-cache`/`.dart_tool`），在 `loadAgentWorktreeChangeSummary` 与 `AgentGitReview.loadChanges` 两条收集路径里跳过「路径任意**目录段**命中白名单」的文件。
+- 刻意用**白名单**而非「凡以 `.` 开头的目录一律排除」：`.github`、`.claude`、`.vscode` 这类隐藏目录里放的常是用户真在改的配置，一刀切会误伤；仓库根下以 `.` 开头的**单个文件**（`.gitignore`、`.env`）也不受影响——只按目录段匹配、大小写不敏感。
+- 版本号从 **1.196.0-rc1** 递增为 **1.196.0-rc2**，内部构建号从 **135** 递增为 **136**，Help 与 Computer Use Helper 构建号从 **52** 递增为 **53**；App、Go agent、Help、Helper、浏览器扩展、README、响应头契约与产品文档保持一致。
+
+### Tests
+
+- 新增 `testHiddenCacheWorktreePathFiltering`，锁定「`.gocache`/`.venv`/`.mypy_cache`/`.gradle`/`.next` 等隐藏缓存目录段被排除，`.github`/`.claude`/`.vscode` 及根下 `.gitignore`/`.env` 放行，大小写不敏感，且名为 `.gocache` 的顶层文件不误伤」这一不变量。
 
 ## 1.196.0-rc1 - 2026-07-24
 
