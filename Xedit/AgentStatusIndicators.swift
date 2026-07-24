@@ -363,7 +363,18 @@ struct AgentStatsDashboard: View {
                                         peak: maxCount
                                     ))
                                     .frame(width: cellSize, height: cellSize)
-                                    .help(L10n.HeatmapCell.tooltip(cellDateLabel(cell.date), String(cell.count)))
+                                    .help(
+                                        L10n.HeatmapCell.tooltip(
+                                            cellDateLabel(cell.date),
+                                            formatTokenCount(cell.tokenCount)
+                                        )
+                                    )
+                                    .accessibilityLabel(
+                                        L10n.HeatmapCell.tooltip(
+                                            cellDateLabel(cell.date),
+                                            formatTokenCount(cell.tokenCount)
+                                        )
+                                    )
                             }
                         }
                     }
@@ -457,17 +468,17 @@ struct AgentStatsDashboard: View {
     private func activityDisplayCounts(_ cells: [[AgentHeatmapCell]]) -> [[Int]] {
         switch activityMode {
         case .daily:
-            return cells.map { $0.map(\.count) }
+            return cells.map { $0.map(\.tokenCount) }
         case .weekly:
             return cells.map { column in
-                let weeklyTotal = column.reduce(0) { $0 + $1.count }
+                let weeklyTotal = column.reduce(0) { $0 + $1.tokenCount }
                 return column.map { _ in weeklyTotal }
             }
         case .cumulative:
             var runningTotal = 0
             return cells.map { column in
                 column.map { cell in
-                    runningTotal += cell.count
+                    runningTotal += cell.tokenCount
                     return runningTotal
                 }
             }
@@ -818,7 +829,8 @@ struct AgentStatsDashboard: View {
 
     private func cellDateLabel(_ date: Date) -> String {
         let formatter = DateFormatter()
-        formatter.dateFormat = "yyyy-MM-dd"
+        formatter.locale = .current
+        formatter.setLocalizedDateFormatFromTemplate("MMMd")
         return formatter.string(from: date)
     }
 

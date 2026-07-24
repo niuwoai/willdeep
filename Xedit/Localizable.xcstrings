@@ -11668,13 +11668,13 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Message count on date"
+            "value" : "%1$@ used %2$@ tokens"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "该日期的消息数"
+            "value" : "%1$@ 使用了 %2$@ 个 Token"
           }
         }
       }

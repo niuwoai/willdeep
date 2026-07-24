@@ -1,6 +1,6 @@
 # WillDeep Product Overview
 
-> Last updated: 2026-07-24 | Current version: v1.195.0-rc16
+> Last updated: 2026-07-24 | Current version: v1.195.0-rc17
 
 ## Positioning
 
@@ -11,6 +11,8 @@ Official product domain: [willdeep.com](https://willdeep.com).
 WillDeep is configured for non-App-Store distribution without App Sandbox so it can access local project files with fewer permission interruptions.
 
 ## 架构概览
+
+- **Token 热力图单日用量提示（1.195.0-rc17）** —— 新聊天信息卡的 52 周热力图改为按每天真实或估算 Token 总量着色；鼠标悬停任意格子会显示本地化日期与当天 Token 用量，提示数据同时作为辅助功能标签，不再出现标题写 Token、格子却统计消息条数的口径错位。统计面板文案门面同步拆入独立文件，使主 `L10n.swift` 恢复到 3000 行硬限制以内。
 
 - **Codex 风格工具活动时间流（1.195.0-rc16）** —— 对话历史把同一轮已经完成的文件读取、目录浏览、代码搜索、Git 检查与命令执行按操作族拆成独立图标行，替代窄窗口里难以扫读的点号长句；折叠态只展示聚合计数，点击任一行仍可展开完整工具详情。
 
