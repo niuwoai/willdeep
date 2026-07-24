@@ -155,6 +155,26 @@ private extension View {
     }
 }
 
+/// Primary approval action rendered as a solid, unfilled outline: a crisp
+/// accent-colored border with a transparent interior and accent-tinted label.
+/// This gives the "继续 / 允许" call-to-action a deliberate outlined look
+/// instead of the system `.borderedProminent` fill or the muddy translucent
+/// wash that `.bordered` paints behind its label.
+private struct AgentApprovalOutlinedButtonStyle: ButtonStyle {
+    let accent: Color
+    let cornerRadius: CGFloat
+
+    func makeBody(configuration: Configuration) -> some View {
+        let shape = RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+        return configuration.label
+            .foregroundStyle(accent)
+            .background(shape.fill(Color.clear))
+            .overlay(shape.strokeBorder(accent, lineWidth: 1.5))
+            .contentShape(shape)
+            .opacity(configuration.isPressed ? 0.6 : 1)
+    }
+}
+
 /// Layout contract for the soft, skin-aware authorization notice.
 /// The same geometry is shared by commands, web access, visible terminal
 /// handoffs, and other tools so confirmations feel like one product system.
@@ -1025,8 +1045,12 @@ struct AgentToolCallCard: View {
         } label: {
             compactAuthorizationActionLabel(L10n.ToolCard.allowConversation)
         }
-        .buttonStyle(.borderedProminent)
-        .approvalButtonBorderShape(cornerRadius: AgentCompactAuthorizationMetrics.buttonCornerRadius)
+        .buttonStyle(
+            AgentApprovalOutlinedButtonStyle(
+                accent: appState.editorSettings.interfaceSkin.palette.accent,
+                cornerRadius: AgentCompactAuthorizationMetrics.buttonCornerRadius
+            )
+        )
         .tint(appState.editorSettings.interfaceSkin.palette.accent)
         .cursor(.arrow)
     }
@@ -1336,8 +1360,7 @@ struct AgentToolCallCard: View {
 
                     authorizationApproveButton(
                         descriptor,
-                        accent: palette.accent,
-                        primaryText: palette.primaryText
+                        accent: palette.accent
                     )
                 }
                 .controlSize(.regular)
@@ -1358,26 +1381,22 @@ struct AgentToolCallCard: View {
     @ViewBuilder
     private func authorizationApproveButton(
         _ descriptor: AgentApprovalNoticeDescriptor,
-        accent: Color,
-        primaryText: Color
+        accent: Color
     ) -> some View {
-        let button = Button {
+        Button {
             approveAuthorizationNotice()
         } label: {
             approvalActionLabel(descriptor.approveTitle, systemImage: "arrow.right")
         }
-        .approvalButtonBorderShape(cornerRadius: AgentApprovalActionMetrics.cornerRadius)
+        .buttonStyle(
+            AgentApprovalOutlinedButtonStyle(
+                accent: accent,
+                cornerRadius: AgentApprovalActionMetrics.cornerRadius
+            )
+        )
         .tint(accent)
         .cursor(.arrow)
         .frame(maxWidth: AgentConfirmationReviewMetrics.actionButtonMaxWidth)
-
-        if descriptor.usesOutlinedApproveAction {
-            button
-                .buttonStyle(.bordered)
-                .foregroundStyle(primaryText)
-        } else {
-            button.buttonStyle(.borderedProminent)
-        }
     }
 
     private func approveAuthorizationNotice() {
@@ -1571,8 +1590,12 @@ struct AgentToolCallCard: View {
                     } label: {
                         confirmationActionLabel(L10n.ToolCard.allow)
                     }
-                    .buttonStyle(.borderedProminent)
-                    .approvalButtonBorderShape(cornerRadius: AgentApprovalActionMetrics.cornerRadius)
+                    .buttonStyle(
+                        AgentApprovalOutlinedButtonStyle(
+                            accent: palette.accent,
+                            cornerRadius: AgentApprovalActionMetrics.cornerRadius
+                        )
+                    )
                     .tint(palette.accent)
                     .cursor(.arrow)
                     .frame(maxWidth: AgentConfirmationReviewMetrics.actionButtonMaxWidth)
