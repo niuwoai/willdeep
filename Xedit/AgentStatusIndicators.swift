@@ -30,22 +30,27 @@ enum AgentModelUsageTableLayout {
 }
 
 enum AgentStatsDashboardTypography {
-    // Keep the dashboard on a readable UI scale. Hierarchy comes from weight,
-    // spacing, color, and separators instead of shrinking supporting copy.
-    static let body: CGFloat = 13
+    // Codex profile-card scale. Supporting copy stays readable while the
+    // profile name and five top-line metrics carry the hierarchy.
+    static let body: CGFloat = 14
     static let sectionTitle: CGFloat = 14
-    static let metricValue: CGFloat = 16
+    static let metricValue: CGFloat = 15
+    static let metricLabel: CGFloat = 13
+    static let profileName: CGFloat = 22
+    static let profileMeta: CGFloat = 13
     static let heroValue: CGFloat = 34
     static let heroLabel: CGFloat = 16
     static let modelSummaryValue: CGFloat = 24
-    static let compactBadge: CGFloat = 13
+    static let compactBadge: CGFloat = body
 }
 
 enum AgentStatsDashboardLayout {
-    static let panelPadding: CGFloat = 18
-    static let summaryCornerRadius: CGFloat = 10
+    static let panelPadding: CGFloat = 0
+    static let profileAvatarSize: CGFloat = 80
+    static let summaryCornerRadius: CGFloat = 15
+    static let metricStripHeight: CGFloat = 61
     static let heatmapCellSize: CGFloat = 8
-    static let heatmapCellSpacing: CGFloat = 1.5
+    static let heatmapCellSpacing: CGFloat = 3
     static let maximumHeatmapWeeks = 52
 }
 
@@ -53,7 +58,8 @@ struct AgentStatsDashboard: View {
     @EnvironmentObject var appState: AppState
     @Environment(\.colorScheme) private var colorScheme
     @State private var selectedTab: DashboardTab
-    @State private var range: DashboardRange = .all
+    @State private var activityMode: ActivityMode = .daily
+    @State private var account = SomeIMIntegrationStore.loadAuthenticatedAccount()
 
     init(initialTab: DashboardTab = .overview) {
         _selectedTab = State(initialValue: initialTab)
@@ -71,32 +77,21 @@ struct AgentStatsDashboard: View {
         }
     }
 
-    enum DashboardRange: String, CaseIterable, Identifiable {
-        case all = "All"
-        case days30 = "30d"
-        case days7 = "7d"
-        case hours24 = "24h"
+    enum ActivityMode: String, CaseIterable, Identifiable {
+        case daily
+        case weekly
+        case cumulative
         var id: String { rawValue }
         var title: String {
             switch self {
-            case .all: return L10n.StatsDashboard.rangeAll
-            case .days30: return L10n.StatsDashboard.range30d
-            case .days7: return L10n.StatsDashboard.range7d
-            case .hours24: return L10n.StatsDashboard.range24h
-            }
-        }
-        var days: Int? {
-            switch self {
-            case .all: return nil
-            case .days30: return 30
-            case .days7: return 7
-            case .hours24: return 1
+            case .daily: return L10n.StatsDashboard.activityDaily
+            case .weekly: return L10n.StatsDashboard.activityWeekly
+            case .cumulative: return L10n.StatsDashboard.activityCumulative
             }
         }
     }
 
     var body: some View {
-        let palette = appState.editorSettings.interfaceSkin.palette
         Group {
             if appState.hasLoadedAgentUsageSnapshots {
                 dashboardContent
@@ -107,79 +102,58 @@ struct AgentStatsDashboard: View {
             }
         }
         .padding(AgentStatsDashboardLayout.panelPadding)
-        .background(
-            RoundedRectangle(cornerRadius: 14)
-                .fill(palette.panelFill)
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: 14)
-                .stroke(palette.hairline, lineWidth: 1)
-        )
         .task {
             await appState.loadAgentUsageSnapshotsIfNeeded()
+        }
+        .onReceive(
+            NotificationCenter.default.publisher(
+                for: SomeIMIntegrationStore.accountDidChangeNotification
+            )
+        ) { _ in
+            account = SomeIMIntegrationStore.loadAuthenticatedAccount()
         }
     }
 
     private var dashboardContent: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            tabBar
+        Group {
             if selectedTab == .overview {
-                overviewSummaryBand
-                activitySection
-                detailSections
-                funFact
+                VStack(alignment: .leading, spacing: 0) {
+                    profileHeader
+                        .padding(.bottom, 43)
+                    overviewSummaryBand
+                        .padding(.bottom, 39)
+                    activitySection
+                        .padding(.bottom, 40)
+                    detailSections
+                }
             } else {
-                modelSummaryBand
-                modelUsageList
+                VStack(alignment: .leading, spacing: 14) {
+                    modelDetailHeader
+                    modelSummaryBand
+                    modelUsageList
+                }
             }
         }
     }
 
-    private var tabBar: some View {
+    private var modelDetailHeader: some View {
         HStack {
-            // Left-side Overview / Models selector.
-            HStack(spacing: 2) {
-                ForEach(DashboardTab.allCases) { tab in
-                    Button { selectedTab = tab } label: {
-                        Text(tab.title)
-                            .font(AgentDesign.chatSupportingFont(
-                                baseFontSize: appState.agentChatBaseFontSize,
-                                visualMinimum: AgentStatsDashboardTypography.body,
-                                weight: selectedTab == tab ? .semibold : .regular
-                            ))
-                            .padding(.horizontal, 11)
-                            .padding(.vertical, 6)
-                            .background(
-                                selectedTab == tab
-                                    ? AnyShapeStyle(dashboardSelectionFill)
-                                    : AnyShapeStyle(Color.clear)
-                            )
-                            .foregroundStyle(selectedTab == tab ? dashboardAccent : Color.secondary)
-                            .clipShape(RoundedRectangle(cornerRadius: 7))
-                    }
-                    .buttonStyle(.plain)
-                }
+            Button {
+                selectedTab = .overview
+            } label: {
+                Label(L10n.StatsDashboard.tabsOverview, systemImage: "chevron.left")
+                    .font(supportingFont(
+                        visualMinimum: AgentStatsDashboardTypography.body,
+                        weight: .medium
+                    ))
             }
+            .buttonStyle(.plain)
             Spacer(minLength: 0)
-            // Right-side All / 30d / 7d range selector.
-            HStack(spacing: 2) {
-                ForEach(DashboardRange.allCases) { value in
-                    Button { range = value } label: {
-                        Text(value.title)
-                            .font(AgentDesign.chatSupportingFont(
-                                baseFontSize: appState.agentChatBaseFontSize,
-                                visualMinimum: AgentStatsDashboardTypography.body,
-                                weight: range == value ? .semibold : .regular
-                            ))
-                            .padding(.horizontal, 9)
-                            .padding(.vertical, 5)
-                            .background(range == value ? dashboardSelectionFill : Color.clear)
-                            .foregroundStyle(range == value ? dashboardAccent : Color.secondary)
-                            .clipShape(RoundedRectangle(cornerRadius: 7))
-                    }
-                    .buttonStyle(.plain)
-                }
-            }
+            Text(L10n.StatsDashboard.tabsModels)
+                .font(supportingFont(
+                    visualMinimum: AgentStatsDashboardTypography.sectionTitle,
+                    weight: .semibold
+                ))
         }
     }
 
@@ -199,74 +173,140 @@ struct AgentStatsDashboard: View {
     }
 
     private var filteredUsageSnapshots: [AgentUsageSessionSnapshot] {
-        guard let days = range.days else { return appState.agentUsageSnapshots }
-        let calendar = Calendar.current
-        guard let threshold = calendar.date(byAdding: .day, value: -days, to: Date()) else {
-            return appState.agentUsageSnapshots
+        appState.agentUsageSnapshots
+    }
+
+    private var profileHeader: some View {
+        VStack(spacing: 0) {
+            profileAvatar
+                .padding(.bottom, 23)
+            Text(profileDisplayName)
+                .font(supportingFont(
+                    visualMinimum: AgentStatsDashboardTypography.profileName,
+                    weight: .regular
+                ))
+                .foregroundStyle(.primary)
+                .lineLimit(1)
+                .padding(.bottom, 8)
+            HStack(spacing: 8) {
+                Text(profileHandle)
+                    .font(supportingFont(
+                        visualMinimum: AgentStatsDashboardTypography.profileMeta
+                    ))
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                Text(profilePlanName)
+                    .font(supportingFont(
+                        visualMinimum: AgentStatsDashboardTypography.profileMeta
+                    ))
+                    .foregroundStyle(.secondary)
+                    .padding(.horizontal, 6)
+                    .padding(.vertical, 2)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 5)
+                            .stroke(
+                                appState.editorSettings.interfaceSkin.palette.hairline,
+                                lineWidth: 1
+                            )
+                    )
+            }
         }
-        return appState.agentUsageSnapshots.map { session in
-            var copy = session
-            copy.messages = session.messages.filter { $0.createdAt >= threshold }
-            return copy
-        }.filter { !$0.messages.isEmpty }
+        .frame(maxWidth: .infinity)
+    }
+
+    private var profileAvatar: some View {
+        ZStack {
+            Circle()
+                .fill(dashboardAvatarFill)
+            if let url = validatedAvatarURL(account?.avatarURL) {
+                AsyncImage(url: url) { phase in
+                    switch phase {
+                    case .success(let image):
+                        image.resizable().scaledToFill()
+                    default:
+                        profileInitials
+                    }
+                }
+            } else {
+                profileInitials
+            }
+        }
+        .frame(
+            width: AgentStatsDashboardLayout.profileAvatarSize,
+            height: AgentStatsDashboardLayout.profileAvatarSize
+        )
+        .clipShape(Circle())
+    }
+
+    private var profileInitials: some View {
+        Text(initials(for: profileDisplayName))
+            .font(.system(size: 30, weight: .regular))
+            .foregroundStyle(Color.white)
+    }
+
+    private var profileDisplayName: String {
+        let accountName = account?.displayName.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        if !accountName.isEmpty {
+            return accountName
+        }
+        let fullName = NSFullUserName().trimmingCharacters(in: .whitespacesAndNewlines)
+        return fullName.isEmpty ? NSUserName() : fullName
+    }
+
+    private var profileHandle: String {
+        if let email = account?.email,
+           let localPart = email.split(separator: "@").first,
+           !localPart.isEmpty {
+            return "@\(localPart)"
+        }
+        return "@\(NSUserName())"
+    }
+
+    private var profilePlanName: String {
+        let status = appState.someIMCodingPlanStatus
+        if status.isActiveNow {
+            let name = status.planName?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            return name.isEmpty ? L10n.StatsDashboard.profilePlanPro : name
+        }
+        return L10n.StatsDashboard.profilePlanFree
     }
 
     private var overviewSummaryBand: some View {
         let stats = overview
-        return HStack(spacing: 12) {
-            HStack(alignment: .firstTextBaseline, spacing: 7) {
-                Text(formatCompact(stats.artifactCount))
-                    .font(supportingFont(
-                        visualMinimum: AgentStatsDashboardTypography.heroValue,
-                        weight: .semibold
-                    ))
-                    .foregroundStyle(.primary)
-                Text(L10n.StatsDashboard.metricArtifacts)
-                    .font(supportingFont(
-                        visualMinimum: AgentStatsDashboardTypography.heroLabel,
-                        weight: .semibold
-                    ))
-                    .foregroundStyle(.primary)
+        return HStack(spacing: 0) {
+            Button {
+                selectedTab = .models
+            } label: {
+                CodexDashboardMetric(
+                    value: formatTokenCount(stats.totalTokens),
+                    title: L10n.StatsDashboard.metricTotalTokens
+                )
             }
-            .fixedSize(horizontal: true, vertical: false)
-
-            Divider()
-                .frame(height: 44)
-
-            DashboardSummaryFact(
-                title: L10n.StatsDashboard.metricTaskTurns,
-                value: formatCompact(stats.userTurnCount)
+            .buttonStyle(.plain)
+            .help(L10n.StatsDashboard.modelsDisclosureHelp)
+            metricDivider
+            CodexDashboardMetric(
+                value: formatTokenCount(peakTaskTokenCount),
+                title: L10n.StatsDashboard.metricPeakTokens
             )
-            DashboardSummaryFact(
-                title: L10n.StatsDashboard.metricFilesChanged,
-                value: formatCompact(stats.editedFileCount)
+            metricDivider
+            CodexDashboardMetric(
+                value: formatDuration(longestTaskDuration),
+                title: L10n.StatsDashboard.metricLongestTask
             )
-            DashboardSummaryFact(
-                title: L10n.StatsDashboard.metricToolCalls,
-                value: formatCompact(stats.toolCallCount)
+            metricDivider
+            CodexDashboardMetric(
+                value: L10n.StatsDashboard.dayCount("\(stats.currentStreak)"),
+                title: L10n.StatsDashboard.metricCurrentStreak
             )
-
-            Spacer(minLength: 2)
-
-            Divider()
-                .frame(height: 44)
-
-            VStack(alignment: .trailing, spacing: 2) {
-                Text(L10n.StatsDashboard.metricCurrentStreak)
-                    .font(supportingFont(visualMinimum: AgentStatsDashboardTypography.body))
-                    .foregroundStyle(.secondary)
-                Text(L10n.StatsDashboard.dayCount("\(stats.currentStreak)"))
-                    .font(supportingFont(
-                        visualMinimum: AgentStatsDashboardTypography.metricValue,
-                        weight: .semibold
-                    ))
-                    .foregroundStyle(.primary)
-            }
-            .fixedSize(horizontal: true, vertical: false)
+            metricDivider
+            CodexDashboardMetric(
+                value: L10n.StatsDashboard.dayCount("\(stats.longestStreak)"),
+                title: L10n.StatsDashboard.metricLongestStreak
+            )
         }
-        .padding(.horizontal, 14)
-        .padding(.vertical, 11)
-        .background(dashboardSummaryFill)
+        .frame(height: AgentStatsDashboardLayout.metricStripHeight)
+        .background(Color.clear)
         .clipShape(RoundedRectangle(cornerRadius: AgentStatsDashboardLayout.summaryCornerRadius))
         .overlay(
             RoundedRectangle(cornerRadius: AgentStatsDashboardLayout.summaryCornerRadius)
@@ -274,9 +314,13 @@ struct AgentStatsDashboard: View {
         )
     }
 
+    private var metricDivider: some View {
+        Divider()
+            .frame(height: 43)
+    }
+
     private var activitySection: some View {
-        let stats = overview
-        return VStack(alignment: .leading, spacing: 9) {
+        VStack(alignment: .leading, spacing: 0) {
             HStack {
                 Text(L10n.StatsDashboard.activityTitle)
                     .font(supportingFont(
@@ -284,31 +328,40 @@ struct AgentStatsDashboard: View {
                         weight: .semibold
                     ))
                 Spacer(minLength: 0)
-                Text(L10n.StatsDashboard.activitySummary(
-                    formatCompact(overview.messageCount),
-                    stats.hasAnyRealUsage ? formatTokens(overview.totalTokens) : "≈\(formatTokens(overview.totalTokens))"
-                ))
-                    .font(supportingFont(visualMinimum: AgentStatsDashboardTypography.body))
-                    .foregroundStyle(.secondary)
+                HStack(spacing: 13) {
+                    ForEach(ActivityMode.allCases) { mode in
+                        Button {
+                            activityMode = mode
+                        } label: {
+                            Text(mode.title)
+                                .font(supportingFont(
+                                    visualMinimum: AgentStatsDashboardTypography.body,
+                                    weight: activityMode == mode ? .medium : .regular
+                                ))
+                                .foregroundStyle(activityMode == mode ? Color.primary : Color.secondary)
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
             }
+            .padding(.bottom, 11)
 
             GeometryReader { proxy in
                 let cellSize = AgentStatsDashboardLayout.heatmapCellSize
                 let cellSpacing = AgentStatsDashboardLayout.heatmapCellSpacing
-                let weekCount = heatmapWeekCount(
-                    for: proxy.size.width,
-                    cellSize: cellSize,
-                    spacing: cellSpacing
-                )
-                let cells = AgentUsageStats.heatmap(for: filteredUsageSnapshots, weekCount: weekCount)
-                let maxCount = cells.flatMap { $0 }.map(\.count).max() ?? 0
+                let cells = activityCells
+                let displayCounts = activityDisplayCounts(cells)
+                let maxCount = displayCounts.flatMap { $0 }.max() ?? 0
 
                 HStack(spacing: cellSpacing) {
-                    ForEach(Array(cells.enumerated()), id: \.offset) { _, column in
+                    ForEach(Array(cells.enumerated()), id: \.offset) { columnIndex, column in
                         VStack(spacing: cellSpacing) {
-                            ForEach(column) { cell in
+                            ForEach(Array(column.enumerated()), id: \.element.id) { rowIndex, cell in
                                 RoundedRectangle(cornerRadius: 1.5)
-                                    .fill(color(for: cell.count, peak: maxCount))
+                                    .fill(color(
+                                        for: displayCounts[columnIndex][rowIndex],
+                                        peak: maxCount
+                                    ))
                                     .frame(width: cellSize, height: cellSize)
                                     .help(L10n.HeatmapCell.tooltip(cellDateLabel(cell.date), String(cell.count)))
                             }
@@ -318,6 +371,9 @@ struct AgentStatsDashboard: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
             .frame(height: heatmapHeight)
+            .padding(.bottom, 10)
+
+            monthLabels
         }
     }
 
@@ -328,10 +384,9 @@ struct AgentStatsDashboard: View {
     }
 
     private var detailSections: some View {
-        HStack(alignment: .top, spacing: 18) {
+        HStack(alignment: .top, spacing: 40) {
             insightSection
                 .frame(maxWidth: .infinity, alignment: .leading)
-            Divider()
             capabilitySection
                 .frame(maxWidth: .infinity, alignment: .leading)
         }
@@ -339,67 +394,183 @@ struct AgentStatsDashboard: View {
 
     private var insightSection: some View {
         let stats = overview
-        return VStack(alignment: .leading, spacing: 8) {
+        return VStack(alignment: .leading, spacing: 11) {
             Text(L10n.StatsDashboard.insightsTitle)
                 .font(supportingFont(
                     visualMinimum: AgentStatsDashboardTypography.sectionTitle,
                     weight: .semibold
                 ))
             DashboardInsightRow(
-                title: L10n.StatsDashboard.insightSessions,
-                value: formatCompact(stats.sessionCount)
+                title: L10n.StatsDashboard.insightQuickMode,
+                value: formatPercentage(managedRoutingRate)
             )
             DashboardInsightRow(
-                title: L10n.StatsDashboard.insightWorkspaces,
-                value: formatCompact(stats.workspaceCount)
+                title: L10n.StatsDashboard.insightReasoningStrength,
+                value: reasoningStrengthLabel
             )
             DashboardInsightRow(
-                title: L10n.StatsDashboard.insightActiveDays,
-                value: L10n.StatsDashboard.dayCount("\(stats.activeDays)")
+                title: L10n.StatsDashboard.insightExploredSkills,
+                value: formatInteger(uniqueToolCount)
             )
             DashboardInsightRow(
-                title: L10n.StatsDashboard.insightPeakHour,
-                value: peakHourLabel(stats.peakHour)
+                title: L10n.StatsDashboard.insightSkillUses,
+                value: formatInteger(stats.toolCallCount)
             )
-            if stats.workflowCount > 0 {
-                DashboardInsightRow(
-                    title: L10n.StatsDashboard.insightWorkflows,
-                    value: formatCompact(stats.workflowCount)
-                )
-            }
+            DashboardInsightRow(
+                title: L10n.StatsDashboard.insightTasksTotal,
+                value: formatInteger(stats.userTurnCount)
+            )
         }
     }
 
     private var capabilitySection: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text(L10n.StatsDashboard.capabilitiesTitle)
+        VStack(alignment: .leading, spacing: 11) {
+            Text(L10n.StatsDashboard.pluginsTitle)
                 .font(supportingFont(
                     visualMinimum: AgentStatsDashboardTypography.sectionTitle,
                     weight: .semibold
                 ))
             if capabilityRows.isEmpty {
-                Text(L10n.StatsDashboard.capabilitiesEmpty)
+                Text(L10n.StatsDashboard.pluginsEmpty)
                     .font(supportingFont(visualMinimum: AgentStatsDashboardTypography.body))
                     .foregroundStyle(.secondary)
                     .frame(minHeight: 68, alignment: .leading)
             } else {
                 ForEach(Array(capabilityRows.prefix(5).enumerated()), id: \.element.id) { index, row in
-                    HStack(spacing: 7) {
-                        Image(systemName: row.capability.systemImage)
-                            .font(.system(size: AgentStatsDashboardTypography.body, weight: .medium))
-                            .foregroundStyle(index == 0 ? dashboardAccent : Color.secondary)
-                            .frame(width: 16)
-                        Text(row.capability.title)
-                            .font(supportingFont(visualMinimum: AgentStatsDashboardTypography.body))
-                            .lineLimit(1)
-                        Spacer(minLength: 0)
-                        Text(L10n.StatsDashboard.callCount(formatCompact(row.callCount)))
-                            .font(supportingFont(visualMinimum: AgentStatsDashboardTypography.body))
-                            .foregroundStyle(index == 0 ? dashboardAccent : Color.secondary)
-                    }
+                    CodexDashboardPluginRow(
+                        capability: row.capability,
+                        callCount: row.callCount,
+                        tint: pluginTint(at: index)
+                    )
                 }
             }
         }
+    }
+
+    private var activityCells: [[AgentHeatmapCell]] {
+        AgentUsageStats.heatmap(
+            for: filteredUsageSnapshots,
+            weekCount: AgentStatsDashboardLayout.maximumHeatmapWeeks
+        )
+    }
+
+    private func activityDisplayCounts(_ cells: [[AgentHeatmapCell]]) -> [[Int]] {
+        switch activityMode {
+        case .daily:
+            return cells.map { $0.map(\.count) }
+        case .weekly:
+            return cells.map { column in
+                let weeklyTotal = column.reduce(0) { $0 + $1.count }
+                return column.map { _ in weeklyTotal }
+            }
+        case .cumulative:
+            var runningTotal = 0
+            return cells.map { column in
+                column.map { cell in
+                    runningTotal += cell.count
+                    return runningTotal
+                }
+            }
+        }
+    }
+
+    private var monthLabels: some View {
+        let formatter = DateFormatter()
+        formatter.setLocalizedDateFormatFromTemplate("MMM")
+        let calendar = Calendar.current
+        let currentMonth = calendar.date(
+            from: calendar.dateComponents([.year, .month], from: Date())
+        ) ?? Date()
+        let months = (0..<12).compactMap { offset in
+            calendar.date(byAdding: .month, value: offset - 11, to: currentMonth)
+        }
+        return HStack(spacing: 0) {
+            ForEach(Array(months.enumerated()), id: \.offset) { index, date in
+                Text(formatter.string(from: date))
+                    .font(supportingFont(
+                        visualMinimum: AgentStatsDashboardTypography.metricLabel
+                    ))
+                    .foregroundStyle(.secondary)
+                    .frame(
+                        maxWidth: .infinity,
+                        alignment: index == 0 ? .leading : (index == months.count - 1 ? .trailing : .center)
+                    )
+            }
+        }
+        .frame(height: 18)
+    }
+
+    private var peakTaskTokenCount: Int {
+        filteredUsageSnapshots.map { session in
+            session.messages.reduce(0) { $0 + dashboardTokenCount(for: $1) }
+        }.max() ?? 0
+    }
+
+    private var longestTaskDuration: TimeInterval {
+        filteredUsageSnapshots.compactMap { session -> TimeInterval? in
+            let dates = session.messages.map(\.createdAt)
+            guard let first = dates.min(), let last = dates.max(), last > first else {
+                return nil
+            }
+            return last.timeIntervalSince(first)
+        }.max() ?? 0
+    }
+
+    private var managedRoutingRate: Double {
+        guard !filteredUsageSnapshots.isEmpty else { return 0 }
+        let managed = filteredUsageSnapshots.count(where: \.isManagedRouting)
+        return Double(managed) / Double(filteredUsageSnapshots.count)
+    }
+
+    private var reasoningUsageRate: Double {
+        let assistantMessages = filteredUsageSnapshots
+            .flatMap(\.messages)
+            .filter { $0.role == .assistant }
+        guard !assistantMessages.isEmpty else { return 0 }
+        let reasoned = assistantMessages.count {
+            ($0.reasoningTokens ?? 0) > 0 || $0.reasoningCharacterCount > 0
+        }
+        return Double(reasoned) / Double(assistantMessages.count)
+    }
+
+    private var reasoningStrengthLabel: String {
+        let level: String
+        if reasoningUsageRate >= 0.67 {
+            level = L10n.StatsDashboard.reasoningHigh
+        } else if reasoningUsageRate >= 0.34 {
+            level = L10n.StatsDashboard.reasoningMedium
+        } else {
+            level = L10n.StatsDashboard.reasoningLow
+        }
+        return L10n.StatsDashboard.reasoningValue(
+            level,
+            formatPercentage(reasoningUsageRate)
+        )
+    }
+
+    private var uniqueToolCount: Int {
+        Set(filteredUsageSnapshots.flatMap(\.messages).flatMap(\.toolCallNames)).count
+    }
+
+    private func dashboardTokenCount(for message: AgentUsageMessageSnapshot) -> Int {
+        if let usage = message.usageTokens, usage > 0 {
+            return usage
+        }
+        let textCharacters = message.contentCharacterCount
+            + message.reasoningCharacterCount
+            + message.toolCallArgumentCharacterCount
+        return max(1, textCharacters / 4 + message.imageCount * 256)
+    }
+
+    private func pluginTint(at index: Int) -> Color {
+        let colors: [Color] = [
+            Color(red: 0.70, green: 0.31, blue: 0.91),
+            Color(red: 0.18, green: 0.67, blue: 0.93),
+            Color(red: 0.98, green: 0.56, blue: 0.20),
+            Color(red: 0.45, green: 0.33, blue: 0.89),
+            Color(red: 0.30, green: 0.33, blue: 0.37),
+        ]
+        return colors[index % colors.count]
     }
 
     private var modelUsageList: some View {
@@ -679,6 +850,59 @@ struct AgentStatsDashboard: View {
         return "\(count)"
     }
 
+    private func formatTokenCount(_ count: Int) -> String {
+        let isSimplifiedChinese = Locale.preferredLanguages.first?
+            .lowercased()
+            .hasPrefix("zh-hans") == true
+        if isSimplifiedChinese {
+            if count >= 100_000_000 {
+                return compactDecimal(Double(count) / 100_000_000) + "亿"
+            }
+            if count >= 10_000 {
+                return compactDecimal(Double(count) / 10_000) + "万"
+            }
+            return formatInteger(count)
+        }
+        if count >= 1_000_000_000 {
+            return compactDecimal(Double(count) / 1_000_000_000) + "B"
+        }
+        if count >= 1_000_000 {
+            return compactDecimal(Double(count) / 1_000_000) + "M"
+        }
+        if count >= 1_000 {
+            return compactDecimal(Double(count) / 1_000) + "K"
+        }
+        return formatInteger(count)
+    }
+
+    private func compactDecimal(_ value: Double) -> String {
+        if value >= 100 || value.rounded() == value {
+            return String(format: "%.0f", value)
+        }
+        return String(format: "%.1f", value)
+    }
+
+    private func formatInteger(_ value: Int) -> String {
+        NumberFormatter.localizedString(from: NSNumber(value: value), number: .decimal)
+    }
+
+    private func formatPercentage(_ value: Double) -> String {
+        String(format: "%.0f%%", min(1, max(0, value)) * 100)
+    }
+
+    private func formatDuration(_ value: TimeInterval) -> String {
+        guard value >= 60 else {
+            return L10n.StatsDashboard.durationMinutes("0")
+        }
+        let formatter = DateComponentsFormatter()
+        formatter.allowedUnits = value >= 3_600 ? [.hour, .minute] : [.minute]
+        formatter.unitsStyle = .abbreviated
+        formatter.maximumUnitCount = 2
+        formatter.zeroFormattingBehavior = .dropAll
+        return formatter.string(from: value)
+            ?? L10n.StatsDashboard.durationMinutes("\(Int(value / 60))")
+    }
+
     private func formatTokens(_ count: Int) -> String {
         if count >= 1_000_000 { return String(format: "%.1fM", Double(count) / 1_000_000) }
         if count >= 1_000 { return "\(count / 1_000)k" }
@@ -730,6 +954,12 @@ struct AgentStatsDashboard: View {
             : Color(red: 0.23, green: 0.44, blue: 0.88)
     }
 
+    private var dashboardAvatarFill: Color {
+        colorScheme == .dark
+            ? Color(red: 0.57, green: 0.43, blue: 0.24)
+            : Color(red: 0.74, green: 0.58, blue: 0.33)
+    }
+
     private var dashboardSelectionFill: Color {
         colorScheme == .dark
             ? dashboardAccent.opacity(0.16)
@@ -745,7 +975,7 @@ struct AgentStatsDashboard: View {
     private var dashboardHeatmapInactive: Color {
         colorScheme == .dark
             ? Color.secondary.opacity(0.16)
-            : Color(red: 0.91, green: 0.93, blue: 0.97)
+            : Color.secondary.opacity(0.08)
     }
 
     private func supportingFont(
@@ -759,6 +989,25 @@ struct AgentStatsDashboard: View {
             weight: weight,
             design: design
         )
+    }
+
+    private func initials(for value: String) -> String {
+        let words = value
+            .split(whereSeparator: { $0.isWhitespace || $0 == "-" || $0 == "_" })
+            .filter { !$0.isEmpty }
+        if words.count >= 2 {
+            return words.prefix(2).compactMap(\.first).map(String.init).joined().uppercased()
+        }
+        return String(value.prefix(2)).uppercased()
+    }
+
+    private func validatedAvatarURL(_ value: String?) -> URL? {
+        guard let value,
+              let url = URL(string: value),
+              ["http", "https"].contains(url.scheme?.lowercased() ?? "") else {
+            return nil
+        }
+        return url
     }
 }
 
@@ -793,6 +1042,90 @@ struct StatCell: View {
         .padding(.vertical, 8)
         .background(appState.editorSettings.interfaceSkin.palette.controlFill.opacity(0.72))
         .clipShape(RoundedRectangle(cornerRadius: 6))
+    }
+}
+
+private struct CodexDashboardMetric: View {
+    @EnvironmentObject var appState: AppState
+    let value: String
+    let title: String
+
+    var body: some View {
+        VStack(spacing: 3) {
+            Text(value)
+                .font(AgentDesign.chatSupportingFont(
+                    baseFontSize: appState.agentChatBaseFontSize,
+                    visualMinimum: AgentStatsDashboardTypography.metricValue,
+                    weight: .regular
+                ))
+                .foregroundStyle(.primary)
+                .lineLimit(1)
+                .minimumScaleFactor(0.72)
+            Text(title)
+                .font(AgentDesign.chatSupportingFont(
+                    baseFontSize: appState.agentChatBaseFontSize,
+                    visualMinimum: AgentStatsDashboardTypography.metricLabel
+                ))
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
+                .minimumScaleFactor(0.72)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .contentShape(Rectangle())
+    }
+}
+
+private struct CodexDashboardPluginRow: View {
+    @EnvironmentObject var appState: AppState
+    let capability: AgentUsageCapability
+    let callCount: Int
+    let tint: Color
+
+    var body: some View {
+        HStack(spacing: 8) {
+            RoundedRectangle(cornerRadius: 5)
+                .fill(tint.opacity(0.14))
+                .overlay {
+                    Image(systemName: capability.systemImage)
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundStyle(tint)
+                }
+                .frame(width: 22, height: 22)
+            Text(pluginName)
+                .font(AgentDesign.chatSupportingFont(
+                    baseFontSize: appState.agentChatBaseFontSize,
+                    visualMinimum: AgentStatsDashboardTypography.body
+                ))
+                .foregroundStyle(.primary)
+                .lineLimit(1)
+                .truncationMode(.middle)
+            Spacer(minLength: 4)
+            Text(L10n.StatsDashboard.pluginRunCount(formatInteger(callCount)))
+                .font(AgentDesign.chatSupportingFont(
+                    baseFontSize: appState.agentChatBaseFontSize,
+                    visualMinimum: AgentStatsDashboardTypography.body
+                ))
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
+        }
+    }
+
+    private var pluginName: String {
+        switch capability {
+        case .workspace: return "@workspace"
+        case .coding: return "@coding"
+        case .terminal: return "@terminal"
+        case .research: return "@research"
+        case .browser: return "@browser"
+        case .media: return "$imagegen"
+        case .automation: return "@automation"
+        case .integration: return "@integrations"
+        case .general: return "@tools"
+        }
+    }
+
+    private func formatInteger(_ value: Int) -> String {
+        NumberFormatter.localizedString(from: NSNumber(value: value), number: .decimal)
     }
 }
 

@@ -1,6 +1,6 @@
 # WillDeep Product Overview
 
-> Last updated: 2026-07-24 | Current version: v1.195.0-rc14
+> Last updated: 2026-07-24 | Current version: v1.195.0-rc16
 
 ## Positioning
 
@@ -11,6 +11,10 @@ Official product domain: [willdeep.com](https://willdeep.com).
 WillDeep is configured for non-App-Store distribution without App Sandbox so it can access local project files with fewer permission interruptions.
 
 ## 架构概览
+
+- **Codex 风格工具活动时间流（1.195.0-rc16）** —— 对话历史把同一轮已经完成的文件读取、目录浏览、代码搜索、Git 检查与命令执行按操作族拆成独立图标行，替代窄窗口里难以扫读的点号长句；折叠态只展示聚合计数，点击任一行仍可展开完整工具详情。
+
+- **Codex 同款新聊天信息卡（1.195.0-rc15）** —— 有历史使用数据时，新聊天页改为单页个人统计卡：账号头像、昵称、账号与方案置顶，五格指标条展示累计/峰值 Token、最长任务和连续天数；下方提供 12 个月 Token 热力图（日/周/累计三态）、活动洞察与五项常用插件排行。点击累计 Token 可继续进入原模型用量明细，功能没有因视觉对齐而丢失。
 
 - **AIPipe 构建期二进制配置（1.195.0-rc9）** —— 发布构建从环境变量或本机 `.env.local` 读取 AIPipe API Key、endpoint 与 topic，在 DerivedData 中生成不入库的 Swift 常量并参与可执行文件编译；启动时优先读取运行环境覆盖，其次使用编译配置，Info.plist 只作为旧构建兼容兜底。
 

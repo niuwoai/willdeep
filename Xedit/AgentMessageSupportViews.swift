@@ -692,20 +692,21 @@ struct AgentChatEmptyState: View {
     @EnvironmentObject var appState: AppState
 
     var body: some View {
-        VStack(spacing: 18) {
-            heroLine
-            // Only show the stats dashboard once the user has at least
-            // one persisted session — for a fresh install the empty
-            // grid would be more demotivating than helpful.
-            if !appState.agentSessions.isEmpty {
-                AgentStatsDashboard()
-                    .frame(maxWidth: 560)
+        Group {
+            // Once usage exists, the profile card owns the complete new-chat
+            // hierarchy, matching Codex without a second greeting above it.
+            if appState.agentSessions.isEmpty {
+                VStack(spacing: 18) {
+                    heroLine
+                    Text(subtitle)
+                        .agentChatSupportingFont()
+                        .foregroundStyle(.secondary)
+                        .multilineTextAlignment(.center)
+                        .frame(maxWidth: 360)
+                }
             } else {
-                Text(subtitle)
-                    .agentChatSupportingFont()
-                    .foregroundStyle(.secondary)
-                    .multilineTextAlignment(.center)
-                    .frame(maxWidth: 360)
+                AgentStatsDashboard()
+                    .frame(maxWidth: 568)
             }
         }
         .foregroundStyle(.secondary)

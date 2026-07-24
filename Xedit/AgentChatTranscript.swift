@@ -249,7 +249,7 @@ struct AgentChatTranscript: View {
                     if appState.agentMessages.isEmpty && localConfirmationPreviewCalls.isEmpty {
                         AgentChatEmptyState()
                             .frame(maxWidth: .infinity)
-                            .padding(.top, 40)
+                            .padding(.top, 44)
                     } else {
                         // rc16: chat pane history rendered as ONE
                         // NSTextView (`AgentChatHistoryTextView`)
