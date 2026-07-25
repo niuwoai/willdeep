@@ -3,6 +3,17 @@
 > 当前文件保留最新版本（1.200.0-rc3 至 1.109.0-rc340）。
 > 更早的 1000 个版本已移至 [CHANGELOG-ARCHIVE.md](CHANGELOG-ARCHIVE.md)。
 
+## 1.202.0-rc4 - 2026-07-25
+
+### Fixed
+
+- **工具活动「✗ N 失败」不再用报警红**：对话历史里已结束命令组的结果徽章（如「已运行 1 条命令 · ✗ 1 失败」）改与活动行同色的 secondary 文案，不再刷 `systemRed`。回合内命令失败很常见、Agent 也会重试，红色会把常态噪声抬成事故感。
+- **思考预览单测对齐 reasoning 兜底 headline**：`testAgentLiveThinkingPreview` 仍按旧约定断言「仅有 reasoning 时无当前动作标题」，与现有 Codex 式兜底行为冲突；现改为期望 thinking 标题与 reasoning 最新一行 liveTitle。
+
+### Meta
+
+- 版本号从 **1.202.0-rc3** 提升为 **1.202.0-rc4**（失败徽章告警色降噪，按 bugfix 只递增 rc 位），内部构建号从 **151** 递增为 **152**，Help 与 Computer Use Helper 构建号从 **68** 递增为 **69**；App、Go agent、Help、Helper、浏览器扩展、README、响应头契约与产品文档保持一致。
+
 ## 1.202.0-rc3 - 2026-07-25
 
 ### Fixed
