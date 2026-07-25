@@ -184,6 +184,93 @@ extension AppState {
         }
     }
 
+    #if DEBUG
+    /// Dev-only: seed an agent provider (base URL + API key) from a local JSON
+    /// file so Debug builds have a usable provider without manual entry — same
+    /// idea as Claude Code storing config in a JSON file. Opt-in via file
+    /// presence, so it is a no-op for everyone who hasn't created the file.
+    ///
+    /// Resolution order:
+    ///   1. env `WILLDEEP_DEV_PROVIDER_CONFIG` = path to the JSON
+    ///   2. `~/.willdeep/dev-provider.json`
+    ///
+    /// The key is stored the normal way (into `entry.apiKey` → Keychain via the
+    /// `agentProviderLibrary` `didSet`), and is never written to the log.
+    func seedDevProviderIfNeeded() {
+        guard ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] == nil else { return }
+        guard let config = Self.loadDevProviderConfig() else { return }
+
+        let base = config.apiBase.trimmingCharacters(in: .whitespacesAndNewlines)
+        let key = config.apiKey.trimmingCharacters(in: .whitespacesAndNewlines)
+        let flash = (config.flashModel ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !base.isEmpty, !key.isEmpty else {
+            NSLog("[dev-provider] skipped: apiBase and apiKey are both required")
+            return
+        }
+        guard !flash.isEmpty else {
+            NSLog("[dev-provider] skipped: flashModel is required")
+            return
+        }
+
+        let presetID = config.providerID?.nonEmptyOrNil
+            ?? AgentProviderPreset.customID
+        // Idempotent: reuse an existing entry with the same base URL so relaunch
+        // doesn't append duplicate rows.
+        let existing = agentProviderLibrary.entries.first {
+            $0.baseURL.trimmingCharacters(in: .whitespacesAndNewlines) == base
+        }
+        let entryID = existing?.id ?? UUID()
+        let pro = config.proModel?.nonEmptyOrNil ?? flash
+        let routing: AgentModelRoutingMode
+        switch (config.routingMode ?? "auto").lowercased() {
+        case "flash": routing = .flash
+        case "pro": routing = .pro
+        default: routing = .auto
+        }
+
+        let entry = AgentProviderEntry(
+            id: entryID,
+            providerID: presetID,
+            displayName: config.displayName?.nonEmptyOrNil ?? existing?.displayName ?? "Dev Seed",
+            baseURL: base,
+            apiKey: key,
+            flashPrimary: flash,
+            flashAlternates: existing?.flashAlternates ?? [],
+            proPrimary: pro,
+            proAlternates: existing?.proAlternates ?? [],
+            routingMode: routing
+        )
+        agentProviderLibrary.upsert(entry)
+        if config.setActive ?? true {
+            agentProviderLibrary.setActive(entryID)
+            if agentProviderLibrary.activeID == entryID {
+                applyActiveProviderLibraryEntry()
+            }
+        }
+        NSLog("[dev-provider] seeded provider preset=%@ base=%@ (key from dev config, not logged)", presetID, base)
+    }
+
+    private static func loadDevProviderConfig() -> DevProviderSeedConfig? {
+        let fileManager = FileManager.default
+        var resolvedPath: String?
+        if let envPath = ProcessInfo.processInfo.environment["WILLDEEP_DEV_PROVIDER_CONFIG"],
+           !envPath.isEmpty, !envPath.hasPrefix("$(") {
+            resolvedPath = (envPath as NSString).expandingTildeInPath
+        } else {
+            let defaultPath = ("~/.willdeep/dev-provider.json" as NSString).expandingTildeInPath
+            if fileManager.fileExists(atPath: defaultPath) { resolvedPath = defaultPath }
+        }
+        guard let resolvedPath, fileManager.fileExists(atPath: resolvedPath) else { return nil }
+        do {
+            let data = try Data(contentsOf: URL(fileURLWithPath: resolvedPath))
+            return try JSONDecoder().decode(DevProviderSeedConfig.self, from: data)
+        } catch {
+            NSLog("[dev-provider] failed to load %@: %@", resolvedPath, error.localizedDescription)
+            return nil
+        }
+    }
+    #endif
+
     func syncSomeIMImageUnderstanding(
         apiKey: String,
         settings: SomeIMIntegrationSettings? = nil
@@ -2308,3 +2395,26 @@ extension AppState {
         setManagedRoutingFloor(.low)
     }
 }
+
+#if DEBUG
+/// On-disk shape of the Debug provider-seed JSON. Only `apiBase` / `apiKey` /
+/// `flashModel` are required; the rest are optional. Loaded by
+/// `AppState.seedDevProviderIfNeeded()`.
+private struct DevProviderSeedConfig: Decodable {
+    var providerID: String?
+    var displayName: String?
+    var apiBase: String
+    var apiKey: String
+    var flashModel: String?
+    var proModel: String?
+    var routingMode: String?
+    var setActive: Bool?
+}
+
+private extension String {
+    var nonEmptyOrNil: String? {
+        let trimmed = trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? nil : trimmed
+    }
+}
+#endif

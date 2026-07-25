@@ -637,6 +637,15 @@ final class AppState: ObservableObject {
             guard !SomeIMIntegrationStore.loadAPIKey().isEmpty else { return }
             await self?.refreshSomeIMRelayRouting()
         }
+        #if DEBUG
+        // Dev convenience: let a local JSON file seed a usable provider+key so
+        // Debug builds work without manual entry (à la Claude Code's settings
+        // JSON). Opt-in via file presence; git-ignored; key never logged. Placed
+        // after the reconcile + relay-probe dispatch so a present dev config has
+        // the final say on the active provider, while keeping the
+        // reconcile→relay-probe ordering (and its source-scan invariant) intact.
+        seedDevProviderIfNeeded()
+        #endif
         startSomeIMCodingPlanRefreshTimer()
         refreshSomeIMCodingPlanStatus(force: false)
         startAppUpdateChecks()
