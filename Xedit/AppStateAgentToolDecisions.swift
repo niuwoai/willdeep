@@ -540,41 +540,112 @@ extension AppState {
             configuration.model = flash
         }
         // The judge reads the live `agentConfiguration`, whose apiKey can
-        // briefly lag the active library entry: the key is materialized from
+        // briefly lag the provider library: the key is materialized from
         // Keychain lazily and `applyActiveProviderLibraryEntry()` can
         // early-return before flushing it into the configuration. When that
         // window overlaps a tool decision the judge sends an empty key and
         // silently falls back to a manual prompt — historically a large slice
         // of judge calls logged `unavailable / missing api key`. If the
-        // resolved key is empty, hydrate it straight from the active entry's
-        // Keychain-backed secret so the judge stays available whenever a key
-        // actually exists.
+        // resolved key is empty, hydrate it from the library entry that
+        // matches the judge's OWN provider — not just whatever entry is
+        // currently active. `agentConfiguration` and `agentProviderLibrary`
+        // .activeID can disagree during bootstrap / provider switch, which is
+        // what left direct-DeepSeek judge calls empty-keyed. Matching by
+        // providerID also keeps this clear of the DeepSeek-key-copied-to-
+        // OpenAI-entry footgun: only a same-provider entry can donate a key.
         if configuration.requiresAPIKey, configuration.apiKey.isEmpty {
-            let hydrated = activeProviderLibraryAPIKey()
+            let hydrated = providerLibraryAPIKey(forProviderID: configuration.providerID)
             if !hydrated.isEmpty {
                 configuration.apiKey = hydrated
             }
         }
+        // Last-resort safety net: if the direct provider's key is still
+        // missing but the user is signed into some.im, run the judge on the
+        // some.im managed flash model instead of bouncing to a manual prompt.
+        // some.im's credential lives in the shared-session Keychain (a
+        // different slot than any per-entry key), so it stays available
+        // exactly in the window where the direct key is empty. Users who
+        // never signed into some.im are unaffected — `nil` keeps the direct
+        // config, which then reports `missing api key` as before.
+        if configuration.requiresAPIKey, configuration.apiKey.isEmpty,
+           let managed = someIMManagedJudgeConfiguration() {
+            return managed
+        }
         return configuration.normalized
     }
 
-    /// The active library entry's API key, reading straight from Keychain via
-    /// a throwaway library copy when the live entry hasn't been materialized
-    /// yet. Never mutates published state, so it's safe to call from the
-    /// synchronous tool-decision path without kicking the provider-library
+    /// The API key of the library entry whose provider matches `providerID`,
+    /// read straight from Keychain via a throwaway library copy when the entry
+    /// hasn't been materialized yet. Prefers the active entry when it is the
+    /// same provider, then falls back to the first same-provider entry that
+    /// yields a non-empty key. Never mutates published state, so it's safe on
+    /// the synchronous tool-decision path without kicking the provider-library
     /// `didSet` cascade (and the DeepSeek-key-copied-to-OpenAI-entry class of
-    /// bugs that machinery guards against).
-    private func activeProviderLibraryAPIKey() -> String {
-        guard let activeID = agentProviderLibrary.activeID,
-              let entry = agentProviderLibrary.entries.first(where: { $0.id == activeID }) else {
-            return ""
+    /// bugs that machinery guards against). Only ever returns a key from a
+    /// same-provider entry — a different provider's secret is never donated.
+    private func providerLibraryAPIKey(forProviderID providerID: String) -> String {
+        let library = agentProviderLibrary
+
+        func materializedKey(for entry: AgentProviderEntry) -> String {
+            if entry.apiKeyLoaded { return entry.apiKey }
+            var copy = library
+            guard AgentSettingsStore.materializeProviderLibraryAPIKey(in: &copy, id: entry.id) else {
+                return entry.apiKey
+            }
+            return copy.entries.first(where: { $0.id == entry.id })?.apiKey ?? entry.apiKey
         }
-        if entry.apiKeyLoaded { return entry.apiKey }
-        var copy = agentProviderLibrary
-        guard AgentSettingsStore.materializeProviderLibraryAPIKey(in: &copy, id: activeID) else {
-            return entry.apiKey
+
+        if let activeID = library.activeID,
+           let active = library.entries.first(where: { $0.id == activeID }),
+           active.providerID == providerID {
+            let key = materializedKey(for: active)
+            if !key.isEmpty { return key }
         }
-        return copy.entries.first(where: { $0.id == activeID })?.apiKey ?? entry.apiKey
+        for entry in library.entries where entry.providerID == providerID {
+            let key = materializedKey(for: entry)
+            if !key.isEmpty { return key }
+        }
+        return ""
+    }
+
+    /// A some.im managed judge configuration, or `nil` when the user is not
+    /// signed into some.im. Built from the some.im library entry when one
+    /// exists (so base URL / models track the user's setup) and always carries
+    /// the shared-session key — which lives in a different Keychain slot than
+    /// any per-entry secret, and is therefore present exactly when a direct
+    /// provider key momentarily is not. Used as the judge's last-resort
+    /// provider so a missing direct key becomes a some.im flash verdict
+    /// instead of a manual prompt. Returns `nil` under XCTest (the login gate
+    /// is false there), so it never fires in unit tests.
+    private func someIMManagedJudgeConfiguration() -> AgentConfiguration? {
+        guard SomeIMIntegrationStore.hasAuthenticatedSessionForAutomaticDefaults() else {
+            return nil
+        }
+        let key = SomeIMIntegrationStore.loadAPIKey()
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !key.isEmpty else { return nil }
+
+        if let entry = agentProviderLibrary.entries.first(where: {
+            $0.providerID == AgentProviderPreset.someIMID
+        }) {
+            var config = entry.makeConfiguration(
+                flashOverride: SomeIMManagedModel.autoFlash,
+                routingMode: .flash
+            )
+            config.model = SomeIMManagedModel.autoFlash
+            config.apiKey = key
+            return config.normalized
+        }
+
+        return AgentConfiguration(
+            providerID: AgentProviderPreset.someIMID,
+            baseURL: SomeIMIntegrationSettings.defaultBaseURL,
+            model: SomeIMManagedModel.autoFlash,
+            flashModel: SomeIMManagedModel.autoFlash,
+            proModel: SomeIMManagedModel.autoPro,
+            routingMode: .flash,
+            apiKey: key
+        ).normalized
     }
 
     func resolveAgentToolCallDecision(id: AgentToolCall.ID, decision: AgentToolDecision) {

@@ -1977,6 +1977,75 @@ struct WillDeepTests {
         #expect(prompt.contains("When in doubt, output NO"))
     }
 
+    @Test("safety judge hydrates key from the matching-provider library entry")
+    @MainActor
+    func testSafetyJudgeHydratesKeyFromMatchingProviderEntry() async {
+        let sandbox = KeychainSandbox()
+        defer { withExtendedLifetime(sandbox) {} }
+        let appState = AppState()
+
+        // The judge runs on DeepSeek; the library owns a live DeepSeek key.
+        let deepseek = AgentProviderEntry(
+            providerID: AgentProviderPreset.deepSeekID,
+            baseURL: "https://api.deepseek.com",
+            apiKey: "sk-live-deepseek",
+            flashPrimary: "deepseek-v4-flash",
+            proPrimary: "deepseek-v4-pro"
+        )
+        appState.agentProviderLibrary = AgentProviderLibrary(
+            entries: [deepseek],
+            activeID: deepseek.id
+        )
+        // Force the live config's key empty AFTER the library is set, so we
+        // exercise the hydration path (the bootstrap / provider-switch window
+        // where `agentConfiguration` and the library briefly disagree) rather
+        // than the already-in-sync happy path.
+        appState.agentConfiguration = AgentConfiguration(
+            providerID: AgentProviderPreset.deepSeekID,
+            baseURL: "https://api.deepseek.com",
+            model: "deepseek-v4-flash",
+            apiKey: ""
+        )
+
+        let judge = appState.configurationForSafetyJudge()
+        #expect(judge.apiKey == "sk-live-deepseek")
+    }
+
+    @Test("safety judge never donates a different provider's key")
+    @MainActor
+    func testSafetyJudgeDoesNotDonateCrossProviderKey() async {
+        let sandbox = KeychainSandbox()
+        defer { withExtendedLifetime(sandbox) {} }
+        let appState = AppState()
+
+        // The library holds ONLY an OpenAI key; the judge runs on DeepSeek.
+        // The OpenAI secret must never be borrowed for a DeepSeek request
+        // (the DeepSeek-key-copied-to-OpenAI-entry class of bug, in reverse).
+        let openai = AgentProviderEntry(
+            providerID: AgentProviderPreset.openAIID,
+            baseURL: "https://api.openai.com/v1",
+            apiKey: "sk-openai-secret",
+            flashPrimary: "gpt-4.1-mini",
+            proPrimary: "gpt-4.1"
+        )
+        appState.agentProviderLibrary = AgentProviderLibrary(
+            entries: [openai],
+            activeID: openai.id
+        )
+        appState.agentConfiguration = AgentConfiguration(
+            providerID: AgentProviderPreset.deepSeekID,
+            baseURL: "https://api.deepseek.com",
+            model: "deepseek-v4-flash",
+            apiKey: ""
+        )
+
+        let judge = appState.configurationForSafetyJudge()
+        // Under XCTest the some.im fallback is disabled, so the judge config
+        // stays the direct DeepSeek one with no borrowed key.
+        #expect(judge.apiKey.isEmpty)
+        #expect(judge.providerID == AgentProviderPreset.deepSeekID)
+    }
+
     @Test("approval mode controls write-tier auto approval")
     @MainActor
     func testApprovalModeControlsWriteTierAutoApproval() async {
