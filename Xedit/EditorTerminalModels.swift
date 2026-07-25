@@ -490,10 +490,13 @@ enum EditorProjectCommandResolver {
                 if !roots.contains(current) {
                     roots.append(current)
                 }
-                if current.path == stop || current.path == current.deletingLastPathComponent().path {
+                // Standardize the parent: on macOS 13 Foundation "/" becomes
+                // "/.." otherwise, and the termination check never fires.
+                let parent = current.deletingLastPathComponent().standardizedFileURL
+                if current.path == stop || parent.path == current.path || parent.path.count >= current.path.count {
                     break
                 }
-                current.deleteLastPathComponent()
+                current = parent
             }
         }
         return roots

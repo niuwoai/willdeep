@@ -401,8 +401,12 @@ extension AppState: AgentMobileGatewayControlling {
             if fm.fileExists(atPath: current.appendingPathComponent(".git").path, isDirectory: &isDir) {
                 return current.path
             }
-            let parent = current.deletingLastPathComponent()
-            if parent.path == current.path { return nil }
+            // On macOS 13 Foundation, deletingLastPathComponent() at "/" yields
+            // "/.." — must re-standardize or the walk never terminates and the
+            // URL grows unboundedly (main-thread hang, sample: appendingPathComponent
+            // / deletingLastPathComponent / URL.path in a tight loop).
+            let parent = current.deletingLastPathComponent().standardizedFileURL
+            if parent.path == current.path || parent.path.count >= current.path.count { return nil }
             current = parent
         }
     }
