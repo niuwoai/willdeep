@@ -193,25 +193,79 @@ struct AgentGlobalRulesTests {
     }
 
     @Test
-    func zmodemDetectorClassifiesRemoteRzPromptAsUpload() throws {
+    func zmodemDetectorClassifiesZrinitFrameAsUpload() throws {
         var detector = TerminalZModemDetector()
-        #expect(detector.detect(in: Array("rz waiting to receive.\r".utf8)) == nil)
+        let prompt = Array("rz waiting to receive.\r".utf8)
+        #expect(detector.detect(in: prompt) == .display(prompt))
 
-        let maybeStart = detector.detect(in: [0x2A, 0x2A, 0x18, 0x42, 0x30, 0x31])
-        let start = try #require(maybeStart)
+        // ZRINIT ("01"): the remote is the receiver, so the local side sends.
+        let start = try #require(startedSession(
+            detector.detect(in: [0x2A, 0x2A, 0x18, 0x42, 0x30, 0x31])
+        ))
         #expect(isUploadDirection(start.direction))
         #expect(start.protocolBytes.prefix(4) == [0x2A, 0x2A, 0x18, 0x42])
     }
 
     @Test
-    func zmodemDetectorDefaultsRemoteSzHandshakeToDownload() throws {
+    func zmodemDetectorClassifiesZrqinitFrameAsDownload() throws {
         var detector = TerminalZModemDetector()
         let bytes = Array("sending file\r".utf8) + [0x2A, 0x2A, 0x18, 0x42, 0x30, 0x30]
 
-        let maybeStart = detector.detect(in: bytes)
-        let start = try #require(maybeStart)
+        // ZRQINIT ("00"): the remote is the sender, so the local side receives.
+        let start = try #require(startedSession(detector.detect(in: bytes)))
         #expect(isDownloadDirection(start.direction))
         #expect(String(decoding: start.displayPrefix, as: UTF8.self) == "sending file\r")
+    }
+
+    @Test
+    func zmodemDetectorMatchesTriggerSplitAcrossChunks() throws {
+        var detector = TerminalZModemDetector()
+        let first = Array("rz\r*".utf8)
+        #expect(detector.detect(in: first) == .display(first))
+
+        let start = try #require(startedSession(
+            detector.detect(in: [0x2A, 0x18, 0x42, 0x30, 0x30])
+        ))
+        #expect(isDownloadDirection(start.direction))
+        #expect(start.displayPrefix.isEmpty)
+        #expect(start.protocolBytes.prefix(4) == [0x2A, 0x2A, 0x18, 0x42])
+    }
+
+    @Test
+    func zmodemDetectorHoldsTriggerUntilFrameTypeArrives() throws {
+        var detector = TerminalZModemDetector()
+        let prefix = Array("sending\r".utf8)
+        #expect(detector.detect(in: prefix + [0x2A, 0x2A, 0x18, 0x42]) == .hold(display: prefix))
+        #expect(detector.isHoldingProtocolTail)
+
+        let start = try #require(startedSession(detector.detect(in: [0x30, 0x31])))
+        #expect(isUploadDirection(start.direction))
+        #expect(!detector.isHoldingProtocolTail)
+    }
+
+    @Test
+    func zmodemDetectorReleasesNonHandshakeFramesForDisplay() throws {
+        var detector = TerminalZModemDetector()
+        // A stray ZFIN ("08") is not a handshake — render it, don't spawn rz.
+        let junk: [UInt8] = [0x2A, 0x2A, 0x18, 0x42, 0x30, 0x38]
+        #expect(detector.detect(in: junk) == .display(junk))
+
+        // The released junk must not poison a later, genuine handshake.
+        let start = startedSession(detector.detect(in: [0x2A, 0x2A, 0x18, 0x42, 0x30, 0x30]))
+        #expect(start != nil)
+    }
+
+    @Test
+    func zmodemDetectorReadsBinaryFrameTypes() throws {
+        var detector = TerminalZModemDetector()
+        let start = try #require(startedSession(
+            detector.detect(in: [0x2A, 0x2A, 0x18, 0x43, 0x00])
+        ))
+        #expect(isDownloadDirection(start.direction))
+
+        var junkDetector = TerminalZModemDetector()
+        let junk: [UInt8] = [0x2A, 0x2A, 0x18, 0x43, 0x7F]
+        #expect(junkDetector.detect(in: junk) == .display(junk))
     }
 
     @Test
@@ -306,6 +360,87 @@ struct AgentGlobalRulesTests {
         #expect(finalReceived == payload)
         #expect(finalCountAtFinish == payload.count)
         #expect(isProcessExited(session.writeRemoteBytes(Array("prompt".utf8))))
+    }
+
+    @Test
+    func zmodemLocalProcessIdleWatchdogAbortsDeadSessions() throws {
+        let completion = DispatchSemaphore(value: 0)
+        let sentLock = NSLock()
+        var sent = Data()
+        // `cat` with an open stdin and no input models a dead handshake:
+        // no bytes move in either direction, so the watchdog must fire.
+        let session = try TerminalZModemProcessSession(
+            executable: "/bin/cat",
+            arguments: [],
+            currentDirectory: nil,
+            idleTimeout: 0.5,
+            sendToRemote: { bytes in
+                sentLock.lock()
+                sent.append(contentsOf: bytes)
+                sentLock.unlock()
+            },
+            finish: { _ in completion.signal() }
+        )
+
+        session.start()
+        #expect(completion.wait(timeout: .now() + 10) == .success)
+        #expect(session.endReason == .timedOut)
+        sentLock.lock()
+        let finalSent = sent
+        sentLock.unlock()
+        // The remote must see the ZMODEM cancel burst so its rz/sz aborts
+        // too, instead of leaving the remote shell hung.
+        #expect(finalSent.contains(0x18))
+    }
+
+    @Test
+    func zmodemLocalProcessEchoesAsyncWritesAndAbortsOnRequest() throws {
+        let payload = Array("hello zmodem".utf8)
+        let completion = DispatchSemaphore(value: 0)
+        let echoed = DispatchSemaphore(value: 0)
+        let sentLock = NSLock()
+        var sent = Data()
+        let session = try TerminalZModemProcessSession(
+            executable: "/bin/cat",
+            arguments: [],
+            currentDirectory: nil,
+            idleTimeout: 30,
+            sendToRemote: { bytes in
+                sentLock.lock()
+                sent.append(contentsOf: bytes)
+                let enough = sent.count >= payload.count
+                sentLock.unlock()
+                if enough { echoed.signal() }
+            },
+            finish: { _ in completion.signal() }
+        )
+
+        session.start()
+        #expect(isAccepted(session.writeRemoteBytes(payload)))
+        #expect(echoed.wait(timeout: .now() + 10) == .success)
+
+        session.abort(reason: .userCancelled)
+        #expect(completion.wait(timeout: .now() + 10) == .success)
+        #expect(session.endReason == .userCancelled)
+        sentLock.lock()
+        let finalSent = sent
+        sentLock.unlock()
+        #expect(finalSent.prefix(payload.count) == Data(payload))
+        #expect(session.transferredByteCount(for: .downloadFromRemote) == payload.count)
+    }
+
+    private func startedSession(_ detection: TerminalZModemDetection) -> TerminalZModemStart? {
+        if case .start(let start) = detection {
+            return start
+        }
+        return nil
+    }
+
+    private func isAccepted(_ result: TerminalZModemRemoteWriteResult) -> Bool {
+        if case .accepted = result {
+            return true
+        }
+        return false
     }
 
     private func isProcessExited(_ result: TerminalZModemRemoteWriteResult) -> Bool {
