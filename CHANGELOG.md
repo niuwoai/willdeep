@@ -1,7 +1,17 @@
 # Changelog
 
-> 当前文件保留最新版本（1.198.0-rc2 至 1.109.0-rc340）。
+> 当前文件保留最新版本（1.198.0-rc3 至 1.109.0-rc340）。
 > 更早的 1000 个版本已移至 [CHANGELOG-ARCHIVE.md](CHANGELOG-ARCHIVE.md)。
+
+## 1.198.0-rc3 - 2026-07-25
+
+### Fixed
+
+- **产物识别收紧，普通代码变更不再被当成「产物」**：会话右下角活动气泡的「N 个产物」卡片此前把整个 worktree 的**所有**变更文件无差别纳入（`AgentSessionArtifactScope.urls(from:)`），导致 `performance_monitor.go`、`protector.go` 这类普通源码修改也被算作产物。现在气泡卡与任务监控右栏（Rail）对齐：worktree 变更文件必须先过 `isAgentSessionArtifactPath` 白名单（md/pdf/png/mp4/zip 等用户可消费的交付物扩展名）才计入产物，`.go`/`.swift`/`.ts` 等源码变更归入「工作文件」，不再混进产物卡片。
+
+### Meta
+
+- 版本号从 **1.198.0-rc2** 递增为 **1.198.0-rc3**（bugfix/打磨，仅递增 rc），内部构建号从 **141** 递增为 **142**，Help 与 Computer Use Helper 构建号从 **58** 递增为 **59**；App、Go agent、Help、Helper、浏览器扩展、README、响应头契约与产品文档保持一致。
 
 ## 1.198.0-rc2 - 2026-07-24
 
