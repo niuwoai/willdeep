@@ -39,3 +39,7 @@ xcuserdata/
 /--version
 /1.179.0-rc6
 /go-react-embed-deploy-*.zip
+
+# WillDeep Debug 版 provider 种子配置(含 api key，勿提交)
+dev-provider.json
+.willdeep/

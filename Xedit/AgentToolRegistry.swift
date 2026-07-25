@@ -1081,10 +1081,10 @@ enum AgentToolRegistry {
         ),
         AgentToolDescriptor(
             name: "edit_generated_image",
-            description: "Edit a previously generated local image through some.im `gpt-image-2` by sending the workspace image path as the reference image. Use when the user right-clicks/quotes a generated image marker like <generated-image-reference ... /> and asks to modify that image. Do not ask the user to upload the image again; pass image_path from the marker path (or pass the whole marker as reference_marker). Saves outputs in the workspace root by default.",
+            description: "Edit an existing local image through some.im `images/edits` (`gpt-image-2`) by sending its path as the reference image, preserving the original subject. Works on ANY local image: (1) a previously generated image — pass image_path from a <generated-image-reference ... /> marker (or the whole marker as reference_marker); (2) a USER-UPLOADED/attached image — pass its file path from the \"Attached Images — File-Backed Paths\" context block. This is the correct tool for \"改我上传的照片/保持人脸/换装/换背景\" style requests; prefer it over generate_image, which creates a new image from text and will not preserve the uploaded subject. Do not ask the user to upload the image again. Saves outputs in the workspace root by default.",
             risk: .read,
             parameters: [
-                AgentToolParameter(name: "image_path", type: .string, description: "Workspace-local image path from the generated-image reference marker. Relative paths resolve from the workspace root.", required: false),
+                AgentToolParameter(name: "image_path", type: .string, description: "Path to the image to edit: an absolute path (e.g. a user-uploaded image from the Attached Images context block) or a workspace-relative path (resolved from the workspace root), such as the path in a generated-image reference marker.", required: false),
                 AgentToolParameter(name: "reference_marker", type: .string, description: "Optional full <generated-image-reference ... /> marker; used to recover image_path when image_path is omitted.", required: false),
                 AgentToolParameter(name: "prompt", type: .string, description: "Edit instruction describing how to modify the referenced image.", required: true),
                 AgentToolParameter(name: "size", type: .string, description: "Optional output size such as 1024x1024.", required: false),

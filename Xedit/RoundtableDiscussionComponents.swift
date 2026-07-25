@@ -26,19 +26,42 @@ enum RoundtableMarkdownTextRenderer {
         return result
     }
 
-    /// `inlineOnlyPreservingWhitespace` 不接受完整的多段 Markdown 文档。
-    /// 按行解析既能保留讨论正文原有的空行，也避免主持人轮次小结因含多个
-    /// Markdown 段落而整体回退成带 `**` 标记的纯文本。
+    /// 逐行解析:先识别块级(标题 `#`、无序/有序列表),其余行走 inline-only Markdown。
+    /// 按行解析既保留讨论正文原有的空行,也避免整段 `.full` 解析吞掉空行/破坏选择;
+    /// 而块级识别让主持人轮次小结的标题分级、列表缩进真正呈现,而非露出 `#` / `-` 标记。
     private static func attributedLine(from raw: String) -> NSAttributedString {
+        if let heading = headingMatch(raw) {
+            // 标题整行按层级放大加粗;标记不外露。
+            return inlineAttributed(from: heading.text, base: headingAttributes(level: heading.level))
+        }
+        if let item = listItemMatch(raw) {
+            let attrs = listAttributes(indent: item.indent)
+            let result = NSMutableAttributedString(string: item.marker, attributes: attrs)
+            result.append(inlineAttributed(from: item.text, base: attrs))
+            return result
+        }
+        return inlineAttributed(from: raw, base: baseAttributes)
+    }
+
+    /// 行内 Markdown(加粗/斜体/代码)烘焙为富文本;标记不外露,保留字符级选择。
+    /// `base` 决定底色字号,标题/列表传入各自的属性,强调字号随之适配。
+    private static func inlineAttributed(
+        from raw: String,
+        base: [NSAttributedString.Key: Any]
+    ) -> NSAttributedString {
         let options = AttributedString.MarkdownParsingOptions(
             interpretedSyntax: .inlineOnlyPreservingWhitespace
         )
         guard let parsed = try? AttributedString(markdown: raw, options: options) else {
-            return NSAttributedString(string: raw, attributes: baseAttributes)
+            return NSAttributedString(string: raw, attributes: base)
         }
 
         let visible = String(parsed.characters)
-        let result = NSMutableAttributedString(string: visible, attributes: baseAttributes)
+        let result = NSMutableAttributedString(string: visible, attributes: base)
+        let baseFontValue = (base[.font] as? NSFont) ?? bodyFont
+        let baseSize = baseFontValue.pointSize
+        // 已经是标题这类加粗字重时,行内 strong 不再降级为普通 semibold。
+        let baseIsBold = baseFontValue.fontDescriptor.symbolicTraits.contains(.bold)
         var characterOffset = 0
 
         for run in parsed.runs {
@@ -53,19 +76,19 @@ enum RoundtableMarkdownTextRenderer {
             if let intent = run.inlinePresentationIntent {
                 if intent.contains(.code) {
                     result.addAttributes([
-                        .font: NSFont.monospacedSystemFont(ofSize: 13.5, weight: .regular),
+                        .font: NSFont.monospacedSystemFont(ofSize: baseSize - 0.5, weight: .regular),
                         .backgroundColor: NSColor.labelColor.withAlphaComponent(0.08),
                         .baselineOffset: 1,
                     ], range: range)
-                } else if intent.contains(.stronglyEmphasized) {
+                } else if intent.contains(.stronglyEmphasized), !baseIsBold {
                     result.addAttribute(
                         .font,
-                        value: NSFont.systemFont(ofSize: 14, weight: .semibold),
+                        value: NSFont.systemFont(ofSize: baseSize, weight: .semibold),
                         range: range
                     )
                 } else if intent.contains(.emphasized) {
                     let italic = NSFontManager.shared.convert(
-                        bodyFont,
+                        NSFont.systemFont(ofSize: baseSize),
                         toHaveTrait: .italicFontMask
                     )
                     result.addAttribute(.font, value: italic, range: range)
@@ -74,6 +97,92 @@ enum RoundtableMarkdownTextRenderer {
         }
 
         return result
+    }
+
+    // MARK: - 块级识别
+
+    /// `## 标题` → (层级, 去掉 # 和空格的正文)。1–6 级,超出按普通行。
+    private static func headingMatch(_ line: String) -> (level: Int, text: String)? {
+        let trimmed = line.drop(while: { $0 == " " })
+        var level = 0
+        var idx = trimmed.startIndex
+        while idx < trimmed.endIndex, trimmed[idx] == "#", level < 6 {
+            level += 1
+            idx = trimmed.index(after: idx)
+        }
+        guard level > 0, idx < trimmed.endIndex, trimmed[idx] == " " else { return nil }
+        let text = trimmed[idx...].trimmingCharacters(in: .whitespaces)
+        guard !text.isEmpty else { return nil }
+        return (level, text)
+    }
+
+    /// `- 项` / `* 项` / `1. 项` → (缩进层级, 统一项目符号, 正文)。
+    private static func listItemMatch(_ line: String) -> (indent: Int, marker: String, text: String)? {
+        let leadingSpaces = line.prefix(while: { $0 == " " }).count
+        let indent = leadingSpaces / 2   // 每 2 空格算一级缩进
+        let body = line.drop(while: { $0 == " " })
+        guard let first = body.first else { return nil }
+
+        // 无序:- * +
+        if "-*+".contains(first) {
+            let after = body.dropFirst()
+            guard after.first == " " else { return nil }
+            let text = String(after.dropFirst())
+            guard !text.trimmingCharacters(in: .whitespaces).isEmpty else { return nil }
+            return (indent, "•  ", text)
+        }
+
+        // 有序:1. 2. …
+        if first.isNumber {
+            var digits = ""
+            var idx = body.startIndex
+            while idx < body.endIndex, body[idx].isNumber {
+                digits.append(body[idx])
+                idx = body.index(after: idx)
+            }
+            guard idx < body.endIndex, body[idx] == ".", digits.count <= 3 else { return nil }
+            let afterDot = body.index(after: idx)
+            guard afterDot < body.endIndex, body[afterDot] == " " else { return nil }
+            let text = String(body[body.index(after: afterDot)...])
+            guard !text.trimmingCharacters(in: .whitespaces).isEmpty else { return nil }
+            return (indent, "\(digits).  ", text)
+        }
+
+        return nil
+    }
+
+    private static func headingAttributes(level: Int) -> [NSAttributedString.Key: Any] {
+        let size: CGFloat
+        let weight: NSFont.Weight
+        switch level {
+        case 1: size = 18; weight = .bold
+        case 2: size = 15.5; weight = .bold
+        default: size = 14; weight = .semibold
+        }
+        let paragraph = NSMutableParagraphStyle()
+        paragraph.lineSpacing = 2
+        paragraph.paragraphSpacingBefore = 5
+        paragraph.paragraphSpacing = 2
+        return [
+            .font: NSFont.systemFont(ofSize: size, weight: weight),
+            .foregroundColor: NSColor.textColor,
+            .paragraphStyle: paragraph,
+        ]
+    }
+
+    /// 列表项:悬挂缩进,换行文字对齐到项目符号之后而非回到最左。
+    private static func listAttributes(indent: Int) -> [NSAttributedString.Key: Any] {
+        let base = CGFloat(indent) * 14
+        let hang: CGFloat = 16
+        let paragraph = NSMutableParagraphStyle()
+        paragraph.lineSpacing = 2
+        paragraph.firstLineHeadIndent = base
+        paragraph.headIndent = base + hang
+        return [
+            .font: bodyFont,
+            .foregroundColor: NSColor.textColor,
+            .paragraphStyle: paragraph,
+        ]
     }
 
     private static var baseAttributes: [NSAttributedString.Key: Any] {
@@ -96,6 +205,10 @@ enum RoundtableVisuals {
         case .risk: return Color(nsColor: .systemOrange)
         case .strategy: return Color(nsColor: .systemIndigo)
         case .psychology: return Color(nsColor: .systemMint)
+        case .legal: return Color(nsColor: .systemPurple)
+        case .research: return Color(nsColor: .systemCyan)
+        case .growth: return Color(nsColor: .systemGreen)
+        case .operations: return Color(nsColor: .systemBrown)
         }
     }
 
@@ -272,20 +385,13 @@ private final class RoundtableComposerNSTextView: NSTextView {
 /// 包装只读 NSTextView，既保留原生文本选择，也把选区实时回传给引用操作。
 struct RoundtableSelectableMessageText: NSViewRepresentable {
     let text: String
-    @Binding var measuredHeight: CGFloat
     let onSelectionChange: (String?) -> Void
 
     func makeCoordinator() -> Coordinator {
-        Coordinator(height: $measuredHeight, onSelectionChange: onSelectionChange)
+        Coordinator(onSelectionChange: onSelectionChange)
     }
 
-    func makeNSView(context: Context) -> NSScrollView {
-        let scrollView = NSScrollView()
-        scrollView.hasVerticalScroller = false
-        scrollView.hasHorizontalScroller = false
-        scrollView.drawsBackground = false
-        scrollView.borderType = .noBorder
-
+    func makeNSView(context: Context) -> NSTextView {
         let textView = NSTextView(frame: .zero)
         textView.delegate = context.coordinator
         textView.isEditable = false
@@ -294,38 +400,57 @@ struct RoundtableSelectableMessageText: NSViewRepresentable {
         textView.drawsBackground = false
         textView.textContainerInset = .zero
         textView.textContainer?.lineFragmentPadding = 0
-        textView.textContainer?.widthTracksTextView = true
+        textView.textContainer?.widthTracksTextView = false
+        textView.textContainer?.heightTracksTextView = false
         textView.isHorizontallyResizable = false
         textView.isVerticallyResizable = true
         textView.autoresizingMask = [.width]
+        textView.minSize = .zero
+        textView.maxSize = NSSize(
+            width: CGFloat.greatestFiniteMagnitude,
+            height: CGFloat.greatestFiniteMagnitude
+        )
         textView.textStorage?.setAttributedString(
             RoundtableMarkdownTextRenderer.attributedString(from: text)
         )
         context.coordinator.renderedSource = text
-        scrollView.documentView = textView
-        context.coordinator.measure(textView)
-        return scrollView
+        return textView
     }
 
-    func updateNSView(_ nsView: NSScrollView, context: Context) {
-        guard let textView = nsView.documentView as? NSTextView else { return }
+    func updateNSView(_ textView: NSTextView, context: Context) {
         context.coordinator.onSelectionChange = onSelectionChange
         if context.coordinator.renderedSource != text {
             textView.textStorage?.setAttributedString(
                 RoundtableMarkdownTextRenderer.attributedString(from: text)
             )
             context.coordinator.renderedSource = text
+            context.coordinator.invalidateMeasurement()
+            textView.invalidateIntrinsicContentSize()
         }
-        context.coordinator.measure(textView)
+    }
+
+    func sizeThatFits(
+        _ proposal: ProposedViewSize,
+        nsView textView: NSTextView,
+        context: Context
+    ) -> CGSize? {
+        guard let width = proposal.width, width.isFinite, width > 1 else {
+            return nil
+        }
+        return context.coordinator.sizeThatFits(textView, width: width)
     }
 
     final class Coordinator: NSObject, NSTextViewDelegate {
-        private var height: Binding<CGFloat>
+        private static let minimumHeight: CGFloat = 22
+        private static let measurementTolerance: CGFloat = 0.5
+
         var onSelectionChange: (String?) -> Void
         var renderedSource: String?
+        private var measuredWidth: CGFloat?
+        private var measuredHeight: CGFloat?
+        private var selectedText: String?
 
-        init(height: Binding<CGFloat>, onSelectionChange: @escaping (String?) -> Void) {
-            self.height = height
+        init(onSelectionChange: @escaping (String?) -> Void) {
             self.onSelectionChange = onSelectionChange
         }
 
@@ -335,27 +460,48 @@ struct RoundtableSelectableMessageText: NSViewRepresentable {
             guard range.length > 0,
                   range.location != NSNotFound,
                   NSMaxRange(range) <= (textView.string as NSString).length else {
-                onSelectionChange(nil)
+                publishSelection(nil)
                 return
             }
             let value = (textView.string as NSString)
                 .substring(with: range)
                 .trimmingCharacters(in: .whitespacesAndNewlines)
-            onSelectionChange(value.isEmpty ? nil : value)
+            publishSelection(value.isEmpty ? nil : value)
         }
 
-        func measure(_ textView: NSTextView) {
-            DispatchQueue.main.async { [weak self, weak textView] in
-                guard let self, let textView, let container = textView.textContainer else { return }
-                let width = max(1, textView.enclosingScrollView?.contentSize.width ?? textView.bounds.width)
-                container.containerSize = NSSize(width: width, height: .greatestFiniteMagnitude)
-                textView.layoutManager?.ensureLayout(for: container)
-                let used = textView.layoutManager?.usedRect(for: container).height ?? 20
-                let next = max(22, ceil(used + 2))
-                if abs(self.height.wrappedValue - next) > 0.5 {
-                    self.height.wrappedValue = next
-                }
+        private func publishSelection(_ value: String?) {
+            guard value != selectedText else { return }
+            selectedText = value
+            onSelectionChange(value)
+        }
+
+        func invalidateMeasurement() {
+            measuredWidth = nil
+            measuredHeight = nil
+        }
+
+        func sizeThatFits(_ textView: NSTextView, width: CGFloat) -> CGSize {
+            if let measuredWidth,
+               let measuredHeight,
+               abs(measuredWidth - width) <= Self.measurementTolerance {
+                return CGSize(width: width, height: measuredHeight)
             }
+
+            guard let container = textView.textContainer,
+                  let layoutManager = textView.layoutManager else {
+                return CGSize(width: width, height: Self.minimumHeight)
+            }
+
+            container.containerSize = NSSize(
+                width: width,
+                height: CGFloat.greatestFiniteMagnitude
+            )
+            layoutManager.ensureLayout(for: container)
+            let usedHeight = layoutManager.usedRect(for: container).height
+            let height = max(Self.minimumHeight, ceil(usedHeight + 2))
+            measuredWidth = width
+            measuredHeight = height
+            return CGSize(width: width, height: height)
         }
     }
 }

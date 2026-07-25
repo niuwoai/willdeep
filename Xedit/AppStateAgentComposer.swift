@@ -1665,6 +1665,31 @@ extension AppState {
             blocks.append(designToCodeBlock)
         }
 
+        // Surface the file-backed paths of the user's uploaded/attached images so
+        // the model can EDIT them in place. Without this the model only ever sees
+        // the pixels (or, on text-only managed models, a text description) and has
+        // no path to pass to the edit tool — so "把我的照片改成…、保持人脸" ends in
+        // the model asking the user to re-upload or silently doing nothing.
+        if !imagePaths.isEmpty {
+            let lines = imagePaths.enumerated()
+                .map { index, path in "- image_\(index + 1): `\(path)`" }
+                .joined(separator: "\n")
+            blocks.append("""
+            ### Attached Images — File-Backed Paths
+
+            The user's uploaded/attached images are saved locally at:
+            \(lines)
+
+            If the user asks to edit, restyle, retouch, or transform one of THESE \
+            uploaded images (e.g. "改成正式照片/穿西装", "保持人脸", "换个背景"), call \
+            the `edit_generated_image` tool with `image_path` set to the matching \
+            path above and a `prompt` describing the change. It edits any local \
+            image via some.im `images/edits`. Do NOT ask the user to re-upload, and \
+            do NOT use `generate_image` for this — that synthesizes a brand-new \
+            image from text and will not preserve the person/subject in the upload.
+            """)
+        }
+
         if !files.isEmpty {
             blocks.append(documentTaskInstruction(
                 mode: documentTaskMode,

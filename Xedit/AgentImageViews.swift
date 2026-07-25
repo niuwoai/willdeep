@@ -616,3 +616,77 @@ enum AgentImagePasteboardHelper {
         }
     }
 }
+
+/// Process-wide cache for remote avatar images, keyed by URL. Plain
+/// `AsyncImage(url:)` restarts from `.empty` on every view rebuild / popover
+/// toggle and drops to its placeholder on any proxy hiccup, which is why the
+/// account avatar flickers in and out. Caching a successfully-decoded image
+/// keeps it sticky across rebuilds.
+nonisolated enum RemoteAvatarImageCache {
+    private static let cache: NSCache<NSURL, NSImage> = {
+        let cache = NSCache<NSURL, NSImage>()
+        cache.countLimit = 64
+        return cache
+    }()
+
+    /// Synchronous cache read (NSCache is thread-safe). Lets the view show a
+    /// previously-loaded avatar immediately, before the async task runs.
+    static func cached(_ url: URL) -> NSImage? {
+        cache.object(forKey: url as NSURL)
+    }
+
+    /// Fetch once and cache. Returns nil on any failure (caller keeps its
+    /// placeholder). Never throws — a proxy/network hiccup must not surface.
+    static func load(_ url: URL) async -> NSImage? {
+        if let hit = cache.object(forKey: url as NSURL) { return hit }
+        do {
+            let (data, response) = try await URLSession.shared.data(from: url)
+            if let http = response as? HTTPURLResponse, !(200..<300).contains(http.statusCode) {
+                return nil
+            }
+            guard let image = NSImage(data: data) else { return nil }
+            cache.setObject(image, forKey: url as NSURL)
+            return image
+        } catch {
+            return nil
+        }
+    }
+}
+
+/// Drop-in replacement for a bare `AsyncImage` avatar: caches the decoded
+/// image process-wide so it stays put across view rebuilds and popover toggles
+/// instead of flickering back to the placeholder. `placeholder` is shown while
+/// loading and on failure.
+struct CachedAvatarImage<Placeholder: View>: View {
+    private let url: URL
+    private let placeholder: Placeholder
+    @State private var loaded: NSImage?
+
+    init(url: URL, @ViewBuilder placeholder: () -> Placeholder) {
+        self.url = url
+        self.placeholder = placeholder()
+    }
+
+    var body: some View {
+        content
+            .task(id: url) {
+                guard loaded == nil else { return }
+                if let hit = RemoteAvatarImageCache.cached(url) {
+                    loaded = hit
+                } else {
+                    loaded = await RemoteAvatarImageCache.load(url)
+                }
+            }
+    }
+
+    @ViewBuilder
+    private var content: some View {
+        if let image = loaded ?? RemoteAvatarImageCache.cached(url) {
+            Image(nsImage: image)
+                .resizable()
+                .scaledToFill()
+        } else {
+            placeholder
+        }
+    }
+}

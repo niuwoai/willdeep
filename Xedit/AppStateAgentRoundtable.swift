@@ -41,7 +41,11 @@ extension AppState {
         agentRuntimes[session.id] = runtime
         agentSessions.insert(session, at: 0)
 
-        let roundtable = AgentRoundtableReport(topic: trimmed)
+        let roundtable = AgentRoundtableReport(
+            topic: trimmed,
+            phase: .clarifying,
+            preparation: RoundtablePreparation(originalTopic: trimmed)
+        )
         let report = WorkflowReport(
             workflowName: "expert-roundtable",
             displayTitle: trimmed,
@@ -56,7 +60,7 @@ extension AppState {
         AgentSessionStore.saveAsync(session)
         persistWorkflowRuntime(runtimeID: session.id)
 
-        driveRoundtable(reportID: report.id, runtimeID: session.id)
+        driveRoundtablePreparation(reportID: report.id, runtimeID: session.id)
         return session.id
     }
 
@@ -103,12 +107,198 @@ extension AppState {
         submitRoundtableUserReply(runtimeID: runtimeID, reportID: reportID, content: content)
     }
 
+    // MARK: - 主持人控轮(收敛后由用户决定继续还是收尾)
+
+    /// 收敛暂停后,主持人点「继续下一轮」:复位 converged、回到 .discussing,再驱动
+    /// 一次。引擎循环从下一轮续跑(前面轮次已有导播小结会被跳过),上一轮小结里的
+    /// 「下一轮建议聚焦」已随 transcript 自动带入。仅在收敛暂停态且无活跃驱动时生效。
+    func continueRoundtableNextRound(runtimeID: UUID, reportID: UUID) {
+        guard agentRoundtableTasks[reportID] == nil else { return }
+        var canContinue = false
+        updateWorkflowReport(id: reportID, runtimeID: runtimeID) { item in
+            guard var roundtable = item.roundtable else { return }
+            // 只在「收敛后停下等主持人」这个态放行,且没到轮数硬顶。
+            guard roundtable.phase == .awaitingUser,
+                  roundtable.converged,
+                  roundtable.currentRound < AgentRoundtableReport.maxRounds
+            else { return }
+            roundtable.converged = false
+            roundtable.phase = .discussing
+            roundtable.updatedAt = Date()
+            item.roundtable = roundtable
+            canContinue = true
+        }
+        guard canContinue else { return }
+        persistWorkflowRuntime(runtimeID: runtimeID)
+        driveRoundtable(reportID: reportID, runtimeID: runtimeID)
+    }
+
+    /// 收敛暂停后,主持人点「结束并生成文档」:保持 converged=true 再驱动一次,引擎
+    /// discuss() 顶部的 `if converged { return .finished }` 便直接进入 synthesize 出终稿。
+    /// 仅在收敛暂停态且无活跃驱动时生效。
+    func finalizeRoundtable(runtimeID: UUID, reportID: UUID) {
+        guard agentRoundtableTasks[reportID] == nil else { return }
+        var canFinalize = false
+        updateWorkflowReport(id: reportID, runtimeID: runtimeID) { item in
+            guard var roundtable = item.roundtable else { return }
+            guard roundtable.phase == .awaitingUser, roundtable.converged else { return }
+            roundtable.phase = .synthesizing
+            roundtable.updatedAt = Date()
+            item.roundtable = roundtable
+            canFinalize = true
+        }
+        guard canFinalize else { return }
+        persistWorkflowRuntime(runtimeID: runtimeID)
+        driveRoundtable(reportID: reportID, runtimeID: runtimeID)
+    }
+
+    // MARK: - 会前准备
+
+    /// 用户补充背景或修正框架后，重新生成一份完整准备方案。准备任务与正式
+    /// 讨论共用 report task 槽，保证同一场圆桌不会同时跑两条模型链路。
+    func refineRoundtablePreparation(
+        runtimeID: UUID,
+        reportID: UUID,
+        content: String
+    ) {
+        let trimmed = content.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty, agentRoundtableTasks[reportID] == nil else { return }
+
+        updateWorkflowReport(id: reportID, runtimeID: runtimeID) { item in
+            guard var roundtable = item.roundtable else { return }
+            var preparation = roundtable.preparation
+                ?? RoundtablePreparation(originalTopic: roundtable.topic)
+            preparation.conversation.append(
+                RoundtablePreparationMessage(speaker: .user, content: trimmed)
+            )
+            roundtable.preparation = preparation
+            roundtable.phase = .clarifying
+            roundtable.updatedAt = Date()
+            item.summary = ""
+            item.roundtable = roundtable
+        }
+        persistWorkflowRuntime(runtimeID: runtimeID)
+        driveRoundtablePreparation(reportID: reportID, runtimeID: runtimeID)
+    }
+
+    /// 从框架确认进入专家选择。只改变准备阶段，不会偷偷启动正式讨论。
+    func showRoundtableExpertSelection(runtimeID: UUID, reportID: UUID) {
+        guard agentRoundtableTasks[reportID] == nil else { return }
+        updateWorkflowReport(id: reportID, runtimeID: runtimeID) { item in
+            guard var roundtable = item.roundtable,
+                  let preparation = roundtable.preparation,
+                  preparation.hasValidExpertSelection
+            else { return }
+            roundtable.phase = .selectingExperts
+            roundtable.updatedAt = Date()
+            item.summary = ""
+            item.roundtable = roundtable
+        }
+        persistWorkflowRuntime(runtimeID: runtimeID)
+    }
+
+    func returnToRoundtablePreparation(runtimeID: UUID, reportID: UUID) {
+        guard agentRoundtableTasks[reportID] == nil else { return }
+        updateWorkflowReport(id: reportID, runtimeID: runtimeID) { item in
+            guard var roundtable = item.roundtable else { return }
+            roundtable.phase = .clarifying
+            roundtable.updatedAt = Date()
+            item.summary = ""
+            item.roundtable = roundtable
+        }
+        persistWorkflowRuntime(runtimeID: runtimeID)
+    }
+
+    /// 用户明确确认阵容后才把精炼议题和专家名单交给正式圆桌引擎。
+    @discardableResult
+    func confirmRoundtableExpertSelection(
+        runtimeID: UUID,
+        reportID: UUID,
+        experts: [AgentRoundtableExpertRole],
+        providerEntryID: UUID? = nil,
+        modelID: String? = nil
+    ) -> Bool {
+        guard agentRoundtableTasks[reportID] == nil else { return false }
+        var seen = Set<AgentRoundtableExpertRole>()
+        let uniqueExperts = experts.filter { seen.insert($0).inserted }
+        guard uniqueExperts.count >= RoundtablePreparation.minimumExpertCount,
+              uniqueExperts.count <= RoundtablePreparation.maximumExpertCount
+        else { return false }
+
+        var confirmed = false
+        updateWorkflowReport(id: reportID, runtimeID: runtimeID) { item in
+            guard var roundtable = item.roundtable,
+                  var preparation = roundtable.preparation,
+                  roundtable.phase == .selectingExperts
+            else { return }
+            preparation.selectedExperts = uniqueExperts
+            roundtable.preparation = preparation
+            roundtable.experts = uniqueExperts
+            roundtable.topic = preparation.resolvedTopic
+            // 仅本场生效的 provider/模型选择;nil 表示跟随全局活跃 provider。
+            roundtable.selectedProviderEntryID = providerEntryID
+            roundtable.selectedModelID = modelID
+            roundtable.phase = .opening
+            roundtable.updatedAt = Date()
+            item.displayTitle = roundtable.displayTitle
+            item.args = roundtable.topic
+            item.summary = ""
+            item.roundtable = roundtable
+            confirmed = true
+        }
+        guard confirmed else { return false }
+        persistWorkflowRuntime(runtimeID: runtimeID)
+        driveRoundtable(reportID: reportID, runtimeID: runtimeID)
+        return true
+    }
+
+    func isAgentRoundtableTaskRunning(reportID: UUID) -> Bool {
+        agentRoundtableTasks[reportID] != nil
+    }
+
+    private func driveRoundtablePreparation(reportID: UUID, runtimeID: UUID) {
+        guard agentRoundtableTasks[reportID] == nil,
+              let (configuration, someIMContext) = roundtableTurnContext(runtimeID: runtimeID, reportID: reportID)
+        else { return }
+
+        let task = Task { @MainActor [weak self] in
+            guard let self else { return }
+            let engine = AgentRoundtableEngine(
+                reportID: reportID,
+                runtimeID: runtimeID,
+                configuration: configuration,
+                someIMContext: someIMContext,
+                appState: self
+            )
+            var failure: String?
+            do {
+                try await engine.prepareDiscussion()
+                try Task.checkCancellation()
+            } catch is CancellationError {
+                failure = CancellationError().localizedDescription
+            } catch {
+                failure = error.localizedDescription
+            }
+
+            self.agentRoundtableTasks[reportID] = nil
+            self.updateWorkflowReport(id: reportID, runtimeID: runtimeID) { item in
+                guard var roundtable = item.roundtable else { return }
+                roundtable.phase = .clarifying
+                roundtable.updatedAt = Date()
+                item.summary = failure ?? ""
+                item.roundtable = roundtable
+            }
+            self.persistWorkflowRuntime(runtimeID: runtimeID)
+        }
+        agentRoundtableTasks[reportID] = task
+    }
+
     // MARK: - 驱动引擎(首跑 / 续跑共用)
 
     /// 启动一次圆桌驱动:跑引擎到暂停点或终稿,并按结果落状态。首跑与续跑
     /// 共用同一条路径,靠引擎的幂等性保证续跑不重复已完成阶段。
     private func driveRoundtable(reportID: UUID, runtimeID: UUID) {
-        guard let (configuration, someIMContext) = roundtableTurnContext(runtimeID: runtimeID) else { return }
+        guard let (configuration, someIMContext) = roundtableTurnContext(runtimeID: runtimeID, reportID: reportID) else { return }
 
         let task = Task { @MainActor [weak self] in
             guard let self else { return }
@@ -174,6 +364,8 @@ extension AppState {
                     if var detail = item.roundtable {
                         detail.phase = .cancelled
                         detail.activeExpert = nil
+                        detail.activeExpertDraft = nil
+                        detail.activeExpertDraftIsComplete = nil
                         item.roundtable = detail
                     }
                 }
@@ -186,6 +378,8 @@ extension AppState {
                     if var detail = item.roundtable {
                         detail.phase = .failed
                         detail.activeExpert = nil
+                        detail.activeExpertDraft = nil
+                        detail.activeExpertDraftIsComplete = nil
                         item.roundtable = detail
                     }
                 }
@@ -197,11 +391,24 @@ extension AppState {
     }
 
     /// 为一次圆桌驱动组装本轮 configuration 与(若走 some.im)请求上下文。
+    /// 若本场圆桌在开会时选定了 provider/模型(report.selectedProviderEntryID),
+    /// 用该 entry 现造配置、仅本场生效,不动全局活跃 provider;否则回退到当前
+    /// 全局活跃 provider 的路由结果。
     private func roundtableTurnContext(
-        runtimeID: UUID
+        runtimeID: UUID,
+        reportID: UUID
     ) -> (AgentConfiguration, SomeIMRequestContext?)? {
         guard let runtime = agentRuntimes[runtimeID] else { return nil }
-        let configuration = configurationForCurrentTurn(for: runtime)
+        let roundtable = workflowReport(id: reportID, runtimeID: runtimeID)?.roundtable
+        let configuration: AgentConfiguration = {
+            if let entryID = roundtable?.selectedProviderEntryID,
+               let entry = agentProviderLibrary.entries.first(where: { $0.id == entryID }) {
+                // 选定模型同时喂给 flash/pro,把本场钉死在这个模型上(不受路由影响)。
+                let model = roundtable?.selectedModelID
+                return entry.makeConfiguration(flashOverride: model, proOverride: model).normalized
+            }
+            return configurationForCurrentTurn(for: runtime)
+        }()
         let someIMContext: SomeIMRequestContext? = {
             guard configuration.providerID == AgentProviderPreset.someIMID else { return nil }
             let workspaceID = AgentWorkspaceIdentityStore.workspaceID(

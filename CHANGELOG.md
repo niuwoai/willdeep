@@ -1,7 +1,50 @@
 # Changelog
 
-> 当前文件保留最新版本（1.199.0-rc2 至 1.109.0-rc340）。
+> 当前文件保留最新版本（1.200.0-rc2 至 1.109.0-rc340）。
 > 更早的 1000 个版本已移至 [CHANGELOG-ARCHIVE.md](CHANGELOG-ARCHIVE.md)。
+
+## 1.200.0-rc2 - 2026-07-25
+
+### Changed
+
+- **右上角计划小卡改为单行 + 悬停跑马灯**：每条计划步骤不再多行换行，统一压成一行显示，避免小卡被长文案撑高、影响一览。鼠标悬停在某条步骤上时，若文字超出卡片宽度，正文会从右向左缓缓流动（跑马灯），把被截断的后半段完整带出来，移开指针即复位；文字本身可容纳时保持静止、不抖动。同时给每条步骤补上原生 tooltip，直接悬停即可看到整条完整文本。
+
+### Fixed
+
+- **「Workspace 访问」模式下网络访问不再频繁弹窗**：`autoApprovalSource` 里 Workspace 访问的白名单判定原先排在 `canSendToSafetyJudge` 的 escalated 短路**之后**，而该短路只放行 `run_command`，导致被沙盒标为 `.escalated` 的 `web_fetch`、`lark_cli` 网络工具虽已列入 `workspaceAccessCanAutoApprove` 白名单却永远命中不到、每次都弹人工授权。现将 Workspace 访问整块判定上移到「打字确认危险门」之后、escalated 短路之前，让白名单条目真正生效；`rm -rf`/`sudo` 等打字确认硬门、未信任 MCP 服务器仍照旧拦截，smart 模式行为不变。
+- **「智能审批」判官不再因缺 key 频繁掉线回退人工**：审计日志显示判官掉线 94 次里 72 次是 `missing api key`，全部为直连 DeepSeek——旧的 key 兜底只读 `agentProviderLibrary.activeID` 单个 entry，当判官用的 `agentConfiguration` 与 activeID 在启动/切换 provider 的窗口不同步时就取到空 key。现改为**按判官自身 providerID 匹配 entry 取 key**（优先 active、否则扫同 provider 的 entry），并只从同 provider 取、绝不跨 provider 串 key（规避「DeepSeek key 串到 OpenAI entry」那类历史坑）。再加**兜底降级**：直连 key 仍为空但用户已登录 some.im 时，判官改走 some.im 托管 `someim-auto-flash`（凭据在共享 session Keychain，恰好在直连 key 为空的窗口仍可用），把"缺 key→弹人工"变成"缺 key→托管判官放行"。未登录 some.im 的直连用户行为不变。新增 3 项测试锁契约。
+
+### Meta
+
+- 版本号从 **1.200.0-rc1** 提升为 **1.200.0-rc2**（计划小卡单行跑马灯 UI 优化 + Workspace 访问网络放行修复，均为 bugfix/UX，按只递增 rc 位处理），内部构建号从 **144** 递增为 **145**，Help 与 Computer Use Helper 构建号从 **61** 递增为 **62**；App、Go agent、Help、Helper、浏览器扩展、README、响应头契约与产品文档保持一致。
+
+## 1.200.0-rc1 - 2026-07-25
+
+### Added
+
+- **专家圆桌会前准备室**：用户按 Return 抛出议题后，不再立刻开讲。WillDeep 会先精炼真正要决策的问题、整理 3～5 个讨论维度、提出高价值澄清问题，并给出带理由的专家阵容建议；用户可继续用约三行输入框补充背景，确认框架后再进入组队。
+- **可编辑的专家组队流程**：AI 默认建议 2～4 位互补专家，用户可从完整专家池自由增删，正式讨论严格要求 2～6 位且必须显式确认。专家池新增法律合规「沈律」、数据研究「林析」、市场增长「夏野」、组织运营「周衡」，各自拥有独立姓名、定位、提示人格、强调色和矢量头像；心理专家升级为行为心理与决策专家。
+- **专家正文真流式发言**：每位专家先以自由文本 provider delta 逐字展示可见正文，再由独立结构化任务提取立场、论据、建议和反问状态。正文与模型推理严格分离，首 token 立即显示、80ms 合并刷新、1 秒持久化检查点；分析失败仍保留已经展示的正文。
+
+### Changed
+
+- 讨论页在专家组织观点时继续提前提示「XX 专家即将发言」；首个正文 token 到达后切换为虚线流式发言卡、实时光标和「正在发言」状态，右侧专家席同步从「思考中」变为「实时发言」。
+- 圆桌会话新增可恢复的 `.clarifying` / `.selectingExperts` 阶段、可选准备数据和可选流式草稿，旧报告缺少这些字段时仍可解码；正式引擎在用户确认前拒绝启动。
+
+### Fixed
+
+- **专家圆桌讨论不再把主线程跑满**：连续两轮生产采样分别在 `1.199.0-rc1` 与 `1.199.0-rc2` 稳定命中 `GraphHost.flushTransactions → GeometryReaderLayout → sizeThatFits/lengthThatFits`，确认只读 `NSTextView` 在 `updateNSView` 中异步测高、写回每条消息的 `@State` 高度并再次修改 `.frame`，使 `LazyVStack` 布局持续失效。现移除整条高度 Binding 回写链，改由 `NSViewRepresentable.sizeThatFits` 直接按提议宽度返回 TextKit 高度，并缓存相同宽度的测量结果；窗口缩放仍会正确换行，但布局过程不再制造新的状态事务。
+- 原生划词引用保持不变；空选区回调增加值去重，避免 `NSTextView` 初始化富文本时向 SwiftUI 重复写入相同的 `nil` 选区。
+
+### Tests
+
+- `AgentRoundtableTests` 增至 26 项，新增只读正文在宽、窄布局下高度确定且宽度感知的测试。
+- `roundtable_interaction_contract_test.rb` 增至 10 项，新增静态守卫：禁止恢复 `measuredTextHeight`、异步主队列测高和 `.frame(height:)` 状态回写链，并要求组件保留 `sizeThatFits` 与测量缓存失效入口。
+- 新增专家自由文本流管线与草稿缓冲定向测试，覆盖正文／推理隔离、usage 与 finish 元数据、provider 错误、取消、空正文拒绝、UI 节流、检查点、结束和重置。
+
+### Meta
+
+- 版本号从 **1.199.0-rc2** 提升为 **1.200.0-rc1**（新增会前准备、专家组队、真流式发言与专家库扩展，按 feature 提 MINOR 位并重置 rc），内部构建号从 **143** 递增为 **144**，Help 与 Computer Use Helper 构建号从 **60** 递增为 **61**；App、Go agent、Help、Helper、浏览器扩展、README、响应头契约与产品文档保持一致。
 
 ## 1.199.0-rc2 - 2026-07-25
 
