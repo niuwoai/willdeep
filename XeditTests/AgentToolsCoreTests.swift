@@ -1279,6 +1279,71 @@ struct AgentToolsCoreTests {
             #expect(profile.contains("(literal \"/dev/tty\")"), "mode \(mode) 应放行 /dev/tty 写入")
         }
     }
+
+    @Test
+    func sandboxDenialHeuristicRecognizesSeatbeltSignals() {
+        #expect(
+            AgentSandboxPolicy.looksLikeSandboxDenial(
+                exitStatus: 1,
+                output: "sandbox-exec: git: Operation not permitted",
+                sandboxMode: .workspaceWrite
+            )
+        )
+        #expect(
+            AgentSandboxPolicy.looksLikeSandboxDenial(
+                error: AgentToolError.commandFailed(1, "sh: /dev/null: Operation not permitted"),
+                sandboxMode: .readOnly
+            )
+        )
+        #expect(
+            !AgentSandboxPolicy.looksLikeSandboxDenial(
+                exitStatus: 1,
+                output: "sandbox-exec: git: Operation not permitted",
+                sandboxMode: .escalated
+            )
+        )
+        #expect(
+            !AgentSandboxPolicy.looksLikeSandboxDenial(
+                exitStatus: 1,
+                output: "error: test failed\nexpected 3 got 4",
+                sandboxMode: .workspaceWrite
+            )
+        )
+        // Long logs only count "permission denied" when it sits near the end.
+        let longNoise = String(repeating: "ok\n", count: 80) + "permission denied\n"
+        #expect(
+            AgentSandboxPolicy.looksLikeSandboxDenial(
+                exitStatus: 1,
+                output: longNoise,
+                sandboxMode: .workspaceWrite
+            )
+        )
+        let buriedDenial = "permission denied\n" + String(repeating: "ok\n", count: 400)
+        #expect(
+            !AgentSandboxPolicy.looksLikeSandboxDenial(
+                exitStatus: 2,
+                output: buriedDenial,
+                sandboxMode: .workspaceWrite
+            )
+        )
+    }
+
+    @Test
+    func sandboxEscalationApprovalCopyUsesEscalationPrompt() {
+        let descriptor = AgentApprovalNoticeCopy.descriptor(
+            toolName: "run_command",
+            arguments: [
+                "command": .string("git add -A"),
+                AgentSandboxPolicy.sandboxEscalationRequestArgumentKey: .bool(true),
+                AgentSandboxPolicy.sandboxDenialDetailArgumentKey: .string("Operation not permitted"),
+            ]
+        )
+        #expect(descriptor.title == L10n.ToolCard.sandboxEscalationTitle)
+        #expect(descriptor.approveTitle == L10n.ToolCard.sandboxEscalationApprove)
+        #expect(descriptor.declineTitle == L10n.ToolCard.sandboxEscalationDecline)
+        #expect(descriptor.metadata.contains(L10n.ToolCard.sandboxEscalationMetadata))
+        #expect(descriptor.metadata.contains("Operation not permitted"))
+    }
 }
 
 @Suite

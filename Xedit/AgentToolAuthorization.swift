@@ -544,6 +544,67 @@ enum AgentSandboxPolicy {
         )
     }
 
+    /// Heuristic for "seatbelt / sandbox-exec blocked this command".
+    /// Used to offer a one-shot escalation approval instead of treating the
+    /// denial as a normal tool failure the model has to guess around.
+    nonisolated static func looksLikeSandboxDenial(
+        error: Error,
+        sandboxMode: AgentSandboxMode
+    ) -> Bool {
+        guard sandboxMode != .escalated else { return false }
+        if let toolError = error as? AgentToolError {
+            switch toolError {
+            case .commandFailed(let code, let output):
+                return looksLikeSandboxDenial(exitStatus: code, output: output, sandboxMode: sandboxMode)
+            case .commandTimeout, .missingArgument, .invalidArgument, .noWorkspace,
+                    .pathOutsideWorkspace, .notFound, .notRegular, .binaryFile,
+                    .fileTooLarge, .unknownTool, .invalidRegex, .httpFailed:
+                return false
+            }
+        }
+        return looksLikeSandboxDenial(
+            exitStatus: -1,
+            output: error.localizedDescription,
+            sandboxMode: sandboxMode
+        )
+    }
+
+    nonisolated static func looksLikeSandboxDenial(
+        exitStatus: Int32,
+        output: String,
+        sandboxMode: AgentSandboxMode
+    ) -> Bool {
+        guard sandboxMode != .escalated else { return false }
+        let trimmed = output.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return false }
+
+        let lowered = trimmed.lowercased()
+        let strongMarkers = [
+            "sandbox-exec:",
+            "deny file-write",
+            "deny network",
+            "operation not permitted",
+        ]
+        if strongMarkers.contains(where: { lowered.contains($0) }) {
+            return true
+        }
+
+        // "permission denied" shows up in many real app failures. Only treat
+        // it as a sandbox signal when the failure looks primary / short, or
+        // the phrase sits near the end of stderr (typical seatbelt shape).
+        guard lowered.contains("permission denied") else { return false }
+        if trimmed.count <= 800 { return true }
+        let tail = String(lowered.suffix(400))
+        return tail.contains("permission denied")
+            || exitStatus == 1
+            || exitStatus == -1
+    }
+
+    /// Argument flag stamped onto a tool call while waiting for the user to
+    /// approve re-running outside the sandbox after a denial.
+    nonisolated static let sandboxEscalationRequestArgumentKey = "_sandbox_escalation_request"
+    nonisolated static let sandboxDenialDetailArgumentKey = "_sandbox_denial_detail"
+
     nonisolated static func scrub(_ text: String) -> String {
         var result = text
         let patterns = [

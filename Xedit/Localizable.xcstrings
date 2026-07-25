@@ -31768,6 +31768,159 @@
         }
       }
     },
+    "tool-card.authorization.sandbox-escalation.title" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sandbox blocked this command"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "沙箱拦住了这条命令"
+          }
+        }
+      }
+    },
+    "tool-card.authorization.sandbox-escalation.subtitle" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "WillDeep can re-run the same command outside the sandbox if you approve."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "如果你同意，WillDeep 可以在无沙箱环境下重跑同一条命令。"
+          }
+        }
+      }
+    },
+    "tool-card.authorization.sandbox-escalation.metadata" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Re-run leaves the default sandbox boundary"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "重跑将离开默认沙箱边界"
+          }
+        }
+      }
+    },
+    "tool-card.authorization.sandbox-escalation.explanation" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Why this prompt"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "为何出现此提示"
+          }
+        }
+      }
+    },
+    "tool-card.authorization.sandbox-escalation.decision-title" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Allow running outside the sandbox?"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "允许在无沙箱下运行吗？"
+          }
+        }
+      }
+    },
+    "tool-card.authorization.sandbox-escalation.decision-subtitle" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Use this when the sandbox denial is blocking routine work the Agent will retry."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "适合沙箱误伤、Agent 本来就会重试的常规工作。"
+          }
+        }
+      }
+    },
+    "tool-card.authorization.sandbox-escalation.decline" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Keep sandboxed"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "保持沙箱"
+          }
+        }
+      }
+    },
+    "tool-card.authorization.sandbox-escalation.approve" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Run without sandbox"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "无沙箱重跑"
+          }
+        }
+      }
+    },
+    "tool-card.authorization.sandbox-escalation.approval-reason" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "User approved re-running outside the sandbox after a sandbox denial."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "用户同意在沙箱拒绝后于无沙箱环境重跑。"
+          }
+        }
+      }
+    },
     "tool-card.always-allow.help" : {
       "extractionState" : "manual",
       "localizations" : {

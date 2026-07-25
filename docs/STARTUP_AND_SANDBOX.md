@@ -93,6 +93,8 @@ seatbelt profile（`seatbeltProfile()`，行 518-540）关键规则：
 >
 > ⚠️ `escalated` 模式**完全不套 seatbelt**；系统若没有 `sandbox-exec` 也会回退到裸 `/bin/sh`（macOS 上一直存在，实际不触发）。
 
+**事后提权（sandbox denial → 授权重跑）**：本地前台 `run_command` 若已在非 `escalated` 沙箱里跑过、且失败输出像 seatbelt 拒绝（`Operation not permitted` / `sandbox-exec:` / 尾部 `permission denied` 等），不会直接当普通工具失败丢给模型瞎重试，而是暂停弹审批卡：「允许无沙箱重跑？」同意后用 `.escalated` 再跑同一条命令；拒绝则记为 denied。Always Allow 签名命中时跳过二次询问、直接提权重跑。远端 SSH workspace 不走此路径（本地 seatbelt 管不到远端）。实现见 `AgentSandboxPolicy.looksLikeSandboxDenial` 与 `AppStateAgentSandboxEscalation.swift`。
+
 环境沙箱化 `sandboxedEnvironment()`（行 459-481）：删掉所有名字像 token/secret/password/api_key/credential 的变量；非 escalated 下把 `HOME` 指到临时目录、清空 `SSH_AUTH_SOCK` / `GITHUB_TOKEN` / `GH_TOKEN`。
 
 ### 3. 命令审批的三层闸门

@@ -3,6 +3,20 @@
 > 当前文件保留最新版本（1.200.0-rc3 至 1.109.0-rc340）。
 > 更早的 1000 个版本已移至 [CHANGELOG-ARCHIVE.md](CHANGELOG-ARCHIVE.md)。
 
+## 1.203.0-rc1 - 2026-07-25
+
+### Added
+
+- **沙箱拒绝后可授权无沙箱重跑**：本地前台 `run_command` 被 seatbelt 拦住（如 `Operation not permitted` / `sandbox-exec:`）时，不再只把失败丢回模型瞎重试，而是弹出审批卡询问「允许无沙箱重跑？」；同意后以 `.escalated` 再跑同一条命令，拒绝则记为 denied。Always Allow 签名命中时跳过二次询问。远端 SSH workspace 不走此路径。
+
+### Fixed
+
+- **全量并行下 Git 审阅范围快照偶发空结果**：`loadsScopedSnapshots` 在 fork 压力下可能读到空的 `git status`；加载侧增加短重试，避免与 `runGitCommand` 的 spawn 退避各说各话。
+
+### Meta
+
+- 版本号从 **1.202.0-rc4** 提升为 **1.203.0-rc1**（沙箱事后提权为新能力，提升 MINOR、rc 重置），内部构建号从 **152** 递增为 **153**，Help 与 Computer Use Helper 构建号从 **69** 递增为 **70**；App、Go agent、Help、Helper、浏览器扩展、README、响应头契约与产品文档保持一致。
+
 ## 1.202.0-rc4 - 2026-07-25
 
 ### Fixed
