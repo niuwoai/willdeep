@@ -223,8 +223,8 @@ enum RoundtableVisuals {
 
     static func symbol(for stance: RoundtableOSR.Stance) -> String {
         switch stance {
-        case .support: return "checkmark.circle.fill"
-        case .oppose: return "xmark.octagon.fill"
+        case .support: return "hand.thumbsup.fill"
+        case .oppose: return "hand.thumbsdown.fill"
         case .neutral: return "equal.circle.fill"
         case .undecided: return "questionmark.circle.fill"
         }

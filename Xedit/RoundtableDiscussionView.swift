@@ -6,6 +6,7 @@
 //
 
 import SwiftUI
+import AppKit
 
 struct RoundtableDiscussionView: View {
     @EnvironmentObject var appState: AppState
@@ -468,23 +469,21 @@ private struct RoundtableStreamingMessageBubble: View {
                     .foregroundStyle(RoundtableVisuals.accent(for: role))
                 }
 
-                Text(
-                    AttributedString(draft)
-                        + AttributedString(isComplete ? "" : " ▍")
+                // Render the live draft through the SAME width-authoritative
+                // TextKit view the finalized bubble uses: it declares its size
+                // as the proposed width via `sizeThatFits`, so it always claims
+                // the bubble column instead of collapsing. A bare SwiftUI `Text`
+                // here had no minimum-width floor, so during the first layout
+                // pass — before the row's width resolved — the adjacent greedy
+                // `Spacer` squeezed CJK content (which line-breaks between any
+                // two glyphs) into a one-glyph-per-line column (逐字竖排) until
+                // the message finalized. Reusing the finalized renderer also
+                // makes the streaming→final transition seamless. Selection is a
+                // no-op while the draft is still mutating every frame.
+                RoundtableSelectableMessageText(
+                    text: draft + (isComplete ? "" : " ▍"),
+                    onSelectionChange: { _ in }
                 )
-                .font(.system(size: 13.5))
-                .foregroundColor(.primary)
-                .textSelection(.disabled)
-                .lineSpacing(3)
-                // Claim the full bubble width like the finalized bubble's
-                // NSViewRepresentable does. Without a horizontal floor a bare
-                // SwiftUI Text of CJK content (which may line-break between any
-                // two glyphs) gets squeezed to a single-character column by the
-                // adjacent Spacer during streaming layout — 逐字竖排. Making the
-                // Text greedy keeps it from collapsing until the message
-                // finalizes and re-renders through RoundtableMessageBubble.
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .fixedSize(horizontal: false, vertical: true)
             }
             .padding(.horizontal, 13)
             .padding(.vertical, 11)
@@ -574,7 +573,7 @@ private struct RoundtableMessageBubble: View {
                 HStack(alignment: .top, spacing: 5) {
                     Image(systemName: "arrow.turn.down.right")
                         .font(.system(size: 10, weight: .semibold))
-                        .foregroundStyle(stanceColor)
+                        .foregroundStyle(avatarColor)
                     Text(suggestion)
                         .font(.system(size: 11.5, weight: .medium))
                         .foregroundStyle(.secondary)
@@ -603,7 +602,7 @@ private struct RoundtableMessageBubble: View {
         .overlay(alignment: .leading) {
             if message.osr != nil {
                 RoundedRectangle(cornerRadius: 2)
-                    .fill(stanceColor)
+                    .fill(avatarColor)
                     .frame(width: 3)
                     .padding(.vertical, 10)
             }
@@ -614,16 +613,58 @@ private struct RoundtableMessageBubble: View {
     private var avatar: some View {
         if let role = message.role, message.speaker == .expert {
             RoundtableExpertAvatar(role: role, size: 38)
+        } else if message.speaker == .user {
+            // The human moderator ("你（主持人）") reuses the signed-in some.im
+            // account avatar — the same one the sidebar footer shows — and
+            // falls back to the app icon when the user has not set a some.im
+            // avatar (or while the remote image is still loading / fails).
+            moderatorAvatar
         } else {
             ZStack {
                 Circle().fill(avatarColor.opacity(0.14))
-                Image(systemName: message.speaker == .chair ? "sparkles" : "person.fill")
+                Image(systemName: "sparkles")
                     .font(.system(size: 14, weight: .semibold))
                     .foregroundStyle(avatarColor)
             }
             .frame(width: 34, height: 34)
             .overlay(Circle().stroke(avatarColor.opacity(0.28), lineWidth: 1))
         }
+    }
+
+    private var moderatorAvatar: some View {
+        Group {
+            if let account = SomeIMIntegrationStore.loadAccount(),
+               let url = moderatorAvatarURL(account.avatarURL) {
+                CachedAvatarImage(url: url) { appLogoAvatar }
+            } else {
+                appLogoAvatar
+            }
+        }
+        .frame(width: 34, height: 34)
+        .clipShape(Circle())
+        .overlay(Circle().stroke(avatarColor.opacity(0.28), lineWidth: 1))
+    }
+
+    /// App-icon fallback avatar for the human moderator — used when the
+    /// signed-in some.im account has no avatar set, or while/if the remote
+    /// avatar fails to load.
+    private var appLogoAvatar: some View {
+        Image(nsImage: NSApp.applicationIconImage
+            ?? NSImage(named: NSImage.applicationIconName)
+            ?? NSImage())
+            .resizable()
+            .scaledToFill()
+    }
+
+    private func moderatorAvatarURL(_ value: String?) -> URL? {
+        guard let trimmed = value?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !trimmed.isEmpty,
+              let url = URL(string: trimmed),
+              let scheme = url.scheme?.lowercased(),
+              scheme == "https" || scheme == "http" else {
+            return nil
+        }
+        return url
     }
 
     private var speakerHeader: some View {
@@ -664,18 +705,18 @@ private struct RoundtableMessageBubble: View {
                     ? Color.red.opacity(0.08)
                     : message.osr == nil
                         ? Color(nsColor: .textBackgroundColor)
-                        : stanceColor.opacity(0.075)
+                        : avatarColor.opacity(0.06)
             )
     }
 
     private var borderColor: Color {
         if message.isError == true { return Color.red.opacity(0.3) }
-        if message.osr != nil { return stanceColor.opacity(0.30) }
+        // Expert cards carry the SPEAKER's identity color (matching the
+        // color-coded 专家席), not the stance color — otherwise a room where
+        // everyone opposes renders every card red. Stance is conveyed by the
+        // thumbs-up/down pill instead.
+        if message.osr != nil { return avatarColor.opacity(0.30) }
         return Color.secondary.opacity(0.15)
-    }
-
-    private var stanceColor: Color {
-        message.osr.map { RoundtableVisuals.color(for: $0.stance) } ?? avatarColor
     }
 
     private var canQuote: Bool {
