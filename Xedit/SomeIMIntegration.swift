@@ -9,6 +9,7 @@
 
 import Foundation
 import AppKit
+import os
 import Security
 import SwiftUI
 import SomeIMSharedSession
@@ -198,6 +199,13 @@ enum SomeIMIntegrationStore {
     /// Shared Keychain access group (Team ZH2S7D6PL6). Must match the
     /// `keychain-access-groups` entitlement and every other participating app.
     nonisolated static let sharedAccessGroup = "ZH2S7D6PL6.com.someim.shared"
+
+    /// Unified-logging channel for credential persistence. Visible in Console.app
+    /// or `log stream --predicate 'subsystem == "com.willdeep.agent"'`. Exists to
+    /// tell apart the two ways browser-login credential save can fail: the write
+    /// itself (shared access group rejected *and* per-app fallback errored) versus
+    /// the post-write readback not matching what we just stored.
+    private static let keychainLog = Logger(subsystem: "com.willdeep.agent", category: "someim-keychain")
 
     private static let settingsKey = "com.willdeep.someIM.integrationSettings.v1"
     private static let accountKey = "com.willdeep.someIM.account.v1"
@@ -426,9 +434,22 @@ enum SomeIMIntegrationStore {
         session.tenantID = account.tenantID
         session.baseURL = normalizedSettings.baseURL
         session.updatedAt = Date()
-        guard session.isValid,
-              persistSharedSession(session),
-              currentSharedSession()?.apiKey == trimmedKey else {
+        guard session.isValid else {
+            keychainLog.error("saveAuthenticatedSession failed: assembled session invalid before persist (apiKey empty=\(trimmedKey.isEmpty, privacy: .public), baseURL empty=\(session.baseURL.isEmpty, privacy: .public))")
+            return false
+        }
+        guard persistSharedSession(session) else {
+            // persistSharedSession already logged which store(s) rejected the
+            // write and the OSStatus; this is the "写失败" bucket.
+            keychainLog.error("saveAuthenticatedSession failed: write did not land in any Keychain store")
+            return false
+        }
+        let readBackKey = currentSharedSession()?.apiKey ?? ""
+        guard readBackKey == trimmedKey else {
+            // Write reported success but what we read back differs — the "回读不
+            // 一致" bucket (e.g. shared group wrote but reads nil, or a stale
+            // per-app row shadowed the fresh value).
+            keychainLog.error("saveAuthenticatedSession failed: readback mismatch — wrote \(maskedKey(trimmedKey), privacy: .public), read \(maskedKey(readBackKey), privacy: .public)")
             return false
         }
         return true
@@ -509,6 +530,34 @@ enum SomeIMIntegrationStore {
         persistSharedSession(session)
     }
 
+    /// Redacts a secret for logging — keeps only length and the last 4 chars, so
+    /// logs can confirm "wrote the same value we read back" without leaking the key.
+    private static func maskedKey(_ value: String) -> String {
+        guard !value.isEmpty else { return "<empty>" }
+        let suffix = value.count > 4 ? String(value.suffix(4)) : "****"
+        return "len=\(value.count) …\(suffix)"
+    }
+
+    /// Human-readable name for the Keychain OSStatus codes we expect on a
+    /// mis-signed / entitlement-less build, plus the system's own message.
+    private static func keychainStatusDescription(_ status: OSStatus) -> String {
+        let name: String
+        switch status {
+        case errSecSuccess: name = "success"
+        case errSecMissingEntitlement: name = "errSecMissingEntitlement (build lacks keychain-access-groups / wrong Team)"
+        case errSecItemNotFound: name = "errSecItemNotFound"
+        case errSecDuplicateItem: name = "errSecDuplicateItem"
+        case errSecAuthFailed: name = "errSecAuthFailed (Keychain locked or user denied)"
+        case errSecInteractionNotAllowed: name = "errSecInteractionNotAllowed"
+        case errSecNoAccessForItem: name = "errSecNoAccessForItem"
+        default: name = "OSStatus \(status)"
+        }
+        if let message = SecCopyErrorMessageString(status, nil) as String? {
+            return "\(name) — \(message)"
+        }
+        return name
+    }
+
     private static func currentSharedSession() -> SomeIMSharedSession? {
         #if DEBUG
         if testSharedSessionOverrideEnabled {
@@ -533,6 +582,7 @@ enum SomeIMIntegrationStore {
         if SomeIMSharedSessionStore.shared.login(session) {
             return true
         }
+        keychainLog.notice("shared-group Keychain write rejected (access group \(sharedAccessGroup, privacy: .public)) — likely errSecMissingEntitlement on an unsigned/mis-Teamed build; falling back to per-app Keychain")
         return persistPrivateKeychainFallbackSession(session)
     }
 
@@ -561,10 +611,15 @@ enum SomeIMIntegrationStore {
         #endif
         let apiKey = session.apiKey.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !apiKey.isEmpty else { return false }
-        AgentCredentialStore.save(apiKey, account: legacyAPIKeyAccount)
+        let status = AgentCredentialStore.saveReportingStatus(apiKey, account: legacyAPIKeyAccount)
         AgentCredentialStore.save(session.sessionToken, account: legacySessionTokenAccount)
-        return AgentCredentialStore.load(account: legacyAPIKeyAccount)
-            .trimmingCharacters(in: .whitespacesAndNewlines) == apiKey
+        let readBack = AgentCredentialStore.load(account: legacyAPIKeyAccount)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        let landed = readBack == apiKey
+        if !landed {
+            keychainLog.error("per-app Keychain fallback failed: SecItem write status \(keychainStatusDescription(status), privacy: .public); readback \(readBack.isEmpty ? "empty" : "mismatch", privacy: .public)")
+        }
+        return landed
     }
 
     #if DEBUG

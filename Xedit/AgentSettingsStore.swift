@@ -895,21 +895,30 @@ enum AgentCredentialStore {
     }
 
     nonisolated static func save(_ secret: String, account: String) {
+        _ = saveReportingStatus(secret, account: account)
+    }
+
+    /// Same as `save`, but surfaces the raw Keychain `OSStatus` so callers can
+    /// log *why* a write failed instead of only inferring it from a later
+    /// readback miss. Returns `errSecSuccess` for the in-memory test/XCTest
+    /// stores (they cannot fail).
+    @discardableResult
+    nonisolated static func saveReportingStatus(_ secret: String, account: String) -> OSStatus {
         testSaveCounts[account, default: 0] += 1
         let trimmed = secret.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty, let data = trimmed.data(using: .utf8) else {
             delete(account: account)
-            return
+            return errSecSuccess
         }
 
         if testKeychainStorage != nil {
             testKeychainStorage?[account] = trimmed
-            return
+            return errSecSuccess
         }
 
         if isRunningUnderXCTest {
             xctestKeychainStorage[account] = trimmed
-            return
+            return errSecSuccess
         }
 
         let baseQuery: [String: Any] = [
@@ -922,7 +931,7 @@ enum AgentCredentialStore {
             kSecAttrAccessible as String: kSecAttrAccessibleAfterFirstUnlock
         ]
         let updateStatus = SecItemUpdate(baseQuery as CFDictionary, updateAttrs as CFDictionary)
-        if updateStatus == errSecSuccess { return }
+        if updateStatus == errSecSuccess { return errSecSuccess }
         if updateStatus != errSecItemNotFound {
             SecItemDelete(baseQuery as CFDictionary)
         }
@@ -930,7 +939,7 @@ enum AgentCredentialStore {
         var addQuery = baseQuery
         addQuery[kSecValueData as String] = data
         addQuery[kSecAttrAccessible as String] = kSecAttrAccessibleAfterFirstUnlock
-        SecItemAdd(addQuery as CFDictionary, nil)
+        return SecItemAdd(addQuery as CFDictionary, nil)
     }
 
     nonisolated static func load(account: String) -> String {
