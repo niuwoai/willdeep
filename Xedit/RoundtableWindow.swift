@@ -15,6 +15,7 @@ import SwiftUI
 
 enum RoundtableRoute: Equatable {
     case home
+    case preparation(runtimeID: UUID, reportID: UUID)
     case discussion(runtimeID: UUID, reportID: UUID)
     case document(runtimeID: UUID, reportID: UUID)
 }
@@ -29,6 +30,12 @@ struct RoundtableRouter: View {
         switch route {
         case .home:
             RoundtableHomeView(route: $route, onDetach: onDetach)
+        case let .preparation(runtimeID, reportID):
+            RoundtablePreparationContainer(
+                route: $route,
+                runtimeID: runtimeID,
+                reportID: reportID
+            )
         case let .discussion(runtimeID, reportID):
             RoundtableDiscussionView(route: $route, runtimeID: runtimeID, reportID: reportID)
         case let .document(runtimeID, reportID):
@@ -209,13 +216,15 @@ struct RoundtableHomeView: View {
     private func start() {
         guard let runtimeID = appState.startAgentRoundtable(topic: topic) else { return }
         guard let reportID = reportID(inRuntime: runtimeID) else { return }
-        route = .discussion(runtimeID: runtimeID, reportID: reportID)
+        route = .preparation(runtimeID: runtimeID, reportID: reportID)
     }
 
     private func open(_ report: AgentRoundtableReport) {
         guard let (runtimeID, reportID) = locate(reportID: report.id) else { return }
         if report.phase == .completed, report.finalDocument != nil {
             route = .document(runtimeID: runtimeID, reportID: reportID)
+        } else if report.phase == .clarifying || report.phase == .selectingExperts {
+            route = .preparation(runtimeID: runtimeID, reportID: reportID)
         } else {
             route = .discussion(runtimeID: runtimeID, reportID: reportID)
         }
@@ -243,6 +252,88 @@ struct RoundtableHomeView: View {
             }
         }
         return nil
+    }
+}
+
+// MARK: - 会前准备
+
+private struct RoundtablePreparationContainer: View {
+    @EnvironmentObject var appState: AppState
+    @Binding var route: RoundtableRoute
+    let runtimeID: UUID
+    let reportID: UUID
+
+    private var workflowReport: WorkflowReport? {
+        appState.workflowReport(id: reportID, runtimeID: runtimeID)
+    }
+
+    private var report: AgentRoundtableReport? {
+        workflowReport?.roundtable
+    }
+
+    private var isBusy: Bool {
+        appState.isAgentRoundtableTaskRunning(reportID: reportID)
+    }
+
+    var body: some View {
+        Group {
+            if let report {
+                if report.phase == .selectingExperts {
+                    RoundtableExpertSelectionView(
+                        report: report,
+                        isBusy: isBusy,
+                        errorMessage: workflowReport?.summary,
+                        providerOptions: appState.agentProviderLibrary.usableEntriesForChatSelection(
+                            isSomeIMAuthenticated: SomeIMIntegrationStore.hasAuthenticatedSessionForAutomaticDefaults()
+                        ),
+                        onBackToPreparation: {
+                            appState.returnToRoundtablePreparation(
+                                runtimeID: runtimeID,
+                                reportID: reportID
+                            )
+                        },
+                        onConfirm: { experts, providerEntryID, modelID in
+                            if appState.confirmRoundtableExpertSelection(
+                                runtimeID: runtimeID,
+                                reportID: reportID,
+                                experts: experts,
+                                providerEntryID: providerEntryID,
+                                modelID: modelID
+                            ) {
+                                route = .discussion(
+                                    runtimeID: runtimeID,
+                                    reportID: reportID
+                                )
+                            }
+                        }
+                    )
+                } else {
+                    RoundtablePreparationView(
+                        report: report,
+                        isBusy: isBusy,
+                        errorMessage: workflowReport?.summary,
+                        onBack: { route = .home },
+                        onRefine: { content in
+                            appState.refineRoundtablePreparation(
+                                runtimeID: runtimeID,
+                                reportID: reportID,
+                                content: content
+                            )
+                        },
+                        onChooseExperts: {
+                            appState.showRoundtableExpertSelection(
+                                runtimeID: runtimeID,
+                                reportID: reportID
+                            )
+                        }
+                    )
+                }
+            } else {
+                ProgressView()
+                    .controlSize(.regular)
+            }
+        }
+        .animation(.easeInOut(duration: 0.2), value: report?.phase)
     }
 }
 
@@ -660,6 +751,17 @@ struct RoundtableDocumentView: View {
                 .font(.system(size: 15, weight: .medium))
                 .lineLimit(1)
             Spacer()
+            // 收敛出文档后仍能回看完整发言流(transcript 持久化)。
+            Button {
+                route = .discussion(runtimeID: runtimeID, reportID: reportID)
+            } label: {
+                Label(
+                    String(localized: "roundtable.document.viewDiscussion", defaultValue: "查看讨论过程"),
+                    systemImage: "bubble.left.and.bubble.right"
+                )
+                .font(.system(size: 13))
+            }
+            .buttonStyle(.bordered)
             if let url = persistedDocumentURL {
                 Button {
                     RoundtableDocumentExporter.reveal(url)

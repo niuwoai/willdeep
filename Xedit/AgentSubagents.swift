@@ -68,6 +68,7 @@ struct AgentSubagentRun: Identifiable, Equatable {
 enum AgentSubagentError: LocalizedError {
     case missingPrompt
     case tooManyConcurrent(Int)
+    case emptyStreamingText
 
     var errorDescription: String? {
         switch self {
@@ -75,8 +76,47 @@ enum AgentSubagentError: LocalizedError {
             return "spawn_agent requires a non-empty `prompt`."
         case .tooManyConcurrent(let limit):
             return "Too many subagents running for this session (max \(limit)). Wait for one to finish or run synchronously."
+        case .emptyStreamingText:
+            return "The streaming subagent finished without producing visible text."
         }
     }
+}
+
+// MARK: - Free-text streaming
+
+/// Full token accounting from a free-text streaming turn.
+///
+/// This is intentionally separate from `Outcome.usageTokens`: roundtable
+/// speech needs the provider's input/output/cache split for observability,
+/// while old subagent callers only depend on a cumulative total.
+nonisolated struct AgentSubagentStreamingUsage: Equatable, Sendable {
+    var prompt = 0
+    var completion = 0
+    var total = 0
+    var cachedPrompt: Int?
+    var cacheWritePrompt: Int?
+    var reasoning = 0
+    var wasReported = false
+}
+
+/// Events visible to a free-text streaming caller.
+///
+/// Text and private reasoning are distinct cases by contract. A roundtable UI
+/// should render only `textDelta`; it may retain or discard `reasoningDelta`
+/// without risking thinking text leaking into the expert's visible speech.
+nonisolated enum AgentSubagentStreamingTextEvent: Equatable, Sendable {
+    case textDelta(String)
+    case reasoningDelta(String)
+    case usage(AgentSubagentStreamingUsage)
+    case finished(reason: String?)
+}
+
+nonisolated struct AgentSubagentStreamingTextOutcome: Equatable, Sendable {
+    let text: String
+    let reasoning: String
+    let usage: AgentSubagentStreamingUsage
+    let finishReason: String?
+    let didFinish: Bool
 }
 
 // MARK: - Registry
@@ -424,6 +464,10 @@ enum AgentSubagentRunner {
         let toolInvocationCount: Int
     }
 
+    typealias StreamingTextEventHandler = @Sendable (
+        AgentSubagentStreamingTextEvent
+    ) async -> Void
+
     static func systemPrompt(workspaceURL: URL?, outputSchema: AgentStructuredSchema? = nil) -> String {
         var lines: [String] = []
         lines.append("You are a focused subagent spawned by a coding agent to complete one task.")
@@ -478,6 +522,45 @@ enum AgentSubagentRunner {
             )
         )
         return descriptors
+    }
+
+    /// Generate one visible, free-text answer and surface it as real provider
+    /// deltas. This is the first half of the roundtable's two-stage expert
+    /// turn: stream the speech here, then analyze the completed `outcome.text`
+    /// with a separate structured-output call.
+    ///
+    /// Deliberately:
+    /// - sends no tools, so there is exactly one visible model turn;
+    /// - never attempts to parse partial `structured_output` arguments;
+    /// - keeps reasoning separate from visible text;
+    /// - propagates provider errors and cancellation unchanged;
+    /// - returns usage and finish metadata even when the caller ignores events.
+    ///
+    /// Existing `run(...)` callers are unaffected.
+    static func runStreamingText(
+        prompt: String,
+        systemInstruction: String,
+        configuration: AgentConfiguration,
+        someIMContext: SomeIMRequestContext? = nil,
+        onEvent: StreamingTextEventHandler? = nil
+    ) async throws -> AgentSubagentStreamingTextOutcome {
+        let trimmedPrompt = prompt.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedPrompt.isEmpty else {
+            throw AgentSubagentError.missingPrompt
+        }
+        let trimmedInstruction = systemInstruction.trimmingCharacters(in: .whitespacesAndNewlines)
+        let resolvedInstruction = trimmedInstruction.isEmpty
+            ? "Answer the user directly in clear, visible prose."
+            : trimmedInstruction
+        let messages = [
+            AgentMessage(role: .system, content: resolvedInstruction),
+            AgentMessage(role: .user, content: trimmedPrompt),
+        ]
+        let client = AgentClient(configuration: configuration, someIMContext: someIMContext)
+
+        return try await AgentSubagentTextStreamPipeline.run(onEvent: onEvent) { consume in
+            try await client.streamChat(messages: messages, tools: [], onEvent: consume)
+        }
     }
 
     /// Run the child loop to completion. Throws on network/provider
@@ -765,5 +848,93 @@ private actor SubagentTurnCollector {
 
     func snapshot() -> Turn {
         turn
+    }
+}
+
+/// Provider-neutral collector for the one-turn free-text streaming API.
+///
+/// Kept as a small standalone pipeline so deterministic tests can inject an
+/// event stream without a live provider. Production passes
+/// `AgentClient.streamChat` directly.
+enum AgentSubagentTextStreamPipeline {
+    typealias EventHandler = AgentSubagentRunner.StreamingTextEventHandler
+    typealias Consumer = @Sendable (AgentClientEvent) async -> Void
+
+    static func run(
+        onEvent: EventHandler?,
+        stream: (_ consume: @escaping Consumer) async throws -> Void
+    ) async throws -> AgentSubagentStreamingTextOutcome {
+        try Task.checkCancellation()
+        let collector = AgentSubagentTextStreamCollector()
+
+        try await stream { event in
+            guard !Task.isCancelled else { return }
+            guard let forwarded = await collector.consume(event) else { return }
+            await onEvent?(forwarded)
+        }
+
+        try Task.checkCancellation()
+        let outcome = await collector.outcome()
+        guard !outcome.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            throw AgentSubagentError.emptyStreamingText
+        }
+        return outcome
+    }
+}
+
+private actor AgentSubagentTextStreamCollector {
+    private var text = ""
+    private var reasoning = ""
+    private var usage = AgentSubagentStreamingUsage()
+    private var finishReason: String?
+    private var didFinish = false
+
+    func consume(_ event: AgentClientEvent) -> AgentSubagentStreamingTextEvent? {
+        switch event {
+        case .textDelta(let delta):
+            guard !delta.isEmpty else { return nil }
+            text += delta
+            return .textDelta(delta)
+        case .reasoningDelta(let delta):
+            guard !delta.isEmpty else { return nil }
+            reasoning += delta
+            return .reasoningDelta(delta)
+        case .toolCallsUpdated:
+            // `runStreamingText` advertises no tools. Ignore a provider's
+            // defensive empty tool snapshot rather than exposing it as text.
+            return nil
+        case .finishedTurn(let reason):
+            didFinish = true
+            finishReason = reason
+            return .finished(reason: reason)
+        case .usageReported(
+            let prompt,
+            let completion,
+            let total,
+            let cachedPrompt,
+            let cacheWritePrompt,
+            let reasoningTokens
+        ):
+            usage = AgentSubagentStreamingUsage(
+                prompt: prompt,
+                completion: completion,
+                total: total,
+                cachedPrompt: cachedPrompt,
+                cacheWritePrompt: cacheWritePrompt,
+                reasoning: reasoningTokens,
+                wasReported: true
+            )
+            return .usage(usage)
+        }
+    }
+
+    func outcome() -> AgentSubagentStreamingTextOutcome {
+        AgentSubagentStreamingTextOutcome(
+            text: text,
+            reasoning: reasoning,
+            usage: usage,
+            finishReason: finishReason,
+            didFinish: didFinish
+        )
     }
 }

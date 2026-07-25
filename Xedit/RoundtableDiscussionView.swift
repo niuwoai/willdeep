@@ -130,6 +130,16 @@ struct RoundtableDiscussionView: View {
                             )
                         }
                     }
+                    if let role = report?.activeExpert,
+                       let draft = report?.activeExpertDraft,
+                       !draft.isEmpty {
+                        RoundtableStreamingMessageBubble(
+                            role: role,
+                            draft: draft,
+                            isComplete: report?.activeExpertDraftIsComplete == true
+                        )
+                            .id("roundtable-streaming-draft")
+                    }
                     Color.clear
                         .frame(height: 1)
                         .id("roundtable-bottom")
@@ -141,6 +151,11 @@ struct RoundtableDiscussionView: View {
             }
             .onChange(of: report?.messages.count ?? 0) { _ in
                 withAnimation(.easeOut(duration: 0.2)) {
+                    proxy.scrollTo("roundtable-bottom", anchor: .bottom)
+                }
+            }
+            .onChange(of: report?.activeExpertDraft?.count ?? 0) { _ in
+                withAnimation(.easeOut(duration: 0.12)) {
                     proxy.scrollTo("roundtable-bottom", anchor: .bottom)
                 }
             }
@@ -168,15 +183,79 @@ struct RoundtableDiscussionView: View {
                     .font(.system(size: 12))
                     .foregroundStyle(.secondary)
             default:
-                if isAwaiting {
-                    awaitingBanner
+                if isAwaiting, report?.converged == true {
+                    // 收敛后停下,把「继续下一轮 / 结束并生成文档」的选择权交给主持人。
+                    // 此态刻意不显示答复输入框:输入会触发 submitRoundtableUserReply→
+                    // 续跑,而 converged=true 会直接 synthesize,等于误收尾。
+                    convergedControls
+                } else {
+                    if isAwaiting {
+                        awaitingBanner
+                    }
+                    inputArea
                 }
-                inputArea
             }
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 11)
         .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    /// 收敛暂停态的主持人控制区:两个按钮把续轮/收尾的决定权交给用户。
+    private var convergedControls: some View {
+        let atRoundCap = (report?.currentRound ?? 0) >= AgentRoundtableReport.maxRounds
+        return VStack(alignment: .leading, spacing: 9) {
+            Label(
+                String(
+                    localized: "roundtable.converged.banner",
+                    defaultValue: "本轮讨论已收敛。你可以继续深入下一轮，或结束并生成会议文档。"
+                ),
+                systemImage: "checkmark.seal.fill"
+            )
+            .font(.system(size: 12, weight: .semibold))
+            .foregroundStyle(.green)
+            .fixedSize(horizontal: false, vertical: true)
+
+            if atRoundCap {
+                Text(
+                    String(
+                        localized: "roundtable.converged.roundCapReached",
+                        defaultValue: "已达讨论轮数上限，请结束并生成文档。"
+                    )
+                )
+                .font(.system(size: 11))
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+            }
+
+            HStack(spacing: 9) {
+                Button {
+                    appState.continueRoundtableNextRound(runtimeID: runtimeID, reportID: reportID)
+                } label: {
+                    Label(
+                        String(localized: "roundtable.converged.continueAction", defaultValue: "继续下一轮"),
+                        systemImage: "arrow.turn.down.right"
+                    )
+                    .font(.system(size: 12.5, weight: .medium))
+                }
+                .buttonStyle(.bordered)
+                .disabled(atRoundCap)
+
+                Button {
+                    appState.finalizeRoundtable(runtimeID: runtimeID, reportID: reportID)
+                } label: {
+                    Label(
+                        String(localized: "roundtable.converged.finalizeAction", defaultValue: "结束并生成文档"),
+                        systemImage: "doc.text"
+                    )
+                    .font(.system(size: 12.5, weight: .semibold))
+                }
+                .buttonStyle(.borderedProminent)
+            }
+        }
+        .padding(11)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(RoundedRectangle(cornerRadius: 10).fill(Color.green.opacity(0.07)))
     }
 
     private var awaitingBanner: some View {
@@ -288,13 +367,27 @@ struct RoundtableDiscussionView: View {
     }
 
     private func activeSpeakerBanner(_ role: AgentRoundtableExpertRole) -> some View {
-        HStack(spacing: 10) {
+        let isSpeaking = !(report?.activeExpertDraft?.isEmpty ?? true)
+        let isAnalyzing = report?.activeExpertDraftIsComplete == true
+        return HStack(spacing: 10) {
             RoundtableExpertAvatar(role: role, size: 32, isActive: true)
             VStack(alignment: .leading, spacing: 2) {
-                Text(String(format: L10n.Roundtable.expertWillSpeakFormat, role.personalName))
+                Text(
+                    isAnalyzing
+                        ? L10n.RoundtableSetup.expertFinishedSpeaking(role.personalName)
+                        : isSpeaking
+                        ? L10n.RoundtableSetup.expertSpeaking(role.personalName)
+                        : String(format: L10n.Roundtable.expertWillSpeakFormat, role.personalName)
+                )
                     .font(.system(size: 12.5, weight: .semibold))
                     .foregroundStyle(RoundtableVisuals.accent(for: role))
-                Text(L10n.Roundtable.expertThinkingDetail)
+                Text(
+                    isAnalyzing
+                        ? L10n.RoundtableSetup.analyzingStanceDetail
+                        : isSpeaking
+                        ? L10n.RoundtableSetup.expertSpeakingDetail
+                        : L10n.Roundtable.expertThinkingDetail
+                )
                     .font(.system(size: 11))
                     .foregroundStyle(.secondary)
             }
@@ -350,11 +443,76 @@ struct RoundtableDiscussionView: View {
     }
 }
 
+private struct RoundtableStreamingMessageBubble: View {
+    let role: AgentRoundtableExpertRole
+    let draft: String
+    let isComplete: Bool
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 10) {
+            RoundtableExpertAvatar(role: role, size: 34, isActive: true)
+            VStack(alignment: .leading, spacing: 6) {
+                HStack(spacing: 6) {
+                    Text(role.personalName)
+                        .font(.system(size: 11.5, weight: .semibold))
+                    Text(role.roleTitle)
+                        .font(.system(size: 10))
+                        .foregroundStyle(.secondary)
+                    Label(
+                        isComplete
+                            ? L10n.RoundtableSetup.analyzingStance
+                            : L10n.RoundtableSetup.liveSpeaking,
+                        systemImage: isComplete ? "sparkles" : "waveform"
+                    )
+                    .font(.system(size: 9.5, weight: .semibold))
+                    .foregroundStyle(RoundtableVisuals.accent(for: role))
+                }
+
+                Text(
+                    AttributedString(draft)
+                        + AttributedString(isComplete ? "" : " ▍")
+                )
+                .font(.system(size: 13.5))
+                .foregroundColor(.primary)
+                .textSelection(.disabled)
+                .lineSpacing(3)
+                // Claim the full bubble width like the finalized bubble's
+                // NSViewRepresentable does. Without a horizontal floor a bare
+                // SwiftUI Text of CJK content (which may line-break between any
+                // two glyphs) gets squeezed to a single-character column by the
+                // adjacent Spacer during streaming layout — 逐字竖排. Making the
+                // Text greedy keeps it from collapsing until the message
+                // finalizes and re-renders through RoundtableMessageBubble.
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .fixedSize(horizontal: false, vertical: true)
+            }
+            .padding(.horizontal, 13)
+            .padding(.vertical, 11)
+            .frame(maxWidth: 660, alignment: .leading)
+            .background(
+                RoundedRectangle(cornerRadius: 13)
+                    .fill(RoundtableVisuals.accent(for: role).opacity(0.08))
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 13)
+                    .stroke(
+                        RoundtableVisuals.accent(for: role).opacity(0.30),
+                        style: StrokeStyle(lineWidth: 1, dash: [5, 3])
+                    )
+            )
+            Spacer(minLength: 64)
+        }
+        .frame(maxWidth: .infinity)
+        .accessibilityLabel(
+            "\(role.personalName)，\(isComplete ? L10n.RoundtableSetup.analyzingStance : L10n.RoundtableSetup.liveSpeaking)"
+        )
+    }
+}
+
 private struct RoundtableMessageBubble: View {
     let message: RoundtableMessage
     let onQuote: (_ excerpt: String, _ isSelection: Bool) -> Void
     @State private var selectedExcerpt: String?
-    @State private var measuredTextHeight: CGFloat = 28
     @State private var isHovering = false
 
     var body: some View {
@@ -408,10 +566,8 @@ private struct RoundtableMessageBubble: View {
 
             RoundtableSelectableMessageText(
                 text: message.content,
-                measuredHeight: $measuredTextHeight,
                 onSelectionChange: { selectedExcerpt = $0 }
             )
-            .frame(height: measuredTextHeight)
 
             if let suggestion = message.osr?.suggestion,
                !suggestion.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
@@ -647,6 +803,18 @@ private struct RoundtableLiveDashboard: View {
                             }
                         }
                     }
+
+                    // 立场是各专家针对「自己那一小节议题」的态度,不是对同一命题的
+                    // 统一投票;所以下面专家席逐条标注了「谁·支持什么」。
+                    Text(
+                        String(
+                            localized: "roundtable.stance.perExpertNote",
+                            defaultValue: "按各专家自述立场统计，具体「谁支持什么」见下方专家席"
+                        )
+                    )
+                    .font(.system(size: 9.5))
+                    .foregroundStyle(.tertiary)
+                    .fixedSize(horizontal: false, vertical: true)
                 }
             }
         }
@@ -671,10 +839,36 @@ private struct RoundtableLiveDashboard: View {
                                 .font(.system(size: 9.5))
                                 .foregroundStyle(.tertiary)
                                 .lineLimit(1)
+                            // 「谁支持什么」:立场徽标 + 该专家自述的议题,让右侧「支持N」
+                            // 不再是无锚点的抽象计数。仅在该专家已发言且非当前发言态时显示。
+                            if report?.activeExpert != role, let osr = entry {
+                                HStack(spacing: 3) {
+                                    Circle()
+                                        .fill(RoundtableVisuals.color(for: osr.stance))
+                                        .frame(width: 5, height: 5)
+                                    Text(osr.stance.displayName)
+                                        .font(.system(size: 9.5, weight: .semibold))
+                                        .foregroundStyle(RoundtableVisuals.color(for: osr.stance))
+                                    if !osr.topic.isEmpty {
+                                        Text("· \(osr.topic)")
+                                            .font(.system(size: 9.5))
+                                            .foregroundStyle(.secondary)
+                                            .lineLimit(1)
+                                    }
+                                }
+                            }
                         }
                         Spacer(minLength: 0)
                         if report?.activeExpert == role {
-                            Text(L10n.Roundtable.thinking)
+                            Text(
+                                report?.activeExpertDraft?.isEmpty == false
+                                    ? (
+                                        report?.activeExpertDraftIsComplete == true
+                                            ? L10n.RoundtableSetup.analyzingStance
+                                            : L10n.RoundtableSetup.liveSpeaking
+                                    )
+                                    : L10n.Roundtable.thinking
+                            )
                                 .font(.system(size: 10, weight: .semibold))
                                 .foregroundStyle(RoundtableVisuals.accent(for: role))
                         } else if let stance = entry?.stance {
@@ -802,6 +996,8 @@ private struct RoundtableLiveDashboard: View {
 
     private var phaseTitle: String {
         switch report?.phase {
+        case .clarifying: return L10n.RoundtableSetup.preparationTitle
+        case .selectingExperts: return L10n.RoundtableSetup.selectionTitle
         case .recommending: return L10n.Roundtable.phaseRecommending
         case .opening: return L10n.Roundtable.phaseOpening
         case .discussing: return L10n.Roundtable.phaseDiscussing

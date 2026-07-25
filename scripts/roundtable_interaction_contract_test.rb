@@ -30,6 +30,12 @@ components_source = read_file(repo_root, "Xedit/RoundtableDiscussionComponents.s
 engine_source = read_file(repo_root, "Xedit/AgentRoundtableEngine.swift")
 model_source = read_file(repo_root, "Xedit/AgentRoundtable.swift")
 app_state_source = read_file(repo_root, "Xedit/AppStateAgentRoundtable.swift")
+preparation_source = read_file(repo_root, "Xedit/RoundtablePreparationView.swift")
+selection_source = read_file(repo_root, "Xedit/RoundtableExpertSelectionView.swift")
+streaming_source = read_file(repo_root, "Xedit/RoundtableStreamingSupport.swift")
+subagents_source = read_file(repo_root, "Xedit/AgentSubagents.swift")
+l10n_source = read_file(repo_root, "Xedit/L10n+RoundtableSetup.swift")
+strings_source = read_file(repo_root, "Xedit/Localizable.xcstrings")
 run_tests_source = read_file(repo_root, "scripts/run_tests.sh")
 workflow_source = read_file(repo_root, ".github/workflows/test.yml")
 
@@ -68,8 +74,14 @@ add_check.call(
 
 add_check.call(
   "active expert is persisted before model work and cleared afterward",
-  engine_source.match?(
-    /mutate \{ \$0\.activeExpert = role \}.*?let payload = try await runExpert.*?mutate \{ \$0\.activeExpert = nil \}/m
+  includes_all?(
+    engine_source,
+    [
+      "$0.activeExpert = role",
+      "$0.activeExpertDraft = nil",
+      "let payload = try await runExpert",
+      "$0.activeExpert = nil"
+    ]
   ),
   "The report must expose the expert who is organizing a response before their model call begins."
 )
@@ -89,22 +101,166 @@ add_check.call(
   "The active expert state must produce a visible name, portrait, and progress notice."
 )
 
-avatar_assets_present = %w[
+roundtable_avatar_assets = %w[
   RoundtableProduct
   RoundtableArchitecture
   RoundtableFinance
   RoundtableRisk
   RoundtableStrategy
   RoundtablePsychology
-].all? do |asset|
+  RoundtableLegal
+  RoundtableResearch
+  RoundtableGrowth
+  RoundtableOperations
+]
+avatar_assets_present = roundtable_avatar_assets.all? do |asset|
+  asset_directory = File.join(repo_root, "Xedit/Assets.xcassets/#{asset}.imageset")
   model_source.include?(asset) &&
-    File.file?(File.join(repo_root, "Xedit/Assets.xcassets/#{asset}.imageset/#{asset}.png"))
+    File.file?(File.join(asset_directory, "Contents.json")) &&
+    !Dir.glob(File.join(asset_directory, "#{asset}.{png,svg}")).empty?
 end
 
 add_check.call(
-  "six distinct generated avatar assets back the expert identities",
+  "ten distinct avatar assets back the expert identities",
   avatar_assets_present,
-  "Every expert role must resolve to a real raster portrait in Assets.xcassets."
+  "Every built-in expert role must resolve to a real PNG or SVG portrait in Assets.xcassets."
+)
+
+add_check.call(
+  "new topics enter a persisted preparation flow before discussion",
+  includes_all?(
+    window_source + app_state_source + model_source,
+    [
+      "case preparation(runtimeID: UUID, reportID: UUID)",
+      "phase: .clarifying",
+      "RoundtablePreparation(originalTopic: trimmed)",
+      "driveRoundtablePreparation(",
+      "case clarifying",
+      "case selectingExperts"
+    ]
+  ),
+  "Submitting a topic must route into clarification and expert selection rather than silently starting the formal discussion."
+)
+
+add_check.call(
+  "expert confirmation strictly gates phase and two-to-six unique experts",
+  includes_all?(
+    app_state_source + selection_source,
+    [
+      "let uniqueExperts = experts.filter { seen.insert($0).inserted }",
+      "uniqueExperts.count >= RoundtablePreparation.minimumExpertCount",
+      "uniqueExperts.count <= RoundtablePreparation.maximumExpertCount",
+      "roundtable.phase == .selectingExperts",
+      "selection.count < RoundtablePreparation.maximumExpertCount",
+      ".disabled(isBusy || !isValidSelection)"
+    ]
+  ),
+  "The UI and AppState entry point must reject fewer than two, more than six, or confirmation from the wrong phase."
+)
+
+add_check.call(
+  "preparation UI exposes framework, clarification, recommendations, and refinement",
+  includes_all?(
+    preparation_source + selection_source,
+    [
+      "frameworkCard",
+      "clarificationQuestions",
+      "clarificationConversation",
+      "recommendationCard",
+      "RoundtableComposerTextView(",
+      "ForEach(AgentRoundtableExpertRole.allCases)",
+      "recommendationReason(for: role)"
+    ]
+  ),
+  "Users must be able to inspect and refine the framework, see recommendation reasons, and adjust the full built-in panel."
+)
+
+add_check.call(
+  "expert speech is true free-text streaming followed by separate analysis",
+  includes_all?(
+    engine_source + subagents_source + streaming_source,
+    [
+      "AgentSubagentRunner.runStreamingText(",
+      "guard case let .textDelta(delta) = event",
+      "draftBuffer.append(delta)",
+      "AgentRoundtablePromptBuilder.analyzeExpertSpeech(",
+      "outputSchema: AgentRoundtablePromptBuilder.expertAnalysisSchema",
+      "attachingSpeech(speech)",
+      "tools: []",
+      "case .reasoningDelta(let delta):",
+      "await publishExpertDraft(draftBuffer.reset())",
+      "$0.activeExpertDraftIsComplete = publication.text.isEmpty"
+    ]
+  ),
+  "Visible provider deltas must stream independently from reasoning, then feed a second structured analysis without rewriting the speech."
+)
+
+add_check.call(
+  "stream completion, cancellation, and failure clear transient draft state",
+  includes_all?(
+    engine_source + app_state_source,
+    [
+      "$0.activeExpertDraftIsComplete = publication.text.isEmpty",
+      "$0.activeExpertDraftIsComplete = nil",
+      "detail.activeExpertDraftIsComplete = nil",
+      "catch is CancellationError",
+      "catch {"
+    ]
+  ),
+  "The UI may distinguish streaming from analysis, but every terminal or abandoned path must clear both the draft and its completion marker."
+)
+
+add_check.call(
+  "streaming draft refresh and persistence are independently throttled",
+  includes_all?(
+    streaming_source + engine_source,
+    [
+      "defaultUIInterval: Duration = .milliseconds(80)",
+      "defaultCheckpointInterval: Duration = .seconds(1)",
+      "shouldRefreshUI",
+      "shouldCheckpoint",
+      "mutate(persist: publication.shouldCheckpoint)"
+    ]
+  ),
+  "Token-level UI updates must not turn into token-level session-store writes."
+)
+
+add_check.call(
+  "discussion renders live expert draft and speaking status",
+  includes_all?(
+    discussion_source + model_source + l10n_source,
+    [
+      "activeExpertDraft",
+      "RoundtableStreamingMessageBubble(",
+      "draft: draft",
+      "activeExpertDraftIsComplete",
+      "expertSpeaking(role.personalName)",
+      "expertFinishedSpeaking(role.personalName)",
+      "expertSpeakingDetail",
+      "liveSpeaking",
+      "analyzingStance"
+    ]
+  ),
+  "The active expert's real text must appear in the transcript and dashboard while it is generated."
+)
+
+new_expert_localization_present = %w[
+  legal
+  research
+  growth
+  operations
+].all? do |role|
+  strings_source.include?("\"roundtable.expert.#{role}.name\"") &&
+    strings_source.include?("\"roundtable.expert.#{role}.role\"") &&
+    strings_source.include?("\"roundtable.setup.expert.#{role}.expertise\"")
+end
+
+add_check.call(
+  "new expert identities and expertise are localized",
+  new_expert_localization_present &&
+    strings_source.include?("\"zh-Hans\"") &&
+    strings_source.include?("\"en\""),
+  "Legal, research, growth, and operations experts need localized names, titles, and expertise in both supported languages."
 )
 
 add_check.call(
@@ -145,6 +301,23 @@ add_check.call(
     ]
   ),
   "Users must be able to quote a whole expert message or a native text selection, and the quote must be stored."
+)
+
+add_check.call(
+  "selectable message sizing cannot write back into SwiftUI layout",
+  includes_all?(
+    components_source,
+    [
+      "func sizeThatFits(",
+      "context.coordinator.sizeThatFits(textView, width: width)",
+      "func invalidateMeasurement()"
+    ]
+  ) &&
+    !components_source.include?("@Binding var measuredHeight") &&
+    !components_source.include?("DispatchQueue.main.async") &&
+    !discussion_source.include?("@State private var measuredTextHeight") &&
+    !discussion_source.include?(".frame(height: measuredTextHeight)"),
+  "Read-only AppKit text must answer SwiftUI's size proposal directly, without an async height Binding feedback loop."
 )
 
 add_check.call(

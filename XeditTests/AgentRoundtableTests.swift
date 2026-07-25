@@ -238,16 +238,23 @@ struct AgentRoundtableTests {
         """.data(using: .utf8)!
         let report = try JSONDecoder().decode(AgentRoundtableReport.self, from: reportJSON)
         #expect(report.activeExpert == nil)
+        #expect(report.activeExpertDraft == nil)
+        #expect(report.activeExpertDraftIsComplete == nil)
+        #expect(report.preparation == nil)
         #expect(report.finalDocumentFilePath == nil)
         #expect(report.finalDocumentWriteError == nil)
     }
 
     // MARK: - 专家池不变量
 
-    @Test("expert roster has six roles with distinct personas")
+    @Test("expert roster contains every supported role with distinct personas")
     func testExpertRoster() {
         let all = AgentRoundtableExpertRole.allCases
-        #expect(all.count == 6)
+        let expectedRoles: Set<AgentRoundtableExpertRole> = [
+            .product, .architecture, .finance, .risk, .strategy, .psychology,
+            .legal, .research, .growth, .operations,
+        ]
+        #expect(Set(all) == expectedRoles)
         // 每个角色都有非空人设、显示名、专长。
         for role in all {
             #expect(!role.systemPersona.trimmingCharacters(in: .whitespaces).isEmpty)
@@ -256,14 +263,14 @@ struct AgentRoundtableTests {
         }
         // 人设互不相同(防复制粘贴趋同)。
         let personas = Set(all.map(\.systemPersona))
-        #expect(personas.count == 6)
+        #expect(personas.count == all.count)
 
         let names = Set(all.map(\.personalName))
         let titles = Set(all.map(\.roleTitle))
         let avatarAssets = Set(all.map(\.avatarAssetName))
-        #expect(names.count == 6)
-        #expect(titles.count == 6)
-        #expect(avatarAssets.count == 6)
+        #expect(names.count == all.count)
+        #expect(titles.count == all.count)
+        #expect(avatarAssets.count == all.count)
     }
 
     @Test("expert markdown is rendered without exposing source markers")
@@ -281,6 +288,32 @@ struct AgentRoundtableTests {
         let codeRange = (rendered.string as NSString).range(of: "灰度发布")
         let codeFont = rendered.attribute(.font, at: codeRange.location, effectiveRange: nil) as? NSFont
         #expect(codeFont?.fontDescriptor.symbolicTraits.contains(.monoSpace) == true)
+    }
+
+    @MainActor
+    @Test("selectable message text sizing is deterministic and width-aware")
+    func testSelectableMessageTextSizing() {
+        let coordinator = RoundtableSelectableMessageText.Coordinator(
+            onSelectionChange: { _ in }
+        )
+        let textView = NSTextView(frame: .zero)
+        textView.textContainerInset = .zero
+        textView.textContainer?.lineFragmentPadding = 0
+        textView.textContainer?.widthTracksTextView = false
+        textView.textStorage?.setAttributedString(
+            RoundtableMarkdownTextRenderer.attributedString(
+                from: String(repeating: "这是一段用于验证窗口缩放时稳定换行的专家发言。", count: 8)
+            )
+        )
+
+        let wide = coordinator.sizeThatFits(textView, width: 420)
+        let repeated = coordinator.sizeThatFits(textView, width: 420)
+        coordinator.invalidateMeasurement()
+        let narrow = coordinator.sizeThatFits(textView, width: 210)
+
+        #expect(wide == repeated)
+        #expect(narrow.height > wide.height)
+        #expect(wide.height >= 22)
     }
 
     @Test("final document unwraps markdown fence and removes read-only handoff")

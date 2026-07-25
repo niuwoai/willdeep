@@ -1,0 +1,998 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>WillDeep · 专家圆桌准备室原型</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --ink: #17243a;
+      --muted: #65748d;
+      --line: rgba(82, 105, 140, .16);
+      --panel: rgba(255,255,255,.82);
+      --blue: #3979f6;
+      --blue-dark: #235fc9;
+      --blue-soft: #eaf3ff;
+      --teal: #1aa38e;
+      --green: #35a85b;
+      --red: #d65050;
+      --amber: #c88719;
+      --shadow: 0 24px 80px rgba(41, 75, 124, .13), 0 3px 12px rgba(41, 75, 124, .07);
+      --radius: 22px;
+      font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "PingFang SC", "Microsoft YaHei", sans-serif;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      color: var(--ink);
+      background:
+        radial-gradient(circle at 13% 15%, rgba(93, 175, 255, .25), transparent 27%),
+        radial-gradient(circle at 88% 3%, rgba(157, 121, 255, .17), transparent 28%),
+        linear-gradient(145deg, #f7fbff 0%, #f3f7fb 48%, #fffaf4 100%);
+      overflow-x: hidden;
+    }
+    body::before {
+      content: "";
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+      opacity: .45;
+      background-image: radial-gradient(rgba(62, 89, 128, .12) .6px, transparent .6px);
+      background-size: 19px 19px;
+      mask-image: linear-gradient(to bottom, black, transparent 70%);
+    }
+    button, textarea { font: inherit; }
+    button { cursor: pointer; }
+    button:focus-visible, textarea:focus-visible {
+      outline: 3px solid rgba(57,121,246,.25);
+      outline-offset: 2px;
+    }
+    .app-shell { width: min(1500px, calc(100vw - 34px)); margin: 18px auto 34px; position: relative; }
+    .topbar {
+      height: 62px;
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      padding: 0 18px;
+      border: 1px solid var(--line);
+      border-radius: 18px;
+      background: rgba(255,255,255,.72);
+      backdrop-filter: blur(24px);
+      box-shadow: 0 5px 24px rgba(58, 82, 118, .06);
+    }
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-weight: 780;
+      letter-spacing: -.02em;
+    }
+    .brand-mark {
+      width: 34px;
+      height: 34px;
+      border-radius: 11px;
+      color: #fff;
+      display: grid;
+      place-items: center;
+      background: linear-gradient(145deg, #4388ff, #6759db);
+      box-shadow: 0 8px 20px rgba(63, 111, 226, .3);
+    }
+    .topbar .topic {
+      min-width: 0;
+      color: var(--muted);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      font-size: 14px;
+    }
+    .spacer { flex: 1; }
+    .ghost-btn, .soft-btn, .primary-btn, .danger-btn {
+      border: 0;
+      border-radius: 12px;
+      min-height: 40px;
+      padding: 0 15px;
+      font-weight: 650;
+      transition: .18s ease;
+    }
+    .ghost-btn { color: #42536e; background: transparent; }
+    .ghost-btn:hover { background: #edf3f9; }
+    .soft-btn { color: var(--blue-dark); background: var(--blue-soft); }
+    .soft-btn:hover { background: #dbeaff; transform: translateY(-1px); }
+    .primary-btn {
+      color: white;
+      background: linear-gradient(135deg, #4387ff, #376ee6);
+      box-shadow: 0 10px 24px rgba(54, 111, 225, .25);
+    }
+    .primary-btn:hover:not(:disabled) { transform: translateY(-1px); box-shadow: 0 13px 30px rgba(54, 111, 225, .32); }
+    .primary-btn:disabled { opacity: .42; cursor: not-allowed; box-shadow: none; }
+    .danger-btn { color: #b94444; background: #fff0f0; }
+    .progress-card {
+      margin: 14px 0;
+      padding: 12px 16px;
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 8px;
+      border-radius: 17px;
+      border: 1px solid var(--line);
+      background: rgba(255,255,255,.62);
+      backdrop-filter: blur(18px);
+    }
+    .step {
+      position: relative;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      min-height: 38px;
+      padding: 0 10px;
+      border-radius: 11px;
+      color: #7a879c;
+      font-size: 14px;
+      font-weight: 650;
+    }
+    .step:not(:last-child)::after {
+      content: "";
+      height: 1px;
+      width: 18%;
+      position: absolute;
+      right: -8%;
+      top: 50%;
+      background: #d6dfeb;
+    }
+    .step-dot {
+      width: 25px;
+      height: 25px;
+      display: grid;
+      place-items: center;
+      flex: 0 0 auto;
+      border-radius: 9px;
+      background: #eef2f7;
+      font-size: 12px;
+    }
+    .step.active { color: #245cb8; background: #eaf3ff; }
+    .step.active .step-dot { color: white; background: var(--blue); }
+    .step.done { color: #27744b; }
+    .step.done .step-dot { color: #fff; background: #45ac71; }
+    .screen { display: none; animation: enter .25s ease-out; }
+    .screen.active { display: block; }
+    @keyframes enter { from { opacity: 0; transform: translateY(5px); } }
+    .workspace {
+      display: grid;
+      grid-template-columns: minmax(0, 1.8fr) minmax(315px, .7fr);
+      min-height: 710px;
+      overflow: hidden;
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      background: rgba(255,255,255,.78);
+      backdrop-filter: blur(26px);
+      box-shadow: var(--shadow);
+    }
+    .main-pane { min-width: 0; padding: 26px 28px 22px; border-right: 1px solid var(--line); }
+    .side-pane { padding: 24px; background: linear-gradient(180deg, rgba(247,251,255,.9), rgba(255,255,255,.7)); }
+    .eyebrow {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      color: var(--blue-dark);
+      font-size: 12px;
+      font-weight: 750;
+      letter-spacing: .08em;
+      text-transform: uppercase;
+    }
+    h1 { margin: 8px 0 8px; font-size: clamp(26px, 3vw, 38px); letter-spacing: -.045em; line-height: 1.16; }
+    h2 { margin: 0; font-size: 18px; letter-spacing: -.02em; }
+    h3 { margin: 0; font-size: 14px; }
+    p { line-height: 1.66; }
+    .lead { margin: 0; color: var(--muted); max-width: 720px; }
+    .notice {
+      margin: 18px 0;
+      padding: 13px 15px;
+      border: 1px solid rgba(51,125,240,.18);
+      border-radius: 14px;
+      color: #355d96;
+      background: rgba(233,244,255,.76);
+      font-size: 13px;
+      display: flex;
+      align-items: flex-start;
+      gap: 9px;
+    }
+    .chat-thread { display: grid; gap: 14px; margin-top: 19px; }
+    .message-row { display: flex; gap: 11px; align-items: flex-start; }
+    .message-row.user { justify-content: flex-end; }
+    .avatar {
+      width: 38px;
+      height: 38px;
+      border-radius: 14px;
+      display: grid;
+      place-items: center;
+      flex: 0 0 auto;
+      color: #fff;
+      font-size: 13px;
+      font-weight: 780;
+      box-shadow: inset 0 0 0 1px rgba(255,255,255,.32), 0 5px 12px rgba(55, 75, 107, .12);
+    }
+    .avatar.ai { background: linear-gradient(145deg,#4f8cff,#6a61dc); }
+    .avatar.user { background: linear-gradient(145deg,#8d9db5,#5f708a); order: 2; }
+    .bubble {
+      max-width: 86%;
+      padding: 14px 16px;
+      border-radius: 6px 17px 17px 17px;
+      border: 1px solid var(--line);
+      background: #fff;
+      box-shadow: 0 5px 18px rgba(55,80,118,.05);
+    }
+    .user .bubble { border-radius: 17px 6px 17px 17px; color: #1e4d93; background: #eaf3ff; border-color: rgba(55, 119, 225, .12); }
+    .bubble-label { color: var(--muted); font-size: 12px; margin-bottom: 7px; }
+    .bubble p { margin: 0; }
+    .question-card {
+      margin-top: 12px;
+      border-radius: 14px;
+      padding: 13px;
+      border: 1px solid rgba(56, 119, 227, .15);
+      background: #f7faff;
+    }
+    .chip-row { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+    .chip {
+      min-height: 32px;
+      padding: 0 11px;
+      border: 1px solid #d9e3ef;
+      border-radius: 999px;
+      color: #455873;
+      background: white;
+      font-size: 12px;
+    }
+    .chip:hover, .chip.selected { color: #225db9; border-color: #8fbaf7; background: #eaf3ff; }
+    .suggestion {
+      margin-top: 18px;
+      padding: 18px;
+      border: 1px solid rgba(77, 118, 178, .14);
+      border-radius: 18px;
+      background: linear-gradient(145deg, rgba(255,255,255,.92), rgba(246,250,255,.92));
+      box-shadow: 0 8px 28px rgba(48,78,119,.06);
+    }
+    .suggestion-head { display: flex; gap: 12px; align-items: start; }
+    .suggestion-head > div:first-child { flex: 1; }
+    .pill { border-radius: 999px; padding: 5px 9px; font-size: 11px; font-weight: 700; color: #446287; background: #edf3fa; white-space: nowrap; }
+    .core-question { margin: 10px 0 15px; font-size: 19px; font-weight: 720; line-height: 1.48; letter-spacing: -.02em; }
+    .framework-grid { display: grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap: 10px; }
+    .framework-item {
+      min-height: 102px;
+      padding: 13px;
+      border: 1px solid #e1e8f1;
+      border-radius: 14px;
+      background: rgba(255,255,255,.85);
+    }
+    .framework-no {
+      width: 23px;
+      height: 23px;
+      display: inline-grid;
+      place-items: center;
+      margin-bottom: 9px;
+      border-radius: 8px;
+      color: #2e69c9;
+      background: #e8f2ff;
+      font-size: 11px;
+      font-weight: 800;
+    }
+    .framework-item p { margin: 6px 0 0; font-size: 12px; color: var(--muted); line-height: 1.55; }
+    .action-row { display: flex; justify-content: flex-end; align-items: center; gap: 9px; margin-top: 17px; }
+    .composer {
+      position: sticky;
+      bottom: 0;
+      margin-top: 18px;
+      padding-top: 12px;
+      background: linear-gradient(to bottom, rgba(255,255,255,0), rgba(255,255,255,.96) 20%);
+    }
+    .composer-box {
+      padding: 10px;
+      border: 1px solid #dbe4ef;
+      border-radius: 16px;
+      background: #fff;
+      box-shadow: 0 9px 28px rgba(46,74,110,.08);
+    }
+    .composer textarea {
+      width: 100%;
+      min-height: 70px;
+      max-height: 140px;
+      padding: 4px 6px;
+      border: 0;
+      resize: vertical;
+      color: var(--ink);
+      background: transparent;
+      line-height: 1.5;
+      outline: none;
+    }
+    .composer-foot { display: flex; align-items: center; gap: 10px; color: var(--muted); font-size: 11px; }
+    .composer-foot .primary-btn { min-height: 34px; margin-left: auto; padding-inline: 13px; }
+    .side-section { margin-bottom: 24px; }
+    .side-title { display: flex; align-items: center; gap: 8px; margin-bottom: 11px; }
+    .side-title span:first-child { color: var(--blue); }
+    .check-list { display: grid; gap: 10px; }
+    .check {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 10px 11px;
+      border-radius: 12px;
+      color: #68768c;
+      background: rgba(255,255,255,.68);
+      font-size: 13px;
+    }
+    .check.done { color: #2c6f4d; background: #eaf8f0; }
+    .check.current { color: #2c5eaa; background: #eaf3ff; box-shadow: inset 3px 0 #4c88ee; }
+    .status-icon { width: 20px; text-align: center; font-weight: 800; }
+    .mini-experts { display: flex; margin: 12px 0 8px 7px; }
+    .mini-experts .avatar { width: 34px; height: 34px; margin-left: -7px; border: 2px solid white; border-radius: 12px; }
+    .side-note { color: var(--muted); font-size: 12px; line-height: 1.6; }
+    .error-card {
+      display: none;
+      margin: 16px 0;
+      padding: 15px;
+      border: 1px solid rgba(202,70,70,.18);
+      border-radius: 15px;
+      background: #fff3f3;
+    }
+    .error-card.visible { display: block; }
+    .error-card strong { color: #b83d3d; }
+
+    /* 专家选择 */
+    .expert-layout { min-height: 710px; border: 1px solid var(--line); border-radius: var(--radius); background: rgba(255,255,255,.8); box-shadow: var(--shadow); overflow: hidden; }
+    .expert-head { padding: 26px 30px 20px; border-bottom: 1px solid var(--line); display: flex; align-items: flex-end; gap: 20px; }
+    .expert-head > div:first-child { flex: 1; }
+    .selection-count { padding: 10px 13px; border-radius: 13px; color: #265ea9; background: #eaf3ff; font-size: 13px; font-weight: 700; }
+    .expert-content { display: grid; grid-template-columns: minmax(0,1fr) 330px; }
+    .expert-main { padding: 24px 30px 30px; border-right: 1px solid var(--line); }
+    .expert-aside { padding: 24px; background: linear-gradient(180deg,#f6faff,#fff); }
+    .section-head { display: flex; align-items: center; gap: 9px; margin-bottom: 13px; }
+    .section-head .pill { margin-left: auto; }
+    .expert-grid { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 13px; }
+    .expert-card {
+      position: relative;
+      display: grid;
+      grid-template-columns: 48px 1fr auto;
+      gap: 12px;
+      align-items: start;
+      min-height: 142px;
+      padding: 15px;
+      border: 1px solid #dfe7f0;
+      border-radius: 17px;
+      background: rgba(255,255,255,.88);
+      transition: .18s ease;
+    }
+    .expert-card:hover { border-color: #aac9f4; transform: translateY(-1px); box-shadow: 0 10px 25px rgba(50,78,118,.07); }
+    .expert-card.selected { border-color: #6da4f0; background: linear-gradient(145deg,#f7fbff,#eef6ff); box-shadow: inset 0 0 0 1px rgba(64,126,226,.12); }
+    .expert-card.recommended::after {
+      content: "AI 推荐";
+      position: absolute;
+      top: -7px;
+      left: 14px;
+      padding: 3px 7px;
+      border-radius: 999px;
+      color: white;
+      background: linear-gradient(135deg,#558ff2,#6e63dd);
+      font-size: 9px;
+      font-weight: 760;
+    }
+    .expert-card .avatar { width: 46px; height: 46px; border-radius: 16px; }
+    .expert-meta { color: var(--muted); font-size: 11px; margin-top: 3px; }
+    .expert-reason { grid-column: 2 / 4; margin: -2px 0 0; color: #5a6980; font-size: 12px; line-height: 1.55; }
+    .toggle {
+      width: 29px;
+      height: 29px;
+      border: 1px solid #cfd9e6;
+      border-radius: 10px;
+      color: #708098;
+      background: white;
+      font-weight: 800;
+    }
+    .selected .toggle { color: white; border-color: var(--blue); background: var(--blue); }
+    .toggle:disabled { opacity: .35; cursor: not-allowed; }
+    .roster { display: grid; gap: 10px; margin-top: 12px; }
+    .roster-row { display: flex; align-items: center; gap: 10px; padding: 9px; border-radius: 12px; background: white; border: 1px solid #e5ebf3; }
+    .roster-row .avatar { width: 34px; height: 34px; border-radius: 11px; }
+    .roster-row div:nth-child(2) { flex: 1; }
+    .roster-role { font-size: 11px; color: var(--muted); margin-top: 2px; }
+    .selection-help { min-height: 20px; margin: 12px 0 7px; color: #54647b; font-size: 12px; }
+    .expert-aside .primary-btn { width: 100%; min-height: 46px; }
+    .disclaimer { margin-top: 15px; padding: 12px; border-radius: 12px; color: #7a6841; background: #fff8e7; font-size: 11px; line-height: 1.6; }
+
+    /* 讨论 */
+    .discussion-layout { display: grid; grid-template-columns: minmax(0,1fr) 385px; height: 760px; border: 1px solid var(--line); border-radius: var(--radius); overflow: hidden; background: rgba(255,255,255,.78); box-shadow: var(--shadow); }
+    .discussion-main { display: flex; min-width: 0; flex-direction: column; border-right: 1px solid var(--line); }
+    .discussion-header { padding: 18px 23px; border-bottom: 1px solid var(--line); display: flex; align-items: center; gap: 12px; background: rgba(255,255,255,.78); }
+    .discussion-header > div:first-child { flex: 1; }
+    .round-pill { padding: 6px 10px; border-radius: 999px; color: #8a611b; background: #fff0c9; font-size: 11px; font-weight: 750; }
+    .messages { flex: 1; overflow-y: auto; padding: 21px 23px 30px; background: linear-gradient(180deg, rgba(245,250,255,.6), rgba(255,255,255,.25)); }
+    .expert-message { display: grid; grid-template-columns: 42px minmax(0,1fr); gap: 11px; margin-bottom: 17px; }
+    .expert-message .avatar { width: 42px; height: 42px; border-radius: 14px; }
+    .speaker-line { display: flex; align-items: center; gap: 7px; margin: 1px 0 7px; font-size: 12px; color: var(--muted); }
+    .speaker-line strong { color: #34445b; }
+    .live-badge { padding: 3px 7px; border-radius: 999px; color: #1e6ac8; background: #e6f2ff; font-size: 10px; font-weight: 750; }
+    .analyzing-badge { color: #7955b2; background: #f1eaff; }
+    .message-card {
+      padding: 15px 17px;
+      max-width: 820px;
+      border: 1px solid #dfe6ef;
+      border-radius: 5px 17px 17px 17px;
+      background: white;
+      box-shadow: 0 6px 19px rgba(52,77,113,.05);
+      line-height: 1.7;
+      white-space: pre-wrap;
+    }
+    .message-card.live { border-color: #92bdf6; box-shadow: 0 7px 26px rgba(59,119,215,.11); }
+    .cursor { display: inline-block; width: 2px; height: 1.1em; margin-left: 2px; vertical-align: -2px; background: #357af0; animation: blink .8s steps(1) infinite; }
+    @keyframes blink { 50% { opacity: 0; } }
+    .osr-strip { display: none; gap: 7px; margin-top: 9px; }
+    .osr-strip.visible { display: flex; }
+    .stance { padding: 5px 9px; border-radius: 9px; font-size: 11px; font-weight: 700; }
+    .stance.oppose { color: #a23d3d; background: #ffeded; }
+    .stance.support { color: #277546; background: #e7f7ed; }
+    .message-actions { margin-top: 7px; display: flex; gap: 6px; }
+    .message-action { border: 0; border-radius: 8px; padding: 5px 8px; color: #6a7890; background: transparent; font-size: 11px; }
+    .message-action:hover { background: #edf3fa; }
+    .quote-preview { display: none; align-items: center; gap: 8px; margin-bottom: 8px; padding: 8px 10px; border-left: 3px solid #5b91e8; border-radius: 8px; color: #52647d; background: #edf5ff; font-size: 11px; }
+    .quote-preview.visible { display: flex; }
+    .quote-preview span { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .discussion-composer { padding: 12px 17px 15px; border-top: 1px solid var(--line); background: white; }
+    .discussion-composer .composer-box { box-shadow: none; }
+    .dashboard { padding: 21px; overflow-y: auto; background: linear-gradient(160deg, #f7fbff, #fff); }
+    .dashboard-hero {
+      position: relative;
+      overflow: hidden;
+      padding: 17px;
+      border-radius: 17px;
+      color: white;
+      background: linear-gradient(135deg,#356fd7,#6758cf);
+      box-shadow: 0 14px 30px rgba(65,92,181,.2);
+    }
+    .dashboard-hero::after {
+      content: "";
+      position: absolute;
+      width: 140px;
+      height: 140px;
+      right: -42px;
+      top: -62px;
+      border-radius: 50%;
+      background: rgba(255,255,255,.13);
+    }
+    .dashboard-hero small { opacity: .75; }
+    .dashboard-hero p { margin: 7px 0 0; line-height: 1.5; font-weight: 650; }
+    .dashboard-section { margin-top: 20px; }
+    .dashboard-section-title { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; font-size: 12px; font-weight: 760; color: #53637a; }
+    .spectrum { display: grid; gap: 9px; }
+    .spectrum-row { display: grid; grid-template-columns: 32px 1fr auto; gap: 9px; align-items: center; padding: 9px; border-radius: 12px; background: #fff; border: 1px solid #e5ebf3; }
+    .spectrum-row .avatar { width: 32px; height: 32px; border-radius: 10px; font-size: 11px; }
+    .expert-state { font-size: 10px; color: #7a879a; }
+    .stance-label { min-width: 52px; padding: 5px 7px; border-radius: 8px; text-align: center; color: #6e7b8d; background: #f0f3f7; font-size: 10px; font-weight: 750; }
+    .stance-label.live { color: #2764bc; background: #e6f2ff; }
+    .stance-label.oppose { color: #a33f3f; background: #ffebeb; }
+    .insight-card { padding: 12px 13px; border-radius: 13px; border: 1px solid #e2e9f1; background: white; font-size: 12px; line-height: 1.55; }
+    .insight-card.empty { color: #77869a; border-style: dashed; background: rgba(255,255,255,.45); }
+    .insight-card.consensus { color: #276d47; background: #eaf8ef; border-color: #ccebd8; }
+    .insight-card.divergence { color: #9a4848; background: #fff0f0; border-color: #f4d1d1; }
+    .prototype-note { margin: 13px 4px 0; color: #7b8799; font-size: 11px; text-align: center; }
+    .toast {
+      position: fixed;
+      left: 50%;
+      bottom: 26px;
+      z-index: 20;
+      transform: translate(-50%, 20px);
+      opacity: 0;
+      pointer-events: none;
+      padding: 11px 15px;
+      border-radius: 12px;
+      color: white;
+      background: rgba(25,38,58,.9);
+      box-shadow: 0 12px 30px rgba(28,42,63,.25);
+      transition: .2s ease;
+      font-size: 13px;
+    }
+    .toast.visible { opacity: 1; transform: translate(-50%, 0); }
+    @media (max-width: 980px) {
+      .workspace, .expert-content, .discussion-layout { grid-template-columns: 1fr; height: auto; }
+      .main-pane, .expert-main, .discussion-main { border-right: 0; }
+      .side-pane, .expert-aside, .dashboard { border-top: 1px solid var(--line); }
+      .expert-grid { grid-template-columns: 1fr; }
+      .discussion-layout { min-height: 900px; }
+      .messages { min-height: 480px; max-height: 600px; }
+    }
+    @media (max-width: 640px) {
+      .app-shell { width: min(100% - 16px, 1500px); margin-top: 8px; }
+      .topbar { padding: 0 10px; }
+      .topbar .topic, .topbar .ghost-btn { display: none; }
+      .progress-card { padding: 8px; }
+      .step { padding: 0 4px; font-size: 11px; }
+      .step:not(:last-child)::after { display: none; }
+      .main-pane, .side-pane, .expert-head, .expert-main { padding: 19px 16px; }
+      .framework-grid { grid-template-columns: 1fr; }
+      .expert-head { align-items: flex-start; flex-direction: column; }
+      .expert-content { display: block; }
+      .discussion-layout { border-radius: 18px; }
+      .dashboard { padding: 16px; }
+    }
+  </style>
+</head>
+<body>
+  <main class="app-shell">
+    <header class="topbar">
+      <div class="brand"><span class="brand-mark">W</span><span>WillDeep</span></div>
+      <span class="topic">专家圆桌 · 35 岁转行 AI 工程师，靠谱吗？</span>
+      <span class="spacer"></span>
+      <button class="ghost-btn" id="restoreDemo">↻ 恢复演示</button>
+      <button class="ghost-btn" id="errorDemo">⚠ 错误演示</button>
+    </header>
+
+    <nav class="progress-card" aria-label="圆桌准备进度">
+      <div class="step active" data-step="prepare"><span class="step-dot">1</span><span>细化议题</span></div>
+      <div class="step" data-step="experts"><span class="step-dot">2</span><span>选择专家</span></div>
+      <div class="step" data-step="discussion"><span class="step-dot">3</span><span>正式讨论</span></div>
+    </nav>
+
+    <section class="screen active" id="prepareScreen">
+      <div class="workspace">
+        <div class="main-pane">
+          <div class="eyebrow">✦ 议题准备室 · 尚未开始讨论</div>
+          <h1>先把问题问对，再请专家开口</h1>
+          <p class="lead">我先帮你收窄问题、整理讨论框架。你确认后，我们再一起决定邀请哪几位专家。</p>
+          <div class="notice"><span>⌁</span><span>你的原始议题会一直保留。下面内容都是 AI 建议稿，不会在你确认前启动专家讨论。</span></div>
+
+          <div class="error-card" id="prepareError">
+            <strong>准备建议暂时生成失败</strong>
+            <p>原始议题和你的补充都已保存。可以安全重试，不会提前开始讨论。</p>
+            <button class="danger-btn" id="retryPrepare">重试建议</button>
+          </div>
+
+          <div class="chat-thread" id="prepareThread">
+            <div class="message-row user">
+              <div class="bubble">
+                <div class="bubble-label">你的原始议题</div>
+                <p>35 岁转行 AI 工程师，靠谱吗？</p>
+              </div>
+              <div class="avatar user">你</div>
+            </div>
+            <div class="message-row">
+              <div class="avatar ai">AI</div>
+              <div class="bubble">
+                <div class="bubble-label">WillDeep · 初步理解</div>
+                <p>这不是单纯的“能不能学会 AI”，而是要判断：你的已有积累能否降低转型成本，以及家庭现金流能承受多长验证周期。</p>
+                <div class="question-card">
+                  <h3>先确认一个关键条件</h3>
+                  <p class="side-note">你目前最接近哪种情况？这会直接影响专家阵容和讨论重点。</p>
+                  <div class="chip-row">
+                    <button class="chip quick-answer">有多年开发经验</button>
+                    <button class="chip quick-answer">技术基础较少</button>
+                    <button class="chip quick-answer">已有 AI 项目经验</button>
+                    <button class="chip quick-answer">更关注副业转型</button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <article class="suggestion" id="suggestionCard">
+            <div class="suggestion-head">
+              <div>
+                <div class="eyebrow">AI 整理后的讨论问题</div>
+                <div class="core-question" id="coreQuestion">35 岁、有后端经验的职场人，是否值得用 6～12 个月转向 AI 工程岗位？</div>
+              </div>
+              <span class="pill" id="revisionBadge">建议稿 · v1</span>
+            </div>
+            <div class="framework-grid">
+              <div class="framework-item"><span class="framework-no">01</span><h3>转型资本</h3><p>现有技术、行业经验与人脉，哪些能迁移，哪些必须重建。</p></div>
+              <div class="framework-item"><span class="framework-no">02</span><h3>真实机会</h3><p>岗位需求、年龄偏见与可验证的细分切入口。</p></div>
+              <div class="framework-item"><span class="framework-no">03</span><h3>成本与退路</h3><p>学习投入、现金流承压时间，以及失败后的可逆路径。</p></div>
+              <div class="framework-item"><span class="framework-no">04</span><h3>行动验证</h3><p>先用项目或内部转岗试水，再决定是否完全切换。</p></div>
+            </div>
+            <div class="action-row">
+              <button class="ghost-btn" id="focusComposer">继续修改框架</button>
+              <button class="primary-btn" id="goExperts">框架可以，选择专家 →</button>
+            </div>
+          </article>
+
+          <div class="composer">
+            <div class="composer-box">
+              <textarea id="prepareInput" aria-label="补充议题背景" placeholder="补充你的经历、约束或想重点讨论的方向…"></textarea>
+              <div class="composer-foot">
+                <span>Enter 提交 · Shift + Enter 换行</span>
+                <button class="primary-btn" id="sendClarification">发送补充</button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <aside class="side-pane">
+          <div class="side-section">
+            <div class="side-title"><span>◈</span><h2>准备进度</h2></div>
+            <div class="check-list">
+              <div class="check done"><span class="status-icon">✓</span><span>已保留原始议题</span></div>
+              <div class="check current" id="frameworkStatus"><span class="status-icon">●</span><span>讨论框架待你确认</span></div>
+              <div class="check"><span class="status-icon">3</span><span>专家阵容尚未确认</span></div>
+              <div class="check"><span class="status-icon">4</span><span>正式讨论尚未开始</span></div>
+            </div>
+          </div>
+          <div class="side-section">
+            <div class="side-title"><span>✦</span><h2>初步组队建议</h2></div>
+            <div class="mini-experts">
+              <span class="avatar" style="background:linear-gradient(145deg,#d47b4d,#b95757)">财</span>
+              <span class="avatar" style="background:linear-gradient(145deg,#4b83dc,#385bb3)">技</span>
+              <span class="avatar" style="background:linear-gradient(145deg,#8264d9,#5847ad)">心</span>
+              <span class="avatar" style="background:linear-gradient(145deg,#45a287,#267660)">策</span>
+            </div>
+            <p class="side-note">建议由财务、技术、行为心理和战略四个视角交叉验证。下一步会说明每位专家为什么值得加入。</p>
+          </div>
+          <div class="side-section">
+            <div class="side-title"><span>⌘</span><h2>准备室规则</h2></div>
+            <p class="side-note">按 Enter 只提交补充。只有你点击“确认框架与专家，开始讨论”，专家才会开口。</p>
+          </div>
+        </aside>
+      </div>
+    </section>
+
+    <section class="screen" id="expertsScreen">
+      <div class="expert-layout">
+        <header class="expert-head">
+          <div>
+            <div class="eyebrow">第二步 · 组建圆桌</div>
+            <h1>这件事，应该请谁坐上桌？</h1>
+            <p class="lead">AI 已根据你的议题预选 4 位专家。你可以自由增删，最终阵容需为 2～6 位。</p>
+          </div>
+          <div class="selection-count" id="selectionCount">已选择 4 / 6 位</div>
+        </header>
+        <div class="expert-content">
+          <div class="expert-main">
+            <div class="section-head">
+              <h2>AI 推荐阵容</h2>
+              <span class="pill">兼顾可行性、成本与人的状态</span>
+            </div>
+            <div class="expert-grid" id="expertGrid"></div>
+          </div>
+          <aside class="expert-aside">
+            <div class="side-title"><span>◎</span><h2>已入选专家</h2></div>
+            <div class="roster" id="selectedRoster"></div>
+            <div class="selection-help" id="selectionHelp">推荐 3～4 位；当前阵容适合开始。</div>
+            <button class="primary-btn" id="startDiscussion">确认框架与 4 位专家，开始讨论</button>
+            <button class="ghost-btn" id="backPrepare" style="width:100%;margin-top:7px">← 返回修改框架</button>
+            <div class="disclaimer">专家提供的是分析视角，不构成法律、投资、医疗等专业意见。重要决定仍需结合真实资质人士与一手数据。</div>
+          </aside>
+        </div>
+      </div>
+    </section>
+
+    <section class="screen" id="discussionScreen">
+      <div class="discussion-layout">
+        <div class="discussion-main">
+          <header class="discussion-header">
+            <div>
+              <h2>35 岁、有后端经验，是否值得转向 AI 工程？</h2>
+              <div class="expert-meta">4 位专家 · 框架与阵容已确认</div>
+            </div>
+            <span class="round-pill">第 1 轮</span>
+            <button class="danger-btn" id="interruptStream">模拟流式中断</button>
+          </header>
+          <div class="messages" id="messages">
+            <div class="expert-message">
+              <div class="avatar ai">W</div>
+              <div>
+                <div class="speaker-line"><strong>WillDeep 主持人</strong><span>刚刚</span></div>
+                <div class="message-card">议题和阵容已经确认。今天我们不讨论“AI 热不热”，而是判断：你的后端积累能否换来更低风险的转型路径。请各位给出清晰立场，并回应前一位专家。</div>
+              </div>
+            </div>
+            <div class="expert-message" id="liveMessage">
+              <div class="avatar" style="background:linear-gradient(145deg,#d47b4d,#b95757)">财</div>
+              <div>
+                <div class="speaker-line"><strong>财务顾问 · 苏明</strong><span class="live-badge" id="liveBadge">● 正在发言</span></div>
+                <div class="message-card live"><span id="streamText"></span><span class="cursor" id="streamCursor"></span></div>
+                <div class="osr-strip" id="osrStrip">
+                  <span class="stance oppose">⊘ 反对裸辞转型</span>
+                  <span class="stance" style="color:#7b5aa8;background:#f1eaff">✓ 赞成低风险试点</span>
+                </div>
+                <div class="message-actions">
+                  <button class="message-action quote-action">↳ 引用整段</button>
+                  <button class="message-action" id="selectQuote">“” 引用选中文字</button>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="discussion-composer">
+            <div class="quote-preview" id="quotePreview"><strong>引用 · 苏明</strong><span id="quoteText">先算清楚现金流能否覆盖验证周期</span><button class="ghost-btn" id="removeQuote">×</button></div>
+            <div class="composer-box">
+              <textarea id="discussionInput" aria-label="主持人发言" placeholder="作为主持人插话、追问或引导…"></textarea>
+              <div class="composer-foot">
+                <span>可引用整段或划选文字 · Shift + Enter 换行</span>
+                <button class="primary-btn" id="sendDiscussion">发送</button>
+              </div>
+            </div>
+          </div>
+        </div>
+        <aside class="dashboard">
+          <div class="dashboard-hero">
+            <small>本轮核心问题</small>
+            <p>已有积累能否换来一条风险可控、可验证的 AI 转型路径？</p>
+          </div>
+          <div class="dashboard-section">
+            <div class="dashboard-section-title"><span>◫</span><span>专家态势 · 1 / 4 发言中</span></div>
+            <div class="spectrum" id="spectrum">
+              <div class="spectrum-row">
+                <span class="avatar" style="background:linear-gradient(145deg,#d47b4d,#b95757)">财</span>
+                <div><strong>苏明</strong><div class="expert-state" id="financeState">正文流式生成中</div></div>
+                <span class="stance-label live" id="financeStance">● 发言中</span>
+              </div>
+              <div class="spectrum-row">
+                <span class="avatar" style="background:linear-gradient(145deg,#4b83dc,#385bb3)">技</span>
+                <div><strong>陈舟</strong><div class="expert-state">等待发言</div></div>
+                <span class="stance-label">… 待定</span>
+              </div>
+              <div class="spectrum-row">
+                <span class="avatar" style="background:linear-gradient(145deg,#8264d9,#5847ad)">心</span>
+                <div><strong>白桦</strong><div class="expert-state">等待发言</div></div>
+                <span class="stance-label">… 待定</span>
+              </div>
+              <div class="spectrum-row">
+                <span class="avatar" style="background:linear-gradient(145deg,#45a287,#267660)">策</span>
+                <div><strong>江导</strong><div class="expert-state">等待发言</div></div>
+                <span class="stance-label">… 待定</span>
+              </div>
+            </div>
+          </div>
+          <div class="dashboard-section">
+            <div class="dashboard-section-title"><span>✓</span><span>已达成共识</span></div>
+            <div class="insight-card empty" id="consensusCard">首位专家完成后形成共识摘要，不提前猜测。</div>
+          </div>
+          <div class="dashboard-section">
+            <div class="dashboard-section-title"><span>◇</span><span>核心分歧</span></div>
+            <div class="insight-card empty" id="divergenceCard">等待至少两位专家完成立场分析。</div>
+          </div>
+        </aside>
+      </div>
+    </section>
+
+    <p class="prototype-note">交互原型 · 所有内容均在本地运行，不连接模型或网络；流式动画仅演示真实 delta 到达后的界面状态。</p>
+  </main>
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+  <script>
+    const expertData = [
+      { id:"finance", initial:"财", role:"财务顾问", name:"苏明", color:"linear-gradient(145deg,#d47b4d,#b95757)", selected:true, recommended:true, reason:"你的关键约束是 6～12 个月投入与机会成本，需要先算现金流和最坏损失。" },
+      { id:"architecture", initial:"技", role:"技术架构师", name:"陈舟", color:"linear-gradient(145deg,#4b83dc,#385bb3)", selected:true, recommended:true, reason:"能判断后端经验能迁移多少，并把“学 AI”拆成可验证的工程能力路径。" },
+      { id:"psychology", initial:"心", role:"行为心理与决策", name:"白桦", color:"linear-gradient(145deg,#8264d9,#5847ad)", selected:true, recommended:true, reason:"帮助区分真实职业动机与年龄焦虑，评估长期学习和求职压力是否可持续。" },
+      { id:"strategy", initial:"策", role:"战略顾问", name:"江导", color:"linear-gradient(145deg,#45a287,#267660)", selected:true, recommended:true, reason:"从细分赛道与个人差异化出发，避免在最拥挤的方向正面竞争。" },
+      { id:"product", initial:"产", role:"产品经理", name:"林越", color:"linear-gradient(145deg,#e3934a,#bb6331)", selected:false, reason:"验证转型目标究竟是岗位、收入、身份，还是对原职业的逃离。" },
+      { id:"risk", initial:"险", role:"风险分析师", name:"何谨", color:"linear-gradient(145deg,#db5b64,#a63b51)", selected:false, reason:"事前验尸每条路线，找出年龄、招聘周期和单点依赖中的失败模式。" },
+      { id:"legal", initial:"法", role:"法律合规", name:"沈律", color:"linear-gradient(145deg,#375e8e,#233e65)", selected:false, reason:"分析竞业、知识产权、培训合同和转型期劳动关系风险。" },
+      { id:"data", initial:"数", role:"数据研究", name:"林析", color:"linear-gradient(145deg,#1598a6,#196f85)", selected:false, reason:"检查岗位样本和薪酬信息是否可靠，设计能推翻乐观假设的验证数据。" },
+      { id:"growth", initial:"市", role:"市场增长", name:"夏野", color:"linear-gradient(145deg,#d85f91,#a84173)", selected:false, reason:"分析不同 AI 细分岗位的供需、竞争者画像与获取机会的真实渠道。" },
+      { id:"operations", initial:"运", role:"组织运营", name:"周衡", color:"linear-gradient(145deg,#7d8d42,#596a2f)", selected:false, reason:"把学习、作品、内转和求职拆成可执行节奏，评估家庭与团队协同成本。" }
+    ];
+    const screens = { prepare: document.querySelector("#prepareScreen"), experts: document.querySelector("#expertsScreen"), discussion: document.querySelector("#discussionScreen") };
+    const toast = document.querySelector("#toast");
+    let toastTimer;
+    let streamTimer;
+    let revision = 1;
+
+    function showToast(message) {
+      toast.textContent = message;
+      toast.classList.add("visible");
+      clearTimeout(toastTimer);
+      toastTimer = setTimeout(() => toast.classList.remove("visible"), 2600);
+    }
+
+    function showScreen(name) {
+      Object.entries(screens).forEach(([key, node]) => node.classList.toggle("active", key === name));
+      const order = ["prepare","experts","discussion"];
+      const current = order.indexOf(name);
+      document.querySelectorAll(".step").forEach((node, index) => {
+        node.classList.toggle("active", index === current);
+        node.classList.toggle("done", index < current);
+        node.querySelector(".step-dot").textContent = index < current ? "✓" : String(index + 1);
+      });
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    }
+
+    function appendClarification(text) {
+      const thread = document.querySelector("#prepareThread");
+      const row = document.createElement("div");
+      row.className = "message-row user";
+      row.innerHTML = '<div class="bubble"><div class="bubble-label">你的补充</div><p></p></div><div class="avatar user">你</div>';
+      row.querySelector("p").textContent = text;
+      thread.appendChild(row);
+      const aiRow = document.createElement("div");
+      aiRow.className = "message-row";
+      aiRow.innerHTML = '<div class="avatar ai">AI</div><div class="bubble"><div class="bubble-label">WillDeep · 已更新建议稿</div><p>明白了。我会把“已有开发经验”和“可承受的验证周期”纳入判断，重点讨论低风险试点，而不是把问题简化为裸辞或不裸辞。</p></div>';
+      thread.appendChild(aiRow);
+      revision += 1;
+      document.querySelector("#revisionBadge").textContent = `已更新 · v${revision}`;
+      document.querySelector("#coreQuestion").textContent = "已有多年开发经验、能承受有限验证期的 35 岁职场人，如何低风险验证 AI 工程转型？";
+      showToast("建议稿已根据你的补充更新，尚未开始讨论");
+    }
+
+    function submitPreparation() {
+      const input = document.querySelector("#prepareInput");
+      const value = input.value.trim();
+      if (!value) return showToast("请先补充一些内容");
+      appendClarification(value);
+      input.value = "";
+    }
+
+    document.querySelectorAll(".quick-answer").forEach(button => button.addEventListener("click", () => {
+      document.querySelectorAll(".quick-answer").forEach(item => item.classList.remove("selected"));
+      button.classList.add("selected");
+      appendClarification(button.textContent + "，可接受约 6 个月的验证周期。");
+    }));
+    document.querySelector("#sendClarification").addEventListener("click", submitPreparation);
+    document.querySelector("#prepareInput").addEventListener("keydown", event => {
+      if (event.key === "Enter" && !event.shiftKey && !event.isComposing) {
+        event.preventDefault();
+        submitPreparation();
+      }
+    });
+    document.querySelector("#focusComposer").addEventListener("click", () => document.querySelector("#prepareInput").focus());
+    document.querySelector("#goExperts").addEventListener("click", () => {
+      document.querySelector("#frameworkStatus").classList.remove("current");
+      document.querySelector("#frameworkStatus").classList.add("done");
+      document.querySelector("#frameworkStatus").innerHTML = '<span class="status-icon">✓</span><span>讨论框架已确认</span>';
+      renderExperts();
+      showScreen("experts");
+    });
+
+    function renderExperts() {
+      const grid = document.querySelector("#expertGrid");
+      grid.innerHTML = "";
+      expertData.forEach(expert => {
+        const card = document.createElement("article");
+        card.className = `expert-card${expert.selected ? " selected" : ""}${expert.recommended ? " recommended" : ""}`;
+        card.innerHTML = `
+          <span class="avatar" style="background:${expert.color}">${expert.initial}</span>
+          <div><h3>${expert.role} · ${expert.name}</h3><div class="expert-meta">${expert.id === "legal" ? "合同、知识产权与监管边界" : expert.id === "data" ? "证据质量、偏差与验证设计" : "独立视角 · 会明确表达立场"}</div></div>
+          <button class="toggle" aria-label="${expert.selected ? "移除" : "添加"}${expert.role}">${expert.selected ? "✓" : "+"}</button>
+          <p class="expert-reason">${expert.reason}</p>`;
+        card.querySelector(".toggle").addEventListener("click", () => toggleExpert(expert.id));
+        grid.appendChild(card);
+      });
+      renderRoster();
+    }
+
+    function toggleExpert(id) {
+      const expert = expertData.find(item => item.id === id);
+      const selectedCount = expertData.filter(item => item.selected).length;
+      if (!expert.selected && selectedCount >= 6) {
+        showToast("最多选择 6 位专家，请先移除一位");
+        return;
+      }
+      expert.selected = !expert.selected;
+      renderExperts();
+    }
+
+    function renderRoster() {
+      const selected = expertData.filter(item => item.selected);
+      document.querySelector("#selectionCount").textContent = `已选择 ${selected.length} / 6 位`;
+      const roster = document.querySelector("#selectedRoster");
+      roster.innerHTML = selected.map(expert => `
+        <div class="roster-row">
+          <span class="avatar" style="background:${expert.color}">${expert.initial}</span>
+          <div><strong>${expert.name}</strong><div class="roster-role">${expert.role}</div></div>
+          <span style="color:#2d9861">✓</span>
+        </div>`).join("");
+      const start = document.querySelector("#startDiscussion");
+      start.disabled = selected.length < 2;
+      start.textContent = `确认框架与 ${selected.length} 位专家，开始讨论`;
+      const help = document.querySelector("#selectionHelp");
+      if (selected.length < 2) {
+        help.textContent = "至少选择 2 位专家，才能形成交叉讨论。";
+        help.style.color = "#b64848";
+      } else if (selected.length === 6) {
+        help.textContent = "已达到 6 位上限；如需更换，请先移除一位。";
+        help.style.color = "#8b671d";
+      } else {
+        help.textContent = "推荐 3～4 位；你也可以按需要选择 2～6 位。";
+        help.style.color = "#54647b";
+      }
+    }
+
+    document.querySelector("#backPrepare").addEventListener("click", () => {
+      showScreen("prepare");
+      showToast("已返回准备室；原先的开始确认失效");
+    });
+
+    function startStreaming() {
+      clearInterval(streamTimer);
+      const target = document.querySelector("#streamText");
+      const cursor = document.querySelector("#streamCursor");
+      const badge = document.querySelector("#liveBadge");
+      const text = "我先把最不浪漫、但最重要的一笔账摆在桌上：不建议为了“赶上 AI”直接裸辞。你的后端经验是资产，不是包袱。更好的路径是保留现金流，用 8 到 12 周完成一个贴近真实业务的 AI 工程项目，再拿市场反馈决定是否扩大投入。先验证，再下注。";
+      target.textContent = "";
+      cursor.style.display = "inline-block";
+      badge.textContent = "● 正在发言";
+      badge.className = "live-badge";
+      document.querySelector("#osrStrip").classList.remove("visible");
+      document.querySelector("#financeState").textContent = "正文流式生成中";
+      document.querySelector("#financeStance").textContent = "● 发言中";
+      document.querySelector("#financeStance").className = "stance-label live";
+      let index = 0;
+      streamTimer = setInterval(() => {
+        target.textContent += text.slice(index, index + 2);
+        index += 2;
+        if (index >= text.length) {
+          clearInterval(streamTimer);
+          cursor.style.display = "none";
+          badge.textContent = "◌ 正在分析立场";
+          badge.className = "live-badge analyzing-badge";
+          document.querySelector("#financeState").textContent = "正文完成 · 分析立场中";
+          document.querySelector("#financeStance").textContent = "◌ 分析中";
+          document.querySelector("#financeStance").className = "stance-label";
+          setTimeout(finishAnalysis, 1200);
+        }
+      }, 36);
+    }
+
+    function finishAnalysis() {
+      document.querySelector("#liveBadge").textContent = "✓ 发言与分析完成";
+      document.querySelector("#liveBadge").className = "live-badge";
+      document.querySelector("#osrStrip").classList.add("visible");
+      document.querySelector("#financeState").textContent = "反对裸辞 · 支持低风险试点";
+      document.querySelector("#financeStance").textContent = "⊘ 反对";
+      document.querySelector("#financeStance").className = "stance-label oppose";
+      const consensus = document.querySelector("#consensusCard");
+      consensus.className = "insight-card consensus";
+      consensus.textContent = "✓ 转型前应先设定可承受的验证周期与止损线。";
+      showToast("正文已固定，立场分析已更新态势看板");
+    }
+
+    document.querySelector("#startDiscussion").addEventListener("click", () => {
+      const count = expertData.filter(item => item.selected).length;
+      if (count < 2 || count > 6) return;
+      showScreen("discussion");
+      startStreaming();
+    });
+
+    document.querySelector("#interruptStream").addEventListener("click", () => {
+      clearInterval(streamTimer);
+      document.querySelector("#streamCursor").style.display = "none";
+      document.querySelector("#liveBadge").textContent = "⚠ 发言中断 · 可安全重试";
+      document.querySelector("#liveBadge").className = "live-badge";
+      document.querySelector("#financeState").textContent = "部分正文已保留，未生成重复消息";
+      document.querySelector("#financeStance").textContent = "! 中断";
+      document.querySelector("#financeStance").className = "stance-label oppose";
+      showToast("已模拟中断：部分正文保留，重试不会复制消息");
+      setTimeout(startStreaming, 1900);
+    });
+
+    document.querySelectorAll(".quote-action").forEach(button => button.addEventListener("click", () => {
+      document.querySelector("#quoteText").textContent = "我先把最不浪漫、但最重要的一笔账摆在桌上…";
+      document.querySelector("#quotePreview").classList.add("visible");
+      document.querySelector("#discussionInput").focus();
+    }));
+    document.querySelector("#selectQuote").addEventListener("click", () => {
+      const selectedText = window.getSelection().toString().trim();
+      document.querySelector("#quoteText").textContent = selectedText || "先验证，再下注。";
+      document.querySelector("#quotePreview").classList.add("visible");
+      document.querySelector("#discussionInput").focus();
+      if (!selectedText) showToast("未检测到划选文字，已用示例选段演示");
+    });
+    document.querySelector("#removeQuote").addEventListener("click", () => document.querySelector("#quotePreview").classList.remove("visible"));
+    document.querySelector("#sendDiscussion").addEventListener("click", () => {
+      const input = document.querySelector("#discussionInput");
+      if (!input.value.trim()) return showToast("请输入主持人发言");
+      showToast(document.querySelector("#quotePreview").classList.contains("visible") ? "已带引用发送，引用与正文将原子保存" : "主持人发言已发送");
+      input.value = "";
+      document.querySelector("#quotePreview").classList.remove("visible");
+    });
+
+    document.querySelector("#errorDemo").addEventListener("click", () => {
+      showScreen("prepare");
+      document.querySelector("#prepareError").classList.add("visible");
+      showToast("错误不会越过确认门禁，原始议题仍在");
+    });
+    document.querySelector("#retryPrepare").addEventListener("click", () => {
+      document.querySelector("#prepareError").classList.remove("visible");
+      showToast("建议已恢复；仍需你确认框架");
+    });
+    document.querySelector("#restoreDemo").addEventListener("click", () => {
+      showScreen("experts");
+      renderExperts();
+      showToast("已恢复到“待选专家”；系统没有自动开始讨论");
+    });
+    renderExperts();
+  </script>
+</body>
+</html>
