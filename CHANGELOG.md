@@ -3,6 +3,16 @@
 > 当前文件保留最新版本（1.200.0-rc3 至 1.109.0-rc340）。
 > 更早的 1000 个版本已移至 [CHANGELOG-ARCHIVE.md](CHANGELOG-ARCHIVE.md)。
 
+## 1.205.0-rc2 - 2026-07-25
+
+### Fixed
+
+- **打开大项目时主线程假死（老 iMac / Intel）**：Quick Open 的 `refreshProjectFileList` 虽把扫盘放进了 `Task.detached`，但缓存命中后重建上千个 `URL`、以及扫完后的 `save`/`fileURLs` 仍落在默认 MainActor 的 `Task` 里；再叠加 `URL.appendingPathComponent` 在旧 Foundation 上会逐条 `getResourceValue` 探盘，主线程会被路径拼接占满（spindump 热点即 `appendingPathComponent` / `deletingLastPathComponent` / `path.getter`，进程 RSS 可在十余秒内暴涨数百 MB）。现将 load→重建 URL→scan→save 全部留在 detached 任务，URL 改为纯路径字符串拼接，扫盘阶段只保留 path 字符串以降低常驻内存，并对缓存回填加硬顶。
+
+### Meta
+
+- 版本号从 **1.205.0-rc1** 提升为 **1.205.0-rc2**（主线程假死为 bugfix，按只递增 rc 位处理），内部构建号从 **155** 递增为 **156**，Help 与 Computer Use Helper 构建号从 **72** 递增为 **73**；App、Go agent、Help、Helper、浏览器扩展、README、响应头契约与产品文档保持一致。
+
 ## 1.205.0-rc1 - 2026-07-25
 
 ### Changed

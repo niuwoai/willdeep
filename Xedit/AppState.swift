@@ -1225,8 +1225,13 @@ final class AppState: ObservableObject {
 
     /// Refresh the Quick Open file list: serve the disk cache immediately (if
     /// present), then verify it against a fresh background scan and backfill any
-    /// differences. All file IO runs off the main thread; only the two
-    /// `@Published` assignments hop back to the main actor.
+    /// differences. Load / scan / URL rebuild / save all run in `Task.detached`;
+    /// only the `@Published` assignment hops back to the main actor.
+    ///
+    /// Important: under default MainActor isolation, a plain `Task { }` stays on
+    /// the main thread — reconstructing thousands of URLs with
+    /// `appendingPathComponent` there is what hung old iMacs at workspace open
+    /// (spindump: `URL.appendingPathComponent` / `deletingLastPathComponent`).
     func refreshProjectFileList() {
         quickOpenRefreshTask?.cancel()
 
@@ -1240,30 +1245,34 @@ final class AppState: ObservableObject {
         let limit = Self.quickOpenFileLimit
 
         quickOpenRefreshTask = Task { [weak self] in
-            // 1. Serve cache instantly (if any).
-            let cached = await Task.detached(priority: .userInitiated) {
-                ProjectFileListCache.load(forRootPath: rootPath)
+            // 1. Serve cache instantly (if any) — rebuild URLs off-main too.
+            let cachedPayload = await Task.detached(priority: .userInitiated) { () -> (entries: [ProjectFileListCache.Entry]?, urls: [URL]?) in
+                guard let cached = ProjectFileListCache.load(forRootPath: rootPath) else {
+                    return (nil, nil)
+                }
+                let urls = ProjectFileListCache.fileURLs(from: cached, root: targetRoot, limit: limit)
+                return (cached.entries, urls)
             }.value
 
-            if let cached, !Task.isCancelled {
-                let urls = ProjectFileListCache.fileURLs(from: cached, root: targetRoot)
+            if let urls = cachedPayload.urls, !Task.isCancelled {
                 self?.applyQuickOpenFiles(urls, ifRootMatches: rootPath)
             }
 
             guard !Task.isCancelled else { return }
 
-            // 2. Verify with a full scan and backfill if it differs.
-            let scanned = await Task.detached(priority: .utility) {
-                ProjectFileListCache.scan(root: targetRoot, limit: limit)
-            }.value
-
-            guard !Task.isCancelled else { return }
-
-            if cached == nil || ProjectFileListCache.differs(cached!.entries, scanned.entries) {
+            // 2. Verify with a full scan; save + rebuild stay off the main actor.
+            let cachedEntries = cachedPayload.entries
+            let scannedURLs = await Task.detached(priority: .utility) { () -> [URL]? in
+                let scanned = ProjectFileListCache.scan(root: targetRoot, limit: limit)
+                if let cachedEntries, !ProjectFileListCache.differs(cachedEntries, scanned.entries) {
+                    return nil
+                }
                 ProjectFileListCache.save(scanned)
-                let urls = ProjectFileListCache.fileURLs(from: scanned, root: targetRoot)
-                self?.applyQuickOpenFiles(urls, ifRootMatches: rootPath)
-            }
+                return ProjectFileListCache.fileURLs(from: scanned, root: targetRoot, limit: limit)
+            }.value
+
+            guard !Task.isCancelled, let scannedURLs else { return }
+            self?.applyQuickOpenFiles(scannedURLs, ifRootMatches: rootPath)
         }
     }
 

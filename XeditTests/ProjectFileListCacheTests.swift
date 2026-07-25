@@ -133,7 +133,7 @@ struct ProjectFileListCacheTests {
 
         let result = ProjectFileListCache.scan(root: tmp, limit: 5)
         #expect(result.entries.count == 5)
-        #expect(result.rootPath == tmp.standardizedFileURL.path)
+        #expect(result.rootPath == tmp.resolvingSymlinksInPath().path)
         #expect(result.schemaVersion == ProjectFileListCache.schemaVersion)
     }
 
@@ -255,6 +255,39 @@ struct ProjectFileListCacheTests {
         #expect(urls.count == 2)
         #expect(urls[0].path.hasSuffix("/tmp/proj/a/b.swift"))
         #expect(urls[1].path.hasSuffix("/tmp/proj/c.swift"))
+    }
+
+    /// Nested relative paths must not go through `URL.appendingPathComponent`,
+    /// which can hit the filesystem per call. Path-string join keeps the same
+    /// absolute result without that probe.
+    @Test
+    func absoluteFileURLJoinsNestedRelativePathsWithoutAppendingAPI() {
+        let url = ProjectFileListCache.absoluteFileURL(
+            rootPath: "/Users/demo/Project",
+            relativePath: "Sources/App/Main.swift"
+        )
+        #expect(url.path == "/Users/demo/Project/Sources/App/Main.swift")
+        #expect(url.isFileURL)
+    }
+
+    /// Hard cap protects against a corrupted / oversized cache file reconstructing
+    /// unbounded URL arrays on the refresh path.
+    @Test
+    func fileURLsRespectsOptionalLimit() {
+        let root = URL(fileURLWithPath: "/tmp/proj")
+        let entries = (0..<20).map { index in
+            ProjectFileListCache.Entry(relativePath: "f\(index).swift", mtime: 0, size: 0)
+        }
+        let file = ProjectFileListCache.CacheFile(
+            schemaVersion: 1,
+            rootPath: root.path,
+            generatedAt: Date(),
+            entries: entries
+        )
+        let urls = ProjectFileListCache.fileURLs(from: file, root: root, limit: 5)
+        #expect(urls.count == 5)
+        #expect(urls[0].path.hasSuffix("/tmp/proj/f0.swift"))
+        #expect(urls[4].path.hasSuffix("/tmp/proj/f4.swift"))
     }
 
     // MARK: - Schema version constant

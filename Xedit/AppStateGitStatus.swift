@@ -891,11 +891,13 @@ extension AppState {
         for case let fileURL as URL in enumerator {
             visitedNodes += 1
             if visitedNodes > maximumTraversalNodes || Task.isCancelled { break }
-            let standardized = fileURL.standardizedFileURL
-            guard standardized.path.hasPrefix(rootPrefix) else { continue }
-            let relativePath = String(standardized.path.dropFirst(rootPrefix.count))
+            // Prefer the enumerator path as-is — `standardizedFileURL` rewrites
+            // via path-component APIs and dominates CPU on large trees.
+            let filePath = fileURL.path
+            guard filePath.hasPrefix(rootPrefix) else { continue }
+            let relativePath = String(filePath.dropFirst(rootPrefix.count))
             guard !relativePath.isEmpty else { continue }
-            let values = try? standardized.resourceValues(forKeys: keys)
+            let values = try? fileURL.resourceValues(forKeys: keys)
             if values?.isDirectory == true {
                 if isAgentTransientArtifactDirectory(relativePath) {
                     enumerator.skipDescendants()
