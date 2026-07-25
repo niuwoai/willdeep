@@ -245,8 +245,13 @@ final class AgentRuntime: ObservableObject, Identifiable {
 
     /// Approval gate shared by Plan mode and Goal-backed Plans. Goal setup,
     /// planning, rejected, proposed, blocked, and completed cycles stay locked.
+    ///
+    /// Plan mode is planning-only: the gate never lifts inside Plan mode,
+    /// regardless of plan status. Approving a plan switches the session back
+    /// to Normal mode, and execution happens there.
     var isPlanGateActive: Bool {
-        guard interactionMode == .plan || interactionMode == .goal else { return false }
+        if interactionMode == .plan { return true }
+        guard interactionMode == .goal else { return false }
         guard let plan = currentPlan else { return true }
         return plan.status != .approved && plan.status != .executing
     }

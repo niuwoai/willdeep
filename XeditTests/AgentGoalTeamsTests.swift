@@ -731,12 +731,20 @@ struct AgentGoalTeamsTests {
             interactionMode: .plan,
             currentPlan: AgentPlan(status: .proposed, summary: "", stepTexts: ["A"])
         ))
-        let approved = AgentRuntime(session: AgentSession(
+        // Plan mode is planning-only: the gate NEVER lifts inside Plan mode,
+        // even for an approved plan. Approval flips the session to Normal
+        // mode, and only there does the gate go inactive.
+        let approvedStillInPlanMode = AgentRuntime(session: AgentSession(
             interactionMode: .plan,
             currentPlan: AgentPlan(status: .approved, summary: "", stepTexts: ["A"])
         ))
+        let approvedInNormalMode = AgentRuntime(session: AgentSession(
+            interactionMode: .normal,
+            currentPlan: AgentPlan(status: .approved, summary: "", stepTexts: ["A"])
+        ))
         #expect(proposed.isPlanGateActive)
-        #expect(!approved.isPlanGateActive)
+        #expect(approvedStillInPlanMode.isPlanGateActive)
+        #expect(!approvedInNormalMode.isPlanGateActive)
 
         let publicFetch = ["url": AgentJSONValue.string("https://developer.apple.com/documentation")]
         #expect(AppState.planGateBlocks(

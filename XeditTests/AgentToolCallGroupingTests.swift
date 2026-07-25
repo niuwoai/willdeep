@@ -622,7 +622,11 @@ extension WillDeepTests {
             }
         }
         let runtime = try #require(appState.agentRuntimes[session.id])
-        runtime.interactionMode = .plan
+        // An approved/executing plan lives in Normal mode: Plan mode is
+        // planning-only and approval flips the session back to Normal for
+        // execution. So a long-running execution session is Normal mode with
+        // the plan carried over — and the plan gate is inactive there.
+        runtime.interactionMode = .normal
         runtime.currentPlan = AgentPlan(
             status: .executing,
             steps: (1...16).map { step in

@@ -14990,30 +14990,13 @@
         "en" : {
           "stringUnit" : {
             "state" : "new",
-            "value" : "Execute"
+            "value" : "Approve & Execute"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "执行"
-          }
-        }
-      }
-    },
-    "plan-auto-execution-banner.countdown-hint" : {
-      "extractionState" : "extracted_with_value",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "new",
-            "value" : "Auto-executing in %ds…"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "将在 %d 秒后自动执行…"
+            "value" : "批准并执行"
           }
         }
       }
@@ -15048,6 +15031,23 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "破坏性关键字防护已关闭。"
+          }
+        }
+      }
+    },
+    "plan-auto-execution-banner.manual-confirm-hint" : {
+      "extractionState" : "extracted_with_value",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Plans never auto-run — waiting for your confirmation."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "计划不会自动执行——等待你确认。"
           }
         }
       }
@@ -15092,13 +15092,13 @@
         "en" : {
           "stringUnit" : {
             "state" : "new",
-            "value" : "Switch to Agent mode and execute now?"
+            "value" : "Plan mode only plans. Approve to switch back to Normal mode and execute."
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "切换到 Agent 模式并立即执行？"
+            "value" : "Plan 模式只负责规划。批准后将切回普通模式执行。"
           }
         }
       }
@@ -15194,13 +15194,13 @@
         "en" : {
           "stringUnit" : {
             "state" : "new",
-            "value" : "When on, the Execute countdown disables itself if the plan mentions rm -rf, git push --force, dd, reboot, etc. You can still execute manually."
+            "value" : "When on, the banner highlights plans that mention rm -rf, git push --force, dd, reboot, etc. so you review them extra carefully before approving."
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "开启后，如果计划中提到 rm -rf、git push --force、dd、reboot 等内容，执行倒计时会自动停用。你仍可手动执行。"
+            "value" : "开启后，如果计划中提到 rm -rf、git push --force、dd、reboot 等内容，横幅会醒目提示，请在批准前仔细核对。"
           }
         }
       }

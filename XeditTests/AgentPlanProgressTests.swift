@@ -198,8 +198,93 @@ struct AgentPlanProgressTests {
             interactionMode: .plan,
             currentPlan: plan
         )
-        #expect(prompt.contains("=== PLAN MODE — ACTIVE ==="))
-        #expect(prompt.contains("Before ANY tool call"))
+        #expect(prompt.contains("=== PLAN MODE — PLANNING ONLY ==="))
+        #expect(prompt.contains("Plan mode NEVER executes"))
+    }
+
+    @MainActor
+    @Test("approving a plan hands the session back to Normal mode for execution")
+    func approvingPlanSwitchesToNormalModeAndKeepsPlan() {
+        let appState = AppState()
+        appState.startNewAgentSession()
+        appState.agentInteractionMode = .plan
+        appState.agentCurrentPlan = AgentPlan(
+            status: .proposed,
+            steps: [AgentPlan.Step(text: "Ship the change")],
+            summary: ""
+        )
+
+        appState.approveAgentPlan()
+
+        // Plan mode is planning-only: approval flips the session to Normal
+        // mode and carries the approved plan over so the execution card and
+        // its progress tracking survive.
+        #expect(appState.agentInteractionMode == .normal)
+        #expect(appState.agentCurrentPlan?.status == .approved)
+        #expect(appState.agentCurrentPlan?.steps.map(\.text) == ["Ship the change"])
+    }
+
+    @MainActor
+    @Test("switching to Normal mode preserves an approved plan but drops a proposed one")
+    func normalModeSwitchKeepsApprovedPlanOnly() {
+        let appState = AppState()
+        appState.startNewAgentSession()
+
+        // A still-proposed plan is planning-state — dropped when leaving Plan.
+        appState.agentInteractionMode = .plan
+        appState.agentCurrentPlan = AgentPlan(
+            status: .proposed,
+            steps: [AgentPlan.Step(text: "Draft")],
+            summary: ""
+        )
+        appState.setAgentInteractionMode(.normal)
+        #expect(appState.agentCurrentPlan == nil)
+
+        // An approved plan is an execution contract — it survives the switch.
+        appState.setAgentInteractionMode(.plan)
+        appState.agentCurrentPlan = AgentPlan(
+            status: .approved,
+            steps: [AgentPlan.Step(text: "Execute")],
+            summary: ""
+        )
+        appState.setAgentInteractionMode(.normal)
+        #expect(appState.agentInteractionMode == .normal)
+        #expect(appState.agentCurrentPlan?.status == .approved)
+    }
+
+    @MainActor
+    @Test("Normal mode applies progress blocks to a carried-over approved plan")
+    func normalModeAppliesProgressToCarriedOverPlan() {
+        let appState = AppState()
+        appState.startNewAgentSession()
+        appState.agentInteractionMode = .normal
+        appState.agentCurrentPlan = AgentPlan(
+            status: .approved,
+            steps: [
+                AgentPlan.Step(text: "A"),
+                AgentPlan.Step(text: "B")
+            ],
+            summary: ""
+        )
+        appState.agentMessages = [
+            AgentMessage(role: .user, content: "Plan approved. Execute the complete plan step by step."),
+            AgentMessage(
+                role: .assistant,
+                content: """
+                Working on it.
+                ```progress
+                1: done
+                2: in_progress
+                ```
+                """
+            )
+        ]
+
+        appState.captureAgentPlanFromLatestMessage()
+
+        #expect(appState.agentCurrentPlan?.status == .executing)
+        #expect(appState.agentCurrentPlan?.steps[0].status == .done)
+        #expect(appState.agentCurrentPlan?.steps[1].status == .inProgress)
     }
 
     @MainActor
@@ -433,7 +518,10 @@ struct AgentPlanProgressTests {
         #expect(prompt.contains("not just an outline, sample, first chapter"))
         #expect(prompt.contains("web_fetch for validated public URLs"))
 
-        let executionPrompt = AgentContextBuilder.systemPrompt(
+        // A Plan-mode prompt never carries an execution contract, even once
+        // the plan is approved — planning only, so the prompt stays PLANNING
+        // ONLY and the checklist/execution guidance is absent here.
+        let approvedButStillInPlanMode = AgentContextBuilder.systemPrompt(
             rootDirectory: nil,
             openedFileURL: nil,
             fileContent: "",
@@ -446,6 +534,25 @@ struct AgentPlanProgressTests {
                 summary: ""
             )
         )
+        #expect(approvedButStillInPlanMode.contains("=== PLAN MODE — PLANNING ONLY ==="))
+        #expect(!approvedButStillInPlanMode.contains("refresh the visible checklist immediately"))
+
+        // The execution contract lives in Normal mode: approval flips the
+        // session back to Normal and pins the approved plan there.
+        let executionPrompt = AgentContextBuilder.systemPrompt(
+            rootDirectory: nil,
+            openedFileURL: nil,
+            fileContent: "",
+            selectedText: "",
+            language: nil,
+            interactionMode: .normal,
+            currentPlan: AgentPlan(
+                status: .approved,
+                steps: [AgentPlan.Step(text: "Run the tests")],
+                summary: ""
+            )
+        )
+        #expect(executionPrompt.contains("=== APPROVED PLAN — EXECUTE ==="))
         #expect(executionPrompt.contains("refresh the visible checklist immediately"))
     }
 }

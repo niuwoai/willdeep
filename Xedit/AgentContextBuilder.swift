@@ -176,47 +176,53 @@ enum AgentContextBuilder {
             """)
         }
 
-        // Plan mode: lock writes behind a numbered, user-approved plan.
+        // Plan mode: planning-only, always. Writes stay locked no matter the
+        // plan status; approval flips the session back to Normal mode and the
+        // execution contract below (the Normal-mode branch) takes over.
         if interactionMode == .plan {
-            if currentPlan == nil || currentPlan?.status == .proposed || currentPlan?.status == .rejected || currentPlan?.status == .done {
-                sections.append("""
-                === PLAN MODE — ACTIVE ===
-                You are in plan-first mode. Before ANY tool call that writes, edits, or runs commands, you MUST first emit a numbered plan in a single fenced block tagged `plan`:
+            sections.append("""
+            === PLAN MODE — PLANNING ONLY ===
+            You are in Plan mode. Plan mode NEVER executes: tools that write, edit, or run commands are hard-blocked here regardless of plan status. Your only deliverable is a numbered plan in a single fenced block tagged `plan`:
 
-                ```plan
-                1. <one-line step>
-                2. <one-line step>
-                ...
-                ```
+            ```plan
+            1. <one-line step>
+            2. <one-line step>
+            ...
+            ```
 
-                Treat the plan as the complete delivery contract for the user's request. Cover the requested end state, not just an outline, sample, first chapter, first file, or first phase unless the user explicitly asked for a partial delivery. Before emitting the plan, compare every requested deliverable against the numbered steps and add any missing work.
+            Treat the plan as the complete delivery contract for the user's request. Cover the requested end state, not just an outline, sample, first chapter, first file, or first phase unless the user explicitly asked for a partial delivery. Before emitting the plan, compare every requested deliverable against the numbered steps and add any missing work.
 
-                Then STOP and wait for the user to click Approve. Do not call any tool after drafting the plan. Read-only investigation tools (search_files, grep_files, read_file, list_directory, git_status, web_search) and web_fetch for validated public URLs are still allowed BEFORE drafting the plan — but once you've drafted, stop and wait.
-                If the user revises and re-prompts after a Reject, emit a new ```plan block.
-                """)
-            } else if currentPlan?.status == .approved || currentPlan?.status == .executing {
-                let plan = currentPlan!
-                let stepsText = plan.steps.enumerated()
-                    .map { "\($0.offset + 1). [\($0.element.status.rawValue)] \($0.element.text)" }
-                    .joined(separator: "\n")
-                sections.append("""
-                === PLAN MODE — APPROVED ===
-                The user approved this plan. Execute it step-by-step. Tool calls (including writes) are now unlocked.
+            Then STOP and wait. When the user approves the plan, WillDeep switches this session back to Normal mode and execution happens there — never in Plan mode. Do not call any tool after drafting the plan. Read-only investigation tools (search_files, grep_files, read_file, list_directory, git_status, web_search) and web_fetch for validated public URLs are still allowed BEFORE drafting the plan — but once you've drafted, stop and wait.
+            If the user revises and re-prompts after a Reject, emit a new ```plan block.
+            """)
+        }
 
-                Approved plan (current statuses shown in brackets):
-                \(stepsText)
+        // Normal mode carrying an approved plan: this is the execution half of
+        // the Plan-mode handshake. The session was flipped back to Normal on
+        // approval; pin the approved steps plus the progress contract here.
+        if interactionMode == .normal,
+           let plan = currentPlan,
+           plan.status == .approved || plan.status == .executing {
+            let stepsText = plan.steps.enumerated()
+                .map { "\($0.offset + 1). [\($0.element.status.rawValue)] \($0.element.text)" }
+                .joined(separator: "\n")
+            sections.append("""
+            === APPROVED PLAN — EXECUTE ===
+            The user approved this plan in Plan mode and the session is now back in Normal mode for execution. Execute it step-by-step. Tool calls (including writes) follow the normal approval rules.
 
-                Progress reporting (REQUIRED):
-                At the end of EVERY reply where you advanced or finished a step, include exactly one fenced block tagged `progress` listing each step number you touched this turn and its new status. Use these status tokens: `pending`, `in_progress`, `done`, `skipped`, `failed`. Example:
+            Approved plan (current statuses shown in brackets):
+            \(stepsText)
 
-                ```progress
-                1: done
-                2: in_progress
-                ```
+            Progress reporting (REQUIRED):
+            At the end of EVERY reply where you advanced or finished a step, include exactly one fenced block tagged `progress` listing each step number you touched this turn and its new status. Use these status tokens: `pending`, `in_progress`, `done`, `skipped`, `failed`. Example:
 
-                Steps you didn't touch this turn can be omitted. Mark a step `in_progress` before you start its tool calls; flip it to `done` (or `failed`) once finished. After receiving tool results, report the resulting step statuses before issuing more tool calls so WillDeep can refresh the visible checklist immediately. Never mark a partial/sample deliverable as `done` when the approved step promises the complete artifact. If the response budget forces a pause, leave the current step `in_progress`; WillDeep can continue it automatically. Once every step is `done`/`skipped`/`failed`, summarize what was accomplished.
-                """)
-            }
+            ```progress
+            1: done
+            2: in_progress
+            ```
+
+            Steps you didn't touch this turn can be omitted. Mark a step `in_progress` before you start its tool calls; flip it to `done` (or `failed`) once finished. After receiving tool results, report the resulting step statuses before issuing more tool calls so WillDeep can refresh the visible checklist immediately. Never mark a partial/sample deliverable as `done` when the approved step promises the complete artifact. If the response budget forces a pause, leave the current step `in_progress`; WillDeep can continue it automatically. Once every step is `done`/`skipped`/`failed`, summarize what was accomplished.
+            """)
         }
 
         // Goal mode: first collect/confirm a goal conversationally, then
@@ -557,8 +563,9 @@ enum AgentContextBuilder {
         // Reclaim every older full snapshot the moment a new one is written.
         // This rewrites at most one turn's worth of already-cached prefix (the
         // provider cache breaks at the newest attach point anyway) and keeps
-        // conflicting stale mode instructions (an old "PLAN MODE — ACTIVE"
-        // block after the plan was approved) out of the model's view.
+        // conflicting stale mode instructions (an old "PLAN MODE — PLANNING
+        // ONLY" block after approval flipped the session to Normal mode) out
+        // of the model's view.
         func supersedePriorContexts(excluding excludedID: AgentMessage.ID?) {
             for index in messages.indices
             where messages[index].role == .user

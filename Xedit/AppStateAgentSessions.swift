@@ -482,12 +482,19 @@ extension AppState {
     /// Flip the session into a different interaction mode. Switching out
     /// of Plan or Goal also drops any associated state so the next
     /// session pick-up starts clean.
+    ///
+    /// One deliberate exception: an approved/executing plan survives the
+    /// Plan → Normal switch. Plan mode is planning-only, so approval hands
+    /// the plan over to Normal mode for execution — dropping it here would
+    /// kill the progress card the moment execution is supposed to start.
     func setAgentInteractionMode(_ mode: AgentInteractionMode) {
         ensureActiveAgentSessionForInteractiveControl()
         guard agentInteractionMode != mode else { return }
         cancelAgentPlanModeSuggestion()
         agentInteractionMode = mode
-        if mode != .plan { agentCurrentPlan = nil }
+        let keepsPlanForExecution = mode == .normal
+            && agentCurrentPlan.map { $0.status == .approved || $0.status == .executing } == true
+        if mode != .plan, !keepsPlanForExecution { agentCurrentPlan = nil }
         if mode != .goal {
             agentCurrentGoal = nil
             activeRuntime?.goalTurnRecoveryCheckpoint = nil
@@ -549,8 +556,10 @@ extension AppState {
         return true
     }
 
-    /// User clicks Approve on the proposed plan — flips it to approved
-    /// so the next turn's system prompt unlocks write tools.
+    /// User clicks Approve on the proposed plan — flips it to approved and,
+    /// in Plan mode, hands the session back to Normal mode. Plan mode is
+    /// planning-only; execution always happens in Normal mode with the
+    /// approved plan pinned into the system prompt.
     func approveAgentPlan() {
         if agentInteractionMode == .goal {
             confirmAgentPlanAndExecute()
@@ -559,6 +568,9 @@ extension AppState {
         guard var plan = agentCurrentPlan else { return }
         plan.status = .approved
         agentCurrentPlan = plan
+        if agentInteractionMode == .plan {
+            setAgentInteractionMode(.normal)
+        }
         persistActiveAgentSession()
     }
 
@@ -573,19 +585,22 @@ extension AppState {
         }
     }
 
-    /// 1.79.0 plan 自动执行 banner 入口。用户点「执行」或倒计时归零
+    /// 1.79.0 plan 自动执行 banner 入口，1.202.0 起改语义：用户点「执行」
     /// 时调用。等效于 approve plan + 立刻派发一条「按 plan 执行」的
     /// user 消息，agent 下个 turn 就会开干。
     ///
-    /// 故意**留在 Plan 模式**，不切到 Normal：plan 模式的 system
-    /// prompt 在 `plan.status == .approved` 时已自动解锁 write tools，
-    /// 留在 plan 模式可以保留 plan card 的步骤勾选 / 进度跟踪体验。
+    /// Plan 模式下会**切回 Normal 模式**再执行：Plan 模式是纯规划态，
+    /// write 工具闸门永不解锁（见 `AgentRuntime.isPlanGateActive`）。
+    /// approved plan 会跟着切换保留下来（见 `setAgentInteractionMode`），
+    /// 所以 plan card 的步骤勾选 / 进度跟踪体验不受影响。Goal 模式
+    /// 维持原语义（留在 Goal 模式，由 Goal 自己的闸门管执行）。
     /// 如果 agent 当前 turn 还在跑（罕见 —— banner 只在 plan 刚解析
     /// 完时出现），prompt 会进队列。
     func confirmAgentPlanAndExecute() {
         guard agentInteractionMode == .plan || agentInteractionMode == .goal,
               var plan = agentCurrentPlan,
               plan.status == .proposed else { return }
+        let confirmedFromPlanMode = agentInteractionMode == .plan
         plan.status = .approved
         agentCurrentPlan = plan
         if agentInteractionMode == .goal, var state = activeRuntime?.goalPlanningState {
@@ -598,6 +613,11 @@ extension AppState {
             // Persist the user's execution intent now so an app exit before
             // queue consumption can still recover the approved Plan.
             activeRuntime?.goalTurnRecoveryCheckpoint = AgentGoalTurnRecoveryCheckpoint()
+        }
+        if confirmedFromPlanMode {
+            // Planning is done — execution belongs to Normal mode. The
+            // approved plan survives this switch (see setAgentInteractionMode).
+            setAgentInteractionMode(.normal)
         }
         persistActiveAgentSession()
 
@@ -692,7 +712,17 @@ extension AppState {
 
     @discardableResult
     func captureAgentPlanFromLatestMessage(for runtime: AgentRuntime) -> AgentGoalProposalCaptureOutcome {
-        guard runtime.interactionMode == .plan || runtime.interactionMode == .goal else { return .noProposal }
+        guard runtime.interactionMode == .plan || runtime.interactionMode == .goal else {
+            // Normal mode never captures fresh ```plan blocks, but it is the
+            // execution half of the Plan-mode handshake: an approved plan
+            // carried over from Plan mode still needs its ```progress blocks
+            // applied so the plan card tracks execution.
+            if let existing = runtime.currentPlan,
+               existing.status == .approved || existing.status == .executing || existing.status == .done {
+                applyAgentPlanProgressFromLatestMessage(for: runtime, existingPlan: existing)
+            }
+            return .noProposal
+        }
         guard let last = runtime.messages.last(where: { $0.role == .assistant && !$0.content.isEmpty }) else {
             return .noProposal
         }

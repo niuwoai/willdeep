@@ -16,8 +16,8 @@ nonisolated struct AgentPlanModeSuggestion: Equatable, Identifiable {
 /// Which action the pre-dispatch preflight recommends for a given input.
 ///
 /// - `skip`: not complex enough (or the user opted out) — send normally.
-/// - `askFlash`: locally ambiguous (1...2 points) — ask a lightweight flash
-///   model whether Plan mode is worth suggesting.
+/// - `askFlash`: locally ambiguous (`flashScoreRange`) — ask a lightweight
+///   flash model whether Plan mode is worth suggesting.
 /// - `suggest`: locally confident (>= `minimumScore`) — surface the banner
 ///   directly without spending a round-trip on the flash judge.
 nonisolated enum AgentPlanModeSuggestionBand: Equatable {
@@ -27,7 +27,14 @@ nonisolated enum AgentPlanModeSuggestionBand: Equatable {
 }
 
 nonisolated enum AgentPlanModeSuggestionPolicy {
-    static let minimumScore = 3
+    /// 1.202.0: raised the entry bar. A direct suggestion now needs 4 points
+    /// (was 3) — a single strong-complexity hint (2) plus one weak signal no
+    /// longer interrupts on its own; it takes a genuine multi-signal task.
+    static let minimumScore = 4
+    /// Locally ambiguous window forwarded to the flash judge. Raised the low
+    /// end from 1 → 2 alongside `minimumScore`: a lone weak hint (score 1) now
+    /// skips outright instead of spending a judge round-trip.
+    static let flashScoreRange = 2...3
     static let autoResolutionSeconds = 15
 
     private static let optOutHints = [
@@ -115,9 +122,9 @@ nonisolated enum AgentPlanModeSuggestionPolicy {
 
     /// Maps the local score into the three-way preflight decision.
     ///
-    /// - `>= minimumScore` (3): locally confident → `.suggest` (no flash call).
-    /// - `1...2`: locally ambiguous → `.askFlash`.
-    /// - `0` or opt-out (`score == nil`): `.skip`.
+    /// - `>= minimumScore` (4): locally confident → `.suggest` (no flash call).
+    /// - `flashScoreRange` (2...3): locally ambiguous → `.askFlash`.
+    /// - below the flash window, or opt-out (`score == nil`): `.skip`.
     static func band(
         userText: String,
         attachmentCount: Int = 0,
@@ -131,7 +138,7 @@ nonisolated enum AgentPlanModeSuggestionPolicy {
             return .skip
         }
         if score >= minimumScore { return .suggest }
-        if score >= 1 { return .askFlash }
+        if flashScoreRange.contains(score) { return .askFlash }
         return .skip
     }
 

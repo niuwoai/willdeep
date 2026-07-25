@@ -17,11 +17,11 @@ extension L10n {
         )
         static let subtitle = String(
             localized: "plan-auto-execution-banner.subtitle",
-            defaultValue: "Switch to Agent mode and execute now?"
+            defaultValue: "Plan mode only plans. Approve to switch back to Normal mode and execute."
         )
         static let confirmButton = String(
             localized: "plan-auto-execution-banner.confirm",
-            defaultValue: "Execute"
+            defaultValue: "Approve & Execute"
         )
         static let rejectButton = String(
             localized: "plan-auto-execution-banner.reject",
@@ -35,18 +35,14 @@ extension L10n {
             localized: "plan-auto-execution-banner.danger-notice",
             defaultValue: "Plan mentions destructive actions — confirm manually."
         )
-        static let countdownHint = String(
-            localized: "plan-auto-execution-banner.countdown-hint",
-            defaultValue: "Auto-executing in %ds…"
+        static let manualConfirmHint = String(
+            localized: "plan-auto-execution-banner.manual-confirm-hint",
+            defaultValue: "Plans never auto-run — waiting for your confirmation."
         )
         static let dangerScanDisabledHint = String(
             localized: "plan-auto-execution-banner.danger-scan-disabled-hint",
             defaultValue: "Destructive-keyword guard is off."
         )
-
-        static func countdownText(secondsRemaining: Int) -> String {
-            String(format: countdownHint, secondsRemaining)
-        }
     }
 
     enum PlanAutoExecutionSettings {
@@ -60,7 +56,7 @@ extension L10n {
         )
         static let dangerScanHelp = String(
             localized: "plan-auto-execution-settings.danger-scan-help",
-            defaultValue: "When on, the Execute countdown disables itself if the plan mentions rm -rf, git push --force, dd, reboot, etc. You can still execute manually."
+            defaultValue: "When on, the banner highlights plans that mention rm -rf, git push --force, dd, reboot, etc. so you review them extra carefully before approving."
         )
         static let clearSilentButton = String(
             localized: "plan-auto-execution-settings.clear-silent-button",

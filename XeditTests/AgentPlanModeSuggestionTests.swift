@@ -49,15 +49,32 @@ struct AgentPlanModeSuggestionPolicyTests {
         #expect(AgentPlanModeSuggestionPolicy.shouldSuggest(userText: task))
     }
 
-    @Test("enumerated multi-step tasks suggest Plan mode")
+    @Test("enumerated multi-step engineering tasks suggest Plan mode")
     func enumeratedTaskSuggestsPlan() {
+        // Enumerated (3 steps → +2) plus a refactor signal (+2) and a
+        // regression-test signal (+1) clears the raised suggest bar of 4.
+        let task = """
+        请完成下面的重构工作：
+        1. 检查现有会话状态
+        2. 重构并发切换逻辑
+        3. 运行回归测试
+        """
+        #expect(AgentPlanModeSuggestionPolicy.shouldSuggest(userText: task))
+    }
+
+    @Test("raised bar: a borderline enumerated task defers to the flash judge")
+    func borderlineEnumeratedTaskDefersToFlash() {
+        // check + fix + run regression tests: scores 3 (verification +1,
+        // enumerated +2) — under the old bar of 3 this suggested outright;
+        // the 1.202.0 bar of 4 sends it to the flash judge instead.
         let task = """
         请完成下面工作：
         1. 检查现有会话状态
         2. 修复并发切换问题
         3. 运行回归测试
         """
-        #expect(AgentPlanModeSuggestionPolicy.shouldSuggest(userText: task))
+        #expect(AgentPlanModeSuggestionPolicy.band(userText: task) == .askFlash)
+        #expect(!AgentPlanModeSuggestionPolicy.shouldSuggest(userText: task))
     }
 
     @Test("explicit opt-out is respected")
