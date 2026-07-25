@@ -18,6 +18,8 @@ enum RoundtableRoute: Equatable {
     case preparation(runtimeID: UUID, reportID: UUID)
     case discussion(runtimeID: UUID, reportID: UUID)
     case document(runtimeID: UUID, reportID: UUID)
+    /// 专家资料页:从讨论中的专家席点进来。`from*` 记住来路,返回时回到那场讨论。
+    case expertProfile(role: AgentRoundtableExpertRole, fromRuntimeID: UUID, fromReportID: UUID)
 }
 
 /// 三个页面的共享路由器。宿主(独立窗口 / 嵌入页)各自持有 route 状态,把
@@ -40,6 +42,13 @@ struct RoundtableRouter: View {
             RoundtableDiscussionView(route: $route, runtimeID: runtimeID, reportID: reportID)
         case let .document(runtimeID, reportID):
             RoundtableDocumentView(route: $route, runtimeID: runtimeID, reportID: reportID)
+        case let .expertProfile(role, fromRuntimeID, fromReportID):
+            RoundtableExpertProfileView(
+                route: $route,
+                role: role,
+                fromRuntimeID: fromRuntimeID,
+                fromReportID: fromReportID
+            )
         }
     }
 }
@@ -854,5 +863,216 @@ struct RoundtableDocumentView: View {
             }
             appState.persistWorkflowRuntime(runtimeID: runtimeID)
         }
+    }
+}
+
+// MARK: - 专家资料页
+
+/// 点击讨论中的专家席某位专家进入:上半是人格简介(头像 / 姓名 / 定位 / persona),
+/// 下半是这位专家「参与过的历史讨论」,点任意一条跳进那场对话。整页用该专家的
+/// accent 色统一气质,导航沿用 RoundtableRoute(不用 sheet,和圆桌其它页一致)。
+struct RoundtableExpertProfileView: View {
+    @EnvironmentObject var appState: AppState
+    @Binding var route: RoundtableRoute
+    let role: AgentRoundtableExpertRole
+    /// 记住是从哪场讨论点进来的,返回时原路回去。
+    let fromRuntimeID: UUID
+    let fromReportID: UUID
+
+    @State private var discussions: [AgentRoundtableReport] = []
+
+    private var accent: Color { RoundtableVisuals.accent(for: role) }
+
+    private static let timestampFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.dateStyle = .medium
+        formatter.timeStyle = .short
+        return formatter
+    }()
+
+    var body: some View {
+        VStack(spacing: 0) {
+            chrome
+            Divider()
+            ScrollView {
+                VStack(alignment: .leading, spacing: 20) {
+                    profileHeader
+                    personaSection
+                    discussionsSection
+                }
+                .padding(24)
+                .frame(maxWidth: 720, alignment: .leading)
+                .frame(maxWidth: .infinity)
+            }
+        }
+        .background(Color(nsColor: .windowBackgroundColor))
+        .onAppear(perform: reload)
+    }
+
+    private var chrome: some View {
+        HStack(spacing: 10) {
+            Button {
+                route = .discussion(runtimeID: fromRuntimeID, reportID: fromReportID)
+            } label: {
+                Label(L10n.Roundtable.backAction, systemImage: "chevron.left")
+                    .labelStyle(.iconOnly)
+                    .font(.system(size: 14, weight: .medium))
+            }
+            .buttonStyle(.plain)
+            Text(role.personalName)
+                .font(.system(size: 15, weight: .medium))
+                .lineLimit(1)
+            Text(role.roleTitle)
+                .font(.system(size: 12))
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
+            Spacer()
+        }
+        .padding(.horizontal, 16).padding(.vertical, 10)
+    }
+
+    private var profileHeader: some View {
+        HStack(alignment: .center, spacing: 16) {
+            RoundtableExpertAvatar(role: role, size: 72)
+            VStack(alignment: .leading, spacing: 6) {
+                Text(role.personalName)
+                    .font(.system(size: 22, weight: .bold))
+                    .lineLimit(1)
+                Text(role.roleTitle)
+                    .font(.system(size: 14, weight: .medium))
+                    .foregroundStyle(accent)
+                    .lineLimit(1)
+                Text(role.shortExpertise)
+                    .font(.system(size: 12.5))
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            Spacer(minLength: 0)
+        }
+        .padding(18)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(RoundedRectangle(cornerRadius: 16).fill(accent.opacity(0.08)))
+        .overlay(RoundedRectangle(cornerRadius: 16).stroke(accent.opacity(0.25), lineWidth: 1))
+    }
+
+    private var personaSection: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Label(
+                String(localized: "roundtable.expertProfile.persona", defaultValue: "人格设定"),
+                systemImage: "person.text.rectangle"
+            )
+            .font(.system(size: 13, weight: .semibold))
+            .foregroundStyle(accent)
+            Text(role.systemPersona)
+                .font(.system(size: 13))
+                .foregroundStyle(.primary)
+                .textSelection(.enabled)
+                .fixedSize(horizontal: false, vertical: true)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(14)
+                .background(RoundedRectangle(cornerRadius: 12).fill(Color(nsColor: .textBackgroundColor)))
+                .overlay(RoundedRectangle(cornerRadius: 12).stroke(Color.secondary.opacity(0.15), lineWidth: 1))
+        }
+    }
+
+    private var discussionsSection: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Label(discussionsTitle, systemImage: "bubble.left.and.bubble.right")
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundStyle(.secondary)
+            if discussions.isEmpty {
+                emptyState
+            } else {
+                ForEach(discussions, id: \.id) { report in
+                    discussionRow(report)
+                }
+            }
+        }
+    }
+
+    private var emptyState: some View {
+        HStack(spacing: 8) {
+            Image(systemName: "tray")
+                .font(.system(size: 13))
+                .foregroundStyle(.tertiary)
+            Text(
+                String(
+                    localized: "roundtable.expertProfile.empty",
+                    defaultValue: "这位专家还没参与过讨论"
+                )
+            )
+            .font(.system(size: 13))
+            .foregroundStyle(.tertiary)
+        }
+        .padding(.vertical, 10)
+    }
+
+    private func discussionRow(_ report: AgentRoundtableReport) -> some View {
+        Button {
+            open(report)
+        } label: {
+            HStack(alignment: .top, spacing: 12) {
+                Image(systemName: report.phase == .completed ? "doc.text" : "ellipsis.bubble")
+                    .font(.system(size: 16))
+                    .foregroundStyle(report.phase == .completed ? accent : Color.orange)
+                    .padding(.top, 2)
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(report.displayTitle)
+                        .font(.system(size: 14, weight: .medium))
+                        .foregroundStyle(.primary)
+                        .lineLimit(1)
+                    Text(Self.timestampFormatter.string(from: report.updatedAt))
+                        .font(.system(size: 11.5))
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                }
+                Spacer(minLength: 0)
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 11))
+                    .foregroundStyle(.tertiary)
+                    .padding(.top, 4)
+            }
+            .padding(12)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(RoundedRectangle(cornerRadius: 12).fill(Color(nsColor: .textBackgroundColor)))
+            .overlay(RoundedRectangle(cornerRadius: 12).stroke(accent.opacity(0.18), lineWidth: 1))
+        }
+        .buttonStyle(.plain)
+    }
+
+    private var discussionsTitle: String {
+        let base = String(
+            localized: "roundtable.expertProfile.discussions",
+            defaultValue: "参与过的讨论"
+        )
+        return discussions.isEmpty ? base : "\(base) · \(discussions.count)"
+    }
+
+    private func reload() {
+        discussions = appState.loadRoundtableHistory().filter { $0.experts.contains(role) }
+    }
+
+    /// 与主页 open(_:) 同款相位路由:完成态进文档,会前态进准备,其余进讨论。
+    private func open(_ report: AgentRoundtableReport) {
+        guard let (runtimeID, reportID) = locate(reportID: report.id) else { return }
+        if report.phase == .completed, report.finalDocument != nil {
+            route = .document(runtimeID: runtimeID, reportID: reportID)
+        } else if report.phase == .clarifying || report.phase == .selectingExperts {
+            route = .preparation(runtimeID: runtimeID, reportID: reportID)
+        } else {
+            route = .discussion(runtimeID: runtimeID, reportID: reportID)
+        }
+    }
+
+    /// 从历史 report id 反查它所在的 runtime + workflow report id(仅在内存 runtime 里找)。
+    private func locate(reportID: UUID) -> (UUID, UUID)? {
+        for (rid, runtime) in appState.agentRuntimes {
+            for message in runtime.messages {
+                if let report = message.workflowReport, report.roundtable?.id == reportID {
+                    return (rid, report.id)
+                }
+            }
+        }
+        return nil
     }
 }

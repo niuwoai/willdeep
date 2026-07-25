@@ -169,4 +169,37 @@ struct RoundtableSetupAndAnalysisTests {
         #expect(decoded.activeExpertDraft == "可见正文已经流完。")
         #expect(decoded.activeExpertDraftIsComplete == true)
     }
+
+    // MARK: - 专家资料页
+
+    /// 资料页「该专家参与过的讨论」= 历史里 experts 命中这位专家的那些 report。
+    /// 这里锁死那条 filter 的语义(含未命中时的空态分支)。
+    @Test("expert profile lists exactly the discussions that expert joined")
+    func expertProfileDiscussionFilter() {
+        let reports = [
+            AgentRoundtableReport(topic: "转行决策", phase: .completed, experts: [.legal, .psychology]),
+            AgentRoundtableReport(topic: "定价策略", phase: .discussing, experts: [.finance, .growth]),
+            AgentRoundtableReport(topic: "架构选型", phase: .completed, experts: [.architecture, .legal]),
+        ]
+
+        let legalDiscussions = reports.filter { $0.experts.contains(.legal) }
+        #expect(legalDiscussions.count == 2)
+        #expect(legalDiscussions.map(\.topic) == ["转行决策", "架构选型"])
+
+        // 没参与过任何讨论的专家 → 空态分支。
+        let strategyDiscussions = reports.filter { $0.experts.contains(.strategy) }
+        #expect(strategyDiscussions.isEmpty)
+    }
+
+    /// 资料页头部与人格区依赖每位专家都有姓名/定位/一句话专长/persona;
+    /// 任一为空都会让资料页出现空白块,这里对全体专家兜底。
+    @Test("every roundtable expert exposes non-empty identity and persona for the profile page")
+    func expertProfileIdentityCompleteness() {
+        for role in AgentRoundtableExpertRole.allCases {
+            #expect(!role.personalName.isEmpty)
+            #expect(!role.roleTitle.isEmpty)
+            #expect(!role.shortExpertise.isEmpty)
+            #expect(!role.systemPersona.isEmpty)
+        }
+    }
 }

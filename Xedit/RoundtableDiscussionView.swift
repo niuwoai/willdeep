@@ -52,8 +52,14 @@ struct RoundtableDiscussionView: View {
             Rectangle()
                 .fill(Color.secondary.opacity(0.12))
                 .frame(width: 1)
-            RoundtableLiveDashboard(report: report)
-                .frame(width: 292)
+            RoundtableLiveDashboard(report: report) { selectedRole in
+                route = .expertProfile(
+                    role: selectedRole,
+                    fromRuntimeID: runtimeID,
+                    fromReportID: reportID
+                )
+            }
+            .frame(width: 292)
         }
         .background(Color(nsColor: .windowBackgroundColor))
         .animation(.easeInOut(duration: 0.2), value: report?.activeExpert)
@@ -758,6 +764,8 @@ private struct RoundtableMessageBubble: View {
 
 private struct RoundtableLiveDashboard: View {
     let report: AgentRoundtableReport?
+    /// 点击专家席某位专家的回调(进入其资料页)。默认空实现,兼容无导航的预览。
+    var onSelectExpert: (AgentRoundtableExpertRole) -> Void = { _ in }
 
     var body: some View {
         ScrollView {
@@ -866,7 +874,10 @@ private struct RoundtableLiveDashboard: View {
             VStack(alignment: .leading, spacing: 9) {
                 ForEach(report?.experts ?? []) { role in
                     let entry = latestByRole[role]
-                    HStack(spacing: 9) {
+                    Button {
+                        onSelectExpert(role)
+                    } label: {
+                        HStack(spacing: 9) {
                         RoundtableExpertAvatar(
                             role: role,
                             size: 31,
@@ -921,7 +932,14 @@ private struct RoundtableLiveDashboard: View {
                                 .font(.system(size: 10))
                                 .foregroundStyle(.tertiary)
                         }
+                        }
+                        .contentShape(Rectangle())
                     }
+                    .buttonStyle(.plain)
+                    .help(String(
+                        localized: "roundtable.expertPanel.openProfile",
+                        defaultValue: "查看资料与历史发言"
+                    ))
                 }
             }
         }
