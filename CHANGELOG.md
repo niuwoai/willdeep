@@ -3,6 +3,16 @@
 > 当前文件保留最新版本（1.200.0-rc3 至 1.109.0-rc340）。
 > 更早的 1000 个版本已移至 [CHANGELOG-ARCHIVE.md](CHANGELOG-ARCHIVE.md)。
 
+## 1.202.0-rc1 - 2026-07-25
+
+### Added
+
+- **侧边栏面板可分离为独立窗口**：Agent 右侧辅助栏（终端、内嵌浏览器、文件、Diff、Preview、Plan、Dev Server、任务监控、媒体任务、短剧、网页组件、图片编辑共 12 种面板）的头部新增「分离成独立窗口」按钮，点击后面板从侧栏搬进一个独立窗口（`WindowGroup(for: AgentSidePanelKind.self)`，同种面板同值去重、重复点击聚焦既有窗口）；窗口头部提供「放回侧栏」按钮，在侧栏菜单重新选中同种面板时分离窗口也会自动让位归位。核心不变量是**同一种面板任何时刻只挂载在一处**——终端的 SwiftTerm NSView 与内嵌浏览器的 WKWebView 都是 model 层单实例，分离/归位是「搬家」而非「镜像」，终端进程、浏览器页面在搬动过程中保持存活（终端 tab/进程本就挂在 `AgentInteractiveTerminalController` 单例上，与 View 生命周期解耦）。配套：终端分离期间侧栏让出常驻挂载（避免双宿主抢 superview）；侧面板资源回收 reaper 对分离中的面板一律豁免（分离窗口不更新任何 session 的 `lastViewedAt`，不豁免会把用户正盯着的终端 tab 收走）；分离窗口沿用 `EditorAppStateRegistry.shared.current` 注入 AppState，随工作区切换整棵重建。新增 `AgentDetachedPanelWindow.swift`（分离窗口根视图 + 计数式 `AgentDetachedPanelRegistry`），侧栏内容分发抽出共用组件 `AgentSidePanelKindContent`，侧栏行为不变。
+
+### Meta
+
+- 版本号从 **1.201.0-rc3** 提升为 **1.202.0-rc1**（新功能提升 MINOR 位、rc 重置为 rc1），内部构建号从 **149** 递增为 **150**，Help 与 Computer Use Helper 构建号从 **66** 递增为 **67**；App、Go agent、Help、Helper、浏览器扩展、README、响应头契约与产品文档保持一致。
+
 ## 1.201.0-rc3 - 2026-07-25
 
 ### Fixed

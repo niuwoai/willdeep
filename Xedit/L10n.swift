@@ -949,6 +949,8 @@ nonisolated enum L10n {
         static let embeddedBrowser = String(localized: "agent-side-panel.embedded-browser", defaultValue: "Browser")
         static let plan = String(localized: "agent-side-panel.plan", defaultValue: "Plan")
         static let close = String(localized: "agent-side-panel.close", defaultValue: "Close Panel")
+        static let detach = String(localized: "agent-side-panel.detach", defaultValue: "Open as Separate Window")
+        static let reattach = String(localized: "agent-side-panel.reattach", defaultValue: "Move Back to Sidebar")
         static let comingSoon = String(localized: "agent-side-panel.coming-soon", defaultValue: "Coming soon")
         static let refresh = String(localized: "agent-side-panel.refresh", defaultValue: "Refresh")
         static let noWorkspace = String(localized: "agent-side-panel.no-workspace", defaultValue: "No workspace selected for this session.")

@@ -124,8 +124,54 @@ nonisolated enum AgentSidePanelKind: String, CaseIterable, Identifiable, Codable
     }
 }
 
+/// 侧栏宿主与「分离窗口」（AgentDetachedPanelWindow）共用的面板内容
+/// 分发。terminal 也在列 —— 侧栏宿主因常驻挂载策略在 ZStack 里单独
+/// 处理 terminal，分离窗口则直接经由本视图挂载。
+struct AgentSidePanelKindContent: View {
+    @EnvironmentObject private var appState: AppState
+    let kind: AgentSidePanelKind
+    @Binding var kindSelection: AgentSidePanelKind?
+    @Binding var selectedFile: URL?
+    var layoutWidth: CGFloat
+
+    var body: some View {
+        switch kind {
+        case .backgroundTasks:
+            // 必须把面板宽度传进去 —— Rail 默认把自己 `.frame(width: 320)`
+            // 锁死,侧面板拖到比 320 窄时它会溢出面板、向左盖住 chat
+            // (「突破左边界」)。传 layoutWidth:拖拽期间保持在拖拽
+            // 起点宽度,子面板不逐鼠标事件重排。
+            AgentTaskMonitorRail(width: layoutWidth)
+        case .mediaTasks:
+            AgentMediaTasksPanel(width: layoutWidth)
+        case .devServer:
+            AgentDevServerPanel(width: layoutWidth)
+        case .shortDrama:
+            AgentShortDramaPanel(store: appState.agentShortDramaStore, width: layoutWidth)
+        case .embeddedBrowser:
+            AgentEmbeddedBrowserPanel(width: layoutWidth)
+        case .widget:
+            AgentSidePanelWidgetView(width: layoutWidth)
+        case .imageEditor:
+            AgentImageEditPanel(width: layoutWidth)
+        case .diff:
+            AgentSidePanelDiffView()
+        case .files:
+            AgentSidePanelFilesView(selectedFile: $selectedFile, kind: $kindSelection)
+        case .terminal:
+            AgentSidePanelTerminalView()
+        case .plan:
+            AgentSidePanelPlanView()
+        case .preview:
+            AgentSidePanelPreviewView(selectedFile: $selectedFile)
+        }
+    }
+}
+
 struct AgentSidePanelHost: View {
     @EnvironmentObject var appState: AppState
+    @Environment(\.openWindow) private var openWindow
+    @ObservedObject private var detachedRegistry = AgentDetachedPanelRegistry.shared
     @Binding var kind: AgentSidePanelKind?
     @Binding var selectedFile: URL?
     @State private var hasMountedTerminalPanel = false
@@ -179,6 +225,24 @@ struct AgentSidePanelHost: View {
                     .truncationMode(.tail)
             }
             Spacer(minLength: 0)
+            if let kind {
+                // 分离成独立窗口:面板从侧栏搬走(kind 置 nil),内容进
+                // AgentDetachedPanelWindow。先清侧栏再开窗,保证同一
+                // 面板不出现双挂载(终端 NSView / WKWebView 单实例)。
+                Button {
+                    detach(kind)
+                } label: {
+                    Image(systemName: "macwindow.on.rectangle")
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundStyle(Color.primary.opacity(0.62))
+                        .frame(width: 22, height: 22)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .focusable(false)
+                .layoutPriority(1)
+                .help(L10n.AgentSidePanel.detach)
+            }
             // rc10 用户反馈:`Image(systemName: "xmark")` + `.secondary`
             // 在浅色皮肤上颜色弱到几乎看不见,误以为没有关闭按钮。
             // 给一个 22pt 圆形 hit area + 13pt 加粗字号 + 主文本色,
@@ -222,8 +286,13 @@ struct AgentSidePanelHost: View {
         }
     }
 
+    /// 终端一经打开就常驻挂载（进程不随面板切换销毁）——但终端被分离
+    /// 到独立窗口时必须让位:SwiftTerm 的 NSView 是 tab 单实例,侧栏的
+    /// 隐藏挂载会与分离窗口互抢 superview。窗口关闭(registry 退出)后
+    /// 这里自动恢复常驻挂载。
     private var shouldKeepTerminalMounted: Bool {
-        hasMountedTerminalPanel || kind == .terminal
+        (hasMountedTerminalPanel || kind == .terminal)
+            && !detachedRegistry.isDetached(.terminal)
     }
 
     private func rememberTerminalMountIfNeeded(_ panelKind: AgentSidePanelKind?) {
@@ -231,39 +300,26 @@ struct AgentSidePanelHost: View {
         hasMountedTerminalPanel = true
     }
 
+    private func detach(_ panelKind: AgentSidePanelKind) {
+        kind = nil
+        openWindow(value: panelKind)
+    }
+
     @ViewBuilder
     private var nonTerminalContent: some View {
         switch kind {
-        case .backgroundTasks:
-            // 必须把面板宽度传进去 —— Rail 默认把自己 `.frame(width: 320)`
-            // 锁死,侧面板拖到比 320 窄时它会溢出面板、向左盖住 chat
-            // (「突破左边界」)。传 layoutWidth:拖拽期间保持在拖拽
-            // 起点宽度,子面板不逐鼠标事件重排。
-            AgentTaskMonitorRail(width: layoutWidth)
-        case .mediaTasks:
-            AgentMediaTasksPanel(width: layoutWidth)
-        case .devServer:
-            AgentDevServerPanel(width: layoutWidth)
-        case .shortDrama:
-            AgentShortDramaPanel(store: appState.agentShortDramaStore, width: layoutWidth)
-        case .embeddedBrowser:
-            AgentEmbeddedBrowserPanel(width: layoutWidth)
-        case .widget:
-            AgentSidePanelWidgetView(width: layoutWidth)
-        case .imageEditor:
-            AgentImageEditPanel(width: layoutWidth)
-        case .diff:
-            AgentSidePanelDiffView()
-        case .files:
-            AgentSidePanelFilesView(selectedFile: $selectedFile, kind: $kind)
-        case .terminal:
-            Color.clear
-        case .plan:
-            AgentSidePanelPlanView()
-        case .preview:
-            AgentSidePanelPreviewView(selectedFile: $selectedFile)
         case .none:
             comingSoonPlaceholder
+        case .terminal:
+            // 终端在 content 的 ZStack 里常驻挂载,这里只留占位。
+            Color.clear
+        case .some(let panelKind):
+            AgentSidePanelKindContent(
+                kind: panelKind,
+                kindSelection: $kind,
+                selectedFile: $selectedFile,
+                layoutWidth: layoutWidth
+            )
         }
     }
 

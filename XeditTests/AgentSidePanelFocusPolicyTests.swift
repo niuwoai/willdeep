@@ -9,6 +9,7 @@ struct AgentSidePanelFocusPolicyTests {
     private static let panelSourceFiles = [
         "AgentSidePanel.swift",
         "AgentSidePanelTerminalView.swift",
+        "AgentDetachedPanelWindow.swift",
         "AgentTaskMonitorRail.swift",
         "AgentConversationActivityOverlay.swift",
         "AgentMediaTasks.swift",

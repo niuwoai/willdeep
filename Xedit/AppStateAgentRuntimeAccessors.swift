@@ -419,6 +419,11 @@ extension AppState {
     }
 
     private func releaseSidePanelResources(for sessionID: AgentSession.ID, kind: AgentSidePanelKind?) {
+        // 分离到独立窗口的面板可能正被用户盯着看,且分离窗口不更新任何
+        // session 的 lastViewedAt —— 一律豁免,窗口关闭后下轮 reap 再收。
+        if let kind, AgentDetachedPanelRegistry.shared.isDetached(kind) {
+            return
+        }
         switch kind {
         case .terminal:
             agentTerminalController.closeTabs(openedBy: sessionID)

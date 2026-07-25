@@ -3454,6 +3454,40 @@
         }
       }
     },
+    "agent-side-panel.detach" : {
+      "extractionState" : "extracted_with_value",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Open as Separate Window"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "分离成独立窗口"
+          }
+        }
+      }
+    },
+    "agent-side-panel.reattach" : {
+      "extractionState" : "extracted_with_value",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Move Back to Sidebar"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "放回侧栏"
+          }
+        }
+      }
+    },
     "agent-side-panel.diff" : {
       "extractionState" : "extracted_with_value",
       "localizations" : {
