@@ -321,6 +321,9 @@ private struct RoundtablePreparationContainer: View {
                         report: report,
                         isBusy: isBusy,
                         errorMessage: workflowReport?.summary,
+                        providerOptions: appState.agentProviderLibrary.usableEntriesForChatSelection(
+                            isSomeIMAuthenticated: SomeIMIntegrationStore.hasAuthenticatedSessionForAutomaticDefaults()
+                        ),
                         onBack: { route = .home },
                         onRefine: { content in
                             appState.refineRoundtablePreparation(
@@ -334,6 +337,17 @@ private struct RoundtablePreparationContainer: View {
                                 runtimeID: runtimeID,
                                 reportID: reportID
                             )
+                        },
+                        // 会前选定的 provider/模型实时写回 report,带到「选择专家」页作为初值。
+                        onSelectProviderModel: { providerEntryID, modelID in
+                            appState.updateWorkflowReport(id: reportID, runtimeID: runtimeID) { item in
+                                guard var roundtable = item.roundtable else { return }
+                                roundtable.selectedProviderEntryID = providerEntryID
+                                roundtable.selectedModelID = modelID
+                                roundtable.updatedAt = Date()
+                                item.roundtable = roundtable
+                            }
+                            appState.persistWorkflowRuntime(runtimeID: runtimeID)
                         }
                     )
                 }

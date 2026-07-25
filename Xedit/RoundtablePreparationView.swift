@@ -11,11 +11,41 @@ struct RoundtablePreparationView: View {
     let report: AgentRoundtableReport
     var isBusy = false
     var errorMessage: String?
+    /// 可选的 provider 库条目;为空时不显示 provider/模型选择器(跟随全局活跃 provider)。
+    var providerOptions: [AgentProviderEntry] = []
     let onBack: () -> Void
     let onRefine: (String) -> Void
     let onChooseExperts: () -> Void
+    /// 本场 provider/模型选择变化时回写 report,带到「选择专家」页作为初值。
+    let onSelectProviderModel: (UUID?, String?) -> Void
 
     @State private var refinementDraft = ""
+    /// nil = 跟随全局活跃 provider;非 nil = 仅本场用该 provider。
+    @State private var selectedProviderID: UUID?
+    /// nil = 用该 provider 的路由默认模型;非 nil = 本场钉死该模型。
+    @State private var selectedModelID: String?
+
+    init(
+        report: AgentRoundtableReport,
+        isBusy: Bool = false,
+        errorMessage: String? = nil,
+        providerOptions: [AgentProviderEntry] = [],
+        onBack: @escaping () -> Void,
+        onRefine: @escaping (String) -> Void,
+        onChooseExperts: @escaping () -> Void,
+        onSelectProviderModel: @escaping (UUID?, String?) -> Void = { _, _ in }
+    ) {
+        self.report = report
+        self.isBusy = isBusy
+        self.errorMessage = errorMessage
+        self.providerOptions = providerOptions
+        self.onBack = onBack
+        self.onRefine = onRefine
+        self.onChooseExperts = onChooseExperts
+        self.onSelectProviderModel = onSelectProviderModel
+        _selectedProviderID = State(initialValue: report.selectedProviderEntryID)
+        _selectedModelID = State(initialValue: report.selectedModelID)
+    }
 
     private var preparation: RoundtablePreparation {
         report.preparation ?? RoundtablePreparation(originalTopic: report.topic)
@@ -235,7 +265,7 @@ struct RoundtablePreparationView: View {
             sectionHeader(
                 L10n.RoundtableSetup.clarificationTitle,
                 symbol: "questionmark.bubble",
-                color: .purple
+                color: .accentColor
             )
             ForEach(Array(preparation.clarificationQuestions.enumerated()), id: \.offset) {
                 _, question in
@@ -246,11 +276,11 @@ struct RoundtablePreparationView: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .background(
                         RoundedRectangle(cornerRadius: 9)
-                            .fill(Color.purple.opacity(0.07))
+                            .fill(Color.accentColor.opacity(0.07))
                     )
             }
         }
-        .roundtableSetupCard(accent: .purple)
+        .roundtableSetupCard(accent: .accentColor)
     }
 
     private var clarificationConversation: some View {
@@ -258,7 +288,7 @@ struct RoundtablePreparationView: View {
             sectionHeader(
                 L10n.RoundtableSetup.clarificationTitle,
                 symbol: "bubble.left.and.bubble.right",
-                color: .purple
+                color: .accentColor
             )
             ForEach(preparation.conversation) { message in
                 HStack(alignment: .top, spacing: 9) {
@@ -268,12 +298,12 @@ struct RoundtablePreparationView: View {
                             : "person.crop.circle"
                     )
                     .font(.system(size: 11, weight: .semibold))
-                    .foregroundStyle(message.speaker == .assistant ? .purple : .secondary)
+                    .foregroundStyle(message.speaker == .assistant ? Color.accentColor : .secondary)
                     .frame(width: 22, height: 22)
                     .background(
                         Circle().fill(
                             message.speaker == .assistant
-                                ? Color.purple.opacity(0.12)
+                                ? Color.accentColor.opacity(0.12)
                                 : Color.secondary.opacity(0.10)
                         )
                     )
@@ -294,46 +324,83 @@ struct RoundtablePreparationView: View {
                 }
             }
         }
-        .roundtableSetupCard(accent: .purple)
+        .roundtableSetupCard(accent: .accentColor)
     }
 
     private var footer: some View {
-        HStack(alignment: .bottom, spacing: 11) {
-            RoundtableComposerTextView(
-                text: $refinementDraft,
-                placeholder: L10n.RoundtableSetup.refinePlaceholder,
-                onSubmit: submitRefinement
-            )
-            .frame(height: 76)
-            .background(
-                RoundedRectangle(cornerRadius: 11)
-                    .fill(Color(nsColor: .textBackgroundColor).opacity(0.92))
-            )
-            .overlay(
-                RoundedRectangle(cornerRadius: 11)
-                    .stroke(Color.purple.opacity(0.22), lineWidth: 1)
-            )
-
-            VStack(alignment: .trailing, spacing: 7) {
-                Button(action: submitRefinement) {
-                    Label(
-                        isBusy
-                            ? L10n.RoundtableSetup.refining
-                            : L10n.RoundtableSetup.refineAction,
-                        systemImage: "sparkles"
+        VStack(spacing: 10) {
+            if !providerOptions.isEmpty {
+                HStack(spacing: 8) {
+                    Text(
+                        String(
+                            localized: "roundtable.setup.provider.label",
+                            defaultValue: "本场使用的模型"
+                        )
                     )
-                }
-                .buttonStyle(.bordered)
-                .disabled(isBusy || trimmedDraft.isEmpty)
+                    .font(.system(size: 11, weight: .medium))
+                    .foregroundStyle(.secondary)
 
-                Button(action: onChooseExperts) {
-                    Label(
-                        L10n.RoundtableSetup.chooseExpertsAction,
-                        systemImage: "person.3.fill"
+                    RoundtableProviderModelPicker(
+                        providerOptions: providerOptions,
+                        selectedProviderID: $selectedProviderID,
+                        selectedModelID: $selectedModelID,
+                        isBusy: isBusy
                     )
+                    .onChange(of: selectedProviderID) { _ in
+                        onSelectProviderModel(selectedProviderID, selectedModelID)
+                    }
+                    .onChange(of: selectedModelID) { _ in
+                        onSelectProviderModel(selectedProviderID, selectedModelID)
+                    }
+
+                    Spacer(minLength: 0)
                 }
-                .buttonStyle(.borderedProminent)
-                .disabled(!canChooseExperts)
+            }
+
+            HStack(alignment: .bottom, spacing: 11) {
+                RoundtableComposerTextView(
+                    text: $refinementDraft,
+                    placeholder: L10n.RoundtableSetup.refinePlaceholder,
+                    onSubmit: submitRefinement
+                )
+                .frame(height: 76)
+                .background(
+                    RoundedRectangle(cornerRadius: 11)
+                        .fill(Color(nsColor: .textBackgroundColor).opacity(0.92))
+                )
+                .overlay(
+                    RoundedRectangle(cornerRadius: 11)
+                        .stroke(Color.accentColor.opacity(0.22), lineWidth: 1)
+                )
+
+                // 两个按钮统一大尺寸 + 等宽成对:主次靠填充色区分(选择专家实心强调、
+                // 继续细化描边次级),体量一致不再一强一弱。
+                VStack(spacing: 8) {
+                    Button(action: submitRefinement) {
+                        Label(
+                            isBusy
+                                ? L10n.RoundtableSetup.refining
+                                : L10n.RoundtableSetup.refineAction,
+                            systemImage: "sparkles"
+                        )
+                        .frame(maxWidth: .infinity)
+                    }
+                    .buttonStyle(.bordered)
+                    .controlSize(.large)
+                    .disabled(isBusy || trimmedDraft.isEmpty)
+
+                    Button(action: onChooseExperts) {
+                        Label(
+                            L10n.RoundtableSetup.chooseExpertsAction,
+                            systemImage: "person.3.fill"
+                        )
+                        .frame(maxWidth: .infinity)
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .controlSize(.large)
+                    .disabled(!canChooseExperts)
+                }
+                .frame(width: 208)
             }
         }
         .padding(.horizontal, 20)

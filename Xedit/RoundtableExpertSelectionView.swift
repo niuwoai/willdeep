@@ -364,6 +364,48 @@ struct RoundtableExpertSelectionView: View {
         onConfirm(orderedSelection, selectedProviderID, selectedModelID)
     }
 
+    /// 开会时选 provider / 模型(仅本场生效)。providerOptions 为空则整块不显示。
+    /// 与会前准备室共用同一个可复用组件,保证两处交互与展示完全一致。
+    private var providerModelPicker: some View {
+        RoundtableProviderModelPicker(
+            providerOptions: providerOptions,
+            selectedProviderID: $selectedProviderID,
+            selectedModelID: $selectedModelID,
+            isBusy: isBusy
+        )
+    }
+
+    private func errorCard(_ message: String) -> some View {
+        HStack(alignment: .top, spacing: 9) {
+            Image(systemName: "exclamationmark.triangle.fill")
+                .foregroundStyle(.red)
+            VStack(alignment: .leading, spacing: 3) {
+                Text(message)
+                    .font(.system(size: 12.5, weight: .medium))
+                Text(L10n.RoundtableSetup.retryHint)
+                    .font(.system(size: 11))
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .padding(12)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(RoundedRectangle(cornerRadius: 11).fill(Color.red.opacity(0.08)))
+        .overlay(RoundedRectangle(cornerRadius: 11).stroke(Color.red.opacity(0.20)))
+    }
+}
+
+// MARK: - Provider / 模型选择器(会前准备室 + 选择专家页共用)
+
+/// 「仅本场生效」的 provider + 模型二级下拉。选专家页和会前准备室都用它,保证
+/// 两处交互一致。`providerOptions` 为空则整块不渲染(跟随全局活跃 provider)。
+struct RoundtableProviderModelPicker: View {
+    let providerOptions: [AgentProviderEntry]
+    /// nil = 跟随全局活跃 provider;非 nil = 仅本场用该 provider。
+    @Binding var selectedProviderID: UUID?
+    /// nil = 用该 provider 的路由默认模型;非 nil = 本场钉死该模型。
+    @Binding var selectedModelID: String?
+    var isBusy = false
+
     private var selectedProviderEntry: AgentProviderEntry? {
         guard let id = selectedProviderID else { return nil }
         return providerOptions.first(where: { $0.id == id })
@@ -376,9 +418,7 @@ struct RoundtableExpertSelectionView: View {
         return (entry.allFlashModels + entry.allProModels).filter { seen.insert($0).inserted }
     }
 
-    /// 开会时选 provider / 模型(仅本场生效)。providerOptions 为空则整块不显示。
-    @ViewBuilder
-    private var providerModelPicker: some View {
+    var body: some View {
         if !providerOptions.isEmpty {
             HStack(spacing: 6) {
                 Image(systemName: "cpu")
@@ -465,23 +505,5 @@ struct RoundtableExpertSelectionView: View {
                 }
             }
         }
-    }
-
-    private func errorCard(_ message: String) -> some View {
-        HStack(alignment: .top, spacing: 9) {
-            Image(systemName: "exclamationmark.triangle.fill")
-                .foregroundStyle(.red)
-            VStack(alignment: .leading, spacing: 3) {
-                Text(message)
-                    .font(.system(size: 12.5, weight: .medium))
-                Text(L10n.RoundtableSetup.retryHint)
-                    .font(.system(size: 11))
-                    .foregroundStyle(.secondary)
-            }
-        }
-        .padding(12)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(RoundedRectangle(cornerRadius: 11).fill(Color.red.opacity(0.08)))
-        .overlay(RoundedRectangle(cornerRadius: 11).stroke(Color.red.opacity(0.20)))
     }
 }
