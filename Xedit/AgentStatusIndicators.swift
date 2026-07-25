@@ -219,13 +219,8 @@ struct AgentStatsDashboard: View {
             Circle()
                 .fill(dashboardAvatarFill)
             if let url = validatedAvatarURL(account?.avatarURL) {
-                AsyncImage(url: url) { phase in
-                    switch phase {
-                    case .success(let image):
-                        image.resizable().scaledToFill()
-                    default:
-                        profileInitials
-                    }
+                CachedAvatarImage(url: url) {
+                    profileInitials
                 }
             } else {
                 profileInitials
