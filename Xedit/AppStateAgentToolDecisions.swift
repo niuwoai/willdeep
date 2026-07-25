@@ -230,23 +230,21 @@ extension AppState {
             return nil
         }
 
-        if sandboxDecision.mode == .escalated,
-           isAgentToolCallAlwaysAllowed(toolName: toolName, arguments: arguments, risk: risk) {
-            return .alwaysAllowList
-        }
-
-        if !Self.canSendToSafetyJudge(toolName: toolName, sandboxDecision: sandboxDecision) {
-            if isAgentToolCallAlwaysAllowed(toolName: toolName, arguments: arguments, risk: risk) {
-                return .alwaysAllowList
-            }
-            return nil
-        }
-
-        if approvalMode == .workspaceAccess,
-           workspaceAccessCanAutoApprove(toolName: toolName, arguments: arguments) {
-            return .workspaceAccess
-        }
+        // Workspace Access is resolved HERE — before the escalated /
+        // safety-judge gates below — so workspace-scoped tools the sandbox
+        // marks `.escalated` (notably `web_fetch` and `lark_cli` network
+        // calls) get approved by the workspace whitelist instead of being
+        // short-circuited into a manual prompt by the `run_command`-only
+        // `canSendToSafetyJudge` gate. Previously this block sat after that
+        // gate, so its `web_fetch` / `lark_cli` whitelist entries were dead
+        // code and "general network access" kept prompting in Workspace
+        // mode. Hard safety gates still win: the typed-confirmation danger
+        // gate above pauses destructive ops, and the delegated-agent /
+        // media allowlists already ran earlier.
         if approvalMode == .workspaceAccess {
+            if workspaceAccessCanAutoApprove(toolName: toolName, arguments: arguments) {
+                return .workspaceAccess
+            }
             // User-pinned always-allow signatures still count in Workspace
             // Access — the mode narrows AUTOMATIC approval to the workspace
             // whitelist, it does not revoke explicit user pins. Anything
@@ -257,6 +255,18 @@ extension AppState {
                 && (arguments["server"]?.stringValue()).map { !AgentMCPSettingsStore.isServerTrusted(name: $0) } == true
             if isAgentToolCallAlwaysAllowed(toolName: toolName, arguments: arguments, risk: risk),
                !pinnedMCPDemoted {
+                return .alwaysAllowList
+            }
+            return nil
+        }
+
+        if sandboxDecision.mode == .escalated,
+           isAgentToolCallAlwaysAllowed(toolName: toolName, arguments: arguments, risk: risk) {
+            return .alwaysAllowList
+        }
+
+        if !Self.canSendToSafetyJudge(toolName: toolName, sandboxDecision: sandboxDecision) {
+            if isAgentToolCallAlwaysAllowed(toolName: toolName, arguments: arguments, risk: risk) {
                 return .alwaysAllowList
             }
             return nil

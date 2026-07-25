@@ -2037,6 +2037,31 @@ struct WillDeepTests {
         )
         #expect(untrustedMCP == nil)
 
+        // Regression: `web_fetch` is sandbox `.escalated`, so before the
+        // Workspace-Access block was hoisted above the `run_command`-only
+        // `canSendToSafetyJudge` short-circuit it never reached its own
+        // whitelist entry and always prompted. General network access must
+        // now auto-approve under Workspace Access.
+        let workspaceFetch = await appState.autoApprovalSource(
+            toolName: "web_fetch",
+            arguments: ["url": .string("https://docs.example.com/guide")],
+            risk: .write,
+            rootDirectory: root,
+            approvalMode: .workspaceAccess
+        )
+        #expect(workspaceFetch == .workspaceAccess)
+
+        // A destructive typed-confirmation command still pauses in
+        // Workspace Access — the hard safety gate must survive the hoist.
+        let workspaceDestructive = await appState.autoApprovalSource(
+            toolName: "run_command",
+            arguments: ["command": .string("rm -rf /tmp/willdeep-test-workspace")],
+            risk: .write,
+            rootDirectory: root,
+            approvalMode: .workspaceAccess
+        )
+        #expect(workspaceDestructive == nil)
+
         let goBuild = await appState.autoApprovalSource(
             toolName: "run_command",
             arguments: ["command": .string("go build -o bin/app . 2>&1")],
