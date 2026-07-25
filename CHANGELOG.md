@@ -3,6 +3,17 @@
 > 当前文件保留最新版本（1.200.0-rc3 至 1.109.0-rc340）。
 > 更早的 1000 个版本已移至 [CHANGELOG-ARCHIVE.md](CHANGELOG-ARCHIVE.md)。
 
+## 1.206.0-rc4 - 2026-07-25
+
+### Fixed
+
+- **Mobile Gateway 发布快照在 macOS 13 上主线程死循环（CPU 100%、内存暴涨）**：`AppState.mobileGatewayRepositoryRoot(for:)` 向上回溯找 `.git` 时，macOS 13 老版 Foundation 的 `deletingLastPathComponent()` 在根目录返回 `/..` 而非 `/`，终止条件 `parent.path == current.path` 永不成立，URL 变成 `/../../..` 无限增长——线上 1.206.0-rc1 (157) 实测卡死：主线程被 `appendingPathComponent` / `URL.path` / `deletingLastPathComponent` 打满，5 分钟内存涨到 18.9GB（sample 采样定位，报告见事故记录）。现对 parent 做 `standardizedFileURL` 归一，并加"路径必须严格变短"兜底守卫。
+- **终端候选根目录回溯同款死循环隐患**：`EditorTerminalModels.candidateRoots` 的向上回溯循环终止条件同样未对 parent 做标准化，打开的文件不在工作区内时在 macOS 13 上会无限循环且 `roots` 数组无限膨胀。同步修复。全仓其余回溯循环已排查：`EditorLanguageService.nearestWorkspaceRoot`（已有 standardize）与 `AgentContextBuilder`（有 rootPath 前缀兜底）无此问题。
+
+### Meta
+
+- 版本号从 **1.206.0-rc3** 提升为 **1.206.0-rc4**（主线程死循环 bugfix，按只递增 rc 位处理），内部构建号从 **159** 递增为 **160**，Help 与 Computer Use Helper 构建号从 **76** 递增为 **77**；App、Go agent、Help、Helper、浏览器扩展、README、响应头契约与产品文档保持一致。
+
 ## 1.206.0-rc3 - 2026-07-25
 
 ### Changed
