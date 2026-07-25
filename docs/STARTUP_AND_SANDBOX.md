@@ -71,13 +71,18 @@
 
 ### 2. shell 命令怎么被关起来（seatbelt）
 
-`AgentSandboxPolicy.shellLaunch()`（行 483-499）：非 `escalated` 且系统有 `/usr/bin/sandbox-exec` 时，命令包成
+`AgentSandboxPolicy.shellLaunch()`：下列情况**不套** `sandbox-exec`，直接 `/bin/sh -c`：
+
+1. `escalated` 模式  
+2. `readOnly` 且 `SafeCommand` 判定为 `.alwaysSafe`、且命令头不是网络/凭据工具（`git log` / `status` / `diff`、`rg`、`pwd` 等）——只读白名单命令读写本就不受限，seatbelt 只会误伤 `/dev/null`、xcrun 缓存之类
+
+其余非 escalated 且系统有 `/usr/bin/sandbox-exec` 时，命令包成
 
 ```
 /usr/bin/sandbox-exec -p <profile> /bin/sh -c <command>
 ```
 
-seatbelt profile（`seatbeltProfile()`，行 518-540）关键规则：
+仍保留 scrubbed 环境（临时 HOME、剥敏感变量）。seatbelt profile（`seatbeltProfile()`）关键规则：
 
 ```
 (version 1)

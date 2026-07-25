@@ -3,6 +3,20 @@
 > 当前文件保留最新版本（1.200.0-rc3 至 1.109.0-rc340）。
 > 更早的 1000 个版本已移至 [CHANGELOG-ARCHIVE.md](CHANGELOG-ARCHIVE.md)。
 
+## 1.204.0-rc1 - 2026-07-25
+
+### Changed
+
+- **只读白名单命令不再套 seatbelt**：`readOnly` 模式下 `SafeCommand` 判定为 `.alwaysSafe` 的命令（如 `git log` / `shortlog` / `status`、`rg`、`pwd`）直接走 `/bin/sh -c`，仍保留 scrubbed 环境；seatbelt 对只读本就无额外收益，却会误伤 `/dev/null`、xcrun 缓存等。`curl`/`ssh` 等网络或凭据类命令即使读形态也仍套 profile；`workspaceWrite*` 模式行为不变。
+
+### Fixed
+
+- **全量并行下 Git 提交单测偶发读到空 log**：`commitsUnstagedChanges` 对 `git log -1` 增加短重试，避免 fork 压力下 `runGit` 吞 spawn 失败成空串。
+
+### Meta
+
+- 版本号从 **1.203.0-rc1** 提升为 **1.204.0-rc1**（只读命令跳过 seatbelt 为行为变更，提升 MINOR、rc 重置），内部构建号从 **153** 递增为 **154**，Help 与 Computer Use Helper 构建号从 **70** 递增为 **71**；App、Go agent、Help、Helper、浏览器扩展、README、响应头契约与产品文档保持一致。
+
 ## 1.203.0-rc1 - 2026-07-25
 
 ### Added

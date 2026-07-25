@@ -1,6 +1,6 @@
 # WillDeep Product Overview
 
-> Last updated: 2026-07-25 | Current version: v1.203.0-rc1
+> Last updated: 2026-07-25 | Current version: v1.204.0-rc1
 
 ## Positioning
 
@@ -11,6 +11,8 @@ Official product domain: [willdeep.com](https://willdeep.com).
 WillDeep is configured for non-App-Store distribution without App Sandbox so it can access local project files with fewer permission interruptions.
 
 ## 架构概览
+
+- **只读白名单命令跳过 seatbelt（1.204.0-rc1）** —— `git log` / `status` / `rg` 等 `alwaysSafe` 只读命令在 `readOnly` 模式下不再套 `sandbox-exec`（仍 scrub 环境）；网络/凭据类命令与 `workspaceWrite*` 模式继续走 seatbelt。
 
 - **沙箱拒绝后可授权无沙箱重跑（1.203.0-rc1）** —— 本地前台 `run_command` 被 seatbelt 拦住时，会弹出审批卡询问是否在无沙箱环境重跑同一条命令；同意后以 escalated 模式再执行，拒绝则记为 denied。Always Allow 签名命中时跳过二次询问。远端 SSH workspace 不走此路径。
 

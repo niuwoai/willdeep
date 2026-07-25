@@ -1221,20 +1221,44 @@ struct AgentToolsCoreTests {
     }
 
     @Test
-    func sandboxLaunchWrapsNonEscalatedCommandsWhenSeatbeltIsAvailable() {
+    func sandboxLaunchSkipsSeatbeltForAlwaysSafeReadOnlyCommands() {
         let root = URL(fileURLWithPath: "/tmp/willdeep-workspace")
-        let launch = AgentSandboxPolicy.shellLaunch(
-            command: "pwd",
-            mode: .readOnly,
+        for command in ["pwd", "git log -1 --oneline", "git shortlog -s HEAD", "rg AgentSandboxPolicy ."] {
+            #expect(
+                AgentSandboxPolicy.shouldRunWithoutSeatbelt(command: command, mode: .readOnly),
+                "\(command) should skip seatbelt in readOnly"
+            )
+            let launch = AgentSandboxPolicy.shellLaunch(
+                command: command,
+                mode: .readOnly,
+                rootDirectory: root
+            )
+            #expect(launch.executableURL.path == "/bin/sh")
+            #expect(launch.arguments == ["-c", command])
+        }
+    }
+
+    @Test
+    func sandboxLaunchKeepsSeatbeltForWorkspaceWriteAndNetworkShapedReads() {
+        let root = URL(fileURLWithPath: "/tmp/willdeep-workspace")
+        #expect(!AgentSandboxPolicy.shouldRunWithoutSeatbelt(
+            command: "git status",
+            mode: .workspaceWrite
+        ))
+        // Read-shaped curl may be alwaysSafe, but still needs the network deny.
+        #expect(!AgentSandboxPolicy.shouldRunWithoutSeatbelt(
+            command: "curl -fsSL https://example.com",
+            mode: .readOnly
+        ))
+
+        guard FileManager.default.isExecutableFile(atPath: "/usr/bin/sandbox-exec") else { return }
+        let writeLaunch = AgentSandboxPolicy.shellLaunch(
+            command: "git status",
+            mode: .workspaceWrite,
             rootDirectory: root
         )
-        if FileManager.default.isExecutableFile(atPath: "/usr/bin/sandbox-exec") {
-            #expect(launch.executableURL.path == "/usr/bin/sandbox-exec")
-            #expect(launch.arguments.contains("/bin/sh"))
-            #expect(launch.arguments.contains("pwd"))
-        } else {
-            #expect(launch.executableURL.path == "/bin/sh")
-        }
+        #expect(writeLaunch.executableURL.path == "/usr/bin/sandbox-exec")
+        #expect(writeLaunch.arguments.contains("/bin/sh"))
     }
 
     @Test
@@ -1267,8 +1291,9 @@ struct AgentToolsCoreTests {
         // git 几乎所有子命令都会以写模式打开 /dev/null；(deny default) profile
         // 不放行会导致沙箱下 git 恒 EPERM。只断言纯函数生成的 profile 字符串，
         // 不端到端跑 sandbox-exec 子进程（CI 虚拟化 runner 上行为不可靠）。
+        // readOnly + alwaysSafe 已跳过 seatbelt，这里只覆盖仍会套 profile 的模式。
         guard FileManager.default.isExecutableFile(atPath: "/usr/bin/sandbox-exec") else { return }
-        for mode in [AgentSandboxMode.readOnly, .workspaceWrite, .workspaceWriteNetwork] {
+        for mode in [AgentSandboxMode.workspaceWrite, .workspaceWriteNetwork] {
             let launch = AgentSandboxPolicy.shellLaunch(
                 command: "git status",
                 mode: mode,

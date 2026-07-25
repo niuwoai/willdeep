@@ -162,11 +162,22 @@ struct AgentGitReviewTests {
         #expect(outcome.commitCreated)
         #expect(!outcome.pushed)
         #expect(AppState.runGit(arguments: ["status", "--porcelain"], in: repository).isEmpty)
-        #expect(
-            AppState.runGit(arguments: ["log", "-1", "--pretty=%s"], in: repository)
+        // Full-suite fork pressure can make a single `git log` return "" via
+        // runGit's swallow-on-spawn-failure path; retry before asserting.
+        #expect(latestCommitSubject(in: repository) == "test: commit from review panel")
+    }
+
+    private func latestCommitSubject(in repository: URL) -> String {
+        for attempt in 0..<3 {
+            let subject = AppState.runGit(arguments: ["log", "-1", "--pretty=%s"], in: repository)
                 .trimmingCharacters(in: .whitespacesAndNewlines)
-                == "test: commit from review panel"
-        )
+            if !subject.isEmpty { return subject }
+            if attempt < 2 {
+                Thread.sleep(forTimeInterval: 0.05 * Double(attempt + 1))
+            }
+        }
+        return AppState.runGit(arguments: ["log", "-1", "--pretty=%s"], in: repository)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
     private func makeRepository() throws -> URL {

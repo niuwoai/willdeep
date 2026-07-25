@@ -531,8 +531,13 @@ enum AgentSandboxPolicy {
         mode: AgentSandboxMode,
         rootDirectory: URL?
     ) -> AgentSandboxLaunch {
-        guard mode != .escalated,
-              FileManager.default.isExecutableFile(atPath: sandboxExecPath) else {
+        // Pure read-only allowlist commands (git log/status/diff, rg, …) gain
+        // nothing from seatbelt — reads were already unrestricted, and the
+        // profile still trips over /dev/null, xcrun caches, and similar
+        // utility paths. Skip sandbox-exec for those; keep scrubbed env.
+        // Network/credential heads stay under seatbelt even in .readOnly.
+        if shouldRunWithoutSeatbelt(command: command, mode: mode)
+            || !FileManager.default.isExecutableFile(atPath: sandboxExecPath) {
             return AgentSandboxLaunch(
                 executableURL: URL(fileURLWithPath: "/bin/sh"),
                 arguments: ["-c", command]
@@ -542,6 +547,39 @@ enum AgentSandboxPolicy {
             executableURL: URL(fileURLWithPath: sandboxExecPath),
             arguments: ["-p", seatbeltProfile(mode: mode, rootDirectory: rootDirectory), "/bin/sh", "-c", command]
         )
+    }
+
+    /// Whether `shellLaunch` should skip `sandbox-exec` for this command.
+    nonisolated static func shouldRunWithoutSeatbelt(
+        command: String,
+        mode: AgentSandboxMode
+    ) -> Bool {
+        switch mode {
+        case .escalated:
+            return true
+        case .workspaceWrite, .workspaceWriteNetwork:
+            return false
+        case .readOnly:
+            break
+        }
+
+        guard SafeCommand.classify(command: command) == .alwaysSafe else { return false }
+        guard let segments = splitCommandSegments(command), !segments.isEmpty else { return false }
+
+        for segment in segments {
+            guard let rawTokens = AgentCommandAuthorization.shellTokens(from: segment),
+                  let invocation = shellInvocation(from: rawTokens) else {
+                return false
+            }
+            let head = invocation.head
+            // curl/ssh/… may be classified alwaysSafe for "read-shaped"
+            // network ops, but they still need the seatbelt network deny
+            // (or a prior escalation) — never skip the profile for them.
+            if networkHeads.contains(head) || credentialHeads.contains(head) {
+                return false
+            }
+        }
+        return true
     }
 
     /// Heuristic for "seatbelt / sandbox-exec blocked this command".
