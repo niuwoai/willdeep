@@ -1,7 +1,20 @@
 # Changelog
 
-> 当前文件保留最新版本（1.200.0-rc2 至 1.109.0-rc340）。
+> 当前文件保留最新版本（1.200.0-rc3 至 1.109.0-rc340）。
 > 更早的 1000 个版本已移至 [CHANGELOG-ARCHIVE.md](CHANGELOG-ARCHIVE.md)。
+
+## 1.200.0-rc3 - 2026-07-25
+
+### Fixed
+
+- **专家圆桌发言卡首帧不再"一字一行"**：流式发言卡原用无最小宽度地板的裸 SwiftUI `Text`，首帧行宽未解算时被相邻贪婪 `Spacer` 挤成逐字竖排（CJK 可在任意两字间断行放大此问题）。现改走定稿卡同款 `RoundtableSelectableMessageText`（TextKit `sizeThatFits` 按父容器提议宽度权威声明自身宽度），首帧即占满气泡列，流式→定稿过渡也无缝。
+- **主持人「你（主持人）」头像不再是空白占位**：改为复用登录的 some.im 账号头像（与侧栏页脚同一 `CachedAvatarImage`）；用户未在 some.im 设置头像、或远程头像加载失败时回退 App 图标。
+- **发言卡配色改用专家定位色，满屏反对不再张张发红**：左侧竖线、描边、底色原按 stance 上色（反对=红），一屋子反对时每张卡都发红、与专家席的颜色身份不符；现统一改用发言专家的定位色，立场改由拇指图标表达。
+- **支持/反对图标改为拇指 👍/👎**：`RoundtableVisuals.symbol` 全局改为 `hand.thumbsup.fill` / `hand.thumbsdown.fill`（消息卡立场 pill、专家席、立场光谱一并生效）；中立/未定保留原符号。
+
+### Meta
+
+- 版本号从 **1.200.0-rc2** 提升为 **1.200.0-rc3**（四项圆桌 UI 打磨均为 bugfix，按只递增 rc 位处理），内部构建号从 **145** 递增为 **146**，Help 与 Computer Use Helper 构建号从 **62** 递增为 **63**；App、Go agent、Help、Helper、浏览器扩展、README、响应头契约与产品文档保持一致。
 
 ## 1.200.0-rc2 - 2026-07-25
 
