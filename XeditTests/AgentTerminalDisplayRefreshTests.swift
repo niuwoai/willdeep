@@ -128,19 +128,28 @@ struct TerminalZModemDetectorNegativeTests {
         // The needle is the 4-byte binary header `**` CAN `B` — text-only
         // lookalikes (an rz mention, bare stars, no CAN byte) must not eat
         // the visible terminal's byte stream.
-        #expect(detector.detect(in: Array("rz\r".utf8)) == nil)
-        #expect(detector.detect(in: Array("**B0100000023be50\r\n".utf8)) == nil)
-        #expect(detector.detect(in: Array("kubectl rollout status deployment/tokenhub\r\n".utf8)) == nil)
+        let rz = Array("rz\r".utf8)
+        #expect(detector.detect(in: rz) == .display(rz))
+        let hexLookalike = Array("**B0100000023be50\r\n".utf8)
+        #expect(detector.detect(in: hexLookalike) == .display(hexLookalike))
+        let kubectl = Array("kubectl rollout status deployment/tokenhub\r\n".utf8)
+        #expect(detector.detect(in: kubectl) == .display(kubectl))
     }
 
-    @Test("the real binary header split across chunks is documented as undetected")
-    func splitHeaderStaysUndetected() {
-        // Current behavior: the needle is only matched within one chunk.
-        // Locked in on purpose — loosening the matcher to span chunks must
-        // never make plain text able to trigger consumption.
+    @Test("the real binary header is matched even when split across chunks")
+    func splitHeaderIsDetected() {
+        // The matcher spans PTY read boundaries (lrzsz's opening frame
+        // routinely arrives split over SSH) — but plain text must still
+        // never trigger consumption, hence the paired negative test above.
         var detector = TerminalZModemDetector()
-        #expect(detector.detect(in: Array("rz\r*".utf8)) == nil)
-        #expect(detector.detect(in: [0x2A, 0x18, 0x42, 0x30, 0x30]) == nil)
+        let first = Array("rz\r*".utf8)
+        #expect(detector.detect(in: first) == .display(first))
+        guard case .start(let start) = detector.detect(in: [0x2A, 0x18, 0x42, 0x30, 0x30]) else {
+            Issue.record("split ZMODEM header was not detected")
+            return
+        }
+        #expect(start.displayPrefix.isEmpty)
+        #expect(start.protocolBytes.prefix(4) == [0x2A, 0x2A, 0x18, 0x42])
     }
 }
 

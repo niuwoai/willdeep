@@ -1033,10 +1033,36 @@ final class AgentLocalProcessTerminalView: TerminalView, TerminalViewDelegate, L
         zmodemBridge.preparePathSelection(selection)
     }
 
+    /// Called by the ZMODEM bridge at session boundaries so the mirror
+    /// gate reacts immediately instead of one PTY chunk late.
+    func zmodemStateDidChange(active: Bool) {
+        zmodemActive = active
+    }
+
+    /// Feed a ZMODEM status line to BOTH the visible terminal and the
+    /// snapshot mirror. During a transfer the raw PTY stream bypasses the
+    /// mirror, so status lines are the only thing keeping the agent's
+    /// `terminal_snapshot` truthful about what the terminal is doing.
+    func feedZModemStatusLine(_ text: String) {
+        let bytes = Array(text.utf8)
+        feed(byteArray: bytes[...])
+        snapshotMirror.queue.async { [snapshotMirror] in
+            snapshotMirror.feedOnQueue(bytes)
+        }
+        refreshVisibleTerminalDisplay()
+    }
+
     // MARK: TerminalViewDelegate
 
     func send(source: TerminalView, data: ArraySlice<UInt8>) {
         onUserActivity?()
+        // While a ZMODEM transfer owns the PTY, keystrokes must not reach
+        // the remote — they would be injected into the protocol stream and
+        // corrupt frames. The bridge swallows them; Ctrl+C aborts the
+        // transfer on both ends.
+        if zmodemActive, zmodemBridge.handleUserInput(Array(data)) {
+            return
+        }
         if shouldRecordInput?() == true {
             let bytes = Array(data)
             let echoEnabled = cachedTerminalEchoEnabled()
@@ -1121,13 +1147,17 @@ final class AgentLocalProcessTerminalView: TerminalView, TerminalViewDelegate, L
         }
         DispatchQueue.main.async { [weak self] in
             guard let self else { return }
-            let consumed = self.zmodemBridge.handleRemoteBytes(bytes)
+            // The bridge returns the bytes the terminal should render:
+            // usually the chunk unchanged, nil while a transfer consumes the
+            // stream, or a substitute chunk when the detector releases bytes
+            // it had held across a read boundary.
+            let renderable = self.zmodemBridge.handleRemoteBytes(bytes)
             self.zmodemActive = self.zmodemBridge.isActive
-            if consumed { return }
-            if self.shouldRecordInput?() == true, !self.isExpectedEcho(bytes[...]) {
+            guard let renderable, !renderable.isEmpty else { return }
+            if self.shouldRecordInput?() == true, !self.isExpectedEcho(renderable[...]) {
                 self.invalidateTerminalEchoCache()
             }
-            self.feed(byteArray: bytes[...])
+            self.feed(byteArray: renderable[...])
             self.refreshVisibleTerminalDisplay()
         }
     }
