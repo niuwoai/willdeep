@@ -868,8 +868,7 @@ extension AppState {
     /// as conversation artifacts. Transient trees are pruned before descent,
     /// avoiding the cost and noise of build products, dependencies and caches.
     nonisolated static func agentArtifactFileSignatures(in directoryURL: URL) -> [String: String] {
-        let root = directoryURL.standardizedFileURL
-        let rootPrefix = root.path.hasSuffix("/") ? root.path : root.path + "/"
+        let root = directoryURL
         let keys: Set<URLResourceKey> = [
             .isDirectoryKey,
             .isRegularFileKey,
@@ -891,12 +890,13 @@ extension AppState {
         for case let fileURL as URL in enumerator {
             visitedNodes += 1
             if visitedNodes > maximumTraversalNodes || Task.isCancelled { break }
-            // Prefer the enumerator path as-is — `standardizedFileURL` rewrites
-            // via path-component APIs and dominates CPU on large trees.
-            let filePath = fileURL.path
-            guard filePath.hasPrefix(rootPrefix) else { continue }
-            let relativePath = String(filePath.dropFirst(rootPrefix.count))
-            guard !relativePath.isEmpty else { continue }
+            // Prefer the enumerator path as-is — avoid per-node
+            // `standardizedFileURL` / symlink resolution on large trees.
+            // Root matching goes through `agentRelativePath`, which normalizes
+            // macOS `/private/var` vs `/var` without touching every URL object.
+            guard let relativePath = agentRelativePath(of: fileURL.path, under: root) else {
+                continue
+            }
             let values = try? fileURL.resourceValues(forKeys: keys)
             if values?.isDirectory == true {
                 if isAgentTransientArtifactDirectory(relativePath) {
@@ -913,6 +913,29 @@ extension AppState {
             signatures[relativePath] = "size=\(size)|mtime=\(modified)"
         }
         return signatures
+    }
+
+    /// Collapse macOS `/private/var` vs `/var` so enumerator paths can be
+    /// compared with the caller's directory URL. `FileManager.enumerator`
+    /// commonly yields `/private/var/...` while `temporaryDirectory` / many
+    /// workspace URLs keep the `/var/...` form; `standardizedFileURL` does
+    /// not bridge that gap on current macOS.
+    nonisolated static func agentCanonicalFilePath(_ path: String) -> String {
+        if path.hasPrefix("/private/") {
+            return String(path.dropFirst("/private".count))
+        }
+        return path
+    }
+
+    /// Returns the relative path of `filePath` under `rootURL`, or `nil`
+    /// when the file is outside that root after `/private` normalization.
+    nonisolated static func agentRelativePath(of filePath: String, under rootURL: URL) -> String? {
+        let rootPath = agentCanonicalFilePath(rootURL.path)
+        let rootPrefix = rootPath.hasSuffix("/") ? rootPath : rootPath + "/"
+        let canonicalFilePath = agentCanonicalFilePath(filePath)
+        guard canonicalFilePath.hasPrefix(rootPrefix) else { return nil }
+        let relativePath = String(canonicalFilePath.dropFirst(rootPrefix.count))
+        return relativePath.isEmpty ? nil : relativePath
     }
 
     nonisolated static func isAgentTransientArtifactDirectory(_ path: String) -> Bool {

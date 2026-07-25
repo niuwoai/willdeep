@@ -13,18 +13,10 @@ concurrency:
 jobs:
   unit-tests:
     name: XeditTests (macOS)
-    # rc10: 升到 macos-26 runner —— 项目 MACOSX_DEPLOYMENT_TARGET = 26.4
-    # （Tahoe），之前的 macos-15 runner（macOS 15.7.x + Xcode 16）xcodebuild
-    # 直接拒绝部署目标不匹配，CI 从 rc1 起一直红；macos-26 默认 Xcode 26.4.1
-    # 正好匹配。
-    #
-    # 2026-07-16: 曾短暂迁到自托管 runner（[self-hosted, macOS]，run
-    # 29434410982），但那台 runner 未配好 —— checkout 阶段 git fetch 就被
-    # 系统代理打回 `RPC failed; HTTP 400`，且 runner 的 _work 目录名被误设成
-    # `svc.sh install && ./svc.sh start`（带空格和 &&）、自带 git 仅 2.21.1。
-    # 已回退到 macos-26 止血。待 runner 侧修好（清代理 env/no_proxy、重装
-    # runner 修 work 目录、升级 git）后再重新切自托管。
-    runs-on: macos-26
+    # 默认 self-hosted runner（仅 `self-hosted` 标签，不附加 macOS /
+    # macos-26 等额外标签）。runner 需自备匹配 MACOSX_DEPLOYMENT_TARGET
+    # 26.4 的 Xcode（优先 Xcode_26.4.1.app，其次 Xcode.app）与 Go toolchain。
+    runs-on: self-hosted
     timeout-minutes: 30
 
     steps:
@@ -33,7 +25,7 @@ jobs:
 
       - name: Select Xcode
         # 优先锁定 Xcode 26.4.1（明确匹配 MACOSX_DEPLOYMENT_TARGET 26.4）；
-        # 当 GitHub 后续把默认 Xcode 又前进一档时，回退到 Xcode.app 软链。
+        # self-hosted 上若未装带版本号的 App，回退到 Xcode.app 软链。
         run: sudo xcode-select -s /Applications/Xcode_26.4.1.app || sudo xcode-select -s /Applications/Xcode.app
 
       # SwiftTerm (terminal panel dependency) compiles a Metal shader
@@ -134,8 +126,8 @@ jobs:
       - name: Run i18n coverage guard
         run: ruby scripts/i18n_coverage_guard.rb build/ci/i18n_report.md build/ci/i18n_report.json
 
-      # macos-26 runner 默认不带 Go toolchain，少了这步 `go test` 直接
-      # `command not found`（exit 127），CI 从加进 Go 测试那次起就一直红。
+      # self-hosted runner 通常已装 Go；仍用 setup-go 按 go.mod 锁定版本，
+      # 避免本机 PATH 上的 Go 与模块要求不一致。
       - name: Set up Go
         # v6 runs on Node.js 24; v5 targeted the now-deprecated Node 20
         # compat shim and emitted a deprecation annotation on every run.

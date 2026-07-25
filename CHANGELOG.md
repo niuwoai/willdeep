@@ -3,6 +3,20 @@
 > 当前文件保留最新版本（1.200.0-rc3 至 1.109.0-rc340）。
 > 更早的 1000 个版本已移至 [CHANGELOG-ARCHIVE.md](CHANGELOG-ARCHIVE.md)。
 
+## 1.206.0-rc2 - 2026-07-25
+
+### Changed
+
+- **GitHub Actions Tests 改回默认 self-hosted runner**：`.github/workflows/test.yml` 的 `runs-on` 从 GitHub-hosted `macos-26` 改为 `self-hosted`（仅默认标签，不附加 `macOS` / `macos-26`）。Xcode 选择、Metal toolchain、setup-go 与 SPM deploy key 步骤保留；runner 需自备匹配部署目标 26.4 的 Xcode。
+
+### Fixed
+
+- **产物清单在 `/var` 临时目录下变空**：`FileManager.enumerator` 常返回 `/private/var/...`，而 `temporaryDirectory` / 部分工作区 URL 仍是 `/var/...`；`standardizedFileURL` 解不开这对前缀，相对路径全部被跳过、会话产物轨漏检。现对两侧做 `/private` 归一化后再算相对路径。
+
+### Meta
+
+- 版本号从 **1.206.0-rc1** 提升为 **1.206.0-rc2**（CI runner 切换与产物清单路径 bugfix，按只递增 rc 位处理），内部构建号从 **157** 递增为 **158**，Help 与 Computer Use Helper 构建号从 **74** 递增为 **75**；App、Go agent、Help、Helper、浏览器扩展、README、响应头契约与产品文档保持一致。
+
 ## 1.206.0-rc1 - 2026-07-25
 
 ### Changed
