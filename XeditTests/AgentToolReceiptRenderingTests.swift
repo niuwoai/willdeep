@@ -94,7 +94,7 @@ struct AgentToolReceiptRenderingTests {
     }
 
     @Test
-    func settledIntentLineRendersFailureReceipt() {
+    func settledIntentLineRendersFailureReceipt() throws {
         let call = AgentMessageToolCall(
             externalID: "call_9",
             toolName: "run_command",
@@ -111,6 +111,19 @@ struct AgentToolReceiptRenderingTests {
         let rendered = AgentChatHistoryRenderer.render(messages: [intent], isDark: false)
         #expect(rendered.string.contains("让我进行最后一次全面验证"))
         #expect(rendered.string.contains("✗ 1 失败"))
+
+        // Routine command failures (Agent will retry) must not paint the
+        // receipt badge in alarm red — keep the same secondary tone as the
+        // rest of the activity line.
+        let badgeLocation = (rendered.string as NSString).range(of: "✗ 1 失败").location
+        #expect(badgeLocation != NSNotFound)
+        let badgeColor = try #require(rendered.attribute(
+            .foregroundColor,
+            at: badgeLocation,
+            effectiveRange: nil
+        ) as? NSColor)
+        #expect(badgeColor.isEqual(NSColor.secondaryLabelColor))
+        #expect(!badgeColor.isEqual(NSColor.systemRed))
     }
 
     @Test

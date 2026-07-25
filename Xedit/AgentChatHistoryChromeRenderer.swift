@@ -403,15 +403,15 @@ extension AgentChatHistoryRenderer {
             // Outcome receipt (✓ 完成 / ✗ N 失败) rides at the tail of the
             // last activity row so every settled intent line ends with a
             // clear "did it succeed" verdict instead of a dangling "我要做 X".
-            // Failures/denials get a warning tint; success stays secondary
-            // so the transcript doesn't turn into a wall of green.
+            // Keep the badge in the same secondary tone as the activity line:
+            // command failures during a turn are routine (Agent retries), so a
+            // red alarm would overstate the severity.
             if index == displayItems.count - 1, let badge = group.outcomeBadge {
-                let isFailure = badge.hasPrefix("✗")
                 result.append(NSAttributedString(
                     string: "  · \(badge)",
                     attributes: [
-                        .font: NSFont.systemFont(ofSize: monoFont.pointSize, weight: isFailure ? .semibold : .regular),
-                        .foregroundColor: isFailure ? NSColor.systemRed : secondaryColor,
+                        .font: NSFont.systemFont(ofSize: monoFont.pointSize, weight: .regular),
+                        .foregroundColor: secondaryColor,
                     ]
                 ))
             }

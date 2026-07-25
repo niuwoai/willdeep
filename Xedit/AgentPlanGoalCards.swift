@@ -255,6 +255,11 @@ struct MarqueeOnHoverText: View {
     /// Full text surfaced as a native tooltip, so the whole step is
     /// reachable even without waiting out the scroll.
     var tooltip: String? = nil
+    /// When set, caps the container at the text's natural width so the
+    /// label hugs its content —— sidebar 会话行这类「标题后面紧跟徽章」
+    /// 的布局需要;不传保持原来的贪婪整行行为(计划卡步骤)。调用方
+    /// 用 NSFont 同步测宽,避免首帧靠 PreferenceKey 回填时的布局抖动。
+    var hugWidth: CGFloat? = nil
 
     /// Pixels-per-second the overflow slides at; keeps long and short
     /// steps feeling like the same gesture.
@@ -298,7 +303,7 @@ struct MarqueeOnHoverText: View {
                 .onChange(of: geo.size.width) { containerWidth = $0 }
         }
         .frame(height: textSize.height)
-        .frame(maxWidth: .infinity, alignment: .leading)
+        .frame(maxWidth: hugWidth ?? .infinity, alignment: .leading)
         .contentShape(Rectangle())
         .onPreferenceChange(MarqueeSizeKey.self) { textSize = $0 }
         .onHover { inside in

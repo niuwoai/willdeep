@@ -86,6 +86,12 @@ nonisolated enum SafeCommand {
         // file inspection
         "cat", "head", "tail", "less", "more", "wc", "nl",
         "file", "stat", "du", "df",
+        "od", "hexdump", "xxd", "strings",
+        // path helpers (resolve / split — no FS mutation)
+        "realpath", "readlink", "dirname", "basename",
+        // compare (read both sides; writes only via shell redirection,
+        // which is rejected upstream)
+        "diff", "cmp",
         // directory listing
         "ls", "tree", "pwd",
         // search
@@ -93,17 +99,30 @@ nonisolated enum SafeCommand {
         // sorting / dedup / cut etc — pure stdin transforms
         "sort", "uniq", "cut", "tr", "awk", "sed", "tee",
         "column", "paste", "join", "comm",
+        "fold", "fmt", "expand", "unexpand", "rev", "tac",
         // hashing / encoding
         "md5", "shasum", "sha256sum", "sha512sum", "base64",
+        "cksum", "sum",
+        // structured data filters (stdout only; file writes need `>` which
+        // is already refused as alwaysDangerous)
+        "jq", "yq", "iconv",
         // env / introspection
         "echo", "printf", "which", "whereis", "type", "command",
         "printenv", "uname", "whoami", "id", "date", "uptime",
-        // process snapshot (no signals)
-        "ps", "top",
+        "sw_vers", "arch", "hostname", "getconf", "locale",
+        "groups", "logname", "man",
+        // process / memory snapshot (no signals)
+        "ps", "top", "lsof", "vm_stat",
+        // Spotlight metadata read (not mdutil — that mutates indexing)
+        "mdfind", "mdls",
+        // tiny calculators
+        "cal", "bc",
         // network read-only. whois 和 dig/host 同族——往查询端口发一个
         // 域名字符串、读回注册信息，无写语义。漏掉它的代价是整条命令
         // 落到 LLM judge，而 judge 提示词对"开网络 socket"判得很严，
         // 实际等于每次都要用户手点（用户实测反馈，1.58.0-rc11 补上）。
+        // Seatbelt skip still keeps curl/ssh under profile via networkHeads;
+        // these DNS/ICMP probes are intentionally allowlisted.
         "ping", "host", "dig", "nslookup", "traceroute", "whois",
         // shell 循环/条件的无副作用胶水：read 只写 shell 变量，test/[
         // 只算真值，seq/true/false/sleep/expr 纯计算或干等。
@@ -131,7 +150,9 @@ nonisolated enum SafeCommand {
         "npm", "yarn", "pnpm", "cargo", "swift", "make", "python", "python3",
         "node", "ruby", "go", "rake",
         "sh", "bash", "zsh", "/bin/sh", "/bin/bash", "/bin/zsh",
-        "env", "/usr/bin/env"
+        "env", "/usr/bin/env",
+        // list/inspect only — extract/write forms stay needsJudgment
+        "defaults", "unzip"
     ]
 
     /// Token-level dangerous words. classifySegment walks EVERY token
@@ -339,6 +360,10 @@ nonisolated enum SafeCommand {
             return classifyEnv(tokens: tokens)
         case "npm", "pnpm", "yarn":
             return AgentPackageCommandPolicy.classify(firstToken: firstToken, tokens: tokens)
+        case "defaults":
+            return classifyDefaults(tokens: tokens)
+        case "unzip":
+            return classifyUnzip(tokens: tokens)
         case "xargs":
             // xargs by itself wraps another command — defer to judgment.
             return .needsJudgment
@@ -347,12 +372,37 @@ nonisolated enum SafeCommand {
         }
     }
 
+    /// `defaults read …` is inspection; write/delete/import stay gated.
+    private static func classifyDefaults(tokens: [String]) -> CommandSafety {
+        guard tokens.count >= 2 else { return .needsJudgment }
+        return tokens[1].lowercased() == "read" ? .alwaysSafe : .needsJudgment
+    }
+
+    /// Archive listing only (`-l` / `-Z` / bare `-v`). Extract forms
+    /// (`unzip archive.zip`, `unzip -o …`, `unzip -ov …`) stay gated —
+    /// do not treat a lone `v` inside combined flags as list intent.
+    private static func classifyUnzip(tokens: [String]) -> CommandSafety {
+        let flags = tokens.dropFirst().filter { $0.hasPrefix("-") }.map { $0.lowercased() }
+        guard !flags.isEmpty else { return .needsJudgment }
+        let looksLikeList = flags.contains("-l")
+            || flags.contains("-z")
+            || flags == ["-v"]
+            || flags.contains(where: { flag in
+                guard flag.hasPrefix("-"), !flag.hasPrefix("--"), flag.count > 1 else { return false }
+                return flag.dropFirst().contains("l")
+            })
+        return looksLikeList ? .alwaysSafe : .needsJudgment
+    }
+
     private static let safeGitSubcommands: Set<String> = [
         "diff", "log", "status", "show", "branch", "remote",
         "blame", "config", "describe", "tag", "shortlog",
         "rev-parse", "rev-list", "ls-files", "ls-tree", "ls-remote",
         "reflog", "stash", "name-rev", "cat-file", "for-each-ref",
-        "symbolic-ref", "var", "help"
+        "symbolic-ref", "var", "help",
+        // more read-only inspectors agents hit constantly
+        "grep", "version", "merge-base", "check-ignore", "check-attr",
+        "count-objects", "whatchanged"
     ]
 
     private static func classifyGit(tokens: [String]) -> CommandSafety {

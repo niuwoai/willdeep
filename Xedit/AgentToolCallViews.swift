@@ -274,6 +274,27 @@ nonisolated enum AgentApprovalNoticeCopy {
     ) -> AgentApprovalNoticeDescriptor {
         switch toolName {
         case "run_command":
+            if arguments[AgentSandboxPolicy.sandboxEscalationRequestArgumentKey]?.boolValue() == true {
+                var metadata = commandMetadata(arguments: arguments)
+                metadata.append(L10n.ToolCard.sandboxEscalationMetadata)
+                if let detail = arguments[AgentSandboxPolicy.sandboxDenialDetailArgumentKey]?.stringValue(),
+                   !detail.isEmpty {
+                    metadata.append(detail)
+                }
+                return AgentApprovalNoticeDescriptor(
+                    iconName: "lock.shield",
+                    title: L10n.ToolCard.sandboxEscalationTitle,
+                    subtitle: L10n.ToolCard.sandboxEscalationSubtitle,
+                    detailTitle: L10n.ToolCard.command,
+                    metadata: metadata,
+                    explanationTitle: L10n.ToolCard.sandboxEscalationExplanation,
+                    decisionTitle: L10n.ToolCard.sandboxEscalationDecisionTitle,
+                    decisionSubtitle: L10n.ToolCard.sandboxEscalationDecisionSubtitle,
+                    declineTitle: L10n.ToolCard.sandboxEscalationDecline,
+                    approveTitle: L10n.ToolCard.sandboxEscalationApprove,
+                    usesOutlinedApproveAction: false
+                )
+            }
             return AgentApprovalNoticeDescriptor(
                 iconName: "terminal",
                 title: "Agent 准备执行一条命令",

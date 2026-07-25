@@ -531,22 +531,26 @@ struct AgentSessionsSidebar: View {
                         .foregroundStyle(palette.accent)
                         .help(L10n.Sidebar.hasActiveScheduledTasksTooltip)
                 }
-                Text(session.title)
-                    .font(AgentDesign.sidebarRowFont)
-                    .foregroundStyle(palette.primaryText.opacity(
+                // 被截断的标题在悬停时向左滚动整段可读(照 Claude 侧栏),
+                // 松开指针回位;放得下的标题静止不动。hugWidth 用 NSFont
+                // 同步测出自然宽度,保证短标题仍紧贴内容、徽章跟在标题后。
+                MarqueeOnHoverText(
+                    attributed: AttributedString(session.title),
+                    font: AgentDesign.sidebarRowFont,
+                    color: palette.primaryText.opacity(
                         isActive ? 1 : AgentDesign.sidebarPrimaryTextOpacity
-                    ))
-                    .lineLimit(1)
-                    .truncationMode(.tail)
-                    // sidebar 收窄时:title 优先保留(给它 priority 1),
-                    // progress / trailing actions 走默认 0，SwiftUI 会先
-                    // 压缩 chrome，而不是把标题压到只剩一个字符。
-                    .layoutPriority(1)
-                    // Double-click the title to rename — same dialog as the
-                    // context-menu "Rename". Takes priority over the row
-                    // button's single-click select for two-tap sequences.
-                    .onTapGesture(count: 2) { presentRenameAlert(for: session) }
-                    .help(L10n.Sidebar.sessionMenuRename)
+                    ),
+                    tooltip: L10n.Sidebar.sessionMenuRename,
+                    hugWidth: Self.sessionTitleNaturalWidth(session.title)
+                )
+                // sidebar 收窄时:title 优先保留(给它 priority 1),
+                // progress / trailing actions 走默认 0，SwiftUI 会先
+                // 压缩 chrome，而不是把标题压到只剩一个字符。
+                .layoutPriority(1)
+                // Double-click the title to rename — same dialog as the
+                // context-menu "Rename". Takes priority over the row
+                // button's single-click select for two-tap sequences.
+                .onTapGesture(count: 2) { presentRenameAlert(for: session) }
                 AgentSessionApprovalBadge(
                     session: session,
                     runtime: observedRuntime,
@@ -681,6 +685,17 @@ struct AgentSessionsSidebar: View {
     /// one inline in the row View blows up the state machine. The
     /// alert is modal to the active window, so the user can't keep
     /// typing into the session list while it's open.
+    /// 会话标题的自然排版宽度(单行、sidebarRowFont)。给
+    /// MarqueeOnHoverText 的 hugWidth 用:同步测出结果,首帧就有正确
+    /// 上限,不用等 PreferenceKey 回填(那会让徽章闪一下)。+2 的余量
+    /// 抵消 NSString 测宽与 SwiftUI Text 渲染间的亚像素差,防止刚好
+    /// 放得下的标题被削掉最后一个字符的边。
+    private static func sessionTitleNaturalWidth(_ title: String) -> CGFloat {
+        let font = NSFont.systemFont(ofSize: AgentDesign.sidebarRowFontSize)
+        let width = (title as NSString).size(withAttributes: [.font: font]).width
+        return ceil(width) + 2
+    }
+
     private func presentRenameAlert(for session: AgentSession) {
         let alert = NSAlert()
         alert.messageText = L10n.Sidebar.renameSessionAlertTitle

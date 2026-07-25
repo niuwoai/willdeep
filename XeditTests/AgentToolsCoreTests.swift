@@ -1221,20 +1221,55 @@ struct AgentToolsCoreTests {
     }
 
     @Test
-    func sandboxLaunchWrapsNonEscalatedCommandsWhenSeatbeltIsAvailable() {
+    func sandboxLaunchSkipsSeatbeltForAlwaysSafeReadOnlyCommands() {
         let root = URL(fileURLWithPath: "/tmp/willdeep-workspace")
-        let launch = AgentSandboxPolicy.shellLaunch(
-            command: "pwd",
-            mode: .readOnly,
+        for command in [
+            "pwd",
+            "cat README.md",
+            "diff -u a b",
+            "jq . package.json",
+            "git log -1 --oneline",
+            "git shortlog -s HEAD",
+            "git grep -n seatbelt",
+            "rg AgentSandboxPolicy .",
+            "unzip -l archive.zip",
+            "defaults read com.apple.finder"
+        ] {
+            #expect(
+                AgentSandboxPolicy.shouldRunWithoutSeatbelt(command: command, mode: .readOnly),
+                "\(command) should skip seatbelt in readOnly"
+            )
+            let launch = AgentSandboxPolicy.shellLaunch(
+                command: command,
+                mode: .readOnly,
+                rootDirectory: root
+            )
+            #expect(launch.executableURL.path == "/bin/sh")
+            #expect(launch.arguments == ["-c", command])
+        }
+    }
+
+    @Test
+    func sandboxLaunchKeepsSeatbeltForWorkspaceWriteAndNetworkShapedReads() {
+        let root = URL(fileURLWithPath: "/tmp/willdeep-workspace")
+        #expect(!AgentSandboxPolicy.shouldRunWithoutSeatbelt(
+            command: "git status",
+            mode: .workspaceWrite
+        ))
+        // Read-shaped curl may be alwaysSafe, but still needs the network deny.
+        #expect(!AgentSandboxPolicy.shouldRunWithoutSeatbelt(
+            command: "curl -fsSL https://example.com",
+            mode: .readOnly
+        ))
+
+        guard FileManager.default.isExecutableFile(atPath: "/usr/bin/sandbox-exec") else { return }
+        let writeLaunch = AgentSandboxPolicy.shellLaunch(
+            command: "git status",
+            mode: .workspaceWrite,
             rootDirectory: root
         )
-        if FileManager.default.isExecutableFile(atPath: "/usr/bin/sandbox-exec") {
-            #expect(launch.executableURL.path == "/usr/bin/sandbox-exec")
-            #expect(launch.arguments.contains("/bin/sh"))
-            #expect(launch.arguments.contains("pwd"))
-        } else {
-            #expect(launch.executableURL.path == "/bin/sh")
-        }
+        #expect(writeLaunch.executableURL.path == "/usr/bin/sandbox-exec")
+        #expect(writeLaunch.arguments.contains("/bin/sh"))
     }
 
     @Test
@@ -1260,6 +1295,90 @@ struct AgentToolsCoreTests {
         } else {
             #expect(launch.executableURL.path == "/bin/sh")
         }
+    }
+
+    @Test
+    func sandboxProfileAllowsWritingDeviceFilesInEveryMode() {
+        // git 几乎所有子命令都会以写模式打开 /dev/null；(deny default) profile
+        // 不放行会导致沙箱下 git 恒 EPERM。只断言纯函数生成的 profile 字符串，
+        // 不端到端跑 sandbox-exec 子进程（CI 虚拟化 runner 上行为不可靠）。
+        // readOnly + alwaysSafe 已跳过 seatbelt，这里只覆盖仍会套 profile 的模式。
+        guard FileManager.default.isExecutableFile(atPath: "/usr/bin/sandbox-exec") else { return }
+        for mode in [AgentSandboxMode.workspaceWrite, .workspaceWriteNetwork] {
+            let launch = AgentSandboxPolicy.shellLaunch(
+                command: "git status",
+                mode: mode,
+                rootDirectory: URL(fileURLWithPath: "/tmp/willdeep-workspace")
+            )
+            let profile = launch.arguments.first { $0.contains("file-write") } ?? ""
+            #expect(profile.contains("(literal \"/dev/null\")"), "mode \(mode) 应放行 /dev/null 写入")
+            #expect(profile.contains("(literal \"/dev/tty\")"), "mode \(mode) 应放行 /dev/tty 写入")
+        }
+    }
+
+    @Test
+    func sandboxDenialHeuristicRecognizesSeatbeltSignals() {
+        #expect(
+            AgentSandboxPolicy.looksLikeSandboxDenial(
+                exitStatus: 1,
+                output: "sandbox-exec: git: Operation not permitted",
+                sandboxMode: .workspaceWrite
+            )
+        )
+        #expect(
+            AgentSandboxPolicy.looksLikeSandboxDenial(
+                error: AgentToolError.commandFailed(1, "sh: /dev/null: Operation not permitted"),
+                sandboxMode: .readOnly
+            )
+        )
+        #expect(
+            !AgentSandboxPolicy.looksLikeSandboxDenial(
+                exitStatus: 1,
+                output: "sandbox-exec: git: Operation not permitted",
+                sandboxMode: .escalated
+            )
+        )
+        #expect(
+            !AgentSandboxPolicy.looksLikeSandboxDenial(
+                exitStatus: 1,
+                output: "error: test failed\nexpected 3 got 4",
+                sandboxMode: .workspaceWrite
+            )
+        )
+        // Long logs only count "permission denied" when it sits near the end.
+        let longNoise = String(repeating: "ok\n", count: 80) + "permission denied\n"
+        #expect(
+            AgentSandboxPolicy.looksLikeSandboxDenial(
+                exitStatus: 1,
+                output: longNoise,
+                sandboxMode: .workspaceWrite
+            )
+        )
+        let buriedDenial = "permission denied\n" + String(repeating: "ok\n", count: 400)
+        #expect(
+            !AgentSandboxPolicy.looksLikeSandboxDenial(
+                exitStatus: 2,
+                output: buriedDenial,
+                sandboxMode: .workspaceWrite
+            )
+        )
+    }
+
+    @Test
+    func sandboxEscalationApprovalCopyUsesEscalationPrompt() {
+        let descriptor = AgentApprovalNoticeCopy.descriptor(
+            toolName: "run_command",
+            arguments: [
+                "command": .string("git add -A"),
+                AgentSandboxPolicy.sandboxEscalationRequestArgumentKey: .bool(true),
+                AgentSandboxPolicy.sandboxDenialDetailArgumentKey: .string("Operation not permitted"),
+            ]
+        )
+        #expect(descriptor.title == L10n.ToolCard.sandboxEscalationTitle)
+        #expect(descriptor.approveTitle == L10n.ToolCard.sandboxEscalationApprove)
+        #expect(descriptor.declineTitle == L10n.ToolCard.sandboxEscalationDecline)
+        #expect(descriptor.metadata.contains(L10n.ToolCard.sandboxEscalationMetadata))
+        #expect(descriptor.metadata.contains("Operation not permitted"))
     }
 }
 

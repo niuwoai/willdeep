@@ -531,8 +531,13 @@ enum AgentSandboxPolicy {
         mode: AgentSandboxMode,
         rootDirectory: URL?
     ) -> AgentSandboxLaunch {
-        guard mode != .escalated,
-              FileManager.default.isExecutableFile(atPath: sandboxExecPath) else {
+        // Pure read-only allowlist commands (git log/status/diff, rg, …) gain
+        // nothing from seatbelt — reads were already unrestricted, and the
+        // profile still trips over /dev/null, xcrun caches, and similar
+        // utility paths. Skip sandbox-exec for those; keep scrubbed env.
+        // Network/credential heads stay under seatbelt even in .readOnly.
+        if shouldRunWithoutSeatbelt(command: command, mode: mode)
+            || !FileManager.default.isExecutableFile(atPath: sandboxExecPath) {
             return AgentSandboxLaunch(
                 executableURL: URL(fileURLWithPath: "/bin/sh"),
                 arguments: ["-c", command]
@@ -543,6 +548,100 @@ enum AgentSandboxPolicy {
             arguments: ["-p", seatbeltProfile(mode: mode, rootDirectory: rootDirectory), "/bin/sh", "-c", command]
         )
     }
+
+    /// Whether `shellLaunch` should skip `sandbox-exec` for this command.
+    nonisolated static func shouldRunWithoutSeatbelt(
+        command: String,
+        mode: AgentSandboxMode
+    ) -> Bool {
+        switch mode {
+        case .escalated:
+            return true
+        case .workspaceWrite, .workspaceWriteNetwork:
+            return false
+        case .readOnly:
+            break
+        }
+
+        guard SafeCommand.classify(command: command) == .alwaysSafe else { return false }
+        guard let segments = splitCommandSegments(command), !segments.isEmpty else { return false }
+
+        for segment in segments {
+            guard let rawTokens = AgentCommandAuthorization.shellTokens(from: segment),
+                  let invocation = shellInvocation(from: rawTokens) else {
+                return false
+            }
+            let head = invocation.head
+            // curl/ssh/… may be classified alwaysSafe for "read-shaped"
+            // network ops, but they still need the seatbelt network deny
+            // (or a prior escalation) — never skip the profile for them.
+            if networkHeads.contains(head) || credentialHeads.contains(head) {
+                return false
+            }
+        }
+        return true
+    }
+
+    /// Heuristic for "seatbelt / sandbox-exec blocked this command".
+    /// Used to offer a one-shot escalation approval instead of treating the
+    /// denial as a normal tool failure the model has to guess around.
+    nonisolated static func looksLikeSandboxDenial(
+        error: Error,
+        sandboxMode: AgentSandboxMode
+    ) -> Bool {
+        guard sandboxMode != .escalated else { return false }
+        if let toolError = error as? AgentToolError {
+            switch toolError {
+            case .commandFailed(let code, let output):
+                return looksLikeSandboxDenial(exitStatus: code, output: output, sandboxMode: sandboxMode)
+            case .commandTimeout, .missingArgument, .invalidArgument, .noWorkspace,
+                    .pathOutsideWorkspace, .notFound, .notRegular, .binaryFile,
+                    .fileTooLarge, .unknownTool, .invalidRegex, .httpFailed:
+                return false
+            }
+        }
+        return looksLikeSandboxDenial(
+            exitStatus: -1,
+            output: error.localizedDescription,
+            sandboxMode: sandboxMode
+        )
+    }
+
+    nonisolated static func looksLikeSandboxDenial(
+        exitStatus: Int32,
+        output: String,
+        sandboxMode: AgentSandboxMode
+    ) -> Bool {
+        guard sandboxMode != .escalated else { return false }
+        let trimmed = output.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return false }
+
+        let lowered = trimmed.lowercased()
+        let strongMarkers = [
+            "sandbox-exec:",
+            "deny file-write",
+            "deny network",
+            "operation not permitted",
+        ]
+        if strongMarkers.contains(where: { lowered.contains($0) }) {
+            return true
+        }
+
+        // "permission denied" shows up in many real app failures. Only treat
+        // it as a sandbox signal when the failure looks primary / short, or
+        // the phrase sits near the end of stderr (typical seatbelt shape).
+        guard lowered.contains("permission denied") else { return false }
+        if trimmed.count <= 800 { return true }
+        let tail = String(lowered.suffix(400))
+        return tail.contains("permission denied")
+            || exitStatus == 1
+            || exitStatus == -1
+    }
+
+    /// Argument flag stamped onto a tool call while waiting for the user to
+    /// approve re-running outside the sandbox after a denial.
+    nonisolated static let sandboxEscalationRequestArgumentKey = "_sandbox_escalation_request"
+    nonisolated static let sandboxDenialDetailArgumentKey = "_sandbox_denial_detail"
 
     nonisolated static func scrub(_ text: String) -> String {
         var result = text
@@ -562,7 +661,11 @@ enum AgentSandboxPolicy {
     }
 
     nonisolated private static func seatbeltProfile(mode: AgentSandboxMode, rootDirectory: URL?) -> String {
+        // git 等工具几乎所有子命令都会以写模式打开 /dev/null（重定向 hook/pager/gpg
+        // 探测输出），交互探测会打开 /dev/tty；(deny default) 下不放行会导致命令恒 EPERM。
         var writeAllows: [String] = [
+            "(literal \"/dev/null\")",
+            "(literal \"/dev/tty\")",
             "(subpath \(profileString(FileManager.default.temporaryDirectory.standardizedFileURL.path)))"
         ]
         if (mode == .workspaceWrite || mode == .workspaceWriteNetwork),

@@ -3,6 +3,81 @@
 > 当前文件保留最新版本（1.200.0-rc3 至 1.109.0-rc340）。
 > 更早的 1000 个版本已移至 [CHANGELOG-ARCHIVE.md](CHANGELOG-ARCHIVE.md)。
 
+## 1.205.0-rc2 - 2026-07-25
+
+### Fixed
+
+- **打开大项目时主线程假死（老 iMac / Intel）**：Quick Open 的 `refreshProjectFileList` 虽把扫盘放进了 `Task.detached`，但缓存命中后重建上千个 `URL`、以及扫完后的 `save`/`fileURLs` 仍落在默认 MainActor 的 `Task` 里；再叠加 `URL.appendingPathComponent` 在旧 Foundation 上会逐条 `getResourceValue` 探盘，主线程会被路径拼接占满（spindump 热点即 `appendingPathComponent` / `deletingLastPathComponent` / `path.getter`，进程 RSS 可在十余秒内暴涨数百 MB）。现将 load→重建 URL→scan→save 全部留在 detached 任务，URL 改为纯路径字符串拼接，扫盘阶段只保留 path 字符串以降低常驻内存，并对缓存回填加硬顶。
+
+### Meta
+
+- 版本号从 **1.205.0-rc1** 提升为 **1.205.0-rc2**（主线程假死为 bugfix，按只递增 rc 位处理），内部构建号从 **155** 递增为 **156**，Help 与 Computer Use Helper 构建号从 **72** 递增为 **73**；App、Go agent、Help、Helper、浏览器扩展、README、响应头契约与产品文档保持一致。
+
+## 1.205.0-rc1 - 2026-07-25
+
+### Changed
+
+- **扩大本地只读 alwaysSafe 白名单**：补上 `diff`/`realpath`/`jq`/`xxd`/`mdfind`/`lsof` 等无写本地工具，以及 `defaults read`、`unzip -l`、更多 git 只读子命令（`grep`/`merge-base`/`version`…）。它们会自动享受 `readOnly` 下跳过 seatbelt；`curl`/`ssh`/`defaults write`/`unzip` 解压仍保持闸门。
+
+### Meta
+
+- 版本号从 **1.204.0-rc1** 提升为 **1.205.0-rc1**（白名单扩面为行为变更，提升 MINOR、rc 重置），内部构建号从 **154** 递增为 **155**，Help 与 Computer Use Helper 构建号从 **71** 递增为 **72**；App、Go agent、Help、Helper、浏览器扩展、README、响应头契约与产品文档保持一致。
+
+## 1.204.0-rc1 - 2026-07-25
+
+### Changed
+
+- **只读白名单命令不再套 seatbelt**：`readOnly` 模式下 `SafeCommand` 判定为 `.alwaysSafe` 的命令（如 `git log` / `shortlog` / `status`、`rg`、`pwd`）直接走 `/bin/sh -c`，仍保留 scrubbed 环境；seatbelt 对只读本就无额外收益，却会误伤 `/dev/null`、xcrun 缓存等。`curl`/`ssh` 等网络或凭据类命令即使读形态也仍套 profile；`workspaceWrite*` 模式行为不变。
+
+### Fixed
+
+- **全量并行下 Git 提交单测偶发读到空 log**：`commitsUnstagedChanges` 对 `git log -1` 增加短重试，避免 fork 压力下 `runGit` 吞 spawn 失败成空串。
+
+### Meta
+
+- 版本号从 **1.203.0-rc1** 提升为 **1.204.0-rc1**（只读命令跳过 seatbelt 为行为变更，提升 MINOR、rc 重置），内部构建号从 **153** 递增为 **154**，Help 与 Computer Use Helper 构建号从 **70** 递增为 **71**；App、Go agent、Help、Helper、浏览器扩展、README、响应头契约与产品文档保持一致。
+
+## 1.203.0-rc1 - 2026-07-25
+
+### Added
+
+- **沙箱拒绝后可授权无沙箱重跑**：本地前台 `run_command` 被 seatbelt 拦住（如 `Operation not permitted` / `sandbox-exec:`）时，不再只把失败丢回模型瞎重试，而是弹出审批卡询问「允许无沙箱重跑？」；同意后以 `.escalated` 再跑同一条命令，拒绝则记为 denied。Always Allow 签名命中时跳过二次询问。远端 SSH workspace 不走此路径。
+
+### Fixed
+
+- **全量并行下 Git 审阅范围快照偶发空结果**：`loadsScopedSnapshots` 在 fork 压力下可能读到空的 `git status`；加载侧增加短重试，避免与 `runGitCommand` 的 spawn 退避各说各话。
+
+### Meta
+
+- 版本号从 **1.202.0-rc4** 提升为 **1.203.0-rc1**（沙箱事后提权为新能力，提升 MINOR、rc 重置），内部构建号从 **152** 递增为 **153**，Help 与 Computer Use Helper 构建号从 **69** 递增为 **70**；App、Go agent、Help、Helper、浏览器扩展、README、响应头契约与产品文档保持一致。
+
+## 1.202.0-rc4 - 2026-07-25
+
+### Fixed
+
+- **工具活动「✗ N 失败」不再用报警红**：对话历史里已结束命令组的结果徽章（如「已运行 1 条命令 · ✗ 1 失败」）改与活动行同色的 secondary 文案，不再刷 `systemRed`。回合内命令失败很常见、Agent 也会重试，红色会把常态噪声抬成事故感。
+- **思考预览单测对齐 reasoning 兜底 headline**：`testAgentLiveThinkingPreview` 仍按旧约定断言「仅有 reasoning 时无当前动作标题」，与现有 Codex 式兜底行为冲突；现改为期望 thinking 标题与 reasoning 最新一行 liveTitle。
+
+### Meta
+
+- 版本号从 **1.202.0-rc3** 提升为 **1.202.0-rc4**（失败徽章告警色降噪，按 bugfix 只递增 rc 位），内部构建号从 **151** 递增为 **152**，Help 与 Computer Use Helper 构建号从 **68** 递增为 **69**；App、Go agent、Help、Helper、浏览器扩展、README、响应头契约与产品文档保持一致。
+
+## 1.202.0-rc3 - 2026-07-25
+
+### Fixed
+
+- **沙箱模式下 git 恒失败（EPERM）**：Agent 命令沙箱的 seatbelt profile 是 `(deny default)`，`file-write*` 只放行了临时目录和 workspace 根目录，没放行 `/dev/null`。而 git 几乎所有子命令都会以写模式打开 `/dev/null`（重定向 hook/pager/gpg 探测输出），导致沙箱下 git 一律被权限拒绝。现已在所有沙箱模式下放行 `/dev/null` 与 `/dev/tty` 的写入，并补了 profile 纯函数输出的单测。
+
+## 1.202.0-rc2 - 2026-07-25
+
+### Added
+
+- **会话侧栏标题悬停跑马灯**：会话列表里被截断的长标题，鼠标悬停在该行时向左滚动整段可读（参照 Claude 客户端侧栏的体验），指针移开后回位；放得下的标题静止不动、不抖动。实现上复用计划卡既有的 `MarqueeOnHoverText` 组件，为它新增 `hugWidth` 参数支持「短标题紧贴内容、徽章跟在标题后」的 hug 布局——自然宽度用 NSFont 同步测出，首帧即有正确上限，避免靠 PreferenceKey 回填造成的徽章闪动。双击重命名、tooltip 与原行为保持不变。
+
+### Meta
+
+- 版本号从 **1.202.0-rc1** 提升为 **1.202.0-rc2**（侧栏交互打磨，同属本轮 UI 迭代，按只递增 rc 位处理），内部构建号从 **150** 递增为 **151**，Help 与 Computer Use Helper 构建号从 **67** 递增为 **68**；App、Go agent、Help、Helper、浏览器扩展、README、响应头契约与产品文档保持一致。
+
 ## 1.202.0-rc1 - 2026-07-25
 
 ### Added

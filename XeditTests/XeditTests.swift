@@ -1335,7 +1335,10 @@ struct WillDeepTests {
             AgentMessage(role: .assistant, content: "", reasoningContent: "先读取文件，再分析调用链")
         )
         #expect(appState.agentLiveThinkingPreview == "先读取文件，再分析调用链")
-        #expect(appState.agentCurrentActivityHeadline == nil)
+        // Reasoning 流在识别不出阶段动词时仍会兜底成当前动作扫光标题，
+        // 避免回合中段出现空白活动行。
+        #expect(appState.agentCurrentActivityHeadline?.title == L10n.AgentActivity.thinking)
+        #expect(appState.agentCurrentActivityHeadline?.liveTitle == "先读取文件，再分析调用链")
 
         // 已知阶段开头的一行正文成为当前动作，保留完整可见标题。
         appState.agentMessages[1].content = "Planning Swift enum extensions"

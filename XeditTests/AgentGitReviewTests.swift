@@ -112,17 +112,20 @@ struct AgentGitReviewTests {
         try write("new\n", to: repository.appendingPathComponent("untracked.txt"))
         try runGit(["add", "--", "staged.txt"], in: repository)
 
+        // Full-suite fork pressure can briefly make `git status` return empty
+        // (see AppState.runGitCommand spawn retry). Reload a couple times
+        // before treating the scoped snapshot as authoritative.
         let uncommitted = try #require(
-            AgentGitReviewLoader.load(workspaceRoot: repository, scope: .uncommitted)
+            loadScopedSnapshot(workspaceRoot: repository, scope: .uncommitted, expectingFiles: true)
         )
         let unstaged = try #require(
-            AgentGitReviewLoader.load(workspaceRoot: repository, scope: .unstaged)
+            loadScopedSnapshot(workspaceRoot: repository, scope: .unstaged, expectingFiles: true)
         )
         let staged = try #require(
-            AgentGitReviewLoader.load(workspaceRoot: repository, scope: .staged)
+            loadScopedSnapshot(workspaceRoot: repository, scope: .staged, expectingFiles: true)
         )
         let lastCommit = try #require(
-            AgentGitReviewLoader.load(workspaceRoot: repository, scope: .lastCommit)
+            loadScopedSnapshot(workspaceRoot: repository, scope: .lastCommit, expectingFiles: true)
         )
 
         #expect(Set(uncommitted.changes.files.map(\.path)) == [
@@ -159,11 +162,22 @@ struct AgentGitReviewTests {
         #expect(outcome.commitCreated)
         #expect(!outcome.pushed)
         #expect(AppState.runGit(arguments: ["status", "--porcelain"], in: repository).isEmpty)
-        #expect(
-            AppState.runGit(arguments: ["log", "-1", "--pretty=%s"], in: repository)
+        // Full-suite fork pressure can make a single `git log` return "" via
+        // runGit's swallow-on-spawn-failure path; retry before asserting.
+        #expect(latestCommitSubject(in: repository) == "test: commit from review panel")
+    }
+
+    private func latestCommitSubject(in repository: URL) -> String {
+        for attempt in 0..<3 {
+            let subject = AppState.runGit(arguments: ["log", "-1", "--pretty=%s"], in: repository)
                 .trimmingCharacters(in: .whitespacesAndNewlines)
-                == "test: commit from review panel"
-        )
+            if !subject.isEmpty { return subject }
+            if attempt < 2 {
+                Thread.sleep(forTimeInterval: 0.05 * Double(attempt + 1))
+            }
+        }
+        return AppState.runGit(arguments: ["log", "-1", "--pretty=%s"], in: repository)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
     private func makeRepository() throws -> URL {
@@ -196,6 +210,25 @@ struct AgentGitReviewTests {
         guard result.succeeded else {
             throw AgentGitReviewTestError.commandFailed(result.userMessage)
         }
+    }
+
+    private func loadScopedSnapshot(
+        workspaceRoot: URL,
+        scope: AgentGitReviewScope,
+        expectingFiles: Bool
+    ) -> AgentGitReviewSnapshot? {
+        for attempt in 0..<3 {
+            if let snapshot = AgentGitReviewLoader.load(
+                workspaceRoot: workspaceRoot,
+                scope: scope
+            ), !expectingFiles || !snapshot.changes.files.isEmpty {
+                return snapshot
+            }
+            if attempt < 2 {
+                Thread.sleep(forTimeInterval: 0.05 * Double(attempt + 1))
+            }
+        }
+        return AgentGitReviewLoader.load(workspaceRoot: workspaceRoot, scope: scope)
     }
 }
 

@@ -1776,11 +1776,47 @@ extension AppState {
                         }
                         result = outcome.result
                     } else {
-                        result = try await AgentToolRunner.run(
-                            name: call.toolName,
+                        switch try await runToolHandlingSandboxEscalation(
+                            toolName: call.toolName,
                             arguments: effectiveArguments,
-                            context: context
-                        )
+                            displayArguments: argsDict,
+                            recordID: recordID,
+                            runtime: runtime,
+                            context: context,
+                            workspaceLocation: workspaceLocation
+                        ) {
+                        case .succeeded(let value):
+                            result = value
+                        case .escalationDeclined(let reason, let denialDetail):
+                            anyDenied = true
+                            withExtendedLifetime(workspaceMutationLease) {}
+                            workspaceMutationLease = nil
+                            if let index = runtime.toolCalls.firstIndex(where: { $0.id == recordID }) {
+                                runtime.toolCalls[index].status = .denied
+                                runtime.toolCalls[index].errorMessage = reason
+                                runtime.toolCalls[index].arguments[AgentSandboxPolicy.sandboxEscalationRequestArgumentKey] = .bool(false)
+                            }
+                            AgentSandboxAuditLog.append(
+                                toolName: call.toolName,
+                                arguments: argsDict,
+                                decision: sandboxDecision,
+                                approvalSource: nil,
+                                outcome: "sandbox_escalation_denied"
+                            )
+                            appendToolMessage(
+                                for: runtime,
+                                toolCallID: call.externalID,
+                                payload: """
+                                Sandbox blocked this command and the user declined to re-run it outside the sandbox.
+                                Original sandbox denial:
+                                \(denialDetail)
+                                """,
+                                source: .systemNotice,
+                                outcomeStatus: .denied,
+                                errorMessage: reason
+                            )
+                            continue
+                        }
                     }
                     withExtendedLifetime(workspaceMutationLease) {}
                     // Release before doing UI bookkeeping; only the verified
@@ -1792,6 +1828,7 @@ extension AppState {
                         if let patchAutoApplySource {
                             runtime.toolCalls[index].approvalSource = patchAutoApplySource
                         }
+                        runtime.toolCalls[index].arguments[AgentSandboxPolicy.sandboxEscalationRequestArgumentKey] = .bool(false)
                     }
                     runtime.recordComputerUseActivity(toolName: call.toolName, images: result.images)
                     if call.toolName == "terminal_create_shortcut",

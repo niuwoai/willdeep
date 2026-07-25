@@ -23,12 +23,26 @@ extension WillDeepTests {
         #expect(SafeCommand.classify(command: "ls -la") == .alwaysSafe)
         #expect(SafeCommand.classify(command: "pwd") == .alwaysSafe)
         #expect(SafeCommand.classify(command: "wc -l Sources/*.swift") == .alwaysSafe)
+        #expect(SafeCommand.classify(command: "diff -u a.swift b.swift") == .alwaysSafe)
+        #expect(SafeCommand.classify(command: "realpath .") == .alwaysSafe)
+        #expect(SafeCommand.classify(command: "jq . package.json") == .alwaysSafe)
+        #expect(SafeCommand.classify(command: "xxd -l 64 binary.bin") == .alwaysSafe)
+        #expect(SafeCommand.classify(command: "mdfind 'kMDItemDisplayName == *.swift'") == .alwaysSafe)
+        #expect(SafeCommand.classify(command: "defaults read com.apple.finder") == .alwaysSafe)
+        #expect(SafeCommand.classify(command: "defaults write com.apple.finder AppleShowAllFiles true") == .needsJudgment)
+        #expect(SafeCommand.classify(command: "unzip -l archive.zip") == .alwaysSafe)
+        #expect(SafeCommand.classify(command: "unzip -lq archive.zip") == .alwaysSafe)
+        #expect(SafeCommand.classify(command: "unzip archive.zip") == .needsJudgment)
+        #expect(SafeCommand.classify(command: "unzip -ov archive.zip") == .needsJudgment)
 
         // git read-only subcommands.
         #expect(SafeCommand.classify(command: "git diff") == .alwaysSafe)
         #expect(SafeCommand.classify(command: "git log --oneline -10") == .alwaysSafe)
         #expect(SafeCommand.classify(command: "git status") == .alwaysSafe)
         #expect(SafeCommand.classify(command: "git show HEAD") == .alwaysSafe)
+        #expect(SafeCommand.classify(command: "git grep -n alwaysSafe") == .alwaysSafe)
+        #expect(SafeCommand.classify(command: "git merge-base HEAD develop") == .alwaysSafe)
+        #expect(SafeCommand.classify(command: "git version") == .alwaysSafe)
 
         // git config writes must NOT be auto-approved.
         #expect(SafeCommand.classify(command: "git config user.email rocky@example.com") == .needsJudgment)
