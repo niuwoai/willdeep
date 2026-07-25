@@ -3,6 +3,12 @@
 > 当前文件保留最新版本（1.200.0-rc3 至 1.109.0-rc340）。
 > 更早的 1000 个版本已移至 [CHANGELOG-ARCHIVE.md](CHANGELOG-ARCHIVE.md)。
 
+## 1.202.0-rc3 - 2026-07-25
+
+### Fixed
+
+- **沙箱模式下 git 恒失败（EPERM）**：Agent 命令沙箱的 seatbelt profile 是 `(deny default)`，`file-write*` 只放行了临时目录和 workspace 根目录，没放行 `/dev/null`。而 git 几乎所有子命令都会以写模式打开 `/dev/null`（重定向 hook/pager/gpg 探测输出），导致沙箱下 git 一律被权限拒绝。现已在所有沙箱模式下放行 `/dev/null` 与 `/dev/tty` 的写入，并补了 profile 纯函数输出的单测。
+
 ## 1.202.0-rc2 - 2026-07-25
 
 ### Added

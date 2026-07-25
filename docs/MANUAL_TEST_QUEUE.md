@@ -14,6 +14,14 @@ CI 只能保编译/单测过。一系列改 UI、改窗口、改 SwiftUI 状态�
 
 ---
 
+## 1.202.0-rc3 — 沙箱模式放行 /dev/null 写入
+
+- ⏳ Agent 会话在非 escalated 沙箱模式下执行 `git status` / `git log`，不再报 EPERM / permission denied。
+- ⏳ 沙箱模式下 `git commit`（触发 hook/gpg 探测路径）能正常完成。
+- ⏳ readOnly 模式下 workspace 内文件写入仍被沙箱拒绝（放行 /dev/null 未扩大其他写权限）。
+
+---
+
 ## 1.202.0-rc2 — 会话侧栏标题悬停跑马灯
 
 - ⏳ 给会话改一个超出侧栏宽度的长标题，悬停该行：标题应向左滚动到末尾可读、往复滚动；移开指针后回到起始位置。
