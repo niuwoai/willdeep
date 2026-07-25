@@ -3,6 +3,16 @@
 > 当前文件保留最新版本（1.200.0-rc3 至 1.109.0-rc340）。
 > 更早的 1000 个版本已移至 [CHANGELOG-ARCHIVE.md](CHANGELOG-ARCHIVE.md)。
 
+## 1.206.0-rc6 - 2026-07-26
+
+### Fixed
+
+- **专家圆桌消息气泡偶发"一字一列"竖排（宽度坍缩）**：`RoundtableSelectableMessageText.sizeThatFits` 此前遇到 nil/无界宽度的理想尺寸探测直接返回 `nil`，回退到 frame 为 `.zero` 的裸 `NSTextView`——SwiftUI 把文本视图当成零宽，HStack 将整列宽度分给相邻的贪婪 `Spacer`，CJK 文本（任意两字间可断行）塌成逐字竖排；流式发言每 80ms 重排一次，反复命中。1.206.0-rc2 的修复（971fba3e，流式气泡复用 TextKit 视图）只覆盖了有限宽度回显路径，未给视图"横向身份"，故仍偶发。现探测提议一律应答文本自然尺寸（按 634pt 上限排版一次，短文本贴合、长文本封顶，带缓存随文本变更失效），气泡在任何布局阶段都占住应有宽度。
+
+### Meta
+
+- 版本号从 **1.206.0-rc5** 提升为 **1.206.0-rc6**（UI 排版 bugfix，按只递增 rc 位处理），内部构建号从 **161** 递增为 **162**，Help 与 Computer Use Helper 构建号从 **78** 递增为 **79**；App、Go agent、Help、Helper、浏览器扩展、README、响应头契约与产品文档保持一致。
+
 ## 1.206.0-rc5 - 2026-07-25
 
 ### Fixed

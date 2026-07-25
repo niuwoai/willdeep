@@ -435,7 +435,11 @@ struct RoundtableSelectableMessageText: NSViewRepresentable {
         context: Context
     ) -> CGSize? {
         guard let width = proposal.width, width.isFinite, width > 1 else {
-            return nil
+            // nil/无界/零宽的探测提议不能返回 nil：那会回退到 frame 为 .zero 的
+            // NSTextView，理想宽度被当成 ~0，HStack 便把整列分给相邻的贪婪
+            // Spacer，CJK 文本（任意两字间可断行）塌成一字一列的竖排。
+            // 改为应答文本的自然尺寸，让气泡在探测阶段就占住应有宽度。
+            return context.coordinator.naturalSize(textView)
         }
         return context.coordinator.sizeThatFits(textView, width: width)
     }
@@ -443,11 +447,14 @@ struct RoundtableSelectableMessageText: NSViewRepresentable {
     final class Coordinator: NSObject, NSTextViewDelegate {
         private static let minimumHeight: CGFloat = 22
         private static let measurementTolerance: CGFloat = 0.5
+        /// 自然宽度测量上限：气泡 `.frame(maxWidth: 660)` 减去水平 padding 13pt×2。
+        private static let maximumNaturalWidth: CGFloat = 634
 
         var onSelectionChange: (String?) -> Void
         var renderedSource: String?
         private var measuredWidth: CGFloat?
         private var measuredHeight: CGFloat?
+        private var naturalMeasurement: CGSize?
         private var selectedText: String?
 
         init(onSelectionChange: @escaping (String?) -> Void) {
@@ -478,6 +485,32 @@ struct RoundtableSelectableMessageText: NSViewRepresentable {
         func invalidateMeasurement() {
             measuredWidth = nil
             measuredHeight = nil
+            naturalMeasurement = nil
+        }
+
+        /// 无有效宽度提议（理想/最小尺寸探测）时的应答：按测量上限排版一次，
+        /// 返回实际使用宽度（短文本贴合、长文本封顶），避免被判定为零宽视图。
+        func naturalSize(_ textView: NSTextView) -> CGSize {
+            if let naturalMeasurement {
+                return naturalMeasurement
+            }
+            guard let container = textView.textContainer,
+                  let layoutManager = textView.layoutManager else {
+                return CGSize(width: Self.minimumHeight, height: Self.minimumHeight)
+            }
+
+            container.containerSize = NSSize(
+                width: Self.maximumNaturalWidth,
+                height: CGFloat.greatestFiniteMagnitude
+            )
+            layoutManager.ensureLayout(for: container)
+            let used = layoutManager.usedRect(for: container)
+            let size = CGSize(
+                width: max(1, ceil(used.width)),
+                height: max(Self.minimumHeight, ceil(used.height + 2))
+            )
+            naturalMeasurement = size
+            return size
         }
 
         func sizeThatFits(_ textView: NSTextView, width: CGFloat) -> CGSize {

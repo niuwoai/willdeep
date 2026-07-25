@@ -475,17 +475,14 @@ private struct RoundtableStreamingMessageBubble: View {
                     .foregroundStyle(RoundtableVisuals.accent(for: role))
                 }
 
-                // Render the live draft through the SAME width-authoritative
-                // TextKit view the finalized bubble uses: it declares its size
-                // as the proposed width via `sizeThatFits`, so it always claims
-                // the bubble column instead of collapsing. A bare SwiftUI `Text`
-                // here had no minimum-width floor, so during the first layout
-                // pass — before the row's width resolved — the adjacent greedy
-                // `Spacer` squeezed CJK content (which line-breaks between any
-                // two glyphs) into a one-glyph-per-line column (逐字竖排) until
-                // the message finalized. Reusing the finalized renderer also
-                // makes the streaming→final transition seamless. Selection is a
-                // no-op while the draft is still mutating every frame.
+                // Render the live draft through the SAME TextKit view the
+                // finalized bubble uses. Its `sizeThatFits` answers ideal-size
+                // probes (nil/unbounded width) with the text's natural width,
+                // so the adjacent greedy `Spacer` can never squeeze CJK content
+                // (which line-breaks between any two glyphs) into a
+                // one-glyph-per-line column (逐字竖排). Reusing the finalized
+                // renderer also makes the streaming→final transition seamless.
+                // Selection is a no-op while the draft is still mutating.
                 RoundtableSelectableMessageText(
                     text: draft + (isComplete ? "" : " ▍"),
                     onSelectionChange: { _ in }
