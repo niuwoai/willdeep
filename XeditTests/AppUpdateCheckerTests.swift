@@ -87,11 +87,19 @@ struct AppUpdateCheckerTests {
         #expect(meta.notes == "Managed update")
     }
 
+    /// 检查更新是 control-plane 调用:host 必须钉死 some.im,绝不跟随模型中转
+    /// 区域(中国区 api.niuwoai.com 是纯推理网关,无 app-updates 端点,跟随即 404)。
+    /// 旧实现曾按 settings.baseURL 拼 host,中国区用户「检查更新」永远弹错。
     @Test
     func managedUpdateURLsUseControlPlaneRoutes() throws {
-        let settings = SomeIMIntegrationSettings(baseURL: "https://edge.example.test/v1")
-        let metadataURL = try #require(AppUpdateChecker.managedUpdateURL(currentVersion: "1.180.0-rc1", settings: settings))
-        let appcastURL = try #require(AppUpdateChecker.managedAppcastURL(settings: settings))
+        let metadataURL = try #require(AppUpdateChecker.managedUpdateURL(currentVersion: "1.180.0-rc1"))
+        let appcastURL = try #require(AppUpdateChecker.managedAppcastURL())
+
+        // host 钉死 control-plane,这是本测试的核心不变量。
+        #expect(metadataURL.host == "some.im")
+        #expect(appcastURL.host == "some.im")
+        #expect(metadataURL.scheme == "https")
+        #expect(appcastURL.scheme == "https")
 
         #expect(metadataURL.path == "/api/v1/public/app-updates/latest")
         #expect(metadataURL.query?.contains("current_version=1.180.0-rc1") == true)

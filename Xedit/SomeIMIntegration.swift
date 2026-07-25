@@ -893,10 +893,12 @@ struct SomeIMGeneratedImage: Equatable, Sendable {
 enum SomeIMClient {
     static let willDeepClientID = "willdeep"
     static let customerPortalURL = URL(string: "https://some.im/customer")!
-    /// Customer identity, login, and subscription APIs live on some.im.
-    /// Model relay selection (for example api.niuwoai.com in China) must not
-    /// redirect these control-plane calls to an inference-only gateway.
-    private static let controlPlaneOrigin = "https://some.im"
+    /// Customer identity, login, subscription, and app-update APIs live on
+    /// some.im. Model relay selection (for example api.niuwoai.com in China)
+    /// must not redirect these control-plane calls to an inference-only
+    /// gateway — the relay only proxies model inference and 404s everything
+    /// else (which used to break Sparkle update checks for China-region users).
+    static let controlPlaneOrigin = "https://some.im"
     private static let someIMClientLocationEndpoint = URL(string: "https://some.im/api/v1/public/client-location")!
     private static let ipipClientLocationEndpoint = URL(string: "https://myip.ipip.net")!
     private static let myIPLAClientLocationEndpoint = URL(string: "https://api.myip.la/en?json")!

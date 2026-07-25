@@ -3,6 +3,16 @@
 > 当前文件保留最新版本（1.200.0-rc3 至 1.109.0-rc340）。
 > 更早的 1000 个版本已移至 [CHANGELOG-ARCHIVE.md](CHANGELOG-ARCHIVE.md)。
 
+## 1.201.0-rc3 - 2026-07-25
+
+### Fixed
+
+- **中国区中转用户「检查更新」不再永远弹「更新错误」**：Sparkle 的 appcast 地址（`AppUpdateChecker.managedAppcastURL` / `managedUpdateURL`）此前按用户所选 some.im 模型中转区域的 baseURL 拼 host——选「中国区（api.niuwoai.com）」时更新请求打到 `api.niuwoai.com/api/v1/public/app-updates/appcast.xml`，而中转是纯推理网关、无 app-updates 端点，恒 404，每次检查更新都弹「获取升级信息时出现错误」。现按项目既有 control-plane 约定（登录/订阅同级），更新检查 host 钉死 `some.im`（复用 `SomeIMClient.controlPlaneOrigin`，取消 private），两个 URL 构造函数不再接收 settings 参数、从签名上杜绝回归；单测补上 host 断言（此前只断言路径，恰好放过了这个 bug）。注意：**已装出去的旧客户端仍带旧逻辑**，需服务端在 `api.niuwoai.com` 补 `/api/v1/public/app-updates/*` 路由（302 到 some.im 即可）才能让存量用户收到更新。
+
+### Meta
+
+- 版本号从 **1.201.0-rc2** 提升为 **1.201.0-rc3**（更新源 bugfix，只递增 rc 位），内部构建号从 **148** 递增为 **149**，Help 与 Computer Use Helper 构建号从 **65** 递增为 **66**；App、Go agent、Help、Helper、浏览器扩展、README、响应头契约与产品文档保持一致。
+
 ## 1.201.0-rc2 - 2026-07-25
 
 ### Changed

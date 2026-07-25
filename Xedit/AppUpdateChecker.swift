@@ -253,15 +253,12 @@ enum AppUpdateChecker {
         return request
     }
 
+    /// 检查更新属于 control-plane(和登录/订阅同级),host 钉死 some.im,
+    /// **绝不**跟随用户选的模型中转区域 —— 中国区中转(api.niuwoai.com)是
+    /// 纯推理网关,没有 app-updates 端点,跟随过去只会拿到 404,导致
+    /// 「检查更新」永远弹错。刻意不接收 settings 参数,从签名上杜绝回归。
     static func managedUpdateURL(currentVersion: String) -> URL? {
-        managedUpdateURL(
-            currentVersion: currentVersion,
-            settings: SomeIMIntegrationStore.loadSettings()
-        )
-    }
-
-    static func managedUpdateURL(currentVersion: String, settings: SomeIMIntegrationSettings) -> URL? {
-        guard var components = URLComponents(string: settings.normalized.baseURL.trimmingCharacters(in: .whitespacesAndNewlines)) else {
+        guard var components = URLComponents(string: SomeIMClient.controlPlaneOrigin) else {
             return nil
         }
         components.path = "/api/v1/public/app-updates/latest"
@@ -274,12 +271,9 @@ enum AppUpdateChecker {
         return components.url
     }
 
-    static func managedAppcastURL(
-        settings: SomeIMIntegrationSettings = SomeIMIntegrationStore.loadSettings()
-    ) -> URL? {
-        guard var components = URLComponents(
-            string: settings.normalized.baseURL.trimmingCharacters(in: .whitespacesAndNewlines)
-        ) else {
+    /// 同上:appcast 一律走 control-plane origin,不吃 settings。
+    static func managedAppcastURL() -> URL? {
+        guard var components = URLComponents(string: SomeIMClient.controlPlaneOrigin) else {
             return nil
         }
         components.path = "/api/v1/public/app-updates/appcast.xml"
