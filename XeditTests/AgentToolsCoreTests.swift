@@ -1223,7 +1223,18 @@ struct AgentToolsCoreTests {
     @Test
     func sandboxLaunchSkipsSeatbeltForAlwaysSafeReadOnlyCommands() {
         let root = URL(fileURLWithPath: "/tmp/willdeep-workspace")
-        for command in ["pwd", "git log -1 --oneline", "git shortlog -s HEAD", "rg AgentSandboxPolicy ."] {
+        for command in [
+            "pwd",
+            "cat README.md",
+            "diff -u a b",
+            "jq . package.json",
+            "git log -1 --oneline",
+            "git shortlog -s HEAD",
+            "git grep -n seatbelt",
+            "rg AgentSandboxPolicy .",
+            "unzip -l archive.zip",
+            "defaults read com.apple.finder"
+        ] {
             #expect(
                 AgentSandboxPolicy.shouldRunWithoutSeatbelt(command: command, mode: .readOnly),
                 "\(command) should skip seatbelt in readOnly"

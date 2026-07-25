@@ -3,6 +3,16 @@
 > 当前文件保留最新版本（1.200.0-rc3 至 1.109.0-rc340）。
 > 更早的 1000 个版本已移至 [CHANGELOG-ARCHIVE.md](CHANGELOG-ARCHIVE.md)。
 
+## 1.205.0-rc1 - 2026-07-25
+
+### Changed
+
+- **扩大本地只读 alwaysSafe 白名单**：补上 `diff`/`realpath`/`jq`/`xxd`/`mdfind`/`lsof` 等无写本地工具，以及 `defaults read`、`unzip -l`、更多 git 只读子命令（`grep`/`merge-base`/`version`…）。它们会自动享受 `readOnly` 下跳过 seatbelt；`curl`/`ssh`/`defaults write`/`unzip` 解压仍保持闸门。
+
+### Meta
+
+- 版本号从 **1.204.0-rc1** 提升为 **1.205.0-rc1**（白名单扩面为行为变更，提升 MINOR、rc 重置），内部构建号从 **154** 递增为 **155**，Help 与 Computer Use Helper 构建号从 **71** 递增为 **72**；App、Go agent、Help、Helper、浏览器扩展、README、响应头契约与产品文档保持一致。
+
 ## 1.204.0-rc1 - 2026-07-25
 
 ### Changed

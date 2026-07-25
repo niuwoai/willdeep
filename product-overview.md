@@ -1,6 +1,6 @@
 # WillDeep Product Overview
 
-> Last updated: 2026-07-25 | Current version: v1.204.0-rc1
+> Last updated: 2026-07-25 | Current version: v1.205.0-rc1
 
 ## Positioning
 
@@ -11,6 +11,8 @@ Official product domain: [willdeep.com](https://willdeep.com).
 WillDeep is configured for non-App-Store distribution without App Sandbox so it can access local project files with fewer permission interruptions.
 
 ## 架构概览
+
+- **扩大本地只读 alwaysSafe 白名单（1.205.0-rc1）** —— 补 `diff`/`jq`/`xxd`/`mdfind`/`defaults read`/`unzip -l` 及更多 git 只读子命令；与既有只读白名单一样在 `readOnly` 下跳过 seatbelt。`curl`/`ssh` 与写形态命令仍闸住。
 
 - **只读白名单命令跳过 seatbelt（1.204.0-rc1）** —— `git log` / `status` / `rg` 等 `alwaysSafe` 只读命令在 `readOnly` 模式下不再套 `sandbox-exec`（仍 scrub 环境）；网络/凭据类命令与 `workspaceWrite*` 模式继续走 seatbelt。
 
