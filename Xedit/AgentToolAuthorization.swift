@@ -562,7 +562,11 @@ enum AgentSandboxPolicy {
     }
 
     nonisolated private static func seatbeltProfile(mode: AgentSandboxMode, rootDirectory: URL?) -> String {
+        // git 等工具几乎所有子命令都会以写模式打开 /dev/null（重定向 hook/pager/gpg
+        // 探测输出），交互探测会打开 /dev/tty；(deny default) 下不放行会导致命令恒 EPERM。
         var writeAllows: [String] = [
+            "(literal \"/dev/null\")",
+            "(literal \"/dev/tty\")",
             "(subpath \(profileString(FileManager.default.temporaryDirectory.standardizedFileURL.path)))"
         ]
         if (mode == .workspaceWrite || mode == .workspaceWriteNetwork),

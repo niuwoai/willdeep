@@ -1261,6 +1261,24 @@ struct AgentToolsCoreTests {
             #expect(launch.executableURL.path == "/bin/sh")
         }
     }
+
+    @Test
+    func sandboxProfileAllowsWritingDeviceFilesInEveryMode() {
+        // git 几乎所有子命令都会以写模式打开 /dev/null；(deny default) profile
+        // 不放行会导致沙箱下 git 恒 EPERM。只断言纯函数生成的 profile 字符串，
+        // 不端到端跑 sandbox-exec 子进程（CI 虚拟化 runner 上行为不可靠）。
+        guard FileManager.default.isExecutableFile(atPath: "/usr/bin/sandbox-exec") else { return }
+        for mode in [AgentSandboxMode.readOnly, .workspaceWrite, .workspaceWriteNetwork] {
+            let launch = AgentSandboxPolicy.shellLaunch(
+                command: "git status",
+                mode: mode,
+                rootDirectory: URL(fileURLWithPath: "/tmp/willdeep-workspace")
+            )
+            let profile = launch.arguments.first { $0.contains("file-write") } ?? ""
+            #expect(profile.contains("(literal \"/dev/null\")"), "mode \(mode) 应放行 /dev/null 写入")
+            #expect(profile.contains("(literal \"/dev/tty\")"), "mode \(mode) 应放行 /dev/tty 写入")
+        }
+    }
 }
 
 @Suite
