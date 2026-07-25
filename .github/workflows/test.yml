@@ -96,6 +96,9 @@ jobs:
       - name: Run widget side-panel contract guard
         run: ruby scripts/widget_side_panel_contract_test.rb build/ci/widget_side_panel_report.md build/ci/widget_side_panel_report.json
 
+      - name: Run Expert Roundtable interaction contract guard
+        run: ruby scripts/roundtable_interaction_contract_test.rb build/ci/roundtable_interaction_contract_report.md build/ci/roundtable_interaction_contract_report.json
+
       - name: Run image edit contract guard
         run: ruby scripts/image_edit_contract_test.rb build/ci/image_edit_report.md build/ci/image_edit_report.json
 
@@ -176,6 +179,8 @@ jobs:
           printf '\n\n' >> "$GITHUB_STEP_SUMMARY"
           cat build/ci/widget_side_panel_report.md >> "$GITHUB_STEP_SUMMARY"
           printf '\n\n' >> "$GITHUB_STEP_SUMMARY"
+          cat build/ci/roundtable_interaction_contract_report.md >> "$GITHUB_STEP_SUMMARY"
+          printf '\n\n' >> "$GITHUB_STEP_SUMMARY"
           cat build/ci/image_edit_report.md >> "$GITHUB_STEP_SUMMARY"
           printf '\n\n' >> "$GITHUB_STEP_SUMMARY"
           cat build/ci/media_task_refresh_report.md >> "$GITHUB_STEP_SUMMARY"
@@ -218,6 +223,8 @@ jobs:
             build/ci/short_drama_media_report.json
             build/ci/widget_side_panel_report.md
             build/ci/widget_side_panel_report.json
+            build/ci/roundtable_interaction_contract_report.md
+            build/ci/roundtable_interaction_contract_report.json
             build/ci/image_edit_report.md
             build/ci/image_edit_report.json
             build/ci/media_task_refresh_report.md

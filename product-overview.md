@@ -1,6 +1,6 @@
 # WillDeep Product Overview
 
-> Last updated: 2026-07-24 | Current version: v1.198.0-rc2
+> Last updated: 2026-07-25 | Current version: v1.202.0-rc2
 
 ## Positioning
 
@@ -11,6 +11,14 @@ Official product domain: [willdeep.com](https://willdeep.com).
 WillDeep is configured for non-App-Store distribution without App Sandbox so it can access local project files with fewer permission interruptions.
 
 ## 架构概览
+
+- **专家圆桌准备室、组队与真流式（1.200.0-rc1）** —— 用户提出议题后先进入持久化准备室：WillDeep 精炼决策问题、生成讨论框架和澄清问题，并从十位内置专家中给出带理由的 2～4 人建议；用户可继续补充背景，再自由增删并明确确认 2～6 位专家。新增法律合规、数据研究、市场增长、组织运营四类专家与独立矢量头像，心理专家升级为行为心理与决策定位。正式发言采用两阶段链路：自由文本正文以 provider delta 真流式呈现，完成后再结构化提取 OSR 和反问状态；正文与推理隔离，分析失败不丢失已展示内容，流式草稿按 80ms 刷新、1 秒检查点持久化，并支持失败、取消和旧会话恢复。
+
+- **专家圆桌正文布局闭环修复（1.200.0-rc1）** —— 只读专家发言不再通过 `NSViewRepresentable → 异步测高 → @State → .frame(height:)` 把 TextKit 测量结果写回 SwiftUI；组件改为在 `sizeThatFits` 中按当前宽度同步返回确定高度并缓存重复测量。窗口缩放仍会按新宽度重新排版，原生划词引用继续保留，但讨论列表不再持续制造 `GraphHost.flushTransactions`；空选区回调也增加去重，避免在视图更新期间无意义写状态。
+
+- **专家圆桌终稿规范化与自动落盘（1.199.0-rc2）** —— 圆桌主持人生成终稿后，WillDeep 会剥离模型偶发输出的“只读代理/请父 agent 写文件”等执行环境话术，自动解开包裹全文的 Markdown 围栏并去掉重复 H1，再交给现有 Markdown 预览组件按标题、列表、强调和表格正常渲染。规范终稿会自动写入 Application Support 下按报告隔离的 `.md` 文件，文档页显示「已自动保存」并可在 Finder 中定位；旧会话进入文档页时同样会自动修复、回填文件，失败则保留可读正文、给出错误与重试入口。
+
+- **专家圆桌沉浸式讨论与引用（1.199.0-rc1）** —— 圆桌讨论升级为有明确专家身份的原生工作台：六位领域专家各有姓名、职责、专属强调色和统一生成风格头像；模型开始组织观点时，发言流与右侧专家席会提前提示「XX 专家要发言了」。发言卡用语义色、图标和标签突出支持/反对/中立/待定，态势看板实时展示阶段进度、立场比例、专家状态与 OSR 信号。主页及讨论区使用约三行高输入框，Return 提交、修饰键 + Return 换行；主持人既可引用专家整段发言，也可划选一段原生文本引用，引用关系随消息落盘并进入后续模型上下文。
 
 - **工作区快照与桌宠采样热点降载（1.196.0-rc3）** —— Agent 每轮的工作区修订捕获改用 `git status -unormal`，避免预先展开整棵未跟踪目录；普通文件按最多 256 个路径批量调用 `git hash-object --no-filters`，替代逐文件 Swift SHA-256 与文件句柄往返，同时保留同尺寸内容变化检测。隐藏缓存目录不再进入修订快照，产物目录树只在真正可能生成产物的工具执行前按需扫描；桌宠动画刷新率封顶为 30 FPS，降低空闲时的持续 CPU 占用。
 

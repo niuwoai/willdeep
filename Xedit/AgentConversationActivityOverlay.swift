@@ -167,7 +167,11 @@ enum AgentSessionArtifactScope {
             urlsByPath[url.path] = url
         }
         if let repositoryURL {
-            for change in appState.agentWorktreeChanges.files {
+            // 只把「用户可消费的交付物」（白名单扩展名）当产物；普通源码变更
+            // （.go/.swift/.ts 等）归入工作文件，不混进产物卡片。对齐
+            // AgentTaskMonitorRail 的产物/工作文件划分。
+            for change in appState.agentWorktreeChanges.files
+            where AppState.isAgentSessionArtifactPath(change.path) {
                 let url = repositoryURL.appendingPathComponent(change.path).standardizedFileURL
                 guard fileExists(url) else { continue }
                 urlsByPath[url.path] = url

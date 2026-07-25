@@ -15,8 +15,11 @@ import SwiftUI
 
 enum RoundtableRoute: Equatable {
     case home
+    case preparation(runtimeID: UUID, reportID: UUID)
     case discussion(runtimeID: UUID, reportID: UUID)
     case document(runtimeID: UUID, reportID: UUID)
+    /// 专家资料页:从讨论中的专家席点进来。`from*` 记住来路,返回时回到那场讨论。
+    case expertProfile(role: AgentRoundtableExpertRole, fromRuntimeID: UUID, fromReportID: UUID)
 }
 
 /// 三个页面的共享路由器。宿主(独立窗口 / 嵌入页)各自持有 route 状态,把
@@ -29,10 +32,23 @@ struct RoundtableRouter: View {
         switch route {
         case .home:
             RoundtableHomeView(route: $route, onDetach: onDetach)
+        case let .preparation(runtimeID, reportID):
+            RoundtablePreparationContainer(
+                route: $route,
+                runtimeID: runtimeID,
+                reportID: reportID
+            )
         case let .discussion(runtimeID, reportID):
             RoundtableDiscussionView(route: $route, runtimeID: runtimeID, reportID: reportID)
         case let .document(runtimeID, reportID):
             RoundtableDocumentView(route: $route, runtimeID: runtimeID, reportID: reportID)
+        case let .expertProfile(role, fromRuntimeID, fromReportID):
+            RoundtableExpertProfileView(
+                route: $route,
+                role: role,
+                fromRuntimeID: fromRuntimeID,
+                fromReportID: fromReportID
+            )
         }
     }
 }
@@ -125,25 +141,22 @@ struct RoundtableHomeView: View {
 
     private var composer: some View {
         VStack(alignment: .leading, spacing: 10) {
-            TextEditor(text: $topic)
-                .font(.system(size: 15))
-                .frame(minHeight: 64)
-                .scrollContentBackground(.hidden)
-                .overlay(alignment: .topLeading) {
-                    if topic.isEmpty {
-                        Text(L10n.Roundtable.topicPlaceholder)
-                            .font(.system(size: 15))
-                            .foregroundStyle(.tertiary)
-                            .padding(.top, 8)
-                            .padding(.leading, 5)
-                            .allowsHitTesting(false)
-                    }
-                }
+            RoundtableComposerTextView(
+                text: $topic,
+                placeholder: L10n.Roundtable.topicPlaceholder,
+                onSubmit: start
+            )
+            .frame(height: 78)
             Divider()
             HStack {
-                Label(L10n.Roundtable.recommendHint, systemImage: "sparkles")
-                    .font(.system(size: 12))
-                    .foregroundStyle(.tertiary)
+                VStack(alignment: .leading, spacing: 2) {
+                    Label(L10n.Roundtable.recommendHint, systemImage: "sparkles")
+                        .font(.system(size: 12))
+                        .foregroundStyle(.secondary)
+                    Text(L10n.Roundtable.submitShortcutHint)
+                        .font(.system(size: 10.5))
+                        .foregroundStyle(.tertiary)
+                }
                 Spacer()
                 Button(action: start) {
                     Label(L10n.Roundtable.startAction, systemImage: "arrow.right")
@@ -153,8 +166,9 @@ struct RoundtableHomeView: View {
             }
         }
         .padding(16)
-        .background(RoundedRectangle(cornerRadius: 12).fill(Color(nsColor: .textBackgroundColor)))
-        .overlay(RoundedRectangle(cornerRadius: 12).stroke(Color.secondary.opacity(0.18), lineWidth: 1))
+        .background(RoundedRectangle(cornerRadius: 14).fill(Color(nsColor: .textBackgroundColor)))
+        .overlay(RoundedRectangle(cornerRadius: 14).stroke(Color.accentColor.opacity(0.28), lineWidth: 1))
+        .shadow(color: Color.black.opacity(0.08), radius: 12, y: 5)
     }
 
     /// 示例议题:点一下把话题填进输入框(不直接发起,留给用户改)。
@@ -211,13 +225,15 @@ struct RoundtableHomeView: View {
     private func start() {
         guard let runtimeID = appState.startAgentRoundtable(topic: topic) else { return }
         guard let reportID = reportID(inRuntime: runtimeID) else { return }
-        route = .discussion(runtimeID: runtimeID, reportID: reportID)
+        route = .preparation(runtimeID: runtimeID, reportID: reportID)
     }
 
     private func open(_ report: AgentRoundtableReport) {
         guard let (runtimeID, reportID) = locate(reportID: report.id) else { return }
         if report.phase == .completed, report.finalDocument != nil {
             route = .document(runtimeID: runtimeID, reportID: reportID)
+        } else if report.phase == .clarifying || report.phase == .selectingExperts {
+            route = .preparation(runtimeID: runtimeID, reportID: reportID)
         } else {
             route = .discussion(runtimeID: runtimeID, reportID: reportID)
         }
@@ -245,6 +261,102 @@ struct RoundtableHomeView: View {
             }
         }
         return nil
+    }
+}
+
+// MARK: - 会前准备
+
+private struct RoundtablePreparationContainer: View {
+    @EnvironmentObject var appState: AppState
+    @Binding var route: RoundtableRoute
+    let runtimeID: UUID
+    let reportID: UUID
+
+    private var workflowReport: WorkflowReport? {
+        appState.workflowReport(id: reportID, runtimeID: runtimeID)
+    }
+
+    private var report: AgentRoundtableReport? {
+        workflowReport?.roundtable
+    }
+
+    private var isBusy: Bool {
+        appState.isAgentRoundtableTaskRunning(reportID: reportID)
+    }
+
+    var body: some View {
+        Group {
+            if let report {
+                if report.phase == .selectingExperts {
+                    RoundtableExpertSelectionView(
+                        report: report,
+                        isBusy: isBusy,
+                        errorMessage: workflowReport?.summary,
+                        providerOptions: appState.agentProviderLibrary.usableEntriesForChatSelection(
+                            isSomeIMAuthenticated: SomeIMIntegrationStore.hasAuthenticatedSessionForAutomaticDefaults()
+                        ),
+                        onBackToPreparation: {
+                            appState.returnToRoundtablePreparation(
+                                runtimeID: runtimeID,
+                                reportID: reportID
+                            )
+                        },
+                        onConfirm: { experts, providerEntryID, modelID in
+                            if appState.confirmRoundtableExpertSelection(
+                                runtimeID: runtimeID,
+                                reportID: reportID,
+                                experts: experts,
+                                providerEntryID: providerEntryID,
+                                modelID: modelID
+                            ) {
+                                route = .discussion(
+                                    runtimeID: runtimeID,
+                                    reportID: reportID
+                                )
+                            }
+                        }
+                    )
+                } else {
+                    RoundtablePreparationView(
+                        report: report,
+                        isBusy: isBusy,
+                        errorMessage: workflowReport?.summary,
+                        providerOptions: appState.agentProviderLibrary.usableEntriesForChatSelection(
+                            isSomeIMAuthenticated: SomeIMIntegrationStore.hasAuthenticatedSessionForAutomaticDefaults()
+                        ),
+                        onBack: { route = .home },
+                        onRefine: { content in
+                            appState.refineRoundtablePreparation(
+                                runtimeID: runtimeID,
+                                reportID: reportID,
+                                content: content
+                            )
+                        },
+                        onChooseExperts: {
+                            appState.showRoundtableExpertSelection(
+                                runtimeID: runtimeID,
+                                reportID: reportID
+                            )
+                        },
+                        // 会前选定的 provider/模型实时写回 report,带到「选择专家」页作为初值。
+                        onSelectProviderModel: { providerEntryID, modelID in
+                            appState.updateWorkflowReport(id: reportID, runtimeID: runtimeID) { item in
+                                guard var roundtable = item.roundtable else { return }
+                                roundtable.selectedProviderEntryID = providerEntryID
+                                roundtable.selectedModelID = modelID
+                                roundtable.updatedAt = Date()
+                                item.roundtable = roundtable
+                            }
+                            appState.persistWorkflowRuntime(runtimeID: runtimeID)
+                        }
+                    )
+                }
+            } else {
+                ProgressView()
+                    .controlSize(.regular)
+            }
+        }
+        .animation(.easeInOut(duration: 0.2), value: report?.phase)
     }
 }
 
@@ -310,7 +422,7 @@ private struct RoundtableHistoryRow: View {
 
 // MARK: - 讨论中
 
-struct RoundtableDiscussionView: View {
+private struct LegacyRoundtableDiscussionView: View {
     @EnvironmentObject var appState: AppState
     @Binding var route: RoundtableRoute
     let runtimeID: UUID
@@ -338,7 +450,7 @@ struct RoundtableDiscussionView: View {
         HStack(spacing: 0) {
             conversation
             Divider()
-            RoundtableDashboard(report: report)
+            LegacyRoundtableDashboard(report: report)
                 .frame(width: 240)
         }
     }
@@ -350,7 +462,7 @@ struct RoundtableDiscussionView: View {
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 14) {
                     ForEach(report?.messages ?? [], id: \.id) { message in
-                        RoundtableBubble(message: message)
+                        LegacyRoundtableBubble(message: message)
                     }
                 }
                 .padding(16)
@@ -464,7 +576,7 @@ struct RoundtableDiscussionView: View {
     }
 }
 
-private struct RoundtableBubble: View {
+private struct LegacyRoundtableBubble: View {
     let message: RoundtableMessage
 
     var body: some View {
@@ -540,7 +652,7 @@ private struct RoundtableBubble: View {
 
 // MARK: - 态势看板
 
-private struct RoundtableDashboard: View {
+private struct LegacyRoundtableDashboard: View {
     let report: AgentRoundtableReport?
 
     var body: some View {
@@ -611,14 +723,27 @@ struct RoundtableDocumentView: View {
         appState.workflowReport(id: reportID, runtimeID: runtimeID)?.roundtable
     }
 
+    private var normalizedDocument: String {
+        AgentRoundtableDocumentNormalizer.normalize(report?.finalDocument ?? "")
+    }
+
+    private var persistedDocumentURL: URL? {
+        guard let path = report?.finalDocumentFilePath, !path.isEmpty else { return nil }
+        let url = URL(fileURLWithPath: path)
+        return FileManager.default.fileExists(atPath: url.path) ? url : nil
+    }
+
     var body: some View {
         VStack(spacing: 0) {
             chrome
             Divider()
+            if let error = report?.finalDocumentWriteError, persistedDocumentURL == nil {
+                documentWriteErrorBanner(error)
+            }
             ScrollView {
                 VStack(alignment: .leading, spacing: 10) {
-                    if let document = report?.finalDocument, !document.isEmpty {
-                        ForEach(Array(MarkdownPreviewParser.blocks(from: document).enumerated()), id: \.offset) { _, block in
+                    if !normalizedDocument.isEmpty {
+                        ForEach(Array(MarkdownPreviewParser.blocks(from: normalizedDocument).enumerated()), id: \.offset) { _, block in
                             MarkdownPreviewBlockView(block: block)
                                 .frame(maxWidth: .infinity, alignment: .leading)
                         }
@@ -631,6 +756,9 @@ struct RoundtableDocumentView: View {
                 .frame(maxWidth: 720, alignment: .leading)
                 .frame(maxWidth: .infinity)
             }
+        }
+        .task(id: report?.finalDocument) {
+            persistDocumentIfNeeded()
         }
     }
 
@@ -646,18 +774,319 @@ struct RoundtableDocumentView: View {
                 .font(.system(size: 15, weight: .medium))
                 .lineLimit(1)
             Spacer()
+            // 收敛出文档后仍能回看完整发言流(transcript 持久化)。
+            Button {
+                route = .discussion(runtimeID: runtimeID, reportID: reportID)
+            } label: {
+                Label(
+                    String(localized: "roundtable.document.viewDiscussion", defaultValue: "查看讨论过程"),
+                    systemImage: "bubble.left.and.bubble.right"
+                )
+                .font(.system(size: 13))
+            }
+            .buttonStyle(.bordered)
+            if let url = persistedDocumentURL {
+                Button {
+                    RoundtableDocumentExporter.reveal(url)
+                } label: {
+                    Label(
+                        L10n.Roundtable.documentSavedAction,
+                        systemImage: "checkmark.circle.fill"
+                    )
+                    .font(.system(size: 13))
+                }
+                .buttonStyle(.bordered)
+                .tint(.green)
+                .help(url.path)
+            }
             Button(action: export) {
                 Label(L10n.Roundtable.exportAction, systemImage: "square.and.arrow.down")
                     .font(.system(size: 13))
             }
             .buttonStyle(.bordered)
-            .disabled((report?.finalDocument ?? "").isEmpty)
+            .disabled(normalizedDocument.isEmpty)
         }
         .padding(.horizontal, 16).padding(.vertical, 10)
     }
 
+    private func documentWriteErrorBanner(_ error: String) -> some View {
+        HStack(spacing: 8) {
+            Image(systemName: "exclamationmark.triangle.fill")
+                .foregroundStyle(.orange)
+            Text(L10n.Roundtable.documentSaveFailed(error))
+                .font(.system(size: 12))
+                .foregroundStyle(.secondary)
+                .lineLimit(2)
+            Spacer(minLength: 8)
+            Button(L10n.Roundtable.documentSaveRetry) {
+                persistDocumentIfNeeded(force: true)
+            }
+            .buttonStyle(.bordered)
+            .controlSize(.small)
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 8)
+        .background(.orange.opacity(0.08))
+    }
+
     private func export() {
-        guard let report, let document = report.finalDocument, !document.isEmpty else { return }
-        RoundtableDocumentExporter.export(title: report.displayTitle, markdown: document)
+        guard let report, !normalizedDocument.isEmpty else { return }
+        RoundtableDocumentExporter.export(
+            title: report.displayTitle,
+            markdown: normalizedDocument
+        )
+    }
+
+    private func persistDocumentIfNeeded(force: Bool = false) {
+        guard let report, !normalizedDocument.isEmpty else { return }
+        if !force, persistedDocumentURL != nil, normalizedDocument == report.finalDocument {
+            return
+        }
+
+        do {
+            let url = try RoundtableDocumentExporter.persist(
+                reportID: reportID,
+                title: report.displayTitle,
+                markdown: normalizedDocument
+            )
+            appState.updateWorkflowReport(id: reportID, runtimeID: runtimeID) { item in
+                guard var detail = item.roundtable else { return }
+                detail.finalDocument = normalizedDocument
+                detail.finalDocumentFilePath = url.path
+                detail.finalDocumentWriteError = nil
+                detail.updatedAt = Date()
+                item.summary = normalizedDocument
+                item.roundtable = detail
+            }
+            appState.persistWorkflowRuntime(runtimeID: runtimeID)
+        } catch {
+            let description = error.localizedDescription
+            NSLog(
+                "Roundtable document backfill failed report=%@ error=%@",
+                reportID.uuidString,
+                description
+            )
+            appState.updateWorkflowReport(id: reportID, runtimeID: runtimeID) { item in
+                guard var detail = item.roundtable else { return }
+                detail.finalDocument = normalizedDocument
+                detail.finalDocumentFilePath = nil
+                detail.finalDocumentWriteError = description
+                detail.updatedAt = Date()
+                item.summary = normalizedDocument
+                item.roundtable = detail
+            }
+            appState.persistWorkflowRuntime(runtimeID: runtimeID)
+        }
+    }
+}
+
+// MARK: - 专家资料页
+
+/// 点击讨论中的专家席某位专家进入:上半是人格简介(头像 / 姓名 / 定位 / persona),
+/// 下半是这位专家「参与过的历史讨论」,点任意一条跳进那场对话。整页用该专家的
+/// accent 色统一气质,导航沿用 RoundtableRoute(不用 sheet,和圆桌其它页一致)。
+struct RoundtableExpertProfileView: View {
+    @EnvironmentObject var appState: AppState
+    @Binding var route: RoundtableRoute
+    let role: AgentRoundtableExpertRole
+    /// 记住是从哪场讨论点进来的,返回时原路回去。
+    let fromRuntimeID: UUID
+    let fromReportID: UUID
+
+    @State private var discussions: [AgentRoundtableReport] = []
+
+    private var accent: Color { RoundtableVisuals.accent(for: role) }
+
+    private static let timestampFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.dateStyle = .medium
+        formatter.timeStyle = .short
+        return formatter
+    }()
+
+    var body: some View {
+        VStack(spacing: 0) {
+            chrome
+            Divider()
+            ScrollView {
+                VStack(alignment: .leading, spacing: 20) {
+                    profileHeader
+                    personaSection
+                    discussionsSection
+                }
+                .padding(24)
+                .frame(maxWidth: 720, alignment: .leading)
+                .frame(maxWidth: .infinity)
+            }
+        }
+        .background(Color(nsColor: .windowBackgroundColor))
+        .onAppear(perform: reload)
+    }
+
+    private var chrome: some View {
+        HStack(spacing: 10) {
+            Button {
+                route = .discussion(runtimeID: fromRuntimeID, reportID: fromReportID)
+            } label: {
+                Label(L10n.Roundtable.backAction, systemImage: "chevron.left")
+                    .labelStyle(.iconOnly)
+                    .font(.system(size: 14, weight: .medium))
+            }
+            .buttonStyle(.plain)
+            Text(role.personalName)
+                .font(.system(size: 15, weight: .medium))
+                .lineLimit(1)
+            Text(role.roleTitle)
+                .font(.system(size: 12))
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
+            Spacer()
+        }
+        .padding(.horizontal, 16).padding(.vertical, 10)
+    }
+
+    private var profileHeader: some View {
+        HStack(alignment: .center, spacing: 16) {
+            RoundtableExpertAvatar(role: role, size: 72)
+            VStack(alignment: .leading, spacing: 6) {
+                Text(role.personalName)
+                    .font(.system(size: 22, weight: .bold))
+                    .lineLimit(1)
+                Text(role.roleTitle)
+                    .font(.system(size: 14, weight: .medium))
+                    .foregroundStyle(accent)
+                    .lineLimit(1)
+                Text(role.shortExpertise)
+                    .font(.system(size: 12.5))
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            Spacer(minLength: 0)
+        }
+        .padding(18)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(RoundedRectangle(cornerRadius: 16).fill(accent.opacity(0.08)))
+        .overlay(RoundedRectangle(cornerRadius: 16).stroke(accent.opacity(0.25), lineWidth: 1))
+    }
+
+    private var personaSection: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Label(
+                String(localized: "roundtable.expertProfile.persona", defaultValue: "人格设定"),
+                systemImage: "person.text.rectangle"
+            )
+            .font(.system(size: 13, weight: .semibold))
+            .foregroundStyle(accent)
+            Text(role.systemPersona)
+                .font(.system(size: 13))
+                .foregroundStyle(.primary)
+                .textSelection(.enabled)
+                .fixedSize(horizontal: false, vertical: true)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(14)
+                .background(RoundedRectangle(cornerRadius: 12).fill(Color(nsColor: .textBackgroundColor)))
+                .overlay(RoundedRectangle(cornerRadius: 12).stroke(Color.secondary.opacity(0.15), lineWidth: 1))
+        }
+    }
+
+    private var discussionsSection: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Label(discussionsTitle, systemImage: "bubble.left.and.bubble.right")
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundStyle(.secondary)
+            if discussions.isEmpty {
+                emptyState
+            } else {
+                ForEach(discussions, id: \.id) { report in
+                    discussionRow(report)
+                }
+            }
+        }
+    }
+
+    private var emptyState: some View {
+        HStack(spacing: 8) {
+            Image(systemName: "tray")
+                .font(.system(size: 13))
+                .foregroundStyle(.tertiary)
+            Text(
+                String(
+                    localized: "roundtable.expertProfile.empty",
+                    defaultValue: "这位专家还没参与过讨论"
+                )
+            )
+            .font(.system(size: 13))
+            .foregroundStyle(.tertiary)
+        }
+        .padding(.vertical, 10)
+    }
+
+    private func discussionRow(_ report: AgentRoundtableReport) -> some View {
+        Button {
+            open(report)
+        } label: {
+            HStack(alignment: .top, spacing: 12) {
+                Image(systemName: report.phase == .completed ? "doc.text" : "ellipsis.bubble")
+                    .font(.system(size: 16))
+                    .foregroundStyle(report.phase == .completed ? accent : Color.orange)
+                    .padding(.top, 2)
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(report.displayTitle)
+                        .font(.system(size: 14, weight: .medium))
+                        .foregroundStyle(.primary)
+                        .lineLimit(1)
+                    Text(Self.timestampFormatter.string(from: report.updatedAt))
+                        .font(.system(size: 11.5))
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                }
+                Spacer(minLength: 0)
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 11))
+                    .foregroundStyle(.tertiary)
+                    .padding(.top, 4)
+            }
+            .padding(12)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(RoundedRectangle(cornerRadius: 12).fill(Color(nsColor: .textBackgroundColor)))
+            .overlay(RoundedRectangle(cornerRadius: 12).stroke(accent.opacity(0.18), lineWidth: 1))
+        }
+        .buttonStyle(.plain)
+    }
+
+    private var discussionsTitle: String {
+        let base = String(
+            localized: "roundtable.expertProfile.discussions",
+            defaultValue: "参与过的讨论"
+        )
+        return discussions.isEmpty ? base : "\(base) · \(discussions.count)"
+    }
+
+    private func reload() {
+        discussions = appState.loadRoundtableHistory().filter { $0.experts.contains(role) }
+    }
+
+    /// 与主页 open(_:) 同款相位路由:完成态进文档,会前态进准备,其余进讨论。
+    private func open(_ report: AgentRoundtableReport) {
+        guard let (runtimeID, reportID) = locate(reportID: report.id) else { return }
+        if report.phase == .completed, report.finalDocument != nil {
+            route = .document(runtimeID: runtimeID, reportID: reportID)
+        } else if report.phase == .clarifying || report.phase == .selectingExperts {
+            route = .preparation(runtimeID: runtimeID, reportID: reportID)
+        } else {
+            route = .discussion(runtimeID: runtimeID, reportID: reportID)
+        }
+    }
+
+    /// 从历史 report id 反查它所在的 runtime + workflow report id(仅在内存 runtime 里找)。
+    private func locate(reportID: UUID) -> (UUID, UUID)? {
+        for (rid, runtime) in appState.agentRuntimes {
+            for message in runtime.messages {
+                if let report = message.workflowReport, report.roundtable?.id == reportID {
+                    return (rid, report.id)
+                }
+            }
+        }
+        return nil
     }
 }

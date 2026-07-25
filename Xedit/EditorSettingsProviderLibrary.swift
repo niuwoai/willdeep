@@ -18,6 +18,7 @@ struct AgentProviderLibrarySection: View {
     let onFetchModels: (AgentProviderEntry) -> Void
 
     @State private var selectedEntryID: UUID?
+    @State private var importMessage: String?
 
     private var selectedEntry: AgentProviderEntry? {
         guard let id = selectedEntryID else { return nil }
@@ -88,9 +89,37 @@ struct AgentProviderLibrarySection: View {
                 .disabled(selectedEntryID == nil || appState.agentProviderLibrary.entries.count <= 1)
                 .help(L10n.Settings.Provider.removeTooltip)
 
+                Menu {
+                    ForEach(ProviderImportSource.allCases) { source in
+                        Button(source.displayName) {
+                            let message = appState.importProviders(from: source)
+                            importMessage = message
+                            selectedEntryID = appState.agentProviderLibrary.activeID
+                        }
+                    }
+                } label: {
+                    Image(systemName: "square.and.arrow.down")
+                        .frame(width: 22, height: 22)
+                }
+                .buttonStyle(.borderless)
+                .menuStyle(.borderlessButton)
+                .fixedSize()
+                .help(String(
+                    localized: "settings.provider.importFromTool",
+                    defaultValue: "从 Claude Code / openclaw / hermes 的配置导入 provider"
+                ))
+
                 Spacer(minLength: 0)
             }
             .padding(.top, 6)
+
+            if let importMessage {
+                Text(importMessage)
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .padding(.top, 3)
+            }
         }
     }
 

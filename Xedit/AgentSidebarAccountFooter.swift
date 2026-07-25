@@ -276,13 +276,8 @@ struct AgentSidebarAccountFooter: View {
             Circle()
                 .fill(appState.editorSettings.interfaceSkin.palette.accent.opacity(0.22))
             if let url = validatedAvatarURL(account.avatarURL) {
-                AsyncImage(url: url) { phase in
-                    switch phase {
-                    case .success(let image):
-                        image.resizable().scaledToFill()
-                    default:
-                        avatarInitial(account.displayName)
-                    }
+                CachedAvatarImage(url: url) {
+                    avatarInitial(account.displayName)
                 }
             } else {
                 avatarInitial(account.displayName)

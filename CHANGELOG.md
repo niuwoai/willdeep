@@ -1,8 +1,159 @@
 # Changelog
 
-> 当前文件保留最新版本（1.198.0-rc2 至 1.109.0-rc340）。
+> 当前文件保留最新版本（1.200.0-rc3 至 1.109.0-rc340）。
 > 更早的 1000 个版本已移至 [CHANGELOG-ARCHIVE.md](CHANGELOG-ARCHIVE.md)。
 
+## 1.202.0-rc2 - 2026-07-25
+
+### Added
+
+- **会话侧栏标题悬停跑马灯**：会话列表里被截断的长标题，鼠标悬停在该行时向左滚动整段可读（参照 Claude 客户端侧栏的体验），指针移开后回位；放得下的标题静止不动、不抖动。实现上复用计划卡既有的 `MarqueeOnHoverText` 组件，为它新增 `hugWidth` 参数支持「短标题紧贴内容、徽章跟在标题后」的 hug 布局——自然宽度用 NSFont 同步测出，首帧即有正确上限，避免靠 PreferenceKey 回填造成的徽章闪动。双击重命名、tooltip 与原行为保持不变。
+
+### Meta
+
+- 版本号从 **1.202.0-rc1** 提升为 **1.202.0-rc2**（侧栏交互打磨，同属本轮 UI 迭代，按只递增 rc 位处理），内部构建号从 **150** 递增为 **151**，Help 与 Computer Use Helper 构建号从 **67** 递增为 **68**；App、Go agent、Help、Helper、浏览器扩展、README、响应头契约与产品文档保持一致。
+
+## 1.202.0-rc1 - 2026-07-25
+
+### Added
+
+- **侧边栏面板可分离为独立窗口**：Agent 右侧辅助栏（终端、内嵌浏览器、文件、Diff、Preview、Plan、Dev Server、任务监控、媒体任务、短剧、网页组件、图片编辑共 12 种面板）的头部新增「分离成独立窗口」按钮，点击后面板从侧栏搬进一个独立窗口（`WindowGroup(for: AgentSidePanelKind.self)`，同种面板同值去重、重复点击聚焦既有窗口）；窗口头部提供「放回侧栏」按钮，在侧栏菜单重新选中同种面板时分离窗口也会自动让位归位。核心不变量是**同一种面板任何时刻只挂载在一处**——终端的 SwiftTerm NSView 与内嵌浏览器的 WKWebView 都是 model 层单实例，分离/归位是「搬家」而非「镜像」，终端进程、浏览器页面在搬动过程中保持存活（终端 tab/进程本就挂在 `AgentInteractiveTerminalController` 单例上，与 View 生命周期解耦）。配套：终端分离期间侧栏让出常驻挂载（避免双宿主抢 superview）；侧面板资源回收 reaper 对分离中的面板一律豁免（分离窗口不更新任何 session 的 `lastViewedAt`，不豁免会把用户正盯着的终端 tab 收走）；分离窗口沿用 `EditorAppStateRegistry.shared.current` 注入 AppState，随工作区切换整棵重建。新增 `AgentDetachedPanelWindow.swift`（分离窗口根视图 + 计数式 `AgentDetachedPanelRegistry`），侧栏内容分发抽出共用组件 `AgentSidePanelKindContent`，侧栏行为不变。
+
+### Meta
+
+- 版本号从 **1.201.0-rc3** 提升为 **1.202.0-rc1**（新功能提升 MINOR 位、rc 重置为 rc1），内部构建号从 **149** 递增为 **150**，Help 与 Computer Use Helper 构建号从 **66** 递增为 **67**；App、Go agent、Help、Helper、浏览器扩展、README、响应头契约与产品文档保持一致。
+
+## 1.201.0-rc3 - 2026-07-25
+
+### Fixed
+
+- **中国区中转用户「检查更新」不再永远弹「更新错误」**：Sparkle 的 appcast 地址（`AppUpdateChecker.managedAppcastURL` / `managedUpdateURL`）此前按用户所选 some.im 模型中转区域的 baseURL 拼 host——选「中国区（api.niuwoai.com）」时更新请求打到 `api.niuwoai.com/api/v1/public/app-updates/appcast.xml`，而中转是纯推理网关、无 app-updates 端点，恒 404，每次检查更新都弹「获取升级信息时出现错误」。现按项目既有 control-plane 约定（登录/订阅同级），更新检查 host 钉死 `some.im`（复用 `SomeIMClient.controlPlaneOrigin`，取消 private），两个 URL 构造函数不再接收 settings 参数、从签名上杜绝回归；单测补上 host 断言（此前只断言路径，恰好放过了这个 bug）。注意：**已装出去的旧客户端仍带旧逻辑**，需服务端在 `api.niuwoai.com` 补 `/api/v1/public/app-updates/*` 路由（302 到 some.im 即可）才能让存量用户收到更新。
+
+### Meta
+
+- 版本号从 **1.201.0-rc2** 提升为 **1.201.0-rc3**（更新源 bugfix，只递增 rc 位），内部构建号从 **148** 递增为 **149**，Help 与 Computer Use Helper 构建号从 **65** 递增为 **66**；App、Go agent、Help、Helper、浏览器扩展、README、响应头契约与产品文档保持一致。
+
+## 1.201.0-rc2 - 2026-07-25
+
+### Changed
+
+- **会前准备室两个按钮改为等体量·主次分明**：「继续细化」与「框架可以，选择专家」原来一个描边、一个实心且尺寸不一，视觉一强一弱像不同层级的控件。现统一为大尺寸、等宽成对——「选择专家」保持实心强调色作主操作、「继续细化」用描边作次操作，体量一致、层级清晰。
+- **准备室配色由固定紫改为跟随系统强调色**：澄清卡、澄清问题底色、主持人（会前主持）图标与输入框描边原来写死 `.purple`，与 App 其它处的强调色身份不一致；现全部改用 `Color.accentColor`，随用户所选界面强调色统一联动（会前准备室背景的氛围渐变光晕保持不变）。
+
+### Added
+
+- **会前准备室也能选本场 provider / 模型**：原来只有进到「选择专家」页才能选，且入口是个不起眼的小 `cpu` 菜单，很多人找不到。现在会前准备室 footer 顶部新增「本场使用的模型」选择器，选定后实时写回 report、带到「选择专家」页作为初值，两处共用同一个可复用组件 `RoundtableProviderModelPicker`，交互与展示完全一致。provider 库为空时（跟随全局活跃 provider）该选择器不显示，与原行为一致。
+
+### Meta
+
+- 版本号从 **1.201.0-rc1** 提升为 **1.201.0-rc2**（准备室 UI 打磨 + 会前选模型入口，功能同属专家圆桌本轮迭代，按只递增 rc 位处理），内部构建号从 **147** 递增为 **148**，Help 与 Computer Use Helper 构建号从 **64** 递增为 **65**；App、Go agent、Help、Helper、浏览器扩展、README、响应头契约与产品文档保持一致。抽取 `RoundtableProviderModelPicker` 为选专家页与准备室共用组件，选专家页行为不变。
+
+## 1.201.0-rc1 - 2026-07-25
+
+### Added
+
+- **专家圆桌新增「专家资料页」**：讨论态势看板的专家席现在每行可点击，点进去就是该专家的独立资料页。上半区用专家的定位色统一气质，展示大头像、姓名、角色定位、一句话专长与完整人格设定（`systemPersona`：身份 / 思维模式 / 偏见与执念 / 语言口癖）；下半区列出「这位专家参与过的历史讨论」，每条显示议题标题 + 更新时间，按时间倒序排列，点任意一条即跳进那场对话（完成态进文档、会前态进准备、其余进讨论，与主页历史入口同款相位路由）。专家从没参与过讨论时显示明确空态。导航沿用 `RoundtableRoute` 枚举（新增 `.expertProfile` 分支，记住来路、返回原路回到那场讨论），不用 sheet，与圆桌其它页保持一致。
+
+### Meta
+
+- 版本号从 **1.200.0-rc3** 提升为 **1.201.0-rc1**（新增专家资料页为功能新增，按语义化版本提升 MINOR 位并重置 rc），内部构建号从 **146** 递增为 **147**，Help 与 Computer Use Helper 构建号从 **63** 递增为 **64**；App、Go agent、Help、Helper、浏览器扩展、README、响应头契约与产品文档保持一致。新增 2 项圆桌单测（按专家筛选历史讨论、全体专家身份/人格字段非空）。
+
+## 1.200.0-rc3 - 2026-07-25
+
+### Fixed
+
+- **专家圆桌发言卡首帧不再"一字一行"**：流式发言卡原用无最小宽度地板的裸 SwiftUI `Text`，首帧行宽未解算时被相邻贪婪 `Spacer` 挤成逐字竖排（CJK 可在任意两字间断行放大此问题）。现改走定稿卡同款 `RoundtableSelectableMessageText`（TextKit `sizeThatFits` 按父容器提议宽度权威声明自身宽度），首帧即占满气泡列，流式→定稿过渡也无缝。
+- **主持人「你（主持人）」头像不再是空白占位**：改为复用登录的 some.im 账号头像（与侧栏页脚同一 `CachedAvatarImage`）；用户未在 some.im 设置头像、或远程头像加载失败时回退 App 图标。
+- **发言卡配色改用专家定位色，满屏反对不再张张发红**：左侧竖线、描边、底色原按 stance 上色（反对=红），一屋子反对时每张卡都发红、与专家席的颜色身份不符；现统一改用发言专家的定位色，立场改由拇指图标表达。
+- **支持/反对图标改为拇指 👍/👎**：`RoundtableVisuals.symbol` 全局改为 `hand.thumbsup.fill` / `hand.thumbsdown.fill`（消息卡立场 pill、专家席、立场光谱一并生效）；中立/未定保留原符号。
+
+### Meta
+
+- 版本号从 **1.200.0-rc2** 提升为 **1.200.0-rc3**（四项圆桌 UI 打磨均为 bugfix，按只递增 rc 位处理），内部构建号从 **145** 递增为 **146**，Help 与 Computer Use Helper 构建号从 **62** 递增为 **63**；App、Go agent、Help、Helper、浏览器扩展、README、响应头契约与产品文档保持一致。
+
+## 1.200.0-rc2 - 2026-07-25
+
+### Changed
+
+- **右上角计划小卡改为单行 + 悬停跑马灯**：每条计划步骤不再多行换行，统一压成一行显示，避免小卡被长文案撑高、影响一览。鼠标悬停在某条步骤上时，若文字超出卡片宽度，正文会从右向左缓缓流动（跑马灯），把被截断的后半段完整带出来，移开指针即复位；文字本身可容纳时保持静止、不抖动。同时给每条步骤补上原生 tooltip，直接悬停即可看到整条完整文本。
+
+### Fixed
+
+- **「Workspace 访问」模式下网络访问不再频繁弹窗**：`autoApprovalSource` 里 Workspace 访问的白名单判定原先排在 `canSendToSafetyJudge` 的 escalated 短路**之后**，而该短路只放行 `run_command`，导致被沙盒标为 `.escalated` 的 `web_fetch`、`lark_cli` 网络工具虽已列入 `workspaceAccessCanAutoApprove` 白名单却永远命中不到、每次都弹人工授权。现将 Workspace 访问整块判定上移到「打字确认危险门」之后、escalated 短路之前，让白名单条目真正生效；`rm -rf`/`sudo` 等打字确认硬门、未信任 MCP 服务器仍照旧拦截，smart 模式行为不变。
+- **「智能审批」判官不再因缺 key 频繁掉线回退人工**：审计日志显示判官掉线 94 次里 72 次是 `missing api key`，全部为直连 DeepSeek——旧的 key 兜底只读 `agentProviderLibrary.activeID` 单个 entry，当判官用的 `agentConfiguration` 与 activeID 在启动/切换 provider 的窗口不同步时就取到空 key。现改为**按判官自身 providerID 匹配 entry 取 key**（优先 active、否则扫同 provider 的 entry），并只从同 provider 取、绝不跨 provider 串 key（规避「DeepSeek key 串到 OpenAI entry」那类历史坑）。再加**兜底降级**：直连 key 仍为空但用户已登录 some.im 时，判官改走 some.im 托管 `someim-auto-flash`（凭据在共享 session Keychain，恰好在直连 key 为空的窗口仍可用），把"缺 key→弹人工"变成"缺 key→托管判官放行"。未登录 some.im 的直连用户行为不变。新增 3 项测试锁契约。
+
+### Meta
+
+- 版本号从 **1.200.0-rc1** 提升为 **1.200.0-rc2**（计划小卡单行跑马灯 UI 优化 + Workspace 访问网络放行修复，均为 bugfix/UX，按只递增 rc 位处理），内部构建号从 **144** 递增为 **145**，Help 与 Computer Use Helper 构建号从 **61** 递增为 **62**；App、Go agent、Help、Helper、浏览器扩展、README、响应头契约与产品文档保持一致。
+
+## 1.200.0-rc1 - 2026-07-25
+
+### Added
+
+- **专家圆桌会前准备室**：用户按 Return 抛出议题后，不再立刻开讲。WillDeep 会先精炼真正要决策的问题、整理 3～5 个讨论维度、提出高价值澄清问题，并给出带理由的专家阵容建议；用户可继续用约三行输入框补充背景，确认框架后再进入组队。
+- **可编辑的专家组队流程**：AI 默认建议 2～4 位互补专家，用户可从完整专家池自由增删，正式讨论严格要求 2～6 位且必须显式确认。专家池新增法律合规「沈律」、数据研究「林析」、市场增长「夏野」、组织运营「周衡」，各自拥有独立姓名、定位、提示人格、强调色和矢量头像；心理专家升级为行为心理与决策专家。
+- **专家正文真流式发言**：每位专家先以自由文本 provider delta 逐字展示可见正文，再由独立结构化任务提取立场、论据、建议和反问状态。正文与模型推理严格分离，首 token 立即显示、80ms 合并刷新、1 秒持久化检查点；分析失败仍保留已经展示的正文。
+
+### Changed
+
+- 讨论页在专家组织观点时继续提前提示「XX 专家即将发言」；首个正文 token 到达后切换为虚线流式发言卡、实时光标和「正在发言」状态，右侧专家席同步从「思考中」变为「实时发言」。
+- 圆桌会话新增可恢复的 `.clarifying` / `.selectingExperts` 阶段、可选准备数据和可选流式草稿，旧报告缺少这些字段时仍可解码；正式引擎在用户确认前拒绝启动。
+
+### Fixed
+
+- **专家圆桌讨论不再把主线程跑满**：连续两轮生产采样分别在 `1.199.0-rc1` 与 `1.199.0-rc2` 稳定命中 `GraphHost.flushTransactions → GeometryReaderLayout → sizeThatFits/lengthThatFits`，确认只读 `NSTextView` 在 `updateNSView` 中异步测高、写回每条消息的 `@State` 高度并再次修改 `.frame`，使 `LazyVStack` 布局持续失效。现移除整条高度 Binding 回写链，改由 `NSViewRepresentable.sizeThatFits` 直接按提议宽度返回 TextKit 高度，并缓存相同宽度的测量结果；窗口缩放仍会正确换行，但布局过程不再制造新的状态事务。
+- 原生划词引用保持不变；空选区回调增加值去重，避免 `NSTextView` 初始化富文本时向 SwiftUI 重复写入相同的 `nil` 选区。
+
+### Tests
+
+- `AgentRoundtableTests` 增至 26 项，新增只读正文在宽、窄布局下高度确定且宽度感知的测试。
+- `roundtable_interaction_contract_test.rb` 增至 10 项，新增静态守卫：禁止恢复 `measuredTextHeight`、异步主队列测高和 `.frame(height:)` 状态回写链，并要求组件保留 `sizeThatFits` 与测量缓存失效入口。
+- 新增专家自由文本流管线与草稿缓冲定向测试，覆盖正文／推理隔离、usage 与 finish 元数据、provider 错误、取消、空正文拒绝、UI 节流、检查点、结束和重置。
+
+### Meta
+
+- 版本号从 **1.199.0-rc2** 提升为 **1.200.0-rc1**（新增会前准备、专家组队、真流式发言与专家库扩展，按 feature 提 MINOR 位并重置 rc），内部构建号从 **143** 递增为 **144**，Help 与 Computer Use Helper 构建号从 **60** 递增为 **61**；App、Go agent、Help、Helper、浏览器扩展、README、响应头契约与产品文档保持一致。
+
+## 1.199.0-rc2 - 2026-07-25
+
+### Fixed
+
+- **圆桌终稿不再显示成 Markdown 代码块**：终稿入库、旧会话展示和导出统一经过规范化，自动解开 `markdown` 围栏、移除“只读代理/请父 agent 写文件”等交接话术与重复 H1；同时兼容围栏外尾注及旧版部分清洗后遗留的孤立闭合围栏，标题、强调、列表和表格继续交给现有 Markdown 预览组件真正渲染。
+- **圆桌结论由 WillDeep 自动落盘**：终稿生成后直接写入 Application Support 下按报告 ID 隔离的 `.md` 文件，文档页显示「已自动保存」并可在 Finder 中定位；旧会话打开文档页时自动回填，写入失败时保留页面正文并显示错误和重试入口。
+- 终稿提示词明确要求只返回 Markdown 正文，不调用工具、不声称只读、不要求其他代理代写，也不使用代码围栏包裹全文，从源头降低格式退化概率。
+- **产物识别收紧，普通代码变更不再被当成「产物」**：会话右下角活动气泡的「N 个产物」卡片此前把整个 worktree 的**所有**变更文件无差别纳入（`AgentSessionArtifactScope.urls(from:)`），导致 `performance_monitor.go`、`protector.go` 这类普通源码修改也被算作产物。现在气泡卡与任务监控右栏（Rail）对齐：worktree 变更文件必须先过 `isAgentSessionArtifactPath` 白名单（md/pdf/png/mp4/zip 等用户可消费的交付物扩展名）才计入产物，`.go`/`.swift`/`.ts` 等源码变更归入「工作文件」，不再混进产物卡片。
+
+### Tests
+
+- `AgentRoundtableTests` 增至 25 项，新增只读交接话术清理、Markdown 围栏解包、部分迁移残留清理、正常 Markdown 保真和真实 `.md` 文件写入测试。
+- 以签名 arm64 Release 打开用户截图对应的真实历史报告复核：页面只保留渲染后的 Markdown，顶部显示「已自动保存」；会话 JSON 与磁盘 `.md` 的规范化结果、H1/H2 结构和文件存在性均通过。
+
+### Meta
+
+- 版本号从 **1.199.0-rc1** 递增为 **1.199.0-rc2**（bugfix，仅递增 rc），内部构建号从 **142** 递增为 **143**，Help 与 Computer Use Helper 构建号从 **59** 递增为 **60**；App、Go agent、Help、Helper、浏览器扩展、README、响应头契约与产品文档保持一致。
+
+## 1.199.0-rc1 - 2026-07-24
+
+### Added
+
+- **专家圆桌沉浸式讨论工作台**：讨论区重构为「发言流 + 实时态势看板」双栏。每位专家拥有独立姓名、职业身份、专属强调色和统一生成风格的真人感头像；当前轮到谁思考时，顶部会提前展示「XX 专家要发言了」动态提示，右侧专家席同步点亮，不再让用户面对无反馈的等待。
+- **双层引用发言**：专家气泡支持整段引用；正文改用原生可选文本，用户划选任意片段后可直接「引用选中内容」。引用来源、选段和原消息 ID 会随主持人消息落盘并进入后续讨论 transcript，专家能理解用户具体在回应哪句话。
+- **多行快捷输入**：圆桌主页与讨论页统一使用约三行高的原生 AppKit 文本输入框；直接按 Return 发起讨论/发送发言，Shift、Option 或 Control + Return 保留换行，兼顾高频提交与多段输入。
+
+### Changed
+
+- 专家发言卡以支持/反对/中立/待定的语义色、图标、标签和左侧色轨进行多重编码，立场不再埋在正文里；建议独立成行动提示，姓名与角色形成明确层级。
+- 右侧态势看板新增阶段进度、立场比例条、专家席实时状态与最新 OSR 信号卡；发言中的头像激活、进度和立场分布会随编排状态同步更新，替代原先大面积空白。
+- 用户引用会显示为输入区草稿卡和已发送消息内的来源卡，支持取消引用；中英文 UI 文案全部进入 `Localizable.xcstrings`，未在 SwiftUI 视图中硬编码。
+
+### Tests
+
+- `AgentRoundtableTests` 新增引用 Codable/Transcript、旧会话可选字段兼容、六位专家姓名/角色/头像资产唯一性测试。
+- 新增 `scripts/roundtable_interaction_contract_test.rb`，以 Markdown 与 JSON 双报告守护 Return 提交、修饰键换行、专家发言预告、六头像资产、立场看板、三行输入和整段/划词引用；本地测试入口与 GitHub Actions 均已接入。21 项定向 `AgentRoundtableTests` 与 9 项交互契约通过，并以签名 arm64 Release 完成真实模型讨论、发言预告、立场看板和划词引用验收。
+
+### Meta
+
+- 版本号从 **1.198.0-rc2** 提升为 **1.199.0-rc1**（新增沉浸讨论与引用能力，按 feature 提 MINOR 位并重置 rc），内部构建号从 **141** 递增为 **142**，Help 与 Computer Use Helper 构建号从 **58** 递增为 **59**；App、Go agent、Help、Helper、浏览器扩展、README、响应头契约与产品文档保持一致。
 ## 1.198.0-rc2 - 2026-07-24
 
 ### Changed

@@ -11,6 +11,41 @@ import UniformTypeIdentifiers
 
 @MainActor
 enum RoundtableDocumentExporter {
+    private static let exportDirectoryName = "roundtable-documents"
+
+    static func persist(
+        reportID: UUID,
+        title: String,
+        markdown: String,
+        rootDirectory: URL? = nil
+    ) throws -> URL {
+        let baseDirectory: URL
+        if let rootDirectory {
+            baseDirectory = rootDirectory
+        } else {
+            guard let applicationSupport = FileManager.default.urls(
+                for: .applicationSupportDirectory,
+                in: .userDomainMask
+            ).first else {
+                throw CocoaError(.fileNoSuchFile)
+            }
+            baseDirectory = applicationSupport
+                .appendingPathComponent("WillDeep", isDirectory: true)
+                .appendingPathComponent(exportDirectoryName, isDirectory: true)
+        }
+
+        let directory = baseDirectory
+            .appendingPathComponent(reportID.uuidString, isDirectory: true)
+        try FileManager.default.createDirectory(
+            at: directory,
+            withIntermediateDirectories: true
+        )
+        let url = directory.appendingPathComponent(suggestedFilename(title: title))
+        try documentBody(title: title, markdown: markdown)
+            .write(to: url, atomically: true, encoding: .utf8)
+        return url
+    }
+
     static func export(title: String, markdown: String) {
         let panel = NSSavePanel()
         panel.title = L10n.Roundtable.exportAction
@@ -21,7 +56,7 @@ enum RoundtableDocumentExporter {
         ]
         panel.canCreateDirectories = true
 
-        let body = "# \(title)\n\n\(markdown)\n"
+        let body = documentBody(title: title, markdown: markdown)
         let completion: (NSApplication.ModalResponse) -> Void = { response in
             guard response == .OK, let url = panel.url else { return }
             do {
@@ -35,6 +70,15 @@ enum RoundtableDocumentExporter {
         } else {
             panel.begin(completionHandler: completion)
         }
+    }
+
+    static func reveal(_ url: URL) {
+        NSWorkspace.shared.activateFileViewerSelecting([url])
+    }
+
+    private static func documentBody(title: String, markdown: String) -> String {
+        let normalized = AgentRoundtableDocumentNormalizer.normalize(markdown)
+        return "# \(title)\n\n\(normalized)\n"
     }
 
     private static func suggestedFilename(title: String) -> String {

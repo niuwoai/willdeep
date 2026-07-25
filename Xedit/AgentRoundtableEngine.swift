@@ -19,6 +19,8 @@ import Foundation
 enum AgentRoundtableError: LocalizedError {
     case reportUnavailable
     case emptyChairOutput
+    case preparationFailed
+    case preparationNotConfirmed
     case recommendationFailed
     case allExpertsFailed
 
@@ -26,6 +28,8 @@ enum AgentRoundtableError: LocalizedError {
         switch self {
         case .reportUnavailable: return "圆桌报告不可用。"
         case .emptyChairOutput: return "主持人未产出内容。"
+        case .preparationFailed: return "未能整理出可靠的讨论框架，请补充信息后重试。"
+        case .preparationNotConfirmed: return "请先确认讨论框架和专家阵容。"
         case .recommendationFailed: return "未能推荐出合适的专家，请调整议题后重试。"
         case .allExpertsFailed: return "本轮所有专家都未能发言。"
         }
@@ -65,11 +69,57 @@ final class AgentRoundtableEngine {
     /// 从当前状态往下推进到下一个暂停点或终稿。每个阶段都按落盘状态幂等,
     /// 支持「专家反问 → 暂停 → 主持人答复 → 续跑」反复驱动同一场圆桌。
     func run() async throws -> RunResult {
+        let phase = try requireReport().phase
+        guard phase != .clarifying, phase != .selectingExperts else {
+            throw AgentRoundtableError.preparationNotConfirmed
+        }
         try await ensureRecommendedAndOpened()
         if try await discuss() == .awaitingUser {
             return .awaitingUser
         }
         return .completed(try await synthesize())
+    }
+
+    /// 生成或重整会前准备。它不会启动正式讨论，只更新精炼议题、讨论框架、
+    /// 澄清问题和带理由的专家建议，等待用户明确确认阵容。
+    func prepareDiscussion() async throws {
+        let report = try requireReport()
+        let existing = report.preparation
+            ?? RoundtablePreparation(originalTopic: report.topic)
+        let transcript = Self.preparationTranscript(existing.conversation)
+        let outcome = try await AgentSubagentRunner.run(
+            prompt: AgentRoundtablePromptBuilder.prepareDiscussion(
+                originalTopic: existing.originalTopic,
+                clarificationTranscript: transcript
+            ),
+            configuration: configuration,
+            workspaceURL: nil,
+            someIMContext: someIMContext,
+            outputSchema: AgentRoundtablePromptBuilder.preparationSchema
+        )
+        guard let payload = Self.decodePreparation(outcome.report), payload.isValid else {
+            throw AgentRoundtableError.preparationFailed
+        }
+
+        var conversation = existing.conversation
+        let assistantSummary = Self.preparationAssistantSummary(payload)
+        if !assistantSummary.isEmpty {
+            conversation.append(
+                RoundtablePreparationMessage(
+                    speaker: .assistant,
+                    content: assistantSummary
+                )
+            )
+        }
+        let preparation = payload.makePreparation(
+            originalTopic: existing.originalTopic,
+            conversation: conversation
+        )
+        mutate {
+            $0.title = payload.title.trimmingCharacters(in: .whitespacesAndNewlines)
+            $0.preparation = preparation
+            $0.phase = .clarifying
+        }
     }
 
     /// 推荐专家 + 导播开场,均幂等:已推荐/已开场则跳过(续跑不重复)。
@@ -123,6 +173,11 @@ final class AgentRoundtableEngine {
             for role in report.experts where !spoken.contains(role) {
                 try Task.checkCancellation()
                 let transcript = AgentRoundtablePromptBuilder.transcript(currentMessages())
+                mutate {
+                    $0.activeExpert = role
+                    $0.activeExpertDraft = nil
+                    $0.activeExpertDraftIsComplete = nil
+                }
                 do {
                     let payload = try await runExpert(topic: report.topic, role: role, round: round, transcript: transcript)
                     appendMessage(.init(
@@ -133,14 +188,29 @@ final class AgentRoundtableEngine {
                         osr: payload.toOSR(),
                         pendingUserOptions: payload.asksUser ? payload.resolvedUserOptions : nil
                     ))
+                    mutate {
+                        $0.activeExpert = nil
+                        $0.activeExpertDraft = nil
+                        $0.activeExpertDraftIsComplete = nil
+                    }
                     // 专家发起反问:暂停讨论,交回给主持人答复后再续跑。
                     if payload.asksUser {
                         setPhase(.awaitingUser)
                         return .awaitingUser
                     }
                 } catch is CancellationError {
+                    mutate {
+                        $0.activeExpert = nil
+                        $0.activeExpertDraft = nil
+                        $0.activeExpertDraftIsComplete = nil
+                    }
                     throw CancellationError()
                 } catch {
+                    mutate {
+                        $0.activeExpert = nil
+                        $0.activeExpertDraft = nil
+                        $0.activeExpertDraftIsComplete = nil
+                    }
                     appendMessage(.init(
                         speaker: .expert,
                         role: role,
@@ -164,8 +234,14 @@ final class AgentRoundtableEngine {
             )
             appendMessage(.init(speaker: .chair, round: round, content: moderation.summary))
             if moderation.converged {
+                // 收敛不再自动收尾。停在 .awaitingUser,把「继续下一轮 / 结束并
+                // 生成文档」的选择权交给主持人。converged=true 供态势看板展示,
+                // 同时作为 finalize 的信号:主持人选「结束」时再 drive 一次,discuss()
+                // 顶部 `if converged { return .finished }` 便直接走 synthesize;
+                // 选「继续下一轮」则先把 converged 复位再 drive,循环续跑下一轮。
                 mutate { $0.converged = true }
-                break
+                setPhase(.awaitingUser)
+                return .awaitingUser
             }
         }
         return .finished
@@ -179,14 +255,25 @@ final class AgentRoundtableEngine {
             return existing
         }
         setPhase(.synthesizing)
-        let document = try await runChair(
+        mutate {
+            $0.activeExpert = nil
+            $0.activeExpertDraft = nil
+            $0.activeExpertDraftIsComplete = nil
+        }
+        let rawDocument = try await runChair(
             AgentRoundtablePromptBuilder.finalDocument(
                 topic: report.topic,
                 transcript: AgentRoundtablePromptBuilder.transcript(currentMessages(), excludeErrors: true)
             )
         )
+        let document = AgentRoundtableDocumentNormalizer.normalize(rawDocument)
+        guard !document.isEmpty else {
+            throw AgentRoundtableError.emptyChairOutput
+        }
         mutate {
             $0.finalDocument = document
+            $0.finalDocumentFilePath = nil
+            $0.finalDocumentWriteError = nil
             $0.phase = .completed
         }
         return document
@@ -227,7 +314,9 @@ final class AgentRoundtableEngine {
         return payload
     }
 
-    /// 专家发言:结构化调用(拿 OSR + speaking)+ 解析兜底。
+    /// 专家发言分两阶段：先把自由文本 provider delta 真流式展示，再用独立
+    /// 结构化调用分析已经完成的正文。第二阶段失败时保留用户已经看到的发言，
+    /// 仅将态势元数据降级为待定。
     private func runExpert(
         topic: String,
         role: AgentRoundtableExpertRole,
@@ -235,17 +324,66 @@ final class AgentRoundtableEngine {
         transcript: String
     ) async throws -> RoundtableExpertPayload {
         try Task.checkCancellation()
-        let outcome = try await AgentSubagentRunner.run(
-            prompt: AgentRoundtablePromptBuilder.expertTurn(topic: topic, role: role, round: round, transcript: transcript),
-            configuration: configuration,
-            workspaceURL: nil,
-            someIMContext: someIMContext,
-            outputSchema: RoundtableOSR.outputSchema
-        )
-        guard let payload = Self.decodeExpert(outcome.report), payload.isValid else {
+        let draftBuffer = RoundtableStreamingDraftBuffer()
+        let visibleOutcome: AgentSubagentStreamingTextOutcome
+        do {
+            visibleOutcome = try await AgentSubagentRunner.runStreamingText(
+                prompt: AgentRoundtablePromptBuilder.expertSpeech(
+                    topic: topic,
+                    role: role,
+                    round: round,
+                    transcript: transcript
+                ),
+                systemInstruction: role.systemPersona,
+                configuration: configuration,
+                someIMContext: someIMContext
+            ) { [weak self] event in
+                guard case let .textDelta(delta) = event,
+                      let publication = await draftBuffer.append(delta)
+                else { return }
+                await self?.publishExpertDraft(publication)
+            }
+            await publishExpertDraft(draftBuffer.finish())
+        } catch {
+            await publishExpertDraft(draftBuffer.reset())
+            throw error
+        }
+
+        let speech = visibleOutcome.text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !speech.isEmpty else {
             throw AgentRoundtableError.emptyChairOutput
         }
-        return payload
+
+        do {
+            let analysisOutcome = try await AgentSubagentRunner.run(
+                prompt: AgentRoundtablePromptBuilder.analyzeExpertSpeech(
+                    topic: topic,
+                    role: role,
+                    speech: speech
+                ),
+                configuration: configuration,
+                workspaceURL: nil,
+                someIMContext: someIMContext,
+                outputSchema: AgentRoundtablePromptBuilder.expertAnalysisSchema
+            )
+            if let analysis = Self.decodeExpertAnalysis(analysisOutcome.report),
+               analysis.isValid {
+                return analysis.attachingSpeech(speech)
+            }
+        } catch is CancellationError {
+            throw CancellationError()
+        } catch {
+            // 用户已看到的正文比看板元数据更重要；分析失败只降级，不丢发言。
+        }
+
+        return RoundtableExpertAnalysisPayload(
+            topic: topic,
+            stance: RoundtableOSR.Stance.undecided.rawValue,
+            arguments: [],
+            suggestion: nil,
+            needsUserInput: false,
+            userOptions: []
+        ).attachingSpeech(speech)
     }
 
     /// 导播小结 + 收敛判定。解析失败时兜底为「未收敛」，让讨论继续。
@@ -279,12 +417,38 @@ final class AgentRoundtableEngine {
         decodeJSON(raw, as: RoundtableExpertPayload.self)
     }
 
+    nonisolated static func decodeExpertAnalysis(
+        _ raw: String
+    ) -> RoundtableExpertAnalysisPayload? {
+        decodeJSON(raw, as: RoundtableExpertAnalysisPayload.self)
+    }
+
     nonisolated static func decodeRecommendation(_ raw: String) -> RoundtableRecommendationPayload? {
         decodeJSON(raw, as: RoundtableRecommendationPayload.self)
     }
 
+    nonisolated static func decodePreparation(_ raw: String) -> RoundtablePreparationPayload? {
+        decodeJSON(raw, as: RoundtablePreparationPayload.self)
+    }
+
     nonisolated static func decodeModeration(_ raw: String) -> RoundtableModerationPayload? {
         decodeJSON(raw, as: RoundtableModerationPayload.self)
+    }
+
+    nonisolated static func preparationTranscript(
+        _ messages: [RoundtablePreparationMessage]
+    ) -> String {
+        let rendered = messages.map { message in
+            let speaker = message.speaker == .user ? "USER" : "ASSISTANT"
+            return "\(speaker): \(message.content)"
+        }.joined(separator: "\n\n")
+        return String(rendered.suffix(AgentRoundtablePromptBuilder.maxPacketCharacters))
+    }
+
+    nonisolated static func preparationAssistantSummary(
+        _ payload: RoundtablePreparationPayload
+    ) -> String {
+        payload.refinedTopic.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
     /// 分层解码:先直接解,失败则剥掉 ```json 围栏和首尾噪声,截取第一个
@@ -390,13 +554,30 @@ final class AgentRoundtableEngine {
         mutate { $0.messages.append(message) }
     }
 
-    private func mutate(_ mutation: (inout AgentRoundtableReport) -> Void) {
+    private func publishExpertDraft(
+        _ publication: RoundtableStreamingDraftBuffer.Publication
+    ) {
+        guard publication.shouldRefreshUI || publication.shouldCheckpoint else { return }
+        mutate(persist: publication.shouldCheckpoint) {
+            $0.activeExpertDraft = publication.text.isEmpty ? nil : publication.text
+            $0.activeExpertDraftIsComplete = publication.text.isEmpty
+                ? nil
+                : publication.isFinal
+        }
+    }
+
+    private func mutate(
+        persist: Bool = true,
+        _ mutation: (inout AgentRoundtableReport) -> Void
+    ) {
         appState?.updateWorkflowReport(id: reportID, runtimeID: runtimeID) { report in
             guard var roundtable = report.roundtable else { return }
             mutation(&roundtable)
             roundtable.updatedAt = Date()
             report.roundtable = roundtable
         }
-        appState?.persistWorkflowRuntime(runtimeID: runtimeID)
+        if persist {
+            appState?.persistWorkflowRuntime(runtimeID: runtimeID)
+        }
     }
 }
