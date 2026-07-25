@@ -3,11 +3,21 @@
 > 当前文件保留最新版本（1.200.0-rc3 至 1.109.0-rc340）。
 > 更早的 1000 个版本已移至 [CHANGELOG-ARCHIVE.md](CHANGELOG-ARCHIVE.md)。
 
+## 1.206.0-rc3 - 2026-07-25
+
+### Changed
+
+- **CI Xcode 不再锁 26.4.1，对齐 macOS 13.7 self-hosted**：项目本身 `MACOSX_DEPLOYMENT_TARGET = 13.7`，self-hosted runner 可跑在 macOS 13.7 + 本机默认 `Xcode.app`。去掉对 `/Applications/Xcode_26.4.1.app` 的硬选；`Select Xcode` 改为优先 `Xcode.app`，并打印 `sw_vers` 方便核对宿主机系统。
+
+### Meta
+
+- 版本号从 **1.206.0-rc2** 提升为 **1.206.0-rc3**（CI 适配为 bugfix/基础设施修正，按只递增 rc 位处理），内部构建号从 **158** 递增为 **159**，Help 与 Computer Use Helper 构建号从 **75** 递增为 **76**；App、Go agent、Help、Helper、浏览器扩展、README、响应头契约与产品文档保持一致。
+
 ## 1.206.0-rc2 - 2026-07-25
 
 ### Changed
 
-- **GitHub Actions Tests 改回默认 self-hosted runner**：`.github/workflows/test.yml` 的 `runs-on` 从 GitHub-hosted `macos-26` 改为 `self-hosted`（仅默认标签，不附加 `macOS` / `macos-26`）。Xcode 选择、Metal toolchain、setup-go 与 SPM deploy key 步骤保留；runner 需自备匹配部署目标 26.4 的 Xcode。
+- **GitHub Actions Tests 改回默认 self-hosted runner**：`.github/workflows/test.yml` 的 `runs-on` 从 GitHub-hosted `macos-26` 改为 `self-hosted`（仅默认标签）。Xcode / Metal / setup-go / SPM deploy key 步骤保留；部署目标以仓库 `MACOSX_DEPLOYMENT_TARGET = 13.7` 为准。
 
 ### Fixed
 
