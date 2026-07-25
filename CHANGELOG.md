@@ -10,6 +10,7 @@
 - **圆桌终稿不再显示成 Markdown 代码块**：终稿入库、旧会话展示和导出统一经过规范化，自动解开 `markdown` 围栏、移除“只读代理/请父 agent 写文件”等交接话术与重复 H1；同时兼容围栏外尾注及旧版部分清洗后遗留的孤立闭合围栏，标题、强调、列表和表格继续交给现有 Markdown 预览组件真正渲染。
 - **圆桌结论由 WillDeep 自动落盘**：终稿生成后直接写入 Application Support 下按报告 ID 隔离的 `.md` 文件，文档页显示「已自动保存」并可在 Finder 中定位；旧会话打开文档页时自动回填，写入失败时保留页面正文并显示错误和重试入口。
 - 终稿提示词明确要求只返回 Markdown 正文，不调用工具、不声称只读、不要求其他代理代写，也不使用代码围栏包裹全文，从源头降低格式退化概率。
+- **产物识别收紧，普通代码变更不再被当成「产物」**：会话右下角活动气泡的「N 个产物」卡片此前把整个 worktree 的**所有**变更文件无差别纳入（`AgentSessionArtifactScope.urls(from:)`），导致 `performance_monitor.go`、`protector.go` 这类普通源码修改也被算作产物。现在气泡卡与任务监控右栏（Rail）对齐：worktree 变更文件必须先过 `isAgentSessionArtifactPath` 白名单（md/pdf/png/mp4/zip 等用户可消费的交付物扩展名）才计入产物，`.go`/`.swift`/`.ts` 等源码变更归入「工作文件」，不再混进产物卡片。
 
 ### Tests
 
@@ -42,7 +43,6 @@
 ### Meta
 
 - 版本号从 **1.198.0-rc2** 提升为 **1.199.0-rc1**（新增沉浸讨论与引用能力，按 feature 提 MINOR 位并重置 rc），内部构建号从 **141** 递增为 **142**，Help 与 Computer Use Helper 构建号从 **58** 递增为 **59**；App、Go agent、Help、Helper、浏览器扩展、README、响应头契约与产品文档保持一致。
-
 ## 1.198.0-rc2 - 2026-07-24
 
 ### Changed
