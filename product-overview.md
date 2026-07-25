@@ -1,6 +1,6 @@
 # WillDeep Product Overview
 
-> Last updated: 2026-07-25 | Current version: v1.205.0-rc1
+> Last updated: 2026-07-25 | Current version: v1.205.0-rc2
 
 ## Positioning
 
@@ -11,6 +11,8 @@ Official product domain: [willdeep.com](https://willdeep.com).
 WillDeep is configured for non-App-Store distribution without App Sandbox so it can access local project files with fewer permission interruptions.
 
 ## 架构概览
+
+- **打开大项目主线程假死修复（1.205.0-rc2）** —— Quick Open 文件列表的缓存回填与扫盘后 URL 重建全部离开 MainActor；不再用会探盘的 `appendingPathComponent` 拼相对路径，降低老 Intel Mac 上打开巨型工作区时的 Beachball 与内存尖峰。
 
 - **扩大本地只读 alwaysSafe 白名单（1.205.0-rc1）** —— 补 `diff`/`jq`/`xxd`/`mdfind`/`defaults read`/`unzip -l` 及更多 git 只读子命令；与既有只读白名单一样在 `readOnly` 下跳过 seatbelt。`curl`/`ssh` 与写形态命令仍闸住。
 

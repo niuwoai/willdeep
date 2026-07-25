@@ -110,13 +110,20 @@ nonisolated enum ProjectFileListCache {
     /// scanned lists are directly comparable. Heavy generated directories are
     /// skipped, and candidate collection is capped before sorting so huge
     /// dependency trees cannot monopolize a background worker.
+    ///
+    /// Callers must run this off the main actor — the enumerator alone can visit
+    /// tens of thousands of nodes on a cold project open.
     static func scan(root: URL, limit: Int) -> CacheFile {
-        let rootPath = root.standardizedFileURL.path
-        var collected: [(url: URL, mtime: Double, size: Int64)] = []
+        // Resolve symlinks once up front (`/var` → `/private/var`) so the
+        // enumerator root and stored `rootPath` share one canonical prefix.
+        // Do NOT call `standardizedFileURL` per node — that is the hang hotspot.
+        let scanRoot = root.resolvingSymlinksInPath()
+        let rootPath = scanRoot.path
+        var collected: [(name: String, path: String, mtime: Double, size: Int64)] = []
         let candidateLimit = max(limit * 4, limit)
 
         if let enumerator = FileManager.default.enumerator(
-            at: root,
+            at: scanRoot,
             includingPropertiesForKeys: [.isDirectoryKey, .isRegularFileKey, .contentModificationDateKey, .fileSizeKey],
             options: [.skipsHiddenFiles, .skipsPackageDescendants]
         ) {
@@ -124,6 +131,7 @@ nonisolated enum ProjectFileListCache {
             for case let url as URL in enumerator {
                 visited += 1
                 if visited > maxTraversalNodes { break }
+                if visited.isMultiple(of: 2_048), Task.isCancelled { break }
                 guard let values = try? url.resourceValues(
                     forKeys: [.isDirectoryKey, .isRegularFileKey, .contentModificationDateKey, .fileSizeKey]
                 ) else {
@@ -138,19 +146,21 @@ nonisolated enum ProjectFileListCache {
                 guard values.isRegularFile == true else { continue }
                 let mtime = values.contentModificationDate?.timeIntervalSince1970 ?? 0
                 let size = Int64(values.fileSize ?? 0)
-                collected.append((url, mtime, size))
+                // Keep path strings only — retaining every URL until sort finishes
+                // can inflate RSS by hundreds of MB on large trees (old iMac hang).
+                collected.append((url.lastPathComponent, url.path, mtime, size))
                 if collected.count >= candidateLimit { break }
             }
         }
 
         let entries = collected
             .sorted { lhs, rhs in
-                lhs.url.lastPathComponent.localizedStandardCompare(rhs.url.lastPathComponent) == .orderedAscending
+                lhs.name.localizedStandardCompare(rhs.name) == .orderedAscending
             }
             .prefix(limit)
             .map { item -> Entry in
                 Entry(
-                    relativePath: relativePath(of: item.url, rootPath: rootPath),
+                    relativePath: relativePath(ofAbsolutePath: item.path, rootPath: rootPath),
                     mtime: item.mtime,
                     size: item.size
                 )
@@ -160,13 +170,33 @@ nonisolated enum ProjectFileListCache {
             schemaVersion: schemaVersion,
             rootPath: rootPath,
             generatedAt: Date(),
-            entries: entries
+            entries: Array(entries)
         )
     }
 
     /// Rebuild absolute file URLs for the given root from cached relative paths.
-    static func fileURLs(from file: CacheFile, root: URL) -> [URL] {
-        file.entries.map { root.appendingPathComponent($0.relativePath) }
+    ///
+    /// Uses pure path-string joining — never `URL.appendingPathComponent`, which
+    /// on older Foundation may probe the filesystem per call (`getResourceValue`)
+    /// and freeze the main thread when reconstructing a large Quick Open list.
+    static func fileURLs(from file: CacheFile, root: URL, limit: Int? = nil) -> [URL] {
+        let rootPath = root.path
+        let capped = limit.map { file.entries.prefix($0) } ?? file.entries.prefix(file.entries.count)
+        return capped.map { entry in
+            absoluteFileURL(rootPath: rootPath, relativePath: entry.relativePath)
+        }
+    }
+
+    /// Join `rootPath` + relative path without Foundation filesystem probes.
+    static func absoluteFileURL(rootPath: String, relativePath: String) -> URL {
+        let trimmed = relativePath.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+        if trimmed.isEmpty {
+            return URL(fileURLWithPath: rootPath, isDirectory: true)
+        }
+        if rootPath.hasSuffix("/") {
+            return URL(fileURLWithPath: rootPath + trimmed, isDirectory: false)
+        }
+        return URL(fileURLWithPath: rootPath + "/" + trimmed, isDirectory: false)
     }
 
     /// `true` when the two lists differ in membership, ordering, mtime, or size.
@@ -176,9 +206,22 @@ nonisolated enum ProjectFileListCache {
 
     // MARK: - Helpers
 
-    private static func relativePath(of url: URL, rootPath: String) -> String {
-        let filePath = url.standardizedFileURL.path
-        guard filePath.hasPrefix(rootPath) else { return filePath }
+    private static func relativePath(ofAbsolutePath filePath: String, rootPath: String) -> String {
+        // Fast path: enumerator paths usually already share `rootPath`.
+        if let relative = relativePathIfPrefixed(filePath, rootPath: rootPath) {
+            return relative
+        }
+        // Fallback for `/var` vs `/private/var` (only runs on the final capped
+        // entry set, never on the 50k-node walk).
+        let resolvedFile = URL(fileURLWithPath: filePath).resolvingSymlinksInPath().path
+        if let relative = relativePathIfPrefixed(resolvedFile, rootPath: rootPath) {
+            return relative
+        }
+        return filePath
+    }
+
+    private static func relativePathIfPrefixed(_ filePath: String, rootPath: String) -> String? {
+        guard filePath.hasPrefix(rootPath) else { return nil }
         return String(filePath.dropFirst(rootPath.count))
             .trimmingCharacters(in: CharacterSet(charactersIn: "/"))
     }
