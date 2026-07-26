@@ -3,6 +3,17 @@
 > 当前文件保留最新版本（1.200.0-rc3 至 1.109.0-rc340）。
 > 更早的 1000 个版本已移至 [CHANGELOG-ARCHIVE.md](CHANGELOG-ARCHIVE.md)。
 
+## 1.208.0-rc4 - 2026-07-26
+
+### Fixed
+
+- **ZMODEM 下载尚未结束却提前报告完成**：带 `zmodem_upload_paths` 或 `zmodem_download_directory` 的 `terminal_send_command` 不再于命令写入 PTY 后立即返回，而是持有一次性传输票据，等待匹配方向的远端握手、本地 lrzsz 进程终止并排空最终协议输出后才确认成功。下载过程中提前生成、仍在增长的本地文件不再构成完成依据；方向不匹配、握手超时、用户取消、空闲超时、本地进程停滞或非零退出均以工具失败返回。
+- **终端快照缺少 ZMODEM 活跃状态**：`terminal_snapshot` 现在返回结构化传输状态；传输中明确标注本地文件可能仍不完整，禁止 Agent 将其作为最终文件读取或向用户报告完成。新增协议完成门禁与握手超时回归测试。
+
+### Meta
+
+- 版本号从 **1.208.0-rc2** 提升为 **1.208.0-rc4**（ZMODEM 完成态 bugfix；`rc3` 已由并行的终端会话停止修复占用，因此继续递增 rc），内部构建号从 **165** 递增为 **166**，Help 与 Computer Use Helper 构建号从 **82** 递增为 **83**；App、Go agent、Help、Helper、浏览器扩展、README、响应头契约与产品文档保持一致。
+
 ## 1.208.0-rc2 - 2026-07-26
 
 ### Fixed

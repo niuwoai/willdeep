@@ -85,6 +85,7 @@ struct RuntimeTerminalProfile: Codable, Equatable {
 struct AgentTerminalRawSnapshot: Sendable {
     let tabID: UUID
     let isRunning: Bool
+    let isZModemTransferActive: Bool
     let runtimeName: String
     let runtimeTarget: String
     let recentCommands: [String]
@@ -94,6 +95,11 @@ struct AgentTerminalRawSnapshot: Sendable {
     /// up before capture even if a resize hasn't reflowed it yet.
     let cols: Int
     let rows: Int
+}
+
+struct AgentTerminalCommandDispatch: Sendable {
+    let result: AgentToolResult
+    let zmodemTicket: TerminalZModemTransferTicket?
 }
 
 /// Result of the "提取主机标识" probe: what machine the tab's shell is
@@ -1029,7 +1035,13 @@ final class AgentLocalProcessTerminalView: TerminalView, TerminalViewDelegate, L
         feed(text: "")
     }
 
-    func prepareZModemPathSelection(_ selection: TerminalZModemPathSelection?) {
+    var isZModemTransferActive: Bool {
+        zmodemActive
+    }
+
+    func prepareZModemPathSelection(
+        _ selection: TerminalZModemPathSelection?
+    ) -> TerminalZModemTransferTicket? {
         zmodemBridge.preparePathSelection(selection)
     }
 
@@ -1579,6 +1591,18 @@ final class AgentTerminalTab: ObservableObject, Identifiable, AgentTerminalProce
         zmodemPathSelection: TerminalZModemPathSelection? = nil,
         secretRedactionValues: [String] = []
     ) throws -> AgentToolResult {
+        try sendApprovedCommandDispatch(
+            command,
+            zmodemPathSelection: zmodemPathSelection,
+            secretRedactionValues: secretRedactionValues
+        ).result
+    }
+
+    func sendApprovedCommandDispatch(
+        _ command: String,
+        zmodemPathSelection: TerminalZModemPathSelection? = nil,
+        secretRedactionValues: [String] = []
+    ) throws -> AgentTerminalCommandDispatch {
         let trimmed = command.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { throw AgentToolError.missingArgument("command") }
         guard isRunning else {
@@ -1587,7 +1611,7 @@ final class AgentTerminalTab: ObservableObject, Identifiable, AgentTerminalProce
         let visibleCommand = AgentSecretStore.redact(trimmed, secretValues: secretRedactionValues)
         recordCommand(visibleCommand)
         lastActivity = Date()
-        terminalView.prepareZModemPathSelection(zmodemPathSelection)
+        let zmodemTicket = terminalView.prepareZModemPathSelection(zmodemPathSelection)
         terminalView.send(txt: trimmed + "\n")
         var payload = """
         Sent command to Agent Terminal tab \"\(title)\".
@@ -1601,7 +1625,10 @@ final class AgentTerminalTab: ObservableObject, Identifiable, AgentTerminalProce
         case nil:
             break
         }
-        return AgentToolResult(summary: "terminal: \(visibleCommand.prefix(80))", payload: payload)
+        return AgentTerminalCommandDispatch(
+            result: AgentToolResult(summary: "terminal: \(visibleCommand.prefix(80))", payload: payload),
+            zmodemTicket: zmodemTicket
+        )
     }
 
     func sendApprovedControl(_ control: AgentTerminalControl) throws -> AgentToolResult {
@@ -2409,6 +2436,7 @@ final class AgentInteractiveTerminalController: ObservableObject {
         return AgentTerminalRawSnapshot(
             tabID: tab.id,
             isRunning: tab.isRunning,
+            isZModemTransferActive: tab.terminalView.isZModemTransferActive,
             runtimeName: tab.title,
             runtimeTarget: tab.runtimeTarget,
             recentCommands: tab.recentCommands,
@@ -2431,6 +2459,25 @@ final class AgentInteractiveTerminalController: ObservableObject {
             opensLocalTabIfNeeded: true
         )
         return try tab.sendApprovedCommand(
+            command,
+            zmodemPathSelection: zmodemPathSelection,
+            secretRedactionValues: secretRedactionValues
+        )
+    }
+
+    func sendApprovedCommandDispatch(
+        _ command: String,
+        targetTabID: UUID? = nil,
+        sessionID: UUID? = nil,
+        zmodemPathSelection: TerminalZModemPathSelection? = nil,
+        secretRedactionValues: [String] = []
+    ) throws -> AgentTerminalCommandDispatch {
+        let tab = try tabForToolUse(
+            targetTabID: targetTabID,
+            sessionID: sessionID,
+            opensLocalTabIfNeeded: true
+        )
+        return try tab.sendApprovedCommandDispatch(
             command,
             zmodemPathSelection: zmodemPathSelection,
             secretRedactionValues: secretRedactionValues

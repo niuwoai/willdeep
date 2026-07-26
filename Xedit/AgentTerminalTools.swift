@@ -109,6 +109,7 @@ enum AgentTerminalTools {
                 return RedactedTerminalSnapshot(
                     tabID: raw.tabID,
                     isRunning: raw.isRunning,
+                    isZModemTransferActive: raw.isZModemTransferActive,
                     runtimeName: raw.runtimeName,
                     runtimeTarget: raw.runtimeTarget,
                     output: trimmed,
@@ -137,6 +138,9 @@ enum AgentTerminalTools {
         let recent = snapshot.recentCommands.isEmpty
             ? "none"
             : snapshot.recentCommands.joined(separator: "\n")
+        let zmodemState = snapshot.isZModemTransferActive
+            ? "active — the local file may exist but is still partial; do not claim transfer completion or inspect it as final data"
+            : "inactive"
         let screen = snapshot.output.isEmpty
             ? (snapshot.isRunning ? "(no terminal output yet)" : "(terminal produced no output before exiting)")
             : snapshot.output
@@ -148,6 +152,7 @@ enum AgentTerminalTools {
             : snapshot.cursorLine
         let payload = """
         \(statusLine)
+        ZMODEM transfer: \(zmodemState)
 
         Terminal context rules:
         - The cursor line below is the best current prompt/input indicator.
@@ -179,6 +184,7 @@ enum AgentTerminalTools {
     private struct RedactedTerminalSnapshot: Sendable {
         let tabID: UUID
         let isRunning: Bool
+        let isZModemTransferActive: Bool
         let runtimeName: String
         let runtimeTarget: String
         let output: String
@@ -224,8 +230,8 @@ enum AgentTerminalTools {
         }
         let pathSelection = try zmodemPathSelection(arguments: arguments, rootDirectory: context.rootDirectory)
         let targetTabID = try terminalTabID(arguments)
-        return try await MainActor.run {
-            try controller.sendApprovedCommand(
+        let dispatch = try await MainActor.run {
+            try controller.sendApprovedCommandDispatch(
                 command,
                 targetTabID: targetTabID,
                 sessionID: context.runtimeID,
@@ -233,6 +239,29 @@ enum AgentTerminalTools {
                 secretRedactionValues: context.secretRedactionValues
             )
         }
+        guard let ticket = dispatch.zmodemTicket else {
+            return dispatch.result
+        }
+        let outcome = await ticket.waitForCompletion()
+        guard outcome.succeeded else {
+            throw AgentToolError.invalidArgument(
+                "ZMODEM transfer did not complete successfully. \(outcome.message) Do not treat a destination file that appeared during transfer as complete."
+            )
+        }
+        let direction = outcome.direction == .downloadFromRemote ? "download" : "upload"
+        let transferred = ByteCountFormatter.string(
+            fromByteCount: Int64(outcome.transferredByteCount),
+            countStyle: .file
+        )
+        return AgentToolResult(
+            summary: "zmodem \(direction) complete: \(transferred)",
+            payload: """
+            \(dispatch.result.payload)
+
+            ZMODEM protocol completion confirmed after the local lrzsz process exited and final protocol output was drained.
+            \(outcome.message)
+            """
+        )
     }
 
     static func hasZModemPathSelection(_ arguments: [String: AgentJSONValue]) -> Bool {

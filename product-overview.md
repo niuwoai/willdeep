@@ -1,6 +1,6 @@
 # WillDeep Product Overview
 
-> Last updated: 2026-07-26 | Current version: v1.208.0-rc2
+> Last updated: 2026-07-26 | Current version: v1.208.0-rc4
 
 ## Positioning
 
@@ -11,6 +11,8 @@ Official product domain: [willdeep.com](https://willdeep.com).
 WillDeep is configured for non-App-Store distribution without App Sandbox so it can access local project files with fewer permission interruptions.
 
 ## 架构概览
+
+- **ZMODEM 下载完成态与协议对齐（1.208.0-rc4）** —— Agent 通过可见终端执行带本地路径的 `rz/sz` 传输时，`terminal_send_command` 会等待匹配握手、本地 lrzsz 进程退出以及最终协议输出排空后才返回成功；下载初期生成但仍在增长的本地文件不再被当作完成。`terminal_snapshot` 同时输出结构化 ZMODEM 活跃状态，明确禁止把传输中的文件作为最终数据分析；握手超时、方向不匹配、取消、空闲超时和非零退出均返回失败。
 
 - **密码占位符换行高亮修复（1.208.0-rc2）** —— Agent 输入框中的 `${secret:...}` 受 Keychain 保护占位符如果在行尾换行，胶囊高亮会按 TextKit 的每个真实行片段分别绘制，不再用跨行外接矩形覆盖前面的普通提示词；单行占位符仍保持一个紧凑胶囊。
 
