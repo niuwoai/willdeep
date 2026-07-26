@@ -1,6 +1,6 @@
 # WillDeep Product Overview
 
-> Last updated: 2026-07-26 | Current version: v1.208.0-rc4
+> Last updated: 2026-07-26 | Current version: v1.208.0-rc5
 
 ## Positioning
 
@@ -11,6 +11,8 @@ Official product domain: [willdeep.com](https://willdeep.com).
 WillDeep is configured for non-App-Store distribution without App Sandbox so it can access local project files with fewer permission interruptions.
 
 ## 架构概览
+
+- **侧栏会话标题利用空闲操作区（1.208.0-rc5）** —— 普通未悬停会话不再长期为隐藏的固定、归档按钮预留 40pt，标题可以使用完整的剩余行宽；已固定会话仅保留紧凑图标宽度，鼠标悬停时再恢复完整操作区，在不改变侧栏宽度和字号的情况下展示更多标题文字。
 
 - **ZMODEM 下载完成态与协议对齐（1.208.0-rc4）** —— Agent 通过可见终端执行带本地路径的 `rz/sz` 传输时，`terminal_send_command` 会等待匹配握手、本地 lrzsz 进程退出以及最终协议输出排空后才返回成功；下载初期生成但仍在增长的本地文件不再被当作完成。`terminal_snapshot` 同时输出结构化 ZMODEM 活跃状态，明确禁止把传输中的文件作为最终数据分析；握手超时、方向不匹配、取消、空闲超时和非零退出均返回失败。
 

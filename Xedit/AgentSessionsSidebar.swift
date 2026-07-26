@@ -123,6 +123,19 @@ enum AgentSidebarSessionPlacement {
     }
 }
 
+enum AgentSidebarSessionTrailingLayout {
+    /// A pinned row only needs enough idle width for its compact pin glyph.
+    /// The full action lane is restored when the pointer enters the row.
+    private static let pinnedIndicatorWidth: CGFloat = 16
+
+    static func reservedActionsWidth(isHovered: Bool, isPinned: Bool) -> CGFloat {
+        if isHovered {
+            return AgentDesign.sidebarSessionTrailingActionsWidth
+        }
+        return isPinned ? pinnedIndicatorWidth : 0
+    }
+}
+
 struct AgentSessionsSidebar: View {
     @EnvironmentObject var appState: AppState
     @Environment(\.openWindow) private var openWindow
@@ -740,9 +753,9 @@ struct AgentSessionsSidebar: View {
     /// Trailing icon cluster on each session row — pin & archive
     /// buttons that fade in on hover, plus a persistent `pin.fill`
     /// badge when the row is pinned so users can see the state at a
-    /// glance even without hovering. The cluster always reserves its
-    /// hover width so rows with plan/goal badges do not reflow as the
-    /// pointer enters and exits.
+    /// glance even without hovering. Idle unpinned rows release this lane
+    /// back to the title; hovering restores the full controls, while a
+    /// pinned row reserves only the compact pin glyph.
     @ViewBuilder
     private func sessionRowTrailingActions(session: AgentSession, isHovered: Bool) -> some View {
         HStack(spacing: 4) {
@@ -781,7 +794,14 @@ struct AgentSessionsSidebar: View {
                     .rotationEffect(.degrees(45))
             }
         }
-        .frame(width: AgentDesign.sidebarSessionTrailingActionsWidth, alignment: .trailing)
+        .frame(
+            width: AgentSidebarSessionTrailingLayout.reservedActionsWidth(
+                isHovered: isHovered,
+                isPinned: session.isPinned
+            ),
+            alignment: .trailing
+        )
+        .clipped()
     }
 
     private var groupedSessions: [SidebarWorkspaceGroup] {
