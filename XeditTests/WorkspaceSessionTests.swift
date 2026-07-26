@@ -22,20 +22,22 @@ extension WillDeepTests {
         defer { try? FileManager.default.removeItem(at: base) }
 
         let appState = AppState(rootDirectory: firstWorkspace)
-        let existingIDs = Set(appState.agentSessions.map(\.id))
+        var createdSessionIDs: [AgentSession.ID] = []
         defer {
-            for id in appState.agentSessions.map(\.id) where !existingIDs.contains(id) {
+            for id in createdSessionIDs {
                 AgentSessionStore.delete(id: id)
             }
         }
 
         let first = appState.startNewAgentSession()
+        createdSessionIDs.append(first.id)
         appState.agentMessages = [AgentMessage(role: .user, content: "first workspace task")]
         appState.persistActiveAgentSession()
 
         // 在 secondWorkspace 起一个新会话:agent runtime 必须绑到
         // second,但 editor 的 rootDirectory 必须仍指向 first。
         let second = appState.startNewAgentSession(inWorkspaceAt: secondWorkspace.path)
+        createdSessionIDs.append(second.id)
         appState.agentMessages = [AgentMessage(role: .user, content: "second workspace task")]
         appState.persistActiveAgentSession()
 

@@ -167,13 +167,8 @@ extension WillDeepTests {
         let fileURL = workspace.appendingPathComponent("Sample.swift")
         try "let value = 1\n".write(to: fileURL, atomically: true, encoding: .utf8)
         let appState = AppState(rootDirectory: workspace)
-        let existingIDs = Set(appState.agentSessions.map(\.id))
         let session = appState.startNewAgentSession()
-        defer {
-            for id in appState.agentSessions.map(\.id) where !existingIDs.contains(id) {
-                AgentSessionStore.delete(id: id)
-            }
-        }
+        defer { AgentSessionStore.delete(id: session.id) }
         guard let runtime = appState.agentRuntimes[session.id] else {
             Issue.record("Expected runtime for new agent session")
             return
@@ -242,13 +237,8 @@ extension WillDeepTests {
         runGit(["commit", "-m", "initial"])
 
         let appState = AppState(rootDirectory: workspace)
-        let existingIDs = Set(appState.agentSessions.map(\.id))
         let session = appState.startNewAgentSession()
-        defer {
-            for id in appState.agentSessions.map(\.id) where !existingIDs.contains(id) {
-                AgentSessionStore.delete(id: id)
-            }
-        }
+        defer { AgentSessionStore.delete(id: session.id) }
         guard let runtime = appState.agentRuntimes[session.id] else {
             Issue.record("Expected runtime for new agent session")
             return
@@ -306,13 +296,8 @@ extension WillDeepTests {
         try "let value = 1\n".write(to: manualFileURL, atomically: true, encoding: .utf8)
 
         let appState = AppState(rootDirectory: workspace)
-        let existingIDs = Set(appState.agentSessions.map(\.id))
         let session = appState.startNewAgentSession()
-        defer {
-            for id in appState.agentSessions.map(\.id) where !existingIDs.contains(id) {
-                AgentSessionStore.delete(id: id)
-            }
-        }
+        defer { AgentSessionStore.delete(id: session.id) }
         guard let runtime = appState.agentRuntimes[session.id] else {
             Issue.record("Expected runtime for new agent session")
             return
@@ -392,13 +377,8 @@ extension WillDeepTests {
         try "let value = 1\n".write(to: fileURL, atomically: true, encoding: .utf8)
 
         let appState = AppState(rootDirectory: workspace)
-        let existingIDs = Set(appState.agentSessions.map(\.id))
         let session = appState.startNewAgentSession()
-        defer {
-            for id in appState.agentSessions.map(\.id) where !existingIDs.contains(id) {
-                AgentSessionStore.delete(id: id)
-            }
-        }
+        defer { AgentSessionStore.delete(id: session.id) }
         let runtime = try #require(appState.agentRuntimes[session.id])
         let messageID = UUID()
         let proposal = try appState.enqueueAgentPatchProposal(
@@ -478,13 +458,8 @@ extension WillDeepTests {
         let fileURL = workspace.appendingPathComponent("Pending.swift")
         try "let value = 1\n".write(to: fileURL, atomically: true, encoding: .utf8)
         let appState = AppState(rootDirectory: workspace)
-        let existingIDs = Set(appState.agentSessions.map(\.id))
         let session = appState.startNewAgentSession()
-        defer {
-            for id in appState.agentSessions.map(\.id) where !existingIDs.contains(id) {
-                AgentSessionStore.delete(id: id)
-            }
-        }
+        defer { AgentSessionStore.delete(id: session.id) }
         let runtime = try #require(appState.agentRuntimes[session.id])
         let messageID = UUID()
         let toolTask = Task { @MainActor in

@@ -441,7 +441,7 @@ struct AgentSessionStoreTests {
     /// orphan every user's existing sessions.
     @Test
     func directoryLivesUnderApplicationSupportWillDeep() {
-        let path = AgentSessionStore.directory.path
+        let path = AgentSessionStore.applicationSupportDirectory.path
         #expect(path.contains("Application Support"))
         #expect(path.contains("WillDeep"))
         #expect(path.hasSuffix("agent-sessions"))

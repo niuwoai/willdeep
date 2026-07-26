@@ -3,6 +3,13 @@
 > 当前文件保留最新版本（1.200.0-rc3 至 1.109.0-rc340）。
 > 更早的 1000 个版本已移至 [CHANGELOG-ARCHIVE.md](CHANGELOG-ARCHIVE.md)。
 
+## 1.206.0-rc7 - 2026-07-26
+
+### Fixed
+
+- **跑一次单元测试就清空用户全部会话历史与用量统计**：`AppState` 把 `agentSessions` 初始化为空数组、磁盘加载走 detached async Task，而 7 个测试文件里共 16 处清理代码在 `AppState` 构造后立刻捕获 `existingIDs`（此刻恒为空集），`defer` 执行时异步加载已把用户全部真实会话填入内存，于是逐个 `AgentSessionStore.delete(id:)` 连同 `catalog-v1` 侧车一起删除。`AgentSessionStore` 又没有测试目录接缝（`AgentAttachmentContentStore` 有），测试直接操作 `~/Library/Application Support/WillDeep/agent-sessions`。用量统计没有独立存储、由会话 JSON 现算，故 token 数、streak、热力图随之归零，表现为"装完新版/过一阵历史就没了"。现为测试进程整体重定向到临时目录（`directoryOverride` + 自动沙盒），并把 16 处清理改为只删本用例创建的会话。
+- **空事务覆盖真实记录**：`save` / `saveAsync` 增加护栏——待写会话 `messages` 为空、而磁盘上现有文件仍有消息时拒绝写入并告警。此前多个 `AppState` 实例共用进程级 `metadataOnlySessions` 标记，一旦标记被其他实例摘除，`materializeAgentSessionIfNeeded` 会误判骨架为已加载，直接把空 messages 持久化覆盖整段历史。
+
 ## 1.206.0-rc6 - 2026-07-26
 
 ### Fixed

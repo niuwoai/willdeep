@@ -181,6 +181,11 @@ nonisolated enum AgentSessionStore {
             do {
                 try ensureDirectory()
                 let url = directory.appendingPathComponent("\(id.uuidString).json")
+                guard !wouldTruncateStoredTranscript(payload, at: url) else {
+                    print("AgentSessionStore: refused to overwrite session \(id) with an empty transcript")
+                    pendingWrites.finish(id)
+                    return
+                }
                 let data = try encoder.encode(payload.externalizingAttachmentContent())
                 try coordinatedWrite(data, to: url)
                 writeCatalogEntryBestEffort(for: payload, sourceURL: url)
@@ -577,12 +582,43 @@ nonisolated enum AgentSessionStore {
         }
     }
 
-    /// Disk location for session JSON files. Created lazily.
-    static var directory: URL {
+    /// Test seam: when set, session JSON lives here instead of Application
+    /// Support. Set it before the store is first touched in a test.
+    nonisolated(unsafe) static var directoryOverride: URL?
+
+    /// The shipping location, never redirected. The rename guard asserts on
+    /// this so it keeps checking the path users actually own.
+    static var applicationSupportDirectory: URL {
         let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
             ?? FileManager.default.temporaryDirectory
         return base.appendingPathComponent("WillDeep", isDirectory: true)
             .appendingPathComponent("agent-sessions", isDirectory: true)
+    }
+
+    /// Every test process gets a throwaway library. Tests build `AppState`,
+    /// whose session list loads from disk asynchronously, then delete every
+    /// id absent from a set captured before that load returned — an empty
+    /// set, so the cleanup swept the user's entire real history. Redirecting
+    /// the whole process is the only version of this that a newly added test
+    /// cannot get wrong.
+    private static let testSandboxDirectory: URL? = {
+        let environment = ProcessInfo.processInfo.environment
+        let underTest = NSClassFromString("XCTestCase") != nil
+            || NSClassFromString("XCTest") != nil
+            || environment["XCTestConfigurationFilePath"] != nil
+            || environment["XCTestBundlePath"] != nil
+        guard underTest else { return nil }
+        return FileManager.default.temporaryDirectory
+            .appendingPathComponent(
+                "WillDeepTests-\(ProcessInfo.processInfo.processIdentifier)",
+                isDirectory: true
+            )
+            .appendingPathComponent("agent-sessions", isDirectory: true)
+    }()
+
+    /// Disk location for session JSON files. Created lazily.
+    static var directory: URL {
+        directoryOverride ?? testSandboxDirectory ?? applicationSupportDirectory
     }
 
     /// The product was named VeilWriter before 1.59. The rename changed the
@@ -763,6 +799,19 @@ nonisolated enum AgentSessionStore {
         }
     }
 
+    /// True when writing `session` would replace a stored transcript with an
+    /// empty one. A skeleton carrying no messages is what `metadataSession`
+    /// produces for the sidebar, and several paths persist whatever is in
+    /// `agentSessions[index]` without materializing it first — one stale
+    /// metadata-only flag is enough to flush that skeleton over real history.
+    /// An empty session whose file is also empty (or absent) writes normally.
+    private static func wouldTruncateStoredTranscript(_ session: AgentSession, at url: URL) -> Bool {
+        guard session.messages.isEmpty else { return false }
+        guard let data = try? Data(contentsOf: url) else { return false }
+        guard let stored = try? decoder.decode(AgentSession.self, from: data) else { return false }
+        return !stored.messages.isEmpty
+    }
+
     private static func metadataSession(from session: AgentSession) -> AgentSession {
         var copy = session
         copy.messages = []
@@ -928,6 +977,10 @@ nonisolated enum AgentSessionStore {
             do {
                 try ensureDirectory()
                 let url = directory.appendingPathComponent("\(session.id.uuidString).json")
+                guard !wouldTruncateStoredTranscript(session, at: url) else {
+                    print("AgentSessionStore: refused to overwrite session \(session.id) with an empty transcript")
+                    return false
+                }
                 let data = try encoder.encode(session.externalizingAttachmentContent())
                 try coordinatedWrite(data, to: url)
                 writeCatalogEntryBestEffort(for: session, sourceURL: url)

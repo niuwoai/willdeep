@@ -243,13 +243,8 @@ struct WillDeepTests {
         defer { try? FileManager.default.removeItem(at: workspace) }
 
         let appState = AppState(rootDirectory: nil)
-        let existingIDs = Set(appState.agentSessions.map(\.id))
         let session = appState.startNewAgentSession()
-        defer {
-            for id in appState.agentSessions.map(\.id) where !existingIDs.contains(id) {
-                AgentSessionStore.delete(id: id)
-            }
-        }
+        defer { AgentSessionStore.delete(id: session.id) }
         let initialCount = appState.agentSessions.count
 
         let rebound = appState.moveActiveAgentSessionToWorkspace(at: workspace.path)
@@ -269,13 +264,8 @@ struct WillDeepTests {
         defer { try? FileManager.default.removeItem(at: workspace) }
 
         let appState = AppState(rootDirectory: nil)
-        let existingIDs = Set(appState.agentSessions.map(\.id))
         let session = appState.startNewAgentSession()
-        defer {
-            for id in appState.agentSessions.map(\.id) where !existingIDs.contains(id) {
-                AgentSessionStore.delete(id: id)
-            }
-        }
+        defer { AgentSessionStore.delete(id: session.id) }
         appState.agentMessages = [
             AgentMessage(role: .user, content: "先聊一个没有工作区的问题"),
             AgentMessage(role: .assistant, content: "可以，等你选工作区后我继续。")
@@ -301,13 +291,8 @@ struct WillDeepTests {
         defer { try? FileManager.default.removeItem(at: workspace) }
 
         let appState = AppState(rootDirectory: nil)
-        let existingIDs = Set(appState.agentSessions.map(\.id))
         let session = appState.startNewAgentSession(inWorkspaceAt: workspace.path)
-        defer {
-            for id in appState.agentSessions.map(\.id) where !existingIDs.contains(id) {
-                AgentSessionStore.delete(id: id)
-            }
-        }
+        defer { AgentSessionStore.delete(id: session.id) }
         appState.agentMessages = [AgentMessage(role: .user, content: "keep this conversation")]
         let initialCount = appState.agentSessions.count
 

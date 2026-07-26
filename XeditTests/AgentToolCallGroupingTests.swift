@@ -570,13 +570,8 @@ extension WillDeepTests {
     @MainActor
     func testToolApprovalClickedBeforeWaiterRegistrationIsDelivered() async throws {
         let appState = AppState()
-        let existingIDs = Set(appState.agentSessions.map(\.id))
         let session = appState.startNewAgentSession()
-        defer {
-            for id in appState.agentSessions.map(\.id) where !existingIDs.contains(id) {
-                AgentSessionStore.delete(id: id)
-            }
-        }
+        defer { AgentSessionStore.delete(id: session.id) }
         guard let runtime = appState.agentRuntimes[session.id] else {
             Issue.record("Expected runtime for new agent session")
             return
@@ -614,13 +609,8 @@ extension WillDeepTests {
         defer { try? FileManager.default.removeItem(at: workspace) }
 
         let appState = AppState(rootDirectory: workspace)
-        let existingIDs = Set(appState.agentSessions.map(\.id))
         let session = appState.startNewAgentSession()
-        defer {
-            for id in appState.agentSessions.map(\.id) where !existingIDs.contains(id) {
-                AgentSessionStore.delete(id: id)
-            }
-        }
+        defer { AgentSessionStore.delete(id: session.id) }
         let runtime = try #require(appState.agentRuntimes[session.id])
         // An approved/executing plan lives in Normal mode: Plan mode is
         // planning-only and approval flips the session back to Normal for
@@ -678,13 +668,8 @@ extension WillDeepTests {
     @MainActor
     func testWorkspaceAccessModeChangeKeepsDangerConfirmationBlocked() async throws {
         let appState = AppState()
-        let existingIDs = Set(appState.agentSessions.map(\.id))
         let session = appState.startNewAgentSession()
-        defer {
-            for id in appState.agentSessions.map(\.id) where !existingIDs.contains(id) {
-                AgentSessionStore.delete(id: id)
-            }
-        }
+        defer { AgentSessionStore.delete(id: session.id) }
         let runtime = try #require(appState.agentRuntimes[session.id])
         runtime.approvalMode = .requestEveryTime
 
@@ -709,13 +694,8 @@ extension WillDeepTests {
     @MainActor
     func testToolApprovalResumesOnlyMatchingWaiter() async throws {
         let appState = AppState()
-        let existingIDs = Set(appState.agentSessions.map(\.id))
         let session = appState.startNewAgentSession()
-        defer {
-            for id in appState.agentSessions.map(\.id) where !existingIDs.contains(id) {
-                AgentSessionStore.delete(id: id)
-            }
-        }
+        defer { AgentSessionStore.delete(id: session.id) }
         guard let runtime = appState.agentRuntimes[session.id] else {
             Issue.record("Expected runtime for new agent session")
             return

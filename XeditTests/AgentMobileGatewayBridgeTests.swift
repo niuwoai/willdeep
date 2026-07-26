@@ -99,11 +99,10 @@ struct AgentMobileGatewayBridgeTests {
     @Test @MainActor
     func appStateMessageSendDispatchesIntoAgentRuntime() throws {
         let appState = AppState()
-        let existingIDs = Set(appState.agentSessions.map(\.id))
         let session = appState.startNewAgentSession()
         defer {
             appState.stopAgentResponse()
-            deleteSessionsCreatedByTest(appState, existingIDs: existingIDs)
+            deleteSessionsCreatedByTest([session.id])
         }
 
         let result = try appState.mobileGatewaySendMessage(
@@ -627,9 +626,8 @@ struct AgentMobileGatewayBridgeTests {
         }
 
         let appState = AppState(rootDirectory: workspace)
-        let existingIDs = Set(appState.agentSessions.map(\.id))
         let session = appState.startNewAgentSession()
-        defer { deleteSessionsCreatedByTest(appState, existingIDs: existingIDs) }
+        defer { deleteSessionsCreatedByTest([session.id]) }
 
         let file = try appState.mobileGatewayReadFile(
             sessionID: session.id,
@@ -656,9 +654,8 @@ struct AgentMobileGatewayBridgeTests {
     @Test @MainActor
     func appStateToolDecideKeepsConfirmAndAnswerGates() throws {
         let appState = AppState()
-        let existingIDs = Set(appState.agentSessions.map(\.id))
         let session = appState.startNewAgentSession()
-        defer { deleteSessionsCreatedByTest(appState, existingIDs: existingIDs) }
+        defer { deleteSessionsCreatedByTest([session.id]) }
 
         let confirmCall = AgentToolCall(
             messageID: UUID(),
@@ -739,9 +736,8 @@ struct AgentMobileGatewayBridgeTests {
         defer { try? FileManager.default.removeItem(at: workspace) }
 
         let appState = AppState(rootDirectory: workspace)
-        let existingIDs = Set(appState.agentSessions.map(\.id))
         let session = appState.startNewAgentSession()
-        defer { deleteSessionsCreatedByTest(appState, existingIDs: existingIDs) }
+        defer { deleteSessionsCreatedByTest([session.id]) }
 
         let applyProposal = AgentPatchProposal(
             messageID: UUID(),
@@ -795,9 +791,8 @@ struct AgentMobileGatewayBridgeTests {
     @Test @MainActor
     func appStateRejectsPendingPatchProposalsWhenMessageSupersedesThem() {
         let appState = AppState()
-        let existingIDs = Set(appState.agentSessions.map(\.id))
         let session = appState.startNewAgentSession()
-        defer { deleteSessionsCreatedByTest(appState, existingIDs: existingIDs) }
+        defer { deleteSessionsCreatedByTest([session.id]) }
 
         guard let runtime = appState.agentRuntimes[session.id] else {
             Issue.record("Expected runtime for new session")
@@ -982,9 +977,8 @@ struct AgentMobileGatewayBridgeTests {
         // repeated on every periodic snapshot. Snapshot reads must observe
         // only already-live runtimes and leave agentRuntimes untouched.
         let appState = AppState()
-        let existingIDs = Set(appState.agentSessions.map(\.id))
         let session = appState.startNewAgentSession()
-        defer { deleteSessionsCreatedByTest(appState, existingIDs: existingIDs) }
+        defer { deleteSessionsCreatedByTest([session.id]) }
 
         // Simulate an evicted runtime: the session stays in agentSessions
         // (as after an eviction or a cold start), but no runtime is live.
@@ -1003,8 +997,8 @@ struct AgentMobileGatewayBridgeTests {
     }
 
     @MainActor
-    private func deleteSessionsCreatedByTest(_ appState: AppState, existingIDs: Set<AgentSession.ID>) {
-        for id in appState.agentSessions.map(\.id) where !existingIDs.contains(id) {
+    private func deleteSessionsCreatedByTest(_ ids: [AgentSession.ID]) {
+        for id in ids {
             AgentSessionStore.delete(id: id)
         }
     }
