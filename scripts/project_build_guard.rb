@@ -3,9 +3,10 @@
 
 # project_build_guard.rb
 #
-# Workspace-level build coordinator. It serializes heavy project build/package
-# commands across agent sessions, records build fingerprints, and skips a run
-# when an identical successful artifact already exists.
+# Repository-level build coordinator. It serializes heavy project build/package
+# commands across agent sessions and linked Git worktrees, records build
+# fingerprints, and skips a run when an identical successful artifact already
+# exists in the current worktree.
 #
 # Usage:
 #   ruby scripts/project_build_guard.rb --name xedit-tests \
@@ -21,6 +22,7 @@ require "open3"
 require "optparse"
 require "securerandom"
 require "time"
+require "tmpdir"
 
 Encoding.default_external = Encoding::UTF_8
 Encoding.default_internal = Encoding::UTF_8
@@ -63,6 +65,13 @@ end
 
 def git_root(start)
   command_output("git", "rev-parse", "--show-toplevel", chdir: start)
+end
+
+def git_common_dir(root)
+  raw = command_output("git", "rev-parse", "--git-common-dir", chdir: root)
+  return nil if raw.to_s.empty?
+
+  File.expand_path(raw, root)
 end
 
 def git_value(root, *args)
@@ -127,6 +136,18 @@ def redacted_command(command)
   command.map { |token| redact_token(token) }
 end
 
+def default_coordination_dir(workspace)
+  repository_identity = git_common_dir(workspace) || workspace
+  canonical_identity = File.realpath(repository_identity)
+  cache_root = ENV.fetch(
+    "PROJECT_BUILD_GUARD_CACHE_DIR",
+    File.join(Dir.home, "Library", "Caches", "WillDeep", "ProjectBuildGuard")
+  )
+  File.join(cache_root, sha256(canonical_identity)[0, 20])
+rescue Errno::ENOENT, Errno::EACCES
+  File.join(Dir.tmpdir, "willdeep-project-build-guard", sha256(repository_identity)[0, 20])
+end
+
 def write_report(markdown_path, json_path, report)
   write_json(json_path, report)
 
@@ -137,6 +158,7 @@ def write_report(markdown_path, json_path, report)
   md << "- Fingerprint: `#{report.fetch("fingerprint")}`\n"
   md << "- Fingerprint refreshed after wait: #{report.fetch("fingerprint_refreshed_after_wait", false)}\n"
   md << "- Workspace: `#{report.fetch("workspace")}`\n"
+  md << "- Coordination directory: `#{report.fetch("coordination_dir")}`\n"
   md << "- Waited: #{report.fetch("waited_seconds")}s\n"
   md << "- Exit status: #{report.fetch("exit_status", "n/a")}\n"
   md << "- Started at: #{report.fetch("started_at", "")}\n"
@@ -155,6 +177,7 @@ end
 options = {
   workspace: nil,
   state_dir: ".codex-build",
+  coordination_dir: nil,
   name: nil,
   kind: "build",
   artifacts: [],
@@ -169,7 +192,13 @@ options = {
 parser = OptionParser.new do |opts|
   opts.banner = "Usage: ruby scripts/project_build_guard.rb [options] -- command args..."
   opts.on("--workspace PATH", "Workspace root. Defaults to git root or cwd.") { |value| options[:workspace] = value }
-  opts.on("--state-dir PATH", "Local guard state dir. Defaults to .codex-build.") { |value| options[:state_dir] = value }
+  opts.on("--state-dir PATH", "Worktree-local cache/report state dir. Defaults to .codex-build.") do |value|
+    options[:state_dir] = value
+  end
+  opts.on(
+    "--coordination-dir PATH",
+    "Shared queue/lock dir. Defaults to a git-common-dir-derived path under ~/Library/Caches."
+  ) { |value| options[:coordination_dir] = value }
   opts.on("--name NAME", "Human-readable build name.") { |value| options[:name] = value }
   opts.on("--kind KIND", "Build kind, e.g. xcode-test, archive, frontend-build.") { |value| options[:kind] = value }
   opts.on("--artifact PATH", "Artifact path that proves this build is reusable. Repeatable.") do |value|
@@ -199,16 +228,30 @@ abort(parser.to_s) if command.empty?
 
 workspace = File.expand_path(options[:workspace] || git_root(Dir.pwd) || Dir.pwd)
 state_dir = File.expand_path(options[:state_dir], workspace)
-queue_dir = File.join(state_dir, "queue")
+coordination_dir = if options[:coordination_dir]
+                     File.expand_path(options[:coordination_dir], workspace)
+                   else
+                     default_coordination_dir(workspace)
+                   end
+queue_dir = File.join(coordination_dir, "queue")
 reports_dir = File.join(state_dir, "reports")
 manifest_path = File.join(state_dir, "manifest.json")
-lock_path = File.join(state_dir, "workspace.lock")
+coordination_manifest_path = File.join(state_dir, "coordination.json")
+lock_path = File.join(coordination_dir, "repository.lock")
 name = sanitize_name(options[:name] || command.first || "build")
 kind = options[:kind].to_s
 
 FileUtils.mkdir_p(queue_dir)
 FileUtils.mkdir_p(reports_dir)
 FileUtils.mkdir_p(File.dirname(lock_path))
+write_json(
+  coordination_manifest_path,
+  {
+    "coordination_dir" => coordination_dir,
+    "queue_dir" => queue_dir,
+    "lock_path" => lock_path
+  }
+)
 
 artifact_paths = options[:artifacts].map { |path| File.expand_path(path, workspace) }
 fingerprint_paths = options[:fingerprint_files].map { |path| File.expand_path(path, workspace) }
@@ -313,6 +356,7 @@ begin
       "name" => name,
       "kind" => kind,
       "workspace" => workspace,
+      "coordination_dir" => coordination_dir,
       "fingerprint" => fingerprint,
       "initial_fingerprint" => initial_fingerprint,
       "fingerprint_refreshed_after_wait" => fingerprint_refreshed,
@@ -331,7 +375,7 @@ begin
     exit 0
   end
 
-  puts "[project_build_guard] acquired workspace build slot: #{name}"
+  puts "[project_build_guard] acquired repository build slot: #{name}"
   if options[:replace_artifacts]
     artifact_paths.each { |path| FileUtils.rm_rf(path) }
   end
@@ -349,6 +393,7 @@ begin
     "name" => name,
     "kind" => kind,
     "workspace" => workspace,
+    "coordination_dir" => coordination_dir,
     "fingerprint" => fingerprint,
     "initial_fingerprint" => initial_fingerprint,
     "fingerprint_refreshed_after_wait" => fingerprint_refreshed,
@@ -368,6 +413,7 @@ begin
     "name" => name,
     "kind" => kind,
     "workspace" => workspace,
+    "coordination_dir" => coordination_dir,
     "fingerprint" => fingerprint,
     "initial_fingerprint" => initial_fingerprint,
     "fingerprint_refreshed_after_wait" => fingerprint_refreshed,

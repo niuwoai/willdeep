@@ -1661,9 +1661,19 @@ enum AgentToolRunner {
 
     private static func projectBuildGuardQueueEntries(rootDirectory: URL?) -> [ProjectBuildQueueEntry] {
         guard let rootDirectory else { return [] }
-        let queueURL = rootDirectory
+        let localStateURL = rootDirectory
             .standardizedFileURL
-            .appendingPathComponent(".codex-build/queue", isDirectory: true)
+            .appendingPathComponent(".codex-build", isDirectory: true)
+        let coordinationURL = localStateURL.appendingPathComponent("coordination.json", isDirectory: false)
+        let queueURL: URL
+        if let data = try? Data(contentsOf: coordinationURL),
+           let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+           let sharedQueuePath = object["queue_dir"] as? String,
+           !sharedQueuePath.isEmpty {
+            queueURL = URL(fileURLWithPath: sharedQueuePath, isDirectory: true).standardizedFileURL
+        } else {
+            queueURL = localStateURL.appendingPathComponent("queue", isDirectory: true)
+        }
         guard let urls = try? FileManager.default.contentsOfDirectory(
             at: queueURL,
             includingPropertiesForKeys: nil,
