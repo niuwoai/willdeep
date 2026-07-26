@@ -1342,7 +1342,11 @@ final class AgentTerminalTab: ObservableObject, Identifiable, AgentTerminalProce
     ) {
         terminalView.invalidateTerminalEchoCache()
         applyAppearance(settings, skin: skin)
-        let env = Self.environmentArray(settings: settings)
+        let env = EditorTerminalLaunchEnvironment.array(
+            settings: settings,
+            injectClaudeCodeCompatibility: kind == .localShell,
+            markAsAgentTerminal: true
+        )
         switch kind {
         case .localShell:
             let shell = Self.loginShellPath(settings.shellPath)
@@ -1767,17 +1771,6 @@ final class AgentTerminalTab: ObservableObject, Identifiable, AgentTerminalProce
             return shell
         }
         return "/bin/zsh"
-    }
-
-    private static func environmentArray(settings: EditorTerminalSettings) -> [String] {
-        var environment = ProcessInfo.processInfo.environment
-        environment["TERM"] = "xterm-256color"
-        environment["WILLDEEP_AGENT_TERMINAL"] = "1"
-        environment["LANG"] = environment["LANG"] ?? "en_US.UTF-8"
-        for (key, value) in settings.environment {
-            environment[key] = value
-        }
-        return environment.sorted { $0.key < $1.key }.map { "\($0.key)=\($0.value)" }
     }
 
     private static func expandedPath(_ value: String) -> String {

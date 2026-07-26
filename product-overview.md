@@ -1,6 +1,6 @@
 # WillDeep Product Overview
 
-> Last updated: 2026-07-26 | Current version: v1.209.0-rc1
+> Last updated: 2026-07-26 | Current version: v1.209.0-rc2
 
 ## Positioning
 
@@ -11,6 +11,8 @@ Official product domain: [willdeep.com](https://willdeep.com).
 WillDeep is configured for non-App-Store distribution without App Sandbox so it can access local project files with fewer permission interruptions.
 
 ## 架构概览
+
+- **本地交互 Shell 轻量启动（1.209.0-rc2）** —— WillDeep 创建的编辑器终端和 Agent Terminal 本地 Shell 会注入 `CLAUDECODE=1`，可复用用户 `.zshrc` 中面向 Claude Code 的轻量 prompt 分支，跳过 powerlevel10k/gitstatus 等高成本初始化；Claude/Codex 委派 Shell、SSH 与后台命令不注入该变量，避免执行器误判嵌套会话。终端高级环境设置仍可显式覆盖或清空该变量。
 
 - **Goal-first 调度台（1.209.0-rc1）** —— 左侧一级入口展示 Goal 与本机/SSH 执行环境，中间把 Goal 清单投影为可持久化的任务依赖图，右侧提供单任务执行器、环境、分支、工作区与验收信息；Goal 运行中普通指令在当前步骤结束后的安全点生效，暂停、恢复、追加任务可即时执行，需要抢占时显式确认。执行器默认由 WillDeep 按任务能力自动选择，也允许在 Goal 或任务层强制指定；SSH Runtime 会探测 Claude Code、Codex、Cursor Agent 与 Cline CLI。
 
