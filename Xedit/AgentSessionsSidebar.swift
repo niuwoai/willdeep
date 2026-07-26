@@ -188,17 +188,23 @@ struct AgentSessionsSidebar: View {
                 LazyVStack(alignment: .leading, spacing: 0) {
                     primaryActions
                     Spacer().frame(height: 18)
-                    pinnedSessionsSection
-                    workspacesHeader
-                    ForEach(groupedSessions) { group in
-                        workspaceGroup(group)
-                    }
-                    if appState.agentSessions.isEmpty {
-                        Text(L10n.Sidebar.emptyState)
-                            .font(AgentDesign.secondaryFont)
-                            .foregroundStyle(.secondary)
-                            .padding(.horizontal, 14)
-                            .padding(.top, 16)
+                    if appState.agentPrimaryDestination == .dispatchBoard {
+                        AgentDispatchSidebarSections(
+                            coordinator: appState.agentDispatchCoordinator
+                        )
+                    } else {
+                        pinnedSessionsSection
+                        workspacesHeader
+                        ForEach(groupedSessions) { group in
+                            workspaceGroup(group)
+                        }
+                        if appState.agentSessions.isEmpty {
+                            Text(L10n.Sidebar.emptyState)
+                                .font(AgentDesign.secondaryFont)
+                                .foregroundStyle(.secondary)
+                                .padding(.horizontal, 14)
+                                .padding(.top, 16)
+                        }
                     }
                 }
                 // 30pt 交通灯安全区继续保留；顶部只补 3pt 呼吸感，
@@ -308,6 +314,17 @@ struct AgentSessionsSidebar: View {
                 appState.agentPrimaryDestination = .scheduledTasks
                 appState.agentSidePanelKind = nil
                 appState.agentSidePanelRequest = nil
+            }
+            SidebarActionRow(
+                icon: "point.3.connected.trianglepath.dotted",
+                title: L10n.Dispatch.navigationTitle,
+                shortcut: nil,
+                isSelected: appState.agentPrimaryDestination == .dispatchBoard
+            ) {
+                appState.agentPrimaryDestination = .dispatchBoard
+                appState.agentSidePanelKind = nil
+                appState.agentSidePanelRequest = nil
+                appState.agentDispatchCoordinator.synchronize(with: appState.agentSessions)
             }
             // 专家圆桌:切到嵌入的 .roundtable 目的地(和「已安排」同级,不切主
             // Agent 会话流);嵌入页内还提供「弹出到独立窗口」入口。

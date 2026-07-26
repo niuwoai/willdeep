@@ -108,6 +108,33 @@ struct AgentRemoteRuntimeTests {
         #expect(RuntimeArch.parse("amd64") == .x86_64)
     }
 
+    @Test("runtime capability decoding remains backward compatible and exposes agent CLIs")
+    func runtimeCapabilitiesDecodeAgentCLIs() throws {
+        let legacyJSON = """
+        {
+          "hasGit": true,
+          "hasRipgrep": true,
+          "shellPath": "/bin/zsh"
+        }
+        """
+        let legacy = try JSONDecoder().decode(
+            RuntimeCapabilities.self,
+            from: Data(legacyJSON.utf8)
+        )
+        #expect(legacy.agentCLIPaths.isEmpty)
+        #expect(legacy.availableExecutionAgents == [.willDeep])
+
+        var probed = RuntimeCapabilities.empty
+        probed.agentCLIPaths = [
+            AgentExecutionAgent.claudeCode.rawValue: "/usr/local/bin/claude",
+            AgentExecutionAgent.codexCLI.rawValue: "/usr/local/bin/codex",
+        ]
+        #expect(
+            probed.availableExecutionAgents
+                == [.willDeep, .claudeCode, .codexCLI]
+        )
+    }
+
     @Test("remote path validator keeps paths inside workspace")
     func remotePathValidation() throws {
         #expect(try RemotePathValidator.resolve("Sources/main.swift", workspaceRoot: "/srv/app") == "/srv/app/Sources/main.swift")

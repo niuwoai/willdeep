@@ -1,3 +1,43 @@
+# Design QA：Goal-first 调度台
+
+## 验收范围
+
+- source visual truth：`/Users/rocky/.codex/generated_images/019f9d36-0e1f-76e1-bfb1-86ba8f206956/call_hcFly4NzLsTPhd6OScom8ise.png`（用户选定的图 3）。
+- implementation screenshot：`/var/folders/np/rjc0y5w52x324x21pv6g33440000gp/T/com.openai.sky.CUAService/WillDeep Screenshot 2026-07-26 at 6.55.25 PM.jpeg`（真实 Debug App、简体中文、浅色皮肤）。
+- 同画布对比：`/Users/rocky/.codex/visualizations/2026/07/26/019f9d36-0e1f-76e1-bfb1-86ba8f206956/orchestrator-visual-compare-final.png`（左侧参考稿，右侧生产实现）。
+- state：两个真实 Goal 清单投影任务、一个本机环境、两个 SSH Runtime；未启动任务，避免视觉验收改变外部执行状态。
+
+## 修正记录
+
+1. 新增与「已安排」「专家圆桌」同级的调度台入口；进入后左侧切换为 Goal 与执行环境列表。
+2. 中央使用 Goal 任务依赖图和验收关卡，右侧检查器提供任务状态、执行器、环境、分支、工作区、验收标准与最近指令。
+3. 底部 Goal 指令区明确显示安全点语义，并提供追加任务、调整计划、暂停/恢复与抢占确认路径。
+4. 执行器徽标从固定横排改为自适应网格，避免窄检查器中 Claude Code、Cursor Agent 与 Cline 标签相互挤压。
+5. 无最近指令时使用独立空态，不再复用“请先创建 Goal”的引导文案。
+
+## Required Fidelity Surfaces
+
+- Fonts and typography：沿用 WillDeep 系统字体与既有侧栏、按钮、次级文字层级；新增文案全部进入中英文 String Catalog。
+- Spacing and layout rhythm：保持参考稿的「左导航 + 中央画布 + 右检查器 + 底部指令」四区结构，任务卡、连线、验收关卡与检查器分隔稳定。
+- Colors and visual tokens：选择态、进度、连接状态与主按钮读取现有主题和系统语义色，没有新增硬编码产品色。
+- Image quality and asset fidelity：界面图标使用 SF Symbols；没有占位图片、伪造 SVG 或位图替代控件。
+- Copy and content：生产截图读取真实 Goal 与 Runtime 数据；参考稿中的八任务活跃态没有硬编码进实现。
+
+## Findings
+
+同画布复核确认，生产实现完整保留图 3 的 Goal-first 信息架构和交互锚点。参考稿展示八个活跃任务，生产截图只有两个等待任务，这是当前真实数据差异；实现会随 Goal 清单动态扩展。检查器的信息密度略低于参考稿，因为 MVP 尚未展示独立验收证据流与合并产物；当前范围内没有未解决的 P0、P1 或 P2 视觉差异。
+
+## 验证
+
+- `AgentDispatchCoordinatorTests` 与 `AgentRemoteRuntimeTests`：18 项通过，覆盖安全点指令、抢占确认、自动/强制执行器、持久化、旧 Runtime JSON 兼容和 SSH CLI 能力。
+- `AgentSidebarListVisualMetricsTests`：14 项通过，确认与 Claude 的侧栏标题空间修复兼容。
+- `go test ./internal/agent`：通过，覆盖 daemon CLI 探测与既有代理脱敏逻辑。
+- 真实 Debug App 已通过 Computer Use 打开调度台，入口、选择、菜单、按钮、输入区和三栏布局均可访问；参考稿和最终截图已放进同一画布复核。
+
+final result: passed
+
+---
+
 # Design QA：专家圆桌终稿 Markdown 与自动落盘
 
 ## 验收范围

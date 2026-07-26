@@ -1085,6 +1085,13 @@ extension AppState {
     /// server must not die because the user interrupted a later answer.
     func stopAgentResponse() {
         guard let runtime = activeRuntime else { return }
+        stopAgentResponse(for: runtime)
+    }
+
+    /// Targeted stop used by the Goal dispatch console. Unlike switching the
+    /// selected conversation first, this preserves the user's place in the
+    /// console and interrupts only the runtime that owns the selected Goal.
+    func stopAgentResponse(for runtime: AgentRuntime) {
         if let activeTurnID = runtime.activeTurnID,
            runtime.userStoppedTurnID == activeTurnID {
             return

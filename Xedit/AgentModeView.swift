@@ -133,7 +133,8 @@ struct AgentModeView: View {
         )
         // `.backgroundTasks` remains decodable for persisted sessions, but it
         // is never a renderable destination after the monitor rail redesign.
-        let activeSidePanel: AgentSidePanelKind? = if appState.agentPrimaryDestination == .scheduledTasks {
+        let activeSidePanel: AgentSidePanelKind? = if appState.agentPrimaryDestination == .scheduledTasks
+            || appState.agentPrimaryDestination == .dispatchBoard {
             nil
         } else if appState.agentSidePanelKind == .backgroundTasks {
             nil
@@ -163,6 +164,8 @@ struct AgentModeView: View {
             VStack(spacing: 0) {
                 if appState.agentPrimaryDestination == .scheduledTasks {
                     AgentScheduledTasksPage()
+                } else if appState.agentPrimaryDestination == .dispatchBoard {
+                    AgentDispatchBoardPage()
                 } else if appState.agentPrimaryDestination == .roundtable {
                     RoundtableEmbeddedView()
                 } else {
