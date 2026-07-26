@@ -679,8 +679,12 @@ enum AgentToolRunner {
 
     // MARK: run_command
 
-    nonisolated private static let defaultCommandTimeout: TimeInterval = 20
-    nonisolated private static let maxCommandTimeout: TimeInterval = 120
+    // 20s/120s starved real builds and test runs: the command got killed,
+    // the model retried with a bigger timeout_seconds, and every retry cost
+    // a full model round trip. 60s absorbs typical lint/test/build steps;
+    // long jobs should still go through run_in_background.
+    nonisolated private static let defaultCommandTimeout: TimeInterval = 60
+    nonisolated private static let maxCommandTimeout: TimeInterval = 600
     nonisolated private static let maxCommandOutput = 32 * 1024
     nonisolated static let supplementalCommandPathEntries = [
         "/opt/homebrew/bin",

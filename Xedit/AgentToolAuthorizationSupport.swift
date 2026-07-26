@@ -527,6 +527,20 @@ enum AgentCommandAuthorization {
 ///    file_remove are deliberately not pinnable because their blast
 ///    radius depends entirely on the path argument.
 enum AgentToolAuthorization {
+    /// Cache key for safety-judge YES verdicts: tool name + command family
+    /// signature. Family granularity matches the Always-Allow pin contract
+    /// (`AgentCommandAuthorization.signature`); commands with no derivable
+    /// family (MCP pseudo-commands, exotic shells) fall back to the exact
+    /// trimmed command text so caching stays strictly per-command there.
+    nonisolated static func judgeVerdictCacheKey(
+        toolName: String,
+        command: String
+    ) -> String {
+        let family = AgentCommandAuthorization.signature(for: command)
+            ?? command.trimmingCharacters(in: .whitespacesAndNewlines)
+        return "\(toolName)|\(family)"
+    }
+
     static func interactiveSurfaceSignature(toolName: String) -> String? {
         if toolName.hasPrefix("computer_use_") {
             return "computer_use:*"

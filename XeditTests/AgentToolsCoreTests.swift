@@ -702,7 +702,11 @@ struct AgentToolsCoreTests {
         #expect(AgentToolError.pathOutsideWorkspace("/etc/passwd").errorDescription
                 == "Path is outside the workspace: /etc/passwd")
         #expect(AgentToolError.notFound("/x").errorDescription == "Path does not exist: /x")
-        #expect(AgentToolError.commandTimeout.errorDescription == "Command timed out.")
+        #expect(AgentToolError.commandTimeout.errorDescription?.hasPrefix("Command timed out") == true)
+        // The timeout message now carries recovery guidance for the model —
+        // it must keep steering toward run_in_background / timeout_seconds
+        // instead of a verbatim retry.
+        #expect(AgentToolError.commandTimeout.errorDescription?.contains("run_in_background") == true)
         #expect(AgentToolError.unknownTool("foo").errorDescription == "Unknown tool: foo")
     }
 
@@ -1361,6 +1365,62 @@ struct AgentToolsCoreTests {
                 output: buriedDenial,
                 sandboxMode: .workspaceWrite
             )
+        )
+    }
+
+    @Test
+    func sandboxedFailureNoteOnlyForSeatbeltedRunCommands() {
+        guard FileManager.default.isExecutableFile(atPath: "/usr/bin/sandbox-exec") else { return }
+        // A command in workspaceWrite mode really ran under seatbelt → note.
+        let note = AgentSandboxPolicy.sandboxedFailureNote(
+            toolName: "run_command",
+            command: "mkdir -p build/out",
+            effectiveMode: .workspaceWrite
+        )
+        #expect(note?.contains("[sandbox]") == true)
+        #expect(note?.contains("do NOT retry the identical command") == true)
+
+        // alwaysSafe read-only commands skip seatbelt entirely — no note.
+        #expect(AgentSandboxPolicy.sandboxedFailureNote(
+            toolName: "run_command",
+            command: "git status",
+            effectiveMode: .readOnly
+        ) == nil)
+        // Escalated runs are unsandboxed — a post-escalation failure must
+        // not be blamed on the sandbox.
+        #expect(AgentSandboxPolicy.sandboxedFailureNote(
+            toolName: "run_command",
+            command: "mkdir -p build/out",
+            effectiveMode: .escalated
+        ) == nil)
+        // Other tools never get the note (terminal commands run unsandboxed).
+        #expect(AgentSandboxPolicy.sandboxedFailureNote(
+            toolName: "terminal_send_command",
+            command: "mkdir -p build/out",
+            effectiveMode: .workspaceWrite
+        ) == nil)
+        #expect(AgentSandboxPolicy.sandboxedFailureNote(
+            toolName: "run_command",
+            command: nil,
+            effectiveMode: .workspaceWrite
+        ) == nil)
+    }
+
+    @Test
+    func judgeVerdictCacheKeyGroupsByCommandFamily() {
+        #expect(
+            AgentToolAuthorization.judgeVerdictCacheKey(toolName: "run_command", command: "git commit -m 'a'")
+                == AgentToolAuthorization.judgeVerdictCacheKey(toolName: "run_command", command: "git commit --amend --no-edit")
+        )
+        #expect(
+            AgentToolAuthorization.judgeVerdictCacheKey(toolName: "run_command", command: "git commit -m 'a'")
+                != AgentToolAuthorization.judgeVerdictCacheKey(toolName: "run_command", command: "git push origin main")
+        )
+        // Tool name is part of the key: a run_command YES must not leak to
+        // the terminal tool family (they have different blast radii).
+        #expect(
+            AgentToolAuthorization.judgeVerdictCacheKey(toolName: "run_command", command: "git commit -m 'a'")
+                != AgentToolAuthorization.judgeVerdictCacheKey(toolName: "terminal_send_command", command: "git commit -m 'a'")
         )
     }
 

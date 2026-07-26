@@ -3,7 +3,15 @@
 > 当前文件保留最新版本（1.200.0-rc3 至 1.109.0-rc340）。
 > 更早的 1000 个版本已移至 [CHANGELOG-ARCHIVE.md](CHANGELOG-ARCHIVE.md)。
 
-## 1.206.0-rc8 - 2026-07-26
+## 1.206.0-rc9 - 2026-07-26
+
+### Fixed
+
+- **Agent 编码回合提速一轮（对标 Codex/Claude Code 的"每步交税"清理）**：
+  - **裁判 verdict 缓存**：智能审批的 LLM 裁判对同一「工具 + 命令族」的 YES 结论缓存 30 分钟（上限 256 条、只缓存 allow、按 `AgentCommandAuthorization.signature` 族粒度），同族命令不再每次都付一趟 flash 模型网络往返；danger 级打字确认门在裁判之前，不受缓存影响。缓存命中同样落 `judge.jsonl`（model=`verdict-cache`）保持审计完整。
+  - **git 状态刷新按轮合并**：此前每个写类工具（含只读 run_command）执行后都 inline `await` 一次 `git status` 子进程，一轮 6 个编辑付 6 次；现改为非产物工具只置标记、整轮结束统一刷一次（产物工具仍即时刷新以保留其专属基线），变更归因基线不变。
+  - **run_command 超时放宽**：前台默认 20s→60s、上限 120s→600s（SSH/daemon 远程后端同步，内部探测保持 20s 快失败）；构建/测试类命令不再必然超时后靠模型重试兜底。超时错误文案改为带指引（转 `run_in_background` 或加大 `timeout_seconds`），阻止模型原样重试。
+  - **沙箱失败结构化回传**：真实在 seatbelt 下运行且失败的 `run_command`，工具结果追加 `[sandbox]` 说明（当前模式与读写/网络限制 + "不要原样重试，改用文件工具或说明理由请求升权"），终结模型对 `operation not permitted` 的盲目重试；升权后重跑的失败不会误标（以工具卡 `_sandbox` 实际模式判定）。
 
 ### Fixed
 

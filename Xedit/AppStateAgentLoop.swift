@@ -1243,6 +1243,13 @@ extension AppState {
             // Execute every tool call, gating on the user when necessary.
             var anyDenied = false
             var changedWorkspacePath: String?
+            // Git status refreshes are coalesced: instead of one blocking
+            // `git status` subprocess after EVERY write-ish tool (a round
+            // with six edits paid six), non-artifact refreshes set this flag
+            // and run once after the round's tools finish. Attribution is
+            // unchanged — the diff is always taken against the same
+            // turn-level baseline.
+            var roundNeedsGitStatusRefresh = false
             for call in latestToolCalls {
                 // Parse argumentsJSON into a dict for downstream risk/dispatch.
                 // The model occasionally emits malformed JSON (especially on
@@ -1847,12 +1854,18 @@ extension AppState {
                     )
                     if call.toolName != "change_workspace",
                        call.toolName == "run_command" || risk != .read || patchAutoApplySource != nil {
-                        await refreshGitStatusAfterAgentTool(
-                            for: runtime,
-                            workspaceURL: workspaceURL,
-                            baselineSnapshot: toolBaselineSnapshot,
-                            producesArtifacts: producesArtifacts
-                        )
+                        if producesArtifacts {
+                            // Artifact harvesting needs this tool's own
+                            // artifact baseline — refresh inline as before.
+                            await refreshGitStatusAfterAgentTool(
+                                for: runtime,
+                                workspaceURL: workspaceURL,
+                                baselineSnapshot: toolBaselineSnapshot,
+                                producesArtifacts: true
+                            )
+                        } else {
+                            roundNeedsGitStatusRefresh = true
+                        }
                     }
                     appendToolMessage(
                         for: runtime,
@@ -1919,15 +1932,45 @@ extension AppState {
                             ?? patchAutoApplySource,
                         outcome: "failed"
                     )
+                    // If the command actually ran under seatbelt, say so
+                    // explicitly — the escalation card only covers denials
+                    // the heuristic recognizes; everything else used to
+                    // reach the model as a bare stderr it would blindly
+                    // retry. `_sandbox` on the record reflects the mode the
+                    // command really ran with (escalation retries overwrite
+                    // it), so a post-escalation failure gets no note.
+                    var sandboxNote = ""
+                    if let toolError = error as? AgentToolError,
+                       case .commandFailed = toolError {
+                        let recordedMode = runtime.toolCalls.first(where: { $0.id == recordID })?
+                            .arguments["_sandbox"]?.stringValue()
+                            .flatMap(AgentSandboxMode.init(rawValue:))
+                        if let note = AgentSandboxPolicy.sandboxedFailureNote(
+                            toolName: call.toolName,
+                            command: argsDict["command"]?.stringValue(),
+                            effectiveMode: recordedMode ?? context.sandboxMode
+                        ) {
+                            sandboxNote = "\n\n" + note
+                        }
+                    }
                     appendToolMessage(
                         for: runtime,
                         toolCallID: call.externalID,
-                        payload: "Tool error: \(errorMessage)\n\n(WillDeep: this tool call failed. Do not stop here — diagnose the cause from the exit code/stderr above and try another approach to accomplish the goal. Only give up if you are genuinely blocked, and then explain what you tried and what you still need.)",
+                        payload: "Tool error: \(errorMessage)\(sandboxNote)\n\n(WillDeep: this tool call failed. Do not stop here — diagnose the cause from the exit code/stderr above and try another approach to accomplish the goal. Only give up if you are genuinely blocked, and then explain what you tried and what you still need.)",
                         source: .systemNotice,
                         outcomeStatus: .failed,
                         errorMessage: errorMessage
                     )
                 }
+            }
+
+            if roundNeedsGitStatusRefresh {
+                await refreshGitStatusAfterAgentTool(
+                    for: runtime,
+                    workspaceURL: workspaceURL,
+                    baselineSnapshot: turnBaselineSnapshot,
+                    producesArtifacts: false
+                )
             }
 
             if let changedWorkspacePath {

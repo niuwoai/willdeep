@@ -102,7 +102,7 @@ enum AgentToolRegistry {
             risk: .write,
             parameters: [
                 AgentToolParameter(name: "command", type: .string, description: "Shell command line. Runs through /bin/sh -c.", required: true),
-                AgentToolParameter(name: "timeout_seconds", type: .integer, description: "Hard timeout in seconds. Foreground default 20s (max 120). Background default unlimited (max 21600 = 6h).", required: false),
+                AgentToolParameter(name: "timeout_seconds", type: .integer, description: "Hard timeout in seconds. Foreground default 60s (max 600). Background default unlimited (max 21600 = 6h).", required: false),
                 AgentToolParameter(name: "run_in_background", type: .boolean, description: "When true, do not block on the command. Returns a job handle (job_xxxxxx); the host injects a system message when the job finishes. Use for tasks expected to take more than ~30 seconds. Defaults to false.", required: false)
             ]
         ),

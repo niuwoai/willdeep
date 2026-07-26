@@ -638,6 +638,38 @@ enum AgentSandboxPolicy {
             || exitStatus == -1
     }
 
+    /// Model-facing note appended to a failed `run_command` result when the
+    /// command actually executed under seatbelt. Without it the model only
+    /// sees a bare "operation not permitted" and — nudged by the "keep
+    /// trying" guidance in the system prompt — tends to retry the identical
+    /// command, which the sandbox denies again. Returns nil when the command
+    /// did not run sandboxed (alwaysSafe skip, escalated, no sandbox-exec).
+    nonisolated static func sandboxedFailureNote(
+        toolName: String,
+        command: String?,
+        effectiveMode: AgentSandboxMode
+    ) -> String? {
+        guard toolName == "run_command",
+              let command,
+              !command.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+              FileManager.default.isExecutableFile(atPath: sandboxExecPath),
+              !shouldRunWithoutSeatbelt(command: command, mode: effectiveMode) else {
+            return nil
+        }
+        let restrictions: String
+        switch effectiveMode {
+        case .escalated:
+            return nil
+        case .readOnly:
+            restrictions = "reads allowed everywhere; writes denied except the temp dir; network denied"
+        case .workspaceWrite:
+            restrictions = "writes allowed only inside the workspace and temp dir; network denied"
+        case .workspaceWriteNetwork:
+            restrictions = "writes allowed only inside the workspace and temp dir; network allowed"
+        }
+        return "[sandbox] This command ran inside WillDeep's macOS sandbox (\(effectiveMode.rawValue): \(restrictions)). If the failure above looks like 'permission denied' / 'operation not permitted', do NOT retry the identical command — the sandbox will deny it again. Instead: use read_file/edit_file/create_file for file work, keep paths inside the workspace, or briefly tell the user why the command must run outside the sandbox so they can approve escalation."
+    }
+
     /// Argument flag stamped onto a tool call while waiting for the user to
     /// approve re-running outside the sandbox after a denial.
     nonisolated static let sandboxEscalationRequestArgumentKey = "_sandbox_escalation_request"

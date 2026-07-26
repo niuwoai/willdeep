@@ -385,6 +385,18 @@ extension AppState {
     /// approve-this habits show up quickly" against cache thrash.
     private static let safetyJudgeHistoryTTL: TimeInterval = 30 * 60
 
+    /// How long a judge YES stays reusable for the same tool + command
+    /// family before the next occurrence pays a real judge round trip
+    /// again. 30 min mirrors the few-shot history TTL: long enough to cover
+    /// a work session's repeated `git commit` / `swift build` cadence,
+    /// short enough that a stale allow doesn't outlive the session context
+    /// it was judged in.
+    private static let safetyJudgeVerdictCacheTTL: TimeInterval = 30 * 60
+
+    /// Hard cap on cached verdict entries; beyond it, expired entries are
+    /// pruned first and the cache is cleared as a last resort.
+    private static let safetyJudgeVerdictCacheLimit = 256
+
     /// Cached operator-decision context appended to the judge system prompt.
     /// Bounded and deduped by `AgentSandboxAuditLog.judgeHistorySamples` +
     /// `AgentInjectionDefense.judgeHistoryContext`; rebuilt lazily behind
@@ -414,6 +426,27 @@ extension AppState {
         toolName: String,
         command: String
     ) async -> AgentToolApprovalSource? {
+        // A recent YES for this tool + command family skips the network
+        // round trip entirely. Only allows are cached (a deny still falls
+        // through to the user each time), and the static danger gates run
+        // BEFORE this point, so a cached family can never smuggle a
+        // typed-confirmation command past the judge.
+        let cacheKey = AgentToolAuthorization.judgeVerdictCacheKey(
+            toolName: toolName,
+            command: command
+        )
+        if let grantedAt = cachedJudgeAllowedVerdicts[cacheKey],
+           Date().timeIntervalSince(grantedAt) < Self.safetyJudgeVerdictCacheTTL {
+            AgentSandboxAuditLog.recordJudge(
+                toolName: toolName,
+                command: command,
+                model: "verdict-cache",
+                verdict: "allow",
+                detail: "cached family: \(cacheKey)"
+            )
+            return .llmJudge
+        }
+
         let configuration = configurationForSafetyJudge()
         let client = AgentClient(configuration: configuration)
         let result = await client.judgeCommandSafety(
@@ -440,6 +473,16 @@ extension AppState {
             verdict: verdict,
             detail: detail
         )
+        if result == .allow {
+            if cachedJudgeAllowedVerdicts.count >= Self.safetyJudgeVerdictCacheLimit {
+                let cutoff = Date().addingTimeInterval(-Self.safetyJudgeVerdictCacheTTL)
+                cachedJudgeAllowedVerdicts = cachedJudgeAllowedVerdicts.filter { $0.value > cutoff }
+                if cachedJudgeAllowedVerdicts.count >= Self.safetyJudgeVerdictCacheLimit {
+                    cachedJudgeAllowedVerdicts.removeAll()
+                }
+            }
+            cachedJudgeAllowedVerdicts[cacheKey] = Date()
+        }
         return result == .allow ? .llmJudge : nil
     }
 

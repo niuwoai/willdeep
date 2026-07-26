@@ -389,7 +389,7 @@ enum AgentToolError: LocalizedError {
             }
             return "Command exited with status \(code): \(trimmed)"
         case .commandTimeout:
-            return "Command timed out."
+            return "Command timed out before completing. Do not retry the same command unchanged: for long-running work (builds, test suites, servers) re-run it with run_in_background=true, or pass a larger timeout_seconds."
         case .unknownTool(let name):
             return "Unknown tool: \(name)"
         case .invalidRegex(let detail):

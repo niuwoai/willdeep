@@ -30,6 +30,9 @@ struct SSHRuntimeBackend: AgentRemoteRuntimeBackend {
     let descriptor: RuntimeDescriptor
 
     private let defaultTimeout: TimeInterval = 20
+    /// run_command default only. Internal probes (git status, workspace
+    /// checks) stay on the shorter `defaultTimeout` so a hung host fails fast.
+    private let defaultCommandTimeout: TimeInterval = 60
     private let maxForegroundTimeout: TimeInterval = 120
     private let maxOutputBytes = 32 * 1024
 
@@ -204,7 +207,7 @@ struct SSHRuntimeBackend: AgentRemoteRuntimeBackend {
         foregroundMaxTimeout: TimeInterval
     ) async throws -> AgentToolResult {
         let command = try requiredString("command", in: arguments)
-        let timeoutArg = arguments["timeout_seconds"]?.intValue().map { Double($0) } ?? defaultTimeout
+        let timeoutArg = arguments["timeout_seconds"]?.intValue().map { Double($0) } ?? defaultCommandTimeout
         let timeout = min(max(timeoutArg, 1), max(1, foregroundMaxTimeout))
         let remoteCommand = workspaceWrappedCommand(command)
 
@@ -425,6 +428,8 @@ struct DaemonRuntimeBackend: AgentRemoteRuntimeBackend {
     let descriptor: RuntimeDescriptor
 
     private let defaultTimeout: TimeInterval = 20
+    /// run_command default only; internal probes stay on `defaultTimeout`.
+    private let defaultCommandTimeout: TimeInterval = 60
     private let maxForegroundTimeout: TimeInterval = 120
     private let maxOutputBytes = 32 * 1024
     private let foregroundJobPollIntervalNanoseconds: UInt64 = 1_000_000_000
@@ -566,7 +571,7 @@ struct DaemonRuntimeBackend: AgentRemoteRuntimeBackend {
         foregroundMaxTimeout: TimeInterval
     ) async throws -> AgentToolResult {
         let command = try requiredString("command", in: arguments)
-        let timeoutArg = arguments["timeout_seconds"]?.intValue() ?? Int(defaultTimeout)
+        let timeoutArg = arguments["timeout_seconds"]?.intValue() ?? Int(defaultCommandTimeout)
         let timeout = min(max(timeoutArg, 1), 3600 * 6)
         let wantsBackground = arguments["run_in_background"]?.boolValue() ?? false
         let job = try await startJob(command: command, timeoutSeconds: timeout)
