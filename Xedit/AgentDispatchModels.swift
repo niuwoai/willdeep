@@ -65,6 +65,28 @@ nonisolated enum AgentDispatchTargetChoice: Codable, Equatable, Hashable {
     case remote(UUID)
 }
 
+nonisolated struct AgentDispatchWorkspaceBinding: Codable, Equatable, Identifiable {
+    var location: WorkspaceLocation
+
+    var id: String {
+        switch location {
+        case .local:
+            return "local"
+        case .remote(let runtimeID, _):
+            return "remote:\(runtimeID.uuidString)"
+        }
+    }
+
+    var targetChoice: AgentDispatchTargetChoice {
+        switch location {
+        case .local:
+            return .local
+        case .remote(let runtimeID, _):
+            return .remote(runtimeID)
+        }
+    }
+}
+
 nonisolated enum AgentDispatchExecutorReason: String, Codable {
     case userPinned
     case testAndSearchFit
@@ -165,6 +187,8 @@ nonisolated struct AgentDispatchGoal: Codable, Equatable, Identifiable {
     var sessionID: UUID
     var title: String
     var statement: String
+    var workspaceLocation: WorkspaceLocation? = nil
+    var workspaceBindings: [AgentDispatchWorkspaceBinding]? = nil
     var tasks: [AgentDispatchTask]
     var executorChoice: AgentDispatchExecutorChoice
     var targetChoice: AgentDispatchTargetChoice
@@ -181,6 +205,45 @@ nonisolated struct AgentDispatchGoal: Codable, Equatable, Identifiable {
 
     var activeTaskCount: Int {
         tasks.filter { $0.state == .running || $0.state == .reviewing }.count
+    }
+
+    var effectiveWorkspaceBindings: [AgentDispatchWorkspaceBinding] {
+        var result: [AgentDispatchWorkspaceBinding] = []
+        if let workspaceLocation {
+            result.append(AgentDispatchWorkspaceBinding(location: workspaceLocation))
+        }
+        for binding in workspaceBindings ?? [] where !result.contains(where: { $0.id == binding.id }) {
+            result.append(binding)
+        }
+        return result
+    }
+
+    var availableTargetChoices: [AgentDispatchTargetChoice] {
+        effectiveWorkspaceBindings.map(\.targetChoice)
+    }
+
+    func resolvedTargetChoice(
+        taskChoice: AgentDispatchTargetChoice
+    ) -> AgentDispatchTargetChoice? {
+        let requested = taskChoice == .automatic ? targetChoice : taskChoice
+        if requested != .automatic {
+            return workspaceLocation(for: requested) == nil ? nil : requested
+        }
+        guard let workspaceLocation else { return nil }
+        return AgentDispatchWorkspaceBinding(location: workspaceLocation).targetChoice
+    }
+
+    func workspaceLocation(
+        for targetChoice: AgentDispatchTargetChoice
+    ) -> WorkspaceLocation? {
+        switch targetChoice {
+        case .automatic:
+            return workspaceLocation
+        case .local, .remote:
+            return effectiveWorkspaceBindings.first {
+                $0.targetChoice == targetChoice
+            }?.location
+        }
     }
 }
 

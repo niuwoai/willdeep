@@ -129,7 +129,9 @@ struct WillDeepTests {
     @Test("agent activity stays textual and hides for user decisions")
     func testAgentActivityTextIndicatorState() {
         let appState = AppState()
-        appState.startNewAgentSession()
+        appState.startNewAgentSession(
+            inWorkspaceAt: FileManager.default.temporaryDirectory.path
+        )
         appState.isAgentResponding = true
         appState.agentMessages = [AgentMessage(role: .assistant, content: "Streaming response")]
 
@@ -167,7 +169,9 @@ struct WillDeepTests {
     @Test("goal running status bar only shows during an active goal turn")
     func testGoalRunningStatusBarVisibility() {
         let appState = AppState()
-        appState.startNewAgentSession()
+        appState.startNewAgentSession(
+            inWorkspaceAt: FileManager.default.temporaryDirectory.path
+        )
 
         appState.agentInteractionMode = .goal
         appState.setAgentGoal(statement: "Ship the thing", items: ["Build", "Verify"])
@@ -192,7 +196,9 @@ struct WillDeepTests {
     @Test("editing goal while agent is responding queues updated goal follow-up")
     func testEditingGoalWhileRespondingQueuesGoalUpdate() {
         let appState = AppState()
-        appState.startNewAgentSession()
+        appState.startNewAgentSession(
+            inWorkspaceAt: FileManager.default.temporaryDirectory.path
+        )
         appState.agentInteractionMode = .goal
         appState.setAgentGoal(statement: "Old target", items: ["First"])
 
@@ -210,7 +216,9 @@ struct WillDeepTests {
     @Test("old goal-check is ignored after a mid-turn goal edit")
     func testOldGoalCheckIgnoredAfterGoalEdit() {
         let appState = AppState()
-        appState.startNewAgentSession()
+        appState.startNewAgentSession(
+            inWorkspaceAt: FileManager.default.temporaryDirectory.path
+        )
         appState.agentInteractionMode = .goal
         appState.setAgentGoal(statement: "Old target", items: ["Old first"])
         appState.agentMessages.append(

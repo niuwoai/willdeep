@@ -36,6 +36,12 @@ extension AppState {
         // isn't one, lazily create one so a brand-new install can fire
         // off its first message without manually picking ⌘N first.
         guard let runtime = activeRuntime ?? activeRuntimeAfterCreatingNewSession() else { return }
+        if runtime.interactionMode == .goal,
+           runtime.workspaceLocation == nil,
+           (runtime.workspaceRootPath?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ?? true) {
+            runtime.errorMessage = L10n.Dispatch.workspaceRequired
+            return
+        }
         if refreshChangedAgentSessionDocumentsIfNeeded(in: runtime) {
             return
         }

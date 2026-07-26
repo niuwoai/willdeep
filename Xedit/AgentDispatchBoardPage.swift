@@ -82,12 +82,37 @@ private struct AgentDispatchBoardContent: View {
     }
 
     private func goalContent(_ goal: AgentDispatchGoal) -> some View {
-        VStack(spacing: 0) {
+        let runtimeDescriptors = AgentRuntimeStore.loadDescriptors()
+        return VStack(spacing: 0) {
             AgentDispatchGoalHeader(
                 goal: goal,
-                runtimeCount: AgentRuntimeStore.loadDescriptors().filter { $0.transport == .ssh }.count,
+                runtimeDescriptors: runtimeDescriptors,
                 onExecutorChoice: { coordinator.updateGoalExecutorChoice($0, goalID: goal.id) },
                 onTargetChoice: { coordinator.updateGoalTargetChoice($0, goalID: goal.id) },
+                onChooseLocalWorkspace: {
+                    appState.chooseLocalWorkspaceForDispatchGoal(goalID: goal.id) { error in
+                        if let error {
+                            alertTarget = .message(
+                                title: L10n.Dispatch.workspaceBindingFailed,
+                                message: error
+                            )
+                        }
+                    }
+                },
+                onBindRemoteWorkspace: { runtime in
+                    if let error = appState.bindDispatchGoalWorkspace(
+                        goalID: goal.id,
+                        location: .remote(
+                            runtimeID: runtime.id,
+                            path: runtime.defaultWorkspacePath
+                        )
+                    ) {
+                        alertTarget = .message(
+                            title: L10n.Dispatch.workspaceBindingFailed,
+                            message: error
+                        )
+                    }
+                },
                 onLaunch: { launchFirstReadyTask(in: goal) },
                 onResume: { togglePaused(goal) }
             )
@@ -96,7 +121,7 @@ private struct AgentDispatchBoardContent: View {
                 AgentDispatchGraphView(
                     goal: goal,
                     selectedTaskID: coordinator.selectedTaskID,
-                    runtimeDescriptors: AgentRuntimeStore.loadDescriptors(),
+                    runtimeDescriptors: runtimeDescriptors,
                     onSelectTask: coordinator.selectTask
                 )
                 Divider().opacity(0.55)
@@ -105,7 +130,7 @@ private struct AgentDispatchBoardContent: View {
                         goal: goal,
                         task: task,
                         localExecutors: localExecutors,
-                        runtimeDescriptors: AgentRuntimeStore.loadDescriptors(),
+                        runtimeDescriptors: runtimeDescriptors,
                         onExecutorChoice: {
                             coordinator.updateTaskExecutorChoice(
                                 $0,
@@ -161,9 +186,9 @@ private struct AgentDispatchBoardContent: View {
                 .multilineTextAlignment(.center)
                 .frame(maxWidth: 480)
             Button {
-                appState.startNewAgentSession()
+                appState.startGoalConversationInLocalWorkspace()
             } label: {
-                Label(L10n.Dispatch.openConversation, systemImage: "plus")
+                Label(L10n.Dispatch.chooseWorkspaceAndStart, systemImage: "folder.badge.plus")
             }
             .buttonStyle(.borderedProminent)
         }
@@ -173,6 +198,13 @@ private struct AgentDispatchBoardContent: View {
 
     private func submitCommand() {
         guard let goal = coordinator.selectedGoal else { return }
+        guard goal.workspaceLocation != nil else {
+            alertTarget = .message(
+                title: L10n.Dispatch.workspaceRequiredShort,
+                message: L10n.Dispatch.workspaceRequired
+            )
+            return
+        }
         let text = commandText.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !text.isEmpty else { return }
         commandText = ""

@@ -104,6 +104,12 @@ struct AgentModePickerPill: View {
                 } label: {
                     Label(mode.displayName, systemImage: mode.symbol)
                 }
+                .disabled(
+                    mode == .goal
+                        && appState.activeRuntime?.workspaceLocation == nil
+                        && (appState.activeRuntime?.workspaceRootPath?
+                            .trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ?? true)
+                )
             }
         } label: {
             HStack(spacing: 4) {

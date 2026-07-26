@@ -39,6 +39,74 @@ extension L10n {
             localized: "dispatch.open-conversation",
             defaultValue: "Start a Goal conversation"
         )
+        static let addWorkspaceMapping = String(
+            localized: "dispatch.add-workspace-mapping",
+            defaultValue: "Add checkout mapping"
+        )
+        static let bindWorkspace = String(
+            localized: "dispatch.bind-workspace",
+            defaultValue: "Bind Workspace"
+        )
+        static let chooseLocalWorkspace = String(
+            localized: "dispatch.choose-local-workspace",
+            defaultValue: "Choose local folder…"
+        )
+        static let chooseWorkspace = String(
+            localized: "dispatch.choose-workspace",
+            defaultValue: "Choose Goal Workspace"
+        )
+        static let chooseWorkspaceAction = String(
+            localized: "dispatch.choose-workspace-action",
+            defaultValue: "Choose"
+        )
+        static let chooseWorkspaceMessage = String(
+            localized: "dispatch.choose-workspace-message",
+            defaultValue: "A Goal must belong to a workspace before it can run."
+        )
+        static let chooseWorkspaceAndStart = String(
+            localized: "dispatch.choose-workspace-and-start",
+            defaultValue: "Choose Workspace and Start"
+        )
+        static let goalWorkspace = String(
+            localized: "dispatch.goal-workspace",
+            defaultValue: "Goal Workspace"
+        )
+        static let mapWorkspaceMessage = String(
+            localized: "dispatch.map-workspace-message",
+            defaultValue: "Choose a checkout of the same project for this Goal."
+        )
+        static let remoteWorkspaceUnavailable = String(
+            localized: "dispatch.remote-workspace-unavailable",
+            defaultValue: "The selected SSH workspace is unavailable."
+        )
+        static let workspaceBindingFailed = String(
+            localized: "dispatch.workspace-binding-failed",
+            defaultValue: "Couldn’t bind workspace"
+        )
+        static let workspaceBusy = String(
+            localized: "dispatch.workspace-busy",
+            defaultValue: "Stop the current Goal turn before binding its workspace."
+        )
+        static let workspaceMappingHelp = String(
+            localized: "dispatch.workspace-mapping-help",
+            defaultValue: "Only map checkouts of the same project."
+        )
+        static let workspaceMappingRequired = String(
+            localized: "dispatch.workspace-mapping-required",
+            defaultValue: "Map a workspace for this execution environment before launching the task."
+        )
+        static let workspaceMissing = String(
+            localized: "dispatch.workspace-missing",
+            defaultValue: "The selected local workspace no longer exists."
+        )
+        static let workspaceRequired = String(
+            localized: "dispatch.workspace-required",
+            defaultValue: "Bind this Goal to a workspace before continuing."
+        )
+        static let workspaceRequiredShort = String(
+            localized: "dispatch.workspace-required-short",
+            defaultValue: "Workspace required"
+        )
         static let addTask = String(localized: "dispatch.add-task", defaultValue: "Add Task")
         static let startPlan = String(localized: "dispatch.start-plan", defaultValue: "Start Plan")
         static let resumePlan = String(localized: "dispatch.resume-plan", defaultValue: "Resume Plan")

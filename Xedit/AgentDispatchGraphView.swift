@@ -97,6 +97,9 @@ struct AgentDispatchGraphView: View {
     private func taskCard(_ task: AgentDispatchTask) -> some View {
         let selected = task.id == selectedTaskID
         let stateColor = AgentDispatchPresentation.taskStateColor(task.state)
+        let displayTarget = task.resolvedTarget
+            ?? goal.resolvedTargetChoice(taskChoice: task.targetChoice)
+            ?? .automatic
         return Button {
             onSelectTask(task.id)
         } label: {
@@ -140,12 +143,14 @@ struct AgentDispatchGraphView: View {
                     )
                     badge(
                         AgentDispatchPresentation.targetChoiceName(
-                            task.resolvedTarget ?? task.targetChoice,
+                            displayTarget,
                             runtimes: runtimeDescriptors
                         ),
-                        symbol: (task.resolvedTarget ?? task.targetChoice).isRemoteTarget
+                        symbol: displayTarget.isRemoteTarget
                             ? "network"
-                            : "desktopcomputer"
+                            : goal.workspaceLocation == nil
+                                ? "folder.badge.questionmark"
+                                : "desktopcomputer"
                     )
                 }
             }

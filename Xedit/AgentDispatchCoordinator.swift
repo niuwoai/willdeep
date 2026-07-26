@@ -77,6 +77,9 @@ final class AgentDispatchCoordinator: ObservableObject {
 
     func updateGoalTargetChoice(_ choice: AgentDispatchTargetChoice, goalID: UUID) {
         updateGoal(id: goalID) { goal in
+            guard choice == .automatic || goal.workspaceLocation(for: choice) != nil else {
+                return
+            }
             goal.targetChoice = choice
             goal.updatedAt = Date()
         }
@@ -98,9 +101,44 @@ final class AgentDispatchCoordinator: ObservableObject {
         goalID: UUID,
         taskID: UUID
     ) {
+        guard let goal = goals.first(where: { $0.id == goalID }),
+              choice == .automatic || goal.workspaceLocation(for: choice) != nil else {
+            return
+        }
         updateTask(goalID: goalID, taskID: taskID) { task in
             task.targetChoice = choice
             task.updatedAt = Date()
+        }
+    }
+
+    func bindWorkspace(
+        _ location: WorkspaceLocation,
+        goalID: UUID,
+        makePrimary: Bool
+    ) {
+        updateGoal(id: goalID) { goal in
+            var bindings = goal.effectiveWorkspaceBindings
+            let binding = AgentDispatchWorkspaceBinding(location: location)
+            if let index = bindings.firstIndex(where: { $0.id == binding.id }) {
+                bindings[index] = binding
+            } else {
+                bindings.append(binding)
+            }
+            if makePrimary || goal.workspaceLocation == nil {
+                goal.workspaceLocation = location
+            }
+            goal.workspaceBindings = bindings
+            if goal.targetChoice != .automatic,
+               goal.workspaceLocation(for: goal.targetChoice) == nil {
+                goal.targetChoice = .automatic
+            }
+            for index in goal.tasks.indices {
+                let choice = goal.tasks[index].targetChoice
+                if choice != .automatic, goal.workspaceLocation(for: choice) == nil {
+                    goal.tasks[index].targetChoice = .automatic
+                }
+            }
+            goal.updatedAt = Date()
         }
     }
 
@@ -263,6 +301,18 @@ final class AgentDispatchCoordinator: ObservableObject {
         existing: AgentDispatchGoal?
     ) -> AgentDispatchGoal {
         let sourceGoal = session.currentGoal ?? AgentGoal()
+        let sourceWorkspace = session.workspaceLocation
+            ?? session.workspaceRootPath.map { WorkspaceLocation.local(path: $0) }
+        let primaryWorkspace = existing?.workspaceLocation ?? sourceWorkspace
+        var workspaceBindings = existing?.effectiveWorkspaceBindings ?? []
+        if let primaryWorkspace {
+            let primaryBinding = AgentDispatchWorkspaceBinding(location: primaryWorkspace)
+            if let index = workspaceBindings.firstIndex(where: { $0.id == primaryBinding.id }) {
+                workspaceBindings[index] = primaryBinding
+            } else {
+                workspaceBindings.insert(primaryBinding, at: 0)
+            }
+        }
         let oldTasks = Dictionary(uniqueKeysWithValues: (existing?.tasks ?? []).map { ($0.id, $0) })
         let sourceTaskIDs = Set(sourceGoal.checklist.map(\.id))
         let firstIncompleteIndex = sourceGoal.checklist.firstIndex { !$0.done }
@@ -302,6 +352,8 @@ final class AgentDispatchCoordinator: ObservableObject {
             sessionID: session.id,
             title: session.title,
             statement: sourceGoal.statement,
+            workspaceLocation: primaryWorkspace,
+            workspaceBindings: workspaceBindings,
             tasks: tasks,
             executorChoice: existing?.executorChoice ?? .automatic,
             targetChoice: existing?.targetChoice ?? .automatic,

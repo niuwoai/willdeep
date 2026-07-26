@@ -489,6 +489,13 @@ extension AppState {
     /// kill the progress card the moment execution is supposed to start.
     func setAgentInteractionMode(_ mode: AgentInteractionMode) {
         ensureActiveAgentSessionForInteractiveControl()
+        if mode == .goal,
+           let runtime = activeRuntime,
+           runtime.workspaceLocation == nil,
+           (runtime.workspaceRootPath?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ?? true) {
+            runtime.errorMessage = L10n.Dispatch.workspaceRequired
+            return
+        }
         guard agentInteractionMode != mode else { return }
         cancelAgentPlanModeSuggestion()
         agentInteractionMode = mode
@@ -944,6 +951,11 @@ extension AppState {
             }
             persistActiveAgentSession()
             enqueueGoalUpdateNoticeIfNeeded(for: runtime, previousGoal: previousGoal, updatedGoal: nil)
+            return
+        }
+        guard runtime.workspaceLocation != nil
+                || (runtime.workspaceRootPath?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false) else {
+            runtime.errorMessage = L10n.Dispatch.workspaceRequired
             return
         }
         var priorItemsByText: [String: AgentGoal.Item] = [:]

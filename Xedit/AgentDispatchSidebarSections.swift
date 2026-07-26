@@ -29,7 +29,7 @@ struct AgentDispatchSidebarSections: View {
     private var goalsSection: some View {
         VStack(alignment: .leading, spacing: 3) {
             sectionHeader(L10n.Dispatch.goalsHeader, trailingSymbol: "plus") {
-                appState.startNewAgentSession()
+                appState.startGoalConversationInLocalWorkspace()
             }
             if coordinator.goals.isEmpty {
                 Text(L10n.Dispatch.emptyTitle)
@@ -121,11 +121,9 @@ struct AgentDispatchSidebarSections: View {
                         .font(.system(size: 13, weight: .medium))
                         .foregroundStyle(.primary)
                         .lineLimit(1)
-                    Text(goal.isPaused
-                         ? L10n.Dispatch.paused
-                         : "\(Int(goal.progressFraction * 100))%")
+                    Text(goalRowSubtitle(goal))
                         .font(.system(size: 10))
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(goal.workspaceLocation == nil ? Color.orange : .secondary)
                 }
                 Spacer(minLength: 4)
                 progressRing(goal.progressFraction, isPaused: goal.isPaused)
@@ -140,6 +138,16 @@ struct AgentDispatchSidebarSections: View {
             )
         }
         .buttonStyle(.plain)
+    }
+
+    private func goalRowSubtitle(_ goal: AgentDispatchGoal) -> String {
+        guard let workspace = goal.workspaceLocation else {
+            return L10n.Dispatch.workspaceRequiredShort
+        }
+        let progress = goal.isPaused
+            ? L10n.Dispatch.paused
+            : "\(Int(goal.progressFraction * 100))%"
+        return "\(workspace.displayName) · \(progress)"
     }
 
     private func environmentRow(

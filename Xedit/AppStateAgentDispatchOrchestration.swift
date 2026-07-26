@@ -5,6 +5,7 @@
 //  Bridges durable dispatch-console records to real Agent runtimes.
 //
 
+import AppKit
 import Foundation
 
 nonisolated enum AgentDispatchLaunchResult: Equatable {
@@ -13,6 +14,87 @@ nonisolated enum AgentDispatchLaunchResult: Equatable {
 }
 
 extension AppState {
+    func startGoalConversationInLocalWorkspace() {
+        let panel = Self.folderOpenPanel()
+        panel.title = L10n.Dispatch.chooseWorkspace
+        panel.message = L10n.Dispatch.chooseWorkspaceMessage
+        panel.prompt = L10n.Dispatch.chooseWorkspaceAction
+        Self.presentFolderOpenPanel(panel) { [weak self] response in
+            guard response == .OK, let url = panel.url, let self else { return }
+            _ = self.startNewAgentSession(inWorkspaceAt: url.standardizedFileURL.path)
+            self.setAgentInteractionMode(.goal)
+        }
+    }
+
+    func chooseLocalWorkspaceForDispatchGoal(
+        goalID: UUID,
+        completion: @escaping (String?) -> Void
+    ) {
+        let panel = Self.folderOpenPanel()
+        panel.title = L10n.Dispatch.chooseWorkspace
+        panel.message = L10n.Dispatch.mapWorkspaceMessage
+        panel.prompt = L10n.Dispatch.chooseWorkspaceAction
+        Self.presentFolderOpenPanel(panel) { [weak self] response in
+            guard response == .OK, let url = panel.url, let self else {
+                completion(nil)
+                return
+            }
+            completion(
+                self.bindDispatchGoalWorkspace(
+                    goalID: goalID,
+                    location: .local(path: url.standardizedFileURL.path)
+                )
+            )
+        }
+    }
+
+    func bindDispatchGoalWorkspace(
+        goalID: UUID,
+        location: WorkspaceLocation
+    ) -> String? {
+        guard let goal = agentDispatchCoordinator.goals.first(where: { $0.id == goalID }) else {
+            return L10n.Dispatch.launchFailed
+        }
+        let isPrimaryBinding = goal.workspaceLocation == nil
+        if isPrimaryBinding {
+            guard let sourceRuntime = runtime(for: goal.sessionID) else {
+                return L10n.Dispatch.launchFailed
+            }
+            guard !sourceRuntime.isResponding && !sourceRuntime.isCompressingContext else {
+                return L10n.Dispatch.workspaceBusy
+            }
+            switch location {
+            case .local(let rawPath):
+                let url = URL(fileURLWithPath: rawPath).standardizedFileURL
+                guard Self.isExistingDirectory(url) else {
+                    return L10n.Dispatch.workspaceMissing
+                }
+                _ = activateSecurityScope(for: url)
+                registerRecentFolder(url)
+                sourceRuntime.rebindWorkspace(to: url.path)
+            case .remote(let runtimeID, let rawPath):
+                guard AgentRuntimeStore.descriptor(id: runtimeID) != nil else {
+                    return L10n.Dispatch.remoteWorkspaceUnavailable
+                }
+                sourceRuntime.rebindRemoteWorkspace(
+                    runtimeID: runtimeID,
+                    path: RemotePathValidator.normalizedWorkspaceRoot(rawPath)
+                )
+            }
+            sourceRuntime.worktreeChanges = .init()
+            sourceRuntime.agentArtifactPaths = []
+            persistAgentSession(runtime: sourceRuntime)
+        }
+
+        agentDispatchCoordinator.bindWorkspace(
+            location,
+            goalID: goalID,
+            makePrimary: isPrimaryBinding
+        )
+        agentDispatchCoordinator.synchronize(with: agentSessions)
+        return nil
+    }
+
     func submitDispatchGoalInstruction(
         goalID: UUID,
         commandID: UUID,
@@ -101,11 +183,17 @@ extension AppState {
         guard !goal.isPaused else {
             return .blocked(message: L10n.Dispatch.goalPausedLaunch)
         }
+        guard goal.workspaceLocation != nil else {
+            return .blocked(message: L10n.Dispatch.workspaceRequired)
+        }
         guard task.state == .queued || task.state == .failed || task.state == .cancelled else {
             return .blocked(message: L10n.Dispatch.waitingForDependencies)
         }
 
-        let target = resolvedDispatchTarget(goal: goal, task: task)
+        guard let target = goal.resolvedTargetChoice(taskChoice: task.targetChoice),
+              let workspaceLocation = goal.workspaceLocation(for: target) else {
+            return .blocked(message: L10n.Dispatch.workspaceMappingRequired)
+        }
         let available = availableDispatchExecutors(on: target)
         let executorChoice = task.executorChoice == .automatic
             ? goal.executorChoice
@@ -119,7 +207,7 @@ extension AppState {
             return .blocked(message: L10n.Dispatch.noExecutorOnTarget)
         }
 
-        guard let runtime = createDispatchTaskRuntime(goal: goal, task: task, target: target) else {
+        guard let runtime = createDispatchTaskRuntime(workspaceLocation: workspaceLocation) else {
             return .blocked(message: L10n.Dispatch.launchFailed)
         }
         runtime.session.title = "\(goal.title) · \(task.title)"
@@ -161,19 +249,6 @@ extension AppState {
         agentPrimaryDestination = .conversation
     }
 
-    private func resolvedDispatchTarget(
-        goal: AgentDispatchGoal,
-        task: AgentDispatchTask
-    ) -> AgentDispatchTargetChoice {
-        let requested = task.targetChoice == .automatic ? goal.targetChoice : task.targetChoice
-        guard requested == .automatic else { return requested }
-        if let source = runtime(for: goal.sessionID)?.workspaceLocation,
-           let remoteID = source.remoteRuntimeID {
-            return .remote(remoteID)
-        }
-        return .local
-    }
-
     private func availableDispatchExecutors(
         on target: AgentDispatchTargetChoice
     ) -> Set<AgentExecutionAgent> {
@@ -187,24 +262,19 @@ extension AppState {
     }
 
     private func createDispatchTaskRuntime(
-        goal: AgentDispatchGoal,
-        task: AgentDispatchTask,
-        target: AgentDispatchTargetChoice
+        workspaceLocation: WorkspaceLocation
     ) -> AgentRuntime? {
-        switch target {
-        case .automatic, .local:
-            let sourceRuntime = runtime(for: goal.sessionID)
-            let localPath = sourceRuntime?.workspaceLocation?.localPath
-                ?? sourceRuntime?.workspaceRootPath
-            let session = startNewAgentSession(inWorkspaceAt: localPath)
+        switch workspaceLocation {
+        case .local(let path):
+            let session = startNewAgentSession(inWorkspaceAt: path)
             return runtime(for: session.id)
-        case .remote(let runtimeID):
-            guard let descriptor = AgentRuntimeStore.descriptor(id: runtimeID) else { return nil }
+        case .remote(let runtimeID, let path):
+            guard AgentRuntimeStore.descriptor(id: runtimeID) != nil else { return nil }
             let session = startNewAgentSession(inWorkspaceAt: nil)
             guard let taskRuntime = runtime(for: session.id) else { return nil }
             taskRuntime.rebindRemoteWorkspace(
                 runtimeID: runtimeID,
-                path: descriptor.defaultWorkspacePath
+                path: path
             )
             persistAgentSession(runtime: taskRuntime)
             return taskRuntime
