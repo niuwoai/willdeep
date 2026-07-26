@@ -289,7 +289,36 @@ final class AppState: ObservableObject {
     @Published var agentSessionLoadFailure: AgentSessionLoadFailure?
     /// Lightweight usage snapshots decoded only when the stats dashboard is
     /// shown. Launch no longer scans every full conversation for analytics.
-    @Published var agentUsageSnapshots: [AgentUsageSessionSnapshot] = []
+    @Published var agentUsageSnapshots: [AgentUsageSessionSnapshot] = [] {
+        didSet { agentUsageStatsRevision &+= 1 }
+    }
+    /// Monotonic write counter for `agentUsageSnapshots`. Keys the memoized
+    /// dashboard aggregates so cache checks never have to compare the
+    /// snapshot payloads themselves.
+    private(set) var agentUsageStatsRevision: UInt64 = 0
+    private var agentUsageDashboardCache:
+        (revision: UInt64, day: Date, model: AgentUsageDashboardModel)?
+
+    /// Memoized dashboard aggregates. Recomputed only when the snapshots
+    /// change or the local calendar day rolls over (streaks and the heatmap
+    /// are day-anchored); every other SwiftUI body evaluation gets the
+    /// cached value instead of re-walking all messages of all sessions.
+    func agentUsageDashboardModel(now: Date = Date()) -> AgentUsageDashboardModel {
+        let day = Calendar.current.startOfDay(for: now)
+        if let cache = agentUsageDashboardCache,
+           cache.revision == agentUsageStatsRevision,
+           cache.day == day {
+            return cache.model
+        }
+        let model = AgentUsageStats.dashboardModel(
+            for: agentUsageSnapshots,
+            heatmapWeekCount: AgentStatsDashboardLayout.maximumHeatmapWeeks,
+            now: now
+        )
+        agentUsageDashboardCache = (agentUsageStatsRevision, day, model)
+        return model
+    }
+
     @Published var hasLoadedAgentUsageSnapshots = false
     @Published var isLoadingAgentUsageSnapshots = false
     /// Sidebar group keys the user has removed from view. Removal only

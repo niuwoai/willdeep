@@ -458,4 +458,84 @@ extension WillDeepTests {
         #expect(external?.isDelegatedExternal == true)
         #expect(external?.estimatedCostUSD == nil)
     }
+
+    // MARK: - Dashboard model bundle & memoization
+
+    @Test("dashboardModel bundles the same aggregates as the individual helpers")
+    func testDashboardModelMatchesIndividualHelpers() {
+        let now = Date()
+        let earlier = now.addingTimeInterval(-90)
+        let toolCalls = [
+            AgentMessageToolCall(externalID: "a", toolName: "read_file", argumentsJSON: "{}"),
+            AgentMessageToolCall(externalID: "b", toolName: "read_file", argumentsJSON: "{}"),
+            AgentMessageToolCall(externalID: "c", toolName: "web_search", argumentsJSON: "{}")
+        ]
+        let sessions = [
+            makeSession(modelID: "gpt-4.1", messages: [
+                userMessage("hi", at: earlier),
+                AgentMessage(role: .assistant, content: "ok", toolCalls: toolCalls, usageTokens: 4_000, createdAt: now)
+            ]),
+            makeSession(modelID: "claude-sonnet-5", messages: [
+                userMessage("solo", at: now)
+            ])
+        ].map { AgentUsageSessionSnapshot(session: $0) }
+
+        let model = AgentUsageStats.dashboardModel(for: sessions, heatmapWeekCount: 4, now: now)
+
+        #expect(model.overview == AgentUsageStats.overview(for: sessions, now: now))
+        #expect(model.modelUsage == AgentUsageStats.modelUsage(for: sessions))
+        #expect(model.capabilityUsage == AgentUsageStats.capabilityUsage(for: sessions))
+        #expect(model.heatmapCells == AgentUsageStats.heatmap(for: sessions, weekCount: 4, now: now))
+        // 4_000 real-usage tokens dominate the first session; the second
+        // has a single estimated user message.
+        #expect(model.peakTaskTokenCount >= 4_000)
+        #expect(abs(model.longestTaskDuration - 90) < 0.001)
+        #expect(model.managedRoutingRate == 0)
+        #expect(model.uniqueToolCount == 2)
+    }
+
+    @Test("dashboardModel on empty snapshots yields zeroed metrics")
+    func testDashboardModelEmptyInput() {
+        let model = AgentUsageStats.dashboardModel(for: [], heatmapWeekCount: 2)
+        #expect(model.overview.sessionCount == 0)
+        #expect(model.peakTaskTokenCount == 0)
+        #expect(model.longestTaskDuration == 0)
+        #expect(model.managedRoutingRate == 0)
+        #expect(model.reasoningUsageRate == 0)
+        #expect(model.uniqueToolCount == 0)
+    }
+
+    @Test("AppState memoizes the dashboard model until snapshots change")
+    func testAppStateDashboardModelMemoization() {
+        let appState = AppState()
+        let baseline = appState.agentUsageStatsRevision
+        let session = makeSession(modelID: "gpt-4.1", messages: [
+            userMessage("hello", at: Date())
+        ])
+
+        let emptyModel = appState.agentUsageDashboardModel()
+        #expect(emptyModel.overview.sessionCount == 0)
+        // Cache hit: same revision, no snapshot writes in between.
+        #expect(appState.agentUsageDashboardModel() == emptyModel)
+        #expect(appState.agentUsageStatsRevision == baseline)
+
+        appState.agentUsageSnapshots = [AgentUsageSessionSnapshot(session: session)]
+        #expect(appState.agentUsageStatsRevision > baseline)
+        let updated = appState.agentUsageDashboardModel()
+        #expect(updated.overview.sessionCount == 1)
+        #expect(updated.overview.userTurnCount == 1)
+    }
+
+    @Test("startNewAgentSession keeps usage snapshots most-recent-first without a full sort")
+    func testUsageSnapshotOrderAfterNewSessions() {
+        let appState = AppState()
+        let first = appState.startNewAgentSession()
+        let second = appState.startNewAgentSession()
+
+        let ids = appState.agentUsageSnapshots.map(\.id)
+        #expect(ids.contains(first.id))
+        #expect(ids.contains(second.id))
+        let stamps = appState.agentUsageSnapshots.map(\.updatedAt)
+        #expect(stamps == stamps.sorted(by: >))
+    }
 }

@@ -1337,12 +1337,17 @@ extension AppState {
 
     private func upsertAgentUsageSnapshot(for session: AgentSession) {
         let snapshot = AgentUsageSessionSnapshot(session: session)
-        if let index = agentUsageSnapshots.firstIndex(where: { $0.id == session.id }) {
-            agentUsageSnapshots[index] = snapshot
-        } else {
-            agentUsageSnapshots.insert(snapshot, at: 0)
+        var snapshots = agentUsageSnapshots
+        if let index = snapshots.firstIndex(where: { $0.id == session.id }) {
+            snapshots.remove(at: index)
         }
-        agentUsageSnapshots.sort { $0.updatedAt > $1.updatedAt }
+        // The array stays sorted most-recent-first, so a single ordered
+        // insert replaces the previous full re-sort. Mutating a local copy
+        // publishes one change per upsert instead of one per array edit.
+        let destination = snapshots.firstIndex { $0.updatedAt < snapshot.updatedAt }
+            ?? snapshots.count
+        snapshots.insert(snapshot, at: destination)
+        agentUsageSnapshots = snapshots
     }
 
     /// Analytics are intentionally absent from the launch path. The stats

@@ -346,7 +346,91 @@ nonisolated struct AgentUsageMessageSnapshot: Equatable {
     }
 }
 
+/// Every aggregate the stats dashboard renders, bundled so the whole
+/// computation runs once per snapshot revision instead of once per SwiftUI
+/// body evaluation. All fields derive purely from the snapshot array plus
+/// `now` (streaks and the heatmap are anchored to the local calendar day),
+/// so `AppState` caches an instance keyed by (snapshot revision, day).
+nonisolated struct AgentUsageDashboardModel: Equatable {
+    let overview: AgentUsageOverview
+    let modelUsage: [AgentModelUsageRow]
+    let capabilityUsage: [AgentCapabilityUsageRow]
+    let heatmapCells: [[AgentHeatmapCell]]
+    let peakTaskTokenCount: Int
+    let longestTaskDuration: TimeInterval
+    let managedRoutingRate: Double
+    let reasoningUsageRate: Double
+    let uniqueToolCount: Int
+}
+
 enum AgentUsageStats {
+    /// Gather every dashboard aggregate in one call so callers can memoize
+    /// the result. Pure function like the individual helpers it wraps.
+    static func dashboardModel(
+        for sessions: [AgentUsageSessionSnapshot],
+        heatmapWeekCount: Int = 12,
+        now: Date = Date()
+    ) -> AgentUsageDashboardModel {
+        let allMessages = sessions.flatMap(\.messages)
+
+        let peakTaskTokenCount = sessions.map { session in
+            session.messages.reduce(0) { $0 + displayTokenCount(for: $1) }
+        }.max() ?? 0
+
+        let longestTaskDuration = sessions.compactMap { session -> TimeInterval? in
+            let dates = session.messages.map(\.createdAt)
+            guard let first = dates.min(), let last = dates.max(), last > first else {
+                return nil
+            }
+            return last.timeIntervalSince(first)
+        }.max() ?? 0
+
+        let managedRoutingRate: Double
+        if sessions.isEmpty {
+            managedRoutingRate = 0
+        } else {
+            let managed = sessions.count(where: \.isManagedRouting)
+            managedRoutingRate = Double(managed) / Double(sessions.count)
+        }
+
+        let assistantMessages = allMessages.filter { $0.role == .assistant }
+        let reasoningUsageRate: Double
+        if assistantMessages.isEmpty {
+            reasoningUsageRate = 0
+        } else {
+            let reasoned = assistantMessages.count {
+                ($0.reasoningTokens ?? 0) > 0 || $0.reasoningCharacterCount > 0
+            }
+            reasoningUsageRate = Double(reasoned) / Double(assistantMessages.count)
+        }
+
+        return AgentUsageDashboardModel(
+            overview: overview(for: sessions, now: now),
+            modelUsage: modelUsage(for: sessions),
+            capabilityUsage: capabilityUsage(for: sessions),
+            heatmapCells: heatmap(for: sessions, weekCount: heatmapWeekCount, now: now),
+            peakTaskTokenCount: peakTaskTokenCount,
+            longestTaskDuration: longestTaskDuration,
+            managedRoutingRate: managedRoutingRate,
+            reasoningUsageRate: reasoningUsageRate,
+            uniqueToolCount: Set(allMessages.flatMap(\.toolCallNames)).count
+        )
+    }
+
+    /// Token formula behind the "peak task" metric: real usage when the
+    /// provider reported it, otherwise chars/4 + 256 per image with a floor
+    /// of 1. Kept separate from `estimateTokens` (600 per image, no floor)
+    /// so the metric strip matches its historical rendering exactly.
+    private static func displayTokenCount(for message: AgentUsageMessageSnapshot) -> Int {
+        if let usage = message.usageTokens, usage > 0 {
+            return usage
+        }
+        let textCharacters = message.contentCharacterCount
+            + message.reasoningCharacterCount
+            + message.toolCallArgumentCharacterCount
+        return max(1, textCharacters / 4 + message.imageCount * 256)
+    }
+
     /// Build an overview snapshot for the given sessions. Pure function
     /// — same input always produces the same output, no side effects.
     static func overview(for sessions: [AgentSession], now: Date = Date()) -> AgentUsageOverview {
