@@ -25,6 +25,17 @@ extension AppState {
             addAgentAlwaysAllowedCommand(rule)
         }
         resolveAgentToolCallDecision(id: id, decision: .approved)
+        // The staged pre-pass can have sibling cards of the same command
+        // family already on screen — release them under the freshly pinned
+        // rule too. Candidates are pre-filtered to pin matches, so this
+        // never pays an LLM-judge round trip.
+        reevaluatePendingAgentToolApprovals(for: runtime) { pending in
+            isAgentToolCallAlwaysAllowed(
+                toolName: pending.toolName,
+                arguments: pending.arguments,
+                risk: pending.risk
+            )
+        }
     }
 
     func allowAgentToolFamilyForConversation(id: AgentToolCall.ID) {
@@ -38,10 +49,54 @@ extension AppState {
         ) else { return }
         runtime.conversationAllowedToolSignatures.insert(signature)
         resolveAgentToolCallDecision(id: id, decision: .approved)
+        // Same-surface cards staged for this round unlock with the new
+        // conversation grant instead of asking once per card.
+        reevaluatePendingAgentToolApprovals(for: runtime) { pending in
+            AgentToolAuthorization.interactiveSurfaceSignature(
+                toolName: pending.toolName
+            ) == signature
+        }
     }
 
     func denyAgentToolCall(id: AgentToolCall.ID) {
         resolveAgentToolCallDecision(id: id, decision: .denied(reason: "User denied"))
+    }
+
+    /// Whether a call is eligible for the one-click batch 全部允许 action.
+    /// Only ordinary write-tier approval cards qualify. Explicitly excluded:
+    /// danger-tier typed confirmations (`.awaitingConfirm` — those cards ask
+    /// for a deliberate per-command "confirm"), sandbox-escalation retries
+    /// (same `.pendingApproval` status, but the question is "leave the
+    /// sandbox?", flagged via `sandboxEscalationRequestArgumentKey`), and
+    /// `ask_user` cards. Local `#1983#` preview cards are filtered by the
+    /// instance-level helpers below, not here — this predicate stays pure so
+    /// it can be unit-tested without an AppState.
+    nonisolated static func isBatchApprovableAgentToolCall(_ call: AgentToolCall) -> Bool {
+        call.status == .pendingApproval
+            && call.risk == .write
+            && call.arguments[AgentSandboxPolicy.sandboxEscalationRequestArgumentKey]?.boolValue() != true
+    }
+
+    /// IDs among `calls` that one 全部允许 click would resolve right now.
+    /// Calls whose decision was already submitted (approve/deny clicked while
+    /// an earlier tool was still running) and local confirmation previews are
+    /// skipped.
+    func batchApprovableAgentToolCallIDs(among calls: [AgentToolCall]) -> [AgentToolCall.ID] {
+        calls.filter { call in
+            Self.isBatchApprovableAgentToolCall(call)
+                && !hasPendingAgentToolDecision(id: call.id)
+                && !isLocalConfirmationPreviewCall(id: call.id)
+        }.map(\.id)
+    }
+
+    /// Resolve a batch of approval cards in one action. Each ID goes through
+    /// the normal `resolveAgentToolCallDecision` path: the call the loop is
+    /// currently awaiting resumes immediately; the rest park their approval
+    /// in `pendingToolDecisions` and are consumed in execution order.
+    func approveAgentToolCalls(ids: [AgentToolCall.ID]) {
+        for id in ids {
+            resolveAgentToolCallDecision(id: id, decision: .approved)
+        }
     }
 
     func confirmAgentToolCall(id: AgentToolCall.ID, typedConfirmation: String) -> Bool {
@@ -736,18 +791,50 @@ extension AppState {
     /// active Plan-gate, session/workspace identity, and untrusted MCP calls
     /// keep their existing user gate.
     func reevaluatePendingToolCallsForWorkspaceAccess(for runtime: AgentRuntime) {
-        let pendingCallIDs = runtime.toolCalls.compactMap { call in
-            call.status == .pendingApproval ? call.id : nil
-        }
-        guard !pendingCallIDs.isEmpty else { return }
+        reevaluatePendingAgentToolApprovals(
+            for: runtime,
+            requiringApprovalMode: .workspaceAccess
+        ) { _ in true }
+    }
 
-        Task { @MainActor [weak self, weak runtime] in
+    /// Re-run the auto-approval policy for calls already parked at
+    /// `.pendingApproval`, resolving the ones the policy now clears. Shared
+    /// by the Workspace-access posture bridge above and by the Always-Allow /
+    /// conversation-allow click hooks: with the staged pre-pass, a whole
+    /// round's approval cards are on screen at once, so a rule pinned from
+    /// one card must release its siblings too instead of forcing one click
+    /// per card.
+    ///
+    /// `candidateFilter` narrows which pending calls are re-evaluated —
+    /// rule-change callers pass a filter matching only the new rule, so a
+    /// re-evaluation can never send an unrelated command back to the LLM
+    /// judge (a second judge pass could approve something the first pass
+    /// left manual). Sandbox-escalation retry cards and calls with an
+    /// already-submitted decision are never re-evaluated.
+    @discardableResult
+    func reevaluatePendingAgentToolApprovals(
+        for runtime: AgentRuntime,
+        requiringApprovalMode: AgentApprovalMode? = nil,
+        matching candidateFilter: (AgentToolCall) -> Bool
+    ) -> Task<Void, Never>? {
+        let pendingCallIDs = runtime.toolCalls.compactMap { call in
+            Self.isBatchApprovableAgentToolCall(call)
+                && runtime.pendingToolDecisions[call.id] == nil
+                && !runtime.localConfirmationPreviewCallIDs.contains(call.id)
+                && candidateFilter(call)
+                ? call.id : nil
+        }
+        guard !pendingCallIDs.isEmpty else { return nil }
+
+        return Task { @MainActor [weak self, weak runtime] in
             guard let self, let runtime else { return }
             let rootDirectory = try? runtime.localWorkspaceURLForOptimisticUse()
 
             for callID in pendingCallIDs {
-                guard runtime.approvalMode == .workspaceAccess,
-                      let index = runtime.toolCalls.firstIndex(where: { $0.id == callID }),
+                if let requiringApprovalMode, runtime.approvalMode != requiringApprovalMode {
+                    continue
+                }
+                guard let index = runtime.toolCalls.firstIndex(where: { $0.id == callID }),
                       runtime.toolCalls[index].status == .pendingApproval else {
                     continue
                 }
@@ -772,7 +859,7 @@ extension AppState {
                     conversationAllowedToolSignatures: runtime.conversationAllowedToolSignatures
                 )
                 guard let source,
-                      runtime.approvalMode == .workspaceAccess,
+                      requiringApprovalMode == nil || runtime.approvalMode == requiringApprovalMode,
                       let currentIndex = runtime.toolCalls.firstIndex(where: { $0.id == callID }),
                       runtime.toolCalls[currentIndex].status == .pendingApproval else {
                     continue
