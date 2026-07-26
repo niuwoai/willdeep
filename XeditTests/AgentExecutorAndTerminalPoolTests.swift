@@ -1,3 +1,4 @@
+import Darwin
 import Foundation
 import Testing
 @testable import WillDeep
@@ -32,6 +33,38 @@ struct AgentExecutorAndTerminalPoolTests {
         #expect(AgentInteractiveTerminalController.canCreateDelegatedShellTab(existingCount: 2))
         #expect(!AgentInteractiveTerminalController.canCreateDelegatedShellTab(existingCount: 3))
         #expect(!AgentInteractiveTerminalController.canCreateDelegatedShellTab(existingCount: 4))
+    }
+
+    @Test("terminal control keys map to exact PTY bytes")
+    func terminalControlBytes() {
+        #expect(AgentTerminalControl.ctrlC.bytes == [3])
+        #expect(AgentTerminalControl.ctrlD.bytes == [4])
+        #expect(AgentTerminalControl.ctrlRightBracket.bytes == [29])
+        #expect(AgentTerminalControl.enter.bytes == [13])
+        #expect(AgentTerminalControl.escape.bytes == [27])
+    }
+
+    @Test("PID terminal cleanup escalates when the process tree ignores TERM")
+    func terminalProcessTreeTerminationEscalates() async throws {
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/bin/sh")
+        process.arguments = ["-c", "trap '' TERM; while true; do sleep 1; done"]
+        try process.run()
+        let rootPID = process.processIdentifier
+        defer {
+            if process.isRunning {
+                _ = Darwin.kill(rootPID, SIGKILL)
+            }
+        }
+
+        try await Task.sleep(nanoseconds: 50_000_000)
+        AgentProcessSupport.terminateProcessTree(rootPID: rootPID, gracePeriod: 0.1)
+
+        let deadline = Date().addingTimeInterval(3)
+        while process.isRunning, Date() < deadline {
+            try await Task.sleep(nanoseconds: 25_000_000)
+        }
+        #expect(!process.isRunning)
     }
 
     @MainActor

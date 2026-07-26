@@ -659,7 +659,7 @@ enum AgentToolAuthorization {
             return signature
         case "terminal_send_control":
             guard let control = AgentCommandAuthorization.cleaned(arguments["control"]?.stringValue() ?? "")?.lowercased(),
-                  ["ctrl_c", "enter", "escape"].contains(control) else {
+                  ["ctrl_c", "ctrl_d", "ctrl_right_bracket", "enter", "escape"].contains(control) else {
                 return nil
             }
             return "terminal_control:\(control)"
@@ -759,7 +759,8 @@ enum AgentToolAuthorization {
 
     /// Render a `terminal_send_control` call as a pseudo command line for
     /// the LLM safety judge. The control key is one of the whitelisted set
-    /// (`ctrl_c` / `enter` / `escape`); the judge sees the intent and can
+    /// (`ctrl_c` / `ctrl_d` / `ctrl_right_bracket` / `enter` / `escape`);
+    /// the judge sees the intent and can
     /// YES the harmless interrupt/cancel keys while staying cautious about
     /// `enter` submitting a queued line.
     static func terminalControlJudgePseudoCommand(control: String) -> String {

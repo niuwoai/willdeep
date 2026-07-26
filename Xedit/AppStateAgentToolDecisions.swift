@@ -398,7 +398,7 @@ extension AppState {
             guard judgeAutoApprove,
                   let control = arguments["control"]?.stringValue()?
                       .trimmingCharacters(in: .whitespacesAndNewlines).lowercased(),
-                  ["ctrl_c", "enter", "escape"].contains(control) else {
+                  ["ctrl_c", "ctrl_d", "ctrl_right_bracket", "enter", "escape"].contains(control) else {
                 return nil
             }
             let pseudo = AgentToolAuthorization.terminalControlJudgePseudoCommand(control: control)

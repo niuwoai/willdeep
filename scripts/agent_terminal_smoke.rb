@@ -35,7 +35,10 @@ policy = read_source(repo_root, "Xedit/AgentToolAuthorization.swift")
 side_panel = read_source(repo_root, "Xedit/AgentSidePanel.swift")
 terminal_view = read_source(repo_root, "Xedit/AgentSidePanelTerminalView.swift")
 runtime_settings = read_source(repo_root, "Xedit/AgentRuntimeSettingsView.swift")
-l10n = read_source(repo_root, "Xedit/L10n.swift")
+l10n = [
+  read_source(repo_root, "Xedit/L10n.swift"),
+  read_source(repo_root, "Xedit/L10n+AgentTerminal.swift")
+].join("\n")
 
 checks = [
   check("terminal backed by SwiftTerm", "Agent terminal uses SwiftTerm LocalProcessTerminalView") {
@@ -45,7 +48,8 @@ checks = [
   },
   check("local shell is the default tab", "openLocalTab launches the login shell, no SSH required") {
     terminal.include?("func openLocalTab") &&
-      terminal.include?("loginShellPath()") &&
+      terminal.include?("case .localShell:") &&
+      terminal.include?("loginShellPath(settings.shellPath)") &&
       terminal.include?('args: ["-l"]')
   },
   check("SSH remains available", "openSSHTab still launches /usr/bin/ssh with -tt") {
@@ -72,6 +76,19 @@ checks = [
   check("terminal writes require approval", "send command/control go through workspace-write approval") {
     policy.include?('"terminal_send_command", "terminal_send_control"') &&
       policy.include?("requiresUserApproval: true")
+  },
+  check("running session exposes manual controls", "Status menu exposes interrupt, telnet escape, EOF, and stop") {
+    terminal_view.include?("sessionStatusPill") &&
+      terminal_view.include?("sendUserControl(.ctrlC") &&
+      terminal_view.include?("sendUserControl(.ctrlRightBracket") &&
+      terminal_view.include?("sendUserControl(.ctrlD") &&
+      terminal_view.include?("controller.stopTab")
+  },
+  check("PTY termination cleans the process tree", "Termination snapshots descendants and uses the shared TERM/KILL cleanup") {
+    terminal.include?("process.shellPid") &&
+      terminal.include?("AgentProcessSupport.terminateProcessTree(rootPID: rootPID)") &&
+      runner.include?("descendantPIDs(of: rootPID)") &&
+      runner.include?("Darwin.kill(identity.pid, SIGKILL)")
   },
   check("side panel has terminal kind", "AgentSidePanelKind exposes .terminal") {
     side_panel.include?("case terminal") && side_panel.include?("AgentSidePanelTerminalView()")
