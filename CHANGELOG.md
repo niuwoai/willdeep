@@ -3,6 +3,24 @@
 > 当前文件保留最新版本（1.200.0-rc3 至 1.109.0-rc340）。
 > 更早的 1000 个版本已移至 [CHANGELOG-ARCHIVE.md](CHANGELOG-ARCHIVE.md)。
 
+## 1.207.0-rc1 - 2026-07-26
+
+### Added
+
+- **Agent 本地文件搜索接入 ripgrep 快路径**：`search_files` 与 `grep_files` 优先发现 PATH、Homebrew 和常见安装位置中的 `rg`，通过 `--json` 流式读取匹配并在达到结果上限时及时终止进程；大小写、固定字符串/正则、include glob、512KB 文件上限、工作区相对路径和生成目录排除与原工具语义保持一致。`rg` 不存在、启动失败或正则不兼容时无感回退 Swift 扫描器，远端 workspace 路径不变；新增独立 `AgentFileSearchTests` 覆盖大小写、结果上限、生成目录过滤、子目录相对路径和可执行文件发现。
+
+### Changed
+
+- **冷启动测试构建减负**：
+  - 项目构建守卫的排队与互斥锁从 worktree 本地 `.codex-build` 拆到按 Git common dir 派生的仓库级共享目录；主工作树与 Claude/Codex linked worktree 现在共用一个重型构建槽，缓存 manifest、报告和实际产物仍留在各自工作树，避免并发重复冷编译而不冒险共享完整 DerivedData。
+  - 新增 `XeditUnitTests` Scheme，只构建 App 测试宿主与 `XeditTests`，常规单测不再把 `XeditUITests` 带入构建图；本地 TestAction 明确关闭 coverage。
+  - 新增 `scripts/run_tests_fast.rb` 开发入口，复用稳定 DerivedData 与共享 SwiftPM checkout/package cache，锁定 `Package.resolved`、跳过更新检查并输出 build timing；`--without-building` 会核对 tracked diff、未跟踪文件内容、工程、依赖锁、Scheme 与 Xcode 版本指纹，发现任何变化即拒绝旧二进制。
+  - `scripts/run_tests.sh` 同步切到 Unit Test Scheme 和稳定包缓存参数；新增 Ruby 合约测试覆盖跨工作树共享协调目录、Scheme 边界、缓存参数和 stale-build 拒绝契约。
+
+### Meta
+
+- 版本号从 **1.206.0-rc9** 提升为 **1.207.0-rc1**（新增 Agent ripgrep 搜索快路径，MINOR +1、rc 归位 rc1），内部构建号从 **162** 递增为 **163**，Help 与 Computer Use Helper 构建号从 **79** 递增为 **80**；App、Go agent、Help、Helper、浏览器扩展、README、响应头契约与产品文档保持一致。
+
 ## 1.206.0-rc9 - 2026-07-26
 
 ### Fixed

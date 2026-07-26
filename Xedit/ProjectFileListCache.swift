@@ -255,7 +255,7 @@ nonisolated enum ProjectFileListCache {
 }
 
 nonisolated enum ProjectDirectoryExclusions {
-    private static let names: Set<String> = [
+    static let names: Set<String> = [
         ".angular",
         ".build",
         ".cache",

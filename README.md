@@ -10,7 +10,7 @@
 
 [![macOS](https://img.shields.io/badge/macOS-13.7%2B-black?logo=apple)](https://www.apple.com/macos/)
 [![Swift](https://img.shields.io/badge/Swift-SwiftUI-orange?logo=swift)](https://developer.apple.com/swift/)
-[![Version](https://img.shields.io/badge/version-1.206.0--rc9-blue)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-1.207.0--rc1-blue)](CHANGELOG.md)
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue)](LICENSE)
 
 *它不只是坐在编辑器旁边回答问题。它会看现场、做事情、留下证据，也知道什么时候该停下来问你。*
@@ -104,6 +104,16 @@ open Xedit.xcodeproj
 ```
 
 需要 Xcode 和 macOS 13.7+。产物名为 **WillDeep.app**。
+
+开发阶段优先通过仓库测试入口执行单测，避免多个 Agent 或 Git worktree 同时冷构建：
+
+```bash
+ruby scripts/run_tests_fast.rb -only-testing:XeditTests/YourTestSuite
+ruby scripts/run_tests_fast.rb --without-building -only-testing:XeditTests/YourTestSuite
+scripts/run_tests.sh
+```
+
+快速入口复用稳定的 DerivedData 与 SwiftPM 缓存，只构建 `XeditTests` Scheme；`--without-building` 会核对源码指纹，源码变化后拒绝运行旧测试二进制。完整本地门禁仍使用 `scripts/run_tests.sh`。
 
 要把当前 worktree 的 Debug 版本直接装进 `/Applications`，先在不会提交的 `.env.local` 中配置登录密钥：
 
@@ -220,7 +230,7 @@ WillDeep 采用 [Apache License 2.0](LICENSE) + [Open Core](OPEN_CORE.md) 模式
 
 [![macOS](https://img.shields.io/badge/macOS-13.7%2B-black?logo=apple)](https://www.apple.com/macos/)
 [![Swift](https://img.shields.io/badge/Swift-SwiftUI-orange?logo=swift)](https://developer.apple.com/swift/)
-[![Version](https://img.shields.io/badge/version-1.206.0--rc9-blue)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-1.207.0--rc1-blue)](CHANGELOG.md)
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue)](LICENSE)
 
 *It does not merely answer questions beside an editor. It inspects the work, takes action, leaves evidence, and knows when to stop and ask.*

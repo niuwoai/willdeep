@@ -35,6 +35,10 @@ set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 OUT_DIR="${ROOT_DIR}/build/ci"
+GIT_COMMON_DIR="$(git -C "${ROOT_DIR}" rev-parse --path-format=absolute --git-common-dir)"
+REPOSITORY_ROOT="$(dirname "${GIT_COMMON_DIR}")"
+SOURCE_PACKAGES_DIR="${WILLDEEP_XCODE_SOURCE_PACKAGES_DIR:-${REPOSITORY_ROOT}/build/ci/DerivedData/SourcePackages}"
+PACKAGE_CACHE_DIR="${WILLDEEP_XCODE_PACKAGE_CACHE_DIR:-${SOURCE_PACKAGES_DIR}}"
 XCRESULT="${OUT_DIR}/XeditTests.xcresult"
 LOG="${OUT_DIR}/xcodebuild.log"
 REPORT_MD="${OUT_DIR}/report.md"
@@ -84,10 +88,16 @@ ruby "${ROOT_DIR}/scripts/project_build_guard.rb" \
     -- \
     xcodebuild test \
       -project "${ROOT_DIR}/Xedit.xcodeproj" \
-      -scheme Xedit \
+      -scheme XeditUnitTests \
       -destination 'platform=macOS' \
       -resultBundlePath "${XCRESULT}" \
       -derivedDataPath "${OUT_DIR}/DerivedData" \
+      -clonedSourcePackagesDirPath "${SOURCE_PACKAGES_DIR}" \
+      -packageCachePath "${PACKAGE_CACHE_DIR}" \
+      -skipPackageUpdates \
+      -onlyUsePackageVersionsFromResolvedFile \
+      -enableCodeCoverage NO \
+      -showBuildTimingSummary \
       CODE_SIGNING_ALLOWED=NO \
       CODE_SIGNING_REQUIRED=NO \
       CODE_SIGN_IDENTITY="" \

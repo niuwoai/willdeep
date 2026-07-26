@@ -38,6 +38,21 @@ nonisolated enum AgentFileTools {
         let needle = query.lowercased()
 
         return try await Task.detached(priority: .userInitiated) {
+            if let matches = AgentRipgrepSearch.search(
+                root: root,
+                searchRoot: root,
+                pattern: .literal(query),
+                caseSensitive: false,
+                includeGlob: nil,
+                limit: limit
+            ) {
+                let summary = "\(matches.count) match\(matches.count == 1 ? "" : "es") for \"\(query)\""
+                let payload = matches.isEmpty
+                    ? "No matches found for \"\(query)\"."
+                    : matches.joined(separator: "\n")
+                return AgentToolResult(summary: summary, payload: payload)
+            }
+
             guard let enumerator = FileManager.default.enumerator(
                 at: root,
                 includingPropertiesForKeys: [.isDirectoryKey, .isRegularFileKey, .fileSizeKey],
@@ -139,6 +154,21 @@ nonisolated enum AgentFileTools {
                 }
             } else {
                 searchRoot = root
+            }
+
+            if let matches = AgentRipgrepSearch.search(
+                root: root,
+                searchRoot: searchRoot,
+                pattern: .regularExpression(pattern),
+                caseSensitive: caseSensitive,
+                includeGlob: includeGlob,
+                limit: limit
+            ) {
+                let summary = "\(matches.count) match\(matches.count == 1 ? "" : "es") for /\(pattern)/"
+                let payload = matches.isEmpty
+                    ? "No matches found for /\(pattern)/."
+                    : matches.joined(separator: "\n")
+                return AgentToolResult(summary: summary, payload: payload)
             }
 
             guard let enumerator = FileManager.default.enumerator(

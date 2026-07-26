@@ -10,12 +10,61 @@ require "tmpdir"
 ROOT = File.expand_path("..", __dir__)
 GUARD = File.join(ROOT, "scripts", "project_build_guard.rb")
 
-def run_guard(workspace, *args)
-  stdout, status = Open3.capture2e("ruby", GUARD, "--workspace", workspace, *args)
+def run_guard(workspace, coordination_dir, *args)
+  stdout, status = Open3.capture2e(
+    "ruby", GUARD,
+    "--workspace", workspace,
+    "--coordination-dir", coordination_dir,
+    *args
+  )
   [stdout, status.exitstatus]
 end
 
+Dir.mktmpdir("project-build-guard-worktrees-") do |fixture_root|
+  repository = File.join(fixture_root, "repository")
+  cache_root = File.join(fixture_root, "guard-cache")
+  linked_worktree = File.join(fixture_root, "linked")
+  root_report = File.join(repository, "root-report.json")
+  linked_report = File.join(repository, "linked-report.json")
+  FileUtils.mkdir_p(repository)
+
+  commands = [
+    ["git", "init", "-q"],
+    ["git", "config", "user.email", "build-guard@example.invalid"],
+    ["git", "config", "user.name", "Build Guard Contract"],
+    ["git", "commit", "--allow-empty", "-qm", "initial"],
+    ["git", "worktree", "add", "-qb", "linked-contract", linked_worktree]
+  ]
+  commands.each do |command|
+    output, status = Open3.capture2e(*command, chdir: repository)
+    abort "git fixture failed: #{command.join(" ")}\n#{output}" unless status.success?
+  end
+
+  [
+    [repository, root_report, "root"],
+    [linked_worktree, linked_report, "linked"]
+  ].each do |workspace, report_path, artifact_name|
+    output, status = Open3.capture2e(
+      { "PROJECT_BUILD_GUARD_CACHE_DIR" => cache_root },
+      "ruby", GUARD,
+      "--workspace", workspace,
+      "--name", "cross-worktree-contract",
+      "--kind", "smoke",
+      "--artifact", "#{artifact_name}.txt",
+      "--json-report", report_path,
+      "--",
+      "ruby", "-e", "File.write(ARGV.fetch(0), 'ok')", "#{artifact_name}.txt"
+    )
+    abort "cross-worktree guard failed:\n#{output}" unless status.success?
+  end
+
+  root_coordination = JSON.parse(File.read(root_report)).fetch("coordination_dir")
+  linked_coordination = JSON.parse(File.read(linked_report)).fetch("coordination_dir")
+  abort "linked worktrees did not share coordination directory" unless root_coordination == linked_coordination
+end
+
 Dir.mktmpdir("project-build-guard-") do |workspace|
+  coordination_dir = File.join(workspace, "shared-coordination")
   artifact = File.join(workspace, "artifact.txt")
   counter = File.join(workspace, "counter.txt")
   report_json = File.join(workspace, "guard.json")
@@ -28,6 +77,7 @@ Dir.mktmpdir("project-build-guard-") do |workspace|
 
   first_stdout, first_status = run_guard(
     workspace,
+    coordination_dir,
     "--name", "contract-smoke",
     "--kind", "smoke",
     "--artifact", artifact,
@@ -39,9 +89,14 @@ Dir.mktmpdir("project-build-guard-") do |workspace|
   abort "first run failed:\n#{first_stdout}" unless first_status.zero?
   abort "artifact was not created" unless File.read(artifact) == "ok"
   abort "counter after first run was not 1" unless File.read(counter) == "1"
+  coordination_manifest = JSON.parse(
+    File.read(File.join(workspace, ".codex-build", "coordination.json"), encoding: "UTF-8")
+  )
+  abort "local coordination pointer is stale" unless coordination_manifest["queue_dir"] == File.join(coordination_dir, "queue")
 
   second_stdout, second_status = run_guard(
     workspace,
+    coordination_dir,
     "--name", "contract-smoke",
     "--kind", "smoke",
     "--artifact", artifact,
@@ -55,21 +110,22 @@ Dir.mktmpdir("project-build-guard-") do |workspace|
 
   report = JSON.parse(File.read(report_json, encoding: "UTF-8"))
   abort "expected cache-hit-after-wait report, got #{report["status"]}" unless report["status"] == "cache-hit-after-wait"
+  abort "coordination directory missing from report" unless report["coordination_dir"] == coordination_dir
   abort "markdown report missing" unless File.file?(report_md)
 
   source = File.join(workspace, "source.txt")
   waiting_artifact = File.join(workspace, "waiting-artifact.txt")
   waiting_report = File.join(workspace, "waiting-guard.json")
-  state_dir = File.join(workspace, ".codex-build")
-  lock_path = File.join(state_dir, "workspace.lock")
+  lock_path = File.join(coordination_dir, "repository.lock")
   File.write(source, "before-wait")
-  FileUtils.mkdir_p(state_dir)
+  FileUtils.mkdir_p(coordination_dir)
 
   File.open(lock_path, File::RDWR | File::CREAT, 0o644) do |lock_file|
     lock_file.flock(File::LOCK_EX)
     guard_args = [
       "ruby", GUARD,
       "--workspace", workspace,
+      "--coordination-dir", coordination_dir,
       "--name", "refresh-after-wait",
       "--kind", "smoke",
       "--artifact", waiting_artifact,
@@ -79,7 +135,7 @@ Dir.mktmpdir("project-build-guard-") do |workspace|
       "ruby", "-e", "File.write('waiting-artifact.txt', File.read('source.txt'))"
     ]
     Open3.popen2e(*guard_args) do |_stdin, stdout_err, wait_thread|
-      queue_pattern = File.join(state_dir, "queue", "*.json")
+      queue_pattern = File.join(coordination_dir, "queue", "*.json")
       deadline = Time.now + 10
       sleep 0.05 while Dir.glob(queue_pattern).empty? && Time.now < deadline
       abort "waiting guard did not enter the queue" if Dir.glob(queue_pattern).empty?

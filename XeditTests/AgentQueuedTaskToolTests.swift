@@ -18,9 +18,19 @@ struct AgentQueuedTaskToolTests {
     func testListQueuedTasksReportsSessionAndBuildQueues() async throws {
         let workspace = FileManager.default.temporaryDirectory
             .appendingPathComponent("WillDeepQueuedTaskToolTests-\(UUID().uuidString)", isDirectory: true)
-        let queueDirectory = workspace.appendingPathComponent(".codex-build/queue", isDirectory: true)
+        let localStateDirectory = workspace.appendingPathComponent(".codex-build", isDirectory: true)
+        let queueDirectory = workspace.appendingPathComponent("shared-build-queue", isDirectory: true)
+        try FileManager.default.createDirectory(at: localStateDirectory, withIntermediateDirectories: true)
         try FileManager.default.createDirectory(at: queueDirectory, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: workspace) }
+        let coordinationData = try JSONSerialization.data(
+            withJSONObject: ["queue_dir": queueDirectory.path],
+            options: [.prettyPrinted]
+        )
+        try coordinationData.write(
+            to: localStateDirectory.appendingPathComponent("coordination.json", isDirectory: false),
+            options: [.atomic]
+        )
 
         let buildEntry: [String: Any] = [
             "id": "queued-build-1",

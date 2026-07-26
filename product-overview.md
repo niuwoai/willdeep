@@ -1,6 +1,6 @@
 # WillDeep Product Overview
 
-> Last updated: 2026-07-25 | Current version: v1.206.0-rc9
+> Last updated: 2026-07-26 | Current version: v1.207.0-rc1
 
 ## Positioning
 
@@ -11,6 +11,10 @@ Official product domain: [willdeep.com](https://willdeep.com).
 WillDeep is configured for non-App-Store distribution without App Sandbox so it can access local project files with fewer permission interruptions.
 
 ## 架构概览
+
+- **本地 Agent 搜索优先使用 ripgrep（1.207.0-rc1）** —— `search_files` 与 `grep_files` 在本机可发现 `rg` 时走 JSON 流式快路径，保留大小写、正则、include glob、结果上限、工作区相对路径和生成目录排除语义；`rg` 缺失、启动失败或无法处理兼容正则时自动回退原 Swift 扫描器，不影响远端 workspace。
+
+- **跨工作树冷启动测试减负（1.207.0-rc1）** —— 项目构建守卫改为按 Git common dir 派生仓库级共享队列和锁，同一仓库的主工作树、Claude/Codex worktree 不再同时争抢 Xcode；缓存 manifest 和 DerivedData 仍按工作树隔离，避免错用产物。新增不包含 `XeditUITests` 的 `XeditUnitTests` Scheme 与 `scripts/run_tests_fast.rb`：稳定复用 DerivedData、SwiftPM checkout/package cache，跳过包更新、关闭本地 coverage、输出 build timing；显式 `--without-building` 只有在源码、未跟踪文件、工程、依赖锁和 Scheme 指纹完全一致时才允许运行。
 
 - **打开大项目主线程假死修复（1.205.0-rc2）** —— Quick Open 文件列表的缓存回填与扫盘后 URL 重建全部离开 MainActor；不再用会探盘的 `appendingPathComponent` 拼相对路径，降低老 Intel Mac 上打开巨型工作区时的 Beachball 与内存尖峰。
 
@@ -1335,7 +1339,7 @@ CLAUDE.md §2 要求 React 部分必须走 i18n，但 WillDeep 是 SwiftUI macOS
 
 ## 测试与 CI
 
-- **本地测试**：详见 [TESTING.md](./TESTING.md)。`XeditTests/` 12 个 Swift Testing（`@Suite` / `@Test`）风格的单测，覆盖 Agent 历史渲染、模型选路、目标 checklist 解析、MCP 服务发现、Memory 存储、Plan 进度、Provider library、Session 持久化、Skill 目录、Markdown 列表嵌套与表格解析。Xcode 跑：`Cmd+U`；命令行跑：`xcodebuild test -project Xedit.xcodeproj -scheme Xedit -destination 'platform=macOS'`。
+- **本地测试**：详见 [TESTING.md](./TESTING.md)。开发阶段使用 `ruby scripts/run_tests_fast.rb -only-testing:XeditTests/<Suite>`；同一源码指纹下可显式追加 `--without-building` 快速复跑。完整本地门禁使用 `scripts/run_tests.sh`。两个入口都使用不包含 UI Tests 的 `XeditUnitTests` Scheme，并通过仓库级构建守卫协调所有 Git worktree；Xcode 图形界面仍可使用 `Cmd+U`。
 - **已知 flaky**：CHANGELOG rc41 提到的 7-8 个测试由 AppState init 中的磁盘 IO 在测试间相互污染引起，已 spawn 独立任务追踪，不在本轮范围。
 - **CI**：`.github/workflows/test.yml` 已落地基础 `Tests` workflow，PR / push / 手动触发会运行复杂度守门、版本一致性检查、`willdeep-agent` Go 测试和 `XeditTests`，并上传 Xcode 测试报告、复杂度报告与版本一致性 Markdown/JSON artifact。仍待补齐高风险 E2E smoke 和更细的 Agent turn report。
 
