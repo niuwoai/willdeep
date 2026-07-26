@@ -48,6 +48,50 @@ extension AppState {
         }
     }
 
+    func chooseRemoteWorkspaceForDispatchGoal(
+        goalID: UUID,
+        runtime: RuntimeDescriptor,
+        completion: @escaping (String?) -> Void
+    ) {
+        guard let goal = agentDispatchCoordinator.goals.first(where: { $0.id == goalID }) else {
+            completion(L10n.Dispatch.launchFailed)
+            return
+        }
+        let alert = NSAlert()
+        alert.messageText = L10n.Dispatch.chooseRemoteWorkspace
+        alert.informativeText = L10n.Dispatch.remoteWorkspaceMessage(
+            projectName: goal.logicalProject?.displayName ?? goal.title,
+            runtimeName: runtime.displayName
+        )
+        alert.alertStyle = .informational
+        alert.addButton(withTitle: L10n.Dispatch.bindWorkspace)
+        alert.addButton(withTitle: L10n.Dispatch.cancel)
+
+        let input = NSTextField(frame: NSRect(x: 0, y: 0, width: 360, height: 24))
+        input.stringValue = goal.workspaceLocation(for: .remote(runtime.id))?.path
+            ?? runtime.defaultWorkspacePath
+        input.placeholderString = runtime.defaultWorkspacePath
+        input.usesSingleLineMode = true
+        alert.accessoryView = input
+        alert.window.initialFirstResponder = input
+
+        guard alert.runModal() == .alertFirstButtonReturn else {
+            completion(nil)
+            return
+        }
+        let path = RemotePathValidator.normalizedWorkspaceRoot(input.stringValue)
+        guard !path.isEmpty else {
+            completion(L10n.Dispatch.remoteWorkspacePathRequired)
+            return
+        }
+        completion(
+            bindDispatchGoalWorkspace(
+                goalID: goalID,
+                location: .remote(runtimeID: runtime.id, path: path)
+            )
+        )
+    }
+
     func bindDispatchGoalWorkspace(
         goalID: UUID,
         location: WorkspaceLocation
@@ -55,7 +99,8 @@ extension AppState {
         guard let goal = agentDispatchCoordinator.goals.first(where: { $0.id == goalID }) else {
             return L10n.Dispatch.launchFailed
         }
-        let isPrimaryBinding = goal.workspaceLocation == nil
+        let isPrimaryBinding = !goal.isWorkspaceBound
+        let logicalProject: AgentDispatchLogicalProject
         if isPrimaryBinding {
             guard let sourceRuntime = runtime(for: goal.sessionID) else {
                 return L10n.Dispatch.launchFailed
@@ -76,18 +121,51 @@ extension AppState {
                 guard AgentRuntimeStore.descriptor(id: runtimeID) != nil else {
                     return L10n.Dispatch.remoteWorkspaceUnavailable
                 }
+                let normalizedPath = RemotePathValidator.normalizedWorkspaceRoot(rawPath)
+                guard !normalizedPath.isEmpty else {
+                    return L10n.Dispatch.remoteWorkspacePathRequired
+                }
                 sourceRuntime.rebindRemoteWorkspace(
                     runtimeID: runtimeID,
-                    path: RemotePathValidator.normalizedWorkspaceRoot(rawPath)
+                    path: normalizedPath
                 )
             }
             sourceRuntime.worktreeChanges = .init()
             sourceRuntime.agentArtifactPaths = []
             persistAgentSession(runtime: sourceRuntime)
+            logicalProject = AgentDispatchLogicalProjectResolver.resolve(location: location)
+        } else {
+            guard let existingProject = goal.logicalProject else {
+                return L10n.Dispatch.workspaceRequired
+            }
+            switch location {
+            case .local(let rawPath):
+                let url = URL(fileURLWithPath: rawPath).standardizedFileURL
+                guard Self.isExistingDirectory(url) else {
+                    return L10n.Dispatch.workspaceMissing
+                }
+                guard AgentDispatchLogicalProjectResolver.localCheckoutBelongs(
+                    to: existingProject,
+                    path: url.path
+                ) else {
+                    return L10n.Dispatch.workspaceProjectMismatch
+                }
+                _ = activateSecurityScope(for: url)
+                registerRecentFolder(url)
+            case .remote(let runtimeID, let rawPath):
+                guard AgentRuntimeStore.descriptor(id: runtimeID) != nil else {
+                    return L10n.Dispatch.remoteWorkspaceUnavailable
+                }
+                guard !RemotePathValidator.normalizedWorkspaceRoot(rawPath).isEmpty else {
+                    return L10n.Dispatch.remoteWorkspacePathRequired
+                }
+            }
+            logicalProject = existingProject
         }
 
         agentDispatchCoordinator.bindWorkspace(
             location,
+            logicalProject: logicalProject,
             goalID: goalID,
             makePrimary: isPrimaryBinding
         )
@@ -183,17 +261,18 @@ extension AppState {
         guard !goal.isPaused else {
             return .blocked(message: L10n.Dispatch.goalPausedLaunch)
         }
-        guard goal.workspaceLocation != nil else {
+        guard goal.isWorkspaceBound else {
             return .blocked(message: L10n.Dispatch.workspaceRequired)
         }
         guard task.state == .queued || task.state == .failed || task.state == .cancelled else {
             return .blocked(message: L10n.Dispatch.waitingForDependencies)
         }
 
-        guard let target = goal.resolvedTargetChoice(taskChoice: task.targetChoice),
-              let workspaceLocation = goal.workspaceLocation(for: target) else {
+        guard let workspaceBinding = goal.resolvedWorkspaceBinding(for: task) else {
             return .blocked(message: L10n.Dispatch.workspaceMappingRequired)
         }
+        let target = workspaceBinding.targetChoice
+        let workspaceLocation = workspaceBinding.location
         let available = availableDispatchExecutors(on: target)
         let executorChoice = task.executorChoice == .automatic
             ? goal.executorChoice
@@ -231,7 +310,11 @@ extension AppState {
         dispatchAgentMessageUsingSelectedExecutor(
             decision.executor,
             for: runtime,
-            text: Self.dispatchTaskPrompt(goal: goal, task: task),
+            text: Self.dispatchTaskPrompt(
+                goal: goal,
+                task: task,
+                workspaceBinding: workspaceBinding
+            ),
             images: [],
             source: .hostInstruction
         )
@@ -315,19 +398,24 @@ extension AppState {
 
     nonisolated private static func dispatchTaskPrompt(
         goal: AgentDispatchGoal,
-        task: AgentDispatchTask
+        task: AgentDispatchTask,
+        workspaceBinding: AgentDispatchWorkspaceBinding
     ) -> String {
         let criteria = task.acceptanceCriteria.map { "- \($0)" }.joined(separator: "\n")
+        let project = goal.logicalProject
         return """
         Goal: \(goal.statement)
 
         Assigned task: \(task.title)
         Suggested branch: \(task.branchName)
+        Logical project: \(project?.displayName ?? "Unbound")
+        Project root: \(project?.primaryWorkspacePath ?? "Unbound")
+        Assigned checkout: \(workspaceBinding.location.path)
 
         Acceptance criteria:
         \(criteria)
 
-        Work only inside the assigned workspace. Preserve unrelated changes. Before reporting completion, provide concrete evidence such as tests, build output, or a focused diff summary. Do not merge into a shared branch; WillDeep owns review and integration.
+        Work only inside the assigned checkout. It is a checkout of the fixed logical project above; do not switch this Task to another repository. Preserve unrelated changes. Before reporting completion, provide concrete evidence such as tests, build output, or a focused diff summary. Do not merge into a shared branch; WillDeep owns review and integration.
         """
     }
 }

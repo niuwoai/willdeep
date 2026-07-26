@@ -100,17 +100,16 @@ private struct AgentDispatchBoardContent: View {
                     }
                 },
                 onBindRemoteWorkspace: { runtime in
-                    if let error = appState.bindDispatchGoalWorkspace(
+                    appState.chooseRemoteWorkspaceForDispatchGoal(
                         goalID: goal.id,
-                        location: .remote(
-                            runtimeID: runtime.id,
-                            path: runtime.defaultWorkspacePath
-                        )
-                    ) {
-                        alertTarget = .message(
-                            title: L10n.Dispatch.workspaceBindingFailed,
-                            message: error
-                        )
+                        runtime: runtime
+                    ) { error in
+                        if let error {
+                            alertTarget = .message(
+                                title: L10n.Dispatch.workspaceBindingFailed,
+                                message: error
+                            )
+                        }
                     }
                 },
                 onLaunch: { launchFirstReadyTask(in: goal) },
@@ -138,8 +137,8 @@ private struct AgentDispatchBoardContent: View {
                                 taskID: task.id
                             )
                         },
-                        onTargetChoice: {
-                            coordinator.updateTaskTargetChoice(
+                        onWorkspaceBindingChoice: {
+                            coordinator.updateTaskWorkspaceBinding(
                                 $0,
                                 goalID: goal.id,
                                 taskID: task.id
@@ -198,7 +197,7 @@ private struct AgentDispatchBoardContent: View {
 
     private func submitCommand() {
         guard let goal = coordinator.selectedGoal else { return }
-        guard goal.workspaceLocation != nil else {
+        guard goal.isWorkspaceBound else {
             alertTarget = .message(
                 title: L10n.Dispatch.workspaceRequiredShort,
                 message: L10n.Dispatch.workspaceRequired

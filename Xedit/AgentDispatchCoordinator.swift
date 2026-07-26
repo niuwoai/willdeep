@@ -107,18 +107,42 @@ final class AgentDispatchCoordinator: ObservableObject {
         }
         updateTask(goalID: goalID, taskID: taskID) { task in
             task.targetChoice = choice
+            task.workspaceBindingID = nil
+            task.updatedAt = Date()
+        }
+    }
+
+    func updateTaskWorkspaceBinding(
+        _ bindingID: String?,
+        goalID: UUID,
+        taskID: UUID
+    ) {
+        guard let goal = goals.first(where: { $0.id == goalID }) else { return }
+        let binding = goal.workspaceBinding(id: bindingID)
+        guard bindingID == nil || binding != nil else { return }
+        updateTask(goalID: goalID, taskID: taskID) { task in
+            task.workspaceBindingID = binding?.id
+            task.targetChoice = binding?.targetChoice ?? .automatic
             task.updatedAt = Date()
         }
     }
 
     func bindWorkspace(
         _ location: WorkspaceLocation,
+        logicalProject: AgentDispatchLogicalProject,
         goalID: UUID,
         makePrimary: Bool
     ) {
         updateGoal(id: goalID) { goal in
+            if makePrimary || goal.logicalProject == nil {
+                goal.logicalProject = logicalProject
+            }
+            guard let boundProject = goal.logicalProject else { return }
             var bindings = goal.effectiveWorkspaceBindings
-            let binding = AgentDispatchWorkspaceBinding(location: location)
+            let binding = AgentDispatchWorkspaceBinding(
+                location: location,
+                projectID: boundProject.id
+            )
             if let index = bindings.firstIndex(where: { $0.id == binding.id }) {
                 bindings[index] = binding
             } else {
@@ -136,6 +160,10 @@ final class AgentDispatchCoordinator: ObservableObject {
                 let choice = goal.tasks[index].targetChoice
                 if choice != .automatic, goal.workspaceLocation(for: choice) == nil {
                     goal.tasks[index].targetChoice = .automatic
+                }
+                if let bindingID = goal.tasks[index].workspaceBindingID,
+                   !bindings.contains(where: { $0.id == bindingID }) {
+                    goal.tasks[index].workspaceBindingID = nil
                 }
             }
             goal.updatedAt = Date()
@@ -303,10 +331,40 @@ final class AgentDispatchCoordinator: ObservableObject {
         let sourceGoal = session.currentGoal ?? AgentGoal()
         let sourceWorkspace = session.workspaceLocation
             ?? session.workspaceRootPath.map { WorkspaceLocation.local(path: $0) }
-        let primaryWorkspace = existing?.workspaceLocation ?? sourceWorkspace
-        var workspaceBindings = existing?.effectiveWorkspaceBindings ?? []
-        if let primaryWorkspace {
-            let primaryBinding = AgentDispatchWorkspaceBinding(location: primaryWorkspace)
+        // Existing records intentionally do not inherit a newly available
+        // session workspace. A legacy Goal that was saved without a binding
+        // must remain visibly unbound until the user binds it once.
+        let primaryWorkspace = existing == nil ? sourceWorkspace : existing?.workspaceLocation
+        let logicalProject: AgentDispatchLogicalProject? = if let existing {
+            existing.logicalProject
+                ?? existing.workspaceLocation.map {
+                    AgentDispatchLogicalProjectResolver.resolve(
+                        location: $0,
+                        preferredLocalProjectPath: session.sidebarWorkspaceRootPath
+                    )
+                }
+        } else {
+            sourceWorkspace.map {
+                AgentDispatchLogicalProjectResolver.resolve(
+                    location: $0,
+                    preferredLocalProjectPath: session.sidebarWorkspaceRootPath
+                )
+            }
+        }
+        // Do not trust pre-project secondary mappings. In particular, rc3
+        // SSH records may contain a runtime's generic default directory,
+        // which was never explicitly confirmed as this project's checkout.
+        // Preserve only mappings already tagged with this logical project;
+        // the primary workspace is reinserted below and every other legacy
+        // checkout must be mapped once under the new invariant.
+        var workspaceBindings = (existing?.workspaceBindings ?? []).filter {
+            $0.projectID == logicalProject?.id
+        }
+        if let primaryWorkspace, let logicalProject {
+            let primaryBinding = AgentDispatchWorkspaceBinding(
+                location: primaryWorkspace,
+                projectID: logicalProject.id
+            )
             if let index = workspaceBindings.firstIndex(where: { $0.id == primaryBinding.id }) {
                 workspaceBindings[index] = primaryBinding
             } else {
@@ -352,6 +410,7 @@ final class AgentDispatchCoordinator: ObservableObject {
             sessionID: session.id,
             title: session.title,
             statement: sourceGoal.statement,
+            logicalProject: logicalProject,
             workspaceLocation: primaryWorkspace,
             workspaceBindings: workspaceBindings,
             tasks: tasks,
@@ -373,6 +432,79 @@ final class AgentDispatchCoordinator: ObservableObject {
             .prefix(6)
             .joined(separator: "-")
         return "dispatch/\(slug.isEmpty ? "task" : slug)"
+    }
+}
+
+nonisolated enum AgentDispatchLogicalProjectResolver {
+    static func resolve(
+        location: WorkspaceLocation,
+        preferredLocalProjectPath: String? = nil
+    ) -> AgentDispatchLogicalProject {
+        let primaryPath: String
+        let repositoryIdentity: String?
+        switch location {
+        case .local(let rawPath):
+            primaryPath = normalizedLocalPath(
+                preferredLocalProjectPath
+                    ?? canonicalLocalProjectPath(for: rawPath)
+                    ?? rawPath
+            )
+            repositoryIdentity = localRepositoryIdentity(for: rawPath)
+                ?? localRepositoryIdentity(for: primaryPath)
+        case .remote(_, let rawPath):
+            primaryPath = RemotePathValidator.normalizedWorkspaceRoot(rawPath)
+            repositoryIdentity = nil
+        }
+        let url = URL(fileURLWithPath: primaryPath)
+        let name = url.lastPathComponent.isEmpty ? primaryPath : url.lastPathComponent
+        return AgentDispatchLogicalProject(
+            displayName: name,
+            primaryWorkspacePath: primaryPath,
+            localRepositoryIdentity: repositoryIdentity
+        )
+    }
+
+    static func localCheckoutBelongs(
+        to project: AgentDispatchLogicalProject,
+        path: String
+    ) -> Bool {
+        let normalized = normalizedLocalPath(path)
+        if let expectedIdentity = project.localRepositoryIdentity {
+            return localRepositoryIdentity(for: normalized) == expectedIdentity
+        }
+        return normalized == normalizedLocalPath(project.primaryWorkspacePath)
+    }
+
+    static func localRepositoryIdentity(for path: String) -> String? {
+        let candidate = URL(fileURLWithPath: path).standardizedFileURL
+        guard let root = AppState.findGitRepositoryRoot(startingAt: candidate) else {
+            return nil
+        }
+        let rawCommonDirectory = AppState.runGit(
+            arguments: ["rev-parse", "--git-common-dir"],
+            in: root
+        ).trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !rawCommonDirectory.isEmpty else { return nil }
+        let commonDirectory: URL
+        if rawCommonDirectory.hasPrefix("/") {
+            commonDirectory = URL(fileURLWithPath: rawCommonDirectory)
+        } else {
+            commonDirectory = root.appendingPathComponent(rawCommonDirectory)
+        }
+        return commonDirectory.standardizedFileURL.path
+    }
+
+    private static func canonicalLocalProjectPath(for path: String) -> String? {
+        guard let repositoryIdentity = localRepositoryIdentity(for: path) else {
+            return nil
+        }
+        let commonDirectory = URL(fileURLWithPath: repositoryIdentity).standardizedFileURL
+        guard commonDirectory.lastPathComponent == ".git" else { return nil }
+        return commonDirectory.deletingLastPathComponent().path
+    }
+
+    private static func normalizedLocalPath(_ path: String) -> String {
+        URL(fileURLWithPath: path).standardizedFileURL.path
     }
 }
 

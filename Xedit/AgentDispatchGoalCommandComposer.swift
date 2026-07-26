@@ -14,7 +14,7 @@ struct AgentDispatchGoalCommandComposer: View {
     let onTogglePause: () -> Void
 
     private var hasWorkspace: Bool {
-        goal.workspaceLocation != nil
+        goal.isWorkspaceBound
     }
 
     var body: some View {
