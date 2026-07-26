@@ -1,6 +1,6 @@
 # WillDeep Product Overview
 
-> Last updated: 2026-07-26 | Current version: v1.209.0-rc3
+> Last updated: 2026-07-26 | Current version: v1.209.0-rc4
 
 ## Positioning
 
@@ -11,6 +11,8 @@ Official product domain: [willdeep.com](https://willdeep.com).
 WillDeep is configured for non-App-Store distribution without App Sandbox so it can access local project files with fewer permission interruptions.
 
 ## 架构概览
+
+- **新聊天空态统计缓存（1.209.0-rc4）** —— 空态统计仪表盘将 overview、模型与能力用量、热力图及任务指标统一构建为一次聚合结果，并由 AppState 按快照修订号与本地日期记忆化；用量快照改为单点有序插入，避免新建聊天时在主线程反复遍历、排序全部历史会话。
 
 - **本地交互 Shell 轻量启动（1.209.0-rc2）** —— WillDeep 创建的编辑器终端和 Agent Terminal 本地 Shell 会注入 `CLAUDECODE=1`，可复用用户 `.zshrc` 中面向 Claude Code 的轻量 prompt 分支，跳过 powerlevel10k/gitstatus 等高成本初始化；Claude/Codex 委派 Shell、SSH 与后台命令不注入该变量，避免执行器误判嵌套会话。终端高级环境设置仍可显式覆盖或清空该变量。
 
