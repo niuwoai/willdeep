@@ -3,7 +3,7 @@
 > 当前文件保留最新版本（1.200.0-rc3 至 1.109.0-rc340）。
 > 更早的 1000 个版本已移至 [CHANGELOG-ARCHIVE.md](CHANGELOG-ARCHIVE.md)。
 
-## 1.209.0-rc2 - 2026-07-26
+## 1.209.0-rc3 - 2026-07-26
 
 ### Fixed
 
@@ -11,7 +11,18 @@
 
 ### Meta
 
-- 版本号从 **1.209.0-rc1** 递增为 **1.209.0-rc2**（bugfix 仅递增 rc 号）；App、Go agent、Help、Helper、浏览器扩展、README、响应头契约与产品文档版本位点保持一致。
+- 版本号从 **1.209.0-rc2** 递增为 **1.209.0-rc3**（新聊天空态性能 bugfix，仅递增 rc 位），内部构建号从 **169** 递增为 **170**，Help 与 Computer Use Helper 构建号从 **86** 递增为 **87**；App、Go agent、Help、Helper、浏览器扩展、README、响应头契约与产品文档保持一致。
+
+## 1.209.0-rc2 - 2026-07-26
+
+### Fixed
+
+- **WillDeep 本地 Shell 的重型 prompt 初始化**：编辑器终端与 Agent Terminal 的本地交互 Shell 现在注入 `CLAUDECODE=1`，可直接命中用户 `.zshrc` 中为 Claude Code 配置的轻量 prompt 分支，避免 powerlevel10k/gitstatus 初始化拖慢首屏；Claude/Codex 委派 Shell、SSH 与无 TTY 后台命令保持原环境，避免执行器误判嵌套会话。终端高级环境设置可显式覆盖或清空该变量。
+- 新增终端启动环境回归测试，覆盖本地 Shell 注入、委派 Shell 隔离以及用户覆盖优先级。
+
+### Meta
+
+- 版本号从 **1.209.0-rc1** 提升为 **1.209.0-rc2**（终端启动兼容性与性能 bugfix，仅递增 rc 位），内部构建号从 **168** 递增为 **169**，Help 与 Computer Use Helper 构建号从 **85** 递增为 **86**；App、Go agent、Help、Helper、浏览器扩展、README、响应头契约与产品文档保持一致。
 
 ## 1.209.0-rc1 - 2026-07-26
 

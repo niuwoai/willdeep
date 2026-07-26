@@ -129,7 +129,11 @@ final class EditorTerminalSession: ObservableObject, AgentTerminalProcessDelegat
         terminalView.startProcess(
             executable: shell,
             args: ["-l"],
-            environment: Self.environmentArray(settings: normalized),
+            environment: EditorTerminalLaunchEnvironment.array(
+                settings: normalized,
+                injectClaudeCodeCompatibility: true,
+                markAsAgentTerminal: false
+            ),
             execName: "-" + (shell as NSString).lastPathComponent,
             currentDirectory: workingDirectoryPath.isEmpty ? nil : workingDirectoryPath
         )
@@ -176,15 +180,6 @@ final class EditorTerminalSession: ObservableObject, AgentTerminalProcessDelegat
         return "/bin/zsh"
     }
 
-    private static func environmentArray(settings: EditorTerminalSettings) -> [String] {
-        var environment = ProcessInfo.processInfo.environment
-        environment["TERM"] = "xterm-256color"
-        environment["LANG"] = environment["LANG"] ?? "en_US.UTF-8"
-        for (key, value) in settings.environment {
-            environment[key] = value
-        }
-        return environment.sorted { $0.key < $1.key }.map { "\($0.key)=\($0.value)" }
-    }
 }
 
 // MARK: - SwiftUI host
