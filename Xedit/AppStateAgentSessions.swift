@@ -1763,13 +1763,14 @@ extension AppState {
     @discardableResult
     private func materializeAgentSessionIfNeeded(id: AgentSession.ID) -> AgentSession? {
         guard let index = agentSessions.firstIndex(where: { $0.id == id }) else { return nil }
-        guard AgentSessionStore.isMetadataOnly(id) else {
+        guard agentSessionIsMetadataOnly(id) else {
             return agentSessions[index]
         }
         guard let fullSession = AgentSessionStore.load(id: id) else {
             return nil
         }
         agentSessions[index] = fullSession
+        clearAgentSessionMetadataOnlyFlag(id)
         return fullSession
     }
 
@@ -2151,6 +2152,7 @@ extension AppState {
         )
         runtime.persist(touchUpdatedAt: touchUpdatedAt)
         agentSessions[index] = runtime.session
+        clearAgentSessionMetadataOnlyFlag(runtime.id)
         // `persist()` just stamped `updatedAt = now`, so this session is
         // the newest — a single move-to-front keeps the list sorted.
         // The previous full `sort` here ran on EVERY persist (several

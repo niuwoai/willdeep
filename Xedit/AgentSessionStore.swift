@@ -832,12 +832,29 @@ nonisolated enum AgentSessionStore {
         return SourceSignature(fileSize: size, modificationTime: date.timeIntervalSince1970)
     }
 
+    /// A catalog load plus the classification that belongs to it. The id
+    /// sets travel with the result so each caller can own its own answer
+    /// to "is this entry still a skeleton": several AppState instances
+    /// exist (Settings window, desktop pet), and with only the
+    /// process-wide tracker one instance's `load(id:)` could clear a flag
+    /// another instance was still relying on — that instance then
+    /// persisted its skeleton over real history.
+    struct LoadedSessions: Sendable {
+        let sessions: [AgentSession]
+        let metadataOnlyIDs: Set<UUID>
+        let metadataOnlyUserMessageIDs: Set<UUID>
+    }
+
+    static func loadAll() -> [AgentSession] {
+        loadAllWithMetadata().sessions
+    }
+
     /// Loads the lightweight sidebar catalog, newest-updated first. Normal
     /// launches read only small sidecars; a missing/stale sidecar triggers a
     /// one-time full-session decode and is repaired for the next launch.
     /// Full messages are materialized by `load(id:)` when the user opens a
     /// session. Usage analytics are deliberately not loaded here.
-    static func loadAll() -> [AgentSession] {
+    static func loadAllWithMetadata() -> LoadedSessions {
         importLegacySessionsIfNeeded()
 
         var sessions: [AgentSession] = []
@@ -888,8 +905,15 @@ nonisolated enum AgentSessionStore {
             }
         }
 
+        // The process-wide tracker is still refreshed here so the legacy
+        // `isMetadataOnly` API keeps answering for callers that have no
+        // per-instance state; AppState reads the returned sets instead.
         metadataOnlySessions.replace(with: metadataOnlyIDs, userMessageIDs: metadataOnlyUserMessageIDs)
-        return sessions.sorted { $0.updatedAt > $1.updatedAt }
+        return LoadedSessions(
+            sessions: sessions.sorted { $0.updatedAt > $1.updatedAt },
+            metadataOnlyIDs: metadataOnlyIDs,
+            metadataOnlyUserMessageIDs: metadataOnlyUserMessageIDs
+        )
     }
 
     static func loadUsageSnapshots() -> [AgentUsageSessionSnapshot] {

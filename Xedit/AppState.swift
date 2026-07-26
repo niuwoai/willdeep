@@ -264,6 +264,18 @@ final class AppState: ObservableObject {
     /// edge to run Goal recovery only after every persisted candidate is
     /// visible, avoiding a race with the initial empty in-memory list.
     @Published private(set) var hasLoadedAgentSessionCatalog = false
+    /// Ids whose entry in `agentSessions` is still the catalog skeleton
+    /// (messages stripped) and must be materialized from disk before it
+    /// can be read or persisted. Owned per instance: several AppState
+    /// instances exist (Settings window, desktop pet), and while this
+    /// lived in a process-wide table another instance's `load(id:)` could
+    /// clear the flag here, after which this instance handed out — and
+    /// eventually persisted — an empty transcript.
+    private var metadataOnlySessionIDs: Set<AgentSession.ID> = []
+    /// Subset of `metadataOnlySessionIDs` whose stored transcript does
+    /// contain a user message. Sidebar visibility needs that fact before
+    /// the session is materialized.
+    private var metadataOnlyUserMessageIDs: Set<AgentSession.ID> = []
     /// Set only when a metadata-only sidebar row can no longer be
     /// materialized from disk. The row is deliberately retained so a
     /// recovered JSON file can reconnect without losing its visible title.
@@ -735,16 +747,26 @@ final class AppState: ObservableObject {
             }
         startAgentSidePanelResourceReaper()
         Task { @MainActor [weak self] in
-            let persistedSessions = await Task.detached(priority: .utility) {
-                AgentSessionStore.loadAll()
+            let loaded = await Task.detached(priority: .utility) {
+                AgentSessionStore.loadAllWithMetadata()
             }.value
             guard let self, !Task.isCancelled else { return }
 
             // A user can create a session while the disk index is loading.
             // In-memory state is newer and therefore wins on ID collisions.
-            var sessionsByID = Dictionary(uniqueKeysWithValues: persistedSessions.map { ($0.id, $0) })
-            for session in self.agentSessions { sessionsByID[session.id] = session }
+            var sessionsByID = Dictionary(uniqueKeysWithValues: loaded.sessions.map { ($0.id, $0) })
+            var metadataOnlyIDs = loaded.metadataOnlyIDs
+            var metadataOnlyUserMessageIDs = loaded.metadataOnlyUserMessageIDs
+            for session in self.agentSessions {
+                sessionsByID[session.id] = session
+                // The skeleton lost — what stays in the list is a real
+                // session, so it must not be marked metadata-only.
+                metadataOnlyIDs.remove(session.id)
+                metadataOnlyUserMessageIDs.remove(session.id)
+            }
             self.agentSessions = sessionsByID.values.sorted { $0.updatedAt > $1.updatedAt }
+            self.metadataOnlySessionIDs = metadataOnlyIDs
+            self.metadataOnlyUserMessageIDs = metadataOnlyUserMessageIDs
             self.hasLoadedAgentSessionCatalog = true
 
             // Empty placeholders are filtered by sidebar visibility instead
@@ -810,6 +832,37 @@ final class AppState: ObservableObject {
                 self.scheduleActiveRuntimeForward()
             }
     }
+
+    // MARK: - Metadata-only session classification
+
+    /// True while `agentSessions` still holds the catalog skeleton for
+    /// `id`. Declared here (rather than exposing the sets) because the
+    /// backing state is per-instance and must stay writable only through
+    /// the two mutators below.
+    func agentSessionIsMetadataOnly(_ id: AgentSession.ID) -> Bool {
+        metadataOnlySessionIDs.contains(id)
+    }
+
+    func agentSessionMetadataOnlyHasUserMessage(_ id: AgentSession.ID) -> Bool {
+        metadataOnlyUserMessageIDs.contains(id)
+    }
+
+    /// Call whenever `agentSessions` gains the full session for `id`.
+    func clearAgentSessionMetadataOnlyFlag(_ id: AgentSession.ID) {
+        metadataOnlySessionIDs.remove(id)
+        metadataOnlyUserMessageIDs.remove(id)
+    }
+
+#if DEBUG
+    func markAgentSessionMetadataOnlyForTesting(_ id: AgentSession.ID, hasUserMessage: Bool) {
+        metadataOnlySessionIDs.insert(id)
+        if hasUserMessage {
+            metadataOnlyUserMessageIDs.insert(id)
+        } else {
+            metadataOnlyUserMessageIDs.remove(id)
+        }
+    }
+#endif
 
     private func startAgentSidePanelResourceReaper() {
         agentSidePanelResourceReaperTimer?.invalidate()

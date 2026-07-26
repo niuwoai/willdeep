@@ -49,7 +49,9 @@ struct AgentRecentSessionEdgeRail: View {
         AgentRecentSessionEdgeRailLogic.recentItems(
             from: appState.agentSessions,
             hiddenWorkspaceKeys: appState.hiddenWorkspaceKeys,
-            limit: maxRows
+            limit: maxRows,
+            isMetadataOnly: appState.agentSessionIsMetadataOnly,
+            metadataOnlyHasUserMessage: appState.agentSessionMetadataOnlyHasUserMessage
         )
     }
 
@@ -198,16 +200,27 @@ enum AgentRecentSessionEdgeRailLogic {
         let workspaceInitials: String
     }
 
+    /// `isMetadataOnly` / `metadataOnlyHasUserMessage` come from the
+    /// caller's AppState instance — the classification is per-instance,
+    /// so it cannot be looked up from a global here. Defaults treat every
+    /// session as fully materialized, which is what in-memory-only
+    /// callers (tests, previews) have.
     static func recentItems(
         from sessions: [AgentSession],
         hiddenWorkspaceKeys: Set<String>,
-        limit: Int
+        limit: Int,
+        isMetadataOnly: (AgentSession.ID) -> Bool = { _ in false },
+        metadataOnlyHasUserMessage: (AgentSession.ID) -> Bool = { _ in false }
     ) -> [Item] {
         sessions
             .filter { session in
                 !session.isArchived
                     && !hiddenWorkspaceKeys.contains(session.workspaceSidebarGroupKey)
-                    && hasUserMessage(session)
+                    && hasUserMessage(
+                        session,
+                        isMetadataOnly: isMetadataOnly,
+                        metadataOnlyHasUserMessage: metadataOnlyHasUserMessage
+                    )
             }
             .sorted { lhs, rhs in
                 lhs.lastActivityAt > rhs.lastActivityAt
@@ -243,12 +256,16 @@ enum AgentRecentSessionEdgeRailLogic {
         return Color(hue: hue, saturation: 0.68, brightness: 0.68)
     }
 
-    private static func hasUserMessage(_ session: AgentSession) -> Bool {
+    private static func hasUserMessage(
+        _ session: AgentSession,
+        isMetadataOnly: (AgentSession.ID) -> Bool,
+        metadataOnlyHasUserMessage: (AgentSession.ID) -> Bool
+    ) -> Bool {
         if session.messages.contains(where: { $0.role == .user }) {
             return true
         }
-        if AgentSessionStore.isMetadataOnly(session.id) {
-            return AgentSessionStore.metadataOnlySessionHasUserMessage(session.id)
+        if isMetadataOnly(session.id) {
+            return metadataOnlyHasUserMessage(session.id)
         }
         return false
     }

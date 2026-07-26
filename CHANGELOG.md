@@ -3,6 +3,12 @@
 > 当前文件保留最新版本（1.200.0-rc3 至 1.109.0-rc340）。
 > 更早的 1000 个版本已移至 [CHANGELOG-ARCHIVE.md](CHANGELOG-ARCHIVE.md)。
 
+## 1.206.0-rc8 - 2026-07-26
+
+### Fixed
+
+- **骨架会话被跨实例误判为已加载，持久化时覆盖真实记录（根因清理）**：`metadataOnlySessions` 是进程级 static，而 `AppState` 有多个实例（主窗口、编辑器注册表、设置窗口、桌宠各一个）。实例 A 的 `loadAll` 把会话标记为仅元数据后，实例 B 的 `load(id:)` 会把该 id 从全局标记中摘除；A 手里仍是 messages 为空的骨架，`materializeAgentSessionIfNeeded` 却因标记已消失而判定"无需补全"，直接返回骨架并在下次持久化时写空。现改为 `loadAllWithMetadata()` 随加载结果一并返回分类，`AppState` 各自持有 `metadataOnlySessionIDs` / `metadataOnlyUserMessageIDs`，补全或持久化后就地清除；会话侧栏与最近会话边栏改为从所属 `AppState` 取判定。1.206.0-rc7 的写入护栏是兜底，此项消除根因。
+
 ## 1.206.0-rc7 - 2026-07-26
 
 ### Fixed

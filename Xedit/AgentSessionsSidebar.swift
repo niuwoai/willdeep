@@ -29,10 +29,25 @@ private struct SidebarWorkspaceGroup: Identifiable {
 }
 
 enum AgentSidebarSessionVisibility {
+    /// `isMetadataOnly` / `metadataOnlyHasUserMessage` come from the
+    /// caller's AppState instance — the classification is per-instance,
+    /// so it cannot be looked up from a global here. Defaults treat every
+    /// session as fully materialized, which is what in-memory-only
+    /// callers (tests, previews) have.
     static func visibleSessions(
         from sessions: [AgentSession],
-        activeID: AgentSession.ID?
+        activeID: AgentSession.ID?,
+        isMetadataOnly: (AgentSession.ID) -> Bool = { _ in false },
+        metadataOnlyHasUserMessage: (AgentSession.ID) -> Bool = { _ in false }
     ) -> [AgentSession] {
+        func hasUserMessage(_ session: AgentSession) -> Bool {
+            Self.hasUserMessage(
+                session,
+                isMetadataOnly: isMetadataOnly,
+                metadataOnlyHasUserMessage: metadataOnlyHasUserMessage
+            )
+        }
+
         var workspaceKeysWithHistory: Set<String> = []
         for session in sessions where hasUserMessage(session) {
             workspaceKeysWithHistory.insert(session.workspaceSidebarGroupKey)
@@ -61,9 +76,13 @@ enum AgentSidebarSessionVisibility {
         }
     }
 
-    private static func hasUserMessage(_ session: AgentSession) -> Bool {
-        if AgentSessionStore.isMetadataOnly(session.id) {
-            return AgentSessionStore.metadataOnlySessionHasUserMessage(session.id)
+    private static func hasUserMessage(
+        _ session: AgentSession,
+        isMetadataOnly: (AgentSession.ID) -> Bool,
+        metadataOnlyHasUserMessage: (AgentSession.ID) -> Bool
+    ) -> Bool {
+        if isMetadataOnly(session.id) {
+            return metadataOnlyHasUserMessage(session.id)
         }
         return session.messages.contains { $0.role == .user }
     }
@@ -775,7 +794,9 @@ struct AgentSessionsSidebar: View {
         // added project does not vanish the moment the next project is added.
         let visibleSessions = AgentSidebarSessionVisibility.visibleSessions(
             from: appState.agentSessions,
-            activeID: appState.activeAgentSessionID
+            activeID: appState.activeAgentSessionID,
+            isMetadataOnly: appState.agentSessionIsMetadataOnly,
+            metadataOnlyHasUserMessage: appState.agentSessionMetadataOnlyHasUserMessage
         )
         let groups = Dictionary(grouping: visibleSessions) { session in
             session.workspaceSidebarGroupKey
@@ -820,7 +841,9 @@ struct AgentSessionsSidebar: View {
     private var globalPinnedSessions: [AgentSession] {
         let visibleSessions = AgentSidebarSessionVisibility.visibleSessions(
             from: appState.agentSessions,
-            activeID: appState.activeAgentSessionID
+            activeID: appState.activeAgentSessionID,
+            isMetadataOnly: appState.agentSessionIsMetadataOnly,
+            metadataOnlyHasUserMessage: appState.agentSessionMetadataOnlyHasUserMessage
         )
         return AgentSidebarSessionPlacement.globalPinnedSessions(from: visibleSessions)
     }
