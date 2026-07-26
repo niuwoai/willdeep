@@ -446,6 +446,57 @@ enum EditorTerminalEnvironmentParser {
     }
 }
 
+/// Builds the environment for WillDeep-owned interactive shells.
+///
+/// `CLAUDECODE=1` is intentionally limited to local user shells so `.zshrc`
+/// can use the same lightweight prompt path it uses for Claude Code. Delegated
+/// executor shells and SSH sessions must not receive the marker: otherwise a
+/// Claude CLI launched by WillDeep can mistake itself for a nested session.
+enum EditorTerminalLaunchEnvironment {
+    static let claudeCodeCompatibilityKey = "CLAUDECODE"
+    static let agentTerminalKey = "WILLDEEP_AGENT_TERMINAL"
+    private static let enabledValue = "1"
+
+    static func variables(
+        from base: [String: String] = ProcessInfo.processInfo.environment,
+        settings: EditorTerminalSettings,
+        injectClaudeCodeCompatibility: Bool,
+        markAsAgentTerminal: Bool
+    ) -> [String: String] {
+        var environment = base
+        environment["TERM"] = "xterm-256color"
+        environment["LANG"] = environment["LANG"] ?? "en_US.UTF-8"
+        if injectClaudeCodeCompatibility {
+            environment[claudeCodeCompatibilityKey] = enabledValue
+        }
+        if markAsAgentTerminal {
+            environment[agentTerminalKey] = enabledValue
+        }
+        // Explicit Terminal settings remain the final authority, including
+        // allowing a user to clear CLAUDECODE when launching Claude manually.
+        for (key, value) in settings.environment {
+            environment[key] = value
+        }
+        return environment
+    }
+
+    static func array(
+        from base: [String: String] = ProcessInfo.processInfo.environment,
+        settings: EditorTerminalSettings,
+        injectClaudeCodeCompatibility: Bool,
+        markAsAgentTerminal: Bool
+    ) -> [String] {
+        variables(
+            from: base,
+            settings: settings,
+            injectClaudeCodeCompatibility: injectClaudeCodeCompatibility,
+            markAsAgentTerminal: markAsAgentTerminal
+        )
+        .sorted { $0.key < $1.key }
+        .map { "\($0.key)=\($0.value)" }
+    }
+}
+
 struct EditorProjectCommand: Identifiable, Hashable {
     enum Kind: String, Hashable {
         case packageScript
