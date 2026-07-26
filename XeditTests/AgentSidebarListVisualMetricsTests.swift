@@ -43,6 +43,28 @@ struct AgentSidebarListVisualMetricsTests {
         #expect(AgentStatsDashboardLayout.maximumHeatmapWeeks == 52)
     }
 
+    @Test("idle session rows return unused action width to the title")
+    func idleSessionRowsUseAvailableSidebarWidth() {
+        #expect(
+            AgentSidebarSessionTrailingLayout.reservedActionsWidth(
+                isHovered: false,
+                isPinned: false
+            ) == 0
+        )
+        #expect(
+            AgentSidebarSessionTrailingLayout.reservedActionsWidth(
+                isHovered: false,
+                isPinned: true
+            ) < AgentDesign.sidebarSessionTrailingActionsWidth
+        )
+        #expect(
+            AgentSidebarSessionTrailingLayout.reservedActionsWidth(
+                isHovered: true,
+                isPinned: false
+            ) == AgentDesign.sidebarSessionTrailingActionsWidth
+        )
+    }
+
     @Test("Token activity tooltip includes the hovered day and its usage")
     func tokenActivityTooltipCarriesDailyUsage() {
         let tooltip = L10n.HeatmapCell.tooltip("7月10日", "10.3亿")

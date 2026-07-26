@@ -57,6 +57,10 @@ struct SSHRuntimeBackend: AgentRemoteRuntimeBackend {
         printf 'java=%s\\n' "$(java -version 2>&1 | head -n 1 || true)"
         printf 'gh=%s\\n' "$(wd_val gh gh --version)"
         printf 'gh_auth=%s\\n' "$(if command -v gh >/dev/null 2>&1; then gh auth status 2>&1 | head -n 1; fi)"
+        printf 'agent_claude=%s\\n' "$(command -v claude 2>/dev/null || true)"
+        printf 'agent_codex=%s\\n' "$(command -v codex 2>/dev/null || true)"
+        printf 'agent_cursor=%s\\n' "$(command -v cursor-agent 2>/dev/null || command -v cursor 2>/dev/null || true)"
+        printf 'agent_cline=%s\\n' "$(command -v cline 2>/dev/null || true)"
         printf 'npm_registry=%s\\n' "$(wd_cfg npm config get registry)"
         printf 'npm_proxy=%s\\n' "$(wd_cfg npm config get proxy)"
         printf 'npm_https_proxy=%s\\n' "$(wd_cfg npm config get https-proxy)"
@@ -99,6 +103,12 @@ struct SSHRuntimeBackend: AgentRemoteRuntimeBackend {
                 "http_proxy": redactedOptionalProxy(fields["env_http_proxy"]),
                 "https_proxy": redactedOptionalProxy(fields["env_https_proxy"]),
                 "no_proxy": nonEmpty(fields["env_no_proxy"])
+            ].compactMapValues { $0 },
+            agentCLIPaths: [
+                AgentExecutionAgent.claudeCode.rawValue: nonEmpty(fields["agent_claude"]),
+                AgentExecutionAgent.codexCLI.rawValue: nonEmpty(fields["agent_codex"]),
+                AgentExecutionAgent.cursorAgent.rawValue: nonEmpty(fields["agent_cursor"]),
+                AgentExecutionAgent.clineCLI.rawValue: nonEmpty(fields["agent_cline"]),
             ].compactMapValues { $0 }
         )
         updated.lastProbeAt = Date()
@@ -463,6 +473,12 @@ struct DaemonRuntimeBackend: AgentRemoteRuntimeBackend {
                 "http_proxy": report.proxies["http_proxy"],
                 "https_proxy": report.proxies["https_proxy"],
                 "no_proxy": report.proxies["no_proxy"]
+            ].compactMapValues { $0 },
+            agentCLIPaths: [
+                AgentExecutionAgent.claudeCode.rawValue: report.tools["claude"],
+                AgentExecutionAgent.codexCLI.rawValue: report.tools["codex"],
+                AgentExecutionAgent.cursorAgent.rawValue: report.tools["cursor-agent"] ?? report.tools["cursor"],
+                AgentExecutionAgent.clineCLI.rawValue: report.tools["cline"],
             ].compactMapValues { $0 }
         )
         updated.lastProbeAt = Date()

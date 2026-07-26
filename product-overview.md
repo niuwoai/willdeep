@@ -1,6 +1,6 @@
 # WillDeep Product Overview
 
-> Last updated: 2026-07-26 | Current version: v1.208.0-rc3
+> Last updated: 2026-07-26 | Current version: v1.209.0-rc1
 
 ## Positioning
 
@@ -12,7 +12,15 @@ WillDeep is configured for non-App-Store distribution without App Sandbox so it 
 
 ## 架构概览
 
+- **Goal-first 调度台（1.209.0-rc1）** —— 左侧一级入口展示 Goal 与本机/SSH 执行环境，中间把 Goal 清单投影为可持久化的任务依赖图，右侧提供单任务执行器、环境、分支、工作区与验收信息；Goal 运行中普通指令在当前步骤结束后的安全点生效，暂停、恢复、追加任务可即时执行，需要抢占时显式确认。执行器默认由 WillDeep 按任务能力自动选择，也允许在 Goal 或任务层强制指定；SSH Runtime 会探测 Claude Code、Codex、Cursor Agent 与 Cline CLI。
+
+- **侧栏会话标题利用空闲操作区（1.208.0-rc5）** —— 普通未悬停会话不再长期为隐藏的固定、归档按钮预留 40pt，标题可以使用完整的剩余行宽；已固定会话仅保留紧凑图标宽度，鼠标悬停时再恢复完整操作区，在不改变侧栏宽度和字号的情况下展示更多标题文字。
+
+- **ZMODEM 下载完成态与协议对齐（1.208.0-rc4）** —— Agent 通过可见终端执行带本地路径的 `rz/sz` 传输时，`terminal_send_command` 会等待匹配握手、本地 lrzsz 进程退出以及最终协议输出排空后才返回成功；下载初期生成但仍在增长的本地文件不再被当作完成。`terminal_snapshot` 同时输出结构化 ZMODEM 活跃状态，明确禁止把传输中的文件作为最终数据分析；握手超时、方向不匹配、取消、空闲超时和非零退出均返回失败。
+
 - **活跃终端会话可控停止（1.208.0-rc3）** —— 运行状态胶囊提供 `Ctrl-C`、telnet 转义键 `Ctrl-]`、`Ctrl-D` 和停止会话入口；停止或关闭标签页时对本地 PTY 的整棵进程树执行 TERM、关闭 PTY、超时 KILL，并用进程启动身份防止 PID 复用误杀。
+
+- **密码占位符换行高亮修复（1.208.0-rc2）** —— Agent 输入框中的 `${secret:...}` 受 Keychain 保护占位符如果在行尾换行，胶囊高亮会按 TextKit 的每个真实行片段分别绘制，不再用跨行外接矩形覆盖前面的普通提示词；单行占位符仍保持一个紧凑胶囊。
 
 - **本地 Agent 搜索优先使用 ripgrep（1.208.0-rc1）** —— `search_files` 与 `grep_files` 在本机可发现 `rg` 时走 JSON 流式快路径，保留大小写、正则、include glob、结果上限、工作区相对路径和生成目录排除语义；`rg` 缺失、启动失败或无法处理兼容正则时自动回退原 Swift 扫描器，不影响远端 workspace。
 

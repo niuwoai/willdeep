@@ -302,6 +302,11 @@ final class AppState: ObservableObject {
     @Published var agentRoutines: [AgentRoutine] = []
     let agentRoutineScheduler = AgentRoutineScheduler()
 
+    /// Goal-first dispatch console state. The coordinator owns durable task
+    /// metadata while AppState remains responsible for creating/running the
+    /// underlying Agent sessions.
+    let agentDispatchCoordinator = AgentDispatchCoordinator()
+
     /// Process-wide registry of background `run_command` jobs. Scoped
     /// by `runtime.id` inside the registry so concurrent sessions can't
     /// steal each other's jobs or completion notices. See

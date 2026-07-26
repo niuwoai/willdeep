@@ -322,6 +322,66 @@ struct AgentGlobalRulesTests {
     }
 
     @Test
+    func zmodemTransferTicketWaitsForProtocolProcessCompletion() async {
+        let ticket = TerminalZModemTransferTicket(
+            direction: .downloadFromRemote,
+            handshakeTimeout: 5
+        )
+        #expect(ticket.markStarted())
+        let waiter = Task {
+            await ticket.waitForCompletion()
+        }
+
+        try? await Task.sleep(nanoseconds: 50_000_000)
+        #expect(!ticket.isFinished)
+
+        let expected = TerminalZModemTransferOutcome(
+            direction: .downloadFromRemote,
+            succeeded: true,
+            message: "protocol complete",
+            transferredByteCount: 17_000_000
+        )
+        ticket.finish(expected)
+        let outcome = await waiter.value
+
+        #expect(outcome == expected)
+        #expect(ticket.isFinished)
+    }
+
+    @Test
+    func zmodemTransferTicketFailsWhenRemoteHandshakeNeverStarts() async {
+        let ticket = TerminalZModemTransferTicket(
+            direction: .downloadFromRemote,
+            handshakeTimeout: 0.05
+        )
+
+        let outcome = await ticket.waitForCompletion()
+
+        #expect(!outcome.succeeded)
+        #expect(outcome.transferredByteCount == 0)
+        #expect(outcome.message.contains("no completed transfer was confirmed"))
+    }
+
+    @Test
+    func zmodemTransferTicketCancellationDoesNotLeaveToolWaiting() async {
+        let ticket = TerminalZModemTransferTicket(
+            direction: .downloadFromRemote,
+            handshakeTimeout: 5
+        )
+        #expect(ticket.markStarted())
+        let waiter = Task {
+            await ticket.waitForCompletion()
+        }
+
+        waiter.cancel()
+        let outcome = await waiter.value
+
+        #expect(!outcome.succeeded)
+        #expect(outcome.message.contains("was cancelled"))
+        #expect(!ticket.isFinished)
+    }
+
+    @Test
     func zmodemLocalProcessDrainsOutputBeforeFinishingAndRejectsLateRemoteBytes() throws {
         let tempDir = try makeTemporaryDirectory()
         defer { try? FileManager.default.removeItem(at: tempDir) }

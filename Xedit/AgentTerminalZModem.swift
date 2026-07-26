@@ -12,7 +12,7 @@ import AppKit
 import Foundation
 import SwiftTerm
 
-enum TerminalZModemDirection {
+enum TerminalZModemDirection: Equatable, Sendable {
     case uploadToRemote
     case downloadFromRemote
 }
@@ -28,6 +28,173 @@ enum TerminalZModemPathSelection: Equatable {
         default:
             return false
         }
+    }
+
+    var direction: TerminalZModemDirection {
+        switch self {
+        case .upload:
+            return .uploadToRemote
+        case .download:
+            return .downloadFromRemote
+        }
+    }
+}
+
+struct TerminalZModemTransferOutcome: Equatable, Sendable {
+    let direction: TerminalZModemDirection
+    let succeeded: Bool
+    let message: String
+    let transferredByteCount: Int
+}
+
+/// Completion gate shared by the terminal bridge and `terminal_send_command`.
+///
+/// Creating the destination file is not completion: local `rz` opens it near
+/// the beginning of a download and keeps appending while the protocol is in
+/// flight. The tool therefore waits on this ticket, which is completed only
+/// after the local lrzsz process terminates and its final stdout is drained.
+final class TerminalZModemTransferTicket: @unchecked Sendable {
+    private enum Phase {
+        case awaitingHandshake
+        case transferring
+        case finished(TerminalZModemTransferOutcome)
+    }
+
+    let direction: TerminalZModemDirection
+
+    private let lock = NSLock()
+    private let handshakeTimeout: TimeInterval
+    private var phase: Phase = .awaitingHandshake
+    private var waiters: [UUID: CheckedContinuation<TerminalZModemTransferOutcome, Never>] = [:]
+    private var cancelledWaiterIDs: Set<UUID> = []
+
+    init(direction: TerminalZModemDirection, handshakeTimeout: TimeInterval = 30) {
+        self.direction = direction
+        self.handshakeTimeout = handshakeTimeout
+        guard handshakeTimeout > 0 else { return }
+        DispatchQueue.global(qos: .utility).asyncAfter(deadline: .now() + handshakeTimeout) { [weak self] in
+            self?.finishIfStillAwaitingHandshake()
+        }
+    }
+
+    @discardableResult
+    func markStarted() -> Bool {
+        lock.lock()
+        defer { lock.unlock() }
+        guard case .awaitingHandshake = phase else { return false }
+        phase = .transferring
+        return true
+    }
+
+    func finish(_ outcome: TerminalZModemTransferOutcome) {
+        let pendingWaiters: [CheckedContinuation<TerminalZModemTransferOutcome, Never>]
+        lock.lock()
+        guard !isFinishedLocked else {
+            lock.unlock()
+            return
+        }
+        phase = .finished(outcome)
+        pendingWaiters = Array(waiters.values)
+        waiters.removeAll(keepingCapacity: false)
+        cancelledWaiterIDs.removeAll(keepingCapacity: false)
+        lock.unlock()
+        pendingWaiters.forEach { $0.resume(returning: outcome) }
+    }
+
+    func waitForCompletion() async -> TerminalZModemTransferOutcome {
+        let waiterID = UUID()
+        return await withTaskCancellationHandler {
+            await withCheckedContinuation { continuation in
+                registerWaiter(id: waiterID, continuation: continuation)
+            }
+        } onCancel: {
+            cancelWaiter(id: waiterID)
+        }
+    }
+
+    var isFinished: Bool {
+        lock.lock()
+        defer { lock.unlock() }
+        return isFinishedLocked
+    }
+
+    private var isFinishedLocked: Bool {
+        if case .finished = phase {
+            return true
+        }
+        return false
+    }
+
+    private func finishIfStillAwaitingHandshake() {
+        let outcome = TerminalZModemTransferOutcome(
+            direction: direction,
+            succeeded: false,
+            message: "WillDeep ZMODEM did not receive a matching remote handshake within \(Self.timeoutText(handshakeTimeout)); no completed transfer was confirmed.",
+            transferredByteCount: 0
+        )
+        let pendingWaiters: [CheckedContinuation<TerminalZModemTransferOutcome, Never>]
+        lock.lock()
+        guard case .awaitingHandshake = phase else {
+            lock.unlock()
+            return
+        }
+        phase = .finished(outcome)
+        pendingWaiters = Array(waiters.values)
+        waiters.removeAll(keepingCapacity: false)
+        cancelledWaiterIDs.removeAll(keepingCapacity: false)
+        lock.unlock()
+        pendingWaiters.forEach { $0.resume(returning: outcome) }
+    }
+
+    private func registerWaiter(
+        id: UUID,
+        continuation: CheckedContinuation<TerminalZModemTransferOutcome, Never>
+    ) {
+        let immediateOutcome: TerminalZModemTransferOutcome?
+        lock.lock()
+        if case .finished(let outcome) = phase {
+            immediateOutcome = outcome
+        } else if cancelledWaiterIDs.remove(id) != nil {
+            immediateOutcome = cancellationOutcome
+        } else {
+            waiters[id] = continuation
+            immediateOutcome = nil
+        }
+        lock.unlock()
+        if let immediateOutcome {
+            continuation.resume(returning: immediateOutcome)
+        }
+    }
+
+    private func cancelWaiter(id: UUID) {
+        let waiter: CheckedContinuation<TerminalZModemTransferOutcome, Never>?
+        lock.lock()
+        if isFinishedLocked {
+            waiter = nil
+        } else if let registered = waiters.removeValue(forKey: id) {
+            waiter = registered
+        } else {
+            cancelledWaiterIDs.insert(id)
+            waiter = nil
+        }
+        lock.unlock()
+        waiter?.resume(returning: cancellationOutcome)
+    }
+
+    private var cancellationOutcome: TerminalZModemTransferOutcome {
+        TerminalZModemTransferOutcome(
+            direction: direction,
+            succeeded: false,
+            message: "Waiting for WillDeep ZMODEM completion was cancelled; the transfer was not confirmed complete.",
+            transferredByteCount: 0
+        )
+    }
+
+    private static func timeoutText(_ timeout: TimeInterval) -> String {
+        if timeout >= 1 {
+            return "\(Int(timeout)) seconds"
+        }
+        return "\(Int((timeout * 1_000).rounded())) milliseconds"
     }
 }
 
@@ -231,6 +398,8 @@ final class TerminalZModemBridge {
     private var state: State = .idle
     private var bufferedWhileStarting: [UInt8] = []
     private var preparedSelection = TerminalZModemPreparedSelection()
+    private var preparedTicket: TerminalZModemTransferTicket?
+    private var activeTicket: TerminalZModemTransferTicket?
     private var progressTimer: DispatchSourceTimer?
     private var sessionDirection: TerminalZModemDirection = .downloadFromRemote
     private var sessionStartedAt = Date()
@@ -247,8 +416,25 @@ final class TerminalZModemBridge {
         state != .idle || detector.isHoldingProtocolTail
     }
 
-    func preparePathSelection(_ selection: TerminalZModemPathSelection?) {
+    func preparePathSelection(
+        _ selection: TerminalZModemPathSelection?
+    ) -> TerminalZModemTransferTicket? {
+        if let previousTicket = preparedTicket {
+            previousTicket.finish(
+                TerminalZModemTransferOutcome(
+                    direction: previousTicket.direction,
+                    succeeded: false,
+                    message: "WillDeep ZMODEM path selection was replaced before its transfer started.",
+                    transferredByteCount: 0
+                )
+            )
+        }
         preparedSelection.prepare(selection)
+        let ticket = selection.map {
+            TerminalZModemTransferTicket(direction: $0.direction)
+        }
+        preparedTicket = ticket
+        return ticket
     }
 
     /// Route one PTY chunk. Returns the bytes the terminal should render,
@@ -306,11 +492,38 @@ final class TerminalZModemBridge {
     private func startSession(_ start: TerminalZModemStart) {
         guard let terminalView else { return }
         let selectedPath = preparedSelection.consume(for: start.direction)
+        let ticket = preparedTicket
+        preparedTicket = nil
+        if let ticket, selectedPath == nil {
+            let message = "WillDeep ZMODEM received a \(Self.directionLabel(start.direction)) handshake that did not match the prepared local path."
+            ticket.finish(
+                TerminalZModemTransferOutcome(
+                    direction: ticket.direction,
+                    succeeded: false,
+                    message: message,
+                    transferredByteCount: 0
+                )
+            )
+            terminalView.cancelRemoteZModem(message: message)
+            return
+        }
         guard let command = Self.localCommand(for: start.direction) else {
-            terminalView.cancelRemoteZModem(message: Self.localInstallHint(for: start.direction))
+            let message = Self.localInstallHint(for: start.direction)
+            ticket?.finish(
+                TerminalZModemTransferOutcome(
+                    direction: start.direction,
+                    succeeded: false,
+                    message: message,
+                    transferredByteCount: 0
+                )
+            )
+            terminalView.cancelRemoteZModem(message: message)
             return
         }
 
+        sessionDirection = start.direction
+        activeTicket = ticket
+        _ = ticket?.markStarted()
         state = .starting
         bufferedWhileStarting.removeAll(keepingCapacity: false)
         terminalView.zmodemStateDidChange(active: true)
@@ -359,6 +572,7 @@ final class TerminalZModemBridge {
     private func abandonStart(message: String) {
         state = .idle
         bufferedWhileStarting.removeAll(keepingCapacity: false)
+        finishActiveTicket(succeeded: false, message: message, transferredByteCount: 0)
         terminalView?.zmodemStateDidChange(active: isActive)
         terminalView?.cancelRemoteZModem(message: message)
     }
@@ -388,7 +602,6 @@ final class TerminalZModemBridge {
             session = newSession
             sessionToken = token
             state = .transferring
-            sessionDirection = start.direction
             sessionStartedAt = Date()
             newSession.start()
             let initialBytes = start.protocolBytes + bufferedWhileStarting
@@ -435,7 +648,29 @@ final class TerminalZModemBridge {
             }
         }
         terminalView?.displayZModemStatus(message)
+        let succeeded = finished.endReason == nil && (exitCode ?? 0) == 0
+        finishActiveTicket(
+            succeeded: succeeded,
+            message: message,
+            transferredByteCount: transferred
+        )
         terminalView?.zmodemStateDidChange(active: isActive)
+    }
+
+    private func finishActiveTicket(
+        succeeded: Bool,
+        message: String,
+        transferredByteCount: Int
+    ) {
+        activeTicket?.finish(
+            TerminalZModemTransferOutcome(
+                direction: sessionDirection,
+                succeeded: succeeded,
+                message: message,
+                transferredByteCount: transferredByteCount
+            )
+        )
+        activeTicket = nil
     }
 
     private func startProgressTimer() {
@@ -482,6 +717,15 @@ final class TerminalZModemBridge {
             command = "rz"
         }
         return "WillDeep ZMODEM needs local `\(command)`. Install lrzsz on this Mac, for example: `brew install lrzsz`."
+    }
+
+    private static func directionLabel(_ direction: TerminalZModemDirection) -> String {
+        switch direction {
+        case .uploadToRemote:
+            return "upload"
+        case .downloadFromRemote:
+            return "download"
+        }
     }
 
     private static func findExecutable(named name: String) -> String? {

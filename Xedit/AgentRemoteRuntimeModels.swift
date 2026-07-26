@@ -85,6 +85,10 @@ struct RuntimeCapabilities: Codable, Equatable {
     var npmHTTPSProxy: String?
     var pipProxy: String?
     var proxyEnvironment: [String: String]
+    /// Coding-agent executables discovered during the last runtime probe.
+    /// Keys use `AgentExecutionAgent.rawValue`; values are absolute command
+    /// paths reported by `command -v`.
+    var agentCLIPaths: [String: String]
 
     static let empty = RuntimeCapabilities(
         hasGit: false,
@@ -105,14 +109,15 @@ struct RuntimeCapabilities: Codable, Equatable {
         npmProxy: nil,
         npmHTTPSProxy: nil,
         pipProxy: nil,
-        proxyEnvironment: [:]
+        proxyEnvironment: [:],
+        agentCLIPaths: [:]
     )
 
     enum CodingKeys: String, CodingKey {
         case hasGit, hasRipgrep, shellPath
         case nodeVersion, npmVersion, yarnVersion, pythonVersion, pipVersion
         case rubyVersion, goVersion, javaVersion, ghVersion, ghAuthStatus
-        case npmRegistry, yarnRegistry, npmProxy, npmHTTPSProxy, pipProxy, proxyEnvironment
+        case npmRegistry, yarnRegistry, npmProxy, npmHTTPSProxy, pipProxy, proxyEnvironment, agentCLIPaths
     }
 
     init(
@@ -134,7 +139,8 @@ struct RuntimeCapabilities: Codable, Equatable {
         npmProxy: String? = nil,
         npmHTTPSProxy: String? = nil,
         pipProxy: String? = nil,
-        proxyEnvironment: [String: String] = [:]
+        proxyEnvironment: [String: String] = [:],
+        agentCLIPaths: [String: String] = [:]
     ) {
         self.hasGit = hasGit
         self.hasRipgrep = hasRipgrep
@@ -155,6 +161,7 @@ struct RuntimeCapabilities: Codable, Equatable {
         self.npmHTTPSProxy = npmHTTPSProxy
         self.pipProxy = pipProxy
         self.proxyEnvironment = proxyEnvironment
+        self.agentCLIPaths = agentCLIPaths
     }
 
     init(from decoder: Decoder) throws {
@@ -178,6 +185,17 @@ struct RuntimeCapabilities: Codable, Equatable {
         self.npmHTTPSProxy = try c.decodeIfPresent(String.self, forKey: .npmHTTPSProxy)
         self.pipProxy = try c.decodeIfPresent(String.self, forKey: .pipProxy)
         self.proxyEnvironment = try c.decodeIfPresent([String: String].self, forKey: .proxyEnvironment) ?? [:]
+        self.agentCLIPaths = try c.decodeIfPresent([String: String].self, forKey: .agentCLIPaths) ?? [:]
+    }
+
+    var availableExecutionAgents: Set<AgentExecutionAgent> {
+        var result: Set<AgentExecutionAgent> = [.willDeep]
+        for key in agentCLIPaths.keys {
+            if let agent = AgentExecutionAgent(rawValue: key) {
+                result.insert(agent)
+            }
+        }
+        return result
     }
 }
 

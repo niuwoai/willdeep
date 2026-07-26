@@ -123,6 +123,19 @@ enum AgentSidebarSessionPlacement {
     }
 }
 
+enum AgentSidebarSessionTrailingLayout {
+    /// A pinned row only needs enough idle width for its compact pin glyph.
+    /// The full action lane is restored when the pointer enters the row.
+    private static let pinnedIndicatorWidth: CGFloat = 16
+
+    static func reservedActionsWidth(isHovered: Bool, isPinned: Bool) -> CGFloat {
+        if isHovered {
+            return AgentDesign.sidebarSessionTrailingActionsWidth
+        }
+        return isPinned ? pinnedIndicatorWidth : 0
+    }
+}
+
 struct AgentSessionsSidebar: View {
     @EnvironmentObject var appState: AppState
     @Environment(\.openWindow) private var openWindow
@@ -175,17 +188,23 @@ struct AgentSessionsSidebar: View {
                 LazyVStack(alignment: .leading, spacing: 0) {
                     primaryActions
                     Spacer().frame(height: 18)
-                    pinnedSessionsSection
-                    workspacesHeader
-                    ForEach(groupedSessions) { group in
-                        workspaceGroup(group)
-                    }
-                    if appState.agentSessions.isEmpty {
-                        Text(L10n.Sidebar.emptyState)
-                            .font(AgentDesign.secondaryFont)
-                            .foregroundStyle(.secondary)
-                            .padding(.horizontal, 14)
-                            .padding(.top, 16)
+                    if appState.agentPrimaryDestination == .dispatchBoard {
+                        AgentDispatchSidebarSections(
+                            coordinator: appState.agentDispatchCoordinator
+                        )
+                    } else {
+                        pinnedSessionsSection
+                        workspacesHeader
+                        ForEach(groupedSessions) { group in
+                            workspaceGroup(group)
+                        }
+                        if appState.agentSessions.isEmpty {
+                            Text(L10n.Sidebar.emptyState)
+                                .font(AgentDesign.secondaryFont)
+                                .foregroundStyle(.secondary)
+                                .padding(.horizontal, 14)
+                                .padding(.top, 16)
+                        }
                     }
                 }
                 // 30pt 交通灯安全区继续保留；顶部只补 3pt 呼吸感，
@@ -295,6 +314,17 @@ struct AgentSessionsSidebar: View {
                 appState.agentPrimaryDestination = .scheduledTasks
                 appState.agentSidePanelKind = nil
                 appState.agentSidePanelRequest = nil
+            }
+            SidebarActionRow(
+                icon: "point.3.connected.trianglepath.dotted",
+                title: L10n.Dispatch.navigationTitle,
+                shortcut: nil,
+                isSelected: appState.agentPrimaryDestination == .dispatchBoard
+            ) {
+                appState.agentPrimaryDestination = .dispatchBoard
+                appState.agentSidePanelKind = nil
+                appState.agentSidePanelRequest = nil
+                appState.agentDispatchCoordinator.synchronize(with: appState.agentSessions)
             }
             // 专家圆桌:切到嵌入的 .roundtable 目的地(和「已安排」同级,不切主
             // Agent 会话流);嵌入页内还提供「弹出到独立窗口」入口。
@@ -740,9 +770,9 @@ struct AgentSessionsSidebar: View {
     /// Trailing icon cluster on each session row — pin & archive
     /// buttons that fade in on hover, plus a persistent `pin.fill`
     /// badge when the row is pinned so users can see the state at a
-    /// glance even without hovering. The cluster always reserves its
-    /// hover width so rows with plan/goal badges do not reflow as the
-    /// pointer enters and exits.
+    /// glance even without hovering. Idle unpinned rows release this lane
+    /// back to the title; hovering restores the full controls, while a
+    /// pinned row reserves only the compact pin glyph.
     @ViewBuilder
     private func sessionRowTrailingActions(session: AgentSession, isHovered: Bool) -> some View {
         HStack(spacing: 4) {
@@ -781,7 +811,14 @@ struct AgentSessionsSidebar: View {
                     .rotationEffect(.degrees(45))
             }
         }
-        .frame(width: AgentDesign.sidebarSessionTrailingActionsWidth, alignment: .trailing)
+        .frame(
+            width: AgentSidebarSessionTrailingLayout.reservedActionsWidth(
+                isHovered: isHovered,
+                isPinned: session.isPinned
+            ),
+            alignment: .trailing
+        )
+        .clipped()
     }
 
     private var groupedSessions: [SidebarWorkspaceGroup] {

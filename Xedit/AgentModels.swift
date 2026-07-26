@@ -815,7 +815,7 @@ nonisolated enum AgentExpert: String, Codable, CaseIterable, Identifiable, Hasha
 /// choose the LLM API used by WillDeep itself, while this chooses whether
 /// the submitted task is handled by WillDeep or delegated to an external
 /// coding agent CLI through the existing tool/approval boundary.
-nonisolated enum AgentExecutionAgent: String, Codable, CaseIterable, Identifiable {
+nonisolated enum AgentExecutionAgent: String, Codable, CaseIterable, Identifiable, Hashable {
     case willDeep
     case claudeCode
     case codexCLI

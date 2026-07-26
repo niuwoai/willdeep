@@ -47,6 +47,10 @@ func Probe(ctx context.Context, root WorkspaceRoot) ProbeReport {
 	report.Tools["go"] = firstCommand(ctx, "go", "version")
 	report.Tools["java"] = firstCommand(ctx, "java", "-version")
 	report.Tools["gh"] = firstCommand(ctx, "gh", "--version")
+	report.Tools["claude"] = commandPath("claude")
+	report.Tools["codex"] = commandPath("codex")
+	report.Tools["cursor-agent"] = firstAvailablePath("cursor-agent", "cursor")
+	report.Tools["cline"] = commandPath("cline")
 
 	report.Registries["npm"] = configValue(ctx, "npm", "config", "get", "registry")
 	report.Registries["yarn"] = firstAvailable(ctx, [][]string{{"yarn", "config", "get", "npmRegistryServer"}, {"yarn", "config", "get", "registry"}})
@@ -121,6 +125,15 @@ func commandPath(name string) string {
 		return ""
 	}
 	return path
+}
+
+func firstAvailablePath(names ...string) string {
+	for _, name := range names {
+		if path := commandPath(name); path != "" {
+			return path
+		}
+	}
+	return ""
 }
 
 func configValue(ctx context.Context, name string, args ...string) string {

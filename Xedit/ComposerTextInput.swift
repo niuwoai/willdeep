@@ -18,6 +18,39 @@
 import AppKit
 import SwiftUI
 
+/// TextKit returns one union bounding box for a glyph range that wraps across
+/// lines. A secret placeholder can wrap after `${` or one of the alias
+/// separators, so drawing that union as one rounded rectangle paints unrelated
+/// prose between the first and last fragment. Keep one precise rect per visual
+/// line instead.
+enum ComposerSecretTagLayout {
+    static func highlightRects(
+        forCharacterRange characterRange: NSRange,
+        layoutManager: NSLayoutManager,
+        textContainer: NSTextContainer
+    ) -> [NSRect] {
+        let glyphRange = layoutManager.glyphRange(
+            forCharacterRange: characterRange,
+            actualCharacterRange: nil
+        )
+        guard glyphRange.length > 0 else { return [] }
+
+        var rects: [NSRect] = []
+        layoutManager.enumerateLineFragments(forGlyphRange: glyphRange) {
+            _, _, _, lineGlyphRange, _ in
+            let fragmentGlyphRange = NSIntersectionRange(glyphRange, lineGlyphRange)
+            guard fragmentGlyphRange.length > 0 else { return }
+            let rect = layoutManager.boundingRect(
+                forGlyphRange: fragmentGlyphRange,
+                in: textContainer
+            )
+            guard rect.width > 0, rect.height > 0 else { return }
+            rects.append(rect)
+        }
+        return rects
+    }
+}
+
 struct ComposerTextEditor: NSViewRepresentable {
     @Binding var text: String
     let placeholder: String
@@ -693,21 +726,27 @@ fileprivate final class ComposerNSTextView: NSTextView {
               let textContainer else { return }
         let origin = textContainerOrigin
         for match in AgentSecretStore.placeholderMatches(in: string) {
-            let glyphRange = layoutManager.glyphRange(
+            let rects = ComposerSecretTagLayout.highlightRects(
                 forCharacterRange: match.range,
-                actualCharacterRange: nil
+                layoutManager: layoutManager,
+                textContainer: textContainer
             )
-            var rect = layoutManager.boundingRect(forGlyphRange: glyphRange, in: textContainer)
-            rect.origin.x += origin.x
-            rect.origin.y += origin.y
-            rect = rect.insetBy(dx: -3, dy: -1)
-            guard rect.intersects(dirtyRect) else { continue }
-            NSColor.controlAccentColor.withAlphaComponent(0.13).setFill()
-            NSBezierPath(roundedRect: rect, xRadius: 5, yRadius: 5).fill()
-            NSColor.controlAccentColor.withAlphaComponent(0.24).setStroke()
-            let border = NSBezierPath(roundedRect: rect.insetBy(dx: 0.5, dy: 0.5), xRadius: 5, yRadius: 5)
-            border.lineWidth = 1
-            border.stroke()
+            for var rect in rects {
+                rect.origin.x += origin.x
+                rect.origin.y += origin.y
+                rect = rect.insetBy(dx: -3, dy: -1)
+                guard rect.intersects(dirtyRect) else { continue }
+                NSColor.controlAccentColor.withAlphaComponent(0.13).setFill()
+                NSBezierPath(roundedRect: rect, xRadius: 5, yRadius: 5).fill()
+                NSColor.controlAccentColor.withAlphaComponent(0.24).setStroke()
+                let border = NSBezierPath(
+                    roundedRect: rect.insetBy(dx: 0.5, dy: 0.5),
+                    xRadius: 5,
+                    yRadius: 5
+                )
+                border.lineWidth = 1
+                border.stroke()
+            }
         }
     }
 
