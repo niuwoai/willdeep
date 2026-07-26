@@ -11,15 +11,20 @@ struct AgentDispatchInspectorView: View {
     let localExecutors: Set<AgentExecutionAgent>
     let runtimeDescriptors: [RuntimeDescriptor]
     let onExecutorChoice: (AgentDispatchExecutorChoice) -> Void
-    let onTargetChoice: (AgentDispatchTargetChoice) -> Void
+    let onWorkspaceBindingChoice: (String?) -> Void
     let onLaunch: () -> Void
     let onOpenConversation: () -> Void
 
+    private var effectiveWorkspaceBinding: AgentDispatchWorkspaceBinding? {
+        goal.resolvedWorkspaceBinding(for: task)
+    }
+
+    private var selectedWorkspaceBinding: AgentDispatchWorkspaceBinding? {
+        goal.workspaceBinding(id: task.workspaceBindingID)
+    }
+
     private var effectiveTarget: AgentDispatchTargetChoice? {
-        if let resolved = task.resolvedTarget {
-            return goal.workspaceLocation(for: resolved) == nil ? nil : resolved
-        }
-        return goal.resolvedTargetChoice(taskChoice: task.targetChoice)
+        effectiveWorkspaceBinding?.targetChoice
     }
 
     private var availableExecutors: Set<AgentExecutionAgent> {
@@ -132,24 +137,41 @@ struct AgentDispatchInspectorView: View {
         VStack(alignment: .leading, spacing: 9) {
             fieldLabel(L10n.Dispatch.environment)
             Menu {
-                targetButton(.automatic)
-                ForEach(Array(goal.availableTargetChoices.enumerated()), id: \.offset) { _, target in
-                    targetButton(target)
+                Button {
+                    onWorkspaceBindingChoice(nil)
+                } label: {
+                    Label(
+                        L10n.Dispatch.automatic,
+                        systemImage: task.workspaceBindingID == nil ? "checkmark" : "circle"
+                    )
+                }
+                ForEach(goal.effectiveWorkspaceBindings) { binding in
+                    Button {
+                        onWorkspaceBindingChoice(binding.id)
+                    } label: {
+                        Label(
+                            workspaceBindingLabel(binding),
+                            systemImage: task.workspaceBindingID == binding.id
+                                ? "checkmark"
+                                : binding.targetChoice.isRemoteTarget
+                                    ? "network"
+                                    : "desktopcomputer"
+                        )
+                    }
                 }
             } label: {
                 pickerSurface(
                     symbol: effectiveTarget?.isRemoteTarget == true
                         ? "network"
                         : effectiveTarget == nil ? "folder.badge.questionmark" : "desktopcomputer",
-                    text: AgentDispatchPresentation.targetChoiceName(
-                        task.targetChoice,
-                        runtimes: runtimeDescriptors
-                    ),
-                    locked: task.targetChoice != .automatic
+                    text: selectedWorkspaceBinding
+                        .map(workspaceBindingLabel)
+                        ?? L10n.Dispatch.automatic,
+                    locked: task.workspaceBindingID != nil
                 )
             }
             .menuStyle(.borderlessButton)
-            .disabled(goal.workspaceLocation == nil)
+            .disabled(!goal.isWorkspaceBound)
             if case .remote(let id)? = effectiveTarget,
                let runtime = runtimeDescriptors.first(where: { $0.id == id }) {
                 Label(
@@ -158,7 +180,7 @@ struct AgentDispatchInspectorView: View {
                 )
                 .font(.system(size: 10))
                 .foregroundStyle(runtime.lastProbeAt == nil ? .secondary : Color.green)
-                Text(goal.workspaceLocation(for: .remote(id))?.path ?? runtime.defaultWorkspacePath)
+                Text(effectiveWorkspaceBinding?.location.path ?? runtime.defaultWorkspacePath)
                     .font(.system(size: 10, design: .monospaced))
                     .foregroundStyle(.secondary)
                     .textSelection(.enabled)
@@ -238,7 +260,7 @@ struct AgentDispatchInspectorView: View {
             .buttonStyle(.borderedProminent)
             .disabled(
                 goal.isPaused
-                    || goal.workspaceLocation == nil
+                    || !goal.isWorkspaceBound
                     || effectiveTarget == nil
                     || task.state == .blocked
                     || task.state == .running
@@ -256,17 +278,6 @@ struct AgentDispatchInspectorView: View {
         Text(text)
             .font(.system(size: 11, weight: .semibold))
             .foregroundStyle(.secondary)
-    }
-
-    private func targetButton(_ target: AgentDispatchTargetChoice) -> some View {
-        Button {
-            onTargetChoice(target)
-        } label: {
-            Label(
-                AgentDispatchPresentation.targetChoiceName(target, runtimes: runtimeDescriptors),
-                systemImage: target == task.targetChoice ? "checkmark" : target.isRemoteTarget ? "network" : "desktopcomputer"
-            )
-        }
     }
 
     private func pickerSurface(symbol: String, text: String, locked: Bool) -> some View {
@@ -315,11 +326,23 @@ struct AgentDispatchInspectorView: View {
     }
 
     private var workspaceDisplayValue: String {
-        guard let effectiveTarget else {
+        guard let effectiveWorkspaceBinding else {
             return L10n.Dispatch.workspaceRequiredShort
         }
-        return goal.workspaceLocation(for: effectiveTarget)?.path
-            ?? L10n.Dispatch.workspaceRequiredShort
+        return effectiveWorkspaceBinding.location.path
+    }
+
+    private func workspaceBindingLabel(
+        _ binding: AgentDispatchWorkspaceBinding
+    ) -> String {
+        switch binding.location {
+        case .local(let path):
+            return "\(L10n.Dispatch.localEnvironment) · \(path)"
+        case .remote(let runtimeID, let path):
+            let runtimeName = runtimeDescriptors.first { $0.id == runtimeID }?.displayName
+                ?? L10n.Dispatch.environment
+            return "\(runtimeName) · \(path)"
+        }
     }
 
     private var taskStateSymbol: String {

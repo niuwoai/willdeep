@@ -123,7 +123,7 @@ struct AgentDispatchSidebarSections: View {
                         .lineLimit(1)
                     Text(goalRowSubtitle(goal))
                         .font(.system(size: 10))
-                        .foregroundStyle(goal.workspaceLocation == nil ? Color.orange : .secondary)
+                        .foregroundStyle(goal.isWorkspaceBound ? .secondary : Color.orange)
                 }
                 Spacer(minLength: 4)
                 progressRing(goal.progressFraction, isPaused: goal.isPaused)
@@ -141,13 +141,13 @@ struct AgentDispatchSidebarSections: View {
     }
 
     private func goalRowSubtitle(_ goal: AgentDispatchGoal) -> String {
-        guard let workspace = goal.workspaceLocation else {
+        guard goal.isWorkspaceBound, let project = goal.logicalProject else {
             return L10n.Dispatch.workspaceRequiredShort
         }
         let progress = goal.isPaused
             ? L10n.Dispatch.paused
             : "\(Int(goal.progressFraction * 100))%"
-        return "\(workspace.displayName) · \(progress)"
+        return "\(project.displayName) · \(progress)"
     }
 
     private func environmentRow(

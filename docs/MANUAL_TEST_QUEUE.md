@@ -14,6 +14,16 @@ CI 只能保编译/单测过。一系列改 UI、改窗口、改 SwiftUI 状态�
 
 ---
 
+## 1.209.0-rc5 — Goal 固定逻辑项目与 checkout 映射
+
+- ⏳ 从 `/Users/rocky/Sites/Xedit` 会话创建 Goal：调度台顶部应明确显示 `Xedit · /Users/rocky/Sites/Xedit`，切换执行环境后这行仍不变化。
+- ⏳ 打开旧的无工作区 Goal：侧栏显示“未绑定工作区”，顶部按钮显示“请先选择工作区”且不可启动；绑定一次后恢复可执行。
+- ⏳ 为 Xedit Goal 选择另一个本机 Git 仓库：应提示该目录属于不同项目并拒绝；选择 Xedit 的另一个 Git worktree 应允许加入 checkout 列表。
+- ⏳ 添加 SSH checkout：点击 SSH runtime 后必须出现远端路径输入框；取消或留空不得建立映射，填写 Xedit 在远端的目录后 Task 可选择该 checkout。
+- ⏳ 两个 Task 分别选择 Xedit 主工作区和另一个 worktree/SSH checkout：两者应在各自精确路径启动，Goal 顶部项目仍固定为 Xedit。
+
+---
+
 ## 1.209.0-rc4 — 新聊天空态统计仪表盘缓存
 
 - ⏳ 在历史会话较多（≥50 个）的库上点「新聊天」（⌘N / 侧边栏按钮）：空态统计仪表盘应立即出现，无可感知的空白等待；连续多次新建/切换不应越来越卡。

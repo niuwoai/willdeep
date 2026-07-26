@@ -1,6 +1,6 @@
 # WillDeep Product Overview
 
-> Last updated: 2026-07-26 | Current version: v1.209.0-rc4
+> Last updated: 2026-07-26 | Current version: v1.209.0-rc5
 
 ## Positioning
 
@@ -11,6 +11,8 @@ Official product domain: [willdeep.com](https://willdeep.com).
 WillDeep is configured for non-App-Store distribution without App Sandbox so it can access local project files with fewer permission interruptions.
 
 ## 架构概览
+
+- **Goal 固定逻辑项目边界（1.209.0-rc5）** —— Goal 不再只是持有可替换路径，而是持久化一个固定逻辑项目；创建时必须选择或继承工作区，旧的无工作区记录保持“未绑定”直至人工绑定一次。顶部明确展示“项目名 · 主项目路径”，本机 checkout 用 Git common directory 验证同仓库，SSH 必须显式填写该项目远端目录；Task 可以选择同项目的不同 worktree/SSH checkout，但失效或跨项目映射会在启动前被拒绝。
 
 - **新聊天空态统计缓存（1.209.0-rc4）** —— 空态统计仪表盘将 overview、模型与能力用量、热力图及任务指标统一构建为一次聚合结果，并由 AppState 按快照修订号与本地日期记忆化；用量快照改为单点有序插入，避免新建聊天时在主线程反复遍历、排序全部历史会话。
 

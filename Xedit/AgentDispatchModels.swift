@@ -65,15 +65,43 @@ nonisolated enum AgentDispatchTargetChoice: Codable, Equatable, Hashable {
     case remote(UUID)
 }
 
+/// Stable identity for the logical project owned by a Goal.
+///
+/// Execution checkouts are deliberately kept outside this value: a Task may
+/// run in another Git worktree or on SSH, but those paths are only mappings of
+/// this same project and can never replace the Goal's primary project.
+nonisolated struct AgentDispatchLogicalProject: Codable, Equatable, Identifiable {
+    var id: UUID
+    var displayName: String
+    var primaryWorkspacePath: String
+    var localRepositoryIdentity: String?
+
+    init(
+        id: UUID = UUID(),
+        displayName: String,
+        primaryWorkspacePath: String,
+        localRepositoryIdentity: String? = nil
+    ) {
+        self.id = id
+        self.displayName = displayName
+        self.primaryWorkspacePath = primaryWorkspacePath
+        self.localRepositoryIdentity = localRepositoryIdentity
+    }
+}
+
 nonisolated struct AgentDispatchWorkspaceBinding: Codable, Equatable, Identifiable {
     var location: WorkspaceLocation
+    /// Nil only for records written before logical-project ownership existed.
+    /// Such mappings are ignored until synchronization migrates a previously
+    /// bound Goal or the user explicitly binds an unbound legacy Goal.
+    var projectID: UUID? = nil
 
     var id: String {
         switch location {
-        case .local:
-            return "local"
-        case .remote(let runtimeID, _):
-            return "remote:\(runtimeID.uuidString)"
+        case .local(let path):
+            return "local:\(path)"
+        case .remote(let runtimeID, let path):
+            return "remote:\(runtimeID.uuidString):\(path)"
         }
     }
 
@@ -111,6 +139,9 @@ nonisolated struct AgentDispatchTask: Codable, Equatable, Identifiable {
     var resolvedExecutor: AgentExecutionAgent?
     var resolvedTarget: AgentDispatchTargetChoice?
     var runtimeSessionID: UUID?
+    /// Optional checkout override. The referenced binding must belong to the
+    /// Goal's logical project; otherwise launch validation rejects it.
+    var workspaceBindingID: String?
     var branchName: String
     var acceptanceCriteria: [String]
     var createdAt: Date
@@ -126,6 +157,7 @@ nonisolated struct AgentDispatchTask: Codable, Equatable, Identifiable {
         resolvedExecutor: AgentExecutionAgent? = nil,
         resolvedTarget: AgentDispatchTargetChoice? = nil,
         runtimeSessionID: UUID? = nil,
+        workspaceBindingID: String? = nil,
         branchName: String = "",
         acceptanceCriteria: [String] = [],
         createdAt: Date = Date(),
@@ -140,6 +172,7 @@ nonisolated struct AgentDispatchTask: Codable, Equatable, Identifiable {
         self.resolvedExecutor = resolvedExecutor
         self.resolvedTarget = resolvedTarget
         self.runtimeSessionID = runtimeSessionID
+        self.workspaceBindingID = workspaceBindingID
         self.branchName = branchName
         self.acceptanceCriteria = acceptanceCriteria
         self.createdAt = createdAt
@@ -187,6 +220,8 @@ nonisolated struct AgentDispatchGoal: Codable, Equatable, Identifiable {
     var sessionID: UUID
     var title: String
     var statement: String
+    /// Nil means the Goal is a legacy unbound record and cannot execute.
+    var logicalProject: AgentDispatchLogicalProject? = nil
     var workspaceLocation: WorkspaceLocation? = nil
     var workspaceBindings: [AgentDispatchWorkspaceBinding]? = nil
     var tasks: [AgentDispatchTask]
@@ -207,19 +242,61 @@ nonisolated struct AgentDispatchGoal: Codable, Equatable, Identifiable {
         tasks.filter { $0.state == .running || $0.state == .reviewing }.count
     }
 
+    var isWorkspaceBound: Bool {
+        logicalProject != nil && workspaceLocation != nil
+    }
+
+    var projectDisplayText: String? {
+        guard let logicalProject else { return nil }
+        return "\(logicalProject.displayName) · \(logicalProject.primaryWorkspacePath)"
+    }
+
     var effectiveWorkspaceBindings: [AgentDispatchWorkspaceBinding] {
+        guard let logicalProject, let workspaceLocation else { return [] }
         var result: [AgentDispatchWorkspaceBinding] = []
-        if let workspaceLocation {
-            result.append(AgentDispatchWorkspaceBinding(location: workspaceLocation))
-        }
-        for binding in workspaceBindings ?? [] where !result.contains(where: { $0.id == binding.id }) {
+        result.append(
+            AgentDispatchWorkspaceBinding(
+                location: workspaceLocation,
+                projectID: logicalProject.id
+            )
+        )
+        for binding in workspaceBindings ?? []
+        where binding.projectID == logicalProject.id
+            && !result.contains(where: { $0.id == binding.id }) {
             result.append(binding)
         }
         return result
     }
 
     var availableTargetChoices: [AgentDispatchTargetChoice] {
-        effectiveWorkspaceBindings.map(\.targetChoice)
+        var choices: [AgentDispatchTargetChoice] = []
+        for choice in effectiveWorkspaceBindings.map(\.targetChoice)
+        where !choices.contains(choice) {
+            choices.append(choice)
+        }
+        return choices
+    }
+
+    func workspaceBinding(id: String?) -> AgentDispatchWorkspaceBinding? {
+        guard let id else { return nil }
+        return effectiveWorkspaceBindings.first { $0.id == id }
+    }
+
+    func resolvedWorkspaceBinding(
+        for task: AgentDispatchTask
+    ) -> AgentDispatchWorkspaceBinding? {
+        if let selectedID = task.workspaceBindingID {
+            return workspaceBinding(id: selectedID)
+        }
+        guard let target = resolvedTargetChoice(taskChoice: task.targetChoice),
+              let location = workspaceLocation(for: target),
+              let logicalProject else {
+            return nil
+        }
+        return AgentDispatchWorkspaceBinding(
+            location: location,
+            projectID: logicalProject.id
+        )
     }
 
     func resolvedTargetChoice(
@@ -229,7 +306,7 @@ nonisolated struct AgentDispatchGoal: Codable, Equatable, Identifiable {
         if requested != .automatic {
             return workspaceLocation(for: requested) == nil ? nil : requested
         }
-        guard let workspaceLocation else { return nil }
+        guard isWorkspaceBound, let workspaceLocation else { return nil }
         return AgentDispatchWorkspaceBinding(location: workspaceLocation).targetChoice
     }
 

@@ -53,8 +53,10 @@ WillDeep 目前已能以 headless 子进程方式委派 Claude Code、Codex CLI�
 ### 3.1 MVP 已落地的边界
 
 - Goal 清单被投影为持久化的任务图；Goal 是一级对象，任务依赖、执行器策略、环境策略和最近指令可在调度台直接查看。
-- Goal 必须显式绑定一个主工作区；没有工作区的旧 Goal 只读展示为“未绑定工作区”，补绑前不能启动、发指令或进入 Goal 模式。
-- 本机与 SSH 是执行环境，不是工作区。一个 Goal 可以为同一项目显式登记多个 checkout 映射；环境选择只列出已有映射，任务运行时必须使用对应映射的精确路径。
+- Goal 持久化一个不可漂移的 `AgentDispatchLogicalProject`。创建时必须从来源会话继承工作区或先选择工作区；顶部固定显示“项目名 · 主项目路径”。没有工作区的旧 Goal 展示为“未绑定工作区”，即使来源会话后来出现目录也不会被静默补绑，必须人工绑定一次。
+- 本机与 SSH 是执行环境，不是项目。`AgentDispatchWorkspaceBinding` 只是固定逻辑项目的 checkout 映射，并携带 `projectID`；环境切换只能引用当前 Goal 的映射，不能改变项目。
+- 本机 checkout 使用 Git common directory 验证是否同仓库，因此主工作区和不同 worktree 可并存，而另一个 Git 仓库会被拒绝。SSH checkout 必须由用户明确填写该项目在远端的对应目录，禁止静默采用 runtime 默认目录。
+- Task 可以通过 `workspaceBindingID` 选择同项目的不同本机 worktree 或 SSH checkout；引用缺失、过期或不属于当前项目时启动校验直接阻塞，不回落到另一个目录。
 - 默认由确定性静态规则自动选执行器（测试/搜索优先 Codex，跨文件架构工作优先 Claude，其余回落 WillDeep）；用户可在 Goal 或单任务级强制指定，指定项不可用时明确阻塞，不静默换人。
 - 本机执行器来自 `LocalAgentCLI` 探测；SSH runtime 探测会附带 Claude Code、Codex、Cursor Agent、Cline CLI 的可执行路径，调度器据此判断远端可用执行器。
 - 普通 Goal 指令在当前步骤结束后的安全点进入下一轮；追加任务、暂停/恢复等纯调度动作立即生效；“立即中断”必须二次确认，保留已有输出后停止当前轮次并优先应用新指令。
@@ -91,6 +93,7 @@ WillDeep 目前已能以 headless 子进程方式委派 Claude Code、Codex CLI�
 2. **调度层是确定性代码，不是 LLM**：LLM 只出现在两处——Goal 拆解（主模型）与执行器选择 judge（轻量模型，可选）。状态机、槽、队列、超时、返工计数全部是普通 Swift 代码，可单测。
 3. **执行器是黑盒工人**：只关心「输入（prompt+worktree+约束）→ 流式进度 → 产出（diff+证据）」，不关心内部实现。
 4. **Workspace 与 Environment 正交**：层级是 `Workspace / Project → Goal → Task`，执行环境只是某个 Workspace checkout 的运行地点。自动选择可在已映射环境中决定，但不得自动猜测另一个目录属于同一项目。
+5. **项目身份单向固定**：只有首次创建/补绑能建立 Goal 的逻辑项目；之后添加本机 worktree、SSH checkout 或切换执行器都只能扩充该项目的执行映射，不能改写主项目。
 
 ## 5. 执行器适配层（ExecutorAdapter）
 

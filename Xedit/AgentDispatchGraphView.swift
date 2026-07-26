@@ -148,7 +148,7 @@ struct AgentDispatchGraphView: View {
                         ),
                         symbol: displayTarget.isRemoteTarget
                             ? "network"
-                            : goal.workspaceLocation == nil
+                            : !goal.isWorkspaceBound
                                 ? "folder.badge.questionmark"
                                 : "desktopcomputer"
                     )

@@ -51,6 +51,10 @@ extension L10n {
             localized: "dispatch.choose-local-workspace",
             defaultValue: "Choose local folder…"
         )
+        static let chooseRemoteWorkspace = String(
+            localized: "dispatch.choose-remote-workspace",
+            defaultValue: "Map SSH Checkout"
+        )
         static let chooseWorkspace = String(
             localized: "dispatch.choose-workspace",
             defaultValue: "Choose Goal Workspace"
@@ -79,6 +83,10 @@ extension L10n {
             localized: "dispatch.remote-workspace-unavailable",
             defaultValue: "The selected SSH workspace is unavailable."
         )
+        static let remoteWorkspacePathRequired = String(
+            localized: "dispatch.remote-workspace-path-required",
+            defaultValue: "Enter the corresponding project directory on this SSH runtime."
+        )
         static let workspaceBindingFailed = String(
             localized: "dispatch.workspace-binding-failed",
             defaultValue: "Couldn’t bind workspace"
@@ -99,6 +107,10 @@ extension L10n {
             localized: "dispatch.workspace-missing",
             defaultValue: "The selected local workspace no longer exists."
         )
+        static let workspaceProjectMismatch = String(
+            localized: "dispatch.workspace-project-mismatch",
+            defaultValue: "This checkout belongs to a different project."
+        )
         static let workspaceRequired = String(
             localized: "dispatch.workspace-required",
             defaultValue: "Bind this Goal to a workspace before continuing."
@@ -106,6 +118,14 @@ extension L10n {
         static let workspaceRequiredShort = String(
             localized: "dispatch.workspace-required-short",
             defaultValue: "Workspace required"
+        )
+        static let selectWorkspaceFirst = String(
+            localized: "dispatch.select-workspace-first",
+            defaultValue: "Choose a workspace first"
+        )
+        static let cancel = String(
+            localized: "dispatch.cancel",
+            defaultValue: "Cancel"
         )
         static let addTask = String(localized: "dispatch.add-task", defaultValue: "Add Task")
         static let startPlan = String(localized: "dispatch.start-plan", defaultValue: "Start Plan")
@@ -122,6 +142,20 @@ extension L10n {
             localized: "dispatch.automatic-environment",
             defaultValue: "Environment: Automatic"
         )
+
+        static func remoteWorkspaceMessage(
+            projectName: String,
+            runtimeName: String
+        ) -> String {
+            String(
+                format: String(
+                    localized: "dispatch.remote-workspace-message",
+                    defaultValue: "Enter the directory where %@ is checked out on %@. This maps an execution checkout; it does not change the Goal's project."
+                ),
+                projectName,
+                runtimeName
+            )
+        }
         static let forceExecutor = String(
             localized: "dispatch.force-executor",
             defaultValue: "Force executor"

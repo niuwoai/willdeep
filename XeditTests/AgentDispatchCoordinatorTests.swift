@@ -112,6 +112,9 @@ struct AgentDispatchCoordinatorTests {
         #expect(synchronized.tasks.first(where: { $0.id == firstID })?.state == .merged)
         #expect(synchronized.tasks[1].state == .queued)
         #expect(synchronized.workspaceLocation == .local(path: "/tmp/Orchestrator"))
+        #expect(synchronized.isWorkspaceBound)
+        #expect(synchronized.logicalProject?.displayName == "Orchestrator")
+        #expect(synchronized.projectDisplayText == "Orchestrator · /tmp/Orchestrator")
         #expect(synchronized.availableTargetChoices == [.local])
     }
 
@@ -121,15 +124,21 @@ struct AgentDispatchCoordinatorTests {
         defer { sandbox.cleanup() }
         let store = AgentDispatchStore(defaults: sandbox.defaults)
         let remoteRuntimeID = UUID()
+        let project = AgentDispatchLogicalProject(
+            displayName: "Project",
+            primaryWorkspacePath: "/tmp/Project"
+        )
         let goal = AgentDispatchGoal(
             id: UUID(),
             sessionID: UUID(),
             title: "持久化",
             statement: "重启后继续",
+            logicalProject: project,
             workspaceLocation: .local(path: "/tmp/Project"),
             workspaceBindings: [
                 AgentDispatchWorkspaceBinding(
-                    location: .remote(runtimeID: remoteRuntimeID, path: "/srv/project")
+                    location: .remote(runtimeID: remoteRuntimeID, path: "/srv/project"),
+                    projectID: project.id
                 ),
             ],
             tasks: [AgentDispatchTask(title: "第一步")],
@@ -169,11 +178,13 @@ struct AgentDispatchCoordinatorTests {
         )
         object.removeValue(forKey: "workspaceLocation")
         object.removeValue(forKey: "workspaceBindings")
+        object.removeValue(forKey: "logicalProject")
         let legacyData = try JSONSerialization.data(withJSONObject: object)
 
         let decoded = try JSONDecoder().decode(AgentDispatchGoal.self, from: legacyData)
 
         #expect(decoded.workspaceLocation == nil)
+        #expect(!decoded.isWorkspaceBound)
         #expect(decoded.effectiveWorkspaceBindings.isEmpty)
         #expect(decoded.resolvedTargetChoice(taskChoice: .automatic) == nil)
     }
@@ -192,12 +203,14 @@ struct AgentDispatchCoordinatorTests {
         )
         coordinator.synchronize(with: [session])
         let goalID = try #require(coordinator.selectedGoal?.id)
+        let project = try #require(coordinator.selectedGoal?.logicalProject)
 
         coordinator.updateGoalTargetChoice(.remote(remoteRuntimeID), goalID: goalID)
         #expect(coordinator.selectedGoal?.targetChoice == .automatic)
 
         coordinator.bindWorkspace(
             .remote(runtimeID: remoteRuntimeID, path: "/srv/project"),
+            logicalProject: project,
             goalID: goalID,
             makePrimary: false
         )
@@ -208,6 +221,211 @@ struct AgentDispatchCoordinatorTests {
         #expect(
             goal.workspaceLocation(for: .remote(remoteRuntimeID))
                 == .remote(runtimeID: remoteRuntimeID, path: "/srv/project")
+        )
+    }
+
+    @Test("旧的未绑定 Goal 不会从会话静默继承工作区")
+    func legacyUnboundGoalRequiresOneExplicitBinding() throws {
+        let sandbox = try makeSandbox()
+        defer { sandbox.cleanup() }
+        let sessionID = UUID()
+        let session = AgentSession(
+            id: sessionID,
+            workspaceRootPath: "/tmp/Project",
+            currentGoal: AgentGoal(statement: "旧目标", checklist: [.init(text: "实现")])
+        )
+        let unbound = AgentDispatchGoal(
+            id: sessionID,
+            sessionID: sessionID,
+            title: "旧目标",
+            statement: "旧目标",
+            tasks: [AgentDispatchTask(title: "实现")],
+            executorChoice: .automatic,
+            targetChoice: .automatic,
+            isPaused: false,
+            commands: [],
+            createdAt: Date(),
+            updatedAt: Date()
+        )
+        let store = AgentDispatchStore(defaults: sandbox.defaults)
+        store.save([unbound])
+        let coordinator = AgentDispatchCoordinator(store: store)
+
+        coordinator.synchronize(with: [session])
+
+        let synchronized = try #require(coordinator.selectedGoal)
+        #expect(!synchronized.isWorkspaceBound)
+        #expect(synchronized.logicalProject == nil)
+        #expect(synchronized.workspaceLocation == nil)
+    }
+
+    @Test("旧 SSH 默认目录映射不会被当成已确认项目 checkout")
+    func legacyRemoteMappingRequiresExplicitRemap() throws {
+        let sandbox = try makeSandbox()
+        defer { sandbox.cleanup() }
+        let sessionID = UUID()
+        let runtimeID = UUID()
+        let session = AgentSession(
+            id: sessionID,
+            workspaceRootPath: "/tmp/Project",
+            currentGoal: AgentGoal(statement: "迁移", checklist: [.init(text: "实现")])
+        )
+        let legacy = AgentDispatchGoal(
+            id: sessionID,
+            sessionID: sessionID,
+            title: "迁移",
+            statement: "迁移",
+            workspaceLocation: .local(path: "/tmp/Project"),
+            workspaceBindings: [
+                AgentDispatchWorkspaceBinding(
+                    location: .remote(runtimeID: runtimeID, path: "/srv/default")
+                ),
+            ],
+            tasks: [AgentDispatchTask(title: "实现")],
+            executorChoice: .automatic,
+            targetChoice: .automatic,
+            isPaused: false,
+            commands: [],
+            createdAt: Date(),
+            updatedAt: Date()
+        )
+        let store = AgentDispatchStore(defaults: sandbox.defaults)
+        store.save([legacy])
+        let coordinator = AgentDispatchCoordinator(store: store)
+
+        coordinator.synchronize(with: [session])
+
+        let synchronized = try #require(coordinator.selectedGoal)
+        #expect(synchronized.isWorkspaceBound)
+        #expect(synchronized.workspaceLocation(for: .remote(runtimeID)) == nil)
+        #expect(synchronized.availableTargetChoices == [.local])
+    }
+
+    @Test("Task 可固定到同一逻辑项目的不同 checkout")
+    func taskCanChooseDifferentCheckoutWithinLogicalProject() throws {
+        let project = AgentDispatchLogicalProject(
+            displayName: "Project",
+            primaryWorkspacePath: "/repo/Project",
+            localRepositoryIdentity: "/repo/Project/.git"
+        )
+        let worktree = AgentDispatchWorkspaceBinding(
+            location: .local(path: "/worktrees/Project/task-a"),
+            projectID: project.id
+        )
+        var task = AgentDispatchTask(title: "实现", workspaceBindingID: worktree.id)
+        let goal = AgentDispatchGoal(
+            id: UUID(),
+            sessionID: UUID(),
+            title: "Project",
+            statement: "交付",
+            logicalProject: project,
+            workspaceLocation: .local(path: "/repo/Project"),
+            workspaceBindings: [worktree],
+            tasks: [task],
+            executorChoice: .automatic,
+            targetChoice: .automatic,
+            isPaused: false,
+            commands: [],
+            createdAt: Date(),
+            updatedAt: Date()
+        )
+
+        #expect(goal.resolvedWorkspaceBinding(for: task) == worktree)
+
+        task.workspaceBindingID = "local:/another/project"
+        #expect(goal.resolvedWorkspaceBinding(for: task) == nil)
+    }
+
+    @Test("本机 checkout 必须共享同一个 Git common directory")
+    func localCheckoutMustBelongToLogicalProject() throws {
+        let base = FileManager.default.temporaryDirectory
+            .appendingPathComponent("willdeep-dispatch-project-\(UUID().uuidString)")
+        let first = base.appendingPathComponent("First")
+        let second = base.appendingPathComponent("Second")
+        try FileManager.default.createDirectory(at: first, withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: second, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: base) }
+        #expect(AppState.runGitCommand(arguments: ["init"], in: first).succeeded)
+        #expect(AppState.runGitCommand(arguments: ["init"], in: second).succeeded)
+        let project = AgentDispatchLogicalProjectResolver.resolve(
+            location: .local(path: first.path)
+        )
+
+        #expect(
+            AgentDispatchLogicalProjectResolver.localCheckoutBelongs(
+                to: project,
+                path: first.path
+            )
+        )
+        #expect(
+            !AgentDispatchLogicalProjectResolver.localCheckoutBelongs(
+                to: project,
+                path: second.path
+            )
+        )
+    }
+
+    @Test("绑定另一个本机仓库会在 AppState 校验层被拒绝")
+    func appStateRejectsDifferentLocalProjectMapping() throws {
+        let base = FileManager.default.temporaryDirectory
+            .appendingPathComponent("willdeep-dispatch-bind-\(UUID().uuidString)")
+        let first = base.appendingPathComponent("First")
+        let second = base.appendingPathComponent("Second")
+        try FileManager.default.createDirectory(at: first, withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: second, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: base) }
+        #expect(AppState.runGitCommand(arguments: ["init"], in: first).succeeded)
+        #expect(AppState.runGitCommand(arguments: ["init"], in: second).succeeded)
+
+        let appState = AppState()
+        appState.agentDispatchCoordinator.resetForTests()
+        _ = appState.startNewAgentSession(inWorkspaceAt: first.path)
+        appState.setAgentInteractionMode(.goal)
+        appState.setAgentGoal(statement: "固定项目", items: ["实现"])
+        appState.agentDispatchCoordinator.synchronize(with: appState.agentSessions)
+        let goalID = try #require(appState.agentDispatchCoordinator.selectedGoal?.id)
+
+        let error = appState.bindDispatchGoalWorkspace(
+            goalID: goalID,
+            location: .local(path: second.path)
+        )
+
+        #expect(error == L10n.Dispatch.workspaceProjectMismatch)
+    }
+
+    @Test("SSH 映射缺少项目对应目录时不能绑定")
+    func remoteMappingRequiresExplicitProjectPath() throws {
+        let sandbox = try makeSandbox()
+        defer { sandbox.cleanup() }
+        let previousDefaults = AgentRuntimeStore.setTestDefaults(sandbox.defaults)
+        defer { _ = AgentRuntimeStore.setTestDefaults(previousDefaults) }
+        let descriptor = RuntimeDescriptor(
+            displayName: "Build Host",
+            host: "example.invalid",
+            username: "builder",
+            defaultWorkspacePath: "/srv/default"
+        )
+        AgentRuntimeStore.upsert(descriptor)
+
+        let appState = AppState()
+        appState.agentDispatchCoordinator.resetForTests()
+        _ = appState.startNewAgentSession(
+            inWorkspaceAt: FileManager.default.temporaryDirectory.path
+        )
+        appState.setAgentInteractionMode(.goal)
+        appState.setAgentGoal(statement: "固定项目", items: ["实现"])
+        appState.agentDispatchCoordinator.synchronize(with: appState.agentSessions)
+        let goalID = try #require(appState.agentDispatchCoordinator.selectedGoal?.id)
+
+        let error = appState.bindDispatchGoalWorkspace(
+            goalID: goalID,
+            location: .remote(runtimeID: descriptor.id, path: "   ")
+        )
+
+        #expect(error == L10n.Dispatch.remoteWorkspacePathRequired)
+        #expect(
+            appState.agentDispatchCoordinator.selectedGoal?
+                .workspaceLocation(for: .remote(descriptor.id)) == nil
         )
     }
 

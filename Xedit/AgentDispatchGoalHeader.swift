@@ -37,6 +37,16 @@ struct AgentDispatchGoalHeader: View {
                         .font(.system(size: 12))
                         .foregroundStyle(.secondary)
                         .lineLimit(1)
+                    Label(
+                        goal.projectDisplayText ?? L10n.Dispatch.workspaceRequiredShort,
+                        systemImage: goal.isWorkspaceBound
+                            ? "folder.fill"
+                            : "folder.badge.questionmark"
+                    )
+                    .font(.system(size: 11, design: .monospaced))
+                    .foregroundStyle(goal.isWorkspaceBound ? .secondary : Color.orange)
+                    .lineLimit(1)
+                    .textSelection(.enabled)
                 }
                 Spacer(minLength: 10)
                 workspaceMenu
@@ -44,13 +54,15 @@ struct AgentDispatchGoalHeader: View {
                 targetMenu
                 Button(action: goal.isPaused ? onResume : onLaunch) {
                     Label(
-                        goal.isPaused ? L10n.Dispatch.resumePlan : L10n.Dispatch.startPlan,
+                        goal.isWorkspaceBound
+                            ? (goal.isPaused ? L10n.Dispatch.resumePlan : L10n.Dispatch.startPlan)
+                            : L10n.Dispatch.selectWorkspaceFirst,
                         systemImage: goal.isPaused ? "play.fill" : "play"
                     )
                     .font(.system(size: 12, weight: .medium))
                 }
                 .buttonStyle(.borderedProminent)
-                .disabled(goal.workspaceLocation == nil)
+                .disabled(!goal.isWorkspaceBound)
             }
             HStack(spacing: 8) {
                 Text(L10n.Dispatch.taskCount(goal.tasks.count))
@@ -68,12 +80,15 @@ struct AgentDispatchGoalHeader: View {
 
     private var workspaceMenu: some View {
         Menu {
-            if let workspace = goal.workspaceLocation {
+            if let project = goal.logicalProject {
                 Section(L10n.Dispatch.goalWorkspace) {
-                    Label(workspace.path, systemImage: "folder.fill")
+                    Label(
+                        "\(project.displayName) · \(project.primaryWorkspacePath)",
+                        systemImage: "folder.fill"
+                    )
                 }
             }
-            Section(goal.workspaceLocation == nil
+            Section(!goal.isWorkspaceBound
                     ? L10n.Dispatch.bindWorkspace
                     : L10n.Dispatch.addWorkspaceMapping) {
                 Button(action: onChooseLocalWorkspace) {
@@ -87,7 +102,7 @@ struct AgentDispatchGoalHeader: View {
                         onBindRemoteWorkspace(runtime)
                     } label: {
                         Label(
-                            "\(runtime.displayName): \(runtime.defaultWorkspacePath)",
+                            remoteWorkspaceLabel(runtime),
                             systemImage: remoteWorkspaceIsMapped(runtime.id)
                                 ? "checkmark"
                                 : "network"
@@ -95,14 +110,14 @@ struct AgentDispatchGoalHeader: View {
                     }
                 }
             }
-            if goal.workspaceLocation != nil {
+            if goal.isWorkspaceBound {
                 Text(L10n.Dispatch.workspaceMappingHelp)
             }
         } label: {
             policyPill(
-                symbol: goal.workspaceLocation == nil ? "folder.badge.questionmark" : "folder.fill",
-                text: goal.workspaceLocation?.displayName ?? L10n.Dispatch.workspaceRequiredShort,
-                tint: goal.workspaceLocation == nil ? .orange : .secondary
+                symbol: goal.isWorkspaceBound ? "folder.fill" : "folder.badge.questionmark",
+                text: goal.logicalProject?.displayName ?? L10n.Dispatch.workspaceRequiredShort,
+                tint: goal.isWorkspaceBound ? .secondary : .orange
             )
         }
         .menuStyle(.borderlessButton)
@@ -155,7 +170,7 @@ struct AgentDispatchGoalHeader: View {
         }
         .menuStyle(.borderlessButton)
         .fixedSize()
-        .disabled(goal.workspaceLocation == nil)
+        .disabled(!goal.isWorkspaceBound)
     }
 
     private func targetButton(_ target: AgentDispatchTargetChoice) -> some View {
@@ -177,6 +192,13 @@ struct AgentDispatchGoalHeader: View {
 
     private func remoteWorkspaceIsMapped(_ runtimeID: UUID) -> Bool {
         goal.workspaceLocation(for: .remote(runtimeID)) != nil
+    }
+
+    private func remoteWorkspaceLabel(_ runtime: RuntimeDescriptor) -> String {
+        guard let path = goal.workspaceLocation(for: .remote(runtime.id))?.path else {
+            return "\(runtime.displayName) · \(L10n.Dispatch.chooseRemoteWorkspace)"
+        }
+        return "\(runtime.displayName) · \(path)"
     }
 
     private func policyPill(
