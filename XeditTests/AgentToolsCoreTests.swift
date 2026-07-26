@@ -1888,4 +1888,77 @@ struct DelegatedAgentComposerOutputTests {
         #expect(content.contains("actual useful error: authentication expired"))
         #expect(content.count < 3_000)
     }
+
+    // MARK: - Parallel read batch
+
+    /// The concurrent-read whitelist must only ever contain read-tier
+    /// tools with no approval, plan-gate, or sandbox-escalation paths.
+    /// `run_command` (even when classified read-only) and `spawn_agent`
+    /// must stay serial: escalation/approval suspends on the runtime's
+    /// single tool-decision waiter, which concurrent calls cannot share.
+    @Test
+    func parallelReadBatchWhitelistOnlyContainsPureReadTools() {
+        for name in AppState.parallelReadBatchToolNames {
+            #expect(
+                AgentToolRegistry.risk(for: name, arguments: [:]) == .read,
+                "\(name) must classify as read-tier"
+            )
+        }
+        #expect(!AppState.parallelReadBatchToolNames.contains("run_command"))
+        #expect(!AppState.parallelReadBatchToolNames.contains("spawn_agent"))
+        #expect(!AppState.parallelReadBatchToolNames.contains("change_workspace"))
+        #expect(!AppState.parallelReadBatchToolNames.contains("rename_session"))
+    }
+
+    /// Whitelisted read tools must be safe to fan out: concurrent
+    /// AgentToolRunner.run calls over the same workspace return the same
+    /// independent results the serial loop produced, keyed back by index.
+    @Test
+    func whitelistedReadToolsRunConcurrentlyWithIndependentResults() async throws {
+        let workspace = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask).first!
+            .appendingPathComponent("willdeep_test_parallel_read_\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: workspace, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: workspace) }
+
+        try "alpha needle one\n".write(
+            to: workspace.appendingPathComponent("one.txt"), atomically: true, encoding: .utf8
+        )
+        try "beta needle two\n".write(
+            to: workspace.appendingPathComponent("two.txt"), atomically: true, encoding: .utf8
+        )
+
+        let context = AgentToolContext(rootDirectory: workspace)
+        let calls: [(name: String, arguments: [String: AgentJSONValue])] = [
+            ("read_file", ["path": .string("one.txt")]),
+            ("read_file", ["path": .string("two.txt")]),
+            ("grep_files", ["pattern": .string("needle")]),
+            ("list_directory", ["path": .string(".")])
+        ]
+
+        var payloads = [String?](repeating: nil, count: calls.count)
+        await withTaskGroup(of: (Int, String?).self) { group in
+            for (index, call) in calls.enumerated() {
+                let name = call.name
+                let arguments = call.arguments
+                group.addTask {
+                    let result = try? await AgentToolRunner.run(
+                        name: name,
+                        arguments: arguments,
+                        context: context
+                    )
+                    return (index, result?.payload)
+                }
+            }
+            for await (index, payload) in group {
+                payloads[index] = payload
+            }
+        }
+
+        #expect(payloads[0]?.contains("alpha needle one") == true)
+        #expect(payloads[1]?.contains("beta needle two") == true)
+        #expect(payloads[2]?.contains("one.txt") == true)
+        #expect(payloads[2]?.contains("two.txt") == true)
+        #expect(payloads[3]?.contains("one.txt") == true)
+        #expect(payloads[3]?.contains("two.txt") == true)
+    }
 }

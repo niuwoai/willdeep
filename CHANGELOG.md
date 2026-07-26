@@ -3,6 +3,15 @@
 > 当前文件保留最新版本（1.200.0-rc3 至 1.109.0-rc340）。
 > 更早的 1000 个版本已移至 [CHANGELOG-ARCHIVE.md](CHANGELOG-ARCHIVE.md)。
 
+## 1.206.0-rc10 - 2026-07-26
+
+### Changed
+
+- **Agent 同回合连续只读工具调用改为并发执行**：系统提示词早已引导模型把独立调用 batch 进一次回复，但工具执行循环仍逐个串行付延迟。现在同一回合内连续的纯只读工具（`read_file` / `search_files` / `grep_files` / `list_directory` / `glob` / `git_status`）先收集成批，用 `TaskGroup` 并发执行（实际 IO 在 `AgentFileTools` 的 detached 任务上真并行），结果按模型原始调用顺序回填 `runtime.toolCalls` 与消息历史，N 次 grep/read 的串行往返合并为一批。安全边界不变：
+  - 只有 `.read` 级、免审批、无副作用、且不可能进入沙箱升权流程的白名单工具参与并发；`run_command` 即便被归类为只读也保持串行（升权提示挂在 runtime 单一 decision waiter 上，并发调用不能共享），`spawn_agent` 走独立派发路径不受影响。
+  - write / danger / userInput 级与审批、plan 门禁、workspace 变更等流程全部保持严格串行；遇到第一个非只读调用先把已收集的 read 批次收齐再继续，远程 workspace（SSH/daemon）一律不并发。
+  - 中途 Stop 与串行路径同语义：批内每个调用都以「Response stopped」落卡收尾，不留悬空 running 状态。
+
 ## 1.206.0-rc9 - 2026-07-26
 
 ### Fixed
