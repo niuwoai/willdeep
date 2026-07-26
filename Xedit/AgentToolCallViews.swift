@@ -414,6 +414,7 @@ struct AgentToolCallGroup: View {
 
     private var interactiveCallsBody: some View {
         VStack(alignment: .leading, spacing: 4) {
+            AgentToolBatchApprovalBar(calls: calls)
             ForEach(calls) { call in
                 AgentToolCallCard(call: call)
             }
@@ -467,6 +468,7 @@ struct AgentToolCallGroup: View {
 
             if detailsVisible {
                 VStack(alignment: .leading, spacing: 4) {
+                    AgentToolBatchApprovalBar(calls: calls)
                     ForEach(calls) { call in
                         AgentToolCallCard(call: call)
                     }
@@ -554,6 +556,51 @@ struct AgentToolCallGroup: View {
     }
 }
 
+/// One-click batch release for a staged round: shown whenever two or more
+/// ordinary write-tier approval cards are waiting at once. Danger-tier typed
+/// confirmations, sandbox-escalation retries, and ask_user cards never enter
+/// the batch — they keep their individual controls.
+struct AgentToolBatchApprovalBar: View {
+    @EnvironmentObject var appState: AppState
+    let calls: [AgentToolCall]
+
+    var body: some View {
+        let approvableIDs = appState.batchApprovableAgentToolCallIDs(among: calls)
+        if approvableIDs.count >= 2 {
+            let palette = appState.editorSettings.interfaceSkin.palette
+            HStack(spacing: 8) {
+                Image(systemName: "checklist")
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(palette.accent)
+                Text("本轮共 \(approvableIDs.count) 项操作待批准")
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundStyle(palette.primaryText)
+                Spacer(minLength: 12)
+                Button {
+                    appState.approveAgentToolCalls(ids: approvableIDs)
+                } label: {
+                    Text("全部允许")
+                        .font(.system(size: 12, weight: .semibold))
+                        .padding(.horizontal, 2)
+                }
+                .buttonStyle(.bordered)
+                .tint(palette.accent)
+                .cursor(.arrow)
+                .help("一键批准这 \(approvableIDs.count) 项待审批操作；危险操作与沙箱升权仍需单独确认")
+            }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 8)
+            .background(palette.accent.opacity(0.06))
+            .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    .stroke(palette.accent.opacity(0.25), lineWidth: 1)
+            )
+            .accessibilityIdentifier("agent-batch-approval-bar")
+        }
+    }
+}
+
 /// Live, phase-aware activity surface for the current assistant turn. The
 /// current operation is one quiet disclosure row by default. Expanding it
 /// reveals the recent timeline. Interactive approvals keep their full controls.
@@ -569,6 +616,7 @@ struct AgentLiveActivityTimeline: View {
             if isExpanded, presentation.hiddenOperationCount > 0 {
                 AgentActivityTimelineSummaryRow(count: presentation.hiddenOperationCount)
             }
+            AgentToolBatchApprovalBar(calls: calls)
             ForEach(presentation.visibleCalls) { call in
                 if call.status.isBlockingForUserDecision {
                     AgentToolCallCard(call: call)

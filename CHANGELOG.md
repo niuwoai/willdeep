@@ -3,14 +3,28 @@
 > 当前文件保留最新版本（1.200.0-rc3 至 1.109.0-rc340）。
 > 更早的 1000 个版本已移至 [CHANGELOG-ARCHIVE.md](CHANGELOG-ARCHIVE.md)。
 
-## 1.206.0-rc10 - 2026-07-26
+## 1.207.0-rc2 - 2026-07-26
 
 ### Changed
 
-- **Agent 同回合连续只读工具调用改为并发执行**：系统提示词早已引导模型把独立调用 batch 进一次回复，但工具执行循环仍逐个串行付延迟。现在同一回合内连续的纯只读工具（`read_file` / `search_files` / `grep_files` / `list_directory` / `glob` / `git_status`）先收集成批，用 `TaskGroup` 并发执行（实际 IO 在 `AgentFileTools` 的 detached 任务上真并行），结果按模型原始调用顺序回填 `runtime.toolCalls` 与消息历史，N 次 grep/read 的串行往返合并为一批。安全边界不变：
+- **Agent 同回合连续只读工具调用改为并发执行**：系统提示词早已引导模型把独立调用 batch 进一次回复，但工具执行循环仍逐个串行付延迟。现在 Stage 2 执行阶段把同一回合内连续的纯只读工具（`read_file` / `search_files` / `grep_files` / `list_directory` / `glob` / `git_status`）收集成批，用 `TaskGroup` 并发执行（实际 IO 在 `AgentFileTools` 的 detached 任务上真并行），结果按模型原始调用顺序回填 `runtime.toolCalls` 与消息历史（记录本身已在 Stage 1 按序建卡），N 次 grep/read 的串行往返合并为一批。安全边界不变：
   - 只有 `.read` 级、免审批、无副作用、且不可能进入沙箱升权流程的白名单工具参与并发；`run_command` 即便被归类为只读也保持串行（升权提示挂在 runtime 单一 decision waiter 上，并发调用不能共享），`spawn_agent` 走独立派发路径不受影响。
   - write / danger / userInput 级与审批、plan 门禁、workspace 变更等流程全部保持严格串行；遇到第一个非只读调用先把已收集的 read 批次收齐再继续，远程 workspace（SSH/daemon）一律不并发。
-  - 中途 Stop 与串行路径同语义：批内每个调用都以「Response stopped」落卡收尾，不留悬空 running 状态。
+  - 中途 Stop 与串行路径同语义：批内每个调用以「Response stopped」落卡收尾，其后未执行的 staged 记录走 `settleUnexecutedStagedCalls` 统一清理，不留悬空 running/审批卡。
+
+## 1.207.0-rc1 - 2026-07-26
+
+### Added
+
+- **Agent 工具审批：整轮预亮卡 + 一键「全部允许」**：
+  - **预亮卡**：回合开始时把本轮所有工具调用一次性解析、风控分级并落卡——需要人工审批的 write 级调用同时全部置为待批准，不再是批完第一个才看到第二个。执行仍严格按原顺序、逐个消费各自决策；提前点掉的卡显示「已提交决定，等待执行循环接收」，由执行循环快路径按序接收。
+  - **全部允许**：审批卡区域新增批量放行条（同轮 ≥2 张普通 write 审批卡时出现，聊天时间线与侧栏工具组两处入口一致）。danger 级打字确认卡（`awaitingConfirm`）、沙箱升权重试卡（`_sandbox_escalation_request` 标记）、`ask_user` 问答卡、`#1983#` 本地预览卡一律不进入批量放行，保持单卡确认。
+  - **同族跟批**：点一张卡的「总是允许 / 本对话允许」后，同族已亮出的其余待批卡自动跟批；候选先按新规则预过滤，只走白名单 / 会话授权等廉价确定性判定，不会为此追加 LLM 裁判往返（避免二次裁判把首判留人工的命令放行）。
+  - **门禁语义不变**：plan 门禁 / goal 模式拦截在预亮阶段同步落卡为拒绝，不会闪出可批卡（`ask_user` 保持原有豁免）；工作区切换后的「跳过剩余调用」逻辑移至执行阶段就地结算已亮卡，并丢弃用户提前停在卡上的决策。
+
+### Meta
+
+- 版本号从 **1.206.0-rc9** 提升为 **1.207.0-rc1**（功能新增，MINOR +1、rc 归位 rc1）；App、Go agent、Help、Computer Use Helper、浏览器扩展、README、响应头契约与产品文档同步。
 
 ## 1.206.0-rc9 - 2026-07-26
 
