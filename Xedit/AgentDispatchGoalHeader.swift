@@ -7,9 +7,11 @@ import SwiftUI
 
 struct AgentDispatchGoalHeader: View {
     let goal: AgentDispatchGoal
-    let runtimeCount: Int
+    let runtimeDescriptors: [RuntimeDescriptor]
     let onExecutorChoice: (AgentDispatchExecutorChoice) -> Void
     let onTargetChoice: (AgentDispatchTargetChoice) -> Void
+    let onChooseLocalWorkspace: () -> Void
+    let onBindRemoteWorkspace: (RuntimeDescriptor) -> Void
     let onLaunch: () -> Void
     let onResume: () -> Void
 
@@ -37,6 +39,7 @@ struct AgentDispatchGoalHeader: View {
                         .lineLimit(1)
                 }
                 Spacer(minLength: 10)
+                workspaceMenu
                 executorMenu
                 targetMenu
                 Button(action: goal.isPaused ? onResume : onLaunch) {
@@ -47,6 +50,7 @@ struct AgentDispatchGoalHeader: View {
                     .font(.system(size: 12, weight: .medium))
                 }
                 .buttonStyle(.borderedProminent)
+                .disabled(goal.workspaceLocation == nil)
             }
             HStack(spacing: 8) {
                 Text(L10n.Dispatch.taskCount(goal.tasks.count))
@@ -60,6 +64,49 @@ struct AgentDispatchGoalHeader: View {
         }
         .padding(.horizontal, 20)
         .padding(.vertical, 14)
+    }
+
+    private var workspaceMenu: some View {
+        Menu {
+            if let workspace = goal.workspaceLocation {
+                Section(L10n.Dispatch.goalWorkspace) {
+                    Label(workspace.path, systemImage: "folder.fill")
+                }
+            }
+            Section(goal.workspaceLocation == nil
+                    ? L10n.Dispatch.bindWorkspace
+                    : L10n.Dispatch.addWorkspaceMapping) {
+                Button(action: onChooseLocalWorkspace) {
+                    Label(
+                        L10n.Dispatch.chooseLocalWorkspace,
+                        systemImage: localWorkspaceIsMapped ? "checkmark" : "folder"
+                    )
+                }
+                ForEach(runtimeDescriptors.filter { $0.transport == .ssh }) { runtime in
+                    Button {
+                        onBindRemoteWorkspace(runtime)
+                    } label: {
+                        Label(
+                            "\(runtime.displayName): \(runtime.defaultWorkspacePath)",
+                            systemImage: remoteWorkspaceIsMapped(runtime.id)
+                                ? "checkmark"
+                                : "network"
+                        )
+                    }
+                }
+            }
+            if goal.workspaceLocation != nil {
+                Text(L10n.Dispatch.workspaceMappingHelp)
+            }
+        } label: {
+            policyPill(
+                symbol: goal.workspaceLocation == nil ? "folder.badge.questionmark" : "folder.fill",
+                text: goal.workspaceLocation?.displayName ?? L10n.Dispatch.workspaceRequiredShort,
+                tint: goal.workspaceLocation == nil ? .orange : .secondary
+            )
+        }
+        .menuStyle(.borderlessButton)
+        .fixedSize()
     }
 
     private var executorMenu: some View {
@@ -94,41 +141,49 @@ struct AgentDispatchGoalHeader: View {
                     systemImage: goal.targetChoice == .automatic ? "checkmark" : "circle"
                 )
             }
-            Button {
-                onTargetChoice(.local)
-            } label: {
-                Label(
-                    L10n.Dispatch.currentMac,
-                    systemImage: goal.targetChoice == .local ? "checkmark" : "desktopcomputer"
-                )
-            }
-            ForEach(AgentRuntimeStore.loadDescriptors().filter { $0.transport == .ssh }) { runtime in
-                Button {
-                    onTargetChoice(.remote(runtime.id))
-                } label: {
-                    Label(
-                        "\(runtime.displayName) · SSH",
-                        systemImage: goal.targetChoice == .remote(runtime.id) ? "checkmark" : "network"
-                    )
-                }
+            ForEach(Array(goal.availableTargetChoices.enumerated()), id: \.offset) { _, target in
+                targetButton(target)
             }
         } label: {
             policyPill(
                 symbol: "network",
                 text: AgentDispatchPresentation.targetChoiceName(
                     goal.targetChoice,
-                    runtimes: AgentRuntimeStore.loadDescriptors(),
-                    automaticSuffix: runtimeCount > 0
-                        ? L10n.Dispatch.remoteRuntimeSuffix(runtimeCount)
-                        : nil
+                    runtimes: runtimeDescriptors
                 )
             )
         }
         .menuStyle(.borderlessButton)
         .fixedSize()
+        .disabled(goal.workspaceLocation == nil)
     }
 
-    private func policyPill(symbol: String, text: String) -> some View {
+    private func targetButton(_ target: AgentDispatchTargetChoice) -> some View {
+        Button {
+            onTargetChoice(target)
+        } label: {
+            Label(
+                AgentDispatchPresentation.targetChoiceName(target, runtimes: runtimeDescriptors),
+                systemImage: target == goal.targetChoice
+                    ? "checkmark"
+                    : target.isRemoteTarget ? "network" : "desktopcomputer"
+            )
+        }
+    }
+
+    private var localWorkspaceIsMapped: Bool {
+        goal.workspaceLocation(for: .local) != nil
+    }
+
+    private func remoteWorkspaceIsMapped(_ runtimeID: UUID) -> Bool {
+        goal.workspaceLocation(for: .remote(runtimeID)) != nil
+    }
+
+    private func policyPill(
+        symbol: String,
+        text: String,
+        tint: Color = .secondary
+    ) -> some View {
         HStack(spacing: 5) {
             Image(systemName: symbol)
             Text(text)
@@ -137,7 +192,7 @@ struct AgentDispatchGoalHeader: View {
                 .font(.system(size: 8, weight: .semibold))
         }
         .font(.system(size: 11))
-        .foregroundStyle(.secondary)
+        .foregroundStyle(tint)
         .padding(.horizontal, 9)
         .frame(height: 28)
         .background(Color.secondary.opacity(0.07))

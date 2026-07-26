@@ -15,13 +15,15 @@ struct AgentDispatchInspectorView: View {
     let onLaunch: () -> Void
     let onOpenConversation: () -> Void
 
-    private var effectiveTarget: AgentDispatchTargetChoice {
-        if let resolved = task.resolvedTarget { return resolved }
-        if task.targetChoice != .automatic { return task.targetChoice }
-        return goal.targetChoice
+    private var effectiveTarget: AgentDispatchTargetChoice? {
+        if let resolved = task.resolvedTarget {
+            return goal.workspaceLocation(for: resolved) == nil ? nil : resolved
+        }
+        return goal.resolvedTargetChoice(taskChoice: task.targetChoice)
     }
 
     private var availableExecutors: Set<AgentExecutionAgent> {
+        guard let effectiveTarget else { return [] }
         switch effectiveTarget {
         case .automatic, .local:
             return localExecutors
@@ -131,13 +133,14 @@ struct AgentDispatchInspectorView: View {
             fieldLabel(L10n.Dispatch.environment)
             Menu {
                 targetButton(.automatic)
-                targetButton(.local)
-                ForEach(runtimeDescriptors.filter { $0.transport == .ssh }) { runtime in
-                    targetButton(.remote(runtime.id))
+                ForEach(Array(goal.availableTargetChoices.enumerated()), id: \.offset) { _, target in
+                    targetButton(target)
                 }
             } label: {
                 pickerSurface(
-                    symbol: effectiveTarget.isRemoteTarget ? "network" : "desktopcomputer",
+                    symbol: effectiveTarget?.isRemoteTarget == true
+                        ? "network"
+                        : effectiveTarget == nil ? "folder.badge.questionmark" : "desktopcomputer",
                     text: AgentDispatchPresentation.targetChoiceName(
                         task.targetChoice,
                         runtimes: runtimeDescriptors
@@ -146,7 +149,8 @@ struct AgentDispatchInspectorView: View {
                 )
             }
             .menuStyle(.borderlessButton)
-            if case .remote(let id) = effectiveTarget,
+            .disabled(goal.workspaceLocation == nil)
+            if case .remote(let id)? = effectiveTarget,
                let runtime = runtimeDescriptors.first(where: { $0.id == id }) {
                 Label(
                     runtime.lastProbeAt == nil ? L10n.Dispatch.notProbed : L10n.Dispatch.probed,
@@ -154,7 +158,7 @@ struct AgentDispatchInspectorView: View {
                 )
                 .font(.system(size: 10))
                 .foregroundStyle(runtime.lastProbeAt == nil ? .secondary : Color.green)
-                Text(runtime.defaultWorkspacePath)
+                Text(goal.workspaceLocation(for: .remote(id))?.path ?? runtime.defaultWorkspacePath)
                     .font(.system(size: 10, design: .monospaced))
                     .foregroundStyle(.secondary)
                     .textSelection(.enabled)
@@ -234,6 +238,8 @@ struct AgentDispatchInspectorView: View {
             .buttonStyle(.borderedProminent)
             .disabled(
                 goal.isPaused
+                    || goal.workspaceLocation == nil
+                    || effectiveTarget == nil
                     || task.state == .blocked
                     || task.state == .running
                     || !executorDecision.isAvailable
@@ -309,11 +315,11 @@ struct AgentDispatchInspectorView: View {
     }
 
     private var workspaceDisplayValue: String {
-        if case .remote(let id) = effectiveTarget {
-            return runtimeDescriptors.first(where: { $0.id == id })?.defaultWorkspacePath
-                ?? L10n.Dispatch.notProbed
+        guard let effectiveTarget else {
+            return L10n.Dispatch.workspaceRequiredShort
         }
-        return L10n.Dispatch.currentMac
+        return goal.workspaceLocation(for: effectiveTarget)?.path
+            ?? L10n.Dispatch.workspaceRequiredShort
     }
 
     private var taskStateSymbol: String {

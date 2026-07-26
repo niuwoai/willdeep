@@ -1,6 +1,6 @@
 # WillDeep Product Overview
 
-> Last updated: 2026-07-26 | Current version: v1.209.0-rc1
+> Last updated: 2026-07-26 | Current version: v1.209.0-rc2
 
 ## Positioning
 
@@ -11,6 +11,8 @@ Official product domain: [willdeep.com](https://willdeep.com).
 WillDeep is configured for non-App-Store distribution without App Sandbox so it can access local project files with fewer permission interruptions.
 
 ## 架构概览
+
+- **Goal 工作区强绑定（1.209.0-rc2）** —— Goal 现在必须明确属于一个本机或 SSH 工作区后才能进入 Goal 模式、发指令或启动任务；旧 Goal 以“未绑定工作区”保守迁移并提供补绑入口。执行环境不再冒充工作区，调度器只允许选择已显式映射的同项目 checkout，任务运行时严格使用映射路径，不再回落到机器默认目录。
 
 - **Goal-first 调度台（1.209.0-rc1）** —— 左侧一级入口展示 Goal 与本机/SSH 执行环境，中间把 Goal 清单投影为可持久化的任务依赖图，右侧提供单任务执行器、环境、分支、工作区与验收信息；Goal 运行中普通指令在当前步骤结束后的安全点生效，暂停、恢复、追加任务可即时执行，需要抢占时显式确认。执行器默认由 WillDeep 按任务能力自动选择，也允许在 Goal 或任务层强制指定；SSH Runtime 会探测 Claude Code、Codex、Cursor Agent 与 Cline CLI。
 

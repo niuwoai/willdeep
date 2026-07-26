@@ -133,7 +133,9 @@ struct AgentPlanModeSuggestionSendTests {
     @Test("manual mode changes cancel the pending countdown")
     func modeChangeCancelsSuggestion() throws {
         let appState = AppState()
-        _ = appState.startNewAgentSession()
+        _ = appState.startNewAgentSession(
+            inWorkspaceAt: FileManager.default.temporaryDirectory.path
+        )
         let runtime = try #require(appState.activeRuntime)
         runtime.input = Self.complexTask
 
@@ -170,7 +172,8 @@ struct AgentNoWorkspaceInteractiveControlTests {
         appState.activateAgentExpert(.browserOps)
 
         #expect(appState.activeAgentSessionID == sessionID)
-        #expect(runtime.interactionMode == .goal)
+        #expect(runtime.interactionMode == .normal)
+        #expect(runtime.errorMessage == L10n.Dispatch.workspaceRequired)
         #expect(runtime.approvalMode == .requestEveryTime)
         #expect(runtime.activeExperts.contains(.browserOps))
     }

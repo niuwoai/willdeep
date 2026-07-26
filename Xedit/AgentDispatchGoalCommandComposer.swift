@@ -13,6 +13,10 @@ struct AgentDispatchGoalCommandComposer: View {
     let onAdjustPlan: () -> Void
     let onTogglePause: () -> Void
 
+    private var hasWorkspace: Bool {
+        goal.workspaceLocation != nil
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 9) {
             HStack(spacing: 6) {
@@ -48,7 +52,11 @@ struct AgentDispatchGoalCommandComposer: View {
                     )
                     .overlay(alignment: .topLeading) {
                         if text.isEmpty {
-                            Text(L10n.Dispatch.goalCommandPlaceholder)
+                            Text(
+                                hasWorkspace
+                                    ? L10n.Dispatch.goalCommandPlaceholder
+                                    : L10n.Dispatch.workspaceRequired
+                            )
                                 .font(.system(size: 12))
                                 .foregroundStyle(.tertiary)
                                 .padding(.horizontal, 12)
@@ -56,13 +64,17 @@ struct AgentDispatchGoalCommandComposer: View {
                                 .allowsHitTesting(false)
                         }
                     }
+                    .disabled(!hasWorkspace)
                 Button(action: onSend) {
                     Label(L10n.Dispatch.send, systemImage: "paperplane.fill")
                         .font(.system(size: 11, weight: .semibold))
                 }
                 .buttonStyle(.borderedProminent)
                 .controlSize(.small)
-                .disabled(text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                .disabled(
+                    !hasWorkspace
+                        || text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                )
                 .padding(8)
             }
             HStack(spacing: 8) {
@@ -84,6 +96,7 @@ struct AgentDispatchGoalCommandComposer: View {
                 )
                 Spacer()
             }
+            .disabled(!hasWorkspace)
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 12)
