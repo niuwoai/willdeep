@@ -28,11 +28,13 @@ nonisolated enum AgentToolDisplay {
         return "\(localized)（\(toolName)）"
     }
 
-    /// `terminal_send_control` 的 control 取值（ctrl_c / enter / escape）
+    /// `terminal_send_control` 的 control 取值。
     /// 直接显示原始别名既不直观也容易被误会，这里展开成「人话 + 作用」。
     static func controlLabel(for raw: String) -> String {
         switch raw {
         case "ctrl_c": return "Ctrl-C（中断当前命令 / SIGINT）"
+        case "ctrl_d": return "Ctrl-D（发送 EOF）"
+        case "ctrl_right_bracket": return "Ctrl-]（打开 telnet 退出提示符）"
         case "enter": return "Enter（回车提交当前行）"
         case "escape": return "Esc（取消 / 退出终端 UI 模式）"
         default: return raw

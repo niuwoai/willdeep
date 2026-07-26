@@ -108,12 +108,16 @@ struct AgentTerminalHostIdentity: Equatable {
 
 enum AgentTerminalControl: String, CaseIterable {
     case ctrlC = "ctrl_c"
+    case ctrlD = "ctrl_d"
+    case ctrlRightBracket = "ctrl_right_bracket"
     case enter
     case escape
 
     var bytes: [UInt8] {
         switch self {
         case .ctrlC: return [3]
+        case .ctrlD: return [4]
+        case .ctrlRightBracket: return [29]
         case .enter: return [13]
         case .escape: return [27]
         }
@@ -122,6 +126,8 @@ enum AgentTerminalControl: String, CaseIterable {
     var displayName: String {
         switch self {
         case .ctrlC: return "Ctrl-C"
+        case .ctrlD: return "Ctrl-D"
+        case .ctrlRightBracket: return "Ctrl-]"
         case .enter: return "Enter"
         case .escape: return "Esc"
         }
@@ -1199,6 +1205,14 @@ final class AgentLocalProcessTerminalView: TerminalView, TerminalViewDelegate, L
     }
 
     func terminate() {
+        let rootPID = process.shellPid
+        if rootPID > 0 {
+            // SwiftTerm only SIGTERMs its immediate child. Capture and signal
+            // the complete tree first, then let SwiftTerm close the PTY so an
+            // SSH peer receives hangup. Survivors are SIGKILLed after the
+            // shared grace period with PID-reuse protection.
+            AgentProcessSupport.terminateProcessTree(rootPID: rootPID)
+        }
         process.terminate()
     }
 
@@ -1608,10 +1622,15 @@ final class AgentTerminalTab: ObservableObject, Identifiable, AgentTerminalProce
         guard isRunning else {
             throw AgentToolError.invalidArgument("Open and start an Agent Terminal tab before sending control input.")
         }
-        lastActivity = Date()
-        terminalView.send(control.bytes)
+        sendUserControl(control)
         let payload = "Sent \(control.displayName) to Agent Terminal tab \"\(title)\"."
         return AgentToolResult(summary: "terminal: \(control.displayName)", payload: payload)
+    }
+
+    func sendUserControl(_ control: AgentTerminalControl) {
+        guard isRunning else { return }
+        lastActivity = Date()
+        terminalView.send(control.bytes)
     }
 
     func sendAutomationCommand(_ command: String, displayCommand: String) throws {
@@ -1938,6 +1957,16 @@ final class AgentInteractiveTerminalController: ObservableObject {
         if activeTabID == id {
             activeTabID = tabs.last?.id
         }
+    }
+
+    func stopTab(id: UUID) {
+        guard let target = tab(id: id), !target.isAutomationBusy else { return }
+        target.terminate()
+    }
+
+    func sendUserControl(_ control: AgentTerminalControl, toTabID id: UUID) {
+        guard let target = tab(id: id), !target.isAutomationBusy else { return }
+        target.sendUserControl(control)
     }
 
     func closeTabs(openedBy sessionID: UUID) {

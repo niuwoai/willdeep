@@ -4349,6 +4349,62 @@
         }
       }
     },
+    "agent-terminal.close-tab" : {
+      "comment" : "Tooltip for closing a terminal tab",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Close terminal tab" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "关闭终端标签" } }
+      }
+    },
+    "agent-terminal.session.automation-busy" : {
+      "comment" : "Explains why a terminal session owned by automation cannot be stopped from the tab",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "An automated task is using this tab. Stop that task before closing the session." } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "自动化任务正在使用此标签；请先停止对应任务，再关闭会话。" } }
+      }
+    },
+    "agent-terminal.session.controls-help" : {
+      "comment" : "Tooltip for the running terminal session controls menu",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Interrupt, send control keys, or stop this terminal session" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "中断程序、发送控制键或停止终端会话" } }
+      }
+    },
+    "agent-terminal.session.interrupt" : {
+      "comment" : "Menu action that sends Ctrl-C to the terminal",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Interrupt Current Program (Ctrl-C)" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "中断当前程序（Ctrl-C）" } }
+      }
+    },
+    "agent-terminal.session.send-eof" : {
+      "comment" : "Menu action that sends Ctrl-D to the terminal",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Send EOF (Ctrl-D)" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "发送 EOF（Ctrl-D）" } }
+      }
+    },
+    "agent-terminal.session.stop" : {
+      "comment" : "Destructive menu action that stops the terminal process tree",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Stop Session" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "停止会话" } }
+      }
+    },
+    "agent-terminal.session.telnet-escape" : {
+      "comment" : "Menu action that sends the Ctrl-right-bracket telnet escape byte",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Telnet Escape (Ctrl-])" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "Telnet 退出键（Ctrl-]）" } }
+      }
+    },
     "agent-terminal.session.exited" : {
       "extractionState" : "manual",
       "localizations" : {

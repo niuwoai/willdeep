@@ -986,6 +986,18 @@ struct AgentToolsCoreTests {
             arguments: ["control": .string("enter")]
         )
         #expect(enterSignature == "terminal_control:enter")
+
+        let eofSignature = AgentToolAuthorization.signature(
+            toolName: "terminal_send_control",
+            arguments: ["control": .string("ctrl_d")]
+        )
+        #expect(eofSignature == "terminal_control:ctrl_d")
+
+        let telnetEscapeSignature = AgentToolAuthorization.signature(
+            toolName: "terminal_send_control",
+            arguments: ["control": .string("ctrl_right_bracket")]
+        )
+        #expect(telnetEscapeSignature == "terminal_control:ctrl_right_bracket")
         #expect(controlSignature != enterSignature)
     }
 

@@ -164,10 +164,10 @@ enum AgentToolRegistry {
         ),
         AgentToolDescriptor(
             name: "terminal_send_control",
-            description: "Send a whitelisted control key to the ACTIVE Agent Terminal side-panel tab, or the exact terminal_tab_id when supplied. Requires user approval; use ctrl_c to interrupt a foreground command, enter to submit the current line, or escape to cancel terminal UI modes.",
+            description: "Send a whitelisted control key to the ACTIVE Agent Terminal side-panel tab, or the exact terminal_tab_id when supplied. Requires user approval; use ctrl_c to interrupt a foreground command, ctrl_d to send EOF, ctrl_right_bracket to open a telnet-style escape prompt, enter to submit the current line, or escape to cancel terminal UI modes.",
             risk: .write,
             parameters: [
-                AgentToolParameter(name: "control", type: .string, description: "One of: ctrl_c, enter, escape.", required: true),
+                AgentToolParameter(name: "control", type: .string, description: "One of: ctrl_c, ctrl_d, ctrl_right_bracket, enter, escape.", required: true),
                 AgentToolParameter(name: "terminal_tab_id", type: .string, description: "Optional exact terminal tab UUID. Omit to target the active side-panel tab.", required: false)
             ]
         ),

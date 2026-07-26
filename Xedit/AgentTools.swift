@@ -32,7 +32,20 @@ enum AgentProcessSupport {
         _ process: Process,
         gracePeriod: TimeInterval = 2
     ) {
-        let rootPID = process.processIdentifier
+        terminateProcessTree(rootPID: process.processIdentifier, gracePeriod: gracePeriod)
+    }
+
+    /// PID-based variant for PTY-backed processes such as SwiftTerm's
+    /// `LocalProcess`, which does not expose a Foundation `Process`.
+    ///
+    /// Capture descendants before sending TERM: the root shell/ssh process
+    /// can exit immediately, after which libproc can no longer discover
+    /// children that ignored the first signal. The delayed identity check
+    /// protects the SIGKILL fallback from PID reuse.
+    nonisolated static func terminateProcessTree(
+        rootPID: pid_t,
+        gracePeriod: TimeInterval = 2
+    ) {
         guard rootPID > 0 else { return }
         let trackedPIDs = descendantPIDs(of: rootPID) + [rootPID]
         let trackedIdentities = trackedPIDs.compactMap(ProcessIdentity.init(pid:))

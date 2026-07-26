@@ -1,6 +1,6 @@
 # WillDeep Product Overview
 
-> Last updated: 2026-07-26 | Current version: v1.208.0-rc1
+> Last updated: 2026-07-26 | Current version: v1.208.0-rc3
 
 ## Positioning
 
@@ -11,6 +11,8 @@ Official product domain: [willdeep.com](https://willdeep.com).
 WillDeep is configured for non-App-Store distribution without App Sandbox so it can access local project files with fewer permission interruptions.
 
 ## 架构概览
+
+- **活跃终端会话可控停止（1.208.0-rc3）** —— 运行状态胶囊提供 `Ctrl-C`、telnet 转义键 `Ctrl-]`、`Ctrl-D` 和停止会话入口；停止或关闭标签页时对本地 PTY 的整棵进程树执行 TERM、关闭 PTY、超时 KILL，并用进程启动身份防止 PID 复用误杀。
 
 - **本地 Agent 搜索优先使用 ripgrep（1.208.0-rc1）** —— `search_files` 与 `grep_files` 在本机可发现 `rg` 时走 JSON 流式快路径，保留大小写、正则、include glob、结果上限、工作区相对路径和生成目录排除语义；`rg` 缺失、启动失败或无法处理兼容正则时自动回退原 Swift 扫描器，不影响远端 workspace。
 
