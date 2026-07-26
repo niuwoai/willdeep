@@ -1,6 +1,6 @@
 # WillDeep Product Overview
 
-> Last updated: 2026-07-26 | Current version: v1.208.0-rc1
+> Last updated: 2026-07-26 | Current version: v1.208.0-rc2
 
 ## Positioning
 
@@ -11,6 +11,8 @@ Official product domain: [willdeep.com](https://willdeep.com).
 WillDeep is configured for non-App-Store distribution without App Sandbox so it can access local project files with fewer permission interruptions.
 
 ## 架构概览
+
+- **密码占位符换行高亮修复（1.208.0-rc2）** —— Agent 输入框中的 `${secret:...}` 受 Keychain 保护占位符如果在行尾换行，胶囊高亮会按 TextKit 的每个真实行片段分别绘制，不再用跨行外接矩形覆盖前面的普通提示词；单行占位符仍保持一个紧凑胶囊。
 
 - **本地 Agent 搜索优先使用 ripgrep（1.208.0-rc1）** —— `search_files` 与 `grep_files` 在本机可发现 `rg` 时走 JSON 流式快路径，保留大小写、正则、include glob、结果上限、工作区相对路径和生成目录排除语义；`rg` 缺失、启动失败或无法处理兼容正则时自动回退原 Swift 扫描器，不影响远端 workspace。
 
