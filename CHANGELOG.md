@@ -1,7 +1,18 @@
 # Changelog
 
-> 当前文件保留最新版本（1.210.0-rc6 至 1.109.0-rc340）。
+> 当前文件保留最新版本（1.210.0-rc7 至 1.109.0-rc340）。
 > 更早的 1000 个版本已移至 [CHANGELOG-ARCHIVE.md](CHANGELOG-ARCHIVE.md)。
+
+## 1.210.0-rc7 - 2026-07-27
+
+### Fixed
+
+- **正式发布被旧测试契约拦截**：Chrome 标签页截图已归为只读操作，但旧测试仍要求写风险；同步更新风险断言，确保截图不再弹出 WillDeep 确认卡。
+- **系统提示词快照未随 WillDeep 技能契约更新**：稳定提示词版本升级为 `willdeep-agent-system-v12`，重新记录 standard 与 extended 配置的确定性哈希，恢复完整发布测试闸门。
+
+### Meta
+
+- 版本号从 **1.210.0-rc6** 递增为 **1.210.0-rc7**（发布回归基线 bugfix，仅递增 rc 位），内部构建号从 **181** 递增为 **182**，Help 与 Computer Use Helper 构建号从 **98** 递增为 **99**；App、Go agent、Help、Helper、浏览器扩展、README、响应头契约与产品文档保持一致。
 
 ## 1.210.0-rc6 - 2026-07-27
 

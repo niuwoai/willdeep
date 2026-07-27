@@ -11,10 +11,10 @@ import Testing
 struct AgentChromeToolTests {
     @Test
     func chromeNavigationAndSnapshotToolsExposeExpectedRisks() throws {
-        for name in ["chrome_status", "chrome_read_page", "chrome_read_selection", "chrome_snapshot", "chrome_list_tabs", "chrome_wait_for"] {
+        for name in ["chrome_status", "chrome_read_page", "chrome_read_selection", "chrome_snapshot", "chrome_list_tabs", "chrome_wait_for", "chrome_capture_tab"] {
             #expect(try #require(AgentToolRegistry.descriptor(for: name)).risk == .read)
         }
-        for name in ["chrome_activate_tab", "chrome_navigate", "chrome_history", "chrome_click", "chrome_type", "chrome_hover", "chrome_select_option", "chrome_press_key", "chrome_scroll", "chrome_capture_tab"] {
+        for name in ["chrome_activate_tab", "chrome_navigate", "chrome_history", "chrome_click", "chrome_type", "chrome_hover", "chrome_select_option", "chrome_press_key", "chrome_scroll"] {
             #expect(try #require(AgentToolRegistry.descriptor(for: name)).risk == .write)
         }
         #expect(try #require(AgentToolRegistry.descriptor(for: "chrome_debugger_command")).risk == .danger)
