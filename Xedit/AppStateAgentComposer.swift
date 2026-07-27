@@ -424,6 +424,17 @@ extension AppState {
             return
         }
 
+        _ = applyExplicitPlanContinuationIfNeeded(
+            for: runtime,
+            text: text,
+            hasAttachments: !images.isEmpty || !textAttachments.isEmpty || !attachedSkills.isEmpty,
+            source: source
+        )
+        let delegatedUserText = AgentPlanContinuationPolicy.delegatedExecutionTask(
+            userText: text,
+            currentPlan: runtime.currentPlan
+        )
+
         resolvePendingAgentPatchProposalsBeforeNewMessage(for: runtime)
 
         runtime.errorMessage = nil
@@ -444,7 +455,7 @@ extension AppState {
         runtime.latestTurnRecall = nil
 
         let delegatedContract = AgentDelegatedTaskControl.makeContract(
-            objective: text,
+            objective: delegatedUserText,
             executor: executionAgent,
             goal: runtime.currentGoal
         )
@@ -456,7 +467,7 @@ extension AppState {
             runtime.delegatedTaskRuns.removeLast(runtime.delegatedTaskRuns.count - 20)
         }
         let prompt = delegatedAgentPrompt(
-            userText: text,
+            userText: delegatedUserText,
             conversationMessages: runtime.messages,
             textAttachments: textAttachments,
             images: images,
@@ -503,7 +514,7 @@ extension AppState {
             await self.runDelegatedAgentToolCall(
                 toolName: toolName,
                 arguments: arguments,
-                userText: text,
+                userText: delegatedUserText,
                 textAttachments: textAttachments,
                 images: images,
                 executionAgent: executionAgent,

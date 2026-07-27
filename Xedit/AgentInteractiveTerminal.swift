@@ -1279,6 +1279,13 @@ final class AgentLocalProcessTerminalView: TerminalView, TerminalViewDelegate, L
 final class AgentTerminalTab: ObservableObject, Identifiable, AgentTerminalProcessDelegate {
     nonisolated static let delegatedShellExecutable = "/bin/sh"
 
+    /// Hard ceiling on a single automation command typed into the pty. The
+    /// tty input queue (MAX_INPUT, 1024 bytes on Darwin) drops the tail of
+    /// anything larger once the interactive shell's echo backs up the output
+    /// queue. Delegated invocations are `/bin/sh <runner path>` — ~100 bytes —
+    /// so this only fires if someone reintroduces an inline wrapper.
+    nonisolated static let maximumAutomationCommandBytes = 512
+
     let id: UUID
     /// Which Agent session opened this tab. nil for tabs the user opened
     /// manually with no active session context.
@@ -1677,6 +1684,14 @@ final class AgentTerminalTab: ObservableObject, Identifiable, AgentTerminalProce
         }
         guard !isAutomationBusy else {
             throw AgentToolError.invalidArgument("The bound Agent Terminal tab is already running another delegated task.")
+        }
+        // Typed into the pty as input, so it is bound by the tty input queue —
+        // see AgentDelegatedTerminalRunner for the full failure mode. Anything
+        // large must be staged in a runner file and invoked by path.
+        guard command.utf8.count <= Self.maximumAutomationCommandBytes else {
+            throw AgentToolError.invalidArgument(
+                "Automation command is \(command.utf8.count) bytes; the pty input queue truncates past \(Self.maximumAutomationCommandBytes). Stage it in a runner file and send `/bin/sh <path>` instead."
+            )
         }
         isAutomationBusy = true
         title = "\(displayCommand) · sh"

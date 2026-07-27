@@ -1940,7 +1940,7 @@ struct WillDeepTests {
         )
         #expect(curlApproval == nil)
 
-        // 普通模式下，委托式编码 Agent 由静态白名单免去重复审批。
+        // 无 Git 基线时，普通会话中的委托式编码 Agent 也需确认。
         let normalApproval = await appState.autoApprovalSource(
             toolName: "claude_code",
             arguments: ["prompt": .string("do x")],
@@ -1948,7 +1948,7 @@ struct WillDeepTests {
             rootDirectory: root,
             interactionMode: .normal
         )
-        #expect(normalApproval == .staticAllowlist)
+        #expect(normalApproval == nil)
 
         // Goal 模式下允许自动改名，但 workspace 归属仍不能绕过人工确认。
         let titleApproval = await appState.autoApprovalSource(
@@ -2081,18 +2081,39 @@ struct WillDeepTests {
 
     @Test("approval mode controls write-tier auto approval")
     @MainActor
-    func testApprovalModeControlsWriteTierAutoApproval() async {
+    func testApprovalModeControlsWriteTierAutoApproval() async throws {
         let sandbox = KeychainSandbox()
         defer { withExtendedLifetime(sandbox) {} }
         let appState = AppState()
         appState.autoApproveSafeCommands = true
-        let root = URL(fileURLWithPath: "/tmp/willdeep-test-workspace")
+        let testRoot = FileManager.default.temporaryDirectory
+            .appendingPathComponent("willdeep_approval_modes_\(UUID().uuidString)", isDirectory: true)
+        let gitRoot = testRoot.appendingPathComponent("git-workspace", isDirectory: true)
+        let noGitRoot = testRoot.appendingPathComponent("plain-workspace", isDirectory: true)
+        try FileManager.default.createDirectory(at: gitRoot, withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: noGitRoot, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: testRoot) }
+
+        func runGit(_ arguments: [String]) throws {
+            let result = AppState.runGitCommand(arguments: arguments, in: gitRoot)
+            try #require(result.succeeded, "git \(arguments.joined(separator: " ")) failed: \(result.stderr)")
+        }
+        try runGit(["init"])
+        try runGit(["config", "user.email", "tests@example.invalid"])
+        try runGit(["config", "user.name", "WillDeep Tests"])
+        try "baseline\n".write(
+            to: gitRoot.appendingPathComponent("README.md"),
+            atomically: true,
+            encoding: .utf8
+        )
+        try runGit(["add", "README.md"])
+        try runGit(["commit", "-m", "baseline"])
 
         let askEveryTime = await appState.autoApprovalSource(
             toolName: "run_command",
             arguments: ["command": .string("ls")],
             risk: .write,
-            rootDirectory: root,
+            rootDirectory: gitRoot,
             approvalMode: .requestEveryTime
         )
         #expect(askEveryTime == nil)
@@ -2101,7 +2122,7 @@ struct WillDeepTests {
             toolName: "run_command",
             arguments: ["command": .string("ls")],
             risk: .write,
-            rootDirectory: root,
+            rootDirectory: noGitRoot,
             approvalMode: .smart
         )
         #expect(smart == .staticAllowlist)
@@ -2113,7 +2134,7 @@ struct WillDeepTests {
                 "zmodem_upload_paths": .array([.string("build/app.tar.gz")]),
             ],
             risk: .write,
-            rootDirectory: root,
+            rootDirectory: gitRoot,
             approvalMode: .smart
         )
         #expect(zmodemPathSelection == nil)
@@ -2122,7 +2143,7 @@ struct WillDeepTests {
             toolName: "run_command",
             arguments: ["command": .string("swift test")],
             risk: .write,
-            rootDirectory: root,
+            rootDirectory: noGitRoot,
             approvalMode: .workspaceAccess
         )
         #expect(workspace == .workspaceAccess)
@@ -2134,24 +2155,30 @@ struct WillDeepTests {
                 "tool": .string("create_issue"),
             ],
             risk: .write,
-            rootDirectory: root,
+            rootDirectory: gitRoot,
             approvalMode: .workspaceAccess
         )
         #expect(untrustedMCP == nil)
 
-        // Regression: `web_fetch` is sandbox `.escalated`, so before the
-        // Workspace-Access block was hoisted above the `run_command`-only
-        // `canSendToSafetyJudge` short-circuit it never reached its own
-        // whitelist entry and always prompted. General network access must
-        // now auto-approve under Workspace Access.
+        // Workspace Access authorizes workspace writes, not external network
+        // effects. Smart review is responsible for judging web/curl actions.
         let workspaceFetch = await appState.autoApprovalSource(
             toolName: "web_fetch",
             arguments: ["url": .string("https://docs.example.com/guide")],
             risk: .write,
-            rootDirectory: root,
+            rootDirectory: gitRoot,
             approvalMode: .workspaceAccess
         )
-        #expect(workspaceFetch == .workspaceAccess)
+        #expect(workspaceFetch == nil)
+
+        let workspaceCurl = await appState.autoApprovalSource(
+            toolName: "run_command",
+            arguments: ["command": .string("curl https://example.com/status")],
+            risk: .write,
+            rootDirectory: gitRoot,
+            approvalMode: .workspaceAccess
+        )
+        #expect(workspaceCurl == nil)
 
         // A destructive typed-confirmation command still pauses in
         // Workspace Access — the hard safety gate must survive the hoist.
@@ -2159,7 +2186,7 @@ struct WillDeepTests {
             toolName: "run_command",
             arguments: ["command": .string("rm -rf /tmp/willdeep-test-workspace")],
             risk: .write,
-            rootDirectory: root,
+            rootDirectory: gitRoot,
             approvalMode: .workspaceAccess
         )
         #expect(workspaceDestructive == nil)
@@ -2168,16 +2195,43 @@ struct WillDeepTests {
             toolName: "run_command",
             arguments: ["command": .string("go build -o bin/app . 2>&1")],
             risk: .write,
-            rootDirectory: root,
+            rootDirectory: gitRoot,
             approvalMode: .smart
         )
         #expect(goBuild == .staticAllowlist)
+
+        let noGitBuild = await appState.autoApprovalSource(
+            toolName: "run_command",
+            arguments: ["command": .string("go build -o bin/app . 2>&1")],
+            risk: .write,
+            rootDirectory: noGitRoot,
+            approvalMode: .smart
+        )
+        #expect(noGitBuild == nil)
+
+        let gitDelegatedAgent = await appState.autoApprovalSource(
+            toolName: "claude_code",
+            arguments: ["prompt": .string("update the project")],
+            risk: .write,
+            rootDirectory: gitRoot,
+            approvalMode: .smart
+        )
+        #expect(gitDelegatedAgent == .staticAllowlist)
+
+        let noGitDelegatedAgent = await appState.autoApprovalSource(
+            toolName: "claude_code",
+            arguments: ["prompt": .string("update the project")],
+            risk: .write,
+            rootDirectory: noGitRoot,
+            approvalMode: .smart
+        )
+        #expect(noGitDelegatedAgent == nil)
 
         let yarnBuild = await appState.autoApprovalSource(
             toolName: "run_command",
             arguments: ["command": .string("yarn run build")],
             risk: .write,
-            rootDirectory: root,
+            rootDirectory: gitRoot,
             approvalMode: .smart
         )
         #expect(yarnBuild == .staticAllowlist)
@@ -2185,13 +2239,13 @@ struct WillDeepTests {
         let heredocGeneration = await appState.autoApprovalSource(
             toolName: "run_command",
             arguments: ["command": .string("""
-            cd /tmp/willdeep-test-workspace && python3 << 'PYEOF'
+            cd \(gitRoot.path) && python3 << 'PYEOF'
             from pathlib import Path
             Path("Generated.swift").write_text("let value = 1\\n")
             PYEOF
             """)],
             risk: .write,
-            rootDirectory: root,
+            rootDirectory: gitRoot,
             approvalMode: .smart
         )
         #expect(heredocGeneration == .staticAllowlist)
@@ -2199,15 +2253,46 @@ struct WillDeepTests {
         let outsideWorkspaceGeneration = await appState.autoApprovalSource(
             toolName: "run_command",
             arguments: ["command": .string("""
-            cd /tmp/willdeep-test-workspace && cat > /tmp/outside.txt << 'EOF'
+            cd \(gitRoot.path) && cat > /tmp/outside.txt << 'EOF'
             generated
             EOF
             """)],
             risk: .write,
-            rootDirectory: root,
+            rootDirectory: gitRoot,
             approvalMode: .smart
         )
         #expect(outsideWorkspaceGeneration == nil)
+    }
+
+    @Test("smart review requires a committed git baseline for workspace writes")
+    func testRecoverableGitBaselineDetection() throws {
+        #expect(AppState.findGitRepositoryRoot(startingAt: URL(fileURLWithPath: "/")) == nil)
+
+        let workspace = FileManager.default.temporaryDirectory
+            .appendingPathComponent("willdeep_git_baseline_\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: workspace, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: workspace) }
+
+        #expect(!AppState.hasRecoverableGitBaseline(startingAt: workspace))
+        #expect(AppState.runGitCommand(arguments: ["init"], in: workspace).succeeded)
+        #expect(!AppState.hasRecoverableGitBaseline(startingAt: workspace))
+
+        #expect(AppState.runGitCommand(
+            arguments: ["config", "user.email", "tests@example.invalid"],
+            in: workspace
+        ).succeeded)
+        #expect(AppState.runGitCommand(
+            arguments: ["config", "user.name", "WillDeep Tests"],
+            in: workspace
+        ).succeeded)
+        try "baseline\n".write(
+            to: workspace.appendingPathComponent("README.md"),
+            atomically: true,
+            encoding: .utf8
+        )
+        #expect(AppState.runGitCommand(arguments: ["add", "README.md"], in: workspace).succeeded)
+        #expect(AppState.runGitCommand(arguments: ["commit", "-m", "baseline"], in: workspace).succeeded)
+        #expect(AppState.hasRecoverableGitBaseline(startingAt: workspace))
     }
 
     @Test("legacy agent session JSON defaults to smart approval")

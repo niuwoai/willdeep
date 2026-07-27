@@ -1,6 +1,6 @@
 # WillDeep Product Overview
 
-> Last updated: 2026-07-27 | Current version: v1.210.0-rc12
+> Last updated: 2026-07-28 | Current version: v1.210.0-rc18
 
 ## Positioning
 
@@ -11,6 +11,17 @@ Official product domain: [willdeep.com](https://willdeep.com).
 WillDeep is configured for non-App-Store distribution without App Sandbox so it can access local project files with fewer permission interruptions.
 
 ## 架构概览
+
+- **委托终端命令被 pty 截断修复（1.210.0-rc18）** —— 分派给 Claude Code / Codex 等外部 CLI 的任务重新通过私有 runner 脚本执行，可见终端只接收一行 `/bin/sh <runner>` 调用；超长中文提示词不再因交互式 shell 回显撑爆 tty 输入队列而被丢字节，也不会让终端停在续行提示符下静默空等。真实命令仍会在执行前回显到终端供用户审阅。
+- **Git 根目录检测内存失控修复（1.210.0-rc17）** —— 无 Git 工作区的仓库根目录探测会在文件系统根目录稳定终止；兼容 Foundation 将 `/` 的父路径暂时表示为 `/..` 的行为，避免路径字符串无限增长、主线程卡死并耗尽内存。
+
+- **Git 感知的智能审核（1.210.0-rc16）** —— Agent 会话默认使用“智能审核”：只读操作自动执行，存在已提交 Git `HEAD` 时自动执行受控工作区写入，外部与联网操作继续经过静态规则或 AI 安全判断；无 Git、仅初始化但尚未提交、已有未保存或脏文件时，写入会要求用户确认。“每次询问”已更名为“严格模式”；用户主动选择“工作区访问”后可在无 Git 工作区自动写入，但外部与联网操作仍需确认。
+
+- **Plan 模式“继续”执行闭环（1.210.0-rc15）** —— 已生成的提案计划会继续作为权威执行契约注入上下文；用户发送“继续”“执行”“proceed”等无歧义短指令时，宿主在真实派发边界把计划标记为已批准并切回 Normal 模式，队列消息与 Codex CLI、Claude Code 等委托执行器同样生效。包含附件、否定或修改要求的消息不会被误判为批准。
+
+- **Agent-only 技能包激活闭环（1.210.0-rc14）** —— 模型通过 `activate_expert` 激活 Web Programming、Browser Ops 或短剧技能包时，runtime 查找会覆盖活跃编辑器、默认 Agent 窗口的 headless AppState，以及关闭最后一个编辑器后仍被保留的会话；用户无需先打开编辑器或工作区即可完成激活。
+
+- **桌面宠物自适应动画帧率（1.210.0-rc13）** —— WillDeep 主窗口处于前台时，桌面宠物以 15 FPS 低功耗刷新；App 退到后台、宠物成为主要可见界面时自动提升到 24 FPS。前后台通知直接驱动同一个活动状态，动画调度和后台消息卡同步切换。
 
 - **提示词快照与终端契约同步（1.210.0-rc12）** —— 终端发送回执与自动回读契约变更后，同步升级稳定提示词契约版本并重录 standard、compact、extended 三档字节级哈希，确保发布前全量测试既能拦住意外漂移，也不会把有意更新误判为回归。
 

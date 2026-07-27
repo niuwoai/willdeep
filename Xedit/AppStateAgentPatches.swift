@@ -364,9 +364,6 @@ extension AppState {
         applyImmediately: Bool = false
     ) throws -> AgentPatchProposal {
         let parsed = try AgentPatchApplier.parse(diff)
-        // 创建新文件直接落地,不进审核 —— 用户反馈:新建文件不需要点
-        // Apply。只有「编辑已存在文件」才排进 chat 里的审核卡片等确认
-        // (Goal / workspace-access 模式仍照常自动应用编辑)。
         let isPureCreation = !parsed.isEmpty && parsed.allSatisfy(\.isNewFile)
 
         let proposalIndex: Int
@@ -384,13 +381,17 @@ extension AppState {
         }
 
         let isCleanTrackedModify = shouldAutoApplyCleanTrackedPatch(changes: parsed, runtime: runtime)
+        let smartHasRecoverableBaseline = runtime.interactionMode != .plan
+            && runtime.approvalMode == .smart
+            && Self.hasRecoverableGitBaseline(startingAt: agentPatchWorkspaceRoot(for: runtime))
+        let smartCanAutoApply = smartHasRecoverableBaseline
+            && (isPureCreation || applyImmediately || isCleanTrackedModify)
 
-        // 直接落盘的四种情形:Goal / workspace-access 自动应用、纯新建
-        // 文件、用户本轮明确要求「直接写 / 落盘 / 不用审核」
-        // (applyImmediately)、以及所有目标都是 git 已跟踪且当前干净的
-        // 既有文件。后者有 HEAD 兜底,风险边界清楚;未跟踪、已有用户
-        // 改动、打开但未保存的文件仍进 chat 卡片等用户点 Apply。
-        if (autoApplySource != nil || isPureCreation || applyImmediately || isCleanTrackedModify),
+        // Goal / Workspace Access can write immediately. Smart review does
+        // so only with a committed git baseline, and still protects dirty or
+        // unsaved tracked files. Strict mode and Smart without git always
+        // leave a patch card for explicit confirmation.
+        if (autoApplySource != nil || smartCanAutoApply),
            runtime.patchProposals[proposalIndex].status == .pending {
             let appliedMessage = autoApplySource
                 .map(autoApplyStatusMessage(for:))

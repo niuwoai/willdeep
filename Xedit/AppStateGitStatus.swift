@@ -284,10 +284,27 @@ extension AppState {
                 return currentURL
             }
 
-            let parentURL = currentURL.deletingLastPathComponent()
+            // Foundation can represent the parent of "/" as "/..". Normalize
+            // every step so the root comparison converges instead of growing
+            // into "/../.." forever and exhausting memory.
+            let parentURL = currentURL.deletingLastPathComponent().standardizedFileURL
             guard parentURL.path != currentURL.path else { return nil }
             currentURL = parentURL
         }
+    }
+
+    /// Smart review may write without asking only when git can restore the
+    /// workspace to a committed baseline. A freshly initialized repository
+    /// has a `.git` directory but no `HEAD`, so it is not recoverable yet.
+    nonisolated static func hasRecoverableGitBaseline(startingAt directoryURL: URL?) -> Bool {
+        guard let directoryURL,
+              let repositoryRoot = findGitRepositoryRoot(startingAt: directoryURL) else {
+            return false
+        }
+        return runGitCommand(
+            arguments: ["rev-parse", "--verify", "HEAD"],
+            in: repositoryRoot
+        ).succeeded
     }
 
     nonisolated static let maxGitOutputBytes = 512 * 1024

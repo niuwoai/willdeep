@@ -51,7 +51,9 @@ final class EditorAppStateRegistry: ObservableObject {
     /// 弱引用避免持有 NSWindow 阻止系统正常释放。
     private var windows: [ObjectIdentifier: WeakWindow] = [:]
 
-    private init() {}
+    /// Internal so unit tests can exercise retained/headless lookup without
+    /// mutating the process-wide shared registry.
+    init() {}
 
     /// Agent 窗口 onAppear 调用,确保 `current` 非空。冷启动只开 agent
     /// 窗口、还没有任何 editor 窗口注册时,惰性建一个 headless AppState
@@ -131,10 +133,12 @@ final class EditorAppStateRegistry: ObservableObject {
 
     /// 找到拥有指定 runtimeID 的 AppState。1.84.0-rc2 起 `run_workflow`
     /// 工具用这个把 agent 主动派的 workflow 注入到正确的 transcript。
-    /// 跨多个 editor 窗口扫一遍 —— window 数量极小（用户开 3 个就算
-    /// 多），扫表无所谓。
+    /// 跨所有仍被 registry 持有的 AppState 扫一遍，包括活跃 editor、
+    /// Agent-only 冷启动创建的 headless fallback，以及关闭最后一个
+    /// editor 后仍作为 current 保留的 orphan。window 数量极小（用户开
+    /// 3 个就算多），扫表无所谓。
     func appState(forRuntime runtimeID: UUID) -> AppState? {
-        for appState in activeEditors.values {
+        for appState in appStatesForTerminationCheck {
             if appState.agentRuntimes[runtimeID] != nil {
                 return appState
             }

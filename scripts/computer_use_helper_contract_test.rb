@@ -21,8 +21,8 @@ record = lambda do |name, ok, detail|
 end
 
 record.call(
-  "protocol-v3",
-  helper_source.include?('protocolVersion = "willdeep-computer-use.v3"'),
+  "protocol-v5",
+  helper_source.include?('protocolVersion = "willdeep-computer-use.v5"'),
   "Computer Use helper protocol"
 )
 

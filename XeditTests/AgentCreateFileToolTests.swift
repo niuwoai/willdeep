@@ -77,6 +77,10 @@ struct AgentCreateFileToolTests {
         let targetSession = appState.startNewAgentSession(inWorkspaceAt: targetWorkspace.path)
         createdSessionIDs.append(targetSession.id)
         let targetRuntime = try #require(appState.runtime(for: targetSession.id))
+        // This test isolates runtime-to-workspace routing. Explicit workspace
+        // access keeps the new Smart-without-Git approval gate from changing
+        // the routing assertion into a pending-approval assertion.
+        targetRuntime.approvalMode = .workspaceAccess
         let activeSession = appState.startNewAgentSession(inWorkspaceAt: activeWorkspace.path)
         createdSessionIDs.append(activeSession.id)
         let activeRuntime = try #require(appState.runtime(for: activeSession.id))
@@ -87,7 +91,8 @@ struct AgentCreateFileToolTests {
             for: targetRuntime,
             messageID: UUID(),
             title: "创建文件: deploy/compose.yml",
-            diff: diff
+            diff: diff,
+            autoApplySource: .workspaceAccess
         )
 
         #expect(proposal.status == .applied)

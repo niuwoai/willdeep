@@ -6266,13 +6266,13 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Ask every time"
+            "value" : "Strict mode"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "每次询问"
+            "value" : "严格模式"
           }
         }
       }
@@ -6283,13 +6283,13 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Ask before write, command, network, or remote actions."
+            "value" : "Ask before every write or external action."
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "写入、命令、联网或远端操作前询问。"
+            "value" : "每次写入或外部操作前都询问。"
           }
         }
       }
@@ -6300,13 +6300,13 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Smart approval"
+            "value" : "Smart review"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "智能审批"
+            "value" : "智能审核"
           }
         }
       }
@@ -6317,13 +6317,13 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "AI-approve normal work; ask for risky actions."
+            "value" : "Auto-write with a git baseline; intelligently review external actions."
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "AI 判断为正常工作则自动执行，高风险继续询问。"
+            "value" : "有 Git 基线时自动写入工作区，并智能审核外部操作。"
           }
         }
       }
@@ -6334,13 +6334,13 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Workspace access"
+            "value" : "Workspace write"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Workspace 访问"
+            "value" : "工作区可写"
           }
         }
       }
@@ -6351,13 +6351,13 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Allow current workspace actions; keep hard safety gates."
+            "value" : "Allow workspace writes; ask before external actions."
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "允许当前 workspace 操作，保留硬安全闸。"
+            "value" : "自动执行工作区写入；外部操作仍需确认。"
           }
         }
       }

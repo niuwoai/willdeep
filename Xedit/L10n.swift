@@ -145,12 +145,12 @@ nonisolated enum L10n {
 
     enum ApprovalMode {
         static let pickerHelp = String(localized: "approval-mode.picker-help", defaultValue: "Choose how this session approves Agent tool calls.")
-        static let requestEveryTime = String(localized: "approval-mode.request-every-time", defaultValue: "Ask every time")
-        static let requestEveryTimeSummary = String(localized: "approval-mode.request-every-time.summary", defaultValue: "Ask before write, command, network, or remote actions.")
-        static let smart = String(localized: "approval-mode.smart", defaultValue: "Smart approval")
-        static let smartSummary = String(localized: "approval-mode.smart.summary", defaultValue: "AI-approve normal work; ask for risky actions.")
-        static let workspaceAccess = String(localized: "approval-mode.workspace-access", defaultValue: "Workspace access")
-        static let workspaceAccessSummary = String(localized: "approval-mode.workspace-access.summary", defaultValue: "Allow current workspace actions; keep hard safety gates.")
+        static let requestEveryTime = String(localized: "approval-mode.request-every-time", defaultValue: "Strict mode")
+        static let requestEveryTimeSummary = String(localized: "approval-mode.request-every-time.summary", defaultValue: "Ask before every write or external action.")
+        static let smart = String(localized: "approval-mode.smart", defaultValue: "Smart review")
+        static let smartSummary = String(localized: "approval-mode.smart.summary", defaultValue: "Auto-write with a git baseline; intelligently review external actions.")
+        static let workspaceAccess = String(localized: "approval-mode.workspace-access", defaultValue: "Workspace write")
+        static let workspaceAccessSummary = String(localized: "approval-mode.workspace-access.summary", defaultValue: "Allow workspace writes; ask before external actions.")
     }
 
     enum Expert {

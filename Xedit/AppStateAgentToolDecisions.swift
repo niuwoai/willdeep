@@ -261,16 +261,16 @@ extension AppState {
             return nil
         }
 
-        // Delegated coding agents (Claude Code / Codex / Cursor / Cline) are
-        // trusted to run without WillDeep's per-call gate by default: each
-        // ships its own approval + sandbox review, so asking again is
-        // redundant friction. `requestEveryTime` above still forces a manual
-        // prompt for users who opt into asking for everything, and goal mode
-        // already auto-approves them earlier. This only skips WillDeep's outer
-        // gate — `.staticAllowlist` keeps the subprocess under the sandbox
-        // mode the policy computed (see `sandboxModeForToolExecution`).
+        // Delegated coding agents can modify many files in one call. Smart
+        // review skips WillDeep's outer gate only when the workspace has a
+        // committed git baseline. Workspace Access remains an explicit user
+        // choice and does not require git; Strict mode returned above.
         if Self.isTrustedDelegatedAgentTool(toolName) {
-            return .staticAllowlist
+            if approvalMode == .workspaceAccess
+                || Self.hasRecoverableGitBaseline(startingAt: rootDirectory) {
+                return .staticAllowlist
+            }
+            return nil
         }
 
         // Remote media-render jobs (some.im / Replicate submit·poll·cancel)
@@ -286,18 +286,16 @@ extension AppState {
         }
 
         // Workspace Access is resolved HERE — before the escalated /
-        // safety-judge gates below — so workspace-scoped tools the sandbox
-        // marks `.escalated` (notably `web_fetch` and `lark_cli` network
-        // calls) get approved by the workspace whitelist instead of being
-        // short-circuited into a manual prompt by the `run_command`-only
-        // `canSendToSafetyJudge` gate. Previously this block sat after that
-        // gate, so its `web_fetch` / `lark_cli` whitelist entries were dead
-        // code and "general network access" kept prompting in Workspace
-        // mode. Hard safety gates still win: the typed-confirmation danger
-        // gate above pauses destructive ops, and the delegated-agent /
-        // media allowlists already ran earlier.
+        // safety-judge gates below. This mode authorizes workspace-scoped
+        // writes, not arbitrary external effects: escalated network/remote
+        // actions remain manual. Smart review is the mode that can ask the
+        // safety judge to approve safe curl/web/remote operations.
         if approvalMode == .workspaceAccess {
-            if workspaceAccessCanAutoApprove(toolName: toolName, arguments: arguments) {
+            if workspaceAccessCanAutoApprove(
+                toolName: toolName,
+                arguments: arguments,
+                sandboxDecision: sandboxDecision
+            ) {
                 return .workspaceAccess
             }
             // User-pinned always-allow signatures still count in Workspace
@@ -411,11 +409,20 @@ extension AppState {
             return nil
         }
 
-        if AgentSandboxPolicy.canAutoApproveWorkspaceWriteCommand(
-            command: command,
-            rootDirectory: rootDirectory
-        ) {
-            return .staticAllowlist
+        if sandboxDecision.mode == .workspaceWrite
+            || sandboxDecision.mode == .workspaceWriteNetwork {
+            // Without a committed baseline, even a contained build or file
+            // generation command must be confirmed. Read-only commands and
+            // external/network calls still use smart classification below.
+            guard Self.hasRecoverableGitBaseline(startingAt: rootDirectory) else {
+                return nil
+            }
+            if AgentSandboxPolicy.canAutoApproveWorkspaceWriteCommand(
+                command: command,
+                rootDirectory: rootDirectory
+            ) {
+                return .staticAllowlist
+            }
         }
 
         switch SafeCommand.classify(command: command) {
@@ -912,10 +919,17 @@ extension AppState {
 
     private func workspaceAccessCanAutoApprove(
         toolName: String,
-        arguments: [String: AgentJSONValue]
+        arguments: [String: AgentJSONValue],
+        sandboxDecision: AgentSandboxDecision
     ) -> Bool {
         switch toolName {
-        case "run_command", "kill_job", "claude_code", "codex_cli", "cursor_agent", "cline_cli", "lark_cli", "web_fetch",
+        case "run_command":
+            guard let command = arguments["command"]?.stringValue(),
+                  !AgentSandboxPolicy.commandUsesExternalAccess(command) else {
+                return false
+            }
+            return sandboxDecision.mode == .readOnly || sandboxDecision.mode == .workspaceWrite
+        case "kill_job", "claude_code", "codex_cli", "cursor_agent", "cline_cli",
              "add_memory", "create_user_skill", "update_user_skill", "suggest_mcp_server", "configure_mcp_server":
             return true
         case "call_mcp_tool":
