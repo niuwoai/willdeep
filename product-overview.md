@@ -1,6 +1,6 @@
 # WillDeep Product Overview
 
-> Last updated: 2026-07-27 | Current version: v1.210.0-rc12
+> Last updated: 2026-07-27 | Current version: v1.210.0-rc13
 
 ## Positioning
 
@@ -11,6 +11,8 @@ Official product domain: [willdeep.com](https://willdeep.com).
 WillDeep is configured for non-App-Store distribution without App Sandbox so it can access local project files with fewer permission interruptions.
 
 ## 架构概览
+
+- **桌面宠物自适应动画帧率（1.210.0-rc13）** —— WillDeep 主窗口处于前台时，桌面宠物以 15 FPS 低功耗刷新；App 退到后台、宠物成为主要可见界面时自动提升到 24 FPS。前后台通知直接驱动同一个活动状态，动画调度和后台消息卡同步切换。
 
 - **提示词快照与终端契约同步（1.210.0-rc12）** —— 终端发送回执与自动回读契约变更后，同步升级稳定提示词契约版本并重录 standard、compact、extended 三档字节级哈希，确保发布前全量测试既能拦住意外漂移，也不会把有意更新误判为回归。
 
