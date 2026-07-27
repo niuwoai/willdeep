@@ -505,8 +505,8 @@ enum AgentToolRunner {
 
         let rawTitle = arguments["title"]?.stringValue()?.trimmingCharacters(in: .whitespacesAndNewlines)
         let title = (rawTitle?.isEmpty == false) ? rawTitle! : "创建文件: \(path)"
-        // New files always write immediately — mirror the long-standing
-        // new-file behavior of apply_patch.
+        // The host decides whether this creation can write immediately from
+        // the active approval mode and recoverable git baseline.
         let patchArguments: [String: AgentJSONValue] = [
             "diff": .string(diff),
             "title": .string(title),

@@ -280,6 +280,66 @@ extension WillDeepTests {
         #expect(try String(contentsOf: dirtyURL, encoding: .utf8) == "let dirty = 2\n")
     }
 
+    @Test("Smart without git and Strict mode keep workspace writes pending")
+    @MainActor
+    func testPatchWritesRequireConfirmationWithoutGitOrInStrictMode() throws {
+        let workspace = FileManager.default.temporaryDirectory
+            .appendingPathComponent("willdeep_patch_mode_gate_\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: workspace, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: workspace) }
+
+        let appState = AppState(rootDirectory: workspace)
+        let session = appState.startNewAgentSession()
+        defer { AgentSessionStore.delete(id: session.id) }
+        guard let runtime = appState.agentRuntimes[session.id] else {
+            Issue.record("Expected runtime for new agent session")
+            return
+        }
+
+        let smartCreation = try appState.enqueueAgentPatchProposal(
+            for: runtime,
+            messageID: UUID(),
+            title: "Smart creation without git",
+            diff: AgentToolRunner.makeCreationDiff(
+                path: "Generated.swift",
+                content: "let generated = true\n"
+            ),
+            applyImmediately: true
+        )
+        #expect(smartCreation.status == .pending)
+        #expect(!FileManager.default.fileExists(
+            atPath: workspace.appendingPathComponent("Generated.swift").path
+        ))
+
+        func runGit(_ arguments: [String]) {
+            let result = AppState.runGitCommand(arguments: arguments, in: workspace)
+            #expect(result.succeeded, "git \(arguments.joined(separator: " ")) failed: \(result.stderr)")
+        }
+        runGit(["init"])
+        runGit(["config", "user.email", "tests@example.invalid"])
+        runGit(["config", "user.name", "WillDeep Tests"])
+        let strictURL = workspace.appendingPathComponent("Strict.swift")
+        try "let strict = 1\n".write(to: strictURL, atomically: true, encoding: .utf8)
+        runGit(["add", "Strict.swift"])
+        runGit(["commit", "-m", "baseline"])
+
+        runtime.approvalMode = .requestEveryTime
+        let strictEdit = try appState.enqueueAgentPatchProposal(
+            for: runtime,
+            messageID: UUID(),
+            title: "Strict tracked edit",
+            diff: """
+            --- a/Strict.swift
+            +++ b/Strict.swift
+            @@ -1 +1 @@
+            -let strict = 1
+            +let strict = 2
+            """
+        )
+        #expect(strictEdit.status == .pending)
+        #expect(try String(contentsOf: strictURL, encoding: .utf8) == "let strict = 1\n")
+    }
+
     @Test("pending patch proposals auto-resolve before the next message in autonomous modes")
     @MainActor
     func testPendingPatchProposalsAutoResolveBeforeNextMessageInAutonomousModes() throws {

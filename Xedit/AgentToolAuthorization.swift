@@ -502,6 +502,38 @@ enum AgentSandboxPolicy {
         return true
     }
 
+    /// Returns whether a shell command reaches beyond the local workspace via
+    /// network or credential-bearing tools. Workspace Access deliberately
+    /// keeps these calls behind confirmation even when the underlying command
+    /// is read-only (for example, a plain `curl` GET).
+    nonisolated static func commandUsesExternalAccess(_ command: String) -> Bool {
+        let trimmed = command.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return true }
+
+        let policyCommand = commandByReplacingSafeShellExpansions(
+            commandWithHeredocBodiesRemoved(trimmed)
+        )
+        guard !containsUnsafeShellExpansion(policyCommand),
+              let segments = splitCommandSegments(policyCommand),
+              !segments.isEmpty else {
+            return true
+        }
+
+        for segment in segments {
+            guard let rawTokens = AgentCommandAuthorization.shellTokens(from: segment),
+                  let invocation = shellInvocation(from: rawTokens) else {
+                return true
+            }
+            let tokens = invocation.commandTokens
+            if networkHeads.contains(invocation.head)
+                || credentialHeads.contains(invocation.head)
+                || AgentPackageCommandPolicy.isDependencyInstallCommand(tokens: tokens) {
+                return true
+            }
+        }
+        return false
+    }
+
     nonisolated static func sandboxedEnvironment(
         mode: AgentSandboxMode,
         rootDirectory: URL?,

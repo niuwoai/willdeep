@@ -1,6 +1,6 @@
 # WillDeep Product Overview
 
-> Last updated: 2026-07-27 | Current version: v1.210.0-rc15
+> Last updated: 2026-07-27 | Current version: v1.210.0-rc17
 
 ## Positioning
 
@@ -11,6 +11,10 @@ Official product domain: [willdeep.com](https://willdeep.com).
 WillDeep is configured for non-App-Store distribution without App Sandbox so it can access local project files with fewer permission interruptions.
 
 ## 架构概览
+
+- **Git 根目录检测内存失控修复（1.210.0-rc17）** —— 无 Git 工作区的仓库根目录探测会在文件系统根目录稳定终止；兼容 Foundation 将 `/` 的父路径暂时表示为 `/..` 的行为，避免路径字符串无限增长、主线程卡死并耗尽内存。
+
+- **Git 感知的智能审核（1.210.0-rc16）** —— Agent 会话默认使用“智能审核”：只读操作自动执行，存在已提交 Git `HEAD` 时自动执行受控工作区写入，外部与联网操作继续经过静态规则或 AI 安全判断；无 Git、仅初始化但尚未提交、已有未保存或脏文件时，写入会要求用户确认。“每次询问”已更名为“严格模式”；用户主动选择“工作区访问”后可在无 Git 工作区自动写入，但外部与联网操作仍需确认。
 
 - **Plan 模式“继续”执行闭环（1.210.0-rc15）** —— 已生成的提案计划会继续作为权威执行契约注入上下文；用户发送“继续”“执行”“proceed”等无歧义短指令时，宿主在真实派发边界把计划标记为已批准并切回 Normal 模式，队列消息与 Codex CLI、Claude Code 等委托执行器同样生效。包含附件、否定或修改要求的消息不会被误判为批准。
 

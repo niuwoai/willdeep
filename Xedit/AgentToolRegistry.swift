@@ -187,7 +187,7 @@ enum AgentToolRegistry {
         ),
         AgentToolDescriptor(
             name: "create_file",
-            description: "Create a BRAND-NEW file and write it to disk IMMEDIATELY. This is the ONLY correct way to make a new file — do NOT use edit_file or apply_patch for creation. Pass the workspace-relative path and the full file content directly; no diff to hand-craft. Fails if the path already exists (to change an existing file, use edit_file instead). Missing parent directories are created. A file card showing the new file appears inline in the chat for auditability.",
+            description: "Create a BRAND-NEW file. This is the ONLY correct way to make a new file — do NOT use edit_file or apply_patch for creation. Pass the workspace-relative path and the full file content directly; no diff to hand-craft. Fails if the path already exists. Goal mode, Workspace Access, or Smart review with a committed git baseline writes immediately; otherwise an inline file card asks the user to Apply.",
             risk: .read,
             parameters: [
                 AgentToolParameter(name: "path", type: .string, description: "Workspace-relative path of the NEW file, e.g. `src/utils/date.ts` or `docs/README.md`. Must not already exist.", required: true),
@@ -197,7 +197,7 @@ enum AgentToolRegistry {
         ),
         AgentToolDescriptor(
             name: "edit_file",
-            description: "EDIT an EXISTING file by EXACT STRING REPLACEMENT — the PREFERRED way to edit files. Pass the workspace-relative path, the exact current text to replace (old_string) and its replacement (new_string). old_string must match the file content EXACTLY — including whitespace and indentation, WITHOUT read_file line-number prefixes — and must appear exactly ONCE in the file unless replace_all=true; include a few surrounding lines to make it unique. The host locates the match and builds the diff itself. If every edited file is already tracked by git and clean against HEAD, the edit writes to disk immediately; otherwise it shows a patch card INLINE IN THE CHAT (below your message; there is NO separate right-side review panel) for the user to review and click Apply. Goal mode or workspace-access approval mode also applies immediately. To CREATE a new file, use `create_file` — NOT this tool.",
+            description: "EDIT an EXISTING file by EXACT STRING REPLACEMENT — the PREFERRED way to edit files. Pass the workspace-relative path, the exact current text to replace (old_string) and its replacement (new_string). old_string must match the file content EXACTLY and appear exactly ONCE unless replace_all=true. In Smart review, a clean git-tracked file with a committed baseline writes immediately; dirty, unsaved, untracked, or non-git files show an inline patch card for the user to click Apply. Goal mode or Workspace Access also applies immediately; Strict mode always asks. To CREATE a new file, use `create_file`.",
             risk: .read,
             parameters: [
                 AgentToolParameter(name: "path", type: .string, description: "Workspace-relative path of the EXISTING file to edit, e.g. `src/utils/date.ts`.", required: true),
@@ -210,7 +210,7 @@ enum AgentToolRegistry {
         ),
         AgentToolDescriptor(
             name: "apply_patch",
-            description: "LEGACY fallback for editing an EXISTING file via a hand-written unified diff. PREFER `edit_file` (exact string replacement) — hand-crafted diffs frequently fail hunk matching. Use apply_patch only when edit_file cannot express the change (e.g. many scattered edits in one atomic patch). To CREATE a new file, use `create_file` instead — NOT this tool. If every edited file is already tracked by git and clean against HEAD, the edit writes to disk immediately; otherwise it shows a patch card INLINE IN THE CHAT, right below your message — there is NO separate right-side review panel — for the user to review and click Apply. Goal mode or workspace-access approval mode also applies immediately. Validates the diff shape before queuing.",
+            description: "LEGACY fallback for editing an EXISTING file via a hand-written unified diff. PREFER `edit_file`; use apply_patch only when exact replacement cannot express the change. To CREATE a new file, use `create_file`. In Smart review, clean git-tracked files with a committed baseline write immediately; dirty, unsaved, untracked, or non-git files show a patch card INLINE IN THE CHAT. Goal mode or Workspace Access also applies immediately; Strict mode always asks. Validates the diff shape before queuing.",
             risk: .read,
             parameters: [
                 AgentToolParameter(name: "diff", type: .string, description: "Unified diff for an EXISTING file. Use workspace-relative paths (`--- a/path`, `+++ b/path`) and standard @@ hunks. (New files: use `create_file`, not a `/dev/null` diff here.)", required: true),
