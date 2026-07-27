@@ -180,21 +180,40 @@ enum AgentContextBuilder {
         // plan status; approval flips the session back to Normal mode and the
         // execution contract below (the Normal-mode branch) takes over.
         if interactionMode == .plan {
-            sections.append("""
-            === PLAN MODE — PLANNING ONLY ===
-            You are in Plan mode. Plan mode NEVER executes: tools that write, edit, or run commands are hard-blocked here regardless of plan status. Your only deliverable is a numbered plan in a single fenced block tagged `plan`:
+            if let plan = currentPlan, plan.status == .proposed {
+                let stepsText = plan.steps.enumerated()
+                    .map { "\($0.offset + 1). \($0.element.text)" }
+                    .joined(separator: "\n")
+                let summaryText = plan.summary.trimmingCharacters(in: .whitespacesAndNewlines)
+                let summaryLine = summaryText.isEmpty ? "" : "\nPlan summary: \(summaryText)"
+                sections.append("""
+                === PLAN MODE — EXISTING PLAN AWAITS DECISION ===
+                You are in Plan mode. Plan mode NEVER executes: tools that write, edit, or run commands are hard-blocked here.
 
-            ```plan
-            1. <one-line step>
-            2. <one-line step>
-            ...
-            ```
+                A proposed plan already exists and is authoritative for this decision:\(summaryLine)
+                <current-proposed-plan>
+                \(stepsText)
+                </current-proposed-plan>
 
-            Treat the plan as the complete delivery contract for the user's request. Cover the requested end state, not just an outline, sample, first chapter, first file, or first phase unless the user explicitly asked for a partial delivery. Before emitting the plan, compare every requested deliverable against the numbered steps and add any missing work.
+                Do not repeat, reconstruct, or silently replace this plan merely because the user sends a short acknowledgement or asks to continue. The host promotes unambiguous approvals such as “继续”, “执行”, “continue”, or “proceed” to Normal execution mode before the request reaches you. If this request is still in Plan mode, revise the plan only when the latest operator message actually supplies revision guidance; preserve every unaffected step and emit exactly one complete replacement `plan` block. Otherwise, briefly state that the existing plan is still awaiting approval and do not emit a new `plan` block.
+                """)
+            } else {
+                sections.append("""
+                === PLAN MODE — PLANNING ONLY ===
+                You are in Plan mode. Plan mode NEVER executes: tools that write, edit, or run commands are hard-blocked here regardless of plan status. Your only deliverable is a numbered plan in a single fenced block tagged `plan`:
 
-            Then STOP and wait. When the user approves the plan, WillDeep switches this session back to Normal mode and execution happens there — never in Plan mode. Do not call any tool after drafting the plan. Read-only investigation tools (search_files, grep_files, read_file, list_directory, git_status, web_search) and web_fetch for validated public URLs are still allowed BEFORE drafting the plan — but once you've drafted, stop and wait.
-            If the user revises and re-prompts after a Reject, emit a new ```plan block.
-            """)
+                ```plan
+                1. <one-line step>
+                2. <one-line step>
+                ...
+                ```
+
+                Treat the plan as the complete delivery contract for the user's request. Cover the requested end state, not just an outline, sample, first chapter, first file, or first phase unless the user explicitly asked for a partial delivery. Before emitting the plan, compare every requested deliverable against the numbered steps and add any missing work.
+
+                Then STOP and wait. When the user approves the plan, WillDeep switches this session back to Normal mode and execution happens there — never in Plan mode. Do not call any tool after drafting the plan. Read-only investigation tools (search_files, grep_files, read_file, list_directory, git_status, web_search) and web_fetch for validated public URLs are still allowed BEFORE drafting the plan — but once you've drafted, stop and wait.
+                If the user revises and re-prompts after a Reject, emit a new ```plan block.
+                """)
+            }
         }
 
         // Normal mode carrying an approved plan: this is the execution half of

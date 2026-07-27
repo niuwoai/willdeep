@@ -1,6 +1,6 @@
 # WillDeep Product Overview
 
-> Last updated: 2026-07-27 | Current version: v1.210.0-rc13
+> Last updated: 2026-07-27 | Current version: v1.210.0-rc15
 
 ## Positioning
 
@@ -11,6 +11,10 @@ Official product domain: [willdeep.com](https://willdeep.com).
 WillDeep is configured for non-App-Store distribution without App Sandbox so it can access local project files with fewer permission interruptions.
 
 ## 架构概览
+
+- **Plan 模式“继续”执行闭环（1.210.0-rc15）** —— 已生成的提案计划会继续作为权威执行契约注入上下文；用户发送“继续”“执行”“proceed”等无歧义短指令时，宿主在真实派发边界把计划标记为已批准并切回 Normal 模式，队列消息与 Codex CLI、Claude Code 等委托执行器同样生效。包含附件、否定或修改要求的消息不会被误判为批准。
+
+- **Agent-only 技能包激活闭环（1.210.0-rc14）** —— 模型通过 `activate_expert` 激活 Web Programming、Browser Ops 或短剧技能包时，runtime 查找会覆盖活跃编辑器、默认 Agent 窗口的 headless AppState，以及关闭最后一个编辑器后仍被保留的会话；用户无需先打开编辑器或工作区即可完成激活。
 
 - **桌面宠物自适应动画帧率（1.210.0-rc13）** —— WillDeep 主窗口处于前台时，桌面宠物以 15 FPS 低功耗刷新；App 退到后台、宠物成为主要可见界面时自动提升到 24 FPS。前后台通知直接驱动同一个活动状态，动画调度和后台消息卡同步切换。
 

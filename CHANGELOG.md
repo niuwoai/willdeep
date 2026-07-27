@@ -1,7 +1,38 @@
 # Changelog
 
-> 当前文件保留最新版本（1.210.0-rc13 至 1.109.0-rc340）。
+> 当前文件保留最新版本（1.210.0-rc15 至 1.109.0-rc340）。
 > 更早的 1000 个版本已移至 [CHANGELOG-ARCHIVE.md](CHANGELOG-ARCHIVE.md)。
+
+## 1.210.0-rc15 - 2026-07-27
+
+### Fixed
+
+- **Plan 模式输入“继续”后重新规划**：当已有 `proposed` 计划时，宿主会在消息真实派发边界识别“继续”“执行”“按这个计划执行”及对应英文短指令，原子地批准原计划、切回 Normal 模式并按既有步骤执行；消息即使在计划生成前进入队列，也会在实际派发时依据最新状态正确处理。
+- **既有计划未进入后续模型上下文**：Plan 模式会显式固定当前提案并禁止无修改意图的静默覆盖；切换到 Codex CLI、Claude Code、Cursor Agent 或 Cline CLI 等委托执行器时，也会把已批准步骤作为权威执行契约打包，不再只转发一个脱离上下文的“继续”。
+- **模糊消息误触发执行**：带附件、来自宿主内部、包含否定或计划修改要求的消息不会自动批准，仍保留在 Plan 模式等待明确决策。
+
+### Tests
+
+- 新增 `AgentPlanContinuationTests`，覆盖中英文批准短语、否定与修改语句、附件和宿主消息保护、既有计划提示词固定，以及委托执行器计划透传。
+
+### Meta
+
+- 版本号从 **1.210.0-rc14** 递增为 **1.210.0-rc15**（Plan 继续执行状态机 bugfix，仅递增 rc 位），内部构建号从 **189** 递增为 **190**，Help 与 Computer Use Helper 构建号从 **106** 递增为 **107**；App、Go agent、Help、Helper、浏览器扩展、README、响应头契约与产品文档保持一致。
+
+## 1.210.0-rc14 - 2026-07-27
+
+### Fixed
+
+- **仅打开 Agent 窗口时模型无法激活技能包**：`activate_expert` 的 runtime 查找不再只扫描已注册的编辑器窗口，同时覆盖默认冷启动创建的 headless AppState、当前保留的 orphan AppState 与后台活跃编辑器；Web Programming、Browser Ops 和短剧技能包不再要求用户先打开编辑器或工作区。
+- **关闭最后一个编辑器后工具失去会话归属**：runtime 定位统一复用 registry 已有的完整保留状态集合，避免会话仍在运行但工具返回 `No active app session found`。
+
+### Tests
+
+- 新增 `EditorAppStateRegistryTests`，覆盖 Agent-only headless、关闭最后一个编辑器后保留 orphan，以及未知 runtime 拒绝三条路径。
+
+### Meta
+
+- 版本号从 **1.210.0-rc13** 递增为 **1.210.0-rc14**（Agent-only 技能包激活 bugfix，仅递增 rc 位），内部构建号从 **188** 递增为 **189**，Help 与 Computer Use Helper 构建号从 **105** 递增为 **106**；App、Go agent、Help、Helper、浏览器扩展、README、响应头契约与产品文档保持一致。
 
 ## 1.210.0-rc13 - 2026-07-27
 

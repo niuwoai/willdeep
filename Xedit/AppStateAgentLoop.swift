@@ -39,6 +39,14 @@ extension AppState {
         existingUserMessageID: AgentMessage.ID? = nil,
         source: AgentMessageSource = .operatorInput
     ) {
+        _ = applyExplicitPlanContinuationIfNeeded(
+            for: runtime,
+            text: text,
+            hasAttachments: !images.isEmpty
+                || !textAttachments.isEmpty
+                || !attachedSkills.isEmpty,
+            source: source
+        )
         resolvePendingAgentPatchProposalsBeforeNewMessage(for: runtime)
 
         let shouldArmGoalRecovery = AgentGoalLaunchRecoveryPolicy.shouldArmExecutionCheckpoint(
