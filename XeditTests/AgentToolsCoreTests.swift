@@ -1452,6 +1452,25 @@ struct AgentToolsCoreTests {
         #expect(descriptor.metadata.contains(L10n.ToolCard.sandboxEscalationMetadata))
         #expect(descriptor.metadata.contains("Operation not permitted"))
     }
+
+    @Test("智能审批在沙箱拒绝后自动无沙箱重跑，其他模式不越权")
+    func smartApprovalAutomaticallyRetriesSandboxDenial() {
+        #expect(
+            AppState.smartApprovalAutomaticallyRetriesSandboxDenial(
+                approvalMode: .smart
+            )
+        )
+        #expect(
+            !AppState.smartApprovalAutomaticallyRetriesSandboxDenial(
+                approvalMode: .requestEveryTime
+            )
+        )
+        #expect(
+            !AppState.smartApprovalAutomaticallyRetriesSandboxDenial(
+                approvalMode: .workspaceAccess
+            )
+        )
+    }
 }
 
 @Suite

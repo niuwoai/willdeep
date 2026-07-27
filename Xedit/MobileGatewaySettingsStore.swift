@@ -155,7 +155,7 @@ enum MobileGatewaySettingsStore {
 
     private static let settingsKey = "com.willdeep.mobileGateway.settings.v1"
     private static let relayRoomKey = "com.willdeep.mobileGateway.relayRoom.v1"
-    private static let keychainService = "com.willdeep.mobile-gateway"
+    static let keychainService = "com.willdeep.mobile-gateway"
     private static let desktopTokenAccount = "desktop-peer-token"
     private static let relayTokenAccount = "relay-token"
 
@@ -242,20 +242,18 @@ enum MobileGatewaySettingsStore {
     }
 
     private static func loadToken(account: String) throws -> String? {
-        let query: [String: Any] = [
-            kSecClass as String: kSecClassGenericPassword,
-            kSecAttrService as String: keychainService,
-            kSecAttrAccount as String: account,
-            kSecReturnData as String: true,
-            kSecMatchLimit as String: kSecMatchLimitOne
-        ]
-        var item: CFTypeRef?
-        let status = SecItemCopyMatching(query as CFDictionary, &item)
-        if status == errSecItemNotFound { return nil }
-        guard status == errSecSuccess else {
-            throw StoreError.tokenLoadFailed(status)
+        let result = WillDeepKeychainStore.loadDataReportingStatus(
+            service: keychainService,
+            account: account,
+            migrationAccessibility: kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly
+        )
+        if result.status == errSecItemNotFound {
+            return nil
         }
-        guard let data = item as? Data else { return nil }
+        guard result.status == errSecSuccess else {
+            throw StoreError.tokenLoadFailed(result.status)
+        }
+        guard let data = result.data else { return nil }
         return String(data: data, encoding: .utf8)
     }
 
@@ -263,26 +261,14 @@ enum MobileGatewaySettingsStore {
         guard let data = token.data(using: .utf8) else {
             throw StoreError.tokenEncodingFailed
         }
-        let query: [String: Any] = [
-            kSecClass as String: kSecClassGenericPassword,
-            kSecAttrService as String: keychainService,
-            kSecAttrAccount as String: account
-        ]
-        let attributes: [String: Any] = [
-            kSecValueData as String: data,
-            kSecAttrAccessible as String: kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly
-        ]
-        let updateStatus = SecItemUpdate(query as CFDictionary, attributes as CFDictionary)
-        if updateStatus == errSecSuccess { return }
-        guard updateStatus == errSecItemNotFound else {
-            throw StoreError.tokenSaveFailed(updateStatus)
-        }
-        var addQuery = query
-        addQuery[kSecValueData as String] = data
-        addQuery[kSecAttrAccessible as String] = kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly
-        let addStatus = SecItemAdd(addQuery as CFDictionary, nil)
-        guard addStatus == errSecSuccess else {
-            throw StoreError.tokenSaveFailed(addStatus)
+        let status = WillDeepKeychainStore.saveData(
+            data,
+            service: keychainService,
+            account: account,
+            accessibility: kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly
+        )
+        guard status == errSecSuccess else {
+            throw StoreError.tokenSaveFailed(status)
         }
     }
 

@@ -713,7 +713,7 @@ struct ModelPickerPill: View {
                 HStack(spacing: 5) {
                     Image(systemName: Self.modelSymbol)
                         .font(.system(size: 10, weight: .semibold))
-                        .foregroundStyle(menuSnapshot.managedActive ? Color.teal : Color.secondary)
+                        .foregroundStyle(isManagedRoutingActive ? Color.teal : Color.secondary)
                     Text(pillLabel)
                         .font(AgentDesign.chatSupportingFont(
                             baseFontSize: appState.agentChatBaseFontSize
@@ -2417,11 +2417,21 @@ struct ModelPickerPill: View {
 
     private var pillLabel: String {
         AgentModelPickerPresentation.pillLabel(
-            managedActive: menuSnapshot.managedActive,
-            currentModelLabel: menuSnapshot.currentModelLabel,
+            managedActive: isManagedRoutingActive,
+            currentModelLabel: currentModelLabel,
             managedLabel: L10n.AgentModelPicker.managed,
             selectModelLabel: L10n.AgentModelPicker.selectModel
         )
+    }
+
+    /// The compact composer pill must read the active runtime directly.
+    /// `menuSnapshot` is intentionally a stable copy for the open model panel,
+    /// but using it for the always-visible pill could leave the old managed
+    /// label on screen for one or more turns after an explicit model choice.
+    /// The runtime already forwards changes through `AppState.objectWillChange`,
+    /// so this value follows the actual request configuration.
+    private var isManagedRoutingActive: Bool {
+        appState.activeRuntime?.managedRouting != nil
     }
 
     private func isCatalogItemCurrent(_ item: AgentModelCatalogItem) -> Bool {

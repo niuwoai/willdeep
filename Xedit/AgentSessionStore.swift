@@ -213,14 +213,32 @@ nonisolated enum AgentSessionStore {
 
     private struct MessageIndex: Decodable {
         let role: String?
+        let containsRoundtableReport: Bool
 
         enum CodingKeys: String, CodingKey {
-            case role
+            case role, workflowReport
+        }
+
+        private struct WorkflowReportIndex: Decodable {
+            let containsRoundtableReport: Bool
+
+            enum CodingKeys: String, CodingKey {
+                case roundtable
+            }
+
+            init(from decoder: Decoder) throws {
+                let c = try decoder.container(keyedBy: CodingKeys.self)
+                containsRoundtableReport = c.contains(.roundtable)
+                    && (try? c.decodeNil(forKey: .roundtable)) == false
+            }
         }
 
         init(from decoder: Decoder) throws {
             let c = try decoder.container(keyedBy: CodingKeys.self)
             role = try c.decodeIfPresent(String.self, forKey: .role)
+            containsRoundtableReport = (
+                try c.decodeIfPresent(WorkflowReportIndex.self, forKey: .workflowReport)
+            )?.containsRoundtableReport ?? false
         }
     }
 
@@ -230,6 +248,7 @@ nonisolated enum AgentSessionStore {
         let workspaceRootPath: String?
         let workspaceLocation: WorkspaceLocation?
         let sidebarWorkspaceRootPath: String?
+        let presentationScope: AgentSessionPresentationScope
         let localWorkspaceIdentity: LocalWorkspaceIdentity?
         let modelID: String?
         let providerID: String?
@@ -254,7 +273,7 @@ nonisolated enum AgentSessionStore {
         let hasUserMessage: Bool
 
         enum CodingKeys: String, CodingKey {
-            case id, title, workspaceRootPath, workspaceLocation, sidebarWorkspaceRootPath, localWorkspaceIdentity, modelID
+            case id, title, workspaceRootPath, workspaceLocation, sidebarWorkspaceRootPath, presentationScope, localWorkspaceIdentity, modelID
             case providerID, providerDisplayName
             case createdAt, updatedAt, messages
             case didEditFiles, agentEditedPaths, interactionMode, approvalMode, executionAgent, activeExperts
@@ -296,6 +315,16 @@ nonisolated enum AgentSessionStore {
             titleIsUserSet = try c.decodeIfPresent(Bool.self, forKey: .titleIsUserSet) ?? false
             let messageIndex = try c.decodeIfPresent([MessageIndex].self, forKey: .messages) ?? []
             hasUserMessage = messageIndex.contains { $0.role == AgentRole.user.rawValue }
+            presentationScope = try c.decodeIfPresent(
+                AgentSessionPresentationScope.self,
+                forKey: .presentationScope
+            ) ?? AgentSession.inferredPresentationScope(
+                interactionMode: interactionMode,
+                currentGoal: currentGoal,
+                containsRoundtableReport: messageIndex.contains(
+                    where: \.containsRoundtableReport
+                )
+            )
         }
 
         var session: AgentSession {
@@ -305,6 +334,7 @@ nonisolated enum AgentSessionStore {
                 workspaceRootPath: workspaceRootPath,
                 workspaceLocation: workspaceLocation,
                 sidebarWorkspaceRootPath: sidebarWorkspaceRootPath,
+                presentationScope: presentationScope,
                 localWorkspaceIdentity: localWorkspaceIdentity,
                 modelID: modelID,
                 providerID: providerID,

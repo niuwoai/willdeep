@@ -190,6 +190,22 @@ final class EditorAppStateRegistry: ObservableObject {
         return true
     }
 
+    /// Every live or retained AppState that may still own active Agent work.
+    /// Normal app termination consults this list before quitting so work in a
+    /// background editor or the headless Agent window is not overlooked.
+    var appStatesForTerminationCheck: [AppState] {
+        var states = Array(activeEditors.values)
+        if let current,
+           !states.contains(where: { $0 === current }) {
+            states.append(current)
+        }
+        if let headlessFallback,
+           !states.contains(where: { $0 === headlessFallback }) {
+            states.append(headlessFallback)
+        }
+        return states
+    }
+
     private final class WeakWindow {
         weak var window: NSWindow?
         init(_ window: NSWindow) { self.window = window }

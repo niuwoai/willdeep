@@ -4,6 +4,51 @@ import Testing
 @Suite
 @MainActor
 struct AIPipeBootstrapTests {
+    @Test("idle app termination does not ask for confirmation")
+    func idleTerminationSkipsConfirmation() {
+        var confirmationCount = 0
+
+        let shouldTerminate = AppTerminationGuard.shouldAllowTermination(
+            appStates: [],
+            confirmation: {
+                confirmationCount += 1
+                return false
+            }
+        )
+
+        #expect(shouldTerminate)
+        #expect(confirmationCount == 0)
+    }
+
+    @Test("active background runtime requires explicit quit confirmation")
+    func activeBackgroundRuntimeRequiresConfirmation() throws {
+        let appState = AppState()
+        let backgroundSession = appState.startNewAgentSession()
+        let backgroundRuntime = try #require(appState.agentRuntimes[backgroundSession.id])
+        _ = appState.startNewAgentSession()
+        backgroundRuntime.isResponding = true
+
+        var confirmationCount = 0
+        let cancelledQuit = AppTerminationGuard.shouldAllowTermination(
+            appStates: [appState],
+            confirmation: {
+                confirmationCount += 1
+                return false
+            }
+        )
+        let confirmedQuit = AppTerminationGuard.shouldAllowTermination(
+            appStates: [appState],
+            confirmation: {
+                confirmationCount += 1
+                return true
+            }
+        )
+
+        #expect(!cancelledQuit)
+        #expect(confirmedQuit)
+        #expect(confirmationCount == 2)
+    }
+
     @Test("valid environment configuration enables reporting")
     func validEnvironmentEnablesReporting() throws {
         var capturedConfig: AIPipeConfig?

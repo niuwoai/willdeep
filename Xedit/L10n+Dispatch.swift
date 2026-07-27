@@ -211,6 +211,27 @@ extension L10n {
             localized: "dispatch.no-recent-instructions",
             defaultValue: "No Goal instructions yet"
         )
+        static let deleteGoal = String(
+            localized: "dispatch.delete-goal",
+            defaultValue: "Delete Goal"
+        )
+        static let deleteGoalConfirmationTitle = String(
+            localized: "dispatch.delete-goal-confirmation-title",
+            defaultValue: "Delete this Goal?"
+        )
+        static func deleteGoalConfirmationMessage(_ title: String) -> String {
+            String(
+                format: String(
+                    localized: "dispatch.delete-goal-confirmation-message",
+                    defaultValue: "“%@” has received Goal instructions. Deleting it will stop its current work and remove its task conversations. This cannot be undone."
+                ),
+                title
+            )
+        }
+        static let deleteGoalConfirm = String(
+            localized: "dispatch.delete-goal-confirm",
+            defaultValue: "Delete and Stop"
+        )
         static let appliedImmediately = String(
             localized: "dispatch.applied-immediately",
             defaultValue: "Applied immediately"

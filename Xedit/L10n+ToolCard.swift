@@ -45,4 +45,8 @@ extension L10n.ToolCard {
         localized: "tool-card.authorization.sandbox-escalation.approval-reason",
         defaultValue: "User approved re-running outside the sandbox after a sandbox denial."
     )
+    static let sandboxEscalationAutomaticApprovalReason = String(
+        localized: "tool-card.authorization.sandbox-escalation.automatic-approval-reason",
+        defaultValue: "The active approval policy automatically authorized re-running the same command outside the sandbox."
+    )
 }

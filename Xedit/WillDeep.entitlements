@@ -27,6 +27,10 @@
 	       SomeIMSharedSessionStore.shared.configure(accessGroup: "ZH2S7D6PL6.com.someim.shared"). -->
 	<key>keychain-access-groups</key>
 	<array>
+		<!-- App-owned Data Protection Keychain namespace. Keeping ordinary
+		     Agent credentials here avoids the legacy per-binary ACL dialog
+		     after WillDeep updates; macOS login / Touch ID unlock governs it. -->
+		<string>$(AppIdentifierPrefix)com.willdeep.app</string>
 		<string>$(AppIdentifierPrefix)com.someim.shared</string>
 	</array>
 
