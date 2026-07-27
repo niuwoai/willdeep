@@ -1,6 +1,6 @@
 # WillDeep Product Overview
 
-> Last updated: 2026-07-27 | Current version: v1.210.0-rc17
+> Last updated: 2026-07-28 | Current version: v1.210.0-rc18
 
 ## Positioning
 
@@ -12,6 +12,7 @@ WillDeep is configured for non-App-Store distribution without App Sandbox so it 
 
 ## 架构概览
 
+- **委托终端命令被 pty 截断修复（1.210.0-rc18）** —— 分派给 Claude Code / Codex 等外部 CLI 的任务重新通过私有 runner 脚本执行，可见终端只接收一行 `/bin/sh <runner>` 调用；超长中文提示词不再因交互式 shell 回显撑爆 tty 输入队列而被丢字节，也不会让终端停在续行提示符下静默空等。真实命令仍会在执行前回显到终端供用户审阅。
 - **Git 根目录检测内存失控修复（1.210.0-rc17）** —— 无 Git 工作区的仓库根目录探测会在文件系统根目录稳定终止；兼容 Foundation 将 `/` 的父路径暂时表示为 `/..` 的行为，避免路径字符串无限增长、主线程卡死并耗尽内存。
 
 - **Git 感知的智能审核（1.210.0-rc16）** —— Agent 会话默认使用“智能审核”：只读操作自动执行，存在已提交 Git `HEAD` 时自动执行受控工作区写入，外部与联网操作继续经过静态规则或 AI 安全判断；无 Git、仅初始化但尚未提交、已有未保存或脏文件时，写入会要求用户确认。“每次询问”已更名为“严格模式”；用户主动选择“工作区访问”后可在无 Git 工作区自动写入，但外部与联网操作仍需确认。
