@@ -1,6 +1,6 @@
 # WillDeep Product Overview
 
-> Last updated: 2026-07-27 | Current version: v1.210.0-rc11
+> Last updated: 2026-07-27 | Current version: v1.210.0-rc12
 
 ## Positioning
 
@@ -11,6 +11,8 @@ Official product domain: [willdeep.com](https://willdeep.com).
 WillDeep is configured for non-App-Store distribution without App Sandbox so it can access local project files with fewer permission interruptions.
 
 ## 架构概览
+
+- **提示词快照与终端契约同步（1.210.0-rc12）** —— 终端发送回执与自动回读契约变更后，同步升级稳定提示词契约版本并重录 standard、compact、extended 三档字节级哈希，确保发布前全量测试既能拦住意外漂移，也不会把有意更新误判为回归。
 
 - **可见终端命令自动回读（1.210.0-rc11）** —— `terminal_send_command` 将发送确认与执行输出明确分开，并在普通命令发送后自动回读同一标签页的短时快照；慢命令或交互命令尚未出结果时，Agent 必须继续调用 `terminal_snapshot`，不能把首轮未见输出误报为终端不稳定。自动回读失败不会触发命令重发。
 
