@@ -777,6 +777,49 @@ struct AgentToolsCoreTests {
         #expect(env["LANG"] == "en_US.UTF-8")
     }
 
+    @Test
+    func localCommandEnvironmentIncludesTerminalSettings() {
+        var settings = EditorTerminalSettings.default
+        settings.environmentText = """
+        TOOL_HOME=/custom/tool
+        PATH=$TOOL_HOME/bin:$PATH
+        """
+
+        let environment = AgentToolRunner.localCommandEnvironment(
+            from: ["PATH": "/usr/bin:/bin"],
+            settings: settings
+        )
+
+        #expect(environment["TOOL_HOME"] == "/custom/tool")
+        #expect(environment["PATH"]?.hasPrefix("/custom/tool/bin:/usr/bin:/bin") == true)
+        #expect(environment[EditorTerminalLaunchEnvironment.agentTerminalKey] == "1")
+        #expect(environment[EditorTerminalLaunchEnvironment.claudeCodeCompatibilityKey] == nil)
+    }
+
+    @Test("run_command receives the terminal-configured local environment")
+    func runCommandUsesConfiguredLocalEnvironment() async throws {
+        var environment = AgentToolRunner.shellEnvironment(from: [
+            "PATH": "/usr/bin:/bin"
+        ])
+        environment["WILLDEEP_TEST_TOOL_HOME"] = "/custom/tool-home"
+        let context = AgentToolContext(
+            rootDirectory: nil,
+            localCommandEnvironment: environment
+        )
+
+        let result = try await AgentToolRunner.run(
+            name: "run_command",
+            arguments: [
+                "command": .string("printf '%s' \"$WILLDEEP_TEST_TOOL_HOME\""),
+                "timeout_seconds": .number(5)
+            ],
+            context: context
+        )
+
+        #expect(result.summary.hasPrefix("exit 0"))
+        #expect(result.payload.contains("/custom/tool-home"))
+    }
+
     // MARK: - AgentSandboxPolicy
 
     @Test
@@ -917,6 +960,9 @@ struct AgentToolsCoreTests {
         #expect(selectTab?.parameters.contains(where: { $0.name == "terminal_tab_id" && $0.required }) == true)
         #expect(sendCommand?.description.contains("OMIT terminal_tab_id") == true)
         #expect(sendCommand?.description.contains("stale UUID") == true)
+        #expect(sendCommand?.description.contains("dispatch confirmation only proves the command was sent") == true)
+        #expect(sendCommand?.description.contains("automatically appends a bounded follow-up screen snapshot") == true)
+        #expect(sendCommand?.description.contains("Never label the terminal unstable") == true)
         #expect(snapshot?.description.contains("ACTIVE Agent Terminal side-panel tab") == true)
         #expect(sendCommand?.description.contains("never send a local-intended command into an SSH tab") == true)
         #expect(sendCommand?.parameters.contains(where: { $0.name == "zmodem_upload_paths" && $0.type == .stringArray }) == true)

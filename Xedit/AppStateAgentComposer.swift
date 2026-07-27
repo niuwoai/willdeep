@@ -730,6 +730,9 @@ extension AppState {
                 )
                 AgentSessionStore.flushPendingWrites()
             },
+            localCommandEnvironment: AgentToolRunner.localCommandEnvironment(
+                settings: editorTerminalSettings
+            ),
             sandboxMode: sandboxModeForToolExecution(
                 risk: risk,
                 approvalSource: approvalSource,

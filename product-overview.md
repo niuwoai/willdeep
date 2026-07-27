@@ -1,6 +1,6 @@
 # WillDeep Product Overview
 
-> Last updated: 2026-07-27 | Current version: v1.210.0-rc7
+> Last updated: 2026-07-27 | Current version: v1.210.0-rc11
 
 ## Positioning
 
@@ -11,6 +11,14 @@ Official product domain: [willdeep.com](https://willdeep.com).
 WillDeep is configured for non-App-Store distribution without App Sandbox so it can access local project files with fewer permission interruptions.
 
 ## 架构概览
+
+- **可见终端命令自动回读（1.210.0-rc11）** —— `terminal_send_command` 将发送确认与执行输出明确分开，并在普通命令发送后自动回读同一标签页的短时快照；慢命令或交互命令尚未出结果时，Agent 必须继续调用 `terminal_snapshot`，不能把首轮未见输出误报为终端不稳定。自动回读失败不会触发命令重发。
+
+- **本轮报告完整工具审计（1.210.0-rc10）** —— Agent 本轮报告保留并可复制全部工具调用，不再在数据层丢弃第 9 条之后的明细；界面默认展示前 8 条，并按实际数量提供展开其余调用与收起操作。审批指标明确标注为“自动批准 / 用户批准”，与工具调用总数分开表达。
+
+- **终端与本地 Agent 共享环境（1.210.0-rc9）** —— 设置 → 终端中的 `KEY=value` 配置由可见编辑器终端、本地前台 `run_command` 与后台任务统一解析和注入；多行配置按顺序生效，重复 `PATH=` 可通过 `$PATH` 逐段累加，同时支持 `$VAR` 与 `${VAR}` 展开。SSH 与远程 daemon 继续维护自己的运行环境，不继承本机终端配置。
+
+- **Codex 风格聊天划词浮层（1.210.0-rc8）** —— 聊天历史中选中文字后会就近显示「添加到任务」轻量胶囊；浮层使用稳定的实底、发丝描边、8pt 圆角和柔和阴影，并提供悬停与深色模式状态。选区内容与原有添加到当前任务的行为保持不变。
 
 - **截屏免确认、持久展示与 Helper 权限隔离（1.210.0-rc6）** —— Mac 显示器、Chrome 标签页、Embedded Browser 页面及 Computer Use 只读界面快照统一按只读工具直接执行，不再显示 WillDeep 逐次确认卡；外部视觉模型分析仍独立审批。Mac 全屏或指定显示器截取由固定 Bundle ID、独立签名的 Computer Use Helper 完成；首次请求 macOS“屏幕与系统音频录制”权限前，主进程会立即持久化当前会话并同步排空写队列，授权后只重启 Helper 并重试一次，不中断主 App 与当前对话。Android adb 与 iOS Simulator simctl 截屏保持独立，不经过 macOS 屏幕录制权限。所有平台截图归档到 `~/.willdeep/captures/<截图ID>/`，工具图片会自动挂到本轮最终助手消息并在聊天中显示，删除会话时清理对应目录。正式发布会拒绝 Bundle ID 或签名团队发生漂移的 Helper。
 

@@ -1,3 +1,40 @@
+# Design QA：Codex 风格聊天划词浮层
+
+## 验收范围
+
+- source visual truth：`/var/folders/np/rjc0y5w52x324x21pv6g33440000gp/T/codex-clipboard-a2bbcc3d-e8b9-4d6d-a0f5-2a00ac3a6210.png`（用户提供的 Codex 划词浮层参考）。
+- implementation screenshot：`/private/tmp/willdeep-selection-action-design-qa.png`（真实 `AgentChatHistoryNSTextView`、浅色皮肤、正文划词状态）。
+- 同画布对比：`/private/tmp/willdeep-selection-action-comparison-rc8.png`（左侧 Codex 参考，右侧 WillDeep 生产实现；实现截图按 2× Retina 密度归一为 328 × 111 px）。
+- state：简体中文、浅色皮肤、聊天正文已划选；浮层显示「添加到任务」且未进入 hover。
+
+## 修正记录
+
+1. 将浮层从容易受 TextKit 合成影响的 `NSVisualEffectView` 改为确定性绘制的 AppKit `NSView`。
+2. 使用白色实体背景、8 pt 圆角、0.5 pt 浅灰描边和 7 pt 柔和阴影，匹配 Codex 的轻量悬浮质感。
+3. 新增 hover 背景反馈、深色模式配色和随布局更新的圆角阴影路径；按钮行为与既有 i18n 文案保持不变。
+4. 浮层固定绘制在聊天文本视图的最上层，避免被正文或其他 TextKit 装饰覆盖。
+
+## Required Fidelity Surfaces
+
+- Fonts and typography：沿用系统 13 pt 中等字重，按钮仍读取 `L10n.AgentSelection.addToTask`，没有新增硬编码 UI 文案。
+- Spacing and layout rhythm：28 pt 高度、9 pt 水平内边距，圆角与 Codex 参考的紧凑单行操作条一致。
+- Colors and visual tokens：浅色为接近纯白的实体背景和弱描边；深色模式使用独立背景、描边和更高阴影透明度。
+- Image quality and asset fidelity：没有新增图片或伪造图标，浮层由 AppKit 原生矢量绘制。
+
+## Findings
+
+同画布复核确认：WillDeep 浮层已具备 Codex 参考中的白色卡片、清晰圆角、浅灰边界和可见但克制的柔和阴影；相同密度下高度与文字内边距一致。参考图同时展示三个并排动作，而 WillDeep 当前产品动作仍只有「添加到任务」，属于功能范围差异，不是本次视觉缺陷。当前没有未解决的 P0、P1 或 P2 视觉差异。
+
+## 验证
+
+- `AgentChatHistoryRendererTests`：80 项通过，覆盖划词回调、空选区、样式指标与真实 AppKit 截图输出。
+- 同画布视觉复核：圆角、描边、阴影、内边距、未 hover 状态均通过。
+- 版本一致性与变更文件完整性由仓库脚本继续校验。
+
+final result: passed
+
+---
+
 # Design QA：Goal-first 调度台
 
 ## 验收范围

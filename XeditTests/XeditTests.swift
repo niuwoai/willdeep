@@ -1006,6 +1006,43 @@ struct WillDeepTests {
     }
 
     @MainActor
+    @Test("terminal command returns an automatic follow-up snapshot instead of dispatch-only output")
+    func testTerminalCommandReturnsAutomaticFollowUpSnapshot() async throws {
+        let controller = AgentInteractiveTerminalController()
+        let settings = EditorTerminalSettings.default
+        let sessionID = UUID()
+        let tab = controller.openLocalTab(
+            originAgentSessionID: sessionID,
+            workingDirectory: FileManager.default.temporaryDirectory.path,
+            settings: settings,
+            skin: nil
+        )
+        defer { controller.closeTab(id: tab.id) }
+        try await Task.sleep(nanoseconds: 300_000_000)
+
+        let marker = "willdeep-terminal-follow-up-\(UUID().uuidString)"
+        let result = try await AgentTerminalTools.sendCommand(
+            arguments: [
+                "command": .string("printf '\(marker)\\n'"),
+                "terminal_tab_id": .string(tab.id.uuidString)
+            ],
+            context: AgentToolContext(
+                rootDirectory: FileManager.default.temporaryDirectory,
+                runtimeID: sessionID,
+                sandboxMode: .workspaceWrite,
+                terminalController: controller
+            )
+        )
+
+        #expect(result.payload.contains("Command dispatch confirmed"))
+        #expect(result.payload.contains("does not contain command output"))
+        #expect(result.payload.contains("Automatic follow-up snapshot"))
+        #expect(result.payload.contains(marker))
+        #expect(result.payload.contains(tab.id.uuidString))
+        #expect(result.payload.contains("call terminal_snapshot again"))
+    }
+
+    @MainActor
     @Test("terminal command explains when its approved tab exited")
     func testTerminalCommandExplainsExitedApprovedTab() throws {
         let controller = AgentInteractiveTerminalController()

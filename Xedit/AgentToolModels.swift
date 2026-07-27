@@ -152,6 +152,11 @@ struct AgentToolContext {
     /// this closure so the current transcript is on disk even if macOS asks the
     /// user to restart a permissioned process.
     let sessionPersistenceBarrier: (@MainActor () -> Void)?
+    /// Resolved environment for commands executed on this Mac. App-owned
+    /// contexts merge Settings → Terminal variables into the normal command
+    /// PATH before installing this value. Remote backends intentionally ignore
+    /// it and resolve their environment on the remote runtime.
+    let localCommandEnvironment: [String: String]?
     /// Effective sandbox mode chosen by the AppState approval gateway.
     /// Read-only tools and auto-approved commands get a scrubbed local
     /// environment; user-approved write/network/credential commands run
@@ -198,6 +203,7 @@ struct AgentToolContext {
         workspaceSessionsSnapshotProvider: (@MainActor () -> [AgentWorkspaceSessionSnapshot])? = nil,
         sessionTitleSuggestionProvider: (@MainActor () async -> AgentSessionTitleSuggestionSnapshot)? = nil,
         sessionPersistenceBarrier: (@MainActor () -> Void)? = nil,
+        localCommandEnvironment: [String: String]? = nil,
         sandboxMode: AgentSandboxMode = .readOnly,
         patchProposalSink: (@MainActor (String?, String, Bool) async throws -> AgentPatchProposal)? = nil,
         editableContentProvider: (@MainActor (URL) throws -> String)? = nil,
@@ -219,6 +225,7 @@ struct AgentToolContext {
         self.workspaceSessionsSnapshotProvider = workspaceSessionsSnapshotProvider
         self.sessionTitleSuggestionProvider = sessionTitleSuggestionProvider
         self.sessionPersistenceBarrier = sessionPersistenceBarrier
+        self.localCommandEnvironment = localCommandEnvironment
         self.sandboxMode = sandboxMode
         self.patchProposalSink = patchProposalSink
         self.editableContentProvider = editableContentProvider
@@ -267,6 +274,7 @@ struct AgentToolContext {
             workspaceSessionsSnapshotProvider: workspaceSessionsSnapshotProvider,
             sessionTitleSuggestionProvider: sessionTitleSuggestionProvider,
             sessionPersistenceBarrier: sessionPersistenceBarrier,
+            localCommandEnvironment: localCommandEnvironment,
             sandboxMode: sandboxMode,
             patchProposalSink: patchProposalSink,
             editableContentProvider: editableContentProvider,
@@ -292,6 +300,7 @@ struct AgentToolContext {
             workspaceSessionsSnapshotProvider: workspaceSessionsSnapshotProvider,
             sessionTitleSuggestionProvider: sessionTitleSuggestionProvider,
             sessionPersistenceBarrier: sessionPersistenceBarrier,
+            localCommandEnvironment: localCommandEnvironment,
             sandboxMode: mode,
             patchProposalSink: patchProposalSink,
             editableContentProvider: editableContentProvider,

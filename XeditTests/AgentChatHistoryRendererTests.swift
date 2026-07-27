@@ -2531,6 +2531,52 @@ struct AgentChatHistoryRendererTests {
     }
 
     @Test
+    func selectionActionUsesCodexStyleSurfaceMetrics() {
+        #expect(AgentChatSelectionActionMetrics.cornerRadius == 8)
+        #expect(AgentChatSelectionActionMetrics.height == 28)
+        #expect(AgentChatSelectionActionMetrics.borderWidth == 0.5)
+        #expect(AgentChatSelectionActionMetrics.shadowRadius == 7)
+        #expect(AgentChatSelectionActionMetrics.lightShadowOpacity == 0.16)
+        #expect(AgentChatSelectionActionMetrics.darkShadowOpacity == 0.36)
+        #expect(
+            AgentChatSelectionActionMetrics.backgroundColor(
+                isDark: false,
+                isHovered: false
+            ).whiteComponent
+                > AgentChatSelectionActionMetrics.backgroundColor(
+                    isDark: false,
+                    isHovered: true
+                ).whiteComponent
+        )
+    }
+
+    @Test("render Codex-style chat selection action for design QA")
+    @MainActor
+    func renderSelectionActionForDesignQA() throws {
+        let outputPath = ProcessInfo.processInfo.environment[
+            "WILLDEEP_SELECTION_ACTION_DESIGN_QA_OUTPUT"
+        ] ?? "/private/tmp/willdeep-selection-action-design-qa.png"
+
+        let view = AgentChatHistoryNSTextView()
+        view.drawsBackground = true
+        view.backgroundColor = .white
+        view.font = NSFont.systemFont(ofSize: 14)
+        view.textContainerInset = NSSize(width: 8, height: 10)
+        view.frame = NSRect(x: 0, y: 0, width: 335, height: 113)
+        view.string = "已处理 7m 8s\n\n部署确认完成。基于终端记录的 deployment success。\n同步更新本地版本。"
+        view.setSelectedRange((view.string as NSString).range(of: "基于终端记录的 deployment"))
+        view.textViewDidChangeSelection(
+            Notification(name: NSTextView.didChangeSelectionNotification, object: view)
+        )
+        view.layoutSubtreeIfNeeded()
+
+        let bitmap = try #require(view.bitmapImageRepForCachingDisplay(in: view.bounds))
+        view.cacheDisplay(in: view.bounds, to: bitmap)
+        let png = try #require(bitmap.representation(using: .png, properties: [:]))
+        try png.write(to: URL(fileURLWithPath: outputPath), options: .atomic)
+    }
+
+    @Test
     func transcriptSearchFindsCaseInsensitiveMatches() {
         let ranges = AgentTranscriptSearch.matchRanges(
             in: "Needle, haystack, needle, NEEDLE.",

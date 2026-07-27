@@ -733,6 +733,18 @@ enum AgentToolRunner {
         return environment
     }
 
+    static func localCommandEnvironment(
+        from base: [String: String] = ProcessInfo.processInfo.environment,
+        settings: EditorTerminalSettings
+    ) -> [String: String] {
+        EditorTerminalLaunchEnvironment.variables(
+            from: shellEnvironment(from: base),
+            settings: settings,
+            injectClaudeCodeCompatibility: false,
+            markAsAgentTerminal: true
+        )
+    }
+
     private static func runCommand(
         arguments: [String: AgentJSONValue],
         context: AgentToolContext,
@@ -770,6 +782,7 @@ enum AgentToolRunner {
                         turnID: context.turnID,
                         timeoutSeconds: bgTimeout,
                         sandboxMode: context.sandboxMode,
+                        environment: context.localCommandEnvironment,
                         displayCommand: AgentSecretStore.redact(command, secretValues: context.secretRedactionValues),
                         secretRedactionValues: context.secretRedactionValues
                     )
@@ -809,7 +822,7 @@ enum AgentToolRunner {
             process.executableURL = launch.executableURL
             process.arguments = launch.arguments
             process.currentDirectoryURL = root
-            let baseEnvironment = shellEnvironment()
+            let baseEnvironment = context.localCommandEnvironment ?? shellEnvironment()
             var environment = AgentSandboxPolicy.sandboxedEnvironment(
                 mode: context.sandboxMode,
                 rootDirectory: context.rootDirectory,

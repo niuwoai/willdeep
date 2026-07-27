@@ -1534,6 +1534,9 @@ extension AppState {
                         )
                         AgentSessionStore.flushPendingWrites()
                     },
+                    localCommandEnvironment: AgentToolRunner.localCommandEnvironment(
+                        settings: editorTerminalSettings
+                    ),
                     sandboxMode: sandboxMode,
                     patchProposalSink: { title, diff, applyImmediately in
                         let proposal = try self.enqueueAgentPatchProposal(

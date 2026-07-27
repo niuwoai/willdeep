@@ -10839,13 +10839,13 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "One KEY=value per line. These values are added to commands launched from the editor terminal."
+            "value" : "One KEY=value per line. Values are shared by the editor terminal and local Agent commands; $VAR references expand in order."
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "每行一个 KEY=value。这些值会被加入到从编辑器终端启动的命令中。"
+            "value" : "每行一个 KEY=value。编辑器终端和本地 Agent 命令共用这些值；$VAR 会按行顺序展开。"
           }
         }
       }
@@ -34500,14 +34500,14 @@
       "localizations" : {
         "en" : {
           "stringUnit" : {
-            "state" : "new",
-            "value" : "%1$@ auto / %2$@ user"
+            "state" : "translated",
+            "value" : "%1$@ auto-approved / %2$@ user-approved"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "%1$@ 自动 / %2$@ 用户"
+            "value" : "%1$@ 自动批准 / %2$@ 用户批准"
           }
         }
       }
@@ -34848,6 +34848,40 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "服务商"
+          }
+        }
+      }
+    },
+    "transcript.turn-report.show-less" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Show less"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "收起"
+          }
+        }
+      }
+    },
+    "transcript.turn-report.show-remaining" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Show remaining %@"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "展开其余 %@ 条"
           }
         }
       }

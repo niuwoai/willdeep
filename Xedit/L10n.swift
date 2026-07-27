@@ -761,7 +761,7 @@ nonisolated enum L10n {
         static let customFont = String(localized: "editor-terminal.custom-font", defaultValue: "Custom font")
         static let customFontFootnote = String(localized: "editor-terminal.custom-font-footnote", defaultValue: "Type the exact name of any installed font to override the picker — use this to apply a Nerd Font that isn't auto-detected so powerline/icon glyphs stop showing as boxes. Leave empty to use the selection above.")
         static let customFontPlaceholder = String(localized: "editor-terminal.custom-font-placeholder", defaultValue: "e.g. JetBrainsMono Nerd Font")
-        static let environmentFootnote = String(localized: "editor-terminal.environment-footnote", defaultValue: "One KEY=value per line. These values are added to commands launched from the editor terminal.")
+        static let environmentFootnote = String(localized: "editor-terminal.environment-footnote", defaultValue: "One KEY=value per line. Values are shared by the editor terminal and local Agent commands; $VAR references expand in order.")
         static let environmentSection = String(localized: "editor-terminal.environment-section", defaultValue: "Environment")
         static let followAppSkin = String(localized: "editor-terminal.follow-app-skin", defaultValue: "Follow App Skin")
         static let font = String(localized: "editor-terminal.font", defaultValue: "Font")
@@ -2724,6 +2724,11 @@ nonisolated enum L10n {
             let template = String(localized: "transcript.turn-report.tools-inline", defaultValue: "%@ tools")
             return String(format: template, a1)
         }
+        static func turnReportShowRemaining(_ a1: String) -> String {
+            let template = String(localized: "transcript.turn-report.show-remaining", defaultValue: "Show remaining %@")
+            return String(format: template, a1)
+        }
+        static let turnReportShowLess = String(localized: "transcript.turn-report.show-less", defaultValue: "Show less")
         static let turnReportApprovals = String(localized: "transcript.turn-report.approvals", defaultValue: "Approvals")
         static let turnReportLearning = String(localized: "transcript.turn-report.learning", defaultValue: "Learning")
         static let turnReportElapsed = String(localized: "transcript.turn-report.elapsed", defaultValue: "Elapsed")
@@ -2742,7 +2747,7 @@ nonisolated enum L10n {
         }
         static let turnReportLearningSection = String(localized: "transcript.turn-report.learning-section", defaultValue: "Learning actions")
         static func turnReportApprovalSummary(_ a1: String, _ a2: String) -> String {
-            let template = String(localized: "transcript.turn-report.approval-summary", defaultValue: "%1$@ auto / %2$@ user")
+            let template = String(localized: "transcript.turn-report.approval-summary", defaultValue: "%1$@ auto-approved / %2$@ user-approved")
             return String(format: template, a1, a2)
         }
         static func turnReportSucceeded(_ a1: String) -> String {

@@ -99,6 +99,10 @@ struct AgentTerminalRawSnapshot: Sendable {
 
 struct AgentTerminalCommandDispatch: Sendable {
     let result: AgentToolResult
+    /// Exact tab that received the command. The tool layer uses this for its
+    /// bounded follow-up snapshot even if the user switches the active tab
+    /// while output is arriving.
+    let terminalTabID: UUID
     let zmodemTicket: TerminalZModemTransferTicket?
 }
 
@@ -1632,8 +1636,10 @@ final class AgentTerminalTab: ObservableObject, Identifiable, AgentTerminalProce
         let zmodemTicket = terminalView.prepareZModemPathSelection(zmodemPathSelection)
         terminalView.send(txt: trimmed + "\n")
         var payload = """
-        Sent command to Agent Terminal tab \"\(title)\".
+        Command dispatch confirmed for Agent Terminal tab \"\(title)\".
         Command: \(visibleCommand)
+
+        This dispatch confirmation does not contain command output.
         """
         switch zmodemPathSelection {
         case .upload(let files):
@@ -1645,6 +1651,7 @@ final class AgentTerminalTab: ObservableObject, Identifiable, AgentTerminalProce
         }
         return AgentTerminalCommandDispatch(
             result: AgentToolResult(summary: "terminal: \(visibleCommand.prefix(80))", payload: payload),
+            terminalTabID: id,
             zmodemTicket: zmodemTicket
         )
     }

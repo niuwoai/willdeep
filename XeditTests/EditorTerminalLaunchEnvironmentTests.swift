@@ -52,4 +52,36 @@ struct EditorTerminalLaunchEnvironmentTests {
         #expect(environment[EditorTerminalLaunchEnvironment.claudeCodeCompatibilityKey] == "")
         #expect(environment["TERM"] == "xterm-custom")
     }
+
+    @Test("Environment lines expand variables in order and accumulate PATH")
+    func environmentExpandsOrderedPathAssignments() {
+        var settings = EditorTerminalSettings.default
+        settings.environmentText = """
+        JAVA_HOME=/Library/JDK
+        MAVEN_HOME=/Users/test/apache-maven
+        PATH=$JAVA_HOME/bin:$PATH:.
+        PATH=$MAVEN_HOME/bin:$PATH
+        PATH="$PATH:$HOME/.npm-global/bin"
+        PATH="/opt/homebrew/opt/mysql-client/bin:$PATH"
+        LITERAL='$HOME/kept'
+        """
+
+        let environment = EditorTerminalLaunchEnvironment.variables(
+            from: [
+                "PATH": "/usr/bin:/bin",
+                "HOME": "/Users/test"
+            ],
+            settings: settings,
+            injectClaudeCodeCompatibility: false,
+            markAsAgentTerminal: false
+        )
+
+        #expect(environment["JAVA_HOME"] == "/Library/JDK")
+        #expect(environment["MAVEN_HOME"] == "/Users/test/apache-maven")
+        #expect(
+            environment["PATH"]
+                == "/opt/homebrew/opt/mysql-client/bin:/Users/test/apache-maven/bin:/Library/JDK/bin:/usr/bin:/bin:.:/Users/test/.npm-global/bin"
+        )
+        #expect(environment["LITERAL"] == "$HOME/kept")
+    }
 }

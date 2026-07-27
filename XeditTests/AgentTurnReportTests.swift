@@ -151,6 +151,39 @@ struct AgentTurnReportTests {
         #expect(report.learningEvents.map(\.title) == ["Created user skill"])
     }
 
+    @Test("latest turn report preserves every tool call for expansion and copying")
+    func latestTurnReportDoesNotTruncateToolDetails() throws {
+        let user = AgentMessage(
+            role: .user,
+            content: "inspect everything",
+            createdAt: Date(timeIntervalSince1970: 1_800_002_000)
+        )
+        let assistant = AgentMessage(
+            role: .assistant,
+            content: "done",
+            createdAt: Date(timeIntervalSince1970: 1_800_002_010)
+        )
+        let runtime = AgentRuntime(
+            session: AgentSession(messages: [user, assistant])
+        )
+        runtime.toolCalls = (0..<12).map { index in
+            AgentToolCall(
+                messageID: assistant.id,
+                externalID: "tool-\(index)",
+                toolName: "terminal_snapshot",
+                arguments: [:],
+                risk: .read,
+                status: .succeeded
+            )
+        }
+
+        let report = try #require(AgentTurnReport.latest(for: runtime))
+
+        #expect(report.toolSummary.total == 12)
+        #expect(report.tools.count == 12)
+        #expect(report.tools.map(\.externalID) == (0..<12).map { "tool-\($0)" })
+    }
+
     @Test
     func sourceIconsMergeDuplicateHostsAndProvideFaviconFallback() throws {
         let references = [

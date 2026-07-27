@@ -145,6 +145,7 @@ final class AgentJobRegistry: ObservableObject {
         turnID: UUID? = nil,
         timeoutSeconds: Double?,
         sandboxMode: AgentSandboxMode = .readOnly,
+        environment: [String: String]? = nil,
         runtimeDisplayName: String? = nil,
         runtimeIDForDisplay: UUID? = nil,
         remotePID: Int32? = nil,
@@ -174,11 +175,14 @@ final class AgentJobRegistry: ObservableObject {
         process.executableURL = launch.executableURL
         process.arguments = launch.arguments
         process.currentDirectoryURL = workingDirectory
-        process.environment = AgentSandboxPolicy.sandboxedEnvironment(
+        var processEnvironment = AgentSandboxPolicy.sandboxedEnvironment(
             mode: sandboxMode,
             rootDirectory: workingDirectory,
-            base: AgentToolRunner.shellEnvironment()
+            base: environment ?? AgentToolRunner.shellEnvironment()
         )
+        processEnvironment["PWD"] = workingDirectory?.path
+            ?? FileManager.default.homeDirectoryForCurrentUser.standardizedFileURL.path
+        process.environment = processEnvironment
 
         let stdoutPipe = Pipe()
         let stderrPipe = Pipe()

@@ -8,6 +8,12 @@
 import Foundation
 
 enum AgentTerminalTools {
+    /// Ordinary visible-terminal commands receive a bounded, best-effort
+    /// follow-up screen read. This is long enough for quick shell commands to
+    /// produce useful output without making interactive/long-running commands
+    /// block the agent turn.
+    private static let commandFollowUpSnapshotDelayNanoseconds: UInt64 = 600_000_000
+
     static func createShortcut(arguments: [String: AgentJSONValue], context: AgentToolContext) async throws -> AgentToolResult {
         guard let controller = context.terminalController else {
             throw AgentToolError.invalidArgument("Agent Terminal is not available in this context.")
@@ -240,7 +246,10 @@ enum AgentTerminalTools {
             )
         }
         guard let ticket = dispatch.zmodemTicket else {
-            return dispatch.result
+            return await resultWithAutomaticFollowUpSnapshot(
+                dispatch: dispatch,
+                context: context
+            )
         }
         let outcome = await ticket.waitForCompletion()
         guard outcome.succeeded else {
@@ -262,6 +271,47 @@ enum AgentTerminalTools {
             \(outcome.message)
             """
         )
+    }
+
+    private static func resultWithAutomaticFollowUpSnapshot(
+        dispatch: AgentTerminalCommandDispatch,
+        context: AgentToolContext
+    ) async -> AgentToolResult {
+        do {
+            try await Task.sleep(nanoseconds: commandFollowUpSnapshotDelayNanoseconds)
+            let followUp = try await snapshot(
+                arguments: [
+                    "terminal_tab_id": .string(dispatch.terminalTabID.uuidString),
+                    "max_characters": .number(6_000)
+                ],
+                context: context
+            )
+            return AgentToolResult(
+                summary: dispatch.result.summary,
+                payload: """
+                \(dispatch.result.payload)
+
+                Automatic follow-up snapshot (captured shortly after dispatch; long-running or interactive commands may still be producing output):
+
+                \(followUp.payload)
+
+                If the expected output or a returned prompt is not visible yet, wait briefly and call terminal_snapshot again for this same tab. Do not infer that terminal output is unstable from this bounded first read.
+                """
+            )
+        } catch {
+            // The command has already been sent. Treating a follow-up read
+            // failure as a failed tool call could make the model execute the
+            // command twice, which is unsafe for non-idempotent commands.
+            return AgentToolResult(
+                summary: dispatch.result.summary,
+                payload: """
+                \(dispatch.result.payload)
+
+                The automatic follow-up snapshot was unavailable: \(error.localizedDescription)
+                The command was already sent; do not send it again. Wait briefly, then call terminal_snapshot for tab \(dispatch.terminalTabID.uuidString) to read its output.
+                """
+            )
+        }
     }
 
     static func hasZModemPathSelection(_ arguments: [String: AgentJSONValue]) -> Bool {
