@@ -41,6 +41,11 @@ final class WillDeepAppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
         guard !isFlushingBeforeTermination else { return .terminateLater }
+        guard AppTerminationGuard.shouldAllowTermination(
+            appStates: EditorAppStateRegistry.shared.appStatesForTerminationCheck
+        ) else {
+            return .terminateCancel
+        }
         isFlushingBeforeTermination = true
         AIPipe.flush()
         // Do not synchronously block AppKit while a large transcript is still

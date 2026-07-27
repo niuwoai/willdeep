@@ -242,6 +242,14 @@ nonisolated struct AgentDispatchGoal: Codable, Equatable, Identifiable {
         tasks.filter { $0.state == .running || $0.state == .reviewing }.count
     }
 
+    var deletionRequiresConfirmation: Bool {
+        !commands.isEmpty
+    }
+
+    var ownedSessionIDs: Set<UUID> {
+        Set([sessionID] + tasks.compactMap(\.runtimeSessionID))
+    }
+
     var isWorkspaceBound: Bool {
         logicalProject != nil && workspaceLocation != nil
     }

@@ -68,6 +68,24 @@ final class AgentDispatchCoordinator: ObservableObject {
         selectedTaskID = id
     }
 
+    @discardableResult
+    func removeGoal(id: UUID) -> AgentDispatchGoal? {
+        guard let index = goals.firstIndex(where: { $0.id == id }) else {
+            return nil
+        }
+        let removed = goals.remove(at: index)
+        if selectedGoalID == id {
+            selectedGoalID = goals.indices.contains(index)
+                ? goals[index].id
+                : goals.last?.id
+            selectedTaskID = selectedGoal?.tasks.first?.id
+        } else {
+            reconcileSelectedTask()
+        }
+        persist()
+        return removed
+    }
+
     func updateGoalExecutorChoice(_ choice: AgentDispatchExecutorChoice, goalID: UUID) {
         updateGoal(id: goalID) { goal in
             goal.executorChoice = choice

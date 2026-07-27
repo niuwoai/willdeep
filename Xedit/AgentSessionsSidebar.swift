@@ -40,6 +40,8 @@ enum AgentSidebarSessionVisibility {
         isMetadataOnly: (AgentSession.ID) -> Bool = { _ in false },
         metadataOnlyHasUserMessage: (AgentSession.ID) -> Bool = { _ in false }
     ) -> [AgentSession] {
+        let workspaceSessions = sessions.filter(\.belongsInWorkspaceSidebar)
+
         func hasUserMessage(_ session: AgentSession) -> Bool {
             Self.hasUserMessage(
                 session,
@@ -49,18 +51,18 @@ enum AgentSidebarSessionVisibility {
         }
 
         var workspaceKeysWithHistory: Set<String> = []
-        for session in sessions where hasUserMessage(session) {
+        for session in workspaceSessions where hasUserMessage(session) {
             workspaceKeysWithHistory.insert(session.workspaceSidebarGroupKey)
         }
 
         var fallbackPlaceholderIDs: Set<AgentSession.ID> = []
         var placeholderWorkspaceKeys: Set<String> = []
         if let activeID,
-           let activeSession = sessions.first(where: { $0.id == activeID }),
+           let activeSession = workspaceSessions.first(where: { $0.id == activeID }),
            !hasUserMessage(activeSession) {
             placeholderWorkspaceKeys.insert(activeSession.workspaceSidebarGroupKey)
         }
-        for session in sessions {
+        for session in workspaceSessions {
             if session.id == activeID || hasUserMessage(session) { continue }
             let key = session.workspaceSidebarGroupKey
             if workspaceKeysWithHistory.contains(key) { continue }
@@ -68,7 +70,7 @@ enum AgentSidebarSessionVisibility {
             fallbackPlaceholderIDs.insert(session.id)
         }
 
-        return sessions.filter { session in
+        return workspaceSessions.filter { session in
             session.isPinned
                 || session.id == activeID
                 || hasUserMessage(session)
@@ -96,7 +98,7 @@ enum AgentSidebarSessionVisibility {
 enum AgentSidebarSessionPlacement {
     static func globalPinnedSessions(from sessions: [AgentSession]) -> [AgentSession] {
         sessions
-            .filter { $0.isPinned && !$0.isArchived }
+            .filter { $0.belongsInWorkspaceSidebar && $0.isPinned && !$0.isArchived }
             .sorted { lhs, rhs in
                 let lhsPinnedAt = lhs.pinnedAt ?? .distantPast
                 let rhsPinnedAt = rhs.pinnedAt ?? .distantPast
@@ -108,7 +110,9 @@ enum AgentSidebarSessionPlacement {
     }
 
     static func workspaceSessions(from sessions: [AgentSession]) -> [AgentSession] {
-        sessions.filter { !$0.isPinned || $0.isArchived }
+        sessions.filter {
+            $0.belongsInWorkspaceSidebar && (!$0.isPinned || $0.isArchived)
+        }
     }
 
     static func workspaceOrder(_ lhs: AgentSession, _ rhs: AgentSession) -> Bool {

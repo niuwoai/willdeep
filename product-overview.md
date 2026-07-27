@@ -1,6 +1,6 @@
 # WillDeep Product Overview
 
-> Last updated: 2026-07-26 | Current version: v1.209.0-rc5
+> Last updated: 2026-07-27 | Current version: v1.210.0-rc2
 
 ## Positioning
 
@@ -11,6 +11,16 @@ Official product domain: [willdeep.com](https://willdeep.com).
 WillDeep is configured for non-App-Store distribution without App Sandbox so it can access local project files with fewer permission interruptions.
 
 ## 架构概览
+
+- **智能审批无沙箱重跑（1.210.0-rc2）** —— 本地 `run_command` 已通过智能审批、但被 macOS seatbelt 拒绝时，会以完全相同的命令自动进行一次无沙箱重跑，不再额外弹出人工确认；自动重跑会保留原审批来源，并在工具记录和沙箱审计中明确标记为智能审批授权。“每次询问”仍显示确认卡，“工作区访问”因无沙箱会越出其授权边界，也继续要求确认。
+
+- **调度与圆桌会话分区（1.210.0-rc1）** —— 调度台 Goal 支持右键删除：尚未收到任何 Goal 指令的空 Goal 直接删除，已收到指令的 Goal 必须经用户确认，确认后先停止父会话及所有已启动 Task，再清理 Goal 与专属会话。会话新增持久化展示域，调度台与专家圆桌产生的父/子会话不再混入普通工作区列表；旧数据会依据 Goal 模式和圆桌报告保守推断归属，仍可在各自专属入口查看。
+
+- **显式模型与系统钥匙串稳定性（1.209.0-rc8）** —— 模型胶囊直接读取当前会话运行时，不再因菜单快照滞后把已选 `glm-5.2` 错显为“省心托管”；显式模型会随会话持久化并在重载后继续驱动真实请求。Provider/API Key、远程 Runtime token、Composer Secret、MCP/Skill 凭据与 Mobile Gateway token 全部迁入绑定应用签名访问组的 macOS Data Protection Keychain，覆盖 `com.willdeep.agent`、`com.willdeep.credentials`、`com.willdeep.mobile-gateway` 及 Debug 变体，并跟随系统登录/Touch ID 解锁；旧版凭据首次成功读取后自动迁移并共享进程缓存，避免工具连续调用时反复出现密码型旧钥匙串授权框。
+
+- **Agent 主循环职责拆分（1.209.0-rc7）** —— 子 Agent 工具执行与工具消息持久化辅助逻辑已从流式 Agent 主循环提取到独立文件，主循环文件低于仓库 3000 行硬限制，同时保留原有 `AppState` 扩展调用契约和运行行为。
+
+- **活跃任务退出保护（1.209.0-rc6）** —— 用户通过菜单、⌘Q 或 Dock 正常退出 WillDeep 时，应用会先汇总所有窗口与后台会话中的模型回复、等待执行、上下文压缩、工作流、专家咨询/圆桌、Goal 调度、后台命令、子 Agent 和媒体任务；只要仍有活跃工作，就显示中英双语确认框，默认保留任务，只有用户明确选择“仍要退出”才继续落盘并终止。系统强制结束、崩溃、断电与 `SIGKILL` 无法由 AppKit 拦截，继续依赖既有会话恢复能力。
 
 - **Goal 固定逻辑项目边界（1.209.0-rc5）** —— Goal 不再只是持有可替换路径，而是持久化一个固定逻辑项目；创建时必须选择或继承工作区，旧的无工作区记录保持“未绑定”直至人工绑定一次。顶部明确展示“项目名 · 主项目路径”，本机 checkout 用 Git common directory 验证同仓库，SSH 必须显式填写该项目远端目录；Task 可以选择同项目的不同 worktree/SSH checkout，但失效或跨项目映射会在启动前被拒绝。
 

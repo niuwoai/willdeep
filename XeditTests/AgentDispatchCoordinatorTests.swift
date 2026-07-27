@@ -118,6 +118,77 @@ struct AgentDispatchCoordinatorTests {
         #expect(synchronized.availableTargetChoices == [.local])
     }
 
+    @Test("未收到指令的 Goal 直接删除，收到指令后需要确认")
+    func goalDeletionConfirmationTracksCommandsAndOwnedSessions() {
+        let sourceID = UUID()
+        let firstTaskRuntimeID = UUID()
+        let secondTaskRuntimeID = UUID()
+        let taskWithoutRuntime = AgentDispatchTask(title: "等待")
+        let firstTask = AgentDispatchTask(
+            title: "执行一",
+            runtimeSessionID: firstTaskRuntimeID
+        )
+        let secondTask = AgentDispatchTask(
+            title: "执行二",
+            runtimeSessionID: secondTaskRuntimeID
+        )
+        var goal = AgentDispatchGoal(
+            id: sourceID,
+            sessionID: sourceID,
+            title: "Delete Contract",
+            statement: "验证删除",
+            tasks: [firstTask, secondTask, taskWithoutRuntime],
+            executorChoice: .automatic,
+            targetChoice: .automatic,
+            isPaused: false,
+            commands: [],
+            createdAt: Date(),
+            updatedAt: Date()
+        )
+
+        #expect(!goal.deletionRequiresConfirmation)
+        #expect(goal.ownedSessionIDs == [sourceID, firstTaskRuntimeID, secondTaskRuntimeID])
+
+        goal.commands.append(
+            AgentDispatchCommand(
+                text: "开始执行",
+                effect: .appliedImmediately,
+                status: .applied
+            )
+        )
+
+        #expect(goal.deletionRequiresConfirmation)
+    }
+
+    @Test("删除 Goal 会持久化并把选中项移到相邻 Goal")
+    func coordinatorRemovalPersistsAndReconcilesSelection() throws {
+        let sandbox = try makeSandbox()
+        defer { sandbox.cleanup() }
+        let store = AgentDispatchStore(defaults: sandbox.defaults)
+        let coordinator = AgentDispatchCoordinator(store: store)
+        let first = AgentSession(
+            title: "First",
+            workspaceRootPath: "/tmp/first",
+            updatedAt: Date(timeIntervalSince1970: 10),
+            currentGoal: AgentGoal(statement: "第一项", checklist: [])
+        )
+        let second = AgentSession(
+            title: "Second",
+            workspaceRootPath: "/tmp/second",
+            updatedAt: Date(timeIntervalSince1970: 20),
+            currentGoal: AgentGoal(statement: "第二项", checklist: [])
+        )
+        coordinator.synchronize(with: [first, second])
+        coordinator.selectGoal(second.id)
+
+        let removed = coordinator.removeGoal(id: second.id)
+
+        #expect(removed?.id == second.id)
+        #expect(coordinator.goals.map(\.id) == [first.id])
+        #expect(coordinator.selectedGoalID == first.id)
+        #expect(store.load().map(\.id) == [first.id])
+    }
+
     @Test("调度记录连同工作区映射可以持久化并重新载入")
     func storeRoundTrip() throws {
         let sandbox = try makeSandbox()

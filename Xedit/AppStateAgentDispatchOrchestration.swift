@@ -14,6 +14,21 @@ nonisolated enum AgentDispatchLaunchResult: Equatable {
 }
 
 extension AppState {
+    @discardableResult
+    func deleteDispatchGoal(goalID: UUID) -> Bool {
+        guard let goal = agentDispatchCoordinator.removeGoal(id: goalID) else {
+            return false
+        }
+
+        for sessionID in goal.ownedSessionIDs {
+            if let runtime = runtime(for: sessionID) {
+                stopAgentResponse(for: runtime)
+            }
+            deleteAgentSession(id: sessionID)
+        }
+        return true
+    }
+
     func startGoalConversationInLocalWorkspace() {
         let panel = Self.folderOpenPanel()
         panel.title = L10n.Dispatch.chooseWorkspace
@@ -21,7 +36,8 @@ extension AppState {
         panel.prompt = L10n.Dispatch.chooseWorkspaceAction
         Self.presentFolderOpenPanel(panel) { [weak self] response in
             guard response == .OK, let url = panel.url, let self else { return }
-            _ = self.startNewAgentSession(inWorkspaceAt: url.standardizedFileURL.path)
+            let session = self.startNewAgentSession(inWorkspaceAt: url.standardizedFileURL.path)
+            self.agentRuntimes[session.id]?.session.presentationScope = .dispatchBoard
             self.setAgentInteractionMode(.goal)
         }
     }
@@ -291,6 +307,7 @@ extension AppState {
         }
         runtime.session.title = "\(goal.title) · \(task.title)"
         runtime.session.titleIsUserSet = true
+        runtime.session.presentationScope = .dispatchBoard
         runtime.interactionMode = .goal
         runtime.currentGoal = AgentGoal(
             statement: task.title,

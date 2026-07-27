@@ -3,6 +3,7 @@
 //  WillDeep
 //
 
+import AppKit
 import SwiftUI
 
 struct AgentDispatchSidebarSections: View {
@@ -138,6 +139,28 @@ struct AgentDispatchSidebarSections: View {
             )
         }
         .buttonStyle(.plain)
+        .contextMenu {
+            Button(L10n.Dispatch.deleteGoal, role: .destructive) {
+                requestDeleteGoal(goal)
+            }
+        }
+    }
+
+    private func requestDeleteGoal(_ goal: AgentDispatchGoal) {
+        guard goal.deletionRequiresConfirmation else {
+            appState.deleteDispatchGoal(goalID: goal.id)
+            return
+        }
+
+        let alert = NSAlert()
+        alert.messageText = L10n.Dispatch.deleteGoalConfirmationTitle
+        alert.informativeText = L10n.Dispatch.deleteGoalConfirmationMessage(goal.title)
+        alert.alertStyle = .warning
+        alert.addButton(withTitle: L10n.Dispatch.deleteGoalConfirm)
+        alert.addButton(withTitle: L10n.Dispatch.cancel)
+        alert.buttons.first?.hasDestructiveAction = true
+        guard alert.runModal() == .alertFirstButtonReturn else { return }
+        appState.deleteDispatchGoal(goalID: goal.id)
     }
 
     private func goalRowSubtitle(_ goal: AgentDispatchGoal) -> String {

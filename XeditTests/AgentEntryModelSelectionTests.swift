@@ -310,6 +310,35 @@ struct AgentEntryModelSelectionTests {
     }
 
     @Test
+    func explicitSomeIMModelSurvivesPersistAndRuntimeRestoration() throws {
+        let _sandbox = installKeychainSandbox(); _ = _sandbox
+        let app = AppState()
+        SomeIMIntegrationStore._setTestSharedSessionOverride(enabled: true)
+        defer { SomeIMIntegrationStore._setTestSharedSessionOverride(enabled: false) }
+        #expect(SomeIMIntegrationStore.saveAPIKey("test-fixture-someim-key"))
+        app.syncSomeIMProvider(
+            settings: SomeIMIntegrationSettings(enabled: true),
+            apiKey: "test-fixture-someim-key"
+        )
+        app.startNewAgentSession()
+        #expect(app.activeRuntime?.managedRouting != nil)
+
+        app.setAgentSessionModel("glm-5.2")
+        app.persistActiveAgentSession()
+
+        let persisted = try #require(app.activeRuntime?.session)
+        #expect(persisted.managedRouting == nil)
+        #expect(persisted.modelID == "glm-5.2")
+        #expect(app.configurationForCurrentTurn(for: try #require(app.activeRuntime)).model == "glm-5.2")
+
+        let restoredRuntime = AgentRuntime(session: persisted)
+        app.seedPersistedSessionModelOverride(for: restoredRuntime)
+        #expect(restoredRuntime.managedRouting == nil)
+        #expect(restoredRuntime.sessionModelOverride == "glm-5.2")
+        #expect(app.configurationForCurrentTurn(for: restoredRuntime).model == "glm-5.2")
+    }
+
+    @Test
     func disablingManagedDefaultStartsNewChatsWithSomeIMAutoFlash() {
         let _sandbox = installKeychainSandbox(); _ = _sandbox
         let app = AppState()

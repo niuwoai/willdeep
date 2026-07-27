@@ -377,21 +377,28 @@ extension AppState {
         ]) { current, _ in current }
         process.standardOutput = stdoutPipe
         process.standardError = stderrPipe
-        stdoutPipe.fileHandleForReading.readabilityHandler = { handle in
-            let data = handle.availableData
-            if !data.isEmpty { stdoutCollector.append(data) }
-        }
-        stderrPipe.fileHandleForReading.readabilityHandler = { handle in
-            let data = handle.availableData
-            if !data.isEmpty { stderrCollector.append(data) }
-        }
 
         do {
             try process.run()
         } catch {
-            stdoutPipe.fileHandleForReading.readabilityHandler = nil
-            stderrPipe.fileHandleForReading.readabilityHandler = nil
             return GitCommandResult(status: -1, stdout: "", stderr: error.localizedDescription, timedOut: false)
+        }
+
+        // Drain both pipes independently for the full lifetime of the child.
+        // Mixing readabilityHandler callbacks with a final readToEnd races
+        // under full-suite fork pressure: the handler can own the last bytes
+        // while the final read observes EOF, leaving a successful `git`
+        // command with an empty stdout snapshot.
+        let drainGroup = DispatchGroup()
+        drainGroup.enter()
+        DispatchQueue.global(qos: .userInitiated).async {
+            stdoutCollector.append(stdoutPipe.fileHandleForReading.readDataToEndOfFile())
+            drainGroup.leave()
+        }
+        drainGroup.enter()
+        DispatchQueue.global(qos: .userInitiated).async {
+            stderrCollector.append(stderrPipe.fileHandleForReading.readDataToEndOfFile())
+            drainGroup.leave()
         }
 
         let timeoutWorkItem = DispatchWorkItem {
@@ -409,14 +416,7 @@ extension AppState {
 
         process.waitUntilExit()
         timeoutWorkItem.cancel()
-        stdoutPipe.fileHandleForReading.readabilityHandler = nil
-        stderrPipe.fileHandleForReading.readabilityHandler = nil
-        if let tail = try? stdoutPipe.fileHandleForReading.readToEnd() {
-            stdoutCollector.append(tail)
-        }
-        if let tail = try? stderrPipe.fileHandleForReading.readToEnd() {
-            stderrCollector.append(tail)
-        }
+        drainGroup.wait()
 
         return GitCommandResult(
             status: process.terminationStatus,

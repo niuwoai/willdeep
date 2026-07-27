@@ -34,6 +34,7 @@ extension AppState {
         let session = AgentSession(
             workspaceRootPath: nil,
             workspaceLocation: nil,
+            presentationScope: .roundtable,
             modelID: modelID,
             managedRouting: managedRouting
         )
