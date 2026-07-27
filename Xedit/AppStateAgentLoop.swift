@@ -1162,7 +1162,7 @@ extension AppState {
                     runtime.messages.append(AgentMessage(role: .system, content: notice))
                     continue
                 }
-                attachRecentGeneratedToolImages(to: assistantID, in: runtime)
+                attachRecentVisibleToolImages(to: assistantID, in: runtime)
                 captureAgentPatchProposals(for: runtime, fromMessageID: assistantID)
                 // A stream can end "successfully" having produced nothing
                 // (provider hiccup, content filter, empty stop). Drop the
@@ -1525,6 +1525,14 @@ extension AppState {
                     },
                     sessionTitleSuggestionProvider: {
                         await self.sessionTitleSuggestionSnapshot(for: runtime)
+                    },
+                    sessionPersistenceBarrier: {
+                        self.persistAgentSession(
+                            runtime: runtime,
+                            touchUpdatedAt: false,
+                            moveToFront: false
+                        )
+                        AgentSessionStore.flushPendingWrites()
                     },
                     sandboxMode: sandboxMode,
                     patchProposalSink: { title, diff, applyImmediately in

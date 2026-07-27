@@ -12,6 +12,51 @@ import Foundation
 @Suite(.serialized)
 struct AgentSkillDirectoryTests {
     @Test
+    func bundledSkillsUseWillDeepNativeDescriptionsAndContracts() throws {
+        let skills = AgentSkillDirectory.list(includeDisabled: true)
+            .filter { $0.source == .bundled }
+        let forbiddenFragments = [
+            "alma",
+            "workbuddy",
+            ".alma",
+            "config/alma",
+            "localhost:23001",
+            "ALMA_",
+        ]
+
+        #expect(skills.count >= 39)
+        for skill in skills {
+            let body = try String(contentsOf: skill.url, encoding: .utf8)
+            let searchableText = AgentSkillLocalization.searchableText(for: skill)
+
+            #expect(skill.name == skill.identifier)
+            #expect(!skill.description.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+            for fragment in forbiddenFragments {
+                #expect(!body.localizedCaseInsensitiveContains(fragment))
+                #expect(!searchableText.localizedCaseInsensitiveContains(fragment))
+            }
+        }
+
+        let nativeContracts: [String: [String]] = [
+            "browser": ["chrome_*", "embedded_browser_*", "list_mcp_servers"],
+            "image-gen": ["generate_image", "edit_generated_image"],
+            "memory-management": ["add_memory"],
+            "scheduler": ["schedule_task", "complete_scheduled_task"],
+            "screenshot": ["capture_screenshot", "computer_use_get_app_state"],
+            "skill-hub": ["list_skills", "read_skill", "create_user_skill"],
+            "thread-management": ["list_workspace_sessions", "rename_session"],
+        ]
+
+        for (identifier, toolNames) in nativeContracts {
+            let skill = try #require(skills.first { $0.identifier == identifier })
+            let body = try String(contentsOf: skill.url, encoding: .utf8)
+            for toolName in toolNames {
+                #expect(body.contains(toolName))
+            }
+        }
+    }
+
+    @Test
     func bundledBrowserSkillIsDiscovered() {
         AgentSkillSettingsStore.setSkillEnabled(identifier: "browser", enabled: true)
         let skills = AgentSkillDirectory.list(includeDisabled: true)
@@ -23,15 +68,18 @@ struct AgentSkillDirectoryTests {
     }
 
     @Test
-    func bundledBrowserSkillDocumentsPlaywrightMCPPreset() throws {
+    func bundledBrowserSkillDocumentsNativeAndConfiguredBrowserSurfaces() throws {
         let skills = AgentSkillDirectory.list(includeDisabled: true)
         let browser = try #require(skills.first { $0.identifier == "browser" })
         let body = try String(contentsOf: browser.url, encoding: .utf8)
 
-        #expect(body.contains("Playwright MCP"))
-        #expect(body.contains("\"args\": [\"npx\", \"-y\", \"@playwright/mcp@latest\"]"))
-        #expect(body.contains("npm_config_registry"))
-        #expect(body.contains("https://registry.npmmirror.com"))
+        #expect(body.contains("chrome_*"))
+        #expect(body.contains("embedded_browser_*"))
+        #expect(body.contains("list_mcp_servers"))
+        #expect(body.contains("list_mcp_tools"))
+        #expect(body.contains("call_mcp_tool"))
+        #expect(!body.contains("@playwright/mcp"))
+        #expect(!body.contains("npm_config_registry"))
     }
 
     @Test

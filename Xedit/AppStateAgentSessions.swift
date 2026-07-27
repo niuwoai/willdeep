@@ -1833,6 +1833,9 @@ extension AppState {
     }
 
     func deleteAgentSession(id: AgentSession.ID) {
+        let persistedImages = agentRuntimes[id]?.messages.flatMap(\.images)
+            ?? AgentSessionStore.load(id: id)?.messages.flatMap(\.images)
+            ?? []
         // If the doomed session is currently mid-turn, cancel its
         // in-flight work before tearing down the runtime so the URL
         // session task and tool-decision waiter don't leak. The
@@ -1858,6 +1861,7 @@ extension AppState {
         pendingDispatchQueue.removeAll { $0.runtimeID == id }
 
         AgentSessionStore.delete(id: id)
+        persistedImages.forEach { $0.removeStoredFileIfNeeded() }
         agentSessions.removeAll { $0.id == id }
         removeAgentUsageSnapshot(id: id)
         cancelAgentKnowledgeFolderWatchers(sessionID: id)

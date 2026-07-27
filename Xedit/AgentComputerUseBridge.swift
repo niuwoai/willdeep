@@ -11,6 +11,7 @@ import Foundation
 
 actor AgentComputerUseBridge {
     static let shared = AgentComputerUseBridge()
+    private static let expectedHelperBundleIdentifier = "com.willdeep.computer-use-helper"
 
     private var process: Process?
     private var input: FileHandle?
@@ -49,6 +50,10 @@ actor AgentComputerUseBridge {
     }
 
     func restart() {
+        // The old process may report termination after startIfNeeded() has
+        // already installed a replacement. Detach its callback first so that
+        // stale EOF cannot clear the new helper's stdin/process references.
+        process?.terminationHandler = nil
         process?.terminate()
         process = nil
         input = nil
@@ -100,7 +105,9 @@ actor AgentComputerUseBridge {
 
     private func helperExecutableURL() throws -> URL {
         guard let helperApp = Bundle.main.url(forResource: "WillDeepComputerUseHelper", withExtension: "app"),
-              let executable = Bundle(url: helperApp)?.executableURL else {
+              let helperBundle = Bundle(url: helperApp),
+              helperBundle.bundleIdentifier == Self.expectedHelperBundleIdentifier,
+              let executable = helperBundle.executableURL else {
             throw AgentToolError.commandFailed(127, "WillDeep Computer Use helper is not bundled. Rebuild or reinstall WillDeep.")
         }
         return executable

@@ -1,59 +1,17 @@
 ---
 name: notebook
-description: Edit Jupyter notebook (.ipynb) cells — insert, replace, or delete cells. Use when working with notebooks.
-allowed-tools:
-  - Bash
-  - Read
-  - Write
+description: Inspect and edit Jupyter notebook files with WillDeep's file tools while preserving valid notebook JSON and cell structure. Use for inserting, replacing, deleting, or reviewing cells in .ipynb files.
 ---
 
-# Notebook Edit Skill
+# Jupyter Notebook Editing
 
-Modify Jupyter notebook cells using `jq` and bash.
+1. Read the notebook with `read_file` and identify cells by stable `id` when available; use indexes only as a fallback.
+2. Preserve top-level notebook metadata, `nbformat`, and `nbformat_minor`.
+3. Make the smallest exact change with `edit_file` or `apply_patch`.
+4. For a new code cell, include `cell_type`, `id`, `metadata`, `source`, `outputs`, and `execution_count`.
+5. For a new Markdown cell, include `cell_type`, `id`, `metadata`, and `source`.
+6. Keep source as an array of strings with newline conventions consistent with neighboring cells.
+7. Validate JSON with `run_command` using `jq empty <notebook>` or an equivalent read-only parser.
+8. Re-read the changed cells and review the diff.
 
-## List Cells
-
-```bash
-# Show all cells with IDs and types
-jq -r '.cells | to_entries[] | "\(.key): [\(.value.cell_type)] id=\(.value.id // "none") | \(.value.source[:1] | .[0] // "" | .[0:80])"' NOTEBOOK.ipynb
-```
-
-## Replace a Cell's Source
-
-```bash
-# Replace cell by index (0-based)
-jq --arg src "print(\"hello world\")\n" \
-   '.cells[0].source = ($src | split("\n") | map(if . == "" then . else . + "\n" end) | .[:-1])' \
-   NOTEBOOK.ipynb > /tmp/nb_tmp.ipynb && mv /tmp/nb_tmp.ipynb NOTEBOOK.ipynb
-```
-
-## Insert a New Cell
-
-```bash
-# Insert a code cell after index 2
-jq --arg src "# New cell\nprint(42)\n" \
-   '.cells |= (.[0:3] + [{
-     "id": ("new-" + (now | tostring)),
-     "cell_type": "code",
-     "source": ($src | split("\n") | map(if . == "" then . else . + "\n" end) | .[:-1]),
-     "metadata": {},
-     "outputs": [],
-     "execution_count": null
-   }] + .[3:])' \
-   NOTEBOOK.ipynb > /tmp/nb_tmp.ipynb && mv /tmp/nb_tmp.ipynb NOTEBOOK.ipynb
-```
-
-## Delete a Cell
-
-```bash
-# Delete cell at index 1
-jq 'del(.cells[1])' NOTEBOOK.ipynb > /tmp/nb_tmp.ipynb && mv /tmp/nb_tmp.ipynb NOTEBOOK.ipynb
-```
-
-## Tips
-
-- Always read the notebook first to understand its structure
-- Notebook source lines should end with `\n` except the last line
-- Use `jq` for reliable JSON manipulation
-- Back up the notebook before complex edits
-- For simple edits, you can also use the Read/Write tools directly on the JSON
+Do not execute notebook cells unless the user asks. Preserve outputs by default; clear them only when requested. Avoid whole-file rewrites for a small cell change.

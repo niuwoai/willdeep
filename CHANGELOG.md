@@ -1,7 +1,51 @@
 # Changelog
 
-> 当前文件保留最新版本（1.210.0-rc2 至 1.109.0-rc340）。
+> 当前文件保留最新版本（1.210.0-rc6 至 1.109.0-rc340）。
 > 更早的 1000 个版本已移至 [CHANGELOG-ARCHIVE.md](CHANGELOG-ARCHIVE.md)。
+
+## 1.210.0-rc6 - 2026-07-27
+
+### Fixed
+
+- **截图完成后聊天里看不到图片**：截图工具过去只把图片挂在隐藏的 `role=tool` 消息上，模型能读取像素，但聊天记录只显示助手文字。现在截图附件标记为持久化 capture 产物，并在本轮结束时自动挂到最终助手消息，TextKit 历史与实时聊天都会显示可点击缩略图，重开会话后仍可查看。
+- **截图文件仍散落在临时目录或 Application Support**：Mac Helper 临时截图迁移到 `~/.willdeep/tmp/computer-use-captures`，主进程随后把所有平台截图归档到 `~/.willdeep/captures/<截图ID>/original.*`，并保存适合模型与聊天缩略图读取的 `preview.jpg`；删除会话时安全清理对应 capture 目录，不触碰用户上传或工作区生成图片。
+
+### Meta
+
+- 版本号从 **1.210.0-rc5** 递增为 **1.210.0-rc6**（截图持久化与聊天展示 bugfix，仅递增 rc 位），内部构建号从 **180** 递增为 **181**，Help 与 Computer Use Helper 构建号从 **97** 递增为 **98**；App、Go agent、Help、Helper、浏览器扩展、README、响应头契约与产品文档保持一致。
+
+## 1.210.0-rc5 - 2026-07-27
+
+### Fixed
+
+- **首次截屏授权前的会话保险不完整**：`capture_screenshot(mac_screen)` 与显式 Computer Use 屏幕权限请求会先读取 Helper 权限状态；尚未授权时，主进程先立即持久化当前运行时并同步排空会话写队列，确认快照已经落盘后才允许 Helper 调用系统授权 API。无会话落盘能力的旁路调用不会触发新的屏幕录制授权。
+- **Helper 重启协议与签名身份缺少硬约束**：Helper 协议升级为 `willdeep-computer-use.v5`，统一返回 `needs_helper_restart`；主进程收到后只重启 Helper 并重试一次显示器截图。运行时固定校验 `com.willdeep.computer-use-helper`，正式发布同时校验 Helper Bundle ID 与签名 TeamIdentifier，避免临时签名或身份漂移导致 macOS 反复丢失屏幕录制授权。
+
+### Meta
+
+- 版本号从 **1.210.0-rc4** 递增为 **1.210.0-rc5**（Helper 截屏授权时序与签名身份 bugfix，仅递增 rc 位），内部构建号从 **179** 递增为 **180**，Help 与 Computer Use Helper 构建号从 **96** 递增为 **97**；App、Go agent、Help、Helper、浏览器扩展、README、响应头契约与产品文档保持一致。
+
+## 1.210.0-rc4 - 2026-07-27
+
+### Fixed
+
+- **纯截屏错误弹出 WillDeep 逐次确认卡**：`capture_screenshot`、Chrome 标签页截图、Embedded Browser 截图及 Computer Use 只读界面快照统一归为只读工具，已获得系统权限后直接执行，不再因“截图可能包含隐私”错误进入写操作审批；向外部视觉模型发送图片的 `visual_qa_screenshot` 仍保持独立审批。
+- **首次 Mac 截屏授权要求重启主 App、打断当前对话**：Mac 显示器截图迁移到独立签名的 Computer Use Helper，主 App 移除屏幕录制用途声明；首次授予 macOS“屏幕与系统音频录制”权限后仅自动重启 Helper 并重试，WillDeep 主进程与当前对话继续保留。Android 与 iOS Simulator 截图链路保持不变。
+
+### Meta
+
+- 版本号从 **1.210.0-rc3** 递增为 **1.210.0-rc4**（截屏授权与审批 bugfix，仅递增 rc 位），内部构建号从 **178** 递增为 **179**，Help 与 Computer Use Helper 构建号从 **95** 递增为 **96**；App、Go agent、Help、Helper、浏览器扩展、README、响应头契约与产品文档保持一致。
+
+## 1.210.0-rc3 - 2026-07-27
+
+### Fixed
+
+- **内置技能仍残留外部产品语义与失效命令**：全面审校 39 个 `BundledSkills`，移除旧产品名称、旧配置目录、旧 localhost API 与不存在的 CLI，改用 WillDeep 实际提供的图片、截图、定时任务、记忆、浏览器、Computer Use、会话、MCP 与文件工具；当前无原生能力的音乐、Discord、Telegram 等技能改为先发现已配置 MCP，缺失时明确报告能力边界。
+- **技能列表描述与正文能力不一致**：英文/简体中文技能展示文案同步到新的 WillDeep 原生契约，`list_skills` 工具描述改为准确说明内置、用户与插件来源；新增 Ruby 审计器和 Swift 回归测试，检查 frontmatter、禁用品牌词、旧工具名、关键运行时工具存在性与技能发现结果。
+
+### Meta
+
+- 版本号从 **1.210.0-rc2** 递增为 **1.210.0-rc3**（内置技能兼容性 bugfix，仅递增 rc 位），内部构建号从 **177** 递增为 **178**，Help 与 Computer Use Helper 构建号从 **94** 递增为 **95**；App、Go agent、Help、Helper、浏览器扩展、README、响应头契约与产品文档保持一致。
 
 ## 1.210.0-rc2 - 2026-07-27
 

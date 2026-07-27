@@ -1,103 +1,25 @@
 ---
 name: discord
-description: 'Interact with Discord: send messages, photos, files to any channel. Manage Discord bot integration with Alma.'
-allowed-tools:
-    - Bash
+description: Operate Discord through a Discord MCP server or connector configured in WillDeep. Use for sending messages or files, reading channels, reactions, and server moderation only after discovering the exact available tools and confirming consequential actions.
 ---
 
-# Discord Bot Skill
+# Discord
 
-Alma can connect to Discord via a bot and participate in guild channels.
+Use only capabilities that WillDeep can discover at runtime.
 
-## Setup
+## Workflow
 
-1. Create a Discord bot at https://discord.com/developers/applications
-2. Enable **MESSAGE CONTENT** intent in Bot settings
-3. Generate a bot token
-4. Add the bot to your server with these permissions: Send Messages, Read Message History, Add Reactions, Attach Files
-5. Configure in Alma settings:
+1. Call `list_mcp_servers` and identify a Discord-capable server.
+2. Call `list_mcp_tools` for that exact server.
+3. Match the user's request to an exposed tool and inspect its required arguments.
+4. Call the tool through `call_mcp_tool`.
+5. Verify the returned channel, message, or action identifier.
 
-```bash
-# Set Discord settings via API
-curl -X PUT http://localhost:23001/api/settings \
-  -H "Content-Type: application/json" \
-  -d '{
-    "discord": {
-      "enabled": true,
-      "botToken": "YOUR_BOT_TOKEN",
-      "allowedGuildIds": [],
-      "allowedChannelIds": []
-    }
-  }'
-```
+If no Discord integration exists, call `search_mcp_servers` and optionally `suggest_mcp_server`. Do not install software, create a bot, or configure credentials unless the user explicitly asks and provides the required configuration.
 
-## Sending Messages
+## Safety
 
-```bash
-# Send a text message to a Discord channel
-curl -s http://localhost:23001/api/discord/send \
-  -H "Content-Type: application/json" \
-  -d '{"channelId": "CHANNEL_ID", "message": "Hello from Alma!"}'
-
-# Send a photo
-curl -s http://localhost:23001/api/discord/send-photo \
-  -H "Content-Type: application/json" \
-  -d '{"channelId": "CHANNEL_ID", "filePath": "/path/to/image.jpg", "caption": "Check this out!"}'
-
-# Send a file
-curl -s http://localhost:23001/api/discord/send-file \
-  -H "Content-Type: application/json" \
-  -d '{"channelId": "CHANNEL_ID", "filePath": "/path/to/doc.pdf", "caption": "Here you go"}'
-```
-
-## Stickers
-
-```bash
-# List all stickers from all servers the bot is in
-alma discord sticker-list
-
-# List stickers from a specific server
-alma discord sticker-list <guildId>
-
-# Search stickers by name
-alma discord sticker-find <query>
-
-# Send a sticker to a channel
-alma discord sticker <channelId> <stickerId>
-```
-
-## Direct Messages (DM)
-
-```bash
-# Send a DM to a Discord user
-alma discord dm <userId> "Hello, this is a private message!"
-```
-
-- The user must share a server with the bot, or have DMs enabled
-- userId is the Discord numeric user ID (find in people profiles under `discord_id`)
-
-## Delete Messages
-
-```bash
-# Delete (retract) a message
-alma discord delete <channelId> <messageId>
-```
-
-- Bot can only delete its own messages, or messages in channels where it has Manage Messages permission
-
-## Bot Commands (in Discord)
-
-Users can use these commands in Discord:
-
-- `/help` or `!help` — Show help
-- `/new [title]` — Start a new conversation
-- `/stop` — Stop current generation
-- `/model` — Show current model
-
-## Notes
-
-- The bot requires **MESSAGE_CONTENT** intent to read message content
-- Discord has a 2000 character limit per message — long responses are automatically split
-- File attachments (images, documents) sent by users are downloaded and passed to Alma
-- The bot responds to: direct mentions (@Alma), replies to bot messages, messages containing "alma", and DMs
-- Group chat history is tracked per channel for context-aware responses
+- Never request that a bot token be pasted into chat or a shell command.
+- Confirm the target server and channel before sending.
+- Confirm immediately before deletes, bans, kicks, role changes, mass mentions, or broad permission changes.
+- Do not claim that Discord is connected until `list_mcp_servers` and `list_mcp_tools` prove it.

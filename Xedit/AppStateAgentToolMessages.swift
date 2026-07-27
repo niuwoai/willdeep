@@ -196,11 +196,11 @@ extension AppState {
         )
     }
 
-    func attachRecentGeneratedToolImages(to assistantID: UUID, in runtime: AgentRuntime) {
+    func attachRecentVisibleToolImages(to assistantID: UUID, in runtime: AgentRuntime) {
         guard let assistantIndex = runtime.messages.firstIndex(where: { $0.id == assistantID }) else {
             return
         }
-        let images = recentGeneratedToolImages(before: assistantIndex, in: runtime.messages)
+        let images = recentVisibleToolImages(before: assistantIndex, in: runtime.messages)
         guard !images.isEmpty else { return }
         let existingIDs = Set(runtime.messages[assistantIndex].images.map(\.id))
         let newImages = images.filter { !existingIDs.contains($0.id) }
@@ -208,7 +208,7 @@ extension AppState {
         runtime.messages[assistantIndex].images.append(contentsOf: newImages)
     }
 
-    private func recentGeneratedToolImages(
+    private func recentVisibleToolImages(
         before assistantIndex: Int,
         in messages: [AgentMessage]
     ) -> [AgentImageAttachment] {
@@ -221,9 +221,11 @@ extension AppState {
                 break
             }
             if message.role == .tool {
-                let generated = message.images.filter { $0.source == .generated }
-                if !generated.isEmpty {
-                    grouped.append(generated)
+                let visible = message.images.filter {
+                    $0.source == .generated || $0.source == .capture
+                }
+                if !visible.isEmpty {
+                    grouped.append(visible)
                 }
             }
             index -= 1

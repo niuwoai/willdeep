@@ -1,42 +1,16 @@
 ---
 name: thread-management
-description: Manage chat threads — create, list, switch, delete, and search conversations. Use when users want to organize their chats.
-allowed-tools:
-  - Bash
+description: Inspect WillDeep sessions in the current workspace and improve the current session title with supported session tools. Use when the user asks which workspace conversations exist or wants the current conversation renamed.
 ---
 
-# Thread Management Skill
+# Session Management
 
-Manage Alma chat threads via the `alma` CLI.
+Use the tools WillDeep currently exposes:
 
-## Commands
+- `list_workspace_sessions`: list sessions associated with the current workspace.
+- `suggest_session_title`: generate a concise title from the current task.
+- `rename_session`: rename the current interactive session after the title is known.
 
-```bash
-# List recent threads (default 20)
-alma threads [limit]
+Do not claim direct support for creating, switching, reading full transcripts, deleting, pinning, or archiving arbitrary sessions unless matching tools are present in the active runtime. Do not use `change_workspace` as a substitute for switching conversations.
 
-# Show thread details
-alma thread info <thread-id>
-
-# Create a new thread
-alma thread create <title> [--model providerId:modelName]
-
-# Delete a thread
-alma thread delete <thread-id>
-
-# Read thread messages
-alma thread messages <thread-id> [--limit 20]
-
-# Switch current chat to a different thread
-alma thread switch <thread-id>
-
-# Search across threads (via API)
-curl -s "http://localhost:23001/api/search/threads?q=QUERY&limit=10"
-```
-
-## Tips
-
-- Use `alma threads` for a quick overview
-- Use `alma thread switch <id>` to switch the current Telegram/Discord chat to a different thread (the ALMA_THREAD_ID env is automatically set)
-- When creating threads for the user, give them descriptive titles
-- Always confirm before deleting threads
+When renaming, preserve the user's language, avoid secrets in titles, and verify the returned session title.

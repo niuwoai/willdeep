@@ -245,7 +245,7 @@ enum AgentToolRegistry {
         ),
         AgentToolDescriptor(
             name: "list_skills",
-            description: "List installed Codex skills from CODEX_HOME so the agent can choose a specialized workflow before acting. Read-only.",
+            description: "List installed skills from WillDeep's bundled skills, user skill roots, and plugin cache so the agent can choose a specialized workflow before acting. Read-only.",
             risk: .read,
             parameters: [
                 AgentToolParameter(name: "query", type: .string, description: "Optional case-insensitive text filter for skill name or description.", required: false)
@@ -1094,10 +1094,10 @@ enum AgentToolRegistry {
         ),
         AgentToolDescriptor(
             name: "visual_qa_screenshot",
-            description: "Inspect a screenshot or UI image for on-demand visual QA. Use only when the user explicitly asks for screenshot/UI/color/theme/accessibility/layout review, or after a browser screenshot was captured with approval for visual verification. Returns local palette/OCR/theme signals and, by default, may send the image to the configured Image Understanding provider for visual review; pass `allow_vl: false` for local-only inspection. Requires approval because screenshots can contain private information and VL analysis may send image bytes to a provider.",
+            description: "Inspect a screenshot or UI image for on-demand visual QA. Use only when the user explicitly asks for screenshot/UI/color/theme/accessibility/layout review, or after a fresh browser screenshot when visual verification is needed. Returns local palette/OCR/theme signals and, by default, may send the image to the configured Image Understanding provider for visual review; pass `allow_vl: false` for local-only inspection. Requires approval because VL analysis may send image bytes to a provider; the separate screenshot capture itself is read-only.",
             risk: .write,
             parameters: [
-                AgentToolParameter(name: "path", type: .string, description: "Screenshot/image path. Prefer workspace-relative paths; absolute local paths are allowed for approved screenshots or user-provided images.", required: true),
+                AgentToolParameter(name: "path", type: .string, description: "Screenshot/image path. Prefer workspace-relative paths; absolute local paths are allowed for fresh tool captures or user-provided images.", required: true),
                 AgentToolParameter(name: "context", type: .string, description: "Optional short context such as page, route, expected state, or recent UI change being verified.", required: false),
                 AgentToolParameter(name: "focus", type: .string, description: "Optional focus area such as `colors`, `dark-mode`, `layout`, `accessibility`, `regression`, or `general`.", required: false),
                 AgentToolParameter(name: "allow_vl", type: .boolean, description: "When true (default), call the configured Image Understanding provider if available. Set false to restrict analysis to local palette/OCR/theme signals.", required: false)
@@ -1105,7 +1105,7 @@ enum AgentToolRegistry {
         ),
         AgentToolDescriptor(
             name: "design_to_code_acceptance",
-            description: "Perform the mandatory final visual acceptance for a pasted-image Design-to-Code run. Call only after production files were written, the implementation was actually run, and a fresh screenshot was captured through the in-app browser, Chrome extension, Computer Use, or an approved platform screenshot tool. Compares the source and rendered pixels, OCR coverage, and palettes; writes design-qa.md plus .willdeep/design-to-code/visual-diff.png. If status is NEEDS_ITERATION, fix the UI and repeat capture + acceptance before finalizing.",
+            description: "Perform the mandatory final visual acceptance for a pasted-image Design-to-Code run. Call only after production files were written, the implementation was actually run, and a fresh screenshot was captured through the in-app browser, Chrome extension, Computer Use, or a platform screenshot tool. Compares the source and rendered pixels, OCR coverage, and palettes; writes design-qa.md plus .willdeep/design-to-code/visual-diff.png. If status is NEEDS_ITERATION, fix the UI and repeat capture + acceptance before finalizing.",
             risk: .write,
             parameters: [
                 AgentToolParameter(name: "source_path", type: .string, description: "Absolute source image path from the Design-to-Code run contract.", required: true),
@@ -1119,8 +1119,8 @@ enum AgentToolRegistry {
         ),
         AgentToolDescriptor(
             name: "capture_screenshot",
-            description: "Capture a screenshot and hand the pixels back to you for visual analysis. Targets: `mac_screen` (this Mac's display), `android` (a connected device/emulator via adb), or `ios_simulator` (a booted simulator via simctl). The image is attached to the tool result so vision-capable models see it directly; the payload also carries the saved full-resolution path and local OCR text so text-only models can follow up with `visual_qa_screenshot`. Use for UI verification after a change, inspecting app/device state, or when the user asks what something looks like. Requires approval because screenshots can contain private information.",
-            risk: .write,
+            description: "Capture a screenshot and hand the pixels back to you for visual analysis. Targets: `mac_screen` (this Mac's display through the separately permissioned Computer Use helper), `android` (a connected device/emulator via adb), or `ios_simulator` (a booted simulator via simctl). The image is attached to the tool result so vision-capable models see it directly; the payload also carries the saved full-resolution path and local OCR text so text-only models can follow up with `visual_qa_screenshot`. Screenshot capture is read-only and does not require a WillDeep confirmation card; macOS may still request its one-time “Screen & System Audio Recording” permission. That system category is separate from microphone permission.",
+            risk: .read,
             parameters: [
                 AgentToolParameter(name: "target", type: .string, description: "What to capture: `mac_screen` (default), `android`, or `ios_simulator`.", required: false),
                 AgentToolParameter(name: "device", type: .string, description: "Optional device selector: adb serial for Android (from `adb devices`), or simulator UDID for iOS (defaults to the booted simulator).", required: false),
@@ -1165,8 +1165,8 @@ enum AgentToolRegistry {
         ),
         AgentToolDescriptor(
             name: "computer_use_get_app_state",
-            description: "Read a macOS app's Accessibility tree and optionally capture only its visible front window. Returns fresh element refs plus a screenshot by default. Requires approval because the screenshot may contain private information. Always refresh before desktop actions.",
-            risk: .write,
+            description: "Read a macOS app's Accessibility tree and optionally capture only its visible front window. Returns fresh element refs plus a screenshot by default. This read-only state capture runs without a WillDeep confirmation card after the separate helper has macOS permission. Always refresh before desktop actions.",
+            risk: .read,
             parameters: [
                 AgentToolParameter(name: "app", type: .string, description: "Running application bundle identifier or localized app name. Omit only when pid is provided.", required: false),
                 AgentToolParameter(name: "pid", type: .integer, description: "Running application process ID. Omit only when app is provided.", required: false),
@@ -1436,8 +1436,8 @@ enum AgentToolRegistry {
         ),
         AgentToolDescriptor(
             name: "chrome_capture_tab",
-            description: "Capture the visible area of the active Chrome tab through the WillDeep Browser extension and return it as an image attachment. Requires approval because screenshots may expose private information.",
-            risk: .write,
+            description: "Capture the visible area of the active Chrome tab through the WillDeep Browser extension and return it as an image attachment. This read-only capture runs without a WillDeep confirmation card.",
+            risk: .read,
             parameters: []
         ),
         AgentToolDescriptor(
@@ -1580,8 +1580,8 @@ enum AgentToolRegistry {
         ),
         AgentToolDescriptor(
             name: "embedded_browser_capture_screenshot",
-            description: "Capture the visible in-app Embedded Browser side panel as a PNG and return the local file path. Requires approval because screenshots may expose private information. Requires the Browser Ops expert.",
-            risk: .write,
+            description: "Capture the visible in-app Embedded Browser side panel as a PNG and return the local file path. This read-only capture runs without a WillDeep confirmation card. Requires the Browser Ops expert.",
+            risk: .read,
             parameters: []
         ),
         AgentToolDescriptor(

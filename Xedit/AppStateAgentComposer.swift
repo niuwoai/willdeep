@@ -722,6 +722,14 @@ extension AppState {
             jobRegistry: agentJobRegistry,
             mediaTaskRegistry: agentMediaTaskRegistry,
             shortDramaStore: agentShortDramaStore,
+            sessionPersistenceBarrier: {
+                self.persistAgentSession(
+                    runtime: runtime,
+                    touchUpdatedAt: false,
+                    moveToFront: false
+                )
+                AgentSessionStore.flushPendingWrites()
+            },
             sandboxMode: sandboxModeForToolExecution(
                 risk: risk,
                 approvalSource: approvalSource,

@@ -147,6 +147,11 @@ struct AgentToolContext {
     /// session. The model can ask for a cheap candidate, then use
     /// rename_session when the title is stale.
     let sessionTitleSuggestionProvider: (@MainActor () async -> AgentSessionTitleSuggestionSnapshot)?
+    /// Synchronous persistence barrier used immediately before a helper may
+    /// trigger a macOS system permission prompt. The interactive host installs
+    /// this closure so the current transcript is on disk even if macOS asks the
+    /// user to restart a permissioned process.
+    let sessionPersistenceBarrier: (@MainActor () -> Void)?
     /// Effective sandbox mode chosen by the AppState approval gateway.
     /// Read-only tools and auto-approved commands get a scrubbed local
     /// environment; user-approved write/network/credential commands run
@@ -192,6 +197,7 @@ struct AgentToolContext {
         sessionQueueSnapshotProvider: (@MainActor () -> AgentSessionQueueSnapshot)? = nil,
         workspaceSessionsSnapshotProvider: (@MainActor () -> [AgentWorkspaceSessionSnapshot])? = nil,
         sessionTitleSuggestionProvider: (@MainActor () async -> AgentSessionTitleSuggestionSnapshot)? = nil,
+        sessionPersistenceBarrier: (@MainActor () -> Void)? = nil,
         sandboxMode: AgentSandboxMode = .readOnly,
         patchProposalSink: (@MainActor (String?, String, Bool) async throws -> AgentPatchProposal)? = nil,
         editableContentProvider: (@MainActor (URL) throws -> String)? = nil,
@@ -212,6 +218,7 @@ struct AgentToolContext {
         self.sessionQueueSnapshotProvider = sessionQueueSnapshotProvider
         self.workspaceSessionsSnapshotProvider = workspaceSessionsSnapshotProvider
         self.sessionTitleSuggestionProvider = sessionTitleSuggestionProvider
+        self.sessionPersistenceBarrier = sessionPersistenceBarrier
         self.sandboxMode = sandboxMode
         self.patchProposalSink = patchProposalSink
         self.editableContentProvider = editableContentProvider
@@ -259,6 +266,7 @@ struct AgentToolContext {
             sessionQueueSnapshotProvider: sessionQueueSnapshotProvider,
             workspaceSessionsSnapshotProvider: workspaceSessionsSnapshotProvider,
             sessionTitleSuggestionProvider: sessionTitleSuggestionProvider,
+            sessionPersistenceBarrier: sessionPersistenceBarrier,
             sandboxMode: sandboxMode,
             patchProposalSink: patchProposalSink,
             editableContentProvider: editableContentProvider,
@@ -283,6 +291,7 @@ struct AgentToolContext {
             sessionQueueSnapshotProvider: sessionQueueSnapshotProvider,
             workspaceSessionsSnapshotProvider: workspaceSessionsSnapshotProvider,
             sessionTitleSuggestionProvider: sessionTitleSuggestionProvider,
+            sessionPersistenceBarrier: sessionPersistenceBarrier,
             sandboxMode: mode,
             patchProposalSink: patchProposalSink,
             editableContentProvider: editableContentProvider,

@@ -17,9 +17,69 @@ enum AgentComputerUseTools {
         return AgentToolResult(summary: "Computer Use permission status", payload: jsonPayload(result))
     }
 
-    static func requestPermissions(arguments: [String: AgentJSONValue]) async throws -> AgentToolResult {
-        let result = try await AgentComputerUseBridge.shared.invoke(action: "request_permissions", arguments: arguments)
+    static func requestPermissions(
+        arguments: [String: AgentJSONValue],
+        sessionPersistenceBarrier: (@MainActor () -> Void)? = nil
+    ) async throws -> AgentToolResult {
+        if arguments["screen_capture"]?.boolValue() != false {
+            try await persistBeforeScreenCapturePermissionIfNeeded(sessionPersistenceBarrier)
+        }
+        var result = try await AgentComputerUseBridge.shared.invoke(
+            action: "request_permissions",
+            arguments: arguments
+        )
+        if result["needs_helper_restart"] as? Bool == true {
+            await AgentComputerUseBridge.shared.restart()
+            result = try await AgentComputerUseBridge.shared.invoke(action: "permissions")
+        }
         return AgentToolResult(summary: "Requested Computer Use permissions", payload: jsonPayload(result))
+    }
+
+    static func captureDisplay(
+        displayIndex: Int?,
+        sessionPersistenceBarrier: (@MainActor () -> Void)? = nil
+    ) async throws -> URL {
+        var arguments: [String: AgentJSONValue] = [:]
+        if let displayIndex {
+            arguments["display"] = .number(Double(displayIndex))
+        }
+
+        try await persistBeforeScreenCapturePermissionIfNeeded(sessionPersistenceBarrier)
+        var result = try await AgentComputerUseBridge.shared.invoke(
+            action: "capture_display",
+            arguments: arguments
+        )
+        if result["needs_helper_restart"] as? Bool == true {
+            await AgentComputerUseBridge.shared.restart()
+            result = try await AgentComputerUseBridge.shared.invoke(
+                action: "capture_display",
+                arguments: arguments
+            )
+        }
+
+        guard let screenshot = result["screenshot"] as? [String: Any],
+              let path = screenshot["path"] as? String,
+              !path.isEmpty else {
+            throw AgentToolError.commandFailed(
+                1,
+                "Screen & System Audio Recording permission is not available to WillDeep Computer Use. Enable it in System Settings; only the helper needs to restart. This is separate from microphone permission."
+            )
+        }
+        return URL(fileURLWithPath: path)
+    }
+
+    private static func persistBeforeScreenCapturePermissionIfNeeded(
+        _ sessionPersistenceBarrier: (@MainActor () -> Void)?
+    ) async throws {
+        let status = try await AgentComputerUseBridge.shared.invoke(action: "permissions")
+        guard status["screen_capture_granted"] as? Bool != true else { return }
+        guard let sessionPersistenceBarrier else {
+            throw AgentToolError.commandFailed(
+                1,
+                "Screen & System Audio Recording permission must be requested from a persisted WillDeep conversation. This is separate from microphone permission."
+            )
+        }
+        sessionPersistenceBarrier()
     }
 
     static func listApps() async throws -> AgentToolResult {

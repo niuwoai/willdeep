@@ -5,7 +5,7 @@ import Foundation
 import ImageIO
 import UniformTypeIdentifiers
 
-private let protocolVersion = "willdeep-computer-use.v3"
+private let protocolVersion = "willdeep-computer-use.v5"
 private let maximumElementCount = 500
 private let maximumDepth = 12
 private let maximumTextLength = 500
@@ -52,6 +52,8 @@ private final class ComputerUseController {
             return permissionStatus()
         case "request_permissions":
             return requestPermissions(arguments)
+        case "capture_display":
+            return try captureDisplay(arguments)
         case "list_apps":
             return listApps()
         case "launch_app":
@@ -80,13 +82,16 @@ private final class ComputerUseController {
     }
 
     private func requestPermissions(_ arguments: [String: Any]) -> [String: Any] {
+        var needsHelperRestart = false
         if bool(arguments, "accessibility", default: true) {
             AXIsProcessTrustedWithOptions([kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String: true] as CFDictionary)
         }
         if bool(arguments, "screen_capture", default: true), !CGPreflightScreenCaptureAccess() {
-            _ = CGRequestScreenCaptureAccess()
+            needsHelperRestart = CGRequestScreenCaptureAccess()
         }
-        return permissionStatus()
+        var status = permissionStatus()
+        status["needs_helper_restart"] = needsHelperRestart
+        return status
     }
 
     private func listApps() -> [String: Any] {
@@ -437,8 +442,54 @@ private final class ComputerUseController {
               let image = CGWindowListCreateImage(.null, .optionIncludingWindow, window.id, [.bestResolution]) else {
             throw HelperFailure.captureFailed
         }
-        let url = try saveCapture(image)
+        let url = try saveCapture(image, prefix: "window")
         return WindowCapture(path: url.path, frame: window.frame, imageSize: CGSize(width: image.width, height: image.height))
+    }
+
+    private func captureDisplay(_ arguments: [String: Any]) throws -> [String: Any] {
+        if !CGPreflightScreenCaptureAccess() {
+            let granted = CGRequestScreenCaptureAccess()
+            return [
+                "screen_capture_granted": granted,
+                "needs_helper_restart": granted
+            ]
+        }
+
+        let displays = activeDisplays()
+        let requestedIndex = int(arguments, "display", default: 1)
+        guard requestedIndex > 0, requestedIndex <= displays.count else {
+            throw HelperFailure.invalidRequest(
+                "Display index \(requestedIndex) is unavailable; active display count is \(displays.count)."
+            )
+        }
+        let displayID = displays[requestedIndex - 1]
+        guard let image = CGDisplayCreateImage(displayID) else {
+            throw HelperFailure.captureFailed
+        }
+        let frame = CGDisplayBounds(displayID)
+        let url = try saveCapture(image, prefix: "display-\(requestedIndex)")
+        let capture = WindowCapture(
+            path: url.path,
+            frame: frame,
+            imageSize: CGSize(width: image.width, height: image.height)
+        )
+        return [
+            "display": requestedIndex,
+            "display_count": displays.count,
+            "screenshot": capture.dictionary
+        ]
+    }
+
+    private func activeDisplays() -> [CGDirectDisplayID] {
+        var count: UInt32 = 0
+        guard CGGetActiveDisplayList(0, nil, &count) == .success, count > 0 else {
+            return [CGMainDisplayID()]
+        }
+        var displays = Array(repeating: CGDirectDisplayID(), count: Int(count))
+        guard CGGetActiveDisplayList(count, &displays, &count) == .success else {
+            return [CGMainDisplayID()]
+        }
+        return Array(displays.prefix(Int(count)))
     }
 
     private func visibleWindow(for pid: pid_t) -> (id: CGWindowID, frame: CGRect)? {
@@ -453,12 +504,12 @@ private final class ComputerUseController {
         return nil
     }
 
-    private func saveCapture(_ image: CGImage) throws -> URL {
+    private func saveCapture(_ image: CGImage, prefix: String) throws -> URL {
         let root = FileManager.default.homeDirectoryForCurrentUser
-            .appendingPathComponent("Library/Application Support/WillDeep/ComputerUseCaptures", isDirectory: true)
+            .appendingPathComponent(".willdeep/tmp/computer-use-captures", isDirectory: true)
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
         purgeOldCaptures(in: root)
-        let url = root.appendingPathComponent("window-\(UUID().uuidString.lowercased()).jpg")
+        let url = root.appendingPathComponent("\(prefix)-\(UUID().uuidString.lowercased()).jpg")
         guard let destination = CGImageDestinationCreateWithURL(url as CFURL, UTType.jpeg.identifier as CFString, 1, nil) else {
             throw HelperFailure.captureFailed
         }

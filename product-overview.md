@@ -1,6 +1,6 @@
 # WillDeep Product Overview
 
-> Last updated: 2026-07-27 | Current version: v1.210.0-rc2
+> Last updated: 2026-07-27 | Current version: v1.210.0-rc6
 
 ## Positioning
 
@@ -11,6 +11,10 @@ Official product domain: [willdeep.com](https://willdeep.com).
 WillDeep is configured for non-App-Store distribution without App Sandbox so it can access local project files with fewer permission interruptions.
 
 ## 架构概览
+
+- **截屏免确认、持久展示与 Helper 权限隔离（1.210.0-rc6）** —— Mac 显示器、Chrome 标签页、Embedded Browser 页面及 Computer Use 只读界面快照统一按只读工具直接执行，不再显示 WillDeep 逐次确认卡；外部视觉模型分析仍独立审批。Mac 全屏或指定显示器截取由固定 Bundle ID、独立签名的 Computer Use Helper 完成；首次请求 macOS“屏幕与系统音频录制”权限前，主进程会立即持久化当前会话并同步排空写队列，授权后只重启 Helper 并重试一次，不中断主 App 与当前对话。Android adb 与 iOS Simulator simctl 截屏保持独立，不经过 macOS 屏幕录制权限。所有平台截图归档到 `~/.willdeep/captures/<截图ID>/`，工具图片会自动挂到本轮最终助手消息并在聊天中显示，删除会话时清理对应目录。正式发布会拒绝 Bundle ID 或签名团队发生漂移的 Helper。
+
+- **WillDeep 原生内置技能契约（1.210.0-rc3）** —— 39 个 `BundledSkills` 已统一为 WillDeep 语境，技能正文与中英展示描述不再引用外部产品名称、旧目录、旧 localhost API 或不存在的 CLI；图片、截图、定时任务、记忆、浏览器、Computer Use、会话、MCP 与文件流程全部对齐当前运行时工具。音乐生成、Discord、Telegram 等依赖外部服务的能力会先发现已配置 MCP，缺失时明确提示能力边界。仓库新增 Ruby 审计器与 Swift 回归测试，持续校验 frontmatter、禁用词、旧工具名和关键工具契约。
 
 - **智能审批无沙箱重跑（1.210.0-rc2）** —— 本地 `run_command` 已通过智能审批、但被 macOS seatbelt 拒绝时，会以完全相同的命令自动进行一次无沙箱重跑，不再额外弹出人工确认；自动重跑会保留原审批来源，并在工具记录和沙箱审计中明确标记为智能审批授权。“每次询问”仍显示确认卡，“工作区访问”因无沙箱会越出其授权边界，也继续要求确认。
 
@@ -1415,7 +1419,7 @@ CLAUDE.md §2 要求 React 部分必须走 i18n，但 WillDeep 是 SwiftUI macOS
 - Fetch Agent model IDs from provider `/models` endpoints and assign returned models to separate Flash and Pro slots in Settings. Agent routing can run cost-first through Auto/Flash or force Pro for stronger turns. API keys remain stored in Keychain.
 - Review Agent-generated unified diff proposals in the Agent panel, then apply or reject them explicitly. Accepted patches are limited to existing files inside the current workspace and update open tabs plus Git status.
 - Let the Agent call built-in workspace tools (`search_files`, `grep_files`, `read_file`, `list_directory`, `git_status`, `run_command`, `ask_user`) via OpenAI function-calling. `search_files` does literal text matching while `grep_files` supports full regular expressions plus an optional filename `include` glob (e.g. `*.swift`). Read-only tools run automatically; `run_command` requires per-call Allow/Deny approval, or an explicit Always Allow rule for matching command families such as `git push`; destructive commands additionally require typing `confirm` before running. `ask_user` lets the agent pause mid-turn and ask the user a clarifying question; when the answer is one of a small known set the model can pass `options` so the card renders clickable choice buttons (or checkboxes for `multi_select`), with a free-form text input still available as an escape hatch.
-- Let the Agent discover built-in, user-created, and plugin Codex skills with `list_skills` and load a selected `SKILL.md` with `read_skill`, so specialized workflows can be pulled into context only when needed. Built-in skills are bundled from Alma under `BundledSkills`; user skills live in `~/.codex/skills`; plugin skills continue to come from `~/.codex/plugins/cache`.
+- Let the Agent discover WillDeep built-in, user-created, and plugin skills with `list_skills` and load a selected `SKILL.md` with `read_skill`, so specialized workflows can be pulled into context only when needed. Built-in skills live under `BundledSkills`; user skills use `~/.willdeep/skills` with legacy `~/.codex/skills` compatibility; plugin skills continue to come from `~/.codex/plugins/cache`.
 - Configure SSH remote runtimes from Settings → Runtimes, bind Agent sessions to a remote workspace from the composer workspace picker, and run Agent file reads, search/grep, Git status, foreground/background shell commands, builds, tests, and delegated local-agent CLI calls on that remote host while keeping chat UI, approvals, and session persistence local.
 - Let the Agent inspect configured MCP servers with `list_mcp_servers`, list one server's MCP tools with `list_mcp_tools`, and call a selected MCP tool with `call_mcp_tool`; server discovery merges App user MCP servers, Cursor `~/.cursor/mcp.json`, and Codex `~/.codex/config.toml`. Both stdio and Cursor-style `streamable-http` MCP transports are supported, with sensitive headers and environment values redacted before display; MCP tool calls still require approval.
 - Automatically run conservatively parsed read-only `run_command` chains, such as workspace-relative or workspace-absolute `cd` prefixes followed by `git diff`, `ls`, `cat`, `rg`, or `grep`, plus workspace-safe `git -C ... diff`; commands that write, redirect, pipe, substitute, or move outside the workspace still require approval or confirmation. When no workspace is bound, `run_command` executes from the user's home directory. Shell commands inherit a supplemental macOS PATH with common Homebrew and local binary directories so tools such as `rg` remain available when WillDeep is launched from the GUI.

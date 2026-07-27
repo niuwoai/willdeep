@@ -71,13 +71,15 @@ struct AgentComputerUseToolTests {
         let permissions = try #require(AgentToolRegistry.descriptor(for: "computer_use_permissions"))
         let apps = try #require(AgentToolRegistry.descriptor(for: "computer_use_list_apps"))
         let inspect = try #require(AgentToolRegistry.descriptor(for: "computer_use_inspect_app"))
+        let state = try #require(AgentToolRegistry.descriptor(for: "computer_use_get_app_state"))
         let wait = try #require(AgentToolRegistry.descriptor(for: "computer_use_wait_for"))
         #expect(permissions.risk == .read)
         #expect(apps.risk == .read)
         #expect(inspect.risk == .read)
+        #expect(state.risk == .read)
         #expect(wait.risk == .read)
         for name in [
-            "computer_use_request_permissions", "computer_use_launch_app", "computer_use_activate_app", "computer_use_get_app_state",
+            "computer_use_request_permissions", "computer_use_launch_app", "computer_use_activate_app",
             "computer_use_click", "computer_use_secondary_action", "computer_use_scroll", "computer_use_drag",
             "computer_use_type_text", "computer_use_press_key", "computer_use_set_value", "computer_use_focus",
             "computer_use_hover", "computer_use_select_text", "computer_use_restart_helper"
@@ -85,6 +87,155 @@ struct AgentComputerUseToolTests {
             let descriptor = try #require(AgentToolRegistry.descriptor(for: name))
             #expect(descriptor.risk == .write, "\(name) must require approval")
         }
+    }
+
+    @Test
+    func pureScreenshotToolsRunWithoutWillDeepApprovalCards() throws {
+        for name in [
+            "capture_screenshot",
+            "computer_use_get_app_state",
+            "chrome_capture_tab",
+            "embedded_browser_capture_screenshot",
+        ] {
+            let descriptor = try #require(AgentToolRegistry.descriptor(for: name))
+            let decision = AgentSandboxPolicy.decision(
+                toolName: name,
+                arguments: [:],
+                rootDirectory: nil
+            )
+            #expect(descriptor.risk == .read, "\(name) must be read-only")
+            #expect(!decision.requiresUserApproval, "\(name) must not show an approval card")
+            #expect(!decision.requiresTypedConfirmation)
+        }
+    }
+
+    @Test
+    func toolContextPreservesSystemPermissionPersistenceBarrier() async throws {
+        var barrierCallCount = 0
+        let context = AgentToolContext(
+            rootDirectory: nil,
+            sessionPersistenceBarrier: {
+                barrierCallCount += 1
+            }
+        )
+
+        let copied = context
+            .withAdditionalSecretRedactionValues(["redacted"])
+            .withSandboxMode(.workspaceWrite)
+        let barrier = try #require(copied.sessionPersistenceBarrier)
+        barrier()
+
+        #expect(barrierCallCount == 1)
+    }
+
+    @Test
+    func computerUseHelperOwnsScreenCapturePermissionContract() throws {
+        let repositoryRoot = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+        let helperInfoURL = repositoryRoot
+            .appendingPathComponent("ComputerUseHelper/Info.plist")
+        let helperInfoData = try Data(contentsOf: helperInfoURL)
+        let helperInfo = try #require(
+            PropertyListSerialization.propertyList(
+                from: helperInfoData,
+                options: [],
+                format: nil
+            ) as? [String: Any]
+        )
+        #expect(helperInfo["CFBundleIdentifier"] as? String == "com.willdeep.computer-use-helper")
+        #expect(helperInfo["NSScreenCaptureUsageDescription"] != nil)
+
+        let mainInfoData = try Data(
+            contentsOf: repositoryRoot.appendingPathComponent("Xedit/Info.plist")
+        )
+        let mainInfo = try #require(
+            PropertyListSerialization.propertyList(
+                from: mainInfoData,
+                options: [],
+                format: nil
+            ) as? [String: Any]
+        )
+        #expect(mainInfo["NSScreenCaptureUsageDescription"] == nil)
+
+        let helperSource = try String(
+            contentsOf: repositoryRoot.appendingPathComponent("ComputerUseHelper/main.swift"),
+            encoding: .utf8
+        )
+        #expect(helperSource.contains("\"capture_display\""))
+        #expect(helperSource.contains("\"needs_helper_restart\""))
+        #expect(!helperSource.contains("\"requires_helper_restart\""))
+
+        let mainSourceRoot = repositoryRoot.appendingPathComponent("Xedit")
+        let sourceEnumerator = try #require(
+            FileManager.default.enumerator(
+                at: mainSourceRoot,
+                includingPropertiesForKeys: nil
+            )
+        )
+        for case let sourceURL as URL in sourceEnumerator
+        where sourceURL.pathExtension == "swift" {
+            let source = try String(contentsOf: sourceURL, encoding: .utf8)
+            #expect(!source.contains("CGRequestScreenCaptureAccess("), "\(sourceURL.lastPathComponent) must not request Screen Recording")
+            #expect(!source.contains("/usr/sbin/screencapture"), "\(sourceURL.lastPathComponent) must not invoke screencapture")
+        }
+    }
+
+    @Test
+    func screenshotArtifactsPersistUnderWillDeepCaptureDirectory() throws {
+        let temporaryRoot = FileManager.default.temporaryDirectory
+            .appendingPathComponent("willdeep-capture-test-\(UUID().uuidString)", isDirectory: true)
+        let rawURL = temporaryRoot.appendingPathComponent("incoming/raw.png")
+        try FileManager.default.createDirectory(
+            at: rawURL.deletingLastPathComponent(),
+            withIntermediateDirectories: true
+        )
+        try Data([0x01, 0x02, 0x03]).write(to: rawURL)
+        let preview = Data([0x04, 0x05])
+        let captureID = UUID()
+        defer { try? FileManager.default.removeItem(at: temporaryRoot) }
+
+        let persisted = try AgentCaptureTools.persistCaptureArtifacts(
+            originalURL: rawURL,
+            previewData: preview,
+            captureID: captureID,
+            capturesRoot: temporaryRoot.appendingPathComponent(".willdeep/captures")
+        )
+
+        #expect(persisted.originalURL.lastPathComponent == "original.png")
+        #expect(FileManager.default.fileExists(atPath: persisted.originalURL.path))
+        #expect(persisted.attachment.source == .capture)
+        #expect(persisted.attachment.fileURL?.lastPathComponent == "preview.jpg")
+        #expect(persisted.attachment.byteCount == preview.count)
+        #expect(!FileManager.default.fileExists(atPath: rawURL.path))
+    }
+
+    @Test
+    func capturedToolImageIsSurfacedOnFinalAssistantMessage() throws {
+        let capture = AgentImageAttachment(
+            mimeType: "image/jpeg",
+            dataBase64: Data([0x01]).base64EncodedString(),
+            source: .capture
+        )
+        let assistant = AgentMessage(role: .assistant, content: "截图完成。")
+        let runtime = AgentRuntime(
+            session: AgentSession(
+                messages: [
+                    AgentMessage(
+                        role: .tool,
+                        content: "captured",
+                        images: [capture],
+                        toolCallID: "capture-1"
+                    ),
+                    assistant,
+                ]
+            )
+        )
+
+        let appState = AppState()
+        appState.attachRecentVisibleToolImages(to: assistant.id, in: runtime)
+
+        #expect(runtime.messages.last?.images.map(\.id) == [capture.id])
     }
 
     @Test

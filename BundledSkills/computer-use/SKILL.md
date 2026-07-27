@@ -5,7 +5,7 @@ description: Control native macOS applications through WillDeep's separate Compu
 
 # WillDeep Computer Use
 
-WillDeep ships its own independently restartable **WillDeep Computer Use** helper. It does not depend on Alma, a third-party CLI, or an external MCP server.
+WillDeep ships its own independently restartable **WillDeep Computer Use** helper. It does not depend on a third-party CLI or an external MCP server.
 
 The helper has its own macOS privacy entries:
 

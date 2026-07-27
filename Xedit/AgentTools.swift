@@ -313,7 +313,10 @@ enum AgentToolRunner {
             case "computer_use_permissions":
                 result = try await AgentComputerUseTools.permissions()
             case "computer_use_request_permissions":
-                result = try await AgentComputerUseTools.requestPermissions(arguments: activeArguments)
+                result = try await AgentComputerUseTools.requestPermissions(
+                    arguments: activeArguments,
+                    sessionPersistenceBarrier: activeContext.sessionPersistenceBarrier
+                )
             case "computer_use_list_apps":
                 result = try await AgentComputerUseTools.listApps()
             case "computer_use_launch_app":
