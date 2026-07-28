@@ -519,9 +519,7 @@ struct AgentChatTranscript: View {
                         .frame(height: 1)
                         .id(Self.bottomScrollID)
                 }
-                .padding(.horizontal, AgentDesign.chatHorizontalInset)
-                .padding(.vertical, 20)
-                .frame(maxWidth: .infinity, alignment: .leading)
+                .agentChatReadableColumn(verticalPadding: 20)
                 .background {
                     AgentTranscriptScrollObserver(
                         isFollowingBottom: $isFollowingTranscriptBottom

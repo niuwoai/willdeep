@@ -539,8 +539,7 @@ extension AppState {
         }
 
         let isCleanTrackedModify = shouldAutoApplyCleanTrackedPatch(changes: parsed, runtime: runtime)
-        let smartHasRecoverableBaseline = runtime.interactionMode != .plan
-            && runtime.approvalMode == .smart
+        let smartHasRecoverableBaseline = runtime.approvalMode == .smart
             && Self.hasRecoverableGitBaseline(startingAt: agentPatchWorkspaceRoot(for: runtime))
         let smartCanAutoApply = smartHasRecoverableBaseline
             && (isPureCreation || applyImmediately || isCleanTrackedModify)
@@ -603,8 +602,7 @@ extension AppState {
         if runtime.interactionMode == .goal {
             return .goalMode
         }
-        if runtime.interactionMode != .plan,
-           runtime.approvalMode == .workspaceAccess {
+        if runtime.approvalMode == .workspaceAccess {
             return .workspaceAccess
         }
         return nil

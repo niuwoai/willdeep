@@ -14,9 +14,8 @@
 //     menus for ad-hoc model IDs not in the library entries.
 //   - `AgentExecutionPickerPill`: WillDeep / Claude Code / Codex
 //     execution backend selector for the next composer turn.
-//   - `AgentModePickerPill`: Normal / Plan / Goal selector. Plan locks
-//     writes until approval; Goal gathers the objective through chat
-//     and pins it to every reply once defined.
+//   - `AgentModePickerPill`: Ordinary / Goal selector. Ordinary mode plans
+//     and executes as needed; Goal repeatedly checks a persistent objective.
 //   - `AgentApprovalModePickerPill`: per-session tool approval posture
 //     selector — request every time, smart approval, or workspace access.
 //   - `AgentExpertPickerPill`: per-session opt-in specialist tool packs

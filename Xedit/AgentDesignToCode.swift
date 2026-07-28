@@ -17,10 +17,6 @@ nonisolated enum AgentDesignToCode {
 
     @MainActor
     static func prepareRuntimeForSlashExecution(_ runtime: AgentRuntime, framework: String?) {
-        if runtime.interactionMode == .plan {
-            runtime.interactionMode = .normal
-            runtime.currentPlan = nil
-        }
         if prefersWebExecution(framework: framework) {
             runtime.activeExperts.formUnion(webExperts)
         }

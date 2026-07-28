@@ -711,6 +711,24 @@ enum AgentDesign {
     }
 }
 
+extension View {
+    /// Keep transcript cards and Composer in one centered readable column.
+    /// Capping only each child while leaving its parent full-width lets the
+    /// two regions choose different horizontal origins on wide windows.
+    /// Explicit `minWidth: 0` also prevents narrow/right-panel layouts from
+    /// preserving an intrinsic width and overflowing toward one side.
+    func agentChatReadableColumn(verticalPadding: CGFloat) -> some View {
+        frame(
+            minWidth: 0,
+            maxWidth: AgentDesign.chatMaxContentWidth,
+            alignment: .leading
+        )
+        .padding(.horizontal, AgentDesign.chatHorizontalInset)
+        .padding(.vertical, verticalPadding)
+        .frame(minWidth: 0, maxWidth: .infinity, alignment: .center)
+    }
+}
+
 private struct AgentChatSupportingBaseFontSizeKey: EnvironmentKey {
     static let defaultValue = AgentSettingsStore.chatBaseFontSizeDefault
 }

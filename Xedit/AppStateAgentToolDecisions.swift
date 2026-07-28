@@ -222,16 +222,6 @@ extension AppState {
             rootDirectory: rootDirectory
         )
 
-        // Plan mode still needs read-like research before the user can judge
-        // the proposed plan. A validated public GET has no workspace side
-        // effects, so let it run instead of turning the investigation into a
-        // confusing "denied" tool result. Keep every other write-tier call
-        // behind the plan gate.
-        if interactionMode == .plan,
-           Self.planModeCanAutoApprove(toolName: toolName, arguments: arguments) {
-            return .staticAllowlist
-        }
-
         // Computer Use never participates in the generic Goal, conversation,
         // durable, or workspace auto-approval paths below. A small reversible
         // action may run only while the same runtime and turn own a controlling
@@ -277,7 +267,7 @@ extension AppState {
         if interactionMode == .goal,
            !sandboxDecision.requiresTypedConfirmation,
            !Self.isCommandShapedTool(toolName),
-           sandboxDecision.mode != .escalated || Self.planModeCanAutoApprove(
+           sandboxDecision.mode != .escalated || Self.goalPlanningCanAutoApprove(
                toolName: toolName,
                arguments: arguments
            ) {
@@ -472,8 +462,7 @@ extension AppState {
         owner: AgentComputerUseOwner?,
         controlState: AgentComputerUseControlState
     ) -> Bool {
-        guard approvalMode != .requestEveryTime,
-              interactionMode != .plan else {
+        guard approvalMode != .requestEveryTime else {
             return false
         }
         return AgentComputerUsePolicy.canAutoApproveInOperationalLease(
@@ -916,7 +905,7 @@ extension AppState {
                 }
 
                 let call = runtime.toolCalls[index]
-                guard !Self.planGateBlocks(
+                guard !Self.goalPlanningGateBlocks(
                     toolName: call.toolName,
                     arguments: call.arguments,
                     risk: call.risk,
@@ -961,7 +950,7 @@ extension AppState {
         return nil
     }
 
-    nonisolated static func planModeCanAutoApprove(
+    nonisolated static func goalPlanningCanAutoApprove(
         toolName: String,
         arguments: [String: AgentJSONValue]
     ) -> Bool {
@@ -973,7 +962,7 @@ extension AppState {
         }
     }
 
-    nonisolated static func planGateBlocks(
+    nonisolated static func goalPlanningGateBlocks(
         toolName: String,
         arguments: [String: AgentJSONValue],
         risk: AgentToolRisk,
@@ -982,9 +971,9 @@ extension AppState {
         guard isActive, risk != .read else { return false }
         // The narrow public-web research exception applies only to ordinary
         // write-tier classification. A danger-tier call can never use it to
-        // bypass the Plan/Goal gate.
+        // bypass the Goal evidence gate.
         guard risk == .write else { return true }
-        return !planModeCanAutoApprove(toolName: toolName, arguments: arguments)
+        return !goalPlanningCanAutoApprove(toolName: toolName, arguments: arguments)
     }
 
     private func workspaceAccessCanAutoApprove(

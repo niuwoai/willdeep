@@ -7,7 +7,7 @@
 //  goal management, and provider-library switch:
 //
 //    - Provider library: apply/select/upsert/remove + sync helpers
-//    - Plan mode: approve/reject/complete/restart/edit/insert/remove +
+//    - Visible plan progress: complete/restart/edit/insert/remove +
 //      capture from latest message + step status
 //    - Goal mode: setAgentGoal / toggleAgentGoalItem +
 //      captureAgentGoalEvaluationFromLatestMessage
@@ -477,16 +477,11 @@ extension AppState {
     // 条目身上，造成 "OpenAI 顶着 DeepSeek 的 API key" 这类 bug。
     // 单向流：library → cfg via `applyActiveProviderLibraryEntry`。
 
-    // MARK: - Interaction modes (plan / goal)
+    // MARK: - Interaction modes (ordinary / goal)
 
-    /// Flip the session into a different interaction mode. Switching out
-    /// of Plan or Goal also drops any associated state so the next
-    /// session pick-up starts clean.
-    ///
-    /// One deliberate exception: an approved/executing plan survives the
-    /// Plan → Normal switch. Plan mode is planning-only, so approval hands
-    /// the plan over to Normal mode for execution — dropping it here would
-    /// kill the progress card the moment execution is supposed to start.
+    /// Flip between ordinary and Goal conversation behavior. Plans are task
+    /// progress rather than a mode, so leaving Goal preserves its current
+    /// execution plan while entering Goal starts a clean goal cycle.
     func setAgentInteractionMode(_ mode: AgentInteractionMode) {
         ensureActiveAgentSessionForInteractiveControl()
         if mode == .goal,
@@ -497,13 +492,13 @@ extension AppState {
             return
         }
         guard agentInteractionMode != mode else { return }
-        cancelAgentPlanModeSuggestion()
         agentInteractionMode = mode
-        let keepsPlanForExecution = mode == .normal
-            && agentCurrentPlan.map { $0.status == .approved || $0.status == .executing } == true
-        if mode != .plan, !keepsPlanForExecution { agentCurrentPlan = nil }
+        if mode == .goal {
+            agentCurrentPlan = nil
+        }
         if mode != .goal {
             agentCurrentGoal = nil
+            activeRuntime?.goalPlanningState = nil
             activeRuntime?.goalTurnRecoveryCheckpoint = nil
         }
         persistActiveAgentSession()
@@ -563,96 +558,7 @@ extension AppState {
         return true
     }
 
-    /// User clicks Approve on the proposed plan — flips it to approved and,
-    /// in Plan mode, hands the session back to Normal mode. Plan mode is
-    /// planning-only; execution always happens in Normal mode with the
-    /// approved plan pinned into the system prompt.
-    func approveAgentPlan() {
-        if agentInteractionMode == .goal {
-            confirmAgentPlanAndExecute()
-            return
-        }
-        guard var plan = agentCurrentPlan else { return }
-        plan.status = .approved
-        agentCurrentPlan = plan
-        if agentInteractionMode == .plan {
-            setAgentInteractionMode(.normal)
-        }
-        persistActiveAgentSession()
-    }
-
-    /// User clicks Reject — drops the plan so the agent re-plans next turn.
-    func rejectAgentPlan() {
-        guard let runtime = activeRuntime else { return }
-        agentCurrentPlan = nil
-        runtime.goalTurnRecoveryCheckpoint = nil
-        persistActiveAgentSession()
-        if agentInteractionMode == .goal {
-            _ = startAgentGoalPlanningIfNeeded(for: runtime, forceRestart: true)
-        }
-    }
-
-    /// 1.79.0 plan 自动执行 banner 入口，1.202.0 起改语义：用户点「执行」
-    /// 时调用。等效于 approve plan + 立刻派发一条「按 plan 执行」的
-    /// user 消息，agent 下个 turn 就会开干。
-    ///
-    /// Plan 模式下会**切回 Normal 模式**再执行：Plan 模式是纯规划态，
-    /// write 工具闸门永不解锁（见 `AgentRuntime.isPlanGateActive`）。
-    /// approved plan 会跟着切换保留下来（见 `setAgentInteractionMode`），
-    /// 所以 plan card 的步骤勾选 / 进度跟踪体验不受影响。Goal 模式
-    /// 维持原语义（留在 Goal 模式，由 Goal 自己的闸门管执行）。
-    /// 如果 agent 当前 turn 还在跑（罕见 —— banner 只在 plan 刚解析
-    /// 完时出现），prompt 会进队列。
-    func confirmAgentPlanAndExecute() {
-        guard agentInteractionMode == .plan || agentInteractionMode == .goal,
-              var plan = agentCurrentPlan,
-              plan.status == .proposed else { return }
-        let confirmedFromPlanMode = agentInteractionMode == .plan
-        plan.status = .approved
-        agentCurrentPlan = plan
-        if agentInteractionMode == .goal, var state = activeRuntime?.goalPlanningState {
-            state.phase = .executing
-            activeRuntime?.goalPlanningState = state
-        }
-        if agentInteractionMode == .goal,
-           activeRuntime?.goalTurnRecoveryCheckpoint == nil {
-            // Approval may be queued behind a still-finishing synthesis turn.
-            // Persist the user's execution intent now so an app exit before
-            // queue consumption can still recover the approved Plan.
-            activeRuntime?.goalTurnRecoveryCheckpoint = AgentGoalTurnRecoveryCheckpoint()
-        }
-        if confirmedFromPlanMode {
-            // Planning is done — execution belongs to Normal mode. The
-            // approved plan survives this switch (see setAgentInteractionMode).
-            setAgentInteractionMode(.normal)
-        }
-        persistActiveAgentSession()
-
-        let goalTurnEndContract = agentInteractionMode == .goal
-            ? "At the end of every reply, first give a compact Goal round delivery summary containing only verified outcomes, material changes, validation, and any genuine blocker or next action; omit command transcripts, failed attempts, raw tool output, and step-by-step narration. Then emit both exactly one ```progress fenced block and exactly one ```goal-check fenced block in the same reply, even when either block contains no changes."
-            : "At the end of each reply, emit exactly one ```progress fenced block with the latest status of every step touched."
-        let prompt = """
-        Plan approved. Execute the complete plan step by step. Do not treat an outline, sample, first file, \
-        or first chapter as completion when an approved step promises the full deliverable. \
-        \(goalTurnEndContract) If the response budget forces a pause, leave the current step in_progress so \
-        WillDeep can continue automatically. Stop only when every step has reached a terminal state.
-        """
-        guard let runtime = activeRuntime else { return }
-        if runtime.isResponding {
-            runtime.queuedMessages.append(
-                AgentQueuedMessage(text: prompt, images: [], source: .hostInstruction)
-            )
-            return
-        }
-        dispatchAgentMessage(
-            for: runtime,
-            text: prompt,
-            images: [],
-            source: .hostInstruction
-        )
-    }
-
-    /// Manually retire an approved plan (e.g. after the agent reported done).
+    /// Manually retire an active plan (e.g. after the agent reported done).
     func completeAgentPlan() {
         guard var plan = agentCurrentPlan else { return }
         plan.status = .done
@@ -664,41 +570,29 @@ extension AppState {
         }
     }
 
-    /// Ask the agent to revise the current plan. Drops the existing
-    /// plan (so the system prompt flips back to "needs a plan") and
-    /// auto-sends a user message — either the bare "please revise"
-    /// boilerplate, or the caller's free-form note appended to it.
-    /// Falls through to the normal queue path if the agent is busy.
+    /// Explicitly revise the visible plan. Ordinary mode replaces it in the
+    /// next round and continues execution; Goal mode intentionally restarts
+    /// evidence planning because the user asked to change the contract.
     func requestPlanRevision(note: String) {
-        if agentInteractionMode == .normal, agentCurrentPlan != nil {
-            // A Plan card remains visible during Normal execution and after
-            // completion. Its explicit revision action is the intentional
-            // escape hatch from that contract, so enter planning mode before
-            // retiring the old Plan instead of silently ignoring the click.
-            setAgentInteractionMode(.plan)
-        }
-        guard agentInteractionMode == .plan || agentInteractionMode == .goal else { return }
-        // Drop the existing plan so the next turn's system prompt
-        // sends the "you must emit a ```plan block" instructions.
+        guard let runtime = activeRuntime else { return }
         agentCurrentPlan = nil
-        activeRuntime?.goalTurnRecoveryCheckpoint = nil
+        runtime.goalTurnRecoveryCheckpoint = nil
         persistActiveAgentSession()
 
         let trimmed = note.trimmingCharacters(in: .whitespacesAndNewlines)
         let prompt: String
         if trimmed.isEmpty {
-            prompt = "Please revise the plan. Re-emit a fresh ```plan``` block reflecting the new approach, then stop and wait for approval."
+            prompt = "Please revise the execution plan, emit one complete replacement ```plan``` block, and continue executing it without waiting for plan approval."
         } else {
             prompt = """
             Please revise the plan with this guidance from me:
 
             \(trimmed)
 
-            Re-emit a fresh ```plan``` block reflecting the new approach, then stop and wait for approval.
+            Emit one complete replacement ```plan``` block and continue executing it without waiting for plan approval.
             """
         }
 
-        guard let runtime = activeRuntime else { return }
         if runtime.interactionMode == .goal {
             _ = startAgentGoalPlanningIfNeeded(
                 for: runtime,
@@ -714,11 +608,9 @@ extension AppState {
         dispatchAgentMessage(for: runtime, text: prompt, images: [])
     }
 
-    /// Parse the most recent assistant message looking for a ```plan
-    /// fenced block and replace `agentCurrentPlan` if one is found and
-    /// the user hasn't already approved a plan this session. Convenience
-    /// wrapper that targets `activeRuntime`; the turn loop calls the
-    /// runtime-explicit variant below.
+    /// Parse the latest visible plan/progress. Ordinary plans become ready
+    /// immediately; Goal plans additionally pass the host-owned proposal
+    /// validator before execution.
     func captureAgentPlanFromLatestMessage() {
         guard let runtime = activeRuntime else { return }
         captureAgentPlanFromLatestMessage(for: runtime)
@@ -726,31 +618,22 @@ extension AppState {
 
     @discardableResult
     func captureAgentPlanFromLatestMessage(for runtime: AgentRuntime) -> AgentGoalProposalCaptureOutcome {
-        guard runtime.interactionMode == .plan || runtime.interactionMode == .goal else {
-            // Normal mode never captures fresh ```plan blocks, but it is the
-            // execution half of the Plan-mode handshake: an approved plan
-            // carried over from Plan mode still needs its ```progress blocks
-            // applied so the plan card tracks execution.
-            if let existing = runtime.currentPlan,
-               existing.status == .approved || existing.status == .executing || existing.status == .done {
-                applyAgentPlanProgressFromLatestMessage(for: runtime, existingPlan: existing)
-            }
-            return .noProposal
-        }
         guard let last = runtime.messages.last(where: { $0.role == .assistant && !$0.content.isEmpty }) else {
             return .noProposal
         }
         if let parsed = AgentPlanParser.extract(from: last.content) {
-            if runtime.interactionMode == .plan {
-                if AgentPlanContinuationPolicy.hasActiveExecutionContract(
-                    runtime.currentPlan
-                ) {
-                    // Automatic/manual entry into Plan mode must not let a
-                    // model reply overwrite an already-approved execution
-                    // contract. The operator must reject/cancel it first.
+            if runtime.interactionMode == .normal {
+                if let existing = runtime.currentPlan,
+                   AgentPlanContinuationPolicy.hasActiveExecutionContract(existing) {
+                    applyAgentPlanProgressFromLatestMessage(for: runtime, existingPlan: existing)
                     return .noProposal
                 }
-                runtime.currentPlan = parsed
+                var executable = parsed
+                executable.status = .approved
+                runtime.currentPlan = AgentPlanParser.applyProgress(
+                    to: executable,
+                    from: last.content
+                ) ?? executable
                 return .captured
             }
             if runtime.goalPlanningState?.phase == .readyForProposal {
@@ -760,10 +643,15 @@ extension AppState {
                     generationID: runtime.goalPlanningState?.generationID
                 )
                 if failures.isEmpty {
-                    runtime.currentPlan = parsed
+                    var executable = parsed
+                    executable.status = .approved
+                    runtime.currentPlan = executable
                     if var state = runtime.goalPlanningState {
-                        state.phase = .awaitingApproval
+                        state.phase = .executing
                         runtime.goalPlanningState = state
+                    }
+                    if runtime.goalTurnRecoveryCheckpoint == nil {
+                        runtime.goalTurnRecoveryCheckpoint = AgentGoalTurnRecoveryCheckpoint()
                     }
                     return .captured
                 }
@@ -774,7 +662,10 @@ extension AppState {
             }
         }
         if let existing = runtime.currentPlan,
-           existing.status == .approved || existing.status == .executing || existing.status == .done {
+           existing.status == .proposed
+            || existing.status == .approved
+            || existing.status == .executing
+            || existing.status == .done {
             applyAgentPlanProgressFromLatestMessage(for: runtime, existingPlan: existing)
         }
         return .noProposal
@@ -790,7 +681,7 @@ extension AppState {
     /// Convenience wrapper that targets `activeRuntime`.
     func captureAgentGoalEvaluationFromLatestMessage() {
         guard let runtime = activeRuntime else { return }
-        captureAgentGoalEvaluationFromLatestMessage(for: runtime)
+        _ = captureAgentGoalEvaluationFromLatestMessage(for: runtime)
     }
 
     @discardableResult
@@ -817,17 +708,20 @@ extension AppState {
         _ = startAgentGoalPlanningIfNeeded(for: runtime)
     }
 
+    @discardableResult
     func captureAgentGoalEvaluationFromLatestMessage(
         for runtime: AgentRuntime,
         finishReason: String? = nil
-    ) {
+    ) -> Bool {
         guard runtime.interactionMode == .goal,
               let goal = runtime.currentGoal,
-              !goal.checklist.isEmpty else { return }
-        guard let last = runtime.messages.last(where: { $0.role == .assistant && !$0.content.isEmpty }) else { return }
+              !goal.checklist.isEmpty else { return false }
+        guard let last = runtime.messages.last(where: { $0.role == .assistant && !$0.content.isEmpty }) else {
+            return false
+        }
         if let editedAt = runtime.currentGoalEditedAt,
            last.createdAt < editedAt {
-            return
+            return false
         }
         if let updated = AgentGoalChecklistParser.applyEvaluation(
             to: goal,
@@ -836,7 +730,9 @@ extension AppState {
         ) {
             runtime.currentGoal = updated
             persistAgentSession(runtime: runtime)
+            return true
         }
+        return false
     }
 
     /// Manually override a single step's status from the UI checkbox.
@@ -914,8 +810,7 @@ extension AppState {
     /// common need when an earlier step's output turned out wrong and
     /// every downstream step has to be redone.
     func restartAgentPlanFromStep(id: UUID, note: String) {
-        guard agentInteractionMode == .plan || agentInteractionMode == .goal,
-              var plan = agentCurrentPlan,
+        guard var plan = agentCurrentPlan,
               let startIdx = plan.steps.firstIndex(where: { $0.id == id }) else { return }
         for i in startIdx..<plan.steps.count {
             plan.steps[i].status = .pending

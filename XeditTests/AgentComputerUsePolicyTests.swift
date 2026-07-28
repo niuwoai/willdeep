@@ -420,10 +420,10 @@ struct AgentComputerUsePolicyTests {
             )
         )
         #expect(
-            !AppState.canAutoApproveComputerUse(
+            AppState.canAutoApproveComputerUse(
                 toolName: "computer_use_type_text",
                 arguments: ordinaryType,
-                interactionMode: .plan,
+                interactionMode: .goal,
                 approvalMode: .smart,
                 owner: owner,
                 controlState: state

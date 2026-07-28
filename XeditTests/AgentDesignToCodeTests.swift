@@ -134,9 +134,9 @@ struct AgentDesignToCodeTests {
 
     @Test
     @MainActor
-    func screenshotSlashCommandLeavesPlanModeBeforeDirectExecution() {
+    func screenshotSlashCommandPreservesOrdinaryPlanAndActivatesExpert() {
         let runtime = AgentRuntime(session: AgentSession(title: "Design to code"))
-        runtime.interactionMode = .plan
+        runtime.interactionMode = .normal
         runtime.currentPlan = AgentPlan(
             status: .approved,
             steps: [AgentPlan.Step(text: "Old plan")],
@@ -146,7 +146,7 @@ struct AgentDesignToCodeTests {
         AgentDesignToCode.prepareRuntimeForSlashExecution(runtime, framework: "html")
 
         #expect(runtime.interactionMode == .normal)
-        #expect(runtime.currentPlan == nil)
+        #expect(runtime.currentPlan?.steps.map(\.text) == ["Old plan"])
         #expect(runtime.activeExperts == AgentDesignToCode.webExperts)
         #expect(AgentDesignToCode.prefersWebExecution(framework: "SwiftUI") == false)
         #expect(AgentDesignToCode.prefersWebExecution(framework: nil) == true)

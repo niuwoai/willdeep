@@ -96,7 +96,7 @@ nonisolated struct AgentSession: Identifiable, Codable, Equatable {
     /// it survives Git commits and excludes transient build/cache output.
     var agentArtifactPaths: [String]
     /// Per-session interaction mode. Persisted so re-selecting a session
-    /// resumes plan/goal context without the user having to redo setup.
+    /// resumes ordinary/goal context without the user having to redo setup.
     var interactionMode: AgentInteractionMode
     /// Per-session tool approval behavior. Defaults to smart approval
     /// for backwards compatibility with existing sessions.
@@ -112,8 +112,8 @@ nonisolated struct AgentSession: Identifiable, Codable, Equatable {
     /// domain-specific tools out of ordinary chats until the user turns
     /// an expert on.
     var activeExperts: Set<AgentExpert>
-    /// Plan-mode state (proposed → approved → done). Nil outside Plan
-    /// mode, or when Plan mode is on but no plan has been drafted yet.
+    /// Visible execution plan used by both ordinary and Goal conversations.
+    /// Planning is a task phase, not a top-level interaction mode.
     var currentPlan: AgentPlan?
     /// Goal-mode definition (statement + acceptance checklist). Nil
     /// outside Goal mode, or when Goal mode is on but the user hasn't
@@ -705,20 +705,44 @@ nonisolated struct AgentSidePanelState: Codable, Equatable {
 
 // MARK: - Plan & Goal modes
 
-/// Top-level interaction mode for an Agent session. Plan locks all write
-/// tools until the user approves a plan; Goal pins a long-term objective
-/// + checklist to every system prompt. Normal is the default.
+/// Top-level interaction mode for an Agent session. Ordinary conversations
+/// may plan and execute in one flow; Goal additionally pins a long-term
+/// objective and acceptance checklist to every turn.
 nonisolated enum AgentInteractionMode: String, Codable, CaseIterable, Identifiable {
     case normal
-    case plan
     case goal
 
     var id: String { rawValue }
 
+    init(from decoder: Decoder) throws {
+        let container = try decoder.singleValueContainer()
+        let rawValue = try container.decode(String.self)
+        switch rawValue {
+        case Self.normal.rawValue:
+            self = .normal
+        case "plan":
+            // Sessions written before 1.211.0-rc6 used Plan as a top-level
+            // mode. Planning now lives inside ordinary mode, so migrate them
+            // without losing the visible plan or transcript.
+            self = .normal
+        case Self.goal.rawValue:
+            self = .goal
+        default:
+            throw DecodingError.dataCorruptedError(
+                in: container,
+                debugDescription: "Unknown AgentInteractionMode: \(rawValue)"
+            )
+        }
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.singleValueContainer()
+        try container.encode(rawValue)
+    }
+
     var displayName: String {
         switch self {
         case .normal: return L10n.InteractionMode.normal
-        case .plan: return L10n.InteractionMode.plan
         case .goal: return L10n.InteractionMode.goal
         }
     }
@@ -726,7 +750,6 @@ nonisolated enum AgentInteractionMode: String, Codable, CaseIterable, Identifiab
     var symbol: String {
         switch self {
         case .normal: return "bubble.left.and.bubble.right"
-        case .plan: return "list.number"
         case .goal: return "target"
         }
     }
@@ -734,9 +757,8 @@ nonisolated enum AgentInteractionMode: String, Codable, CaseIterable, Identifiab
 
 /// Per-session approval posture exposed from the Agent composer. It
 /// influences only write-tier auto-approval; read tools still run
-/// automatically, danger-tier tools still require typed confirmation,
-/// and Plan mode keeps its own plan-approval gate except for validated
-/// public web research needed to prepare the plan.
+/// automatically, and danger-tier tools still require typed confirmation.
+/// Goal's host-owned evidence phase remains read-only until validation.
 nonisolated enum AgentApprovalMode: String, Codable, CaseIterable, Identifiable {
     case requestEveryTime
     case smart
@@ -1113,7 +1135,15 @@ nonisolated struct AgentGoalPlanningState: Codable, Equatable {
             // leaving a permanently ready-but-silent session.
             copy.phase = .blocked
         case .awaitingApproval:
-            if currentPlan?.status != .proposed { copy.phase = .blocked }
+            // Legacy sessions may still carry the removed approval phase.
+            // A valid plan now proceeds automatically.
+            if currentPlan?.status == .proposed
+                || currentPlan?.status == .approved
+                || currentPlan?.status == .executing {
+                copy.phase = .executing
+            } else {
+                copy.phase = .blocked
+            }
         case .executing:
             // `.done + .executing` is a valid narrow recovery state: every
             // Plan step reached a terminal status, but the provider stopped
@@ -1136,12 +1166,11 @@ nonisolated struct AgentGoalPlanningState: Codable, Equatable {
     }
 }
 
-/// A user-approvable execution plan parsed from the agent's reply.
+/// A visible execution plan parsed from the agent's reply.
 /// Lifecycle:
-///   proposed → awaiting user click
-///   approved → write tools unlocked, agent continues
-///   rejected → user dismissed; agent should re-plan on next turn
-///   executing/done used purely for display once approved.
+///   proposed/rejected are retained for persisted-session compatibility.
+///   New plans become approved (ready) immediately, then executing/done as
+///   progress arrives. Tool safety is governed by AgentApprovalMode.
 nonisolated struct AgentPlan: Codable, Equatable {
     enum Status: String, Codable { case proposed, approved, rejected, executing, done }
 

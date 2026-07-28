@@ -91,7 +91,7 @@ struct AgentExecutionPickerPill: View {
     }
 }
 
-// MARK: - Mode picker (Normal / Plan / Goal)
+// MARK: - Mode picker (Ordinary / Goal)
 
 struct AgentModePickerPill: View {
     @EnvironmentObject var appState: AppState
@@ -134,7 +134,7 @@ struct AgentModePickerPill: View {
         .menuIndicator(.hidden)
         .focusable(false)
         .fixedSize()
-        .help("Conversation mode — Plan locks writes until you approve; Goal pins an objective to every reply.")
+        .help(L10n.InteractionMode.help)
     }
 
     private var pillForeground: Color {
@@ -144,7 +144,6 @@ struct AgentModePickerPill: View {
     private var pillBackground: Color {
         switch appState.agentInteractionMode {
         case .normal: return Color.secondary.opacity(0.10)
-        case .plan: return Color.orange
         case .goal: return Color.accentColor
         }
     }

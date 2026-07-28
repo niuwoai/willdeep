@@ -104,14 +104,6 @@ final class AgentRuntime: ObservableObject, Identifiable {
     @Published var delegatedTaskRuns: [AgentDelegatedTaskRun] = []
     @Published var activeExperts: Set<AgentExpert> = []
     @Published var currentPlan: AgentPlan?
-    /// Runtime-only pre-dispatch prompt for complex Normal-mode tasks.
-    /// Keeping it per session prevents one chat's countdown from appearing
-    /// after the user switches to another conversation.
-    @Published var pendingPlanModeSuggestion: AgentPlanModeSuggestion?
-    /// True while a locally-ambiguous input is parked awaiting the flash
-    /// judge's verdict. Drives the composer's input-field spinner and blocks
-    /// repeated sends from sneaking past the preflight.
-    @Published var isAskingPlanModeFlash: Bool = false
     @Published var currentGoal: AgentGoal?
     @Published var goalPlanningState: AgentGoalPlanningState?
     @Published var goalTurnRecoveryCheckpoint: AgentGoalTurnRecoveryCheckpoint?
@@ -221,14 +213,6 @@ final class AgentRuntime: ObservableObject, Identifiable {
     /// delivered back to the parent model. The next agent-loop round consumes
     /// these report ids into host-only system notices.
     var pendingWorkflowCompletionReportIDs: [UUID] = []
-    /// Runtime-side fallback for the Plan suggestion countdown. The banner
-    /// also renders its own per-second progress, but auto-resolution must not
-    /// depend on the composer currently being mounted on screen.
-    var planModeSuggestionAutoResolveTask: Task<Void, Never>?
-    /// In-flight flash-judge task for the `.askFlash` preflight band. Task
-    /// handle only (not @Published); cancelled/cleared alongside the
-    /// suggestion state.
-    var planModeFlashJudgeTask: Task<Void, Never>?
     /// Skills that were explicitly attached to the in-flight user turn.
     /// They are cleared/overwritten on the next dispatch and used only
     /// to explain turn recall in reports.
@@ -238,6 +222,13 @@ final class AgentRuntime: ObservableObject, Identifiable {
     /// cancelled turn skips post-turn compression so the queue head can
     /// dispatch as soon as the provider/tool loop unwinds.
     var shouldConsumeQueueAfterStop: Bool = false
+    /// True only for a user turn that explicitly asks for analysis/a plan
+    /// without execution. The plan remains visible, but host auto-continuation
+    /// must stop after the planning reply.
+    var currentTurnPlanningOnly: Bool = false
+    /// Goal may continue across several provider turns, but repeated
+    /// no-change self-checks must pause instead of spinning forever.
+    var consecutiveGoalRoundsWithoutChecklistProgress: Int = 0
 
     /// Continuation resumed when the user resolves a blocking tool
     /// call (Allow / Deny / Confirm / answer ask_user). Per-runtime
@@ -256,16 +247,12 @@ final class AgentRuntime: ObservableObject, Identifiable {
     /// disk persistence: closing/reopening the conversation asks again.
     var conversationAllowedToolSignatures: Set<String> = []
 
-    // MARK: - Plan gate
+    // MARK: - Goal planning gate
 
-    /// Approval gate shared by Plan mode and Goal-backed Plans. Goal setup,
-    /// planning, rejected, proposed, blocked, and completed cycles stay locked.
-    ///
-    /// Plan mode is planning-only: the gate never lifts inside Plan mode,
-    /// regardless of plan status. Approving a plan switches the session back
-    /// to Normal mode, and execution happens there.
+    /// Goal setup and host-owned evidence gathering stay read-only until a
+    /// validated plan exists. Ordinary mode never uses a plan gate: its plan
+    /// is progress UI, while AgentApprovalMode remains the safety boundary.
     var isPlanGateActive: Bool {
-        if interactionMode == .plan { return true }
         guard interactionMode == .goal else { return false }
         guard let plan = currentPlan else { return true }
         let hasIncompleteGoalChecklist = currentGoal.map {
@@ -300,11 +287,15 @@ final class AgentRuntime: ObservableObject, Identifiable {
         self.executionAgent = session.executionAgent
         self.delegatedTaskRuns = session.delegatedTaskRuns.map(Self.normalizingInterruptedDelegatedTask)
         self.activeExperts = session.activeExperts
-        self.currentPlan = session.currentPlan
+        var restoredPlan = session.currentPlan
+        if restoredPlan?.status == .proposed {
+            restoredPlan?.status = .approved
+        }
+        self.currentPlan = restoredPlan
         self.currentGoal = session.currentGoal
         self.goalTurnRecoveryCheckpoint = session.goalTurnRecoveryCheckpoint
         let restoredGoalPlanningState = session.goalPlanningState?.normalizedForRestore(
-            currentPlan: session.currentPlan,
+            currentPlan: restoredPlan,
             currentGoal: session.currentGoal
         )
         self.goalPlanningState = restoredGoalPlanningState

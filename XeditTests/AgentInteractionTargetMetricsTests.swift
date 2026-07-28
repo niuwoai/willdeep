@@ -4,22 +4,39 @@ import Testing
 
 @Suite
 struct AgentInteractionTargetMetricsTests {
-    @Test("composer expands before applying its readable-width cap")
-    func composerUsesStableAvailableWidth() throws {
+    @Test("transcript and composer share the centered readable column")
+    func chatSurfacesShareReadableColumn() throws {
         let repositoryRoot = URL(fileURLWithPath: #filePath)
             .deletingLastPathComponent()
             .deletingLastPathComponent()
-        let source = try String(
+        let composerSource = try String(
             contentsOf: repositoryRoot.appendingPathComponent(
                 "Xedit/AgentModeComposerView.swift"
             ),
             encoding: .utf8
         )
+        let transcriptSource = try String(
+            contentsOf: repositoryRoot.appendingPathComponent(
+                "Xedit/AgentChatTranscript.swift"
+            ),
+            encoding: .utf8
+        )
+        let layoutSource = try String(
+            contentsOf: repositoryRoot.appendingPathComponent(
+                "Xedit/AgentModeView.swift"
+            ),
+            encoding: .utf8
+        )
 
-        let stableWidthModifiers =
-            ".frame(maxWidth: .infinity)\n"
-            + "                .frame(maxWidth: AgentDesign.chatMaxContentWidth)"
-        #expect(source.contains(stableWidthModifiers))
+        #expect(composerSource.contains(
+            ".agentChatReadableColumn(verticalPadding: 14)"
+        ))
+        #expect(transcriptSource.contains(
+            ".agentChatReadableColumn(verticalPadding: 20)"
+        ))
+        #expect(layoutSource.contains(
+            ".frame(minWidth: 0, maxWidth: .infinity, alignment: .center)"
+        ))
     }
 
     @Test("side-panel divider keeps a forgiving hit target around a thin visual rule")

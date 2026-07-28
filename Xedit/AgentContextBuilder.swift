@@ -80,16 +80,16 @@ enum AgentContextBuilder {
     private static let maxSelectionCharacters = 6_000
     private static let maxRulesCharacters = 6_000
     private static let dynamicContextMarker = "=== Dynamic Turn Context ==="
-    static let stablePrefixVersion = "willdeep-agent-system-v15"
+    static let stablePrefixVersion = "willdeep-agent-system-v16"
     /// Byte-level snapshot hashes for all three prompt profiles (computed
     /// with the fixed test locale directive). Intentional prompt edits must
     /// bump `stablePrefixVersion` and re-record every affected hash — run
     /// the snapshot tests once to get the new values from the failure
     /// output. Without all three, compact/extended drift (a merge eating
     /// half a sentence) ships silently.
-    static let stablePrefixSnapshotHash = "b344c8767ec432b0"
-    static let compactPrefixSnapshotHash = "5bc5ce43ebee53a2"
-    static let extendedPrefixSnapshotHash = "658668df60179dca"
+    static let stablePrefixSnapshotHash = "52573d0d2ec55e0d"
+    static let compactPrefixSnapshotHash = "4c8d471c66eb12f8"
+    static let extendedPrefixSnapshotHash = "1f56fb51dbdf9c85"
 
     static func systemPrompt(
         rootDirectory: URL?,
@@ -150,7 +150,7 @@ enum AgentContextBuilder {
             if executionAgent == .willDeep {
                 let delegatedPolicy = interactionMode == .goal
                     ? "WillDeep is the selected executor. External delegated coding tools (claude_code, codex_cli, cursor_agent, cline_cli) are available only as a Goal-mode fallback after native workspace tools, focused edits, and verification attempts are not enough."
-                    : "WillDeep is the selected executor. External delegated coding tools (claude_code, codex_cli, cursor_agent, cline_cli) are intentionally unavailable in Normal and Plan mode; use WillDeep's native tools instead."
+                    : "WillDeep is the selected executor. External delegated coding tools (claude_code, codex_cli, cursor_agent, cline_cli) are intentionally unavailable in ordinary mode; use WillDeep's native tools instead."
                 sections.append("""
                 Delegated executor policy:
                 \(delegatedPolicy)
@@ -163,12 +163,8 @@ enum AgentContextBuilder {
             }
         }
 
-        // Plan mode: rename_session is a write tool the plan gate would
-        // reject before approval, so instructing the model to call it just
-        // manufactures a denied call every turn. Skip the section; titles
-        // catch up on the first post-approval turn.
-        if interactionMode != .plan,
-           let currentSessionTitle, !currentSessionTitle.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+        if let currentSessionTitle,
+           !currentSessionTitle.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
             sections.append("""
             Current session title: \(currentSessionTitle)
             Session title locked: \(currentSessionTitleIsLocked ? "yes" : "no")
@@ -176,74 +172,18 @@ enum AgentContextBuilder {
             """)
         }
 
-        // Plan mode: planning-only, always. Writes stay locked no matter the
-        // plan status; approval flips the session back to Normal mode and the
-        // execution contract below (the Normal-mode branch) takes over.
-        if interactionMode == .plan {
-            if let plan = currentPlan, plan.status == .proposed {
-                let stepsText = plan.steps.enumerated()
-                    .map { "\($0.offset + 1). \($0.element.text)" }
-                    .joined(separator: "\n")
-                let summaryText = plan.summary.trimmingCharacters(in: .whitespacesAndNewlines)
-                let summaryLine = summaryText.isEmpty ? "" : "\nPlan summary: \(summaryText)"
-                sections.append("""
-                === PLAN MODE — EXISTING PLAN AWAITS DECISION ===
-                You are in Plan mode. Plan mode NEVER executes: tools that write, edit, or run commands are hard-blocked here.
-
-                A proposed plan already exists and is authoritative for this decision:\(summaryLine)
-                <current-proposed-plan>
-                \(stepsText)
-                </current-proposed-plan>
-
-                Do not repeat, reconstruct, or silently replace this plan merely because the user sends a short acknowledgement or asks to continue. The host promotes unambiguous approvals such as “继续”, “执行”, “continue”, or “proceed” to Normal execution mode before the request reaches you. If this request is still in Plan mode, revise the plan only when the latest operator message actually supplies revision guidance; preserve every unaffected step and emit exactly one complete replacement `plan` block. Otherwise, briefly state that the existing plan is still awaiting approval and do not emit a new `plan` block.
-                """)
-            } else if let plan = currentPlan,
-                      plan.status == .approved || plan.status == .executing {
-                let stepsText = plan.steps.enumerated()
-                    .map { "\($0.offset + 1). [\($0.element.status.rawValue)] \($0.element.text)" }
-                    .joined(separator: "\n")
-                sections.append("""
-                === PLAN MODE — ACTIVE EXECUTION CONTRACT ===
-                This session already has an approved Plan:
-                <current-approved-plan>
-                \(stepsText)
-                </current-approved-plan>
-
-                Plan mode cannot execute it, but it also must not replace it. Do not emit a new `plan` block and do not reconstruct the steps. Tell the user to return to Normal mode to resume this exact Plan, or explicitly reject/cancel it before requesting a replacement.
-                """)
-            } else {
-                sections.append("""
-                === PLAN MODE — PLANNING ONLY ===
-                You are in Plan mode. Plan mode NEVER executes: tools that write, edit, or run commands are hard-blocked here regardless of plan status. Your only deliverable is a numbered plan in a single fenced block tagged `plan`:
-
-                ```plan
-                1. <one-line step>
-                2. <one-line step>
-                ...
-                ```
-
-                Treat the plan as the complete delivery contract for the user's request. Cover the requested end state, not just an outline, sample, first chapter, first file, or first phase unless the user explicitly asked for a partial delivery. Before emitting the plan, compare every requested deliverable against the numbered steps and add any missing work.
-
-                Then STOP and wait. When the user approves the plan, WillDeep switches this session back to Normal mode and execution happens there — never in Plan mode. Do not call any tool after drafting the plan. Read-only investigation tools (search_files, grep_files, read_file, list_directory, git_status, web_search) and web_fetch for validated public URLs are still allowed BEFORE drafting the plan — but once you've drafted, stop and wait.
-                If the user revises and re-prompts after a Reject, emit a new ```plan block.
-                """)
-            }
-        }
-
-        // Normal mode carrying an approved plan: this is the execution half of
-        // the Plan-mode handshake. The session was flipped back to Normal on
-        // approval; pin the approved steps plus the progress contract here.
-        if interactionMode == .normal,
-           let plan = currentPlan,
-           plan.status == .approved || plan.status == .executing {
+        if interactionMode == .normal, let plan = currentPlan,
+           plan.status == .proposed
+            || plan.status == .approved
+            || plan.status == .executing {
             let stepsText = plan.steps.enumerated()
                 .map { "\($0.offset + 1). [\($0.element.status.rawValue)] \($0.element.text)" }
                 .joined(separator: "\n")
             sections.append("""
-            === APPROVED PLAN — EXECUTE ===
-            The user approved this plan in Plan mode and the session is now back in Normal mode for execution. Execute it step-by-step. Tool calls (including writes) follow the normal approval rules.
+            === ACTIVE PLAN — CONTINUE, DO NOT RE-PLAN ===
+            This ordinary conversation already has an active execution plan. Continue it step-by-step. Do not emit a replacement `plan` block unless the user explicitly asks to revise the plan or starts a different task. Tool calls follow the independent approval policy.
 
-            Approved plan (current statuses shown in brackets):
+            Active plan (current statuses shown in brackets):
             \(stepsText)
 
             Progress reporting (REQUIRED):
@@ -254,7 +194,14 @@ enum AgentContextBuilder {
             2: in_progress
             ```
 
-            Steps you didn't touch this turn can be omitted. Mark a step `in_progress` before you start its tool calls; flip it to `done` (or `failed`) once finished. After receiving tool results, report the resulting step statuses before issuing more tool calls so WillDeep can refresh the visible checklist immediately. Never mark a partial/sample deliverable as `done` when the approved step promises the complete artifact. If the response budget forces a pause, leave the current step `in_progress`; WillDeep can continue it automatically. Once every step is `done`/`skipped`/`failed`, summarize what was accomplished.
+            Steps you didn't touch this turn can be omitted. Mark a step `in_progress` before you start its tool calls; flip it to `done` (or `failed`) once finished. After receiving tool results, report the resulting step statuses before issuing more tool calls so WillDeep can refresh the visible checklist immediately. Never mark a partial/sample deliverable as `done` when the step promises the complete artifact. If the response budget forces a pause, leave the current step `in_progress`; WillDeep can continue it automatically. Once every step is `done`/`skipped`/`failed`, summarize what was accomplished.
+            """)
+        } else if interactionMode == .normal {
+            sections.append("""
+            === ORDINARY MODE — PLAN WHEN USEFUL, THEN EXECUTE ===
+            Handle simple tasks directly. For a genuinely multi-step task, emit exactly one complete numbered `plan` fenced block near the start of the reply so WillDeep can show progress, then continue executing it in the same turn without waiting for plan approval. Do not plan again on later tool rounds; update the original steps with `progress` blocks.
+
+            If the operator explicitly asks only for analysis or a plan and says not to execute, emit the plan and stop without write-tier tools. Otherwise, planning is not a stopping point. The tool approval policy remains independent and still governs consequential actions.
             """)
         }
 
@@ -284,28 +231,27 @@ enum AgentContextBuilder {
             """
             let isFinalizingInterruptedPlan = currentPlan?.status == .done
                 && goalPlanningState?.phase == .executing
-            if currentPlan?.status == .approved
+            if currentPlan?.status == .proposed
+                || currentPlan?.status == .approved
                 || currentPlan?.status == .executing
                 || isFinalizingInterruptedPlan {
                 if isFinalizingInterruptedPlan {
-                    goalBlock += "The existing approved Plan reached terminal step statuses, but its Goal finalization was interrupted before every acceptance item was settled. Resume this exact Plan and preserve its progress. Do not emit a new `plan`, do not restart Goal Teams, and do not repeat completed implementation. Run only the remaining verification needed for unchecked acceptance items, then report the `goal-check`.\n"
+                    goalBlock += "The existing Plan reached terminal step statuses, but its Goal finalization was interrupted before every acceptance item was settled. Resume this exact Goal loop and preserve its progress. Do not emit a new `plan`, do not restart Goal Teams, and do not repeat completed implementation. Run only the remaining verification needed for unchecked acceptance items, then report the `goal-check`.\n"
                 } else {
-                    goalBlock += "The user explicitly approved the current Goal-backed Plan. Execute only that plan and its locked scope. Ordinary write-tier tools may proceed through the existing approval policy; danger-tier operations still require typed confirmation every time.\n"
+                    goalBlock += "A validated Goal-backed Plan is active. Execute only that plan and its locked scope; do not emit another plan on later rounds. Ordinary write-tier tools may proceed through the existing approval policy; danger-tier operations still require typed confirmation every time.\n"
                 }
                 if let plan = currentPlan {
-                    goalBlock += "Approved Plan steps:\n"
+                    goalBlock += "Active Plan steps:\n"
                     for (index, step) in plan.steps.enumerated() {
                         goalBlock += "  \(index + 1). [\(step.status.rawValue)] \(step.text)\n"
                     }
                     goalBlock += "At the end of each execution reply, emit exactly one `progress` fenced block for touched steps.\n"
                 }
-            } else if currentPlan?.status == .proposed || goalPlanningState?.phase == .awaitingApproval {
-                goalBlock += "A Goal-backed Plan is awaiting explicit user approval. Do not call tools or continue automatically. Wait for Approve, Reject, or revision guidance.\n"
             } else if currentPlan?.status == .done, goalPlanningState?.phase == .completed {
-                goalBlock += "The Goal and its approved Plan are complete. Do not create another Plan or restart Goal Teams unless the user explicitly changes or extends the Goal.\n"
+                goalBlock += "The Goal and its Plan are complete. Do not create another Plan or restart Goal Teams unless the user explicitly changes or extends the Goal.\n"
             } else {
                 goalBlock += "Goal Teams planning is host-coordinated and write-tier tools are locked. Do not implement and do not manually spawn planning members. The host starts exactly three independent read-only members, waits until all are terminal, then runs read-only evidence arbitration when at least two reports are valid. Only after arbitration succeeds may the parent emit a proposal.\n"
-                goalBlock += "A valid proposal must include the exact ten-column Teams table (Member, Skill/Subagent, Goal Slice, Claimed Tasks, Locked Scope, Deliverable, Done Criteria, Docs/Tasklist Updates, Test Owner, Validator) plus one complete numbered fenced `plan` covering implementation, tests, documentation, version handling, and acceptance (or explicit reasoned N/A). Then stop for explicit approval.\n"
+                goalBlock += "A valid proposal must include the exact ten-column Teams table (Member, Skill/Subagent, Goal Slice, Claimed Tasks, Locked Scope, Deliverable, Done Criteria, Docs/Tasklist Updates, Test Owner, Validator) plus one complete numbered fenced `plan` covering implementation, tests, documentation, version handling, and acceptance (or explicit reasoned N/A). The host validates it and execution continues automatically without a plan-approval pause.\n"
                 if goalPlanningState?.phase == .blocked {
                     goalBlock += "Independent planning is blocked. Explain the visible evidence gap; do not synthesize a proposed Plan or offer execution approval.\n"
                 }
@@ -414,7 +360,7 @@ enum AgentContextBuilder {
             """,
             """
             Tone and response style:
-            - Be concise and direct. Default to no more than 4 lines plus any required diff, tool result, or Plan/Goal progress block; required structured status blocks do not count toward this limit.
+            - Be concise and direct. Default to no more than 4 lines plus any required diff, tool result, or plan/Goal progress block; required structured status blocks do not count toward this limit.
             - Do the work directly; avoid ceremonial preambles and postambles.
             - After producing a diff, stop unless the user asked for explanation.
             - No emojis unless the user asks.
@@ -436,7 +382,7 @@ enum AgentContextBuilder {
             sections.append("""
             Compact profile:
             - Prefer the shortest correct path. Use tools to verify facts, then answer tersely.
-            - Keep plans implicit unless the user asks or Plan/Goal mode requires a visible plan.
+            - Keep plans implicit for simple tasks. For genuinely multi-step work, use one visible plan and then execute it without re-planning on later rounds.
             - Avoid broad refactors and optional explanations.
             """)
         case .standard:
@@ -606,8 +552,7 @@ enum AgentContextBuilder {
         // Reclaim every older full snapshot the moment a new one is written.
         // This rewrites at most one turn's worth of already-cached prefix (the
         // provider cache breaks at the newest attach point anyway) and keeps
-        // conflicting stale mode instructions (an old "PLAN MODE — PLANNING
-        // ONLY" block after approval flipped the session to Normal mode) out
+        // conflicting stale mode instructions out
         // of the model's view.
         func supersedePriorContexts(excluding excludedID: AgentMessage.ID?) {
             for index in messages.indices
@@ -653,7 +598,7 @@ enum AgentContextBuilder {
         //   message, so the context must follow it;
         // - the turn context itself changed (mode switch / retry without a
         //   new user message) — reusing the frozen snapshot would run the
-        //   turn under stale instructions (e.g. missing PLAN MODE).
+        //   turn under stale instructions.
         let hasSystemNoticeAfterUser = messages[(userIndex + 1)...].contains {
             $0.role == .system && !$0.isLocalTranscriptEvent
         }
@@ -1005,9 +950,11 @@ nonisolated enum AgentPlanAutoContinuationPolicy {
         for plan: AgentPlan?,
         automaticContinuationCount: Int,
         consecutiveNoProgressReplies: Int,
-        hasQueuedUserMessages: Bool
+        hasQueuedUserMessages: Bool,
+        allowsAutomaticExecution: Bool = true
     ) -> AgentPlanAutoContinuationDecision {
-        guard !hasQueuedUserMessages,
+        guard allowsAutomaticExecution,
+              !hasQueuedUserMessages,
               let plan,
               plan.status == .approved || plan.status == .executing,
               plan.steps.contains(where: { !terminalStatuses.contains($0.status) }) else {
@@ -1025,7 +972,7 @@ nonisolated enum AgentPlanAutoContinuationPolicy {
     static func continuationNotice(finishReason: String?) -> String {
         let reason = finishReason.map { " The provider ended the previous reply with finish reason '\($0)'." } ?? ""
         return """
-        Automatic Plan continuation: the approved plan still has non-terminal steps.\(reason)
+        Automatic plan continuation: the active plan still has non-terminal steps.\(reason)
         Continue from the current step statuses without restating completed work. Do not stop after a partial or sample deliverable. If the response budget forces another pause, leave the current step in_progress. If genuinely blocked, mark the step failed and explain why. End the reply with exactly one progress block containing the latest statuses touched in that reply.
         """
     }

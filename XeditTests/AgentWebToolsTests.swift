@@ -101,24 +101,24 @@ struct AgentWebToolsTests {
     }
 
     @Test
-    func planGateAllowsOnlyValidatedPublicWebFetchResearch() {
+    func goalPlanningGateAllowsOnlyValidatedPublicWebFetchResearch() {
         let publicFetch = ["url": AgentJSONValue.string("https://developer.apple.com/documentation")]
         let privateFetch = ["url": AgentJSONValue.string("http://127.0.0.1/admin")]
 
-        #expect(AppState.planModeCanAutoApprove(toolName: "web_fetch", arguments: publicFetch))
-        #expect(!AppState.planGateBlocks(
+        #expect(AppState.goalPlanningCanAutoApprove(toolName: "web_fetch", arguments: publicFetch))
+        #expect(!AppState.goalPlanningGateBlocks(
             toolName: "web_fetch",
             arguments: publicFetch,
             risk: .write,
             isActive: true
         ))
-        #expect(AppState.planGateBlocks(
+        #expect(AppState.goalPlanningGateBlocks(
             toolName: "web_fetch",
             arguments: privateFetch,
             risk: .write,
             isActive: true
         ))
-        #expect(AppState.planGateBlocks(
+        #expect(AppState.goalPlanningGateBlocks(
             toolName: "run_command",
             arguments: ["command": .string("swift build")],
             risk: .write,
@@ -127,7 +127,7 @@ struct AgentWebToolsTests {
     }
 
     @Test
-    func planModeAutoApprovesValidatedPublicWebResearchOnly() async {
+    func goalPlanningAutoApprovesValidatedPublicWebResearchOnly() async {
         let sandbox = KeychainSandbox()
         defer { withExtendedLifetime(sandbox) {} }
         let appState = AppState()
@@ -138,17 +138,17 @@ struct AgentWebToolsTests {
             arguments: ["url": .string("https://developer.apple.com/documentation")],
             risk: .write,
             rootDirectory: root,
-            interactionMode: .plan,
+            interactionMode: .goal,
             approvalMode: .requestEveryTime
         )
-        #expect(publicFetch == .staticAllowlist)
+        #expect(publicFetch == .goalMode)
 
         let privateFetch = await appState.autoApprovalSource(
             toolName: "web_fetch",
             arguments: ["url": .string("http://127.0.0.1/admin")],
             risk: .write,
             rootDirectory: root,
-            interactionMode: .plan
+            interactionMode: .goal
         )
         #expect(privateFetch == nil)
 
@@ -157,7 +157,7 @@ struct AgentWebToolsTests {
             arguments: ["command": .string("swift build")],
             risk: .write,
             rootDirectory: root,
-            interactionMode: .plan,
+            interactionMode: .goal,
             approvalMode: .requestEveryTime
         )
         #expect(command == nil)

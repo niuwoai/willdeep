@@ -39,14 +39,11 @@ extension AppState {
         existingUserMessageID: AgentMessage.ID? = nil,
         source: AgentMessageSource = .operatorInput
     ) {
-        _ = applyExplicitPlanContinuationIfNeeded(
-            for: runtime,
-            text: text,
-            hasAttachments: !images.isEmpty
-                || !textAttachments.isEmpty
-                || !attachedSkills.isEmpty,
-            source: source
-        )
+        runtime.currentTurnPlanningOnly = source == .operatorInput
+            && AgentExecutionIntentPolicy.requestsPlanningOnly(text)
+        if source == .operatorInput {
+            runtime.consecutiveGoalRoundsWithoutChecklistProgress = 0
+        }
         resolvePendingAgentPatchProposalsBeforeNewMessage(for: runtime)
 
         let shouldArmGoalRecovery = AgentGoalLaunchRecoveryPolicy.shouldArmExecutionCheckpoint(
@@ -1254,7 +1251,7 @@ extension AppState {
                     } ?? false
                 let assistantReplyContainsGoalCheck = hasValidClosedGoalCheck
                 if assistantReplyContainsGoalCheck {
-                    captureAgentGoalEvaluationFromLatestMessage(
+                    let didAdvanceGoalChecklist = captureAgentGoalEvaluationFromLatestMessage(
                         for: runtime,
                         finishReason: finishReason
                     )
@@ -1262,7 +1259,19 @@ extension AppState {
                     // evaluation. A stale checklist plus an interrupted
                     // response must resume finalization, not erase the
                     // completed Plan and launch Goal Teams again.
-                    prepareNextAgentGoalPlanningCycleIfNeeded(for: runtime)
+                    prepareNextAgentGoalPlanningCycleIfNeeded(
+                        for: runtime,
+                        didAdvanceChecklist: didAdvanceGoalChecklist
+                    )
+                } else if runtime.interactionMode == .goal,
+                          runtime.currentPlan?.status == .done,
+                          runtime.currentGoal?.checklist.contains(where: { !$0.done }) == true {
+                    // Missing Goal evidence must continue the same acceptance
+                    // loop rather than silently ending or creating a new Plan.
+                    prepareNextAgentGoalPlanningCycleIfNeeded(
+                        for: runtime,
+                        didAdvanceChecklist: false
+                    )
                 }
                 let planStatusesAfterReply = runtime.currentPlan?.steps.map(\.status)
                 if didAdvancePlanSinceLastContinuationDecision
@@ -1277,7 +1286,8 @@ extension AppState {
                     for: runtime.currentPlan,
                     automaticContinuationCount: planAutomaticContinuationCount,
                     consecutiveNoProgressReplies: consecutivePlanRepliesWithoutProgress,
-                    hasQueuedUserMessages: !runtime.queuedMessages.isEmpty
+                    hasQueuedUserMessages: !runtime.queuedMessages.isEmpty,
+                    allowsAutomaticExecution: !runtime.currentTurnPlanningOnly
                 ) {
                 case .continueExecution:
                     planAutomaticContinuationCount += 1
@@ -1464,6 +1474,24 @@ extension AppState {
                 runtime.toolCalls.append(record)
                 let recordID = record.id
 
+                if runtime.currentTurnPlanningOnly,
+                   AgentExecutionIntentPolicy.blocksExecution(risk: risk) {
+                    anyDenied = true
+                    if let index = runtime.toolCalls.firstIndex(where: { $0.id == recordID }) {
+                        runtime.toolCalls[index].status = .denied
+                        runtime.toolCalls[index].errorMessage = "Planning-only request"
+                    }
+                    appendToolMessage(
+                        for: runtime,
+                        toolCallID: call.externalID,
+                        payload: "Blocked: the operator explicitly requested planning or analysis without execution. Return the plan and stop; do not ask for approval.",
+                        source: .systemNotice,
+                        outcomeStatus: .denied,
+                        errorMessage: "Planning-only request"
+                    )
+                    continue
+                }
+
                 // rc2: if the user isn't looking at the app when a tool
                 // call needs them (approve / confirm / answer), surface
                 // a system banner so they don't sit on a stalled turn.
@@ -1475,16 +1503,15 @@ extension AppState {
                     status: initialStatus
                 )
 
-                // Plan approval gate blocks writes until the user approves,
-                // while still allowing validated public web GETs needed to
-                // research that plan. Blocked calls go back as tool errors so
-                // the model knows to stop and emit a plan. Resolved during
+                // Goal evidence planning blocks writes until the host validates
+                // a plan, while still allowing validated public web GETs needed
+                // for research. Resolved during
                 // staging (synchronously, right after the record is appended)
                 // so a gated call never sits on screen as an approvable card.
                 // `ask_user` is exempt exactly as in the old serial flow,
                 // where its handler ran ahead of this gate.
                 if risk != .userInput,
-                   Self.planGateBlocks(
+                   Self.goalPlanningGateBlocks(
                     toolName: call.toolName,
                     arguments: argsDict,
                     risk: risk,
@@ -1493,15 +1520,15 @@ extension AppState {
                     anyDenied = true
                     if let index = runtime.toolCalls.firstIndex(where: { $0.id == recordID }) {
                         runtime.toolCalls[index].status = .denied
-                        runtime.toolCalls[index].errorMessage = "Plan approval required"
+                        runtime.toolCalls[index].errorMessage = "Goal planning validation required"
                     }
                     appendToolMessage(
                         for: runtime,
                         toolCallID: call.externalID,
-                        payload: "Blocked: no current plan has explicit user approval. Complete the required planning flow, then stop and wait for approval.",
+                        payload: "Blocked: Goal evidence planning has not produced a validated execution plan yet. Finish the host-owned planning flow without asking for user approval.",
                         source: .systemNotice,
                         outcomeStatus: .denied,
-                        errorMessage: "Plan approval required"
+                        errorMessage: "Goal planning validation required"
                     )
                     continue
                 }
@@ -2493,8 +2520,7 @@ extension AppState {
         if runtime.interactionMode == .goal {
             return .goalMode
         }
-        if runtime.interactionMode != .plan,
-           runtime.approvalMode == .workspaceAccess {
+        if runtime.approvalMode == .workspaceAccess {
             return .workspaceAccess
         }
         return nil
@@ -2567,7 +2593,7 @@ extension AppState {
     /// — the conservative case where the payload contains arbitrary
     /// bytes from the workspace / MCP / shell, any of which could carry
     /// injection markers. Callers that hand-author the payload string
-    /// (denial notices, plan-mode blocks) should pass `.systemNotice`
+    /// (denial notices, host-owned Goal gates) should pass `.systemNotice`
     /// to skip the neutralizer; the `ask_user` reply path should pass
     /// `.userAnswer` so the content gets wrapped in `<user_answer>` and
     /// the model can tell a typed reply apart from a tool result.

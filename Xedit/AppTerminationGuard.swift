@@ -57,7 +57,6 @@ extension AppState {
             runtime.isResponding
                 || runtime.isAwaitingProviderSlot
                 || runtime.isCompressingContext
-                || runtime.isAskingPlanModeFlash
                 || !runtime.workflowTasks.isEmpty
                 || !agentJobRegistry.aliveJobs(forRuntime: runtime.id).isEmpty
                 || agentSubagentRegistry.activeCount(forParentRuntime: runtime.id) > 0

@@ -165,21 +165,10 @@ extension AppState {
         set { activeRuntime?.activeExperts = newValue }
     }
 
-    /// Current proposed/approved plan for Plan mode.
+    /// Current visible execution plan for ordinary or Goal mode.
     var agentCurrentPlan: AgentPlan? {
         get { activeRuntime?.currentPlan }
         set { activeRuntime?.currentPlan = newValue }
-    }
-
-    var agentPendingPlanModeSuggestion: AgentPlanModeSuggestion? {
-        get { activeRuntime?.pendingPlanModeSuggestion }
-        set { activeRuntime?.pendingPlanModeSuggestion = newValue }
-    }
-
-    /// True while the active session is waiting on the Plan-mode flash judge.
-    /// Drives the composer send-button spinner.
-    var agentIsAskingPlanModeFlash: Bool {
-        activeRuntime?.isAskingPlanModeFlash ?? false
     }
 
     /// Currently-pinned goal for Goal mode.
@@ -206,8 +195,8 @@ extension AppState {
         return runtime.learningEvents.filter { $0.createdAt >= latestUser.createdAt }
     }
 
-    /// True when Plan mode is on and no active approved/executing plan exists.
-    /// Completed plans require a fresh plan before the next write-tier turn.
+    /// True only while Goal's host-owned evidence phase has not produced an
+    /// executable plan. Ordinary mode never gates tools on plan state.
     var isPlanGateActive: Bool {
         activeRuntime?.isPlanGateActive ?? false
     }

@@ -63,8 +63,7 @@ nonisolated enum AgentMessageSource: String, Codable, Equatable {
 nonisolated enum AgentTranscriptEvent: String, Codable, Equatable {
     case modelChanged
     case responseStopped
-    /// A complex task auto-entered Plan mode after the suggestion banner
-    /// timed out without an explicit user choice.
+    /// Legacy event retained so old transcripts remain decodable.
     case autoPlanModeEntered
 }
 

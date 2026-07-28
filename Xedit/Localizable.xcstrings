@@ -228,8 +228,6 @@
     "roundtable.setup.expert.research.expertise" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Evidence, statistical bias, research design, and validation" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "数据证据、统计偏差、研究设计与验证路径" } } } },
     "roundtable.setup.expert.growth.expertise" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Users, competition, channel efficiency, and monetization" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "用户洞察、竞争格局、渠道效率与商业化增长" } } } },
     "roundtable.setup.expert.operations.expertise" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Organization, collaboration, process cost, and execution cadence" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "组织能力、协作机制、流程成本与落地节奏" } } } },
-    "agent-notification.plan-suggestion.body" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Return to confirm whether to enter Plan mode before starting." } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "回到 App 确认是否先进入 Plan 模式再执行。" } } } },
-    "agent-notification.plan-suggestion.title" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "A task may need Plan mode" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "有任务建议进入 Plan 模式" } } } },
     "delegated-task.acceptance-passed-attempt" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Executor self-review and WillDeep acceptance passed on attempt %d." } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "执行器自验收与 WillDeep 二次验收已在第 %d 次执行通过。" } } } },
     "delegated-task.acceptance-unavailable" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "No acceptance verdict is available." } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "未能取得验收结论。" } } } },
     "delegated-task.accepted" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Accepted" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "验收通过" } } } },
@@ -351,12 +349,6 @@
     "agent-model-picker.upgrade-to" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Upgrade this conversation to %@" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "本会话升至 %@" } } } },
     "agent-model-picker.view-all" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "View all models" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "查看全部模型" } } } },
     "agent-model-picker.view-plans" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "View Plans" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "查看套餐" } } } },
-    "plan-mode-suggestion.auto-entered-notice" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Complex task — asked whether to enter Plan mode; auto-entered after %d seconds without confirmation." } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "复杂任务，已询问是否进入 Plan 模式；超过 %d 秒未确认，已自动进入 Plan 模式。" } } } },
-    "plan-mode-suggestion.continue-normally" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Continue normally" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "直接执行" } } } },
-    "plan-mode-suggestion.countdown-hint" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Entering Plan mode in %ds…" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "%d 秒后自动进入 Plan 模式…" } } } },
-    "plan-mode-suggestion.enter-plan" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Enter Plan" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "进入 Plan" } } } },
-    "plan-mode-suggestion.subtitle" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Switch to Plan mode before starting?" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "是否先进入 Plan 模式梳理步骤？" } } } },
-    "plan-mode-suggestion.title" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "This task looks complex" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "这个任务看起来比较复杂" } } } },
     "desktop-pet.appearance.antenna-botanist" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Antenna botanist" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "天线植物学家" } } } },
     "desktop-pet.appearance.cloud-forge" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Cloud-forge engineer" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "云锻工程师" } } } },
     "desktop-pet.appearance.code-shiba" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Code Shiba" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "代码柴犬" } } } },
@@ -10352,16 +10344,6 @@
         }
       }
     },
-    "Conversation mode — Plan locks writes until you approve; Goal pins an objective to every reply." : {
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "对话模式 —— 计划模式会锁定写入,直到你批准;目标模式会把一个目标固定到每次回复中。"
-          }
-        }
-      }
-    },
     "Copied" : {
       "localizations" : {
         "zh-Hans" : {
@@ -12341,6 +12323,23 @@
         }
       }
     },
+    "interaction-mode.help" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Conversation mode — Ordinary plans and executes as needed; Goal repeatedly checks a persistent objective."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "对话模式——普通模式会按需规划并执行；目标模式会持续检查固定目标。"
+          }
+        }
+      }
+    },
     "interaction-mode.normal" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -12354,23 +12353,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "普通"
-          }
-        }
-      }
-    },
-    "interaction-mode.plan" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Plan"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "计划"
           }
         }
       }
@@ -15192,279 +15174,6 @@
         }
       }
     },
-    "plan-auto-execution-banner.confirm" : {
-      "extractionState" : "extracted_with_value",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "new",
-            "value" : "Approve & Execute"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "批准并执行"
-          }
-        }
-      }
-    },
-    "plan-auto-execution-banner.danger-notice" : {
-      "extractionState" : "extracted_with_value",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "new",
-            "value" : "Plan mentions destructive actions — confirm manually."
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "计划中提到了破坏性操作——请手动确认。"
-          }
-        }
-      }
-    },
-    "plan-auto-execution-banner.danger-scan-disabled-hint" : {
-      "extractionState" : "extracted_with_value",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "new",
-            "value" : "Destructive-keyword guard is off."
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "破坏性关键字防护已关闭。"
-          }
-        }
-      }
-    },
-    "plan-auto-execution-banner.manual-confirm-hint" : {
-      "extractionState" : "extracted_with_value",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "new",
-            "value" : "Plans never auto-run — waiting for your confirmation."
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "计划不会自动执行——等待你确认。"
-          }
-        }
-      }
-    },
-    "plan-auto-execution-banner.reject" : {
-      "extractionState" : "extracted_with_value",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "new",
-            "value" : "Stay in Plan"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "留在 Plan 模式"
-          }
-        }
-      }
-    },
-    "plan-auto-execution-banner.remember" : {
-      "extractionState" : "extracted_with_value",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "new",
-            "value" : "Don't ask again in this workspace"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "在本工作区不再询问"
-          }
-        }
-      }
-    },
-    "plan-auto-execution-banner.subtitle" : {
-      "extractionState" : "extracted_with_value",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "new",
-            "value" : "Plan mode only plans. Approve to switch back to Normal mode and execute."
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Plan 模式只负责规划。批准后将切回普通模式执行。"
-          }
-        }
-      }
-    },
-    "plan-auto-execution-banner.title" : {
-      "extractionState" : "extracted_with_value",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "new",
-            "value" : "Plan is ready"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "计划已就绪"
-          }
-        }
-      }
-    },
-    "plan-auto-execution-settings.clear-silent-button" : {
-      "extractionState" : "extracted_with_value",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "new",
-            "value" : "Re-enable Plan prompt for this workspace"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "为本工作区重新启用 Plan 确认提示"
-          }
-        }
-      }
-    },
-    "plan-auto-execution-settings.clear-silent-empty" : {
-      "extractionState" : "extracted_with_value",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "new",
-            "value" : "No silent-execution preference saved for the current workspace."
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "当前工作区没有保存静默执行的偏好设置。"
-          }
-        }
-      }
-    },
-    "plan-auto-execution-settings.clear-silent-help" : {
-      "extractionState" : "extracted_with_value",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "new",
-            "value" : "You previously chose to silently auto-execute plans in this workspace. Click to bring back the confirmation banner."
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "你之前选择了在本工作区静默自动执行计划。点击可恢复确认横幅。"
-          }
-        }
-      }
-    },
-    "plan-auto-execution-settings.danger-scan" : {
-      "extractionState" : "extracted_with_value",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "new",
-            "value" : "Scan plan for destructive keywords"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "扫描计划中的破坏性关键字"
-          }
-        }
-      }
-    },
-    "plan-auto-execution-settings.danger-scan-help" : {
-      "extractionState" : "extracted_with_value",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "new",
-            "value" : "When on, the banner highlights plans that mention rm -rf, git push --force, dd, reboot, etc. so you review them extra carefully before approving."
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "开启后，如果计划中提到 rm -rf、git push --force、dd、reboot 等内容，横幅会醒目提示，请在批准前仔细核对。"
-          }
-        }
-      }
-    },
-    "plan-auto-execution-settings.no-workspace" : {
-      "extractionState" : "extracted_with_value",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "new",
-            "value" : "Open a workspace to manage its Plan auto-execution preference."
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "打开一个工作区以管理它的 Plan 自动执行偏好。"
-          }
-        }
-      }
-    },
-    "plan-auto-execution-settings.section" : {
-      "extractionState" : "extracted_with_value",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "new",
-            "value" : "Plan auto-execution"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Plan 自动执行"
-          }
-        }
-      }
-    },
-    "plan-card.approve-button" : {
-      "comment" : "button to approve plan",
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Approve"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "同意"
-          }
-        }
-      }
-    },
     "plan-card.collapse-help" : {
       "comment" : "tooltip for collapsing the current plan card",
       "extractionState" : "manual",
@@ -15555,24 +15264,6 @@
         }
       }
     },
-    "plan-card.info-text" : {
-      "comment" : "informational text about plan mode",
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Plan mode blocks writes until you Approve."
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "计划模式会阻止写入，直到您同意。"
-          }
-        }
-      }
-    },
     "plan-card.mark-complete-button" : {
       "comment" : "button to mark plan complete",
       "extractionState" : "manual",
@@ -15587,24 +15278,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "标记计划完成"
-          }
-        }
-      }
-    },
-    "plan-card.reject-button" : {
-      "comment" : "button to reject plan",
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Reject"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "拒绝"
           }
         }
       }
@@ -15724,13 +15397,13 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Approved"
+            "value" : "Ready"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "已同意"
+            "value" : "已就绪"
           }
         }
       }
@@ -15778,13 +15451,13 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Awaiting Approval"
+            "value" : "Planned"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "等待同意"
+            "value" : "已规划"
           }
         }
       }
@@ -15904,13 +15577,13 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Approve the plan to track step progress"
+            "value" : "This legacy plan is no longer active"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "同意计划以跟踪步骤进度"
+            "value" : "此旧计划已不再活动"
           }
         }
       }

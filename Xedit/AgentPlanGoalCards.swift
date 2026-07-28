@@ -7,8 +7,8 @@
 //
 //   - `AgentPlanCard`: orange-tinted card listing every plan step
 //     with a status glyph the user can cycle (pending → in-progress →
-//     done → skipped → pending). While `.proposed`, the card surfaces
-//     Approve / Reject buttons; once approved, it offers Mark Complete.
+//     done → skipped → pending). Plans execute without a separate approval
+//     mode; the card remains editable progress UI.
 //     `AgentPlanRevisionRow` sits at the bottom — collapsed Replan
 //     button that expands into a one-line note field for mid-execution
 //     guidance.
@@ -39,7 +39,7 @@ enum AgentPlanStepLayoutMetrics {
 
 nonisolated enum AgentPlanCardExpansionPolicy {
     static func initiallyExpanded(for status: AgentPlan.Status) -> Bool {
-        status == .proposed
+        status == .proposed || status == .approved
     }
 
     static func shouldCollapseForAssistantRound(
@@ -103,7 +103,7 @@ struct AgentPlanCard: View {
                         AgentPlanStepRow(
                             index: index + 1,
                             step: step,
-                            interactive: plan.status != .proposed && plan.status != .rejected,
+                            interactive: plan.status != .rejected,
                             onCycle: { next in
                                 appState.setAgentPlanStepStatus(id: step.id, status: next)
                             }
@@ -111,22 +111,9 @@ struct AgentPlanCard: View {
                     }
                 }
 
-                if plan.status == .proposed {
-                    // rc16:Reject 在左、Approve 在右(borderedProminent),对齐
-                    // macOS「拒绝远离主操作位」防误触习惯。
-                    HStack(spacing: 8) {
-                        Button(L10n.PlanCard.rejectButton) { appState.rejectAgentPlan() }
-                            .buttonStyle(.bordered)
-                            .controlSize(.small)
-                        Button(L10n.PlanCard.approveButton) { appState.approveAgentPlan() }
-                            .buttonStyle(.borderedProminent)
-                            .controlSize(.small)
-                        Spacer(minLength: 0)
-                        Text(L10n.PlanCard.infoText)
-                            .font(.system(size: 10))
-                            .foregroundStyle(.secondary)
-                    }
-                } else if plan.status == .approved || plan.status == .executing {
+                if plan.status == .proposed
+                    || plan.status == .approved
+                    || plan.status == .executing {
                     Button(L10n.PlanCard.markCompleteButton) { appState.completeAgentPlan() }
                         .buttonStyle(.bordered)
                         .controlSize(.small)
@@ -325,8 +312,7 @@ private struct MarqueeSizeKey: PreferenceKey {
 /// One row of the plan card. The status glyph doubles as a button that
 /// cycles pending → in_progress → done → skipped → pending, so the
 /// user can override whatever the agent reported. While the plan is
-/// still .proposed (awaiting approval), the glyph is shown but not
-/// interactive — checking off steps before approval doesn't make sense.
+/// still active, the glyph can be adjusted by the user.
 struct AgentPlanStepRow: View {
     @EnvironmentObject var appState: AppState
     let index: Int
@@ -388,10 +374,6 @@ struct AgentPlanStepRow: View {
             if interactive {
                 Divider()
                 Button(L10n.PlanStep.menuRestart) { sheet = .restart }
-                    .disabled(
-                        appState.agentInteractionMode != .plan
-                            && appState.agentInteractionMode != .goal
-                    )
             }
             Divider()
             Button(L10n.PlanStep.menuRemove, role: .destructive) {

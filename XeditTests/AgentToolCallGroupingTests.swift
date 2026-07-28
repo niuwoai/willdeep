@@ -612,10 +612,8 @@ extension WillDeepTests {
         let session = appState.startNewAgentSession()
         defer { AgentSessionStore.delete(id: session.id) }
         let runtime = try #require(appState.agentRuntimes[session.id])
-        // An approved/executing plan lives in Normal mode: Plan mode is
-        // planning-only and approval flips the session back to Normal for
-        // execution. So a long-running execution session is Normal mode with
-        // the plan carried over — and the plan gate is inactive there.
+        // A long-running ordinary execution can carry a visible Plan, but the
+        // Plan itself is progress state and does not create an approval gate.
         runtime.interactionMode = .normal
         runtime.currentPlan = AgentPlan(
             status: .executing,

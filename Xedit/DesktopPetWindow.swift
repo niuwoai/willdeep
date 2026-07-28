@@ -575,7 +575,6 @@ final class DesktopPetWindowManager: ObservableObject {
 
         let needsAttention = runtimes.contains { runtime in
             runtime.toolCalls.contains { $0.status.isBlockingForUserDecision }
-                || runtime.pendingPlanModeSuggestion != nil
         }
         let isRunningTool = runtimes.contains { runtime in
             runtime.toolCalls.contains { $0.status == .running }

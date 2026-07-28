@@ -126,12 +126,11 @@ struct AgentComposerLocalPanelTriggerTests {
 
         runtime.input = "请重构认证模块，同时完成数据库迁移，并补充单元测试。"
         appState.sendAgentMessage()
-        defer { appState.cancelAgentPlanModeSuggestion() }
 
         #expect(!runtime.hasLocalConfirmationPreview)
         #expect(runtime.toolCalls.isEmpty)
-        #expect(runtime.pendingPlanModeSuggestion != nil)
-        #expect(runtime.messages.isEmpty)
+        #expect(runtime.messages.last?.role == .user)
+        #expect(runtime.messages.last?.content.contains("请重构认证模块") == true)
     }
 
     @Test("清空会话会复位口令预览状态")

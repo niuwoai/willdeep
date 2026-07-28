@@ -2,79 +2,15 @@
 //  AgentPlanContinuation.swift
 //  WillDeep
 //
-//  Deterministic handling for short operator replies that approve an already
-//  proposed Plan. This lives in the host instead of relying on the model to
-//  infer whether "继续" means "execute" or "draft another plan".
+//  Plan execution continuity and explicit plan-only intent.
 //
 
 import Foundation
 
 nonisolated enum AgentPlanContinuationPolicy {
-    private static let compactApprovalPhrases: Set<String> = [
-        "继续",
-        "继续执行",
-        "执行",
-        "执行吧",
-        "开始",
-        "开始吧",
-        "开始执行",
-        "按计划执行",
-        "按这个计划执行",
-        "按照计划执行",
-        "按照这个计划执行",
-        "照计划执行",
-        "就按计划执行",
-        "就按这个计划执行",
-        "可以继续",
-        "可以执行",
-        "可以开始",
-        "好的继续",
-        "好的执行",
-        "好的开始",
-        "好的开始吧",
-        "没问题继续",
-        "没问题执行",
-        "没问题开始",
-        "确认执行",
-        "批准执行",
-        "同意执行",
-    ]
-
-    private static let wordApprovalPhrases: Set<String> = [
-        "continue",
-        "proceed",
-        "execute",
-        "execute it",
-        "start",
-        "start execution",
-        "go ahead",
-        "go ahead and execute",
-        "proceed with the plan",
-        "execute the plan",
-        "follow the plan",
-        "implement the plan",
-        "approve",
-        "approved",
-        "yes proceed",
-        "yes execute",
-        "ok proceed",
-        "okay proceed",
-        "looks good proceed",
-        "looks good go ahead",
-    ]
-
-    static func isExplicitApproval(_ text: String) -> Bool {
-        let words = normalizedWords(text)
-        guard !words.isEmpty else { return false }
-        if wordApprovalPhrases.contains(words) {
-            return true
-        }
-        return compactApprovalPhrases.contains(words.replacingOccurrences(of: " ", with: ""))
-    }
-
-    /// An approved Plan remains the execution contract until progress marks
-    /// it done or the operator rejects it. A complex follow-up must not
-    /// trigger the automatic Plan-mode preflight and silently replace it.
+    /// An active Plan remains the execution contract until progress marks
+    /// it done or the operator explicitly requests a revision. A complex
+    /// follow-up must not silently replace it.
     static func hasActiveExecutionContract(_ plan: AgentPlan?) -> Bool {
         guard let plan else { return false }
         return plan.status == .approved || plan.status == .executing
@@ -86,6 +22,14 @@ nonisolated enum AgentPlanContinuationPolicy {
         userText: String,
         currentPlan: AgentPlan?
     ) -> String {
+        if AgentExecutionIntentPolicy.requestsPlanningOnly(userText) {
+            return """
+            \(userText)
+
+            === PLANNING ONLY — READ-ONLY ===
+            Inspect only what is necessary, return a concrete plan, and do not edit files, run mutating commands, or change external state.
+            """
+        }
         guard let currentPlan,
               currentPlan.status == .approved || currentPlan.status == .executing else {
             return userText
@@ -99,53 +43,41 @@ nonisolated enum AgentPlanContinuationPolicy {
         return """
         \(userText)
 
-        === APPROVED WILLDEEP PLAN — EXECUTE, DO NOT RE-PLAN ===\(summaryBlock)
+        === ACTIVE WILLDEEP PLAN — EXECUTE, DO NOT RE-PLAN ===\(summaryBlock)
         \(steps)
 
-        The operator has approved this Plan. Execute these steps end-to-end and report verified progress; do not replace it with another plan.
+        Execute these steps end-to-end and report verified progress; do not replace them with another plan.
         """
     }
 
-    private static func normalizedWords(_ text: String) -> String {
-        let lowered = text.lowercased()
-        let punctuationAsSpaces = lowered.unicodeScalars.map { scalar -> String in
-            if CharacterSet.punctuationCharacters.contains(scalar)
-                || CharacterSet.symbols.contains(scalar) {
-                return " "
-            }
-            return String(scalar)
-        }.joined()
-        return punctuationAsSpaces
-            .split(whereSeparator: \.isWhitespace)
-            .joined(separator: " ")
-    }
 }
 
-extension AppState {
-    /// Promote a proposed Plan to the executable Normal-mode contract when
-    /// the operator sends an unambiguous short approval. Re-evaluated at the
-    /// real dispatch boundary so a message queued before Plan synthesis
-    /// finished still observes the newly proposed Plan.
-    @discardableResult
-    func applyExplicitPlanContinuationIfNeeded(
-        for runtime: AgentRuntime,
-        text: String,
-        hasAttachments: Bool,
-        source: AgentMessageSource
-    ) -> Bool {
-        guard source == .operatorInput,
-              !hasAttachments,
-              runtime.interactionMode == .plan,
-              var plan = runtime.currentPlan,
-              plan.status == .proposed,
-              AgentPlanContinuationPolicy.isExplicitApproval(text) else {
+nonisolated enum AgentExecutionIntentPolicy {
+    private static let executionOverrides = [
+        "不要只规划", "不要只分析", "不用只规划", "直接执行", "直接做",
+        "don't just plan", "do not just plan", "execute directly", "just do it",
+    ]
+    private static let planningOnlyHints = [
+        "只规划", "只要计划", "只给计划", "仅规划", "仅给计划",
+        "先给计划", "先列计划", "先分析不要执行", "不要执行", "暂不执行",
+        "先别执行", "不要修改", "不要动代码",
+        "plan only", "only plan", "planning only", "do not execute",
+        "don't execute", "do not implement", "don't implement",
+        "without executing", "without implementation",
+    ]
+
+    static func requestsPlanningOnly(_ text: String) -> Bool {
+        let normalized = text
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .lowercased()
+        guard !normalized.isEmpty,
+              !executionOverrides.contains(where: normalized.contains) else {
             return false
         }
+        return planningOnlyHints.contains(where: normalized.contains)
+    }
 
-        plan.status = .approved
-        runtime.currentPlan = plan
-        runtime.interactionMode = .normal
-        runtime.goalTurnRecoveryCheckpoint = nil
-        return true
+    static func blocksExecution(risk: AgentToolRisk) -> Bool {
+        risk == .write || risk == .danger
     }
 }

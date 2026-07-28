@@ -60,11 +60,6 @@ struct EditorSettingsView: View {
     @State private var webSearchSaveStatus: String = ""
     @State private var discoveredLocalAgents: [LocalAgentCLI.Discovery] = LocalAgentCLI.discoverAll()
 
-    // 1.79.0-rc2 Plan 自动执行 banner 的设置项。@State 缓存当前值，
-    // onAppear / 切 workspace 时同步加载；toggle / button 写回 store
-    // 后立刻更新缓存触发 UI 重算。
-    @State private var planDangerScanEnabled: Bool = AgentSettingsStore.loadPlanAutoExecuteDangerScanEnabled()
-    @State private var planSilentlyApprovedForWorkspace: Bool = false
     @State private var anthropicMaxOutputTokens: Double = Double(AgentSettingsStore.loadAnthropicMaxOutputTokens())
 
     var body: some View {
@@ -325,36 +320,6 @@ struct EditorSettingsView: View {
                     .foregroundStyle(.secondary)
             }
 
-            Section(L10n.PlanAutoExecutionSettings.sectionTitle) {
-                Toggle(L10n.PlanAutoExecutionSettings.dangerScanToggle, isOn: $planDangerScanEnabled)
-                    .onCompatibleChange(of: planDangerScanEnabled) { _, newValue in
-                        AgentSettingsStore.savePlanAutoExecuteDangerScanEnabled(newValue)
-                    }
-                Text(L10n.PlanAutoExecutionSettings.dangerScanHelp)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-
-                if let path = appState.rootDirectory?.path, !path.isEmpty {
-                    if planSilentlyApprovedForWorkspace {
-                        Button(L10n.PlanAutoExecutionSettings.clearSilentButton) {
-                            AgentSettingsStore.savePlanAutoExecuteSilently(false, workspacePath: path)
-                            planSilentlyApprovedForWorkspace = false
-                        }
-                        Text(L10n.PlanAutoExecutionSettings.clearSilentHelp)
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    } else {
-                        Text(L10n.PlanAutoExecutionSettings.clearSilentEmpty)
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    }
-                } else {
-                    Text(L10n.PlanAutoExecutionSettings.noWorkspace)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
-            }
-
             Section(L10n.Settings.sectionWebTools) {
                 Picker(L10n.Settings.WebTools.providerLabel, selection: $webSearchProviderBuffer) {
                     ForEach(AgentWebSearchProvider.allCases) { provider in
@@ -443,12 +408,6 @@ struct EditorSettingsView: View {
         .formStyle(.grouped)
         .onAppear {
             loadAgentBuffersFromAppState()
-            // Plan 自动执行偏好提升到 Form 级别加载，避免 attach 在
-            // Section 上时 Section 重建导致反复 UserDefaults 读。
-            planDangerScanEnabled = AgentSettingsStore.loadPlanAutoExecuteDangerScanEnabled()
-            planSilentlyApprovedForWorkspace = AgentSettingsStore.loadPlanAutoExecuteSilently(
-                workspacePath: appState.rootDirectory?.path
-            )
             anthropicMaxOutputTokens = Double(AgentSettingsStore.loadAnthropicMaxOutputTokens())
         }
         .onCompatibleChange(of: appState.agentConfiguration) { _, _ in
@@ -459,11 +418,6 @@ struct EditorSettingsView: View {
             if !agentBuffersDiffer {
                 loadAgentBuffersFromAppState()
             }
-        }
-        .onCompatibleChange(of: appState.rootDirectory?.path) { _, newPath in
-            planSilentlyApprovedForWorkspace = AgentSettingsStore.loadPlanAutoExecuteSilently(
-                workspacePath: newPath
-            )
         }
     }
 

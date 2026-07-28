@@ -283,7 +283,7 @@ enum AgentSkillLocalization {
         "music-gen": .init(name: "音乐生成", description: "通过 WillDeep 中已配置的音乐生成 MCP 服务生成歌曲或纯音乐。", aliases: ["歌曲", "音频", "作曲"]),
         "music-listener": .init(name: "音乐聆听", description: "检查本地音频元数据，并通过已配置服务完成转写或语义分析。", aliases: ["音频分析", "歌曲分析"]),
         "notebook": .init(name: "Notebook 编辑", description: "编辑 Jupyter Notebook,支持插入、替换或删除单元格。", aliases: ["ipynb", "Jupyter"]),
-        "plan-mode": .init(name: "计划模式", description: "在不改变文件或外部状态的前提下，为复杂工作生成结构化、有依据的计划。", aliases: ["规划", "计划"]),
+        "plan-mode": .init(name: "规划方案", description: "在不改变文件或外部状态的前提下，为复杂工作生成结构化、有依据的计划。", aliases: ["规划", "计划"]),
         "reactions": .init(name: "消息反应", description: "通过已配置的消息工具给指定消息添加 emoji 反应。", aliases: ["表情", "回应"]),
         "scheduler": .init(name: "定时任务", description: "创建按固定分钟间隔或每日本地时间运行的 WillDeep 周期任务。", aliases: ["提醒", "定时", "自动化"]),
         "screenshot": .init(name: "屏幕截图", description: "截取并缩放 macOS 屏幕截图,用于界面调试或查看屏幕。", aliases: ["截图", "屏幕捕获"]),

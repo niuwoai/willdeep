@@ -279,14 +279,19 @@ extension AppState {
         return true
     }
 
-    /// Must run after both `progress` and `goal-check` from the same reply
-    /// have been applied. An empty checklist deliberately does not auto-loop.
-    func prepareNextAgentGoalPlanningCycleIfNeeded(for runtime: AgentRuntime) {
+    /// Continue checking the same Goal without throwing away the plan and
+    /// restarting Goal Teams. One no-change round is tolerated; the second
+    /// pauses for user guidance instead of spinning indefinitely.
+    func prepareNextAgentGoalPlanningCycleIfNeeded(
+        for runtime: AgentRuntime,
+        didAdvanceChecklist: Bool = true
+    ) {
         guard runtime.interactionMode == .goal,
               runtime.currentPlan?.status == .done,
               let goal = runtime.currentGoal,
               !goal.checklist.isEmpty else { return }
         if goal.checklist.allSatisfy(\.done) {
+            runtime.consecutiveGoalRoundsWithoutChecklistProgress = 0
             if var state = runtime.goalPlanningState {
                 state.phase = .completed
                 runtime.goalPlanningState = state
@@ -294,10 +299,48 @@ extension AppState {
             persistAgentSession(runtime: runtime, touchUpdatedAt: false, moveToFront: false)
             return
         }
-        runtime.currentPlan = nil
-        runtime.goalPlanningState = nil
+        if didAdvanceChecklist {
+            runtime.consecutiveGoalRoundsWithoutChecklistProgress = 0
+        } else {
+            runtime.consecutiveGoalRoundsWithoutChecklistProgress += 1
+        }
+        if var state = runtime.goalPlanningState {
+            state.phase = .executing
+            runtime.goalPlanningState = state
+        }
         persistAgentSession(runtime: runtime, touchUpdatedAt: false, moveToFront: false)
-        _ = startAgentGoalPlanningIfNeeded(for: runtime)
+        guard runtime.consecutiveGoalRoundsWithoutChecklistProgress < 2 else {
+            runtime.errorMessage = "Goal 已暂停：连续两轮验收清单没有进展。请补充信息、调整目标，或明确要求继续。"
+            runtime.errorDetails = nil
+            return
+        }
+
+        let remaining = goal.checklist
+            .filter { !$0.done }
+            .map(\.text)
+            .joined(separator: "\n- ")
+        let prompt = """
+        Goal acceptance is still incomplete. Continue the same Goal without creating or replacing a plan and without restarting Goal Teams. Do not repeat completed implementation. Focus only on the unchecked acceptance items below, using the existing evidence and plan history:
+        - \(remaining)
+
+        End with one `goal-check` block. If progress is impossible without user input or an external state change, explain the concrete blocker and do not pretend an item is complete.
+        """
+        if runtime.isResponding {
+            guard !runtime.queuedMessages.contains(where: {
+                $0.source == .hostInstruction
+                    && $0.text.hasPrefix("Goal acceptance is still incomplete.")
+            }) else { return }
+            runtime.queuedMessages.append(
+                AgentQueuedMessage(text: prompt, images: [], source: .hostInstruction)
+            )
+        } else {
+            dispatchAgentMessage(
+                for: runtime,
+                text: prompt,
+                images: [],
+                source: .hostInstruction
+            )
+        }
     }
 
     /// Returns true for every coordinator-owned run, including stale runs, so
@@ -530,7 +573,7 @@ extension AppState {
 
             Immediately before the Teams table, emit this exact invisible binding marker once: <!-- goal-planning-generation:\(state.generationID.uuidString) -->
 
-            Then include exactly one numbered fenced `plan` block. It must cover implementation, tests, documentation, version handling, and acceptance, or explicitly mark a category N/A with a reason. Every step must name a task ID, member, or deliverable. Stop after the proposal and wait for explicit user approval. Do not call tools.
+            Then include exactly one numbered fenced `plan` block. It must cover implementation, tests, documentation, version handling, and acceptance, or explicitly mark a category N/A with a reason. Every step must name a task ID, member, or deliverable. Do not ask for plan approval and do not emit another plan on later rounds. End this synthesis reply without tools; the host validates the proposal and immediately continues execution.
             """,
             limit: 36_000
         )

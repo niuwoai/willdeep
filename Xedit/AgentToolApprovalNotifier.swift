@@ -90,24 +90,6 @@ enum AgentToolApprovalNotifier {
         postNotificationWhenAuthorized(identifier: identifier, content: content)
     }
 
-    /// A complex task parked its send behind the Plan-mode suggestion banner
-    /// while the user is away. Same auth + delivery + deep-link path as the
-    /// approval notifier; no-op in the foreground (the banner is visible).
-    @MainActor
-    static func notifyPlanModeSuggestionIfBackgrounded(runtimeID: UUID) {
-        if NSApp.isActive { return }
-        let content = UNMutableNotificationContent()
-        content.title = L10n.AgentNotifications.planSuggestionTitle
-        content.body = L10n.AgentNotifications.planSuggestionBody
-        content.sound = .default
-        content.userInfo = [AgentNotificationUserInfoKey.runtimeID: runtimeID.uuidString]
-        if let attachment = AgentNotificationIcon.attachment() {
-            content.attachments = [attachment]
-        }
-        let identifier = "willdeep.agent.planSuggestion.\(runtimeID.uuidString)"
-        postNotificationWhenAuthorized(identifier: identifier, content: content)
-    }
-
     @MainActor
     private static func postNotificationWhenAuthorized(
         identifier: String,

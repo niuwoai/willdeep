@@ -125,11 +125,6 @@ struct AgentToolsCoreTests {
             interactionMode: .normal,
             executionAgent: .willDeep
         ).map(\.name))
-        let willDeepPlan = Set(AgentToolRegistry.tools(
-            activeExperts: [],
-            interactionMode: .plan,
-            executionAgent: .willDeep
-        ).map(\.name))
         let willDeepGoal = Set(AgentToolRegistry.tools(
             activeExperts: [],
             interactionMode: .goal,
@@ -152,7 +147,6 @@ struct AgentToolsCoreTests {
         ).map(\.name))
 
         #expect(willDeepNormal.isDisjoint(with: delegatedTools))
-        #expect(willDeepPlan.isDisjoint(with: delegatedTools))
         #expect(delegatedTools.isSubset(of: willDeepGoal))
         #expect(!willDeepGoal.contains("change_workspace"))
         #expect(codexSelected.intersection(delegatedTools) == ["codex_cli"])
@@ -1302,6 +1296,13 @@ struct AgentToolsCoreTests {
         #expect(cursorArguments["permission_mode"]?.stringValue() == AgentExecutionAgent.cursorAgent.defaultPermissionMode)
         #expect(clineArguments["visible_terminal_label"]?.stringValue() == "Cline")
         #expect(clineArguments["permission_mode"]?.stringValue() == AgentExecutionAgent.clineCLI.defaultPermissionMode)
+
+        let planningArguments = AppState.delegatedAgentArguments(
+            prompt: "plan only",
+            executionAgent: .codexCLI,
+            planningOnly: true
+        )
+        #expect(planningArguments["permission_mode"]?.stringValue() == "plan")
     }
 
     @Test

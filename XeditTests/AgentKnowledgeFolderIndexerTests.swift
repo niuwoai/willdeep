@@ -14,7 +14,6 @@ struct AgentKnowledgeFolderIndexerTests {
         let folder = AgentKnowledgeFolder(url: URL(fileURLWithPath: "/tmp/reference"))
         #expect(folder.status == .pending)
         #expect(!AgentKnowledgeFolderIndexPolicy.startsAutomatically(in: .normal))
-        #expect(!AgentKnowledgeFolderIndexPolicy.startsAutomatically(in: .plan))
         #expect(AgentKnowledgeFolderIndexPolicy.startsAutomatically(in: .goal))
     }
 

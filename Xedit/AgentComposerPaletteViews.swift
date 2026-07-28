@@ -751,12 +751,6 @@ enum AgentSessionTodoSummaryLogic {
            !goal.checklist.isEmpty {
             return goalSummary(goal)
         }
-        if session.interactionMode == .plan,
-           let plan = session.currentPlan,
-           !plan.steps.isEmpty,
-           plan.status != .rejected {
-            return planSummary(plan)
-        }
         if let plan = session.currentPlan,
            !plan.steps.isEmpty,
            plan.status != .rejected {

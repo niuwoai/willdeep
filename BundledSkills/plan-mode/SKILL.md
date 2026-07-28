@@ -5,7 +5,7 @@ description: Produce a structured, evidence-based implementation plan without ch
 
 # Planning
 
-WillDeep does not expose a skill-level command that changes the app's collaboration mode. Do not call a localhost endpoint or claim that a mode changed.
+Planning is a task phase inside ordinary conversation, not an app interaction mode. Do not claim that a mode changed.
 
 ## Workflow
 
@@ -15,6 +15,6 @@ WillDeep does not expose a skill-level command that changes the app's collaborat
 4. Compare meaningful alternatives and record the decision.
 5. Produce ordered, verifiable steps with affected components, tests, risks, and rollback notes.
 6. Separate required work from optional follow-ups.
-7. Stop before implementation unless the user also asked to execute.
+7. Stop before implementation only when the user explicitly asked for planning or analysis without execution.
 
-For a persistent checklist, load the `todo` skill. When the WillDeep UI is already in Plan mode, follow its active runtime rules; the skill itself never toggles that state.
+For a persistent checklist, load the `todo` skill. The skill never changes the app's conversation mode.

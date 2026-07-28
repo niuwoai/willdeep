@@ -155,11 +155,13 @@ nonisolated enum L10n {
     }
 
     enum InteractionMode {
-        // 1.96.0-rc3:composer 上的 Normal / Plan / Goal 三档 badge 文案。
-        // 之前是硬编码英文 displayName,简体中文用户看着突兀。
+        // 顶层只区分普通对话和持续验收的 Goal；计划属于任务进度。
         static let normal = String(localized: "interaction-mode.normal", defaultValue: "Normal")
-        static let plan = String(localized: "interaction-mode.plan", defaultValue: "Plan")
         static let goal = String(localized: "interaction-mode.goal", defaultValue: "Goal")
+        static let help = String(
+            localized: "interaction-mode.help",
+            defaultValue: "Conversation mode — Ordinary plans and executes as needed; Goal repeatedly checks a persistent objective."
+        )
     }
 
     enum ApprovalMode {
@@ -1175,15 +1177,12 @@ nonisolated enum L10n {
     }
 
     enum PlanCard {
-        static let approveButton = String(localized: "plan-card.approve-button", defaultValue: "Approve")
         static let collapseHelp = String(localized: "plan-card.collapse-help", defaultValue: "Collapse plan")
         static let collapsed = String(localized: "plan-card.collapsed", defaultValue: "Collapsed")
         static let expandHelp = String(localized: "plan-card.expand-help", defaultValue: "Expand plan")
         static let expanded = String(localized: "plan-card.expanded", defaultValue: "Expanded")
         static let header = String(localized: "plan-card.header", defaultValue: "Plan")
-        static let infoText = String(localized: "plan-card.info-text", defaultValue: "Plan mode blocks writes until you Approve.")
         static let markCompleteButton = String(localized: "plan-card.mark-complete-button", defaultValue: "Mark plan complete")
-        static let rejectButton = String(localized: "plan-card.reject-button", defaultValue: "Reject")
     }
 
     enum PlanRevision {
@@ -1196,15 +1195,15 @@ nonisolated enum L10n {
     }
 
     enum PlanStatus {
-        static let approved = String(localized: "plan-status.approved", defaultValue: "Approved")
+        static let approved = String(localized: "plan-status.approved", defaultValue: "Ready")
         static let done = String(localized: "plan-status.done", defaultValue: "Done")
         static let executing = String(localized: "plan-status.executing", defaultValue: "Executing")
-        static let proposed = String(localized: "plan-status.proposed", defaultValue: "Awaiting Approval")
+        static let proposed = String(localized: "plan-status.proposed", defaultValue: "Planned")
         static let rejected = String(localized: "plan-status.rejected", defaultValue: "Rejected")
     }
 
     enum PlanStep {
-        static let cycleStatusHelp = String(localized: "plan-step.cycle-status.help", defaultValue: "Approve the plan to track step progress")
+        static let cycleStatusHelp = String(localized: "plan-step.cycle-status.help", defaultValue: "This legacy plan is no longer active")
         static let menuEdit = String(localized: "plan-step.menu.edit", defaultValue: "Edit step…")
         static let menuInsertAbove = String(localized: "plan-step.menu.insert-above", defaultValue: "Insert step above…")
         static let menuInsertBelow = String(localized: "plan-step.menu.insert-below", defaultValue: "Insert step below…")
