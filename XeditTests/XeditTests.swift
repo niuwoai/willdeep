@@ -2799,7 +2799,10 @@ struct WillDeepTests {
 
     @Test("agent token estimate includes tool schemas without exploding short chats")
     func testAgentTokenEstimateIncludesTools() {
-        let maximumExpectedToolSchemaTokens = 35_000
+        // Keep a narrow ceiling above the current complete registry so this
+        // catches accidental schema explosions without rejecting intentional
+        // additions to the built-in tool surface.
+        let maximumExpectedToolSchemaTokens = 37_000
         let messages = [AgentMessage(role: .user, content: "hi")]
         let withoutTools = AppState.estimateAgentTokens(messages: messages, tools: [])
         let withTools = AppState.estimateAgentTokens(messages: messages, tools: AgentToolRegistry.all)

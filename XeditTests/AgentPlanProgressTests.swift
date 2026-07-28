@@ -518,9 +518,8 @@ struct AgentPlanProgressTests {
         #expect(prompt.contains("not just an outline, sample, first chapter"))
         #expect(prompt.contains("web_fetch for validated public URLs"))
 
-        // A Plan-mode prompt never carries an execution contract, even once
-        // the plan is approved — planning only, so the prompt stays PLANNING
-        // ONLY and the checklist/execution guidance is absent here.
+        // If the UI remains in Plan mode after approval, preserve the active
+        // execution contract instead of inviting the model to replace it.
         let approvedButStillInPlanMode = AgentContextBuilder.systemPrompt(
             rootDirectory: nil,
             openedFileURL: nil,
@@ -534,7 +533,10 @@ struct AgentPlanProgressTests {
                 summary: ""
             )
         )
-        #expect(approvedButStillInPlanMode.contains("=== PLAN MODE — PLANNING ONLY ==="))
+        #expect(approvedButStillInPlanMode.contains("=== PLAN MODE — ACTIVE EXECUTION CONTRACT ==="))
+        #expect(approvedButStillInPlanMode.contains("[pending] Run the tests"))
+        #expect(approvedButStillInPlanMode.contains("Do not emit a new `plan` block"))
+        #expect(!approvedButStillInPlanMode.contains("=== PLAN MODE — PLANNING ONLY ==="))
         #expect(!approvedButStillInPlanMode.contains("refresh the visible checklist immediately"))
 
         // The execution contract lives in Normal mode: approval flips the
