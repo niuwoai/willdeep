@@ -99,7 +99,15 @@ enum AgentSandboxPolicy {
 
     nonisolated private static let sensitivePathFragments: [String] = [
         "/.ssh", "/.gnupg", "/.aws", "/.config/gh", "/library/keychains",
-        ".env", "id_rsa", "id_ed25519", "credentials", "token", "secret"
+        ".env", "id_rsa", "id_ed25519"
+    ]
+
+    /// Credential nouns are intentionally boundary-matched. Product and
+    /// namespace names such as `tokenhub` are ordinary identifiers; treating
+    /// every substring containing "token" as a secret upgrades harmless
+    /// commands to danger-tier confirmation.
+    nonisolated private static let sensitiveCredentialMarkers: [String] = [
+        "token", "tokens", "secret", "secrets", "credential", "credentials"
     ]
 
     nonisolated private static let sandboxExecPath = "/usr/bin/sandbox-exec"
@@ -173,9 +181,29 @@ enum AgentSandboxPolicy {
                 reason: "Deleting a user skill is destructive.",
                 prefixRule: nil
             )
+        case "terminal_send_command":
+            guard let command = arguments["command"]?.stringValue() else {
+                return AgentSandboxDecision(
+                    mode: .escalated,
+                    requiresUserApproval: true,
+                    requiresTypedConfirmation: true,
+                    reason: "Missing terminal command argument.",
+                    prefixRule: nil
+                )
+            }
+            if commandRequiresSensitiveDesktopConfirmation(command) {
+                return commandDecision(command: command, rootDirectory: rootDirectory)
+            }
+            return AgentSandboxDecision(
+                mode: .workspaceWrite,
+                requiresUserApproval: true,
+                requiresTypedConfirmation: false,
+                reason: "This tool can run external code in the visible terminal.",
+                prefixRule: nil
+            )
         case "rename_session", "change_workspace",
              "call_mcp_tool", "kill_job", "activate_expert", "add_memory", "create_user_skill", "update_user_skill", "suggest_mcp_server", "configure_mcp_server",
-             "terminal_send_command", "terminal_send_control", "terminal_create_shortcut", "terminal_edit_shortcut":
+             "terminal_send_control", "terminal_create_shortcut", "terminal_edit_shortcut":
             return AgentSandboxDecision(
                 mode: .workspaceWrite,
                 requiresUserApproval: true,
@@ -184,11 +212,17 @@ enum AgentSandboxPolicy {
                 prefixRule: nil
             )
         case "computer_use_request_permissions", "computer_use_launch_app", "computer_use_activate_app", "computer_use_click", "computer_use_secondary_action", "computer_use_scroll", "computer_use_drag", "computer_use_type_text", "computer_use_press_key", "computer_use_set_value", "computer_use_focus", "computer_use_hover", "computer_use_select_text", "computer_use_restart_helper":
+            let explicitConfirmation = AgentComputerUsePolicy.requiresExplicitConfirmation(
+                toolName: toolName,
+                arguments: arguments
+            )
             return AgentSandboxDecision(
                 mode: .escalated,
                 requiresUserApproval: true,
-                requiresTypedConfirmation: false,
-                reason: "Computer Use can inspect or control another macOS app and must remain visibly user-approved.",
+                requiresTypedConfirmation: explicitConfirmation,
+                reason: explicitConfirmation
+                    ? "Computer Use requires fresh per-action confirmation for consequential or ambiguous actions, non-navigation keys, sensitive/control-character input, and private-takeover boundaries; an operational lease cannot bypass it."
+                    : "This ordinary Computer Use action may run automatically only inside the current runtime-, turn-, and target-bound controlling lease; the first control action and Strict mode still require user approval.",
                 prefixRule: nil
             )
         default:
@@ -211,6 +245,15 @@ enum AgentSandboxPolicy {
                 requiresTypedConfirmation: true,
                 reason: "Empty command is refused.",
                 prefixRule: nil
+            )
+        }
+        if commandRequiresSensitiveDesktopConfirmation(trimmed) {
+            return AgentSandboxDecision(
+                mode: .escalated,
+                requiresUserApproval: true,
+                requiresTypedConfirmation: true,
+                reason: "Screen capture, clipboard access, or GUI scripting can observe private pixels or mutate external desktop state and requires typed confirmation.",
+                prefixRule: AgentCommandAuthorization.prefixRule(for: trimmed)
             )
         }
 
@@ -509,6 +552,9 @@ enum AgentSandboxPolicy {
     nonisolated static func commandUsesExternalAccess(_ command: String) -> Bool {
         let trimmed = command.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return true }
+        if commandRequiresSensitiveDesktopConfirmation(trimmed) {
+            return true
+        }
 
         let policyCommand = commandByReplacingSafeShellExpansions(
             commandWithHeredocBodiesRemoved(trimmed)
@@ -532,6 +578,44 @@ enum AgentSandboxPolicy {
             }
         }
         return false
+    }
+
+    /// Commands that can bypass Computer Use's private-takeover boundary by
+    /// reading screen pixels, reading/writing the system clipboard, or
+    /// driving macOS UI scripting. Detection covers direct executables and
+    /// inline-language wrappers (`ruby -e`, `swift -e`, `sh -c`, etc.).
+    nonisolated static func commandRequiresSensitiveDesktopConfirmation(
+        _ command: String
+    ) -> Bool {
+        let lowered = command.lowercased()
+        guard !lowered.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            return false
+        }
+
+        let directPatterns = [
+            #"(?<![a-z0-9_])screencapture(?![a-z0-9_])"#,
+            #"(?<![a-z0-9_])pbpaste(?![a-z0-9_])"#,
+            #"(?<![a-z0-9_])pbcopy(?![a-z0-9_])"#,
+            #"cgwindowlistcreateimage"#,
+        ]
+        if directPatterns.contains(where: {
+            lowered.range(of: $0, options: .regularExpression) != nil
+        }) {
+            return true
+        }
+
+        let usesAppleScript = lowered.range(
+            of: #"(?<![a-z0-9_])osascript(?![a-z0-9_])|nsapplescript"#,
+            options: .regularExpression
+        ) != nil
+        guard usesAppleScript else { return false }
+
+        let guiOrClipboardTerms = [
+            "clipboard", "system events", "keystroke", "key code",
+            "ui element", "menu item", "frontmost", "click ",
+            "click\"", "click'",
+        ]
+        return guiOrClipboardTerms.contains(where: lowered.contains)
     }
 
     nonisolated static func sandboxedEnvironment(
@@ -1133,7 +1217,47 @@ enum AgentSandboxPolicy {
 
     nonisolated private static func referencesSensitivePath(_ token: String) -> Bool {
         let lower = token.lowercased()
-        return sensitivePathFragments.contains { lower.contains($0) }
+        if sensitivePathFragments.contains(where: { lower.contains($0) }) {
+            return true
+        }
+        if sensitiveOptionNameLooksSensitive(lower) {
+            return true
+        }
+        return sensitiveCredentialMarkers.contains { marker in
+            containsIdentifierBoundedMarker(marker, in: lower)
+        }
+    }
+
+    nonisolated private static func sensitiveOptionNameLooksSensitive(_ lower: String) -> Bool {
+        guard lower.hasPrefix("-") else { return false }
+        let optionName = lower.split(separator: "=", maxSplits: 1).first.map(String.init) ?? lower
+        return sensitiveCredentialMarkers.contains { marker in
+            optionName.hasSuffix(marker)
+                || containsIdentifierBoundedMarker(marker, in: optionName)
+        }
+    }
+
+    nonisolated private static func containsIdentifierBoundedMarker(
+        _ marker: String,
+        in value: String
+    ) -> Bool {
+        var searchStart = value.startIndex
+        while searchStart < value.endIndex,
+              let range = value.range(of: marker, range: searchStart..<value.endIndex) {
+            let isLeadingBoundary = range.lowerBound == value.startIndex
+                || !isASCIIAlphaNumeric(value[value.index(before: range.lowerBound)])
+            let isTrailingBoundary = range.upperBound == value.endIndex
+                || !isASCIIAlphaNumeric(value[range.upperBound])
+            if isLeadingBoundary && isTrailingBoundary {
+                return true
+            }
+            searchStart = range.upperBound
+        }
+        return false
+    }
+
+    nonisolated private static func isASCIIAlphaNumeric(_ character: Character) -> Bool {
+        character.isASCII && (character.isLetter || character.isNumber)
     }
 
     nonisolated private static func keyLooksSensitive(_ key: String) -> Bool {

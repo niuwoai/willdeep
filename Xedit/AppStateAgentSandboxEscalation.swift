@@ -135,6 +135,9 @@ extension AppState {
         toolName: String,
         arguments: [String: AgentJSONValue]
     ) -> Bool {
+        guard !toolName.hasPrefix("computer_use_") else {
+            return false
+        }
         guard !agentAlwaysAllowedCommands.isEmpty else { return false }
         let signatures = Set(
             AgentToolAuthorization.matchingSignatures(toolName: toolName, arguments: arguments)

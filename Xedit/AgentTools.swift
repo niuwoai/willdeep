@@ -169,13 +169,36 @@ enum AgentToolRunner {
             activeArguments = arguments
         }
         let activeContext = context.withAdditionalSecretRedactionValues(resolution.secretValues)
+        var computerUseControl: AgentComputerUsePreparedControl?
+        var localObservationGuard: AgentComputerUseLocalObservationGuard?
+        var computerUseMaintenance:
+            AgentComputerUseMaintenanceReservation?
         do {
+            computerUseMaintenance = try await AgentComputerUseExecution
+                .prepareMaintenanceReservation(toolName: name)
+            localObservationGuard = try await AgentComputerUseExecution
+                .prepareLocalObservation(
+                    toolName: name,
+                    arguments: activeArguments
+                )
+            computerUseControl = try await AgentComputerUseExecution.prepare(
+                toolName: name,
+                arguments: activeArguments,
+                context: activeContext
+            )
+            let computerUseLeaseID = computerUseControl?
+                .leaseID
+                .uuidString
+                .lowercased()
             let result: AgentToolResult
             if AgentShortDramaToolDispatcher.canHandle(name) {
                 result = try await AgentShortDramaToolDispatcher.run(
                     name: name,
                     arguments: activeArguments,
                     context: activeContext
+                )
+                await AgentComputerUseExecution.finishMaintenanceReservation(
+                    computerUseMaintenance
                 )
                 return AgentSecretStore.redact(result, secretValues: activeContext.secretRedactionValues)
             }
@@ -320,35 +343,90 @@ enum AgentToolRunner {
             case "computer_use_list_apps":
                 result = try await AgentComputerUseTools.listApps()
             case "computer_use_launch_app":
-                result = try await AgentComputerUseTools.launchApp(arguments: activeArguments)
+                result = try await AgentComputerUseTools.launchApp(
+                    arguments: activeArguments,
+                    controlLeaseID: computerUseLeaseID
+                )
             case "computer_use_activate_app":
-                result = try await AgentComputerUseTools.activateApp(arguments: activeArguments)
+                result = try await AgentComputerUseTools.activateApp(
+                    arguments: activeArguments,
+                    controlLeaseID: computerUseLeaseID
+                )
             case "computer_use_get_app_state":
-                result = try await AgentComputerUseTools.getAppState(arguments: activeArguments)
+                result = try await AgentComputerUseTools.getAppState(
+                    arguments: activeArguments,
+                    controlLeaseID: computerUseLeaseID
+                )
             case "computer_use_inspect_app":
-                result = try await AgentComputerUseTools.inspectApp(arguments: activeArguments)
+                result = try await AgentComputerUseTools.inspectApp(
+                    arguments: activeArguments,
+                    controlLeaseID: computerUseLeaseID
+                )
             case "computer_use_wait_for":
-                result = try await AgentComputerUseTools.waitFor(arguments: activeArguments)
+                result = try await AgentComputerUseTools.waitFor(
+                    arguments: activeArguments,
+                    controlLeaseID: computerUseLeaseID
+                )
             case "computer_use_click":
-                result = try await AgentComputerUseTools.perform(action: "click", arguments: activeArguments)
+                result = try await AgentComputerUseTools.perform(
+                    action: "click",
+                    arguments: activeArguments,
+                    controlLeaseID: computerUseLeaseID
+                )
             case "computer_use_secondary_action":
-                result = try await AgentComputerUseTools.perform(action: "secondary_action", arguments: activeArguments)
+                result = try await AgentComputerUseTools.perform(
+                    action: "secondary_action",
+                    arguments: activeArguments,
+                    controlLeaseID: computerUseLeaseID
+                )
             case "computer_use_scroll":
-                result = try await AgentComputerUseTools.perform(action: "scroll", arguments: activeArguments)
+                result = try await AgentComputerUseTools.perform(
+                    action: "scroll",
+                    arguments: activeArguments,
+                    controlLeaseID: computerUseLeaseID
+                )
             case "computer_use_drag":
-                result = try await AgentComputerUseTools.perform(action: "drag", arguments: activeArguments)
+                result = try await AgentComputerUseTools.perform(
+                    action: "drag",
+                    arguments: activeArguments,
+                    controlLeaseID: computerUseLeaseID
+                )
             case "computer_use_type_text":
-                result = try await AgentComputerUseTools.perform(action: "type_text", arguments: activeArguments)
+                result = try await AgentComputerUseTools.perform(
+                    action: "type_text",
+                    arguments: activeArguments,
+                    controlLeaseID: computerUseLeaseID
+                )
             case "computer_use_press_key":
-                result = try await AgentComputerUseTools.perform(action: "press_key", arguments: activeArguments)
+                result = try await AgentComputerUseTools.perform(
+                    action: "press_key",
+                    arguments: activeArguments,
+                    controlLeaseID: computerUseLeaseID
+                )
             case "computer_use_set_value":
-                result = try await AgentComputerUseTools.perform(action: "set_value", arguments: activeArguments)
+                result = try await AgentComputerUseTools.perform(
+                    action: "set_value",
+                    arguments: activeArguments,
+                    controlLeaseID: computerUseLeaseID
+                )
             case "computer_use_focus":
-                result = try await AgentComputerUseTools.perform(action: "focus", arguments: activeArguments)
+                result = try await AgentComputerUseTools.perform(
+                    action: "focus",
+                    arguments: activeArguments,
+                    controlLeaseID: computerUseLeaseID
+                )
             case "computer_use_hover":
-                result = try await AgentComputerUseTools.perform(action: "hover", arguments: activeArguments)
+                result = try await AgentComputerUseTools.perform(
+                    action: "hover",
+                    arguments: activeArguments,
+                    controlLeaseID: computerUseLeaseID
+                )
             case "computer_use_select_text":
-                result = try await AgentComputerUseTools.perform(action: "select_text", arguments: activeArguments)
+                result = try await AgentComputerUseTools.perform(
+                    action: "select_text",
+                    arguments: activeArguments,
+                    controlLeaseID: computerUseLeaseID
+                )
             case "computer_use_restart_helper":
                 result = try await AgentComputerUseTools.restartHelper()
             case "chrome_status":
@@ -434,8 +512,42 @@ enum AgentToolRunner {
             default:
                 throw AgentToolError.unknownTool(name)
             }
+            try await AgentComputerUseExecution.complete(
+                computerUseControl,
+                result: result
+            )
+            do {
+                try await AgentComputerUseExecution.validateLocalObservation(
+                    localObservationGuard
+                )
+            } catch {
+                if name == "capture_screenshot",
+                   localObservationGuard != nil {
+                    AgentCaptureTools.discardPersistedCaptureArtifacts(in: result)
+                }
+                throw error
+            }
+            await AgentComputerUseExecution.finishMaintenanceReservation(
+                computerUseMaintenance
+            )
             return AgentSecretStore.redact(result, secretValues: activeContext.secretRedactionValues)
         } catch {
+            await AgentComputerUseExecution.finishMaintenanceReservation(
+                computerUseMaintenance
+            )
+            if computerUseControl != nil {
+                do {
+                    try await AgentComputerUseExecution.handleFailure(
+                        error,
+                        prepared: computerUseControl
+                    )
+                } catch {
+                    throw redactedToolError(
+                        error,
+                        secretValues: activeContext.secretRedactionValues
+                    )
+                }
+            }
             throw redactedToolError(error, secretValues: activeContext.secretRedactionValues)
         }
     }

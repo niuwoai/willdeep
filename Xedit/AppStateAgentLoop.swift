@@ -532,6 +532,30 @@ extension AppState {
         refreshAgentWorkspaceCollision()
         _ = startAgentGoalPlanningIfNeeded(for: runtime)
         defer {
+            let computerUseLeaseID: AgentComputerUseLease.ID? = {
+                guard let lease = AgentComputerUseCoordinator.shared.state.lease,
+                      lease.owner.runtimeID == runtime.id,
+                      lease.owner.turnID == turnID else {
+                    return nil
+                }
+                return lease.id
+            }()
+            AgentComputerUseCoordinator.shared.finishTurn(
+                runtimeID: runtime.id,
+                turnID: turnID
+            )
+            // Computer Use approvals are intentionally turn-scoped. The
+            // exclusive lease binds calls to one target during this turn;
+            // retaining `computer_use:*` into a later turn would silently
+            // authorize a different target or newly consequential action.
+            runtime.conversationAllowedToolSignatures.remove("computer_use:*")
+            if let computerUseLeaseID {
+                Task {
+                    try? await AgentComputerUseBridge.shared.endControlSession(
+                        controlLeaseID: computerUseLeaseID.uuidString.lowercased()
+                    )
+                }
+            }
             let shouldConsumeQueueAfterStop = runtime.shouldConsumeQueueAfterStop
             runtime.isResponding = false
             runtime.turnStartedAt = nil
@@ -1367,7 +1391,8 @@ extension AppState {
                     rootDirectory: workspaceURL,
                     interactionMode: runtime.interactionMode,
                     approvalMode: runtime.approvalMode,
-                    conversationAllowedToolSignatures: runtime.conversationAllowedToolSignatures
+                    conversationAllowedToolSignatures: runtime.conversationAllowedToolSignatures,
+                    computerUseOwner: runtime.computerUseOwner
                 )
                 let isAlwaysAllowed = autoApproval != nil
                 let initialStatus: AgentToolCallStatus
@@ -1507,6 +1532,7 @@ extension AppState {
                     runtimeDescriptor: remoteRuntimeDescriptor,
                     runtimeID: runtime.id,
                     turnID: runtime.activeTurnID,
+                    computerUseSessionTitle: runtime.session.title,
                     jobRegistry: agentJobRegistry,
                     mediaTaskRegistry: agentMediaTaskRegistry,
                     shortDramaStore: agentShortDramaStore,

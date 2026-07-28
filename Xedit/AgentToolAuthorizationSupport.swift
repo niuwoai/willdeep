@@ -78,6 +78,16 @@ enum AgentSandboxAuditLog {
         if toolName == "lark_cli" {
             return AgentLarkCLI.commandPreview(arguments: arguments["arguments"]?.stringArrayValue() ?? [])
         }
+        if toolName.hasPrefix("computer_use_") {
+            let targetPID = arguments["pid"]?.intValue().map(String.init)
+            let target = arguments["target_label"]?.stringValue()
+                ?? arguments["app"]?.stringValue()
+                ?? targetPID
+                ?? "?"
+            let purpose = arguments["purpose"]?.stringValue() ?? "-"
+            let consequence = arguments["consequence"]?.stringValue() ?? "-"
+            return "\(toolName) target=\(target) purpose=\(purpose) consequence=\(consequence)"
+        }
         return toolName
     }
 
@@ -543,7 +553,11 @@ enum AgentToolAuthorization {
 
     static func interactiveSurfaceSignature(toolName: String) -> String? {
         if toolName.hasPrefix("computer_use_") {
-            return "computer_use:*"
+            // Native desktop control never uses the generic conversation
+            // allow-list. Ordinary actions are approved only by the live
+            // runtime/target-bound Computer Use lease; consequential actions
+            // remain per-action confirmations.
+            return nil
         }
         if toolName.hasPrefix("chrome_") {
             return "browser:chrome"
@@ -565,6 +579,18 @@ enum AgentToolAuthorization {
         toolName: String,
         arguments: [String: AgentJSONValue]
     ) -> String? {
+        // Native desktop control is intentionally never durable. A remembered
+        // `computer_use:*` rule would outlive the current target/turn and let
+        // an approval for a harmless scroll authorize a later send, delete,
+        // purchase, permission change, or entirely different app.
+        if toolName.hasPrefix("computer_use_") {
+            return nil
+        }
+        if ["run_command", "terminal_send_command"].contains(toolName),
+           let command = arguments["command"]?.stringValue(),
+           AgentSandboxPolicy.commandRequiresSensitiveDesktopConfirmation(command) {
+            return nil
+        }
         let baseSignature = signature(toolName: toolName, arguments: arguments)
 
         switch toolName {

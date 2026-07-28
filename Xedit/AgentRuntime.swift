@@ -48,6 +48,10 @@ final class AgentRuntime: ObservableObject, Identifiable {
     @Published var contextSummaryThroughMessageID: AgentMessage.ID?
     @Published var patchProposals: [AgentPatchProposal] = []
     @Published var toolCalls: [AgentToolCall] = []
+    /// Decisions clicked before the tool loop has registered its waiter.
+    /// This state drives the approval card's immediate "submitted" receipt,
+    /// so it must publish even though the loop consumes entries in order.
+    @Published var pendingToolDecisions: [AgentToolCall.ID: AgentToolDecision] = [:]
     /// Runtime-only tool cards installed by the exact `#1983#` composer
     /// trigger. They deliberately never enter `AgentSession.messages`, so a
     /// confirmation-surface preview cannot leak into a later model request or
@@ -176,6 +180,17 @@ final class AgentRuntime: ObservableObject, Identifiable {
     /// jobs and subagents inherit it so Stop can clean up only the newest
     /// turn without touching an older dev server or watcher in this session.
     var activeTurnID: UUID?
+    /// Stable owner identity handed to the global Computer Use coordinator.
+    /// Keeping the turn id in the identity prevents a late helper callback
+    /// from an older turn dismissing or mutating a newer control session.
+    var computerUseOwner: AgentComputerUseOwner? {
+        guard let activeTurnID else { return nil }
+        return AgentComputerUseOwner(
+            runtimeID: id,
+            turnID: activeTurnID,
+            sessionTitle: session.title
+        )
+    }
     /// The already-resolved configuration for the active turn. Stop cleanup
     /// reuses this in-memory value for its lightweight process decision and
     /// therefore does not re-scan Keychain credentials.
@@ -228,10 +243,6 @@ final class AgentRuntime: ObservableObject, Identifiable {
     /// Without this guard, clicking a different pending card could resume
     /// the wrong continuation when multiple approval cards are visible.
     var toolDecisionWaiterCallID: AgentToolCall.ID?
-    /// Decisions clicked before the tool loop has registered its waiter.
-    /// This closes the race where the UI card accepts a click but the
-    /// continuation slot is not ready yet, leaving an apparently dead card.
-    var pendingToolDecisions: [AgentToolCall.ID: AgentToolDecision] = [:]
     /// A proposal-only edit suspends its tool result until the user resolves
     /// the inline patch card. This prevents the provider from receiving a
     /// stale "pending" result while the user's Apply click is still in flight.

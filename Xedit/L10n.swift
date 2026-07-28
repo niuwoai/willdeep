@@ -122,6 +122,25 @@ nonisolated enum L10n {
     enum ComputerUsePreview {
         static let close = String(localized: "computer-use-preview.close", defaultValue: "Close Computer Use preview")
         static let open = String(localized: "computer-use-preview.open", defaultValue: "Open latest Computer Use screenshot")
+        static let idle = String(localized: "computer-use-preview.state.idle", defaultValue: "Computer Use idle")
+        static let observing = String(localized: "computer-use-preview.state.observing", defaultValue: "Observing")
+        static let controlling = String(localized: "computer-use-preview.state.controlling", defaultValue: "Controlling")
+        static let paused = String(localized: "computer-use-preview.state.paused", defaultValue: "Computer Use paused")
+        static let userTakeover = String(localized: "computer-use-preview.state.user-takeover", defaultValue: "You are in control")
+        static let stopping = String(localized: "computer-use-preview.state.stopping", defaultValue: "Stopping Computer Use")
+        static let stoppingDetail = String(localized: "computer-use-preview.stopping-detail", defaultValue: "Finishing the current action and releasing control…")
+        static let failed = String(localized: "computer-use-preview.state.failed", defaultValue: "Computer Use failed")
+        static let unknownTarget = String(localized: "computer-use-preview.unknown-target", defaultValue: "Unknown application")
+        static let pause = String(localized: "computer-use-preview.action.pause", defaultValue: "Pause")
+        static let takeOver = String(localized: "computer-use-preview.action.take-over", defaultValue: "I'll take over")
+        static let resume = String(localized: "computer-use-preview.action.resume", defaultValue: "Resume")
+        static let stop = String(localized: "computer-use-preview.action.stop", defaultValue: "Stop")
+        static let statusAccessibility = String(localized: "computer-use-preview.status-accessibility", defaultValue: "Computer Use control status")
+
+        static func owningTask(_ title: String) -> String {
+            let template = String(localized: "computer-use-preview.owning-task", defaultValue: "Task: %@")
+            return String(format: template, title)
+        }
     }
 
     enum AgentSelection {
@@ -1355,6 +1374,9 @@ nonisolated enum L10n {
     enum ToolCard {
         static let allow = String(localized: "tool-card.allow", defaultValue: "Allow")
         static let allowConversation = String(localized: "tool-card.allow-conversation", defaultValue: "Allow for This Conversation")
+        static let allowComputerUseSession = String(localized: "tool-card.allow-computer-use-session", defaultValue: "Allow This Control Session")
+        static let approvalControlLeaseBadge = String(localized: "tool-card.approval.control-lease.badge", defaultValue: "CONTROL")
+        static let approvalControlLeaseTooltip = String(localized: "tool-card.approval.control-lease.tooltip", defaultValue: "Auto-approved by the current runtime-, turn-, and target-bound Computer Use controlling lease.")
         static let alwaysAllow = String(localized: "tool-card.always-allow", defaultValue: "Always Allow")
         static let browserAuthorizationTitle = String(localized: "tool-card.authorization.browser.title", defaultValue: "Browser")
         static let browserChromeAuthorizationQuestion = String(localized: "tool-card.authorization.browser.chrome-question", defaultValue: "Allow WillDeep to control Chrome?")
@@ -2779,6 +2801,7 @@ nonisolated enum L10n {
         static let turnReportStatusDenied = String(localized: "transcript.turn-report.status.denied", defaultValue: "Denied")
         static let turnReportApprovalUser = String(localized: "transcript.turn-report.approval.user", defaultValue: "User approved")
         static let turnReportApprovalAlwaysAllow = String(localized: "transcript.turn-report.approval.always-allow", defaultValue: "Always allow")
+        static let turnReportApprovalControlLease = String(localized: "transcript.turn-report.approval.control-lease", defaultValue: "Control lease")
         static let turnReportApprovalStatic = String(localized: "transcript.turn-report.approval.static", defaultValue: "Static allow")
         static let turnReportApprovalJudge = String(localized: "transcript.turn-report.approval.judge", defaultValue: "Judge allow")
         static let turnReportApprovalGoal = String(localized: "transcript.turn-report.approval.goal", defaultValue: "Goal mode")

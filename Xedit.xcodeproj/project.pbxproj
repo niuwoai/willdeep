@@ -387,6 +387,7 @@
 			);
 			inputPaths = (
 				"$(SRCROOT)/ComputerUseHelper/main.swift",
+				"$(SRCROOT)/ComputerUseHelper/SensitiveAccessibilityScanner.swift",
 				"$(SRCROOT)/ComputerUseHelper/Info.plist",
 			);
 			name = "Build WillDeep Computer Use Helper";
@@ -397,7 +398,7 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/zsh;
-			shellScript = "set -euo pipefail\nbuild_start=\"$(date +%s)\"\nlog_step() {\n  local now elapsed\n  now=\"$(date +%s)\"\n  elapsed=$((now - build_start))\n  printf '[ComputerUseHelper][+%ss] %s\\n' \"$elapsed\" \"$*\"\n}\ntime_step() {\n  local label step_start now elapsed exit_code\n  label=\"$1\"\n  shift\n  step_start=\"$(date +%s)\"\n  log_step \"START ${label}\"\n  if \"$@\"; then\n    now=\"$(date +%s)\"\n    elapsed=$((now - step_start))\n    log_step \"DONE ${label} (${elapsed}s)\"\n  else\n    exit_code=$?\n    now=\"$(date +%s)\"\n    elapsed=$((now - step_start))\n    log_step \"FAILED ${label} (${elapsed}s, status=${exit_code})\"\n    return \"$exit_code\"\n  fi\n}\nsource=\"$SRCROOT/ComputerUseHelper/main.swift\"\nplist=\"$SRCROOT/ComputerUseHelper/Info.plist\"\napp=\"$TARGET_BUILD_DIR/$UNLOCALIZED_RESOURCES_FOLDER_PATH/WillDeepComputerUseHelper.app\"\ncontents=\"$app/Contents\"\nmacos=\"$contents/MacOS\"\ntmpdir=\"$(mktemp -d)\"\ntrap 'rm -rf \"$tmpdir\"' EXIT\nlog_step \"Preparing bundle at ${app}\"\nrm -rf \"$app\"\nmkdir -p \"$macos\"\ncp \"$plist\" \"$contents/Info.plist\"\nmodule_cache=\"$DERIVED_FILE_DIR/computer-use-module-cache\"\nmkdir -p \"$module_cache\"\nlog_step \"Swift source: ${source}\"\nlog_step \"Module cache: ${module_cache}\"\ntime_step \"swiftc arm64 helper\" xcrun swiftc -target arm64-apple-macos13.7 -module-cache-path \"$module_cache\" -framework AppKit -framework ApplicationServices -framework CoreGraphics -framework ImageIO \"$source\" -o \"$tmpdir/helper-arm64\"\ntime_step \"swiftc x86_64 helper\" xcrun swiftc -target x86_64-apple-macos13.7 -module-cache-path \"$module_cache\" -framework AppKit -framework ApplicationServices -framework CoreGraphics -framework ImageIO \"$source\" -o \"$tmpdir/helper-x86_64\"\ntime_step \"lipo universal helper\" lipo -create \"$tmpdir/helper-arm64\" \"$tmpdir/helper-x86_64\" -output \"$macos/WillDeepComputerUseHelper\"\nchmod +x \"$macos/WillDeepComputerUseHelper\"\nlipo -info \"$macos/WillDeepComputerUseHelper\"\nif [ \"${CODE_SIGNING_ALLOWED:-YES}\" = \"NO\" ]; then\n  sign=\"-\"\nelse\n  sign=\"${EXPANDED_CODE_SIGN_IDENTITY:-${CODE_SIGN_IDENTITY:--}}\"\n  [ -n \"$sign\" ] || sign=\"-\"\nfi\nif [ \"$sign\" != \"-\" ] && [ -n \"${DEVELOPMENT_TEAM:-}\" ]; then\n  identity_output=\"$(security find-identity -v -p codesigning 2>/dev/null || true)\"\n  resolved_sign=\"$(/usr/bin/awk -v label=\"$sign\" -v team=\"$DEVELOPMENT_TEAM\" 'index($0, label) > 0 && index($0, \"(\" team \")\") > 0 { print $2; exit }' <<< \"$identity_output\")\"\n  [ -z \"$resolved_sign\" ] || sign=\"$resolved_sign\"\nfi\nlog_step \"Code signing identity: ${sign}\"\nsign_start=\"$(date +%s)\"\nlog_step \"START codesign helper app\"\nif codesign --force --sign \"$sign\" --timestamp=none \"$app\"; then\n  sign_elapsed=$(($(date +%s) - sign_start))\n  log_step \"DONE codesign helper app (${sign_elapsed}s)\"\nelse\n  exit_code=$?\n  sign_elapsed=$(($(date +%s) - sign_start))\n  log_step \"FAILED codesign helper app (${sign_elapsed}s, status=${exit_code})\"\n  log_step \"Bundle diagnostics for ${app}:\"\n  find \"$app\" -maxdepth 3 -print\n  codesign --display --verbose=4 \"$app\" 2>&1 || true\n  exit \"$exit_code\"\nfi\ntime_step \"codesign verify helper app\" codesign --verify --deep --strict --verbose=2 \"$app\"\ntotal_elapsed=$(($(date +%s) - build_start))\nlog_step \"Computer Use Helper build finished (${total_elapsed}s)\"\n";
+			shellScript = "set -euo pipefail\nbuild_start=\"$(date +%s)\"\nlog_step() {\n  local now elapsed\n  now=\"$(date +%s)\"\n  elapsed=$((now - build_start))\n  printf '[ComputerUseHelper][+%ss] %s\\n' \"$elapsed\" \"$*\"\n}\ntime_step() {\n  local label step_start now elapsed exit_code\n  label=\"$1\"\n  shift\n  step_start=\"$(date +%s)\"\n  log_step \"START ${label}\"\n  if \"$@\"; then\n    now=\"$(date +%s)\"\n    elapsed=$((now - step_start))\n    log_step \"DONE ${label} (${elapsed}s)\"\n  else\n    exit_code=$?\n    now=\"$(date +%s)\"\n    elapsed=$((now - step_start))\n    log_step \"FAILED ${label} (${elapsed}s, status=${exit_code})\"\n    return \"$exit_code\"\n  fi\n}\nmain_source=\"$SRCROOT/ComputerUseHelper/main.swift\"\nscanner_source=\"$SRCROOT/ComputerUseHelper/SensitiveAccessibilityScanner.swift\"\nplist=\"$SRCROOT/ComputerUseHelper/Info.plist\"\napp=\"$TARGET_BUILD_DIR/$UNLOCALIZED_RESOURCES_FOLDER_PATH/WillDeepComputerUseHelper.app\"\ncontents=\"$app/Contents\"\nmacos=\"$contents/MacOS\"\ntmpdir=\"$(mktemp -d)\"\ntrap 'rm -rf \"$tmpdir\"' EXIT\nlog_step \"Preparing bundle at ${app}\"\nrm -rf \"$app\"\nmkdir -p \"$macos\"\ncp \"$plist\" \"$contents/Info.plist\"\nmodule_cache=\"$DERIVED_FILE_DIR/computer-use-module-cache\"\nmkdir -p \"$module_cache\"\nlog_step \"Swift sources: ${main_source}, ${scanner_source}\"\nlog_step \"Module cache: ${module_cache}\"\ntime_step \"swiftc arm64 helper\" xcrun swiftc -target arm64-apple-macos13.7 -module-cache-path \"$module_cache\" -framework AppKit -framework ApplicationServices -framework CoreGraphics -framework ImageIO \"$main_source\" \"$scanner_source\" -o \"$tmpdir/helper-arm64\"\ntime_step \"swiftc x86_64 helper\" xcrun swiftc -target x86_64-apple-macos13.7 -module-cache-path \"$module_cache\" -framework AppKit -framework ApplicationServices -framework CoreGraphics -framework ImageIO \"$main_source\" \"$scanner_source\" -o \"$tmpdir/helper-x86_64\"\ntime_step \"lipo universal helper\" lipo -create \"$tmpdir/helper-arm64\" \"$tmpdir/helper-x86_64\" -output \"$macos/WillDeepComputerUseHelper\"\nchmod +x \"$macos/WillDeepComputerUseHelper\"\nlipo -info \"$macos/WillDeepComputerUseHelper\"\nif [ \"${CODE_SIGNING_ALLOWED:-YES}\" = \"NO\" ]; then\n  sign=\"-\"\nelse\n  sign=\"${EXPANDED_CODE_SIGN_IDENTITY:-${CODE_SIGN_IDENTITY:--}}\"\n  [ -n \"$sign\" ] || sign=\"-\"\nfi\nif [ \"$sign\" != \"-\" ] && [ -n \"${DEVELOPMENT_TEAM:-}\" ]; then\n  identity_output=\"$(security find-identity -v -p codesigning 2>/dev/null || true)\"\n  resolved_sign=\"$(/usr/bin/awk -v label=\"$sign\" -v team=\"$DEVELOPMENT_TEAM\" 'index($0, label) > 0 && index($0, \"(\" team \")\") > 0 { print $2; exit }' <<< \"$identity_output\")\"\n  [ -z \"$resolved_sign\" ] || sign=\"$resolved_sign\"\nfi\nlog_step \"Code signing identity: ${sign}\"\nsign_start=\"$(date +%s)\"\nlog_step \"START codesign helper app\"\nif codesign --force --sign \"$sign\" --timestamp=none \"$app\"; then\n  sign_elapsed=$(($(date +%s) - sign_start))\n  log_step \"DONE codesign helper app (${sign_elapsed}s)\"\nelse\n  exit_code=$?\n  sign_elapsed=$(($(date +%s) - sign_start))\n  log_step \"FAILED codesign helper app (${sign_elapsed}s, status=${exit_code})\"\n  log_step \"Bundle diagnostics for ${app}:\"\n  find \"$app\" -maxdepth 3 -print\n  codesign --display --verbose=4 \"$app\" 2>&1 || true\n  exit \"$exit_code\"\nfi\ntime_step \"codesign verify helper app\" codesign --verify --deep --strict --verbose=2 \"$app\"\ntotal_elapsed=$(($(date +%s) - build_start))\nlog_step \"Computer Use Helper build finished (${total_elapsed}s)\"\n";
 		};
 		7E2F8B7A2F9E4A1C9E0B1003 /* Generate embedded build credentials */ = {
 			isa = PBXShellScriptBuildPhase;
@@ -471,7 +472,7 @@
 				CODE_SIGN_ENTITLEMENTS = Xedit/WillDeep.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 194;
+				CURRENT_PROJECT_VERSION = 196;
 				DEVELOPMENT_TEAM = ZH2S7D6PL6;
 				ENABLE_APP_SANDBOX = NO;
 				ENABLE_HARDENED_RUNTIME = YES;
@@ -498,7 +499,7 @@
 					"$(SRCROOT)/Xedit/Voice/Libraries/onnxruntime",
 					"$(PROJECT_DIR)/Xedit/Voice/Libraries/onnxruntime",
 				);
-				MARKETING_VERSION = "1.210.0-rc19";
+				MARKETING_VERSION = "1.211.0-rc2";
 				OTHER_LDFLAGS = (
 					"$(inherited)",
 					"$(SRCROOT)/Xedit/Voice/Libraries/onnxruntime/libonnxruntime.1.23.2.dylib",
@@ -526,7 +527,7 @@
 				CODE_SIGN_ENTITLEMENTS = Xedit/WillDeep.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 194;
+				CURRENT_PROJECT_VERSION = 196;
 				DEVELOPMENT_TEAM = ZH2S7D6PL6;
 				ENABLE_APP_SANDBOX = NO;
 				ENABLE_HARDENED_RUNTIME = YES;
@@ -553,7 +554,7 @@
 					"$(SRCROOT)/Xedit/Voice/Libraries/onnxruntime",
 					"$(PROJECT_DIR)/Xedit/Voice/Libraries/onnxruntime",
 				);
-				MARKETING_VERSION = "1.210.0-rc19";
+				MARKETING_VERSION = "1.211.0-rc2";
 				OTHER_LDFLAGS = (
 					"$(inherited)",
 					"$(SRCROOT)/Xedit/Voice/Libraries/onnxruntime/libonnxruntime.1.23.2.dylib",
@@ -697,11 +698,11 @@
 			buildSettings = {
 				BUNDLE_LOADER = "$(TEST_HOST)";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 194;
+				CURRENT_PROJECT_VERSION = 196;
 				DEVELOPMENT_TEAM = ZH2S7D6PL6;
 				GENERATE_INFOPLIST_FILE = YES;
 				MACOSX_DEPLOYMENT_TARGET = 13.7;
-				MARKETING_VERSION = "1.210.0-rc19";
+				MARKETING_VERSION = "1.211.0-rc2";
 				PRODUCT_BUNDLE_IDENTIFIER = com.willdeep.app.tests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				STRING_CATALOG_GENERATE_SYMBOLS = NO;
@@ -718,11 +719,11 @@
 			buildSettings = {
 				BUNDLE_LOADER = "$(TEST_HOST)";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 194;
+				CURRENT_PROJECT_VERSION = 196;
 				DEVELOPMENT_TEAM = ZH2S7D6PL6;
 				GENERATE_INFOPLIST_FILE = YES;
 				MACOSX_DEPLOYMENT_TARGET = 13.7;
-				MARKETING_VERSION = "1.210.0-rc19";
+				MARKETING_VERSION = "1.211.0-rc2";
 				PRODUCT_BUNDLE_IDENTIFIER = com.willdeep.app.tests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				STRING_CATALOG_GENERATE_SYMBOLS = NO;
@@ -738,10 +739,10 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 194;
+				CURRENT_PROJECT_VERSION = 196;
 				DEVELOPMENT_TEAM = ZH2S7D6PL6;
 				GENERATE_INFOPLIST_FILE = YES;
-				MARKETING_VERSION = "1.210.0-rc19";
+				MARKETING_VERSION = "1.211.0-rc2";
 				PRODUCT_BUNDLE_IDENTIFIER = com.willdeep.app.uitests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				STRING_CATALOG_GENERATE_SYMBOLS = NO;
@@ -757,10 +758,10 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 194;
+				CURRENT_PROJECT_VERSION = 196;
 				DEVELOPMENT_TEAM = ZH2S7D6PL6;
 				GENERATE_INFOPLIST_FILE = YES;
-				MARKETING_VERSION = "1.210.0-rc19";
+				MARKETING_VERSION = "1.211.0-rc2";
 				PRODUCT_BUNDLE_IDENTIFIER = com.willdeep.app.uitests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				STRING_CATALOG_GENERATE_SYMBOLS = NO;

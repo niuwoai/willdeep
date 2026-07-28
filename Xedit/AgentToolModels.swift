@@ -124,6 +124,10 @@ struct AgentToolContext {
     /// work records it separately from `runtimeID` so a user Stop targets only
     /// work created by the latest turn.
     let turnID: UUID?
+    /// User-visible title of the conversation that owns a native Computer Use
+    /// lease. Kept separate from runtimeID so the global control indicator can
+    /// identify a background task without reaching back into AppState.
+    let computerUseSessionTitle: String?
     /// Shared background-job registry. Nil in non-app call paths;
     /// when nil, `run_command` with `run_in_background: true` falls
     /// back to the foreground path so behavior is still defined.
@@ -196,6 +200,7 @@ struct AgentToolContext {
         runtimeDescriptor: RuntimeDescriptor? = nil,
         runtimeID: UUID? = nil,
         turnID: UUID? = nil,
+        computerUseSessionTitle: String? = nil,
         jobRegistry: AgentJobRegistry? = nil,
         mediaTaskRegistry: AgentMediaTaskRegistry? = nil,
         shortDramaStore: AgentShortDramaStore? = nil,
@@ -218,6 +223,7 @@ struct AgentToolContext {
         self.runtimeDescriptor = runtimeDescriptor
         self.runtimeID = runtimeID
         self.turnID = turnID
+        self.computerUseSessionTitle = computerUseSessionTitle
         self.jobRegistry = jobRegistry
         self.mediaTaskRegistry = mediaTaskRegistry
         self.shortDramaStore = shortDramaStore
@@ -267,6 +273,7 @@ struct AgentToolContext {
             runtimeDescriptor: runtimeDescriptor,
             runtimeID: runtimeID,
             turnID: turnID,
+            computerUseSessionTitle: computerUseSessionTitle,
             jobRegistry: jobRegistry,
             mediaTaskRegistry: mediaTaskRegistry,
             shortDramaStore: shortDramaStore,
@@ -293,6 +300,7 @@ struct AgentToolContext {
             runtimeDescriptor: runtimeDescriptor,
             runtimeID: runtimeID,
             turnID: turnID,
+            computerUseSessionTitle: computerUseSessionTitle,
             jobRegistry: jobRegistry,
             mediaTaskRegistry: mediaTaskRegistry,
             shortDramaStore: shortDramaStore,
@@ -467,8 +475,9 @@ enum AgentToolDecision {
 /// session was in Goal mode, which auto-approves write-tier calls
 /// (danger-tier still gates on the user). `.workspaceAccess` means the
 /// current session's composer approval mode grants write-tier access
-/// inside the active workspace. nil = either pure read (never gated) or
-/// still pending.
+/// inside the active workspace. `.controlLease` means the same runtime,
+/// turn, and target already owns a live Computer Use controlling lease.
+/// nil = either pure read (never gated) or still pending.
 enum AgentToolApprovalSource: String, Equatable, Codable {
     case user
     case alwaysAllowList
@@ -476,6 +485,9 @@ enum AgentToolApprovalSource: String, Equatable, Codable {
     case llmJudge
     case goalMode
     case workspaceAccess
+    /// A reversible Computer Use action was authorized by the current
+    /// runtime- and target-bound in-memory control lease.
+    case controlLease
     /// The user approved a call that requires access outside the default
     /// sandbox boundary (network, credentials/keychain, system paths, or
     /// destructive shell syntax).

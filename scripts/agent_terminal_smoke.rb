@@ -74,8 +74,13 @@ checks = [
     %w[terminal_snapshot terminal_send_command terminal_send_control].all? { |name| tools.include?(name) && runner.include?(name) }
   },
   check("terminal writes require approval", "send command/control go through workspace-write approval") {
-    policy.include?('"terminal_send_command", "terminal_send_control"') &&
-      policy.include?("requiresUserApproval: true")
+    terminal_command_requires_approval = policy.match?(
+      /case "terminal_send_command":.*?requiresUserApproval: true/m
+    )
+    terminal_control_requires_approval = policy.match?(
+      /case "rename_session".*?"terminal_send_control".*?requiresUserApproval: true/m
+    )
+    terminal_command_requires_approval && terminal_control_requires_approval
   },
   check("running session exposes manual controls", "Status menu exposes interrupt, telnet escape, EOF, and stop") {
     terminal_view.include?("sessionStatusPill") &&

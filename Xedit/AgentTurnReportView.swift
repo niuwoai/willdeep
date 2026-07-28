@@ -477,6 +477,8 @@ struct AgentTurnReportCard: View {
             return L10n.Transcript.turnReportApprovalGoal
         case .workspaceAccess:
             return L10n.Transcript.turnReportApprovalWorkspace
+        case .controlLease:
+            return L10n.Transcript.turnReportApprovalControlLease
         case .escalated:
             return L10n.Transcript.turnReportApprovalEscalated
         case .trustedServer:

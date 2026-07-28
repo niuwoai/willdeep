@@ -7,6 +7,7 @@ require "pathname"
 ROOT = Pathname.new(__dir__).parent
 HELPER = ROOT.join("ComputerUseHelper", "main.swift")
 TOOLS = ROOT.join("Xedit", "AgentComputerUseTools.swift")
+POLICY = ROOT.join("Xedit", "AgentComputerUsePolicy.swift")
 DEFAULT_MARKDOWN_REPORT = "/tmp/xedit-computer-use-helper-contract.md"
 DEFAULT_JSON_REPORT = "/tmp/xedit-computer-use-helper-contract.json"
 
@@ -14,6 +15,7 @@ markdown_path = Pathname.new(ARGV[0] || DEFAULT_MARKDOWN_REPORT)
 json_path = Pathname.new(ARGV[1] || DEFAULT_JSON_REPORT)
 helper_source = HELPER.read
 tools_source = TOOLS.read
+policy_source = POLICY.read
 checks = []
 
 record = lambda do |name, ok, detail|
@@ -21,8 +23,8 @@ record = lambda do |name, ok, detail|
 end
 
 record.call(
-  "protocol-v5",
-  helper_source.include?('protocolVersion = "willdeep-computer-use.v5"'),
+  "protocol-v6",
+  helper_source.include?('protocolVersion = "willdeep-computer-use.v6"'),
   "Computer Use helper protocol"
 )
 
@@ -54,7 +56,9 @@ record.call(
 
 record.call(
   "select-text-secret-guard",
-  tools_source.include?('action == "select_text"') && tools_source.include?("rejectSensitiveText(arguments)"),
+  tools_source.include?("AgentComputerUsePolicy.validateBeforeHelper") &&
+    policy_source.include?('action == "select_text"') &&
+    policy_source.include?("likelySensitiveText(candidate)"),
   "selection shares the Computer Use secret guard"
 )
 

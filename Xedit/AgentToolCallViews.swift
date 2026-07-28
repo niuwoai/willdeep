@@ -1072,17 +1072,29 @@ struct AgentToolCallCard: View {
         } else {
             ViewThatFits(in: .horizontal) {
                 HStack(spacing: AgentCompactAuthorizationMetrics.actionSpacing) {
-                    compactAlwaysAllowButton
+                    if alwaysAllowSignature != nil {
+                        compactAlwaysAllowButton
+                    } else if conversationAllowSignature == nil {
+                        compactAllowOnceButton
+                    }
                     Spacer(minLength: 16)
                     compactDenyButton
-                    compactConversationAllowButton
+                    if conversationAllowSignature != nil {
+                        compactConversationAllowButton
+                    }
                 }
                 VStack(alignment: .leading, spacing: AgentCompactAuthorizationMetrics.actionSpacing) {
-                    compactAlwaysAllowButton
+                    if alwaysAllowSignature != nil {
+                        compactAlwaysAllowButton
+                    } else if conversationAllowSignature == nil {
+                        compactAllowOnceButton
+                    }
                     HStack(spacing: AgentCompactAuthorizationMetrics.actionSpacing) {
                         Spacer(minLength: 0)
                         compactDenyButton
-                        compactConversationAllowButton
+                        if conversationAllowSignature != nil {
+                            compactConversationAllowButton
+                        }
                     }
                 }
             }
@@ -1098,6 +1110,20 @@ struct AgentToolCallCard: View {
         }
         .buttonStyle(.bordered)
         .approvalButtonBorderShape(cornerRadius: AgentCompactAuthorizationMetrics.buttonCornerRadius)
+        .tint(appState.editorSettings.interfaceSkin.palette.accent)
+        .cursor(.arrow)
+    }
+
+    private var compactAllowOnceButton: some View {
+        Button {
+            appState.approveAgentToolCall(id: call.id)
+        } label: {
+            compactAuthorizationActionLabel(L10n.ToolCard.allow)
+        }
+        .buttonStyle(.bordered)
+        .approvalButtonBorderShape(
+            cornerRadius: AgentCompactAuthorizationMetrics.buttonCornerRadius
+        )
         .tint(appState.editorSettings.interfaceSkin.palette.accent)
         .cursor(.arrow)
     }
@@ -1118,7 +1144,11 @@ struct AgentToolCallCard: View {
         Button {
             appState.allowAgentToolFamilyForConversation(id: call.id)
         } label: {
-            compactAuthorizationActionLabel(L10n.ToolCard.allowConversation)
+            compactAuthorizationActionLabel(
+                call.toolName.hasPrefix("computer_use_")
+                    ? L10n.ToolCard.allowComputerUseSession
+                    : L10n.ToolCard.allowConversation
+            )
         }
         .buttonStyle(
             AgentApprovalOutlinedButtonStyle(
@@ -2325,6 +2355,13 @@ struct AgentToolCallCard: View {
         )
     }
 
+    private var conversationAllowSignature: String? {
+        guard call.risk == .write else { return nil }
+        return AgentToolAuthorization.interactiveSurfaceSignature(
+            toolName: call.toolName
+        )
+    }
+
     private var decisionAlreadySubmitted: Bool {
         appState.hasPendingAgentToolDecision(id: call.id)
     }
@@ -2421,6 +2458,7 @@ struct AgentToolCallCard: View {
         case .llmJudge: return "AI OK"
         case .goalMode: return "GOAL"
         case .workspaceAccess: return "WORKSPACE"
+        case .controlLease: return L10n.ToolCard.approvalControlLeaseBadge
         case .escalated: return "ESCALATED"
         case .trustedServer: return "TRUSTED"
         }
@@ -2435,6 +2473,7 @@ struct AgentToolCallCard: View {
         case .llmJudge: return "An LLM judge classified this call as non-malicious normal work."
         case .goalMode: return "Auto-approved because this session is in Goal mode. Danger-tier commands still ask."
         case .workspaceAccess: return "Auto-approved by this session's Workspace Access approval mode. Danger-tier commands still ask."
+        case .controlLease: return L10n.ToolCard.approvalControlLeaseTooltip
         case .escalated: return "You approved this call to run outside the default sandbox boundary."
         case .trustedServer: return "You marked this MCP server as fully trusted — all its calls auto-run."
         }

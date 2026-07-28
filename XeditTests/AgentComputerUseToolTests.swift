@@ -239,41 +239,111 @@ struct AgentComputerUseToolTests {
     }
 
     @Test
-    func computerUseActionsCannotGoalModeAutoApprove() {
+    @MainActor
+    func computerUseActionsCannotAutoApproveWithoutMatchingRuntimeLease() async {
+        let arguments: [String: AgentJSONValue] = [
+            "pid": .number(123),
+            "snapshot_id": .string("snapshot"),
+            "x": .number(10),
+            "y": .number(10),
+            "target_label": .string("General"),
+            "purpose": .string("Open the requested settings tab"),
+            "consequence": .string("navigation"),
+        ]
+        let risk = AgentToolRegistry.risk(
+            for: "computer_use_click",
+            arguments: arguments
+        )
         let decision = AgentSandboxPolicy.decision(
             toolName: "computer_use_click",
-            arguments: ["pid": .number(123), "x": .number(10), "y": .number(10)],
+            arguments: arguments,
             rootDirectory: nil
         )
+        #expect(risk == .danger)
         #expect(decision.mode == .escalated)
         #expect(decision.requiresUserApproval)
-        #expect(!decision.requiresTypedConfirmation)
+        #expect(decision.requiresTypedConfirmation)
+
+        let appState = AppState()
+        let approval = await appState.autoApprovalSource(
+            toolName: "computer_use_click",
+            arguments: arguments,
+            risk: risk,
+            rootDirectory: nil,
+            interactionMode: .goal,
+            approvalMode: .workspaceAccess,
+            conversationAllowedToolSignatures: ["computer_use:*"],
+            computerUseOwner: AgentComputerUseOwner(
+                runtimeID: UUID(),
+                turnID: UUID(),
+                sessionTitle: "Test"
+            )
+        )
+        #expect(approval == nil)
     }
 
     @Test
-    func computerUseAuthorizationUsesFamilyScopedConversationGrant() async {
+    func computerUseAuthorizationNeverUsesFamilyScopedConversationGrant() async {
         #expect(
             AgentToolAuthorization.interactiveSurfaceSignature(
                 toolName: "computer_use_click"
-            ) == "computer_use:*"
+            ) == nil
         )
         #expect(
             AgentToolAuthorization.signature(
                 toolName: "computer_use_type_text",
                 arguments: ["pid": .number(123), "text": .string("hello")]
-            ) == "computer_use:*"
+            ) == nil
         )
 
+        let semanticArguments: [String: AgentJSONValue] = [
+            "pid": .number(123),
+            "snapshot_id": .string("snapshot"),
+            "ref": .string("snapshot:e1"),
+            "target_label": .string("General"),
+            "purpose": .string("Open the requested settings tab"),
+            "consequence": .string("navigation"),
+        ]
         let appState = AppState()
         let approval = await appState.autoApprovalSource(
             toolName: "computer_use_click",
-            arguments: ["pid": .number(123), "x": .number(10), "y": .number(10)],
-            risk: .write,
+            arguments: semanticArguments,
+            risk: AgentToolRegistry.risk(
+                for: "computer_use_click",
+                arguments: semanticArguments
+            ),
             rootDirectory: nil,
             approvalMode: .requestEveryTime,
-            conversationAllowedToolSignatures: ["computer_use:*"]
+            conversationAllowedToolSignatures: ["computer_use:*"],
+            computerUseOwner: AgentComputerUseOwner(
+                runtimeID: UUID(),
+                turnID: UUID(),
+                sessionTitle: "Test"
+            )
         )
-        #expect(approval == .user)
+        #expect(approval == nil)
+    }
+
+    @Test
+    func controlLeaseApprovalSourceIsAuditable() {
+        let appState = AppState()
+        let mode = appState.sandboxModeForToolExecution(
+            risk: .write,
+            approvalSource: .controlLease,
+            sandboxDecision: AgentSandboxDecision(
+                mode: .workspaceWrite,
+                requiresUserApproval: true,
+                requiresTypedConfirmation: false,
+                reason: "test",
+                prefixRule: nil
+            )
+        )
+
+        #expect(mode == .workspaceWrite)
+        #expect(AgentToolApprovalSource.controlLease.rawValue == "controlLease")
+        #expect(!L10n.ToolCard.approvalControlLeaseBadge.isEmpty)
+        #expect(!L10n.ToolCard.approvalControlLeaseTooltip.isEmpty)
+        #expect(!L10n.Transcript.turnReportApprovalControlLease.isEmpty)
     }
 
     @Test
@@ -299,6 +369,16 @@ struct AgentComputerUseToolTests {
         #expect(select.parameters.contains { $0.name == "selection_type" && !$0.required })
         #expect(state.parameters.contains { $0.name == "include_screenshot" && !$0.required })
         #expect(wait.parameters.contains { $0.name == "condition" && $0.required })
+        let waitSnapshot = try #require(
+            wait.parameters.first { $0.name == "snapshot_id" }
+        )
+        #expect(!waitSnapshot.required)
+        #expect(waitSnapshot.description.contains("Required whenever condition is ref_exists or value_contains"))
+        let waitRef = try #require(
+            wait.parameters.first { $0.name == "ref" }
+        )
+        #expect(waitRef.description.contains("prefix must match snapshot_id"))
+        #expect(wait.description.contains("title_contains does not require either one"))
     }
 
     @Test

@@ -19,6 +19,7 @@ nonisolated enum AgentSidePanelResizeMetrics {
 
 struct AgentModeView: View {
     @EnvironmentObject var appState: AppState
+    @ObservedObject private var computerUseCoordinator = AgentComputerUseCoordinator.shared
     @State private var sidebarWidth: CGFloat = 230
     /// Whether the leftmost session list is shown. Toggled from the chat
     /// header (rc24) so a user who lives in one long conversation can
@@ -263,15 +264,13 @@ struct AgentModeView: View {
             }
         }
         .overlay {
-            if appState.agentPrimaryDestination == .conversation {
-                AgentComputerUsePresentationLayer(
-                    activity: appState.activeRuntime?.latestComputerUseActivity,
-                    isActive: appState.activeRuntime?.isResponding == true,
-                    sessionID: appState.activeAgentSessionID,
-                    turnStartedAt: appState.activeRuntime?.turnStartedAt,
-                    thumbnailTrailingInset: activeSidePanel == nil ? 0 : CGFloat(panelWidth + 1)
-                )
-            }
+            // Computer Use is globally exclusive and may be owned by a
+            // background conversation. Keep its status visible when the user
+            // switches sessions or Agent destinations.
+            AgentComputerUsePresentationLayer(
+                coordinator: computerUseCoordinator,
+                thumbnailTrailingInset: activeSidePanel == nil ? 0 : CGFloat(panelWidth + 1)
+            )
         }
         .sheet(isPresented: $isSessionSearchPresented) {
             AgentSessionSearchView()
@@ -279,6 +278,7 @@ struct AgentModeView: View {
         }
         .onAppear {
             DesktopPetWindowManager.shared.attach(to: appState)
+            AgentComputerUseFloatingPanelController.shared.install()
             // Keep decoding the legacy enum case for persisted sessions, but
             // never resurrect the retired task-monitor rail.
             if appState.agentSidePanelKind == .backgroundTasks {

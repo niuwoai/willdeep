@@ -1135,7 +1135,7 @@ enum AgentToolRegistry {
         ),
         AgentToolDescriptor(
             name: "computer_use_request_permissions",
-            description: "Open macOS permission prompts for the separate WillDeep Computer Use helper. Ask only after the user has explicitly approved enabling desktop control. It may request Accessibility for app controls and Screen & System Audio Recording for visual state screenshots.",
+            description: "Open macOS permission prompts for the separate WillDeep Computer Use helper. Ask only after the user has explicitly approved enabling desktop control. It may request Accessibility for app controls and Screen & System Audio Recording for visual state screenshots. This one-off host operation never creates a reusable Computer Use session grant.",
             risk: .write,
             parameters: [
                 AgentToolParameter(name: "accessibility", type: .boolean, description: "Request Accessibility permission. Defaults to true.", required: false),
@@ -1184,12 +1184,13 @@ enum AgentToolRegistry {
         ),
         AgentToolDescriptor(
             name: "computer_use_wait_for",
-            description: "Wait read-only for a fresh Accessibility ref, element value, or window title condition. Returns a refreshed Accessibility tree; screenshot capture is opt-in.",
+            description: "Wait read-only for a fresh Accessibility ref, element value, or window title condition. When condition is ref_exists or value_contains, both ref and its matching snapshot_id are required. title_contains does not require either one. Returns a refreshed Accessibility tree; screenshot capture is opt-in.",
             risk: .read,
             parameters: [
                 AgentToolParameter(name: "app", type: .string, description: "Running app identifier or name. Omit when pid or ref is provided.", required: false),
                 AgentToolParameter(name: "pid", type: .integer, description: "Target process ID. Omit when app or ref is provided.", required: false),
-                AgentToolParameter(name: "ref", type: .string, description: "Fresh ref required by ref_exists and value_contains.", required: false),
+                AgentToolParameter(name: "ref", type: .string, description: "Fresh Accessibility ref required by ref_exists and value_contains. Its prefix must match snapshot_id.", required: false),
+                AgentToolParameter(name: "snapshot_id", type: .string, description: "Fresh snapshot_id matching ref. Required whenever condition is ref_exists or value_contains; omit for title_contains.", required: false),
                 AgentToolParameter(name: "condition", type: .string, description: "ref_exists, value_contains, or title_contains.", required: true),
                 AgentToolParameter(name: "expected", type: .string, description: "Expected substring for value_contains or title_contains.", required: false),
                 AgentToolParameter(name: "timeout_ms", type: .integer, description: "100 through 15000 milliseconds; defaults to 5000.", required: false),
@@ -1199,108 +1200,139 @@ enum AgentToolRegistry {
         ),
         AgentToolDescriptor(
             name: "computer_use_click",
-            description: "Click a fresh Accessibility element ref, or click coordinates in the most recent target-window screenshot. Requires approval. Use element refs first; use pixels only when the app exposes no usable Accessibility tree.",
+            description: "Click a fresh Accessibility element ref, or click screenshot-relative coordinates in the most recent target-window screenshot. Requires a plain-language purpose and consequence classification. After the first control action is approved, only ref-based ordinary none/navigation clicks may run automatically inside the current runtime-, turn-, and target-bound controlling lease. A coordinate-only pixel fallback always requires fresh per-action typed confirmation because it cannot prove the semantic target. The lease is never persisted or reused across tasks. Consequential actions require fresh confirmation, while authentication, CAPTCHA, credential entry, and financial transactions require private user takeover. Copy/Cut/Paste controls are prohibited. Use element refs first; use pixels only when the app exposes no usable Accessibility tree.",
             risk: .write,
             parameters: [
                 AgentToolParameter(name: "ref", type: .string, description: "Fresh element ref from computer_use_get_app_state. Omit for pixel fallback.", required: false),
                 AgentToolParameter(name: "pid", type: .integer, description: "Target process ID; optional when ref is supplied.", required: false),
+                AgentToolParameter(name: "snapshot_id", type: .string, description: "Fresh snapshot_id from computer_use_get_app_state. It must match the active snapshot and any supplied ref prefix.", required: true),
                 AgentToolParameter(name: "x", type: .integer, description: "Screenshot-relative x coordinate for pixel fallback.", required: false),
                 AgentToolParameter(name: "y", type: .integer, description: "Screenshot-relative y coordinate for pixel fallback.", required: false),
-                AgentToolParameter(name: "click_count", type: .integer, description: "1, 2, or 3. Defaults to 1.", required: false)
+                AgentToolParameter(name: "click_count", type: .integer, description: "1, 2, or 3. Defaults to 1.", required: false),
+                AgentToolParameter(name: "target_label", type: .string, description: "Visible label or concise description of the control being clicked.", required: true),
+                AgentToolParameter(name: "purpose", type: .string, description: "Why this click is needed, in one concise sentence.", required: true),
+                AgentToolParameter(name: "consequence", type: .string, description: "One of: none, navigation, authentication, captcha, credential_entry, send, delete, purchase, financial_transaction, legal_agreement, permission_change, account_change, sensitive_data_transfer.", required: true)
             ]
         ),
         AgentToolDescriptor(
             name: "computer_use_secondary_action",
-            description: "Open an element's context menu with Accessibility, falling back to a right-click at screenshot coordinates. Requires approval.",
+            description: "Open an element's context menu with Accessibility, falling back to a right-click at screenshot-relative coordinates. Only a fresh ref-based ordinary none/navigation action may run automatically inside the current approved controlling lease. A coordinate-only right-click always requires fresh per-action typed confirmation because it cannot prove the semantic target. Consequential actions still require confirmation. Requires purpose and consequence classification; Copy/Cut/Paste controls are prohibited.",
             risk: .write,
             parameters: [
                 AgentToolParameter(name: "ref", type: .string, description: "Fresh element ref; omit for pixel fallback.", required: false),
                 AgentToolParameter(name: "pid", type: .integer, description: "Target process ID; optional when ref is supplied.", required: false),
+                AgentToolParameter(name: "snapshot_id", type: .string, description: "Fresh snapshot_id. It must match the active snapshot and any supplied ref.", required: true),
                 AgentToolParameter(name: "x", type: .integer, description: "Screenshot-relative x coordinate for pixel fallback.", required: false),
-                AgentToolParameter(name: "y", type: .integer, description: "Screenshot-relative y coordinate for pixel fallback.", required: false)
+                AgentToolParameter(name: "y", type: .integer, description: "Screenshot-relative y coordinate for pixel fallback.", required: false),
+                AgentToolParameter(name: "target_label", type: .string, description: "Visible label or concise description of the target.", required: true),
+                AgentToolParameter(name: "purpose", type: .string, description: "Why the context menu is needed.", required: true),
+                AgentToolParameter(name: "consequence", type: .string, description: "One of the Computer Use consequence values documented on computer_use_click.", required: true)
             ]
         ),
         AgentToolDescriptor(
             name: "computer_use_scroll",
-            description: "Scroll the target macOS app after a fresh state snapshot. Requires approval.",
+            description: "Scroll the target macOS app after a fresh state snapshot. Ordinary scrolling runs automatically only while the same runtime and turn own the current approved controlling lease; the first control action and Strict mode still ask.",
             risk: .write,
             parameters: [
                 AgentToolParameter(name: "pid", type: .integer, description: "Target process ID.", required: true),
+                AgentToolParameter(name: "snapshot_id", type: .string, description: "Fresh snapshot_id for the target window.", required: true),
                 AgentToolParameter(name: "direction", type: .string, description: "up, down, left, or right.", required: true),
                 AgentToolParameter(name: "pages", type: .integer, description: "1 through 8 pages; defaults to 1.", required: false)
             ]
         ),
         AgentToolDescriptor(
             name: "computer_use_drag",
-            description: "Drag from one screenshot-relative coordinate to another in the target macOS app. Requires approval.",
+            description: "Drag from one screenshot-relative coordinate to another in the target macOS app. The current drag protocol is coordinate-only and cannot prove semantic source and destination controls, so every drag requires fresh per-action typed confirmation and is never auto-approved by a control lease. Requires purpose and consequence classification.",
             risk: .write,
             parameters: [
                 AgentToolParameter(name: "pid", type: .integer, description: "Target process ID.", required: true),
+                AgentToolParameter(name: "snapshot_id", type: .string, description: "Fresh snapshot_id for these screenshot-relative coordinates.", required: true),
                 AgentToolParameter(name: "from_x", type: .integer, description: "Screenshot-relative starting x coordinate.", required: true),
                 AgentToolParameter(name: "from_y", type: .integer, description: "Screenshot-relative starting y coordinate.", required: true),
                 AgentToolParameter(name: "to_x", type: .integer, description: "Screenshot-relative ending x coordinate.", required: true),
-                AgentToolParameter(name: "to_y", type: .integer, description: "Screenshot-relative ending y coordinate.", required: true)
+                AgentToolParameter(name: "to_y", type: .integer, description: "Screenshot-relative ending y coordinate.", required: true),
+                AgentToolParameter(name: "target_label", type: .string, description: "Concise description of what is being dragged and where.", required: true),
+                AgentToolParameter(name: "purpose", type: .string, description: "Why this drag is needed.", required: true),
+                AgentToolParameter(name: "consequence", type: .string, description: "One of the Computer Use consequence values documented on computer_use_click.", required: true)
             ]
         ),
         AgentToolDescriptor(
             name: "computer_use_type_text",
-            description: "Type text into the target macOS app. Requires approval because it can change external app state. Never use for passwords, API keys, one-time codes, or other sensitive data.",
+            description: "Type non-sensitive text into the target macOS app. Ordinary none/navigation text without control characters may run automatically only inside the current runtime-, turn-, and target-bound controlling lease with a fresh snapshot. Consequential text requires fresh confirmation. Never use for passwords, API keys, one-time codes, payment data, recovery material, or other sensitive data; ask the user to take over privately.",
             risk: .write,
             parameters: [
                 AgentToolParameter(name: "pid", type: .integer, description: "Target process ID.", required: true),
-                AgentToolParameter(name: "text", type: .string, description: "Non-sensitive text to type.", required: true)
+                AgentToolParameter(name: "snapshot_id", type: .string, description: "Fresh snapshot_id proving the target and focused window.", required: true),
+                AgentToolParameter(name: "text", type: .string, description: "Non-sensitive text to type.", required: true),
+                AgentToolParameter(name: "target_label", type: .string, description: "Visible label or concise description of the destination field.", required: true),
+                AgentToolParameter(name: "purpose", type: .string, description: "Why this text is needed.", required: true),
+                AgentToolParameter(name: "consequence", type: .string, description: "One of the Computer Use consequence values documented on computer_use_click.", required: true)
             ]
         ),
         AgentToolDescriptor(
             name: "computer_use_press_key",
-            description: "Send a keyboard key or modifier combination such as `cmd+s`, `tab`, or `return` to the target macOS app. Requires approval.",
+            description: "Send one keyboard key to the target macOS app. Tab, Shift-Tab, arrows, Escape, Home, End, PageUp, and PageDown may run automatically only inside the current approved controlling lease with a fresh snapshot and none/navigation consequence. Return/Enter, deletion keys, modifier combinations, and unknown keys require fresh typed confirmation. Requires purpose and consequence classification. Cmd-C, Cmd-X, and Cmd-V are prohibited because the clipboard is private external state.",
             risk: .write,
             parameters: [
                 AgentToolParameter(name: "pid", type: .integer, description: "Target process ID.", required: true),
-                AgentToolParameter(name: "key", type: .string, description: "Key or combination such as cmd+s, ctrl+shift+t, tab, return, escape, or left.", required: true)
+                AgentToolParameter(name: "snapshot_id", type: .string, description: "Fresh snapshot_id proving the target and focused window.", required: true),
+                AgentToolParameter(name: "key", type: .string, description: "Key or combination such as cmd+s, ctrl+shift+t, tab, return, escape, or left. cmd+c, cmd+x, and cmd+v are not allowed.", required: true),
+                AgentToolParameter(name: "target_label", type: .string, description: "Concise description of the focused control.", required: true),
+                AgentToolParameter(name: "purpose", type: .string, description: "Why this key is needed.", required: true),
+                AgentToolParameter(name: "consequence", type: .string, description: "One of the Computer Use consequence values documented on computer_use_click.", required: true)
             ]
         ),
         AgentToolDescriptor(
             name: "computer_use_set_value",
-            description: "Set a value through a fresh Accessibility element ref, for example a text field or slider. Requires approval and should not be used for secrets.",
+            description: "Set a value through a fresh Accessibility element ref, for example a text field or slider. An ordinary non-sensitive none/navigation value without control characters may run automatically only inside the current approved controlling lease. Consequential values require fresh confirmation. Requires purpose and consequence classification and must never be used for secrets.",
             risk: .write,
             parameters: [
                 AgentToolParameter(name: "ref", type: .string, description: "Fresh editable element ref.", required: true),
-                AgentToolParameter(name: "value", type: .string, description: "Non-sensitive value to set.", required: true)
+                AgentToolParameter(name: "snapshot_id", type: .string, description: "Fresh snapshot_id matching the editable element ref.", required: true),
+                AgentToolParameter(name: "value", type: .string, description: "Non-sensitive value to set.", required: true),
+                AgentToolParameter(name: "target_label", type: .string, description: "Visible label or concise description of the target control.", required: true),
+                AgentToolParameter(name: "purpose", type: .string, description: "Why this value change is needed.", required: true),
+                AgentToolParameter(name: "consequence", type: .string, description: "One of the Computer Use consequence values documented on computer_use_click.", required: true)
             ]
         ),
         AgentToolDescriptor(
             name: "computer_use_focus",
-            description: "Focus a fresh Accessibility element ref before typing or sending keys. Requires approval. Use this when a field or control is visible but not receiving keyboard input.",
+            description: "Focus a fresh Accessibility element ref before typing or sending keys. With a matching fresh snapshot, focus may run automatically only inside the current approved controlling lease. Use this when a field or control is visible but not receiving keyboard input.",
             risk: .write,
             parameters: [
-                AgentToolParameter(name: "ref", type: .string, description: "Fresh focusable element ref from computer_use_get_app_state.", required: true)
+                AgentToolParameter(name: "ref", type: .string, description: "Fresh focusable element ref from computer_use_get_app_state.", required: true),
+                AgentToolParameter(name: "snapshot_id", type: .string, description: "Fresh snapshot_id matching the focusable element ref.", required: true)
             ]
         ),
         AgentToolDescriptor(
             name: "computer_use_hover",
-            description: "Move the pointer to the center of a fresh Accessibility element ref, or to screenshot-relative coordinates. Useful for hover-only controls and tooltips. Requires approval.",
+            description: "Move the pointer to the center of a fresh Accessibility element ref, or to screenshot-relative coordinates. With complete fresh snapshot arguments, hover may run automatically only inside the current approved controlling lease. Useful for hover-only controls and tooltips.",
             risk: .write,
             parameters: [
                 AgentToolParameter(name: "ref", type: .string, description: "Fresh element ref. Omit for pixel fallback.", required: false),
                 AgentToolParameter(name: "pid", type: .integer, description: "Target process ID; optional when ref is supplied.", required: false),
+                AgentToolParameter(name: "snapshot_id", type: .string, description: "Fresh snapshot_id matching the active target and any supplied ref.", required: true),
                 AgentToolParameter(name: "x", type: .integer, description: "Screenshot-relative x coordinate for pixel fallback.", required: false),
                 AgentToolParameter(name: "y", type: .integer, description: "Screenshot-relative y coordinate for pixel fallback.", required: false)
             ]
         ),
         AgentToolDescriptor(
             name: "computer_use_select_text",
-            description: "Select matching text, or place the cursor before or after it, inside a fresh editable Accessibility element. Requires approval and never accepts secret text.",
+            description: "Select matching text, or place the cursor before or after it, inside a fresh editable Accessibility element. Ordinary non-sensitive selection without control characters may run automatically only inside the current approved controlling lease; consequential selection requires fresh confirmation. Requires purpose and consequence classification and never accepts secret text.",
             risk: .write,
             parameters: [
                 AgentToolParameter(name: "ref", type: .string, description: "Fresh editable element ref.", required: true),
+                AgentToolParameter(name: "snapshot_id", type: .string, description: "Fresh snapshot_id matching the editable element ref.", required: true),
                 AgentToolParameter(name: "text", type: .string, description: "Non-sensitive text to select.", required: true),
-                AgentToolParameter(name: "selection_type", type: .string, description: "text (default), cursor_before, or cursor_after.", required: false)
+                AgentToolParameter(name: "selection_type", type: .string, description: "text (default), cursor_before, or cursor_after.", required: false),
+                AgentToolParameter(name: "target_label", type: .string, description: "Visible label or concise description of the target control.", required: true),
+                AgentToolParameter(name: "purpose", type: .string, description: "Why this selection or cursor move is needed.", required: true),
+                AgentToolParameter(name: "consequence", type: .string, description: "One of the Computer Use consequence values documented on computer_use_click.", required: true)
             ]
         ),
         AgentToolDescriptor(
             name: "computer_use_restart_helper",
-            description: "Restart only the separate WillDeep Computer Use helper and then report its permissions. Use after the user changes macOS permissions; WillDeep itself does not need a restart.",
+            description: "Restart only the separate WillDeep Computer Use helper and then report its permissions. Use after the user changes macOS permissions; WillDeep itself does not need a restart. This one-off lifecycle operation never creates a reusable Computer Use session grant.",
             risk: .write,
             parameters: []
         ),
@@ -1821,8 +1853,20 @@ enum AgentToolRegistry {
             }
             return .read
         }
+        if descriptor.name == "terminal_send_command",
+           let command = arguments["command"]?.stringValue(),
+           AgentSandboxPolicy.commandRequiresSensitiveDesktopConfirmation(command) {
+            return .danger
+        }
         if descriptor.name == "lark_cli" {
             return AgentLarkCLI.risk(arguments: arguments["arguments"]?.stringArrayValue() ?? [])
+        }
+        if descriptor.name.hasPrefix("computer_use_") {
+            return AgentComputerUsePolicy.risk(
+                toolName: descriptor.name,
+                arguments: arguments,
+                declaredRisk: descriptor.risk
+            )
         }
         return descriptor.risk
     }

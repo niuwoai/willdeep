@@ -505,15 +505,16 @@ struct GeminiAdapter {
     ///   2. `role: assistant` becomes `role: "model"`. Tool calls on
     ///      that message turn into one `functionCall` part each,
     ///      sharing the message with any leading text.
-    ///   3. `role: tool` becomes a `user` message containing a single
-    ///      `functionResponse` part. The `name` comes from
+    ///   3. A contiguous `role: tool` run becomes one `user` message
+    ///      containing the corresponding `functionResponse` parts. The
+    ///      `name` comes from
     ///      `toolNameByID[message.toolCallID]`; if we lost the
     ///      mapping we fall back to a placeholder so the request
     ///      doesn't get rejected outright — the model can usually
     ///      reason about a `"unknown_tool"` reply, while a malformed
     ///      request bricks the whole turn.
     ///   4. `role: user` carries text + (optionally) image parts as
-    ///      `inline_data` blocks.
+    ///      `inlineData` blocks.
     nonisolated static func encodeRequestBody(
         messages: [AgentMessage],
         tools: [AgentToolDescriptor],
@@ -523,7 +524,9 @@ struct GeminiAdapter {
         var systemBlobs: [String] = []
         var contents: [[String: Any]] = []
 
-        for message in messages {
+        var pendingToolResponseParts: [[String: Any]] = []
+        var pendingToolVisualParts: [[String: Any]] = []
+        for (index, message) in messages.enumerated() {
             switch message.role {
             case .system:
                 // Local-only transcript markers (model-changed, auto-Plan
@@ -587,27 +590,47 @@ struct GeminiAdapter {
                 ])
 
             case .tool:
-                guard let id = message.toolCallID, !id.isEmpty else { continue }
-                let name = toolNameByID[id] ?? "unknown_tool"
-                // Gemini wants the tool response wrapped in an object —
-                // free-form so the model gets the full payload. We put
-                // the textual result under a `content` key; some
-                // examples also accept a free `result` key, but
-                // `content` is what the official samples use.
-                let responsePayload: [String: Any] = [
-                    "content": message.modelContent
-                ]
-                contents.append([
-                    "role": "user",
-                    "parts": [
-                        [
-                            "functionResponse": [
-                                "name": name,
-                                "response": responsePayload
-                            ]
-                        ]
+                if let id = message.toolCallID, !id.isEmpty {
+                    let name = toolNameByID[id] ?? "unknown_tool"
+                    // Gemini wants the tool response wrapped in an object —
+                    // free-form so the model gets the full payload. We put
+                    // the textual result under a `content` key; some
+                    // examples also accept a free `result` key, but
+                    // `content` is what the official samples use.
+                    let responsePayload: [String: Any] = [
+                        "content": message.modelContent
                     ]
-                ])
+                    pendingToolResponseParts.append([
+                        "functionResponse": [
+                            "name": name,
+                            "response": responsePayload
+                        ]
+                    ])
+                    if supportsImages, !message.images.isEmpty {
+                        pendingToolVisualParts.append([
+                            "text": "Visual output from function \(name):"
+                        ])
+                        for image in message.images {
+                            if let block = imagePart(from: image) {
+                                pendingToolVisualParts.append(block)
+                            }
+                        }
+                    }
+                }
+
+                // Gemini represents parallel function results as parts of one
+                // user turn. Append visual parts only after the complete
+                // functionResponse run so images cannot split the responses.
+                let nextIsTool = index + 1 < messages.count
+                    && messages[index + 1].role == .tool
+                if !nextIsTool, !pendingToolResponseParts.isEmpty {
+                    contents.append([
+                        "role": "user",
+                        "parts": pendingToolResponseParts + pendingToolVisualParts
+                    ])
+                    pendingToolResponseParts.removeAll(keepingCapacity: true)
+                    pendingToolVisualParts.removeAll(keepingCapacity: true)
+                }
 
             case .workflowReport, .widget, .scheduledTask:
                 // Workflow / widget / scheduled-task card 不发给模型，跳过。
@@ -638,7 +661,7 @@ struct GeminiAdapter {
 
     nonisolated private static func imagePart(from image: AgentImageAttachment) -> [String: Any]? {
         // Parse our existing `data:image/...;base64,...` URL into
-        // Gemini's `inline_data` shape. Same approach as the
+        // Gemini's `inlineData` shape. Same approach as the
         // Anthropic adapter — the in-app representation already has
         // base64 + media type, just rewrap.
         let dataURL = image.dataURL
@@ -654,8 +677,8 @@ struct GeminiAdapter {
             mediaType = "image/png"
         }
         return [
-            "inline_data": [
-                "mime_type": mediaType,
+            "inlineData": [
+                "mimeType": mediaType,
                 "data": base64
             ]
         ]

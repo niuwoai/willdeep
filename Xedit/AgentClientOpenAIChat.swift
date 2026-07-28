@@ -435,13 +435,63 @@ struct OpenAIChatAdapter {
             // all ignore it harmlessly when they already emit usage by
             // default, so it's safe to send unconditionally.
             "stream_options": ["include_usage": true],
-            "messages": providerMessages.map { encodeMessage($0, supportsImages: supportsImages) }
+            "messages": encodeMessages(
+                providerMessages,
+                supportsImages: supportsImages
+            )
         ]
         if !tools.isEmpty {
             body["tools"] = tools.map(encodeTool)
             body["tool_choice"] = "auto"
         }
         return try JSONSerialization.data(withJSONObject: body, options: [.sortedKeys])
+    }
+
+    /// Chat Completions does not accept `image_url` parts on a `tool`
+    /// message. Keep every tool reply as the required textual `tool` row,
+    /// then surface any visual result in a synthetic `user` multimodal row
+    /// immediately after the complete contiguous tool-output group. Waiting
+    /// for the group boundary is important for parallel tool calls: inserting
+    /// a user row before every expected tool output has arrived makes the
+    /// assistant tool-call turn invalid on strict OpenAI-compatible servers.
+    nonisolated private static func encodeMessages(
+        _ messages: [AgentMessage],
+        supportsImages: Bool
+    ) -> [[String: Any]] {
+        var encoded: [[String: Any]] = []
+        var pendingToolVisualParts: [[String: Any]] = []
+
+        for (index, message) in messages.enumerated() {
+            encoded.append(encodeMessage(message, supportsImages: supportsImages))
+
+            if supportsImages, message.role == .tool, !message.images.isEmpty {
+                let callID = message.toolCallID ?? "unknown"
+                pendingToolVisualParts.append([
+                    "type": "text",
+                    "text": "Visual output from tool call \(callID):"
+                ])
+                for image in message.images {
+                    pendingToolVisualParts.append([
+                        "type": "image_url",
+                        "image_url": ["url": image.dataURL]
+                    ])
+                }
+            }
+
+            let nextIsTool = index + 1 < messages.count
+                && messages[index + 1].role == .tool
+            if message.role == .tool,
+               !nextIsTool,
+               !pendingToolVisualParts.isEmpty {
+                encoded.append([
+                    "role": "user",
+                    "content": pendingToolVisualParts
+                ])
+                pendingToolVisualParts.removeAll(keepingCapacity: true)
+            }
+        }
+
+        return encoded
     }
 
     nonisolated static func providerReadyMessages(
@@ -513,6 +563,42 @@ struct OpenAIChatAdapter {
             index += 1
         }
 
+        return retainingRecentToolImages(
+            result,
+            supportsImages: supportsImages
+        )
+    }
+
+    /// Tool screenshots are working state, not unbounded prompt context.
+    ///
+    /// Keep a short visual trajectory so the model can compare the current UI
+    /// with recent states and recover from a mistaken click. Older Retina
+    /// captures would otherwise create unbounded bandwidth and memory growth.
+    /// Persisted chat attachments remain untouched; this trims only the
+    /// provider-bound copy.
+    nonisolated private static func retainingRecentToolImages(
+        _ messages: [AgentMessage],
+        supportsImages: Bool
+    ) -> [AgentMessage] {
+        let maximumRetainedToolImageGroups = 4
+        var toolGroupStarts: [Int] = []
+        if supportsImages {
+            for index in messages.indices
+            where messages[index].role == .tool
+                && (index == messages.startIndex
+                    || messages[messages.index(before: index)].role != .tool) {
+                toolGroupStarts.append(index)
+            }
+        }
+        let retainedGroupStart = toolGroupStarts
+            .suffix(maximumRetainedToolImageGroups)
+            .first ?? messages.endIndex
+
+        var result = messages
+        for index in result.indices
+        where result[index].role == .tool && index < retainedGroupStart {
+            result[index].images = []
+        }
         return result
     }
 

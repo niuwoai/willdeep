@@ -53,6 +53,11 @@ enum AgentCaptureTools {
             .lowercased()
         let device = arguments["device"]?.stringValue()?.trimmingCharacters(in: .whitespacesAndNewlines)
         let displayIndex = arguments["display"]?.intValue()
+        let localObservationGuard = try await AgentComputerUseExecution
+            .prepareLocalObservation(
+                toolName: "capture_screenshot",
+                arguments: arguments
+            )
 
         let rawURL: URL
         let label: String
@@ -77,52 +82,74 @@ enum AgentCaptureTools {
             )
         }
 
-        // Validate we actually got a non-empty image.
-        let size = (try? rawURL.resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? 0
-        guard size > 0 else {
-            throw AgentToolError.commandFailed(1, "screenshot command produced an empty file")
+        do {
+            // Validate we actually got a non-empty image.
+            let size = (try? rawURL.resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? 0
+            guard size > 0 else {
+                throw AgentToolError.commandFailed(1, "screenshot command produced an empty file")
+            }
+
+            let info = try ImageWorkflowSupport.loadImage(path: rawURL.path)
+            let originalWidth = info.image.width
+            let originalHeight = info.image.height
+
+            // Downscale for the wire; OCR runs on the full-res original.
+            let scaled = downscaled(info.image)
+            guard let jpegData = encodeJPEG(scaled, quality: jpegQuality) else {
+                throw AgentToolError.commandFailed(1, "failed to encode captured screenshot")
+            }
+            let ocrLines = (try? ImageWorkflowSupport.recognizeText(in: info.image)) ?? []
+            let ocrSection = ocrMarkdown(ocrLines)
+            let scaledNote = (scaled.width != originalWidth || scaled.height != originalHeight)
+                ? " (downscaled to \(scaled.width)x\(scaled.height) for the model)"
+                : ""
+
+            // Do not persist pixels captured across a private takeover boundary.
+            try await AgentComputerUseExecution.validateLocalObservation(
+                localObservationGuard
+            )
+            let persistedCapture = try persistCaptureArtifacts(
+                originalURL: rawURL,
+                previewData: jpegData
+            )
+            do {
+                // Close the final race between persistence and result return.
+                try await AgentComputerUseExecution.validateLocalObservation(
+                    localObservationGuard
+                )
+            } catch {
+                try? FileManager.default.removeItem(
+                    at: persistedCapture.originalURL.deletingLastPathComponent()
+                )
+                throw error
+            }
+            let attachment = persistedCapture.attachment
+
+            let payload = """
+            # Screenshot captured
+
+            Target: \(label)
+            Original size: \(originalWidth)x\(originalHeight)\(scaledNote)
+            Saved (full resolution): `\(persistedCapture.originalURL.path)`
+
+            The image is attached to this tool result. If you can see it, describe/act on it directly. If your model cannot see images, call `visual_qa_screenshot` on the saved path above for a VL description, or rely on the OCR below.
+
+            ## OCR text (local, best-effort)
+
+            \(ocrSection)
+            """
+
+            return AgentToolResult(
+                summary: "Captured \(label) (\(originalWidth)x\(originalHeight))",
+                payload: payload,
+                images: [attachment]
+            )
+        } catch {
+            if localObservationGuard != nil {
+                try? FileManager.default.removeItem(at: rawURL)
+            }
+            throw error
         }
-
-        let info = try ImageWorkflowSupport.loadImage(path: rawURL.path)
-        let originalWidth = info.image.width
-        let originalHeight = info.image.height
-
-        // Downscale for the wire; OCR runs on the full-res original.
-        let scaled = downscaled(info.image)
-        guard let jpegData = encodeJPEG(scaled, quality: jpegQuality) else {
-            throw AgentToolError.commandFailed(1, "failed to encode captured screenshot")
-        }
-        let persistedCapture = try persistCaptureArtifacts(
-            originalURL: rawURL,
-            previewData: jpegData
-        )
-        let attachment = persistedCapture.attachment
-
-        let ocrLines = (try? ImageWorkflowSupport.recognizeText(in: info.image)) ?? []
-        let ocrSection = ocrMarkdown(ocrLines)
-        let scaledNote = (scaled.width != originalWidth || scaled.height != originalHeight)
-            ? " (downscaled to \(scaled.width)x\(scaled.height) for the model)"
-            : ""
-
-        let payload = """
-        # Screenshot captured
-
-        Target: \(label)
-        Original size: \(originalWidth)x\(originalHeight)\(scaledNote)
-        Saved (full resolution): `\(persistedCapture.originalURL.path)`
-
-        The image is attached to this tool result. If you can see it, describe/act on it directly. If your model cannot see images, call `visual_qa_screenshot` on the saved path above for a VL description, or rely on the OCR below.
-
-        ## OCR text (local, best-effort)
-
-        \(ocrSection)
-        """
-
-        return AgentToolResult(
-            summary: "Captured \(label) (\(originalWidth)x\(originalHeight))",
-            payload: payload,
-            images: [attachment]
-        )
     }
 
     // MARK: - Capture backends
@@ -169,6 +196,22 @@ enum AgentCaptureTools {
             originalURL: persistedOriginalURL.standardizedFileURL,
             attachment: attachment
         )
+    }
+
+    static func discardPersistedCaptureArtifacts(in result: AgentToolResult) {
+        let capturesRoot = FileManager.default.homeDirectoryForCurrentUser
+            .appendingPathComponent(".willdeep/captures", isDirectory: true)
+            .standardizedFileURL
+        for image in result.images {
+            guard let filePath = image.filePath else { continue }
+            let imageURL = URL(fileURLWithPath: filePath)
+                .standardizedFileURL
+            let captureDirectory = imageURL.deletingLastPathComponent()
+            guard captureDirectory.deletingLastPathComponent() == capturesRoot else {
+                continue
+            }
+            try? FileManager.default.removeItem(at: captureDirectory)
+        }
     }
 
     private static func temporaryCaptureURL(target: String) throws -> URL {

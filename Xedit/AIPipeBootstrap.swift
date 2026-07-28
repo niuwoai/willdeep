@@ -26,6 +26,9 @@ final class WillDeepAppDelegate: NSObject, NSApplicationDelegate {
         // session that posted them (see AgentNotificationResponder).
         UNUserNotificationCenter.current().delegate = AgentNotificationResponder.shared
         MainActor.assumeIsolated {
+            // The Computer Use strip must outlive AgentModeView navigation so
+            // controls remain available while the target app is frontmost.
+            AgentComputerUseFloatingPanelController.shared.install()
             FnPushToTalkMonitor.shared.install()
             VoiceModelLifecycleController.shared.install()
             // 手机网关(互联网中继)开机自连并常驻：不再等用户打开设置页，

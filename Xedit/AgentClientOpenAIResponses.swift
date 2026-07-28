@@ -589,9 +589,8 @@ struct OpenAIResponsesAdapter {
                 }
                 if supportsImages {
                     for image in message.images {
-                        // Responses accepts the same `image_url`
-                        // shape Chat Completions does — pass the
-                        // existing data URL through verbatim.
+                        // Responses carries the image URL directly on
+                        // an `input_image` part.
                         content.append([
                             "type": "input_image",
                             "image_url": image.dataURL
@@ -633,10 +632,31 @@ struct OpenAIResponsesAdapter {
 
             case .tool:
                 guard let callID = message.toolCallID, !callID.isEmpty else { continue }
+                let output: Any
+                if supportsImages, !message.images.isEmpty {
+                    // Unlike Chat Completions, Responses explicitly allows a
+                    // function_call_output to contain text/image input parts.
+                    var outputContent: [[String: Any]] = []
+                    if !message.modelContent.isEmpty {
+                        outputContent.append([
+                            "type": "input_text",
+                            "text": message.modelContent
+                        ])
+                    }
+                    for image in message.images {
+                        outputContent.append([
+                            "type": "input_image",
+                            "image_url": image.dataURL
+                        ])
+                    }
+                    output = outputContent
+                } else {
+                    output = message.modelContent
+                }
                 input.append([
                     "type": "function_call_output",
                     "call_id": callID,
-                    "output": message.modelContent
+                    "output": output
                 ])
 
             case .workflowReport, .widget, .scheduledTask:

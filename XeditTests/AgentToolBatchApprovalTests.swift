@@ -5,6 +5,7 @@
 //  同回合预亮卡 + 全部允许 批量放行的资格过滤与决策派发。
 //
 
+import Combine
 import Foundation
 import Testing
 @testable import WillDeep
@@ -123,6 +124,40 @@ struct AgentToolBatchApprovalTests {
         #expect(runtime.toolCalls[0].status == .running)
         #expect(runtime.toolCalls[1].status == .pendingApproval)
         #expect(isApproved(runtime.pendingToolDecisions[second.id]))
+    }
+
+    @Test("非当前等待调用暂存决定时发布状态更新")
+    func parkedDecisionPublishesRuntimeChange() async throws {
+        let appState = AppState()
+        _ = appState.startNewAgentSession()
+        let runtime = try #require(appState.activeRuntime)
+
+        let first = makeCall()
+        let second = makeCall()
+        runtime.toolCalls = [first, second]
+
+        let waiterTask = Task { @MainActor in
+            await appState.awaitToolDecision(for: runtime, forCallID: first.id)
+        }
+        var spins = 0
+        while runtime.toolDecisionWaiterCallID != first.id, spins < 10_000 {
+            spins += 1
+            await Task.yield()
+        }
+        #expect(runtime.toolDecisionWaiterCallID == first.id)
+
+        var publishCount = 0
+        let observation = runtime.objectWillChange.sink { publishCount += 1 }
+
+        appState.approveAgentToolCall(id: second.id)
+
+        #expect(isApproved(runtime.pendingToolDecisions[second.id]))
+        #expect(runtime.toolCalls[1].status == .pendingApproval)
+        #expect(publishCount == 1)
+
+        appState.approveAgentToolCall(id: first.id)
+        _ = await waiterTask.value
+        withExtendedLifetime(observation) {}
     }
 
     @Test("按新增 Always-Allow 规则重评：同族待批卡全部放行")

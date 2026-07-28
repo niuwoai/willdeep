@@ -858,6 +858,49 @@ struct AgentToolsCoreTests {
         #expect(decision.requiresTypedConfirmation == false)
     }
 
+    @Test("tokenhub identifiers do not trigger credential confirmation")
+    func sandboxPolicyDoesNotTreatTokenhubIdentifiersAsCredentials() {
+        let root = URL(fileURLWithPath: "/tmp/willdeep-workspace")
+        let commands = [
+            "kubectl -n tokenhub get configmap tokenhub-config -o yaml | grep -i redis",
+            "kubectl -n tokenhub get pods -l app.kubernetes.io/name=tokenhub-redis -o wide",
+            "kubectl -n tokenhub get pods -l app.kubernetes.io/name=tokenhub --no-headers 2>/dev/null | head -5",
+        ]
+
+        for command in commands {
+            let decision = AgentSandboxPolicy.commandDecision(
+                command: command,
+                rootDirectory: root
+            )
+            #expect(
+                decision.requiresTypedConfirmation == false,
+                "Ordinary tokenhub identifiers must not be classified as credentials: \(command)"
+            )
+        }
+    }
+
+    @Test("real credential markers still require typed confirmation")
+    func sandboxPolicyKeepsTypedConfirmationForCredentialMarkers() {
+        let root = URL(fileURLWithPath: "/tmp/willdeep-workspace")
+        let commands = [
+            "kubectl get pods --token example",
+            "deploy --accessToken example",
+            "cat ~/.ssh/id_rsa",
+            "cat secrets/credentials",
+        ]
+
+        for command in commands {
+            let decision = AgentSandboxPolicy.commandDecision(
+                command: command,
+                rootDirectory: root
+            )
+            #expect(
+                decision.requiresTypedConfirmation == true,
+                "Sensitive credential markers must keep typed confirmation: \(command)"
+            )
+        }
+    }
+
     @Test
     func sandboxPolicyAutoApprovesShellWrappedEchoSentinel() {
         let root = URL(fileURLWithPath: "/tmp/willdeep-workspace")

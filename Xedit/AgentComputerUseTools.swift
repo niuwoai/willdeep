@@ -87,38 +87,82 @@ enum AgentComputerUseTools {
         return AgentToolResult(summary: "Listed running macOS apps", payload: jsonPayload(result))
     }
 
-    static func launchApp(arguments: [String: AgentJSONValue]) async throws -> AgentToolResult {
-        let result = try await AgentComputerUseBridge.shared.invoke(action: "launch_app", arguments: arguments)
+    static func launchApp(
+        arguments: [String: AgentJSONValue],
+        controlLeaseID: String? = nil
+    ) async throws -> AgentToolResult {
+        let result = try await AgentComputerUseBridge.shared.invoke(
+            action: "launch_app",
+            arguments: arguments,
+            controlLeaseID: controlLeaseID
+        )
         return AgentToolResult(summary: "Launched macOS app", payload: jsonPayload(result))
     }
 
-    static func activateApp(arguments: [String: AgentJSONValue]) async throws -> AgentToolResult {
-        let result = try await AgentComputerUseBridge.shared.invoke(action: "activate_app", arguments: arguments)
+    static func activateApp(
+        arguments: [String: AgentJSONValue],
+        controlLeaseID: String? = nil
+    ) async throws -> AgentToolResult {
+        let result = try await AgentComputerUseBridge.shared.invoke(
+            action: "activate_app",
+            arguments: arguments,
+            controlLeaseID: controlLeaseID
+        )
         return AgentToolResult(summary: "Activated macOS app", payload: jsonPayload(result))
     }
 
-    static func getAppState(arguments: [String: AgentJSONValue]) async throws -> AgentToolResult {
-        let result = try await AgentComputerUseBridge.shared.invoke(action: "get_app_state", arguments: arguments)
+    static func getAppState(
+        arguments: [String: AgentJSONValue],
+        controlLeaseID: String? = nil
+    ) async throws -> AgentToolResult {
+        let result = try await AgentComputerUseBridge.shared.invoke(
+            action: "get_app_state",
+            arguments: arguments,
+            controlLeaseID: controlLeaseID
+        )
         return try stateResult(summary: "Captured macOS app state", result: result)
     }
 
-    static func inspectApp(arguments: [String: AgentJSONValue]) async throws -> AgentToolResult {
+    static func inspectApp(
+        arguments: [String: AgentJSONValue],
+        controlLeaseID: String? = nil
+    ) async throws -> AgentToolResult {
         var safeArguments = arguments
         safeArguments["include_screenshot"] = .bool(false)
-        let result = try await AgentComputerUseBridge.shared.invoke(action: "get_app_state", arguments: safeArguments)
+        let result = try await AgentComputerUseBridge.shared.invoke(
+            action: "get_app_state",
+            arguments: safeArguments,
+            controlLeaseID: controlLeaseID
+        )
         return try stateResult(summary: "Inspected macOS app Accessibility state", result: result)
     }
 
-    static func waitFor(arguments: [String: AgentJSONValue]) async throws -> AgentToolResult {
-        let result = try await AgentComputerUseBridge.shared.invoke(action: "wait_for", arguments: arguments)
+    static func waitFor(
+        arguments: [String: AgentJSONValue],
+        controlLeaseID: String? = nil
+    ) async throws -> AgentToolResult {
+        let result = try await AgentComputerUseBridge.shared.invoke(
+            action: "wait_for",
+            arguments: arguments,
+            controlLeaseID: controlLeaseID
+        )
         return try stateResult(summary: "Waited for macOS app state", result: result)
     }
 
-    static func perform(action: String, arguments: [String: AgentJSONValue]) async throws -> AgentToolResult {
-        if action == "type_text" || action == "set_value" || action == "select_text" {
-            try rejectSensitiveText(arguments)
-        }
-        let result = try await AgentComputerUseBridge.shared.invoke(action: action, arguments: arguments)
+    static func perform(
+        action: String,
+        arguments: [String: AgentJSONValue],
+        controlLeaseID: String? = nil
+    ) async throws -> AgentToolResult {
+        try AgentComputerUsePolicy.validateBeforeHelper(
+            action: action,
+            arguments: arguments
+        )
+        let result = try await AgentComputerUseBridge.shared.invoke(
+            action: action,
+            arguments: arguments,
+            controlLeaseID: controlLeaseID
+        )
         return try stateResult(summary: "Performed computer-use \(action)", result: result)
     }
 
@@ -132,7 +176,7 @@ enum AgentComputerUseTools {
     private static func stateResult(summary: String, result: [String: Any]) throws -> AgentToolResult {
         let image = try result["screenshot"].flatMap { $0 as? [String: Any] }.flatMap(attachment)
         var payload = jsonPayload(result)
-        payload += "\n\nCoordinate rule: element refs are valid only for this fresh state. Pixel x/y values are relative to the returned screenshot unless coordinate_space is explicitly `screen`. A null screenshot means this was an Accessibility-only inspection and pixel fallback is intentionally unavailable."
+        payload += "\n\nCoordinate rule: every action must include this state's snapshot_id. Element refs are valid only for this fresh state and must share its snapshot prefix. Pixel x/y values are always relative to the returned target-window screenshot; screen-space coordinates are not accepted. A null screenshot means this was an Accessibility-only inspection and pixel fallback is intentionally unavailable."
         return AgentToolResult(summary: summary, payload: payload, images: image.map { [$0] } ?? [])
     }
 
@@ -169,13 +213,4 @@ enum AgentComputerUseTools {
         return text
     }
 
-    private static func rejectSensitiveText(_ arguments: [String: AgentJSONValue]) throws {
-        let candidate = (arguments["text"] ?? arguments["value"])?.stringValue() ?? ""
-        let lowered = candidate.lowercased()
-        let prefixes = ["sk-", "ghp_", "github_pat_", "akia", "bearer ", "xoxb-", "xoxp-", "-----begin"]
-        let looksLikeOneTimeCode = candidate.range(of: "^\\d{6,8}$", options: .regularExpression) != nil
-        if prefixes.contains(where: lowered.hasPrefix) || looksLikeOneTimeCode {
-            throw AgentToolError.invalidArgument("Computer Use refuses to type a likely secret or one-time code. Ask the user to take over.")
-        }
-    }
 }

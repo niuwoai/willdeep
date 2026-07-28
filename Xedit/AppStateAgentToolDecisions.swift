@@ -173,6 +173,12 @@ extension AppState {
         arguments: [String: AgentJSONValue],
         risk: AgentToolRisk
     ) -> Bool {
+        // Legacy builds could persist the over-broad `computer_use:*`
+        // signature. Never honor it: native app control must stay tied to the
+        // current visible control lease and conversation.
+        guard !toolName.hasPrefix("computer_use_") else {
+            return false
+        }
         guard risk == .write,
               !agentAlwaysAllowedCommands.isEmpty else {
             return false
@@ -193,7 +199,8 @@ extension AppState {
         rootDirectory: URL?,
         interactionMode: AgentInteractionMode = .normal,
         approvalMode: AgentApprovalMode = .smart,
-        conversationAllowedToolSignatures: Set<String> = []
+        conversationAllowedToolSignatures: Set<String> = [],
+        computerUseOwner: AgentComputerUseOwner? = nil
     ) async -> AgentToolApprovalSource? {
         guard risk == .write else { return nil }
 
@@ -223,6 +230,26 @@ extension AppState {
         if interactionMode == .plan,
            Self.planModeCanAutoApprove(toolName: toolName, arguments: arguments) {
             return .staticAllowlist
+        }
+
+        // Computer Use never participates in the generic Goal, conversation,
+        // durable, or workspace auto-approval paths below. A small reversible
+        // action may run only while the same runtime and turn own a controlling
+        // target-bound lease. Strict mode and a read-only observing lease both
+        // require an explicit user decision.
+        if toolName.hasPrefix("computer_use_") {
+            guard approvalMode != .requestEveryTime,
+                  let source = Self.computerUseLeaseApprovalSource(
+                      toolName: toolName,
+                      arguments: arguments,
+                      interactionMode: interactionMode,
+                      approvalMode: approvalMode,
+                      owner: computerUseOwner,
+                      controlState: AgentComputerUseCoordinator.shared.state
+                  ) else {
+                return nil
+            }
+            return source
         }
 
         if let signature = AgentToolAuthorization.interactiveSurfaceSignature(
@@ -437,6 +464,47 @@ extension AppState {
         return await safetyJudgeApproval(toolName: toolName, command: command)
     }
 
+    nonisolated static func canAutoApproveComputerUse(
+        toolName: String,
+        arguments: [String: AgentJSONValue],
+        interactionMode: AgentInteractionMode,
+        approvalMode: AgentApprovalMode,
+        owner: AgentComputerUseOwner?,
+        controlState: AgentComputerUseControlState
+    ) -> Bool {
+        guard approvalMode != .requestEveryTime,
+              interactionMode != .plan else {
+            return false
+        }
+        return AgentComputerUsePolicy.canAutoApproveInOperationalLease(
+            toolName: toolName,
+            arguments: arguments,
+            owner: owner,
+            controlState: controlState
+        )
+    }
+
+    nonisolated static func computerUseLeaseApprovalSource(
+        toolName: String,
+        arguments: [String: AgentJSONValue],
+        interactionMode: AgentInteractionMode,
+        approvalMode: AgentApprovalMode,
+        owner: AgentComputerUseOwner?,
+        controlState: AgentComputerUseControlState
+    ) -> AgentToolApprovalSource? {
+        guard canAutoApproveComputerUse(
+            toolName: toolName,
+            arguments: arguments,
+            interactionMode: interactionMode,
+            approvalMode: approvalMode,
+            owner: owner,
+            controlState: controlState
+        ) else {
+            return nil
+        }
+        return .controlLease
+    }
+
     // MARK: - Safety judge (LLM) with cached operator history
 
     /// TTL for the cached few-shot history block fed to the safety judge.
@@ -626,7 +694,8 @@ extension AppState {
             return .readOnly
         }
         switch approvalSource {
-        case .workspaceAccess, .goalMode, .alwaysAllowList, .trustedServer, .user:
+        case .workspaceAccess, .goalMode, .alwaysAllowList, .trustedServer,
+             .user, .controlLease:
             return sandboxDecision.mode == .workspaceWriteNetwork ? .workspaceWriteNetwork : .workspaceWrite
         case .escalated:
             return .escalated
@@ -863,7 +932,8 @@ extension AppState {
                     rootDirectory: rootDirectory,
                     interactionMode: runtime.interactionMode,
                     approvalMode: runtime.approvalMode,
-                    conversationAllowedToolSignatures: runtime.conversationAllowedToolSignatures
+                    conversationAllowedToolSignatures: runtime.conversationAllowedToolSignatures,
+                    computerUseOwner: runtime.computerUseOwner
                 )
                 guard let source,
                       requiringApprovalMode == nil || runtime.approvalMode == requiringApprovalMode,

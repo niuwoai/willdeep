@@ -1,6 +1,6 @@
 # WillDeep Product Overview
 
-> Last updated: 2026-07-28 | Current version: v1.210.0-rc19
+> Last updated: 2026-07-28 | Current version: v1.211.0-rc2
 
 ## Positioning
 
@@ -12,6 +12,8 @@ WillDeep is configured for non-App-Store distribution without App Sandbox so it 
 
 ## 架构概览
 
+- **多命令审批即时回执（1.211.0-rc2）** —— 同一轮预亮多条命令时，用户可以先批准尚未轮到执行的卡片；暂存决定会立即发布到界面并将按钮替换为“已提交决定”，不再像点击失效。敏感参数检测改为凭据词边界匹配，`tokenhub`、`tokenhub-redis` 等普通业务标识不会再因包含 `token` 子串而被错误升级为高风险确认；真实的 `--token`、secret/credential 路径及密钥目录仍保持强制确认。
+- **Computer Use 全局控制会话（1.211.0-rc1）** —— WillDeep 的原生 macOS Computer Use 已升级为窗口截图与 Accessibility 双通道控制：每个动作绑定 runtime、turn、目标进程、目标窗口、独占 lease 和 fresh snapshot，主窗口状态卡与跨 App 悬浮条提供暂停、用户接管、恢复和停止。真实键鼠输入会立即让权并废弃在途结果，接管期间禁止本机截图；登录、验证码、凭据与支付由用户私下完成。Host 与 Helper 双层拒绝控制 WillDeep 自身和终端应用。只读观察不会自动取得控制权；用户批准首个普通写动作后，普通非敏感输入、导航键、滚动、聚焦、悬停及带 fresh Accessibility ref 的 `none/navigation` 点击才可在当前 runtime、turn 与目标强绑定的 controlling lease 内连续执行。无法证明语义目标的坐标点击、坐标右键和当前仅支持坐标的拖拽始终逐动作确认；严格模式同样逐次询问，lease 不进入会话级或持久授权。高影响动作继续逐次确认，剪贴板操作永久拒绝。敏感截图遮罩独立完整扫描当前 AXWindow 子树，任何读取异常、结构畸形、超时或超预算都会失败关闭为 `screenshot = null`，不会保存不确定的像素。动作后的截图会以 OpenAI Chat、OpenAI Responses 与 Gemini 各自支持的多模态工具结果格式回送视觉模型；provider 上下文只携带最近 4 组工具结果中的截图，完整附件继续保留在本机会话记录。
 - **截图结果可靠显示（1.210.0-rc19）** —— 工具结果经过统一敏感信息脱敏时会完整保留图片附件；`capture_screenshot`、浏览器截图及其他产图工具不再出现“提示已附图但聊天记录没有图片”的数据折损。
 - **委托终端命令被 pty 截断修复（1.210.0-rc18）** —— 分派给 Claude Code / Codex 等外部 CLI 的任务重新通过私有 runner 脚本执行，可见终端只接收一行 `/bin/sh <runner>` 调用；超长中文提示词不再因交互式 shell 回显撑爆 tty 输入队列而被丢字节，也不会让终端停在续行提示符下静默空等。真实命令仍会在执行前回显到终端供用户审阅。
 - **Git 根目录检测内存失控修复（1.210.0-rc17）** —— 无 Git 工作区的仓库根目录探测会在文件系统根目录稳定终止；兼容 Foundation 将 `/` 的父路径暂时表示为 `/..` 的行为，避免路径字符串无限增长、主线程卡死并耗尽内存。

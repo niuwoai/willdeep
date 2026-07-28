@@ -410,6 +410,21 @@
     "computer-use-preview.open" : {
       "localizations" : { "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "打开最新电脑操作截图" } } }
     },
+    "computer-use-preview.action.pause" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Pause" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "暂停" } } } },
+    "computer-use-preview.action.resume" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Resume" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "继续" } } } },
+    "computer-use-preview.action.stop" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Stop" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "停止" } } } },
+    "computer-use-preview.action.take-over" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "I'll take over" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "我来操作" } } } },
+    "computer-use-preview.owning-task" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Task: %@" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "任务：%@" } } } },
+    "computer-use-preview.state.controlling" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Controlling" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "正在控制" } } } },
+    "computer-use-preview.state.failed" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Computer Use failed" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "电脑操作失败" } } } },
+    "computer-use-preview.state.idle" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Computer Use idle" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "电脑操作空闲" } } } },
+    "computer-use-preview.state.observing" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Observing" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "正在观察" } } } },
+    "computer-use-preview.state.paused" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Computer Use paused" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "电脑操作已暂停" } } } },
+    "computer-use-preview.state.stopping" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Stopping Computer Use" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "正在停止电脑操作" } } } },
+    "computer-use-preview.state.user-takeover" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "You are in control" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "由你操作" } } } },
+    "computer-use-preview.status-accessibility" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Computer Use control status" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "电脑操作控制状态" } } } },
+    "computer-use-preview.stopping-detail" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Finishing the current action and releasing control…" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "正在结束当前操作并释放控制…" } } } },
+    "computer-use-preview.unknown-target" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Unknown application" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "未知应用" } } } },
     "consultation.button-help" : {
       "localizations" : { "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "打开多专家会诊或圆桌群聊" } } }
     },
@@ -31825,6 +31840,23 @@
         }
       }
     },
+    "tool-card.allow-computer-use-session" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Allow This Control Session"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "允许本次控制会话"
+          }
+        }
+      }
+    },
     "tool-card.always-allow" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -31838,6 +31870,40 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "始终允许"
+          }
+        }
+      }
+    },
+    "tool-card.approval.control-lease.badge" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "CONTROL"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "控制租约"
+          }
+        }
+      }
+    },
+    "tool-card.approval.control-lease.tooltip" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Auto-approved by the current runtime-, turn-, and target-bound Computer Use controlling lease."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "由当前运行时、回合与目标强绑定的电脑控制短期租约自动批准。"
           }
         }
       }
@@ -34525,6 +34591,23 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "始终允许"
+          }
+        }
+      }
+    },
+    "transcript.turn-report.approval.control-lease" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Control lease"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "控制租约"
           }
         }
       }
