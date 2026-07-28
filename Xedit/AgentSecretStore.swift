@@ -222,7 +222,13 @@ enum AgentSecretStore {
                     url: redact(reference.url, secretValues: secretValues),
                     toolName: reference.toolName
                 )
-            }
+            },
+            // Image metadata never contains the resolved command secrets that
+            // this pass is responsible for scrubbing. Preserve the attachments
+            // when rebuilding the value; otherwise every image-producing tool
+            // reports success while its screenshot silently disappears before
+            // the tool message is persisted or rendered.
+            images: result.images
         )
     }
 

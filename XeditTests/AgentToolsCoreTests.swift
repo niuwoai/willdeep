@@ -437,6 +437,30 @@ struct AgentToolsCoreTests {
     }
 
     @Test
+    func toolResultRedactionPreservesImageAttachments() {
+        let image = AgentImageAttachment(
+            mimeType: "image/jpeg",
+            filePath: "/tmp/willdeep-capture-preview.jpg",
+            byteCount: 123,
+            source: .capture
+        )
+        let result = AgentToolResult(
+            summary: "captured super-secret",
+            payload: "Saved super-secret",
+            images: [image]
+        )
+
+        let redacted = AgentSecretStore.redact(
+            result,
+            secretValues: ["super-secret"]
+        )
+
+        #expect(redacted.summary == "captured [secret]")
+        #expect(redacted.payload == "Saved [secret]")
+        #expect(redacted.images == [image])
+    }
+
+    @Test
     func agentSecretAliasesAreNormalizedAndUpdateExistingValues() throws {
         _ = AgentCredentialStore._setTestKeychainServiceOverride("agent-secret-alias-\(UUID().uuidString)")
         defer {
