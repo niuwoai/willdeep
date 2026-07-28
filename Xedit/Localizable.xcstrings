@@ -3003,6 +3003,23 @@
         }
       }
     },
+    "agent-patch-error.duplicate-target" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The same file appears more than once in this patch batch: %@"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "同一文件在这批 patch 中重复出现：%@"
+          }
+        }
+      }
+    },
     "agent-patch.already-applied" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -3084,6 +3101,23 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "patch 路径超出当前工作目录：%@"
+          }
+        }
+      }
+    },
+    "agent-patch-error.rollback-failed" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Applying the patch failed, and WillDeep could not fully restore: %@"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "应用 patch 失败，WillDeep 也未能完整恢复：%@"
           }
         }
       }

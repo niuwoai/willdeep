@@ -1926,7 +1926,9 @@ enum AgentPatchError: LocalizedError {
     case missingFile(String)
     case hunkDidNotMatch(String)
     case targetAlreadyExists(String)
+    case duplicateTarget(String)
     case writeVerificationFailed(String)
+    case rollbackFailed(String)
 
     var errorDescription: String? {
         switch self {
@@ -1944,8 +1946,12 @@ enum AgentPatchError: LocalizedError {
             return L10n.AgentPatchError.hunkDidNotMatch(path)
         case .targetAlreadyExists(let path):
             return L10n.AgentPatchError.targetAlreadyExists(path)
+        case .duplicateTarget(let path):
+            return L10n.AgentPatchError.duplicateTarget(path)
         case .writeVerificationFailed(let path):
             return L10n.AgentPatchError.writeVerificationFailed(path)
+        case .rollbackFailed(let path):
+            return L10n.AgentPatchError.rollbackFailed(path)
         }
     }
 }

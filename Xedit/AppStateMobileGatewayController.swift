@@ -51,13 +51,21 @@ extension AppState: AgentMobileGatewayControlling {
             runtime.patchProposals
                 .filter { $0.status == .pending }
                 .map { proposal in
-                    AgentMobileGatewayPatchSnapshot(
+                    let batchCount = runtime.patchProposals.filter {
+                        $0.messageID == proposal.messageID
+                    }.count
+                    return AgentMobileGatewayPatchSnapshot(
                         id: proposal.id,
                         title: proposal.title,
                         summary: "Patch proposal",
                         path: Self.mobileGatewayPatchPath(from: proposal.diff),
                         stats: Self.mobileGatewayPatchStats(from: proposal.diff),
-                        sessionID: runtime.id
+                        sessionID: runtime.id,
+                        batchID: proposal.messageID,
+                        batchCount: batchCount,
+                        batchCollecting: runtime.collectingPatchReviewMessageIDs.contains(
+                            proposal.messageID
+                        )
                     )
                 }
         }
@@ -625,15 +633,38 @@ extension AppState: AgentMobileGatewayControlling {
                 throw AgentMobileGatewayCommandError.sessionNotFound(sessionID)
             }
         }
-        guard agentPatchProposals.contains(where: { $0.id == patchID && $0.status == .pending }) else {
+        guard let proposal = agentPatchProposals.first(where: {
+            $0.id == patchID && $0.status == .pending
+        }) else {
             throw AgentMobileGatewayCommandError.patchNotFound(patchID)
         }
-        if approved {
-            applyAgentPatchProposal(id: patchID)
-        } else {
-            rejectAgentPatchProposal(id: patchID)
+        if activeRuntime?.collectingPatchReviewMessageIDs.contains(proposal.messageID) == true {
+            throw AgentMobileGatewayCommandError.patchBatchCollecting(patchID)
         }
-        return .ok(sessionID: activeAgentSessionID, message: approved ? "Patch approved" : "Patch rejected")
+        let pendingBatchCount = agentPatchProposals.filter {
+            $0.messageID == proposal.messageID && $0.status == .pending
+        }.count
+        if approved {
+            applyAgentPatchProposals(forMessageID: proposal.messageID)
+            guard let finalProposal = agentPatchProposals.first(where: {
+                $0.id == patchID
+            }) else {
+                throw AgentMobileGatewayCommandError.patchNotFound(patchID)
+            }
+            guard finalProposal.status == .applied else {
+                throw AgentMobileGatewayCommandError.patchApplyFailed(
+                    patchID,
+                    finalProposal.statusMessage ?? "unknown error"
+                )
+            }
+        } else {
+            rejectAgentPatchProposals(forMessageID: proposal.messageID)
+        }
+        let scope = pendingBatchCount > 1 ? "Patch batch" : "Patch"
+        return .ok(
+            sessionID: activeAgentSessionID,
+            message: approved ? "\(scope) approved" : "\(scope) rejected"
+        )
     }
 
     func mobileGatewayDiff(

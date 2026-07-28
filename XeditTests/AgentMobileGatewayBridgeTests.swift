@@ -213,6 +213,7 @@ struct AgentMobileGatewayBridgeTests {
     func snapshotIncludesPendingToolAndPatchApprovals() {
         let session = AgentSession(title: "Approval session")
         let patchID = UUID()
+        let patchBatchID = UUID()
         let jobID = UUID()
         let controller = FakeMobileGatewayController(sessions: [session], activeSessionID: session.id)
         controller.pendingTools = [
@@ -233,7 +234,10 @@ struct AgentMobileGatewayBridgeTests {
                 summary: "Patch proposal",
                 path: "Sources/App.swift",
                 stats: "+2 -1",
-                sessionID: session.id
+                sessionID: session.id,
+                batchID: patchBatchID,
+                batchCount: 3,
+                batchCollecting: true
             )
         ]
         controller.jobs = [
@@ -317,6 +321,9 @@ struct AgentMobileGatewayBridgeTests {
         }
         #expect(patch["id"]?.stringValue == patchID.uuidString)
         #expect(patch["path"]?.stringValue == "Sources/App.swift")
+        #expect(patch["batch_id"]?.stringValue == patchBatchID.uuidString)
+        #expect(patch["batch_count"]?.intValue == 3)
+        #expect(patch["batch_collecting"]?.boolValue == true)
 
         guard case .array(let jobs)? = response.payload["jobs"],
               case .object(let job)? = jobs.first else {
@@ -752,6 +759,21 @@ struct AgentMobileGatewayBridgeTests {
             """
         )
         appState.agentPatchProposals = [applyProposal]
+        appState.activeRuntime?.collectingPatchReviewMessageIDs.insert(
+            applyProposal.messageID
+        )
+
+        #expect(throws: AgentMobileGatewayCommandError.patchBatchCollecting(applyProposal.id)) {
+            try appState.mobileGatewayDecidePatch(
+                sessionID: session.id,
+                patchID: applyProposal.id,
+                approved: true
+            )
+        }
+        #expect(appState.agentPatchProposals.first?.status == .pending)
+        appState.activeRuntime?.collectingPatchReviewMessageIDs.remove(
+            applyProposal.messageID
+        )
 
         let applyResult = try appState.mobileGatewayDecidePatch(
             sessionID: session.id,
@@ -786,6 +808,101 @@ struct AgentMobileGatewayBridgeTests {
         #expect(rejectResult.sessionID == session.id)
         #expect(appState.agentPatchProposals.first?.status == .rejected)
         #expect(try String(contentsOf: readme, encoding: .utf8) == "hello from Android\n")
+    }
+
+    @Test @MainActor
+    func appStateMobilePatchDecisionAppliesWholeBatchAtomically() throws {
+        let workspace = FileManager.default.temporaryDirectory
+            .appendingPathComponent("willdeep_mobile_gateway_patch_batch_\(UUID().uuidString)")
+        let firstURL = workspace.appendingPathComponent("First.swift")
+        let secondURL = workspace.appendingPathComponent("Second.swift")
+        try FileManager.default.createDirectory(at: workspace, withIntermediateDirectories: true)
+        try "let first = 1\n".write(to: firstURL, atomically: true, encoding: .utf8)
+        try "let second = 1\n".write(to: secondURL, atomically: true, encoding: .utf8)
+        defer { try? FileManager.default.removeItem(at: workspace) }
+
+        let appState = AppState(rootDirectory: workspace)
+        let session = appState.startNewAgentSession()
+        defer { deleteSessionsCreatedByTest([session.id]) }
+
+        let staleBatchID = UUID()
+        let validFirst = AgentPatchProposal(
+            messageID: staleBatchID,
+            title: "First",
+            diff: """
+            --- a/First.swift
+            +++ b/First.swift
+            @@ -1 +1 @@
+            -let first = 1
+            +let first = 2
+            """
+        )
+        let staleSecond = AgentPatchProposal(
+            messageID: staleBatchID,
+            title: "Second",
+            diff: """
+            --- a/Second.swift
+            +++ b/Second.swift
+            @@ -1 +1 @@
+            -let second = 999
+            +let second = 2
+            """
+        )
+        appState.agentPatchProposals = [validFirst, staleSecond]
+
+        let snapshots = appState.mobileGatewayPendingPatchProposals
+        #expect(snapshots.count == 2)
+        #expect(snapshots.allSatisfy { $0.batchID == staleBatchID })
+        #expect(snapshots.allSatisfy { $0.batchCount == 2 })
+
+        var failedPatchID: UUID?
+        var failureMessage = ""
+        do {
+            _ = try appState.mobileGatewayDecidePatch(
+                sessionID: session.id,
+                patchID: validFirst.id,
+                approved: true
+            )
+            Issue.record("Expected the stale batch to fail")
+        } catch AgentMobileGatewayCommandError.patchApplyFailed(let id, let message) {
+            failedPatchID = id
+            failureMessage = message
+        }
+        #expect(failedPatchID == validFirst.id)
+        #expect(!failureMessage.isEmpty)
+        #expect(appState.agentPatchProposals.allSatisfy { $0.status == .failed })
+        #expect(try String(contentsOf: firstURL, encoding: .utf8) == "let first = 1\n")
+        #expect(try String(contentsOf: secondURL, encoding: .utf8) == "let second = 1\n")
+
+        let validBatchID = UUID()
+        let first = AgentPatchProposal(
+            messageID: validBatchID,
+            title: "First",
+            diff: validFirst.diff
+        )
+        let second = AgentPatchProposal(
+            messageID: validBatchID,
+            title: "Second",
+            diff: """
+            --- a/Second.swift
+            +++ b/Second.swift
+            @@ -1 +1 @@
+            -let second = 1
+            +let second = 2
+            """
+        )
+        appState.agentPatchProposals = [first, second]
+
+        let result = try appState.mobileGatewayDecidePatch(
+            sessionID: session.id,
+            patchID: first.id,
+            approved: true
+        )
+
+        #expect(result.message == "Patch batch approved")
+        #expect(appState.agentPatchProposals.allSatisfy { $0.status == .applied })
+        #expect(try String(contentsOf: firstURL, encoding: .utf8) == "let first = 2\n")
+        #expect(try String(contentsOf: secondURL, encoding: .utf8) == "let second = 2\n")
     }
 
     @Test @MainActor

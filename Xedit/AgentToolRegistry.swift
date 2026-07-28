@@ -187,7 +187,7 @@ enum AgentToolRegistry {
         ),
         AgentToolDescriptor(
             name: "create_file",
-            description: "Create a BRAND-NEW file. This is the ONLY correct way to make a new file — do NOT use edit_file or apply_patch for creation. Pass the workspace-relative path and the full file content directly; no diff to hand-craft. Fails if the path already exists. Goal mode, Workspace Access, or Smart review with a committed git baseline writes immediately; otherwise an inline file card asks the user to Apply.",
+            description: "Create a BRAND-NEW file. This is the ONLY correct way to make a new file — do NOT use edit_file or apply_patch for creation. Pass the workspace-relative path and the full file content directly; no diff to hand-craft. Fails if the path already exists. Goal mode, Workspace Access, or Smart review with a committed git baseline writes immediately; otherwise an inline file card asks the user to Apply. For several independent files, emit all create_file/edit_file calls in one assistant response so WillDeep can present one Apply All review group.",
             risk: .read,
             parameters: [
                 AgentToolParameter(name: "path", type: .string, description: "Workspace-relative path of the NEW file, e.g. `src/utils/date.ts` or `docs/README.md`. Must not already exist.", required: true),
@@ -197,7 +197,7 @@ enum AgentToolRegistry {
         ),
         AgentToolDescriptor(
             name: "edit_file",
-            description: "EDIT an EXISTING file by EXACT STRING REPLACEMENT — the PREFERRED way to edit files. Pass the workspace-relative path, the exact current text to replace (old_string) and its replacement (new_string). old_string must match the file content EXACTLY and appear exactly ONCE unless replace_all=true. In Smart review, a clean git-tracked file with a committed baseline writes immediately; dirty, unsaved, untracked, or non-git files show an inline patch card for the user to click Apply. Goal mode or Workspace Access also applies immediately; Strict mode always asks. To CREATE a new file, use `create_file`.",
+            description: "EDIT an EXISTING file by EXACT STRING REPLACEMENT — the PREFERRED way to edit files. Pass the workspace-relative path, the exact current text to replace (old_string) and its replacement (new_string). old_string must match the file content EXACTLY and appear exactly ONCE unless replace_all=true. In Smart review, a clean git-tracked file with a committed baseline writes immediately; dirty, unsaved, untracked, or non-git files show an inline patch card for the user to click Apply. Goal mode or Workspace Access also applies immediately; Strict mode always asks. For several independent files, emit all create_file/edit_file calls in one assistant response so WillDeep can present one Apply All review group. Keep dependent edits to the same file ordered. To CREATE a new file, use `create_file`.",
             risk: .read,
             parameters: [
                 AgentToolParameter(name: "path", type: .string, description: "Workspace-relative path of the EXISTING file to edit, e.g. `src/utils/date.ts`.", required: true),

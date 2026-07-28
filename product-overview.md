@@ -1,6 +1,6 @@
 # WillDeep Product Overview
 
-> Last updated: 2026-07-28 | Current version: v1.211.0-rc2
+> Last updated: 2026-07-28 | Current version: v1.211.0-rc3
 
 ## Positioning
 
@@ -12,6 +12,7 @@ WillDeep is configured for non-App-Store distribution without App Sandbox so it 
 
 ## 架构概览
 
+- **本地文件修改批量审核（1.211.0-rc3）** —— 同一模型回复中连续且目标路径互不重叠的 `create_file`、`edit_file` 与 `apply_patch` 会先完整收集，再以一组内联补丁供用户展开检查并“全部应用/全部拒绝”，不再生成一个文件就暂停一次。收集阶段暂不开放决策按钮，封口后一次审核；批量应用会预检全部目标和 hunk、写前复核文件基线，并在后续写入失败时回滚此前文件。同路径、符号链接/硬链接别名或顺序依赖修改自动拆批或拒绝，外部命令、危险操作、升权、终端、MCP 与 Computer Use 保持各自原有审批边界。
 - **多命令审批即时回执（1.211.0-rc2）** —— 同一轮预亮多条命令时，用户可以先批准尚未轮到执行的卡片；暂存决定会立即发布到界面并将按钮替换为“已提交决定”，不再像点击失效。敏感参数检测改为凭据词边界匹配，`tokenhub`、`tokenhub-redis` 等普通业务标识不会再因包含 `token` 子串而被错误升级为高风险确认；真实的 `--token`、secret/credential 路径及密钥目录仍保持强制确认。
 - **Computer Use 全局控制会话（1.211.0-rc1）** —— WillDeep 的原生 macOS Computer Use 已升级为窗口截图与 Accessibility 双通道控制：每个动作绑定 runtime、turn、目标进程、目标窗口、独占 lease 和 fresh snapshot，主窗口状态卡与跨 App 悬浮条提供暂停、用户接管、恢复和停止。真实键鼠输入会立即让权并废弃在途结果，接管期间禁止本机截图；登录、验证码、凭据与支付由用户私下完成。Host 与 Helper 双层拒绝控制 WillDeep 自身和终端应用。只读观察不会自动取得控制权；用户批准首个普通写动作后，普通非敏感输入、导航键、滚动、聚焦、悬停及带 fresh Accessibility ref 的 `none/navigation` 点击才可在当前 runtime、turn 与目标强绑定的 controlling lease 内连续执行。无法证明语义目标的坐标点击、坐标右键和当前仅支持坐标的拖拽始终逐动作确认；严格模式同样逐次询问，lease 不进入会话级或持久授权。高影响动作继续逐次确认，剪贴板操作永久拒绝。敏感截图遮罩独立完整扫描当前 AXWindow 子树，任何读取异常、结构畸形、超时或超预算都会失败关闭为 `screenshot = null`，不会保存不确定的像素。动作后的截图会以 OpenAI Chat、OpenAI Responses 与 Gemini 各自支持的多模态工具结果格式回送视觉模型；provider 上下文只携带最近 4 组工具结果中的截图，完整附件继续保留在本机会话记录。
 - **截图结果可靠显示（1.210.0-rc19）** —— 工具结果经过统一敏感信息脱敏时会完整保留图片附件；`capture_screenshot`、浏览器截图及其他产图工具不再出现“提示已附图但聊天记录没有图片”的数据折损。
@@ -1383,7 +1384,7 @@ WillDeep 是 SwiftUI + AppKit 桥接的 macOS 应用，单进程多窗口。代�
 - **bugfix**（含文档、release 流程改进）：只递增 `rcN`。
 - **feature 新增**：可提升 `PATCH` / `MINOR`，rc 归位 `rc1`。
 - 前后端版本号必须一致——这里"后端"指 `AgentClient` 出站请求的 `X-App-Version` header（值从 `Bundle.main.CFBundleShortVersionString` 取，等价 pbxproj `MARKETING_VERSION`）。
-- 版本同步位点：`Xedit.xcodeproj/project.pbxproj` 里 6 个 `MARKETING_VERSION` 块（debug / release × 三个 target）、`willdeep-agent/internal/agent/version.go`、`Help/WillDeep.help/Contents/Info.plist`、`ComputerUseHelper/Info.plist`、README version badge、本文件顶部 `Current version`、`docs/MOBILE_GATEWAY_REQUIREMENTS.md` 与 `docs/AGENT_HARNESS_IMPROVEMENT_PRIORITIES.md` 一并同步。
+- 版本同步位点：`Xedit.xcodeproj/project.pbxproj` 里 6 个 `MARKETING_VERSION` / `CURRENT_PROJECT_VERSION` 块（debug / release × 三个 target）、`willdeep-agent/internal/agent/version.go`、`Help/WillDeep.help/Contents/Info.plist`、`ComputerUseHelper/Info.plist`、README version badge、`chrome-extension/willdeep-browser/manifest.json` 及其 README、本文件顶部 `Current version`、`docs/MOBILE_GATEWAY_REQUIREMENTS.md` 与 `docs/AGENT_HARNESS_IMPROVEMENT_PRIORITIES.md` 一并同步。
 - 每次版本变更必须同步在 `CHANGELOG.md` 顶部写一节、更新本文件头部的 `Current version` 字段。
 - git commit 后建议打 `v{版本号}` tag 并推送 origin（`scripts/release.sh` 公证完成后会交互确认是否打 tag/push）。
 

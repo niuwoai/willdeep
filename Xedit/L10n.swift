@@ -953,8 +953,16 @@ nonisolated enum L10n {
             let template = String(localized: "agent-patch-error.target-already-exists", defaultValue: "Cannot create %@ — it already exists. Use a modify diff instead.")
             return String(format: template, a1)
         }
+        static func duplicateTarget(_ a1: String) -> String {
+            let template = String(localized: "agent-patch-error.duplicate-target", defaultValue: "The same file appears more than once in this patch batch: %@")
+            return String(format: template, a1)
+        }
         static func writeVerificationFailed(_ a1: String) -> String {
             let template = String(localized: "agent-patch-error.write-verification-failed", defaultValue: "The patch reported a write for %@, but the file could not be verified on disk.")
+            return String(format: template, a1)
+        }
+        static func rollbackFailed(_ a1: String) -> String {
+            let template = String(localized: "agent-patch-error.rollback-failed", defaultValue: "Applying the patch failed, and WillDeep could not fully restore: %@")
             return String(format: template, a1)
         }
     }

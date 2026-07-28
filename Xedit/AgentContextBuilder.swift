@@ -80,16 +80,16 @@ enum AgentContextBuilder {
     private static let maxSelectionCharacters = 6_000
     private static let maxRulesCharacters = 6_000
     private static let dynamicContextMarker = "=== Dynamic Turn Context ==="
-    static let stablePrefixVersion = "willdeep-agent-system-v13"
+    static let stablePrefixVersion = "willdeep-agent-system-v14"
     /// Byte-level snapshot hashes for all three prompt profiles (computed
     /// with the fixed test locale directive). Intentional prompt edits must
     /// bump `stablePrefixVersion` and re-record every affected hash — run
     /// the snapshot tests once to get the new values from the failure
     /// output. Without all three, compact/extended drift (a merge eating
     /// half a sentence) ships silently.
-    static let stablePrefixSnapshotHash = "5884e4d3b1d5de3e"
-    static let compactPrefixSnapshotHash = "68bea0d985b34c"
-    static let extendedPrefixSnapshotHash = "3270f834ee01e3b8"
+    static let stablePrefixSnapshotHash = "62b6dbfdfe8e52e7"
+    static let compactPrefixSnapshotHash = "5ac105d0159025b3"
+    static let extendedPrefixSnapshotHash = "d70c962d2b9a832b"
 
     static func systemPrompt(
         rootDirectory: URL?,
@@ -463,7 +463,7 @@ enum AgentContextBuilder {
             - When operating the visible side-panel terminal, avoid creating or overwriting files with heredoc, here-string, `cat > file`, `echo > file`, or similar pasted multi-line shell techniques by default. Prefer create_file/edit_file/apply_patch for local workspace files, run_command for ordinary command execution, and explicit file transfer tools for host-to-host copies. If the terminal is the only viable path to a remote host and transfer tools are unavailable, a small auditable heredoc or patch-style shell fallback is acceptable; verify the result afterwards.
             - WillDeep's visible side-panel terminal supports rz/sz ZMODEM transfers by intercepting lrzsz handshakes. With terminal_send_command, pass `zmodem_upload_paths` alongside remote `rz` to preselect local upload files, or `zmodem_download_directory` alongside remote `sz <file>` to preselect the local destination; omit them only when the user should choose through the macOS file panel. Before asking a remote shell to use `rz` or `sz`, check `command -v rz sz`; if missing, tell the user how to install lrzsz for that server OS (for example apt/yum/dnf/apk/brew install lrzsz). The local Mac also needs lrzsz; WillDeep prompts for `brew install lrzsz` if local `rz`/`sz` is missing. If the remote host cannot install lrzsz or ZMODEM setup fails, fall back to scp/rsync, workspace files, attachments, App edit/write flow, apply_patch for local files, or a careful remote shell edit fallback instead.
             - To CREATE a new file, call create_file with the path and full content — it writes straight to disk. Do NOT craft a `/dev/null` diff for new files. For code EDITS to an existing file, use edit_file: pass the exact current text as old_string (copied verbatim from the file — same whitespace/indentation, WITHOUT read_file line-number prefixes) and the replacement as new_string; old_string must be unique in the file, so include a few surrounding lines, or set replace_all=true for bulk renames. The host locates the match and builds the diff itself. If every edited file is already tracked by git and clean against HEAD, the edit lands directly; if any file is untracked, already dirty, or has unsaved editor changes, a patch card appears inline in the chat for the user to Apply (Goal / workspace-access modes auto-apply). Do NOT hand-craft unified diffs with apply_patch unless edit_file genuinely cannot express the change — hand-written hunks frequently fail to match. Never tell the user to look in a "right-side review panel" — cards appear inline in the conversation. If the user explicitly asked to write/save an edit directly without review ("直接写", "直接落盘", "不用审核", "just write it"), pass apply_immediately=true so the edit lands without a card. If edit_file is unavailable or the edit requires unsupported deletion/binary changes, explain that limit and provide the diff or next step instead.
-            - When tool calls are independent, batch them into one assistant turn so they can run in parallel.
+            - When tool calls are independent, batch them into one assistant turn so they can run in parallel. In particular, emit independent create_file/edit_file calls for multiple files together: WillDeep collects their patch cards into one review group with Apply All / Reject All instead of interrupting the user once per file. Keep dependent edits to the same file ordered.
             - You can discover installed skills with list_skills and read a selected skill's SKILL.md with read_skill. Use skills when the user's task matches a specialized workflow. With approval, you can create_user_skill, update_user_skill, or delete_user_skill, but only user-created skills may be changed or deleted.
             - Expert guidance: if the user's task clearly enters a specialist domain and the relevant expert is not active, ask once with ask_user whether to activate it, then call activate_expert if they agree. Examples: short-drama production/storyboard work → shortDrama; web UI/frontend/static HTML/Vite/Next/React/Vue/screenshot-to-UI/dev-server orchestration → webCoding. If activating would only slow down a tiny one-off answer, continue without ceremony.
             - You can inspect configured MCP servers with list_mcp_servers, inspect a server's tools with list_mcp_tools, and call a configured MCP tool with call_mcp_tool. MCP tool calls may require approval.

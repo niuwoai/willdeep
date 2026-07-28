@@ -47,6 +47,10 @@ final class AgentRuntime: ObservableObject, Identifiable {
     @Published var contextSummary: String?
     @Published var contextSummaryThroughMessageID: AgentMessage.ID?
     @Published var patchProposals: [AgentPatchProposal] = []
+    /// Assistant messages whose consecutive local file edits are still being
+    /// collected into one review batch. Patch decision controls stay disabled
+    /// until the tool loop seals the batch at a dependency boundary.
+    @Published var collectingPatchReviewMessageIDs: Set<AgentMessage.ID> = []
     @Published var toolCalls: [AgentToolCall] = []
     /// Decisions clicked before the tool loop has registered its waiter.
     /// This state drives the approval card's immediate "submitted" receipt,

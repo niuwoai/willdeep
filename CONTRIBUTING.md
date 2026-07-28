@@ -88,21 +88,19 @@ Co-Authored-By: ...  (可选)
 - 格式 `MAJOR.MINOR.PATCH-rcN`，例 `1.52.1-rc42`。
 - **bugfix / 文档 / release 流程改进** → 只递增 `rcN`。
 - **feature 新增** → 提升 `PATCH` 或 `MINOR`，`rc` 归位 `rc1`。
-- 6 处需要同步（rc42 起，因为新增 Help target）：
-  - `Xedit.xcodeproj/project.pbxproj` 里全部 `MARKETING_VERSION = "x.y.z-rcN";`（debug + release × target；用 `grep -c MARKETING_VERSION Xedit.xcodeproj/project.pbxproj` 数一下，确保都改了）
-  - `Help/VeilWriter.help/Contents/Info.plist` 里 `CFBundleShortVersionString` 与 `CFBundleVersion`
+- 版本同步位点以 [product-overview.md → 版本号约定](./product-overview.md#版本号约定) 的清单为准，至少包含：
+  - `Xedit.xcodeproj/project.pbxproj` 里全部 `MARKETING_VERSION` 与 `CURRENT_PROJECT_VERSION`（debug + release × target）
+  - `willdeep-agent/internal/agent/version.go`
+  - `Help/WillDeep.help/Contents/Info.plist` 与 `ComputerUseHelper/Info.plist`
+  - 根 README、Chrome 扩展 manifest / README、Mobile Gateway 与 Agent Harness 版本文档
   - `product-overview.md` 头部的 `Current version` 字段
   - `CHANGELOG.md` 顶部新增一节
 - 版本号一定要前后一致：`AgentClient` 出站请求带的 `X-App-Version` 取自 `Bundle.main.CFBundleShortVersionString`，必须等于 pbxproj 里的 `MARKETING_VERSION`。
 
-一键校验脚本（可以放进 git pre-commit 或 PR check）：
+一键校验使用仓库脚本（CI 与本地共用）：
 
 ```bash
-PROJ_VER=$(grep -m1 'MARKETING_VERSION' Xedit.xcodeproj/project.pbxproj | sed -E 's/.*"([^"]+)".*/\1/')
-DOC_VER=$(grep -m1 'Current version' product-overview.md | sed -E 's/.*v([0-9.]+-rc[0-9]+).*/\1/')
-CHG_VER=$(grep -m1 '^## ' CHANGELOG.md | sed -E 's/## ([0-9.]+-rc[0-9]+).*/\1/')
-echo "pbxproj: $PROJ_VER | doc: $DOC_VER | changelog: $CHG_VER"
-[[ "$PROJ_VER" == "$DOC_VER" && "$PROJ_VER" == "$CHG_VER" ]] || { echo "❌ 版本号不一致"; exit 1; }
+ruby scripts/version_consistency.rb
 ```
 
 ## 五、提 PR 前的自检

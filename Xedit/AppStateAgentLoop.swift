@@ -864,6 +864,12 @@ extension AppState {
             )
             runtime.messages.append(assistantMessage)
             let assistantID = assistantMessage.id
+            // Cancellation, provider retry, or any other early exit must not
+            // strand a visible patch card in the non-interactive collecting
+            // state.
+            defer {
+                runtime.collectingPatchReviewMessageIDs.remove(assistantID)
+            }
             // Stamp the wall-clock start so we can attach an elapsed
             // seconds value to the message footer once the stream
             // finishes. We use the moment we hand the request off to
@@ -1522,6 +1528,18 @@ extension AppState {
             // and the serial path below. Captures this round's workspace
             // binding plus the `changedWorkspacePath` slot the
             // workspace-change sink writes into.
+            var needsPatchReviewBoundary = false
+            var pendingPatchReviewPathKeys: Set<String>? = []
+            func awaitPatchReviewBoundary() async {
+                // Seal before suspending. The UI can now enable Apply /
+                // Reject, and a very fast click is still safe because the
+                // waiter re-reads cards that were already resolved.
+                runtime.collectingPatchReviewMessageIDs.remove(assistantID)
+                _ = await awaitPendingAgentPatchProposals(
+                    forMessageID: assistantID,
+                    runtime: runtime
+                )
+            }
             func makeToolContext(
                 sandboxMode: AgentSandboxMode,
                 patchAutoApplySource: AgentToolApprovalSource?
@@ -1573,7 +1591,7 @@ extension AppState {
                     ),
                     sandboxMode: sandboxMode,
                     patchProposalSink: { title, diff, applyImmediately in
-                        let proposal = try self.enqueueAgentPatchProposal(
+                        try self.enqueueAgentPatchProposal(
                             for: runtime,
                             messageID: assistantID,
                             title: title,
@@ -1581,7 +1599,6 @@ extension AppState {
                             autoApplySource: patchAutoApplySource,
                             applyImmediately: applyImmediately
                         )
-                        return await self.awaitAgentPatchDecision(proposal, runtime: runtime)
                     },
                     // edit_file matches old_string against the same content
                     // the patch applier will later apply to (open tab buffer
@@ -1615,6 +1632,36 @@ extension AppState {
                 let autoApproval = staged.autoApproval
                 let isAlwaysAllowed = autoApproval != nil
                 let recordID = staged.recordID
+                let currentPatchReviewPathKeys = Self.patchReviewPathKeys(
+                    toolName: call.toolName,
+                    arguments: argsDict
+                )
+                let isPatchReviewTool = Self.patchReviewToolNames.contains(call.toolName)
+                let overlapsPendingPatchReview = {
+                    guard isPatchReviewTool,
+                          let pendingPatchReviewPathKeys,
+                          let currentPatchReviewPathKeys else {
+                        return isPatchReviewTool
+                    }
+                    return !pendingPatchReviewPathKeys.isDisjoint(with: currentPatchReviewPathKeys)
+                }()
+
+                // File-edit tools enqueue review proposals without blocking
+                // inside the first tool. Before any different kind of tool
+                // or an overlapping file edit runs, settle the accumulated
+                // disjoint edits as one review group. The overlap boundary is
+                // important: a second edit to the same path must read the
+                // first approved result, not the stale pre-review content.
+                if needsPatchReviewBoundary,
+                   !isPatchReviewTool || overlapsPendingPatchReview {
+                    await awaitPatchReviewBoundary()
+                    needsPatchReviewBoundary = false
+                    pendingPatchReviewPathKeys = []
+                    if Task.isCancelled {
+                        settleUnexecutedStagedCalls(from: stagedIndex, reason: "Cancelled")
+                        return
+                    }
+                }
 
                 // Fan out consecutive read-tier calls instead of paying each
                 // one serially. Only whitelisted pure local workspace reads
@@ -1784,6 +1831,9 @@ extension AppState {
                     continue
                 }
 
+                if isPatchReviewTool {
+                    runtime.collectingPatchReviewMessageIDs.insert(assistantID)
+                }
                 let patchAutoApplySource = patchAutoApplySource(
                     forToolName: call.toolName,
                     runtime: runtime
@@ -2043,6 +2093,17 @@ extension AppState {
                         images: result.images,
                         outcomeStatus: .succeeded
                     )
+                    if isPatchReviewTool {
+                        needsPatchReviewBoundary = true
+                        if let currentPatchReviewPathKeys,
+                           let existingPathKeys = pendingPatchReviewPathKeys {
+                            pendingPatchReviewPathKeys = existingPathKeys.union(currentPatchReviewPathKeys)
+                        } else {
+                            // An unparseable target is deliberately
+                            // unbatchable with the next file operation.
+                            pendingPatchReviewPathKeys = nil
+                        }
+                    }
                 } catch is CancellationError {
                     workspaceMutationLease = nil
                     if let delegatedControl {
@@ -2070,6 +2131,23 @@ extension AppState {
                     settleUnexecutedStagedCalls(from: stagedIndex + 1, reason: "Response stopped")
                     return
                 } catch {
+                    if isPatchReviewTool,
+                       runtime.patchProposals.contains(where: {
+                           $0.messageID == assistantID && $0.status == .pending
+                       }) {
+                        // A file tool normally returns immediately after
+                        // enqueueing its proposal. Preserve the review
+                        // boundary even if later result construction throws.
+                        needsPatchReviewBoundary = true
+                        if let currentPatchReviewPathKeys,
+                           let existingPathKeys = pendingPatchReviewPathKeys {
+                            pendingPatchReviewPathKeys = existingPathKeys.union(
+                                currentPatchReviewPathKeys
+                            )
+                        } else {
+                            pendingPatchReviewPathKeys = nil
+                        }
+                    }
                     // Deinit unlocks and closes the cross-process flock.
                     // This is a no-op for ordinary, unguarded tools.
                     workspaceMutationLease = nil
@@ -2139,6 +2217,17 @@ extension AppState {
                 return
             }
 
+            // A round ending with file edits has no following non-patch tool
+            // to create the review boundary. Wait here after every adjacent
+            // proposal is visible, before asking the provider for another
+            // response (which could otherwise repeat the same edit).
+            if needsPatchReviewBoundary {
+                await awaitPatchReviewBoundary()
+                if Task.isCancelled {
+                    return
+                }
+            }
+
             if roundNeedsGitStatusRefresh {
                 await refreshGitStatusAfterAgentTool(
                     for: runtime,
@@ -2185,6 +2274,54 @@ extension AppState {
     nonisolated static let parallelReadBatchToolNames: Set<String> = [
         "read_file", "search_files", "grep_files", "list_directory", "glob", "git_status"
     ]
+
+    /// Local file tools whose pending proposals can share one review boundary
+    /// when the model emits them consecutively in the same assistant turn.
+    /// Other write surfaces keep their existing per-call authorization.
+    nonisolated static let patchReviewToolNames: Set<String> = [
+        "create_file", "edit_file", "apply_patch"
+    ]
+
+    /// Conservative path identities used only to decide whether adjacent
+    /// patch tools may share a review boundary. Nil means "unknown target" and
+    /// forces the current batch to settle before another file tool runs.
+    static func patchReviewPathKeys(
+        toolName: String,
+        arguments: [String: AgentJSONValue]
+    ) -> Set<String>? {
+        let rawPaths: [String]
+        switch toolName {
+        case "create_file", "edit_file":
+            guard let path = arguments["path"]?.stringValue() else { return nil }
+            rawPaths = [path]
+        case "apply_patch":
+            guard let rawDiff = arguments["diff"]?.stringValue()?
+                .trimmingCharacters(in: .whitespacesAndNewlines),
+                !rawDiff.isEmpty else {
+                return nil
+            }
+            let extractedBlocks = AgentPatchApplier.extractDiffBlocks(from: rawDiff)
+            let diff = extractedBlocks.count == 1 ? extractedBlocks[0] : rawDiff
+            guard let changes = try? AgentPatchApplier.parse(diff), !changes.isEmpty else {
+                return nil
+            }
+            rawPaths = changes.map(\.path)
+        default:
+            return nil
+        }
+
+        let keys = rawPaths.compactMap { rawPath -> String? in
+            let trimmed = rawPath.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !trimmed.isEmpty else { return nil }
+            return URL(fileURLWithPath: trimmed)
+                .standardizedFileURL
+                .path
+                .precomposedStringWithCanonicalMapping
+                .lowercased()
+        }
+        guard keys.count == rawPaths.count else { return nil }
+        return Set(keys)
+    }
 
     /// One read-tier staged call collected for concurrent execution. Risk,
     /// sandbox decision, tool record, and execution context are all resolved
