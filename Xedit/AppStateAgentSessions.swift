@@ -670,6 +670,13 @@ extension AppState {
     /// boilerplate, or the caller's free-form note appended to it.
     /// Falls through to the normal queue path if the agent is busy.
     func requestPlanRevision(note: String) {
+        if agentInteractionMode == .normal, agentCurrentPlan != nil {
+            // A Plan card remains visible during Normal execution and after
+            // completion. Its explicit revision action is the intentional
+            // escape hatch from that contract, so enter planning mode before
+            // retiring the old Plan instead of silently ignoring the click.
+            setAgentInteractionMode(.plan)
+        }
         guard agentInteractionMode == .plan || agentInteractionMode == .goal else { return }
         // Drop the existing plan so the next turn's system prompt
         // sends the "you must emit a ```plan block" instructions.
@@ -735,6 +742,14 @@ extension AppState {
         }
         if let parsed = AgentPlanParser.extract(from: last.content) {
             if runtime.interactionMode == .plan {
+                if AgentPlanContinuationPolicy.hasActiveExecutionContract(
+                    runtime.currentPlan
+                ) {
+                    // Automatic/manual entry into Plan mode must not let a
+                    // model reply overwrite an already-approved execution
+                    // contract. The operator must reject/cancel it first.
+                    return .noProposal
+                }
                 runtime.currentPlan = parsed
                 return .captured
             }
@@ -802,7 +817,10 @@ extension AppState {
         _ = startAgentGoalPlanningIfNeeded(for: runtime)
     }
 
-    func captureAgentGoalEvaluationFromLatestMessage(for runtime: AgentRuntime) {
+    func captureAgentGoalEvaluationFromLatestMessage(
+        for runtime: AgentRuntime,
+        finishReason: String? = nil
+    ) {
         guard runtime.interactionMode == .goal,
               let goal = runtime.currentGoal,
               !goal.checklist.isEmpty else { return }
@@ -811,7 +829,11 @@ extension AppState {
            last.createdAt < editedAt {
             return
         }
-        if let updated = AgentGoalChecklistParser.applyEvaluation(to: goal, from: last.content) {
+        if let updated = AgentGoalChecklistParser.applyEvaluation(
+            to: goal,
+            from: last.content,
+            finishReason: finishReason
+        ) {
             runtime.currentGoal = updated
             persistAgentSession(runtime: runtime)
         }

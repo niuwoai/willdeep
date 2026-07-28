@@ -268,7 +268,15 @@ final class AgentRuntime: ObservableObject, Identifiable {
         if interactionMode == .plan { return true }
         guard interactionMode == .goal else { return false }
         guard let plan = currentPlan else { return true }
-        return plan.status != .approved && plan.status != .executing
+        let hasIncompleteGoalChecklist = currentGoal.map {
+            !$0.checklist.isEmpty && $0.checklist.contains(where: { !$0.done })
+        } ?? false
+        let isInterruptedFinalization = plan.status == .done
+            && goalPlanningState?.phase == .executing
+            && hasIncompleteGoalChecklist
+        return plan.status != .approved
+            && plan.status != .executing
+            && !isInterruptedFinalization
     }
 
     // MARK: - Init

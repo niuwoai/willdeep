@@ -113,6 +113,97 @@ struct AgentGoalChecklistParserTests {
         #expect(AgentGoalChecklistParser.applyEvaluation(to: g, from: "Just prose.") == nil)
     }
 
+    @Test
+    func proseDoesNotCountAsCurrentRoundEvaluation() {
+        #expect(!AgentGoalChecklistParser.containsEvaluationBlock(
+            in: "The provider stopped before Goal verification."
+        ))
+    }
+
+    @Test
+    func noChangesBlockStillCountsAsCurrentRoundEvaluation() {
+        let reply = """
+        Verification finished without changing checklist state.
+
+        ```goal-check
+        # no changes
+        ```
+        """
+        #expect(AgentGoalChecklistParser.containsEvaluationBlock(in: reply))
+    }
+
+    @Test
+    func truncatedGoalCheckCannotAdvanceGoalLifecycle() {
+        let reply = """
+        Verification was cut off.
+
+        ```goal-check
+        1: done
+        """
+        #expect(!AgentGoalChecklistParser.containsEvaluationBlock(
+            in: reply,
+            checklistCount: 1
+        ))
+        #expect(AgentGoalChecklistParser.applyEvaluation(
+            to: goal(1),
+            from: reply
+        ) == nil)
+    }
+
+    @Test
+    func emptyUnknownAndOutOfRangeGoalChecksAreInvalid() {
+        let empty = """
+        ```goal-check
+        ```
+        """
+        let invalid = """
+        ```goal-check
+        1: warp-speed
+        99: done
+        ```
+        """
+        #expect(!AgentGoalChecklistParser.containsEvaluationBlock(
+            in: empty,
+            checklistCount: 2
+        ))
+        #expect(!AgentGoalChecklistParser.containsEvaluationBlock(
+            in: invalid,
+            checklistCount: 2
+        ))
+    }
+
+    @Test
+    func closedInRangeGoalCheckIsValidEvenWhenStateDoesNotChange() {
+        let reply = """
+        ```goal-check
+        2: undone
+        ```
+        """
+        #expect(AgentGoalChecklistParser.containsEvaluationBlock(
+            in: reply,
+            checklistCount: 2
+        ))
+    }
+
+    @Test
+    func lengthTruncatedReplyCannotAdvanceEvenWithAClosedGoalCheck() {
+        let reply = """
+        ```goal-check
+        1: done
+        ```
+        """
+        #expect(!AgentGoalChecklistParser.containsEvaluationBlock(
+            in: reply,
+            checklistCount: 1,
+            finishReason: "length"
+        ))
+        #expect(AgentGoalChecklistParser.applyEvaluation(
+            to: goal(1),
+            from: reply,
+            finishReason: "length"
+        ) == nil)
+    }
+
     /// A no-op block (every entry already matches current state)
     /// returns nil so the caller can skip persistence.
     @Test

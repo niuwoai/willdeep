@@ -294,7 +294,8 @@ struct AgentGoalTeamsTests {
                 .init(roleID: "requirements", displayName: "需求分析-目标边界质疑", status: .completed),
                 .init(roleID: "architecture", displayName: "架构-实现路径论证", status: .completed),
                 .init(roleID: "testing", displayName: "测试-失败路径审查", status: .completed),
-            ]
+            ],
+            arbitration: .init(status: .completed, report: "verified planning evidence")
         )
         let encoded = try JSONEncoder().encode(state)
         let decoded = try JSONDecoder().decode(AgentGoalPlanningState.self, from: encoded)
@@ -723,6 +724,101 @@ struct AgentGoalTeamsTests {
         #expect(emptyRuntime.currentPlan?.status == .done)
         #expect(emptyRuntime.goalPlanningState == nil)
         #expect(emptyRuntime.isPlanGateActive)
+    }
+
+    @Test("额度中断后保留已完成 Plan，续跑只做 Goal 验收")
+    func interruptedDonePlanResumesFinalizationWithoutReplanning() {
+        let goal = AgentGoal(
+            statement: "Ship safely",
+            checklist: [.init(text: "Verified")]
+        )
+        let donePlan = AgentPlan(
+            status: .done,
+            summary: "",
+            stepTexts: ["GT-003 implement", "GT-004 test"]
+        )
+        let state = AgentGoalPlanningState(
+            goalFingerprint: AgentGoalPlanningState.fingerprint(for: goal),
+            phase: .executing,
+            members: [
+                .init(roleID: "requirements", displayName: "需求分析-目标边界质疑", status: .completed),
+                .init(roleID: "architecture", displayName: "架构-实现路径论证", status: .completed),
+                .init(roleID: "testing", displayName: "测试-失败路径审查", status: .completed),
+            ]
+        )
+        let (appState, runtime) = makeAppRuntime(
+            goal: goal,
+            plan: donePlan,
+            planningState: state
+        )
+
+        #expect(!appState.startAgentGoalPlanningIfNeeded(for: runtime))
+        #expect(runtime.currentPlan?.status == .done)
+        #expect(runtime.goalPlanningState?.phase == .executing)
+        #expect(!runtime.isPlanGateActive)
+        #expect(!AppState.planGateBlocks(
+            toolName: "run_command",
+            arguments: ["command": .string("swift test")],
+            risk: .write,
+            isActive: runtime.isPlanGateActive
+        ))
+
+        let prompt = AgentContextBuilder.systemPrompt(
+            rootDirectory: nil,
+            openedFileURL: nil,
+            fileContent: "",
+            selectedText: "",
+            language: nil,
+            toolsEnabled: true,
+            interactionMode: .goal,
+            currentPlan: runtime.currentPlan,
+            currentGoal: runtime.currentGoal,
+            goalPlanningState: runtime.goalPlanningState,
+            globalRules: nil
+        )
+        #expect(prompt.contains(
+            "Resume this exact Plan and preserve its progress"
+        ))
+        #expect(prompt.contains("Do not emit a new `plan`"))
+        #expect(prompt.contains("Run only the remaining verification"))
+        #expect(!prompt.contains(
+            "A valid proposal must include the exact ten-column Teams table"
+        ))
+    }
+
+    @Test("已完成 Goal 不保留中断验收写权限")
+    func completedGoalClosesInterruptedFinalizationGate() {
+        let completedGoal = AgentGoal(
+            statement: "Ship safely",
+            checklist: [.init(text: "Verified", done: true)]
+        )
+        let donePlan = AgentPlan(
+            status: .done,
+            summary: "",
+            stepTexts: ["GT-003 implement"]
+        )
+        let state = AgentGoalPlanningState(
+            goalFingerprint: AgentGoalPlanningState.fingerprint(for: completedGoal),
+            phase: .executing,
+            members: [
+                .init(roleID: "requirements", displayName: "需求分析-目标边界质疑", status: .completed),
+                .init(roleID: "architecture", displayName: "架构-实现路径论证", status: .completed),
+                .init(roleID: "testing", displayName: "测试-失败路径审查", status: .completed),
+            ]
+        )
+        let (_, runtime) = makeAppRuntime(
+            goal: completedGoal,
+            plan: donePlan,
+            planningState: state
+        )
+
+        #expect(runtime.goalPlanningState?.phase == .completed)
+        #expect(runtime.isPlanGateActive)
+
+        // Guard the live-state path too: even before persistence normalization,
+        // a stale executing phase must not reopen write tools.
+        runtime.goalPlanningState?.phase = .executing
+        #expect(runtime.isPlanGateActive)
     }
 
     @Test("普通 Plan 行为不回归，danger 不能借研究例外绕过门禁")

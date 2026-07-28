@@ -114,6 +114,103 @@ struct AgentPlanContinuationTests {
         #expect(!prompt.contains("Your only deliverable is a numbered plan"))
     }
 
+    @Test("approved and executing Plans suppress automatic re-planning")
+    func activeExecutionContractIsDetected() {
+        #expect(AgentPlanContinuationPolicy.hasActiveExecutionContract(
+            AgentPlan(status: .approved, summary: "", stepTexts: ["Implement"])
+        ))
+        #expect(AgentPlanContinuationPolicy.hasActiveExecutionContract(
+            AgentPlan(status: .executing, summary: "", stepTexts: ["Verify"])
+        ))
+        #expect(!AgentPlanContinuationPolicy.hasActiveExecutionContract(
+            AgentPlan(status: .proposed, summary: "", stepTexts: ["Plan"])
+        ))
+        #expect(!AgentPlanContinuationPolicy.hasActiveExecutionContract(
+            AgentPlan(status: .done, summary: "", stepTexts: ["Done"])
+        ))
+    }
+
+    @Test("Plan mode pins an active execution contract instead of drafting again")
+    func activeExecutionPlanIsPinnedInPlanModePrompt() {
+        let prompt = AgentContextBuilder.systemPrompt(
+            rootDirectory: nil,
+            openedFileURL: nil,
+            fileContent: "",
+            selectedText: "",
+            language: nil,
+            interactionMode: .plan,
+            currentPlan: AgentPlan(
+                status: .executing,
+                summary: "",
+                stepTexts: ["Keep completed work", "Resume verification"]
+            ),
+            globalRules: nil
+        )
+
+        #expect(prompt.contains("=== PLAN MODE — ACTIVE EXECUTION CONTRACT ==="))
+        #expect(prompt.contains("1. [pending] Keep completed work"))
+        #expect(prompt.contains("Do not emit a new `plan` block"))
+        #expect(!prompt.contains("Your only deliverable is a numbered plan"))
+    }
+
+    @MainActor
+    @Test("a model Plan reply cannot overwrite an approved execution contract")
+    func activeExecutionPlanCannotBeOverwritten() {
+        let appState = AppState()
+        let runtime = AgentRuntime(session: AgentSession(title: "Pinned Plan"))
+        runtime.interactionMode = .plan
+        runtime.currentPlan = AgentPlan(
+            status: .approved,
+            summary: "Original",
+            stepTexts: ["Original implementation", "Original verification"]
+        )
+        runtime.messages = [
+            AgentMessage(
+                role: .assistant,
+                content: """
+                ```plan
+                1. Replacement step
+                2. Repeat everything
+                ```
+                """
+            )
+        ]
+
+        let outcome = appState.captureAgentPlanFromLatestMessage(for: runtime)
+
+        #expect(outcome == .noProposal)
+        #expect(runtime.currentPlan?.status == .approved)
+        #expect(runtime.currentPlan?.steps.map(\.text) == [
+            "Original implementation",
+            "Original verification",
+        ])
+    }
+
+    @MainActor
+    @Test("explicit revision action replaces an active Normal-mode Plan")
+    func explicitRevisionActionLeavesExecutionAndQueuesPlanningGuidance() throws {
+        let appState = AppState()
+        let session = appState.startNewAgentSession()
+        defer { AgentSessionStore.delete(id: session.id) }
+        let runtime = try #require(appState.agentRuntimes[session.id])
+        runtime.interactionMode = .normal
+        runtime.currentPlan = AgentPlan(
+            status: .executing,
+            summary: "Original contract",
+            stepTexts: ["Keep completed work", "Finish verification"]
+        )
+        runtime.isResponding = true
+
+        appState.requestPlanRevision(note: "Replace only the verification approach")
+
+        #expect(runtime.interactionMode == .plan)
+        #expect(runtime.currentPlan == nil)
+        #expect(runtime.queuedMessages.count == 1)
+        #expect(runtime.queuedMessages[0].text.contains(
+            "Replace only the verification approach"
+        ))
+    }
+
     @Test("delegated executors receive the approved Plan as their execution contract")
     func delegatedTaskPinsApprovedPlan() {
         let task = AgentPlanContinuationPolicy.delegatedExecutionTask(

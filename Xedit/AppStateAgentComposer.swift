@@ -105,6 +105,7 @@ extension AppState {
 
         if allowPlanModeSuggestion,
            runtime.interactionMode == .normal,
+           !AgentPlanContinuationPolicy.hasActiveExecutionContract(runtime.currentPlan),
            !runtime.isResponding {
             // While the prompt is visible, only its two explicit actions may
             // resolve the parked send. Repeated Return presses must not sneak

@@ -571,8 +571,12 @@ extension AppState {
             refreshAgentWorkspaceCollision()
             captureAgentPlanFromLatestMessage(for: runtime)
             let didDefineGoal = captureAgentGoalDefinitionFromLatestMessage(for: runtime)
-            captureAgentGoalEvaluationFromLatestMessage(for: runtime)
-            prepareNextAgentGoalPlanningCycleIfNeeded(for: runtime)
+            // Do not advance a completed Plan into a fresh planning cycle
+            // from unconditional turn cleanup. This defer also runs after
+            // quota errors, timeouts, cancellation, and empty streams; in
+            // those cases even a closed, partially streamed goal-check is not
+            // authoritative. The successful prose-only reply path owns both
+            // evaluation capture and cycle advancement.
             startAgentGoalPlanningAfterCaptureIfNeeded(didDefineGoal, for: runtime)
             persistAgentSession(runtime: runtime)
             if !shouldConsumeQueueAfterStop {
@@ -1238,8 +1242,28 @@ extension AppState {
                     // the proposal instead of ending the turn deadlocked.
                     continue
                 }
-                captureAgentGoalEvaluationFromLatestMessage(for: runtime)
-                prepareNextAgentGoalPlanningCycleIfNeeded(for: runtime)
+                let goalChecklistCount = runtime.currentGoal?.checklist.count
+                let hasValidClosedGoalCheck = runtime.messages
+                    .first(where: { $0.id == assistantID })
+                    .map {
+                        AgentGoalChecklistParser.containsEvaluationBlock(
+                            in: $0.content,
+                            checklistCount: goalChecklistCount,
+                            finishReason: finishReason
+                        )
+                    } ?? false
+                let assistantReplyContainsGoalCheck = hasValidClosedGoalCheck
+                if assistantReplyContainsGoalCheck {
+                    captureAgentGoalEvaluationFromLatestMessage(
+                        for: runtime,
+                        finishReason: finishReason
+                    )
+                    // Advance only from this round's explicit Goal
+                    // evaluation. A stale checklist plus an interrupted
+                    // response must resume finalization, not erase the
+                    // completed Plan and launch Goal Teams again.
+                    prepareNextAgentGoalPlanningCycleIfNeeded(for: runtime)
+                }
                 let planStatusesAfterReply = runtime.currentPlan?.steps.map(\.status)
                 if didAdvancePlanSinceLastContinuationDecision
                     || planStatusesBeforeReply != planStatusesAfterReply {

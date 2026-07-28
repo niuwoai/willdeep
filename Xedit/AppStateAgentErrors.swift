@@ -199,6 +199,14 @@ extension AppState {
             return
         }
 
+        // Every retry gate has passed and this turn will actually start. An
+        // idle retry has no live patch collector, so settle proposals restored
+        // from the interrupted turn before replaying history. Doing this any
+        // earlier would mutate approvals even when login or provider capacity
+        // prevents Retry from starting.
+        runtime.collectingPatchReviewMessageIDs.removeAll()
+        _ = resolvePendingAgentPatchProposalsBeforeNewMessage(for: runtime)
+
         runtime.errorMessage = nil
         runtime.errorDetails = nil
         runtime.errorRequiresSomeIMLogin = false

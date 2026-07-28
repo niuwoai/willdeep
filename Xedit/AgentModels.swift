@@ -1095,6 +1095,17 @@ nonisolated struct AgentGoalPlanningState: Codable, Equatable {
         if let currentGoal, copy.goalFingerprint != Self.fingerprint(for: currentGoal) {
             copy.phase = .blocked
         }
+        let hasIncompleteGoalChecklist = currentGoal.map {
+            !$0.checklist.isEmpty && $0.checklist.contains(where: { !$0.done })
+        } ?? false
+        let hasCompletedGoalChecklist = currentGoal.map {
+            !$0.checklist.isEmpty && $0.checklist.allSatisfy(\.done)
+        } ?? false
+        if copy.phase == .executing,
+           currentPlan?.status == .done,
+           hasCompletedGoalChecklist {
+            copy.phase = .completed
+        }
         switch copy.phase {
         case .readyForProposal:
             // The synthesis wake is runtime-only and cannot be reconstructed
@@ -1104,7 +1115,16 @@ nonisolated struct AgentGoalPlanningState: Codable, Equatable {
         case .awaitingApproval:
             if currentPlan?.status != .proposed { copy.phase = .blocked }
         case .executing:
-            if currentPlan?.status != .approved && currentPlan?.status != .executing {
+            // `.done + .executing` is a valid narrow recovery state: every
+            // Plan step reached a terminal status, but the provider stopped
+            // before the same Goal round completed its checklist. Keep the
+            // ledger only while a real acceptance item remains unfinished,
+            // so a completed or empty Goal cannot retain write permission.
+            let canResumeInterruptedFinalization = currentPlan?.status == .done
+                && hasIncompleteGoalChecklist
+            if currentPlan?.status != .approved
+                && currentPlan?.status != .executing
+                && !canResumeInterruptedFinalization {
                 copy.phase = .blocked
             }
         case .completed:

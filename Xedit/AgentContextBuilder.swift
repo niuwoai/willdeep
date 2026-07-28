@@ -80,16 +80,16 @@ enum AgentContextBuilder {
     private static let maxSelectionCharacters = 6_000
     private static let maxRulesCharacters = 6_000
     private static let dynamicContextMarker = "=== Dynamic Turn Context ==="
-    static let stablePrefixVersion = "willdeep-agent-system-v14"
+    static let stablePrefixVersion = "willdeep-agent-system-v15"
     /// Byte-level snapshot hashes for all three prompt profiles (computed
     /// with the fixed test locale directive). Intentional prompt edits must
     /// bump `stablePrefixVersion` and re-record every affected hash — run
     /// the snapshot tests once to get the new values from the failure
     /// output. Without all three, compact/extended drift (a merge eating
     /// half a sentence) ships silently.
-    static let stablePrefixSnapshotHash = "62b6dbfdfe8e52e7"
-    static let compactPrefixSnapshotHash = "5ac105d0159025b3"
-    static let extendedPrefixSnapshotHash = "d70c962d2b9a832b"
+    static let stablePrefixSnapshotHash = "b344c8767ec432b0"
+    static let compactPrefixSnapshotHash = "5bc5ce43ebee53a2"
+    static let extendedPrefixSnapshotHash = "658668df60179dca"
 
     static func systemPrompt(
         rootDirectory: URL?,
@@ -197,6 +197,20 @@ enum AgentContextBuilder {
 
                 Do not repeat, reconstruct, or silently replace this plan merely because the user sends a short acknowledgement or asks to continue. The host promotes unambiguous approvals such as “继续”, “执行”, “continue”, or “proceed” to Normal execution mode before the request reaches you. If this request is still in Plan mode, revise the plan only when the latest operator message actually supplies revision guidance; preserve every unaffected step and emit exactly one complete replacement `plan` block. Otherwise, briefly state that the existing plan is still awaiting approval and do not emit a new `plan` block.
                 """)
+            } else if let plan = currentPlan,
+                      plan.status == .approved || plan.status == .executing {
+                let stepsText = plan.steps.enumerated()
+                    .map { "\($0.offset + 1). [\($0.element.status.rawValue)] \($0.element.text)" }
+                    .joined(separator: "\n")
+                sections.append("""
+                === PLAN MODE — ACTIVE EXECUTION CONTRACT ===
+                This session already has an approved Plan:
+                <current-approved-plan>
+                \(stepsText)
+                </current-approved-plan>
+
+                Plan mode cannot execute it, but it also must not replace it. Do not emit a new `plan` block and do not reconstruct the steps. Tell the user to return to Normal mode to resume this exact Plan, or explicitly reject/cancel it before requesting a replacement.
+                """)
             } else {
                 sections.append("""
                 === PLAN MODE — PLANNING ONLY ===
@@ -268,8 +282,16 @@ enum AgentContextBuilder {
             Treat each provider/tool loop as one user-facing Goal round. While work is active, use tools and concise status updates as needed. When the round settles, the final visible prose must be a compact delivery summary: lead with the outcome, then list only verified results, material changes, validation evidence, and any genuine remaining blocker or next action. Do not repeat command transcripts, failed attempts, raw tool output, or step-by-step construction notes in that final summary; those remain available in WillDeep's activity and audit surfaces.
 
             """
-            if currentPlan?.status == .approved || currentPlan?.status == .executing {
-                goalBlock += "The user explicitly approved the current Goal-backed Plan. Execute only that plan and its locked scope. Ordinary write-tier tools may proceed through the existing approval policy; danger-tier operations still require typed confirmation every time.\n"
+            let isFinalizingInterruptedPlan = currentPlan?.status == .done
+                && goalPlanningState?.phase == .executing
+            if currentPlan?.status == .approved
+                || currentPlan?.status == .executing
+                || isFinalizingInterruptedPlan {
+                if isFinalizingInterruptedPlan {
+                    goalBlock += "The existing approved Plan reached terminal step statuses, but its Goal finalization was interrupted before every acceptance item was settled. Resume this exact Plan and preserve its progress. Do not emit a new `plan`, do not restart Goal Teams, and do not repeat completed implementation. Run only the remaining verification needed for unchecked acceptance items, then report the `goal-check`.\n"
+                } else {
+                    goalBlock += "The user explicitly approved the current Goal-backed Plan. Execute only that plan and its locked scope. Ordinary write-tier tools may proceed through the existing approval policy; danger-tier operations still require typed confirmation every time.\n"
+                }
                 if let plan = currentPlan {
                     goalBlock += "Approved Plan steps:\n"
                     for (index, step) in plan.steps.enumerated() {
@@ -279,6 +301,8 @@ enum AgentContextBuilder {
                 }
             } else if currentPlan?.status == .proposed || goalPlanningState?.phase == .awaitingApproval {
                 goalBlock += "A Goal-backed Plan is awaiting explicit user approval. Do not call tools or continue automatically. Wait for Approve, Reject, or revision guidance.\n"
+            } else if currentPlan?.status == .done, goalPlanningState?.phase == .completed {
+                goalBlock += "The Goal and its approved Plan are complete. Do not create another Plan or restart Goal Teams unless the user explicitly changes or extends the Goal.\n"
             } else {
                 goalBlock += "Goal Teams planning is host-coordinated and write-tier tools are locked. Do not implement and do not manually spawn planning members. The host starts exactly three independent read-only members, waits until all are terminal, then runs read-only evidence arbitration when at least two reports are valid. Only after arbitration succeeds may the parent emit a proposal.\n"
                 goalBlock += "A valid proposal must include the exact ten-column Teams table (Member, Skill/Subagent, Goal Slice, Claimed Tasks, Locked Scope, Deliverable, Done Criteria, Docs/Tasklist Updates, Test Owner, Validator) plus one complete numbered fenced `plan` covering implementation, tests, documentation, version handling, and acceptance (or explicit reasoned N/A). Then stop for explicit approval.\n"
@@ -851,6 +875,35 @@ enum AgentPlanParser {
         fencedBodies(in: content, tag: tag).first
     }
 
+    /// Returns only a fully closed fenced block. Plan/progress rendering keeps
+    /// accepting an in-flight block through `fencedBody`, but lifecycle
+    /// transitions such as Goal completion must never trust truncated output.
+    fileprivate static func closedFencedBody(in content: String, tag: String) -> String? {
+        let lines = content.components(separatedBy: .newlines)
+        let wanted = tag.lowercased()
+        var inBlock = false
+        var currentBody: [String] = []
+        for line in lines {
+            let trimmed = line.trimmingCharacters(in: .whitespaces)
+            if !inBlock {
+                guard trimmed.hasPrefix("```") else { continue }
+                let info = String(trimmed.dropFirst(3))
+                    .trimmingCharacters(in: .whitespaces)
+                    .lowercased()
+                if info == wanted {
+                    inBlock = true
+                    currentBody = []
+                }
+                continue
+            }
+            if trimmed.hasPrefix("```") {
+                return currentBody.joined(separator: "\n")
+            }
+            currentBody.append(line)
+        }
+        return nil
+    }
+
     private static func fencedBodies(in content: String, tag: String) -> [String] {
         let lines = content.components(separatedBy: .newlines)
         let wanted = tag.lowercased()
@@ -1043,14 +1096,71 @@ enum AgentGoalParser {
 /// progress-block design but uses a boolean lifecycle (the only two
 /// states for a checklist item).
 enum AgentGoalChecklistParser {
+    /// Distinguishes a completed Goal reply from quota, cancellation, and
+    /// provider-failure exits where no current-round evaluation arrived.
+    /// A closed, explicit `# no changes` block still counts: the model
+    /// deliberately completed the self-check even when no flags changed.
+    /// Empty, truncated, out-of-range, or unknown-token blocks do not count,
+    /// because treating them as completion could erase the old Plan and
+    /// launch a replacement Goal Teams cycle.
+    static func containsEvaluationBlock(
+        in content: String,
+        checklistCount: Int? = nil,
+        finishReason: String? = nil
+    ) -> Bool {
+        guard finishReason?.lowercased() != "length" else { return false }
+        guard let body = AgentPlanParser.closedFencedBody(
+            in: content,
+            tag: "goal-check"
+        ), !body.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            return false
+        }
+        for raw in body.components(separatedBy: .newlines) {
+            let trimmed = raw.trimmingCharacters(in: .whitespaces)
+            guard !trimmed.isEmpty else { continue }
+            if trimmed.lowercased() == "# no changes" {
+                return true
+            }
+            guard let (index, after) = AgentPlanParser.leadingNumber(in: trimmed),
+                  index >= 1,
+                  checklistCount.map({ index <= $0 }) ?? true else {
+                continue
+            }
+            let rest = trimmed[after...]
+                .drop { $0 == ":" || $0 == "." || $0 == ")" || $0 == "-" || $0 == " " || $0 == "\t" }
+            let token = rest.split(separator: " ", maxSplits: 1).first.map(String.init)?
+                .lowercased() ?? ""
+            if parseDoneFlag(token) != nil {
+                return true
+            }
+        }
+        return false
+    }
+
     /// Returns a copy of `goal` with checklist `done` flags updated from
     /// the goal-check block in `content`. Unknown tokens and indexes
     /// out of range are dropped silently — a sloppy reply can't corrupt
     /// the whole checklist. Returns nil when no goal-check block is
     /// present OR when nothing actually changes (so callers can avoid
     /// no-op persistence).
-    static func applyEvaluation(to goal: AgentGoal, from content: String) -> AgentGoal? {
-        guard let body = AgentPlanParser.fencedBody(in: content, tag: "goal-check") else { return nil }
+    static func applyEvaluation(
+        to goal: AgentGoal,
+        from content: String,
+        finishReason: String? = nil
+    ) -> AgentGoal? {
+        guard containsEvaluationBlock(
+            in: content,
+            checklistCount: goal.checklist.count,
+            finishReason: finishReason
+        ) else {
+            return nil
+        }
+        guard let body = AgentPlanParser.closedFencedBody(
+            in: content,
+            tag: "goal-check"
+        ) else {
+            return nil
+        }
         var updates: [Int: Bool] = [:]
         for raw in body.components(separatedBy: .newlines) {
             let trimmed = raw.trimmingCharacters(in: .whitespaces)

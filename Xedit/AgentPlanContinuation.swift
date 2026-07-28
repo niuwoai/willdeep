@@ -72,6 +72,14 @@ nonisolated enum AgentPlanContinuationPolicy {
         return compactApprovalPhrases.contains(words.replacingOccurrences(of: " ", with: ""))
     }
 
+    /// An approved Plan remains the execution contract until progress marks
+    /// it done or the operator rejects it. A complex follow-up must not
+    /// trigger the automatic Plan-mode preflight and silently replace it.
+    static func hasActiveExecutionContract(_ plan: AgentPlan?) -> Bool {
+        guard let plan else { return false }
+        return plan.status == .approved || plan.status == .executing
+    }
+
     /// Delegated CLI executors cannot rely on the native system prompt, so
     /// carry the approved Plan in the task text that is handed to them.
     static func delegatedExecutionTask(
