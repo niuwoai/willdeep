@@ -571,12 +571,14 @@ extension WillDeepTests {
     }
 
     @MainActor
-    @Test("editor disables writing assistance that mutates source punctuation")
-    func testEditorDisablesSourceMutatingWritingAssistance() {
+    @Test("editor uses plain-text editing while retaining attributed highlighting")
+    func testEditorUsesPlainTextEditingWithAttributedHighlighting() throws {
         let textView = WillDeepTextView(frame: .zero)
+        textView.isRichText = true
 
         textView.configureCodeEditingBehavior()
 
+        #expect(textView.isRichText == false)
         #expect(textView.isAutomaticQuoteSubstitutionEnabled == false)
         #expect(textView.isAutomaticDashSubstitutionEnabled == false)
         #expect(textView.isAutomaticTextReplacementEnabled == false)
@@ -584,6 +586,39 @@ extension WillDeepTests {
         #expect(textView.smartInsertDeleteEnabled == false)
         #expect(textView.isAutomaticDataDetectionEnabled == false)
         #expect(textView.isAutomaticLinkDetectionEnabled == false)
+        #expect(textView.isContinuousSpellCheckingEnabled == false)
+        #expect(textView.isGrammarCheckingEnabled == false)
+        #expect(textView.isAutomaticTextCompletionEnabled == false)
+
+        textView.string = "let value = 1"
+        let highlightedRange = NSRange(location: 0, length: 3)
+        let highlightedColor = NSColor.systemPurple
+        let textStorage = try #require(textView.textStorage)
+        textStorage.addAttribute(.foregroundColor, value: highlightedColor, range: highlightedRange)
+
+        let storedColor = textStorage.attribute(
+            .foregroundColor,
+            at: highlightedRange.location,
+            effectiveRange: nil
+        ) as? NSColor
+        #expect(storedColor == highlightedColor)
+    }
+
+    @MainActor
+    @Test("editor selection applies a matched system foreground and background pair")
+    func testEditorSelectionUsesMatchedSemanticColors() throws {
+        let textView = WillDeepTextView(frame: .zero)
+
+        textView.configureCodeEditingBehavior()
+
+        let foreground = try #require(
+            textView.selectedTextAttributes[.foregroundColor] as? NSColor
+        )
+        let background = try #require(
+            textView.selectedTextAttributes[.backgroundColor] as? NSColor
+        )
+        #expect(foreground == NSColor.selectedTextColor)
+        #expect(background == NSColor.selectedTextBackgroundColor)
     }
 
     @MainActor

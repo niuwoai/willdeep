@@ -150,9 +150,10 @@ struct EditorView: NSViewRepresentable {
         scrollView.autoresizingMask = [.width, .height]
         scrollView.contentView.postsBoundsChangedNotifications = true
 
-        // Rich text mode is required for NSAttributedString highlighting.
+        // Keep user editing and pasteboard import strictly plain-text. Syntax
+        // highlighting still uses programmatic text-storage attributes; AppKit
+        // does not require rich-text editing to render those attributes.
         textView.isEditable = true
-        textView.isRichText = true
         textView.importsGraphics = false
         textView.configureCodeEditingBehavior()
         textView.allowsUndo = true
@@ -608,6 +609,7 @@ struct EditorView: NSViewRepresentable {
             textView.drawsBackground = true
             textView.backgroundColor = editorBackgroundColor
             textView.insertionPointColor = theme.insertionPointColor
+            textView.selectedTextAttributes = WillDeepTextView.codeSelectionTextAttributes
             textView.currentLineColor = theme.currentLineBackgroundColor
             textView.foldedPlaceholderColor = theme.gutterTextColor
             textView.foldedPlaceholderBackgroundColor = theme.gutterTextColor.withAlphaComponent(0.12)
