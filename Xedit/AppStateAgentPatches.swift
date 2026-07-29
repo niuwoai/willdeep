@@ -696,4 +696,39 @@ extension AppState {
         knownModificationDates[url] = Self.modificationDate(at: url)
         hasExternalFileChanges = false
     }
+
+    func writeDelegatedAgentContent(
+        _ content: String,
+        to url: URL,
+        runtime: AgentRuntime,
+        workspaceRoot: URL
+    ) throws {
+        let root = workspaceRoot.standardizedFileURL
+        let destination: URL
+        do {
+            destination = try AgentWorkspacePathGuard.validate(
+                url,
+                root: root
+            )
+        } catch {
+            throw CocoaError(
+                .fileWriteNoPermission,
+                userInfo: [
+                    NSFilePathErrorKey: url.standardizedFileURL.path,
+                    NSLocalizedDescriptionKey: "Delegated agent write is outside the workspace.",
+                ]
+            )
+        }
+        try FileManager.default.createDirectory(
+            at: destination.deletingLastPathComponent(),
+            withIntermediateDirectories: true
+        )
+        try Data(content.utf8).write(to: destination, options: .atomic)
+        applyAgentPatchedContent(content, to: destination)
+        runtime.didEditFiles = true
+        let relativePath = destination.path == root.path
+            ? destination.lastPathComponent
+            : String(destination.path.dropFirst(root.path.count + 1))
+        runtime.agentEditedPaths.insert(relativePath)
+    }
 }

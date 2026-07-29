@@ -120,8 +120,8 @@ protocol ExecutorAdapter {
 
 | 执行器 | 派工命令 | 结构化输出 | 续接 | 备注 |
 | --- | --- | --- | --- | --- |
-| Claude Code | `claude -p <prompt> --output-format stream-json --permission-mode <m>` | ✅ stream-json 事件流 | ✅ `claude -p --resume <session-id>` | 能力最全，Phase 1 主力 |
-| Codex CLI | `codex exec <prompt> --json` | ✅ JSONL 事件 | ✅ `codex exec resume <session-id>` | Phase 1 主力 |
+| Claude Code | argv + stdin：`claude -p --input-format text --output-format stream-json` | ✅ stream-json 事件流 | ✅ `claude -p --resume <session-id>` | 当前无 fail-closed stdio 宿主审批回调；每轮新进程 resume |
+| Codex CLI | argv + stdin：`codex exec --json -`；本机审批场景使用 `codex app-server --stdio` | ✅ JSONL / app-server 通知 | ✅ thread resume | app-server 的命令、文件和权限请求回到宿主审批 |
 | Cursor Agent | `cursor-agent -p <prompt> --output-format json` | ⚠️ 有但字段较少 | ⚠️ 不稳定 | Phase 1 保持现状「可用不承诺」，resume 走降级路径 |
 | 自研 loop | 进程内 `AgentRuntime`（不起子进程） | ✅ 原生 | ✅ 原生 | 后端即省心托管模型池；也是其余三家不可用时的兜底 |
 

@@ -556,7 +556,7 @@ enum AgentToolRunner {
 
         let currentContent: String
         if let provider = context.editableContentProvider {
-            currentContent = try await provider(url)
+            currentContent = try provider(url)
         } else {
             currentContent = AppState.decodeText(from: try Data(contentsOf: url))
         }
@@ -1025,13 +1025,16 @@ enum AgentToolRunner {
             throw AgentToolError.missingArgument("prompt")
         }
 
-        let permissionMode = arguments["permission_mode"]?.stringValue()?
+        let requestedPermissionMode = arguments["permission_mode"]?.stringValue()?
             .trimmingCharacters(in: .whitespacesAndNewlines) ?? "acceptEdits"
-        guard claudeCodePermissionModes.contains(permissionMode) else {
+        guard claudeCodePermissionModes.contains(requestedPermissionMode) else {
             throw AgentToolError.invalidArgument(
                 "permission_mode must be one of: \(claudeCodePermissionModes.sorted().joined(separator: ", "))"
             )
         }
+        let permissionMode = claudeCodeCLIPermissionMode(
+            requestedPermissionMode
+        )
 
         let executable: String
         if context.remoteBackend != nil {
@@ -1045,6 +1048,85 @@ enum AgentToolRunner {
             )
         }
 
+        if context.remoteBackend == nil,
+           arguments["use_visible_terminal"]?.boolValue() != true {
+            let root = context.rootDirectory?.standardizedFileURL
+                ?? FileManager.default.homeDirectoryForCurrentUser.standardizedFileURL
+            let environment = context.localCommandEnvironment ?? shellEnvironment()
+            let acpExecutable = claudeCodeACPExecutablePath(
+                environment: environment
+            )
+            let capabilities = AgentExecutorCapabilityResolver.select(
+                executor: .claudeCode,
+                isRemote: false,
+                usesDaemon: false,
+                usesVisibleTerminal: false,
+                hasHostApproval: context.delegatedApprovalHandler != nil,
+                hasACPAdapter: acpExecutable != nil
+            )
+            if capabilities.transport == .agentClientProtocol,
+               let acpExecutable {
+                let configuration = AgentACPConfiguration(
+                    executableURL: URL(fileURLWithPath: acpExecutable),
+                    claudeExecutableURL: URL(fileURLWithPath: executable),
+                    prompt: prompt,
+                    model: arguments["model"]?.stringValue(),
+                    sessionID: delegatedAgentSessionID(arguments),
+                    imagePaths: delegatedImagePaths(arguments),
+                    workingDirectory: root,
+                    environment: environment,
+                    sandboxMode: context.sandboxMode,
+                    permissionMode: permissionMode,
+                    secretRedactionValues: context.secretRedactionValues
+                )
+                return try await runACPDelegatedAgent(
+                    configuration,
+                    arguments: arguments,
+                    context: context
+                )
+            }
+            let specification = AgentExecutorProcessFactory.claudeCode(
+                executable: executable,
+                prompt: prompt,
+                permissionMode: permissionMode,
+                model: arguments["model"]?.stringValue(),
+                sessionID: delegatedAgentSessionID(arguments),
+                imagePaths: delegatedImagePaths(arguments),
+                workingDirectory: root,
+                environment: environment,
+                sandboxMode: context.sandboxMode
+            )
+            return try await runStructuredDelegatedAgent(
+                specification,
+                arguments: arguments,
+                context: context
+            )
+        }
+        if let daemonBackend = context.daemonBackend,
+           arguments["use_visible_terminal"]?.boolValue() != true {
+            let root = URL(
+                fileURLWithPath: context.workspaceLocation?.path
+                    ?? daemonBackend.descriptor.defaultWorkspacePath
+            )
+            let specification = AgentExecutorProcessFactory.claudeCode(
+                executable: executable,
+                prompt: prompt,
+                permissionMode: permissionMode,
+                model: arguments["model"]?.stringValue(),
+                sessionID: delegatedAgentSessionID(arguments),
+                imagePaths: delegatedImagePaths(arguments),
+                workingDirectory: root,
+                environment: [:],
+                sandboxMode: context.sandboxMode
+            )
+            return try await daemonBackend.runExecutor(
+                specification: specification,
+                arguments: arguments,
+                context: context,
+                foregroundMaxTimeout: delegatedAgentForegroundTimeout
+            )
+        }
+
         let command = claudeCodeCommandLine(
             executable: executable,
             prompt: prompt,
@@ -1054,6 +1136,164 @@ enum AgentToolRunner {
         )
 
         return try await runDelegatedAgentCommand(command, arguments: arguments, context: context)
+    }
+
+    private static func runACPDelegatedAgent(
+        _ configuration: AgentACPConfiguration,
+        arguments: [String: AgentJSONValue],
+        context: AgentToolContext
+    ) async throws -> AgentToolResult {
+        let runInBackground = arguments["run_in_background"]?.boolValue() ?? true
+        let canDetach = runInBackground
+            && context.jobRegistry != nil
+            && context.runtimeID != nil
+        let registry: AgentJobRegistry
+        if let sharedRegistry = context.jobRegistry {
+            registry = sharedRegistry
+        } else {
+            registry = await MainActor.run { AgentJobRegistry() }
+        }
+        let runtimeID = context.runtimeID ?? UUID()
+        let requestedTimeout = arguments["timeout_seconds"]?.intValue()
+        let timeout: Double? = requestedTimeout.map {
+            Double(min(max($0, 1), Int(delegatedAgentForegroundTimeout)))
+        } ?? (canDetach ? nil : delegatedAgentForegroundTimeout)
+        let jobID = UUID()
+        let controller = AgentACPClientTurn(
+            configuration: configuration,
+            approvalHandler: context.delegatedApprovalHandler,
+            readHandler: { url in
+                if let provider = context.editableContentProvider {
+                    return try provider(url)
+                }
+                return try String(contentsOf: url, encoding: .utf8)
+            },
+            writeHandler: context.delegatedFileWriteHandler,
+            eventHandler: { events in
+                await MainActor.run {
+                    registry.recordManagedExecutorEvents(
+                        id: jobID,
+                        events: events
+                    )
+                }
+            },
+            processHandler: { pid in
+                await MainActor.run {
+                    registry.updateManagedExecutorProcess(id: jobID, pid: pid)
+                }
+            }
+        )
+        let job = await MainActor.run {
+            registry.registerManagedExecutor(
+                id: jobID,
+                executor: .claudeCode,
+                displayCommand: "Claude Code ACP",
+                workingDirectory: configuration.workingDirectory,
+                runtimeID: runtimeID,
+                turnID: context.turnID,
+                timeoutSeconds: timeout,
+                publishesCompletion: canDetach,
+                cancellation: { controller.cancel() }
+            )
+        }
+
+        Task {
+            do {
+                let result = try await controller.run()
+                let status: AgentBackgroundJob.Status = result.status == .completed
+                    ? .completed
+                    : (result.status == .cancelled ? .killed : .failed)
+                await MainActor.run {
+                    registry.finishManagedExecutor(
+                        id: jobID,
+                        status: status,
+                        exitCode: status == .completed ? 0 : -1
+                    )
+                }
+            } catch {
+                let detail = AgentSecretStore.redact(
+                    error.localizedDescription,
+                    secretValues: context.secretRedactionValues
+                )
+                await MainActor.run {
+                    registry.recordManagedExecutorEvents(
+                        id: jobID,
+                        events: [AgentExecutorEvent(
+                            kind: .warning,
+                            detail: detail,
+                            status: .failed
+                        )]
+                    )
+                    registry.finishManagedExecutor(
+                        id: jobID,
+                        status: .failed,
+                        exitCode: -1
+                    )
+                }
+            }
+        }
+
+        if canDetach {
+            let timeoutLine = timeout.map { "\nTimeout: \(Int($0))s" } ?? ""
+            return AgentToolResult(
+                summary: "▶ \(job.displayHandle) started",
+                payload: """
+                Started Claude Code ACP job \(job.displayHandle).
+                cwd: \(configuration.workingDirectory.path)\(timeoutLine)
+
+                Claude permissions, filesystem access, and terminal commands are routed through WillDeep. Events are streaming into the job registry; use `get_job_output`, `list_jobs`, or `kill_job` while it runs.
+                """
+            )
+        }
+
+        let completedJob = try await withTaskCancellationHandler {
+            while true {
+                try Task.checkCancellation()
+                if let snapshot = await MainActor.run(
+                    body: { registry.job(id: job.id) }
+                ), !snapshot.isAlive {
+                    return snapshot
+                }
+                try await Task.sleep(nanoseconds: 100_000_000)
+            }
+        } onCancel: {
+            Task { @MainActor in
+                _ = registry.killForStoppedTurn(id: job.id)
+            }
+        }
+        await MainActor.run {
+            registry.markCompletionSurfaced(id: job.id, forRuntime: runtimeID)
+        }
+        let resultText = await MainActor.run {
+            registry.executorResultText(id: job.id)
+        }
+        let rawOutput = await MainActor.run {
+            registry.output(id: job.id, tailLines: nil)
+        }
+        let detail = resultText.isEmpty ? rawOutput : resultText
+        switch completedJob.status {
+        case .completed:
+            let usage = structuredUsageSummary(completedJob.executorUsage)
+            let sessionLine = completedJob.executorSessionID.map {
+                "\n\nSession: \($0)"
+            } ?? ""
+            return AgentToolResult(
+                summary: "claude_code completed\(usage)",
+                payload: detail + sessionLine
+            )
+        case .timedOut:
+            throw AgentToolError.commandTimeout
+        case .running:
+            throw AgentToolError.commandFailed(
+                -1,
+                "Claude Code ACP job did not reach a terminal state."
+            )
+        case .failed, .killed, .launchFailed:
+            throw AgentToolError.commandFailed(
+                completedJob.exitCode ?? -1,
+                detail
+            )
+        }
     }
 
     // MARK: codex_cli / cursor_agent / cline_cli
@@ -1123,28 +1363,6 @@ enum AgentToolRunner {
         executablePath(commandName: "cline", preferredPaths: [
             "\(NSHomeDirectory())/.local/bin/cline",
         ], environment: environment, isExecutable: isExecutable)
-    }
-
-    nonisolated static func executablePath(
-        commandName: String,
-        preferredPaths: [String],
-        environment: [String: String],
-        isExecutable: (String) -> Bool
-    ) -> String? {
-        var seen = Set<String>()
-        var candidates: [String] = []
-
-        func append(_ path: String) {
-            guard !seen.contains(path) else { return }
-            seen.insert(path)
-            candidates.append(path)
-        }
-
-        preferredPaths.forEach(append)
-        for entry in (environment["PATH"] ?? "").split(separator: ":").map(String.init) {
-            append("\(entry)/\(commandName)")
-        }
-        return candidates.first(where: isExecutable)
     }
 
     nonisolated static func codexCLICommandLine(
@@ -1259,6 +1477,72 @@ enum AgentToolRunner {
                 "Codex CLI not found on this Mac. Install Codex CLI or the Codex desktop app, then retry. Tell the user instead of retrying blindly."
             )
         }
+        if context.remoteBackend == nil,
+           arguments["use_visible_terminal"]?.boolValue() != true {
+            let root = context.rootDirectory?.standardizedFileURL
+                ?? FileManager.default.homeDirectoryForCurrentUser.standardizedFileURL
+            if context.delegatedApprovalHandler != nil {
+                let configuration = AgentCodexAppServerConfiguration(
+                    executableURL: URL(fileURLWithPath: executable),
+                    prompt: prompt,
+                    model: arguments["model"]?.stringValue(),
+                    sessionID: delegatedAgentSessionID(arguments),
+                    imagePaths: delegatedImagePaths(arguments),
+                    workingDirectory: root,
+                    environment: context.localCommandEnvironment
+                        ?? shellEnvironment(),
+                    sandboxMode: context.sandboxMode,
+                    permissionMode: permissionMode,
+                    secretRedactionValues: context.secretRedactionValues
+                )
+                return try await runCodexAppServerDelegatedAgent(
+                    configuration,
+                    arguments: arguments,
+                    context: context
+                )
+            }
+            let specification = AgentExecutorProcessFactory.codexCLI(
+                executable: executable,
+                prompt: prompt,
+                permissionMode: permissionMode,
+                model: arguments["model"]?.stringValue(),
+                sessionID: delegatedAgentSessionID(arguments),
+                workspacePath: context.workspaceLocation?.path
+                    ?? context.rootDirectory?.standardizedFileURL.path,
+                imagePaths: delegatedImagePaths(arguments),
+                workingDirectory: root,
+                environment: context.localCommandEnvironment ?? shellEnvironment(),
+                sandboxMode: context.sandboxMode
+            )
+            return try await runStructuredDelegatedAgent(
+                specification,
+                arguments: arguments,
+                context: context
+            )
+        }
+        if let daemonBackend = context.daemonBackend,
+           arguments["use_visible_terminal"]?.boolValue() != true {
+            let workspacePath = context.workspaceLocation?.path
+                ?? daemonBackend.descriptor.defaultWorkspacePath
+            let specification = AgentExecutorProcessFactory.codexCLI(
+                executable: executable,
+                prompt: prompt,
+                permissionMode: permissionMode,
+                model: arguments["model"]?.stringValue(),
+                sessionID: delegatedAgentSessionID(arguments),
+                workspacePath: workspacePath,
+                imagePaths: delegatedImagePaths(arguments),
+                workingDirectory: URL(fileURLWithPath: workspacePath),
+                environment: [:],
+                sandboxMode: context.sandboxMode
+            )
+            return try await daemonBackend.runExecutor(
+                specification: specification,
+                arguments: arguments,
+                context: context,
+                foregroundMaxTimeout: delegatedAgentForegroundTimeout
+            )
+        }
         let command = codexCLICommandLine(
             executable: executable,
             prompt: prompt,
@@ -1268,6 +1552,297 @@ enum AgentToolRunner {
             imagePaths: delegatedImagePaths(arguments)
         )
         return try await runDelegatedAgentCommand(command, arguments: arguments, context: context)
+    }
+
+    private static func runCodexAppServerDelegatedAgent(
+        _ configuration: AgentCodexAppServerConfiguration,
+        arguments: [String: AgentJSONValue],
+        context: AgentToolContext
+    ) async throws -> AgentToolResult {
+        let runInBackground = arguments["run_in_background"]?.boolValue() ?? true
+        let canDetach = runInBackground
+            && context.jobRegistry != nil
+            && context.runtimeID != nil
+        let registry: AgentJobRegistry
+        if let sharedRegistry = context.jobRegistry {
+            registry = sharedRegistry
+        } else {
+            registry = await MainActor.run { AgentJobRegistry() }
+        }
+        let runtimeID = context.runtimeID ?? UUID()
+        let requestedTimeout = arguments["timeout_seconds"]?.intValue()
+        let timeout: Double? = requestedTimeout.map {
+            Double(min(max($0, 1), Int(delegatedAgentForegroundTimeout)))
+        } ?? (canDetach ? nil : delegatedAgentForegroundTimeout)
+        let jobID = UUID()
+        let controller = AgentCodexAppServerTurn(
+            configuration: configuration,
+            approvalHandler: context.delegatedApprovalHandler,
+            eventHandler: { events in
+                await MainActor.run {
+                    registry.recordManagedExecutorEvents(
+                        id: jobID,
+                        events: events
+                    )
+                }
+            },
+            processHandler: { pid in
+                await MainActor.run {
+                    registry.updateManagedExecutorProcess(
+                        id: jobID,
+                        pid: pid
+                    )
+                }
+            }
+        )
+        let job = await MainActor.run {
+            registry.registerManagedExecutor(
+                id: jobID,
+                executor: .codexCLI,
+                displayCommand: "Codex app-server",
+                workingDirectory: configuration.workingDirectory,
+                runtimeID: runtimeID,
+                turnID: context.turnID,
+                timeoutSeconds: timeout,
+                publishesCompletion: canDetach,
+                cancellation: {
+                    controller.cancel()
+                }
+            )
+        }
+
+        Task {
+            do {
+                let result = try await controller.run()
+                let status: AgentBackgroundJob.Status
+                switch result.status {
+                case .completed:
+                    status = .completed
+                case .cancelled:
+                    status = .killed
+                case .pending, .running, .failed:
+                    status = .failed
+                }
+                await MainActor.run {
+                    registry.finishManagedExecutor(
+                        id: jobID,
+                        status: status,
+                        exitCode: status == .completed ? 0 : -1
+                    )
+                }
+            } catch {
+                let detail = AgentSecretStore.redact(
+                    error.localizedDescription,
+                    secretValues: context.secretRedactionValues
+                )
+                await MainActor.run {
+                    registry.recordManagedExecutorEvents(
+                        id: jobID,
+                        events: [AgentExecutorEvent(
+                            kind: .warning,
+                            detail: detail,
+                            status: .failed
+                        )]
+                    )
+                    registry.finishManagedExecutor(
+                        id: jobID,
+                        status: .failed,
+                        exitCode: -1
+                    )
+                }
+            }
+        }
+
+        if canDetach {
+            let timeoutLine = timeout.map { "\nTimeout: \(Int($0))s" } ?? ""
+            return AgentToolResult(
+                summary: "▶ \(job.displayHandle) started",
+                payload: """
+                Started bidirectional Codex app-server job \(job.displayHandle).
+                cwd: \(configuration.workingDirectory.path)\(timeoutLine)
+
+                Approval requests are routed through WillDeep. Events are streaming into the job registry; use `get_job_output`, `list_jobs`, or `kill_job` while it runs.
+                """
+            )
+        }
+
+        let completedJob = try await withTaskCancellationHandler {
+            while true {
+                try Task.checkCancellation()
+                if let snapshot = await MainActor.run(
+                    body: { registry.job(id: job.id) }
+                ), !snapshot.isAlive {
+                    return snapshot
+                }
+                try await Task.sleep(nanoseconds: 100_000_000)
+            }
+        } onCancel: {
+            Task { @MainActor in
+                _ = registry.killForStoppedTurn(id: job.id)
+            }
+        }
+
+        await MainActor.run {
+            registry.markCompletionSurfaced(id: job.id, forRuntime: runtimeID)
+        }
+        let resultText = await MainActor.run {
+            registry.executorResultText(id: job.id)
+        }
+        let rawOutput = await MainActor.run {
+            registry.output(id: job.id, tailLines: nil)
+        }
+        let failureDetail = resultText.isEmpty ? rawOutput : resultText
+        switch completedJob.status {
+        case .completed:
+            let usage = structuredUsageSummary(completedJob.executorUsage)
+            let sessionLine = completedJob.executorSessionID.map {
+                "\n\nSession: \($0)"
+            } ?? ""
+            return AgentToolResult(
+                summary: "codex_cli completed\(usage)",
+                payload: (resultText.isEmpty ? rawOutput : resultText)
+                    + sessionLine
+            )
+        case .timedOut:
+            throw AgentToolError.commandTimeout
+        case .running:
+            throw AgentToolError.commandFailed(
+                -1,
+                "Codex app-server job did not reach a terminal state."
+            )
+        case .failed, .killed, .launchFailed:
+            throw AgentToolError.commandFailed(
+                completedJob.exitCode ?? -1,
+                failureDetail
+            )
+        }
+    }
+
+    private static func runStructuredDelegatedAgent(
+        _ specification: AgentExecutorProcessSpecification,
+        arguments: [String: AgentJSONValue],
+        context: AgentToolContext
+    ) async throws -> AgentToolResult {
+        let runInBackground = arguments["run_in_background"]?.boolValue() ?? true
+        let canDetach = runInBackground && context.jobRegistry != nil && context.runtimeID != nil
+        let registry: AgentJobRegistry
+        if let sharedRegistry = context.jobRegistry {
+            registry = sharedRegistry
+        } else {
+            registry = await MainActor.run { AgentJobRegistry() }
+        }
+        let runtimeID = context.runtimeID ?? UUID()
+        let requestedTimeout = arguments["timeout_seconds"]?.intValue()
+        let timeout: Double? = requestedTimeout.map {
+            Double(min(max($0, 1), Int(delegatedAgentForegroundTimeout)))
+        } ?? (canDetach ? nil : delegatedAgentForegroundTimeout)
+
+        let job: AgentBackgroundJob
+        do {
+            job = try await MainActor.run {
+                try registry.startExecutor(
+                    specification: specification,
+                    runtimeID: runtimeID,
+                    turnID: context.turnID,
+                    timeoutSeconds: timeout,
+                    publishesCompletion: canDetach,
+                    secretRedactionValues: context.secretRedactionValues
+                )
+            }
+        } catch {
+            throw AgentToolError.commandFailed(
+                -1,
+                AgentSecretStore.redact(
+                    error.localizedDescription,
+                    secretValues: context.secretRedactionValues
+                )
+            )
+        }
+        if job.status == .launchFailed {
+            await MainActor.run {
+                registry.markCompletionSurfaced(id: job.id, forRuntime: runtimeID)
+            }
+            let detail: String
+            if let eventDetail = job.latestExecutorEvent?.detail {
+                detail = eventDetail
+            } else {
+                detail = await MainActor.run { registry.output(id: job.id) }
+            }
+            throw AgentToolError.commandFailed(-1, detail)
+        }
+        if specification.executor == .claudeCode,
+           context.delegatedApprovalHandler != nil {
+            await MainActor.run {
+                registry.recordExecutorNotice(
+                    id: job.id,
+                    detail: """
+                    Claude Code capability note: this CLI build does not expose a fail-closed stdio permission callback. WillDeep is streaming structured events and can resume the session, but Claude permissions remain enforced by its CLI mode plus the outer WillDeep sandbox.
+                    """
+                )
+            }
+        }
+
+        if canDetach {
+            let timeoutLine = timeout.map { "\nTimeout: \(Int($0))s" } ?? ""
+            return AgentToolResult(
+                summary: "▶ \(job.displayHandle) started",
+                payload: """
+                Started structured \(specification.executor.rawValue) job \(job.displayHandle).
+                PID: \(job.pid)
+                cwd: \(job.workingDirectoryPath ?? specification.workingDirectory?.path ?? "")\(timeoutLine)
+
+                Events are streaming into the job registry. You will receive a completion notification on a later turn; use `get_job_output`, `list_jobs`, or `kill_job` while it runs.
+                """
+            )
+        }
+
+        let completedJob = try await withTaskCancellationHandler {
+            while true {
+                try Task.checkCancellation()
+                if let snapshot = await MainActor.run(body: { registry.job(id: job.id) }),
+                   !snapshot.isAlive {
+                    return snapshot
+                }
+                try await Task.sleep(nanoseconds: 100_000_000)
+            }
+        } onCancel: {
+            Task { @MainActor in
+                _ = registry.killForStoppedTurn(id: job.id)
+            }
+        }
+
+        await MainActor.run {
+            registry.markCompletionSurfaced(id: job.id, forRuntime: runtimeID)
+        }
+        let resultText = await MainActor.run {
+            registry.executorResultText(id: job.id)
+        }
+        let rawOutput = await MainActor.run {
+            registry.output(id: job.id, tailLines: nil)
+        }
+        let failureDetail = resultText.isEmpty ? rawOutput : resultText
+
+        switch completedJob.status {
+        case .completed:
+            let usage = structuredUsageSummary(completedJob.executorUsage)
+            let payload = resultText.isEmpty ? rawOutput : resultText
+            let sessionLine = completedJob.executorSessionID.map {
+                "\n\nSession: \($0)"
+            } ?? ""
+            return AgentToolResult(
+                summary: "\(specification.executor.rawValue) completed\(usage)",
+                payload: payload + sessionLine
+            )
+        case .timedOut:
+            throw AgentToolError.commandTimeout
+        case .running:
+            throw AgentToolError.commandFailed(-1, "Structured agent job did not reach a terminal state.")
+        case .failed, .killed, .launchFailed:
+            throw AgentToolError.commandFailed(
+                completedJob.exitCode ?? -1,
+                failureDetail
+            )
+        }
     }
 
     private static func cursorAgent(
@@ -1343,23 +1918,6 @@ enum AgentToolRunner {
             throw AgentToolError.missingArgument("prompt")
         }
         return prompt
-    }
-
-    nonisolated static func delegatedImagePaths(
-        _ arguments: [String: AgentJSONValue],
-        fileManager: FileManager = .default
-    ) -> [String] {
-        guard let candidates = arguments["image_paths"]?.stringArrayValue() else { return [] }
-        return candidates.compactMap { path in
-            let url = URL(fileURLWithPath: path).standardizedFileURL
-            let directory = url.deletingLastPathComponent()
-            guard url.path.hasPrefix(FileManager.default.temporaryDirectory.standardizedFileURL.path + "/"),
-                  directory.lastPathComponent.hasPrefix(AgentDelegatedImageBundle.directoryPrefix),
-                  fileManager.fileExists(atPath: url.path) else {
-                return nil
-            }
-            return url.path
-        }
     }
 
     private static func runDelegatedAgentCommand(
@@ -1464,19 +2022,71 @@ enum AgentToolRunner {
             throw AgentToolError.missingArgument("job_id")
         }
         let tailLines = arguments["tail_lines"]?.intValue()
-        let snapshot: (job: AgentBackgroundJob, output: String)? = await MainActor.run {
+        let snapshot: (
+            job: AgentBackgroundJob,
+            output: String,
+            events: [AgentExecutorEvent]
+        )? = await MainActor.run {
             guard let job = registry.job(matchingHandle: handle, runtimeID: runtimeID) else { return nil }
-            return (job, registry.output(id: job.id, tailLines: tailLines))
+            return (
+                job,
+                registry.output(id: job.id, tailLines: tailLines),
+                registry.executorEvents(id: job.id)
+            )
         }
         guard let snapshot else {
             throw AgentJobError.jobNotFound(handle)
         }
         let header = describe(job: snapshot.job)
-        let body = snapshot.output.isEmpty ? "(no output captured yet)" : snapshot.output
+        let structuredEvents = tailLines.map {
+            Array(snapshot.events.suffix(max(1, $0)))
+        } ?? snapshot.events
+        let structuredBody = structuredEvents.map(structuredEventDescription).joined(separator: "\n")
+        let body: String
+        let outputLabel: String
+        if snapshot.job.executor != nil, !structuredBody.isEmpty {
+            body = structuredBody
+            outputLabel = "events"
+        } else {
+            body = snapshot.output.isEmpty ? "(no output captured yet)" : snapshot.output
+            outputLabel = "output"
+        }
         return AgentToolResult(
             summary: "\(snapshot.job.displayHandle): \(snapshot.job.status.rawValue)",
-            payload: "\(header)\n--- output ---\n\(body)"
+            payload: "\(header)\n--- \(outputLabel) ---\n\(body)"
         )
+    }
+
+    nonisolated private static func structuredEventDescription(
+        _ event: AgentExecutorEvent
+    ) -> String {
+        var fields = ["event=\(event.kind.rawValue)"]
+        if let status = event.status {
+            fields.append("status=\(status.rawValue)")
+        }
+        if let sessionID = event.sessionID {
+            fields.append("session_id=\(sessionID)")
+        }
+        if let toolName = event.toolName {
+            fields.append("tool=\(toolName)")
+        }
+        if let filePath = event.filePath {
+            fields.append("file=\(filePath)")
+        }
+        if let detail = event.detail?
+            .trimmingCharacters(in: .whitespacesAndNewlines),
+           !detail.isEmpty {
+            fields.append("detail=\(detail.replacingOccurrences(of: "\n", with: "\\n"))")
+        }
+        if let usage = event.usage {
+            if let input = usage.inputTokens {
+                fields.append("input_tokens=\(input)")
+            }
+            if let output = usage.outputTokens {
+                fields.append("output_tokens=\(output)")
+            }
+        }
+        return fields.joined(separator: " ")
     }
 
     private static func killJob(

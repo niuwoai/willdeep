@@ -120,6 +120,12 @@ struct AgentJobRow: View {
                 .lineLimit(isExpanded ? nil : 2)
                 .truncationMode(.tail)
                 .textSelection(.enabled)
+            if let event = job.latestExecutorEvent {
+                AgentExecutorEventRow(event: event, compact: true)
+            }
+            if job.executor != nil {
+                structuredMetadata
+            }
             HStack(spacing: 6) {
                 statusLabel
                 if let exit = job.exitCode {
@@ -133,18 +139,40 @@ struct AgentJobRow: View {
                 Spacer(minLength: 0)
             }
             if isExpanded {
-                let output = appState.agentJobRegistry.output(id: job.id, tailLines: 200)
-                ScrollView {
-                    Text(output.isEmpty ? L10n.AgentJobs.noOutput : output)
-                        .font(.system(size: 10.5, design: .monospaced))
-                        .foregroundStyle(.secondary)
+                if job.executor != nil {
+                    let events = appState.agentJobRegistry.executorEvents(id: job.id)
+                        .filter { $0.kind != .raw && $0.kind != .usage }
+                    ScrollView {
+                        LazyVStack(alignment: .leading, spacing: 7) {
+                            ForEach(events.suffix(60)) { event in
+                                AgentExecutorEventRow(event: event, compact: false)
+                            }
+                            if events.isEmpty {
+                                Text(L10n.AgentJobs.noOutput)
+                                    .font(.system(size: 10.5))
+                                    .foregroundStyle(.secondary)
+                            }
+                        }
                         .frame(maxWidth: .infinity, alignment: .leading)
-                        .textSelection(.enabled)
+                    }
+                    .frame(maxHeight: 220)
+                    .padding(6)
+                    .background(Color(nsColor: .textBackgroundColor).opacity(0.6))
+                    .clipShape(RoundedRectangle(cornerRadius: 4))
+                } else {
+                    let output = appState.agentJobRegistry.output(id: job.id, tailLines: 200)
+                    ScrollView {
+                        Text(output.isEmpty ? L10n.AgentJobs.noOutput : output)
+                            .font(.system(size: 10.5, design: .monospaced))
+                            .foregroundStyle(.secondary)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .textSelection(.enabled)
+                    }
+                    .frame(maxHeight: 160)
+                    .padding(6)
+                    .background(Color(nsColor: .textBackgroundColor).opacity(0.6))
+                    .clipShape(RoundedRectangle(cornerRadius: 4))
                 }
-                .frame(maxHeight: 160)
-                .padding(6)
-                .background(Color(nsColor: .textBackgroundColor).opacity(0.6))
-                .clipShape(RoundedRectangle(cornerRadius: 4))
             }
         }
         .padding(8)
@@ -217,6 +245,33 @@ struct AgentJobRow: View {
         statusForeground.opacity(0.14)
     }
 
+    @ViewBuilder
+    private var structuredMetadata: some View {
+        HStack(spacing: 8) {
+            if let sessionID = job.executorSessionID {
+                Label {
+                    Text("\(L10n.AgentTaskMonitor.structuredSession) \(sessionID)")
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                } icon: {
+                    Image(systemName: "link")
+                }
+            }
+            if let usage = job.executorUsage {
+                Label(
+                    L10n.AgentTaskMonitor.structuredUsage(
+                        input: usage.inputTokens.map(String.init) ?? "–",
+                        output: usage.outputTokens.map(String.init) ?? "–"
+                    ),
+                    systemImage: "number"
+                )
+            }
+        }
+        .font(.system(size: 9.5))
+        .foregroundStyle(.secondary)
+        .labelStyle(.titleAndIcon)
+    }
+
     private static func formatDuration(_ seconds: TimeInterval) -> String {
         let total = max(0, Int(seconds))
         if total < 60 { return "\(total)s" }
@@ -224,5 +279,100 @@ struct AgentJobRow: View {
         if m < 60 { return "\(m)m\(s)s" }
         let h = m / 60, mm = m % 60
         return "\(h)h\(mm)m"
+    }
+}
+
+private struct AgentExecutorEventRow: View {
+    let event: AgentExecutorEvent
+    let compact: Bool
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 6) {
+            Image(systemName: symbol)
+                .font(.system(size: 9, weight: .semibold))
+                .foregroundStyle(tint)
+                .frame(width: 12, height: 14)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title)
+                    .font(.system(size: 10, weight: .semibold))
+                    .lineLimit(1)
+                if let detail, !detail.isEmpty {
+                    if compact {
+                        detailText(detail)
+                            .lineLimit(2)
+                    } else {
+                        detailText(detail)
+                            .lineLimit(8)
+                            .textSelection(.enabled)
+                    }
+                }
+            }
+            Spacer(minLength: 0)
+        }
+    }
+
+    private func detailText(_ detail: String) -> some View {
+        Text(detail)
+            .font(.system(
+                size: 9.5,
+                design: event.kind == .toolStarted || event.kind == .toolUpdated
+                    ? .monospaced
+                    : .default
+            ))
+            .foregroundStyle(.secondary)
+    }
+
+    private var title: String {
+        let fallback: String
+        switch event.kind {
+        case .sessionStarted: fallback = L10n.AgentTaskMonitor.eventStarted
+        case .message: fallback = L10n.AgentTaskMonitor.eventMessage
+        case .thinking: fallback = L10n.AgentTaskMonitor.eventThinking
+        case .toolStarted, .toolUpdated: fallback = L10n.AgentTaskMonitor.eventTool
+        case .fileChanged: fallback = L10n.AgentTaskMonitor.eventFileChanged
+        case .permissionRequested: fallback = L10n.AgentTaskMonitor.eventPermission
+        case .usage: fallback = L10n.AgentTaskMonitor.eventUsage
+        case .warning: fallback = L10n.AgentTaskMonitor.eventWarning
+        case .finished: fallback = L10n.AgentTaskMonitor.eventFinished
+        case .raw: fallback = L10n.AgentTaskMonitor.eventRaw
+        }
+        if let title = event.title?
+            .trimmingCharacters(in: .whitespacesAndNewlines),
+           !title.isEmpty {
+            return title
+        }
+        return fallback
+    }
+
+    private var detail: String? {
+        if event.kind == .fileChanged {
+            return event.filePath ?? event.detail
+        }
+        return event.detail
+    }
+
+    private var symbol: String {
+        switch event.kind {
+        case .sessionStarted: return "link"
+        case .message: return "text.bubble"
+        case .thinking: return "brain"
+        case .toolStarted, .toolUpdated: return "wrench.and.screwdriver"
+        case .fileChanged: return "doc.badge.ellipsis"
+        case .permissionRequested: return "hand.raised"
+        case .usage: return "number"
+        case .warning: return "exclamationmark.triangle"
+        case .finished: return "checkmark.circle"
+        case .raw: return "ellipsis.curlybraces"
+        }
+    }
+
+    private var tint: Color {
+        switch event.status {
+        case .failed: return .red
+        case .cancelled: return .orange
+        case .completed: return .green
+        case .pending, .running: return .accentColor
+        case nil: return .secondary
+        }
     }
 }

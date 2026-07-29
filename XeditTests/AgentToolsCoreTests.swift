@@ -1236,14 +1236,14 @@ struct AgentToolsCoreTests {
     }
 
     @Test
-    func composerDelegatedAgentsUseVisibleBoundTerminal() {
+    func composerDelegatedAgentsPreferStructuredExecutionWhenSupported() {
         let arguments = AppState.delegatedAgentArguments(
             prompt: "delegate this task",
             executionAgent: .codexCLI
         )
 
         #expect(arguments["run_in_background"]?.boolValue() == false)
-        #expect(arguments["use_visible_terminal"]?.boolValue() == true)
+        #expect(arguments["use_visible_terminal"]?.boolValue() == false)
         #expect(arguments["visible_terminal_label"]?.stringValue() == "Codex")
         #expect(arguments["permission_mode"]?.stringValue() == AgentExecutionAgent.codexCLI.defaultPermissionMode)
 
@@ -1255,8 +1255,10 @@ struct AgentToolsCoreTests {
             prompt: "delegate this task",
             executionAgent: .clineCLI
         )
+        #expect(cursorArguments["use_visible_terminal"]?.boolValue() == true)
         #expect(cursorArguments["visible_terminal_label"]?.stringValue() == "Cursor Agent")
         #expect(cursorArguments["permission_mode"]?.stringValue() == AgentExecutionAgent.cursorAgent.defaultPermissionMode)
+        #expect(clineArguments["use_visible_terminal"]?.boolValue() == true)
         #expect(clineArguments["visible_terminal_label"]?.stringValue() == "Cline")
         #expect(clineArguments["permission_mode"]?.stringValue() == AgentExecutionAgent.clineCLI.defaultPermissionMode)
     }

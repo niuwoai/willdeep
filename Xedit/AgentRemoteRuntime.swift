@@ -626,6 +626,359 @@ struct DaemonRuntimeBackend: AgentRemoteRuntimeBackend {
         )
     }
 
+    func runExecutor(
+        specification: AgentExecutorProcessSpecification,
+        arguments: [String: AgentJSONValue],
+        context: AgentToolContext,
+        foregroundMaxTimeout: TimeInterval
+    ) async throws -> AgentToolResult {
+        let timeoutArg = arguments["timeout_seconds"]?.intValue()
+            ?? Int(foregroundMaxTimeout)
+        let timeout = min(max(timeoutArg, 1), 3600 * 6)
+        let wantsBackground = arguments["run_in_background"]?.boolValue() ?? true
+        let remoteExecutable = specification.executableURL.lastPathComponent
+        let job = try await startProcess(
+            executable: remoteExecutable,
+            arguments: specification.arguments,
+            standardInput: specification.standardInput,
+            timeoutSeconds: timeout
+        )
+        if let registry = context.jobRegistry,
+           let runtimeID = context.runtimeID {
+            return try await runManagedExecutor(
+                remoteJob: job,
+                specification: specification,
+                registry: registry,
+                runtimeID: runtimeID,
+                turnID: context.turnID,
+                timeout: timeout,
+                wantsBackground: wantsBackground,
+                secretRedactionValues: context.secretRedactionValues
+            )
+        }
+        if wantsBackground {
+            let capabilityNote = specification.executor == .claudeCode
+                ? "\nClaude Code permissions remain controlled by its CLI mode and the daemon workspace boundary; this transport does not provide host-routed approvals."
+                : ""
+            return AgentToolResult(
+                summary: "▶ \(job.id) started on \(descriptor.displayName)",
+                payload: """
+                Started structured \(specification.executor.rawValue) daemon job \(job.id).
+                Runtime: \(descriptor.displayName)
+                Executable: \(remoteExecutable)
+                Remote PID: \(job.pid ?? 0)
+                cwd: \(job.cwd)
+
+                The prompt was sent over stdin, outside argv and the shell.\(capabilityNote)
+                Use `get_job_output` with job_id `\(job.id)` or `kill_job` to inspect or stop it.
+                """
+            )
+        }
+
+        let deadline = Date().addingTimeInterval(
+            min(TimeInterval(timeout), max(1, foregroundMaxTimeout))
+        )
+        var latest = job
+        while latest.exitCode == nil && Date() < deadline {
+            try await Task.sleep(
+                nanoseconds: foregroundJobPollIntervalNanoseconds
+            )
+            latest = try await getJob(id: job.id)
+        }
+        if latest.exitCode == nil {
+            _ = try? await killJob(id: job.id)
+            throw AgentToolError.commandTimeout
+        }
+
+        let output = try await jobOutput(id: job.id)
+        let redactedOutput = AgentSecretStore.redact(
+            output.output,
+            secretValues: context.secretRedactionValues
+        )
+        let events = redactedOutput
+            .split(separator: "\n", omittingEmptySubsequences: true)
+            .flatMap { specification.decoder.decode(line: String($0)) }
+        let resultText = structuredResultText(
+            events: events,
+            fallback: redactedOutput
+        )
+        if latest.exitCode != 0 {
+            throw AgentToolError.commandFailed(
+                Int32(latest.exitCode ?? -1),
+                resultText
+            )
+        }
+        let sessionID = events.reversed()
+            .compactMap { $0.sessionID }
+            .first
+        let sessionLine = sessionID.map { "\n\nSession: \($0)" } ?? ""
+        let capabilityNote = specification.executor == .claudeCode
+            ? "\n\nPermission note: Claude permissions were enforced by its CLI mode and the daemon workspace boundary; host-routed approvals are unavailable on this transport."
+            : ""
+        return AgentToolResult(
+            summary: "daemon \(descriptor.displayName): \(specification.executor.rawValue) completed",
+            payload: resultText + sessionLine + capabilityNote
+        )
+    }
+
+    private func runManagedExecutor(
+        remoteJob: DaemonJobData,
+        specification: AgentExecutorProcessSpecification,
+        registry: AgentJobRegistry,
+        runtimeID: UUID,
+        turnID: UUID?,
+        timeout: Int,
+        wantsBackground: Bool,
+        secretRedactionValues: [String]
+    ) async throws -> AgentToolResult {
+        let localJobID = UUID()
+        let streamController = DaemonExecutorStreamController()
+        let localJob = await MainActor.run {
+            registry.registerManagedExecutor(
+                id: localJobID,
+                executor: specification.executor,
+                displayCommand: "\(specification.executor.rawValue) via \(descriptor.displayName)",
+                workingDirectory: specification.workingDirectory
+                    ?? URL(fileURLWithPath: descriptor.defaultWorkspacePath),
+                runtimeID: runtimeID,
+                turnID: turnID,
+                timeoutSeconds: Double(timeout),
+                publishesCompletion: wantsBackground,
+                runtimeDisplayName: descriptor.displayName,
+                remoteRuntimeID: descriptor.id,
+                remotePID: remoteJob.pid.map(Int32.init),
+                cancellation: {
+                    streamController.cancel()
+                    Task {
+                        _ = try? await killJob(id: remoteJob.id)
+                    }
+                }
+            )
+        }
+
+        let streamTask = Task {
+            let terminal: DaemonExecutorStreamTerminal
+            do {
+                terminal = try await streamExecutorEvents(
+                    remoteJobID: remoteJob.id,
+                    specification: specification,
+                    registry: registry,
+                    localJobID: localJobID,
+                    secretRedactionValues: secretRedactionValues
+                )
+            } catch is CancellationError {
+                terminal = .cancelled
+            } catch {
+                let detail = AgentSecretStore.redact(
+                    error.localizedDescription,
+                    secretValues: secretRedactionValues
+                )
+                await MainActor.run {
+                    registry.recordManagedExecutorEvents(
+                        id: localJobID,
+                        events: [AgentExecutorEvent(
+                            kind: .warning,
+                            detail: detail,
+                            status: .failed
+                        )]
+                    )
+                }
+                terminal = .failed
+            }
+            await MainActor.run {
+                registry.finishManagedExecutor(
+                    id: localJobID,
+                    status: terminal.jobStatus,
+                    exitCode: terminal.exitCode
+                )
+            }
+        }
+        streamController.attach(streamTask)
+
+        if wantsBackground {
+            return AgentToolResult(
+                summary: "▶ \(localJob.displayHandle) started on \(descriptor.displayName)",
+                payload: """
+                Started structured \(specification.executor.rawValue) job \(localJob.displayHandle).
+                Runtime: \(descriptor.displayName)
+                Remote job: \(remoteJob.id)
+                Remote PID: \(remoteJob.pid ?? 0)
+                cwd: \(remoteJob.cwd)
+
+                The prompt was sent over stdin, outside argv and the shell. Structured daemon events are streaming into WillDeep; use `get_job_output`, `list_jobs`, or `kill_job` with local job id `\(localJob.displayHandle)`.
+                """
+            )
+        }
+
+        let completedJob = try await withTaskCancellationHandler {
+            while true {
+                try Task.checkCancellation()
+                if let snapshot = await MainActor.run(
+                    body: { registry.job(id: localJobID) }
+                ), !snapshot.isAlive {
+                    return snapshot
+                }
+                try await Task.sleep(nanoseconds: 100_000_000)
+            }
+        } onCancel: {
+            streamController.cancel()
+        }
+        await MainActor.run {
+            registry.markCompletionSurfaced(id: localJobID, forRuntime: runtimeID)
+        }
+        let detail = await MainActor.run {
+            let result = registry.executorResultText(id: localJobID)
+            return result.isEmpty
+                ? registry.output(id: localJobID, tailLines: nil)
+                : result
+        }
+        switch completedJob.status {
+        case .completed:
+            let usage = AgentToolRunner.structuredUsageSummary(
+                completedJob.executorUsage
+            )
+            let sessionLine = completedJob.executorSessionID.map {
+                "\n\nSession: \($0)"
+            } ?? ""
+            return AgentToolResult(
+                summary: "daemon \(descriptor.displayName): \(specification.executor.rawValue) completed\(usage)",
+                payload: detail + sessionLine
+            )
+        case .timedOut:
+            throw AgentToolError.commandTimeout
+        case .running:
+            throw AgentToolError.commandFailed(
+                -1,
+                "Daemon executor did not reach a terminal state."
+            )
+        case .failed, .killed, .launchFailed:
+            throw AgentToolError.commandFailed(
+                completedJob.exitCode ?? -1,
+                detail
+            )
+        }
+    }
+
+    private func streamExecutorEvents(
+        remoteJobID: String,
+        specification: AgentExecutorProcessSpecification,
+        registry: AgentJobRegistry,
+        localJobID: UUID,
+        secretRedactionValues: [String]
+    ) async throws -> DaemonExecutorStreamTerminal {
+        let request = try eventStreamRequest(jobID: remoteJobID)
+        let (bytes, response) = try await URLSession.shared.bytes(for: request)
+        let status = (response as? HTTPURLResponse)?.statusCode ?? 0
+        guard (200..<300).contains(status) else {
+            throw AgentToolError.httpFailed(
+                status,
+                "Daemon event stream failed."
+            )
+        }
+        var terminal = DaemonExecutorStreamTerminal.failed
+        for try await line in bytes.lines {
+            try Task.checkCancellation()
+            guard line.hasPrefix("data:") else { continue }
+            let json = line.dropFirst(5).trimmingCharacters(
+                in: .whitespaces
+            )
+            guard let data = json.data(using: .utf8),
+                  let event = try? JSONDecoder.willdeepDaemon.decode(
+                    DaemonJobEventData.self,
+                    from: data
+                  ) else {
+                continue
+            }
+            if let exitCode = event.exitCode {
+                terminal = exitCode == 0 ? .completed : .failedCode(
+                    Int32(exitCode)
+                )
+            }
+            var normalized = specification.decoder.decode(line: event.data)
+            if event.stream == "stderr",
+               normalized.isEmpty || normalized.allSatisfy({
+                   $0.kind == .raw
+               }),
+               !event.data.trimmingCharacters(
+                in: .whitespacesAndNewlines
+               ).isEmpty {
+                normalized = [AgentExecutorEvent(
+                    kind: .warning,
+                    detail: AgentSecretStore.redact(
+                        event.data.trimmingCharacters(
+                            in: .whitespacesAndNewlines
+                        ),
+                        secretValues: secretRedactionValues
+                    ),
+                    status: .running
+                )]
+            }
+            normalized = redactedExecutorEvents(
+                normalized,
+                secretValues: secretRedactionValues
+            )
+            if !normalized.isEmpty {
+                await MainActor.run {
+                    registry.recordManagedExecutorEvents(
+                        id: localJobID,
+                        events: normalized
+                    )
+                }
+            }
+        }
+        return terminal
+    }
+
+    private func redactedExecutorEvents(
+        _ events: [AgentExecutorEvent],
+        secretValues: [String]
+    ) -> [AgentExecutorEvent] {
+        func redact(_ value: String?) -> String? {
+            value.map {
+                AgentSecretStore.redact($0, secretValues: secretValues)
+            }
+        }
+        return events.map { event in
+            var copy = event
+            copy.sessionID = redact(event.sessionID)
+            copy.itemID = redact(event.itemID)
+            copy.parentID = redact(event.parentID)
+            copy.title = redact(event.title)
+            copy.detail = redact(event.detail)
+            copy.toolName = redact(event.toolName)
+            copy.filePath = redact(event.filePath)
+            copy.rawJSON = redact(event.rawJSON)
+            return copy
+        }
+    }
+
+    private func eventStreamRequest(jobID: String) throws -> URLRequest {
+        guard let baseURL = descriptor.daemonEndpointURL else {
+            throw AgentToolError.invalidArgument(
+                "Daemon endpoint URL is not configured."
+            )
+        }
+        let url = baseURL
+            .appendingPathComponent("v1")
+            .appendingPathComponent("run")
+            .appendingPathComponent("jobs")
+            .appendingPathComponent(jobID)
+            .appendingPathComponent("events")
+        var request = URLRequest(url: url)
+        request.timeoutInterval = TimeInterval(3600 * 6)
+        request.setValue("text/event-stream", forHTTPHeaderField: "Accept")
+        let token = RemoteRuntimeSecretStore.daemonToken(
+            runtimeID: descriptor.id
+        )
+        if !token.isEmpty {
+            request.setValue(
+                "Bearer \(token)",
+                forHTTPHeaderField: "Authorization"
+            )
+        }
+        return request
+    }
+
     func listJobs() async throws -> AgentToolResult {
         AgentToolResult(summary: "daemon jobs", payload: "Daemon job listing is not exposed by this daemon version. Use the job id returned by run_command with get_job_output or kill_job.")
     }
@@ -673,6 +1026,27 @@ struct DaemonRuntimeBackend: AgentRemoteRuntimeBackend {
             "timeout_seconds": timeoutSeconds
         ]
         return try await request(method: "POST", path: "/v1/run/start", query: [], body: body)
+    }
+
+    private func startProcess(
+        executable: String,
+        arguments: [String],
+        standardInput: Data,
+        timeoutSeconds: Int
+    ) async throws -> DaemonJobData {
+        let body: [String: Any] = [
+            "executable": executable,
+            "arguments": arguments,
+            "stdin_base64": standardInput.base64EncodedString(),
+            "cwd": ".",
+            "timeout_seconds": timeoutSeconds
+        ]
+        return try await request(
+            method: "POST",
+            path: "/v1/run/start",
+            query: [],
+            body: body
+        )
     }
 
     private func getJob(id: String) async throws -> DaemonJobData {
@@ -736,6 +1110,30 @@ struct DaemonRuntimeBackend: AgentRemoteRuntimeBackend {
             return String(value.prefix(maxOutputBytes)) + "\n...[truncated]"
         }
         return value
+    }
+
+    private func structuredResultText(
+        events: [AgentExecutorEvent],
+        fallback: String
+    ) -> String {
+        if let final = events.reversed().first(where: {
+            $0.kind == .finished
+                && $0.detail?.trimmingCharacters(in: .whitespacesAndNewlines)
+                    .isEmpty == false
+        })?.detail {
+            return final.trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+        let messages = events.compactMap { event -> String? in
+            guard (event.kind == .message && event.status != .running)
+                    || event.kind == .warning else {
+                return nil
+            }
+            return event.detail?.trimmingCharacters(in: .whitespacesAndNewlines)
+        }.filter { !$0.isEmpty }
+        if !messages.isEmpty {
+            return messages.joined(separator: "\n\n")
+        }
+        return trimOutput(fallback)
     }
 }
 
@@ -809,6 +1207,73 @@ private struct DaemonJobData: Decodable {
 
 private struct DaemonJobOutputData: Decodable {
     let output: String
+}
+
+private struct DaemonJobEventData: Decodable {
+    let stream: String
+    let data: String
+    let exitCode: Int?
+
+    enum CodingKeys: String, CodingKey {
+        case stream, data
+        case exitCode = "exit_code"
+    }
+}
+
+private enum DaemonExecutorStreamTerminal {
+    case completed
+    case failed
+    case failedCode(Int32)
+    case cancelled
+
+    var jobStatus: AgentBackgroundJob.Status {
+        switch self {
+        case .completed:
+            return .completed
+        case .cancelled:
+            return .killed
+        case .failed, .failedCode:
+            return .failed
+        }
+    }
+
+    var exitCode: Int32 {
+        switch self {
+        case .completed:
+            return 0
+        case .failedCode(let code):
+            return code
+        case .failed:
+            return -1
+        case .cancelled:
+            return SIGTERM
+        }
+    }
+}
+
+private nonisolated final class DaemonExecutorStreamController:
+    @unchecked Sendable {
+    private let lock = NSLock()
+    private var task: Task<Void, Never>?
+    private var cancelled = false
+
+    func attach(_ task: Task<Void, Never>) {
+        let shouldCancel = lock.withLock {
+            self.task = task
+            return cancelled
+        }
+        if shouldCancel {
+            task.cancel()
+        }
+    }
+
+    func cancel() {
+        let task = lock.withLock {
+            cancelled = true
+            return self.task
+        }
+        task?.cancel()
+    }
 }
 
 private struct DaemonKillData: Decodable {

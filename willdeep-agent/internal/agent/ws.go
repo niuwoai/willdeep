@@ -89,7 +89,18 @@ func (s *Server) handleWSMessage(ctx context.Context, message WSMessage) WSRespo
 		if err != nil {
 			return wsError(message, err)
 		}
-		job, err := s.jobs.Start(ctx, wsString(message.Payload, "command"), cwd, time.Duration(wsInt(message.Payload, "timeout_seconds", 0))*time.Second)
+		stdin, err := decodeProcessStdin(wsString(message.Payload, "stdin_base64"))
+		if err != nil {
+			return wsError(message, err)
+		}
+		job, err := s.jobs.StartProcess(ctx, ProcessSpec{
+			Command:    wsString(message.Payload, "command"),
+			Executable: wsString(message.Payload, "executable"),
+			Arguments:  wsStringArray(message.Payload, "arguments"),
+			Stdin:      stdin,
+			Cwd:        cwd,
+			Timeout:    time.Duration(wsInt(message.Payload, "timeout_seconds", 0)) * time.Second,
+		})
 		if err != nil {
 			return wsError(message, err)
 		}
@@ -132,4 +143,23 @@ func wsInt(payload map[string]any, key string, fallback int) int {
 	default:
 		return fallback
 	}
+}
+
+func wsStringArray(payload map[string]any, key string) []string {
+	if payload == nil {
+		return nil
+	}
+	values, ok := payload[key].([]any)
+	if !ok {
+		return nil
+	}
+	result := make([]string, 0, len(values))
+	for _, value := range values {
+		text, ok := value.(string)
+		if !ok {
+			return nil
+		}
+		result = append(result, text)
+	}
+	return result
 }

@@ -1,6 +1,6 @@
 # WillDeep Product Overview
 
-> Last updated: 2026-07-28 | Current version: v1.210.0-rc19
+> Last updated: 2026-07-29 | Current version: v1.213.0-rc1
 
 ## Positioning
 
@@ -11,6 +11,8 @@ Official product domain: [willdeep.com](https://willdeep.com).
 WillDeep is configured for non-App-Store distribution without App Sandbox so it can access local project files with fewer permission interruptions.
 
 ## 架构概览
+
+- **Claude Code / Codex 结构化外部执行器（1.213.0-rc1）** —— 显式 capability resolver 会在 ACP、Codex app-server、结构化进程、远端 daemon、可见终端和兼容 shell 之间选路。本机 Claude 在 ACP adapter 可用时通过 JSON-RPC stdio 把权限、编辑器缓冲区文件读写与反向终端交回 WillDeep，并按 session ID 在同一进程持续多轮；本机 Codex 使用 `app-server --stdio` 回传命令、文件和扩展权限审批。协议不可用时，Claude `stream-json` 与 Codex `exec --json` 仍通过 argv + prompt stdin 安全降级。远端 daemon 用 `executable + arguments + stdin_base64` 启动，并通过 SSE 把前后台事件实时归一到本机任务面板。所有路径共享会话、消息、思考、工具、文件、usage、警告和完成事件模型，以及停止、超时、脱敏和 sandbox 生命周期；用户显式选择的可见终端与 SSH、Cursor、Cline 兼容路径继续保留。详细能力矩阵见 `docs/STRUCTURED_AGENT_EXECUTORS.md`。
 
 - **截图结果可靠显示（1.210.0-rc19）** —— 工具结果经过统一敏感信息脱敏时会完整保留图片附件；`capture_screenshot`、浏览器截图及其他产图工具不再出现“提示已附图但聊天记录没有图片”的数据折损。
 - **委托终端命令被 pty 截断修复（1.210.0-rc18）** —— 分派给 Claude Code / Codex 等外部 CLI 的任务重新通过私有 runner 脚本执行，可见终端只接收一行 `/bin/sh <runner>` 调用；超长中文提示词不再因交互式 shell 回显撑爆 tty 输入队列而被丢字节，也不会让终端停在续行提示符下静默空等。真实命令仍会在执行前回显到终端供用户审阅。

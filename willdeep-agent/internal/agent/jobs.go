@@ -21,6 +21,15 @@ type JobRegistry struct {
 	jobs map[string]*Job
 }
 
+type ProcessSpec struct {
+	Command    string
+	Executable string
+	Arguments  []string
+	Stdin      []byte
+	Cwd        string
+	Timeout    time.Duration
+}
+
 type Job struct {
 	ID         string    `json:"id"`
 	Command    string    `json:"command"`
@@ -56,24 +65,36 @@ func NewJobRegistry() *JobRegistry {
 }
 
 func (r *JobRegistry) Start(ctx context.Context, command string, cwd string, timeout time.Duration) (*Job, error) {
-	if command == "" {
-		return nil, errors.New("command is required")
+	return r.StartProcess(ctx, ProcessSpec{
+		Command: command,
+		Cwd:     cwd,
+		Timeout: timeout,
+	})
+}
+
+func (r *JobRegistry) StartProcess(ctx context.Context, spec ProcessSpec) (*Job, error) {
+	if err := ValidateProcessSpec(spec); err != nil {
+		return nil, err
 	}
-	if timeout <= 0 {
-		timeout = 30 * time.Minute
+	if spec.Timeout <= 0 {
+		spec.Timeout = 30 * time.Minute
 	}
-	if timeout > 6*time.Hour {
-		timeout = 6 * time.Hour
+	if spec.Timeout > 6*time.Hour {
+		spec.Timeout = 6 * time.Hour
 	}
-	jobCtx, cancel := context.WithTimeout(ctx, timeout)
+	jobCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), spec.Timeout)
 
 	r.mu.Lock()
 	r.seq++
 	id := fmt.Sprintf("job-%d", r.seq)
+	displayCommand := spec.Command
+	if spec.Executable != "" {
+		displayCommand = spec.Executable
+	}
 	job := &Job{
 		ID:        id,
-		Command:   command,
-		Cwd:       cwd,
+		Command:   displayCommand,
+		Cwd:       spec.Cwd,
 		StartedAt: time.Now().UTC(),
 		cancel:    cancel,
 		buffer:    jobBuffer{wait: make(chan struct{})},
@@ -81,8 +102,14 @@ func (r *JobRegistry) Start(ctx context.Context, command string, cwd string, tim
 	r.jobs[id] = job
 	r.mu.Unlock()
 
-	cmd := exec.CommandContext(jobCtx, "/bin/sh", "-lc", command)
-	cmd.Dir = cwd
+	var cmd *exec.Cmd
+	if spec.Executable != "" {
+		cmd = exec.CommandContext(jobCtx, spec.Executable, spec.Arguments...)
+		cmd.Stdin = bytes.NewReader(spec.Stdin)
+	} else {
+		cmd = exec.CommandContext(jobCtx, "/bin/sh", "-lc", spec.Command)
+	}
+	cmd.Dir = spec.Cwd
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
 	stdout, err := cmd.StdoutPipe()
 	if err != nil {
@@ -120,6 +147,18 @@ func (r *JobRegistry) Start(ctx context.Context, command string, cwd string, tim
 	}()
 
 	return job, nil
+}
+
+func ValidateProcessSpec(spec ProcessSpec) error {
+	hasCommand := spec.Command != ""
+	hasExecutable := spec.Executable != ""
+	if hasCommand == hasExecutable {
+		return errors.New("exactly one of command or executable is required")
+	}
+	if hasCommand && len(spec.Arguments) > 0 {
+		return errors.New("arguments require executable")
+	}
+	return nil
 }
 
 func (r *JobRegistry) Get(id string) (*Job, bool) {

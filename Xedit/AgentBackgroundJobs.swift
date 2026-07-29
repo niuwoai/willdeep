@@ -58,6 +58,12 @@ struct AgentBackgroundJob: Identifiable, Equatable {
     /// Output buffer size in bytes — cheap UI summary, the real text
     /// comes from `AgentJobRegistry.output(_:tailLines:)`.
     var outputByteCount: Int
+    /// Present for structured Claude/Codex sessions. Generic shell jobs keep
+    /// these fields nil and retain their existing behavior.
+    var executor: AgentExecutionAgent? = nil
+    var executorSessionID: String? = nil
+    var latestExecutorEvent: AgentExecutorEvent? = nil
+    var executorUsage: AgentExecutorUsage? = nil
 
     var isAlive: Bool { status == .running }
     nonisolated var needsAttention: Bool {
@@ -131,6 +137,13 @@ final class AgentJobRegistry: ObservableObject {
     /// `jobs` (the publishable snapshot) so SwiftUI diffs only the
     /// cheap metadata.
     private var processes: [UUID: AgentJobProcess] = [:]
+
+    /// Bidirectional protocol sessions own their Process inside the protocol
+    /// driver. The registry keeps only cancellation, timeout, and normalized
+    /// event state so the regular job UI can manage both transport styles.
+    private var managedExecutorEvents: [UUID: [AgentExecutorEvent]] = [:]
+    private var managedExecutorCancellations: [UUID: @Sendable () -> Void] = [:]
+    private var managedExecutorTimeouts: [UUID: DispatchWorkItem] = [:]
 
     // MARK: - Spawn
 
@@ -298,6 +311,381 @@ final class AgentJobRegistry: ObservableObject {
         return initial
     }
 
+    /// Start a structured coding-agent process without `/bin/sh -c`.
+    /// The prompt is written to stdin after launch and never appears in argv,
+    /// job metadata, process listings, or approval previews.
+    @discardableResult
+    func startExecutor(
+        specification: AgentExecutorProcessSpecification,
+        runtimeID: UUID,
+        turnID: UUID? = nil,
+        timeoutSeconds: Double?,
+        publishesCompletion: Bool = true,
+        secretRedactionValues: [String] = []
+    ) throws -> AgentBackgroundJob {
+        let id = UUID()
+        let shortID = String(id.uuidString.prefix(6)).lowercased()
+        let workingDirectoryPath = specification.workingDirectory?.path
+        if let turnID {
+            originatingTurnIDs[id] = turnID
+        }
+        if !publishesCompletion {
+            suppressedCompletionJobIDs.insert(id)
+        }
+
+        let process = Process()
+        let launch = AgentSandboxPolicy.processLaunch(
+            executableURL: specification.executableURL,
+            arguments: specification.arguments,
+            mode: specification.sandboxMode,
+            rootDirectory: specification.workingDirectory
+        )
+        process.executableURL = launch.executableURL
+        process.arguments = launch.arguments
+        process.currentDirectoryURL = specification.workingDirectory
+        var processEnvironment = AgentSandboxPolicy.sandboxedEnvironment(
+            mode: specification.sandboxMode,
+            rootDirectory: specification.workingDirectory,
+            base: specification.environment
+        )
+        processEnvironment["PWD"] = specification.workingDirectory?.path
+            ?? FileManager.default.homeDirectoryForCurrentUser.standardizedFileURL.path
+        process.environment = processEnvironment
+
+        let stdinPipe = Pipe()
+        let stdoutPipe = Pipe()
+        let stderrPipe = Pipe()
+        process.standardInput = stdinPipe
+        process.standardOutput = stdoutPipe
+        process.standardError = stderrPipe
+
+        let collector = AgentJobOutputCollector(
+            limit: Self.maxOutputBytes,
+            secretRedactionValues: secretRedactionValues
+        )
+        let eventCollector = AgentExecutorEventCollector(
+            decoder: specification.decoder,
+            secretRedactionValues: secretRedactionValues
+        )
+        stdoutPipe.fileHandleForReading.readabilityHandler = { [weak self] handle in
+            let data = handle.availableData
+            guard !data.isEmpty else { return }
+            collector.append(data)
+            let events = eventCollector.append(data)
+            guard !events.isEmpty else { return }
+            Task { @MainActor [weak self] in
+                self?.recordExecutorEvents(id: id, events: events)
+            }
+        }
+        stderrPipe.fileHandleForReading.readabilityHandler = { handle in
+            let data = handle.availableData
+            if !data.isEmpty {
+                collector.append(data)
+            }
+        }
+
+        do {
+            try process.run()
+        } catch {
+            stdoutPipe.fileHandleForReading.readabilityHandler = nil
+            stderrPipe.fileHandleForReading.readabilityHandler = nil
+            if process.isRunning {
+                AgentProcessSupport.terminateProcessTree(process)
+            }
+            try? stdinPipe.fileHandleForWriting.close()
+            let job = AgentBackgroundJob(
+                id: id,
+                shortID: shortID,
+                command: specification.displayCommand,
+                workingDirectoryPath: workingDirectoryPath,
+                runtimeID: runtimeID,
+                startedAt: Date(),
+                pid: process.isRunning ? process.processIdentifier : -1,
+                status: .launchFailed,
+                exitCode: -1,
+                finishedAt: Date(),
+                outputByteCount: 0,
+                executor: specification.executor,
+                latestExecutorEvent: AgentExecutorEvent(
+                    kind: .warning,
+                    detail: AgentSecretStore.redact(
+                        error.localizedDescription,
+                        secretValues: secretRedactionValues
+                    ),
+                    status: .failed
+                )
+            )
+            collector.appendString(error.localizedDescription)
+            processes[id] = AgentJobProcess(
+                process: process,
+                collector: collector,
+                executorEventCollector: eventCollector
+            )
+            insertOrUpdate(job)
+            if publishesCompletion {
+                pendingCompletionEvents[runtimeID, default: []].append(id)
+            } else {
+                suppressedCompletionJobIDs.remove(id)
+            }
+            return job
+        }
+
+        let initial = AgentBackgroundJob(
+            id: id,
+            shortID: shortID,
+            command: specification.displayCommand,
+            workingDirectoryPath: workingDirectoryPath,
+            runtimeID: runtimeID,
+            startedAt: Date(),
+            pid: process.processIdentifier,
+            status: .running,
+            exitCode: nil,
+            finishedAt: nil,
+            outputByteCount: 0,
+            executor: specification.executor
+        )
+        let processBox = AgentJobProcess(
+            process: process,
+            collector: collector,
+            executorEventCollector: eventCollector
+        )
+        processes[id] = processBox
+        insertOrUpdate(initial)
+
+        if let timeoutSeconds, timeoutSeconds > 0 {
+            let work = DispatchWorkItem { [weak processBox] in
+                guard let processBox, processBox.process.isRunning else { return }
+                processBox.markTimedOut()
+                AgentProcessSupport.terminateProcessTree(processBox.process)
+            }
+            Self.lifecycleQueue.asyncAfter(
+                deadline: .now() + timeoutSeconds,
+                execute: work
+            )
+            processBox.timeoutWork = work
+        }
+
+        process.terminationHandler = { [weak self, weak processBox] proc in
+            stdoutPipe.fileHandleForReading.readabilityHandler = nil
+            stderrPipe.fileHandleForReading.readabilityHandler = nil
+            if let processBox {
+                processBox.timeoutWork?.cancel()
+                let remainingOutput = stdoutPipe.fileHandleForReading.availableData
+                processBox.collector.append(remainingOutput)
+                let remainingEvents = processBox.executorEventCollector?.append(
+                    remainingOutput,
+                    flush: true
+                ) ?? []
+                processBox.collector.append(
+                    stderrPipe.fileHandleForReading.availableData
+                )
+                if !remainingEvents.isEmpty {
+                    Task { @MainActor [weak self] in
+                        self?.recordExecutorEvents(
+                            id: id,
+                            events: remainingEvents
+                        )
+                    }
+                }
+            }
+            let exitStatus = proc.terminationStatus
+            let didTimeOut = processBox?.didTimeOut ?? false
+            let wasKilled = processBox?.didExplicitKill ?? false
+            Task { @MainActor [weak self] in
+                self?.markFinished(
+                    id: id,
+                    exitCode: exitStatus,
+                    didTimeOut: didTimeOut,
+                    wasKilled: wasKilled
+                )
+            }
+        }
+        let standardInput = specification.standardInput
+        Self.lifecycleQueue.async { [weak self, weak processBox] in
+            do {
+                if !standardInput.isEmpty {
+                    try stdinPipe.fileHandleForWriting.write(
+                        contentsOf: standardInput
+                    )
+                }
+                try stdinPipe.fileHandleForWriting.close()
+            } catch {
+                try? stdinPipe.fileHandleForWriting.close()
+                guard let processBox, processBox.process.isRunning else { return }
+                let detail = AgentSecretStore.redact(
+                    error.localizedDescription,
+                    secretValues: secretRedactionValues
+                )
+                processBox.collector.appendString(detail)
+                let warning = AgentExecutorEvent(
+                    kind: .warning,
+                    detail: detail,
+                    status: .failed
+                )
+                processBox.executorEventCollector?.append(warning)
+                Task { @MainActor [weak self] in
+                    self?.recordExecutorEvents(id: id, events: [warning])
+                }
+                AgentProcessSupport.terminateProcessTree(processBox.process)
+            }
+        }
+        return initial
+    }
+
+    /// Register a bidirectional executor whose protocol driver owns its
+    /// Process. Events, cancellation, timeout, and completion remain visible
+    /// through the same job registry API as one-shot structured executors.
+    @discardableResult
+    func registerManagedExecutor(
+        id: UUID = UUID(),
+        executor: AgentExecutionAgent,
+        displayCommand: String,
+        workingDirectory: URL,
+        runtimeID: UUID,
+        turnID: UUID? = nil,
+        timeoutSeconds: Double?,
+        publishesCompletion: Bool,
+        runtimeDisplayName: String? = nil,
+        remoteRuntimeID: UUID? = nil,
+        remotePID: Int32? = nil,
+        cancellation: @escaping @Sendable () -> Void
+    ) -> AgentBackgroundJob {
+        if let turnID {
+            originatingTurnIDs[id] = turnID
+        }
+        if !publishesCompletion {
+            suppressedCompletionJobIDs.insert(id)
+        }
+        managedExecutorEvents[id] = []
+        managedExecutorCancellations[id] = cancellation
+        let job = AgentBackgroundJob(
+            id: id,
+            shortID: String(id.uuidString.prefix(6)).lowercased(),
+            command: displayCommand,
+            workingDirectoryPath: workingDirectory.path,
+            runtimeID: runtimeID,
+            runtimeDisplayName: runtimeDisplayName,
+            remoteRuntimeID: remoteRuntimeID,
+            remotePID: remotePID,
+            startedAt: Date(),
+            pid: remotePID ?? -1,
+            status: .running,
+            exitCode: nil,
+            finishedAt: nil,
+            outputByteCount: 0,
+            executor: executor
+        )
+        insertOrUpdate(job)
+
+        if let timeoutSeconds, timeoutSeconds > 0 {
+            let work = DispatchWorkItem { [weak self] in
+                cancellation()
+                Task { @MainActor [weak self] in
+                    self?.finishManagedExecutor(
+                        id: id,
+                        status: .timedOut,
+                        exitCode: -1
+                    )
+                }
+            }
+            managedExecutorTimeouts[id] = work
+            Self.lifecycleQueue.asyncAfter(
+                deadline: .now() + timeoutSeconds,
+                execute: work
+            )
+        }
+        return job
+    }
+
+    func updateManagedExecutorProcess(id: UUID, pid: Int32) {
+        guard let index = jobs.firstIndex(where: { $0.id == id }),
+              jobs[index].isAlive else {
+            return
+        }
+        jobs[index].pid = pid
+    }
+
+    func recordManagedExecutorEvents(
+        id: UUID,
+        events: [AgentExecutorEvent]
+    ) {
+        guard !events.isEmpty,
+              let index = jobs.firstIndex(where: { $0.id == id }) else {
+            return
+        }
+        var collected = managedExecutorEvents[id] ?? []
+        collected.append(contentsOf: events)
+        if collected.count > 2_000 {
+            collected.removeFirst(collected.count - 2_000)
+        }
+        managedExecutorEvents[id] = collected
+        var updated = jobs[index]
+        applyExecutorEvents(events, to: &updated)
+        updated.outputByteCount = managedExecutorOutput(
+            events: collected
+        ).utf8.count
+        jobs[index] = updated
+    }
+
+    func recordExecutorNotice(id: UUID, detail: String) {
+        guard let process = processes[id] else { return }
+        let event = AgentExecutorEvent(
+            kind: .warning,
+            detail: detail,
+            status: .running
+        )
+        process.executorEventCollector?.append(event)
+        process.collector.appendString(detail + "\n")
+        recordExecutorEvents(id: id, events: [event])
+    }
+
+    func finishManagedExecutor(
+        id: UUID,
+        status: AgentBackgroundJob.Status,
+        exitCode: Int32
+    ) {
+        guard let index = jobs.firstIndex(where: { $0.id == id }),
+              jobs[index].isAlive else {
+            return
+        }
+        managedExecutorTimeouts.removeValue(forKey: id)?.cancel()
+        managedExecutorCancellations.removeValue(forKey: id)
+        var updated = jobs[index]
+        let collectedEvents = managedExecutorEvents[id] ?? []
+        applyExecutorEvents(collectedEvents, to: &updated)
+        updated.status = status
+        updated.exitCode = exitCode
+        updated.finishedAt = Date()
+        if updated.latestExecutorEvent?.kind != .finished {
+            let eventStatus: AgentExecutorEventStatus
+            switch status {
+            case .completed: eventStatus = .completed
+            case .killed: eventStatus = .cancelled
+            case .running, .failed, .timedOut, .launchFailed:
+                eventStatus = .failed
+            }
+            let finished = AgentExecutorEvent(
+                kind: .finished,
+                sessionID: updated.executorSessionID,
+                detail: "exit \(exitCode)",
+                status: eventStatus
+            )
+            managedExecutorEvents[id, default: []].append(finished)
+            updated.latestExecutorEvent = finished
+        }
+        updated.outputByteCount = managedExecutorOutput(
+            events: managedExecutorEvents[id] ?? []
+        ).utf8.count
+        jobs[index] = updated
+
+        let suppressCompletion = suppressedCompletionJobIDs.remove(id) != nil
+        if !suppressCompletion {
+            pendingCompletionEvents[updated.runtimeID, default: []].append(id)
+            AgentToolApprovalNotifier.notifyJobFinished(job: updated)
+            onJobFinished?(updated)
+        }
+    }
+
     // MARK: - Queries
 
     func jobs(forRuntime runtimeID: UUID) -> [AgentBackgroundJob] {
@@ -362,13 +750,46 @@ final class AgentJobRegistry: ObservableObject {
     /// for. Drop a single trailing newline before splitting so the
     /// tail count matches user intuition.
     func output(id: UUID, tailLines: Int? = nil) -> String {
-        guard let proc = processes[id] else { return "" }
-        let full = proc.collector.stringValue
+        let full: String
+        if let proc = processes[id] {
+            full = proc.collector.stringValue
+        } else {
+            full = managedExecutorOutput(
+                events: managedExecutorEvents[id] ?? []
+            )
+        }
         guard let tailLines, tailLines > 0 else { return full }
         let normalized = full.hasSuffix("\n") ? String(full.dropLast()) : full
         let lines = normalized.split(separator: "\n", omittingEmptySubsequences: false)
         if lines.count <= tailLines { return full }
         return lines.suffix(tailLines).joined(separator: "\n")
+    }
+
+    func executorEvents(id: UUID) -> [AgentExecutorEvent] {
+        processes[id]?.executorEventCollector?.snapshot
+            ?? managedExecutorEvents[id]
+            ?? []
+    }
+
+    func executorResultText(id: UUID) -> String {
+        let events = executorEvents(id: id)
+        if let final = events.reversed().first(where: {
+            $0.kind == .finished
+                && $0.detail?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false
+        })?.detail {
+            return final.trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+        let messages = events.compactMap { event -> String? in
+            guard (event.kind == .message && event.status != .running)
+                    || event.kind == .warning else {
+                return nil
+            }
+            return event.detail?.trimmingCharacters(in: .whitespacesAndNewlines)
+        }.filter { !$0.isEmpty }
+        if !messages.isEmpty {
+            return messages.joined(separator: "\n\n")
+        }
+        return output(id: id)
     }
 
     // MARK: - Lifecycle ops
@@ -377,9 +798,17 @@ final class AgentJobRegistry: ObservableObject {
     /// Returns true if a process was actually signaled.
     @discardableResult
     func kill(id: UUID) -> Bool {
-        guard let proc = processes[id], proc.process.isRunning else { return false }
-        proc.markExplicitKill()
-        AgentProcessSupport.terminateProcessTree(proc.process)
+        if let proc = processes[id], proc.process.isRunning {
+            proc.markExplicitKill()
+            AgentProcessSupport.terminateProcessTree(proc.process)
+            return true
+        }
+        guard let cancellation = managedExecutorCancellations[id],
+              jobs.first(where: { $0.id == id })?.isAlive == true else {
+            return false
+        }
+        cancellation()
+        finishManagedExecutor(id: id, status: .killed, exitCode: SIGTERM)
         return true
     }
 
@@ -447,6 +876,17 @@ final class AgentJobRegistry: ObservableObject {
         evictOldHistory(for: job.runtimeID)
     }
 
+    private func recordExecutorEvents(
+        id: UUID,
+        events: [AgentExecutorEvent]
+    ) {
+        guard let index = jobs.firstIndex(where: { $0.id == id }) else { return }
+        var updated = jobs[index]
+        applyExecutorEvents(events, to: &updated)
+        updated.outputByteCount = processes[id]?.collector.byteCount ?? 0
+        jobs[index] = updated
+    }
+
     private func evictOldHistory(for runtimeID: UUID) {
         let scoped = jobs.enumerated().filter { $0.element.runtimeID == runtimeID }
         guard scoped.count > Self.historyLimit else { return }
@@ -458,6 +898,9 @@ final class AgentJobRegistry: ObservableObject {
         for entry in removable.prefix(drop) {
             jobs.removeAll(where: { $0.id == entry.element.id })
             processes.removeValue(forKey: entry.element.id)
+            managedExecutorEvents.removeValue(forKey: entry.element.id)
+            managedExecutorCancellations.removeValue(forKey: entry.element.id)
+            managedExecutorTimeouts.removeValue(forKey: entry.element.id)?.cancel()
             originatingTurnIDs.removeValue(forKey: entry.element.id)
             suppressedCompletionJobIDs.remove(entry.element.id)
         }
@@ -471,18 +914,45 @@ final class AgentJobRegistry: ObservableObject {
     ) {
         guard let index = jobs.firstIndex(where: { $0.id == id }) else { return }
         var updated = jobs[index]
+        let collectedEvents = processes[id]?.executorEventCollector?.snapshot ?? []
+        applyExecutorEvents(collectedEvents, to: &updated)
+        let providerFinishedStatus = collectedEvents.reversed().first {
+            $0.kind == .finished
+        }?.status
         updated.finishedAt = Date()
         updated.exitCode = exitCode
         if wasKilled {
             updated.status = .killed
         } else if didTimeOut {
             updated.status = .timedOut
+        } else if providerFinishedStatus == .failed {
+            updated.status = .failed
+        } else if providerFinishedStatus == .cancelled {
+            updated.status = .killed
         } else if exitCode == 0 {
             updated.status = .completed
         } else {
             updated.status = .failed
         }
         updated.outputByteCount = processes[id]?.collector.byteCount ?? 0
+        if updated.latestExecutorEvent?.kind != .finished {
+            let status: AgentExecutorEventStatus
+            if wasKilled {
+                status = .cancelled
+            } else if didTimeOut || exitCode != 0 {
+                status = .failed
+            } else {
+                status = .completed
+            }
+            let finished = AgentExecutorEvent(
+                kind: .finished,
+                sessionID: updated.executorSessionID,
+                detail: "exit \(exitCode)",
+                status: status
+            )
+            processes[id]?.executorEventCollector?.append(finished)
+            updated.latestExecutorEvent = finished
+        }
         jobs[index] = updated
 
         let suppressCompletion = suppressedCompletionJobIDs.remove(id) != nil
@@ -491,6 +961,46 @@ final class AgentJobRegistry: ObservableObject {
             AgentToolApprovalNotifier.notifyJobFinished(job: updated)
             onJobFinished?(updated)
         }
+    }
+
+    private func applyExecutorEvents(
+        _ events: [AgentExecutorEvent],
+        to job: inout AgentBackgroundJob
+    ) {
+        for event in events {
+            if event.kind == .sessionStarted, let sessionID = event.sessionID {
+                job.executorSessionID = sessionID
+            }
+            if let usage = event.usage, event.kind == .usage || event.kind == .finished {
+                job.executorUsage = usage
+            }
+            if event.kind != .raw && event.kind != .usage {
+                job.latestExecutorEvent = event
+            }
+        }
+    }
+
+    private func managedExecutorOutput(
+        events: [AgentExecutorEvent]
+    ) -> String {
+        let lines = events.compactMap { event -> String? in
+            let detail = event.detail?
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            if let detail, !detail.isEmpty {
+                return detail
+            }
+            let title = event.title?
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            if let title, !title.isEmpty {
+                return title
+            }
+            return nil
+        }
+        let output = lines.joined(separator: "\n")
+        guard output.utf8.count > Self.maxOutputBytes else {
+            return output
+        }
+        return String(output.suffix(Self.maxOutputBytes)) + "\n...[truncated]"
     }
 }
 
@@ -515,14 +1025,20 @@ enum AgentJobError: LocalizedError {
 private nonisolated final class AgentJobProcess: @unchecked Sendable {
     let process: Process
     let collector: AgentJobOutputCollector
+    let executorEventCollector: AgentExecutorEventCollector?
     var timeoutWork: DispatchWorkItem?
     private let stateLock = NSLock()
     private var _didTimeOut = false
     private var _didExplicitKill = false
 
-    init(process: Process, collector: AgentJobOutputCollector) {
+    init(
+        process: Process,
+        collector: AgentJobOutputCollector,
+        executorEventCollector: AgentExecutorEventCollector? = nil
+    ) {
         self.process = process
         self.collector = collector
+        self.executorEventCollector = executorEventCollector
     }
 
     func markTimedOut() {
@@ -543,6 +1059,90 @@ private nonisolated final class AgentJobProcess: @unchecked Sendable {
     var didExplicitKill: Bool {
         stateLock.lock(); defer { stateLock.unlock() }
         return _didExplicitKill
+    }
+}
+
+private nonisolated final class AgentExecutorEventCollector: @unchecked Sendable {
+    private static let eventLimit = 2_000
+    private let decoder: any AgentExecutorEventDecoding
+    private let secretRedactionValues: [String]
+    private let lock = NSLock()
+    private var buffer = Data()
+    private var events: [AgentExecutorEvent] = []
+
+    init(
+        decoder: any AgentExecutorEventDecoding,
+        secretRedactionValues: [String]
+    ) {
+        self.decoder = decoder
+        self.secretRedactionValues = secretRedactionValues
+    }
+
+    func append(_ data: Data, flush: Bool = false) -> [AgentExecutorEvent] {
+        guard !data.isEmpty || flush else { return [] }
+        lock.lock()
+        defer { lock.unlock() }
+        buffer.append(data)
+        var decoded: [AgentExecutorEvent] = []
+        while let newlineIndex = buffer.firstIndex(of: 0x0A) {
+            let lineData = buffer.prefix(upTo: newlineIndex)
+            buffer.removeSubrange(buffer.startIndex...newlineIndex)
+            guard let line = String(data: lineData, encoding: .utf8),
+                  !line.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+                continue
+            }
+            decoded.append(contentsOf: decoder.decode(line: line).map(redacted))
+        }
+        if flush, !buffer.isEmpty {
+            if let line = String(data: buffer, encoding: .utf8),
+               !line.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                decoded.append(contentsOf: decoder.decode(line: line).map(redacted))
+            }
+            buffer.removeAll(keepingCapacity: true)
+        }
+        appendLocked(decoded)
+        return decoded
+    }
+
+    func append(_ event: AgentExecutorEvent) {
+        lock.lock()
+        appendLocked([event])
+        lock.unlock()
+    }
+
+    var snapshot: [AgentExecutorEvent] {
+        lock.lock()
+        defer { lock.unlock() }
+        return events
+    }
+
+    private func appendLocked(_ values: [AgentExecutorEvent]) {
+        guard !values.isEmpty else { return }
+        events.append(contentsOf: values)
+        if events.count > Self.eventLimit {
+            events.removeFirst(events.count - Self.eventLimit)
+        }
+    }
+
+    private func redacted(_ event: AgentExecutorEvent) -> AgentExecutorEvent {
+        func text(_ value: String?) -> String? {
+            value.map {
+                AgentSecretStore.redact(
+                    $0,
+                    secretValues: secretRedactionValues
+                )
+            }
+        }
+        var output = event
+        output.sessionID = text(event.sessionID)
+        output.itemID = text(event.itemID)
+        output.parentID = text(event.parentID)
+        output.title = text(event.title)
+        output.detail = text(event.detail)
+        output.toolName = text(event.toolName)
+        output.filePath = text(event.filePath)
+        output.rawJSON = text(event.rawJSON)
+        return output
     }
 }
 

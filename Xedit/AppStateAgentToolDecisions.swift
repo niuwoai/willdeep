@@ -11,6 +11,123 @@ import AppKit
 import Foundation
 
 extension AppState {
+    func resolveDelegatedExecutorApproval(
+        _ request: AgentDelegatedApprovalRequest,
+        runtime: AgentRuntime,
+        messageID: UUID,
+        rootDirectory: URL?
+    ) async -> AgentDelegatedApprovalDecision {
+        let toolName: String
+        var arguments: [String: AgentJSONValue] = [
+            "_delegated_executor": .string(request.executor.rawValue),
+            "_delegated_approval_kind": .string(request.kind.rawValue),
+        ]
+        if let command = request.command, !command.isEmpty {
+            arguments["command"] = .string(command)
+        }
+        if let cwd = request.cwd, !cwd.isEmpty {
+            arguments["_cwd"] = .string(cwd)
+        }
+        if let reason = request.reason, !reason.isEmpty {
+            arguments["_approval_reason"] = .string(reason)
+        }
+        if !request.filePaths.isEmpty {
+            arguments["path"] = .string(request.filePaths.joined(separator: ", "))
+            arguments["_file_paths"] = .array(request.filePaths.map(AgentJSONValue.string))
+        }
+        if let permissions = request.requestedPermissions, !permissions.isEmpty {
+            arguments["_requested_permissions"] = .string(permissions)
+        }
+
+        let risk: AgentToolRisk
+        switch request.kind {
+        case .command:
+            toolName = "run_command"
+            risk = AgentToolRegistry.risk(
+                for: toolName,
+                arguments: arguments,
+                rootDirectory: rootDirectory
+            )
+        case .fileChange:
+            toolName = "edit_file"
+            risk = .write
+        case .permissions:
+            toolName = "run_command"
+            risk = .danger
+            if arguments["command"] == nil {
+                arguments["command"] = .string("Request additional executor permissions")
+            }
+        }
+
+        let autoApproval: AgentToolApprovalSource?
+        if risk == .write {
+            autoApproval = await autoApprovalSource(
+                toolName: toolName,
+                arguments: arguments,
+                risk: risk,
+                rootDirectory: rootDirectory,
+                interactionMode: runtime.interactionMode,
+                approvalMode: runtime.approvalMode,
+                conversationAllowedToolSignatures: runtime.conversationAllowedToolSignatures
+            )
+        } else {
+            autoApproval = nil
+        }
+
+        let initialStatus: AgentToolCallStatus
+        if autoApproval != nil {
+            initialStatus = .running
+        } else {
+            initialStatus = risk == .danger ? .awaitingConfirm : .pendingApproval
+        }
+        let record = AgentToolCall(
+            messageID: messageID,
+            externalID: "delegated:\(request.id)",
+            toolName: toolName,
+            arguments: arguments,
+            risk: risk,
+            status: initialStatus,
+            approvalSource: autoApproval
+        )
+        runtime.toolCalls.append(record)
+        AgentToolApprovalNotifier.notifyIfBackgrounded(
+            toolName: record.toolName,
+            arguments: record.arguments,
+            status: initialStatus
+        )
+
+        let decision: AgentDelegatedApprovalDecision
+        if autoApproval != nil {
+            decision = autoApproval == .alwaysAllowList && request.allowsSessionApproval
+                ? .acceptForSession
+                : .accept
+        } else {
+            switch await awaitToolDecision(for: runtime, forCallID: record.id) {
+            case .approved:
+                decision = .accept
+            case .denied:
+                decision = .decline
+            case .answered:
+                decision = .decline
+            }
+        }
+
+        if let index = runtime.toolCalls.firstIndex(where: { $0.id == record.id }) {
+            switch decision {
+            case .accept, .acceptForSession:
+                runtime.toolCalls[index].status = .succeeded
+                runtime.toolCalls[index].result = AgentToolResult(
+                    summary: "Delegated executor request approved",
+                    payload: request.reason ?? request.command ?? request.kind.rawValue
+                )
+            case .decline, .cancel:
+                runtime.toolCalls[index].status = .denied
+                runtime.toolCalls[index].errorMessage = "User denied delegated executor request"
+            }
+        }
+        return decision
+    }
+
     func approveAgentToolCall(id: AgentToolCall.ID) {
         resolveAgentToolCallDecision(id: id, decision: .approved)
     }

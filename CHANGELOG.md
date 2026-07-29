@@ -1,7 +1,48 @@
 # Changelog
 
-> 当前文件保留最新版本（1.210.0-rc19 至 1.109.0-rc340）。
+> 当前文件保留最新版本（1.213.0-rc1 至 1.109.0-rc340）。
 > 更早的 1000 个版本已移至 [CHANGELOG-ARCHIVE.md](CHANGELOG-ARCHIVE.md)。
+
+## 1.213.0-rc1 - 2026-07-29
+
+### Added
+
+- **Claude Code / Codex 结构化执行通道**：本机委托默认通过 `Process` argv 与 stdin 启动，不再把提示词拼进 shell 字符串；Claude Code `stream-json` 与 Codex `exec --json` 被归一为统一的会话、消息、思考、工具、文件变更、用量、警告和完成事件。
+- **实时任务可观测性**：右侧任务面板展示执行器、当前事件、session、Token 用量和完整事件时间线；`get_job_output` 对结构化任务返回归一事件，而不是要求调用方解析 provider JSONL。
+- **外部会话续接**：`claude_code` 与 `codex_cli` 新增 `session_id` 参数，完成结果和后台通知会返回可复用会话 ID，后续提示可通过各 CLI 的原生 resume 机制继续同一会话。
+- **Codex app-server 双向宿主**：本机不可见 Codex 委托在存在宿主审批回调时使用 JSON-RPC 风格的 `codex app-server --stdio` 会话；WillDeep 完成 initialize、thread/turn 生命周期管理，并把命令执行、文件修改和扩展权限请求映射回现有智能审批卡。用户拒绝、会话级允许、停止和超时都会回写协议或终止进程树。
+- **Claude Code ACP 双向宿主**：检测到本机 ACP adapter 与宿主审批能力时，Claude 委托优先使用 ACP JSON-RPC 2.0 stdio；权限请求、编辑器缓冲区文件读写和反向终端全部由 WillDeep 执行与审计。会话按 session ID 复用同一 adapter 进程，会话级授权随连接保留，并通过空闲时间与容量上限回收。
+- **远端 daemon 结构化进程 API**：`POST /v1/run/start` 与 WebSocket `run.start` 新增互斥的 `executable + arguments + stdin_base64` 启动模式；Claude/Codex 远端 daemon 委托复用本机 adapter 的 argv/stdin 和 JSONL decoder，旧 `command` 字符串接口继续兼容。
+- **显式执行器能力协商**：新增统一 capability resolver，按本机/远端、daemon、可见终端、宿主审批与 ACP adapter 可用性选择 transport，不再在调用处分散猜测协议能力。
+
+### Changed
+
+- Claude Code 与 Codex 的 Composer、Goal 及自检委托默认使用结构化后台通道；Cursor Agent、Cline CLI 和用户显式选择的可见终端继续使用原兼容路径。
+- 外部执行器进程继续受 WillDeep 的 sandbox、超时和停止生命周期控制；前台等待的任务从创建起抑制后台完成通知，避免同一结果重复唤醒会话。
+- daemon HTTP job 会脱离已返回请求的取消信号继续运行，同时仍受六小时上限、显式 kill 与进程组终止约束，修复后台作业可能随 handler 返回立即退出的问题。
+- 远端 daemon 的 SSE stdout、stderr 与 exit 事件会实时进入本机 managed job；前后台任务共享事件时间线、用量、session、停止和完成通知，不再要求用户拿远端 job id 手动轮询整坨输出。
+- 远端 Claude/Codex 委托未显式设置超时时默认使用六小时委托上限，不再误用普通命令的 60 秒默认值。
+- Claude Code 在 ACP 不可用时保留 `stream-json`、session resume 与 CLI 权限模式；任务事件会明确展示降级，不把非阻断 HTTP hook 伪装成安全审批边界。
+- WillDeep 对外保留 Claude `permission_mode: default` 的自动拒绝语义，在 CLI adapter 边界映射为新版 Claude Code 接受的 `dontAsk`。
+
+### Security
+
+- 提示词只写入子进程 stdin，不出现在 argv、进程列表、任务标题或审批预览中。
+- 解码后的结构化事件与原始输出使用同一组已解析密钥执行脱敏，避免工具参数、文件事件或 provider 原始 JSON 绕过日志脱敏进入 UI 和模型上下文。
+- daemon 结构化 stdin 使用 Base64 传输并限制为 1 MiB；`command` 与 `executable` 必须且只能提供一个，`arguments` 只能与 `executable` 同用，避免结构化请求意外回落到 shell 解析。
+- ACP 反向文件访问会解析最近存在祖先的符号链接后再校验工作区根目录，覆盖读取、写入和终端 cwd，阻止通过工作区内 symlink 越界；写入必须先获得协议权限并经过宿主写入处理器，命令通过 WillDeep 审批与 sandbox 后才启动。
+
+### Tests
+
+- 新增结构化进程工厂、Claude/Codex JSONL 归一、快速进程事件保留、前台完成通知抑制、session resume argv 与事件密钥脱敏回归测试；同步更新 Composer 默认通道测试。
+- 新增 fake Codex app-server 端到端测试，覆盖握手、turn、命令审批、事件、用量和完成；该测试只使用本地 Ruby 假服务，不调用付费模型。
+- 新增 fake ACP 端到端测试，覆盖 capability initialize、权限往返、反向终端、未保存编辑器内容读取、宿主文件写入、事件、用量与完成；另以两轮提示和相同 PID 验证同一 adapter 进程会话复用。
+- 新增 ACP 工作区路径守卫测试，覆盖合法新文件与符号链接逃逸拒绝。
+- 新增 Go 进程/API 测试，覆盖 argv 不经 shell 展开、stdin 原样传递、请求取消后后台继续、启动模式互斥校验和 HTTP 结构化启动。
+
+### Meta
+
+- 功能新增按语义化版本提升为 **1.213.0-rc1**，App 内部构建号使用 **203**，Help 与 Computer Use Helper 构建号使用 **120**；App、Go agent、Help、Helper、浏览器扩展、README、响应头契约与产品文档保持一致。
 
 ## 1.210.0-rc19 - 2026-07-28
 

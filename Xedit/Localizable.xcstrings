@@ -3965,6 +3965,16 @@
         }
       }
     },
+    "agent-task-monitor.event.file-changed" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "File changed" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "文件已修改" } } } },
+    "agent-task-monitor.event.finished" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Finished" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "已结束" } } } },
+    "agent-task-monitor.event.message" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Agent message" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "Agent 消息" } } } },
+    "agent-task-monitor.event.permission" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Permission requested" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "请求权限" } } } },
+    "agent-task-monitor.event.raw" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Provider event" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "执行器事件" } } } },
+    "agent-task-monitor.event.started" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Session started" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "会话已启动" } } } },
+    "agent-task-monitor.event.thinking" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Thinking" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "思考中" } } } },
+    "agent-task-monitor.event.tool" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Tool" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "工具调用" } } } },
+    "agent-task-monitor.event.usage" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Usage updated" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "用量已更新" } } } },
+    "agent-task-monitor.event.warning" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Warning" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "警告" } } } },
     "agent-task-monitor.more-background-jobs" : {
       "comment" : "Overflow count under the task monitor rail when more background jobs exist than are shown. Placeholder is the hidden job count.",
       "extractionState" : "manual",
@@ -3983,6 +3993,8 @@
         }
       }
     },
+    "agent-task-monitor.structured-session" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Session" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "会话" } } } },
+    "agent-task-monitor.structured-usage" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "%1$@ in · %2$@ out" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "输入 %1$@ · 输出 %2$@" } } } },
     "agent-terminal.clear" : {
       "extractionState" : "manual",
       "localizations" : {

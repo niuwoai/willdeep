@@ -1,6 +1,6 @@
 # Agent Harness Improvement Priorities
 
-> Last updated: 2026-07-28 | Current version: v1.210.0-rc19
+> Last updated: 2026-07-29 | Current version: v1.213.0-rc1
 
 这份文档用于回答一个核心问题：一个 harness 级 Agent 要继续变强，哪些问题必须优先解决。
 
@@ -23,15 +23,16 @@
 
 ## P0：执行自主性
 
-当前状态：依赖安装、构建、测试、后台任务和远端 runtime 已经能通过工具链执行；TLS/临时网络错误有重试；沙箱和审批链路能区分 read/write/danger。1.195.0-rc1 起，Claude Code、Codex CLI、Cursor Agent 与 Cline CLI 的 Composer 委托及 Goal 模式原生调用统一受任务契约约束，执行器先提交证据并由全新只读上下文复核，WillDeep 再独立检查变更边界与安全验证命令；失败最多返工三轮，未通过不交付，完整阶段与证据持久化并显示在监督栏。
+当前状态：依赖安装、构建、测试、后台任务和远端 runtime 已经能通过工具链执行；TLS/临时网络错误有重试；沙箱和审批链路能区分 read/write/danger。1.195.0-rc1 起，Claude Code、Codex CLI、Cursor Agent 与 Cline CLI 的 Composer 委托及 Goal 模式原生调用统一受任务契约约束，执行器先提交证据并由全新只读上下文复核，WillDeep 再独立检查变更边界与安全验证命令；失败最多返工三轮，未通过不交付，完整阶段与证据持久化并显示在监督栏。1.213.0-rc1 起，本机 Claude/Codex 和远端 daemon 的 Claude/Codex 使用 argv + stdin 与结构化 JSONL，Codex app-server 的命令、文件、权限请求能回到宿主审批；可见终端、SSH、Cursor/Cline 保留兼容路径。
 
-仍然不好：真实任务里只要遇到工具缺失、依赖安装失败、远端环境不完整、证书/代理波动，就容易退化成“让用户本地执行”。Harness 级 Agent 应该先自查环境、自己重试、自己给出可执行修复路径，只有凭据、危险操作或外部安装才交给用户确认。
+仍然不好：Claude Code 当前没有可供 Swift 宿主使用的 fail-closed stdio 权限回调，只能由 CLI 权限模式与 WillDeep 外层 sandbox 共同约束；SSH、Cursor/Cline 也还没有统一事件与审批反向委托。真实任务里遇到工具缺失、依赖安装失败、远端环境不完整、证书/代理波动时，也仍容易退化成“让用户本地执行”。
 
 下一步顺序：
 
-1. 把“缺少依赖/命令不存在/权限不足/证书问题”的错误分类做成统一恢复策略。
-2. 对 artifact 类任务建立生成后验证规范，例如 PPT/PDF/截图必须由 harness 自己渲染或检查。
-3. 对远端 runtime 增加一次性环境准备建议和可复制诊断报告。
+1. 为执行器增加显式 capability negotiation；优先评估 ACP adapter，并在 Claude 提供 fail-closed 权限通道后接回宿主审批。
+2. 把“缺少依赖/命令不存在/权限不足/证书问题”的错误分类做成统一恢复策略。
+3. 对 artifact 类任务建立生成后验证规范，例如 PPT/PDF/截图必须由 harness 自己渲染或检查。
+4. 对远端 runtime 增加一次性环境准备建议和可复制诊断报告。
 
 ## P1：自学习
 
