@@ -12,7 +12,8 @@ require "optparse"
 options = {
   log_path: "build/ci/xcodebuild.log",
   pass_grace_seconds: 180,
-  idle_timeout_seconds: 180
+  idle_timeout_seconds: 180,
+  term_grace_seconds: 15
 }
 
 parser = OptionParser.new do |opts|
@@ -24,6 +25,10 @@ parser = OptionParser.new do |opts|
   opts.on("--idle-timeout SECONDS", Integer,
           "Once tests are running, terminate xcodebuild if it emits no output for this many seconds") do |value|
     options[:idle_timeout_seconds] = value
+  end
+  opts.on("--term-grace SECONDS", Integer,
+          "Seconds to wait after SIGTERM before SIGKILL, giving xcodebuild a chance to finalize the xcresult") do |value|
+    options[:term_grace_seconds] = value
   end
 end
 
@@ -107,9 +112,54 @@ begin
       STDOUT.flush
       log.write(message)
       log.flush
+      # SIGTERM first, then wait out --term-grace before escalating. xcodebuild
+      # writes the .xcresult bundle's Info.plist last; a SIGKILL two seconds in
+      # leaves only Data/ and Staging/ behind, which every xcresulttool
+      # invocation then rejects as corrupt. The grace period is best effort —
+      # a truly wedged xcodebuild will not finalize no matter how long we wait,
+      # which is why scripts/xcresult_report.rb can also recover counts from the
+      # log below instead of trusting the bundle.
       signal_process(pid, "TERM")
-      sleep 2
-      unless Process.waitpid2(pid, Process::WNOHANG)
+      deadline = Time.now + options[:term_grace_seconds]
+      reaped = nil
+      loop do
+        reaped = begin
+          Process.waitpid2(pid, Process::WNOHANG)
+        rescue Errno::ECHILD
+          # Already reaped elsewhere; treat as exited so we don't SIGKILL a
+          # recycled pid.
+          [pid, nil]
+        end
+        break if reaped || Time.now >= deadline
+
+        # Keep draining the pipe: a process blocked on a full stdout pipe can
+        # never reach its own signal handling and finalize the bundle.
+        next unless IO.select([reader], nil, nil, 0.5)
+
+        drained = reader.read_nonblock(16_384, exception: false)
+        unless drained.is_a?(String)
+          # At EOF read_nonblock returns nil while select keeps reporting the
+          # pipe readable; pace the loop so we don't spin hot waiting on waitpid.
+          sleep 0.1
+          next
+        end
+
+        drained = drained.force_encoding(Encoding::UTF_8)
+        drained = drained.scrub("?") unless drained.valid_encoding?
+        STDOUT.write(drained)
+        STDOUT.flush
+        log.write(drained)
+        log.flush
+      end
+
+      unless reaped
+        escalation = "[xcodebuild_ci] xcodebuild ignored SIGTERM for #{options[:term_grace_seconds]}s; " \
+                     "sending SIGKILL. The .xcresult bundle may be incomplete — " \
+                     "scripts/xcresult_report.rb will fall back to #{options[:log_path]}.\n"
+        STDOUT.write(escalation)
+        STDOUT.flush
+        log.write(escalation)
+        log.flush
         signal_process(pid, "KILL")
         wait_for_process(pid)
       end

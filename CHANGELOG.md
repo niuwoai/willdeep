@@ -1,7 +1,29 @@
 # Changelog
 
-> 当前文件保留最新版本（1.210.0-rc19 至 1.109.0-rc340）。
+> 当前文件保留最新版本（1.210.0-rc20 至 1.109.0-rc340）。
 > 更早的 1000 个版本已移至 [CHANGELOG-ARCHIVE.md](CHANGELOG-ARCHIVE.md)。
+
+## 1.210.0-rc20 - 2026-07-29
+
+### Fixed
+
+- **测试报告"假绿"：跑挂了的构建和跑通了的构建长得一模一样**：`scripts/xcresult_report.rb` 解析不出 xcresult 时不再写出 `ok:true`。此前 `scripts/xcodebuild_ci.rb` 的看门狗（`--pass-grace 180`）在 xcodebuild 测试跑完却不退出时会杀掉进程组——这是 macOS 上 xcodebuild 收尾挂死的已知毛病——被杀的 result bundle 只剩 `Data/` 和 `Staging/`，没有 `Info.plist`，于是 `xcresulttool` 的新接口和 `--legacy` 接口双双失败；报告器却把归零的计数原样留着，照旧写出 `{"ok": true, "stats": {"total": 0, ...}}` 和 `**Status:** ✅ passed=0 failed=0 skipped=0 total=0`。调用方普遍用 `ruby scripts/run_tests_fast.rb | tail -60` 这种写法，管道本来就吞退出码，再配上一个绿勾，跑崩的构建和真跑通的构建就彻底分不出来了。现在解析不出来就明明白白报 `unknown` 并非零退出，绝不冒充通过。
+- **解析不出 bundle 时退回原始日志兜底**：报告器新增 `--log PATH`（默认取 xcresult 同目录的 `xcodebuild.log`），bundle 读不出来时改从原始 xcodebuild 日志里捞 `Test run with N tests in M suites passed/failed`、`Executed N tests, with M failures`、`** TEST SUCCEEDED **` / `** TEST FAILED **` 以及失败用例名。实测对着一次真实的 1755 用例运行，日志兜底还原出的总数与 xcresult 解析结果完全一致（1748 Swift Testing + 7 XCTest）。真数据能捞回来就不该丢。
+
+### Changed
+
+- **报告新增 `status` / `source` / `reasons` 字段，退出码分级**：`report.json` 除 `ok` 外新增 `status`（`passed` / `failed` / `unknown`）、`source`（`xcresult` / `xcodebuild-log` / `none`）和 `reasons`（说明为什么没能确认）；退出码 0 = 通过、1 = 失败、2 = 无法确认。`report.md` 对无法确认的运行渲染 `⚠️ UNKNOWN — result could not be verified` 并列出原因，零解析用例数不再渲染成绿勾（确实预期跑 0 个用例时用 `--allow-empty` 显式声明）。
+- **看门狗给 xcodebuild 留出收尾时间**：`scripts/xcodebuild_ci.rb` 新增 `--term-grace`（默认 15 秒），SIGTERM 之后先等一会儿再上 SIGKILL，其间继续抽干输出管道（免得进程卡在写满的管道上根本轮不到处理信号），让 xcodebuild 有机会把 `Info.plist` 写完。这是尽力而为——真正卡死的 xcodebuild 等多久都不会收尾，所以日志兜底才是兜底。
+- **调用方一律把日志传给报告器**：`scripts/run_tests.sh`、`scripts/run_tests_fast.rb` 和 CI 的报告步骤都补上 `--log`；`run_tests.sh` 改为捕获报告器退出码并在测试退出码为 0 时透传它，`run_tests_fast.rb` 在报告器无法确认通过时打印整份报告再退出（管道场景下退出码会被吞，报告正文是唯一还能看见的信号）。
+
+### Tests
+
+- 新增 `scripts/xcresult_report_contract_test.rb`（23 条断言），构造"被杀出半截"的 bundle（只有 `Data/` + `Staging/`、无 `Info.plist`）覆盖：无日志兜底时必须 `unknown` + 退出 2 + markdown 里不带 ✅、有通过日志时还原真实用例总数、有失败日志时判为 `failed` + 退出 1、`--log` 覆盖默认路径、bundle 缺失、以及零用例默认不算通过而 `--allow-empty` 才算。同时断言三个调用方确实传了 `--log`。已接入 `scripts/run_tests.sh` 与 CI（含 job summary）。
+
+### Meta
+
+- 版本号从 **1.210.0-rc19** 递增为 **1.210.0-rc20**（测试报告假绿 bugfix，仅递增 rc 位）；App、Go agent、Help、Helper、浏览器扩展、README、响应头契约与产品文档保持一致。
+- 已知冲突：分支 `fix/run-tests-fast-encoding` 也占用了 1.210.0-rc20，两者合回 develop 时需按"取更高 rc + 并入对方 CHANGELOG 条目"处理。
 
 ## 1.210.0-rc19 - 2026-07-28
 

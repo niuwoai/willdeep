@@ -66,6 +66,20 @@ scripts/run_tests.sh
 - `build/ci/report.md` / `report.json` — 人读与机读测试报告。
 - `build/ci/project_build_guard_report.md` / `.json` — 排队、缓存与耗时记录。
 
+### 怎么读测试报告（别被绿勾骗了）
+
+`report.json` 里 `status` 才是结论，三种取值：
+
+| status | 含义 | 退出码 |
+| --- | --- | --- |
+| `passed` | 确认通过 | 0 |
+| `failed` | 确认有失败用例 | 1 |
+| `unknown` | **没能确认**——result bundle 读不出来，日志也捞不到结论 | 2 |
+
+`source` 说明结论是从哪来的：`xcresult`（正常解析）、`xcodebuild-log`（bundle 坏了，从原始日志兜底捞的，计数为近似值）、`none`（什么都没捞到，此时必然是 `unknown`）。`unknown` 时 `reasons` 数组会写清楚为什么。
+
+为什么要有 `unknown`：xcodebuild 在 macOS 上跑完测试后有概率不退出，`scripts/xcodebuild_ci.rb` 的看门狗会把它杀掉，被杀的 bundle 缺 `Info.plist`，`xcresulttool` 全线失败。这种情况下报告绝不允许写出 `ok:true`——尤其是 `scripts/run_tests_fast.rb | tail -60` 这类写法本来就吞退出码，一个绿勾就足以让跑崩的构建冒充跑通的构建。
+
 快速入口与完整入口会复用稳定的 DerivedData、SwiftPM checkout/package cache，并通过 Git common dir 派生的仓库级锁协调所有 linked worktree。完整 DerivedData 仍按工作树隔离，不允许多个工作树并发写入同一目录。
 
 ## 四、写新测试（Swift Testing 风格）
