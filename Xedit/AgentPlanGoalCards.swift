@@ -230,10 +230,15 @@ struct AgentPlanRevisionRow: View {
 }
 
 /// A single-line label that scrolls its overflow to the left while the
-/// pointer hovers, so a long plan step stays one row tall yet stays fully
-/// readable on demand. When the text already fits, it renders as a plain
-/// static line and never animates. macOS 13 compatible — measures widths
-/// with a classic `GeometryReader` + `PreferenceKey` (no `onGeometryChange`).
+/// pointer hovers, so a long title stays one row tall yet stays fully
+/// readable on demand.
+///
+/// 静止状态就是一条普通的单行截断文本(尾部省略号),不做任何硬裁剪
+/// 或遮罩——尾巴被切掉看着像"被挡住"是上一版的 bug。只有指针悬停
+/// 且确实有溢出时才整段左滚;指针离开立刻停下并复位,不留后台常驻
+/// 动画(滚动层直接从视图树里摘掉,repeatForever 随之销毁)。
+/// macOS 13 compatible — measures widths with a classic `GeometryReader`
+/// + `PreferenceKey` (no `onGeometryChange`).
 struct MarqueeOnHoverText: View {
     let attributed: AttributedString
     var font: Font = .system(size: 12)
@@ -251,15 +256,19 @@ struct MarqueeOnHoverText: View {
     /// Pixels-per-second the overflow slides at; keeps long and short
     /// steps feeling like the same gesture.
     private let velocity: CGFloat = 26
+    /// 悬停后先静止一下再起步,避免指针只是路过就抖一下。
+    private let startDelay: Double = 0.35
 
     @State private var textSize: CGSize = .init(width: 0, height: 16)
     @State private var containerWidth: CGFloat = 0
-    @State private var hovering = false
+    @State private var scrolling = false
+    @State private var offset: CGFloat = 0
 
     private var overflow: CGFloat { max(0, textSize.width - containerWidth) }
     private var scrollable: Bool { overflow > 0.5 }
 
-    private var line: some View {
+    /// 完整文本(不截断),滚动时用;同时兼作隐形测量层。
+    private var fullLine: some View {
         Text(attributed)
             .font(font)
             .strikethrough(strikethrough, color: .secondary)
@@ -268,26 +277,41 @@ struct MarqueeOnHoverText: View {
             .fixedSize(horizontal: true, vertical: false)
     }
 
-    private var marqueeAnimation: Animation {
-        guard hovering, scrollable else { return .easeOut(duration: 0.22) }
-        let duration = max(0.6, Double(overflow) / Double(velocity))
-        return .linear(duration: duration).delay(0.35).repeatForever(autoreverses: true)
+    /// 静止状态的样子:规规矩矩的尾部省略号,不硬切、不加遮罩。
+    private var truncatedLine: some View {
+        Text(attributed)
+            .font(font)
+            .strikethrough(strikethrough, color: .secondary)
+            .foregroundStyle(color)
+            .lineLimit(1)
+            .truncationMode(.tail)
     }
 
     var body: some View {
         GeometryReader { geo in
-            line
-                .background(
-                    GeometryReader { inner in
-                        Color.clear.preference(key: MarqueeSizeKey.self, value: inner.size)
-                    }
-                )
-                .offset(x: hovering && scrollable ? -overflow : 0)
-                .frame(width: geo.size.width, alignment: .leading)
-                .clipped()
-                .animation(marqueeAnimation, value: hovering)
-                .onAppear { containerWidth = geo.size.width }
-                .onChange(of: geo.size.width) { containerWidth = $0 }
+            ZStack(alignment: .leading) {
+                // 只为量出整段文字的自然宽度,永远不可见。
+                fullLine
+                    .hidden()
+                    .background(
+                        GeometryReader { inner in
+                            Color.clear.preference(key: MarqueeSizeKey.self, value: inner.size)
+                        }
+                    )
+                if scrolling {
+                    // 滚动层只在悬停期间存在,离场即销毁,顺带把
+                    // repeatForever 动画一起收掉。
+                    fullLine.offset(x: offset)
+                } else {
+                    truncatedLine
+                }
+            }
+            .frame(width: geo.size.width, alignment: .leading)
+            // 只有滚动层可能越界,这里的 clip 是给它兜底,静止状态
+            // 靠省略号收尾,不会被切。
+            .clipped()
+            .onAppear { containerWidth = geo.size.width }
+            .onChange(of: geo.size.width) { containerWidth = $0 }
         }
         .frame(height: textSize.height)
         .frame(maxWidth: hugWidth ?? .infinity, alignment: .leading)
@@ -295,10 +319,47 @@ struct MarqueeOnHoverText: View {
         .onPreferenceChange(MarqueeSizeKey.self) { textSize = $0 }
         .onHover { inside in
             // Only arm the scroll when there is actually hidden overflow;
-            // a fitting step should never twitch on hover.
-            hovering = inside && scrollable
+            // a fitting title should never twitch on hover.
+            if inside && scrollable {
+                startScrolling()
+            } else {
+                stopScrolling()
+            }
         }
+        .onDisappear(perform: stopScrolling)
         .help(tooltip ?? "")
+    }
+
+    private func startScrolling() {
+        guard !scrolling else { return }
+        offset = 0
+        scrolling = true
+        let distance = overflow
+        let duration = max(0.6, Double(distance) / Double(velocity))
+        // 等滚动层真正插入视图树的下一拍再挂动画,否则 SwiftUI 会把
+        // 这次 offset 变化当成初始状态、动画直接被吞掉。
+        DispatchQueue.main.async {
+            guard scrolling else { return }
+            withAnimation(
+                .linear(duration: duration)
+                    .delay(startDelay)
+                    .repeatForever(autoreverses: true)
+            ) {
+                offset = -distance
+            }
+        }
+    }
+
+    private func stopScrolling() {
+        guard scrolling else { return }
+        // repeatForever 不会自己停:必须用一次 disablesAnimations 的
+        // 事务把 offset 拽回 0,才能真的掐断这条无限动画。
+        var transaction = Transaction()
+        transaction.disablesAnimations = true
+        withTransaction(transaction) {
+            scrolling = false
+            offset = 0
+        }
     }
 }
 
