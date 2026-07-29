@@ -1,9 +1,15 @@
 # Changelog
 
-> 当前文件保留最新版本（1.210.0-rc19 至 1.109.0-rc340）。
+> 当前文件保留最新版本（1.210.0-rc20 至 1.109.0-rc340）。
 > 更早的 1000 个版本已移至 [CHANGELOG-ARCHIVE.md](CHANGELOG-ARCHIVE.md)。
 
-## 1.210.0-rc19 - 2026-07-28
+## 1.210.0-rc20 - 2026-07-29
+
+### Fixed
+
+- **`run_tests_fast.rb` 在中文改动下崩溃，还会伪装成「测试全绿」**：`scripts/run_tests_fast.rb` 现在显式把编码钉死为 UTF-8，不再依赖调用者的 locale。此前 `source_fingerprint` 把 `git diff` 原样交给 `JSON.generate`，而 `LANG`/`LC_ALL` 未设置时 Ruby 会把子进程输出标成 US-ASCII——本仓库 CHANGELOG 和 docs 全是中文，只要工作区有未提交改动就必崩（`"\xE5" on US-ASCII`）。危害不止于崩溃：调用方常写成 `ruby scripts/run_tests_fast.rb | tail -60`，管道会吞掉非零退出码，脚本崩了却显示 exit 0，造成"测试通过"的假象。
+- 同时对子进程输出做 `scrub` 兜底：即便 locale 已是 UTF-8，仓库里若有以遗留编码保存的文件，其 diff 仍会以非法 UTF-8 字节撞碎 `JSON.generate`。
+- `scripts/project_build_guard.rb` 早已在文件头钉死 UTF-8，本次改动是把同样的前置约定补回 `run_tests_fast.rb`；`scripts/run_tests.sh` 与其余 Ruby 脚本经排查不受影响。
 
 ### Fixed
 

@@ -19,6 +19,15 @@ require "json"
 require "open3"
 require "time"
 
+# This repository's CHANGELOG and docs are Chinese, so `git diff`/`git status`
+# output routinely carries non-ASCII bytes. Ruby tags subprocess output with the
+# caller's locale encoding, which is US-ASCII whenever LANG/LC_ALL are unset — and
+# JSON.generate then aborts the whole run on the first Chinese byte. Pin UTF-8
+# here so the script never depends on how the caller's shell happens to be set up,
+# matching scripts/project_build_guard.rb.
+Encoding.default_external = Encoding::UTF_8
+Encoding.default_internal = Encoding::UTF_8
+
 ROOT = File.expand_path("..", __dir__)
 OUT_DIR = File.join(ROOT, "build", "fast-tests")
 DERIVED_DATA = File.join(ROOT, "build", "ci", "DerivedData")
@@ -33,9 +42,18 @@ SCHEME = "XeditUnitTests"
 
 def command_output(*command)
   output, status = Open3.capture2e(*command, chdir: ROOT)
+  output = utf8(output)
   abort "Command failed: #{command.join(" ")}\n#{output}" unless status.success?
 
   output
+end
+
+# Re-tag subprocess bytes as UTF-8 and drop anything that still is not valid —
+# a tracked file saved in a legacy encoding would otherwise reach JSON.generate
+# as malformed UTF-8. Substitution is deterministic, so fingerprints stay stable.
+def utf8(text)
+  text = text.dup.force_encoding(Encoding::UTF_8)
+  text.valid_encoding? ? text : text.scrub
 end
 
 def sha256_file(path)
