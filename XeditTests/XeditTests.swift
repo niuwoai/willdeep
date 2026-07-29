@@ -1731,6 +1731,14 @@ struct WillDeepTests {
         #expect(descriptor?.parameters.contains(where: { $0.name == "model" }) == true)
     }
 
+    @Test("run_command exposes background override and user-facing label")
+    func testRunCommandBackgroundPresentationRegistration() {
+        let descriptor = AgentToolRegistry.descriptor(for: "run_command")
+        #expect(descriptor?.parameters.contains(where: { $0.name == "run_in_background" }) == true)
+        #expect(descriptor?.parameters.contains(where: { $0.name == "label" }) == true)
+        #expect(descriptor?.description.contains("automatically moved to the background") == true)
+    }
+
     @Test("MCP read-style tool names pass the static heuristic")
     func testMCPReadOnlyToolNameHeuristic() {
         #expect(AgentToolAuthorization.mcpToolNameLooksReadOnly("get_issue"))

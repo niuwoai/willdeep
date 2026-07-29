@@ -153,7 +153,7 @@ struct AgentToolActivityRowPresentation: Identifiable, Equatable {
     }
 
     private static func statusTitle(for call: AgentToolCall) -> String {
-        let operation = operationName(for: call.toolName)
+        let operation = operationName(for: call)
         switch call.status {
         case .running:
             return "正在\(operation)"
@@ -170,13 +170,21 @@ struct AgentToolActivityRowPresentation: Identifiable, Equatable {
         }
     }
 
-    private static func operationName(for toolName: String) -> String {
-        switch toolName {
+    private static func operationName(for call: AgentToolCall) -> String {
+        switch call.toolName {
         case "read_file": return "读取文件"
         case "list_directory": return "浏览目录"
         case "grep_files", "search_files": return "搜索代码"
         case "git_status": return "查看 Git 状态"
-        case "run_command": return "运行命令"
+        case "run_command":
+            if let label = compact(call.arguments["label"]?.stringValue()) {
+                return label.count > 60 ? String(label.prefix(60)) + "…" : label
+            }
+            if let command = call.arguments["command"]?.stringValue(),
+               let inferred = AgentRunCommandExecutionPolicy.inferredActivityKind(for: command) {
+                return inferred.operationName
+            }
+            return "运行命令"
         case "terminal_snapshot": return "读取终端快照"
         case "terminal_send_command": return "发送终端命令"
         case "terminal_send_control": return "发送终端控制键"
@@ -185,7 +193,7 @@ struct AgentToolActivityRowPresentation: Identifiable, Equatable {
         case "edit_file": return "编辑文件"
         case "create_file": return "创建文件"
         case "apply_patch": return "应用补丁"
-        default: return AgentToolDisplay.name(for: toolName)
+        default: return AgentToolDisplay.name(for: call.toolName)
         }
     }
 

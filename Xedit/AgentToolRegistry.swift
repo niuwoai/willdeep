@@ -98,12 +98,13 @@ enum AgentToolRegistry {
         ),
         AgentToolDescriptor(
             name: "run_command",
-            description: "Run a shell command in the workspace root. This is the DEFAULT way to execute any shell command — including ones that reach other machines (scp / rsync / ssh remote-host), file copies, builds, installs, and tests. Only use terminal_send_command instead when the user explicitly asks for the command to be run in the visible side-panel terminal. Requires user approval. Refuses commands that escape the workspace. Pass `run_in_background: true` for long-running tasks (dev servers, watchers, big builds, test suites that take minutes) — the call returns immediately with a job handle and you receive a system notification when the job finishes; meanwhile inspect partial output with `get_job_output` or stop it with `kill_job`.",
+            description: "Run a shell command in the workspace root. This is the DEFAULT way to execute any shell command — including ones that reach other machines (scp / rsync / ssh remote-host), file copies, builds, installs, and tests. Only use terminal_send_command instead when the user explicitly asks for the command to be run in the visible side-panel terminal. Requires user approval. Refuses commands that escape the workspace. Well-known test/build/dev-server commands are automatically moved to the background when `run_in_background` is omitted. Pass `run_in_background: true` for any other task expected to take at least ~30 seconds; the call returns immediately with a job handle and you receive a system notification when the job finishes. Continue independent, non-conflicting work while it runs.",
             risk: .write,
             parameters: [
                 AgentToolParameter(name: "command", type: .string, description: "Shell command line. Runs through /bin/sh -c.", required: true),
                 AgentToolParameter(name: "timeout_seconds", type: .integer, description: "Hard timeout in seconds. Foreground default 60s (max 600). Background default unlimited (max 21600 = 6h).", required: false),
-                AgentToolParameter(name: "run_in_background", type: .boolean, description: "When true, do not block on the command. Returns a job handle (job_xxxxxx); the host injects a system message when the job finishes. Use for tasks expected to take more than ~30 seconds. Defaults to false.", required: false)
+                AgentToolParameter(name: "run_in_background", type: .boolean, description: "When true, do not block on the command. When false, force foreground execution. When omitted, recognized test/build/dev-server commands run in the background automatically; other commands remain foreground.", required: false),
+                AgentToolParameter(name: "label", type: .string, description: "Optional concise user-facing action phrase for the live chat row, such as `运行前端测试` or `编译 macOS Release`. Never include secrets.", required: false)
             ]
         ),
         AgentToolDescriptor(

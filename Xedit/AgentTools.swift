@@ -11,6 +11,131 @@
 import Foundation
 import Darwin
 
+nonisolated enum AgentRunCommandExecutionPolicy {
+    enum ActivityKind: Equatable {
+        case test
+        case build
+        case server
+
+        var operationName: String {
+            switch self {
+            case .test: return "运行测试"
+            case .build: return "编译项目"
+            case .server: return "启动开发服务"
+            }
+        }
+    }
+
+    /// An explicit model/user choice always wins. Otherwise, promote only
+    /// well-known test/build/dev-server entry points. This intentionally does
+    /// not infer from arbitrary words such as "build" inside script paths:
+    /// release, publish, notarization, and deployment workflows must opt in.
+    static func shouldRunInBackground(arguments: [String: AgentJSONValue]) -> Bool {
+        if let explicitChoice = arguments["run_in_background"]?.boolValue() {
+            return explicitChoice
+        }
+        guard let command = arguments["command"]?.stringValue() else { return false }
+        return inferredActivityKind(for: command) != nil
+    }
+
+    static func inferredActivityKind(for command: String) -> ActivityKind? {
+        for segment in SafeCommand.splitPipeline(command) {
+            let tokens = normalizedInvocationTokens(from: SafeCommand.tokenize(segment))
+            guard let executable = tokens.first else { continue }
+            let arguments = Array(tokens.dropFirst())
+
+            switch executable {
+            case "xcodebuild":
+                if arguments.contains("test") { return .test }
+                if arguments.contains(where: { ["build", "archive"].contains($0) }) { return .build }
+                if !arguments.contains(where: {
+                    ["-list", "-showbuildsettings", "-showsdks", "-version", "clean"].contains($0)
+                }) {
+                    return .build
+                }
+            case "swift", "go", "cargo":
+                if arguments.first == "test" { return .test }
+                if arguments.first == "build" { return .build }
+            case "pytest", "rspec":
+                return .test
+            case "python", "python3":
+                if arguments.starts(with: ["-m", "pytest"]) { return .test }
+            case "bundle":
+                if arguments.starts(with: ["exec", "rspec"]) { return .test }
+            case "npm", "yarn", "pnpm", "bun":
+                if let kind = packageScriptActivityKind(arguments) { return kind }
+            case "make", "gmake":
+                if let kind = makeActivityKind(arguments) { return kind }
+            case "gradle", "gradlew", "mvn", "mvnw":
+                if arguments.contains(where: { ["test", "check", "verify"].contains($0) }) { return .test }
+                if arguments.contains(where: { ["build", "assemble", "package"].contains($0) }) { return .build }
+            case "docker":
+                if arguments.first == "build" { return .build }
+                if arguments.starts(with: ["compose", "build"]) { return .build }
+                if arguments.starts(with: ["compose", "up"]) { return .server }
+            default:
+                let basename = URL(fileURLWithPath: executable).lastPathComponent
+                if ["run_tests.sh", "run-tests.sh", "test.sh", "tests.sh"].contains(basename) {
+                    return .test
+                }
+                if ["build.sh", "build.rb"].contains(basename) {
+                    return .build
+                }
+            }
+        }
+        return nil
+    }
+
+    private static func normalizedInvocationTokens(from rawTokens: [String]) -> [String] {
+        var tokens = rawTokens.map { $0.lowercased() }
+        while let first = tokens.first, isEnvironmentAssignment(first) {
+            tokens.removeFirst()
+        }
+        if tokens.first == "env" {
+            tokens.removeFirst()
+            while let first = tokens.first, isEnvironmentAssignment(first) {
+                tokens.removeFirst()
+            }
+        }
+        while let first = tokens.first, ["time", "nice", "nohup"].contains(first) {
+            tokens.removeFirst()
+        }
+        guard let first = tokens.first else { return [] }
+        tokens[0] = URL(fileURLWithPath: first).lastPathComponent
+        return tokens
+    }
+
+    private static func isEnvironmentAssignment(_ token: String) -> Bool {
+        guard let separator = token.firstIndex(of: "="), separator != token.startIndex else {
+            return false
+        }
+        return token[..<separator].allSatisfy { $0 == "_" || $0.isLetter || $0.isNumber }
+    }
+
+    private static func packageScriptActivityKind(_ rawArguments: [String]) -> ActivityKind? {
+        var arguments = rawArguments
+        if arguments.first == "run" {
+            arguments.removeFirst()
+        }
+        guard let script = arguments.first?.split(separator: ":", maxSplits: 1).first.map(String.init) else {
+            return nil
+        }
+        switch script {
+        case "test", "tests", "check", "ci": return .test
+        case "build", "compile": return .build
+        case "dev", "serve", "start": return .server
+        default: return nil
+        }
+    }
+
+    private static func makeActivityKind(_ arguments: [String]) -> ActivityKind? {
+        if arguments.contains(where: { ["test", "tests", "check"].contains($0) }) { return .test }
+        if arguments.contains(where: { ["build", "compile", "all"].contains($0) }) { return .build }
+        if arguments.contains(where: { ["dev", "serve", "start"].contains($0) }) { return .server }
+        return nil
+    }
+}
+
 enum AgentProcessSupport {
     static func waitUntilExit(_ process: Process) async {
         let waiter = Waiter()
@@ -862,28 +987,35 @@ enum AgentToolRunner {
         context: AgentToolContext,
         foregroundMaxTimeout: TimeInterval = maxCommandTimeout
     ) async throws -> AgentToolResult {
+        var effectiveArguments = arguments
+        let selectedBackgroundAutomatically =
+            arguments["run_in_background"] == nil
+            && AgentRunCommandExecutionPolicy.shouldRunInBackground(arguments: arguments)
+        if selectedBackgroundAutomatically {
+            effectiveArguments["run_in_background"] = .bool(true)
+        }
         if let backend = context.remoteBackend {
             return try await backend.runCommand(
-                arguments: arguments,
+                arguments: effectiveArguments,
                 context: context,
                 foregroundMaxTimeout: foregroundMaxTimeout
             )
         }
         let root = context.rootDirectory?.standardizedFileURL
             ?? FileManager.default.homeDirectoryForCurrentUser.standardizedFileURL
-        guard let command = arguments["command"]?.stringValue(),
+        guard let command = effectiveArguments["command"]?.stringValue(),
               !command.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
             throw AgentToolError.missingArgument("command")
         }
-        let timeoutArg = arguments["timeout_seconds"]?.intValue().map { Double($0) } ?? defaultCommandTimeout
+        let timeoutArg = effectiveArguments["timeout_seconds"]?.intValue().map { Double($0) } ?? defaultCommandTimeout
         let timeout = min(max(timeoutArg, 1), max(1, foregroundMaxTimeout))
 
         // Background path: hand the Process off to the registry, return
         // immediately with the job handle, let the agent loop pull the
         // completion event at the top of a later turn.
-        let wantsBackground = arguments["run_in_background"]?.boolValue() ?? false
+        let wantsBackground = effectiveArguments["run_in_background"]?.boolValue() ?? false
         if wantsBackground, let registry = context.jobRegistry, let runtimeID = context.runtimeID {
-            let bgTimeout: Double? = arguments["timeout_seconds"]?.intValue().map { Double(min(max($0, 1), 3600 * 6)) }
+            let bgTimeout: Double? = effectiveArguments["timeout_seconds"]?.intValue().map { Double(min(max($0, 1), 3600 * 6)) }
             let job: AgentBackgroundJob
             do {
                 job = try await MainActor.run {
@@ -907,16 +1039,24 @@ enum AgentToolRunner {
             }
             let cwd = job.workingDirectoryPath ?? root.path
             let timeoutLine = bgTimeout.map { "\nTimeout: \(Int($0))s" } ?? ""
+            let selectionLine = selectedBackgroundAutomatically
+                ? "\nBackground mode: selected automatically for this test/build/server command."
+                : ""
             let payload = """
             Started background job \(job.displayHandle).
             Command: \(AgentSecretStore.redact(command, secretValues: context.secretRedactionValues))
             PID: \(job.pid)
-            cwd: \(cwd)\(timeoutLine)
+            cwd: \(cwd)\(timeoutLine)\(selectionLine)
 
             The job is running. You will receive a `<background-task-notification>` system message at the start of a later turn when it finishes (or fails). Until then, call `get_job_output` to inspect partial output, `list_jobs` to see all alive jobs, or `kill_job` to stop it.
             """
+            let activityLabel = effectiveArguments["label"]?.stringValue()?
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            let summary = activityLabel.flatMap { $0.isEmpty ? nil : String($0.prefix(60)) }
+                ?? AgentRunCommandExecutionPolicy.inferredActivityKind(for: command)?.operationName
+                ?? job.displayHandle
             return AgentToolResult(
-                summary: "▶ \(job.displayHandle) started",
+                summary: "▶ \(summary) · \(job.displayHandle)",
                 payload: payload
             )
         }

@@ -292,6 +292,27 @@ extension WillDeepTests {
         #expect(command.detail?.contains("super-sensitive-value") == false)
     }
 
+    @Test("live command rows use model labels and safe inferred activity names")
+    func liveCommandRowsUseNaturalActivityNames() {
+        let labeled = AgentToolActivityRowPresentation(call: makeCall(
+            "run_command",
+            status: .running,
+            arguments: [
+                "label": .string("运行前端测试"),
+                "command": .string("yarn test"),
+            ]
+        ))
+        let inferred = AgentToolActivityRowPresentation(call: makeCall(
+            "run_command",
+            arguments: ["command": .string("xcodebuild -scheme WillDeep test")]
+        ))
+
+        #expect(labeled.title == "正在运行前端测试")
+        #expect(inferred.title == "已运行测试")
+        #expect(labeled.detail == nil)
+        #expect(!labeled.title.contains("yarn"))
+    }
+
     @Test("live activity timeline keeps recent rows and never hides approvals")
     func testLiveActivityTimelineBoundsCompletedRows() {
         var calls = (0..<12).map { index in

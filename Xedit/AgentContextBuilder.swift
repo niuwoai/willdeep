@@ -80,16 +80,16 @@ enum AgentContextBuilder {
     private static let maxSelectionCharacters = 6_000
     private static let maxRulesCharacters = 6_000
     private static let dynamicContextMarker = "=== Dynamic Turn Context ==="
-    static let stablePrefixVersion = "willdeep-agent-system-v16"
+    static let stablePrefixVersion = "willdeep-agent-system-v17"
     /// Byte-level snapshot hashes for all three prompt profiles (computed
     /// with the fixed test locale directive). Intentional prompt edits must
     /// bump `stablePrefixVersion` and re-record every affected hash — run
     /// the snapshot tests once to get the new values from the failure
     /// output. Without all three, compact/extended drift (a merge eating
     /// half a sentence) ships silently.
-    static let stablePrefixSnapshotHash = "52573d0d2ec55e0d"
-    static let compactPrefixSnapshotHash = "4c8d471c66eb12f8"
-    static let extendedPrefixSnapshotHash = "1f56fb51dbdf9c85"
+    static let stablePrefixSnapshotHash = "43a7a8e0bd1571ce"
+    static let compactPrefixSnapshotHash = "1a041137f1bcdf4a"
+    static let extendedPrefixSnapshotHash = "93d2d154d78fd43c"
 
     static func systemPrompt(
         rootDirectory: URL?,
@@ -421,6 +421,7 @@ enum AgentContextBuilder {
                 - Inspect with search_files, grep_files, read_file, list_directory, and git_status before guessing.
                 - Create new files with create_file. Edit existing files with exact-match edit_file; use apply_patch only when edit_file cannot express the change.
                 - Use run_command for practical build/test verification and debug a failed call before reporting a blocker.
+                - Put test/build/server commands expected to take at least 30 seconds in the background (recognized commands are promoted automatically when the flag is omitted), give them a concise `label`, and continue independent documentation or metadata work. Never change source/build inputs under an active verification job; if you do, treat its result as stale and rerun it. Inspect the automatic completion notice before claiming success.
                 - Terminal tools follow the ACTIVE side-panel terminal tab; treat it as a separate stateful local-or-SSH context and inspect terminal_snapshot before location-sensitive commands. terminal_send_command confirms dispatch and appends a bounded automatic snapshot for ordinary commands; if expected output is not visible yet, wait briefly and call terminal_snapshot again before concluding the terminal is unstable.
                 - Respect the active approval mode, keep paths workspace-relative, protect secrets, and verify changed artifacts before answering.
                 """)
@@ -453,7 +454,8 @@ enum AgentContextBuilder {
             - Treat `<generated-image-reference ... />` in user content as a workspace-local generated image reference, not a user-uploaded image. If the user asks to modify/refine that referenced image, call `edit_generated_image` with `reference_marker` (or the marker's `path` as `image_path`) and the user's edit prompt. The edit tool uses `gpt-image-2` by default; do not ask the user to re-upload the image.
             - Web programming workflow: when the Web Programming expert is active, accept user-provided screenshots and local HTML/CSS/image files as source material; use `show_widget(html_path:)` for static HTML/SVG previews, start Vite/Next/React/Vue/frontend/backend dev servers with `run_command(run_in_background: true)`, track them in the Dev Server side panel, inspect/tail output with `get_job_output`, stop them with `kill_job`, and use browser screenshot/read tools for final visual QA when available.
             - Verify generated artifacts before your final answer when a practical verification command or file inspection exists. Only ask the user to run a command when you are blocked by missing credentials, an unavailable local program, denied approval, unsupported platform access, or a command that genuinely needs the user's interactive control.
-            - For long-running shell work (dev servers, watchers, big test suites, full builds — anything you'd expect to take ≥30s), pass `run_in_background: true` to `run_command`. The call returns immediately with a job handle like `job_ab12cd`; the host will inject a `<background-task-notification>...</background-task-notification>` system message at the start of a later turn when the job finishes. Until then, you can call `get_job_output` to inspect partial output, `list_jobs` to see all alive jobs, or `kill_job` to stop one. Do NOT busy-poll — if you've started a job and the user hasn't asked about it, just answer them; the completion notice will come on its own.
+            - For long-running shell work (dev servers, watchers, big test suites, full builds — anything you'd expect to take ≥30s), pass `run_in_background: true` and a concise user-facing `label` to `run_command`. The host also promotes recognized test/build/dev-server commands automatically when `run_in_background` is omitted; explicit false still forces foreground execution. The call returns immediately with a job handle like `job_ab12cd`, and the host injects a `<background-task-notification>...</background-task-notification>` system message at the start of a later turn when the job finishes.
+            - After starting a background job, briefly state what is running and immediately continue independent, non-conflicting work in the same turn—for example CHANGELOG, release notes, API docs, or metadata that the active job does not consume. Never edit source code, build configuration, dependency locks, generated inputs, or version files that can affect an active test/build. If any such input changes, mark that job's result stale and rerun the relevant verification after the edits. Do not busy-poll: use `get_job_output` only when partial output is needed, otherwise rely on the completion notice. When the notice arrives, inspect the result, diagnose failures, rerun when stale or repaired, and only then claim the task is complete.
             - When something a user asked for is ambiguous or you're missing a required piece of information, call ask_user with a single concrete question instead of guessing. Do NOT call ask_user for things you can determine by reading files yourself. If the answer is one of a small known set, pass `options` so the user can click; set `multi_select` to true only when more than one option can legitimately apply at once.
             - For learning/configuration actions, store only compact rules or workflows: add_memory for explicit future preferences ("always", "never", "以后", "必须", "默认"), create/update/delete user skills only when the user asks or a genuinely reusable workflow is being maintained, and search_mcp_servers plus suggest_mcp_server/configure_mcp_server for repeat external-system gaps. Do not store secrets or one-off facts.
             - Use workspace-relative paths in tool arguments.

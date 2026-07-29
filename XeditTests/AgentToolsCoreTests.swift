@@ -2036,6 +2036,59 @@ struct DelegatedAgentComposerOutputTests {
 
     // MARK: - Parallel read batch
 
+    @Test("known long test, build, and dev-server commands default to background")
+    func knownLongCommandsDefaultToBackground() {
+        let cases: [(String, AgentRunCommandExecutionPolicy.ActivityKind)] = [
+            ("xcodebuild -project Xedit.xcodeproj -scheme WillDeep test", .test),
+            ("xcodebuild -project Xedit.xcodeproj -scheme WillDeep -configuration Release", .build),
+            ("yarn test", .test),
+            ("npm run build", .build),
+            ("pnpm dev", .server),
+            ("go test ./...", .test),
+            ("swift build -c release", .build),
+            ("python3 -m pytest tests", .test),
+            ("bundle exec rspec", .test),
+            ("./gradlew assemble", .build),
+            ("docker compose up", .server),
+            ("cd web && yarn build", .build),
+        ]
+
+        for (command, expectedKind) in cases {
+            let arguments: [String: AgentJSONValue] = ["command": .string(command)]
+            #expect(
+                AgentRunCommandExecutionPolicy.shouldRunInBackground(arguments: arguments),
+                "\(command) should default to background"
+            )
+            #expect(AgentRunCommandExecutionPolicy.inferredActivityKind(for: command) == expectedKind)
+        }
+    }
+
+    @Test("automatic background policy stays conservative and honors explicit choices")
+    func automaticBackgroundPolicyHonorsExplicitChoices() {
+        let foregroundCommands = [
+            "git status --short",
+            "rg build Xedit",
+            "scripts/release.sh",
+            "xcrun notarytool submit app.dmg",
+            "npm publish",
+            "xcodebuild -list",
+        ]
+        for command in foregroundCommands {
+            #expect(!AgentRunCommandExecutionPolicy.shouldRunInBackground(
+                arguments: ["command": .string(command)]
+            ))
+        }
+
+        #expect(!AgentRunCommandExecutionPolicy.shouldRunInBackground(arguments: [
+            "command": .string("yarn test"),
+            "run_in_background": .bool(false),
+        ]))
+        #expect(AgentRunCommandExecutionPolicy.shouldRunInBackground(arguments: [
+            "command": .string("git status --short"),
+            "run_in_background": .bool(true),
+        ]))
+    }
+
     /// The concurrent-read whitelist must only ever contain read-tier
     /// tools with no approval, plan-gate, or sandbox-escalation paths.
     /// `run_command` (even when classified read-only) and `spawn_agent`
