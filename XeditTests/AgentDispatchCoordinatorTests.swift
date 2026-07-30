@@ -68,6 +68,108 @@ struct AgentDispatchCoordinatorTests {
         #expect(!pinnedUnavailable.isAvailable)
     }
 
+    @Test("任务图按真实依赖分层并把末端节点连接到验收关卡")
+    func graphLayoutUsesDependencyLayers() throws {
+        let root = AgentDispatchTask(title: "根节点")
+        let left = AgentDispatchTask(title: "左分支", dependencyIDs: [root.id])
+        let right = AgentDispatchTask(title: "右分支", dependencyIDs: [root.id])
+        let merge = AgentDispatchTask(
+            title: "汇聚",
+            dependencyIDs: [left.id, right.id]
+        )
+
+        let layout = AgentDispatchGraphLayout(tasks: [root, left, right, merge])
+        let rootCenter = try #require(layout.taskCenters[root.id])
+        let leftCenter = try #require(layout.taskCenters[left.id])
+        let rightCenter = try #require(layout.taskCenters[right.id])
+        let mergeCenter = try #require(layout.taskCenters[merge.id])
+
+        #expect(rootCenter.x < leftCenter.x)
+        #expect(leftCenter.x == rightCenter.x)
+        #expect(leftCenter.y != rightCenter.y)
+        #expect(leftCenter.x < mergeCenter.x)
+        #expect(mergeCenter.x < layout.gateCenter.x)
+        #expect(layout.edges.count == 5)
+        #expect(layout.edges.contains(AgentDispatchGraphEdge(sourceID: merge.id, targetID: nil)))
+    }
+
+    @Test("结构化节点编辑拒绝循环依赖并保留原计划")
+    func taskDefinitionRejectsDependencyCycles() throws {
+        let sandbox = try makeSandbox()
+        defer { sandbox.cleanup() }
+        let coordinator = AgentDispatchCoordinator(
+            store: AgentDispatchStore(defaults: sandbox.defaults)
+        )
+        let firstID = UUID()
+        let secondID = UUID()
+        coordinator.synchronize(
+            with: [
+                AgentSession(
+                    title: "Graph",
+                    workspaceRootPath: "/tmp/Graph",
+                    currentGoal: AgentGoal(
+                        statement: "构建任务图",
+                        checklist: [
+                            AgentGoal.Item(id: firstID, text: "第一步"),
+                            AgentGoal.Item(id: secondID, text: "第二步"),
+                        ]
+                    )
+                ),
+            ]
+        )
+        let goalID = try #require(coordinator.selectedGoal?.id)
+
+        let updated = coordinator.updateTaskDefinition(
+            goalID: goalID,
+            taskID: firstID,
+            title: "第一步",
+            dependencyIDs: [secondID],
+            acceptanceCriteria: ["通过测试"]
+        )
+
+        #expect(!updated)
+        #expect(coordinator.selectedGoal?.tasks.first?.dependencyIDs.isEmpty == true)
+    }
+
+    @Test("追加节点可以显式选择多个前置节点和验收标准")
+    func appendTaskSupportsGraphDefinition() throws {
+        let sandbox = try makeSandbox()
+        defer { sandbox.cleanup() }
+        let coordinator = AgentDispatchCoordinator(
+            store: AgentDispatchStore(defaults: sandbox.defaults)
+        )
+        coordinator.synchronize(
+            with: [
+                AgentSession(
+                    title: "Graph",
+                    workspaceRootPath: "/tmp/Graph",
+                    currentGoal: AgentGoal(
+                        statement: "并行任务",
+                        checklist: [
+                            AgentGoal.Item(text: "任务 A"),
+                            AgentGoal.Item(text: "任务 B"),
+                        ]
+                    )
+                ),
+            ]
+        )
+        let goalID = try #require(coordinator.selectedGoal?.id)
+        let dependencies = try #require(coordinator.selectedGoal?.tasks.map(\.id))
+
+        let appended = try #require(
+            coordinator.appendTask(
+                title: "汇聚节点",
+                goalID: goalID,
+                dependencyIDs: dependencies,
+                acceptanceCriteria: ["报告完整", "测试通过"]
+            )
+        )
+
+        #expect(appended.dependencyIDs == dependencies)
+        #expect(appended.acceptanceCriteria == ["报告完整", "测试通过"])
+        #expect(appended.state == .blocked)
+    }
+
     @Test("Goal 清单同步保留人工追加任务、指令与执行策略")
     func synchronizationPreservesDispatchOwnedState() throws {
         let sandbox = try makeSandbox()

@@ -237,19 +237,37 @@ final class AgentDispatchCoordinator: ObservableObject {
     }
 
     @discardableResult
-    func appendTask(title: String, goalID: UUID) -> AgentDispatchTask? {
+    func appendTask(
+        title: String,
+        goalID: UUID,
+        dependencyIDs requestedDependencyIDs: [UUID]? = nil,
+        acceptanceCriteria requestedAcceptanceCriteria: [String]? = nil
+    ) -> AgentDispatchTask? {
         let trimmed = title.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return nil }
         var appended: AgentDispatchTask?
         updateGoal(id: goalID) { goal in
             let predecessor = goal.tasks.last
-            let dependencies = predecessor.map { [$0.id] } ?? []
+            let validTaskIDs = Set(goal.tasks.map(\.id))
+            let dependencies = requestedDependencyIDs.map {
+                Self.uniqueIDs($0.filter(validTaskIDs.contains))
+            }
+                ?? predecessor.map { [$0.id] }
+                ?? []
+            let criteria = requestedAcceptanceCriteria?
+                .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+                .filter { !$0.isEmpty }
+                ?? []
             let task = AgentDispatchTask(
                 title: trimmed,
-                state: predecessor == nil || predecessor?.state == .merged ? .queued : .blocked,
+                state: dependencies.allSatisfy { dependencyID in
+                    goal.tasks.first(where: { $0.id == dependencyID })?.state == .merged
+                } ? .queued : .blocked,
                 dependencyIDs: dependencies,
                 branchName: Self.branchName(for: trimmed),
-                acceptanceCriteria: [L10n.Dispatch.defaultAcceptanceCriterion]
+                acceptanceCriteria: criteria.isEmpty
+                    ? [L10n.Dispatch.defaultAcceptanceCriterion]
+                    : criteria
             )
             goal.tasks.append(task)
             goal.updatedAt = Date()
@@ -259,6 +277,54 @@ final class AgentDispatchCoordinator: ObservableObject {
             selectedTaskID = appended.id
         }
         return appended
+    }
+
+    @discardableResult
+    func updateTaskDefinition(
+        goalID: UUID,
+        taskID: UUID,
+        title: String,
+        dependencyIDs requestedDependencyIDs: [UUID],
+        acceptanceCriteria requestedAcceptanceCriteria: [String]
+    ) -> Bool {
+        let trimmedTitle = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedTitle.isEmpty,
+              let goal = goals.first(where: { $0.id == goalID }),
+              let existingTask = goal.tasks.first(where: { $0.id == taskID }),
+              existingTask.state != .running,
+              existingTask.state != .reviewing else {
+            return false
+        }
+
+        let validTaskIDs = Set(goal.tasks.map(\.id)).subtracting([taskID])
+        let dependencyIDs = Self.uniqueIDs(
+            requestedDependencyIDs.filter(validTaskIDs.contains)
+        )
+        guard !Self.dependenciesCreateCycle(
+            taskID: taskID,
+            dependencyIDs: dependencyIDs,
+            tasks: goal.tasks
+        ) else {
+            return false
+        }
+
+        let criteria = requestedAcceptanceCriteria
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+        let mergedIDs = Set(goal.tasks.filter { $0.state == .merged }.map(\.id))
+        updateTask(goalID: goalID, taskID: taskID) { task in
+            task.title = trimmedTitle
+            task.dependencyIDs = dependencyIDs
+            task.acceptanceCriteria = criteria.isEmpty
+                ? [L10n.Dispatch.defaultAcceptanceCriterion]
+                : criteria
+            task.branchName = Self.branchName(for: trimmedTitle)
+            if task.state == .blocked || task.state == .queued {
+                task.state = Set(dependencyIDs).isSubset(of: mergedIDs) ? .queued : .blocked
+            }
+            task.updatedAt = Date()
+        }
+        return true
     }
 
     func markTaskStarted(
@@ -340,6 +406,39 @@ final class AgentDispatchCoordinator: ObservableObject {
 
     private func persist() {
         store.save(goals)
+    }
+
+    private static func dependenciesCreateCycle(
+        taskID: UUID,
+        dependencyIDs: [UUID],
+        tasks: [AgentDispatchTask]
+    ) -> Bool {
+        var dependenciesByTask = Dictionary(
+            uniqueKeysWithValues: tasks.map { ($0.id, $0.dependencyIDs) }
+        )
+        dependenciesByTask[taskID] = dependencyIDs
+
+        func reachesTask(_ currentID: UUID, visited: inout Set<UUID>) -> Bool {
+            if currentID == taskID {
+                return true
+            }
+            guard visited.insert(currentID).inserted else {
+                return false
+            }
+            return dependenciesByTask[currentID, default: []].contains { dependencyID in
+                reachesTask(dependencyID, visited: &visited)
+            }
+        }
+
+        return dependencyIDs.contains { dependencyID in
+            var visited: Set<UUID> = []
+            return reachesTask(dependencyID, visited: &visited)
+        }
+    }
+
+    private static func uniqueIDs(_ ids: [UUID]) -> [UUID] {
+        var seen: Set<UUID> = []
+        return ids.filter { seen.insert($0).inserted }
     }
 
     private static func project(

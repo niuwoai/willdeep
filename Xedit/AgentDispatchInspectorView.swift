@@ -14,6 +14,7 @@ struct AgentDispatchInspectorView: View {
     let onWorkspaceBindingChoice: (String?) -> Void
     let onLaunch: () -> Void
     let onOpenConversation: () -> Void
+    let onEdit: () -> Void
 
     private var effectiveWorkspaceBinding: AgentDispatchWorkspaceBinding? {
         goal.resolvedWorkspaceBinding(for: task)
@@ -246,6 +247,12 @@ struct AgentDispatchInspectorView: View {
 
     private var actions: some View {
         VStack(spacing: 8) {
+            Button(action: onEdit) {
+                Label(L10n.Dispatch.editNode, systemImage: "slider.horizontal.3")
+                    .frame(maxWidth: .infinity)
+            }
+            .buttonStyle(.bordered)
+            .disabled(task.state == .running || task.state == .reviewing)
             if task.runtimeSessionID != nil {
                 Button(action: onOpenConversation) {
                     Label(L10n.Dispatch.openTaskConversation, systemImage: "bubble.left")
@@ -356,6 +363,159 @@ struct AgentDispatchInspectorView: View {
         case .cancelled: return "xmark.circle"
         case .merged: return "checkmark.circle.fill"
         }
+    }
+}
+
+struct AgentDispatchAcceptanceInspectorView: View {
+    let goal: AgentDispatchGoal
+    let onSelectTask: (UUID) -> Void
+
+    private var completedTasks: [AgentDispatchTask] {
+        goal.tasks.filter { $0.state == .accepted || $0.state == .merged }
+    }
+
+    private var pendingTasks: [AgentDispatchTask] {
+        goal.tasks.filter { $0.state != .accepted && $0.state != .merged }
+    }
+
+    private var totalCriteria: Int {
+        goal.tasks.reduce(0) { $0 + $1.acceptanceCriteria.count }
+    }
+
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 0) {
+                header
+                sectionDivider
+                summary
+                sectionDivider
+                taskChecklist
+            }
+            .padding(16)
+        }
+        .background(Color(nsColor: .controlBackgroundColor).opacity(0.38))
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel(L10n.Dispatch.acceptanceGate)
+    }
+
+    private var header: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(spacing: 9) {
+                Image(systemName: "checkmark.shield.fill")
+                    .font(.system(size: 24, weight: .medium))
+                    .foregroundStyle(pendingTasks.isEmpty ? Color.green : Color.orange)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(L10n.Dispatch.acceptanceGate)
+                        .font(.system(size: 17, weight: .semibold))
+                    Text(L10n.Dispatch.acceptanceInspectorMessage)
+                        .font(.system(size: 10))
+                        .foregroundStyle(.secondary)
+                }
+            }
+            ProgressView(
+                value: Double(completedTasks.count),
+                total: Double(max(goal.tasks.count, 1))
+            )
+            .tint(pendingTasks.isEmpty ? .green : .orange)
+            Text(L10n.Dispatch.acceptanceProgress(completedTasks.count, goal.tasks.count))
+                .font(.system(size: 10, design: .monospaced))
+                .foregroundStyle(.secondary)
+        }
+    }
+
+    private var summary: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            fieldLabel(L10n.Dispatch.graphSummaryTitle)
+            HStack(spacing: 8) {
+                summaryTile(
+                    value: "\(goal.tasks.count)",
+                    label: L10n.Dispatch.graphTasks,
+                    color: .blue
+                )
+                summaryTile(
+                    value: "\(pendingTasks.count)",
+                    label: L10n.Dispatch.graphPending,
+                    color: .orange
+                )
+                summaryTile(
+                    value: "\(totalCriteria)",
+                    label: L10n.Dispatch.graphCriteria,
+                    color: .indigo
+                )
+            }
+        }
+    }
+
+    private var taskChecklist: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            fieldLabel(L10n.Dispatch.acceptanceByTask)
+            ForEach(goal.tasks) { task in
+                Button {
+                    onSelectTask(task.id)
+                } label: {
+                    HStack(alignment: .top, spacing: 8) {
+                        Image(
+                            systemName: task.state == .accepted || task.state == .merged
+                                ? "checkmark.circle.fill"
+                                : task.state == .failed
+                                    ? "exclamationmark.triangle.fill"
+                                    : "circle"
+                        )
+                        .foregroundStyle(
+                            AgentDispatchPresentation.taskStateColor(task.state)
+                        )
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text(task.title)
+                                .font(.system(size: 11, weight: .medium))
+                                .foregroundStyle(.primary)
+                                .lineLimit(2)
+                            Text(L10n.Dispatch.criteriaCount(task.acceptanceCriteria.count))
+                                .font(.system(size: 9))
+                                .foregroundStyle(.secondary)
+                        }
+                        Spacer(minLength: 4)
+                        Image(systemName: "chevron.right")
+                            .font(.system(size: 9, weight: .semibold))
+                            .foregroundStyle(.tertiary)
+                    }
+                    .padding(9)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(Color(nsColor: .textBackgroundColor).opacity(0.58))
+                    .clipShape(RoundedRectangle(cornerRadius: 8))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 8)
+                            .stroke(Color.secondary.opacity(0.13), lineWidth: 1)
+                    )
+                }
+                .buttonStyle(.plain)
+            }
+        }
+    }
+
+    private var sectionDivider: some View {
+        Divider()
+            .padding(.vertical, 14)
+    }
+
+    private func fieldLabel(_ text: String) -> some View {
+        Text(text)
+            .font(.system(size: 11, weight: .semibold))
+            .foregroundStyle(.secondary)
+    }
+
+    private func summaryTile(value: String, label: String, color: Color) -> some View {
+        VStack(alignment: .leading, spacing: 3) {
+            Text(value)
+                .font(.system(size: 16, weight: .semibold, design: .rounded))
+                .foregroundStyle(color)
+            Text(label)
+                .font(.system(size: 9))
+                .foregroundStyle(.secondary)
+        }
+        .padding(9)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(color.opacity(0.07))
+        .clipShape(RoundedRectangle(cornerRadius: 8))
     }
 }
 

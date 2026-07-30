@@ -289,6 +289,122 @@ extension L10n {
             localized: "dispatch.acceptance-gate",
             defaultValue: "Acceptance Gate"
         )
+        static let graphTitle = String(
+            localized: "dispatch.graph-title",
+            defaultValue: "Task Graph"
+        )
+        static let graphActive = String(
+            localized: "dispatch.graph-active",
+            defaultValue: "Active"
+        )
+        static let graphReview = String(
+            localized: "dispatch.graph-review",
+            defaultValue: "Review"
+        )
+        static let graphComplete = String(
+            localized: "dispatch.graph-complete",
+            defaultValue: "Complete"
+        )
+        static let graphSummaryTitle = String(
+            localized: "dispatch.graph-summary-title",
+            defaultValue: "Graph Summary"
+        )
+        static let graphTasks = String(
+            localized: "dispatch.graph-tasks",
+            defaultValue: "Tasks"
+        )
+        static let graphPending = String(
+            localized: "dispatch.graph-pending",
+            defaultValue: "Pending"
+        )
+        static let graphCriteria = String(
+            localized: "dispatch.graph-criteria",
+            defaultValue: "Criteria"
+        )
+        static let zoomOut = String(
+            localized: "dispatch.zoom-out",
+            defaultValue: "Zoom out"
+        )
+        static let zoomIn = String(
+            localized: "dispatch.zoom-in",
+            defaultValue: "Zoom in"
+        )
+        static let resetZoom = String(
+            localized: "dispatch.reset-zoom",
+            defaultValue: "Reset zoom"
+        )
+        static let addNode = String(
+            localized: "dispatch.add-node",
+            defaultValue: "Add Node"
+        )
+        static let editNode = String(
+            localized: "dispatch.edit-node",
+            defaultValue: "Edit Node"
+        )
+        static let saveNode = String(
+            localized: "dispatch.save-node",
+            defaultValue: "Save Node"
+        )
+        static let nodeSelectionHint = String(
+            localized: "dispatch.node-selection-hint",
+            defaultValue: "Select to inspect this node."
+        )
+        static let nodeEditorMessage = String(
+            localized: "dispatch.node-editor-message",
+            defaultValue: "Define the node, its prerequisites, and the evidence required to pass."
+        )
+        static let nodeTaskTitle = String(
+            localized: "dispatch.node-task-title",
+            defaultValue: "Task title"
+        )
+        static let nodeTaskTitlePlaceholder = String(
+            localized: "dispatch.node-task-title-placeholder",
+            defaultValue: "Describe the outcome of this node"
+        )
+        static let nodeDependencies = String(
+            localized: "dispatch.node-dependencies",
+            defaultValue: "Prerequisite nodes"
+        )
+        static let nodeDependenciesHelp = String(
+            localized: "dispatch.node-dependencies-help",
+            defaultValue: "This node remains blocked until every selected prerequisite is merged."
+        )
+        static let noDependenciesAvailable = String(
+            localized: "dispatch.no-dependencies-available",
+            defaultValue: "No other nodes are available."
+        )
+        static let nodeAcceptanceHelp = String(
+            localized: "dispatch.node-acceptance-help",
+            defaultValue: "Enter one acceptance criterion per line."
+        )
+        static let runtimeInstructions = String(
+            localized: "dispatch.runtime-instructions",
+            defaultValue: "Runtime Instructions"
+        )
+        static let showInstructions = String(
+            localized: "dispatch.show-instructions",
+            defaultValue: "Show Instructions"
+        )
+        static let hideInstructions = String(
+            localized: "dispatch.hide-instructions",
+            defaultValue: "Hide Instructions"
+        )
+        static let planUpdateFailed = String(
+            localized: "dispatch.plan-update-failed",
+            defaultValue: "Couldn’t update the graph"
+        )
+        static let planUpdateFailedMessage = String(
+            localized: "dispatch.plan-update-failed-message",
+            defaultValue: "Check that the title is present, the task is not running, and the selected prerequisites do not create a cycle."
+        )
+        static let acceptanceInspectorMessage = String(
+            localized: "dispatch.acceptance-inspector-message",
+            defaultValue: "Final evidence and task readiness"
+        )
+        static let acceptanceByTask = String(
+            localized: "dispatch.acceptance-by-task",
+            defaultValue: "Acceptance by task"
+        )
 
         static func taskCount(_ count: Int) -> String {
             String(
@@ -301,6 +417,41 @@ extension L10n {
             String(
                 localized: "dispatch.active-count",
                 defaultValue: "\(count) active"
+            )
+        }
+
+        static func graphSummary(_ tasks: Int, _ edges: Int) -> String {
+            String(
+                localized: "dispatch.graph-summary",
+                defaultValue: "\(tasks) nodes · \(edges) connections"
+            )
+        }
+
+        static func nodeOrdinal(_ ordinal: Int) -> String {
+            String(
+                localized: "dispatch.node-ordinal",
+                defaultValue: "NODE \(ordinal)"
+            )
+        }
+
+        static func taskNodeAccessibility(_ ordinal: Int, _ title: String) -> String {
+            String(
+                localized: "dispatch.task-node-accessibility",
+                defaultValue: "Task node \(ordinal): \(title)"
+            )
+        }
+
+        static func acceptanceProgress(_ completed: Int, _ total: Int) -> String {
+            String(
+                localized: "dispatch.acceptance-progress",
+                defaultValue: "\(completed) of \(total) tasks passed"
+            )
+        }
+
+        static func criteriaCount(_ count: Int) -> String {
+            String(
+                localized: "dispatch.criteria-count",
+                defaultValue: "\(count) acceptance criteria"
             )
         }
 
