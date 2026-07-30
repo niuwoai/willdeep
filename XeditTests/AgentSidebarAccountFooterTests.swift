@@ -88,6 +88,20 @@ struct AgentSidebarAccountFooterTests {
         #expect(trailingSource.distance(from: buttonStyle.lowerBound, to: focusPolicy.lowerBound) < 80)
     }
 
+    @Test("account footer and popover header share the cached remote avatar renderer")
+    func accountChromeSharesAvatarRenderer() throws {
+        let repositoryRoot = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+        let sourceURL = repositoryRoot
+            .appendingPathComponent("Xedit", isDirectory: true)
+            .appendingPathComponent("AgentSidebarAccountFooter.swift")
+        let source = try String(contentsOf: sourceURL, encoding: .utf8)
+
+        #expect(source.components(separatedBy: "AgentSidebarAccountAvatar(").count - 1 == 2)
+        #expect(source.contains("CachedAvatarImage(url: url)"))
+    }
+
     @Test("render account menu and footer for design QA")
     @MainActor
     func renderAccountChromeForDesignQA() throws {

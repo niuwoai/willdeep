@@ -1,6 +1,6 @@
 # WillDeep Product Overview
 
-> Last updated: 2026-07-30 | Current version: v1.215.0-rc2
+> Last updated: 2026-07-30 | Current version: v1.215.0-rc3
 
 ## Positioning
 
@@ -11,6 +11,8 @@ Official product domain: [willdeep.com](https://willdeep.com).
 WillDeep is configured for non-App-Store distribution without App Sandbox so it can access local project files with fewer permission interruptions.
 
 ## 架构概览
+
+- **账号头像统一渲染（1.215.0-rc3）** —— 侧栏底部账号条与弹出菜单顶部共用同一个远程头像组件和进程级缓存，不再由弹出菜单硬编码昵称首字母；只有未配置头像、加载中或请求失败时才显示首字母占位。
 
 - **侧栏标题稳定截断（1.215.0-rc2）** —— 会话标题和计划步骤恢复为无状态的单行尾部省略号，并通过系统 tooltip 展示完整内容；移除行内 GeometryReader、PreferenceKey、hover 状态回写与无限跑马灯动画，避免侧栏在命中测试和 LazyVStack 布局之间形成主线程反馈环。
 
