@@ -14,6 +14,28 @@ nonisolated enum AgentDispatchLaunchResult: Equatable {
 }
 
 extension AppState {
+    /// Pet/system-notification navigation follows the session's product
+    /// scope. Dispatch child runtimes return to their owning project graph
+    /// instead of dropping the user into a chat transcript.
+    func revealAgentSessionFromNotification(id sessionID: UUID) {
+        guard let session = agentSessions.first(where: { $0.id == sessionID }) else {
+            _ = selectAgentSession(id: sessionID)
+            return
+        }
+        if let projectID = session.dispatchParentProjectID,
+           agentDispatchCoordinator.goals.contains(where: { $0.id == projectID }) {
+            selectDispatchGoal(projectID)
+            return
+        }
+        _ = selectAgentSession(id: sessionID)
+        if session.presentationScope == .dispatchBoard {
+            if agentDispatchCoordinator.goals.contains(where: { $0.id == sessionID }) {
+                agentDispatchCoordinator.selectGoal(sessionID)
+            }
+            agentPrimaryDestination = .dispatchBoard
+        }
+    }
+
     @discardableResult
     func deleteDispatchGoal(goalID: UUID) -> Bool {
         guard let goal = agentDispatchCoordinator.removeGoal(id: goalID) else {
@@ -94,6 +116,33 @@ extension AppState {
             return
         }
         applyDispatchModel(routing.planningModelID, to: runtime)
+        persistAgentSession(runtime: runtime, touchUpdatedAt: false, moveToFront: false)
+    }
+
+    func updateDispatchPlanningProfiles(
+        primaryProfileID: String,
+        fallbackProfileIDs: [String],
+        goalID: UUID
+    ) {
+        agentDispatchCoordinator.updatePlanningProfiles(
+            primaryProfileID: primaryProfileID,
+            fallbackProfileIDs: fallbackProfileIDs,
+            goalID: goalID
+        )
+        guard let goal = agentDispatchCoordinator.goals.first(where: { $0.id == goalID }),
+              let runtime = runtime(for: goal.sessionID) else {
+            return
+        }
+        var sourceGoal = runtime.currentGoal ?? AgentGoal()
+        sourceGoal.planningProfileID = primaryProfileID
+        sourceGoal.planningFallbackProfileIDs = fallbackProfileIDs
+        sourceGoal.planningAttemptedProfileIDs = nil
+        runtime.currentGoal = sourceGoal
+        if let profile = dispatchExecutionProfiles(for: goal).first(where: {
+            $0.id == primaryProfileID && $0.executor == .willDeep
+        }) {
+            applyDispatchModel(profile.modelID, to: runtime)
+        }
         persistAgentSession(runtime: runtime, touchUpdatedAt: false, moveToFront: false)
     }
 
@@ -347,14 +396,40 @@ extension AppState {
         let target = workspaceBinding.targetChoice
         let workspaceLocation = workspaceBinding.location
         let available = availableDispatchExecutors(on: target)
+        let profiles = dispatchExecutionProfiles(for: goal).filter {
+            $0.executor != .willDeep
+                || $0.modelID == nil
+                || agentModelIsCompatibleWithActiveProvider($0.modelID ?? "")
+        }
+        let profile = AgentDispatchProfileResolver.next(
+            primaryProfileID: task.primaryProfileID,
+            fallbackProfileIDs: task.fallbackProfileIDs ?? [],
+            attemptedProfileIDs: task.attemptedProfileIDs ?? [],
+            availableExecutors: available,
+            profiles: profiles
+        )
+        let hasProfilePolicy = task.primaryProfileID != nil
+            || !(task.fallbackProfileIDs ?? []).isEmpty
+        if task.executorChoice == .automatic, hasProfilePolicy, profile == nil {
+            return .blocked(message: L10n.Dispatch.noProfileAvailable)
+        }
         let executorChoice = task.executorChoice == .automatic
             ? goal.executorChoice
             : task.executorChoice
-        let decision = AgentDispatchExecutorResolver.resolve(
-            title: task.title,
-            choice: executorChoice,
-            availableExecutors: available
-        )
+        let decision: AgentDispatchExecutorDecision
+        if task.executorChoice == .automatic, let profile {
+            decision = AgentDispatchExecutorDecision(
+                executor: profile.executor,
+                reason: .userPinned,
+                isAvailable: available.contains(profile.executor)
+            )
+        } else {
+            decision = AgentDispatchExecutorResolver.resolve(
+                title: task.title,
+                choice: executorChoice,
+                availableExecutors: available
+            )
+        }
         guard decision.isAvailable else {
             return .blocked(message: L10n.Dispatch.noExecutorOnTarget)
         }
@@ -375,7 +450,7 @@ extension AppState {
         runtime.executionAgent = decision.executor
         if decision.executor == .willDeep {
             applyDispatchModel(
-                goal.effectiveModelRouting.executionModelID,
+                profile?.modelID ?? goal.effectiveModelRouting.executionModelID,
                 to: runtime
             )
         }
@@ -385,14 +460,13 @@ extension AppState {
             goalID: goalID,
             taskID: taskID,
             executor: decision.executor,
+            profileID: profile?.id,
             target: target,
             runtimeSessionID: runtime.id
         )
 
-        let delegatedProfile = selectedDispatchCLIProfile(
-            goal: goal,
-            executor: decision.executor
-        )
+        let delegatedProfile = profile?.delegatedProfile
+            ?? selectedDispatchCLIProfile(goal: goal, executor: decision.executor)
         dispatchAgentMessageUsingSelectedExecutor(
             decision.executor,
             for: runtime,
@@ -470,6 +544,20 @@ extension AppState {
                 taskID: taskID,
                 state: state
             )
+            if state == .failed,
+               let refreshedGoal = self.agentDispatchCoordinator.goals.first(where: {
+                   $0.id == goalID
+               }),
+               let refreshedTask = refreshedGoal.tasks.first(where: {
+                   $0.id == taskID
+               }),
+               refreshedTask.executorChoice == .automatic,
+               AgentDispatchProfileResolver.hasUntriedFallback(
+                   fallbackProfileIDs: refreshedTask.fallbackProfileIDs ?? [],
+                   attemptedProfileIDs: refreshedTask.attemptedProfileIDs ?? []
+               ) {
+                _ = self.launchDispatchTask(goalID: goalID, taskID: taskID)
+            }
         }
     }
 
@@ -496,6 +584,14 @@ extension AppState {
         ).first {
             $0.id == profileID && $0.executor == executor
         }
+    }
+
+    private func dispatchExecutionProfiles(
+        for goal: AgentDispatchGoal
+    ) -> [AgentExecutionProfile] {
+        AgentExecutionProfileStore().availableProfiles(
+            workspacePath: goal.logicalProject?.primaryWorkspacePath
+        )
     }
 
     nonisolated private static func dispatchGoalInstructionPrompt(_ text: String) -> String {

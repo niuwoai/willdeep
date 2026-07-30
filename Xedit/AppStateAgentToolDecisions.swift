@@ -625,6 +625,7 @@ extension AppState {
     nonisolated static let trustedDelegatedAgentToolNames: Set<String> = [
         "claude_code",
         "codex_cli",
+        "hermes_cli",
         "cursor_agent",
         "cline_cli"
     ]
@@ -951,6 +952,8 @@ extension AppState {
         switch toolName {
         case "web_fetch":
             return arguments["url"]?.stringValue().flatMap(AgentWebTools.validatedPublicURL(_:)) != nil
+        case "claude_code", "codex_cli", "hermes_cli", "cursor_agent", "cline_cli":
+            return arguments["permission_mode"]?.stringValue() == "plan"
         default:
             return false
         }
@@ -982,7 +985,7 @@ extension AppState {
                 return false
             }
             return sandboxDecision.mode == .readOnly || sandboxDecision.mode == .workspaceWrite
-        case "kill_job", "claude_code", "codex_cli", "cursor_agent", "cline_cli",
+        case "kill_job", "claude_code", "codex_cli", "hermes_cli", "cursor_agent", "cline_cli",
              "add_memory", "create_user_skill", "update_user_skill", "suggest_mcp_server", "configure_mcp_server":
             return true
         case "call_mcp_tool":

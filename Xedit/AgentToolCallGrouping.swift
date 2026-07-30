@@ -227,7 +227,7 @@ struct AgentToolActivityRowPresentation: Identifiable, Equatable {
             return host
         case "spawn_agent":
             return compact(call.arguments["label"]?.stringValue())
-        case "claude_code", "codex_cli", "cursor_agent", "cline_cli":
+        case "claude_code", "codex_cli", "hermes_cli", "cursor_agent", "cline_cli":
             guard let progress = call.delegatedProgress else { return nil }
             var detail = L10n.DelegatedTask.liveProgress(
                 phase: progress.phase,
@@ -384,6 +384,7 @@ nonisolated enum AgentToolKind: Equatable, Sendable {
     case subagent
     case claudeCode
     case codexCLI
+    case hermesCLI
     case cursorAgent
     case clineCLI
     case fileMutation
@@ -407,6 +408,8 @@ nonisolated enum AgentToolKind: Equatable, Sendable {
             return .claudeCode
         case "codex_cli":
             return .codexCLI
+        case "hermes_cli":
+            return .hermesCLI
         case "cursor_agent":
             return .cursorAgent
         case "cline_cli":
@@ -446,6 +449,8 @@ nonisolated enum AgentToolKind: Equatable, Sendable {
             return "已委派 \(count) 个 Claude Code 任务"
         case .codexCLI:
             return "已委派 \(count) 个 Codex CLI 任务"
+        case .hermesCLI:
+            return "已委派 \(count) 个 Hermes 任务"
         case .cursorAgent:
             return "已委派 \(count) 个 Cursor Agent 任务"
         case .clineCLI:
@@ -482,6 +487,7 @@ nonisolated enum AgentToolKind: Equatable, Sendable {
         case .subagent: return "person.2"
         case .claudeCode: return "sparkles.rectangle.stack"
         case .codexCLI: return "terminal.fill"
+        case .hermesCLI: return "h.circle"
         case .cursorAgent: return "cursorarrow.rays"
         case .clineCLI: return "chevron.left.forwardslash.chevron.right"
         case .fileMutation: return "square.and.pencil"
@@ -501,6 +507,8 @@ extension AgentToolKind {
             return "委派给 Claude Code"
         case .codexCLI:
             return "委派给 Codex"
+        case .hermesCLI:
+            return "委派给 Hermes"
         case .cursorAgent:
             return "委派给 Cursor Agent"
         case .clineCLI:

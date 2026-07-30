@@ -80,16 +80,16 @@ enum AgentContextBuilder {
     private static let maxSelectionCharacters = 6_000
     private static let maxRulesCharacters = 6_000
     private static let dynamicContextMarker = "=== Dynamic Turn Context ==="
-    static let stablePrefixVersion = "willdeep-agent-system-v17"
+    static let stablePrefixVersion = "willdeep-agent-system-v18"
     /// Byte-level snapshot hashes for all three prompt profiles (computed
     /// with the fixed test locale directive). Intentional prompt edits must
     /// bump `stablePrefixVersion` and re-record every affected hash — run
     /// the snapshot tests once to get the new values from the failure
     /// output. Without all three, compact/extended drift (a merge eating
     /// half a sentence) ships silently.
-    static let stablePrefixSnapshotHash = "43a7a8e0bd1571ce"
-    static let compactPrefixSnapshotHash = "1a041137f1bcdf4a"
-    static let extendedPrefixSnapshotHash = "93d2d154d78fd43c"
+    static let stablePrefixSnapshotHash = "715bba744ee6877"
+    static let compactPrefixSnapshotHash = "46017a1c23e9d66b"
+    static let extendedPrefixSnapshotHash = "5ec7259e8cf44833"
 
     static func systemPrompt(
         rootDirectory: URL?,
@@ -149,8 +149,8 @@ enum AgentContextBuilder {
         if toolsEnabled {
             if executionAgent == .willDeep {
                 let delegatedPolicy = interactionMode == .goal
-                    ? "WillDeep is the selected executor. External delegated coding tools (claude_code, codex_cli, cursor_agent, cline_cli) are available only as a Goal-mode fallback after native workspace tools, focused edits, and verification attempts are not enough."
-                    : "WillDeep is the selected executor. External delegated coding tools (claude_code, codex_cli, cursor_agent, cline_cli) are intentionally unavailable in ordinary mode; use WillDeep's native tools instead."
+                    ? "WillDeep is the selected executor. External delegated coding tools (claude_code, codex_cli, hermes_cli, cursor_agent, cline_cli) are available only as a Goal-mode fallback after native workspace tools, focused edits, and verification attempts are not enough."
+                    : "WillDeep is the selected executor. External delegated coding tools (claude_code, codex_cli, hermes_cli, cursor_agent, cline_cli) are intentionally unavailable in ordinary mode; use WillDeep's native tools instead."
                 sections.append("""
                 Delegated executor policy:
                 \(delegatedPolicy)
@@ -407,7 +407,7 @@ enum AgentContextBuilder {
                 Extended operating model:
                 - Workspace exploration: search_files, grep_files, read_file, list_directory, git_status.
                 - Shell and verification: run_command for build/test/render commands; use run_in_background with list_jobs/get_job_output/kill_job for long tasks.
-                - Delegation: spawn_agent for read-only parallel exploration; claude_code/codex_cli/cursor_agent/cline_cli for approved end-to-end delegated coding tasks.
+                - Delegation: spawn_agent for read-only parallel exploration; claude_code/codex_cli/hermes_cli/cursor_agent/cline_cli for approved end-to-end delegated coding tasks.
                 - External context: web_search/web_fetch for current public information, list_mcp_servers/list_mcp_tools/call_mcp_tool for configured integrations, configure_mcp_server for approved pasted MCP JSON add/update, and lark_cli for configured Feishu/Lark work.
                 - Browser and UI QA: chrome_* / embedded_browser_* tools exist only while the browserOps or webCoding expert is active (activate_expert) — when absent from your tool list they are unavailable, not broken. When active they can list/activate tabs, navigate, take fresh DOM snapshots, wait, click/type/hover/select options by ref, press keys with native focus/edit fallbacks, scroll, and capture the active Chrome tab when configured. Pure screenshot capture is read-only and does not need a WillDeep confirmation card; visual_qa_screenshot remains approval-gated when it may send pixels to a configured Image Understanding provider. computer_use_* controls a selected native macOS app through WillDeep's separate permissioned helper.
                 """)

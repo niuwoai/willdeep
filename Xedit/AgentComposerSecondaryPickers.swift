@@ -75,6 +75,7 @@ struct AgentExecutionPickerPill: View {
         case .willDeep: return Color.secondary.opacity(0.10)
         case .claudeCode: return Color.purple
         case .codexCLI: return Color.accentColor
+        case .hermesCLI: return Color.indigo
         case .cursorAgent: return Color.green
         case .clineCLI: return Color.orange
         }

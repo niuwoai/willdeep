@@ -10,8 +10,11 @@ struct AgentDispatchInspectorView: View {
     let task: AgentDispatchTask
     let localExecutors: Set<AgentExecutionAgent>
     let runtimeDescriptors: [RuntimeDescriptor]
+    let profiles: [AgentExecutionProfile]
     let onExecutorChoice: (AgentDispatchExecutorChoice) -> Void
     let onWorkspaceBindingChoice: (String?) -> Void
+    let onProfiles: (String?, [String]) -> Void
+    let onManageProfiles: () -> Void
     let onLaunch: () -> Void
     let onOpenConversation: () -> Void
     let onEdit: () -> Void
@@ -44,17 +47,31 @@ struct AgentDispatchInspectorView: View {
     }
 
     private var executorDecision: AgentDispatchExecutorDecision {
-        AgentDispatchExecutorResolver.resolve(
+        if task.executorChoice == .automatic,
+           let profile = selectedPrimaryProfile {
+            return AgentDispatchExecutorDecision(
+                executor: profile.executor,
+                reason: .userPinned,
+                isAvailable: availableExecutors.contains(profile.executor)
+            )
+        }
+        return AgentDispatchExecutorResolver.resolve(
             title: task.title,
             choice: effectiveExecutorChoice,
             availableExecutors: availableExecutors
         )
     }
 
+    private var selectedPrimaryProfile: AgentExecutionProfile? {
+        profiles.first { $0.id == task.primaryProfileID }
+    }
+
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 0) {
                 header
+                sectionDivider
+                profileSection
                 sectionDivider
                 executorSection
                 sectionDivider
@@ -71,6 +88,78 @@ struct AgentDispatchInspectorView: View {
             .padding(16)
         }
         .background(Color(nsColor: .controlBackgroundColor).opacity(0.38))
+    }
+
+    private var profileSection: some View {
+        VStack(alignment: .leading, spacing: 9) {
+            fieldLabel(L10n.Dispatch.primaryProfile)
+            Menu {
+                Button {
+                    onProfiles(nil, task.fallbackProfileIDs ?? [])
+                } label: {
+                    Label(
+                        L10n.Dispatch.automatic,
+                        systemImage: task.primaryProfileID == nil ? "checkmark" : "wand.and.stars"
+                    )
+                }
+                ForEach(profiles) { profile in
+                    Button {
+                        onProfiles(
+                            profile.id,
+                            (task.fallbackProfileIDs ?? []).filter {
+                                $0 != profile.id
+                            }
+                        )
+                    } label: {
+                        Label(
+                            profile.name,
+                            systemImage: profile.id == task.primaryProfileID
+                                ? "checkmark"
+                                : profile.executor.symbol
+                        )
+                    }
+                }
+                Divider()
+                Button(action: onManageProfiles) {
+                    Label(L10n.Dispatch.manageProfiles, systemImage: "gearshape")
+                }
+            } label: {
+                pickerSurface(
+                    symbol: selectedPrimaryProfile?.executor.symbol ?? "wand.and.stars",
+                    text: selectedPrimaryProfile?.name ?? L10n.Dispatch.automatic,
+                    locked: task.primaryProfileID != nil
+                )
+            }
+            .menuStyle(.borderlessButton)
+
+            Menu(L10n.Dispatch.fallbackProfiles) {
+                ForEach(profiles.filter { $0.id != task.primaryProfileID }) { profile in
+                    Button {
+                        var fallbacks = task.fallbackProfileIDs ?? []
+                        if let index = fallbacks.firstIndex(of: profile.id) {
+                            fallbacks.remove(at: index)
+                        } else {
+                            fallbacks.append(profile.id)
+                        }
+                        onProfiles(task.primaryProfileID, fallbacks)
+                    } label: {
+                        Label(
+                            profile.name,
+                            systemImage: (task.fallbackProfileIDs ?? []).contains(profile.id)
+                                ? "checkmark"
+                                : profile.executor.symbol
+                        )
+                    }
+                }
+            }
+            .menuStyle(.borderlessButton)
+
+            if let selectedPrimaryProfile {
+                Text(selectedPrimaryProfile.displayDetail)
+                    .font(.system(size: 10))
+                    .foregroundStyle(.secondary)
+            }
+        }
     }
 
     private var header: some View {
@@ -94,7 +183,7 @@ struct AgentDispatchInspectorView: View {
 
     private var executorSection: some View {
         VStack(alignment: .leading, spacing: 9) {
-            fieldLabel(L10n.Dispatch.executor)
+            fieldLabel(L10n.Dispatch.humanOverride)
             Menu {
                 ForEach(AgentDispatchExecutorChoice.allCases) { choice in
                     Button {
@@ -248,10 +337,10 @@ struct AgentDispatchInspectorView: View {
     private var actions: some View {
         VStack(spacing: 8) {
             Button(action: onEdit) {
-                Label(L10n.Dispatch.editNode, systemImage: "slider.horizontal.3")
+                Label(L10n.Dispatch.humanOverride, systemImage: "slider.horizontal.3")
                     .frame(maxWidth: .infinity)
             }
-            .buttonStyle(.bordered)
+            .buttonStyle(.borderless)
             .disabled(task.state == .running || task.state == .reviewing)
             if task.runtimeSessionID != nil {
                 Button(action: onOpenConversation) {

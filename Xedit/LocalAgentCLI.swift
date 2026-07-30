@@ -13,20 +13,53 @@ nonisolated struct LocalAgentCLIProfile: Identifiable, Equatable {
     nonisolated enum Configuration: Equatable {
         case codexConfig(name: String)
         case claudeAgent(name: String)
+        case hermesProfile(name: String)
+        case generic
     }
 
     let id: String
     let displayName: String
     let executor: AgentExecutionAgent
     let configuration: Configuration
+    let modelID: String?
+    let providerID: String?
 
-    var argument: (name: String, value: String) {
+    var argument: (name: String, value: String)? {
         switch configuration {
         case .codexConfig(let name):
-            return ("profile", name)
+            return name.isEmpty ? nil : ("profile", name)
         case .claudeAgent(let name):
-            return ("agent", name)
+            return name.isEmpty ? nil : ("agent", name)
+        case .hermesProfile(let name):
+            return ("hermes_profile", name.isEmpty ? "default" : name)
+        case .generic:
+            return nil
         }
+    }
+
+    var nativeProfileName: String? {
+        switch configuration {
+        case .codexConfig(let name), .claudeAgent(let name), .hermesProfile(let name):
+            return name.isEmpty ? nil : name
+        case .generic:
+            return nil
+        }
+    }
+
+    init(
+        id: String,
+        displayName: String,
+        executor: AgentExecutionAgent,
+        configuration: Configuration,
+        modelID: String? = nil,
+        providerID: String? = nil
+    ) {
+        self.id = id
+        self.displayName = displayName
+        self.executor = executor
+        self.configuration = configuration
+        self.modelID = modelID
+        self.providerID = providerID
     }
 
     nonisolated static func discover(
@@ -49,7 +82,12 @@ nonisolated struct LocalAgentCLIProfile: Identifiable, Equatable {
                 id: "codex:\(name)",
                 displayName: name,
                 executor: .codexCLI,
-                configuration: .codexConfig(name: name)
+                configuration: .codexConfig(name: name),
+                modelID: modelValue(
+                    in: codexDirectory.appendingPathComponent("\(name).config.toml"),
+                    key: "model",
+                    fileManager: fileManager
+                )
             )
         }
 
@@ -80,7 +118,34 @@ nonisolated struct LocalAgentCLIProfile: Identifiable, Equatable {
             )
         }
 
-        return codexProfiles + claudeProfiles
+        let hermesRoot = homeDirectory.appendingPathComponent(".hermes", isDirectory: true)
+        let hermesProfileNames = ["default"] + (
+            (try? fileManager.contentsOfDirectory(
+                atPath: hermesRoot.appendingPathComponent("profiles", isDirectory: true).path
+            )) ?? []
+        )
+        let hermesProfiles = Array(Set(hermesProfileNames))
+            .filter(profileNameIsSafe)
+            .sorted()
+            .map { name in
+                let profileRoot = name == "default"
+                    ? hermesRoot
+                    : hermesRoot
+                        .appendingPathComponent("profiles", isDirectory: true)
+                        .appendingPathComponent(name, isDirectory: true)
+                return LocalAgentCLIProfile(
+                    id: "hermes:\(name)",
+                    displayName: name,
+                    executor: .hermesCLI,
+                    configuration: .hermesProfile(name: name),
+                    modelID: yamlModelValue(
+                        in: profileRoot.appendingPathComponent("config.yaml"),
+                        fileManager: fileManager
+                    )
+                )
+            }
+
+        return codexProfiles + claudeProfiles + hermesProfiles
     }
 
     nonisolated private static func namedFiles(
@@ -108,6 +173,52 @@ nonisolated struct LocalAgentCLIProfile: Identifiable, Equatable {
             CharacterSet(charactersIn: "._-")
         )
         return name.unicodeScalars.allSatisfy(allowed.contains)
+    }
+
+    nonisolated private static func modelValue(
+        in url: URL,
+        key: String,
+        fileManager: FileManager
+    ) -> String? {
+        guard fileManager.fileExists(atPath: url.path),
+              let content = try? String(contentsOf: url, encoding: .utf8) else {
+            return nil
+        }
+        let prefix = "\(key) ="
+        for rawLine in content.components(separatedBy: .newlines) {
+            let line = rawLine.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard line.hasPrefix(prefix) else { continue }
+            return quotedValue(String(line.dropFirst(prefix.count)))
+        }
+        return nil
+    }
+
+    nonisolated private static func yamlModelValue(
+        in url: URL,
+        fileManager: FileManager
+    ) -> String? {
+        guard fileManager.fileExists(atPath: url.path),
+              let content = try? String(contentsOf: url, encoding: .utf8) else {
+            return nil
+        }
+        var insideModel = false
+        for rawLine in content.components(separatedBy: .newlines) {
+            if !rawLine.hasPrefix(" "), !rawLine.hasPrefix("\t") {
+                insideModel = rawLine.trimmingCharacters(in: .whitespaces) == "model:"
+                continue
+            }
+            guard insideModel else { continue }
+            let line = rawLine.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard line.hasPrefix("default:") else { continue }
+            return quotedValue(String(line.dropFirst("default:".count)))
+        }
+        return nil
+    }
+
+    nonisolated private static func quotedValue(_ raw: String) -> String? {
+        let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+            .trimmingCharacters(in: CharacterSet(charactersIn: "\"'"))
+        return trimmed.isEmpty ? nil : trimmed
     }
 }
 
@@ -163,6 +274,17 @@ struct LocalAgentCLI: Identifiable, Equatable {
                 "/usr/local/bin/codex"
             ],
             integration: .directTool("codex_cli")
+        ),
+        LocalAgentCLI(
+            id: "hermes-cli",
+            displayName: "Hermes",
+            commandName: "hermes",
+            commonPaths: [
+                "\(NSHomeDirectory())/.local/bin/hermes",
+                "/opt/homebrew/bin/hermes",
+                "/usr/local/bin/hermes"
+            ],
+            integration: .directTool("hermes_cli")
         ),
         LocalAgentCLI(
             id: "opencode",

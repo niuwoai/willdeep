@@ -68,6 +68,53 @@ struct AgentDispatchCoordinatorTests {
         #expect(!pinnedUnavailable.isAvailable)
     }
 
+    @Test("Profile 回退链跳过已尝试和不可用执行器并保持顺序")
+    func profileFallbackSkipsAttemptedAndUnavailableProfiles() throws {
+        let profiles = [
+            AgentExecutionProfile(
+                id: "primary",
+                name: "Primary",
+                executor: .willDeep,
+                modelID: "planner"
+            ),
+            AgentExecutionProfile(
+                id: "unavailable",
+                name: "Unavailable",
+                executor: .claudeCode,
+                modelID: "claude-model"
+            ),
+            AgentExecutionProfile(
+                id: "fallback",
+                name: "Fallback",
+                executor: .codexCLI,
+                modelID: "codex-model"
+            ),
+        ]
+
+        let selected = try #require(
+            AgentDispatchProfileResolver.next(
+                primaryProfileID: "primary",
+                fallbackProfileIDs: ["unavailable", "fallback"],
+                attemptedProfileIDs: ["primary"],
+                availableExecutors: [.willDeep, .codexCLI],
+                profiles: profiles
+            )
+        )
+        #expect(selected.id == "fallback")
+        #expect(
+            AgentDispatchProfileResolver.hasUntriedFallback(
+                fallbackProfileIDs: ["unavailable", "fallback"],
+                attemptedProfileIDs: ["primary", "unavailable"]
+            )
+        )
+        #expect(
+            !AgentDispatchProfileResolver.hasUntriedFallback(
+                fallbackProfileIDs: ["unavailable", "fallback"],
+                attemptedProfileIDs: ["primary", "unavailable", "fallback"]
+            )
+        )
+    }
+
     @Test("任务执行会话不会再次投影成侧栏项目")
     func taskSessionsDoNotBecomeProjects() throws {
         let sandbox = try makeSandbox()
@@ -186,6 +233,110 @@ struct AgentDispatchCoordinatorTests {
         #expect(layout.edges.contains(AgentDispatchGraphEdge(sourceID: merge.id, targetID: nil)))
     }
 
+    @Test("AI 任务图支持分叉、双上游汇聚、节点 Profile 与稳定 ID")
+    func aiDispatchGraphProjectsRealDAGAndProfiles() throws {
+        let content = """
+        ```dispatch-graph
+        {
+          "nodes": [
+            {
+              "id": "ROOT-1",
+              "title": "读取需求",
+              "depends_on": [],
+              "profile": "planner",
+              "fallback_profiles": ["fallback"],
+              "acceptance": ["需求边界明确"]
+            },
+            {
+              "id": "LEFT-1",
+              "title": "实现左分支",
+              "depends_on": ["ROOT-1"],
+              "profile": "worker",
+              "fallback_profiles": ["fallback"],
+              "acceptance": ["左分支测试通过"]
+            },
+            {
+              "id": "RIGHT-1",
+              "title": "实现右分支",
+              "depends_on": ["ROOT-1"],
+              "profile": "worker",
+              "fallback_profiles": ["fallback"],
+              "acceptance": ["右分支测试通过"]
+            },
+            {
+              "id": "MERGE-1",
+              "title": "集成验收",
+              "depends_on": ["LEFT-1", "RIGHT-1"],
+              "profile": "planner",
+              "fallback_profiles": ["fallback"],
+              "acceptance": ["集成测试通过"]
+            }
+          ]
+        }
+        ```
+        """
+        let availableProfiles: Set<String> = ["planner", "worker", "fallback"]
+        let first = try #require(
+            AgentGoalDispatchPlanParser.extract(
+                from: content,
+                availableProfileIDs: availableProfiles,
+                namespace: "project-1"
+            )
+        )
+        let second = try #require(
+            AgentGoalDispatchPlanParser.extract(
+                from: content,
+                availableProfileIDs: availableProfiles,
+                namespace: "project-1"
+            )
+        )
+        #expect(first.nodes.map(\.id) == second.nodes.map(\.id))
+
+        let sandbox = try makeSandbox()
+        defer { sandbox.cleanup() }
+        let coordinator = AgentDispatchCoordinator(
+            store: AgentDispatchStore(defaults: sandbox.defaults)
+        )
+        let session = AgentSession(
+            title: "真实 DAG",
+            workspaceRootPath: "/tmp/Graph",
+            currentGoal: AgentGoal(
+                statement: "并行实现并汇聚",
+                checklist: [AgentGoal.Item(text: "集成测试通过")],
+                dispatchPlan: first
+            )
+        )
+        coordinator.synchronize(with: [session])
+
+        let tasks = try #require(coordinator.selectedGoal?.tasks)
+        let left = try #require(tasks.first { $0.title == "实现左分支" })
+        let right = try #require(tasks.first { $0.title == "实现右分支" })
+        let merge = try #require(tasks.first { $0.title == "集成验收" })
+        #expect(tasks.count == 4)
+        #expect(Set(merge.dependencyIDs) == Set([left.id, right.id]))
+        #expect(merge.primaryProfileID == "planner")
+        #expect(merge.fallbackProfileIDs == ["fallback"])
+        #expect(merge.state == .blocked)
+
+        let manual = try #require(
+            coordinator.appendTask(
+                title: "人工补充",
+                goalID: session.id,
+                acceptanceCriteria: ["人工验收"]
+            )
+        )
+        var revisedSession = session
+        revisedSession.currentGoal?.dispatchPlan = AgentGoalDispatchPlan(
+            nodes: Array(first.nodes.prefix(2))
+        )
+        revisedSession.updatedAt = Date().addingTimeInterval(1)
+        coordinator.synchronize(with: [revisedSession])
+        let revisedTasks = try #require(coordinator.selectedGoal?.tasks)
+        #expect(revisedTasks.contains { $0.id == manual.id })
+        #expect(!revisedTasks.contains { $0.title == "实现右分支" })
+        #expect(!revisedTasks.contains { $0.title == "集成验收" })
+    }
+
     @Test("结构化节点编辑拒绝循环依赖并保留原计划")
     func taskDefinitionRejectsDependencyCycles() throws {
         let sandbox = try makeSandbox()
@@ -205,7 +356,29 @@ struct AgentDispatchCoordinatorTests {
                         checklist: [
                             AgentGoal.Item(id: firstID, text: "第一步"),
                             AgentGoal.Item(id: secondID, text: "第二步"),
-                        ]
+                        ],
+                        dispatchPlan: AgentGoalDispatchPlan(
+                            nodes: [
+                                AgentGoalDispatchPlan.Node(
+                                    id: firstID,
+                                    key: "FIRST-1",
+                                    title: "第一步",
+                                    dependencyIDs: [],
+                                    primaryProfileID: nil,
+                                    fallbackProfileIDs: [],
+                                    acceptanceCriteria: ["第一步完成"]
+                                ),
+                                AgentGoalDispatchPlan.Node(
+                                    id: secondID,
+                                    key: "SECOND-1",
+                                    title: "第二步",
+                                    dependencyIDs: [firstID],
+                                    primaryProfileID: nil,
+                                    fallbackProfileIDs: [],
+                                    acceptanceCriteria: ["第二步完成"]
+                                ),
+                            ]
+                        )
                     )
                 ),
             ]
@@ -740,6 +913,39 @@ struct AgentDispatchCoordinatorTests {
         #expect(runtime.messages.isEmpty)
         #expect(appState.agentPrimaryDestination == .dispatchBoard)
         #expect(appState.agentDispatchCoordinator.selectedGoalID == session.id)
+    }
+
+    @Test("调度项目及子任务通知都返回调度台而不是聊天")
+    func dispatchNotificationsRevealOwningProjectBoard() throws {
+        let appState = AppState()
+        appState.agentDispatchCoordinator.resetForTests()
+        let project = appState.startDispatchGoalSession(
+            inWorkspaceAt: FileManager.default.temporaryDirectory.path
+        )
+        appState.setAgentGoal(statement: "通知路由", items: ["执行节点"])
+        appState.agentDispatchCoordinator.synchronize(with: appState.agentSessions)
+        let taskID = try #require(
+            appState.agentDispatchCoordinator.selectedGoal?.tasks.first?.id
+        )
+
+        appState.agentPrimaryDestination = .conversation
+        appState.revealAgentSessionFromNotification(id: project.id)
+        #expect(appState.agentPrimaryDestination == .dispatchBoard)
+        #expect(appState.agentDispatchCoordinator.selectedGoalID == project.id)
+
+        let child = appState.startNewAgentSession(
+            inWorkspaceAt: FileManager.default.temporaryDirectory.path
+        )
+        let childRuntime = try #require(appState.runtime(for: child.id))
+        childRuntime.session.dispatchParentProjectID = project.id
+        childRuntime.session.dispatchTaskID = taskID
+        appState.persistAgentSession(runtime: childRuntime)
+
+        appState.agentPrimaryDestination = .conversation
+        appState.revealAgentSessionFromNotification(id: child.id)
+        #expect(appState.agentPrimaryDestination == .dispatchBoard)
+        #expect(appState.activeAgentSessionID == project.id)
+        #expect(appState.agentDispatchCoordinator.selectedGoalID == project.id)
     }
 
     private func makeSandbox() throws -> DefaultsSandbox {

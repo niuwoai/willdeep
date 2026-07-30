@@ -1677,6 +1677,20 @@ enum AgentToolRegistry {
             ]
         ),
         AgentToolDescriptor(
+            name: "hermes_cli",
+            description: "Delegate a coding or planning task to a locally installed Hermes Agent profile in one-shot mode. The selected profile gets its own Hermes home, model, provider, tools, and memory. Requires user approval and remains inside WillDeep's workspace sandbox.",
+            risk: .write,
+            parameters: [
+                AgentToolParameter(name: "prompt", type: .string, description: "Self-contained task description for Hermes.", required: true),
+                AgentToolParameter(name: "permission_mode", type: .string, description: "Use `plan` for planning-only dispatch metadata; otherwise defaults to workspaceWrite.", required: false),
+                AgentToolParameter(name: "model", type: .string, description: "Optional Hermes model override.", required: false),
+                AgentToolParameter(name: "provider", type: .string, description: "Optional Hermes provider override.", required: false),
+                AgentToolParameter(name: "hermes_profile", type: .string, description: "Hermes profile name. Defaults to `default`.", required: false),
+                AgentToolParameter(name: "run_in_background", type: .boolean, description: "Run in the background when true.", required: false),
+                AgentToolParameter(name: "timeout_seconds", type: .integer, description: "Optional hard timeout.", required: false)
+            ]
+        ),
+        AgentToolDescriptor(
             name: "cursor_agent",
             description: "Delegate a complex coding task to the locally installed Cursor Agent CLI (`cursor agent --print`). Cursor Agent can inspect and edit the workspace, run shell commands, and work multi-step; use it for self-contained implementation tasks. Requires user approval. Use `permission_mode: \"plan\"` or `\"ask\"` for read-only modes. The prompt must be fully self-contained: Cursor Agent sees the workspace files but not this conversation.",
             risk: .write,
@@ -1804,7 +1818,7 @@ enum AgentToolRegistry {
 
     static func isDelegatedCodingTool(_ name: String) -> Bool {
         switch name {
-        case "claude_code", "codex_cli", "cursor_agent", "cline_cli":
+        case "claude_code", "codex_cli", "hermes_cli", "cursor_agent", "cline_cli":
             return true
         default:
             return false

@@ -25,6 +25,8 @@ private struct AgentDispatchBoardContent: View {
     @State private var graphSelection: AgentDispatchGraphSelection?
     @State private var editorRequest: AgentDispatchEditorRequest?
     @State private var isCommandConsoleExpanded = false
+    @State private var executionProfiles: [AgentExecutionProfile] = []
+    @State private var isProfileManagerPresented = false
 
     private enum AlertTarget: Identifiable {
         case interrupt(goalID: UUID, command: AgentDispatchCommand)
@@ -51,12 +53,14 @@ private struct AgentDispatchBoardContent: View {
         .onAppear {
             coordinator.synchronize(with: appState.agentSessions)
             localExecutors = AgentDispatchExecutorResolver.localAvailableExecutors()
+            reloadExecutionProfiles()
         }
         .onReceive(appState.$agentSessions) { sessions in
             coordinator.synchronize(with: sessions)
         }
         .onChange(of: coordinator.selectedGoalID) { _ in
             graphSelection = coordinator.selectedTaskID.map(AgentDispatchGraphSelection.task)
+            reloadExecutionProfiles()
         }
         .alert(item: $alertTarget) { target in
             switch target {
@@ -104,15 +108,30 @@ private struct AgentDispatchBoardContent: View {
                 )
             }
         }
+        .sheet(isPresented: $isProfileManagerPresented) {
+            AgentExecutionProfileManagerView(
+                workspacePath: coordinator.selectedGoal?
+                    .logicalProject?.primaryWorkspacePath,
+                onChanged: reloadExecutionProfiles,
+                onClose: { isProfileManagerPresented = false }
+            )
+        }
     }
 
     private var goalSetupContent: some View {
         AgentDispatchGoalSetupView(
             workspaceLocation: appState.activeRuntime?.workspaceLocation,
             workspaceName: appState.activeRuntime?.session.workspaceName
-                ?? L10n.Workspace.noWorkspace
-        ) { statement, checklist in
-            appState.setAgentGoal(statement: statement, items: checklist)
+                ?? L10n.Workspace.noWorkspace,
+            profiles: executionProfiles,
+            onManageProfiles: { isProfileManagerPresented = true }
+        ) { statement, checklist, planningProfileID, fallbackProfileIDs in
+            appState.setAgentGoal(
+                statement: statement,
+                items: checklist,
+                planningProfileID: planningProfileID,
+                planningFallbackProfileIDs: fallbackProfileIDs
+            )
         }
     }
 
@@ -122,22 +141,16 @@ private struct AgentDispatchBoardContent: View {
             AgentDispatchGoalHeader(
                 goal: goal,
                 runtimeDescriptors: runtimeDescriptors,
-                modelIDs: dispatchModelIDs(for: goal),
-                cliProfiles: LocalAgentCLIProfile.discover(
-                    workspacePath: goal.logicalProject?.primaryWorkspacePath
-                ),
-                onExecutorChoice: { coordinator.updateGoalExecutorChoice($0, goalID: goal.id) },
+                profiles: executionProfiles,
                 onTargetChoice: { coordinator.updateGoalTargetChoice($0, goalID: goal.id) },
-                onModelRouting: {
-                    appState.updateDispatchGoalModelRouting($0, goalID: goal.id)
-                },
-                onCLIProfile: { executor, profileID in
-                    coordinator.updateGoalCLIProfile(
-                        profileID,
-                        executor: executor,
+                onPlanningProfiles: { primaryProfileID, fallbackProfileIDs in
+                    appState.updateDispatchPlanningProfiles(
+                        primaryProfileID: primaryProfileID,
+                        fallbackProfileIDs: fallbackProfileIDs,
                         goalID: goal.id
                     )
                 },
+                onManageProfiles: { isProfileManagerPresented = true },
                 onChooseLocalWorkspace: {
                     appState.chooseLocalWorkspaceForDispatchGoal(goalID: goal.id) { error in
                         if let error {
@@ -197,6 +210,7 @@ private struct AgentDispatchBoardContent: View {
                         task: task,
                         localExecutors: localExecutors,
                         runtimeDescriptors: runtimeDescriptors,
+                        profiles: executionProfiles,
                         onExecutorChoice: {
                             coordinator.updateTaskExecutorChoice(
                                 $0,
@@ -211,6 +225,15 @@ private struct AgentDispatchBoardContent: View {
                                 taskID: task.id
                             )
                         },
+                        onProfiles: { primaryProfileID, fallbackProfileIDs in
+                            coordinator.updateTaskProfiles(
+                                primaryProfileID: primaryProfileID,
+                                fallbackProfileIDs: fallbackProfileIDs,
+                                goalID: goal.id,
+                                taskID: task.id
+                            )
+                        },
+                        onManageProfiles: { isProfileManagerPresented = true },
                         onLaunch: { launchTask(goalID: goal.id, taskID: task.id) },
                         onOpenConversation: {
                             guard let runtimeID = task.runtimeSessionID else { return }
@@ -267,7 +290,7 @@ private struct AgentDispatchBoardContent: View {
                         )
                     }
                 } label: {
-                    Label(L10n.Dispatch.editNode, systemImage: "slider.horizontal.3")
+                    Label(L10n.Dispatch.humanOverride, systemImage: "slider.horizontal.3")
                 }
                 .disabled(coordinator.selectedTaskID == nil)
                 Button {
@@ -487,6 +510,14 @@ private struct AgentDispatchBoardContent: View {
         }
         .prefix(24)
         .map { $0 }
+    }
+
+    private func reloadExecutionProfiles() {
+        executionProfiles = AgentExecutionProfileStore().availableProfiles(
+            workspacePath: coordinator.selectedGoal?
+                .logicalProject?.primaryWorkspacePath
+                ?? appState.activeRuntime?.workspaceRootPath
+        )
     }
 
     private func launchTask(goalID: UUID, taskID: UUID) {

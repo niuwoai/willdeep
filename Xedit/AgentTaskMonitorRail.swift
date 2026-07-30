@@ -760,7 +760,7 @@ struct AgentSemanticActivityStatusLine: View {
             return AgentActivityPhase(label: "操作终端", systemImage: "terminal", tint: .orange)
         case .fileMutation, .applyPatch:
             return AgentActivityPhase(label: "编辑中", systemImage: "pencil.line", tint: .green)
-        case .subagent, .claudeCode, .codexCLI, .cursorAgent, .clineCLI:
+        case .subagent, .claudeCode, .codexCLI, .hermesCLI, .cursorAgent, .clineCLI:
             let delegatedProgress = call.delegatedProgress.map {
                 L10n.DelegatedTask.liveProgress(
                     phase: $0.phase,

@@ -637,15 +637,36 @@ extension AppState {
                 return .captured
             }
             if runtime.goalPlanningState?.phase == .readyForProposal {
+                let requiresDispatchGraph = runtime.session.presentationScope == .dispatchBoard
+                let availableProfiles = requiresDispatchGraph
+                    ? Set(
+                        AgentExecutionProfileStore().availableProfiles(
+                            workspacePath: runtime.workspaceLocation?.path
+                                ?? runtime.workspaceRootPath
+                        ).map(\.id)
+                    )
+                    : nil
                 let failures = AgentGoalPlanProposalValidator.validationFailures(
                     content: last.content,
                     plan: parsed,
-                    generationID: runtime.goalPlanningState?.generationID
+                    generationID: runtime.goalPlanningState?.generationID,
+                    requiresDispatchGraph: requiresDispatchGraph,
+                    availableProfileIDs: availableProfiles
                 )
                 if failures.isEmpty {
                     var executable = parsed
                     executable.status = .approved
                     runtime.currentPlan = executable
+                    if requiresDispatchGraph,
+                       let dispatchPlan = AgentGoalDispatchPlanParser.extract(
+                           from: last.content,
+                           availableProfileIDs: availableProfiles,
+                           namespace: runtime.id.uuidString
+                       ),
+                       var goal = runtime.currentGoal {
+                        goal.dispatchPlan = dispatchPlan
+                        runtime.currentGoal = goal
+                    }
                     if var state = runtime.goalPlanningState {
                         state.phase = .executing
                         runtime.goalPlanningState = state
@@ -847,7 +868,12 @@ extension AppState {
     /// Preserves existing checklist `done` state when an item's text
     /// hasn't changed — so the user can tweak the goal statement or add
     /// new items without losing what's already ticked.
-    func setAgentGoal(statement: String, items: [String]) {
+    func setAgentGoal(
+        statement: String,
+        items: [String],
+        planningProfileID: String? = nil,
+        planningFallbackProfileIDs: [String] = []
+    ) {
         guard let runtime = activeRuntime else { return }
         let trimmedStatement = statement.trimmingCharacters(in: .whitespacesAndNewlines)
         let trimmedItems = items
@@ -888,7 +914,14 @@ extension AppState {
                     return AgentGoal.Item(id: prior.id, text: text, done: prior.done)
                 }
                 return AgentGoal.Item(text: text)
-            }
+            },
+            planningProfileID: planningProfileID
+                ?? previousGoal?.planningProfileID
+                ?? AgentExecutionProfile.recommendedPlannerID,
+            planningFallbackProfileIDs: planningProfileID == nil
+                ? previousGoal?.planningFallbackProfileIDs
+                : planningFallbackProfileIDs,
+            planningAttemptedProfileIDs: previousGoal?.planningAttemptedProfileIDs
         )
         runtime.currentGoal = updatedGoal
         if previousGoal != updatedGoal {

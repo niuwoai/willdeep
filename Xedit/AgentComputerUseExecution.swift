@@ -72,6 +72,7 @@ nonisolated enum AgentComputerUseExecution {
         "run_command",
         "claude_code",
         "codex_cli",
+        "hermes_cli",
         "cursor_agent",
         "cline_cli",
         "call_mcp_tool",

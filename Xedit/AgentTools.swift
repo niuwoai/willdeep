@@ -380,6 +380,8 @@ enum AgentToolRunner {
                 result = try await claudeCode(arguments: activeArguments, context: activeContext)
             case "codex_cli":
                 result = try await codexCLI(arguments: activeArguments, context: activeContext)
+            case "hermes_cli":
+                result = try await hermesCLI(arguments: activeArguments, context: activeContext)
             case "cursor_agent":
                 result = try await cursorAgent(arguments: activeArguments, context: activeContext)
             case "cline_cli":
@@ -1320,7 +1322,7 @@ enum AgentToolRunner {
         return try await runDelegatedAgentCommand(command, arguments: arguments, context: context)
     }
 
-    // MARK: codex_cli / cursor_agent / cline_cli
+    // MARK: codex_cli / hermes_cli / cursor_agent / cline_cli
 
     nonisolated static let delegatedAgentForegroundTimeout: TimeInterval = 3600 * 6
     nonisolated static let codexCLIPermissionModes: Set<String> = ["plan", "workspaceWrite", "default"]
@@ -1386,6 +1388,17 @@ enum AgentToolRunner {
     ) -> String? {
         executablePath(commandName: "cline", preferredPaths: [
             "\(NSHomeDirectory())/.local/bin/cline",
+        ], environment: environment, isExecutable: isExecutable)
+    }
+
+    nonisolated static func hermesCLIExecutablePath(
+        environment: [String: String] = shellEnvironment(),
+        isExecutable: (String) -> Bool = { FileManager.default.isExecutableFile(atPath: $0) }
+    ) -> String? {
+        executablePath(commandName: "hermes", preferredPaths: [
+            "\(NSHomeDirectory())/.local/bin/hermes",
+            "/opt/homebrew/bin/hermes",
+            "/usr/local/bin/hermes",
         ], environment: environment, isExecutable: isExecutable)
     }
 
@@ -1504,6 +1517,48 @@ enum AgentToolRunner {
         return parts.joined(separator: " ")
     }
 
+    nonisolated static func hermesCLICommandLine(
+        executable: String,
+        prompt: String,
+        model: String?,
+        provider: String?,
+        profile: String?,
+        planningOnly: Bool = false,
+        homeDirectory: String? = NSHomeDirectory()
+    ) -> String {
+        let normalizedProfile = profile?.isEmpty == false ? profile! : "default"
+        let profileSuffix = normalizedProfile == "default"
+            ? "/.hermes"
+            : "/.hermes/profiles/\(normalizedProfile)"
+        let hermesHome: String
+        if let homeDirectory {
+            hermesHome = shellQuoted("\(homeDirectory)\(profileSuffix)")
+        } else {
+            // Remote execution must resolve the remote account's home, not
+            // serialize this Mac's local NSHomeDirectory into the command.
+            hermesHome = "\"$HOME\(profileSuffix)\""
+        }
+        var parts = [
+            "/usr/bin/env",
+            "HERMES_HOME=\(hermesHome)",
+            shellQuoted(executable),
+            "--oneshot", shellQuoted(prompt),
+        ]
+        if let model, !model.isEmpty {
+            parts += ["--model", shellQuoted(model)]
+        }
+        if let provider, !provider.isEmpty {
+            parts += ["--provider", shellQuoted(provider)]
+        }
+        if planningOnly {
+            // Hermes --oneshot bypasses its interactive approval prompts.
+            // Planning therefore receives an intentionally empty toolset so
+            // the external planner cannot mutate the workspace.
+            parts += ["--toolsets", "context_engine"]
+        }
+        return parts.joined(separator: " ")
+    }
+
     private static func codexCLI(
         arguments: [String: AgentJSONValue],
         context: AgentToolContext
@@ -1577,6 +1632,45 @@ enum AgentToolRunner {
             workspacePath: context.workspaceLocation?.path ?? context.rootDirectory?.standardizedFileURL.path
         )
         return try await runDelegatedAgentCommand(command, arguments: arguments, context: context)
+    }
+
+    private static func hermesCLI(
+        arguments: [String: AgentJSONValue],
+        context: AgentToolContext
+    ) async throws -> AgentToolResult {
+        let prompt = try delegatedAgentPrompt(arguments: arguments)
+        let executable: String
+        if context.remoteBackend != nil {
+            executable = "hermes"
+        } else if let localExecutable = hermesCLIExecutablePath() {
+            executable = localExecutable
+        } else {
+            throw AgentToolError.commandFailed(
+                127,
+                "Hermes CLI not found on this Mac. Install Hermes Agent, then retry."
+            )
+        }
+        let profile = arguments["hermes_profile"]?.stringValue()?
+            .trimmingCharacters(in: .whitespacesAndNewlines) ?? "default"
+        guard LocalAgentCLIProfile.profileNameIsSafe(profile) else {
+            throw AgentToolError.invalidArgument(
+                "hermes_profile must contain only letters, numbers, dot, underscore, or hyphen"
+            )
+        }
+        let command = hermesCLICommandLine(
+            executable: executable,
+            prompt: prompt,
+            model: arguments["model"]?.stringValue(),
+            provider: arguments["provider"]?.stringValue(),
+            profile: profile,
+            planningOnly: arguments["permission_mode"]?.stringValue() == "plan",
+            homeDirectory: context.remoteBackend == nil ? NSHomeDirectory() : nil
+        )
+        return try await runDelegatedAgentCommand(
+            command,
+            arguments: arguments,
+            context: context
+        )
     }
 
     private static func clineCLI(

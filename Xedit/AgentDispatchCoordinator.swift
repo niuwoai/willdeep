@@ -148,6 +148,37 @@ final class AgentDispatchCoordinator: ObservableObject {
         }
     }
 
+    func updateTaskProfiles(
+        primaryProfileID: String?,
+        fallbackProfileIDs: [String],
+        goalID: UUID,
+        taskID: UUID
+    ) {
+        updateTask(goalID: goalID, taskID: taskID) { task in
+            task.primaryProfileID = primaryProfileID
+            task.fallbackProfileIDs = Self.uniqueStrings(
+                fallbackProfileIDs.filter { $0 != primaryProfileID }
+            )
+            task.attemptedProfileIDs = nil
+            task.activeProfileID = nil
+            task.updatedAt = Date()
+        }
+    }
+
+    func updatePlanningProfiles(
+        primaryProfileID: String,
+        fallbackProfileIDs: [String],
+        goalID: UUID
+    ) {
+        updateGoal(id: goalID) { goal in
+            goal.planningProfileID = primaryProfileID
+            goal.planningFallbackProfileIDs = Self.uniqueStrings(
+                fallbackProfileIDs.filter { $0 != primaryProfileID }
+            )
+            goal.updatedAt = Date()
+        }
+    }
+
     func updateTaskTargetChoice(
         _ choice: AgentDispatchTargetChoice,
         goalID: UUID,
@@ -281,12 +312,10 @@ final class AgentDispatchCoordinator: ObservableObject {
         guard !trimmed.isEmpty else { return nil }
         var appended: AgentDispatchTask?
         updateGoal(id: goalID) { goal in
-            let predecessor = goal.tasks.last
             let validTaskIDs = Set(goal.tasks.map(\.id))
             let dependencies = requestedDependencyIDs.map {
                 Self.uniqueIDs($0.filter(validTaskIDs.contains))
             }
-                ?? predecessor.map { [$0.id] }
                 ?? []
             let criteria = requestedAcceptanceCriteria?
                 .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
@@ -365,14 +394,28 @@ final class AgentDispatchCoordinator: ObservableObject {
         goalID: UUID,
         taskID: UUID,
         executor: AgentExecutionAgent,
+        profileID: String? = nil,
         target: AgentDispatchTargetChoice,
         runtimeSessionID: UUID
     ) {
         updateTask(goalID: goalID, taskID: taskID) { task in
             task.state = .running
             task.resolvedExecutor = executor
+            task.activeProfileID = profileID
+            if let profileID {
+                var attempted = task.attemptedProfileIDs ?? []
+                if !attempted.contains(profileID) {
+                    attempted.append(profileID)
+                }
+                task.attemptedProfileIDs = attempted
+            }
             task.resolvedTarget = target
             task.runtimeSessionID = runtimeSessionID
+            var runtimeSessionIDs = task.runtimeSessionIDs ?? []
+            if !runtimeSessionIDs.contains(runtimeSessionID) {
+                runtimeSessionIDs.append(runtimeSessionID)
+            }
+            task.runtimeSessionIDs = runtimeSessionIDs
             task.updatedAt = Date()
         }
     }
@@ -475,6 +518,11 @@ final class AgentDispatchCoordinator: ObservableObject {
         return ids.filter { seen.insert($0).inserted }
     }
 
+    private static func uniqueStrings(_ values: [String]) -> [String] {
+        var seen: Set<String> = []
+        return values.filter { seen.insert($0).inserted }
+    }
+
     private static func project(
         session: AgentSession,
         existing: AgentDispatchGoal?
@@ -522,32 +570,73 @@ final class AgentDispatchCoordinator: ObservableObject {
                 workspaceBindings.insert(primaryBinding, at: 0)
             }
         }
-        let oldTasks = Dictionary(uniqueKeysWithValues: (existing?.tasks ?? []).map { ($0.id, $0) })
-        let sourceTaskIDs = Set(sourceGoal.checklist.map(\.id))
-        let firstIncompleteIndex = sourceGoal.checklist.firstIndex { !$0.done }
-        let projectedTasks = sourceGoal.checklist.enumerated().map { index, item -> AgentDispatchTask in
-            var task = oldTasks[item.id] ?? AgentDispatchTask(
-                id: item.id,
-                title: item.text,
-                dependencyIDs: index > 0 ? [sourceGoal.checklist[index - 1].id] : [],
-                branchName: branchName(for: item.text),
-                acceptanceCriteria: [L10n.Dispatch.defaultAcceptanceCriterion],
-                createdAt: session.createdAt,
-                updatedAt: session.updatedAt
-            )
-            task.title = item.text
-            if item.done {
-                task.state = .merged
-            } else if task.state == .merged {
-                task.state = index == firstIncompleteIndex ? .queued : .blocked
-            } else if task.runtimeSessionID == nil {
-                task.state = index == firstIncompleteIndex ? .queued : .blocked
+        let oldTasks = Dictionary(
+            uniqueKeysWithValues: (existing?.tasks ?? []).map { ($0.id, $0) }
+        )
+        let plannedNodes = sourceGoal.dispatchPlan?.nodes ?? []
+        let sourceTaskIDs: Set<UUID>
+        let projectedTasks: [AgentDispatchTask]
+        if !plannedNodes.isEmpty {
+            sourceTaskIDs = Set(plannedNodes.map(\.id))
+            projectedTasks = plannedNodes.map { node in
+                var task = oldTasks[node.id] ?? AgentDispatchTask(
+                    id: node.id,
+                    title: node.title,
+                    dependencyIDs: node.dependencyIDs,
+                    planNodeKey: node.key,
+                    primaryProfileID: node.primaryProfileID,
+                    fallbackProfileIDs: node.fallbackProfileIDs,
+                    branchName: branchName(for: node.title),
+                    acceptanceCriteria: node.acceptanceCriteria,
+                    createdAt: session.createdAt,
+                    updatedAt: session.updatedAt
+                )
+                task.title = node.title
+                task.dependencyIDs = node.dependencyIDs
+                task.planNodeKey = node.key
+                task.primaryProfileID = node.primaryProfileID
+                task.fallbackProfileIDs = node.fallbackProfileIDs
+                task.acceptanceCriteria = node.acceptanceCriteria.isEmpty
+                    ? [L10n.Dispatch.defaultAcceptanceCriterion]
+                    : node.acceptanceCriteria
+                if task.runtimeSessionID == nil {
+                    task.state = node.dependencyIDs.isEmpty ? .queued : .blocked
+                }
+                task.updatedAt = max(task.updatedAt, session.updatedAt)
+                return task
             }
-            task.updatedAt = max(task.updatedAt, session.updatedAt)
-            return task
+        } else {
+            // Until the planner emits a dispatch graph, acceptance items are
+            // independent placeholders. They must never be converted into a
+            // fake serial execution plan.
+            sourceTaskIDs = Set(sourceGoal.checklist.map(\.id))
+            projectedTasks = sourceGoal.checklist.map { item in
+                var task = oldTasks[item.id] ?? AgentDispatchTask(
+                    id: item.id,
+                    title: item.text,
+                    dependencyIDs: [],
+                    primaryProfileID: AgentExecutionProfile.recommendedWorkerID,
+                    branchName: branchName(for: item.text),
+                    acceptanceCriteria: [item.text],
+                    createdAt: session.createdAt,
+                    updatedAt: session.updatedAt
+                )
+                task.title = item.text
+                task.dependencyIDs = []
+                if item.done {
+                    task.state = .merged
+                } else if task.runtimeSessionID == nil {
+                    task.state = .queued
+                }
+                task.updatedAt = max(task.updatedAt, session.updatedAt)
+                return task
+            }
         }
+        let acceptancePlaceholderIDs = Set(sourceGoal.checklist.map(\.id))
         let manuallyAppendedTasks = (existing?.tasks ?? []).filter {
             !sourceTaskIDs.contains($0.id)
+                && !acceptancePlaceholderIDs.contains($0.id)
+                && $0.planNodeKey == nil
         }
         var tasks = projectedTasks + manuallyAppendedTasks
         let mergedIDs = Set(tasks.filter { $0.state == .merged }.map(\.id))
@@ -568,6 +657,11 @@ final class AgentDispatchCoordinator: ObservableObject {
             executorChoice: existing?.executorChoice ?? .automatic,
             targetChoice: existing?.targetChoice ?? .automatic,
             modelRouting: existing?.modelRouting ?? .costOptimized,
+            planningProfileID: sourceGoal.planningProfileID
+                ?? existing?.planningProfileID
+                ?? AgentExecutionProfile.recommendedPlannerID,
+            planningFallbackProfileIDs: sourceGoal.planningFallbackProfileIDs
+                ?? existing?.planningFallbackProfileIDs,
             cliProfileSelections: existing?.cliProfileSelections,
             isPaused: existing?.isPaused ?? false,
             commands: existing?.commands ?? [],

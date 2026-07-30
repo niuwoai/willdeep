@@ -8,10 +8,16 @@ import SwiftUI
 struct AgentDispatchGoalSetupView: View {
     let workspaceLocation: WorkspaceLocation?
     let workspaceName: String
-    let onCreate: (String, [String]) -> Void
+    let profiles: [AgentExecutionProfile]
+    let onManageProfiles: () -> Void
+    let onCreate: (String, [String], String, [String]) -> Void
 
     @State private var statement = ""
     @State private var checklistText = ""
+    @State private var planningProfileID = AgentExecutionProfile.recommendedPlannerID
+    @State private var planningFallbackProfileIDs: Set<String> = [
+        AgentExecutionProfile.recommendedWorkerID,
+    ]
     @FocusState private var focusedField: Field?
 
     private enum Field {
@@ -146,12 +152,56 @@ struct AgentDispatchGoalSetupView: View {
             }
 
             summaryCard(
-                title: L10n.Dispatch.executor,
-                symbol: "cpu"
+                title: L10n.Dispatch.planningProfile,
+                symbol: "brain.head.profile"
             ) {
-                Label(L10n.Dispatch.automaticExecutor, systemImage: "wand.and.stars")
+                Menu {
+                    ForEach(profiles) { profile in
+                        Button {
+                            planningProfileID = profile.id
+                            planningFallbackProfileIDs.remove(profile.id)
+                        } label: {
+                            Label(
+                                profile.name,
+                                systemImage: profile.id == planningProfileID
+                                    ? "checkmark"
+                                    : profile.executor.symbol
+                            )
+                        }
+                    }
+                    Divider()
+                    Button(action: onManageProfiles) {
+                        Label(L10n.Dispatch.manageProfiles, systemImage: "gearshape")
+                    }
+                } label: {
+                    Label(
+                        selectedPlanningProfile?.name ?? L10n.Dispatch.automatic,
+                        systemImage: selectedPlanningProfile?.executor.symbol
+                            ?? "wand.and.stars"
+                    )
                     .font(.system(size: 12, weight: .medium))
-                Text(L10n.Dispatch.executorReason(.localFallback))
+                }
+                .menuStyle(.borderlessButton)
+                Menu(L10n.Dispatch.planningFallbacks) {
+                    ForEach(profiles.filter { $0.id != planningProfileID }) { profile in
+                        Button {
+                            if planningFallbackProfileIDs.contains(profile.id) {
+                                planningFallbackProfileIDs.remove(profile.id)
+                            } else {
+                                planningFallbackProfileIDs.insert(profile.id)
+                            }
+                        } label: {
+                            Label(
+                                profile.name,
+                                systemImage: planningFallbackProfileIDs.contains(profile.id)
+                                    ? "checkmark"
+                                    : profile.executor.symbol
+                            )
+                        }
+                    }
+                }
+                .menuStyle(.borderlessButton)
+                Text(L10n.Dispatch.aiPlansGraph)
                     .font(.system(size: 11))
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
@@ -183,7 +233,12 @@ struct AgentDispatchGoalSetupView: View {
             Spacer()
             Button {
                 focusedField = nil
-                onCreate(normalizedStatement, checklistItems)
+                onCreate(
+                    normalizedStatement,
+                    checklistItems,
+                    planningProfileID,
+                    orderedPlanningFallbackIDs
+                )
             } label: {
                 Label(L10n.Dispatch.createProject, systemImage: "plus")
                     .font(.system(size: 12, weight: .semibold))
@@ -199,6 +254,14 @@ struct AgentDispatchGoalSetupView: View {
         .overlay(alignment: .top) {
             Divider().opacity(0.55)
         }
+    }
+
+    private var selectedPlanningProfile: AgentExecutionProfile? {
+        profiles.first { $0.id == planningProfileID }
+    }
+
+    private var orderedPlanningFallbackIDs: [String] {
+        profiles.map(\.id).filter(planningFallbackProfileIDs.contains)
     }
 
     private func fieldCard<Content: View>(

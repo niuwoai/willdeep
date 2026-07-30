@@ -25,7 +25,7 @@ struct AgentExecutorAndTerminalPoolTests {
         #expect(catalogEntry?.integration == .directTool("codex_cli"))
     }
 
-    @Test("调度台发现多个 Codex 与 Claude Profile 并安全传参")
+    @Test("调度台发现 Codex、Claude 与 Hermes Profile 并安全传参")
     func dispatchCLIProfilesAreDiscoveredAndForwarded() throws {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent(
             "WillDeepCLIProfiles-\(UUID().uuidString)",
@@ -39,7 +39,11 @@ struct AgentExecutorAndTerminalPoolTests {
         let projectAgents = workspace
             .appendingPathComponent(".claude", isDirectory: true)
             .appendingPathComponent("agents", isDirectory: true)
-        for directory in [codexHome, userAgents, projectAgents] {
+        let hermesProfile = root
+            .appendingPathComponent(".hermes", isDirectory: true)
+            .appendingPathComponent("profiles", isDirectory: true)
+            .appendingPathComponent("worker", isDirectory: true)
+        for directory in [codexHome, userAgents, projectAgents, hermesProfile] {
             try FileManager.default.createDirectory(
                 at: directory,
                 withIntermediateDirectories: true
@@ -47,7 +51,7 @@ struct AgentExecutorAndTerminalPoolTests {
         }
         defer { try? FileManager.default.removeItem(at: root) }
 
-        try "".write(
+        try "model = \"codex-model\"\n".write(
             to: codexHome.appendingPathComponent("fast.config.toml"),
             atomically: true,
             encoding: .utf8
@@ -62,6 +66,11 @@ struct AgentExecutorAndTerminalPoolTests {
             atomically: true,
             encoding: .utf8
         )
+        try "model:\n  default: hermes-model\n".write(
+            to: hermesProfile.appendingPathComponent("config.yaml"),
+            atomically: true,
+            encoding: .utf8
+        )
 
         let profiles = LocalAgentCLIProfile.discover(
             workspacePath: workspace.path,
@@ -72,7 +81,11 @@ struct AgentExecutorAndTerminalPoolTests {
             "codex:fast",
             "claude-agent:implementer",
             "claude-agent:reviewer",
+            "hermes:default",
+            "hermes:worker",
         ])
+        #expect(profiles.first { $0.id == "codex:fast" }?.modelID == "codex-model")
+        #expect(profiles.first { $0.id == "hermes:worker" }?.modelID == "hermes-model")
 
         let codex = AgentToolRunner.codexCLICommandLine(
             executable: "/x/codex",
@@ -92,6 +105,30 @@ struct AgentExecutorAndTerminalPoolTests {
             agent: "reviewer"
         )
         #expect(claude.contains("--agent 'reviewer'"))
+
+        let hermes = AgentToolRunner.hermesCLICommandLine(
+            executable: "/x/hermes",
+            prompt: "implement",
+            model: "hermes-model",
+            provider: "someim",
+            profile: "worker",
+            planningOnly: true,
+            homeDirectory: "/Users/tester"
+        )
+        #expect(hermes.contains("HERMES_HOME='/Users/tester/.hermes/profiles/worker'"))
+        #expect(hermes.contains("--model 'hermes-model'"))
+        #expect(hermes.contains("--provider 'someim'"))
+        #expect(hermes.contains("--toolsets context_engine"))
+
+        let remoteHermes = AgentToolRunner.hermesCLICommandLine(
+            executable: "hermes",
+            prompt: "review",
+            model: nil,
+            provider: nil,
+            profile: "default",
+            homeDirectory: nil
+        )
+        #expect(remoteHermes.contains("HERMES_HOME=\"$HOME/.hermes\""))
         #expect(!LocalAgentCLIProfile.profileNameIsSafe("bad profile; rm"))
     }
 

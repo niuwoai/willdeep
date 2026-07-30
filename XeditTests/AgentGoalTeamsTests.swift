@@ -158,6 +158,31 @@ struct AgentGoalTeamsTests {
         ))
     }
 
+    @Test("Goal 规划门禁只允许外部执行器的只规划调用")
+    func goalPlanningGateAllowsPlanningOnlyDelegation() {
+        let planningArguments = [
+            "prompt": AgentJSONValue.string("plan only"),
+            "permission_mode": AgentJSONValue.string("plan"),
+        ]
+        #expect(!AppState.goalPlanningGateBlocks(
+            toolName: "hermes_cli",
+            arguments: planningArguments,
+            risk: .write,
+            isActive: true
+        ))
+
+        let executionArguments = [
+            "prompt": AgentJSONValue.string("edit files"),
+            "permission_mode": AgentJSONValue.string("workspaceWrite"),
+        ]
+        #expect(AppState.goalPlanningGateBlocks(
+            toolName: "hermes_cli",
+            arguments: executionArguments,
+            risk: .write,
+            isActive: true
+        ))
+    }
+
     @Test
     func restoringRunningPlanningStateInterruptsAndBlocks() {
         let state = AgentGoalPlanningState(

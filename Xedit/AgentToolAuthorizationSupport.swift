@@ -714,6 +714,10 @@ enum AgentToolAuthorization {
             let mode = arguments["permission_mode"]?.stringValue()?
                 .trimmingCharacters(in: .whitespacesAndNewlines) ?? "workspaceWrite"
             return "codex_cli:\(mode)"
+        case "hermes_cli":
+            let mode = arguments["permission_mode"]?.stringValue()?
+                .trimmingCharacters(in: .whitespacesAndNewlines) ?? "workspaceWrite"
+            return "hermes_cli:\(mode)"
         case "cursor_agent":
             let mode = arguments["permission_mode"]?.stringValue()?
                 .trimmingCharacters(in: .whitespacesAndNewlines) ?? "default"

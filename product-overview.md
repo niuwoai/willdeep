@@ -1,6 +1,6 @@
 # WillDeep Product Overview
 
-> Last updated: 2026-07-30 | Current version: v1.214.0-rc1
+> Last updated: 2026-07-30 | Current version: v1.215.0-rc1
 
 ## Positioning
 
@@ -11,6 +11,8 @@ Official product domain: [willdeep.com](https://willdeep.com).
 WillDeep is configured for non-App-Store distribution without App Sandbox so it can access local project files with fewer permission interruptions.
 
 ## 架构概览
+
+- **AI 原生 DAG 与多 Profile 调度（1.215.0-rc1）** —— 调度台不再把 Goal 验收清单投影成固定单线任务：规划模型必须输出独立的 `dispatch-graph`，由 AI 决定最小可执行节点、并行分支、多个前置依赖与显式汇聚节点；节点 key 在项目内映射为稳定 UUID，规划重试不会冲掉既有执行历史。规划本身和每个执行节点都绑定统一 Profile，Profile 可组合 WillDeep、Codex CLI、Claude Code、Hermes、Cursor Agent 或 Cline，以及对应模型、Provider、原生 Profile/Agent 名称；主 Profile 失败后按持久化回退链自动切换并记录尝试，防止循环重跑。调度台内置 Profile 管理器并自动合并 Codex、Claude 与 Hermes 的本机配置；人工节点编辑保留为直接干预入口。桌面宠物和系统通知会按项目/任务归属返回对应调度台，不再把调度任务打开成聊天。
 
 - **项目级图工程调度与分角色模型路由（1.214.0-rc1）** —— 调度台左侧顶层对象统一为“项目”，任务执行产生的子会话通过项目/任务归属字段留在项目内部，不再被同步器提升成新的侧栏项目；历史版本已经产生的重复项会按任务运行时关联自动收敛。项目级主操作改为“启动执行”，执行活跃时保持幂等，仍可在具体任务节点上显式并行启动。每个项目可分别选择规划模型与执行模型，默认以 `kimi-k3` 负责整体规划、`deepseek-v4-pro` 负责常规执行；本地 Codex 与 Claude Code 会发现已配置的多个 Profile/Agent，并把项目选择安全传入对应 CLI。
 

@@ -8,12 +8,10 @@ import SwiftUI
 struct AgentDispatchGoalHeader: View {
     let goal: AgentDispatchGoal
     let runtimeDescriptors: [RuntimeDescriptor]
-    let modelIDs: [String]
-    let cliProfiles: [LocalAgentCLIProfile]
-    let onExecutorChoice: (AgentDispatchExecutorChoice) -> Void
+    let profiles: [AgentExecutionProfile]
     let onTargetChoice: (AgentDispatchTargetChoice) -> Void
-    let onModelRouting: (AgentDispatchModelRouting) -> Void
-    let onCLIProfile: (AgentExecutionAgent, String?) -> Void
+    let onPlanningProfiles: (String, [String]) -> Void
+    let onManageProfiles: () -> Void
     let onChooseLocalWorkspace: () -> Void
     let onBindRemoteWorkspace: (RuntimeDescriptor) -> Void
     let onLaunch: () -> Void
@@ -55,7 +53,6 @@ struct AgentDispatchGoalHeader: View {
                 Spacer(minLength: 10)
                 workspaceMenu
                 routingMenu
-                executorMenu
                 targetMenu
                 Button(action: goal.isPaused ? onResume : onLaunch) {
                     Label(
@@ -127,51 +124,56 @@ struct AgentDispatchGoalHeader: View {
         .fixedSize()
     }
 
-    private var executorMenu: some View {
-        Menu {
-            ForEach(AgentDispatchExecutorChoice.allCases) { choice in
-                Button {
-                    onExecutorChoice(choice)
-                } label: {
-                    Label(
-                        AgentDispatchPresentation.executorChoiceName(choice),
-                        systemImage: choice == goal.executorChoice ? "checkmark" : "circle"
-                    )
-                }
-            }
-        } label: {
-            policyPill(
-                symbol: "cpu",
-                text: AgentDispatchPresentation.executorChoiceName(goal.executorChoice)
-            )
-        }
-        .menuStyle(.borderlessButton)
-        .fixedSize()
-    }
-
     private var routingMenu: some View {
         Menu {
-            Menu(L10n.Dispatch.planningModel) {
-                modelButtons(role: .planning)
+            Section(L10n.Dispatch.planningProfile) {
+                ForEach(profiles) { profile in
+                    Button {
+                        onPlanningProfiles(
+                            profile.id,
+                            goal.effectivePlanningFallbackProfileIDs.filter {
+                                $0 != profile.id
+                            }
+                        )
+                    } label: {
+                        Label(
+                            profile.name,
+                            systemImage: profile.id == goal.effectivePlanningProfileID
+                                ? "checkmark"
+                                : profile.executor.symbol
+                        )
+                    }
+                }
             }
-            Menu(L10n.Dispatch.executionModel) {
-                modelButtons(role: .execution)
+            Menu(L10n.Dispatch.planningFallbacks) {
+                ForEach(profiles.filter {
+                    $0.id != goal.effectivePlanningProfileID
+                }) { profile in
+                    Button {
+                        var fallbacks = goal.effectivePlanningFallbackProfileIDs
+                        if let index = fallbacks.firstIndex(of: profile.id) {
+                            fallbacks.remove(at: index)
+                        } else {
+                            fallbacks.append(profile.id)
+                        }
+                        onPlanningProfiles(
+                            goal.effectivePlanningProfileID,
+                            fallbacks
+                        )
+                    } label: {
+                        Label(
+                            profile.name,
+                            systemImage: goal.effectivePlanningFallbackProfileIDs
+                                .contains(profile.id)
+                                ? "checkmark"
+                                : profile.executor.symbol
+                        )
+                    }
+                }
             }
-            let claudeProfiles = cliProfiles.filter { $0.executor == .claudeCode }
-            let codexProfiles = cliProfiles.filter { $0.executor == .codexCLI }
-            if !claudeProfiles.isEmpty {
-                profileMenu(
-                    title: AgentExecutionAgent.claudeCode.displayName,
-                    executor: .claudeCode,
-                    profiles: claudeProfiles
-                )
-            }
-            if !codexProfiles.isEmpty {
-                profileMenu(
-                    title: AgentExecutionAgent.codexCLI.displayName,
-                    executor: .codexCLI,
-                    profiles: codexProfiles
-                )
+            Divider()
+            Button(action: onManageProfiles) {
+                Label(L10n.Dispatch.manageProfiles, systemImage: "gearshape")
             }
         } label: {
             policyPill(
@@ -184,85 +186,9 @@ struct AgentDispatchGoalHeader: View {
         .help(L10n.Dispatch.modelRoutingHelp)
     }
 
-    @ViewBuilder
-    private func modelButtons(role: ModelRole) -> some View {
-        let selectedModel = role.modelID(in: goal.effectiveModelRouting)
-        Button {
-            updateModel(nil, role: role)
-        } label: {
-            Label(
-                L10n.Dispatch.followCurrentModel,
-                systemImage: selectedModel == nil ? "checkmark" : "circle"
-            )
-        }
-        ForEach(modelIDs, id: \.self) { modelID in
-            Button {
-                updateModel(modelID, role: role)
-            } label: {
-                Label(
-                    modelID,
-                    systemImage: selectedModel == modelID ? "checkmark" : "circle"
-                )
-            }
-        }
-    }
-
-    private func profileMenu(
-        title: String,
-        executor: AgentExecutionAgent,
-        profiles: [LocalAgentCLIProfile]
-    ) -> some View {
-        Menu("\(title) · \(L10n.Dispatch.profile)") {
-            let selectedProfileID = goal.selectedCLIProfileID(for: executor)
-            Button {
-                onCLIProfile(executor, nil)
-            } label: {
-                Label(
-                    L10n.Dispatch.defaultProfile,
-                    systemImage: selectedProfileID == nil ? "checkmark" : "circle"
-                )
-            }
-            ForEach(profiles) { profile in
-                Button {
-                    onCLIProfile(executor, profile.id)
-                } label: {
-                    Label(
-                        profile.displayName,
-                        systemImage: selectedProfileID == profile.id ? "checkmark" : "circle"
-                    )
-                }
-            }
-        }
-    }
-
-    private enum ModelRole {
-        case planning
-        case execution
-
-        func modelID(in routing: AgentDispatchModelRouting) -> String? {
-            switch self {
-            case .planning: return routing.planningModelID
-            case .execution: return routing.executionModelID
-            }
-        }
-    }
-
-    private func updateModel(_ modelID: String?, role: ModelRole) {
-        var routing = goal.effectiveModelRouting
-        switch role {
-        case .planning:
-            routing.planningModelID = modelID
-        case .execution:
-            routing.executionModelID = modelID
-        }
-        onModelRouting(routing)
-    }
-
     private var routingSummary: String {
-        let routing = goal.effectiveModelRouting
-        let planning = routing.planningModelID ?? L10n.Dispatch.automatic
-        let execution = routing.executionModelID ?? L10n.Dispatch.automatic
-        return "\(planning) → \(execution)"
+        profiles.first { $0.id == goal.effectivePlanningProfileID }?.name
+            ?? L10n.Dispatch.planningProfile
     }
 
     private var launchButtonTitle: String {

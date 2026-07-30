@@ -221,7 +221,7 @@ extension AppState {
                 attachedSkills: attachedSkills,
                 source: source
             )
-        case .claudeCode, .codexCLI, .cursorAgent, .clineCLI:
+        case .claudeCode, .codexCLI, .hermesCLI, .cursorAgent, .clineCLI:
             dispatchDelegatedAgentMessage(
                 for: runtime,
                 text: text,
@@ -371,6 +371,7 @@ extension AppState {
         runtime: AgentRuntime
     ) async {
         var arguments = initialArguments
+        var delegatedSucceeded = false
         let workspaceLocation = runtime.workspaceLocation
             ?? runtime.workspaceRootPath.map { .local(path: $0) }
         let workspaceURL: URL?
@@ -414,8 +415,23 @@ extension AppState {
             runtime.isResponding = false
             runtime.turnStartedAt = nil
             runtime.requestTask = nil
+            let shouldRetryPlanning = finishExternalDispatchPlanningIfNeeded(
+                for: runtime,
+                succeeded: delegatedSucceeded
+            )
             persistAgentSession(runtime: runtime)
             consumeNextQueuedMessageIfNeeded(for: runtime)
+            if shouldRetryPlanning {
+                Task { @MainActor [weak self, weak runtime] in
+                    await Task.yield()
+                    guard let self, let runtime else { return }
+                    _ = self.startAgentGoalPlanningIfNeeded(
+                        for: runtime,
+                        forceRestart: true,
+                        revisionNote: runtime.goalPlanningState?.revisionNote
+                    )
+                }
+            }
         }
 
         if !images.isEmpty {
@@ -618,6 +634,7 @@ extension AppState {
                 errorMessage: outcome.accepted ? nil : outcome.errorMessage,
                 toolPayload: outcome.result.payload
             )
+            delegatedSucceeded = outcome.accepted
             refreshDelegatedAgentWorktreeInBackground(
                 runtimeID: runtime.id,
                 workspaceURL: workspaceURL,
@@ -687,6 +704,24 @@ extension AppState {
         workspaceURL: URL?,
         baselineTask: Task<AgentWorktreeSnapshot, Never>?
     ) async throws -> DelegatedAcceptanceOutcome {
+        if initialArguments["permission_mode"]?.stringValue() == "plan" {
+            let result = try await AgentToolRunner.run(
+                name: toolName,
+                arguments: initialArguments,
+                context: context
+            )
+            updateDelegatedTaskRun(id: delegatedRunID, runtime: runtime) { run in
+                run.phase = .readyForDelivery
+                run.attempt = 1
+                run.startedAt = run.startedAt ?? Date()
+                run.finishedAt = Date()
+            }
+            return DelegatedAcceptanceOutcome(
+                accepted: true,
+                result: result,
+                errorMessage: nil
+            )
+        }
         guard let contract = delegatedTaskRun(id: delegatedRunID, runtime: runtime)?.contract else {
             let result = try await AgentToolRunner.run(
                 name: toolName,
@@ -1494,9 +1529,15 @@ extension AppState {
                 contract.requiresFreshSelfReview ? "double" : "self"
             )
         }
-        if let profile, profile.executor == executionAgent {
-            let argument = profile.argument
+        if let profile, profile.executor == executionAgent,
+           let argument = profile.argument {
             arguments[argument.name] = .string(argument.value)
+        }
+        if let modelID = profile?.modelID, !modelID.isEmpty {
+            arguments["model"] = .string(modelID)
+        }
+        if let providerID = profile?.providerID, !providerID.isEmpty {
+            arguments["provider"] = .string(providerID)
         }
         return arguments
     }

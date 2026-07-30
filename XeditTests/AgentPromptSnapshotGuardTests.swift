@@ -48,7 +48,7 @@ struct AgentContextBuilderPromptTests {
         #expect(!compact.contains("list_mcp_servers"))
     }
 
-    @Test("stable v17 prompt text is guarded by a deterministic hash snapshot")
+    @Test("stable v18 prompt text is guarded by a deterministic hash snapshot")
     func testStablePromptSnapshotHash() {
         let prompt = AgentContextBuilder.stableSystemPromptPrefix(
             toolsEnabled: true,
@@ -61,7 +61,7 @@ struct AgentContextBuilderPromptTests {
             promptProfile: .standard
         )
 
-        #expect(AgentContextBuilder.stablePrefixVersion == "willdeep-agent-system-v17")
+        #expect(AgentContextBuilder.stablePrefixVersion == "willdeep-agent-system-v18")
         #expect(diagnostics.hash == AgentContextBuilder.stablePrefixSnapshotHash)
     }
 

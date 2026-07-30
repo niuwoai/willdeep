@@ -226,6 +226,78 @@ extension L10n {
             defaultValue: "Use different models for project planning and ordinary task execution."
         )
         static let profile = String(localized: "dispatch.profile", defaultValue: "Profile")
+        static let planningProfile = String(
+            localized: "dispatch.planning-profile",
+            defaultValue: "Planning Profile"
+        )
+        static let planningFallbacks = String(
+            localized: "dispatch.planning-fallbacks",
+            defaultValue: "Planning Fallbacks"
+        )
+        static let primaryProfile = String(
+            localized: "dispatch.primary-profile",
+            defaultValue: "Primary Profile"
+        )
+        static let fallbackProfiles = String(
+            localized: "dispatch.fallback-profiles",
+            defaultValue: "Fallback Profiles"
+        )
+        static let manageProfiles = String(
+            localized: "dispatch.manage-profiles",
+            defaultValue: "Manage Profiles…"
+        )
+        static let profileManagerTitle = String(
+            localized: "dispatch.profile-manager-title",
+            defaultValue: "Execution Profiles"
+        )
+        static let profileManagerMessage = String(
+            localized: "dispatch.profile-manager-message",
+            defaultValue: "Profiles bind an executor, model, and native CLI configuration. AI planning assigns these profiles to graph nodes."
+        )
+        static let addProfile = String(
+            localized: "dispatch.add-profile",
+            defaultValue: "Add Profile"
+        )
+        static let deleteProfile = String(
+            localized: "dispatch.delete-profile",
+            defaultValue: "Delete Profile"
+        )
+        static let profileName = String(
+            localized: "dispatch.profile-name",
+            defaultValue: "Profile name"
+        )
+        static let modelID = String(
+            localized: "dispatch.model-id",
+            defaultValue: "Model ID"
+        )
+        static let providerID = String(
+            localized: "dispatch.provider-id",
+            defaultValue: "Provider ID"
+        )
+        static let nativeProfile = String(
+            localized: "dispatch.native-profile",
+            defaultValue: "Native profile / agent name"
+        )
+        static let profileManaged = String(
+            localized: "dispatch.profile-managed",
+            defaultValue: "Managed"
+        )
+        static let profileDiscovered = String(
+            localized: "dispatch.profile-discovered",
+            defaultValue: "Discovered"
+        )
+        static let profileBuiltIn = String(
+            localized: "dispatch.profile-built-in",
+            defaultValue: "Built in"
+        )
+        static let humanOverride = String(
+            localized: "dispatch.human-override",
+            defaultValue: "Human Override"
+        )
+        static let aiPlansGraph = String(
+            localized: "dispatch.ai-plans-graph",
+            defaultValue: "AI will choose the nodes, dependencies, primary profiles, and fallback chain."
+        )
         static let defaultProfile = String(
             localized: "dispatch.default-profile",
             defaultValue: "Default profile"
@@ -315,6 +387,10 @@ extension L10n {
         static let noExecutorOnTarget = String(
             localized: "dispatch.no-executor-target",
             defaultValue: "The forced executor is not available in this execution environment."
+        )
+        static let noProfileAvailable = String(
+            localized: "dispatch.no-profile-available",
+            defaultValue: "No untried profile in this node's fallback chain is available."
         )
         static let goalPausedLaunch = String(
             localized: "dispatch.goal-paused-launch",

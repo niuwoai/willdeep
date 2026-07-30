@@ -898,6 +898,7 @@ nonisolated enum AgentExecutionAgent: String, Codable, CaseIterable, Identifiabl
     case willDeep
     case claudeCode
     case codexCLI
+    case hermesCLI
     case cursorAgent
     case clineCLI
 
@@ -908,6 +909,7 @@ nonisolated enum AgentExecutionAgent: String, Codable, CaseIterable, Identifiabl
         case .willDeep: return L10n.ExecutionAgent.willDeepName
         case .claudeCode: return L10n.ExecutionAgent.claudeCodeName
         case .codexCLI: return L10n.ExecutionAgent.codexName
+        case .hermesCLI: return L10n.ExecutionAgent.hermesName
         case .cursorAgent: return L10n.ExecutionAgent.cursorName
         case .clineCLI: return L10n.ExecutionAgent.clineName
         }
@@ -918,6 +920,7 @@ nonisolated enum AgentExecutionAgent: String, Codable, CaseIterable, Identifiabl
         case .willDeep: return L10n.ExecutionAgent.willDeepSummary
         case .claudeCode: return L10n.ExecutionAgent.claudeCodeSummary
         case .codexCLI: return L10n.ExecutionAgent.codexSummary
+        case .hermesCLI: return L10n.ExecutionAgent.hermesSummary
         case .cursorAgent: return L10n.ExecutionAgent.cursorSummary
         case .clineCLI: return L10n.ExecutionAgent.clineSummary
         }
@@ -928,6 +931,7 @@ nonisolated enum AgentExecutionAgent: String, Codable, CaseIterable, Identifiabl
         case .willDeep: return "hammer.fill"
         case .claudeCode: return "sparkles.rectangle.stack"
         case .codexCLI: return "terminal"
+        case .hermesCLI: return "h.circle"
         case .cursorAgent: return "cursorarrow.click"
         case .clineCLI: return "chevron.left.forwardslash.chevron.right"
         }
@@ -938,6 +942,7 @@ nonisolated enum AgentExecutionAgent: String, Codable, CaseIterable, Identifiabl
         case .willDeep: return nil
         case .claudeCode: return "claude_code"
         case .codexCLI: return "codex_cli"
+        case .hermesCLI: return "hermes_cli"
         case .cursorAgent: return "cursor_agent"
         case .clineCLI: return "cline_cli"
         }
@@ -948,6 +953,7 @@ nonisolated enum AgentExecutionAgent: String, Codable, CaseIterable, Identifiabl
         case .willDeep: return nil
         case .claudeCode: return "acceptEdits"
         case .codexCLI: return "workspaceWrite"
+        case .hermesCLI: return "workspaceWrite"
         case .cursorAgent: return "default"
         case .clineCLI: return "act"
         }
@@ -959,6 +965,8 @@ nonisolated enum AgentExecutionAgent: String, Codable, CaseIterable, Identifiabl
             self = .claudeCode
         case "codex_cli":
             self = .codexCLI
+        case "hermes_cli":
+            self = .hermesCLI
         case "cursor_agent":
             self = .cursorAgent
         case "cline_cli":
@@ -1236,6 +1244,15 @@ nonisolated struct AgentPlan: Codable, Equatable {
 nonisolated struct AgentGoal: Codable, Equatable {
     var statement: String
     var checklist: [Item]
+    /// AI-authored execution graph. Acceptance criteria remain in
+    /// `checklist`; they are not execution steps and must never be projected
+    /// into an artificial linear chain.
+    var dispatchPlan: AgentGoalDispatchPlan? = nil
+    /// Stable profile IDs selected before planning starts. The primary
+    /// planner can be a WillDeep model or an external coding-agent CLI.
+    var planningProfileID: String? = nil
+    var planningFallbackProfileIDs: [String]? = nil
+    var planningAttemptedProfileIDs: [String]? = nil
 
     struct Item: Codable, Equatable, Identifiable {
         var id: UUID
@@ -1249,9 +1266,20 @@ nonisolated struct AgentGoal: Codable, Equatable {
         }
     }
 
-    init(statement: String = "", checklist: [Item] = []) {
+    init(
+        statement: String = "",
+        checklist: [Item] = [],
+        dispatchPlan: AgentGoalDispatchPlan? = nil,
+        planningProfileID: String? = nil,
+        planningFallbackProfileIDs: [String]? = nil,
+        planningAttemptedProfileIDs: [String]? = nil
+    ) {
         self.statement = statement
         self.checklist = checklist
+        self.dispatchPlan = dispatchPlan
+        self.planningProfileID = planningProfileID
+        self.planningFallbackProfileIDs = planningFallbackProfileIDs
+        self.planningAttemptedProfileIDs = planningAttemptedProfileIDs
     }
 
     var isEmpty: Bool { statement.isEmpty && checklist.isEmpty }

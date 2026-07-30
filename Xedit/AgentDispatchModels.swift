@@ -32,6 +32,7 @@ nonisolated enum AgentDispatchExecutorChoice: String, Codable, CaseIterable, Ide
     case willDeep
     case claudeCode
     case codexCLI
+    case hermesCLI
     case cursorAgent
     case clineCLI
 
@@ -43,6 +44,7 @@ nonisolated enum AgentDispatchExecutorChoice: String, Codable, CaseIterable, Ide
         case .willDeep: return .willDeep
         case .claudeCode: return .claudeCode
         case .codexCLI: return .codexCLI
+        case .hermesCLI: return .hermesCLI
         case .cursorAgent: return .cursorAgent
         case .clineCLI: return .clineCLI
         }
@@ -53,6 +55,7 @@ nonisolated enum AgentDispatchExecutorChoice: String, Codable, CaseIterable, Ide
         case .willDeep: self = .willDeep
         case .claudeCode: self = .claudeCode
         case .codexCLI: self = .codexCLI
+        case .hermesCLI: self = .hermesCLI
         case .cursorAgent: self = .cursorAgent
         case .clineCLI: self = .clineCLI
         }
@@ -159,16 +162,53 @@ nonisolated struct AgentDispatchExecutorDecision: Equatable {
     let isAvailable: Bool
 }
 
+nonisolated enum AgentDispatchProfileResolver {
+    static func next(
+        primaryProfileID: String?,
+        fallbackProfileIDs: [String],
+        attemptedProfileIDs: [String],
+        availableExecutors: Set<AgentExecutionAgent>,
+        profiles: [AgentExecutionProfile]
+    ) -> AgentExecutionProfile? {
+        let candidates = [primaryProfileID].compactMap { $0 } + fallbackProfileIDs
+        let attempted = Set(attemptedProfileIDs)
+        return candidates
+            .filter { !attempted.contains($0) }
+            .compactMap { id in profiles.first(where: { $0.id == id }) }
+            .first { availableExecutors.contains($0.executor) }
+    }
+
+    static func hasUntriedFallback(
+        fallbackProfileIDs: [String],
+        attemptedProfileIDs: [String]
+    ) -> Bool {
+        let attempted = Set(attemptedProfileIDs)
+        return fallbackProfileIDs.contains { !attempted.contains($0) }
+    }
+}
+
 nonisolated struct AgentDispatchTask: Codable, Equatable, Identifiable {
     var id: UUID
     var title: String
     var state: AgentDispatchTaskState
     var dependencyIDs: [UUID]
+    /// Stable AI-authored key when this task came from `dispatch-graph`.
+    /// Nil marks a human-appended node or a legacy acceptance placeholder.
+    var planNodeKey: String? = nil
     var executorChoice: AgentDispatchExecutorChoice
     var targetChoice: AgentDispatchTargetChoice
     var resolvedExecutor: AgentExecutionAgent?
+    /// AI-selected primary execution profile. A human executor override can
+    /// still replace it from the inspector.
+    var primaryProfileID: String? = nil
+    /// Ordered failover chain. Values are stable app-owned profile IDs.
+    var fallbackProfileIDs: [String]? = nil
+    /// Persisted attempt ledger prevents retry loops across relaunches.
+    var attemptedProfileIDs: [String]? = nil
+    var activeProfileID: String? = nil
     var resolvedTarget: AgentDispatchTargetChoice?
     var runtimeSessionID: UUID?
+    var runtimeSessionIDs: [UUID]? = nil
     /// Optional checkout override. The referenced binding must belong to the
     /// Goal's logical project; otherwise launch validation rejects it.
     var workspaceBindingID: String?
@@ -182,11 +222,17 @@ nonisolated struct AgentDispatchTask: Codable, Equatable, Identifiable {
         title: String,
         state: AgentDispatchTaskState = .queued,
         dependencyIDs: [UUID] = [],
+        planNodeKey: String? = nil,
         executorChoice: AgentDispatchExecutorChoice = .automatic,
         targetChoice: AgentDispatchTargetChoice = .automatic,
         resolvedExecutor: AgentExecutionAgent? = nil,
+        primaryProfileID: String? = nil,
+        fallbackProfileIDs: [String]? = nil,
+        attemptedProfileIDs: [String]? = nil,
+        activeProfileID: String? = nil,
         resolvedTarget: AgentDispatchTargetChoice? = nil,
         runtimeSessionID: UUID? = nil,
+        runtimeSessionIDs: [UUID]? = nil,
         workspaceBindingID: String? = nil,
         branchName: String = "",
         acceptanceCriteria: [String] = [],
@@ -197,11 +243,17 @@ nonisolated struct AgentDispatchTask: Codable, Equatable, Identifiable {
         self.title = title
         self.state = state
         self.dependencyIDs = dependencyIDs
+        self.planNodeKey = planNodeKey
         self.executorChoice = executorChoice
         self.targetChoice = targetChoice
         self.resolvedExecutor = resolvedExecutor
+        self.primaryProfileID = primaryProfileID
+        self.fallbackProfileIDs = fallbackProfileIDs
+        self.attemptedProfileIDs = attemptedProfileIDs
+        self.activeProfileID = activeProfileID
         self.resolvedTarget = resolvedTarget
         self.runtimeSessionID = runtimeSessionID
+        self.runtimeSessionIDs = runtimeSessionIDs
         self.workspaceBindingID = workspaceBindingID
         self.branchName = branchName
         self.acceptanceCriteria = acceptanceCriteria
@@ -260,6 +312,8 @@ nonisolated struct AgentDispatchGoal: Codable, Equatable, Identifiable {
     /// Nil on legacy records; callers use `effectiveModelRouting` so old
     /// projects receive the cost-optimized defaults without migration UI.
     var modelRouting: AgentDispatchModelRouting? = nil
+    var planningProfileID: String? = nil
+    var planningFallbackProfileIDs: [String]? = nil
     /// Selected local CLI profile IDs keyed by `AgentExecutionAgent.rawValue`.
     /// Profiles are discovered from the user's Codex/Claude configuration;
     /// only the stable ID is stored with the project.
@@ -302,12 +356,24 @@ nonisolated struct AgentDispatchGoal: Codable, Equatable, Identifiable {
         cliProfileSelections?[executor.rawValue]
     }
 
+    var effectivePlanningProfileID: String {
+        planningProfileID ?? AgentExecutionProfile.recommendedPlannerID
+    }
+
+    var effectivePlanningFallbackProfileIDs: [String] {
+        planningFallbackProfileIDs ?? []
+    }
+
     var deletionRequiresConfirmation: Bool {
         !commands.isEmpty
     }
 
     var ownedSessionIDs: Set<UUID> {
-        Set([sessionID] + tasks.compactMap(\.runtimeSessionID))
+        Set(
+            [sessionID]
+                + tasks.flatMap { $0.runtimeSessionIDs ?? [] }
+                + tasks.compactMap(\.runtimeSessionID)
+        )
     }
 
     var isWorkspaceBound: Bool {
@@ -496,6 +562,7 @@ nonisolated enum AgentDispatchExecutorResolver {
             switch discovery.cli.id {
             case "claude-code": result.insert(.claudeCode)
             case "codex-cli": result.insert(.codexCLI)
+            case "hermes-cli": result.insert(.hermesCLI)
             case "cursor-cli": result.insert(.cursorAgent)
             case "cline-cli": result.insert(.clineCLI)
             default: break
