@@ -185,7 +185,7 @@ struct AgentDispatchGoalSetupView: View {
                 focusedField = nil
                 onCreate(normalizedStatement, checklistItems)
             } label: {
-                Label(L10n.Dispatch.startPlan, systemImage: "play.fill")
+                Label(L10n.Dispatch.createProject, systemImage: "plus")
                     .font(.system(size: 12, weight: .semibold))
             }
             .buttonStyle(.borderedProminent)

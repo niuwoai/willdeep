@@ -14,6 +14,29 @@ import Foundation
 @Suite
 @MainActor
 struct AgentSessionPersistenceTests {
+    @Test("dispatch task ownership survives session persistence")
+    func dispatchTaskOwnershipRoundTrip() throws {
+        let parentID = UUID()
+        let taskID = UUID()
+        let session = AgentSession(
+            presentationScope: .dispatchBoard,
+            dispatchParentProjectID: parentID,
+            dispatchTaskID: taskID,
+            currentGoal: AgentGoal(
+                statement: "执行任务",
+                checklist: [AgentGoal.Item(text: "完成")]
+            )
+        )
+
+        let decoded = try JSONDecoder().decode(
+            AgentSession.self,
+            from: JSONEncoder().encode(session)
+        )
+
+        #expect(decoded.dispatchParentProjectID == parentID)
+        #expect(decoded.dispatchTaskID == taskID)
+    }
+
     /// Older session JSON written before plan/goal persistence existed
     /// must still decode — fields default to normal/nil/false.
     @Test

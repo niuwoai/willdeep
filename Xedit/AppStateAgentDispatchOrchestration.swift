@@ -56,6 +56,10 @@ extension AppState {
 
         runtime.session.presentationScope = .dispatchBoard
         setAgentInteractionMode(.goal)
+        applyDispatchModel(
+            AgentDispatchModelRouting.costOptimized.planningModelID,
+            to: runtime
+        )
         agentPrimaryDestination = .dispatchBoard
         persistAgentSession(runtime: runtime)
         return runtime.session
@@ -78,6 +82,19 @@ extension AppState {
         agentDispatchCoordinator.selectGoal(goalID)
         _ = selectAgentSession(id: goal.sessionID)
         agentPrimaryDestination = .dispatchBoard
+    }
+
+    func updateDispatchGoalModelRouting(
+        _ routing: AgentDispatchModelRouting,
+        goalID: UUID
+    ) {
+        agentDispatchCoordinator.updateGoalModelRouting(routing, goalID: goalID)
+        guard let goal = agentDispatchCoordinator.goals.first(where: { $0.id == goalID }),
+              let runtime = runtime(for: goal.sessionID) else {
+            return
+        }
+        applyDispatchModel(routing.planningModelID, to: runtime)
+        persistAgentSession(runtime: runtime, touchUpdatedAt: false, moveToFront: false)
     }
 
     func chooseLocalWorkspaceForDispatchGoal(
@@ -239,6 +256,7 @@ extension AppState {
             return
         }
 
+        applyDispatchModel(goal.effectiveModelRouting.planningModelID, to: runtime)
         let prompt = Self.dispatchGoalInstructionPrompt(text)
         let queued = AgentQueuedMessage(
             text: prompt,
@@ -279,6 +297,7 @@ extension AppState {
             return
         }
 
+        applyDispatchModel(goal.effectiveModelRouting.planningModelID, to: runtime)
         let queued = AgentQueuedMessage(
             text: Self.dispatchGoalInstructionPrompt(text),
             executionAgent: .willDeep,
@@ -346,12 +365,20 @@ extension AppState {
         runtime.session.title = "\(goal.title) · \(task.title)"
         runtime.session.titleIsUserSet = true
         runtime.session.presentationScope = .dispatchBoard
+        runtime.session.dispatchParentProjectID = goal.id
+        runtime.session.dispatchTaskID = task.id
         runtime.interactionMode = .goal
         runtime.currentGoal = AgentGoal(
             statement: task.title,
             checklist: task.acceptanceCriteria.map { AgentGoal.Item(text: $0) }
         )
         runtime.executionAgent = decision.executor
+        if decision.executor == .willDeep {
+            applyDispatchModel(
+                goal.effectiveModelRouting.executionModelID,
+                to: runtime
+            )
+        }
         persistAgentSession(runtime: runtime)
 
         agentDispatchCoordinator.markTaskStarted(
@@ -362,6 +389,10 @@ extension AppState {
             runtimeSessionID: runtime.id
         )
 
+        let delegatedProfile = selectedDispatchCLIProfile(
+            goal: goal,
+            executor: decision.executor
+        )
         dispatchAgentMessageUsingSelectedExecutor(
             decision.executor,
             for: runtime,
@@ -371,6 +402,7 @@ extension AppState {
                 workspaceBinding: workspaceBinding
             ),
             images: [],
+            delegatedProfile: delegatedProfile,
             source: .hostInstruction
         )
         agentPrimaryDestination = .dispatchBoard
@@ -438,6 +470,31 @@ extension AppState {
                 taskID: taskID,
                 state: state
             )
+        }
+    }
+
+    private func applyDispatchModel(_ modelID: String?, to runtime: AgentRuntime) {
+        guard let modelID,
+              agentModelIsCompatibleWithActiveProvider(modelID) else {
+            runtime.sessionModelOverride = nil
+            return
+        }
+        runtime.managedRouting = nil
+        runtime.sessionModelOverride = modelID
+        recordFetchedAgentModels([modelID])
+    }
+
+    private func selectedDispatchCLIProfile(
+        goal: AgentDispatchGoal,
+        executor: AgentExecutionAgent
+    ) -> LocalAgentCLIProfile? {
+        guard let profileID = goal.selectedCLIProfileID(for: executor) else {
+            return nil
+        }
+        return LocalAgentCLIProfile.discover(
+            workspacePath: goal.logicalProject?.primaryWorkspacePath
+        ).first {
+            $0.id == profileID && $0.executor == executor
         }
     }
 

@@ -68,6 +68,99 @@ struct AgentDispatchCoordinatorTests {
         #expect(!pinnedUnavailable.isAvailable)
     }
 
+    @Test("任务执行会话不会再次投影成侧栏项目")
+    func taskSessionsDoNotBecomeProjects() throws {
+        let sandbox = try makeSandbox()
+        defer { sandbox.cleanup() }
+        let coordinator = AgentDispatchCoordinator(
+            store: AgentDispatchStore(defaults: sandbox.defaults)
+        )
+        let taskID = UUID()
+        let projectSession = AgentSession(
+            title: "顶层项目",
+            workspaceRootPath: "/tmp/project",
+            presentationScope: .dispatchBoard,
+            currentGoal: AgentGoal(
+                statement: "交付项目",
+                checklist: [AgentGoal.Item(id: taskID, text: "实现")]
+            )
+        )
+        coordinator.synchronize(with: [projectSession])
+
+        let explicitChild = AgentSession(
+            title: "显式归属任务",
+            workspaceRootPath: "/tmp/project",
+            presentationScope: .dispatchBoard,
+            dispatchParentProjectID: projectSession.id,
+            dispatchTaskID: taskID,
+            currentGoal: AgentGoal(
+                statement: "实现",
+                checklist: [AgentGoal.Item(text: "测试通过")]
+            )
+        )
+        coordinator.synchronize(with: [projectSession, explicitChild])
+        #expect(coordinator.goals.map(\.id) == [projectSession.id])
+
+        let legacyChildID = UUID()
+        coordinator.markTaskStarted(
+            goalID: projectSession.id,
+            taskID: taskID,
+            executor: .willDeep,
+            target: .local,
+            runtimeSessionID: legacyChildID
+        )
+        let legacyChild = AgentSession(
+            id: legacyChildID,
+            title: "旧版本任务",
+            workspaceRootPath: "/tmp/project",
+            presentationScope: .dispatchBoard,
+            currentGoal: AgentGoal(
+                statement: "旧版本任务",
+                checklist: [AgentGoal.Item(text: "测试通过")]
+            )
+        )
+        coordinator.synchronize(with: [projectSession, explicitChild, legacyChild])
+        #expect(coordinator.goals.map(\.id) == [projectSession.id])
+    }
+
+    @Test("项目保存规划执行模型与本地 CLI Profile")
+    func projectPreservesRoleRoutingAndCLIProfiles() throws {
+        let sandbox = try makeSandbox()
+        defer { sandbox.cleanup() }
+        let coordinator = AgentDispatchCoordinator(
+            store: AgentDispatchStore(defaults: sandbox.defaults)
+        )
+        let session = AgentSession(
+            title: "模型组合",
+            workspaceRootPath: "/tmp/project",
+            currentGoal: AgentGoal(
+                statement: "组合模型交付",
+                checklist: [AgentGoal.Item(text: "执行")]
+            )
+        )
+        coordinator.synchronize(with: [session])
+        #expect(coordinator.selectedGoal?.effectiveModelRouting == .costOptimized)
+
+        coordinator.updateGoalModelRouting(
+            AgentDispatchModelRouting(
+                planningModelID: "planner-large",
+                executionModelID: "worker-small"
+            ),
+            goalID: session.id
+        )
+        coordinator.updateGoalCLIProfile(
+            "codex:fast",
+            executor: .codexCLI,
+            goalID: session.id
+        )
+        coordinator.synchronize(with: [session])
+
+        let project = try #require(coordinator.selectedGoal)
+        #expect(project.effectiveModelRouting.planningModelID == "planner-large")
+        #expect(project.effectiveModelRouting.executionModelID == "worker-small")
+        #expect(project.selectedCLIProfileID(for: .codexCLI) == "codex:fast")
+    }
+
     @Test("任务图按真实依赖分层并把末端节点连接到验收关卡")
     func graphLayoutUsesDependencyLayers() throws {
         let root = AgentDispatchTask(title: "根节点")

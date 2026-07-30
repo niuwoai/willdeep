@@ -8,8 +8,12 @@ import SwiftUI
 struct AgentDispatchGoalHeader: View {
     let goal: AgentDispatchGoal
     let runtimeDescriptors: [RuntimeDescriptor]
+    let modelIDs: [String]
+    let cliProfiles: [LocalAgentCLIProfile]
     let onExecutorChoice: (AgentDispatchExecutorChoice) -> Void
     let onTargetChoice: (AgentDispatchTargetChoice) -> Void
+    let onModelRouting: (AgentDispatchModelRouting) -> Void
+    let onCLIProfile: (AgentExecutionAgent, String?) -> Void
     let onChooseLocalWorkspace: () -> Void
     let onBindRemoteWorkspace: (RuntimeDescriptor) -> Void
     let onLaunch: () -> Void
@@ -50,19 +54,18 @@ struct AgentDispatchGoalHeader: View {
                 }
                 Spacer(minLength: 10)
                 workspaceMenu
+                routingMenu
                 executorMenu
                 targetMenu
                 Button(action: goal.isPaused ? onResume : onLaunch) {
                     Label(
-                        goal.isWorkspaceBound
-                            ? (goal.isPaused ? L10n.Dispatch.resumePlan : L10n.Dispatch.startPlan)
-                            : L10n.Dispatch.selectWorkspaceFirst,
+                        launchButtonTitle,
                         systemImage: goal.isPaused ? "play.fill" : "play"
                     )
                     .font(.system(size: 12, weight: .medium))
                 }
                 .buttonStyle(.borderedProminent)
-                .disabled(!goal.isWorkspaceBound)
+                .disabled(!canLaunchFromHeader)
             }
             HStack(spacing: 8) {
                 Text(L10n.Dispatch.taskCount(goal.tasks.count))
@@ -144,6 +147,145 @@ struct AgentDispatchGoalHeader: View {
         }
         .menuStyle(.borderlessButton)
         .fixedSize()
+    }
+
+    private var routingMenu: some View {
+        Menu {
+            Menu(L10n.Dispatch.planningModel) {
+                modelButtons(role: .planning)
+            }
+            Menu(L10n.Dispatch.executionModel) {
+                modelButtons(role: .execution)
+            }
+            let claudeProfiles = cliProfiles.filter { $0.executor == .claudeCode }
+            let codexProfiles = cliProfiles.filter { $0.executor == .codexCLI }
+            if !claudeProfiles.isEmpty {
+                profileMenu(
+                    title: AgentExecutionAgent.claudeCode.displayName,
+                    executor: .claudeCode,
+                    profiles: claudeProfiles
+                )
+            }
+            if !codexProfiles.isEmpty {
+                profileMenu(
+                    title: AgentExecutionAgent.codexCLI.displayName,
+                    executor: .codexCLI,
+                    profiles: codexProfiles
+                )
+            }
+        } label: {
+            policyPill(
+                symbol: "brain.head.profile",
+                text: routingSummary
+            )
+        }
+        .menuStyle(.borderlessButton)
+        .fixedSize()
+        .help(L10n.Dispatch.modelRoutingHelp)
+    }
+
+    @ViewBuilder
+    private func modelButtons(role: ModelRole) -> some View {
+        let selectedModel = role.modelID(in: goal.effectiveModelRouting)
+        Button {
+            updateModel(nil, role: role)
+        } label: {
+            Label(
+                L10n.Dispatch.followCurrentModel,
+                systemImage: selectedModel == nil ? "checkmark" : "circle"
+            )
+        }
+        ForEach(modelIDs, id: \.self) { modelID in
+            Button {
+                updateModel(modelID, role: role)
+            } label: {
+                Label(
+                    modelID,
+                    systemImage: selectedModel == modelID ? "checkmark" : "circle"
+                )
+            }
+        }
+    }
+
+    private func profileMenu(
+        title: String,
+        executor: AgentExecutionAgent,
+        profiles: [LocalAgentCLIProfile]
+    ) -> some View {
+        Menu("\(title) · \(L10n.Dispatch.profile)") {
+            let selectedProfileID = goal.selectedCLIProfileID(for: executor)
+            Button {
+                onCLIProfile(executor, nil)
+            } label: {
+                Label(
+                    L10n.Dispatch.defaultProfile,
+                    systemImage: selectedProfileID == nil ? "checkmark" : "circle"
+                )
+            }
+            ForEach(profiles) { profile in
+                Button {
+                    onCLIProfile(executor, profile.id)
+                } label: {
+                    Label(
+                        profile.displayName,
+                        systemImage: selectedProfileID == profile.id ? "checkmark" : "circle"
+                    )
+                }
+            }
+        }
+    }
+
+    private enum ModelRole {
+        case planning
+        case execution
+
+        func modelID(in routing: AgentDispatchModelRouting) -> String? {
+            switch self {
+            case .planning: return routing.planningModelID
+            case .execution: return routing.executionModelID
+            }
+        }
+    }
+
+    private func updateModel(_ modelID: String?, role: ModelRole) {
+        var routing = goal.effectiveModelRouting
+        switch role {
+        case .planning:
+            routing.planningModelID = modelID
+        case .execution:
+            routing.executionModelID = modelID
+        }
+        onModelRouting(routing)
+    }
+
+    private var routingSummary: String {
+        let routing = goal.effectiveModelRouting
+        let planning = routing.planningModelID ?? L10n.Dispatch.automatic
+        let execution = routing.executionModelID ?? L10n.Dispatch.automatic
+        return "\(planning) → \(execution)"
+    }
+
+    private var launchButtonTitle: String {
+        guard goal.isWorkspaceBound else {
+            return L10n.Dispatch.selectWorkspaceFirst
+        }
+        if goal.isPaused {
+            return L10n.Dispatch.resumeExecution
+        }
+        if goal.isExecutionActive {
+            return L10n.Dispatch.executionRunning
+        }
+        return goal.hasStartedExecution
+            ? L10n.Dispatch.continueExecution
+            : L10n.Dispatch.startExecution
+    }
+
+    private var canLaunchFromHeader: Bool {
+        guard goal.isWorkspaceBound else { return false }
+        if goal.isPaused {
+            return true
+        }
+        return !goal.isExecutionActive && goal.hasReadyTask
     }
 
     private var targetMenu: some View {

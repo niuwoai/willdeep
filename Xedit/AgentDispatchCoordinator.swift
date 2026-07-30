@@ -35,9 +35,16 @@ final class AgentDispatchCoordinator: ObservableObject {
     }
 
     func synchronize(with sessions: [AgentSession]) {
+        let persistedTaskSessionIDs = Set(
+            goals.flatMap { $0.tasks.compactMap(\.runtimeSessionID) }
+        )
         let sourceSessions = sessions.filter { session in
             guard let goal = session.currentGoal else { return false }
-            return !goal.isEmpty
+            guard !goal.isEmpty else { return false }
+            // Explicit ownership handles new task sessions. Persisted task
+            // IDs also remove duplicate projects created by older builds.
+            return session.dispatchParentProjectID == nil
+                && !persistedTaskSessionIDs.contains(session.id)
         }
         let existingByID = Dictionary(uniqueKeysWithValues: goals.map { ($0.id, $0) })
         let projected = sourceSessions.map { session in
@@ -99,6 +106,33 @@ final class AgentDispatchCoordinator: ObservableObject {
                 return
             }
             goal.targetChoice = choice
+            goal.updatedAt = Date()
+        }
+    }
+
+    func updateGoalModelRouting(
+        _ routing: AgentDispatchModelRouting,
+        goalID: UUID
+    ) {
+        updateGoal(id: goalID) { goal in
+            goal.modelRouting = routing
+            goal.updatedAt = Date()
+        }
+    }
+
+    func updateGoalCLIProfile(
+        _ profileID: String?,
+        executor: AgentExecutionAgent,
+        goalID: UUID
+    ) {
+        updateGoal(id: goalID) { goal in
+            var selections = goal.cliProfileSelections ?? [:]
+            if let profileID, !profileID.isEmpty {
+                selections[executor.rawValue] = profileID
+            } else {
+                selections.removeValue(forKey: executor.rawValue)
+            }
+            goal.cliProfileSelections = selections.isEmpty ? nil : selections
             goal.updatedAt = Date()
         }
     }
@@ -533,6 +567,8 @@ final class AgentDispatchCoordinator: ObservableObject {
             tasks: tasks,
             executorChoice: existing?.executorChoice ?? .automatic,
             targetChoice: existing?.targetChoice ?? .automatic,
+            modelRouting: existing?.modelRouting ?? .costOptimized,
+            cliProfileSelections: existing?.cliProfileSelections,
             isPaused: existing?.isPaused ?? false,
             commands: existing?.commands ?? [],
             createdAt: existing?.createdAt ?? session.createdAt,

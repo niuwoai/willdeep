@@ -1,6 +1,6 @@
 # WillDeep Product Overview
 
-> Last updated: 2026-07-30 | Current version: v1.213.0-rc2
+> Last updated: 2026-07-30 | Current version: v1.214.0-rc1
 
 ## Positioning
 
@@ -11,6 +11,8 @@ Official product domain: [willdeep.com](https://willdeep.com).
 WillDeep is configured for non-App-Store distribution without App Sandbox so it can access local project files with fewer permission interruptions.
 
 ## 架构概览
+
+- **项目级图工程调度与分角色模型路由（1.214.0-rc1）** —— 调度台左侧顶层对象统一为“项目”，任务执行产生的子会话通过项目/任务归属字段留在项目内部，不再被同步器提升成新的侧栏项目；历史版本已经产生的重复项会按任务运行时关联自动收敛。项目级主操作改为“启动执行”，执行活跃时保持幂等，仍可在具体任务节点上显式并行启动。每个项目可分别选择规划模型与执行模型，默认以 `kimi-k3` 负责整体规划、`deepseek-v4-pro` 负责常规执行；本地 Codex 与 Claude Code 会发现已配置的多个 Profile/Agent，并把项目选择安全传入对应 CLI。
 
 - **Graph Engineer 图工程调度台（1.213.0-rc1）** —— Goal 的真实 `dependencyIDs` 现在驱动可滚动、可缩放的二维 DAG 画布，任务节点按依赖层级自动布局并通过端口与曲线连接；分支末端统一汇入可选中的验收关卡，多前置任务会明确呈现合流关系。任务节点、验收关卡和右侧 Inspector 使用同一选择模型，点击后详情同步切换；“追加任务 / 调整计划”不再把文字塞进聊天框，而是打开结构化节点编辑器，用于维护标题、多个前置节点和逐条验收标准，并在保存时拒绝循环依赖。底部聊天式输入降级为可折叠的运行时指令控制台，画布主操作集中到添加/编辑节点、暂停/恢复与缩放工具栏。
 - **审批模式边界（1.213.0-rc2）** —— 智能审核和工作区可写都会直接应用经过路径校验的工作区文件变更，只有严格模式逐个展示文件审核卡；智能审核继续对外部操作做安全分类与模型判断，工作区可写则对外部操作保持人工确认。模式菜单按自动化程度从高到低排列，严格模式固定在最后。

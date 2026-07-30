@@ -13,7 +13,7 @@ extension L10n {
         )
         static let goalsHeader = String(
             localized: "dispatch.goals-header",
-            defaultValue: "Goals"
+            defaultValue: "Projects"
         )
         static let environmentsHeader = String(
             localized: "dispatch.environments-header",
@@ -29,19 +29,19 @@ extension L10n {
         static let addSSH = String(localized: "dispatch.add-ssh", defaultValue: "Add SSH")
         static let emptyTitle = String(
             localized: "dispatch.empty-title",
-            defaultValue: "No active Goals yet"
+            defaultValue: "No dispatch projects yet"
         )
         static let emptyMessage = String(
             localized: "dispatch.empty-message",
-            defaultValue: "Create a Goal in a conversation. WillDeep will project its checklist here as an executable plan."
+            defaultValue: "Create a project here. WillDeep will turn its outcome and acceptance criteria into an executable task graph."
         )
         static let openConversation = String(
             localized: "dispatch.open-conversation",
-            defaultValue: "Start a Goal conversation"
+            defaultValue: "Create a dispatch project"
         )
         static let goalSetupTitle = String(
             localized: "dispatch.goal-setup-title",
-            defaultValue: "Define this Goal"
+            defaultValue: "Define this project"
         )
         static let goalSetupMessage = String(
             localized: "dispatch.goal-setup-message",
@@ -65,7 +65,7 @@ extension L10n {
         )
         static let chooseWorkspace = String(
             localized: "dispatch.choose-workspace",
-            defaultValue: "Choose Goal Workspace"
+            defaultValue: "Choose Project Workspace"
         )
         static let chooseWorkspaceAction = String(
             localized: "dispatch.choose-workspace-action",
@@ -73,7 +73,7 @@ extension L10n {
         )
         static let chooseWorkspaceMessage = String(
             localized: "dispatch.choose-workspace-message",
-            defaultValue: "A Goal must belong to a workspace before it can run."
+            defaultValue: "A project must belong to a workspace before it can run."
         )
         static let chooseWorkspaceAndStart = String(
             localized: "dispatch.choose-workspace-and-start",
@@ -81,11 +81,11 @@ extension L10n {
         )
         static let goalWorkspace = String(
             localized: "dispatch.goal-workspace",
-            defaultValue: "Goal Workspace"
+            defaultValue: "Project Workspace"
         )
         static let mapWorkspaceMessage = String(
             localized: "dispatch.map-workspace-message",
-            defaultValue: "Choose a checkout of the same project for this Goal."
+            defaultValue: "Choose another checkout of this project."
         )
         static let remoteWorkspaceUnavailable = String(
             localized: "dispatch.remote-workspace-unavailable",
@@ -101,7 +101,7 @@ extension L10n {
         )
         static let workspaceBusy = String(
             localized: "dispatch.workspace-busy",
-            defaultValue: "Stop the current Goal turn before binding its workspace."
+            defaultValue: "Stop the current project turn before binding its workspace."
         )
         static let workspaceMappingHelp = String(
             localized: "dispatch.workspace-mapping-help",
@@ -121,7 +121,7 @@ extension L10n {
         )
         static let workspaceRequired = String(
             localized: "dispatch.workspace-required",
-            defaultValue: "Bind this Goal to a workspace before continuing."
+            defaultValue: "Bind this project to a workspace before continuing."
         )
         static let workspaceRequiredShort = String(
             localized: "dispatch.workspace-required-short",
@@ -136,8 +136,26 @@ extension L10n {
             defaultValue: "Cancel"
         )
         static let addTask = String(localized: "dispatch.add-task", defaultValue: "Add Task")
-        static let startPlan = String(localized: "dispatch.start-plan", defaultValue: "Start Plan")
-        static let resumePlan = String(localized: "dispatch.resume-plan", defaultValue: "Resume Plan")
+        static let createProject = String(
+            localized: "dispatch.create-project",
+            defaultValue: "Create Project"
+        )
+        static let startExecution = String(
+            localized: "dispatch.start-execution",
+            defaultValue: "Start Execution"
+        )
+        static let continueExecution = String(
+            localized: "dispatch.continue-execution",
+            defaultValue: "Continue Execution"
+        )
+        static let resumeExecution = String(
+            localized: "dispatch.resume-execution",
+            defaultValue: "Resume Execution"
+        )
+        static let executionRunning = String(
+            localized: "dispatch.execution-running",
+            defaultValue: "Execution Running"
+        )
         static let paused = String(localized: "dispatch.paused", defaultValue: "Paused")
         static let executor = String(localized: "dispatch.executor", defaultValue: "Executor")
         static let environment = String(localized: "dispatch.environment", defaultValue: "Environment")
@@ -158,7 +176,7 @@ extension L10n {
             String(
                 format: String(
                     localized: "dispatch.remote-workspace-message",
-                    defaultValue: "Enter the directory where %@ is checked out on %@. This maps an execution checkout; it does not change the Goal's project."
+                    defaultValue: "Enter the directory where %@ is checked out on %@. This maps an execution checkout; it does not change the project."
                 ),
                 projectName,
                 runtimeName
@@ -191,6 +209,27 @@ extension L10n {
             defaultValue: "Available executors"
         )
         static let launchTask = String(localized: "dispatch.launch-task", defaultValue: "Launch Task")
+        static let planningModel = String(
+            localized: "dispatch.planning-model",
+            defaultValue: "Planning model"
+        )
+        static let executionModel = String(
+            localized: "dispatch.execution-model",
+            defaultValue: "Execution model"
+        )
+        static let followCurrentModel = String(
+            localized: "dispatch.follow-current-model",
+            defaultValue: "Follow current model"
+        )
+        static let modelRoutingHelp = String(
+            localized: "dispatch.model-routing-help",
+            defaultValue: "Use different models for project planning and ordinary task execution."
+        )
+        static let profile = String(localized: "dispatch.profile", defaultValue: "Profile")
+        static let defaultProfile = String(
+            localized: "dispatch.default-profile",
+            defaultValue: "Default profile"
+        )
         static let openTaskConversation = String(
             localized: "dispatch.open-task-conversation",
             defaultValue: "Open Task Conversation"
@@ -201,7 +240,7 @@ extension L10n {
         )
         static let goalCommandTitle = String(
             localized: "dispatch.goal-command-title",
-            defaultValue: "Send an instruction to this Goal"
+            defaultValue: "Send an instruction to this project"
         )
         static let goalCommandPlaceholder = String(
             localized: "dispatch.goal-command-placeholder",
@@ -217,21 +256,21 @@ extension L10n {
         )
         static let noRecentInstructions = String(
             localized: "dispatch.no-recent-instructions",
-            defaultValue: "No Goal instructions yet"
+            defaultValue: "No project instructions yet"
         )
         static let deleteGoal = String(
             localized: "dispatch.delete-goal",
-            defaultValue: "Delete Goal"
+            defaultValue: "Delete Project"
         )
         static let deleteGoalConfirmationTitle = String(
             localized: "dispatch.delete-goal-confirmation-title",
-            defaultValue: "Delete this Goal?"
+            defaultValue: "Delete this project?"
         )
         static func deleteGoalConfirmationMessage(_ title: String) -> String {
             String(
                 format: String(
                     localized: "dispatch.delete-goal-confirmation-message",
-                    defaultValue: "“%@” has received Goal instructions. Deleting it will stop its current work and remove its task conversations. This cannot be undone."
+                    defaultValue: "“%@” has received project instructions. Deleting it will stop its current work and remove its task conversations. This cannot be undone."
                 ),
                 title
             )
@@ -255,7 +294,7 @@ extension L10n {
         static let cancelled = String(localized: "dispatch.cancelled", defaultValue: "Cancelled")
         static let interruptTitle = String(
             localized: "dispatch.interrupt-title",
-            defaultValue: "Interrupt the current Goal execution?"
+            defaultValue: "Interrupt the current project execution?"
         )
         static let interruptMessage = String(
             localized: "dispatch.interrupt-message",
@@ -279,7 +318,7 @@ extension L10n {
         )
         static let goalPausedLaunch = String(
             localized: "dispatch.goal-paused-launch",
-            defaultValue: "Resume this Goal before launching another task."
+            defaultValue: "Resume this project before launching another task."
         )
         static let taskStarted = String(
             localized: "dispatch.task-started",

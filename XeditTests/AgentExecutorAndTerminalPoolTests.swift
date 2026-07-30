@@ -25,6 +25,76 @@ struct AgentExecutorAndTerminalPoolTests {
         #expect(catalogEntry?.integration == .directTool("codex_cli"))
     }
 
+    @Test("调度台发现多个 Codex 与 Claude Profile 并安全传参")
+    func dispatchCLIProfilesAreDiscoveredAndForwarded() throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(
+            "WillDeepCLIProfiles-\(UUID().uuidString)",
+            isDirectory: true
+        )
+        let codexHome = root.appendingPathComponent("codex", isDirectory: true)
+        let userAgents = root
+            .appendingPathComponent(".claude", isDirectory: true)
+            .appendingPathComponent("agents", isDirectory: true)
+        let workspace = root.appendingPathComponent("workspace", isDirectory: true)
+        let projectAgents = workspace
+            .appendingPathComponent(".claude", isDirectory: true)
+            .appendingPathComponent("agents", isDirectory: true)
+        for directory in [codexHome, userAgents, projectAgents] {
+            try FileManager.default.createDirectory(
+                at: directory,
+                withIntermediateDirectories: true
+            )
+        }
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        try "".write(
+            to: codexHome.appendingPathComponent("fast.config.toml"),
+            atomically: true,
+            encoding: .utf8
+        )
+        try "".write(
+            to: userAgents.appendingPathComponent("reviewer.md"),
+            atomically: true,
+            encoding: .utf8
+        )
+        try "".write(
+            to: projectAgents.appendingPathComponent("implementer.md"),
+            atomically: true,
+            encoding: .utf8
+        )
+
+        let profiles = LocalAgentCLIProfile.discover(
+            workspacePath: workspace.path,
+            homeDirectory: root,
+            codexHomeDirectory: codexHome
+        )
+        #expect(profiles.map(\.id) == [
+            "codex:fast",
+            "claude-agent:implementer",
+            "claude-agent:reviewer",
+        ])
+
+        let codex = AgentToolRunner.codexCLICommandLine(
+            executable: "/x/codex",
+            prompt: "implement",
+            permissionMode: "workspaceWrite",
+            model: nil,
+            workspacePath: workspace.path,
+            profile: "fast"
+        )
+        #expect(codex.contains("--profile 'fast'"))
+
+        let claude = AgentToolRunner.claudeCodeCommandLine(
+            executable: "/x/claude",
+            prompt: "review",
+            permissionMode: "plan",
+            model: nil,
+            agent: "reviewer"
+        )
+        #expect(claude.contains("--agent 'reviewer'"))
+        #expect(!LocalAgentCLIProfile.profileNameIsSafe("bad profile; rm"))
+    }
+
     @Test("delegated terminal pool uses reusable sh tabs with a hard cap")
     func delegatedTerminalPoolPolicy() {
         #expect(AgentTerminalTab.delegatedShellExecutable == "/bin/sh")

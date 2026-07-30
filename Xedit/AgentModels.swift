@@ -54,6 +54,11 @@ nonisolated struct AgentSession: Identifiable, Codable, Equatable {
     /// Dedicated workflow sessions are persisted like conversations, but are
     /// presented only by their owning surface.
     var presentationScope: AgentSessionPresentationScope
+    /// Dispatch task conversations belong to one top-level project. Keeping
+    /// this ownership on the session prevents task runtimes from being
+    /// projected back into the dispatch sidebar as duplicate projects.
+    var dispatchParentProjectID: UUID?
+    var dispatchTaskID: UUID?
     /// Best-effort local folder identity for recovering from Finder moves
     /// or renames. Tools do not poll this on the happy path; it is consulted
     /// only after the recorded path appears to have failed.
@@ -176,6 +181,8 @@ nonisolated struct AgentSession: Identifiable, Codable, Equatable {
         workspaceLocation: WorkspaceLocation? = nil,
         sidebarWorkspaceRootPath: String? = nil,
         presentationScope: AgentSessionPresentationScope = .workspace,
+        dispatchParentProjectID: UUID? = nil,
+        dispatchTaskID: UUID? = nil,
         localWorkspaceIdentity: LocalWorkspaceIdentity? = nil,
         modelID: String? = nil,
         providerID: String? = nil,
@@ -215,6 +222,8 @@ nonisolated struct AgentSession: Identifiable, Codable, Equatable {
         self.workspaceLocation = workspaceLocation ?? workspaceRootPath.map { .local(path: $0) }
         self.sidebarWorkspaceRootPath = sidebarWorkspaceRootPath
         self.presentationScope = presentationScope
+        self.dispatchParentProjectID = dispatchParentProjectID
+        self.dispatchTaskID = dispatchTaskID
         self.localWorkspaceIdentity = localWorkspaceIdentity
             ?? AgentWorkspaceAvailabilityResolver.captureIdentity(for: self.workspaceLocation?.localPath ?? workspaceRootPath)
         self.modelID = modelID
@@ -313,7 +322,7 @@ nonisolated struct AgentSession: Identifiable, Codable, Equatable {
     // currentGoal) loads cleanly — every newer field uses
     // decodeIfPresent with a default.
     enum CodingKeys: String, CodingKey {
-        case id, title, workspaceRootPath, workspaceLocation, sidebarWorkspaceRootPath, presentationScope, localWorkspaceIdentity, modelID
+        case id, title, workspaceRootPath, workspaceLocation, sidebarWorkspaceRootPath, presentationScope, dispatchParentProjectID, dispatchTaskID, localWorkspaceIdentity, modelID
         case providerID, providerDisplayName, managedRouting
         case createdAt, updatedAt, messages, contextSummary, contextSummaryThroughMessageID
         case didEditFiles, agentEditedPaths, agentArtifactPaths, interactionMode, approvalMode, executionAgent, delegatedTaskRuns, activeExperts, currentPlan, currentGoal, goalPlanningState, goalTurnRecoveryCheckpoint, learningEvents, latestTurnRecall, documentAttachments, knowledgeFolders, documentTaskMode, redactSensitiveAttachmentContent, sidePanelState
@@ -328,6 +337,11 @@ nonisolated struct AgentSession: Identifiable, Codable, Equatable {
         self.workspaceLocation = try c.decodeIfPresent(WorkspaceLocation.self, forKey: .workspaceLocation)
             ?? self.workspaceRootPath.map { .local(path: $0) }
         self.sidebarWorkspaceRootPath = try c.decodeIfPresent(String.self, forKey: .sidebarWorkspaceRootPath)
+        self.dispatchParentProjectID = try c.decodeIfPresent(
+            UUID.self,
+            forKey: .dispatchParentProjectID
+        )
+        self.dispatchTaskID = try c.decodeIfPresent(UUID.self, forKey: .dispatchTaskID)
         self.localWorkspaceIdentity = try c.decodeIfPresent(LocalWorkspaceIdentity.self, forKey: .localWorkspaceIdentity)
         self.modelID = try c.decodeIfPresent(String.self, forKey: .modelID)
         self.providerID = try c.decodeIfPresent(String.self, forKey: .providerID)

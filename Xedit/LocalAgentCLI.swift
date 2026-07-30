@@ -9,6 +9,108 @@
 
 import Foundation
 
+nonisolated struct LocalAgentCLIProfile: Identifiable, Equatable {
+    nonisolated enum Configuration: Equatable {
+        case codexConfig(name: String)
+        case claudeAgent(name: String)
+    }
+
+    let id: String
+    let displayName: String
+    let executor: AgentExecutionAgent
+    let configuration: Configuration
+
+    var argument: (name: String, value: String) {
+        switch configuration {
+        case .codexConfig(let name):
+            return ("profile", name)
+        case .claudeAgent(let name):
+            return ("agent", name)
+        }
+    }
+
+    nonisolated static func discover(
+        workspacePath: String?,
+        homeDirectory: URL = FileManager.default.homeDirectoryForCurrentUser,
+        codexHomeDirectory: URL? = nil,
+        fileManager: FileManager = .default
+    ) -> [LocalAgentCLIProfile] {
+        let codexDirectory = codexHomeDirectory
+            ?? ProcessInfo.processInfo.environment["CODEX_HOME"].map {
+                URL(fileURLWithPath: $0, isDirectory: true)
+            }
+            ?? homeDirectory.appendingPathComponent(".codex", isDirectory: true)
+        let codexProfiles = namedFiles(
+            in: codexDirectory,
+            suffix: ".config.toml",
+            fileManager: fileManager
+        ).map { name in
+            LocalAgentCLIProfile(
+                id: "codex:\(name)",
+                displayName: name,
+                executor: .codexCLI,
+                configuration: .codexConfig(name: name)
+            )
+        }
+
+        var claudeDirectories = [
+            homeDirectory
+                .appendingPathComponent(".claude", isDirectory: true)
+                .appendingPathComponent("agents", isDirectory: true),
+        ]
+        if let workspacePath, !workspacePath.isEmpty {
+            claudeDirectories.append(
+                URL(fileURLWithPath: workspacePath, isDirectory: true)
+                    .appendingPathComponent(".claude", isDirectory: true)
+                    .appendingPathComponent("agents", isDirectory: true)
+            )
+        }
+        var seenClaudeNames: Set<String> = []
+        let claudeProfiles = claudeDirectories.flatMap {
+            namedFiles(in: $0, suffix: ".md", fileManager: fileManager)
+        }
+        .filter { seenClaudeNames.insert($0).inserted }
+        .sorted()
+        .map { name in
+            LocalAgentCLIProfile(
+                id: "claude-agent:\(name)",
+                displayName: name,
+                executor: .claudeCode,
+                configuration: .claudeAgent(name: name)
+            )
+        }
+
+        return codexProfiles + claudeProfiles
+    }
+
+    nonisolated private static func namedFiles(
+        in directory: URL,
+        suffix: String,
+        fileManager: FileManager
+    ) -> [String] {
+        guard let names = try? fileManager.contentsOfDirectory(atPath: directory.path) else {
+            return []
+        }
+        return names.compactMap { fileName in
+            guard fileName.hasSuffix(suffix), fileName.count > suffix.count else {
+                return nil
+            }
+            let name = String(fileName.dropLast(suffix.count))
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            return profileNameIsSafe(name) ? name : nil
+        }
+        .sorted()
+    }
+
+    nonisolated static func profileNameIsSafe(_ name: String) -> Bool {
+        guard !name.isEmpty else { return false }
+        let allowed = CharacterSet.alphanumerics.union(
+            CharacterSet(charactersIn: "._-")
+        )
+        return name.unicodeScalars.allSatisfy(allowed.contains)
+    }
+}
+
 struct LocalAgentCLI: Identifiable, Equatable {
     nonisolated enum Integration: Equatable, Sendable {
         case directTool(String)

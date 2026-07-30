@@ -122,8 +122,22 @@ private struct AgentDispatchBoardContent: View {
             AgentDispatchGoalHeader(
                 goal: goal,
                 runtimeDescriptors: runtimeDescriptors,
+                modelIDs: dispatchModelIDs(for: goal),
+                cliProfiles: LocalAgentCLIProfile.discover(
+                    workspacePath: goal.logicalProject?.primaryWorkspacePath
+                ),
                 onExecutorChoice: { coordinator.updateGoalExecutorChoice($0, goalID: goal.id) },
                 onTargetChoice: { coordinator.updateGoalTargetChoice($0, goalID: goal.id) },
+                onModelRouting: {
+                    appState.updateDispatchGoalModelRouting($0, goalID: goal.id)
+                },
+                onCLIProfile: { executor, profileID in
+                    coordinator.updateGoalCLIProfile(
+                        profileID,
+                        executor: executor,
+                        goalID: goal.id
+                    )
+                },
                 onChooseLocalWorkspace: {
                     appState.chooseLocalWorkspaceForDispatchGoal(goalID: goal.id) { error in
                         if let error {
@@ -445,8 +459,8 @@ private struct AgentDispatchBoardContent: View {
     }
 
     private func launchFirstReadyTask(in goal: AgentDispatchGoal) {
-        guard let task = goal.tasks.first(where: { $0.state == .queued })
-            ?? coordinator.selectedTask else {
+        guard !goal.isExecutionActive,
+              let task = goal.tasks.first(where: { $0.state == .queued }) else {
             alertTarget = .message(
                 title: L10n.Dispatch.launchFailed,
                 message: L10n.Dispatch.waitingForDependencies
@@ -454,6 +468,25 @@ private struct AgentDispatchBoardContent: View {
             return
         }
         launchTask(goalID: goal.id, taskID: task.id)
+    }
+
+    private func dispatchModelIDs(for goal: AgentDispatchGoal) -> [String] {
+        let routing = goal.effectiveModelRouting
+        let candidates = [
+            routing.planningModelID,
+            routing.executionModelID,
+            AgentDispatchModelRouting.recommendedPlanningModel,
+            AgentDispatchModelRouting.recommendedExecutionModel,
+        ].compactMap { $0 }
+            + appState.agentRecentlyUsedModelIDs
+            + appState.agentKnownModelIDs
+        var seen: Set<String> = []
+        return candidates.filter { modelID in
+            let trimmed = modelID.trimmingCharacters(in: .whitespacesAndNewlines)
+            return !trimmed.isEmpty && seen.insert(trimmed.lowercased()).inserted
+        }
+        .prefix(24)
+        .map { $0 }
     }
 
     private func launchTask(goalID: UUID, taskID: UUID) {

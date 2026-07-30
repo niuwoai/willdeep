@@ -208,6 +208,7 @@ extension AppState {
         images: [AgentImageAttachment],
         textAttachments: [AgentTextAttachment] = [],
         attachedSkills: [AgentSkillEntry] = [],
+        delegatedProfile: LocalAgentCLIProfile? = nil,
         source: AgentMessageSource = .operatorInput
     ) {
         switch executionAgent {
@@ -228,6 +229,7 @@ extension AppState {
                 textAttachments: textAttachments,
                 attachedSkills: attachedSkills,
                 executionAgent: executionAgent,
+                delegatedProfile: delegatedProfile,
                 source: source
             )
         }
@@ -240,6 +242,7 @@ extension AppState {
         textAttachments: [AgentTextAttachment] = [],
         attachedSkills: [AgentSkillEntry] = [],
         executionAgent: AgentExecutionAgent,
+        delegatedProfile: LocalAgentCLIProfile? = nil,
         source: AgentMessageSource = .operatorInput
     ) {
         guard let toolName = executionAgent.toolName else {
@@ -307,7 +310,8 @@ extension AppState {
             prompt: prompt,
             executionAgent: executionAgent,
             contract: delegatedContract,
-            planningOnly: runtime.currentTurnPlanningOnly
+            planningOnly: runtime.currentTurnPlanningOnly,
+            profile: delegatedProfile
         )
         let externalID = "composer-\(executionAgent.rawValue)-\(UUID().uuidString)"
         let assistantMessage = AgentMessage(
@@ -742,6 +746,9 @@ extension AppState {
                     prompt: reviewPrompt,
                     executionAgent: executionAgent
                 )
+                for key in ["profile", "agent", "model"] {
+                    reviewArguments[key] = arguments[key]
+                }
                 reviewArguments["permission_mode"] = .string("plan")
                 reviewArguments["run_in_background"] = .bool(false)
                 reviewArguments["use_visible_terminal"] = .bool(true)
@@ -1465,7 +1472,8 @@ extension AppState {
         prompt: String,
         executionAgent: AgentExecutionAgent,
         contract: AgentDelegatedTaskContract? = nil,
-        planningOnly: Bool = false
+        planningOnly: Bool = false,
+        profile: LocalAgentCLIProfile? = nil
     ) -> [String: AgentJSONValue] {
         var arguments: [String: AgentJSONValue] = [
             "prompt": .string(prompt),
@@ -1485,6 +1493,10 @@ extension AppState {
             arguments["verification_policy"] = .string(
                 contract.requiresFreshSelfReview ? "double" : "self"
             )
+        }
+        if let profile, profile.executor == executionAgent {
+            let argument = profile.argument
+            arguments[argument.name] = .string(argument.value)
         }
         return arguments
     }

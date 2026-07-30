@@ -1244,7 +1244,8 @@ enum AgentToolRunner {
         prompt: String,
         permissionMode: String,
         model: String?,
-        imagePaths: [String] = []
+        imagePaths: [String] = [],
+        agent: String? = nil
     ) -> String {
         var parts = [shellQuoted(executable)]
         let imageDirectories = Array(Set(imagePaths.map {
@@ -1260,6 +1261,9 @@ enum AgentToolRunner {
         ]
         if let model, !model.isEmpty {
             parts += ["--model", shellQuoted(model)]
+        }
+        if let agent, !agent.isEmpty {
+            parts += ["--agent", shellQuoted(agent)]
         }
         return parts.joined(separator: " ")
     }
@@ -1296,13 +1300,21 @@ enum AgentToolRunner {
                 "Claude Code CLI not found on this Mac. Install it first (e.g. `npm install -g @anthropic-ai/claude-code` or the native installer from https://claude.com/claude-code), then retry. Tell the user instead of retrying blindly."
             )
         }
+        let agent = arguments["agent"]?.stringValue()?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        if let agent, !LocalAgentCLIProfile.profileNameIsSafe(agent) {
+            throw AgentToolError.invalidArgument(
+                "agent must contain only letters, numbers, dot, underscore, or hyphen"
+            )
+        }
 
         let command = claudeCodeCommandLine(
             executable: executable,
             prompt: prompt,
             permissionMode: permissionMode,
             model: arguments["model"]?.stringValue(),
-            imagePaths: delegatedImagePaths(arguments)
+            imagePaths: delegatedImagePaths(arguments),
+            agent: agent
         )
 
         return try await runDelegatedAgentCommand(command, arguments: arguments, context: context)
@@ -1405,7 +1417,8 @@ enum AgentToolRunner {
         permissionMode: String,
         model: String?,
         workspacePath: String?,
-        imagePaths: [String] = []
+        imagePaths: [String] = [],
+        profile: String? = nil
     ) -> String {
         let sandbox = permissionMode == "plan" ? "read-only" : "workspace-write"
         var parts = [
@@ -1416,6 +1429,9 @@ enum AgentToolRunner {
             "--skip-git-repo-check",
             "--sandbox", sandbox,
         ]
+        if let profile, !profile.isEmpty {
+            parts += ["--profile", shellQuoted(profile)]
+        }
         if let workspacePath, !workspacePath.isEmpty {
             parts += ["--cd", shellQuoted(workspacePath)]
         }
@@ -1511,13 +1527,21 @@ enum AgentToolRunner {
                 "Codex CLI not found on this Mac. Install Codex CLI or the Codex desktop app, then retry. Tell the user instead of retrying blindly."
             )
         }
+        let profile = arguments["profile"]?.stringValue()?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        if let profile, !LocalAgentCLIProfile.profileNameIsSafe(profile) {
+            throw AgentToolError.invalidArgument(
+                "profile must contain only letters, numbers, dot, underscore, or hyphen"
+            )
+        }
         let command = codexCLICommandLine(
             executable: executable,
             prompt: prompt,
             permissionMode: permissionMode,
             model: arguments["model"]?.stringValue(),
             workspacePath: context.workspaceLocation?.path ?? context.rootDirectory?.standardizedFileURL.path,
-            imagePaths: delegatedImagePaths(arguments)
+            imagePaths: delegatedImagePaths(arguments),
+            profile: profile
         )
         return try await runDelegatedAgentCommand(command, arguments: arguments, context: context)
     }

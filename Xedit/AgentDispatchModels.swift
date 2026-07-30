@@ -65,6 +65,36 @@ nonisolated enum AgentDispatchTargetChoice: Codable, Equatable, Hashable {
     case remote(UUID)
 }
 
+/// Per-project model roles. Planning stays on the top-level project session;
+/// ordinary implementation runs use the execution model on child task
+/// sessions. Model IDs are provider-agnostic so relay providers such as
+/// some.im can combine model families without changing the project shape.
+nonisolated struct AgentDispatchModelRouting: Codable, Equatable {
+    static let recommendedPlanningModel = "kimi-k3"
+    static let recommendedExecutionModel = "deepseek-v4-pro"
+
+    var planningModelID: String?
+    var executionModelID: String?
+
+    static let costOptimized = AgentDispatchModelRouting(
+        planningModelID: recommendedPlanningModel,
+        executionModelID: recommendedExecutionModel
+    )
+
+    init(
+        planningModelID: String? = recommendedPlanningModel,
+        executionModelID: String? = recommendedExecutionModel
+    ) {
+        self.planningModelID = Self.normalized(planningModelID)
+        self.executionModelID = Self.normalized(executionModelID)
+    }
+
+    nonisolated private static func normalized(_ value: String?) -> String? {
+        let trimmed = value?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        return trimmed.isEmpty ? nil : trimmed
+    }
+}
+
 /// Stable identity for the logical project owned by a Goal.
 ///
 /// Execution checkouts are deliberately kept outside this value: a Task may
@@ -227,6 +257,13 @@ nonisolated struct AgentDispatchGoal: Codable, Equatable, Identifiable {
     var tasks: [AgentDispatchTask]
     var executorChoice: AgentDispatchExecutorChoice
     var targetChoice: AgentDispatchTargetChoice
+    /// Nil on legacy records; callers use `effectiveModelRouting` so old
+    /// projects receive the cost-optimized defaults without migration UI.
+    var modelRouting: AgentDispatchModelRouting? = nil
+    /// Selected local CLI profile IDs keyed by `AgentExecutionAgent.rawValue`.
+    /// Profiles are discovered from the user's Codex/Claude configuration;
+    /// only the stable ID is stored with the project.
+    var cliProfileSelections: [String: String]? = nil
     var isPaused: Bool
     var commands: [AgentDispatchCommand]
     var createdAt: Date
@@ -240,6 +277,29 @@ nonisolated struct AgentDispatchGoal: Codable, Equatable, Identifiable {
 
     var activeTaskCount: Int {
         tasks.filter { $0.state == .running || $0.state == .reviewing }.count
+    }
+
+    var isExecutionActive: Bool {
+        activeTaskCount > 0
+    }
+
+    var hasStartedExecution: Bool {
+        tasks.contains {
+            $0.runtimeSessionID != nil
+                || ![.blocked, .queued].contains($0.state)
+        }
+    }
+
+    var hasReadyTask: Bool {
+        tasks.contains { $0.state == .queued }
+    }
+
+    var effectiveModelRouting: AgentDispatchModelRouting {
+        modelRouting ?? .costOptimized
+    }
+
+    func selectedCLIProfileID(for executor: AgentExecutionAgent) -> String? {
+        cliProfileSelections?[executor.rawValue]
     }
 
     var deletionRequiresConfirmation: Bool {
