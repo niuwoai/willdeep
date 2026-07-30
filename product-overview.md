@@ -1,6 +1,6 @@
 # WillDeep Product Overview
 
-> Last updated: 2026-07-30 | Current version: v1.213.0-rc1
+> Last updated: 2026-07-30 | Current version: v1.213.0-rc2
 
 ## Positioning
 
@@ -13,6 +13,7 @@ WillDeep is configured for non-App-Store distribution without App Sandbox so it 
 ## 架构概览
 
 - **Graph Engineer 图工程调度台（1.213.0-rc1）** —— Goal 的真实 `dependencyIDs` 现在驱动可滚动、可缩放的二维 DAG 画布，任务节点按依赖层级自动布局并通过端口与曲线连接；分支末端统一汇入可选中的验收关卡，多前置任务会明确呈现合流关系。任务节点、验收关卡和右侧 Inspector 使用同一选择模型，点击后详情同步切换；“追加任务 / 调整计划”不再把文字塞进聊天框，而是打开结构化节点编辑器，用于维护标题、多个前置节点和逐条验收标准，并在保存时拒绝循环依赖。底部聊天式输入降级为可折叠的运行时指令控制台，画布主操作集中到添加/编辑节点、暂停/恢复与缩放工具栏。
+- **审批模式边界（1.213.0-rc2）** —— 智能审核和工作区可写都会直接应用经过路径校验的工作区文件变更，只有严格模式逐个展示文件审核卡；智能审核继续对外部操作做安全分类与模型判断，工作区可写则对外部操作保持人工确认。模式菜单按自动化程度从高到低排列，严格模式固定在最后。
 - **外部执行器实时监督反馈（1.212.0-rc9）** —— Claude Code、Codex CLI、Cursor Agent 与 Cline CLI 的可见终端输出继续完整保留在 Agent Terminal，同时由 runner 约每秒读取有限尾部、移除 ANSI 控制序列并完成密钥脱敏后，向 Composer 活动行、工具时间线和详情卡回传当前动作与最近输出。UI 使用宿主真实状态机展示“执行中 / 执行器独立验收 / WillDeep 二次验收 / 定点返工 / 验收通过”和尝试次数，不根据日志猜测虚假百分比；实时日志尾部仅用于内存渲染，不写入会话 JSON。
 - **调度台 Goal 创建改为结构化工作台（1.212.0-rc8）** —— 调度台选择工作区后直接展示目标陈述、逐项验收清单、工作区与自动调度策略摘要；提交后原位进入任务图。创建阶段不再复用聊天 transcript、消息气泡、普通 Composer 或聊天状态栏，结构化草稿也不会制造伪聊天消息。
 - **本地编译、单测与发布预热共享热缓存（1.212.0-rc7）** —— `ruby scripts/build_fast.rb` 作为 Debug/Release 增量编译入口，默认将 DerivedData、SwiftPM checkout、独立 package 下载缓存与 Xcode compilation cache 固定在 `~/Library/Caches/WillDeep/Xcode/Xedit`；本地快速单测和完整单测也默认复用同一路径，因此一次编译可以直接为后续测试预热，反向亦然。CLI 构建默认关闭 index store 以减少额外工作，但不修改 Xcode IDE 的工程索引设置；可用 `--index`、`--sign`、`--release`、`--destination` 或环境变量显式覆盖。`generic/platform=macOS` 可为 new83d 正式 archive 预热目标架构，但正式签名、公证、上传与 appcast 仍由发布引擎完成。每次编译输出 Markdown、JSON、原始日志及项目构建守卫报告；当前工作区实测冷构建 683.9 秒、无变更热构建 24.8 秒，源码回退时 compilation cache 命中 2/3 个任务并在 24.6 秒完成。

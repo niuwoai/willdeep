@@ -6399,13 +6399,13 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Auto-write with a git baseline; intelligently review external actions."
+            "value" : "Auto-write in the workspace; intelligently review external actions."
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "有 Git 基线时自动写入工作区，并智能审核外部操作。"
+            "value" : "自动写入工作区，并智能审核外部操作。"
           }
         }
       }

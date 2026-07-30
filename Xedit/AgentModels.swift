@@ -760,9 +760,9 @@ nonisolated enum AgentInteractionMode: String, Codable, CaseIterable, Identifiab
 /// automatically, and danger-tier tools still require typed confirmation.
 /// Goal's host-owned evidence phase remains read-only until validation.
 nonisolated enum AgentApprovalMode: String, Codable, CaseIterable, Identifiable {
-    case requestEveryTime
     case smart
     case workspaceAccess
+    case requestEveryTime
 
     var id: String { rawValue }
 
@@ -787,7 +787,7 @@ nonisolated enum AgentApprovalMode: String, Codable, CaseIterable, Identifiable 
         case .requestEveryTime:
             return "Strict mode: ask before every write or external action. Read-only tools may run automatically. Danger-tier tools still require typed confirmation."
         case .smart:
-            return "Use WillDeep's smart review policy: read-only tools run automatically; workspace writes auto-run only with a committed git baseline; safe external actions may be AI-approved; uncertain or risky actions ask the user."
+            return "Use WillDeep's smart review policy: read-only tools and workspace-scoped writes run automatically; safe external actions may be AI-approved; uncertain or risky external actions ask the user."
         case .workspaceAccess:
             return "Allow write-tier actions and delegated agent work inside the current workspace to auto-run. External/network actions, danger-tier tools, the Plan gate, and untrusted MCP calls still require user approval."
         }
@@ -798,7 +798,7 @@ nonisolated enum AgentApprovalMode: String, Codable, CaseIterable, Identifiable 
         case .requestEveryTime:
             return "Strict: reads auto-run; every write or external action asks; danger-tier commands require typed confirmation."
         case .smart:
-            return "Reads auto-run; git-backed workspace writes and safe reviewed external actions may auto-run; uncertain actions ask; danger-tier commands require typed confirmation."
+            return "Reads and workspace-scoped writes auto-run; safe external actions may pass intelligent review; uncertain external actions ask; danger-tier commands require typed confirmation."
         case .workspaceAccess:
             return "Reads and workspace-scoped writes auto-run; untrusted external actions ask; danger-tier commands require typed confirmation."
         }

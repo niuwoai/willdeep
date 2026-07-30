@@ -2215,7 +2215,7 @@ struct WillDeepTests {
             rootDirectory: noGitRoot,
             approvalMode: .smart
         )
-        #expect(noGitBuild == nil)
+        #expect(noGitBuild == .staticAllowlist)
 
         let gitDelegatedAgent = await appState.autoApprovalSource(
             toolName: "claude_code",
@@ -2233,7 +2233,7 @@ struct WillDeepTests {
             rootDirectory: noGitRoot,
             approvalMode: .smart
         )
-        #expect(noGitDelegatedAgent == nil)
+        #expect(noGitDelegatedAgent == .staticAllowlist)
 
         let yarnBuild = await appState.autoApprovalSource(
             toolName: "run_command",
@@ -2272,7 +2272,7 @@ struct WillDeepTests {
         #expect(outsideWorkspaceGeneration == nil)
     }
 
-    @Test("smart review requires a committed git baseline for workspace writes")
+    @Test("git baseline detection remains available for recovery diagnostics")
     func testRecoverableGitBaselineDetection() throws {
         #expect(AppState.findGitRepositoryRoot(startingAt: URL(fileURLWithPath: "/")) == nil)
 

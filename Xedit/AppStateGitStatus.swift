@@ -293,9 +293,9 @@ extension AppState {
         }
     }
 
-    /// Smart review may write without asking only when git can restore the
-    /// workspace to a committed baseline. A freshly initialized repository
-    /// has a `.git` directory but no `HEAD`, so it is not recoverable yet.
+    /// Reports whether git can restore the workspace to a committed
+    /// baseline. Approval policy no longer depends on this diagnostic: Smart
+    /// review trusts the workspace boundary, while Strict mode always asks.
     nonisolated static func hasRecoverableGitBaseline(startingAt directoryURL: URL?) -> Bool {
         guard let directoryURL,
               let repositoryRoot = findGitRepositoryRoot(startingAt: directoryURL) else {

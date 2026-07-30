@@ -212,9 +212,9 @@ extension WillDeepTests {
         #expect(try String(contentsOf: fileURL, encoding: .utf8) == "let value = 3\n")
     }
 
-    @Test("apply_patch auto-applies clean tracked files but queues dirty tracked files")
+    @Test("Smart review auto-applies clean and dirty workspace files")
     @MainActor
-    func testApplyPatchAutoAppliesOnlyCleanTrackedFiles() throws {
+    func testSmartReviewAutoAppliesWorkspaceFilesRegardlessOfGitStatus() throws {
         let workspace = FileManager.default.temporaryDirectory
             .appendingPathComponent("willdeep_apply_patch_clean_tracked_\(UUID().uuidString)", isDirectory: true)
         try FileManager.default.createDirectory(at: workspace, withIntermediateDirectories: true)
@@ -258,7 +258,7 @@ extension WillDeepTests {
         )
 
         #expect(cleanProposal.status == .applied)
-        #expect(cleanProposal.statusMessage == "Auto-applied because edited files are tracked and clean in git")
+        #expect(cleanProposal.statusMessage == "Auto-applied by Smart review")
         #expect(try String(contentsOf: cleanURL, encoding: .utf8) == "let clean = 2\n")
 
         try "let dirty = 2\n".write(to: dirtyURL, atomically: true, encoding: .utf8)
@@ -275,14 +275,14 @@ extension WillDeepTests {
             """
         )
 
-        #expect(dirtyProposal.status == .pending)
-        #expect(dirtyProposal.statusMessage == nil)
-        #expect(try String(contentsOf: dirtyURL, encoding: .utf8) == "let dirty = 2\n")
+        #expect(dirtyProposal.status == .applied)
+        #expect(dirtyProposal.statusMessage == "Auto-applied by Smart review")
+        #expect(try String(contentsOf: dirtyURL, encoding: .utf8) == "let dirty = 3\n")
     }
 
-    @Test("Smart without git and Strict mode keep workspace writes pending")
+    @Test("Smart writes without git while Strict keeps workspace changes pending")
     @MainActor
-    func testPatchWritesRequireConfirmationWithoutGitOrInStrictMode() throws {
+    func testOnlyStrictModeRequiresWorkspacePatchConfirmation() throws {
         let workspace = FileManager.default.temporaryDirectory
             .appendingPathComponent("willdeep_patch_mode_gate_\(UUID().uuidString)", isDirectory: true)
         try FileManager.default.createDirectory(at: workspace, withIntermediateDirectories: true)
@@ -306,8 +306,9 @@ extension WillDeepTests {
             ),
             applyImmediately: true
         )
-        #expect(smartCreation.status == .pending)
-        #expect(!FileManager.default.fileExists(
+        #expect(smartCreation.status == .applied)
+        #expect(smartCreation.statusMessage == "Auto-applied by Smart review")
+        #expect(FileManager.default.fileExists(
             atPath: workspace.appendingPathComponent("Generated.swift").path
         ))
 
@@ -350,10 +351,10 @@ extension WillDeepTests {
 
         let goalFileURL = workspace.appendingPathComponent("Goal.swift")
         let workspaceFileURL = workspace.appendingPathComponent("Workspace.swift")
-        let manualFileURL = workspace.appendingPathComponent("Manual.swift")
+        let smartFileURL = workspace.appendingPathComponent("Smart.swift")
         try "let value = 1\n".write(to: goalFileURL, atomically: true, encoding: .utf8)
         try "let value = 1\n".write(to: workspaceFileURL, atomically: true, encoding: .utf8)
-        try "let value = 1\n".write(to: manualFileURL, atomically: true, encoding: .utf8)
+        try "let value = 1\n".write(to: smartFileURL, atomically: true, encoding: .utf8)
 
         let appState = AppState(rootDirectory: workspace)
         let session = appState.startNewAgentSession()
@@ -408,10 +409,10 @@ extension WillDeepTests {
         runtime.patchProposals.append(
             AgentPatchProposal(
                 messageID: UUID(),
-                title: "Manual pending",
+                title: "Smart pending",
                 diff: """
-                --- a/Manual.swift
-                +++ b/Manual.swift
+                --- a/Smart.swift
+                +++ b/Smart.swift
                 @@ -1 +1 @@
                 -let value = 1
                 +let value = 2
@@ -420,9 +421,9 @@ extension WillDeepTests {
         )
 
         #expect(appState.resolvePendingAgentPatchProposalsBeforeNewMessage(for: runtime) == 1)
-        #expect(runtime.patchProposals.last?.status == .rejected)
-        #expect(runtime.patchProposals.last?.statusMessage == "Superseded by a newer message.")
-        #expect(try String(contentsOf: manualFileURL, encoding: .utf8) == "let value = 1\n")
+        #expect(runtime.patchProposals.last?.status == .applied)
+        #expect(runtime.patchProposals.last?.statusMessage == "Auto-applied by Smart review")
+        #expect(try String(contentsOf: smartFileURL, encoding: .utf8) == "let value = 2\n")
     }
 
     @Test("manual patch Apply resumes the tool and rewrites stale pending feedback")

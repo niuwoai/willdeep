@@ -522,7 +522,6 @@ extension AppState {
     ) throws -> AgentPatchProposal {
         let parsed = try AgentPatchApplier.parse(diff)
         try validateUniqueAgentPatchTargets(parsed, runtime: runtime)
-        let isPureCreation = !parsed.isEmpty && parsed.allSatisfy(\.isNewFile)
 
         let proposalIndex: Int
         if let existingIndex = runtime.patchProposals.firstIndex(where: { $0.diff == diff }) {
@@ -538,29 +537,18 @@ extension AppState {
             proposalIndex = runtime.patchProposals.count - 1
         }
 
-        let isCleanTrackedModify = shouldAutoApplyCleanTrackedPatch(changes: parsed, runtime: runtime)
-        let smartHasRecoverableBaseline = runtime.approvalMode == .smart
-            && Self.hasRecoverableGitBaseline(startingAt: agentPatchWorkspaceRoot(for: runtime))
-        let smartCanAutoApply = smartHasRecoverableBaseline
-            && (isPureCreation || applyImmediately || isCleanTrackedModify)
+        let effectiveAutoApplySource = autoApplySource
+            ?? (runtime.approvalMode == .smart ? AgentToolApprovalSource.staticAllowlist : nil)
 
-        // Goal / Workspace Access can write immediately. Smart review does
-        // so only with a committed git baseline, and still protects dirty or
-        // unsaved tracked files. Strict mode and Smart without git always
-        // leave a patch card for explicit confirmation.
-        if (autoApplySource != nil || smartCanAutoApply),
+        // Goal, Smart review, and Workspace Access apply validated
+        // workspace-contained patches immediately. Strict mode is the only
+        // posture that leaves every file change pending for explicit review.
+        if let effectiveAutoApplySource,
            runtime.patchProposals[proposalIndex].status == .pending {
-            let appliedMessage = autoApplySource
-                .map(autoApplyStatusMessage(for:))
-                ?? autoApplyStatusMessage(
-                    isPureCreation: isPureCreation,
-                    applyImmediately: applyImmediately,
-                    isCleanTrackedModify: isCleanTrackedModify
-                )
             let outcome = resolveAgentPatchApplication(
                 diff,
                 runtime: runtime,
-                appliedMessage: appliedMessage
+                appliedMessage: autoApplyStatusMessage(for: effectiveAutoApplySource)
             )
             runtime.patchProposals[proposalIndex].status = outcome.status
             runtime.patchProposals[proposalIndex].statusMessage = outcome.message
@@ -570,29 +558,14 @@ extension AppState {
         return runtime.patchProposals[proposalIndex]
     }
 
-    private func autoApplyStatusMessage(
-        isPureCreation: Bool,
-        applyImmediately: Bool,
-        isCleanTrackedModify: Bool
-    ) -> String {
-        if isPureCreation {
-            return "New file written automatically"
-        }
-        if applyImmediately {
-            return "Applied immediately as requested"
-        }
-        if isCleanTrackedModify {
-            return "Auto-applied because edited files are tracked and clean in git"
-        }
-        return "Auto-applied"
-    }
-
     private func autoApplyStatusMessage(for source: AgentToolApprovalSource) -> String {
         switch source {
         case .goalMode:
             return "Auto-applied by Goal mode"
         case .workspaceAccess:
             return "Auto-applied by workspace access approval"
+        case .staticAllowlist:
+            return "Auto-applied by Smart review"
         default:
             return "Auto-applied"
         }
@@ -605,55 +578,10 @@ extension AppState {
         if runtime.approvalMode == .workspaceAccess {
             return .workspaceAccess
         }
+        if runtime.approvalMode == .smart {
+            return .staticAllowlist
+        }
         return nil
-    }
-
-    private func shouldAutoApplyCleanTrackedPatch(
-        changes: [AgentPatchFileChange],
-        runtime: AgentRuntime?
-    ) -> Bool {
-        guard !changes.isEmpty,
-              !changes.contains(where: \.isNewFile),
-              let workspaceRoot = agentPatchWorkspaceRoot(for: runtime)?.standardizedFileURL,
-              let repositoryRoot = Self.findGitRepositoryRoot(startingAt: workspaceRoot)?.standardizedFileURL else {
-            return false
-        }
-
-        let workspacePath = workspaceRoot.path
-        let repositoryPath = repositoryRoot.path
-        return changes.allSatisfy { change in
-            guard let url = try? resolveAgentPatchURL(change.path, root: workspaceRoot, rootPath: workspacePath),
-                  FileManager.default.fileExists(atPath: url.path),
-                  !agentPatchHasUnsavedEditorChanges(for: url) else {
-                return false
-            }
-            let repositoryRelativePath = Self.relativeWorkspacePath(
-                for: url,
-                root: repositoryRoot,
-                rootPath: repositoryPath
-            )
-            guard !repositoryRelativePath.isEmpty else { return false }
-
-            let tracked = Self.runGitCommand(
-                arguments: ["ls-files", "--error-unmatch", "--", repositoryRelativePath],
-                in: repositoryRoot
-            ).succeeded
-            guard tracked else { return false }
-
-            let status = Self.runGit(
-                arguments: ["status", "--porcelain=v1", "--", repositoryRelativePath],
-                in: repositoryRoot
-            ).trimmingCharacters(in: .whitespacesAndNewlines)
-            return status.isEmpty
-        }
-    }
-
-    private func agentPatchHasUnsavedEditorChanges(for url: URL) -> Bool {
-        let standardizedPath = url.standardizedFileURL.path
-        if tabs.contains(where: { $0.url.standardizedFileURL.path == standardizedPath && $0.isEdited }) {
-            return true
-        }
-        return openedFileURL?.standardizedFileURL.path == standardizedPath && isEdited
     }
 
     func applyAgentPatch(_ diff: String) throws {

@@ -279,15 +279,11 @@ extension AppState {
         }
 
         // Delegated coding agents can modify many files in one call. Smart
-        // review skips WillDeep's outer gate only when the workspace has a
-        // committed git baseline. Workspace Access remains an explicit user
-        // choice and does not require git; Strict mode returned above.
+        // review and Workspace Access both let workspace-scoped delegated
+        // work pass WillDeep's outer gate; the delegated runner keeps its own
+        // sandbox and review boundary. Strict mode returned above.
         if Self.isTrustedDelegatedAgentTool(toolName) {
-            if approvalMode == .workspaceAccess
-                || Self.hasRecoverableGitBaseline(startingAt: rootDirectory) {
-                return .staticAllowlist
-            }
-            return nil
+            return .staticAllowlist
         }
 
         // Remote media-render jobs (some.im / Replicate submit·poll·cancel)
@@ -428,12 +424,10 @@ extension AppState {
 
         if sandboxDecision.mode == .workspaceWrite
             || sandboxDecision.mode == .workspaceWriteNetwork {
-            // Without a committed baseline, even a contained build or file
-            // generation command must be confirmed. Read-only commands and
-            // external/network calls still use smart classification below.
-            guard Self.hasRecoverableGitBaseline(startingAt: rootDirectory) else {
-                return nil
-            }
+            // Smart review treats workspace containment as the local write
+            // boundary. Git remains useful for recovery, but its absence must
+            // not turn every in-workspace change into a user approval card.
+            // External effects continue through the classifier/judge below.
             if AgentSandboxPolicy.canAutoApproveWorkspaceWriteCommand(
                 command: command,
                 rootDirectory: rootDirectory

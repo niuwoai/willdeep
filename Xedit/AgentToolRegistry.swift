@@ -188,7 +188,7 @@ enum AgentToolRegistry {
         ),
         AgentToolDescriptor(
             name: "create_file",
-            description: "Create a BRAND-NEW file. This is the ONLY correct way to make a new file — do NOT use edit_file or apply_patch for creation. Pass the workspace-relative path and the full file content directly; no diff to hand-craft. Fails if the path already exists. Goal mode, Workspace Access, or Smart review with a committed git baseline writes immediately; otherwise an inline file card asks the user to Apply. For several independent files, emit all create_file/edit_file calls in one assistant response so WillDeep can present one Apply All review group.",
+            description: "Create a BRAND-NEW file. This is the ONLY correct way to make a new file — do NOT use edit_file or apply_patch for creation. Pass the workspace-relative path and the full file content directly; no diff to hand-craft. Fails if the path already exists. Goal mode, Smart review, and Workspace Access write validated workspace files immediately; Strict mode presents an inline file card for the user to Apply. For several independent files, emit all create_file/edit_file calls in one assistant response so WillDeep can present one Apply All review group.",
             risk: .read,
             parameters: [
                 AgentToolParameter(name: "path", type: .string, description: "Workspace-relative path of the NEW file, e.g. `src/utils/date.ts` or `docs/README.md`. Must not already exist.", required: true),
@@ -198,7 +198,7 @@ enum AgentToolRegistry {
         ),
         AgentToolDescriptor(
             name: "edit_file",
-            description: "EDIT an EXISTING file by EXACT STRING REPLACEMENT — the PREFERRED way to edit files. Pass the workspace-relative path, the exact current text to replace (old_string) and its replacement (new_string). old_string must match the file content EXACTLY and appear exactly ONCE unless replace_all=true. In Smart review, a clean git-tracked file with a committed baseline writes immediately; dirty, unsaved, untracked, or non-git files show an inline patch card for the user to click Apply. Goal mode or Workspace Access also applies immediately; Strict mode always asks. For several independent files, emit all create_file/edit_file calls in one assistant response so WillDeep can present one Apply All review group. Keep dependent edits to the same file ordered. To CREATE a new file, use `create_file`.",
+            description: "EDIT an EXISTING file by EXACT STRING REPLACEMENT — the PREFERRED way to edit files. Pass the workspace-relative path, the exact current text to replace (old_string) and its replacement (new_string). old_string must match the file content EXACTLY and appear exactly ONCE unless replace_all=true. Goal mode, Smart review, and Workspace Access apply validated workspace edits immediately; Strict mode always asks. For several independent files, emit all create_file/edit_file calls in one assistant response so WillDeep can present one Apply All review group. Keep dependent edits to the same file ordered. To CREATE a new file, use `create_file`.",
             risk: .read,
             parameters: [
                 AgentToolParameter(name: "path", type: .string, description: "Workspace-relative path of the EXISTING file to edit, e.g. `src/utils/date.ts`.", required: true),
@@ -206,17 +206,17 @@ enum AgentToolRegistry {
                 AgentToolParameter(name: "new_string", type: .string, description: "Replacement text. Pass an empty string to delete old_string. Must differ from old_string.", required: true),
                 AgentToolParameter(name: "replace_all", type: .boolean, description: "Replace EVERY occurrence of old_string instead of requiring a unique match (e.g. renaming a symbol). Defaults to false.", required: false),
                 AgentToolParameter(name: "title", type: .string, description: "Optional short title for the patch card. Defaults to `编辑文件: <path>`.", required: false),
-                AgentToolParameter(name: "apply_immediately", type: .boolean, description: "Set true ONLY when the user explicitly asked to write / save directly without review (e.g. \"直接写\", \"直接落盘\", \"不用审核\", \"just write it\", \"save it directly\"). The edit then writes to disk immediately instead of waiting for the user to click Apply. Defaults to false.", required: false)
+                AgentToolParameter(name: "apply_immediately", type: .boolean, description: "Set true ONLY when the user explicitly asked to write / save directly without review (e.g. \"直接写\", \"直接落盘\", \"不用审核\", \"just write it\", \"save it directly\"). Smart review and Workspace Access already write immediately. Strict mode ignores this flag because every workspace change requires review. Defaults to false.", required: false)
             ]
         ),
         AgentToolDescriptor(
             name: "apply_patch",
-            description: "LEGACY fallback for editing an EXISTING file via a hand-written unified diff. PREFER `edit_file`; use apply_patch only when exact replacement cannot express the change. To CREATE a new file, use `create_file`. In Smart review, clean git-tracked files with a committed baseline write immediately; dirty, unsaved, untracked, or non-git files show a patch card INLINE IN THE CHAT. Goal mode or Workspace Access also applies immediately; Strict mode always asks. Validates the diff shape before queuing.",
+            description: "LEGACY fallback for editing an EXISTING file via a hand-written unified diff. PREFER `edit_file`; use apply_patch only when exact replacement cannot express the change. To CREATE a new file, use `create_file`. Goal mode, Smart review, and Workspace Access apply validated workspace edits immediately; Strict mode presents the patch card INLINE IN THE CHAT. Validates the diff shape before queuing.",
             risk: .read,
             parameters: [
                 AgentToolParameter(name: "diff", type: .string, description: "Unified diff for an EXISTING file. Use workspace-relative paths (`--- a/path`, `+++ b/path`) and standard @@ hunks. (New files: use `create_file`, not a `/dev/null` diff here.)", required: true),
                 AgentToolParameter(name: "title", type: .string, description: "Optional short title for the patch card. Defaults to Agent Patch.", required: false),
-                AgentToolParameter(name: "apply_immediately", type: .boolean, description: "Set true ONLY when the user explicitly asked to write / save directly without review (e.g. \"直接写\", \"直接落盘\", \"不用审核\", \"just write it\", \"save it directly\"). The edit then writes to disk immediately instead of waiting for the user to click Apply. Defaults to false.", required: false)
+                AgentToolParameter(name: "apply_immediately", type: .boolean, description: "Set true ONLY when the user explicitly asked to write / save directly without review (e.g. \"直接写\", \"直接落盘\", \"不用审核\", \"just write it\", \"save it directly\"). Smart review and Workspace Access already write immediately. Strict mode ignores this flag because every workspace change requires review. Defaults to false.", required: false)
             ]
         ),
         AgentToolDescriptor(

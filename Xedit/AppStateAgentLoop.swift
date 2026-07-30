@@ -2433,6 +2433,9 @@ extension AppState {
         if runtime.approvalMode == .workspaceAccess {
             return .workspaceAccess
         }
+        if runtime.approvalMode == .smart {
+            return .staticAllowlist
+        }
         return nil
     }
 
