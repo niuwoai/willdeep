@@ -566,7 +566,11 @@ extension AppState {
 
         // `var` so a managed output-quality failure can swap in an escalated
         // client and re-run the round (see the no-tool-call guard below).
-        var client = AgentClient(configuration: turnConfiguration, someIMContext: someIMContext)
+        var client = AgentClient(
+            configuration: turnConfiguration,
+            someIMContext: someIMContext,
+            openAIResponsesContinuationState: runtime.openAIResponsesContinuationState
+        )
         // Resolve the runtime's workspace path for tool execution —
         // never read AppState.rootDirectory here. Concurrent runtimes
         // can be running against different workspaces; the window's
@@ -1049,7 +1053,11 @@ extension AppState {
                             runtime.messages.remove(at: dropIndex)
                         }
                         turnConfiguration.model = escalatedModel
-                        client = AgentClient(configuration: turnConfiguration, someIMContext: someIMContext)
+                        client = AgentClient(
+                            configuration: turnConfiguration,
+                            someIMContext: someIMContext,
+                            openAIResponsesContinuationState: runtime.openAIResponsesContinuationState
+                        )
                         let escalatedTier = SomeIMManagedModel.tier(of: escalatedModel)
                         if let escalatedTier {
                             // Cap the persisted floor at one step above the

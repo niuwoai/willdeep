@@ -22,6 +22,18 @@ nonisolated struct AgentGoalTurnRecoveryCheckpoint: Codable, Equatable, Identifi
     }
 }
 
+/// Durable Responses API cursor metadata for one conversation.
+///
+/// Only opaque response ids and SHA-256 request signatures are persisted.
+/// Prompt text, tool schemas, credentials, and duplicate message bodies are
+/// deliberately excluded from this snapshot.
+nonisolated struct AgentOpenAIResponsesContinuationSnapshot: Codable, Equatable {
+    let responseID: String
+    let contextSignature: Data
+    let inputItemSignatures: [Data]
+    let updatedAt: Date
+}
+
 /// The product surface that owns a persisted session. Dedicated workflow
 /// sessions still reuse AgentSessionStore, but must not leak into the ordinary
 /// workspace conversation list.
@@ -70,6 +82,10 @@ nonisolated struct AgentSession: Identifiable, Codable, Equatable {
     /// can group historical sessions by the actual configured provider.
     var providerID: String?
     var providerDisplayName: String?
+    /// Server-side Responses continuation cursor and stable request hashes.
+    /// Optional for backwards compatibility and cleared automatically when
+    /// the upstream reports that the stored response no longer exists.
+    var openAIResponsesContinuation: AgentOpenAIResponsesContinuationSnapshot?
     /// Per-session "省心托管" (some.im managed routing) state. Non-nil only
     /// when the user selected managed routing for this session; carries the
     /// only-goes-up capability floor. Orthogonal to `modelID` / override —
@@ -187,6 +203,7 @@ nonisolated struct AgentSession: Identifiable, Codable, Equatable {
         modelID: String? = nil,
         providerID: String? = nil,
         providerDisplayName: String? = nil,
+        openAIResponsesContinuation: AgentOpenAIResponsesContinuationSnapshot? = nil,
         managedRouting: AgentManagedRoutingState? = nil,
         createdAt: Date = Date(),
         updatedAt: Date = Date(),
@@ -229,6 +246,7 @@ nonisolated struct AgentSession: Identifiable, Codable, Equatable {
         self.modelID = modelID
         self.providerID = providerID
         self.providerDisplayName = providerDisplayName
+        self.openAIResponsesContinuation = openAIResponsesContinuation
         self.managedRouting = managedRouting
         self.createdAt = createdAt
         self.updatedAt = updatedAt
@@ -323,7 +341,7 @@ nonisolated struct AgentSession: Identifiable, Codable, Equatable {
     // decodeIfPresent with a default.
     enum CodingKeys: String, CodingKey {
         case id, title, workspaceRootPath, workspaceLocation, sidebarWorkspaceRootPath, presentationScope, dispatchParentProjectID, dispatchTaskID, localWorkspaceIdentity, modelID
-        case providerID, providerDisplayName, managedRouting
+        case providerID, providerDisplayName, openAIResponsesContinuation, managedRouting
         case createdAt, updatedAt, messages, contextSummary, contextSummaryThroughMessageID
         case didEditFiles, agentEditedPaths, agentArtifactPaths, interactionMode, approvalMode, executionAgent, delegatedTaskRuns, activeExperts, currentPlan, currentGoal, goalPlanningState, goalTurnRecoveryCheckpoint, learningEvents, latestTurnRecall, documentAttachments, knowledgeFolders, documentTaskMode, redactSensitiveAttachmentContent, sidePanelState
         case pinnedAt, archivedAt, titleIsUserSet
@@ -346,6 +364,10 @@ nonisolated struct AgentSession: Identifiable, Codable, Equatable {
         self.modelID = try c.decodeIfPresent(String.self, forKey: .modelID)
         self.providerID = try c.decodeIfPresent(String.self, forKey: .providerID)
         self.providerDisplayName = try c.decodeIfPresent(String.self, forKey: .providerDisplayName)
+        self.openAIResponsesContinuation = try c.decodeIfPresent(
+            AgentOpenAIResponsesContinuationSnapshot.self,
+            forKey: .openAIResponsesContinuation
+        )
         self.managedRouting = try c.decodeIfPresent(AgentManagedRoutingState.self, forKey: .managedRouting)
         self.createdAt = try c.decode(Date.self, forKey: .createdAt)
         self.updatedAt = try c.decode(Date.self, forKey: .updatedAt)
@@ -1599,6 +1621,21 @@ struct AgentConfiguration: Codable, Equatable {
             return override
         }
         return AgentProviderPreset.preset(id: providerID)?.kind ?? .openAIChat
+    }
+
+    /// Transport used for model inference. GPT-5-family ids are routed through
+    /// `/responses` even when their OpenAI-compatible provider entry still
+    /// uses the legacy Chat protocol. Native Anthropic/Gemini configurations
+    /// remain pinned to their own incompatible wire formats.
+    var inferenceProviderKind: AgentProviderKind {
+        let configuredKind = providerKind
+        guard configuredKind == .openAIChat || configuredKind == .openAIResponses else {
+            return configuredKind
+        }
+        if model.range(of: "gpt-5", options: [.caseInsensitive]) != nil {
+            return .openAIResponses
+        }
+        return configuredKind
     }
 }
 

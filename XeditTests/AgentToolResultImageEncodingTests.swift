@@ -13,6 +13,212 @@ import Testing
 @Suite
 struct AgentToolResultImageEncodingTests {
     @Test
+    func gpt5ModelsUseResponsesForOpenAICompatibleInference() {
+        let gpt5FamilyModels = [
+            "gpt-5",
+            "gpt-5.4",
+            "gpt-5.5",
+            "gpt-5.6-sol",
+            "openai/gpt-5.4-codex",
+            "vendor/GPT-5.6-sol"
+        ]
+        let legacyConfiguration = AgentConfiguration(
+            providerID: AgentProviderPreset.openAIID,
+            baseURL: "https://api.openai.com/v1",
+            model: "gpt-4.1",
+            apiKey: "test"
+        ).normalized
+        let nativeAnthropicConfiguration = AgentConfiguration(
+            providerID: AgentProviderPreset.customID,
+            baseURL: "https://example.com",
+            model: "gpt-5-compatible-alias",
+            apiKey: "test",
+            customKindOverride: .anthropicMessages
+        ).normalized
+
+        for model in gpt5FamilyModels {
+            let configuration = AgentConfiguration(
+                providerID: AgentProviderPreset.openAIID,
+                baseURL: "https://api.openai.com/v1",
+                model: model,
+                apiKey: "test"
+            ).normalized
+            #expect(configuration.inferenceProviderKind == .openAIResponses)
+        }
+        #expect(legacyConfiguration.inferenceProviderKind == .openAIChat)
+        #expect(nativeAnthropicConfiguration.inferenceProviderKind == .anthropicMessages)
+    }
+
+    @Test
+    func openAIResponsesUsesPreviousResponseForStrictlyAppendedToolOutput() throws {
+        let state = OpenAIResponsesContinuationState()
+        let initialMessages = [
+            AgentMessage(role: .system, content: "You are a coding agent."),
+            AgentMessage(role: .user, content: "Inspect the project.")
+        ]
+        let initialBody = try OpenAIResponsesAdapter.encodeRequestBody(
+            model: "gpt-5",
+            messages: initialMessages,
+            tools: [],
+            supportsImages: true
+        )
+        let initialRequest = try state.prepare(fullBody: initialBody)
+        #expect(!initialRequest.usesPreviousResponse)
+        state.commit(responseID: "resp_first", preparedRequest: initialRequest)
+
+        let appendedMessages = initialMessages + [
+            AgentMessage(
+                role: .assistant,
+                content: "",
+                toolCalls: [
+                    AgentMessageToolCall(
+                        externalID: "call_read",
+                        toolName: "read_file",
+                        argumentsJSON: #"{"path":"README.md"}"#
+                    )
+                ]
+            ),
+            AgentMessage(
+                role: .tool,
+                content: "Project readme",
+                toolCallID: "call_read"
+            )
+        ]
+        let appendedBody = try OpenAIResponsesAdapter.encodeRequestBody(
+            model: "gpt-5",
+            messages: appendedMessages,
+            tools: [],
+            supportsImages: true
+        )
+        let continuedRequest = try state.prepare(fullBody: appendedBody)
+        let continuedObject = try toolResultImageJSONObject(continuedRequest.body)
+        let deltaInput = try #require(continuedObject["input"] as? [[String: Any]])
+
+        #expect(continuedRequest.usesPreviousResponse)
+        #expect(continuedObject["previous_response_id"] as? String == "resp_first")
+        #expect(continuedObject["store"] as? Bool == true)
+        #expect(deltaInput.count == 1)
+        #expect(deltaInput[0]["type"] as? String == "function_call_output")
+        #expect(deltaInput[0]["call_id"] as? String == "call_read")
+    }
+
+    @Test
+    func openAIResponsesRestoresCursorAndSendsOnlyNewUserInput() throws {
+        let state = OpenAIResponsesContinuationState()
+        let initialMessages = [
+            AgentMessage(role: .system, content: "You are a coding agent."),
+            AgentMessage(role: .user, content: "Inspect the project.")
+        ]
+        let initialBody = try OpenAIResponsesAdapter.encodeRequestBody(
+            model: "gpt-5",
+            messages: initialMessages,
+            tools: [],
+            supportsImages: true
+        )
+        let initialRequest = try state.prepare(fullBody: initialBody)
+        state.commit(responseID: "resp_first", preparedRequest: initialRequest)
+
+        let persistedSession = AgentSession(
+            openAIResponsesContinuation: try #require(state.persistedSnapshot)
+        )
+        let persistedData = try JSONEncoder().encode(persistedSession)
+        let restoredSession = try JSONDecoder().decode(AgentSession.self, from: persistedData)
+        let restoredState = OpenAIResponsesContinuationState(
+            persistedSnapshot: restoredSession.openAIResponsesContinuation
+        )
+
+        // Recreate the earlier messages with fresh UUIDs/timestamps, as happens
+        // when the app rebuilds its system message after a restart.
+        let replayedMessages = [
+            AgentMessage(role: .system, content: "You are a coding agent."),
+            AgentMessage(role: .user, content: "Inspect the project.")
+        ]
+        let appendedMessages = replayedMessages + [
+            AgentMessage(role: .assistant, content: "The project uses Swift."),
+            AgentMessage(role: .user, content: "Now inspect its tests.")
+        ]
+        let appendedBody = try OpenAIResponsesAdapter.encodeRequestBody(
+            model: "gpt-5",
+            messages: appendedMessages,
+            tools: [],
+            supportsImages: true
+        )
+        let continuedRequest = try restoredState.prepare(fullBody: appendedBody)
+        let continuedObject = try toolResultImageJSONObject(continuedRequest.body)
+        let deltaInput = try #require(continuedObject["input"] as? [[String: Any]])
+        let userContent = try #require(deltaInput.first?["content"] as? [[String: Any]])
+
+        #expect(continuedRequest.usesPreviousResponse)
+        #expect(continuedObject["previous_response_id"] as? String == "resp_first")
+        #expect(deltaInput.count == 1)
+        #expect(deltaInput[0]["role"] as? String == "user")
+        #expect(userContent.first?["text"] as? String == "Now inspect its tests.")
+    }
+
+    @Test
+    func openAIResponsesFallsBackWhenContextOrTransportChanges() throws {
+        let state = OpenAIResponsesContinuationState()
+        let initialMessages = [
+            AgentMessage(role: .system, content: "Original instructions"),
+            AgentMessage(role: .user, content: "First question")
+        ]
+        let initialBody = try OpenAIResponsesAdapter.encodeRequestBody(
+            model: "gpt-5",
+            messages: initialMessages,
+            tools: [],
+            supportsImages: true
+        )
+        let initialRequest = try state.prepare(
+            fullBody: initialBody,
+            transportIdentity: "relay-a"
+        )
+        state.commit(responseID: "resp_first", preparedRequest: initialRequest)
+
+        let stableAppendedMessages = initialMessages + [
+            AgentMessage(role: .assistant, content: "First answer"),
+            AgentMessage(role: .user, content: "Follow-up")
+        ]
+        let stableAppendedBody = try OpenAIResponsesAdapter.encodeRequestBody(
+            model: "gpt-5",
+            messages: stableAppendedMessages,
+            tools: [],
+            supportsImages: true
+        )
+        let transportFallbackRequest = try state.prepare(
+            fullBody: stableAppendedBody,
+            transportIdentity: "relay-b"
+        )
+        let transportFallbackObject = try toolResultImageJSONObject(
+            transportFallbackRequest.body
+        )
+
+        let changedMessages = [
+            AgentMessage(role: .system, content: "Changed instructions"),
+            initialMessages[1],
+            AgentMessage(role: .assistant, content: "First answer"),
+            AgentMessage(role: .user, content: "Follow-up")
+        ]
+        let changedBody = try OpenAIResponsesAdapter.encodeRequestBody(
+            model: "gpt-5",
+            messages: changedMessages,
+            tools: [],
+            supportsImages: true
+        )
+        let fallbackRequest = try state.prepare(
+            fullBody: changedBody,
+            transportIdentity: "relay-a"
+        )
+        let fallbackObject = try toolResultImageJSONObject(fallbackRequest.body)
+        let fullInput = try #require(fallbackObject["input"] as? [[String: Any]])
+
+        #expect(!transportFallbackRequest.usesPreviousResponse)
+        #expect(transportFallbackObject["previous_response_id"] == nil)
+        #expect(!fallbackRequest.usesPreviousResponse)
+        #expect(fallbackObject["previous_response_id"] == nil)
+        #expect(fullInput.count == 3)
+    }
+
+    @Test
     func openAIChatPlacesToolImagesAfterCompleteToolOutputGroup() throws {
         let data = try OpenAIChatAdapter.encodeChatRequest(
             model: "gpt-4.1",

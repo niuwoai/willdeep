@@ -1,6 +1,6 @@
 # WillDeep Product Overview
 
-> Last updated: 2026-07-30 | Current version: v1.216.0-rc1
+> Last updated: 2026-07-31 | Current version: v1.218.0-rc1
 
 ## Positioning
 
@@ -11,6 +11,10 @@ Official product domain: [willdeep.com](https://willdeep.com).
 WillDeep is configured for non-App-Store distribution without App Sandbox so it can access local project files with fewer permission interruptions.
 
 ## 架构概览
+
+- **GPT-5 自动 Responses 路由与跨重启续接（1.218.0-rc1）** —— OpenAI-compatible Provider 中模型 ID 只要包含 `gpt-5`（大小写不敏感，例如 `gpt-5.4`、`gpt-5.5`、`gpt-5.6-sol`）就自动通过 `/responses` 推理，无需用户另选 Responses Provider；Anthropic 与 Gemini 原生协议不参与误判。成功 Response 的 `response_id`、上下文哈希和 wire-input 哈希随会话 JSON 持久化，应用重启后仍可通过 `previous_response_id + 增量 input` 继续；落盘内容不包含重复提示词、工具 schema、凭据或消息正文。上游游标失效，或 Provider/Base URL/API Key、模型、提示词、工具及历史前缀变化时安全回退完整请求；some.im 会话/工作区头及 OpenRouter branding 在自动路由后继续保留。
+
+- **Responses 有状态增量续接（1.217.0-rc1）** —— 选择 OpenAI Responses 协议的模型后，每个打开的会话会保留最近一次成功 Response 的游标；只有模型、instructions、工具 schema、图像能力与既有消息严格不变且历史仅追加时，后续工具轮次或用户轮次才发送 `previous_response_id + 增量 input`。请求显式使用 `store: true`，独立安全判定使用 `store: false`；上游返回游标不存在、过期或不支持时自动清除游标并以完整历史重试，修改上下文、切换模型/工具或压缩历史也会直接走完整请求。
 
 - **工作区 Goal 感知与单实例调度（1.216.0-rc1）** —— 普通会话会从宿主获取当前工作区其他未完成 Goal 的目标、进度、运行状态与调度归属，并同时注入 Agent 上下文、工作区会话工具和早期 Composer 提示，避免重复建立目标或与已有执行争抢同一现场。同一逻辑项目（本机按 Git common directory、远端按精确位置）只允许一个未暂停且未完成的调度项目运行；重复创建会直接打开现有调度，暂停或全部任务合并后释放名额，恢复、提交草稿和启动子任务都会再次执行冲突校验，历史重复记录同步时自动只保留一个运行实例。
 

@@ -1,7 +1,47 @@
 # Changelog
 
-> 当前文件保留最新版本（1.216.0-rc1 至 1.109.0-rc340）。
+> 当前文件保留最新版本（1.218.0-rc1 至 1.109.0-rc340）。
 > 更早的 1000 个版本已移至 [CHANGELOG-ARCHIVE.md](CHANGELOG-ARCHIVE.md)。
+
+## 1.218.0-rc1 - 2026-07-31
+
+### Added
+
+- **GPT-5 自动 Responses 路由**：OpenAI-compatible Provider 的最终推理模型 ID 只要包含 `gpt-5`（大小写不敏感，例如 `gpt-5.4`、`gpt-5.5`、`gpt-5.6-sol`），主回复与安全判定就自动使用 `/responses`；显式 Responses Provider 继续生效，Anthropic/Gemini 原生协议保持原路由。
+- **Responses 游标跨重启续接**：最近一次成功 Response 的游标与稳定请求签名随 `AgentSession` JSON 持久化，重新打开应用和会话后仍能只发送新增用户输入或工具结果。
+
+### Changed
+
+- 续接前缀校验从包含临时消息 UUID/时间戳的消息编码，改为真实 Responses wire input 的 SHA-256 签名；系统消息在重建或应用重启后不会因本地身份变化误触发完整历史回退。
+- 持久化快照只保存不透明 `response_id`、上下文哈希、逐 input-item 哈希和更新时间，不重复保存提示词、工具 schema、凭据或消息正文；Provider、Base URL 或 API Key 变化会改变仅存哈希的连接身份并强制发送完整历史。
+- 自动切换 Responses 后继续携带 some.im 会话/工作区上下文头、额度响应观察以及 OpenRouter branding；游标失效仍会清除快照并以完整历史自动重试一次。
+
+### Tests
+
+- 新增 `gpt-5`/非 GPT-5/原生 Anthropic 路由边界，以及会话序列化、模拟应用重启、恢复游标后仅发送新增用户输入的回归；Responses/工具图像编码定向测试套件 11 项全部通过。
+
+### Meta
+
+- 功能版本从 **1.217.0-rc1** 提升为 **1.218.0-rc1**，内部构建号从 **220** 递增为 **221**，Help 与 Computer Use Helper 构建号从 **137** 递增为 **138**；App、Go agent、Help、Helper、浏览器扩展、README、响应头契约与产品文档保持一致。
+
+## 1.217.0-rc1 - 2026-07-30
+
+### Added
+
+- **Responses 有状态增量续接**：OpenAI Responses 会话会记录最近一次成功 Response 的游标；当模型、instructions、工具 schema、图像能力与既有消息保持一致且历史严格追加时，后续请求只上传 `previous_response_id` 与增量 `input`，覆盖同一回合的工具循环及打开期间的后续用户回合。
+
+### Changed
+
+- Responses 主请求显式设置 `store: true`，独立安全判定显式设置 `store: false`；模型、工具、上下文或旧消息发生变化时仍发送完整历史。
+- 上游返回 `previous_response_id` 不存在、过期或不支持时，客户端会清除会话游标并自动用完整历史重试一次，兼容仅提供无状态 Responses 外壳的网关。
+
+### Tests
+
+- 新增严格追加时仅发送工具结果增量、早期 instructions 变化时回退完整历史的回归；定向执行 Responses/工具图像编码测试套件 9 项，全部通过。
+
+### Meta
+
+- 功能版本从 **1.216.0-rc1** 提升为 **1.217.0-rc1**，内部构建号从 **219** 递增为 **220**，Help 与 Computer Use Helper 构建号从 **136** 递增为 **137**；App、Go agent、Help、Helper、浏览器扩展、README、响应头契约与产品文档保持一致。
 
 ## 1.216.0-rc1 - 2026-07-30
 

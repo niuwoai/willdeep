@@ -31,15 +31,174 @@
 //  synthesis needed (unlike the Gemini adapter).
 //
 
+import CryptoKit
 import Foundation
+
+/// Per-conversation continuation cursor for the Responses API.
+///
+/// The server owns the canonical response history. Locally we retain only
+/// enough request metadata to prove that the next request is a strict append
+/// of the request that produced `responseID`. If any earlier message, model,
+/// instructions, tool schema, or image capability changes, preparation falls
+/// back to a full request instead of risking a forked/malformed conversation.
+nonisolated final class OpenAIResponsesContinuationState: @unchecked Sendable {
+    struct PreparedRequest {
+        let body: Data
+        let responseID: String?
+        fileprivate let contextSignature: Data
+        fileprivate let inputItemSignatures: [Data]
+
+        var usesPreviousResponse: Bool { responseID != nil }
+    }
+
+    private let lock = NSLock()
+    private var snapshot: AgentOpenAIResponsesContinuationSnapshot?
+
+    init(persistedSnapshot: AgentOpenAIResponsesContinuationSnapshot? = nil) {
+        if let persistedSnapshot,
+           !persistedSnapshot.responseID.isEmpty,
+           !persistedSnapshot.contextSignature.isEmpty,
+           !persistedSnapshot.inputItemSignatures.isEmpty {
+            snapshot = persistedSnapshot
+        } else {
+            snapshot = nil
+        }
+    }
+
+    var persistedSnapshot: AgentOpenAIResponsesContinuationSnapshot? {
+        lock.withLock { snapshot }
+    }
+
+    func prepare(fullBody: Data, transportIdentity: String = "") throws -> PreparedRequest {
+        let requestObject = try Self.requestObject(from: fullBody)
+        let contextSignature = try Self.contextSignature(
+            for: requestObject,
+            transportIdentity: transportIdentity
+        )
+        let input = requestObject["input"] as? [[String: Any]] ?? []
+        let inputItemSignatures = try input.map(Self.inputItemSignature)
+
+        return try lock.withLock {
+            guard let snapshot,
+                  snapshot.contextSignature == contextSignature,
+                  inputItemSignatures.count > snapshot.inputItemSignatures.count,
+                  Array(inputItemSignatures.prefix(snapshot.inputItemSignatures.count))
+                    == snapshot.inputItemSignatures else {
+                return PreparedRequest(
+                    body: fullBody,
+                    responseID: nil,
+                    contextSignature: contextSignature,
+                    inputItemSignatures: inputItemSignatures
+                )
+            }
+
+            let appendedInput = Array(input.dropFirst(snapshot.inputItemSignatures.count))
+            let serverOutputCount = appendedInput.prefix(while: Self.isServerOutputItem).count
+            guard serverOutputCount > 0 else {
+                return PreparedRequest(
+                    body: fullBody,
+                    responseID: nil,
+                    contextSignature: contextSignature,
+                    inputItemSignatures: inputItemSignatures
+                )
+            }
+            let deltaInput = Array(appendedInput.dropFirst(serverOutputCount))
+            guard !deltaInput.isEmpty else {
+                return PreparedRequest(
+                    body: fullBody,
+                    responseID: nil,
+                    contextSignature: contextSignature,
+                    inputItemSignatures: inputItemSignatures
+                )
+            }
+
+            var continuationObject = requestObject
+            continuationObject["input"] = deltaInput
+            continuationObject["previous_response_id"] = snapshot.responseID
+            let continuationBody = try JSONSerialization.data(
+                withJSONObject: continuationObject,
+                options: [.sortedKeys]
+            )
+            return PreparedRequest(
+                body: continuationBody,
+                responseID: snapshot.responseID,
+                contextSignature: contextSignature,
+                inputItemSignatures: inputItemSignatures
+            )
+        }
+    }
+
+    func commit(responseID: String, preparedRequest: PreparedRequest) {
+        guard !responseID.isEmpty else { return }
+        lock.withLock {
+            snapshot = AgentOpenAIResponsesContinuationSnapshot(
+                responseID: responseID,
+                contextSignature: preparedRequest.contextSignature,
+                inputItemSignatures: preparedRequest.inputItemSignatures,
+                updatedAt: Date()
+            )
+        }
+    }
+
+    func invalidate(responseID: String? = nil) {
+        lock.withLock {
+            guard responseID == nil || snapshot?.responseID == responseID else { return }
+            snapshot = nil
+        }
+    }
+
+    private static func requestObject(from body: Data) throws -> [String: Any] {
+        guard let object = try JSONSerialization.jsonObject(with: body) as? [String: Any] else {
+            throw AgentClientError.invalidResponse
+        }
+        return object
+    }
+
+    private static func contextSignature(
+        for requestObject: [String: Any],
+        transportIdentity: String
+    ) throws -> Data {
+        var context = requestObject
+        context.removeValue(forKey: "input")
+        context.removeValue(forKey: "previous_response_id")
+        context["_willdeep_transport_identity"] = transportIdentity
+        return try signature(of: context)
+    }
+
+    private static func inputItemSignature(_ inputItem: [String: Any]) throws -> Data {
+        try signature(of: inputItem)
+    }
+
+    private static func signature(of object: Any) throws -> Data {
+        let canonical = try JSONSerialization.data(withJSONObject: object, options: [.sortedKeys])
+        return Data(SHA256.hash(data: canonical))
+    }
+
+    private static func isServerOutputItem(_ inputItem: [String: Any]) -> Bool {
+        if inputItem["type"] as? String == "function_call" {
+            return true
+        }
+        return inputItem["type"] as? String == "message"
+            && inputItem["role"] as? String == "assistant"
+    }
+}
 
 struct OpenAIResponsesAdapter {
     private let configuration: AgentConfiguration
     private let session: URLSession
+    private let continuationState: OpenAIResponsesContinuationState
+    private let someIMContext: SomeIMRequestContext?
 
-    init(configuration: AgentConfiguration, session: URLSession? = nil) {
+    init(
+        configuration: AgentConfiguration,
+        session: URLSession? = nil,
+        continuationState: OpenAIResponsesContinuationState = OpenAIResponsesContinuationState(),
+        someIMContext: SomeIMRequestContext? = nil
+    ) {
         self.configuration = configuration.normalized
         self.session = session ?? AgentNetworkSupport.defaultSession()
+        self.continuationState = continuationState
+        self.someIMContext = someIMContext
     }
 
     // MARK: - streamChat
@@ -54,82 +213,112 @@ struct OpenAIResponsesAdapter {
         }
 
         let endpoint = try responsesEndpoint(from: configuration.baseURL)
-        var request = URLRequest(url: endpoint)
-        request.timeoutInterval = AgentNetworkSupport.requestTimeout
-        request.httpMethod = "POST"
-        applyAuthenticationHeaders(to: &request)
-        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        request.setValue("text/event-stream", forHTTPHeaderField: "Accept")
-
         let requestMessages = AgentClient.providerReadyMessages(
             messages,
             supportsImages: configuration.supportsImageInput
         )
-        let requestBody = try Self.encodeRequestBody(
+        let fullRequestBody = try Self.encodeRequestBody(
             model: configuration.model,
             messages: requestMessages,
             tools: tools,
             supportsImages: configuration.supportsImageInput
         )
-        request.httpBody = requestBody
+        var mayUseContinuation = true
 
-        let (bytes, response) = try await session.bytes(for: request)
-        guard let httpResponse = response as? HTTPURLResponse else {
-            throw AgentClientError.invalidResponse
-        }
-        guard (200..<300).contains(httpResponse.statusCode) else {
-            let responseBody = try await AgentNetworkSupport.collectBody(from: bytes)
-            throw AgentClientError.serverStatus(
-                httpError(
-                    statusCode: httpResponse.statusCode,
-                    method: request.httpMethod ?? "POST",
-                    url: endpoint,
-                    requestBody: requestBody,
-                    responseBody: responseBody,
-                    messages: requestMessages
+        while true {
+            let preparedRequest: OpenAIResponsesContinuationState.PreparedRequest
+            if mayUseContinuation {
+                preparedRequest = try continuationState.prepare(
+                    fullBody: fullRequestBody,
+                    transportIdentity: continuationTransportIdentity
                 )
-            )
-        }
-
-        // Same line-pair SSE pattern as Anthropic: each `event: <name>`
-        // line pre-announces the type of the next `data: <json>` line.
-        // Hold onto the name and route the next payload accordingly.
-        var pendingEventName: String = ""
-        var state = StreamState()
-
-        for try await line in bytes.lines {
-            try Task.checkCancellation()
-
-            if line.hasPrefix("event: ") {
-                pendingEventName = String(line.dropFirst("event: ".count))
-                continue
+            } else {
+                continuationState.invalidate()
+                preparedRequest = try continuationState.prepare(
+                    fullBody: fullRequestBody,
+                    transportIdentity: continuationTransportIdentity
+                )
             }
-            guard line.hasPrefix("data: ") else { continue }
-            let payload = String(line.dropFirst("data: ".count))
-            guard !payload.isEmpty,
-                  let data = payload.data(using: .utf8) else { continue }
 
-            await handleEvent(
-                name: pendingEventName,
-                payload: data,
-                state: &state,
-                onEvent: onEvent
-            )
+            var request = URLRequest(url: endpoint)
+            request.timeoutInterval = AgentNetworkSupport.requestTimeout
+            request.httpMethod = "POST"
+            applyAuthenticationHeaders(to: &request)
+            request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+            request.setValue("text/event-stream", forHTTPHeaderField: "Accept")
+            request.httpBody = preparedRequest.body
 
-            // Reset so an unpaired `data:` (shouldn't happen but the
-            // line-pair contract assumes pairing) doesn't get
-            // misrouted to whatever event we last saw.
-            pendingEventName = ""
-        }
+            let (bytes, response) = try await session.bytes(for: request)
+            guard let httpResponse = response as? HTTPURLResponse else {
+                throw AgentClientError.invalidResponse
+            }
+            SomeIMCreditsResponseObserver.capture(httpResponse, providerID: configuration.providerID)
+            guard (200..<300).contains(httpResponse.statusCode) else {
+                let responseBody = try await AgentNetworkSupport.collectBody(from: bytes)
+                if preparedRequest.usesPreviousResponse,
+                   Self.isInvalidContinuation(
+                       statusCode: httpResponse.statusCode,
+                       responseBody: responseBody
+                   ) {
+                    continuationState.invalidate(responseID: preparedRequest.responseID)
+                    mayUseContinuation = false
+                    continue
+                }
+                throw AgentClientError.serverStatus(
+                    httpError(
+                        statusCode: httpResponse.statusCode,
+                        method: request.httpMethod ?? "POST",
+                        url: endpoint,
+                        requestBody: preparedRequest.body,
+                        responseBody: responseBody,
+                        messages: requestMessages
+                    )
+                )
+            }
 
-        // A 2xx stream that produced no text, reasoning, function call,
-        // completion or error is an empty no-op. Surface it as a retryable
-        // error instead of a silent dropped turn.
-        if !state.didEmitStreamEvent {
-            throw AgentClientError.emptyStream(
-                providerID: configuration.providerID,
-                model: configuration.model
-            )
+            // Same line-pair SSE pattern as Anthropic: each `event: <name>`
+            // line pre-announces the type of the next `data: <json>` line.
+            var pendingEventName = ""
+            var state = StreamState()
+
+            for try await line in bytes.lines {
+                try Task.checkCancellation()
+
+                if line.hasPrefix("event: ") {
+                    pendingEventName = String(line.dropFirst("event: ".count))
+                    continue
+                }
+                guard line.hasPrefix("data: ") else { continue }
+                let payload = String(line.dropFirst("data: ".count))
+                guard !payload.isEmpty,
+                      let data = payload.data(using: .utf8) else { continue }
+
+                await handleEvent(
+                    name: pendingEventName,
+                    payload: data,
+                    state: &state,
+                    onEvent: onEvent
+                )
+                pendingEventName = ""
+            }
+
+            // A 2xx stream that produced no text, reasoning, function call,
+            // completion or error is an empty no-op.
+            if !state.didEmitStreamEvent {
+                throw AgentClientError.emptyStream(
+                    providerID: configuration.providerID,
+                    model: configuration.model
+                )
+            }
+            if state.didCompleteResponse,
+               !state.didFailResponse,
+               let responseID = state.responseID {
+                continuationState.commit(
+                    responseID: responseID,
+                    preparedRequest: preparedRequest
+                )
+            }
+            return
         }
     }
 
@@ -172,7 +361,8 @@ struct OpenAIResponsesAdapter {
             ],
             // Responses reasoning (o-series) can spend more before the tag.
             "max_output_tokens": AgentInjectionDefense.judgeMaxReasoningOutputTokens,
-            "stream": false
+            "stream": false,
+            "store": false
         ]
         guard let payload = try? JSONSerialization.data(withJSONObject: body, options: []) else {
             return .unavailable("encode failed")
@@ -300,6 +490,9 @@ struct OpenAIResponsesAdapter {
         /// response that closes with none of these would look like a silent
         /// success; `streamChat` throws `emptyStream` when this stays false.
         var didEmitStreamEvent = false
+        var responseID: String?
+        var didCompleteResponse = false
+        var didFailResponse = false
     }
 
     private struct PendingFunctionCall {
@@ -335,6 +528,13 @@ struct OpenAIResponsesAdapter {
         onEvent: @escaping @Sendable (AgentClientEvent) async -> Void
     ) async {
         switch name {
+        case "response.created":
+            if let event = try? JSONDecoder().decode(ResponseLifecycleEvent.self, from: payload),
+               let responseID = event.response?.id,
+               !responseID.isEmpty {
+                state.responseID = responseID
+            }
+
         case "response.output_text.delta":
             if let event = try? JSONDecoder().decode(OutputTextDeltaEvent.self, from: payload),
                let delta = event.delta, !delta.isEmpty {
@@ -427,6 +627,10 @@ struct OpenAIResponsesAdapter {
             // OpenAI-flavoured finish_reason strings AppState already
             // understands.
             if let event = try? JSONDecoder().decode(ResponseCompletedEvent.self, from: payload) {
+                if let responseID = event.response?.id, !responseID.isEmpty {
+                    state.responseID = responseID
+                }
+                state.didCompleteResponse = true
                 if let usage = event.response?.usage {
                     let prompt = usage.input_tokens ?? 0
                     let completion = usage.output_tokens ?? 0
@@ -460,6 +664,7 @@ struct OpenAIResponsesAdapter {
             } else {
                 reason = "openai_responses_error"
             }
+            state.didFailResponse = true
             state.didEmitStreamEvent = true
             await onEvent(.finishedTurn(reason))
 
@@ -533,18 +738,64 @@ struct OpenAIResponsesAdapter {
 
     // MARK: - Headers / endpoints
 
+    /// Raw connection identity is hashed into the continuation context and is
+    /// never persisted directly. This prevents a response id issued by one
+    /// provider endpoint/account from being reused after the user switches
+    /// provider, base URL, or API key.
+    private var continuationTransportIdentity: String {
+        [
+            configuration.providerID,
+            configuration.baseURL,
+            configuration.apiKey
+        ].joined(separator: "\u{1F}")
+    }
+
     private func applyAuthenticationHeaders(to request: inout URLRequest) {
         // Same as Chat Completions: Bearer-key auth. The Responses
         // surface accepts the OpenAI-org `OpenAI-Organization` and
         // `OpenAI-Project` headers too, but neither is required for
         // a personal key and adding them risks 401s on org-less
         // accounts — leave those for a future settings knob.
-        request.setValue("Bearer \(configuration.apiKey)", forHTTPHeaderField: "Authorization")
+        if !configuration.apiKey.isEmpty {
+            request.setValue("Bearer \(configuration.apiKey)", forHTTPHeaderField: "Authorization")
+        }
         AgentNetworkSupport.applyStandardHeaders(to: &request)
+        applyRelayBrandingHeaders(to: &request)
+        applySomeIMContextHeaders(to: &request)
+    }
+
+    private func applySomeIMContextHeaders(to request: inout URLRequest) {
+        guard configuration.providerID == AgentProviderPreset.someIMID,
+              let someIMContext else { return }
+        request.setValue(
+            someIMContext.sessionID,
+            forHTTPHeaderField: AgentNetworkSupport.willDeepSessionHeaderName
+        )
+        if let workspaceID = someIMContext.workspaceID, !workspaceID.isEmpty {
+            request.setValue(
+                workspaceID,
+                forHTTPHeaderField: AgentNetworkSupport.willDeepWorkspaceHeaderName
+            )
+        }
+    }
+
+    private func applyRelayBrandingHeaders(to request: inout URLRequest) {
+        guard configuration.providerID == "openrouter" else { return }
+        request.setValue("https://willdeep.com", forHTTPHeaderField: "HTTP-Referer")
+        request.setValue("WillDeep", forHTTPHeaderField: "X-Title")
     }
 
     private func responsesEndpoint(from baseURL: String) throws -> URL {
         try AgentNetworkSupport.endpoint(from: baseURL, suffix: "responses")
+    }
+
+    private static func isInvalidContinuation(statusCode: Int, responseBody: String) -> Bool {
+        guard statusCode == 400 || statusCode == 404 || statusCode == 410 else { return false }
+        let lower = responseBody.lowercased()
+        return lower.contains("previous_response_id")
+            || lower.contains("previous response")
+            || lower.contains("response not found")
+            || lower.contains("response expired")
     }
 
     // MARK: - Request body encoding
@@ -670,7 +921,8 @@ struct OpenAIResponsesAdapter {
         var body: [String: Any] = [
             "model": model,
             "input": input,
-            "stream": true
+            "stream": true,
+            "store": true
         ]
         if !systemBlobs.isEmpty {
             body["instructions"] = systemBlobs.joined(separator: "\n\n")
@@ -788,6 +1040,7 @@ private struct ResponseCompletedEvent: Decodable {
     let response: ResponseBody?
 
     struct ResponseBody: Decodable {
+        let id: String?
         let status: String?
         let usage: Usage?
         let output: [Output]?
@@ -821,6 +1074,14 @@ private struct ResponseCompletedEvent: Decodable {
 
     struct ErrorPayload: Decodable {
         let message: String?
+    }
+}
+
+private struct ResponseLifecycleEvent: Decodable {
+    let response: Response?
+
+    struct Response: Decodable {
+        let id: String?
     }
 }
 

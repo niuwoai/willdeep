@@ -8,7 +8,7 @@
 //  Call sites everywhere in AppState construct `AgentClient(configuration:)`
 //  and call `streamChat / judgeCommandSafety / fetchModels` — they don't
 //  know or care which transport protocol the configured provider speaks.
-//  Routing happens here based on `configuration.providerKind`.
+//  Routing happens here based on `configuration.inferenceProviderKind`.
 //
 
 import Foundation
@@ -111,15 +111,18 @@ struct AgentClient {
     private let configuration: AgentConfiguration
     private let session: URLSession?
     private let someIMContext: SomeIMRequestContext?
+    private let openAIResponsesContinuationState: OpenAIResponsesContinuationState
 
     init(
         configuration: AgentConfiguration,
         session: URLSession? = nil,
-        someIMContext: SomeIMRequestContext? = nil
+        someIMContext: SomeIMRequestContext? = nil,
+        openAIResponsesContinuationState: OpenAIResponsesContinuationState = OpenAIResponsesContinuationState()
     ) {
         self.configuration = configuration.normalized
         self.session = session
         self.someIMContext = someIMContext
+        self.openAIResponsesContinuationState = openAIResponsesContinuationState
     }
 
     func streamChat(
@@ -127,7 +130,7 @@ struct AgentClient {
         tools: [AgentToolDescriptor] = [],
         onEvent: @escaping @Sendable (AgentClientEvent) async -> Void
     ) async throws {
-        switch configuration.providerKind {
+        switch configuration.inferenceProviderKind {
         case .openAIChat:
             try await OpenAIChatAdapter(configuration: configuration, session: session, someIMContext: someIMContext)
                 .streamChat(messages: messages, tools: tools, onEvent: onEvent)
@@ -138,7 +141,12 @@ struct AgentClient {
             try await GeminiAdapter(configuration: configuration, session: session)
                 .streamChat(messages: messages, tools: tools, onEvent: onEvent)
         case .openAIResponses:
-            try await OpenAIResponsesAdapter(configuration: configuration, session: session)
+            try await OpenAIResponsesAdapter(
+                configuration: configuration,
+                session: session,
+                continuationState: openAIResponsesContinuationState,
+                someIMContext: someIMContext
+            )
                 .streamChat(messages: messages, tools: tools, onEvent: onEvent)
         }
     }
@@ -151,7 +159,7 @@ struct AgentClient {
         command: String,
         historyContext: String = ""
     ) async -> AgentSafetyJudgeResult {
-        switch configuration.providerKind {
+        switch configuration.inferenceProviderKind {
         case .openAIChat:
             return await OpenAIChatAdapter(configuration: configuration, session: session, someIMContext: someIMContext)
                 .judgeCommandSafety(command: command, historyContext: historyContext)
@@ -162,7 +170,11 @@ struct AgentClient {
             return await GeminiAdapter(configuration: configuration, session: session)
                 .judgeCommandSafety(command: command, historyContext: historyContext)
         case .openAIResponses:
-            return await OpenAIResponsesAdapter(configuration: configuration, session: session)
+            return await OpenAIResponsesAdapter(
+                configuration: configuration,
+                session: session,
+                someIMContext: someIMContext
+            )
                 .judgeCommandSafety(command: command, historyContext: historyContext)
         }
     }

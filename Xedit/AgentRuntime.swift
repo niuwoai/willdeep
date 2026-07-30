@@ -172,6 +172,10 @@ final class AgentRuntime: ObservableObject, Identifiable {
     /// when idle. Cancelled when the session is closed or the user
     /// stops the response.
     var requestTask: Task<Void, Never>?
+    /// Conversation-scoped Responses cursor. The lock-protected live state
+    /// survives tool rounds and is mirrored into AgentSession so reopening the
+    /// conversation after an app restart can continue from the stored response.
+    let openAIResponsesContinuationState: OpenAIResponsesContinuationState
     /// Stable ownership token for work started by the active turn. Background
     /// jobs and subagents inherit it so Stop can clean up only the newest
     /// turn without touching an older dev server or watcher in this session.
@@ -273,6 +277,9 @@ final class AgentRuntime: ObservableObject, Identifiable {
         self.session = session
         self.workspaceRootPath = session.workspaceRootPath
         self.workspaceLocation = session.workspaceLocation
+        self.openAIResponsesContinuationState = OpenAIResponsesContinuationState(
+            persistedSnapshot: session.openAIResponsesContinuation
+        )
 
         // Seed live state from persisted session.
         self.messages = session.messages.map(Self.normalizingInterruptedWorkflow)
@@ -464,6 +471,7 @@ final class AgentRuntime: ObservableObject, Identifiable {
         session.redactSensitiveAttachmentContent = redactSensitiveAttachmentContent
         session.sidePanelState = sidePanelState
         session.managedRouting = managedRouting
+        session.openAIResponsesContinuation = openAIResponsesContinuationState.persistedSnapshot
         if touchUpdatedAt {
             session.updatedAt = Date()
         }
