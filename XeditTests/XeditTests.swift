@@ -1948,7 +1948,7 @@ struct WillDeepTests {
         )
         #expect(curlApproval == nil)
 
-        // 无 Git 基线时，普通会话中的委托式编码 Agent 也需确认。
+        // Smart 模式信任受控委托式编码 Agent；其自身仍受沙箱约束。
         let normalApproval = await appState.autoApprovalSource(
             toolName: "claude_code",
             arguments: ["prompt": .string("do x")],
@@ -1956,7 +1956,7 @@ struct WillDeepTests {
             rootDirectory: root,
             interactionMode: .normal
         )
-        #expect(normalApproval == nil)
+        #expect(normalApproval == .staticAllowlist)
 
         // Goal 模式下允许自动改名，但 workspace 归属仍不能绕过人工确认。
         let titleApproval = await appState.autoApprovalSource(

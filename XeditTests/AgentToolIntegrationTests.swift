@@ -441,6 +441,7 @@ extension WillDeepTests {
         let session = appState.startNewAgentSession()
         defer { AgentSessionStore.delete(id: session.id) }
         let runtime = try #require(appState.agentRuntimes[session.id])
+        runtime.approvalMode = .requestEveryTime
         let messageID = UUID()
         let proposal = try appState.enqueueAgentPatchProposal(
             for: runtime,
@@ -522,6 +523,7 @@ extension WillDeepTests {
         let session = appState.startNewAgentSession()
         defer { AgentSessionStore.delete(id: session.id) }
         let runtime = try #require(appState.agentRuntimes[session.id])
+        runtime.approvalMode = .requestEveryTime
         let messageID = UUID()
         let toolTask = Task { @MainActor in
             try await AgentToolRunner.run(

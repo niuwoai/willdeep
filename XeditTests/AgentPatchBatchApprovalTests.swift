@@ -396,6 +396,7 @@ struct AgentPatchBatchApprovalTests {
         let session = appState.startNewAgentSession()
         defer { AgentSessionStore.delete(id: session.id) }
         let runtime = try #require(appState.agentRuntimes[session.id])
+        runtime.approvalMode = .requestEveryTime
         try FileManager.default.createSymbolicLink(
             at: workspace.appendingPathComponent("Alias.swift"),
             withDestinationURL: workspace.appendingPathComponent("First.swift")

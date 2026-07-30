@@ -1,6 +1,6 @@
 # WillDeep Product Overview
 
-> Last updated: 2026-07-31 | Current version: v1.218.0-rc1
+> Last updated: 2026-07-31 | Current version: v1.218.0-rc2
 
 ## Positioning
 
@@ -11,6 +11,8 @@ Official product domain: [willdeep.com](https://willdeep.com).
 WillDeep is configured for non-App-Store distribution without App Sandbox so it can access local project files with fewer permission interruptions.
 
 ## 架构概览
+
+- **Smart 审批发布门禁对齐（1.218.0-rc2）** —— 手动补丁应用与批量重复目标校验的回归用例显式使用“每次请求审批”模式，受控委托式编码 Agent 的 Smart 模式用例按现行策略断言静态白名单；发布测试既覆盖人工审批路径，也不再把 Smart 自动应用工作区变更误判为回归。
 
 - **GPT-5 自动 Responses 路由与跨重启续接（1.218.0-rc1）** —— OpenAI-compatible Provider 中模型 ID 只要包含 `gpt-5`（大小写不敏感，例如 `gpt-5.4`、`gpt-5.5`、`gpt-5.6-sol`）就自动通过 `/responses` 推理，无需用户另选 Responses Provider；Anthropic 与 Gemini 原生协议不参与误判。成功 Response 的 `response_id`、上下文哈希和 wire-input 哈希随会话 JSON 持久化，应用重启后仍可通过 `previous_response_id + 增量 input` 继续；落盘内容不包含重复提示词、工具 schema、凭据或消息正文。上游游标失效，或 Provider/Base URL/API Key、模型、提示词、工具及历史前缀变化时安全回退完整请求；some.im 会话/工作区头及 OpenRouter branding 在自动路由后继续保留。
 
