@@ -54,8 +54,16 @@ enum AgentSessionTools {
             if session.isAwaitingProviderSlot { flags.append("provider-queued") }
             if session.queuedMessageCount > 0 { flags.append("queued_messages=\(session.queuedMessageCount)") }
             if session.titleIsUserSet { flags.append("title_locked") }
+            if session.isDispatchProject { flags.append("dispatch-project") }
+            if session.dispatchParentProjectID != nil { flags.append("dispatch-task") }
+            if session.isDispatchPaused { flags.append("dispatch-paused") }
+            if session.goalIsComplete { flags.append("goal-complete") }
             let flagText = flags.isEmpty ? "normal" : flags.joined(separator: ",")
-            lines.append("- #\(offset + 1) \(session.title) [\(flagText)] id=\(session.id.uuidString) updated=\(isoString(session.updatedAt)) mode=\(session.interactionMode.rawValue)")
+            var line = "- #\(offset + 1) \(session.title) [\(flagText)] id=\(session.id.uuidString) updated=\(isoString(session.updatedAt)) mode=\(session.interactionMode.rawValue)"
+            if let statement = session.goalStatement, !statement.isEmpty {
+                line += " goal=\(statement) progress=\(session.goalCompletedItemCount)/\(session.goalTotalItemCount)"
+            }
+            lines.append(line)
         }
 
         let jsonObject: [String: Any] = [
@@ -65,6 +73,7 @@ enum AgentSessionTools {
                     "title": session.title,
                     "workspace_root_path": session.workspaceRootPath ?? NSNull(),
                     "workspace_display_name": session.workspaceDisplayName,
+                    "presentation_scope": session.presentationScope.rawValue,
                     "is_active": session.isActive,
                     "is_pinned": session.isPinned,
                     "is_archived": session.isArchived,
@@ -76,7 +85,16 @@ enum AgentSessionTools {
                     "interaction_mode": session.interactionMode.rawValue,
                     "approval_mode": session.approvalMode.rawValue,
                     "execution_agent": session.executionAgent.rawValue,
-                    "title_is_user_set": session.titleIsUserSet
+                    "title_is_user_set": session.titleIsUserSet,
+                    "goal_statement": session.goalStatement ?? NSNull(),
+                    "goal_completed_item_count": session.goalCompletedItemCount,
+                    "goal_total_item_count": session.goalTotalItemCount,
+                    "goal_is_complete": session.goalIsComplete,
+                    "goal_planning_phase": session.goalPlanningPhase?.rawValue ?? NSNull(),
+                    "dispatch_parent_project_id": session.dispatchParentProjectID?.uuidString ?? NSNull(),
+                    "dispatch_task_id": session.dispatchTaskID?.uuidString ?? NSNull(),
+                    "is_dispatch_project": session.isDispatchProject,
+                    "is_dispatch_paused": session.isDispatchPaused
                 ] as [String: Any]
             }
         ]

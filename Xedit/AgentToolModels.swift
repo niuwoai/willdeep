@@ -86,6 +86,7 @@ struct AgentWorkspaceSessionSnapshot: Equatable {
     let title: String
     let workspaceRootPath: String?
     let workspaceDisplayName: String
+    let presentationScope: AgentSessionPresentationScope
     let isActive: Bool
     let isPinned: Bool
     let isArchived: Bool
@@ -98,6 +99,15 @@ struct AgentWorkspaceSessionSnapshot: Equatable {
     let approvalMode: AgentApprovalMode
     let executionAgent: AgentExecutionAgent
     let titleIsUserSet: Bool
+    let goalStatement: String?
+    let goalCompletedItemCount: Int
+    let goalTotalItemCount: Int
+    let goalIsComplete: Bool
+    let goalPlanningPhase: AgentGoalPlanningState.Phase?
+    let dispatchParentProjectID: UUID?
+    let dispatchTaskID: UUID?
+    let isDispatchProject: Bool
+    let isDispatchPaused: Bool
 }
 
 struct AgentSessionTitleSuggestionSnapshot: Equatable {

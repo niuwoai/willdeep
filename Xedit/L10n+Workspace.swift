@@ -55,4 +55,62 @@ nonisolated extension L10n {
             defaultValue: "Create a separate Git worktree and move this conversation there so it no longer shares the checkout"
         )
     }
+
+    enum AgentWorkspaceGoalAwareness {
+        static let open = String(
+            localized: "agent-workspace-goal-awareness.open",
+            defaultValue: "Open"
+        )
+
+        static func summary(
+            _ title: String,
+            _ completed: Int,
+            _ total: Int,
+            _ isRunning: Bool,
+            _ isDispatchProject: Bool
+        ) -> String {
+            switch (isDispatchProject, isRunning) {
+            case (true, true):
+                return String(
+                    format: String(
+                        localized: "agent-workspace-goal-awareness.dispatch-running",
+                        defaultValue: "Dispatch project “%@” is already running in this workspace · %lld/%lld"
+                    ),
+                    title,
+                    completed,
+                    total
+                )
+            case (true, false):
+                return String(
+                    format: String(
+                        localized: "agent-workspace-goal-awareness.dispatch-unfinished",
+                        defaultValue: "This workspace already has dispatch project “%@” · %lld/%lld"
+                    ),
+                    title,
+                    completed,
+                    total
+                )
+            case (false, true):
+                return String(
+                    format: String(
+                        localized: "agent-workspace-goal-awareness.goal-running",
+                        defaultValue: "Goal “%@” is already running in this workspace · %lld/%lld"
+                    ),
+                    title,
+                    completed,
+                    total
+                )
+            case (false, false):
+                return String(
+                    format: String(
+                        localized: "agent-workspace-goal-awareness.goal-unfinished",
+                        defaultValue: "This workspace already has unfinished Goal “%@” · %lld/%lld"
+                    ),
+                    title,
+                    completed,
+                    total
+                )
+            }
+        }
+    }
 }

@@ -790,6 +790,7 @@ extension AppState {
                 goalPlanningState: runtime.goalPlanningState,
                 currentSessionTitle: runtime.session.title,
                 currentSessionTitleIsLocked: runtime.session.titleIsUserSet,
+                workspaceSessions: workspaceSessionSnapshots(for: runtime),
                 activeExperts: activeExperts,
                 promptProfile: promptProfile
             )

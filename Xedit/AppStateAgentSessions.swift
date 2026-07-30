@@ -901,6 +901,24 @@ extension AppState {
             runtime.errorMessage = L10n.Dispatch.workspaceRequired
             return
         }
+        if runtime.session.presentationScope == .dispatchBoard,
+           let location = runtime.workspaceLocation
+                ?? runtime.workspaceRootPath.map({ .local(path: $0) }) {
+            agentDispatchCoordinator.synchronize(with: agentSessions)
+            let ownProject = agentDispatchCoordinator.goals.first {
+                $0.sessionID == runtime.id
+            }
+            if ownProject?.isPaused != true,
+               let conflict = agentDispatchCoordinator.activeGoal(
+                    for: location,
+                    excluding: runtime.id
+               ) {
+                runtime.errorMessage = L10n.Dispatch.projectAlreadyRunning(
+                    conflict.statement.isEmpty ? conflict.title : conflict.statement
+                )
+                return
+            }
+        }
         var priorItemsByText: [String: AgentGoal.Item] = [:]
         for item in runtime.currentGoal?.checklist ?? [] {
             if priorItemsByText[item.text] == nil {
@@ -2076,11 +2094,18 @@ extension AppState {
             .map { session in
                 let live = agentRuntimes[session.id]
                 let source = live?.session ?? session
+                let goal = live?.currentGoal ?? source.currentGoal
+                let completedGoalItems = goal?.checklist.filter(\.done).count ?? 0
+                let totalGoalItems = goal?.checklist.count ?? 0
+                let dispatchProject = agentDispatchCoordinator.goals.first {
+                    $0.sessionID == source.id
+                }
                 return AgentWorkspaceSessionSnapshot(
                     id: source.id,
                     title: source.title,
                     workspaceRootPath: source.workspaceLocation?.localPath ?? source.workspaceRootPath,
                     workspaceDisplayName: source.workspaceName,
+                    presentationScope: source.presentationScope,
                     isActive: source.id == runtime.id,
                     isPinned: source.isPinned,
                     isArchived: source.isArchived,
@@ -2092,7 +2117,19 @@ extension AppState {
                     interactionMode: live?.interactionMode ?? source.interactionMode,
                     approvalMode: live?.approvalMode ?? source.approvalMode,
                     executionAgent: live?.executionAgent ?? source.executionAgent,
-                    titleIsUserSet: source.titleIsUserSet
+                    titleIsUserSet: source.titleIsUserSet,
+                    goalStatement: goal?.statement,
+                    goalCompletedItemCount: completedGoalItems,
+                    goalTotalItemCount: totalGoalItems,
+                    goalIsComplete: totalGoalItems > 0 && completedGoalItems == totalGoalItems,
+                    goalPlanningPhase: live?.goalPlanningState?.phase
+                        ?? source.goalPlanningState?.phase,
+                    dispatchParentProjectID: source.dispatchParentProjectID,
+                    dispatchTaskID: source.dispatchTaskID,
+                    isDispatchProject: source.presentationScope == .dispatchBoard
+                        && source.dispatchParentProjectID == nil
+                        && goal != nil,
+                    isDispatchPaused: dispatchProject?.isPaused ?? false
                 )
             }
     }

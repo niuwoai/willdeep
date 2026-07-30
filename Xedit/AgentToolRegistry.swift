@@ -67,7 +67,7 @@ enum AgentToolRegistry {
         ),
         AgentToolDescriptor(
             name: "list_workspace_sessions",
-            description: "List WillDeep Agent sessions that belong to the CURRENT workspace group, including title, mode, activity time, running/queued state, and whether the title is locked. Read-only. Use this when the user asks what sessions exist in this workspace, or before deciding whether a new user input belongs in the current session or should be renamed.",
+            description: "List WillDeep Agent sessions that belong to the CURRENT workspace group, including title, mode, activity time, running/queued state, Goal summary/progress, and dispatch-console ownership. Read-only. Use this when the user asks what sessions or Goals exist in this workspace, or before deciding whether new work would duplicate an existing Goal.",
             risk: .read,
             parameters: [
                 AgentToolParameter(name: "include_archived", type: .boolean, description: "When true, include archived sessions in this workspace. Defaults to false.", required: false),

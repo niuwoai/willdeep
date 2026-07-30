@@ -70,7 +70,33 @@ extension AppState {
     /// must restore its own presentation scope and destination explicitly.
     @discardableResult
     func startDispatchGoalSession(inWorkspaceAt workspacePath: String) -> AgentSession {
-        let session = startNewAgentSession(inWorkspaceAt: workspacePath)
+        let normalizedPath = URL(fileURLWithPath: workspacePath).standardizedFileURL.path
+        let location = WorkspaceLocation.local(path: normalizedPath)
+        agentDispatchCoordinator.synchronize(with: agentSessions)
+
+        if let existingGoal = agentDispatchCoordinator.activeGoal(for: location),
+           let existingSession = agentSessions.first(where: { $0.id == existingGoal.sessionID }) {
+            selectDispatchGoal(existingGoal.id)
+            return existingSession
+        }
+
+        if let existingDraft = agentSessions.first(where: { session in
+            guard !session.isArchived,
+                  session.presentationScope == .dispatchBoard,
+                  session.dispatchParentProjectID == nil,
+                  session.currentGoal == nil,
+                  let draftLocation = session.workspaceLocation
+                    ?? session.workspaceRootPath.map({ .local(path: $0) }) else {
+                return false
+            }
+            return Self.dispatchLocationsRepresentSameProject(draftLocation, location)
+        }) {
+            _ = selectAgentSession(id: existingDraft.id)
+            agentPrimaryDestination = .dispatchBoard
+            return existingDraft
+        }
+
+        let session = startNewAgentSession(inWorkspaceAt: normalizedPath)
         guard let runtime = runtime(for: session.id) else {
             agentPrimaryDestination = .dispatchBoard
             return session
@@ -85,6 +111,23 @@ extension AppState {
         agentPrimaryDestination = .dispatchBoard
         persistAgentSession(runtime: runtime)
         return runtime.session
+    }
+
+    private static func dispatchLocationsRepresentSameProject(
+        _ lhs: WorkspaceLocation,
+        _ rhs: WorkspaceLocation
+    ) -> Bool {
+        switch (lhs, rhs) {
+        case (.remote, .remote):
+            return lhs == rhs
+        case (.local, .local):
+            return AgentDispatchLogicalProjectResolver.representsSameProject(
+                AgentDispatchLogicalProjectResolver.resolve(location: lhs),
+                AgentDispatchLogicalProjectResolver.resolve(location: rhs)
+            )
+        default:
+            return false
+        }
     }
 
     var isPreparingDispatchGoal: Bool {
@@ -382,6 +425,13 @@ extension AppState {
         }
         guard !goal.isPaused else {
             return .blocked(message: L10n.Dispatch.goalPausedLaunch)
+        }
+        if let conflict = agentDispatchCoordinator.conflictingActiveGoal(for: goalID) {
+            return .blocked(
+                message: L10n.Dispatch.projectAlreadyRunning(
+                    conflict.statement.isEmpty ? conflict.title : conflict.statement
+                )
+            )
         }
         guard goal.isWorkspaceBound else {
             return .blocked(message: L10n.Dispatch.workspaceRequired)

@@ -69,6 +69,11 @@ struct AgentChatComposer: View {
                         .frame(maxWidth: AgentDesign.chatMaxContentWidth)
                 }
 
+                if let relatedGoal = relatedWorkspaceGoal, shouldShowWorkspaceGoalAwareness {
+                    AgentComposerWorkspaceGoalCard(session: relatedGoal)
+                        .frame(maxWidth: AgentDesign.chatMaxContentWidth)
+                }
+
                 if appState.shouldShowComposerGoalCard, let goal = appState.agentCurrentGoal {
                     AgentComposerGoalCard(goal: goal)
                         .frame(maxWidth: AgentDesign.chatMaxContentWidth)
@@ -113,10 +118,42 @@ struct AgentChatComposer: View {
     /// 到别的会话时 `agentMessages` 自动带出新会话的消息数，天然重新计数。
     private var shouldShowWorkspaceCollision: Bool {
         guard !appState.agentWorkspaceCollision.isEmpty else { return false }
+        return currentSessionUserTurnCount <= 3
+    }
+
+    private var shouldShowWorkspaceGoalAwareness: Bool {
+        currentSessionUserTurnCount <= 3
+    }
+
+    private var currentSessionUserTurnCount: Int {
         let userTurnCount = appState.agentMessages.reduce(into: 0) { count, message in
             if message.role == .user { count += 1 }
         }
-        return userTurnCount <= 3
+        return userTurnCount
+    }
+
+    private var relatedWorkspaceGoal: AgentWorkspaceSessionSnapshot? {
+        guard let runtime = appState.activeRuntime,
+              runtime.session.presentationScope == .workspace else {
+            return nil
+        }
+        return appState.workspaceSessionSnapshots(for: runtime)
+            .filter {
+                !$0.isActive
+                    && !$0.isArchived
+                    && $0.goalStatement?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false
+                    && !$0.goalIsComplete
+            }
+            .sorted {
+                if $0.isDispatchProject != $1.isDispatchProject {
+                    return $0.isDispatchProject && !$1.isDispatchProject
+                }
+                if $0.isResponding != $1.isResponding {
+                    return $0.isResponding && !$1.isResponding
+                }
+                return $0.lastActivityAt > $1.lastActivityAt
+            }
+            .first
     }
 
     private var shouldShowActivityStatus: Bool {
@@ -136,6 +173,53 @@ struct AgentChatComposer: View {
         )
     }
 
+}
+
+private struct AgentComposerWorkspaceGoalCard: View {
+    @EnvironmentObject private var appState: AppState
+    let session: AgentWorkspaceSessionSnapshot
+
+    var body: some View {
+        HStack(spacing: 8) {
+            Image(systemName: session.isDispatchProject ? "point.3.connected.trianglepath.dotted" : "target")
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundStyle(Color.accentColor)
+
+            Text(
+                L10n.AgentWorkspaceGoalAwareness.summary(
+                    session.title,
+                    session.goalCompletedItemCount,
+                    session.goalTotalItemCount,
+                    session.isResponding,
+                    session.isDispatchProject
+                )
+            )
+            .font(.system(size: 12, weight: .medium))
+            .foregroundStyle(.primary)
+            .lineLimit(2)
+            .fixedSize(horizontal: false, vertical: true)
+
+            Spacer(minLength: 8)
+
+            Button(L10n.AgentWorkspaceGoalAwareness.open) {
+                appState.revealAgentSessionFromNotification(id: session.id)
+            }
+            .buttonStyle(.plain)
+            .focusable(false)
+            .font(.system(size: 12, weight: .semibold))
+            .foregroundStyle(Color.accentColor)
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 7)
+        .background(
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .fill(Color.accentColor.opacity(0.08))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .strokeBorder(Color.accentColor.opacity(0.28), lineWidth: 1)
+        )
+    }
 }
 
 private struct AgentComposerWorktreeCreationCard: View {

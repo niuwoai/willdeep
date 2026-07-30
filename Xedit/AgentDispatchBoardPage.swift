@@ -404,11 +404,21 @@ private struct AgentDispatchBoardContent: View {
             return
         }
         if text.hasPrefix("暂停全部") || text.lowercased().hasPrefix("pause all") {
-            coordinator.setPaused(true, goalID: goal.id)
+            _ = coordinator.setPaused(true, goalID: goal.id)
             return
         }
         if text.hasPrefix("恢复全部") || text.lowercased().hasPrefix("resume all") {
-            coordinator.setPaused(false, goalID: goal.id)
+            guard coordinator.setPaused(false, goalID: goal.id) else {
+                alertTarget = .message(
+                    title: L10n.Dispatch.launchFailed,
+                    message: L10n.Dispatch.projectAlreadyRunning(
+                        coordinator.conflictingActiveGoal(for: goal.id).map {
+                            $0.statement.isEmpty ? $0.title : $0.statement
+                        } ?? L10n.Dispatch.goalsHeader
+                    )
+                )
+                return
+            }
             return
         }
 
@@ -427,12 +437,22 @@ private struct AgentDispatchBoardContent: View {
     private func togglePaused(_ goal: AgentDispatchGoal) {
         let paused = !goal.isPaused
         let text = paused ? L10n.Dispatch.pauseAll : L10n.Dispatch.resumeAll
+        guard coordinator.setPaused(paused, goalID: goal.id) else {
+            alertTarget = .message(
+                title: L10n.Dispatch.launchFailed,
+                message: L10n.Dispatch.projectAlreadyRunning(
+                    coordinator.conflictingActiveGoal(for: goal.id).map {
+                        $0.statement.isEmpty ? $0.title : $0.statement
+                    } ?? L10n.Dispatch.goalsHeader
+                )
+            )
+            return
+        }
         _ = coordinator.recordCommand(
             goalID: goal.id,
             text: text,
             effect: .appliedImmediately
         )
-        coordinator.setPaused(paused, goalID: goal.id)
     }
 
     private func selectGraphNode(_ selection: AgentDispatchGraphSelection) {

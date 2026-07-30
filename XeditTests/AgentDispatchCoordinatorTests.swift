@@ -528,6 +528,55 @@ struct AgentDispatchCoordinatorTests {
         #expect(goal.deletionRequiresConfirmation)
     }
 
+    @Test("仅全部合并或显式暂停会释放项目调度名额")
+    func dispatchSlotReleaseRequiresCompletionOrPause() {
+        let queued = AgentDispatchTask(title: "排队", state: .queued)
+        var goal = AgentDispatchGoal(
+            id: UUID(),
+            sessionID: UUID(),
+            title: "Slot",
+            statement: "验证名额",
+            tasks: [queued],
+            executorChoice: .automatic,
+            targetChoice: .automatic,
+            isPaused: false,
+            commands: [],
+            createdAt: Date(),
+            updatedAt: Date()
+        )
+
+        #expect(!goal.isComplete)
+        #expect(goal.isOperationallyActive)
+
+        goal.tasks[0].state = .failed
+        #expect(!goal.isComplete)
+        #expect(goal.isOperationallyActive)
+
+        goal.isPaused = true
+        #expect(!goal.isOperationallyActive)
+
+        goal.isPaused = false
+        goal.tasks[0].state = .merged
+        #expect(goal.isComplete)
+        #expect(!goal.isOperationallyActive)
+    }
+
+    @Test("共享 Git common directory 的不同 checkout 属于同一调度项目")
+    func logicalProjectIdentityCollapsesWorktrees() {
+        let first = AgentDispatchLogicalProject(
+            displayName: "Main",
+            primaryWorkspacePath: "/repo/main",
+            localRepositoryIdentity: "/repo/main/.git"
+        )
+        let second = AgentDispatchLogicalProject(
+            displayName: "Feature",
+            primaryWorkspacePath: "/repo/worktrees/feature",
+            localRepositoryIdentity: "/repo/main/.git"
+        )
+
+        #expect(AgentDispatchLogicalProjectResolver.representsSameProject(first, second))
+    }
+
     @Test("删除 Goal 会持久化并把选中项移到相邻 Goal")
     func coordinatorRemovalPersistsAndReconcilesSelection() throws {
         let sandbox = try makeSandbox()
@@ -913,6 +962,113 @@ struct AgentDispatchCoordinatorTests {
         #expect(runtime.messages.isEmpty)
         #expect(appState.agentPrimaryDestination == .dispatchBoard)
         #expect(appState.agentDispatchCoordinator.selectedGoalID == session.id)
+    }
+
+    @Test("同一工作区重复创建调度项目会复用现有项目")
+    func duplicateDispatchProjectReusesExistingSession() throws {
+        let workspace = FileManager.default.temporaryDirectory
+            .appendingPathComponent("willdeep-single-dispatch-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: workspace, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: workspace) }
+
+        let appState = AppState()
+        appState.agentDispatchCoordinator.resetForTests()
+        let first = appState.startDispatchGoalSession(inWorkspaceAt: workspace.path)
+        appState.setAgentGoal(statement: "唯一调度", items: ["完成实现"])
+        appState.agentDispatchCoordinator.synchronize(with: appState.agentSessions)
+        let sessionCount = appState.agentSessions.count
+
+        let reused = appState.startDispatchGoalSession(inWorkspaceAt: workspace.path)
+
+        #expect(reused.id == first.id)
+        #expect(appState.activeAgentSessionID == first.id)
+        #expect(appState.agentPrimaryDestination == .dispatchBoard)
+        #expect(appState.agentSessions.count == sessionCount)
+        #expect(appState.agentDispatchCoordinator.goals.count == 1)
+    }
+
+    @Test("暂停释放调度名额，但存在新项目时旧项目不能恢复")
+    func pausedDispatchReleasesSlotAndResumeChecksConflict() throws {
+        let workspace = FileManager.default.temporaryDirectory
+            .appendingPathComponent("willdeep-dispatch-resume-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: workspace, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: workspace) }
+
+        let appState = AppState()
+        appState.agentDispatchCoordinator.resetForTests()
+        let first = appState.startDispatchGoalSession(inWorkspaceAt: workspace.path)
+        appState.setAgentGoal(statement: "旧调度", items: ["旧任务"])
+        appState.agentDispatchCoordinator.synchronize(with: appState.agentSessions)
+        #expect(appState.agentDispatchCoordinator.setPaused(true, goalID: first.id))
+
+        let second = appState.startDispatchGoalSession(inWorkspaceAt: workspace.path)
+        #expect(second.id != first.id)
+        appState.setAgentGoal(statement: "新调度", items: ["新任务"])
+        appState.agentDispatchCoordinator.synchronize(with: appState.agentSessions)
+
+        #expect(
+            appState.agentDispatchCoordinator.activeGoal(
+                for: .local(path: workspace.path)
+            )?.id == second.id
+        )
+        #expect(!appState.agentDispatchCoordinator.setPaused(false, goalID: first.id))
+        #expect(appState.agentDispatchCoordinator.goals.first(where: { $0.id == first.id })?.isPaused == true)
+    }
+
+    @Test("恢复旧调度后，尚未定义的新草稿不能成为第二个运行项目")
+    func activeDispatchRejectsCompetingDraftDefinition() throws {
+        let workspace = FileManager.default.temporaryDirectory
+            .appendingPathComponent("willdeep-dispatch-draft-conflict-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: workspace, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: workspace) }
+
+        let appState = AppState()
+        appState.agentDispatchCoordinator.resetForTests()
+        let first = appState.startDispatchGoalSession(inWorkspaceAt: workspace.path)
+        appState.setAgentGoal(statement: "旧调度", items: ["旧任务"])
+        appState.agentDispatchCoordinator.synchronize(with: appState.agentSessions)
+        #expect(appState.agentDispatchCoordinator.setPaused(true, goalID: first.id))
+
+        let draft = appState.startDispatchGoalSession(inWorkspaceAt: workspace.path)
+        #expect(draft.id != first.id)
+        #expect(appState.agentDispatchCoordinator.setPaused(false, goalID: first.id))
+
+        appState.setAgentGoal(statement: "冲突草稿", items: ["不能启动"])
+
+        let draftRuntime = try #require(appState.runtime(for: draft.id))
+        #expect(draftRuntime.currentGoal == nil)
+        #expect(draftRuntime.errorMessage == L10n.Dispatch.projectAlreadyRunning("旧调度"))
+    }
+
+    @Test("恢复时同一项目的多个历史调度只保留一个运行")
+    func synchronizationPausesDuplicateLegacyDispatchProjects() {
+        let workspace = "/tmp/willdeep-legacy-single-dispatch"
+        let older = AgentSession(
+            title: "Older",
+            workspaceRootPath: workspace,
+            updatedAt: Date(timeIntervalSince1970: 10),
+            currentGoal: AgentGoal(
+                statement: "旧项目",
+                checklist: [.init(text: "实现")]
+            )
+        )
+        let newer = AgentSession(
+            title: "Newer",
+            workspaceRootPath: workspace,
+            updatedAt: Date(timeIntervalSince1970: 20),
+            currentGoal: AgentGoal(
+                statement: "新项目",
+                checklist: [.init(text: "实现")]
+            )
+        )
+        let coordinator = AgentDispatchCoordinator()
+        coordinator.resetForTests()
+
+        coordinator.synchronize(with: [older, newer])
+
+        #expect(coordinator.goals.filter(\.isOperationallyActive).count == 1)
+        #expect(coordinator.goals.first(where: { $0.id == newer.id })?.isPaused == false)
+        #expect(coordinator.goals.first(where: { $0.id == older.id })?.isPaused == true)
     }
 
     @Test("调度项目及子任务通知都返回调度台而不是聊天")

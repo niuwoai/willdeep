@@ -269,4 +269,53 @@ struct AgentGoalChecklistParserTests {
         #expect(prompt.contains("compact delivery summary"))
         #expect(prompt.contains("Do not repeat command transcripts, failed attempts, raw tool output"))
     }
+
+    @Test
+    func workspaceGoalAwarenessPreventsDuplicateGoalCreation() {
+        let existingSessionID = UUID()
+        let prompt = AgentContextBuilder.systemPrompt(
+            rootDirectory: URL(fileURLWithPath: "/tmp/project"),
+            openedFileURL: nil,
+            fileContent: "",
+            selectedText: "",
+            language: nil,
+            currentSessionTitle: "新会话",
+            workspaceSessions: [
+                AgentWorkspaceSessionSnapshot(
+                    id: existingSessionID,
+                    title: "登录重构调度台",
+                    workspaceRootPath: "/tmp/project",
+                    workspaceDisplayName: "project",
+                    presentationScope: .dispatchBoard,
+                    isActive: false,
+                    isPinned: false,
+                    isArchived: false,
+                    isResponding: true,
+                    isAwaitingProviderSlot: false,
+                    queuedMessageCount: 0,
+                    updatedAt: Date(timeIntervalSince1970: 2_000),
+                    lastActivityAt: Date(timeIntervalSince1970: 2_000),
+                    interactionMode: .goal,
+                    approvalMode: .smart,
+                    executionAgent: .willDeep,
+                    titleIsUserSet: true,
+                    goalStatement: "重构登录流程",
+                    goalCompletedItemCount: 1,
+                    goalTotalItemCount: 3,
+                    goalIsComplete: false,
+                    goalPlanningPhase: .executing,
+                    dispatchParentProjectID: nil,
+                    dispatchTaskID: nil,
+                    isDispatchProject: true,
+                    isDispatchPaused: false
+                )
+            ]
+        )
+
+        #expect(prompt.contains("=== WORKSPACE GOAL AWARENESS ==="))
+        #expect(prompt.contains("[dispatch-project, running] 登录重构调度台"))
+        #expect(prompt.contains(existingSessionID.uuidString))
+        #expect(prompt.contains("Do not emit a new `goal` block"))
+        #expect(prompt.contains("only one non-paused unfinished dispatch project"))
+    }
 }

@@ -96,12 +96,45 @@ final class AgentDispatchCoordinator: ObservableObject {
                 defaultAcceptanceCriterion: defaultAcceptanceCriterion
             )
         }
-        return projected.sorted { lhs, rhs in
+        var ordered = projected.sorted { lhs, rhs in
             if lhs.activeTaskCount != rhs.activeTaskCount {
                 return lhs.activeTaskCount > rhs.activeTaskCount
             }
             return lhs.updatedAt > rhs.updatedAt
         }
+        // Older builds could persist more than one unfinished project for the
+        // same logical workspace. Keep the strongest/most-recent owner active
+        // and pause the rest during projection so restore cannot reintroduce
+        // an ambiguous project-level owner.
+        var activeOwners: [AgentDispatchGoal] = []
+        for index in ordered.indices where ordered[index].isOperationallyActive {
+            if activeOwners.contains(where: {
+                Self.goalsRepresentSameProject($0, ordered[index])
+            }) {
+                ordered[index].isPaused = true
+            } else {
+                activeOwners.append(ordered[index])
+            }
+        }
+        return ordered
+    }
+
+    private nonisolated static func goalsRepresentSameProject(
+        _ lhs: AgentDispatchGoal,
+        _ rhs: AgentDispatchGoal
+    ) -> Bool {
+        guard let lhsProject = lhs.logicalProject,
+              let rhsProject = rhs.logicalProject else {
+            return false
+        }
+        if case (.some(.remote(_, _)), .some(.remote(_, _))) =
+            (lhs.workspaceLocation, rhs.workspaceLocation) {
+            return lhs.workspaceLocation == rhs.workspaceLocation
+        }
+        return AgentDispatchLogicalProjectResolver.representsSameProject(
+            lhsProject,
+            rhsProject
+        )
     }
 
     private func applySynchronizedGoals(_ synchronizedGoals: [AgentDispatchGoal]) {
@@ -122,6 +155,38 @@ final class AgentDispatchCoordinator: ObservableObject {
     func selectTask(_ id: UUID) {
         guard let goal = selectedGoal, goal.tasks.contains(where: { $0.id == id }) else { return }
         selectedTaskID = id
+    }
+
+    /// Returns the unfinished, non-paused dispatch project that currently
+    /// owns a logical project/workspace. Local Git worktrees collapse through
+    /// their shared `--git-common-dir`; non-Git folders use standardized paths.
+    func activeGoal(
+        for location: WorkspaceLocation,
+        excluding excludedGoalID: UUID? = nil
+    ) -> AgentDispatchGoal? {
+        let candidateProject = AgentDispatchLogicalProjectResolver.resolve(location: location)
+        return goals.first { goal in
+            guard goal.id != excludedGoalID,
+                  goal.isOperationallyActive,
+                  let project = goal.logicalProject else {
+                return false
+            }
+            if case .remote = location {
+                return goal.workspaceLocation == location
+            }
+            return AgentDispatchLogicalProjectResolver.representsSameProject(
+                project,
+                candidateProject
+            )
+        }
+    }
+
+    func conflictingActiveGoal(for goalID: UUID) -> AgentDispatchGoal? {
+        guard let goal = goals.first(where: { $0.id == goalID }),
+              let location = goal.workspaceLocation else {
+            return nil
+        }
+        return activeGoal(for: location, excluding: goalID)
     }
 
     @discardableResult
@@ -343,11 +408,17 @@ final class AgentDispatchCoordinator: ObservableObject {
         }
     }
 
-    func setPaused(_ paused: Bool, goalID: UUID) {
+    @discardableResult
+    func setPaused(_ paused: Bool, goalID: UUID) -> Bool {
+        if !paused, conflictingActiveGoal(for: goalID) != nil {
+            return false
+        }
+        guard goals.contains(where: { $0.id == goalID }) else { return false }
         updateGoal(id: goalID) { goal in
             goal.isPaused = paused
             goal.updatedAt = Date()
         }
+        return true
     }
 
     @discardableResult
@@ -770,6 +841,18 @@ nonisolated enum AgentDispatchLogicalProjectResolver {
             return localRepositoryIdentity(for: normalized) == expectedIdentity
         }
         return normalized == normalizedLocalPath(project.primaryWorkspacePath)
+    }
+
+    static func representsSameProject(
+        _ lhs: AgentDispatchLogicalProject,
+        _ rhs: AgentDispatchLogicalProject
+    ) -> Bool {
+        if let lhsIdentity = lhs.localRepositoryIdentity,
+           let rhsIdentity = rhs.localRepositoryIdentity {
+            return lhsIdentity == rhsIdentity
+        }
+        return normalizedLocalPath(lhs.primaryWorkspacePath)
+            == normalizedLocalPath(rhs.primaryWorkspacePath)
     }
 
     static func localRepositoryIdentity(for path: String) -> String? {

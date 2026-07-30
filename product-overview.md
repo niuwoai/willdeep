@@ -1,6 +1,6 @@
 # WillDeep Product Overview
 
-> Last updated: 2026-07-30 | Current version: v1.215.0-rc6
+> Last updated: 2026-07-30 | Current version: v1.216.0-rc1
 
 ## Positioning
 
@@ -11,6 +11,8 @@ Official product domain: [willdeep.com](https://willdeep.com).
 WillDeep is configured for non-App-Store distribution without App Sandbox so it can access local project files with fewer permission interruptions.
 
 ## 架构概览
+
+- **工作区 Goal 感知与单实例调度（1.216.0-rc1）** —— 普通会话会从宿主获取当前工作区其他未完成 Goal 的目标、进度、运行状态与调度归属，并同时注入 Agent 上下文、工作区会话工具和早期 Composer 提示，避免重复建立目标或与已有执行争抢同一现场。同一逻辑项目（本机按 Git common directory、远端按精确位置）只允许一个未暂停且未完成的调度项目运行；重复创建会直接打开现有调度，暂停或全部任务合并后释放名额，恢复、提交草稿和启动子任务都会再次执行冲突校验，历史重复记录同步时自动只保留一个运行实例。
 
 - **无管道 Git 探测与后台调度投影（1.215.0-rc6）** —— Git 子进程输出写入每次调用独占的临时普通文件，退出后限量读取并立即清理，不再依赖管道 EOF、共享读线程或 `DispatchGroup.wait()`；调度台的仓库探测与会话投影在 utility 后台任务完成，并以修订号保证只有最新结果写回主线程。
 

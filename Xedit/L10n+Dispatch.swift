@@ -396,6 +396,15 @@ extension L10n {
             localized: "dispatch.goal-paused-launch",
             defaultValue: "Resume this project before launching another task."
         )
+        static func projectAlreadyRunning(_ projectName: String) -> String {
+            String(
+                format: String(
+                    localized: "dispatch.project-already-running",
+                    defaultValue: "“%@” is already the active dispatch project for this workspace. Open or pause it before starting another one."
+                ),
+                projectName
+            )
+        }
         static let taskStarted = String(
             localized: "dispatch.task-started",
             defaultValue: "Task started"

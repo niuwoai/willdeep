@@ -106,6 +106,7 @@ enum AgentContextBuilder {
         goalPlanningState: AgentGoalPlanningState? = nil,
         currentSessionTitle: String? = nil,
         currentSessionTitleIsLocked: Bool = false,
+        workspaceSessions: [AgentWorkspaceSessionSnapshot] = [],
         activeExperts: Set<AgentExpert> = [],
         globalRules: String? = AgentGlobalRulesStore.loadRules(),
         promptProfile: AgentSystemPromptProfile = .standard
@@ -170,6 +171,64 @@ enum AgentContextBuilder {
             Session title locked: \(currentSessionTitleIsLocked ? "yes" : "no")
             On each new user input, consider whether this title still describes the current task. If it is stale or too generic, call suggest_session_title, then call rename_session with the suggested title only when the rename is clearly useful. In normal mode the user will approve it; in Goal mode it auto-applies.
             """)
+        }
+
+        let otherWorkspaceGoals = workspaceSessions
+            .filter {
+                !$0.isActive
+                    && !$0.isArchived
+                    && $0.goalStatement?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false
+                    && !$0.goalIsComplete
+            }
+            .sorted {
+                if $0.isDispatchProject != $1.isDispatchProject {
+                    return $0.isDispatchProject && !$1.isDispatchProject
+                }
+                if $0.isResponding != $1.isResponding {
+                    return $0.isResponding && !$1.isResponding
+                }
+                return $0.lastActivityAt > $1.lastActivityAt
+            }
+            .prefix(8)
+        if !otherWorkspaceGoals.isEmpty {
+            var awareness = """
+            === WORKSPACE GOAL AWARENESS ===
+            Host-observed facts: this workspace has other unfinished Goal sessions. Use these facts before defining a Goal or starting overlapping work:
+            """
+            for session in otherWorkspaceGoals {
+                let kind: String
+                if session.isDispatchProject {
+                    kind = "dispatch-project"
+                } else if session.dispatchParentProjectID != nil {
+                    kind = "dispatch-task"
+                } else {
+                    kind = "conversation-goal"
+                }
+                let state: String
+                if session.isDispatchPaused {
+                    state = "paused"
+                } else if session.isResponding {
+                    state = "running"
+                } else if session.isAwaitingProviderSlot {
+                    state = "provider-queued"
+                } else {
+                    state = "unfinished"
+                }
+                awareness += "\n- [\(kind), \(state)] \(session.title) — \(session.goalStatement ?? "") — progress \(session.goalCompletedItemCount)/\(session.goalTotalItemCount) — session \(session.id.uuidString)"
+                if let parentID = session.dispatchParentProjectID {
+                    awareness += " — parent dispatch project \(parentID.uuidString)"
+                }
+            }
+            awareness += """
+
+            Coordination rules:
+            - Do not emit a new `goal` block or start duplicate implementation when the latest request clearly belongs to one of these unfinished Goals.
+            - Tell the user which existing Goal/session owns overlapping work and continue only in the owning session. Do not silently copy its checklist, Plan, or authorization into this session.
+            - A dispatch-task is a child of its parent dispatch project, never an independent top-level Goal.
+            - WillDeep permits only one non-paused unfinished dispatch project per logical project. Never propose or simulate a second running dispatch console for the same project.
+            - Unrelated work may continue in this session, but avoid the same checkout or overlapping files while another listed session is running.
+            """
+            sections.append(awareness)
         }
 
         if interactionMode == .normal, let plan = currentPlan,

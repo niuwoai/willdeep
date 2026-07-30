@@ -337,6 +337,20 @@ nonisolated struct AgentDispatchGoal: Codable, Equatable, Identifiable {
         activeTaskCount > 0
     }
 
+    /// A dispatch project is complete only after it has concrete work and
+    /// every task has been merged. Failed/cancelled work remains unfinished
+    /// so retrying it does not silently free the project's single active slot.
+    var isComplete: Bool {
+        !tasks.isEmpty && tasks.allSatisfy { $0.state == .merged }
+    }
+
+    /// Project-level ownership used by the single-running-dispatch invariant.
+    /// Pausing explicitly releases the slot; merely waiting for dependencies,
+    /// planning, failing, or cancelling a task does not.
+    var isOperationallyActive: Bool {
+        !isPaused && !isComplete
+    }
+
     var hasStartedExecution: Bool {
         tasks.contains {
             $0.runtimeSessionID != nil
