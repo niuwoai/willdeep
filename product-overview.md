@@ -1,6 +1,6 @@
 # WillDeep Product Overview
 
-> Last updated: 2026-07-30 | Current version: v1.215.0-rc3
+> Last updated: 2026-07-30 | Current version: v1.215.0-rc6
 
 ## Positioning
 
@@ -11,6 +11,12 @@ Official product domain: [willdeep.com](https://willdeep.com).
 WillDeep is configured for non-App-Store distribution without App Sandbox so it can access local project files with fewer permission interruptions.
 
 ## 架构概览
+
+- **无管道 Git 探测与后台调度投影（1.215.0-rc6）** —— Git 子进程输出写入每次调用独占的临时普通文件，退出后限量读取并立即清理，不再依赖管道 EOF、共享读线程或 `DispatchGroup.wait()`；调度台的仓库探测与会话投影在 utility 后台任务完成，并以修订号保证只有最新结果写回主线程。
+
+- **独立视觉模型有界重试（1.215.0-rc5）** —— 图片先由专用视觉模型转成文字，再交给纯文本主模型；some.im 明确返回视觉路由暂不可用的 HTTP 422 时，整个解析操作最多额外重试一次。错误卡会标明视觉阶段与模型名，解析失败则硬停止，绝不把原图继续透传给文本模型。
+
+- **编辑设置可靠落盘（1.215.0-rc4）** —— `EditorSettings` 的异步保存任务在排队时捕获不可变快照，并在弱引用 `AppState` 的界面副作用之前完成持久化；设置窗口关闭、切换当前编辑器或替换临时状态时，行号、当前行高亮等开关不会再因原状态对象释放而复位。
 
 - **账号头像统一渲染（1.215.0-rc3）** —— 侧栏底部账号条与弹出菜单顶部共用同一个远程头像组件和进程级缓存，不再由弹出菜单硬编码昵称首字母；只有未配置头像、加载中或请求失败时才显示首字母占位。
 

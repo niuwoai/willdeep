@@ -51,12 +51,12 @@ private struct AgentDispatchBoardContent: View {
             }
         }
         .onAppear {
-            coordinator.synchronize(with: appState.agentSessions)
+            coordinator.synchronizeInBackground(with: appState.agentSessions)
             localExecutors = AgentDispatchExecutorResolver.localAvailableExecutors()
             reloadExecutionProfiles()
         }
         .onReceive(appState.$agentSessions) { sessions in
-            coordinator.synchronize(with: sessions)
+            coordinator.synchronizeInBackground(with: sessions)
         }
         .onChange(of: coordinator.selectedGoalID) { _ in
             graphSelection = coordinator.selectedTaskID.map(AgentDispatchGraphSelection.task)

@@ -2052,6 +2052,10 @@ enum AgentClientError: LocalizedError {
     case invalidBaseURL
     case invalidResponse
     case serverStatus(AgentProviderHTTPError)
+    /// A dedicated vision-model preflight failed before the text-only main
+    /// model was called. Keeping this separate prevents the error banner from
+    /// implying that the main chat model received the image.
+    case imageDescriptionServerStatus(AgentProviderHTTPError)
     /// The provider accepted the request (HTTP 2xx) but the SSE stream
     /// closed without emitting a single meaningful event — no text, no
     /// reasoning, no tool call, not even a finish_reason. A relay whose
@@ -2076,6 +2080,8 @@ enum AgentClientError: LocalizedError {
             return "The model provider returned an invalid response."
         case .serverStatus(let error):
             return "The model provider returned HTTP \(error.statusCode)."
+        case .imageDescriptionServerStatus(let error):
+            return "The vision model \(error.model) returned HTTP \(error.statusCode)."
         case .emptyStream(let providerID, let model):
             return "The provider \(providerID) (\(model)) returned an empty stream."
         case .unsupportedProviderKind(let kind):

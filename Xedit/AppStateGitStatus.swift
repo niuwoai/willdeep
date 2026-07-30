@@ -8,7 +8,7 @@
 //  worktree-change summary:
 //
 //    - GitFileStatusKind / GitRepositoryStatus value types
-//    - ProcessOutputCollector / TimedProcessState helpers
+//    - TimedProcessState helper
 //    - The nonisolated static `loadGitStatus`, `loadAgentWorktreeChangeSummary`,
 //      and parsing helpers, attached to AppState by extension
 //
@@ -374,10 +374,40 @@ extension AppState {
         timeout: TimeInterval
     ) -> GitCommandResult {
         let process = Process()
-        let stdoutPipe = Pipe()
-        let stderrPipe = Pipe()
-        let stdoutCollector = ProcessOutputCollector(limit: maxGitOutputBytes)
-        let stderrCollector = ProcessOutputCollector(limit: maxGitOutputBytes)
+        let outputID = UUID().uuidString
+        let temporaryDirectory = FileManager.default.temporaryDirectory
+        let stdoutURL = temporaryDirectory
+            .appendingPathComponent("willdeep-git-\(outputID).stdout")
+        let stderrURL = temporaryDirectory
+            .appendingPathComponent("willdeep-git-\(outputID).stderr")
+        guard FileManager.default.createFile(atPath: stdoutURL.path, contents: nil),
+              FileManager.default.createFile(atPath: stderrURL.path, contents: nil) else {
+            try? FileManager.default.removeItem(at: stdoutURL)
+            try? FileManager.default.removeItem(at: stderrURL)
+            return GitCommandResult(
+                status: -1,
+                stdout: "",
+                stderr: "Unable to create temporary Git output files.",
+                timedOut: false
+            )
+        }
+        defer {
+            try? FileManager.default.removeItem(at: stdoutURL)
+            try? FileManager.default.removeItem(at: stderrURL)
+        }
+        let stdoutHandle: FileHandle
+        let stderrHandle: FileHandle
+        do {
+            stdoutHandle = try FileHandle(forWritingTo: stdoutURL)
+            stderrHandle = try FileHandle(forWritingTo: stderrURL)
+        } catch {
+            return GitCommandResult(
+                status: -1,
+                stdout: "",
+                stderr: error.localizedDescription,
+                timedOut: false
+            )
+        }
         let runState = TimedProcessState()
         process.executableURL = URL(fileURLWithPath: "/usr/bin/git")
         // `core.quotePath=false`:git 默认把路径里的非 ASCII 字节用八进制
@@ -392,31 +422,22 @@ extension AppState {
             "GIT_OPTIONAL_LOCKS": "0",
             "GIT_TERMINAL_PROMPT": "0"
         ]) { current, _ in current }
-        process.standardOutput = stdoutPipe
-        process.standardError = stderrPipe
+        process.standardOutput = stdoutHandle
+        process.standardError = stderrHandle
 
         do {
             try process.run()
         } catch {
+            stdoutHandle.closeFile()
+            stderrHandle.closeFile()
             return GitCommandResult(status: -1, stdout: "", stderr: error.localizedDescription, timedOut: false)
         }
 
-        // Drain both pipes independently for the full lifetime of the child.
-        // Mixing readabilityHandler callbacks with a final readToEnd races
-        // under full-suite fork pressure: the handler can own the last bytes
-        // while the final read observes EOF, leaving a successful `git`
-        // command with an empty stdout snapshot.
-        let drainGroup = DispatchGroup()
-        drainGroup.enter()
-        DispatchQueue.global(qos: .userInitiated).async {
-            stdoutCollector.append(stdoutPipe.fileHandleForReading.readDataToEndOfFile())
-            drainGroup.leave()
-        }
-        drainGroup.enter()
-        DispatchQueue.global(qos: .userInitiated).async {
-            stderrCollector.append(stderrPipe.fileHandleForReading.readDataToEndOfFile())
-            drainGroup.leave()
-        }
+        // `Process` has duplicated these descriptors into the child. Closing
+        // the parent copies prevents descriptor accumulation while regular
+        // files avoid pipe backpressure and DispatchGroup/EOF deadlocks.
+        stdoutHandle.closeFile()
+        stderrHandle.closeFile()
 
         let timeoutWorkItem = DispatchWorkItem {
             runState.markTimedOut()
@@ -433,19 +454,41 @@ extension AppState {
 
         process.waitUntilExit()
         timeoutWorkItem.cancel()
-        drainGroup.wait()
+        let stdoutData = readLimitedProcessOutput(
+            at: stdoutURL,
+            limit: maxGitOutputBytes
+        )
+        let stderrData = readLimitedProcessOutput(
+            at: stderrURL,
+            limit: maxGitOutputBytes
+        )
 
         return GitCommandResult(
             status: process.terminationStatus,
-            stdout: stdoutCollector.stringValue,
-            stderr: stderrCollector.stringValue,
+            stdout: decodeProcessOutput(stdoutData),
+            stderr: decodeProcessOutput(stderrData),
             timedOut: runState.didTimeout,
             allowedExitStatuses: allowedExitStatuses
         )
     }
+
+    private nonisolated static func readLimitedProcessOutput(
+        at url: URL,
+        limit: Int
+    ) -> Data {
+        guard let handle = try? FileHandle(forReadingFrom: url) else {
+            return Data()
+        }
+        defer { handle.closeFile() }
+        return (try? handle.read(upToCount: limit)) ?? Data()
+    }
+
+    private nonisolated static func decodeProcessOutput(_ data: Data) -> String {
+        String(data: data, encoding: .utf8) ?? decodeText(from: data)
+    }
 }
 
-struct GitCommandResult: Equatable {
+nonisolated struct GitCommandResult: Equatable, Sendable {
     var status: Int32
     var stdout: String
     var stderr: String
@@ -477,33 +520,6 @@ struct GitCommandResult: Equatable {
         let output = stdout.trimmingCharacters(in: .whitespacesAndNewlines)
         if !output.isEmpty { return output }
         return "git exited with status \(status)"
-    }
-}
-
-nonisolated final class ProcessOutputCollector: @unchecked Sendable {
-    private let limit: Int
-    private var data = Data()
-    private let lock = NSLock()
-
-    init(limit: Int) {
-        self.limit = limit
-    }
-
-    func append(_ chunk: Data) {
-        guard !chunk.isEmpty else { return }
-        lock.lock()
-        defer { lock.unlock() }
-
-        let remaining = max(0, limit - data.count)
-        guard remaining > 0 else { return }
-        data.append(chunk.prefix(remaining))
-    }
-
-    var stringValue: String {
-        lock.lock()
-        let snapshot = data
-        lock.unlock()
-        return String(data: snapshot, encoding: .utf8) ?? AppState.decodeText(from: snapshot)
     }
 }
 

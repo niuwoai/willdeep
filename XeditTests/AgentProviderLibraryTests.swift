@@ -798,4 +798,59 @@ struct AgentProviderLibraryTests {
         )
         #expect(someIMVisionConfig.supportsImageInput)
     }
+
+    @Test("image route retry is bounded to one exact transient 422")
+    func imageRouteRetryIsStrictlyBounded() {
+        let routeError = AgentClientError.serverStatus(
+            AgentProviderHTTPError(
+                statusCode: 422,
+                method: "POST",
+                url: "https://relay.example/v1/chat/completions",
+                providerID: "some-im",
+                model: "qwen3-vl-plus",
+                requestSummary: "",
+                requestBody: "",
+                responseBody: #"{"message":"no route can preserve requested chat_completions capabilities: input_modality:image"}"#
+            )
+        )
+
+        #expect(AgentImageDescriptionRetryPolicy.shouldRetry(routeError, retryCount: 0))
+        #expect(!AgentImageDescriptionRetryPolicy.shouldRetry(routeError, retryCount: 1))
+        #expect(AgentImageDescriptionRetryPolicy.maximumRetryCount == 1)
+
+        let unrelated422 = AgentClientError.serverStatus(
+            AgentProviderHTTPError(
+                statusCode: 422,
+                method: "POST",
+                url: "https://relay.example/v1/chat/completions",
+                providerID: "some-im",
+                model: "qwen3-vl-plus",
+                requestSummary: "",
+                requestBody: "",
+                responseBody: #"{"message":"invalid request body"}"#
+            )
+        )
+        #expect(!AgentImageDescriptionRetryPolicy.shouldRetry(unrelated422, retryCount: 0))
+    }
+
+    @Test("image description errors identify the vision stage")
+    func imageDescriptionErrorsIdentifyVisionStage() {
+        let providerError = AgentProviderHTTPError(
+            statusCode: 422,
+            method: "POST",
+            url: "https://relay.example/v1/chat/completions",
+            providerID: "some-im",
+            model: "qwen3-vl-plus",
+            requestSummary: "",
+            requestBody: "",
+            responseBody: #"{"message":"no route can preserve requested chat_completions capabilities: input_modality:image"}"#
+        )
+        let error = AgentClientError.imageDescriptionServerStatus(providerError)
+        let message = AppState.friendlyMessage(for: error)
+        let details = AppState.details(for: error)
+
+        #expect(message.contains("视觉模型 qwen3-vl-plus"))
+        #expect(message.contains("图片尚未交给纯文本主模型"))
+        #expect(details?.sections.first?.title == "Image Understanding Request")
+    }
 }

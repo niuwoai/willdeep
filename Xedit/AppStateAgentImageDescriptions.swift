@@ -7,6 +7,26 @@
 
 import Foundation
 
+nonisolated enum AgentImageDescriptionRetryPolicy {
+    /// A vision-route lookup can briefly return 422 while the relay refreshes
+    /// its healthy upstream set. Permit exactly one delayed retry across the
+    /// whole image-description operation; candidate fallbacks do not each get
+    /// their own retry budget.
+    static let maximumRetryCount = 1
+    static let retryDelayNanoseconds: UInt64 = 800_000_000
+
+    static func shouldRetry(_ error: Error, retryCount: Int) -> Bool {
+        guard retryCount < maximumRetryCount,
+              case AgentClientError.serverStatus(let providerError) = error,
+              providerError.statusCode == 422 else {
+            return false
+        }
+        let response = providerError.responseBody.lowercased()
+        return response.contains("no route can preserve")
+            && response.contains("input_modality:image")
+    }
+}
+
 extension AppState {
     func prepareImagesForTextOnlyProvider(
         for runtime: AgentRuntime,
@@ -43,18 +63,41 @@ extension AppState {
         configuration: AgentConfiguration
     ) async throws -> String {
         var lastError: Error?
+        var retryCount = 0
         for candidate in imageDescriptionConfigurationCandidates(fallback: configuration) {
-            do {
-                return try await requestImageDescription(images, configuration: candidate)
-            } catch {
-                lastError = error
-                continue
+            while true {
+                do {
+                    return try await requestImageDescription(images, configuration: candidate)
+                } catch is CancellationError {
+                    throw CancellationError()
+                } catch {
+                    if AgentImageDescriptionRetryPolicy.shouldRetry(error, retryCount: retryCount) {
+                        retryCount += 1
+                        try await Task.sleep(
+                            nanoseconds: AgentImageDescriptionRetryPolicy.retryDelayNanoseconds
+                        )
+                        continue
+                    }
+                    lastError = Self.imageDescriptionStageError(error)
+                    break
+                }
             }
         }
         if let lastError {
             throw lastError
         }
-        return try await requestImageDescription(images, configuration: configuration)
+        do {
+            return try await requestImageDescription(images, configuration: configuration)
+        } catch {
+            throw Self.imageDescriptionStageError(error)
+        }
+    }
+
+    private nonisolated static func imageDescriptionStageError(_ error: Error) -> Error {
+        guard case AgentClientError.serverStatus(let providerError) = error else {
+            return error
+        }
+        return AgentClientError.imageDescriptionServerStatus(providerError)
     }
 
     private func requestImageDescription(

@@ -328,7 +328,9 @@ struct AgentSessionsSidebar: View {
                 appState.agentPrimaryDestination = .dispatchBoard
                 appState.agentSidePanelKind = nil
                 appState.agentSidePanelRequest = nil
-                appState.agentDispatchCoordinator.synchronize(with: appState.agentSessions)
+                appState.agentDispatchCoordinator.synchronizeInBackground(
+                    with: appState.agentSessions
+                )
             }
             // 专家圆桌:切到嵌入的 .roundtable 目的地(和「已安排」同级,不切主
             // Agent 会话流);嵌入页内还提供「弹出到独立窗口」入口。

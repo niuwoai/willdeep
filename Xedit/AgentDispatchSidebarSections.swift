@@ -23,7 +23,7 @@ struct AgentDispatchSidebarSections: View {
             environmentsSection
         }
         .onAppear {
-            coordinator.synchronize(with: appState.agentSessions)
+            coordinator.synchronizeInBackground(with: appState.agentSessions)
         }
     }
 

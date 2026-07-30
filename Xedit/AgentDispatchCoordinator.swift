@@ -15,6 +15,7 @@ final class AgentDispatchCoordinator: ObservableObject {
     @Published var selectedTaskID: UUID?
 
     private let store: AgentDispatchStore
+    private var backgroundSynchronizationRevision = 0
 
     init(store: AgentDispatchStore = AgentDispatchStore()) {
         self.store = store
@@ -35,8 +36,49 @@ final class AgentDispatchCoordinator: ObservableObject {
     }
 
     func synchronize(with sessions: [AgentSession]) {
+        backgroundSynchronizationRevision += 1
+        applySynchronizedGoals(
+            Self.synchronizedGoals(
+                from: sessions,
+                existingGoals: goals,
+                defaultAcceptanceCriterion: L10n.Dispatch.defaultAcceptanceCriterion
+            )
+        )
+    }
+
+    /// Projects repository-backed session metadata away from the main actor.
+    /// Rapid SwiftUI `onReceive` updates are coalesced by revision so an older
+    /// projection can never overwrite a newer one.
+    func synchronizeInBackground(with sessions: [AgentSession]) {
+        backgroundSynchronizationRevision += 1
+        let revision = backgroundSynchronizationRevision
+        let existingGoals = goals
+        let defaultAcceptanceCriterion = L10n.Dispatch.defaultAcceptanceCriterion
+
+        Task.detached(priority: .utility) {
+            let synchronizedGoals = Self.synchronizedGoals(
+                from: sessions,
+                existingGoals: existingGoals,
+                defaultAcceptanceCriterion: defaultAcceptanceCriterion
+            )
+            await MainActor.run { [weak self] in
+                guard let self,
+                      self.backgroundSynchronizationRevision == revision,
+                      self.goals == existingGoals else {
+                    return
+                }
+                self.applySynchronizedGoals(synchronizedGoals)
+            }
+        }
+    }
+
+    private nonisolated static func synchronizedGoals(
+        from sessions: [AgentSession],
+        existingGoals: [AgentDispatchGoal],
+        defaultAcceptanceCriterion: String
+    ) -> [AgentDispatchGoal] {
         let persistedTaskSessionIDs = Set(
-            goals.flatMap { $0.tasks.compactMap(\.runtimeSessionID) }
+            existingGoals.flatMap { $0.tasks.compactMap(\.runtimeSessionID) }
         )
         let sourceSessions = sessions.filter { session in
             guard let goal = session.currentGoal else { return false }
@@ -46,17 +88,24 @@ final class AgentDispatchCoordinator: ObservableObject {
             return session.dispatchParentProjectID == nil
                 && !persistedTaskSessionIDs.contains(session.id)
         }
-        let existingByID = Dictionary(uniqueKeysWithValues: goals.map { ($0.id, $0) })
+        let existingByID = Dictionary(uniqueKeysWithValues: existingGoals.map { ($0.id, $0) })
         let projected = sourceSessions.map { session in
-            Self.project(session: session, existing: existingByID[session.id])
+            Self.project(
+                session: session,
+                existing: existingByID[session.id],
+                defaultAcceptanceCriterion: defaultAcceptanceCriterion
+            )
         }
-        goals = projected.sorted { lhs, rhs in
+        return projected.sorted { lhs, rhs in
             if lhs.activeTaskCount != rhs.activeTaskCount {
                 return lhs.activeTaskCount > rhs.activeTaskCount
             }
             return lhs.updatedAt > rhs.updatedAt
         }
+    }
 
+    private func applySynchronizedGoals(_ synchronizedGoals: [AgentDispatchGoal]) {
+        goals = synchronizedGoals
         if selectedGoalID.flatMap({ id in goals.first(where: { $0.id == id }) }) == nil {
             selectedGoalID = goals.first?.id
         }
@@ -523,9 +572,10 @@ final class AgentDispatchCoordinator: ObservableObject {
         return values.filter { seen.insert($0).inserted }
     }
 
-    private static func project(
+    private nonisolated static func project(
         session: AgentSession,
-        existing: AgentDispatchGoal?
+        existing: AgentDispatchGoal?,
+        defaultAcceptanceCriterion: String
     ) -> AgentDispatchGoal {
         let sourceGoal = session.currentGoal ?? AgentGoal()
         let sourceWorkspace = session.workspaceLocation
@@ -597,7 +647,7 @@ final class AgentDispatchCoordinator: ObservableObject {
                 task.primaryProfileID = node.primaryProfileID
                 task.fallbackProfileIDs = node.fallbackProfileIDs
                 task.acceptanceCriteria = node.acceptanceCriteria.isEmpty
-                    ? [L10n.Dispatch.defaultAcceptanceCriterion]
+                    ? [defaultAcceptanceCriterion]
                     : node.acceptanceCriteria
                 if task.runtimeSessionID == nil {
                     task.state = node.dependencyIDs.isEmpty ? .queued : .blocked

@@ -1875,13 +1875,17 @@ final class AppState: ObservableObject {
     private func scheduleEditorSettingsSideEffects() {
         editorSettingsSideEffectsWorkItem?.cancel()
 
+        // Capture the value at interaction time. The Settings scene can swap
+        // to another registry AppState (or release a fallback AppState) before
+        // this main-queue work item runs. Persistence must not depend on that
+        // view-owned object still being alive.
+        let normalizedSettings = editorSettings.normalized()
         let workItem = DispatchWorkItem { [weak self] in
+            EditorSettingsStore.save(normalizedSettings)
             guard let self else { return }
-            let normalizedSettings = self.editorSettings.normalized()
             if self.inspectorMode != normalizedSettings.preferredInspectorMode {
                 self.inspectorMode = normalizedSettings.preferredInspectorMode
             }
-            EditorSettingsStore.save(normalizedSettings)
             self.bumpEditorRenderRevision()
             self.bumpEditorHighlightRevision()
         }
