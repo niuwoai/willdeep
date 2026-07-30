@@ -584,16 +584,16 @@ struct AgentSessionsSidebar: View {
                         .foregroundStyle(palette.accent)
                         .help(L10n.Sidebar.hasActiveScheduledTasksTooltip)
                 }
-                // 被截断的标题在悬停时向左滚动整段可读(照 Claude 侧栏),
-                // 松开指针回位;放得下的标题静止不动。hugWidth 用 NSFont
-                // 同步测出自然宽度,保证短标题仍紧贴内容、徽章跟在标题后。
-                MarqueeOnHoverText(
+                // 标题保持单行并以省略号截断，完整内容通过系统 tooltip
+                // 提供。hugWidth 用 NSFont 同步测出自然宽度，保证短标题
+                // 仍紧贴内容、徽章跟在标题后。
+                TruncatedTooltipText(
                     attributed: AttributedString(session.title),
                     font: AgentDesign.sidebarRowFont,
                     color: palette.primaryText.opacity(
                         isActive ? 1 : AgentDesign.sidebarPrimaryTextOpacity
                     ),
-                    tooltip: L10n.Sidebar.sessionMenuRename,
+                    tooltip: session.title,
                     hugWidth: Self.sessionTitleNaturalWidth(session.title)
                 )
                 // sidebar 收窄时:title 优先保留(给它 priority 1),
@@ -739,10 +739,9 @@ struct AgentSessionsSidebar: View {
     /// alert is modal to the active window, so the user can't keep
     /// typing into the session list while it's open.
     /// 会话标题的自然排版宽度(单行、sidebarRowFont)。给
-    /// MarqueeOnHoverText 的 hugWidth 用:同步测出结果,首帧就有正确
-    /// 上限,不用等 PreferenceKey 回填(那会让徽章闪一下)。+2 的余量
-    /// 抵消 NSString 测宽与 SwiftUI Text 渲染间的亚像素差,防止刚好
-    /// 放得下的标题被削掉最后一个字符的边。
+    /// TruncatedTooltipText 的 hugWidth 用：同步测出结果，首帧就有正确
+    /// 上限。+2 的余量抵消 NSString 测宽与 SwiftUI Text 渲染间的
+    /// 亚像素差，防止刚好放得下的标题被削掉最后一个字符的边。
     private static func sessionTitleNaturalWidth(_ title: String) -> CGFloat {
         let font = NSFont.systemFont(ofSize: AgentDesign.sidebarRowFontSize)
         let width = (title as NSString).size(withAttributes: [.font: font]).width

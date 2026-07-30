@@ -1,7 +1,21 @@
 # Changelog
 
-> 当前文件保留最新版本（1.215.0-rc1 至 1.109.0-rc340）。
+> 当前文件保留最新版本（1.215.0-rc2 至 1.109.0-rc340）。
 > 更早的 1000 个版本已移至 [CHANGELOG-ARCHIVE.md](CHANGELOG-ARCHIVE.md)。
+
+## 1.215.0-rc2 - 2026-07-30
+
+### Fixed
+
+- **悬停长标题后 WillDeep 主线程卡死**：会话标题和计划步骤恢复为单行尾部省略号，通过系统 tooltip 展示完整内容；移除 `GeometryReader`、`PreferenceKey`、hover 状态回写和 `repeatForever` 跑马灯动画，阻断 hover 命中测试与 `LazyVStack` 重布局之间的反馈环。
+
+### Tests
+
+- 执行静态回归检查、版本一致性、Swift 定向测试与完整 Debug 构建，确认截断组件不再包含布局测量、悬停状态或无限动画。
+
+### Meta
+
+- 版本号从 **1.215.0-rc1** 递增为 bugfix 版本 **1.215.0-rc2**，内部构建号从 **213** 递增为 **214**，Help 与 Computer Use Helper 构建号从 **130** 递增为 **131**；App、Go agent、Help、Helper、浏览器扩展、README、响应头契约与产品文档保持一致。
 
 ## 1.215.0-rc1 - 2026-07-30
 

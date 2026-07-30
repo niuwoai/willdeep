@@ -229,144 +229,32 @@ struct AgentPlanRevisionRow: View {
     }
 }
 
-/// A single-line label that scrolls its overflow to the left while the
-/// pointer hovers, so a long title stays one row tall yet stays fully
-/// readable on demand.
-///
-/// 静止状态就是一条普通的单行截断文本(尾部省略号),不做任何硬裁剪
-/// 或遮罩——尾巴被切掉看着像"被挡住"是上一版的 bug。只有指针悬停
-/// 且确实有溢出时才整段左滚;指针离开立刻停下并复位,不留后台常驻
-/// 动画(滚动层直接从视图树里摘掉,repeatForever 随之销毁)。
-/// macOS 13 compatible — measures widths with a classic `GeometryReader`
-/// + `PreferenceKey` (no `onGeometryChange`).
-struct MarqueeOnHoverText: View {
+/// A stable single-line label that truncates overflowing content and exposes
+/// the complete value through the native tooltip. It deliberately avoids
+/// geometry feedback, hover state, and perpetual animation so list rows remain
+/// inert while SwiftUI measures or reuses them.
+struct TruncatedTooltipText: View {
     let attributed: AttributedString
     var font: Font = .system(size: 12)
     var color: Color = .primary
     var strikethrough: Bool = false
-    /// Full text surfaced as a native tooltip, so the whole step is
-    /// reachable even without waiting out the scroll.
+    /// Full text surfaced as a native tooltip.
     var tooltip: String? = nil
     /// When set, caps the container at the text's natural width so the
     /// label hugs its content —— sidebar 会话行这类「标题后面紧跟徽章」
-    /// 的布局需要;不传保持原来的贪婪整行行为(计划卡步骤)。调用方
-    /// 用 NSFont 同步测宽,避免首帧靠 PreferenceKey 回填时的布局抖动。
+    /// 的布局需要;不传保持原来的贪婪整行行为(计划卡步骤)。
     var hugWidth: CGFloat? = nil
 
-    /// Pixels-per-second the overflow slides at; keeps long and short
-    /// steps feeling like the same gesture.
-    private let velocity: CGFloat = 26
-    /// 悬停后先静止一下再起步,避免指针只是路过就抖一下。
-    private let startDelay: Double = 0.35
-
-    @State private var textSize: CGSize = .init(width: 0, height: 16)
-    @State private var containerWidth: CGFloat = 0
-    @State private var scrolling = false
-    @State private var offset: CGFloat = 0
-
-    private var overflow: CGFloat { max(0, textSize.width - containerWidth) }
-    private var scrollable: Bool { overflow > 0.5 }
-
-    /// 完整文本(不截断),滚动时用;同时兼作隐形测量层。
-    private var fullLine: some View {
-        Text(attributed)
-            .font(font)
-            .strikethrough(strikethrough, color: .secondary)
-            .foregroundStyle(color)
-            .lineLimit(1)
-            .fixedSize(horizontal: true, vertical: false)
-    }
-
-    /// 静止状态的样子:规规矩矩的尾部省略号,不硬切、不加遮罩。
-    private var truncatedLine: some View {
+    var body: some View {
         Text(attributed)
             .font(font)
             .strikethrough(strikethrough, color: .secondary)
             .foregroundStyle(color)
             .lineLimit(1)
             .truncationMode(.tail)
-    }
-
-    var body: some View {
-        GeometryReader { geo in
-            ZStack(alignment: .leading) {
-                // 只为量出整段文字的自然宽度,永远不可见。
-                fullLine
-                    .hidden()
-                    .background(
-                        GeometryReader { inner in
-                            Color.clear.preference(key: MarqueeSizeKey.self, value: inner.size)
-                        }
-                    )
-                if scrolling {
-                    // 滚动层只在悬停期间存在,离场即销毁,顺带把
-                    // repeatForever 动画一起收掉。
-                    fullLine.offset(x: offset)
-                } else {
-                    truncatedLine
-                }
-            }
-            .frame(width: geo.size.width, alignment: .leading)
-            // 只有滚动层可能越界,这里的 clip 是给它兜底,静止状态
-            // 靠省略号收尾,不会被切。
-            .clipped()
-            .onAppear { containerWidth = geo.size.width }
-            .onChange(of: geo.size.width) { containerWidth = $0 }
-        }
-        .frame(height: textSize.height)
-        .frame(maxWidth: hugWidth ?? .infinity, alignment: .leading)
-        .contentShape(Rectangle())
-        .onPreferenceChange(MarqueeSizeKey.self) { textSize = $0 }
-        .onHover { inside in
-            // Only arm the scroll when there is actually hidden overflow;
-            // a fitting title should never twitch on hover.
-            if inside && scrollable {
-                startScrolling()
-            } else {
-                stopScrolling()
-            }
-        }
-        .onDisappear(perform: stopScrolling)
-        .help(tooltip ?? "")
-    }
-
-    private func startScrolling() {
-        guard !scrolling else { return }
-        offset = 0
-        scrolling = true
-        let distance = overflow
-        let duration = max(0.6, Double(distance) / Double(velocity))
-        // 等滚动层真正插入视图树的下一拍再挂动画,否则 SwiftUI 会把
-        // 这次 offset 变化当成初始状态、动画直接被吞掉。
-        DispatchQueue.main.async {
-            guard scrolling else { return }
-            withAnimation(
-                .linear(duration: duration)
-                    .delay(startDelay)
-                    .repeatForever(autoreverses: true)
-            ) {
-                offset = -distance
-            }
-        }
-    }
-
-    private func stopScrolling() {
-        guard scrolling else { return }
-        // repeatForever 不会自己停:必须用一次 disablesAnimations 的
-        // 事务把 offset 拽回 0,才能真的掐断这条无限动画。
-        var transaction = Transaction()
-        transaction.disablesAnimations = true
-        withTransaction(transaction) {
-            scrolling = false
-            offset = 0
-        }
-    }
-}
-
-private struct MarqueeSizeKey: PreferenceKey {
-    static let defaultValue: CGSize = .zero
-    static func reduce(value: inout CGSize, nextValue: () -> CGSize) {
-        value = nextValue()
+            .frame(maxWidth: hugWidth ?? .infinity, alignment: .leading)
+            .contentShape(Rectangle())
+            .help(tooltip ?? "")
     }
 }
 
@@ -420,7 +308,7 @@ struct AgentPlanStepRow: View {
                 .lineLimit(1)
                 .fixedSize(horizontal: true, vertical: false)
                 .frame(width: AgentPlanStepLayoutMetrics.indexColumnWidth, alignment: .trailing)
-            MarqueeOnHoverText(
+            TruncatedTooltipText(
                 attributed: MarkdownInline.attributedString(from: step.text),
                 color: textColor,
                 strikethrough: step.status == .done || step.status == .skipped,

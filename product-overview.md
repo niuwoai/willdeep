@@ -1,6 +1,6 @@
 # WillDeep Product Overview
 
-> Last updated: 2026-07-30 | Current version: v1.215.0-rc1
+> Last updated: 2026-07-30 | Current version: v1.215.0-rc2
 
 ## Positioning
 
@@ -11,6 +11,8 @@ Official product domain: [willdeep.com](https://willdeep.com).
 WillDeep is configured for non-App-Store distribution without App Sandbox so it can access local project files with fewer permission interruptions.
 
 ## 架构概览
+
+- **侧栏标题稳定截断（1.215.0-rc2）** —— 会话标题和计划步骤恢复为无状态的单行尾部省略号，并通过系统 tooltip 展示完整内容；移除行内 GeometryReader、PreferenceKey、hover 状态回写与无限跑马灯动画，避免侧栏在命中测试和 LazyVStack 布局之间形成主线程反馈环。
 
 - **AI 原生 DAG 与多 Profile 调度（1.215.0-rc1）** —— 调度台不再把 Goal 验收清单投影成固定单线任务：规划模型必须输出独立的 `dispatch-graph`，由 AI 决定最小可执行节点、并行分支、多个前置依赖与显式汇聚节点；节点 key 在项目内映射为稳定 UUID，规划重试不会冲掉既有执行历史。规划本身和每个执行节点都绑定统一 Profile，Profile 可组合 WillDeep、Codex CLI、Claude Code、Hermes、Cursor Agent 或 Cline，以及对应模型、Provider、原生 Profile/Agent 名称；主 Profile 失败后按持久化回退链自动切换并记录尝试，防止循环重跑。调度台内置 Profile 管理器并自动合并 Codex、Claude 与 Hermes 的本机配置；人工节点编辑保留为直接干预入口。桌面宠物和系统通知会按项目/任务归属返回对应调度台，不再把调度任务打开成聊天。
 
