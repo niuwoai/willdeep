@@ -751,6 +751,7 @@ enum AgentSkillMarketplaceStore {
         try FileManager.default.createDirectory(at: skillDirectory, withIntermediateDirectories: true)
         storeCredentials(credentials, for: entry)
         try skillMarkdown(for: entry).write(to: skillURL, atomically: true, encoding: .utf8)
+        AgentSkillDirectory.invalidateCache()
         for (relativePath, contents) in entry.supportFiles {
             let supportURL = skillDirectory.appendingPathComponent(relativePath)
             try FileManager.default.createDirectory(
@@ -774,6 +775,7 @@ enum AgentSkillMarketplaceStore {
         }
         clearCredentials(for: entry)
         try FileManager.default.removeItem(at: skillURL.deletingLastPathComponent())
+        AgentSkillDirectory.invalidateCache()
     }
 
     static func installedSkillURL(

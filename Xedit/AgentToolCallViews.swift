@@ -888,6 +888,110 @@ struct AgentActivityHeadlineView: View {
     }
 }
 
+private struct AgentDelegatedLiveProgressView: View {
+    @EnvironmentObject var appState: AppState
+    let progress: AgentDelegatedLiveProgress
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 5) {
+            HStack(spacing: 6) {
+                Image(systemName: phaseSymbol)
+                    .font(.system(size: 10, weight: .semibold))
+                    .foregroundStyle(phaseTint)
+                    .frame(width: 14)
+                Text(
+                    L10n.DelegatedTask.liveProgress(
+                        phase: progress.phase,
+                        attempt: progress.attempt,
+                        maximum: progress.maximumAttempts
+                    )
+                )
+                .font(AgentDesign.chatSupportingFont(
+                    baseFontSize: appState.agentChatBaseFontSize,
+                    visualMinimum: 10,
+                    weight: .semibold
+                ))
+                .foregroundStyle(phaseTint)
+                .lineLimit(1)
+                if !progress.phase.isTerminal {
+                    ProgressView()
+                        .controlSize(.small)
+                        .scaleEffect(0.55)
+                        .frame(width: 12, height: 12)
+                }
+                Spacer(minLength: 0)
+            }
+
+            if let activity = progress.currentActivity, !activity.isEmpty {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(L10n.DelegatedTask.currentActivity)
+                        .font(.caption2)
+                        .foregroundStyle(.tertiary)
+                    Text(activity)
+                        .font(.system(size: 10.5, design: .monospaced))
+                        .foregroundStyle(.secondary)
+                        .lineLimit(2)
+                        .truncationMode(.middle)
+                        .textSelection(.enabled)
+                }
+            }
+
+            if progress.terminalTabID != nil {
+                Label(
+                    L10n.DelegatedTask.fullOutputInTerminal,
+                    systemImage: "terminal"
+                )
+                .font(.caption2)
+                .foregroundStyle(.tertiary)
+            }
+        }
+        .padding(.horizontal, 7)
+        .padding(.vertical, 6)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(phaseTint.opacity(0.06))
+        .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
+        .accessibilityIdentifier("agent-delegated-live-progress")
+    }
+
+    private var phaseSymbol: String {
+        switch progress.phase {
+        case .contracted:
+            return "doc.badge.gearshape"
+        case .executing:
+            return "hammer"
+        case .selfVerifying:
+            return "person.crop.circle.badge.checkmark"
+        case .willDeepVerifying:
+            return "checkmark.shield"
+        case .reworkRequired:
+            return "arrow.uturn.backward.circle"
+        case .readyForDelivery:
+            return "checkmark.seal.fill"
+        case .failed:
+            return "xmark.octagon.fill"
+        case .cancelled:
+            return "stop.circle"
+        }
+    }
+
+    private var phaseTint: Color {
+        switch progress.phase {
+        case .contracted:
+            return .secondary
+        case .executing, .selfVerifying, .willDeepVerifying:
+            return appState.editorSettings.interfaceSkin.palette.accent
+        case .reworkRequired:
+            return .orange
+        case .readyForDelivery:
+            return .green
+        case .failed:
+            return .red
+        case .cancelled:
+            return .secondary
+        }
+    }
+}
+
 struct AgentToolCallCard: View {
     @EnvironmentObject var appState: AppState
     let call: AgentToolCall
@@ -979,6 +1083,10 @@ struct AgentToolCallCard: View {
                 }
             }
 
+            if let progress = call.delegatedProgress {
+                AgentDelegatedLiveProgressView(progress: progress)
+            }
+
             if let images = call.result?.images, !images.isEmpty {
                 AgentToolResultImageStrip(images: images)
             }
@@ -989,6 +1097,13 @@ struct AgentToolCallCard: View {
                 }
                 if let payload = call.result?.payload, !payload.isEmpty {
                     expandableBlock(title: L10n.ToolCard.output, text: payload)
+                }
+                if let recentOutput = call.delegatedProgress?.recentOutput,
+                   !recentOutput.isEmpty {
+                    expandableBlock(
+                        title: L10n.DelegatedTask.recentOutput,
+                        text: recentOutput
+                    )
                 }
                 if let errorMessage = call.errorMessage, !errorMessage.isEmpty {
                     expandableBlock(title: L10n.ToolCard.error, text: errorMessage)
@@ -2441,6 +2556,7 @@ struct AgentToolCallCard: View {
         return terminalShortcutProtectedInputState != nil
         || !argumentsLines.isEmpty
         || !(call.result?.payload.isEmpty ?? true)
+        || !(call.delegatedProgress?.recentOutput?.isEmpty ?? true)
         || !(call.errorMessage?.isEmpty ?? true)
     }
 

@@ -624,7 +624,9 @@ struct AgentPluginPickerPill: View {
         .focusable(false)
         .fixedSize()
         .help(L10n.PluginPicker.help)
-        .onAppear(perform: refresh)
+        .task {
+            await refresh()
+        }
     }
 
     private var pluginGroups: [PluginSkillGroup] {
@@ -659,9 +661,14 @@ struct AgentPluginPickerPill: View {
         }
     }
 
-    private func refresh() {
-        pluginSkills = AgentSkillDirectory.list(includeDisabled: false)
-        mcpServers = AgentMCPServerDirectory.list(includeDisabled: false)
+    @MainActor
+    private func refresh() async {
+        let loadedSkills = await AgentSkillDirectory.listAsync(includeDisabled: false)
+        guard !Task.isCancelled else { return }
+        let loadedServers = await AgentMCPServerDirectory.listAsync(includeDisabled: false)
+        guard !Task.isCancelled else { return }
+        pluginSkills = loadedSkills
+        mcpServers = loadedServers
     }
 
     private struct PluginSkillGroup {

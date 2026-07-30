@@ -1,6 +1,6 @@
 # WillDeep Product Overview
 
-> Last updated: 2026-07-29 | Current version: v1.212.0-rc3
+> Last updated: 2026-07-30 | Current version: v1.212.0-rc9
 
 ## Positioning
 
@@ -12,6 +12,11 @@ WillDeep is configured for non-App-Store distribution without App Sandbox so it 
 
 ## 架构概览
 
+- **外部执行器实时监督反馈（1.212.0-rc9）** —— Claude Code、Codex CLI、Cursor Agent 与 Cline CLI 的可见终端输出继续完整保留在 Agent Terminal，同时由 runner 约每秒读取有限尾部、移除 ANSI 控制序列并完成密钥脱敏后，向 Composer 活动行、工具时间线和详情卡回传当前动作与最近输出。UI 使用宿主真实状态机展示“执行中 / 执行器独立验收 / WillDeep 二次验收 / 定点返工 / 验收通过”和尝试次数，不根据日志猜测虚假百分比；实时日志尾部仅用于内存渲染，不写入会话 JSON。
+- **调度台 Goal 创建改为结构化工作台（1.212.0-rc8）** —— 调度台选择工作区后直接展示目标陈述、逐项验收清单、工作区与自动调度策略摘要；提交后原位进入任务图。创建阶段不再复用聊天 transcript、消息气泡、普通 Composer 或聊天状态栏，结构化草稿也不会制造伪聊天消息。
+- **本地编译、单测与发布预热共享热缓存（1.212.0-rc7）** —— `ruby scripts/build_fast.rb` 作为 Debug/Release 增量编译入口，默认将 DerivedData、SwiftPM checkout、独立 package 下载缓存与 Xcode compilation cache 固定在 `~/Library/Caches/WillDeep/Xcode/Xedit`；本地快速单测和完整单测也默认复用同一路径，因此一次编译可以直接为后续测试预热，反向亦然。CLI 构建默认关闭 index store 以减少额外工作，但不修改 Xcode IDE 的工程索引设置；可用 `--index`、`--sign`、`--release`、`--destination` 或环境变量显式覆盖。`generic/platform=macOS` 可为 new83d 正式 archive 预热目标架构，但正式签名、公证、上传与 appcast 仍由发布引擎完成。每次编译输出 Markdown、JSON、原始日志及项目构建守卫报告；当前工作区实测冷构建 683.9 秒、无变更热构建 24.8 秒，源码回退时 compilation cache 命中 2/3 个任务并在 24.6 秒完成。
+- **分层并行 CI 与持久 Xcode 缓存（1.212.0-rc5）** —— Ruby quality/interaction/short-drama 守门、Go agent 测试和 macOS 原生单测拆为独立 Job 并行执行；Mac Runner 先 `build-for-testing`、再 `test-without-building`，只承担 Xcode 必需工作。DerivedData、SwiftPM checkout/package cache 固定在仓库外的 Runner 缓存目录，本地测试入口也允许通过 `WILLDEEP_XCODE_DERIVED_DATA_PATH` 复用同一策略；Xcode 测试构建默认启用 compilation cache 并关闭 CI index store。本地无编译复测的有效性指纹只跟踪真实构建输入，文档与测试报告变化不会让现有测试二进制失效。图像理解回退、Transcript 历史文案与 Workflow Report 渲染测试同步拆出独立文件，所有 Swift/测试源文件重新低于 3000 行硬限制。
+- **Skills 目录缓存与后台刷新（1.212.0-rc4）** —— 技能发现结果由进程级线程安全缓存统一持有，并发调用只执行一次磁盘加载；创建、更新、删除、安装与卸载会显式使缓存失效，启用状态变化则直接重新应用设置。应用启动会在 utility 后台任务预热缓存，Composer 的 `$` 补全、插件选择器和技能设置页均异步取数，避免 SwiftUI 主线程反复遍历技能目录和读取 `SKILL.md`。
 - **Editor 高对比选区与轻量纯文本输入（1.212.0-rc3）** —— 原生 `NSTextView` 编辑器使用系统配套的选区前景色与背景色，避免浅色代码文字落在浅色选区上；编辑行为明确采用纯文本模式，程序化语法着色仍由 attributed text storage 保留，并关闭拼写、语法及自动补全等非代码写作服务。未命名 `.txt` 标签页继续跳过语法高亮，粘贴不再承担富文本编辑和文本检查链路的额外同步成本。
 - **侧栏标题按需跑马灯（1.212.0-rc2）** —— 会话标题和计划步骤放不下时，静止状态使用标准尾部省略号，不再被硬裁剪；指针悬停约 0.35 秒后才创建完整文本滚动层，移开或视图消失时立即销毁滚动层并以禁用动画事务复位，避免 `repeatForever` 在后台残留。没有溢出的短标题保持静止。
 - **长任务自动后台编排（1.212.0-rc1）** —— `run_command` 在模型未显式选择时，会保守识别常见测试、构建和开发服务入口并自动交给后台 Job；显式前台仍优先，发布、上传、公证与部署流程不会被模糊匹配。后台任务通过可选 `label` 或安全分类在聊天中显示“正在运行前端测试”“正在编译项目”等自然活动标题，完整命令继续隐藏。模型在任务运行时会继续处理不与当前构建输入冲突的 CHANGELOG、发布说明、API 文档等工作；活动验证的源码、构建配置、依赖锁、生成输入或版本文件一旦变化，旧结果即视为过期并必须重跑。Job 完成通知会自动恢复所属 runtime，驱动最终检查、失败修复与验收闭环。

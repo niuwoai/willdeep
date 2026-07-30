@@ -521,6 +521,32 @@ struct AgentDispatchCoordinatorTests {
         #expect(boundRuntime.errorMessage == nil)
     }
 
+    @Test("调度台选择工作区后保留结构化 Goal 草稿，不创建聊天消息")
+    func dispatchGoalDraftKeepsOrchestratorDestination() throws {
+        let appState = AppState()
+        appState.agentDispatchCoordinator.resetForTests()
+
+        let session = appState.startDispatchGoalSession(
+            inWorkspaceAt: FileManager.default.temporaryDirectory.path
+        )
+        let runtime = try #require(appState.runtime(for: session.id))
+
+        #expect(appState.activeAgentSessionID == session.id)
+        #expect(appState.agentPrimaryDestination == .dispatchBoard)
+        #expect(runtime.session.presentationScope == .dispatchBoard)
+        #expect(runtime.interactionMode == .goal)
+        #expect(runtime.currentGoal == nil)
+        #expect(runtime.messages.isEmpty)
+        #expect(appState.isPreparingDispatchGoal)
+
+        appState.setAgentGoal(statement: "留在调度台", items: ["生成任务图"])
+
+        #expect(!appState.isPreparingDispatchGoal)
+        #expect(runtime.messages.isEmpty)
+        #expect(appState.agentPrimaryDestination == .dispatchBoard)
+        #expect(appState.agentDispatchCoordinator.selectedGoalID == session.id)
+    }
+
     private func makeSandbox() throws -> DefaultsSandbox {
         let suiteName = "willdeep-dispatch-\(UUID().uuidString)"
         let defaults = try #require(UserDefaults(suiteName: suiteName))

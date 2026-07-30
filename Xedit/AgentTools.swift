@@ -1634,7 +1634,8 @@ enum AgentToolRunner {
                 sessionID: sessionID,
                 displayCommand: displayCommand,
                 timeout: timeout,
-                secretRedactionValues: context.secretRedactionValues
+                secretRedactionValues: context.secretRedactionValues,
+                progressSink: context.delegatedProgressSink
             )
         }
         var forwarded = delegatedAgentForwardedCommandArguments(

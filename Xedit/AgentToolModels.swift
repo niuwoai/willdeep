@@ -181,6 +181,9 @@ struct AgentToolContext {
     /// tied to the visible side-panel session instead of creating hidden SSH
     /// sessions on the model's behalf.
     let terminalController: AgentInteractiveTerminalController?
+    /// Receives throttled, bounded and already-redacted output from a visible
+    /// delegated CLI terminal. Nil for ordinary tools and non-app harnesses.
+    let delegatedProgressSink: (@MainActor (AgentDelegatedTerminalProgressUpdate) -> Void)?
     /// Host-owned session actions. These closures are only installed by the
     /// interactive AppState loop; ad-hoc runners and subagents cannot rename
     /// or move a user's conversation behind the host's approval boundary.
@@ -214,6 +217,7 @@ struct AgentToolContext {
         editableContentProvider: (@MainActor (URL) throws -> String)? = nil,
         patchAutoApplySource: AgentToolApprovalSource? = nil,
         terminalController: AgentInteractiveTerminalController? = nil,
+        delegatedProgressSink: (@MainActor (AgentDelegatedTerminalProgressUpdate) -> Void)? = nil,
         sessionRenameSink: (@MainActor (String) throws -> String)? = nil,
         workspaceChangeSink: (@MainActor (String) throws -> String)? = nil,
         secretRedactionValues: [String] = []
@@ -237,6 +241,7 @@ struct AgentToolContext {
         self.editableContentProvider = editableContentProvider
         self.patchAutoApplySource = patchAutoApplySource
         self.terminalController = terminalController
+        self.delegatedProgressSink = delegatedProgressSink
         self.sessionRenameSink = sessionRenameSink
         self.workspaceChangeSink = workspaceChangeSink
         self.secretRedactionValues = Self.uniqueNonEmpty(secretRedactionValues)
@@ -287,6 +292,7 @@ struct AgentToolContext {
             editableContentProvider: editableContentProvider,
             patchAutoApplySource: patchAutoApplySource,
             terminalController: terminalController,
+            delegatedProgressSink: delegatedProgressSink,
             sessionRenameSink: sessionRenameSink,
             workspaceChangeSink: workspaceChangeSink,
             secretRedactionValues: secretRedactionValues + values
@@ -314,6 +320,7 @@ struct AgentToolContext {
             editableContentProvider: editableContentProvider,
             patchAutoApplySource: patchAutoApplySource,
             terminalController: terminalController,
+            delegatedProgressSink: delegatedProgressSink,
             sessionRenameSink: sessionRenameSink,
             workspaceChangeSink: workspaceChangeSink,
             secretRedactionValues: secretRedactionValues
@@ -521,6 +528,10 @@ struct AgentToolCall: Identifiable, Equatable {
     /// ("第 3/12 轮 · 5 次工具"), refreshed each round so the card shows
     /// forward motion instead of an opaque "委派中" spinner.
     var subagentProgress: String?
+    /// For Claude Code / Codex CLI / Cursor Agent / Cline CLI: host-owned
+    /// phase, attempt and bounded redacted output tail. Render-only; the
+    /// durable acceptance state lives in `AgentDelegatedTaskRun`.
+    var delegatedProgress: AgentDelegatedLiveProgress?
 
     init(
         id: UUID = UUID(),
@@ -534,7 +545,8 @@ struct AgentToolCall: Identifiable, Equatable {
         errorMessage: String? = nil,
         approvalSource: AgentToolApprovalSource? = nil,
         subagentModel: String? = nil,
-        subagentProgress: String? = nil
+        subagentProgress: String? = nil,
+        delegatedProgress: AgentDelegatedLiveProgress? = nil
     ) {
         self.id = id
         self.messageID = messageID
@@ -548,6 +560,7 @@ struct AgentToolCall: Identifiable, Equatable {
         self.approvalSource = approvalSource
         self.subagentModel = subagentModel
         self.subagentProgress = subagentProgress
+        self.delegatedProgress = delegatedProgress
     }
 }
 

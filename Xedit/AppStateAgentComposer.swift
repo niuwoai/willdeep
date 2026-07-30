@@ -576,7 +576,14 @@ extension AppState {
                 approvalSource: approvalSource,
                 sandboxDecision: sandboxDecision
             ),
-            terminalController: agentTerminalController
+            terminalController: agentTerminalController,
+            delegatedProgressSink: { update in
+                self.updateDelegatedTerminalProgress(
+                    id: delegatedRunID,
+                    runtime: runtime,
+                    update: update
+                )
+            }
         )
 
         do {
@@ -942,7 +949,57 @@ extension AppState {
             return
         }
         update(&runtime.delegatedTaskRuns[index])
+        syncDelegatedToolProgress(
+            run: runtime.delegatedTaskRuns[index],
+            runtime: runtime
+        )
         persistAgentSession(runtime: runtime)
+    }
+
+    private func syncDelegatedToolProgress(
+        run: AgentDelegatedTaskRun,
+        runtime: AgentRuntime
+    ) {
+        guard let callIndex = runtime.toolCalls.firstIndex(where: {
+            $0.arguments["delegated_task_id"]?.stringValue() == run.id.uuidString
+        }) else {
+            return
+        }
+        var progress = runtime.toolCalls[callIndex].delegatedProgress
+            ?? AgentDelegatedLiveProgress(
+                maximumAttempts: run.contract.maxAttempts
+            )
+        progress.phase = run.phase
+        progress.attempt = run.attempt
+        progress.maximumAttempts = run.contract.maxAttempts
+        runtime.toolCalls[callIndex].delegatedProgress = progress
+    }
+
+    func updateDelegatedTerminalProgress(
+        id: UUID,
+        runtime: AgentRuntime,
+        update: AgentDelegatedTerminalProgressUpdate
+    ) {
+        guard let run = delegatedTaskRun(id: id, runtime: runtime),
+              let callIndex = runtime.toolCalls.firstIndex(where: {
+                  $0.arguments["delegated_task_id"]?.stringValue() == id.uuidString
+              }) else {
+            return
+        }
+        var progress = runtime.toolCalls[callIndex].delegatedProgress
+            ?? AgentDelegatedLiveProgress(
+                phase: run.phase,
+                attempt: run.attempt,
+                maximumAttempts: run.contract.maxAttempts
+            )
+        progress.terminalTabID = update.terminalTabID
+        if let currentActivity = update.currentActivity {
+            progress.currentActivity = currentActivity
+        }
+        if let recentOutput = update.recentOutput {
+            progress.recentOutput = recentOutput
+        }
+        runtime.toolCalls[callIndex].delegatedProgress = progress
     }
 
     nonisolated private static func delegatedAcceptedPayload(

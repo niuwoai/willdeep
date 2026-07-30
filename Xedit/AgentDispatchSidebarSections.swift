@@ -30,7 +30,7 @@ struct AgentDispatchSidebarSections: View {
     private var goalsSection: some View {
         VStack(alignment: .leading, spacing: 3) {
             sectionHeader(L10n.Dispatch.goalsHeader, trailingSymbol: "plus") {
-                appState.startGoalConversationInLocalWorkspace()
+                    appState.startDispatchGoalInLocalWorkspace()
             }
             if coordinator.goals.isEmpty {
                 Text(L10n.Dispatch.emptyTitle)
@@ -107,10 +107,11 @@ struct AgentDispatchSidebarSections: View {
     }
 
     private func goalRow(_ goal: AgentDispatchGoal) -> some View {
-        let isSelected = coordinator.selectedGoalID == goal.id
+        let isSelected = !appState.isPreparingDispatchGoal
+            && coordinator.selectedGoalID == goal.id
         let palette = appState.editorSettings.interfaceSkin.palette
         return Button {
-            coordinator.selectGoal(goal.id)
+            appState.selectDispatchGoal(goal.id)
         } label: {
             HStack(spacing: 9) {
                 Image(systemName: goal.isPaused ? "pause.circle" : "scope")

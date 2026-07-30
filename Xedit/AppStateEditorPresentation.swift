@@ -147,6 +147,40 @@ extension AppState {
         return lines.isEmpty ? nil : lines.joined(separator: "\n")
     }
 
+    /// A single delegated CLI gets a real phase-aware headline instead of the
+    /// generic "1 running task" label. Multiple concurrent tasks keep the
+    /// compact count so the transcript footer does not turn into a log wall.
+    var agentRunningTaskHeadline: String? {
+        guard isAgentResponding else { return nil }
+        let runningCalls = agentToolCalls.filter { $0.status == .running }
+        let aliveJobCount = activeAgentSessionID
+            .map { agentJobRegistry.aliveJobs(forRuntime: $0).count } ?? 0
+        guard runningCalls.count == 1,
+              aliveJobCount == 0,
+              let call = runningCalls.first,
+              let progress = call.delegatedProgress else {
+            return nil
+        }
+
+        var detail = L10n.DelegatedTask.liveProgress(
+            phase: progress.phase,
+            attempt: progress.attempt,
+            maximum: progress.maximumAttempts
+        )
+        if let activity = progress.currentActivity?
+            .trimmingCharacters(in: .whitespacesAndNewlines),
+           !activity.isEmpty {
+            let clipped = activity.count > 80
+                ? String(activity.prefix(80)) + "…"
+                : activity
+            detail += " · \(clipped)"
+        }
+        return L10n.DelegatedTask.liveHeadline(
+            executor: AgentToolDisplay.name(for: call.toolName),
+            progress: detail
+        )
+    }
+
     var shouldShowGoalRunningStatusBar: Bool {
         agentInteractionMode == .goal
             && isAgentResponding

@@ -227,6 +227,17 @@ struct AgentToolActivityRowPresentation: Identifiable, Equatable {
             return host
         case "spawn_agent":
             return compact(call.arguments["label"]?.stringValue())
+        case "claude_code", "codex_cli", "cursor_agent", "cline_cli":
+            guard let progress = call.delegatedProgress else { return nil }
+            var detail = L10n.DelegatedTask.liveProgress(
+                phase: progress.phase,
+                attempt: progress.attempt,
+                maximum: progress.maximumAttempts
+            )
+            if let activity = compact(progress.currentActivity) {
+                detail += " · \(activity)"
+            }
+            return detail
         default:
             return nil
         }

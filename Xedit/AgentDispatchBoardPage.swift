@@ -37,7 +37,9 @@ private struct AgentDispatchBoardContent: View {
 
     var body: some View {
         Group {
-            if let goal = coordinator.selectedGoal {
+            if appState.isPreparingDispatchGoal {
+                goalSetupContent
+            } else if let goal = coordinator.selectedGoal {
                 goalContent(goal)
             } else {
                 emptyState
@@ -78,6 +80,16 @@ private struct AgentDispatchBoardContent: View {
                     dismissButton: .default(Text(L10n.CloseTab.ok))
                 )
             }
+        }
+    }
+
+    private var goalSetupContent: some View {
+        AgentDispatchGoalSetupView(
+            workspaceLocation: appState.activeRuntime?.workspaceLocation,
+            workspaceName: appState.activeRuntime?.session.workspaceName
+                ?? L10n.Workspace.noWorkspace
+        ) { statement, checklist in
+            appState.setAgentGoal(statement: statement, items: checklist)
         }
     }
 
@@ -185,7 +197,7 @@ private struct AgentDispatchBoardContent: View {
                 .multilineTextAlignment(.center)
                 .frame(maxWidth: 480)
             Button {
-                appState.startGoalConversationInLocalWorkspace()
+                appState.startDispatchGoalInLocalWorkspace()
             } label: {
                 Label(L10n.Dispatch.chooseWorkspaceAndStart, systemImage: "folder.badge.plus")
             }

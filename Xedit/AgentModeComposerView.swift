@@ -501,10 +501,12 @@ private struct ComposerCard: View {
     @State private var skillMenuVisible: Bool = false
     @State private var skillMenuSelection: Int = 0
     @State private var skillMenuQuery: String = ""
-    /// Cached skill list — re-fetched whenever the $ popover opens so we
-    /// pick up newly installed skills without recomputing on every
-    /// keystroke.
+    /// View-local projection of the process-wide filesystem catalog.
+    /// Cold discovery always runs off MainActor; later opens only compare a
+    /// cheap revision until a real skill mutation invalidates the cache.
     @State private var skillCatalog: [AgentSkillEntry] = []
+    @State private var skillCatalogRevision: Int = -1
+    @State private var skillCatalogLoadTask: Task<Void, Never>?
     /// Strong ref to the coordinator so the @-token replacement helper
     /// can call back into it from SwiftUI callbacks.
     @State private var coordinatorRef = ComposerCoordinatorRef()
@@ -1051,15 +1053,28 @@ private struct ComposerCard: View {
             if atMenuVisible {
                 closeAtMenu()
             }
-            // Refresh the catalog on transition from closed → open so a
-            // newly installed skill shows up the next time `$` is typed.
-            if !skillMenuVisible || skillCatalog.isEmpty {
-                skillCatalog = AgentSkillDirectory.list()
+            if !skillMenuVisible
+                || skillCatalogRevision != AgentSkillDirectory.cacheRevision {
+                refreshSkillCatalogIfNeeded()
             }
             skillMenuQuery = q
         } else {
             skillMenuQuery = ""
             skillMenuVisible = false
+        }
+    }
+
+    private func refreshSkillCatalogIfNeeded() {
+        guard skillCatalogLoadTask == nil else { return }
+        let expectedRevision = AgentSkillDirectory.cacheRevision
+        guard skillCatalogRevision != expectedRevision else { return }
+
+        skillCatalogLoadTask = Task { @MainActor in
+            defer { skillCatalogLoadTask = nil }
+            let loadedSkills = await AgentSkillDirectory.listAsync()
+            guard !Task.isCancelled else { return }
+            skillCatalog = loadedSkills
+            skillCatalogRevision = AgentSkillDirectory.cacheRevision
         }
     }
 

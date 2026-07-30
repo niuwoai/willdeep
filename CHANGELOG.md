@@ -1,7 +1,100 @@
 # Changelog
 
-> 当前文件保留最新版本（1.212.0-rc3 至 1.109.0-rc340）。
+> 当前文件保留最新版本（1.212.0-rc9 至 1.109.0-rc340）。
 > 更早的 1000 个版本已移至 [CHANGELOG-ARCHIVE.md](CHANGELOG-ARCHIVE.md)。
+
+## 1.212.0-rc9 - 2026-07-30
+
+### Fixed
+
+- **外部执行器只能在终端查看实时进度**：Claude Code、Codex CLI、Cursor Agent 与 Cline CLI 的可见终端 runner 现在每秒读取一次有限日志尾部，先移除终端控制序列并按当前会话密钥脱敏，再把当前动作与最近输出回传到对应工具调用；不会把完整日志或实时尾部写入会话持久化。
+- **委托状态长期停留在执行器名称和转圈**：Composer 底部活动行、实时工具时间线、工具详情卡与任务监督栏现在展示执行阶段、当前尝试次数和最近动作；执行器独立验收、WillDeep 二次验收、定点返工与最终交付继续使用宿主已有的真实状态机，不伪造百分比。
+
+### Tests
+
+- 新增外部执行器日志尾部读取、ANSI 控制序列清理、行数/字符边界与实时阶段展示回归测试。
+
+### Meta
+
+- 版本号从 **1.212.0-rc8** 递增为 **1.212.0-rc9**（外部执行器进度反馈 bugfix 仅递增 rc），内部构建号从 **208** 递增为 **209**，Help 与 Computer Use Helper 构建号从 **125** 递增为 **126**；App、Go agent、Help、Helper、浏览器扩展、README、响应头契约与产品文档保持一致。
+
+## 1.212.0-rc8 - 2026-07-29
+
+### Fixed
+
+- **调度台 Goal 创建仍然像聊天**：移除创建阶段对 `AgentChatTranscript`、`AgentChatComposer` 和聊天状态栏的复用，改为目标陈述、验收清单、工作区与调度策略摘要组成的结构化工作台；提交后原位切换为任务图。
+- **错误产品契约被测试固化**：将“内嵌 Goal 会话”回归测试改为“结构化 Goal 草稿不创建聊天消息”，并同步修正文档中把聊天式创建描述为设计目标的内容。
+
+### Meta
+
+- 版本号从 **1.212.0-rc7** 递增为 **1.212.0-rc8**（调度台体验 bugfix 仅递增 rc），内部构建号从 **207** 递增为 **208**，Help 与 Computer Use Helper 构建号从 **124** 递增为 **125**；App、Go agent、Help、Helper、浏览器扩展、README、响应头契约与产品文档保持一致。
+
+## 1.212.0-rc7 - 2026-07-29
+
+### Changed
+
+- **快速构建支持发布架构预热**：`build_fast.rb` 新增 `--destination` 与 `WILLDEEP_XCODE_DESTINATION`，本地仍默认使用 `platform=macOS`；new83d 发布器可显式使用 `generic/platform=macOS` 和相同 Swift 编译模式，为正式多架构 archive 预热 compilation cache。
+- **构建提速方案形成正式文档**：新增本地编译、定向/完整单测、CI Runner、缓存布局、实测数据与发布边界说明；README 补充常用命令和完整文档入口。
+
+### Tests
+
+- 扩展快速构建入口契约，覆盖 destination 环境变量及显式命令行覆盖。
+
+### Meta
+
+- 版本号从 **1.212.0-rc6** 递增为 **1.212.0-rc7**（构建/发布集成优化仅递增 rc），内部构建号从 **206** 递增为 **207**，Help 与 Computer Use Helper 构建号从 **123** 递增为 **124**；App、Go agent、Help、Helper、浏览器扩展、README、响应头契约与产品文档保持一致。
+
+## 1.212.0-rc6 - 2026-07-29
+
+### Changed
+
+- **本地编译与测试共用热缓存**：新增 `ruby scripts/build_fast.rb`，默认把 Debug 增量编译的 DerivedData、SwiftPM checkout、独立 package cache 与 Xcode compilation cache 放在 `~/Library/Caches/WillDeep/Xcode/Xedit`；本地快速单测和完整单测同步改用同一路径，一次构建可以直接预热后续测试，测试构建也能反向预热本地编译。
+- **CLI 编译减负且不影响 IDE 索引**：快速编译默认关闭 index store、跳过依赖更新并锁定 `Package.resolved`，但不修改 Xcode 工程的索引设置；`--index`、`--sign`、`--release` 及现有 `WILLDEEP_XCODE_*` 环境变量可按场景覆盖。
+- **本地编译结果可观测**：快速编译接入项目级构建队列，避免多个任务同时争抢 Xcode；每次生成 Markdown、JSON、原始日志与构建守卫报告，记录耗时、缓存目录、签名/索引配置及最终 App 路径。
+
+### Tests
+
+- 扩展快速测试入口契约，覆盖本地编译 action、共享缓存、SwiftPM checkout/package cache 隔离、compilation cache、CLI 索引策略、构建协调器与双格式报告。
+- 当前工作区实测 Debug 冷构建 **683.9 秒**，无变更热构建 **24.8 秒**（约快 **27.5 倍**）；模拟单 Swift 文件变更为 **124.7 秒**，恢复已有源码内容时 compilation cache 命中 **2/3** 个任务，`SwiftEmitModule` 从 **59.2 秒**降至 **0.12 秒**，整轮 **24.6 秒**。
+
+### Meta
+
+- 版本号从 **1.212.0-rc5** 递增为 **1.212.0-rc6**（本地构建性能优化仅递增 rc），内部构建号从 **205** 递增为 **206**，Help 与 Computer Use Helper 构建号从 **122** 递增为 **123**；App、Go agent、Help、Helper、浏览器扩展、README、响应头契约与产品文档保持一致。
+
+## 1.212.0-rc5 - 2026-07-29
+
+### Changed
+
+- **CI 重型任务拆分并行**：原先全部占用同一台 Mac 的 Ruby 契约守门、Go agent 测试和 Xcode 单测拆为独立 Job；三组 Ruby 守门在 Linux Runner 上并行执行并输出各自的 Markdown/JSON 耗时报告，Go agent 使用独立 Linux Job，Mac Runner 只负责构建测试产物和执行原生单测。
+- **Xcode 构建与测试解耦**：Mac CI 统一改用 `XeditUnitTests` scheme，先执行 `build-for-testing`，再执行 `test-without-building`；失败重跑和后续测试分片可以直接复用已构建产物，不再把一次测试执行与一次完整编译绑死。
+- **仓库外持久编译缓存**：本地完整/快速测试入口新增 `WILLDEEP_XCODE_DERIVED_DATA_PATH`，CI 将 DerivedData 与 SwiftPM 缓存固定在 Runner 用户缓存目录，避免 `actions/checkout` 清理仓库时一并删除。测试构建默认启用 Xcode compilation cache、关闭 index store，仍可通过环境变量显式覆盖。
+- **本地快速测试指纹收敛**：`run_tests_fast.rb --without-building` 只根据 App、单测、Xcode 工程、内嵌 Go agent、Computer Use Helper、Vendor 与构建凭据等真实输入判断产物是否过期；README、CHANGELOG 和测试报告变化不再误伤可复用测试二进制，持久化 stamp 只保存 diff 摘要而不保存整份补丁。
+- **超长 Swift 文件按职责拆分**：图像理解回退从 Agent 主循环独立出来，Transcript 搜索/历史文案移入专属扩展，Workflow Report 渲染回归测试也单独成组；原 3071、3034、3001 行文件分别降至 2960、2977、2946 行，重新满足仓库单文件 3000 行硬限制。
+
+### Tests
+
+- 新增 CI 守门分组执行器，为 quality、interaction、short-drama 三组记录逐步状态与耗时；扩展快速测试入口契约，覆盖仓库外 DerivedData、编译缓存和 CI 索引配置。
+- quality、interaction、short-drama 守门与 Go agent 全量测试通过；新拆出的 Workflow Report 测试套件 2 项通过，同一构建产物的 `test-without-building` 热路径实测约 13 秒。
+
+### Meta
+
+- 版本号从 **1.212.0-rc4** 递增为 **1.212.0-rc5**（构建与测试流水线性能优化仅递增 rc），内部构建号从 **204** 递增为 **205**，Help 与 Computer Use Helper 构建号从 **121** 递增为 **122**；App、Go agent、Help、Helper、浏览器扩展、响应头契约与产品文档保持一致。
+
+## 1.212.0-rc4 - 2026-07-29
+
+### Fixed
+
+- **Skills 目录被高频重复扫描**：技能发现结果改为进程级线程安全缓存；并发读取共享同一轮加载，只有创建、更新、删除、安装、卸载或显式刷新后才会失效。启用/停用技能只重新应用设置，不再遍历磁盘。
+- **Skills 扫描阻塞主线程**：应用启动在 utility 后台任务预热技能目录；Composer 的 `$` 补全、插件选择器和技能设置页均改为异步刷新，避免 `FileManager` 目录遍历与 `SKILL.md` 读取进入 SwiftUI 主线程更新链路。
+- **调度台选择工作区后跳到新聊天**：新建 Goal 仍复用独立会话运行时，但工作区选择完成后会恢复调度台目的地，并在调度台内嵌 Goal 创建对话；Goal 定义完成后原位切换为任务图，不再把用户带到普通聊天页。
+
+### Tests
+
+- 新增技能目录缓存复用与显式失效回归测试，以及调度台 Goal 会话目的地、展示域和创建完成选中状态测试；两组定向测试共 30 项通过。
+
+### Meta
+
+- 版本号从 **1.212.0-rc3** 递增为 **1.212.0-rc4**（bugfix 仅递增 rc），内部构建号从 **203** 递增为 **204**，Help 与 Computer Use Helper 构建号从 **120** 递增为 **121**；App、Go agent、Help、Helper、浏览器扩展、响应头契约与产品文档保持一致。
 
 ## 1.212.0-rc3 - 2026-07-29
 

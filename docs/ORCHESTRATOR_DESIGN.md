@@ -143,6 +143,8 @@ enum ExecutorEvent {
 
 各 adapter 负责把 stream-json / JSONL / 纯文本解析成上述事件；解析失败时降级为 `progress(原始行)`，**永不因解析失败丢任务**。事件双写：喂 UI（任务卡片实时区）+ 追加到任务日志文件（`~/Library/.../DispatchTasks/<id>/events.jsonl`，供事后审计与验收复核）。
 
+当前一对一外部委托已经先落地最低可用反馈：可见终端 runner 约每秒读取有限日志尾部，去除 ANSI 控制序列并完成宿主密钥脱敏后，将当前动作和最近输出写入内存态 ToolCall；Composer 活动行、工具时间线、详情卡与监督栏同时展示真实阶段和尝试次数。完整原始输出仍留在 Agent Terminal，实时尾部不进入会话 JSON，也不根据文本猜测百分比。调度台完整事件日志仍按上面的统一事件模型演进。
+
 ## 6. 任务模型与生命周期
 
 ### 6.1 DispatchTask
@@ -215,7 +217,7 @@ queued → running → reviewing → accepted → merging → merged
 `AgentSessionsSidebar` 在「专家圆桌」同级新增 `.dispatchBoard` 目的地「调度台」。MVP 采用用户选定的 Goal-first 方案：
 
 - 左栏上半区是 Goal 列表与进度，下半区是这台 Mac 和 SSH 执行环境；没有把执行器/机器选择的负担先甩给用户。
-- 新建 Goal 先选择主工作区；旧 Goal 未绑定时显示醒目标记，顶部和检查器均可补绑。顶部工作区菜单允许为同一项目添加本机或 SSH checkout 映射。
+- 新建 Goal 先选择主工作区，随后在调度台中心区域展示结构化 Goal 草稿：目标陈述、逐项验收清单、工作区与自动调度策略摘要；不渲染聊天 transcript、消息气泡或普通 Composer。提交后原位切换为任务图。旧 Goal 未绑定时显示醒目标记，顶部和检查器均可补绑。顶部工作区菜单允许为同一项目添加本机或 SSH checkout 映射。
 - 中间以 Goal 标题、声明和任务 DAG 为主视觉，任务卡显示状态、执行器、环境和依赖；点选任务后在右侧检查器查看或覆盖策略。
 - 顶部 Goal 级策略默认自动；用户可以强制指定执行器或已映射环境。右侧任务级选择优先于 Goal 级选择，未映射环境不会进入选项。
 - 底部是 Goal 指令栏，明确展示“立即生效 / 当前步骤后生效 / 需要中断确认”的结果，并提供追加任务、调整计划、暂停/恢复快捷动作。
@@ -229,6 +231,7 @@ queued → running → reviewing → accepted → merging → merged
 
 - 卡片内容 = 任务对象的投影（按 taskID 实时取），显示状态徽标、执行器、分支、最近一条进度、操作按钮（查看详情 / 取消）。
 - **不变量（历史教训，硬性要求）**：新 role 必须在 transcript 有真实渲染路径（不能只加 `AgentModeMessageView` 分支）；`messageHash` 必须包含状态、进度摘要等全部展示字段，否则状态变了卡片不刷新。
+- 外部 CLI 不提供可验证总工作量时不显示百分比；只展示阶段、尝试次数、当前动作、最近脱敏输出和持续时间，避免“65%”一类伪精确反馈。
 
 ### 8.3 Composer 与状态栏
 

@@ -21,7 +21,16 @@ require "time"
 
 ROOT = File.expand_path("..", __dir__)
 OUT_DIR = File.join(ROOT, "build", "fast-tests")
-DERIVED_DATA = File.join(ROOT, "build", "ci", "DerivedData")
+LOCAL_XCODE_CACHE_ROOT = File.expand_path(
+  ENV.fetch(
+    "WILLDEEP_XCODE_CACHE_ROOT",
+    File.join(Dir.home, "Library", "Caches", "WillDeep", "Xcode", "Xedit")
+  )
+)
+DERIVED_DATA = ENV.fetch(
+  "WILLDEEP_XCODE_DERIVED_DATA_PATH",
+  File.join(LOCAL_XCODE_CACHE_ROOT, "DerivedData")
+)
 XCRESULT = File.join(OUT_DIR, "XeditFastTests.xcresult")
 LOG = File.join(OUT_DIR, "xcodebuild.log")
 REPORT_MD = File.join(OUT_DIR, "report.md")
@@ -30,6 +39,15 @@ GUARD_REPORT_MD = File.join(OUT_DIR, "project_build_guard_report.md")
 GUARD_REPORT_JSON = File.join(OUT_DIR, "project_build_guard_report.json")
 BUILD_STAMP = File.join(OUT_DIR, "build_fingerprint.json")
 SCHEME = "XeditUnitTests"
+BUILD_INPUT_PATHS = [
+  "Xedit",
+  "XeditTests",
+  "Xedit.xcodeproj",
+  "Vendor",
+  "ComputerUseHelper",
+  "willdeep-agent",
+  "scripts/generate_build_credentials.rb"
+].freeze
 
 def command_output(*command)
   output, status = Open3.capture2e(*command, chdir: ROOT)
@@ -42,8 +60,12 @@ def sha256_file(path)
   File.file?(path) ? Digest::SHA256.file(path).hexdigest : nil
 end
 
+def build_input_git_output(*arguments)
+  command_output("git", *arguments, "--", *BUILD_INPUT_PATHS)
+end
+
 def source_fingerprint
-  untracked = command_output("git", "ls-files", "--others", "--exclude-standard", "-z")
+  untracked = build_input_git_output("ls-files", "--others", "--exclude-standard", "-z")
     .split("\0")
     .reject(&:empty?)
     .sort
@@ -54,10 +76,18 @@ def source_fingerprint
 
   input = {
     "git_head" => command_output("git", "rev-parse", "HEAD").strip,
-    "git_status" => command_output("git", "status", "--porcelain=v1"),
-    "git_diff" => command_output("git", "diff", "--binary"),
-    "git_cached_diff" => command_output("git", "diff", "--cached", "--binary"),
+    "build_input_paths" => BUILD_INPUT_PATHS,
+    "git_status_sha256" => Digest::SHA256.hexdigest(
+      build_input_git_output("status", "--porcelain=v1")
+    ),
+    "git_diff_sha256" => Digest::SHA256.hexdigest(
+      build_input_git_output("diff", "--binary")
+    ),
+    "git_cached_diff_sha256" => Digest::SHA256.hexdigest(
+      build_input_git_output("diff", "--cached", "--binary")
+    ),
     "untracked_files" => untracked,
+    "local_build_credentials_sha256" => sha256_file(File.join(ROOT, ".env.local")),
     "xcodebuild_version" => command_output("xcodebuild", "-version").strip,
     "project" => sha256_file(File.join(ROOT, "Xedit.xcodeproj", "project.pbxproj")),
     "package_resolved" => sha256_file(
@@ -133,13 +163,14 @@ if without_building
   end
 end
 
-git_common_dir = command_output("git", "rev-parse", "--path-format=absolute", "--git-common-dir").strip
-repository_root = File.dirname(git_common_dir)
 source_packages_dir = ENV.fetch(
   "WILLDEEP_XCODE_SOURCE_PACKAGES_DIR",
-  File.join(repository_root, "build", "ci", "DerivedData", "SourcePackages")
+  File.join(LOCAL_XCODE_CACHE_ROOT, "SourcePackages")
 )
-package_cache_dir = ENV.fetch("WILLDEEP_XCODE_PACKAGE_CACHE_DIR", source_packages_dir)
+package_cache_dir = ENV.fetch(
+  "WILLDEEP_XCODE_PACKAGE_CACHE_DIR",
+  File.join(LOCAL_XCODE_CACHE_ROOT, "PackageCache")
+)
 xcode_action = without_building ? "test-without-building" : "test"
 xcode_command = [
   "xcodebuild", xcode_action,
@@ -154,6 +185,9 @@ xcode_command = [
   "-onlyUsePackageVersionsFromResolvedFile",
   "-enableCodeCoverage", "NO",
   "-showBuildTimingSummary",
+  "COMPILATION_CACHE_ENABLE_CACHING=#{ENV.fetch("WILLDEEP_XCODE_COMPILATION_CACHE", "YES")}",
+  "COMPILATION_CACHE_ENABLE_DIAGNOSTIC_REMARKS=#{ENV.fetch("WILLDEEP_XCODE_CACHE_REMARKS", "NO")}",
+  "COMPILER_INDEX_STORE_ENABLE=#{ENV.fetch("WILLDEEP_XCODE_INDEX_STORE", "NO")}",
   "CODE_SIGNING_ALLOWED=NO",
   "CODE_SIGNING_REQUIRED=NO",
   "CODE_SIGN_IDENTITY=",

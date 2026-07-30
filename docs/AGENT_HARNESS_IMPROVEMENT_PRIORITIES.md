@@ -1,6 +1,6 @@
 # Agent Harness Improvement Priorities
 
-> Last updated: 2026-07-29 | Current version: v1.212.0-rc3
+> Last updated: 2026-07-30 | Current version: v1.212.0-rc9
 
 这份文档用于回答一个核心问题：一个 harness 级 Agent 要继续变强，哪些问题必须优先解决。
 
@@ -22,6 +22,8 @@
 4. `AgentModels.swift`：后续如新增模型域，优先落入独立文件，不再回塞主模型文件。
 
 ## P0：执行自主性
+
+外部委托不再是只能盯终端的黑盒：Claude Code、Codex CLI、Cursor Agent 与 Cline CLI 的可见 runner 会把有限、脱敏的输出尾部节流回传到当前 ToolCall，Composer 与监督栏展示真实执行/自验收/宿主验收/返工阶段和尝试次数。完整日志仍以终端为准，宿主不根据自由文本伪造完成百分比。
 
 当前状态：依赖安装、构建、测试、后台任务和远端 runtime 已经能通过工具链执行；TLS/临时网络错误有重试；沙箱和审批链路能区分 read/write/danger。1.195.0-rc1 起，Claude Code、Codex CLI、Cursor Agent 与 Cline CLI 的 Composer 委托及 Goal 模式原生调用统一受任务契约约束，执行器先提交证据并由全新只读上下文复核，WillDeep 再独立检查变更边界与安全验证命令；失败最多返工三轮，未通过不交付，完整阶段与证据持久化并显示在监督栏。
 

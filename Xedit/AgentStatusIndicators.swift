@@ -1248,6 +1248,7 @@ struct PlanStatusPill: View {
 struct AgentRunningTasksRow: View {
     let count: Int
     var isAgentTurnActive: Bool = true
+    var labelOverride: String? = nil
     var detail: String? = nil
     var onTap: (() -> Void)? = nil
 
@@ -1295,6 +1296,9 @@ struct AgentRunningTasksRow: View {
     }
 
     private var label: String {
+        if let labelOverride, !labelOverride.isEmpty {
+            return labelOverride
+        }
         if isAgentTurnActive {
             return count == 1
                 ? L10n.Transcript.runningTaskOne

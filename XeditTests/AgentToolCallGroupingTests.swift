@@ -71,6 +71,26 @@ struct AgentToolCallGroupingPresentationTests {
         )
     }
 
+    @Test("external CLI activity exposes phase attempt and latest redacted action")
+    func delegatedCLILiveProgressIsVisible() throws {
+        var call = makeCall("codex_cli")
+        call.delegatedProgress = AgentDelegatedLiveProgress(
+            phase: .executing,
+            attempt: 1,
+            maximumAttempts: 2,
+            terminalTabID: UUID(),
+            currentActivity: "go test ./internal/payment",
+            recentOutput: "ok example/internal/payment"
+        )
+
+        let presentation = AgentToolActivityRowPresentation(call: call)
+        let detail = try #require(presentation.detail)
+
+        #expect(detail.contains(L10n.DelegatedTask.phase(.executing)))
+        #expect(detail.contains(L10n.DelegatedTask.attempt(1, 2)))
+        #expect(detail.contains("go test ./internal/payment"))
+    }
+
     @Test("live activity timeline hides a failed exact edit after the same file is repaired")
     func liveActivityTimelineCompactsRecoveredEditFailure() {
         let path = "deploy/k8s/tokenhub-deployment.yaml"

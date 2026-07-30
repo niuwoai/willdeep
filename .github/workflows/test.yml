@@ -6,27 +6,82 @@ on:
   pull_request:
   workflow_dispatch:
 
+permissions:
+  contents: read
+
 concurrency:
   group: tests-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
-  unit-tests:
+  ruby-guards:
+    name: Ruby guards (${{ matrix.group }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        group:
+          - quality
+          - interaction
+          - short-drama
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Set up Ruby
+        uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: "3.3"
+
+      - name: Print toolchain
+        run: ruby --version
+
+      - name: Run guard group
+        run: ruby scripts/run_ci_guard_group.rb "${{ matrix.group }}" build/ci
+
+      - name: Upload guard reports
+        if: always()
+        continue-on-error: true
+        uses: actions/upload-artifact@v7
+        with:
+          name: xedit-guard-${{ matrix.group }}
+          path: build/ci
+          retention-days: 7
+
+  go-agent-tests:
+    name: Go agent tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Set up Go
+        uses: actions/setup-go@v6
+        with:
+          go-version-file: willdeep-agent/go.mod
+          cache-dependency-path: willdeep-agent/go.sum
+
+      - name: Print toolchain
+        run: go version
+
+      - name: Run Go agent tests
+        run: go test ./...
+        working-directory: willdeep-agent
+
+  mac-unit-tests:
     name: XeditTests (macOS)
-    # 默认 self-hosted runner（仅 `self-hosted` 标签）。项目
-    # MACOSX_DEPLOYMENT_TARGET = 13.7，runner 可以是 macOS 13.7+；
-    # 使用本机已安装的默认 Xcode.app（不要锁 Xcode 26.x）。
-    # 另需可用的 Go toolchain（或由 setup-go 拉取）。
-    runs-on: self-hosted
-    timeout-minutes: 30
+    runs-on: [self-hosted, macOS, ARM64]
+    timeout-minutes: 90
 
     steps:
       - name: Checkout
         uses: actions/checkout@v6
 
       - name: Select Xcode
-        # self-hosted / macOS 13.7：用默认 /Applications/Xcode.app。
-        # 若 runner 服务账户已 xcode-select 过，这一步只是确认路径存在。
         run: |
           if [ -d /Applications/Xcode.app ]; then
             sudo xcode-select -s /Applications/Xcode.app
@@ -34,9 +89,6 @@ jobs:
           xcode-select -p
           xcodebuild -version
 
-      # SwiftTerm (terminal panel dependency) compiles a Metal shader
-      # (Apple/Metal/Shaders.metal). Newer Xcode may ship Metal as an
-      # on-demand component; older toolchains ignore/fail this harmlessly.
       - name: Ensure Metal toolchain
         run: xcodebuild -downloadComponent MetalToolchain || true
 
@@ -47,204 +99,89 @@ jobs:
           ruby --version
           sw_vers || true
 
-      # The Xedit target depends on the PRIVATE Swift package
-      # github.com/xurenlu/SomeIMSharedSession. GITHUB_TOKEN can't read another
-      # private repo, so authenticate SPM with a read-only deploy key stored in
-      # the SOMEIM_DEPLOY_KEY repo secret. The https→ssh rewrite is scoped to
-      # ONLY that package so the public SwiftTerm dependency keeps resolving
-      # anonymously over https. Locally none of this is needed — a developer's
-      # own git insteadOf/SSH key already covers the clone.
       - name: Configure private SPM access
         env:
           SOMEIM_DEPLOY_KEY: ${{ secrets.SOMEIM_DEPLOY_KEY }}
+        run: ruby scripts/configure_ci_private_spm.rb
+
+      - name: Build test products
         run: |
-          if [ -z "$SOMEIM_DEPLOY_KEY" ]; then
-            echo "::warning::SOMEIM_DEPLOY_KEY is not set — the private SomeIMSharedSession package will fail to resolve."
-            exit 0
-          fi
-          mkdir -p ~/.ssh
-          printf '%s\n' "$SOMEIM_DEPLOY_KEY" > ~/.ssh/someim_deploy_key
-          chmod 600 ~/.ssh/someim_deploy_key
-          ssh-keyscan -t ed25519,rsa github.com >> ~/.ssh/known_hosts 2>/dev/null
-          {
-            echo "Host github.com"
-            echo "  HostName github.com"
-            echo "  User git"
-            echo "  IdentityFile ~/.ssh/someim_deploy_key"
-            echo "  IdentitiesOnly yes"
-          } >> ~/.ssh/config
-          chmod 600 ~/.ssh/config
-          git config --global \
-            url."git@github.com:xurenlu/SomeIMSharedSession".insteadOf \
-            "https://github.com/xurenlu/SomeIMSharedSession"
-          echo "Configured private SPM access via read-only deploy key."
+          CACHE_ROOT="${HOME}/Library/Caches/WillDeepCI/Xcode/${RUNNER_NAME:-default}"
+          DERIVED_DATA="${CACHE_ROOT}/DerivedData"
+          SOURCE_PACKAGES="${CACHE_ROOT}/SourcePackages"
+          PACKAGE_CACHE="${CACHE_ROOT}/PackageCache"
+          mkdir -p build/ci "$DERIVED_DATA" "$SOURCE_PACKAGES" "$PACKAGE_CACHE"
+          ruby scripts/xcodebuild_ci.rb \
+            --log build/ci/xcodebuild-build.log \
+            --pass-grace 180 \
+            --idle-timeout 180 \
+            -- \
+            xcodebuild build-for-testing \
+              -project Xedit.xcodeproj \
+              -scheme XeditUnitTests \
+              -destination 'platform=macOS' \
+              -resultBundlePath build/ci/XeditBuild.xcresult \
+              -derivedDataPath "$DERIVED_DATA" \
+              -clonedSourcePackagesDirPath "$SOURCE_PACKAGES" \
+              -packageCachePath "$PACKAGE_CACHE" \
+              -skipPackageUpdates \
+              -onlyUsePackageVersionsFromResolvedFile \
+              -enableCodeCoverage NO \
+              -showBuildTimingSummary \
+              COMPILATION_CACHE_ENABLE_CACHING=YES \
+              COMPILATION_CACHE_ENABLE_DIAGNOSTIC_REMARKS=NO \
+              COMPILER_INDEX_STORE_ENABLE=NO \
+              CODE_SIGNING_ALLOWED=NO \
+              CODE_SIGNING_REQUIRED=NO \
+              CODE_SIGN_IDENTITY=""
 
-      - name: List schemes
-        run: xcodebuild -project Xedit.xcodeproj -list
-
-      - name: Run complexity guard
-        run: ruby scripts/complexity_guard.rb build/ci/complexity_report.md build/ci/complexity_report.json
-
-      - name: Run version consistency
-        run: ruby scripts/version_consistency.rb build/ci/version_report.md build/ci/version_report.json
-
-      - name: Run short-drama media contract guard
-        run: ruby scripts/short_drama_media_contract_test.rb build/ci/short_drama_media_report.md build/ci/short_drama_media_report.json
-
-      - name: Run widget side-panel contract guard
-        run: ruby scripts/widget_side_panel_contract_test.rb build/ci/widget_side_panel_report.md build/ci/widget_side_panel_report.json
-
-      - name: Run Expert Roundtable interaction contract guard
-        run: ruby scripts/roundtable_interaction_contract_test.rb build/ci/roundtable_interaction_contract_report.md build/ci/roundtable_interaction_contract_report.json
-
-      - name: Run image edit contract guard
-        run: ruby scripts/image_edit_contract_test.rb build/ci/image_edit_report.md build/ci/image_edit_report.json
-
-      - name: Run media task refresh contract guard
-        run: ruby scripts/media_task_refresh_contract_test.rb build/ci/media_task_refresh_report.md build/ci/media_task_refresh_report.json
-
-      - name: Run media import context contract guard
-        run: ruby scripts/media_import_context_contract_test.rb build/ci/media_import_context_report.md build/ci/media_import_context_report.json
-
-      - name: Run production gap actions contract guard
-        run: ruby scripts/production_gap_actions_contract_test.rb build/ci/production_gap_actions_report.md build/ci/production_gap_actions_report.json
-
-      - name: Generate short-drama MVP tryout package
-        run: ruby scripts/short_drama_mvp_tryout_package.rb build/ci/short_drama_mvp_tryout_package build/ci/short_drama_mvp_tryout_package_report.md build/ci/short_drama_mvp_tryout_package_report.json
-
-      - name: Generate short-drama MVP smoke evidence report
-        run: ruby scripts/short_drama_mvp_smoke_evidence_report.rb build/ci/short_drama_mvp_tryout_package build/ci/short_drama_mvp_smoke_evidence_report.md build/ci/short_drama_mvp_smoke_evidence_report.json
-
-      - name: Run short-drama MVP smoke evidence contract guard
-        run: ruby scripts/short_drama_mvp_smoke_evidence_contract_test.rb build/ci/short_drama_mvp_smoke_evidence_contract_report.md build/ci/short_drama_mvp_smoke_evidence_contract_report.json
-
-      - name: Generate short-drama MVP acceptance report
-        run: ruby scripts/short_drama_mvp_acceptance_report.rb build/ci/short_drama_mvp_acceptance_report.md build/ci/short_drama_mvp_acceptance_report.json
-
-      - name: Generate short-drama MVP handoff bundle
-        run: ruby scripts/short_drama_mvp_handoff_bundle.rb build/ci/short_drama_mvp_acceptance_report.json build/ci/short_drama_mvp_handoff_bundle.md build/ci/short_drama_mvp_handoff_bundle.json
-
-      - name: Run short-drama MVP handoff bundle contract guard
-        run: ruby scripts/short_drama_mvp_handoff_bundle_contract_test.rb build/ci/short_drama_mvp_handoff_bundle_contract_report.md build/ci/short_drama_mvp_handoff_bundle_contract_report.json
-
-      # 守住简体中文翻译覆盖率:可翻译文案缺 zh-Hans 即报红,防止新增 key
-      # 漏翻让中文用户回落英文。纯符号/格式串自动豁免。
-      - name: Run i18n coverage guard
-        run: ruby scripts/i18n_coverage_guard.rb build/ci/i18n_report.md build/ci/i18n_report.json
-
-      # self-hosted runner 通常已装 Go；仍用 setup-go 按 go.mod 锁定版本，
-      # 避免本机 PATH 上的 Go 与模块要求不一致。
-      - name: Set up Go
-        # v6 runs on Node.js 24; v5 targeted the now-deprecated Node 20
-        # compat shim and emitted a deprecation annotation on every run.
-        uses: actions/setup-go@v6
-        with:
-          go-version-file: willdeep-agent/go.mod
-          cache-dependency-path: willdeep-agent/go.sum
-
-      - name: Run Go agent tests
-        run: go test ./...
-        working-directory: willdeep-agent
-
-      - name: Run XeditTests
+      - name: Run tests without rebuilding
         id: tests
         run: |
-          mkdir -p build/ci
-          ruby scripts/xcodebuild_ci.rb --log build/ci/xcodebuild.log --pass-grace 180 --idle-timeout 180 -- \
-            xcodebuild test \
-            -project Xedit.xcodeproj \
-            -scheme Xedit \
-            -destination 'platform=macOS' \
-            -only-testing:XeditTests \
-            -resultBundlePath build/ci/XeditTests.xcresult \
-            -derivedDataPath build/ci/DerivedData \
-            CODE_SIGNING_ALLOWED=NO \
-            CODE_SIGNING_REQUIRED=NO \
-            CODE_SIGN_IDENTITY=""
+          CACHE_ROOT="${HOME}/Library/Caches/WillDeepCI/Xcode/${RUNNER_NAME:-default}"
+          DERIVED_DATA="${CACHE_ROOT}/DerivedData"
+          SOURCE_PACKAGES="${CACHE_ROOT}/SourcePackages"
+          PACKAGE_CACHE="${CACHE_ROOT}/PackageCache"
+          ruby scripts/xcodebuild_ci.rb \
+            --log build/ci/xcodebuild-test.log \
+            --pass-grace 180 \
+            --idle-timeout 180 \
+            -- \
+            xcodebuild test-without-building \
+              -project Xedit.xcodeproj \
+              -scheme XeditUnitTests \
+              -destination 'platform=macOS' \
+              -only-testing:XeditTests \
+              -resultBundlePath build/ci/XeditTests.xcresult \
+              -derivedDataPath "$DERIVED_DATA" \
+              -clonedSourcePackagesDirPath "$SOURCE_PACKAGES" \
+              -packageCachePath "$PACKAGE_CACHE" \
+              -skipPackageUpdates \
+              -onlyUsePackageVersionsFromResolvedFile \
+              -enableCodeCoverage NO \
+              CODE_SIGNING_ALLOWED=NO \
+              CODE_SIGNING_REQUIRED=NO \
+              CODE_SIGN_IDENTITY=""
 
-      - name: Generate Markdown + JSON report
+      - name: Generate Markdown and JSON report
         if: always()
         run: ruby scripts/xcresult_report.rb build/ci/XeditTests.xcresult build/ci/report.md build/ci/report.json
 
       - name: Append report to job summary
         if: always()
-        run: |
-          cat build/ci/complexity_report.md >> "$GITHUB_STEP_SUMMARY"
-          printf '\n\n' >> "$GITHUB_STEP_SUMMARY"
-          cat build/ci/version_report.md >> "$GITHUB_STEP_SUMMARY"
-          printf '\n\n' >> "$GITHUB_STEP_SUMMARY"
-          cat build/ci/short_drama_media_report.md >> "$GITHUB_STEP_SUMMARY"
-          printf '\n\n' >> "$GITHUB_STEP_SUMMARY"
-          cat build/ci/widget_side_panel_report.md >> "$GITHUB_STEP_SUMMARY"
-          printf '\n\n' >> "$GITHUB_STEP_SUMMARY"
-          cat build/ci/roundtable_interaction_contract_report.md >> "$GITHUB_STEP_SUMMARY"
-          printf '\n\n' >> "$GITHUB_STEP_SUMMARY"
-          cat build/ci/image_edit_report.md >> "$GITHUB_STEP_SUMMARY"
-          printf '\n\n' >> "$GITHUB_STEP_SUMMARY"
-          cat build/ci/media_task_refresh_report.md >> "$GITHUB_STEP_SUMMARY"
-          printf '\n\n' >> "$GITHUB_STEP_SUMMARY"
-          cat build/ci/media_import_context_report.md >> "$GITHUB_STEP_SUMMARY"
-          printf '\n\n' >> "$GITHUB_STEP_SUMMARY"
-          cat build/ci/production_gap_actions_report.md >> "$GITHUB_STEP_SUMMARY"
-          printf '\n\n' >> "$GITHUB_STEP_SUMMARY"
-          cat build/ci/short_drama_mvp_tryout_package_report.md >> "$GITHUB_STEP_SUMMARY"
-          printf '\n\n' >> "$GITHUB_STEP_SUMMARY"
-          cat build/ci/short_drama_mvp_smoke_evidence_report.md >> "$GITHUB_STEP_SUMMARY"
-          printf '\n\n' >> "$GITHUB_STEP_SUMMARY"
-          cat build/ci/short_drama_mvp_smoke_evidence_contract_report.md >> "$GITHUB_STEP_SUMMARY"
-          printf '\n\n' >> "$GITHUB_STEP_SUMMARY"
-          cat build/ci/short_drama_mvp_acceptance_report.md >> "$GITHUB_STEP_SUMMARY"
-          printf '\n\n' >> "$GITHUB_STEP_SUMMARY"
-          cat build/ci/short_drama_mvp_handoff_bundle.md >> "$GITHUB_STEP_SUMMARY"
-          printf '\n\n' >> "$GITHUB_STEP_SUMMARY"
-          cat build/ci/short_drama_mvp_handoff_bundle_contract_report.md >> "$GITHUB_STEP_SUMMARY"
-          printf '\n\n' >> "$GITHUB_STEP_SUMMARY"
-          cat build/ci/report.md >> "$GITHUB_STEP_SUMMARY"
+        run: ruby scripts/ci_append_markdown.rb build/ci/report.md
 
       - name: Upload test artifacts
         if: always()
-        # Artifact 存储配额满时不要把整个 run 标红：测试结论以前面的步骤为准，
-        # 报告同时已写入 job summary，上传失败只损失可下载副本。
         continue-on-error: true
         uses: actions/upload-artifact@v7
         with:
           name: xedit-test-results
           path: |
+            build/ci/XeditBuild.xcresult
             build/ci/XeditTests.xcresult
             build/ci/report.md
             build/ci/report.json
-            build/ci/complexity_report.md
-            build/ci/complexity_report.json
-            build/ci/version_report.md
-            build/ci/version_report.json
-            build/ci/short_drama_media_report.md
-            build/ci/short_drama_media_report.json
-            build/ci/widget_side_panel_report.md
-            build/ci/widget_side_panel_report.json
-            build/ci/roundtable_interaction_contract_report.md
-            build/ci/roundtable_interaction_contract_report.json
-            build/ci/image_edit_report.md
-            build/ci/image_edit_report.json
-            build/ci/media_task_refresh_report.md
-            build/ci/media_task_refresh_report.json
-            build/ci/media_import_context_report.md
-            build/ci/media_import_context_report.json
-            build/ci/production_gap_actions_report.md
-            build/ci/production_gap_actions_report.json
-            build/ci/short_drama_mvp_tryout_package
-            build/ci/short_drama_mvp_tryout_package_report.md
-            build/ci/short_drama_mvp_tryout_package_report.json
-            build/ci/short_drama_mvp_smoke_evidence_report.md
-            build/ci/short_drama_mvp_smoke_evidence_report.json
-            build/ci/short_drama_mvp_smoke_evidence_contract_report.md
-            build/ci/short_drama_mvp_smoke_evidence_contract_report.json
-            build/ci/short_drama_mvp_smoke_evidence_contract
-            build/ci/short_drama_mvp_acceptance_report.md
-            build/ci/short_drama_mvp_acceptance_report.json
-            build/ci/short_drama_mvp_handoff_bundle.md
-            build/ci/short_drama_mvp_handoff_bundle.json
-            build/ci/short_drama_mvp_handoff_bundle_contract_report.md
-            build/ci/short_drama_mvp_handoff_bundle_contract_report.json
-            build/ci/short_drama_mvp_handoff_bundle_contract
-            build/ci/xcodebuild.log
+            build/ci/xcodebuild-build.log
+            build/ci/xcodebuild-test.log
           retention-days: 7

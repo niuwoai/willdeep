@@ -901,6 +901,12 @@ extension AppState {
             runtime.goalTurnRecoveryCheckpoint = nil
         }
         persistActiveAgentSession()
+        if runtime.session.presentationScope == .dispatchBoard,
+           agentPrimaryDestination == .dispatchBoard {
+            agentDispatchCoordinator.synchronize(with: agentSessions)
+            agentDispatchCoordinator.selectGoal(runtime.id)
+            agentPrimaryDestination = .dispatchBoard
+        }
         enqueueGoalUpdateNoticeIfNeeded(for: runtime, previousGoal: previousGoal, updatedGoal: updatedGoal)
         if previousGoal != updatedGoal {
             _ = startAgentGoalPlanningIfNeeded(for: runtime)

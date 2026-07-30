@@ -39,6 +39,14 @@ extension L10n {
             localized: "dispatch.open-conversation",
             defaultValue: "Start a Goal conversation"
         )
+        static let goalSetupTitle = String(
+            localized: "dispatch.goal-setup-title",
+            defaultValue: "Define this Goal"
+        )
+        static let goalSetupMessage = String(
+            localized: "dispatch.goal-setup-message",
+            defaultValue: "Describe the outcome and acceptance criteria. WillDeep will turn them into an executable plan here."
+        )
         static let addWorkspaceMapping = String(
             localized: "dispatch.add-workspace-mapping",
             defaultValue: "Add checkout mapping"

@@ -2638,7 +2638,8 @@ final class AgentInteractiveTerminalController: ObservableObject {
         sessionID: UUID,
         displayCommand: String,
         timeout: TimeInterval,
-        secretRedactionValues: [String]
+        secretRedactionValues: [String],
+        progressSink: (@MainActor (AgentDelegatedTerminalProgressUpdate) -> Void)? = nil
     ) async throws -> AgentToolResult {
         guard let config = defaultLocalTabProvider?(sessionID) else {
             throw AgentToolError.invalidArgument(
@@ -2679,6 +2680,36 @@ final class AgentInteractiveTerminalController: ObservableObject {
 
         let startupDeadline = Date().addingTimeInterval(15)
         var didStart = false
+        var nextProgressReadAt = Date()
+        var lastProgressSnapshot: AgentDelegatedLiveOutputSnapshot?
+
+        func publishProgress(force: Bool = false) {
+            let rawOutput = AgentDelegatedTerminalRunner.readOutputTail(
+                from: artifacts.outputURL
+            )
+            let redacted = AgentSecretStore.redact(
+                rawOutput,
+                secretValues: secretRedactionValues
+            )
+            let snapshot = AgentDelegatedLiveOutputSnapshot.make(from: redacted)
+            guard force || snapshot != lastProgressSnapshot else { return }
+            lastProgressSnapshot = snapshot
+            progressSink?(
+                AgentDelegatedTerminalProgressUpdate(
+                    terminalTabID: tab.id,
+                    currentActivity: snapshot.currentActivity,
+                    recentOutput: snapshot.recentOutput
+                )
+            )
+        }
+
+        progressSink?(
+            AgentDelegatedTerminalProgressUpdate(
+                terminalTabID: tab.id,
+                currentActivity: nil,
+                recentOutput: nil
+            )
+        )
         while Date() < deadline {
             if Task.isCancelled {
                 _ = try? tab.sendApprovedControl(.ctrlC)
@@ -2693,8 +2724,13 @@ final class AgentInteractiveTerminalController: ObservableObject {
                     )
                 }
             }
+            if didStart, Date() >= nextProgressReadAt {
+                publishProgress()
+                nextProgressReadAt = Date().addingTimeInterval(1)
+            }
             if FileManager.default.fileExists(atPath: artifacts.statusURL.path) {
                 try? await Task.sleep(nanoseconds: 100_000_000)
+                publishProgress(force: true)
                 let statusText = (try? String(contentsOf: artifacts.statusURL, encoding: .utf8))?
                     .trimmingCharacters(in: .whitespacesAndNewlines) ?? "1"
                 let exitCode = Int(statusText) ?? 1

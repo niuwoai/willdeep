@@ -29,17 +29,55 @@ extension AppState {
         return true
     }
 
-    func startGoalConversationInLocalWorkspace() {
+    func startDispatchGoalInLocalWorkspace() {
         let panel = Self.folderOpenPanel()
         panel.title = L10n.Dispatch.chooseWorkspace
         panel.message = L10n.Dispatch.chooseWorkspaceMessage
         panel.prompt = L10n.Dispatch.chooseWorkspaceAction
         Self.presentFolderOpenPanel(panel) { [weak self] response in
             guard response == .OK, let url = panel.url, let self else { return }
-            let session = self.startNewAgentSession(inWorkspaceAt: url.standardizedFileURL.path)
-            self.agentRuntimes[session.id]?.session.presentationScope = .dispatchBoard
-            self.setAgentInteractionMode(.goal)
+            self.startDispatchGoalSession(
+                inWorkspaceAt: url.standardizedFileURL.path
+            )
         }
+    }
+
+    /// Creates the structured Goal draft without leaving the orchestrator.
+    /// `startNewAgentSession(inWorkspaceAt:)` intentionally routes ordinary
+    /// callers to the conversation destination, so the dispatch entry point
+    /// must restore its own presentation scope and destination explicitly.
+    @discardableResult
+    func startDispatchGoalSession(inWorkspaceAt workspacePath: String) -> AgentSession {
+        let session = startNewAgentSession(inWorkspaceAt: workspacePath)
+        guard let runtime = runtime(for: session.id) else {
+            agentPrimaryDestination = .dispatchBoard
+            return session
+        }
+
+        runtime.session.presentationScope = .dispatchBoard
+        setAgentInteractionMode(.goal)
+        agentPrimaryDestination = .dispatchBoard
+        persistAgentSession(runtime: runtime)
+        return runtime.session
+    }
+
+    var isPreparingDispatchGoal: Bool {
+        guard agentPrimaryDestination == .dispatchBoard,
+              let runtime = activeRuntime else {
+            return false
+        }
+        return runtime.session.presentationScope == .dispatchBoard
+            && runtime.interactionMode == .goal
+            && runtime.currentGoal == nil
+    }
+
+    func selectDispatchGoal(_ goalID: UUID) {
+        guard let goal = agentDispatchCoordinator.goals.first(where: { $0.id == goalID }) else {
+            return
+        }
+        agentDispatchCoordinator.selectGoal(goalID)
+        _ = selectAgentSession(id: goal.sessionID)
+        agentPrimaryDestination = .dispatchBoard
     }
 
     func chooseLocalWorkspaceForDispatchGoal(

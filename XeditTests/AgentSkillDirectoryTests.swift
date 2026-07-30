@@ -12,6 +12,44 @@ import Foundation
 @Suite(.serialized)
 struct AgentSkillDirectoryTests {
     @Test
+    func filesystemCatalogCacheReusesSnapshotUntilInvalidated() {
+        let cache = AgentSkillCatalogCache()
+        let entry = AgentSkillEntry(
+            identifier: "cached-skill",
+            name: "Cached Skill",
+            description: "Cache fixture",
+            url: URL(fileURLWithPath: "/tmp/cached-skill/SKILL.md"),
+            source: .user,
+            isEnabled: true
+        )
+        var loadCount = 0
+
+        let first = cache.value {
+            loadCount += 1
+            return [entry]
+        }
+        let second = cache.value {
+            loadCount += 1
+            return []
+        }
+
+        #expect(first == [entry])
+        #expect(second == [entry])
+        #expect(loadCount == 1)
+        #expect(cache.revision == 0)
+
+        cache.invalidate()
+        let refreshed = cache.value {
+            loadCount += 1
+            return []
+        }
+
+        #expect(refreshed.isEmpty)
+        #expect(loadCount == 2)
+        #expect(cache.revision == 1)
+    }
+
+    @Test
     func bundledSkillsUseWillDeepNativeDescriptionsAndContracts() throws {
         let skills = AgentSkillDirectory.list(includeDisabled: true)
             .filter { $0.source == .bundled }

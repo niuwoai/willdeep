@@ -252,6 +252,50 @@ struct AgentDelegatedTerminalRunnerTests {
         }
     }
 
+    @Test("live output snapshots strip terminal controls and keep a bounded tail")
+    func liveOutputSnapshotIsReadableAndBounded() throws {
+        let lines = (1...12).map { "step-\($0)" }
+        let raw = "\u{001B}[32m" + lines.joined(separator: "\n") + "\u{001B}[0m"
+
+        let snapshot = AgentDelegatedLiveOutputSnapshot.make(
+            from: raw,
+            maximumLines: 4,
+            maximumCharacters: 200
+        )
+
+        #expect(snapshot.currentActivity == "step-12")
+        #expect(snapshot.currentActivity?.contains("\n") == false)
+        let output = try #require(snapshot.recentOutput)
+        #expect(output == "step-9\nstep-10\nstep-11\nstep-12")
+        #expect(!output.contains("\u{001B}"))
+
+        let longActivity = AgentDelegatedLiveOutputSnapshot.make(
+            from: String(repeating: "x", count: 240)
+        ).currentActivity
+        #expect(longActivity?.count == 181)
+        #expect(longActivity?.hasPrefix("…") == true)
+        #expect(longActivity?.contains("\n") == false)
+    }
+
+    @Test("live output reader only returns the bounded file tail")
+    func liveOutputReaderBoundsDiskReads() throws {
+        let directory = try makeTemporaryDirectory(named: "runner live tail")
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let outputURL = directory.appendingPathComponent("executor.log")
+        let prefix = String(repeating: "old-output\n", count: 200)
+        try Data((prefix + "latest-one\nlatest-two\n").utf8)
+            .write(to: outputURL, options: .atomic)
+
+        let tail = AgentDelegatedTerminalRunner.readOutputTail(
+            from: outputURL,
+            maximumBytes: 48
+        )
+
+        #expect(tail.utf8.count <= 48)
+        #expect(tail.hasSuffix("latest-one\nlatest-two\n"))
+        #expect(tail.components(separatedBy: "old-output").count < 6)
+    }
+
     private func makeTemporaryDirectory(named name: String) throws -> URL {
         let directory = FileManager.default.temporaryDirectory
             .appendingPathComponent("WillDeepTests-\(name)-\(UUID().uuidString)", isDirectory: true)

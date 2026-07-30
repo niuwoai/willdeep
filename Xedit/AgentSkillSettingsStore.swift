@@ -142,6 +142,7 @@ nonisolated enum AgentSkillFileManager {
         \(body.trimmingCharacters(in: .whitespacesAndNewlines))
         """
         try markdown.write(to: skillURL, atomically: true, encoding: .utf8)
+        AgentSkillDirectory.invalidateCache()
         return skillURL
     }
 
@@ -164,6 +165,7 @@ nonisolated enum AgentSkillFileManager {
         }
 
         try FileManager.default.removeItem(at: skillDirectory)
+        AgentSkillDirectory.invalidateCache()
     }
 
     static func updateUserSkill(
@@ -210,6 +212,7 @@ nonisolated enum AgentSkillFileManager {
         \(nextBody)
         """
         try markdown.write(to: skillURL, atomically: true, encoding: .utf8)
+        AgentSkillDirectory.invalidateCache()
     }
 
     private static func skillSlug(from name: String) -> String {

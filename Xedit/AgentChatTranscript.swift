@@ -190,6 +190,7 @@ nonisolated enum AgentStreamingMessageSelection {
 
 struct AgentChatTranscript: View {
     @EnvironmentObject var appState: AppState
+    var showsEmptyState = true
     private static let bottomScrollID = "agent-chat-transcript-bottom"
 
     /// 1.103.0-rc11: TextKit footer 里 doc.text 图标点开后呈现
@@ -234,7 +235,9 @@ struct AgentChatTranscript: View {
                     // default, alongside the artifact / media / dev-server cards.
                     // See AgentConversationActivityOverlay.
 
-                    if appState.agentMessages.isEmpty && localConfirmationPreviewCalls.isEmpty {
+                    if showsEmptyState,
+                       appState.agentMessages.isEmpty,
+                       localConfirmationPreviewCalls.isEmpty {
                         AgentChatEmptyState()
                             .frame(maxWidth: .infinity)
                             .padding(.top, 44)

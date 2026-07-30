@@ -20,6 +20,12 @@ final class WillDeepAppDelegate: NSObject, NSApplicationDelegate {
         // and starts forwarding cross-app login/logout changes.
         SomeIMIntegrationStore.configureSharedSession()
         guard !Self.isRunningUnderXCTest else { return }
+        // Skill discovery touches bundled, user, legacy, and plugin trees.
+        // Warm the shared catalog away from AppKit's main thread so mobile
+        // gateway snapshots and the first composer `$` menu are cache hits.
+        _ = Task.detached(priority: .utility) {
+            _ = AgentSkillDirectory.list(includeDisabled: true)
+        }
         AIPipeBootstrap.initialize()
         ChromeNativeHostInstaller.installAtLaunch()
         // Route taps on agent approval / job notifications back to the

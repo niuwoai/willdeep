@@ -424,6 +424,7 @@ struct AgentTurnActivityStatusView: View {
                 AgentRunningTasksRow(
                     count: runningTasks,
                     isAgentTurnActive: appState.isAgentResponding,
+                    labelOverride: appState.agentRunningTaskHeadline,
                     detail: appState.agentRunningTaskSummary,
                     onTap: onRunningTasksTap
                 )

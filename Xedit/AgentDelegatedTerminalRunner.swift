@@ -44,8 +44,57 @@ struct AgentDelegatedTerminalArtifacts {
     }
 }
 
+nonisolated struct AgentDelegatedLiveOutputSnapshot: Equatable, Sendable {
+    let currentActivity: String?
+    let recentOutput: String?
+
+    static func make(
+        from rawOutput: String,
+        maximumLines: Int = 8,
+        maximumCharacters: Int = 2_400
+    ) -> Self {
+        let withoutANSI = AgentDelegatedTerminalRunner.removingTerminalControlSequences(
+            from: rawOutput
+        )
+        let lines = withoutANSI
+            .replacingOccurrences(of: "\r", with: "\n")
+            .split(whereSeparator: \.isNewline)
+            .map {
+                $0.trimmingCharacters(in: .whitespacesAndNewlines)
+            }
+            .filter { !$0.isEmpty }
+
+        guard !lines.isEmpty else {
+            return Self(currentActivity: nil, recentOutput: nil)
+        }
+
+        let selectedLines = Array(lines.suffix(max(maximumLines, 1)))
+        let lastLine = selectedLines.last ?? ""
+        let activity = lastLine.count > 180
+            ? "…" + String(lastLine.suffix(180))
+            : lastLine
+        let output = clippedSuffix(
+            selectedLines.joined(separator: "\n"),
+            maximumCharacters: max(maximumCharacters, 1)
+        )
+        return Self(
+            currentActivity: activity.isEmpty ? nil : activity,
+            recentOutput: output.isEmpty ? nil : output
+        )
+    }
+
+    private static func clippedSuffix(
+        _ value: String,
+        maximumCharacters: Int
+    ) -> String {
+        guard value.count > maximumCharacters else { return value }
+        return "…\n" + String(value.suffix(maximumCharacters))
+    }
+}
+
 enum AgentDelegatedTerminalRunner {
     nonisolated static let runnerPermissions = 0o600
+    nonisolated static let maximumLiveOutputBytes: UInt64 = 16 * 1_024
 
     /// Upper bound on the command echoed to the visible terminal. The full
     /// text always reaches the shell through the runner file; this only caps
@@ -141,6 +190,45 @@ enum AgentDelegatedTerminalRunner {
 
     nonisolated static func invocation(runnerURL: URL) -> String {
         "/bin/sh \(shellQuoted(runnerURL.path))"
+    }
+
+    nonisolated static func readOutputTail(
+        from outputURL: URL,
+        maximumBytes: UInt64 = maximumLiveOutputBytes
+    ) -> String {
+        guard let handle = try? FileHandle(forReadingFrom: outputURL) else {
+            return ""
+        }
+        defer { try? handle.close() }
+
+        guard let endOffset = try? handle.seekToEnd() else { return "" }
+        let startOffset = endOffset > maximumBytes ? endOffset - maximumBytes : 0
+        do {
+            try handle.seek(toOffset: startOffset)
+            guard let data = try handle.readToEnd(), !data.isEmpty else {
+                return ""
+            }
+            var output = String(decoding: data, as: UTF8.self)
+            if startOffset > 0, let firstNewline = output.firstIndex(of: "\n") {
+                output.removeSubrange(output.startIndex...firstNewline)
+            }
+            return output
+        } catch {
+            return ""
+        }
+    }
+
+    nonisolated static func removingTerminalControlSequences(
+        from value: String
+    ) -> String {
+        let escape = "\u{001B}"
+        let bell = "\u{0007}"
+        let pattern = "\(escape)(?:\\[[0-?]*[ -/]*[@-~]|\\][^\(bell)]*(?:\(bell)|\(escape)\\\\))"
+        return value.replacingOccurrences(
+            of: pattern,
+            with: "",
+            options: .regularExpression
+        )
     }
 
     nonisolated static func shellQuoted(_ value: String) -> String {
