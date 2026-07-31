@@ -181,6 +181,29 @@ extension AppState {
             ),
             AgentToolCall(
                 messageID: messageID,
+                externalID: "local-confirmation-preview-skill-batch",
+                toolName: "create_user_skills",
+                arguments: [
+                    "skills_json": .string("""
+                    [
+                      {
+                        "name": "release-guardian",
+                        "description": "发布前检查版本、变更记录与构建产物。",
+                        "body": "Run release checks and verify artifacts."
+                      },
+                      {
+                        "name": "incident-reviewer",
+                        "description": "生产事故后整理证据、根因与改进项。",
+                        "body": "Collect evidence and verify follow-ups."
+                      }
+                    ]
+                    """)
+                ],
+                risk: .write,
+                status: .pendingApproval
+            ),
+            AgentToolCall(
+                messageID: messageID,
                 externalID: "local-confirmation-preview-browser",
                 toolName: "embedded_browser_navigate",
                 arguments: ["url": .string("https://example.com")],

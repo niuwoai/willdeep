@@ -9,11 +9,16 @@ import Foundation
 
 nonisolated enum AgentImageDescriptionRetryPolicy {
     /// A vision-route lookup can briefly return 422 while the relay refreshes
-    /// its healthy upstream set. Permit exactly one delayed retry across the
-    /// whole image-description operation; candidate fallbacks do not each get
-    /// their own retry budget.
-    static let maximumRetryCount = 1
-    static let retryDelayNanoseconds: UInt64 = 800_000_000
+    /// its healthy upstream set. Keep the retry budget bounded and scoped to
+    /// this exact transient response, but wait long enough for route discovery
+    /// to settle so users are not forced to press Retry themselves.
+    static let maximumRetryCount = 3
+    static let initialRetryDelayNanoseconds: UInt64 = 800_000_000
+
+    static func retryDelayNanoseconds(for retryCount: Int) -> UInt64 {
+        let boundedRetryCount = max(0, min(retryCount, maximumRetryCount - 1))
+        return initialRetryDelayNanoseconds << boundedRetryCount
+    }
 
     static func shouldRetry(_ error: Error, retryCount: Int) -> Bool {
         guard retryCount < maximumRetryCount,
@@ -72,10 +77,11 @@ extension AppState {
                     throw CancellationError()
                 } catch {
                     if AgentImageDescriptionRetryPolicy.shouldRetry(error, retryCount: retryCount) {
-                        retryCount += 1
-                        try await Task.sleep(
-                            nanoseconds: AgentImageDescriptionRetryPolicy.retryDelayNanoseconds
+                        let delay = AgentImageDescriptionRetryPolicy.retryDelayNanoseconds(
+                            for: retryCount
                         )
+                        retryCount += 1
+                        try await Task.sleep(nanoseconds: delay)
                         continue
                     }
                     lastError = Self.imageDescriptionStageError(error)

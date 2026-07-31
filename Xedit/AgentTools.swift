@@ -404,6 +404,8 @@ enum AgentToolRunner {
                 result = try AgentSelfLearning.addMemory(arguments: activeArguments, rootDirectory: activeContext.rootDirectory)
             case "create_user_skill":
                 result = try AgentSelfLearning.createUserSkill(arguments: activeArguments)
+            case "create_user_skills":
+                result = try AgentSelfLearning.createUserSkills(arguments: activeArguments)
             case "update_user_skill":
                 result = try AgentConfigurationTools.updateUserSkill(arguments: activeArguments)
             case "delete_user_skill":

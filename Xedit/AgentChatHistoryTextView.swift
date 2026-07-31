@@ -585,7 +585,13 @@ final class AgentChatHistoryNSTextView: NSTextView {
     }
 
     func applySearch(query: String, activeMatchIndex: Int?, isDark: Bool) {
-        currentSearchQuery = AgentTranscriptSearch.normalizedQuery(query)
+        let normalizedQuery = AgentTranscriptSearch.normalizedQuery(query)
+        guard normalizedQuery != currentSearchQuery
+                || activeMatchIndex != currentActiveSearchMatchIndex
+                || isDark != currentSearchIsDark else {
+            return
+        }
+        currentSearchQuery = normalizedQuery
         currentActiveSearchMatchIndex = activeMatchIndex
         currentSearchIsDark = isDark
         applySearchHighlight()
@@ -598,10 +604,37 @@ final class AgentChatHistoryNSTextView: NSTextView {
             activeMatchIndex: currentActiveSearchMatchIndex,
             isDark: currentSearchIsDark
         )
-        textStorage?.setAttributedString(result.attributedString)
+        replaceTranscriptStoragePreservingSelection(with: result.attributedString)
         reportSearchResultCountIfNeeded(result.matchCount)
         scrollActiveSearchMatchIfNeeded(ranges: result.matchRanges)
         invalidateIntrinsicContentSize()
+    }
+
+    /// Hover and search highlighting only change attributes. Replacing the
+    /// whole NSTextStorage normally collapses the selection, which makes the
+    /// selection action disappear immediately after it is shown. Preserve a
+    /// valid selection whenever the underlying conversation text is unchanged.
+    private func replaceTranscriptStoragePreservingSelection(
+        with attributedString: NSAttributedString
+    ) {
+        guard let textStorage else { return }
+        let range = selectedRange()
+        let canPreserveSelection = range.location != NSNotFound
+            && range.length > 0
+            && NSMaxRange(range) <= attributedString.length
+            && textStorage.string == attributedString.string
+
+        if canPreserveSelection {
+            delegate = nil
+        }
+        textStorage.setAttributedString(attributedString)
+        if canPreserveSelection {
+            setSelectedRange(range)
+            delegate = self
+            if let selectedText = currentSelectedConversationText() {
+                showSelectionAction(selectedText: selectedText)
+            }
+        }
     }
 
     private func reportSearchResultCountIfNeeded(_ count: Int) {

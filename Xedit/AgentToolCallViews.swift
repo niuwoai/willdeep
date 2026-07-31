@@ -70,6 +70,7 @@ nonisolated enum AgentToolDisplay {
         "activate_expert": "激活技能包",
         "add_memory": "记忆要点",
         "create_user_skill": "新建技能",
+        "create_user_skills": "批量新建技能",
         "update_user_skill": "更新技能",
         "delete_user_skill": "删除技能",
         "search_mcp_servers": "搜索 MCP 服务",
@@ -210,8 +211,10 @@ nonisolated enum AgentCompactAuthorizationMetrics {
     static let horizontalPadding: CGFloat = 14
     static let verticalPadding: CGFloat = 15
     static let contentSpacing: CGFloat = 15
-    static let actionSpacing: CGFloat = 8
-    static let minimumButtonHeight: CGFloat = 22
+    static let actionSpacing: CGFloat = 10
+    static let minimumButtonWidth: CGFloat = 76
+    static let primaryButtonMinimumWidth: CGFloat = 112
+    static let minimumButtonHeight: CGFloat = 36
     static let cornerRadius: CGFloat = 20
     static let buttonCornerRadius: CGFloat = 14
     static let horizontalMinimumWidth: CGFloat = 520
@@ -351,6 +354,24 @@ nonisolated enum AgentApprovalNoticeCopy {
                 decisionSubtitle: "不会提交表单或修改网页内容。",
                 declineTitle: "暂不访问",
                 approveTitle: "本次允许",
+                usesOutlinedApproveAction: false
+            )
+        case "create_user_skills":
+            let drafts = (try? AgentSelfLearning.decodeSkillBatch(
+                arguments["skills_json"]?.stringValue() ?? ""
+            )) ?? []
+            let count = drafts.count
+            return AgentApprovalNoticeDescriptor(
+                iconName: "wand.and.stars",
+                title: "Agent 准备创建 \(count) 个技能",
+                subtitle: "所有技能会先整体校验，再作为同一批次写入；任一项失败都会撤销本批已创建内容。",
+                detailTitle: "技能清单",
+                metadata: ["\(count) 个技能", "一次确认", "失败整批回滚"],
+                explanationTitle: "查看批量创建说明",
+                decisionTitle: "创建这批技能吗？",
+                decisionSubtitle: "确认一次即可处理清单中的全部技能，结果会逐项显示。",
+                declineTitle: "暂不创建",
+                approveTitle: "创建全部",
                 usesOutlinedApproveAction: false
             )
         default:
@@ -1263,7 +1284,8 @@ struct AgentToolCallCard: View {
             compactAuthorizationActionLabel(
                 call.toolName.hasPrefix("computer_use_")
                     ? L10n.ToolCard.allowComputerUseSession
-                    : L10n.ToolCard.allowConversation
+                    : L10n.ToolCard.allowConversation,
+                minimumWidth: AgentCompactAuthorizationMetrics.primaryButtonMinimumWidth
             )
         }
         .buttonStyle(
@@ -1276,11 +1298,17 @@ struct AgentToolCallCard: View {
         .cursor(.arrow)
     }
 
-    private func compactAuthorizationActionLabel(_ title: String) -> some View {
+    private func compactAuthorizationActionLabel(
+        _ title: String,
+        minimumWidth: CGFloat = AgentCompactAuthorizationMetrics.minimumButtonWidth
+    ) -> some View {
         Text(title)
-            .font(.system(size: 12, weight: .semibold))
-            .padding(.horizontal, 2)
-            .frame(minHeight: AgentCompactAuthorizationMetrics.minimumButtonHeight)
+            .font(.system(size: 13, weight: .semibold))
+            .padding(.horizontal, 12)
+            .frame(
+                minWidth: minimumWidth,
+                minHeight: AgentCompactAuthorizationMetrics.minimumButtonHeight
+            )
             .contentShape(
                 RoundedRectangle(
                     cornerRadius: AgentCompactAuthorizationMetrics.buttonCornerRadius,
@@ -2438,6 +2466,17 @@ struct AgentToolCallCard: View {
            let url = call.arguments["url"]?.stringValue(),
            !url.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
             return ("访问地址", url)
+        }
+        if call.toolName == "create_user_skills",
+           let rawJSON = call.arguments["skills_json"]?.stringValue(),
+           let drafts = try? AgentSelfLearning.decodeSkillBatch(rawJSON) {
+            let lines = drafts.enumerated().flatMap { index, draft in
+                [
+                    "\(index + 1). \(draft.name)",
+                    "   \(draft.description)",
+                ]
+            }
+            return ("技能清单", lines.joined(separator: "\n"))
         }
         guard !argumentsLines.isEmpty else { return nil }
         return ("操作内容", argumentsLines)

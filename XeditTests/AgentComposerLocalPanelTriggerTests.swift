@@ -73,10 +73,11 @@ struct AgentComposerLocalPanelTriggerTests {
         #expect(runtime.localConfirmationPreviewCalls.map(\.toolName) == [
             "run_command",
             "web_fetch",
+            "create_user_skills",
             "embedded_browser_navigate",
             "computer_use_click",
         ])
-        #expect(runtime.toolCalls.count == 4)
+        #expect(runtime.toolCalls.count == 5)
     }
 
     @Test("旧会话中的保留口令不会触发，也不会发送给 AI")
@@ -148,6 +149,6 @@ struct AgentComposerLocalPanelTriggerTests {
         #expect(runtime.toolCalls.isEmpty)
         runtime.input = "#1983#"
         appState.sendAgentMessage()
-        #expect(runtime.localConfirmationPreviewCalls.count == 4)
+        #expect(runtime.localConfirmationPreviewCalls.count == 5)
     }
 }

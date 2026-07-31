@@ -986,7 +986,7 @@ extension AppState {
             }
             return sandboxDecision.mode == .readOnly || sandboxDecision.mode == .workspaceWrite
         case "kill_job", "claude_code", "codex_cli", "hermes_cli", "cursor_agent", "cline_cli",
-             "add_memory", "create_user_skill", "update_user_skill", "suggest_mcp_server", "configure_mcp_server":
+             "add_memory", "create_user_skill", "create_user_skills", "update_user_skill", "suggest_mcp_server", "configure_mcp_server":
             return true
         case "call_mcp_tool":
             guard let server = arguments["server"]?.stringValue() else {

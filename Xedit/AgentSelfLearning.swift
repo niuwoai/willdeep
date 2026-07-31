@@ -21,6 +21,12 @@ struct AgentSelfLearningSkillCandidate: Equatable {
     var reason: String
 }
 
+nonisolated struct AgentUserSkillBatchDraft: Codable, Equatable {
+    var name: String
+    var description: String
+    var body: String
+}
+
 nonisolated enum AgentLearningEventKind: String, Codable, Equatable {
     case memory
     case skill
@@ -234,6 +240,8 @@ struct AgentSelfLearningAudit: Equatable {
 enum AgentSelfLearning {
     private static let maxMemoryCharacters = 1_200
     private static let maxSkillBodyCharacters = 12_000
+    static let maxSkillBatchCount = 10
+    private static let maxSkillBatchJSONCharacters = 128_000
     private static let maxMCPNoteCharacters = 1_200
     private static let defaultMCPSearchCount = 5
     private static let maxMCPSearchCount = 10
@@ -292,6 +300,122 @@ enum AgentSelfLearning {
         )
     }
 
+    static func createUserSkills(
+        arguments: [String: AgentJSONValue],
+        root: URL = AgentSkillFileManager.userSkillsRoot
+    ) throws -> AgentToolResult {
+        let rawJSON = try limitedRequiredString(
+            "skills_json",
+            in: arguments,
+            maxCharacters: maxSkillBatchJSONCharacters
+        )
+        let drafts = try decodeSkillBatch(rawJSON)
+        let normalized = try drafts.map { draft in
+            let values: [String: AgentJSONValue] = [
+                "name": .string(draft.name),
+                "description": .string(draft.description),
+                "body": .string(draft.body),
+            ]
+            return AgentUserSkillBatchDraft(
+                name: try limitedRequiredString("name", in: values, maxCharacters: 80),
+                description: AgentMemorySanitizer.sanitize(
+                    try limitedRequiredString("description", in: values, maxCharacters: 240)
+                ).text,
+                body: AgentMemorySanitizer.sanitize(
+                    try limitedRequiredString("body", in: values, maxCharacters: maxSkillBodyCharacters)
+                ).text
+            )
+        }
+
+        let slugs = normalized.map { AgentSkillFileManager.skillSlug(from: $0.name) }
+        guard slugs.allSatisfy({ !$0.isEmpty }) else {
+            throw AgentSkillFileError.invalidName
+        }
+        guard Set(slugs).count == slugs.count else {
+            throw AgentToolError.invalidArgument("skills_json contains duplicate skill names.")
+        }
+
+        let fileManager = FileManager.default
+        let directories = slugs.map { root.appendingPathComponent($0, isDirectory: true) }
+        if let existingIndex = directories.firstIndex(where: { fileManager.fileExists(atPath: $0.path) }) {
+            throw AgentSkillFileError.alreadyExists(slugs[existingIndex])
+        }
+
+        let stagingRoot = root
+            .deletingLastPathComponent()
+            .appendingPathComponent(".willdeep-skill-batch-\(UUID().uuidString)", isDirectory: true)
+        var committedDirectories: [URL] = []
+        var createdURLs: [URL] = []
+        do {
+            try fileManager.createDirectory(at: stagingRoot, withIntermediateDirectories: true)
+            for draft in normalized {
+                _ = try AgentSkillFileManager.createUserSkill(
+                    name: draft.name,
+                    description: draft.description,
+                    body: draft.body,
+                    root: stagingRoot
+                )
+            }
+
+            try fileManager.createDirectory(at: root, withIntermediateDirectories: true)
+            for (slug, directory) in zip(slugs, directories) {
+                guard !fileManager.fileExists(atPath: directory.path) else {
+                    throw AgentSkillFileError.alreadyExists(slug)
+                }
+                try fileManager.moveItem(
+                    at: stagingRoot.appendingPathComponent(slug, isDirectory: true),
+                    to: directory
+                )
+                committedDirectories.append(directory)
+                createdURLs.append(directory.appendingPathComponent("SKILL.md"))
+            }
+        } catch {
+            for directory in committedDirectories.reversed() {
+                try? fileManager.removeItem(at: directory)
+            }
+            try? fileManager.removeItem(at: stagingRoot)
+            AgentSkillDirectory.invalidateCache()
+            throw error
+        }
+        try? fileManager.removeItem(at: stagingRoot)
+        AgentSkillDirectory.invalidateCache()
+
+        let createdLines = zip(slugs, createdURLs).map { slug, url in
+            "- \(slug): \(url.path)"
+        }
+        return AgentToolResult(
+            summary: "Created \(createdURLs.count) user skills",
+            payload: ([
+                "Created \(createdURLs.count) user skills in one approved batch:",
+            ] + createdLines + [
+                "Refresh skills or type $ to attach them in a future turn.",
+            ]).joined(separator: "\n")
+        )
+    }
+
+    nonisolated static func decodeSkillBatch(_ rawJSON: String) throws -> [AgentUserSkillBatchDraft] {
+        guard let data = rawJSON.data(using: .utf8) else {
+            throw AgentToolError.invalidArgument("skills_json is not UTF-8.")
+        }
+        let drafts: [AgentUserSkillBatchDraft]
+        do {
+            drafts = try JSONDecoder().decode([AgentUserSkillBatchDraft].self, from: data)
+        } catch {
+            throw AgentToolError.invalidArgument(
+                "skills_json must be a JSON array of {name, description, body} objects."
+            )
+        }
+        guard !drafts.isEmpty else {
+            throw AgentToolError.invalidArgument("skills_json must contain at least one skill.")
+        }
+        guard drafts.count <= maxSkillBatchCount else {
+            throw AgentToolError.invalidArgument(
+                "skills_json can contain at most \(maxSkillBatchCount) skills."
+            )
+        }
+        return drafts
+    }
+
     static func auditTurn(
         for runtime: AgentRuntime,
         workspaceURL: URL?,
@@ -318,7 +442,9 @@ enum AgentSelfLearning {
                 .filter { $0.role == .assistant && $0.createdAt >= latestUser.createdAt }
                 .map(\.id)
         )
-        let calls = runtime.toolCalls.filter { relevantAssistantIDs.contains($0.messageID) }
+        let calls = runtime.toolCalls.filter {
+            relevantAssistantIDs.contains($0.messageID) && $0.status == .succeeded
+        }
         // 框架规则类候选只看用户原话：assistant 措辞里"建议/以后/自动"
         // 这类词天天出现，拿混合证据喂关键词匹配会让每个回合都误产
         // 学习事件（1.195.0-rc11 实测），所以强意图闸只对用户文本生效。
@@ -327,7 +453,10 @@ enum AgentSelfLearning {
             userText: latestUser.modelContent,
             evidenceText: evidenceText
         )
-        let explicitSkillDirective = containsExplicitSkillCreationSignal(evidenceText)
+        // Only the operator can authorize automatic skill creation. Assistant
+        // narration such as "this could become a skill" is evidence for a
+        // review candidate, never an instruction to write one.
+        let explicitSkillDirective = containsExplicitSkillCreationSignal(latestUser.modelContent)
         let skillCandidate = automaticSkillCandidate(
             userText: latestUser.modelContent,
             assistantText: recentAssistantText,
@@ -523,9 +652,10 @@ enum AgentSelfLearning {
     static func captureAutomaticSkillCandidate(
         for runtime: AgentRuntime,
         workspaceURL: URL?,
+        skillSettings: AgentSkillSettings? = nil,
         root: URL = AgentSkillFileManager.userSkillsRoot
     ) -> [AgentLearningEvent] {
-        let settings = AgentSkillSettingsStore.load().normalized
+        let settings = (skillSettings ?? AgentSkillSettingsStore.load()).normalized
         guard let audit = auditTurn(
             for: runtime,
             workspaceURL: workspaceURL,
@@ -581,6 +711,34 @@ enum AgentSelfLearning {
                         commandName: "create_user_skill",
                         reason: L10n.Transcript.learningReasonSkillEvidenceTooThin,
                         nextStep: L10n.Transcript.learningNextStepWaitForWorkflow
+                    )
+                )
+            ]
+        }
+        guard audit.explicitSkillDirective else {
+            let draft = AgentLearningSkillDraft(
+                name: candidate.name,
+                description: candidate.description,
+                body: candidate.body
+            )
+            return [
+                AgentLearningEvent(
+                    kind: .skill,
+                    status: .suggested,
+                    title: L10n.Transcript.learningActionProposeSkill,
+                    detail: [
+                        candidate.reason,
+                        "Source: \(skillSourceSummary(for: audit))",
+                        "Draft skill: \(candidate.name)"
+                    ].joined(separator: "\n"),
+                    action: AgentLearningAction(
+                        kind: .proposeSkill,
+                        commandName: "create_user_skill",
+                        target: candidate.name,
+                        skillDraft: draft,
+                        reason: candidate.reason,
+                        nextStep: L10n.Transcript.learningExplanationDraftNeedsReview,
+                        requiresUserConfirmation: true
                     )
                 )
             ]
@@ -677,12 +835,14 @@ enum AgentSelfLearning {
         workspaceURL: URL?,
         settings: AgentSkillSettings
     ) -> AgentSelfLearningSkillCandidate? {
-        let evidenceText = userText + "\n\n" + assistantText
-        let explicitSkillDirective = containsExplicitSkillCreationSignal(evidenceText)
-        guard containsReusableWorkflowSignal(evidenceText) || explicitSkillDirective else { return nil }
+        let lowerUserText = userText.lowercased()
+        let explicitSkillDirective = containsExplicitSkillCreationSignal(userText)
+        let hasImplicitReusableIntent = hasStrongDurableIntent(in: lowerUserText)
+            && containsReusableWorkflowSignal(userText)
+        guard hasImplicitReusableIntent || explicitSkillDirective else { return nil }
 
         let requiredToolCalls = explicitSkillDirective
-            ? max(2, min(settings.minimumToolCallCount, 3))
+            ? 4
             : settings.minimumToolCallCount
         guard calls.count >= requiredToolCalls else { return nil }
 

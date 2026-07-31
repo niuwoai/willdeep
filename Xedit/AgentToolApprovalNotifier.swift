@@ -61,7 +61,12 @@ enum AgentToolApprovalNotifier {
     /// notifier — see header comment for rationale.
     @MainActor
     static func notifyJobFinished(job: AgentBackgroundJob) {
-        if NSApp.isActive, !job.needsAttention { return }
+        guard shouldNotifyJobFinished(
+            status: job.status,
+            isAppActive: NSApp.isActive
+        ) else {
+            return
+        }
 
         let statusWord: String
         switch job.status {
@@ -88,6 +93,22 @@ enum AgentToolApprovalNotifier {
 
         let identifier = "willdeep.agent.jobFinished.\(job.id.uuidString)"
         postNotificationWhenAuthorized(identifier: identifier, content: content)
+    }
+
+    /// System banners are reserved for actionable failures the user cannot
+    /// already see. Successful completions and explicit stops remain visible
+    /// in the job drawer/transcript without interrupting unrelated work.
+    static func shouldNotifyJobFinished(
+        status: AgentBackgroundJob.Status,
+        isAppActive: Bool
+    ) -> Bool {
+        guard !isAppActive else { return false }
+        switch status {
+        case .failed, .timedOut, .launchFailed:
+            return true
+        case .running, .completed, .killed:
+            return false
+        }
     }
 
     @MainActor

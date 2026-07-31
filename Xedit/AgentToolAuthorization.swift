@@ -202,7 +202,7 @@ enum AgentSandboxPolicy {
                 prefixRule: nil
             )
         case "rename_session", "change_workspace",
-             "call_mcp_tool", "kill_job", "activate_expert", "add_memory", "create_user_skill", "update_user_skill", "suggest_mcp_server", "configure_mcp_server",
+             "call_mcp_tool", "kill_job", "activate_expert", "add_memory", "create_user_skill", "create_user_skills", "update_user_skill", "suggest_mcp_server", "configure_mcp_server",
              "terminal_send_control", "terminal_create_shortcut", "terminal_edit_shortcut":
             return AgentSandboxDecision(
                 mode: .workspaceWrite,

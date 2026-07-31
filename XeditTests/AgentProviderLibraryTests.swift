@@ -799,7 +799,7 @@ struct AgentProviderLibraryTests {
         #expect(someIMVisionConfig.supportsImageInput)
     }
 
-    @Test("image route retry is bounded to one exact transient 422")
+    @Test("image route retry is bounded to three exponential retries for one exact transient 422")
     func imageRouteRetryIsStrictlyBounded() {
         let routeError = AgentClientError.serverStatus(
             AgentProviderHTTPError(
@@ -815,8 +815,13 @@ struct AgentProviderLibraryTests {
         )
 
         #expect(AgentImageDescriptionRetryPolicy.shouldRetry(routeError, retryCount: 0))
-        #expect(!AgentImageDescriptionRetryPolicy.shouldRetry(routeError, retryCount: 1))
-        #expect(AgentImageDescriptionRetryPolicy.maximumRetryCount == 1)
+        #expect(AgentImageDescriptionRetryPolicy.shouldRetry(routeError, retryCount: 1))
+        #expect(AgentImageDescriptionRetryPolicy.shouldRetry(routeError, retryCount: 2))
+        #expect(!AgentImageDescriptionRetryPolicy.shouldRetry(routeError, retryCount: 3))
+        #expect(AgentImageDescriptionRetryPolicy.maximumRetryCount == 3)
+        #expect(AgentImageDescriptionRetryPolicy.retryDelayNanoseconds(for: 0) == 800_000_000)
+        #expect(AgentImageDescriptionRetryPolicy.retryDelayNanoseconds(for: 1) == 1_600_000_000)
+        #expect(AgentImageDescriptionRetryPolicy.retryDelayNanoseconds(for: 2) == 3_200_000_000)
 
         let unrelated422 = AgentClientError.serverStatus(
             AgentProviderHTTPError(

@@ -123,7 +123,9 @@ struct AgentConfirmationVisualTests {
         #expect(browserSize.width == 714)
         #expect(computerUseSize.height < 180)
         #expect(browserSize.height < 180)
-        #expect(AgentCompactAuthorizationMetrics.minimumButtonHeight == 22)
+        #expect(AgentCompactAuthorizationMetrics.minimumButtonWidth == 76)
+        #expect(AgentCompactAuthorizationMetrics.primaryButtonMinimumWidth == 112)
+        #expect(AgentCompactAuthorizationMetrics.minimumButtonHeight == 36)
         #expect(AgentCompactAuthorizationMetrics.usesHorizontalActions(availableWidth: 714))
         #expect(!AgentCompactAuthorizationMetrics.usesHorizontalActions(availableWidth: 480))
     }
@@ -141,6 +143,11 @@ struct AgentConfirmationVisualTests {
             elapsed: AgentActivitySweepMetrics.sweepDuration + 0.1
         ) > 1)
         #expect(!AgentActivitySweepMetrics.animatesElapsedTime)
+        #expect(AgentActivitySweepMetrics.maximumFramesPerSecond <= 12)
+        #expect(
+            AgentActivitySweepMetrics.frameInterval
+                == 1.0 / AgentActivitySweepMetrics.maximumFramesPerSecond
+        )
     }
 
     private func designQAOutputDirectory() throws -> URL {

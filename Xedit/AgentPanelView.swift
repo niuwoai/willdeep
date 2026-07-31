@@ -529,6 +529,11 @@ nonisolated enum AgentActivitySweepMetrics {
     static let bandWidthFraction: CGFloat = 0.38
     static let baseOpacity = 0.58
     static let animatesElapsedTime = false
+    /// The sweep is decorative. Keeping it below the display refresh rate
+    /// avoids repeatedly invalidating the surrounding transcript hierarchy
+    /// while still looking continuous at the current 1.25-second duration.
+    static let maximumFramesPerSecond = 12.0
+    static let frameInterval: TimeInterval = 1.0 / maximumFramesPerSecond
 
     static func progress(elapsed: TimeInterval) -> CGFloat {
         let cycleDuration = sweepDuration + pauseDuration
@@ -561,7 +566,9 @@ struct AgentActivitySweepLabel: View {
                     if let progressOverride {
                         sweepLayer(progress: progressOverride)
                     } else {
-                        TimelineView(.animation(minimumInterval: 1.0 / 30.0)) { context in
+                        TimelineView(.animation(
+                            minimumInterval: AgentActivitySweepMetrics.frameInterval
+                        )) { context in
                             sweepLayer(progress: AgentActivitySweepMetrics.progress(
                                 elapsed: context.date.timeIntervalSince(animationStartedAt)
                             ))

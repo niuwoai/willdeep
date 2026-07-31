@@ -863,5 +863,21 @@ struct AgentAuthorizationNoticeTests {
         #expect(web.declineTitle == "暂不访问")
         #expect(web.metadata.contains("仅发送 GET 请求"))
         #expect(web.metadata.contains { $0.hasPrefix("最多读取 12") })
+
+        let skillBatch = AgentApprovalNoticeCopy.descriptor(
+            toolName: "create_user_skills",
+            arguments: [
+                "skills_json": .string("""
+                [
+                  {"name":"release-guardian","description":"Release checks.","body":"Run checks."},
+                  {"name":"incident-reviewer","description":"Incident review.","body":"Review evidence."}
+                ]
+                """)
+            ]
+        )
+        #expect(skillBatch.title == "Agent 准备创建 2 个技能")
+        #expect(skillBatch.approveTitle == "创建全部")
+        #expect(skillBatch.metadata.contains("一次确认"))
+        #expect(skillBatch.metadata.contains("失败整批回滚"))
     }
 }

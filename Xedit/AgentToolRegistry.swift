@@ -282,12 +282,20 @@ enum AgentToolRegistry {
         ),
         AgentToolDescriptor(
             name: "create_user_skill",
-            description: "Create a local user Codex skill under ~/.willdeep/skills when a reusable workflow has emerged and should be available via $skill/list_skills in future turns. Include when to use it, steps, verification, and safety notes. Requires approval outside autonomous modes.",
+            description: "Create exactly one local user Codex skill under ~/.willdeep/skills when a reusable workflow has emerged. When the user asks for multiple skills, do not call this repeatedly; call create_user_skills once so the user can review and approve the full batch in one confirmation. Include when to use it, steps, verification, and safety notes. Requires approval outside autonomous modes.",
             risk: .write,
             parameters: [
                 AgentToolParameter(name: "name", type: .string, description: "Short skill name, e.g. `release-guardian` or `ppt-qc-workflow`.", required: true),
                 AgentToolParameter(name: "description", type: .string, description: "One sentence describing when the Agent should use this skill.", required: true),
                 AgentToolParameter(name: "body", type: .string, description: "Markdown skill instructions. Must avoid secrets and stale outputs.", required: true)
+            ]
+        ),
+        AgentToolDescriptor(
+            name: "create_user_skills",
+            description: "Create multiple local user Codex skills as one reviewed batch under ~/.willdeep/skills. Use this whenever one user request asks for two or more skills. Put every requested skill in a single call; never split the batch into repeated create_user_skill calls. The host shows one confirmation containing the whole batch, validates every draft before writing, and rolls back the batch if creation fails.",
+            risk: .write,
+            parameters: [
+                AgentToolParameter(name: "skills_json", type: .string, description: "JSON array with 1-10 objects: [{\"name\":\"release-guardian\",\"description\":\"Use before releases.\",\"body\":\"Markdown instructions...\"}]. Each body must include when to use the skill, steps, verification, and safety boundaries. Do not include secrets.", required: true)
             ]
         ),
         AgentToolDescriptor(

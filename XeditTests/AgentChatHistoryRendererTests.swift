@@ -2531,6 +2531,30 @@ struct AgentChatHistoryRendererTests {
     }
 
     @Test
+    @MainActor
+    func transcriptStyleRefreshPreservesSelectedText() {
+        let message = AgentMessage(role: .assistant, content: "alpha selected excerpt omega")
+        let view = AgentChatHistoryNSTextView()
+        view.frame = NSRect(x: 0, y: 0, width: 420, height: 120)
+        view.applyMessages(
+            [message],
+            isDark: false,
+            baseFontSize: 14
+        )
+        let range = (view.string as NSString).range(of: "selected excerpt")
+        view.setSelectedRange(range)
+
+        view.applySearch(query: "alpha", activeMatchIndex: 0, isDark: false)
+        view.applySearch(query: "", activeMatchIndex: nil, isDark: false)
+
+        #expect(view.selectedRange() == range)
+        var receivedText: String?
+        view.onAddSelectionToTask = { receivedText = $0 }
+        #expect(view.addCurrentSelectionToTask())
+        #expect(receivedText == "selected excerpt")
+    }
+
+    @Test
     func selectionActionUsesCodexStyleSurfaceMetrics() {
         #expect(AgentChatSelectionActionMetrics.cornerRadius == 8)
         #expect(AgentChatSelectionActionMetrics.height == 28)

@@ -81,7 +81,7 @@ struct AgentSkillDirectoryTests {
             "memory-management": ["add_memory"],
             "scheduler": ["schedule_task", "complete_scheduled_task"],
             "screenshot": ["capture_screenshot", "computer_use_get_app_state"],
-            "skill-hub": ["list_skills", "read_skill", "create_user_skill"],
+            "skill-hub": ["list_skills", "read_skill", "create_user_skill", "create_user_skills"],
             "thread-management": ["list_workspace_sessions", "rename_session"],
         ]
 

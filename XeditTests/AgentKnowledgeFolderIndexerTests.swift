@@ -23,6 +23,7 @@ struct AgentKnowledgeFolderIndexerTests {
         #expect(SkillPickerLayout.minimumListHeight(entryCount: 1) == SkillPickerLayout.rowHeight)
         #expect(SkillPickerLayout.minimumListHeight(entryCount: 3) == SkillPickerLayout.rowHeight * 3)
         #expect(SkillPickerLayout.minimumListHeight(entryCount: 20) == SkillPickerLayout.rowHeight * 3)
+        #expect(ComposerPaletteLayout.maximumListHeight == 440)
     }
 
     @Test("Knowledge folders honor gitignore, custom exclusions, and sensitive-file defaults")
