@@ -226,6 +226,42 @@ nonisolated struct AgentDelegatedTaskRun: Codable, Equatable, Identifiable, Send
     }
 }
 
+/// Ephemeral progress rendered while an external CLI is running. The durable
+/// acceptance ledger remains `AgentDelegatedTaskRun`; this snapshot deliberately
+/// keeps only a bounded, redacted output tail and is never written to session JSON.
+nonisolated struct AgentDelegatedLiveProgress: Equatable, Sendable {
+    var phase: AgentDelegatedTaskPhase
+    var attempt: Int
+    var maximumAttempts: Int
+    var terminalTabID: UUID?
+    var currentActivity: String?
+    var recentOutput: String?
+
+    init(
+        phase: AgentDelegatedTaskPhase = .contracted,
+        attempt: Int = 0,
+        maximumAttempts: Int,
+        terminalTabID: UUID? = nil,
+        currentActivity: String? = nil,
+        recentOutput: String? = nil
+    ) {
+        self.phase = phase
+        self.attempt = attempt
+        self.maximumAttempts = maximumAttempts
+        self.terminalTabID = terminalTabID
+        self.currentActivity = currentActivity
+        self.recentOutput = recentOutput
+    }
+}
+
+/// Bounded terminal update emitted by the delegated runner after secret
+/// redaction. AppState merges it into the matching tool-call presentation.
+nonisolated struct AgentDelegatedTerminalProgressUpdate: Equatable, Sendable {
+    let terminalTabID: UUID
+    let currentActivity: String?
+    let recentOutput: String?
+}
+
 nonisolated enum AgentDelegatedTaskControl {
     static let evidenceStartMarker = "WILLDEEP_EXECUTOR_EVIDENCE_BEGIN"
     static let evidenceEndMarker = "WILLDEEP_EXECUTOR_EVIDENCE_END"

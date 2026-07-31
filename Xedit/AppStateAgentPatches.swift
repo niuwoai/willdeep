@@ -8,10 +8,27 @@
 
 import Foundation
 
+enum AgentPatchRollbackAction: Equatable {
+    case noChangeNeeded
+    case restoreOriginal
+    case removeNewFile
+    case preserveConflict
+}
+
 extension AppState {
+    func isAgentPatchReviewCollecting(forMessageID messageID: AgentMessage.ID) -> Bool {
+        activeRuntime?.collectingPatchReviewMessageIDs.contains(messageID) == true
+    }
+
     func rejectAgentPatchProposal(id: AgentPatchProposal.ID) {
         guard let runtime = activeRuntime,
-              let index = runtime.patchProposals.firstIndex(where: { $0.id == id }) else { return }
+              let index = runtime.patchProposals.firstIndex(where: { $0.id == id }),
+              runtime.patchProposals[index].status == .pending,
+              !runtime.collectingPatchReviewMessageIDs.contains(
+                runtime.patchProposals[index].messageID
+              ) else {
+            return
+        }
         runtime.patchProposals[index].status = .rejected
         runtime.patchProposals[index].statusMessage = "Rejected"
         synchronizeAgentPatchDecision(runtime.patchProposals[index], in: runtime)
@@ -50,6 +67,37 @@ extension AppState {
         )
     }
 
+    /// Resolve cancellation for one review batch as a single main-actor
+    /// transition. Every proposal, persisted tool result, live tool-call
+    /// result, and registered waiter observes the same terminal state before
+    /// any continuation can resume.
+    @discardableResult
+    private func rejectPendingAgentPatchProposals(
+        forMessageID messageID: AgentMessage.ID,
+        runtime: AgentRuntime,
+        statusMessage: String
+    ) -> [AgentPatchProposal] {
+        let indices = runtime.patchProposals.indices.filter {
+            runtime.patchProposals[$0].messageID == messageID
+                && runtime.patchProposals[$0].status == .pending
+        }
+        guard !indices.isEmpty else {
+            return runtime.patchProposals.filter { $0.messageID == messageID }
+        }
+
+        for index in indices {
+            runtime.patchProposals[index].status = .rejected
+            runtime.patchProposals[index].statusMessage = statusMessage
+            synchronizeAgentPatchDecision(runtime.patchProposals[index], in: runtime)
+        }
+        let proposalIDs = indices.map { runtime.patchProposals[$0].id }
+        for proposalID in proposalIDs {
+            resumeAgentPatchDecisionWaiter(id: proposalID, runtime: runtime)
+        }
+        persistAgentSession(runtime: runtime)
+        return runtime.patchProposals.filter { $0.messageID == messageID }
+    }
+
     @discardableResult
     func autoApplyPendingAgentPatchProposals(
         for runtime: AgentRuntime,
@@ -76,27 +124,57 @@ extension AppState {
     }
 
     /// Apply every still-pending proposal that belongs to one assistant
-    /// message (one turn). Backs the "Apply All" button on the collapsed
-    /// patch group card. Reuses the single-proposal apply path so disk
-    /// writes, tab sync and status messages stay identical.
+    /// message (one review batch). Backs the "Apply All" button on the
+    /// collapsed patch group card. Diffs are merged before application so the
+    /// patch applier validates every target/hunk before it starts writing;
+    /// one stale proposal therefore cannot leave the earlier files applied
+    /// and the later files failed.
     func applyAgentPatchProposals(forMessageID messageID: AgentMessage.ID) {
-        let ids = agentPatchProposals
-            .filter { $0.messageID == messageID && $0.status == .pending }
-            .map(\.id)
-        for id in ids {
-            applyAgentPatchProposal(id: id)
+        guard let runtime = activeRuntime,
+              !runtime.collectingPatchReviewMessageIDs.contains(messageID) else {
+            return
         }
+        let indices = runtime.patchProposals.indices.filter {
+            runtime.patchProposals[$0].messageID == messageID
+                && runtime.patchProposals[$0].status == .pending
+        }
+        guard !indices.isEmpty else { return }
+
+        let combinedDiff = indices
+            .map { runtime.patchProposals[$0].diff }
+            // `AgentPatchApplier` flushes the preceding file when it sees a
+            // `diff --git` header. Plain `---` / `+++` headers alone do not
+            // delimit two independently generated proposal strings.
+            .joined(separator: "\ndiff --git a/.willdeep-review-boundary b/.willdeep-review-boundary\n")
+        let outcome = resolveAgentPatchApplication(
+            combinedDiff,
+            runtime: runtime,
+            appliedMessage: "Applied as part of batch"
+        )
+        for index in indices {
+            runtime.patchProposals[index].status = outcome.status
+            runtime.patchProposals[index].statusMessage = outcome.message
+            synchronizeAgentPatchDecision(runtime.patchProposals[index], in: runtime)
+            resumeAgentPatchDecisionWaiter(
+                id: runtime.patchProposals[index].id,
+                runtime: runtime
+            )
+        }
+        persistAgentSession(runtime: runtime)
     }
 
     /// Reject every still-pending proposal from one assistant message.
     /// Backs the "Reject All" button on the collapsed patch group card.
     func rejectAgentPatchProposals(forMessageID messageID: AgentMessage.ID) {
-        let ids = agentPatchProposals
-            .filter { $0.messageID == messageID && $0.status == .pending }
-            .map(\.id)
-        for id in ids {
-            rejectAgentPatchProposal(id: id)
+        guard let runtime = activeRuntime,
+              !runtime.collectingPatchReviewMessageIDs.contains(messageID) else {
+            return
         }
+        rejectPendingAgentPatchProposals(
+            forMessageID: messageID,
+            runtime: runtime,
+            statusMessage: "Rejected"
+        )
     }
 
     /// Apply every still-pending proposal across ALL assistant messages.
@@ -105,6 +183,13 @@ extension AppState {
     /// many turns). Reuses the single-proposal path so disk writes, tab
     /// sync and status messages stay identical.
     func applyAllPendingAgentPatchProposals() {
+        guard let runtime = activeRuntime,
+              !runtime.patchProposals.contains(where: {
+                  $0.status == .pending
+                      && runtime.collectingPatchReviewMessageIDs.contains($0.messageID)
+              }) else {
+            return
+        }
         let ids = agentPatchProposals
             .filter { $0.status == .pending }
             .map(\.id)
@@ -115,6 +200,13 @@ extension AppState {
 
     /// Reject every still-pending proposal across ALL assistant messages.
     func rejectAllPendingAgentPatchProposals() {
+        guard let runtime = activeRuntime,
+              !runtime.patchProposals.contains(where: {
+                  $0.status == .pending
+                      && runtime.collectingPatchReviewMessageIDs.contains($0.messageID)
+              }) else {
+            return
+        }
         let ids = agentPatchProposals
             .filter { $0.status == .pending }
             .map(\.id)
@@ -125,7 +217,13 @@ extension AppState {
 
     func applyAgentPatchProposal(id: AgentPatchProposal.ID) {
         guard let runtime = activeRuntime,
-              let index = runtime.patchProposals.firstIndex(where: { $0.id == id }) else { return }
+              let index = runtime.patchProposals.firstIndex(where: { $0.id == id }),
+              runtime.patchProposals[index].status == .pending,
+              !runtime.collectingPatchReviewMessageIDs.contains(
+                runtime.patchProposals[index].messageID
+              ) else {
+            return
+        }
 
         let outcome = resolveAgentPatchApplication(
             runtime.patchProposals[index].diff,
@@ -139,10 +237,11 @@ extension AppState {
         persistAgentSession(runtime: runtime)
     }
 
-    /// Wait for the inline patch card to be resolved before returning the tool
-    /// result to the provider. Previously `apply_patch` returned "pending"
-    /// immediately, so the next provider request could already be in flight
-    /// when the user clicked Apply and would still ask for the same approval.
+    /// Wait for one inline patch card to be resolved. The interactive Agent
+    /// loop first enqueues every adjacent file-edit call from the model round,
+    /// then waits through `awaitPendingAgentPatchProposals` so the user sees
+    /// one review group instead of one blocking card per file. Direct tool
+    /// harnesses may still use this single-proposal primitive.
     func awaitAgentPatchDecision(
         _ proposal: AgentPatchProposal,
         runtime: AgentRuntime
@@ -159,26 +258,84 @@ extension AppState {
                     return
                 }
                 if Task.isCancelled {
-                    var cancelled = current
-                    cancelled.status = .rejected
-                    cancelled.statusMessage = "Response stopped before patch approval"
-                    continuation.resume(returning: cancelled)
+                    rejectPendingAgentPatchProposals(
+                        forMessageID: current.messageID,
+                        runtime: runtime,
+                        statusMessage: "Response stopped before patch approval"
+                    )
+                    let resolved = runtime.patchProposals.first(where: {
+                        $0.id == proposal.id
+                    }) ?? current
+                    continuation.resume(returning: resolved)
                     return
                 }
                 runtime.patchDecisionWaiters[proposal.id] = continuation
             }
         } onCancel: {
-            Task { @MainActor [weak runtime] in
-                guard let runtime,
-                      let continuation = runtime.patchDecisionWaiters.removeValue(forKey: proposal.id) else {
-                    return
-                }
-                var cancelled = runtime.patchProposals.first(where: { $0.id == proposal.id }) ?? proposal
-                cancelled.status = .rejected
-                cancelled.statusMessage = "Response stopped before patch approval"
-                continuation.resume(returning: cancelled)
+            Task { @MainActor [weak self, weak runtime] in
+                guard let self, let runtime else { return }
+                self.rejectPendingAgentPatchProposals(
+                    forMessageID: proposal.messageID,
+                    runtime: runtime,
+                    statusMessage: "Response stopped before patch approval"
+                )
             }
         }
+    }
+
+    /// Settle every patch produced by one assistant message, waiting only for
+    /// proposals that are still pending.
+    ///
+    /// The IDs are snapshotted before the first suspension. This lets the
+    /// execution loop enqueue a consecutive run of create/edit/apply calls,
+    /// surface all of their diffs together, and then pause once at the review
+    /// boundary. "Apply All" / "Reject All" may resolve every proposal while
+    /// only the first waiter is registered; later calls therefore re-read the
+    /// runtime and return immediately instead of hanging.
+    @discardableResult
+    func awaitPendingAgentPatchProposals(
+        forMessageID messageID: AgentMessage.ID,
+        runtime: AgentRuntime
+    ) async -> [AgentPatchProposal] {
+        // Seal the collection before the first suspension. The UI observes
+        // this published transition and enables Apply/Reject only after every
+        // adjacent proposal for the batch is already present.
+        runtime.collectingPatchReviewMessageIDs.remove(messageID)
+        let proposalIDs = runtime.patchProposals
+            .filter { $0.messageID == messageID && $0.status == .pending }
+            .map(\.id)
+        var resolved: [AgentPatchProposal] = []
+        resolved.reserveCapacity(proposalIDs.count)
+
+        for (offset, id) in proposalIDs.enumerated() {
+            guard let proposal = runtime.patchProposals.first(where: { $0.id == id }) else {
+                continue
+            }
+            let decision = await awaitAgentPatchDecision(proposal, runtime: runtime)
+            // The user can click Apply All while the tool runner is still
+            // finishing its textual result. Re-sync at the review boundary so
+            // that race cannot leave a newly appended provider result saying
+            // "pending" after the patch was already applied or rejected.
+            let finalDecision = runtime.patchProposals.first(where: {
+                $0.id == id
+            }) ?? decision
+            synchronizeAgentPatchDecision(finalDecision, in: runtime)
+            resolved.append(finalDecision)
+            if Task.isCancelled {
+                for remainingID in proposalIDs.dropFirst(offset + 1) {
+                    if let remaining = runtime.patchProposals.first(where: {
+                        $0.id == remainingID
+                    }) {
+                        resolved.append(remaining)
+                    }
+                }
+                break
+            }
+        }
+        if !resolved.isEmpty {
+            persistAgentSession(runtime: runtime)
+        }
+        return resolved
     }
 
     private func resumeAgentPatchDecisionWaiter(
@@ -364,10 +521,7 @@ extension AppState {
         applyImmediately: Bool = false
     ) throws -> AgentPatchProposal {
         let parsed = try AgentPatchApplier.parse(diff)
-        // 创建新文件直接落地,不进审核 —— 用户反馈:新建文件不需要点
-        // Apply。只有「编辑已存在文件」才排进 chat 里的审核卡片等确认
-        // (Goal / workspace-access 模式仍照常自动应用编辑)。
-        let isPureCreation = !parsed.isEmpty && parsed.allSatisfy(\.isNewFile)
+        try validateUniqueAgentPatchTargets(parsed, runtime: runtime)
 
         let proposalIndex: Int
         if let existingIndex = runtime.patchProposals.firstIndex(where: { $0.diff == diff }) {
@@ -383,26 +537,18 @@ extension AppState {
             proposalIndex = runtime.patchProposals.count - 1
         }
 
-        let isCleanTrackedModify = shouldAutoApplyCleanTrackedPatch(changes: parsed, runtime: runtime)
+        let effectiveAutoApplySource = autoApplySource
+            ?? (runtime.approvalMode == .smart ? AgentToolApprovalSource.staticAllowlist : nil)
 
-        // 直接落盘的四种情形:Goal / workspace-access 自动应用、纯新建
-        // 文件、用户本轮明确要求「直接写 / 落盘 / 不用审核」
-        // (applyImmediately)、以及所有目标都是 git 已跟踪且当前干净的
-        // 既有文件。后者有 HEAD 兜底,风险边界清楚;未跟踪、已有用户
-        // 改动、打开但未保存的文件仍进 chat 卡片等用户点 Apply。
-        if (autoApplySource != nil || isPureCreation || applyImmediately || isCleanTrackedModify),
+        // Goal, Smart review, and Workspace Access apply validated
+        // workspace-contained patches immediately. Strict mode is the only
+        // posture that leaves every file change pending for explicit review.
+        if let effectiveAutoApplySource,
            runtime.patchProposals[proposalIndex].status == .pending {
-            let appliedMessage = autoApplySource
-                .map(autoApplyStatusMessage(for:))
-                ?? autoApplyStatusMessage(
-                    isPureCreation: isPureCreation,
-                    applyImmediately: applyImmediately,
-                    isCleanTrackedModify: isCleanTrackedModify
-                )
             let outcome = resolveAgentPatchApplication(
                 diff,
                 runtime: runtime,
-                appliedMessage: appliedMessage
+                appliedMessage: autoApplyStatusMessage(for: effectiveAutoApplySource)
             )
             runtime.patchProposals[proposalIndex].status = outcome.status
             runtime.patchProposals[proposalIndex].statusMessage = outcome.message
@@ -412,29 +558,14 @@ extension AppState {
         return runtime.patchProposals[proposalIndex]
     }
 
-    private func autoApplyStatusMessage(
-        isPureCreation: Bool,
-        applyImmediately: Bool,
-        isCleanTrackedModify: Bool
-    ) -> String {
-        if isPureCreation {
-            return "New file written automatically"
-        }
-        if applyImmediately {
-            return "Applied immediately as requested"
-        }
-        if isCleanTrackedModify {
-            return "Auto-applied because edited files are tracked and clean in git"
-        }
-        return "Auto-applied"
-    }
-
     private func autoApplyStatusMessage(for source: AgentToolApprovalSource) -> String {
         switch source {
         case .goalMode:
             return "Auto-applied by Goal mode"
         case .workspaceAccess:
             return "Auto-applied by workspace access approval"
+        case .staticAllowlist:
+            return "Auto-applied by Smart review"
         default:
             return "Auto-applied"
         }
@@ -444,59 +575,13 @@ extension AppState {
         if runtime.interactionMode == .goal {
             return .goalMode
         }
-        if runtime.interactionMode != .plan,
-           runtime.approvalMode == .workspaceAccess {
+        if runtime.approvalMode == .workspaceAccess {
             return .workspaceAccess
         }
+        if runtime.approvalMode == .smart {
+            return .staticAllowlist
+        }
         return nil
-    }
-
-    private func shouldAutoApplyCleanTrackedPatch(
-        changes: [AgentPatchFileChange],
-        runtime: AgentRuntime?
-    ) -> Bool {
-        guard !changes.isEmpty,
-              !changes.contains(where: \.isNewFile),
-              let workspaceRoot = agentPatchWorkspaceRoot(for: runtime)?.standardizedFileURL,
-              let repositoryRoot = Self.findGitRepositoryRoot(startingAt: workspaceRoot)?.standardizedFileURL else {
-            return false
-        }
-
-        let workspacePath = workspaceRoot.path
-        let repositoryPath = repositoryRoot.path
-        return changes.allSatisfy { change in
-            guard let url = try? resolveAgentPatchURL(change.path, root: workspaceRoot, rootPath: workspacePath),
-                  FileManager.default.fileExists(atPath: url.path),
-                  !agentPatchHasUnsavedEditorChanges(for: url) else {
-                return false
-            }
-            let repositoryRelativePath = Self.relativeWorkspacePath(
-                for: url,
-                root: repositoryRoot,
-                rootPath: repositoryPath
-            )
-            guard !repositoryRelativePath.isEmpty else { return false }
-
-            let tracked = Self.runGitCommand(
-                arguments: ["ls-files", "--error-unmatch", "--", repositoryRelativePath],
-                in: repositoryRoot
-            ).succeeded
-            guard tracked else { return false }
-
-            let status = Self.runGit(
-                arguments: ["status", "--porcelain=v1", "--", repositoryRelativePath],
-                in: repositoryRoot
-            ).trimmingCharacters(in: .whitespacesAndNewlines)
-            return status.isEmpty
-        }
-    }
-
-    private func agentPatchHasUnsavedEditorChanges(for url: URL) -> Bool {
-        let standardizedPath = url.standardizedFileURL.path
-        if tabs.contains(where: { $0.url.standardizedFileURL.path == standardizedPath && $0.isEdited }) {
-            return true
-        }
-        return openedFileURL?.standardizedFileURL.path == standardizedPath && isEdited
     }
 
     func applyAgentPatch(_ diff: String) throws {
@@ -517,7 +602,14 @@ extension AppState {
         let changes = try AgentPatchApplier.parse(diff)
         let root = resolvedRoot.standardizedFileURL
         let rootPath = root.path
-        var pendingWrites: [(url: URL, content: String, relativePath: String, isNewFile: Bool)] = []
+        try validateUniqueAgentPatchTargets(changes, runtime: runtime)
+        var pendingWrites: [(
+            url: URL,
+            content: String,
+            originalData: Data?,
+            relativePath: String,
+            isNewFile: Bool
+        )] = []
 
         for change in changes {
             let url = try resolveAgentPatchURL(change.path, root: root, rootPath: rootPath)
@@ -529,34 +621,96 @@ extension AppState {
                 }
                 let newContent = try AgentPatchApplier.apply(change, to: "")
                 let relativePath = Self.relativeWorkspacePath(for: url, root: root, rootPath: rootPath)
-                pendingWrites.append((url, newContent, relativePath, true))
+                pendingWrites.append((url, newContent, nil, relativePath, true))
                 continue
             }
             guard FileManager.default.fileExists(atPath: url.path) else {
                 throw AgentPatchError.missingFile(change.path)
             }
 
-            let currentContent = try editableContent(forAgentPatchURL: url)
+            // Disk-backed edits must derive both the hunk result and the CAS
+            // baseline from one read. Otherwise an external edit between two
+            // reads could be accepted as the baseline and then overwritten by
+            // a patch calculated from older bytes. An open tab intentionally
+            // remains the edit source, while these same disk bytes protect the
+            // eventual save from concurrent on-disk changes.
+            let originalData = try Data(contentsOf: url)
+            let standardizedPath = url.standardizedFileURL.path
+            let currentContent: String
+            if let tab = tabs.first(where: {
+                $0.url.standardizedFileURL.path == standardizedPath
+            }) {
+                currentContent = tab.content
+            } else {
+                currentContent = Self.decodeText(from: originalData)
+            }
             let newContent = try AgentPatchApplier.apply(change, to: currentContent)
             let relativePath = Self.relativeWorkspacePath(for: url, root: root, rootPath: rootPath)
-            pendingWrites.append((url, newContent, relativePath, false))
+            pendingWrites.append((url, newContent, originalData, relativePath, false))
         }
 
-        for pendingWrite in pendingWrites {
-            // Ensure parent directories exist for newly created files.
-            try FileManager.default.createDirectory(
-                at: pendingWrite.url.deletingLastPathComponent(),
-                withIntermediateDirectories: true
-            )
-            try pendingWrite.content.write(to: pendingWrite.url, atomically: true, encoding: .utf8)
-            let verifiedContent = try Self.decodeText(
-                from: Self.readFileData(from: pendingWrite.url, allowLargeFile: true)
-            )
-            guard verifiedContent == pendingWrite.content else {
-                throw AgentPatchError.writeVerificationFailed(
-                    pendingWrite.relativePath.isEmpty ? pendingWrite.url.lastPathComponent : pendingWrite.relativePath
+        var attemptedWrites: [(
+            url: URL,
+            content: String,
+            originalData: Data?,
+            relativePath: String,
+            isNewFile: Bool
+        )] = []
+        do {
+            for pendingWrite in pendingWrites {
+                let displayPath = pendingWrite.relativePath.isEmpty
+                    ? pendingWrite.url.lastPathComponent
+                    : pendingWrite.relativePath
+                if let originalData = pendingWrite.originalData {
+                    // Approval can sit open while another process edits the
+                    // workspace. Re-check the exact preflight bytes before
+                    // replacing this target so rollback never overwrites a
+                    // newer external change with an older snapshot.
+                    guard (try? Data(contentsOf: pendingWrite.url)) == originalData else {
+                        throw AgentPatchError.hunkDidNotMatch(displayPath)
+                    }
+                } else {
+                    guard !FileManager.default.fileExists(atPath: pendingWrite.url.path) else {
+                        throw AgentPatchError.targetAlreadyExists(displayPath)
+                    }
+                }
+                // Track the attempt before Foundation's atomic replacement.
+                // If the call reports an error after touching the target, the
+                // rollback below still knows to inspect and restore it.
+                attemptedWrites.append(pendingWrite)
+                try FileManager.default.createDirectory(
+                    at: pendingWrite.url.deletingLastPathComponent(),
+                    withIntermediateDirectories: true
+                )
+                try pendingWrite.content.write(
+                    to: pendingWrite.url,
+                    atomically: true,
+                    encoding: .utf8
+                )
+                let verifiedContent = try Self.decodeText(
+                    from: Self.readFileData(from: pendingWrite.url, allowLargeFile: true)
+                )
+                guard verifiedContent == pendingWrite.content else {
+                    throw AgentPatchError.writeVerificationFailed(
+                        displayPath
+                    )
+                }
+            }
+        } catch {
+            let originalError = error
+            let rollbackFailures = rollbackAgentPatchWrites(attemptedWrites)
+            guard rollbackFailures.isEmpty else {
+                throw AgentPatchError.rollbackFailed(
+                    rollbackFailures.joined(separator: ", ")
                 )
             }
+            throw originalError
+        }
+
+        // Keep editor buffers untouched until every disk write has succeeded.
+        // A failed batch can then roll the filesystem back without also
+        // reconstructing tab content/revision/dirty state.
+        for pendingWrite in pendingWrites {
             applyAgentPatchedContent(pendingWrite.content, to: pendingWrite.url)
         }
 
@@ -588,6 +742,132 @@ extension AppState {
 
         refreshAgentPatchGitStatus(for: runtime, workspaceRoot: root)
         persistSession()
+    }
+
+    private func validateUniqueAgentPatchTargets(
+        _ changes: [AgentPatchFileChange],
+        runtime: AgentRuntime?
+    ) throws {
+        guard let resolvedRoot = agentPatchWorkspaceRoot(for: runtime) else {
+            throw AgentPatchError.noWorkspace
+        }
+        let root = resolvedRoot.standardizedFileURL
+        let rootPath = root.path
+        let canonicalRoot = root.resolvingSymlinksInPath().standardizedFileURL
+        let canonicalRootPath = canonicalRoot.path
+        let volumeSupportsCaseSensitiveNames = (
+            try? canonicalRoot.resourceValues(
+                forKeys: [.volumeSupportsCaseSensitiveNamesKey]
+            ).volumeSupportsCaseSensitiveNames
+        ) ?? false
+        var targetIdentities: Set<String> = []
+
+        for change in changes {
+            let url = try resolveAgentPatchURL(change.path, root: root, rootPath: rootPath)
+            let canonicalURL: URL
+            if FileManager.default.fileExists(atPath: url.path) {
+                canonicalURL = url.resolvingSymlinksInPath().standardizedFileURL
+            } else {
+                canonicalURL = url.deletingLastPathComponent()
+                    .resolvingSymlinksInPath()
+                    .appendingPathComponent(url.lastPathComponent)
+                    .standardizedFileURL
+            }
+            let canonicalPath = canonicalURL.path
+            guard canonicalPath == canonicalRootPath
+                    || canonicalPath.hasPrefix(canonicalRootPath + "/") else {
+                throw AgentPatchError.pathOutsideWorkspace(change.path)
+            }
+
+            let identity: String
+            if !change.isNewFile,
+               let attributes = try? FileManager.default.attributesOfItem(
+                   atPath: canonicalPath
+               ),
+               let systemNumber = attributes[.systemNumber],
+               let fileNumber = attributes[.systemFileNumber] {
+                // Device + inode catches hard-link aliases in addition to
+                // repeated lexical paths and symlink aliases.
+                identity = "inode:\(systemNumber):\(fileNumber)"
+            } else {
+                let normalizedPath = canonicalPath.precomposedStringWithCanonicalMapping
+                identity = "path:" + (
+                    volumeSupportsCaseSensitiveNames
+                        ? normalizedPath
+                        : normalizedPath.lowercased()
+                )
+            }
+            guard targetIdentities.insert(identity).inserted else {
+                throw AgentPatchError.duplicateTarget(change.path)
+            }
+        }
+    }
+
+    private func rollbackAgentPatchWrites(
+        _ writes: [(
+            url: URL,
+            content: String,
+            originalData: Data?,
+            relativePath: String,
+            isNewFile: Bool
+        )]
+    ) -> [String] {
+        var failures: [String] = []
+        for write in writes.reversed() {
+            let displayPath = write.relativePath.isEmpty
+                ? write.url.lastPathComponent
+                : write.relativePath
+            do {
+                let currentData = try? Data(contentsOf: write.url)
+                let expectedData = write.content.data(using: .utf8) ?? Data()
+                switch Self.agentPatchRollbackAction(
+                    currentData: currentData,
+                    originalData: write.originalData,
+                    expectedData: expectedData
+                ) {
+                case .noChangeNeeded:
+                    continue
+                case .restoreOriginal:
+                    guard let originalData = write.originalData else {
+                        throw AgentPatchError.rollbackFailed(displayPath)
+                    }
+                    try originalData.write(to: write.url, options: .atomic)
+                    guard (try? Data(contentsOf: write.url)) == originalData else {
+                        throw AgentPatchError.writeVerificationFailed(displayPath)
+                    }
+                case .removeNewFile:
+                    try FileManager.default.removeItem(at: write.url)
+                case .preserveConflict:
+                    // A newer external edit owns the current bytes. Keep it
+                    // intact and report that rollback could not be completed.
+                    throw AgentPatchError.rollbackFailed(displayPath)
+                }
+            } catch {
+                failures.append(displayPath)
+            }
+        }
+        return failures
+    }
+
+    nonisolated static func agentPatchRollbackAction(
+        currentData: Data?,
+        originalData: Data?,
+        expectedData: Data
+    ) -> AgentPatchRollbackAction {
+        if let originalData {
+            if currentData == originalData {
+                return .noChangeNeeded
+            }
+            return currentData == expectedData
+                ? .restoreOriginal
+                : .preserveConflict
+        }
+        guard let currentData else {
+            return .noChangeNeeded
+        }
+        return currentData == expectedData
+            ? .removeNewFile
+            : .preserveConflict
     }
 
     /// Workspace root used for resolving / confining agent patches.

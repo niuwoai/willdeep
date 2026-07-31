@@ -125,11 +125,6 @@ struct AgentToolsCoreTests {
             interactionMode: .normal,
             executionAgent: .willDeep
         ).map(\.name))
-        let willDeepPlan = Set(AgentToolRegistry.tools(
-            activeExperts: [],
-            interactionMode: .plan,
-            executionAgent: .willDeep
-        ).map(\.name))
         let willDeepGoal = Set(AgentToolRegistry.tools(
             activeExperts: [],
             interactionMode: .goal,
@@ -152,7 +147,6 @@ struct AgentToolsCoreTests {
         ).map(\.name))
 
         #expect(willDeepNormal.isDisjoint(with: delegatedTools))
-        #expect(willDeepPlan.isDisjoint(with: delegatedTools))
         #expect(delegatedTools.isSubset(of: willDeepGoal))
         #expect(!willDeepGoal.contains("change_workspace"))
         #expect(codexSelected.intersection(delegatedTools) == ["codex_cli"])
@@ -437,6 +431,30 @@ struct AgentToolsCoreTests {
     }
 
     @Test
+    func toolResultRedactionPreservesImageAttachments() {
+        let image = AgentImageAttachment(
+            mimeType: "image/jpeg",
+            filePath: "/tmp/willdeep-capture-preview.jpg",
+            byteCount: 123,
+            source: .capture
+        )
+        let result = AgentToolResult(
+            summary: "captured super-secret",
+            payload: "Saved super-secret",
+            images: [image]
+        )
+
+        let redacted = AgentSecretStore.redact(
+            result,
+            secretValues: ["super-secret"]
+        )
+
+        #expect(redacted.summary == "captured [secret]")
+        #expect(redacted.payload == "Saved [secret]")
+        #expect(redacted.images == [image])
+    }
+
+    @Test
     func agentSecretAliasesAreNormalizedAndUpdateExistingValues() throws {
         _ = AgentCredentialStore._setTestKeychainServiceOverride("agent-secret-alias-\(UUID().uuidString)")
         defer {
@@ -702,7 +720,11 @@ struct AgentToolsCoreTests {
         #expect(AgentToolError.pathOutsideWorkspace("/etc/passwd").errorDescription
                 == "Path is outside the workspace: /etc/passwd")
         #expect(AgentToolError.notFound("/x").errorDescription == "Path does not exist: /x")
-        #expect(AgentToolError.commandTimeout.errorDescription == "Command timed out.")
+        #expect(AgentToolError.commandTimeout.errorDescription?.hasPrefix("Command timed out") == true)
+        // The timeout message now carries recovery guidance for the model —
+        // it must keep steering toward run_in_background / timeout_seconds
+        // instead of a verbatim retry.
+        #expect(AgentToolError.commandTimeout.errorDescription?.contains("run_in_background") == true)
         #expect(AgentToolError.unknownTool("foo").errorDescription == "Unknown tool: foo")
     }
 
@@ -773,6 +795,49 @@ struct AgentToolsCoreTests {
         #expect(env["LANG"] == "en_US.UTF-8")
     }
 
+    @Test
+    func localCommandEnvironmentIncludesTerminalSettings() {
+        var settings = EditorTerminalSettings.default
+        settings.environmentText = """
+        TOOL_HOME=/custom/tool
+        PATH=$TOOL_HOME/bin:$PATH
+        """
+
+        let environment = AgentToolRunner.localCommandEnvironment(
+            from: ["PATH": "/usr/bin:/bin"],
+            settings: settings
+        )
+
+        #expect(environment["TOOL_HOME"] == "/custom/tool")
+        #expect(environment["PATH"]?.hasPrefix("/custom/tool/bin:/usr/bin:/bin") == true)
+        #expect(environment[EditorTerminalLaunchEnvironment.agentTerminalKey] == "1")
+        #expect(environment[EditorTerminalLaunchEnvironment.claudeCodeCompatibilityKey] == nil)
+    }
+
+    @Test("run_command receives the terminal-configured local environment")
+    func runCommandUsesConfiguredLocalEnvironment() async throws {
+        var environment = AgentToolRunner.shellEnvironment(from: [
+            "PATH": "/usr/bin:/bin"
+        ])
+        environment["WILLDEEP_TEST_TOOL_HOME"] = "/custom/tool-home"
+        let context = AgentToolContext(
+            rootDirectory: nil,
+            localCommandEnvironment: environment
+        )
+
+        let result = try await AgentToolRunner.run(
+            name: "run_command",
+            arguments: [
+                "command": .string("printf '%s' \"$WILLDEEP_TEST_TOOL_HOME\""),
+                "timeout_seconds": .number(5)
+            ],
+            context: context
+        )
+
+        #expect(result.summary.hasPrefix("exit 0"))
+        #expect(result.payload.contains("/custom/tool-home"))
+    }
+
     // MARK: - AgentSandboxPolicy
 
     @Test
@@ -785,6 +850,49 @@ struct AgentToolsCoreTests {
         #expect(decision.mode == .readOnly)
         #expect(decision.requiresUserApproval == false)
         #expect(decision.requiresTypedConfirmation == false)
+    }
+
+    @Test("tokenhub identifiers do not trigger credential confirmation")
+    func sandboxPolicyDoesNotTreatTokenhubIdentifiersAsCredentials() {
+        let root = URL(fileURLWithPath: "/tmp/willdeep-workspace")
+        let commands = [
+            "kubectl -n tokenhub get configmap tokenhub-config -o yaml | grep -i redis",
+            "kubectl -n tokenhub get pods -l app.kubernetes.io/name=tokenhub-redis -o wide",
+            "kubectl -n tokenhub get pods -l app.kubernetes.io/name=tokenhub --no-headers 2>/dev/null | head -5",
+        ]
+
+        for command in commands {
+            let decision = AgentSandboxPolicy.commandDecision(
+                command: command,
+                rootDirectory: root
+            )
+            #expect(
+                decision.requiresTypedConfirmation == false,
+                "Ordinary tokenhub identifiers must not be classified as credentials: \(command)"
+            )
+        }
+    }
+
+    @Test("real credential markers still require typed confirmation")
+    func sandboxPolicyKeepsTypedConfirmationForCredentialMarkers() {
+        let root = URL(fileURLWithPath: "/tmp/willdeep-workspace")
+        let commands = [
+            "kubectl get pods --token example",
+            "deploy --accessToken example",
+            "cat ~/.ssh/id_rsa",
+            "cat secrets/credentials",
+        ]
+
+        for command in commands {
+            let decision = AgentSandboxPolicy.commandDecision(
+                command: command,
+                rootDirectory: root
+            )
+            #expect(
+                decision.requiresTypedConfirmation == true,
+                "Sensitive credential markers must keep typed confirmation: \(command)"
+            )
+        }
     }
 
     @Test
@@ -913,6 +1021,9 @@ struct AgentToolsCoreTests {
         #expect(selectTab?.parameters.contains(where: { $0.name == "terminal_tab_id" && $0.required }) == true)
         #expect(sendCommand?.description.contains("OMIT terminal_tab_id") == true)
         #expect(sendCommand?.description.contains("stale UUID") == true)
+        #expect(sendCommand?.description.contains("dispatch confirmation only proves the command was sent") == true)
+        #expect(sendCommand?.description.contains("automatically appends a bounded follow-up screen snapshot") == true)
+        #expect(sendCommand?.description.contains("Never label the terminal unstable") == true)
         #expect(snapshot?.description.contains("ACTIVE Agent Terminal side-panel tab") == true)
         #expect(sendCommand?.description.contains("never send a local-intended command into an SSH tab") == true)
         #expect(sendCommand?.parameters.contains(where: { $0.name == "zmodem_upload_paths" && $0.type == .stringArray }) == true)
@@ -982,6 +1093,18 @@ struct AgentToolsCoreTests {
             arguments: ["control": .string("enter")]
         )
         #expect(enterSignature == "terminal_control:enter")
+
+        let eofSignature = AgentToolAuthorization.signature(
+            toolName: "terminal_send_control",
+            arguments: ["control": .string("ctrl_d")]
+        )
+        #expect(eofSignature == "terminal_control:ctrl_d")
+
+        let telnetEscapeSignature = AgentToolAuthorization.signature(
+            toolName: "terminal_send_control",
+            arguments: ["control": .string("ctrl_right_bracket")]
+        )
+        #expect(telnetEscapeSignature == "terminal_control:ctrl_right_bracket")
         #expect(controlSignature != enterSignature)
     }
 
@@ -1173,6 +1296,13 @@ struct AgentToolsCoreTests {
         #expect(cursorArguments["permission_mode"]?.stringValue() == AgentExecutionAgent.cursorAgent.defaultPermissionMode)
         #expect(clineArguments["visible_terminal_label"]?.stringValue() == "Cline")
         #expect(clineArguments["permission_mode"]?.stringValue() == AgentExecutionAgent.clineCLI.defaultPermissionMode)
+
+        let planningArguments = AppState.delegatedAgentArguments(
+            prompt: "plan only",
+            executionAgent: .codexCLI,
+            planningOnly: true
+        )
+        #expect(planningArguments["permission_mode"]?.stringValue() == "plan")
     }
 
     @Test
@@ -1196,6 +1326,28 @@ struct AgentToolsCoreTests {
         #expect(decision.mode == .escalated)
         #expect(decision.requiresUserApproval == true)
         #expect(decision.requiresTypedConfirmation == true)
+    }
+
+    @Test("home-relative paths use direct escalation instead of the sandbox home")
+    func sandboxPolicyPreservesRealHomePaths() {
+        let root = URL(fileURLWithPath: "/tmp/willdeep-workspace")
+        let commands = [
+            "mkdir -p ~/bin",
+            "printf '%s' script >~/bin/watchlog",
+            "TARGET=$HOME/bin/watchlog touch \"$TARGET\"",
+            "TARGET=${HOME}/bin/watchlog touch \"$TARGET\"",
+        ]
+
+        for command in commands {
+            let decision = AgentSandboxPolicy.commandDecision(
+                command: command,
+                rootDirectory: root
+            )
+            #expect(decision.mode == .escalated, "\(command) must preserve the real home path")
+            #expect(decision.requiresUserApproval == true)
+            #expect(decision.requiresTypedConfirmation == false)
+            #expect(decision.reason.contains("real home"))
+        }
     }
 
     @Test
@@ -1365,6 +1517,62 @@ struct AgentToolsCoreTests {
     }
 
     @Test
+    func sandboxedFailureNoteOnlyForSeatbeltedRunCommands() {
+        guard FileManager.default.isExecutableFile(atPath: "/usr/bin/sandbox-exec") else { return }
+        // A command in workspaceWrite mode really ran under seatbelt → note.
+        let note = AgentSandboxPolicy.sandboxedFailureNote(
+            toolName: "run_command",
+            command: "mkdir -p build/out",
+            effectiveMode: .workspaceWrite
+        )
+        #expect(note?.contains("[sandbox]") == true)
+        #expect(note?.contains("do NOT retry the identical command") == true)
+
+        // alwaysSafe read-only commands skip seatbelt entirely — no note.
+        #expect(AgentSandboxPolicy.sandboxedFailureNote(
+            toolName: "run_command",
+            command: "git status",
+            effectiveMode: .readOnly
+        ) == nil)
+        // Escalated runs are unsandboxed — a post-escalation failure must
+        // not be blamed on the sandbox.
+        #expect(AgentSandboxPolicy.sandboxedFailureNote(
+            toolName: "run_command",
+            command: "mkdir -p build/out",
+            effectiveMode: .escalated
+        ) == nil)
+        // Other tools never get the note (terminal commands run unsandboxed).
+        #expect(AgentSandboxPolicy.sandboxedFailureNote(
+            toolName: "terminal_send_command",
+            command: "mkdir -p build/out",
+            effectiveMode: .workspaceWrite
+        ) == nil)
+        #expect(AgentSandboxPolicy.sandboxedFailureNote(
+            toolName: "run_command",
+            command: nil,
+            effectiveMode: .workspaceWrite
+        ) == nil)
+    }
+
+    @Test
+    func judgeVerdictCacheKeyGroupsByCommandFamily() {
+        #expect(
+            AgentToolAuthorization.judgeVerdictCacheKey(toolName: "run_command", command: "git commit -m 'a'")
+                == AgentToolAuthorization.judgeVerdictCacheKey(toolName: "run_command", command: "git commit --amend --no-edit")
+        )
+        #expect(
+            AgentToolAuthorization.judgeVerdictCacheKey(toolName: "run_command", command: "git commit -m 'a'")
+                != AgentToolAuthorization.judgeVerdictCacheKey(toolName: "run_command", command: "git push origin main")
+        )
+        // Tool name is part of the key: a run_command YES must not leak to
+        // the terminal tool family (they have different blast radii).
+        #expect(
+            AgentToolAuthorization.judgeVerdictCacheKey(toolName: "run_command", command: "git commit -m 'a'")
+                != AgentToolAuthorization.judgeVerdictCacheKey(toolName: "terminal_send_command", command: "git commit -m 'a'")
+        )
+    }
+
+    @Test
     func sandboxEscalationApprovalCopyUsesEscalationPrompt() {
         let descriptor = AgentApprovalNoticeCopy.descriptor(
             toolName: "run_command",
@@ -1379,6 +1587,25 @@ struct AgentToolsCoreTests {
         #expect(descriptor.declineTitle == L10n.ToolCard.sandboxEscalationDecline)
         #expect(descriptor.metadata.contains(L10n.ToolCard.sandboxEscalationMetadata))
         #expect(descriptor.metadata.contains("Operation not permitted"))
+    }
+
+    @Test("智能审批在沙箱拒绝后自动无沙箱重跑，其他模式不越权")
+    func smartApprovalAutomaticallyRetriesSandboxDenial() {
+        #expect(
+            AppState.smartApprovalAutomaticallyRetriesSandboxDenial(
+                approvalMode: .smart
+            )
+        )
+        #expect(
+            !AppState.smartApprovalAutomaticallyRetriesSandboxDenial(
+                approvalMode: .requestEveryTime
+            )
+        )
+        #expect(
+            !AppState.smartApprovalAutomaticallyRetriesSandboxDenial(
+                approvalMode: .workspaceAccess
+            )
+        )
     }
 }
 
@@ -1827,5 +2054,131 @@ struct DelegatedAgentComposerOutputTests {
         #expect(content.contains("Earlier delegated executor output omitted"))
         #expect(content.contains("actual useful error: authentication expired"))
         #expect(content.count < 3_000)
+    }
+
+    // MARK: - Parallel read batch
+
+    @Test("known long test, build, and dev-server commands default to background")
+    func knownLongCommandsDefaultToBackground() {
+        let cases: [(String, AgentRunCommandExecutionPolicy.ActivityKind)] = [
+            ("xcodebuild -project Xedit.xcodeproj -scheme WillDeep test", .test),
+            ("xcodebuild -project Xedit.xcodeproj -scheme WillDeep -configuration Release", .build),
+            ("yarn test", .test),
+            ("npm run build", .build),
+            ("pnpm dev", .server),
+            ("go test ./...", .test),
+            ("swift build -c release", .build),
+            ("python3 -m pytest tests", .test),
+            ("bundle exec rspec", .test),
+            ("./gradlew assemble", .build),
+            ("docker compose up", .server),
+            ("cd web && yarn build", .build),
+        ]
+
+        for (command, expectedKind) in cases {
+            let arguments: [String: AgentJSONValue] = ["command": .string(command)]
+            #expect(
+                AgentRunCommandExecutionPolicy.shouldRunInBackground(arguments: arguments),
+                "\(command) should default to background"
+            )
+            #expect(AgentRunCommandExecutionPolicy.inferredActivityKind(for: command) == expectedKind)
+        }
+    }
+
+    @Test("automatic background policy stays conservative and honors explicit choices")
+    func automaticBackgroundPolicyHonorsExplicitChoices() {
+        let foregroundCommands = [
+            "git status --short",
+            "rg build Xedit",
+            "scripts/release.sh",
+            "xcrun notarytool submit app.dmg",
+            "npm publish",
+            "xcodebuild -list",
+        ]
+        for command in foregroundCommands {
+            #expect(!AgentRunCommandExecutionPolicy.shouldRunInBackground(
+                arguments: ["command": .string(command)]
+            ))
+        }
+
+        #expect(!AgentRunCommandExecutionPolicy.shouldRunInBackground(arguments: [
+            "command": .string("yarn test"),
+            "run_in_background": .bool(false),
+        ]))
+        #expect(AgentRunCommandExecutionPolicy.shouldRunInBackground(arguments: [
+            "command": .string("git status --short"),
+            "run_in_background": .bool(true),
+        ]))
+    }
+
+    /// The concurrent-read whitelist must only ever contain read-tier
+    /// tools with no approval, plan-gate, or sandbox-escalation paths.
+    /// `run_command` (even when classified read-only) and `spawn_agent`
+    /// must stay serial: escalation/approval suspends on the runtime's
+    /// single tool-decision waiter, which concurrent calls cannot share.
+    @Test
+    func parallelReadBatchWhitelistOnlyContainsPureReadTools() {
+        for name in AppState.parallelReadBatchToolNames {
+            #expect(
+                AgentToolRegistry.risk(for: name, arguments: [:]) == .read,
+                "\(name) must classify as read-tier"
+            )
+        }
+        #expect(!AppState.parallelReadBatchToolNames.contains("run_command"))
+        #expect(!AppState.parallelReadBatchToolNames.contains("spawn_agent"))
+        #expect(!AppState.parallelReadBatchToolNames.contains("change_workspace"))
+        #expect(!AppState.parallelReadBatchToolNames.contains("rename_session"))
+    }
+
+    /// Whitelisted read tools must be safe to fan out: concurrent
+    /// AgentToolRunner.run calls over the same workspace return the same
+    /// independent results the serial loop produced, keyed back by index.
+    @Test
+    func whitelistedReadToolsRunConcurrentlyWithIndependentResults() async throws {
+        let workspace = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask).first!
+            .appendingPathComponent("willdeep_test_parallel_read_\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: workspace, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: workspace) }
+
+        try "alpha needle one\n".write(
+            to: workspace.appendingPathComponent("one.txt"), atomically: true, encoding: .utf8
+        )
+        try "beta needle two\n".write(
+            to: workspace.appendingPathComponent("two.txt"), atomically: true, encoding: .utf8
+        )
+
+        let context = AgentToolContext(rootDirectory: workspace)
+        let calls: [(name: String, arguments: [String: AgentJSONValue])] = [
+            ("read_file", ["path": .string("one.txt")]),
+            ("read_file", ["path": .string("two.txt")]),
+            ("grep_files", ["pattern": .string("needle")]),
+            ("list_directory", ["path": .string(".")])
+        ]
+
+        var payloads = [String?](repeating: nil, count: calls.count)
+        await withTaskGroup(of: (Int, String?).self) { group in
+            for (index, call) in calls.enumerated() {
+                let name = call.name
+                let arguments = call.arguments
+                group.addTask {
+                    let result = try? await AgentToolRunner.run(
+                        name: name,
+                        arguments: arguments,
+                        context: context
+                    )
+                    return (index, result?.payload)
+                }
+            }
+            for await (index, payload) in group {
+                payloads[index] = payload
+            }
+        }
+
+        #expect(payloads[0]?.contains("alpha needle one") == true)
+        #expect(payloads[1]?.contains("beta needle two") == true)
+        #expect(payloads[2]?.contains("one.txt") == true)
+        #expect(payloads[2]?.contains("two.txt") == true)
+        #expect(payloads[3]?.contains("one.txt") == true)
+        #expect(payloads[3]?.contains("two.txt") == true)
     }
 }

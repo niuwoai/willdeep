@@ -71,7 +71,7 @@ final class AgentNotificationResponder: NSObject, UNUserNotificationCenterDelega
 
         if let target {
             registry.setCurrent(target.appState)
-            target.appState.selectAgentSession(id: target.sessionID)
+            target.appState.revealAgentSessionFromNotification(id: target.sessionID)
         }
 
         // Open / focus the Agent window via a SwiftUI observer (only it

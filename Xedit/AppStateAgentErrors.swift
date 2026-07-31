@@ -109,6 +109,13 @@ extension AppState {
                     hint = "查看「Details」里的响应体定位原因。"
                 }
                 return "模型服务返回 HTTP \(code)。\(hint)"
+            case .imageDescriptionServerStatus(let provider):
+                let code = provider.statusCode
+                let prefix = "视觉模型 \(provider.model) 解析图片失败（HTTP \(code)）"
+                if let serverMessage = Self.providerErrorMessage(from: provider.responseBody) {
+                    return "\(prefix)：\(serverMessage)。图片尚未交给纯文本主模型。"
+                }
+                return "\(prefix)。图片尚未交给纯文本主模型，请稍后重试或更换视觉模型。"
             case .emptyStream:
                 return "模型服务返回了空响应（连接正常，但没有任何内容、也没有报错）。多半是上游临时抽风、被限流，或「省心托管 / some.im」的中继 token 已失效。点「重试」再发一次；如果反复空响应，多半要重新登录 some.im，或换个 provider/模型。"
             case .unsupportedProviderKind(let kind):
@@ -199,6 +206,14 @@ extension AppState {
             return
         }
 
+        // Every retry gate has passed and this turn will actually start. An
+        // idle retry has no live patch collector, so settle proposals restored
+        // from the interrupted turn before replaying history. Doing this any
+        // earlier would mutate approvals even when login or provider capacity
+        // prevents Retry from starting.
+        runtime.collectingPatchReviewMessageIDs.removeAll()
+        _ = resolvePendingAgentPatchProposalsBeforeNewMessage(for: runtime)
+
         runtime.errorMessage = nil
         runtime.errorDetails = nil
         runtime.errorRequiresSomeIMLogin = false
@@ -256,12 +271,21 @@ extension AppState {
                 )
             ])
         }
-        guard case AgentClientError.serverStatus(let providerError) = error else {
+        let providerError: AgentProviderHTTPError
+        let requestTitle: String
+        switch error {
+        case AgentClientError.serverStatus(let error):
+            providerError = error
+            requestTitle = "Request"
+        case AgentClientError.imageDescriptionServerStatus(let error):
+            providerError = error
+            requestTitle = "Image Understanding Request"
+        default:
             return nil
         }
         return AgentErrorDetails(sections: [
             AgentErrorDetails.Section(
-                title: "Request",
+                title: requestTitle,
                 text: """
                 Method: \(providerError.method)
                 URL: \(providerError.url)

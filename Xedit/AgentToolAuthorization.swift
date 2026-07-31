@@ -99,7 +99,15 @@ enum AgentSandboxPolicy {
 
     nonisolated private static let sensitivePathFragments: [String] = [
         "/.ssh", "/.gnupg", "/.aws", "/.config/gh", "/library/keychains",
-        ".env", "id_rsa", "id_ed25519", "credentials", "token", "secret"
+        ".env", "id_rsa", "id_ed25519"
+    ]
+
+    /// Credential nouns are intentionally boundary-matched. Product and
+    /// namespace names such as `tokenhub` are ordinary identifiers; treating
+    /// every substring containing "token" as a secret upgrades harmless
+    /// commands to danger-tier confirmation.
+    nonisolated private static let sensitiveCredentialMarkers: [String] = [
+        "token", "tokens", "secret", "secrets", "credential", "credentials"
     ]
 
     nonisolated private static let sandboxExecPath = "/usr/bin/sandbox-exec"
@@ -157,7 +165,7 @@ enum AgentSandboxPolicy {
                     prefixRule: ["lark-cli"]
                 )
             }
-        case "claude_code", "codex_cli", "cursor_agent", "cline_cli":
+        case "claude_code", "codex_cli", "hermes_cli", "cursor_agent", "cline_cli":
             return AgentSandboxDecision(
                 mode: .escalated,
                 requiresUserApproval: true,
@@ -173,9 +181,29 @@ enum AgentSandboxPolicy {
                 reason: "Deleting a user skill is destructive.",
                 prefixRule: nil
             )
+        case "terminal_send_command":
+            guard let command = arguments["command"]?.stringValue() else {
+                return AgentSandboxDecision(
+                    mode: .escalated,
+                    requiresUserApproval: true,
+                    requiresTypedConfirmation: true,
+                    reason: "Missing terminal command argument.",
+                    prefixRule: nil
+                )
+            }
+            if commandRequiresSensitiveDesktopConfirmation(command) {
+                return commandDecision(command: command, rootDirectory: rootDirectory)
+            }
+            return AgentSandboxDecision(
+                mode: .workspaceWrite,
+                requiresUserApproval: true,
+                requiresTypedConfirmation: false,
+                reason: "This tool can run external code in the visible terminal.",
+                prefixRule: nil
+            )
         case "rename_session", "change_workspace",
-             "call_mcp_tool", "kill_job", "activate_expert", "add_memory", "create_user_skill", "update_user_skill", "suggest_mcp_server", "configure_mcp_server",
-             "terminal_send_command", "terminal_send_control", "terminal_create_shortcut", "terminal_edit_shortcut":
+             "call_mcp_tool", "kill_job", "activate_expert", "add_memory", "create_user_skill", "create_user_skills", "update_user_skill", "suggest_mcp_server", "configure_mcp_server",
+             "terminal_send_control", "terminal_create_shortcut", "terminal_edit_shortcut":
             return AgentSandboxDecision(
                 mode: .workspaceWrite,
                 requiresUserApproval: true,
@@ -183,12 +211,18 @@ enum AgentSandboxPolicy {
                 reason: "This tool can modify application state or run external code.",
                 prefixRule: nil
             )
-        case "computer_use_request_permissions", "computer_use_launch_app", "computer_use_activate_app", "computer_use_get_app_state", "computer_use_click", "computer_use_secondary_action", "computer_use_scroll", "computer_use_drag", "computer_use_type_text", "computer_use_press_key", "computer_use_set_value", "computer_use_focus", "computer_use_hover", "computer_use_select_text", "computer_use_restart_helper":
+        case "computer_use_request_permissions", "computer_use_launch_app", "computer_use_activate_app", "computer_use_click", "computer_use_secondary_action", "computer_use_scroll", "computer_use_drag", "computer_use_type_text", "computer_use_press_key", "computer_use_set_value", "computer_use_focus", "computer_use_hover", "computer_use_select_text", "computer_use_restart_helper":
+            let explicitConfirmation = AgentComputerUsePolicy.requiresExplicitConfirmation(
+                toolName: toolName,
+                arguments: arguments
+            )
             return AgentSandboxDecision(
                 mode: .escalated,
                 requiresUserApproval: true,
-                requiresTypedConfirmation: false,
-                reason: "Computer Use can inspect or control another macOS app and must remain visibly user-approved.",
+                requiresTypedConfirmation: explicitConfirmation,
+                reason: explicitConfirmation
+                    ? "Computer Use requires fresh per-action confirmation for malformed or ambiguous actions, non-navigation keys, sensitive/control-character input, and private-takeover boundaries; an operational lease cannot bypass it."
+                    : "This Computer Use action may run automatically only inside the current runtime-, turn-, and target-bound controlling lease; the first control action and Strict mode still require user approval.",
                 prefixRule: nil
             )
         default:
@@ -211,6 +245,15 @@ enum AgentSandboxPolicy {
                 requiresTypedConfirmation: true,
                 reason: "Empty command is refused.",
                 prefixRule: nil
+            )
+        }
+        if commandRequiresSensitiveDesktopConfirmation(trimmed) {
+            return AgentSandboxDecision(
+                mode: .escalated,
+                requiresUserApproval: true,
+                requiresTypedConfirmation: true,
+                reason: "Screen capture, clipboard access, or GUI scripting can observe private pixels or mutate external desktop state and requires typed confirmation.",
+                prefixRule: AgentCommandAuthorization.prefixRule(for: trimmed)
             )
         }
 
@@ -256,6 +299,18 @@ enum AgentSandboxPolicy {
             let tokens = invocation.commandTokens
             let head = invocation.head
             let assignmentValues = invocation.environmentAssignments.map(environmentAssignmentValue)
+            let localPathTokens = localPathCheckTokens(for: tokens, head: head)
+
+            // Non-escalated commands intentionally receive an isolated HOME.
+            // Running a command that spells `~/...` or `$HOME/...` there would
+            // silently target the sandbox home instead of the user's real
+            // home. Escalate before launch so the exact user-requested path is
+            // preserved rather than relying on a failing seatbelt retry.
+            if assignmentValues.contains(where: referencesSandboxRemappedHome)
+                || localPathTokens.contains(where: referencesSandboxRemappedHome) {
+                needsEscalation = true
+                reasons.append("Home-relative paths require access to the user's real home outside the workspace sandbox.")
+            }
 
             if invocation.environmentAssignments.contains(where: environmentAssignmentKeyLooksSensitive) {
                 needsEscalation = true
@@ -370,7 +425,7 @@ enum AgentSandboxPolicy {
                 reasons.append("Command references a sensitive path or credential-like value.")
             }
 
-            if localPathCheckTokens(for: tokens, head: head).contains(where: { token in
+            if localPathTokens.contains(where: { token in
                 guard looksLikePath(token),
                       let resolved = resolvePath(token, workingDirectory: workingDirectory, rootDirectory: rootDirectory) else {
                     return false
@@ -500,6 +555,79 @@ enum AgentSandboxPolicy {
         }
 
         return true
+    }
+
+    /// Returns whether a shell command reaches beyond the local workspace via
+    /// network or credential-bearing tools. Workspace Access deliberately
+    /// keeps these calls behind confirmation even when the underlying command
+    /// is read-only (for example, a plain `curl` GET).
+    nonisolated static func commandUsesExternalAccess(_ command: String) -> Bool {
+        let trimmed = command.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return true }
+        if commandRequiresSensitiveDesktopConfirmation(trimmed) {
+            return true
+        }
+
+        let policyCommand = commandByReplacingSafeShellExpansions(
+            commandWithHeredocBodiesRemoved(trimmed)
+        )
+        guard !containsUnsafeShellExpansion(policyCommand),
+              let segments = splitCommandSegments(policyCommand),
+              !segments.isEmpty else {
+            return true
+        }
+
+        for segment in segments {
+            guard let rawTokens = AgentCommandAuthorization.shellTokens(from: segment),
+                  let invocation = shellInvocation(from: rawTokens) else {
+                return true
+            }
+            let tokens = invocation.commandTokens
+            if networkHeads.contains(invocation.head)
+                || credentialHeads.contains(invocation.head)
+                || AgentPackageCommandPolicy.isDependencyInstallCommand(tokens: tokens) {
+                return true
+            }
+        }
+        return false
+    }
+
+    /// Commands that can bypass Computer Use's private-takeover boundary by
+    /// reading screen pixels, reading/writing the system clipboard, or
+    /// driving macOS UI scripting. Detection covers direct executables and
+    /// inline-language wrappers (`ruby -e`, `swift -e`, `sh -c`, etc.).
+    nonisolated static func commandRequiresSensitiveDesktopConfirmation(
+        _ command: String
+    ) -> Bool {
+        let lowered = command.lowercased()
+        guard !lowered.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            return false
+        }
+
+        let directPatterns = [
+            #"(?<![a-z0-9_])screencapture(?![a-z0-9_])"#,
+            #"(?<![a-z0-9_])pbpaste(?![a-z0-9_])"#,
+            #"(?<![a-z0-9_])pbcopy(?![a-z0-9_])"#,
+            #"cgwindowlistcreateimage"#,
+        ]
+        if directPatterns.contains(where: {
+            lowered.range(of: $0, options: .regularExpression) != nil
+        }) {
+            return true
+        }
+
+        let usesAppleScript = lowered.range(
+            of: #"(?<![a-z0-9_])osascript(?![a-z0-9_])|nsapplescript"#,
+            options: .regularExpression
+        ) != nil
+        guard usesAppleScript else { return false }
+
+        let guiOrClipboardTerms = [
+            "clipboard", "system events", "keystroke", "key code",
+            "ui element", "menu item", "frontmost", "click ",
+            "click\"", "click'",
+        ]
+        return guiOrClipboardTerms.contains(where: lowered.contains)
     }
 
     nonisolated static func sandboxedEnvironment(
@@ -636,6 +764,38 @@ enum AgentSandboxPolicy {
         return tail.contains("permission denied")
             || exitStatus == 1
             || exitStatus == -1
+    }
+
+    /// Model-facing note appended to a failed `run_command` result when the
+    /// command actually executed under seatbelt. Without it the model only
+    /// sees a bare "operation not permitted" and — nudged by the "keep
+    /// trying" guidance in the system prompt — tends to retry the identical
+    /// command, which the sandbox denies again. Returns nil when the command
+    /// did not run sandboxed (alwaysSafe skip, escalated, no sandbox-exec).
+    nonisolated static func sandboxedFailureNote(
+        toolName: String,
+        command: String?,
+        effectiveMode: AgentSandboxMode
+    ) -> String? {
+        guard toolName == "run_command",
+              let command,
+              !command.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+              FileManager.default.isExecutableFile(atPath: sandboxExecPath),
+              !shouldRunWithoutSeatbelt(command: command, mode: effectiveMode) else {
+            return nil
+        }
+        let restrictions: String
+        switch effectiveMode {
+        case .escalated:
+            return nil
+        case .readOnly:
+            restrictions = "reads allowed everywhere; writes denied except the temp dir; network denied"
+        case .workspaceWrite:
+            restrictions = "writes allowed only inside the workspace and temp dir; network denied"
+        case .workspaceWriteNetwork:
+            restrictions = "writes allowed only inside the workspace and temp dir; network allowed"
+        }
+        return "[sandbox] This command ran inside WillDeep's macOS sandbox (\(effectiveMode.rawValue): \(restrictions)). If the failure above looks like 'permission denied' / 'operation not permitted', do NOT retry the identical command — the sandbox will deny it again. Instead: use read_file/edit_file/create_file for file work, keep paths inside the workspace, or briefly tell the user why the command must run outside the sandbox so they can approve escalation."
     }
 
     /// Argument flag stamped onto a tool call while waiting for the user to
@@ -1021,6 +1181,9 @@ enum AgentSandboxPolicy {
     nonisolated private static func resolvePath(_ raw: String, workingDirectory: URL?, rootDirectory: URL?) -> URL? {
         let cleaned = raw.trimmingCharacters(in: CharacterSet(charactersIn: "\"'"))
         guard looksLikePath(cleaned) else { return nil }
+        if let expandedHomePath = expandedSandboxRemappedHomePath(cleaned) {
+            return URL(fileURLWithPath: expandedHomePath).standardizedFileURL
+        }
         if cleaned.hasPrefix("/") {
             return URL(fileURLWithPath: cleaned).standardizedFileURL
         }
@@ -1045,6 +1208,39 @@ enum AgentSandboxPolicy {
 
     nonisolated private static func looksLikePath(_ token: String) -> Bool {
         token.hasPrefix("/") || token.hasPrefix("./") || token.hasPrefix("../") || token == ".."
+            || expandedSandboxRemappedHomePath(token) != nil
+    }
+
+    nonisolated private static func referencesSandboxRemappedHome(_ raw: String) -> Bool {
+        expandedSandboxRemappedHomePath(raw) != nil
+    }
+
+    /// Expands only the shell forms whose meaning changes when the sandbox
+    /// replaces HOME. Leading redirection syntax is ignored so both
+    /// `> ~/bin/file` and `>~/bin/file` are recognized.
+    nonisolated private static func expandedSandboxRemappedHomePath(_ raw: String) -> String? {
+        var cleaned = raw.trimmingCharacters(in: CharacterSet(charactersIn: "\"'"))
+        while let first = cleaned.first,
+              first == ">" || first == "<" || first.isNumber {
+            cleaned.removeFirst()
+        }
+
+        let suffix: Substring
+        if cleaned == "~" || cleaned == "$HOME" || cleaned == "${HOME}" {
+            suffix = ""
+        } else if cleaned.hasPrefix("~/") {
+            suffix = cleaned.dropFirst(2)
+        } else if cleaned.hasPrefix("$HOME/") {
+            suffix = cleaned.dropFirst("$HOME/".count)
+        } else if cleaned.hasPrefix("${HOME}/") {
+            suffix = cleaned.dropFirst("${HOME}/".count)
+        } else {
+            return nil
+        }
+
+        let home = FileManager.default.homeDirectoryForCurrentUser.standardizedFileURL
+        guard !suffix.isEmpty else { return home.path }
+        return home.appendingPathComponent(String(suffix)).standardizedFileURL.path
     }
 
     nonisolated private static func isSafeRelativeDirectoryHop(_ raw: String) -> Bool {
@@ -1069,7 +1265,47 @@ enum AgentSandboxPolicy {
 
     nonisolated private static func referencesSensitivePath(_ token: String) -> Bool {
         let lower = token.lowercased()
-        return sensitivePathFragments.contains { lower.contains($0) }
+        if sensitivePathFragments.contains(where: { lower.contains($0) }) {
+            return true
+        }
+        if sensitiveOptionNameLooksSensitive(lower) {
+            return true
+        }
+        return sensitiveCredentialMarkers.contains { marker in
+            containsIdentifierBoundedMarker(marker, in: lower)
+        }
+    }
+
+    nonisolated private static func sensitiveOptionNameLooksSensitive(_ lower: String) -> Bool {
+        guard lower.hasPrefix("-") else { return false }
+        let optionName = lower.split(separator: "=", maxSplits: 1).first.map(String.init) ?? lower
+        return sensitiveCredentialMarkers.contains { marker in
+            optionName.hasSuffix(marker)
+                || containsIdentifierBoundedMarker(marker, in: optionName)
+        }
+    }
+
+    nonisolated private static func containsIdentifierBoundedMarker(
+        _ marker: String,
+        in value: String
+    ) -> Bool {
+        var searchStart = value.startIndex
+        while searchStart < value.endIndex,
+              let range = value.range(of: marker, range: searchStart..<value.endIndex) {
+            let isLeadingBoundary = range.lowerBound == value.startIndex
+                || !isASCIIAlphaNumeric(value[value.index(before: range.lowerBound)])
+            let isTrailingBoundary = range.upperBound == value.endIndex
+                || !isASCIIAlphaNumeric(value[range.upperBound])
+            if isLeadingBoundary && isTrailingBoundary {
+                return true
+            }
+            searchStart = range.upperBound
+        }
+        return false
+    }
+
+    nonisolated private static func isASCIIAlphaNumeric(_ character: Character) -> Bool {
+        character.isASCII && (character.isLetter || character.isNumber)
     }
 
     nonisolated private static func keyLooksSensitive(_ key: String) -> Bool {

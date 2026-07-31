@@ -1,6 +1,6 @@
 # WillDeep Mobile Gateway Requirements
 
-> Last updated: 2026-07-25 | Target version: v1.206.0-rc1
+> Last updated: 2026-08-01 | Target version: v1.220.0-rc11
 
 ## Summary
 
@@ -118,8 +118,8 @@ The gateway does not execute the command. It forwards the command to the desktop
 
 All Mobile Gateway HTTP responses must include:
 
-- `X-App-Version: 1.206.0-rc1`
-- `X-Server-Version: 1.206.0-rc1`
+- `X-App-Version: 1.220.0-rc11`
+- `X-Server-Version: 1.220.0-rc11`
 
 ### `GET /mobile/health`
 
@@ -131,7 +131,7 @@ Response data:
 {
   "version": {
     "name": "willdeep-agent",
-    "version": "1.206.0-rc1",
+    "version": "1.220.0-rc11",
     "go_version": "go1.23.x",
     "os": "darwin",
     "arch": "arm64"
@@ -347,7 +347,8 @@ Current desktop bridge behavior:
 - `.awaitingConfirm` danger-tier tool calls still require `payload.typed_confirmation == "confirm"`; a mobile approve without that field returns `command.error`.
 - Pending danger-tier tool snapshots include `requires_confirmation: true` so Android can show a typed confirmation field before sending `tool.decide`.
 - `.awaitingUserAnswer` tool calls require `payload.answer`; empty answers return `command.error`.
-- `patch.decide` selects the target session and calls the existing patch apply/reject entry points.
+- Pending patch snapshots and `patch.upsert` expose `batch_id`, `batch_count`, and `batch_collecting`; clients must disable approval while the batch is still collecting.
+- `patch.decide` selects the target session and resolves the proposal's entire review batch through the same atomic Apply All / Reject All entry points as the desktop. Apply failures return `command.error` with the real failure instead of a success acknowledgement.
 - `diff.get` returns the pending patch unified diff in an `ack` payload with `patch_id`, `title`, and `diff`; it does not grant mobile direct filesystem access.
 - `state.snapshot` includes background job metadata, and `publishSnapshot()` also emits `job.updated` envelopes for current jobs.
 - `state.snapshot` includes desktop worktree changed-file metadata, and `publishSnapshot()` also emits `worktree.updated` envelopes for current changed files.

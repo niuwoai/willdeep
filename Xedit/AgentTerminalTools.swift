@@ -8,6 +8,12 @@
 import Foundation
 
 enum AgentTerminalTools {
+    /// Ordinary visible-terminal commands receive a bounded, best-effort
+    /// follow-up screen read. This is long enough for quick shell commands to
+    /// produce useful output without making interactive/long-running commands
+    /// block the agent turn.
+    private static let commandFollowUpSnapshotDelayNanoseconds: UInt64 = 600_000_000
+
     static func createShortcut(arguments: [String: AgentJSONValue], context: AgentToolContext) async throws -> AgentToolResult {
         guard let controller = context.terminalController else {
             throw AgentToolError.invalidArgument("Agent Terminal is not available in this context.")
@@ -109,6 +115,7 @@ enum AgentTerminalTools {
                 return RedactedTerminalSnapshot(
                     tabID: raw.tabID,
                     isRunning: raw.isRunning,
+                    isZModemTransferActive: raw.isZModemTransferActive,
                     runtimeName: raw.runtimeName,
                     runtimeTarget: raw.runtimeTarget,
                     output: trimmed,
@@ -137,6 +144,9 @@ enum AgentTerminalTools {
         let recent = snapshot.recentCommands.isEmpty
             ? "none"
             : snapshot.recentCommands.joined(separator: "\n")
+        let zmodemState = snapshot.isZModemTransferActive
+            ? "active — the local file may exist but is still partial; do not claim transfer completion or inspect it as final data"
+            : "inactive"
         let screen = snapshot.output.isEmpty
             ? (snapshot.isRunning ? "(no terminal output yet)" : "(terminal produced no output before exiting)")
             : snapshot.output
@@ -148,6 +158,7 @@ enum AgentTerminalTools {
             : snapshot.cursorLine
         let payload = """
         \(statusLine)
+        ZMODEM transfer: \(zmodemState)
 
         Terminal context rules:
         - The cursor line below is the best current prompt/input indicator.
@@ -179,6 +190,7 @@ enum AgentTerminalTools {
     private struct RedactedTerminalSnapshot: Sendable {
         let tabID: UUID
         let isRunning: Bool
+        let isZModemTransferActive: Bool
         let runtimeName: String
         let runtimeTarget: String
         let output: String
@@ -224,13 +236,80 @@ enum AgentTerminalTools {
         }
         let pathSelection = try zmodemPathSelection(arguments: arguments, rootDirectory: context.rootDirectory)
         let targetTabID = try terminalTabID(arguments)
-        return try await MainActor.run {
-            try controller.sendApprovedCommand(
+        let dispatch = try await MainActor.run {
+            try controller.sendApprovedCommandDispatch(
                 command,
                 targetTabID: targetTabID,
                 sessionID: context.runtimeID,
                 zmodemPathSelection: pathSelection,
                 secretRedactionValues: context.secretRedactionValues
+            )
+        }
+        guard let ticket = dispatch.zmodemTicket else {
+            return await resultWithAutomaticFollowUpSnapshot(
+                dispatch: dispatch,
+                context: context
+            )
+        }
+        let outcome = await ticket.waitForCompletion()
+        guard outcome.succeeded else {
+            throw AgentToolError.invalidArgument(
+                "ZMODEM transfer did not complete successfully. \(outcome.message) Do not treat a destination file that appeared during transfer as complete."
+            )
+        }
+        let direction = outcome.direction == .downloadFromRemote ? "download" : "upload"
+        let transferred = ByteCountFormatter.string(
+            fromByteCount: Int64(outcome.transferredByteCount),
+            countStyle: .file
+        )
+        return AgentToolResult(
+            summary: "zmodem \(direction) complete: \(transferred)",
+            payload: """
+            \(dispatch.result.payload)
+
+            ZMODEM protocol completion confirmed after the local lrzsz process exited and final protocol output was drained.
+            \(outcome.message)
+            """
+        )
+    }
+
+    private static func resultWithAutomaticFollowUpSnapshot(
+        dispatch: AgentTerminalCommandDispatch,
+        context: AgentToolContext
+    ) async -> AgentToolResult {
+        do {
+            try await Task.sleep(nanoseconds: commandFollowUpSnapshotDelayNanoseconds)
+            let followUp = try await snapshot(
+                arguments: [
+                    "terminal_tab_id": .string(dispatch.terminalTabID.uuidString),
+                    "max_characters": .number(6_000)
+                ],
+                context: context
+            )
+            return AgentToolResult(
+                summary: dispatch.result.summary,
+                payload: """
+                \(dispatch.result.payload)
+
+                Automatic follow-up snapshot (captured shortly after dispatch; long-running or interactive commands may still be producing output):
+
+                \(followUp.payload)
+
+                If the expected output or a returned prompt is not visible yet, wait briefly and call terminal_snapshot again for this same tab. Do not infer that terminal output is unstable from this bounded first read.
+                """
+            )
+        } catch {
+            // The command has already been sent. Treating a follow-up read
+            // failure as a failed tool call could make the model execute the
+            // command twice, which is unsafe for non-idempotent commands.
+            return AgentToolResult(
+                summary: dispatch.result.summary,
+                payload: """
+                \(dispatch.result.payload)
+
+                The automatic follow-up snapshot was unavailable: \(error.localizedDescription)
+                The command was already sent; do not send it again. Wait briefly, then call terminal_snapshot for tab \(dispatch.terminalTabID.uuidString) to read its output.
+                """
             )
         }
     }

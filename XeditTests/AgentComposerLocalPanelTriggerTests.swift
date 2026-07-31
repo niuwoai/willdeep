@@ -73,10 +73,11 @@ struct AgentComposerLocalPanelTriggerTests {
         #expect(runtime.localConfirmationPreviewCalls.map(\.toolName) == [
             "run_command",
             "web_fetch",
+            "create_user_skills",
             "embedded_browser_navigate",
             "computer_use_click",
         ])
-        #expect(runtime.toolCalls.count == 4)
+        #expect(runtime.toolCalls.count == 5)
     }
 
     @Test("旧会话中的保留口令不会触发，也不会发送给 AI")
@@ -126,12 +127,11 @@ struct AgentComposerLocalPanelTriggerTests {
 
         runtime.input = "请重构认证模块，同时完成数据库迁移，并补充单元测试。"
         appState.sendAgentMessage()
-        defer { appState.cancelAgentPlanModeSuggestion() }
 
         #expect(!runtime.hasLocalConfirmationPreview)
         #expect(runtime.toolCalls.isEmpty)
-        #expect(runtime.pendingPlanModeSuggestion != nil)
-        #expect(runtime.messages.isEmpty)
+        #expect(runtime.messages.last?.role == .user)
+        #expect(runtime.messages.last?.content.contains("请重构认证模块") == true)
     }
 
     @Test("清空会话会复位口令预览状态")
@@ -149,6 +149,6 @@ struct AgentComposerLocalPanelTriggerTests {
         #expect(runtime.toolCalls.isEmpty)
         runtime.input = "#1983#"
         appState.sendAgentMessage()
-        #expect(runtime.localConfirmationPreviewCalls.count == 4)
+        #expect(runtime.localConfirmationPreviewCalls.count == 5)
     }
 }

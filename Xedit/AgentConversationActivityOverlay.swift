@@ -16,7 +16,7 @@ struct AgentConversationActivityOverlay: View {
     @State private var dismissedCardKeys: Set<String> = []
     /// Floating plan card fold state — replaces the old transcript-inline
     /// `isCurrentPlanExpanded`. Collapsed by default; only auto-expands while
-    /// the plan is `.proposed` (awaiting approval) or when the footer's
+    /// the plan is newly ready or when the footer's
     /// "查看计划" affordance requests it via `agentPlanOverlayExpandRequestToken`.
     @State private var isPlanExpanded = false
 
@@ -24,10 +24,8 @@ struct AgentConversationActivityOverlay: View {
         AgentConversationActivitySnapshot.capture(from: appState)
     }
 
-    /// The current plan, only when Plan/Goal mode has one to show.
+    /// The current plan is task progress, independent of conversation mode.
     private var visiblePlan: AgentPlan? {
-        guard appState.agentInteractionMode == .plan
-            || appState.agentInteractionMode == .goal else { return nil }
         return appState.agentCurrentPlan
     }
 
@@ -42,8 +40,7 @@ struct AgentConversationActivityOverlay: View {
         let showsDevServer = devServerKey.map { !dismissedCardKeys.contains($0) } ?? false
         if plan != nil || showsArtifacts || showsMedia || showsDevServer {
             VStack(alignment: .trailing, spacing: 6) {
-                // Plan card sits on top — it's the execution gate and the most
-                // important thing to keep in view.
+                // Plan card sits on top as the task's visible progress.
                 if let plan {
                     AgentPlanCard(plan: plan, isExpanded: $isPlanExpanded, floating: true)
                         .frame(

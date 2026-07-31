@@ -70,7 +70,7 @@ enum AgentVisualQATools {
 
         ## Call Boundary
 
-        This tool is for explicit or clearly implied visual QA only: screenshots, UI color/theme checks, layout regressions, accessibility contrast review, or post-render verification after an approved browser screenshot. With `allow_vl=true`, the image may be sent to the configured Image Understanding provider. Use `allow_vl=false` for local-only palette/OCR inspection.
+        This tool is for explicit or clearly implied visual QA only: screenshots, UI color/theme checks, layout regressions, accessibility contrast review, or post-render verification after a fresh browser screenshot. With `allow_vl=true`, the image may be sent to the configured Image Understanding provider. Use `allow_vl=false` for local-only palette/OCR inspection.
         """
 
         return AgentToolResult(

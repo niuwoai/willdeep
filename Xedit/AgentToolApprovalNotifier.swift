@@ -61,7 +61,12 @@ enum AgentToolApprovalNotifier {
     /// notifier — see header comment for rationale.
     @MainActor
     static func notifyJobFinished(job: AgentBackgroundJob) {
-        if NSApp.isActive, !job.needsAttention { return }
+        guard shouldNotifyJobFinished(
+            status: job.status,
+            isAppActive: NSApp.isActive
+        ) else {
+            return
+        }
 
         let statusWord: String
         switch job.status {
@@ -90,22 +95,20 @@ enum AgentToolApprovalNotifier {
         postNotificationWhenAuthorized(identifier: identifier, content: content)
     }
 
-    /// A complex task parked its send behind the Plan-mode suggestion banner
-    /// while the user is away. Same auth + delivery + deep-link path as the
-    /// approval notifier; no-op in the foreground (the banner is visible).
-    @MainActor
-    static func notifyPlanModeSuggestionIfBackgrounded(runtimeID: UUID) {
-        if NSApp.isActive { return }
-        let content = UNMutableNotificationContent()
-        content.title = L10n.AgentNotifications.planSuggestionTitle
-        content.body = L10n.AgentNotifications.planSuggestionBody
-        content.sound = .default
-        content.userInfo = [AgentNotificationUserInfoKey.runtimeID: runtimeID.uuidString]
-        if let attachment = AgentNotificationIcon.attachment() {
-            content.attachments = [attachment]
+    /// System banners are reserved for actionable failures the user cannot
+    /// already see. Successful completions and explicit stops remain visible
+    /// in the job drawer/transcript without interrupting unrelated work.
+    static func shouldNotifyJobFinished(
+        status: AgentBackgroundJob.Status,
+        isAppActive: Bool
+    ) -> Bool {
+        guard !isAppActive else { return false }
+        switch status {
+        case .failed, .timedOut, .launchFailed:
+            return true
+        case .running, .completed, .killed:
+            return false
         }
-        let identifier = "willdeep.agent.planSuggestion.\(runtimeID.uuidString)"
-        postNotificationWhenAuthorized(identifier: identifier, content: content)
     }
 
     @MainActor

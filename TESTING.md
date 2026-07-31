@@ -14,33 +14,32 @@
 最常用的姿势：
 
 1. Xcode 打开 `Xedit.xcodeproj`。
-2. Scheme 选 `Xedit`。
-3. `Cmd+U` 跑全套（单元 + UI）。
+2. 普通开发 Scheme 选 `XeditUnitTests`。
+3. `Cmd+U` 跑单元测试；需要 UI 测试时再切回 `Xedit`。
 4. 单测要单独跑：在 Test Navigator (`Cmd+6`) 里勾对应 `@Test` 函数旁的菱形。
 
 ## 二、本地跑（命令行）
 
-不开 Xcode 也能跑。Swift Testing 跑在 `xcodebuild` 上：
+不开 Xcode 也能跑。开发阶段统一使用快速入口，不要直接启动裸 `xcodebuild`，否则多个 Agent/worktree 无法共享构建锁：
 
 ```bash
 # 全套单元测试
-xcodebuild test \
-  -project Xedit.xcodeproj \
-  -scheme Xedit \
-  -destination 'platform=macOS' \
-  -only-testing:XeditTests \
-  | xcpretty
+ruby scripts/run_tests_fast.rb
 ```
 
 只跑某一个 Suite：
 
 ```bash
-xcodebuild test \
-  -project Xedit.xcodeproj \
-  -scheme Xedit \
-  -destination 'platform=macOS' \
+ruby scripts/run_tests_fast.rb \
+  -only-testing:XeditTests/AgentSessionPersistenceTests
+
+# 源码和构建输入完全未变时，跳过构建步骤快速复跑
+ruby scripts/run_tests_fast.rb \
+  --without-building \
   -only-testing:XeditTests/AgentSessionPersistenceTests
 ```
+
+`--without-building` 会校验 tracked diff、未跟踪文件内容、Xcode 工程、`Package.resolved`、Scheme 和 Xcode 版本。任一输入变化都会拒绝旧测试二进制，改为不带该参数重跑即可。
 
 UI 测试：
 
@@ -56,29 +55,18 @@ xcodebuild test \
 
 ## 三、scripts/run_tests.sh
 
-**当前不存在。** 想要的话可以创建一个最小封装：
+完整本地门禁执行：
 
 ```bash
-#!/usr/bin/env bash
-# scripts/run_tests.sh — 一键跑全套单元测试
-set -euo pipefail
-ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
-cd "$ROOT_DIR"
-
-xcodebuild test \
-  -project Xedit.xcodeproj \
-  -scheme Xedit \
-  -destination 'platform=macOS' \
-  -only-testing:XeditTests \
-  -resultBundlePath build/test-results.xcresult \
-  | xcpretty --report junit --output build/test-results.xml
+scripts/run_tests.sh
 ```
 
 跑完会有：
-- `build/test-results.xcresult` — Xcode 原生 result bundle，双击可在 Xcode 里看完整失败堆栈。
-- `build/test-results.xml` — JUnit 格式，给 CI 用。
+- `build/ci/XeditTests.xcresult` — Xcode 原生 result bundle。
+- `build/ci/report.md` / `report.json` — 人读与机读测试报告。
+- `build/ci/project_build_guard_report.md` / `.json` — 排队、缓存与耗时记录。
 
-`scripts/release.sh` 在 rc42 改进后会**先调用同样的 `xcodebuild test`**，失败则停止打包（见 [scripts/release.sh](./scripts/release.sh)）。
+快速入口与完整入口会复用稳定的 DerivedData、SwiftPM checkout/package cache，并通过 Git common dir 派生的仓库级锁协调所有 linked worktree。完整 DerivedData 仍按工作树隔离，不允许多个工作树并发写入同一目录。
 
 ## 四、写新测试（Swift Testing 风格）
 
@@ -120,18 +108,14 @@ struct MyFeatureTests {
 
 ## 五、CI 报告位置
 
-**当前未配置 CI**（`.github/workflows/` 不存在）。落地后约定（见 [ROADMAP.md](./ROADMAP.md) 阶段 6）：
-
-- workflow 名 `tests.yml`，PR 触发。
-- 产物上传到 GitHub Actions artifact `test-results`：包含 `build/test-results.xcresult.zip` 与 `build/test-results.xml`。
-- 失败时在 PR check tab 直接看 JUnit 摘要。
+GitHub Actions `Tests` workflow 会运行复杂度、版本一致性、Go agent 与 XeditTests 门禁，并上传 Xcode、Markdown 和 JSON 报告。
 
 ## 六、Pre-PR 自检清单
 
 提 PR 前自己跑一遍：
 
 ```bash
-xcodebuild test -project Xedit.xcodeproj -scheme Xedit -destination 'platform=macOS' -only-testing:XeditTests | xcpretty
+scripts/run_tests.sh
 ```
 
-期望：除了 rc41 CHANGELOG 列出的 7-8 个已知 flaky test 外，其余全绿。如果出现新的 fail，先复现确认是不是本 PR 引入。
+期望：完整门禁全绿。如果出现新的失败，先用 `run_tests_fast.rb -only-testing:...` 针对性复现。

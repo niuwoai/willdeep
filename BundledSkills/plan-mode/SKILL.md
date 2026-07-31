@@ -1,38 +1,20 @@
 ---
 name: plan-mode
-description: Switch into structured planning mode before outlining multi-step solutions, and exit when done.
-allowed-tools:
-  - Bash
+description: Produce a structured, evidence-based implementation plan without changing files or external state. Use when the user asks to plan, evaluate approaches, identify risks, or review a complex task before execution.
 ---
 
-# Plan Mode Skill
+# Planning
 
-Enter and exit structured planning mode.
+Planning is a task phase inside ordinary conversation, not an app interaction mode. Do not claim that a mode changed.
 
-## Enter Plan Mode
+## Workflow
 
-```bash
-curl -s -X POST http://localhost:23001/api/plan-mode/enter
-```
+1. Inspect the relevant workspace, code, documentation, and current state with read-only tools.
+2. State the goal, constraints, assumptions, and evidence.
+3. Resolve unknowns from local context when possible.
+4. Compare meaningful alternatives and record the decision.
+5. Produce ordered, verifiable steps with affected components, tests, risks, and rollback notes.
+6. Separate required work from optional follow-ups.
+7. Stop before implementation only when the user explicitly asked for planning or analysis without execution.
 
-Response: `{"active": true, "since": "2026-01-01T00:00:00.000Z", "message": "Plan mode activated."}`
-
-## Exit Plan Mode
-
-```bash
-curl -s -X POST http://localhost:23001/api/plan-mode/exit
-```
-
-Response: `{"active": false, "since": null, "message": "Plan mode exited."}`
-
-## Check Status
-
-```bash
-curl -s http://localhost:23001/api/plan-mode
-```
-
-## When to Use
-
-- Before outlining a complex multi-step solution
-- When the user asks you to "plan" or "think through" an approach
-- Exit after the plan is finalized and you're ready to execute
+For a persistent checklist, load the `todo` skill. The skill never changes the app's conversation mode.

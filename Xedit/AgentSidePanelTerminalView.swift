@@ -508,6 +508,11 @@ private struct AgentSidePanelTerminalContentView: View {
             .disabled(tab.isAutomationBusy)
             .focusable(false)
             .foregroundStyle(interfacePalette.secondaryText)
+            .help(
+                tab.isAutomationBusy
+                    ? L10n.AgentTerminal.sessionAutomationBusy
+                    : L10n.AgentTerminal.closeTab
+            )
         }
         .padding(.horizontal, 8)
         .padding(.vertical, 4)
@@ -641,21 +646,72 @@ private struct AgentSidePanelTerminalContentView: View {
             .padding(.horizontal, SessionIdentityMetrics.dividerPadding)
     }
 
+    @ViewBuilder
     private func sessionStatusPill(_ tab: AgentTerminalTab) -> some View {
+        if tab.isRunning {
+            Menu {
+                Button {
+                    controller.sendUserControl(.ctrlC, toTabID: tab.id)
+                } label: {
+                    Label(L10n.AgentTerminal.sessionInterrupt, systemImage: "command")
+                }
+                .disabled(tab.isAutomationBusy)
+                Button {
+                    controller.sendUserControl(.ctrlRightBracket, toTabID: tab.id)
+                } label: {
+                    Label(L10n.AgentTerminal.sessionTelnetEscape, systemImage: "escape")
+                }
+                .disabled(tab.isAutomationBusy)
+                Button {
+                    controller.sendUserControl(.ctrlD, toTabID: tab.id)
+                } label: {
+                    Label(L10n.AgentTerminal.sessionSendEOF, systemImage: "text.append")
+                }
+                .disabled(tab.isAutomationBusy)
+                Divider()
+                Button(role: .destructive) {
+                    controller.stopTab(id: tab.id)
+                } label: {
+                    Label(L10n.AgentTerminal.sessionStop, systemImage: "stop.fill")
+                }
+                .disabled(tab.isAutomationBusy)
+                if tab.isAutomationBusy {
+                    Text(L10n.AgentTerminal.sessionAutomationBusy)
+                }
+            } label: {
+                sessionStatusLabel(tab)
+            }
+            .menuStyle(.borderlessButton)
+            .menuIndicator(.hidden)
+            .fixedSize()
+            .focusable(false)
+            .help(L10n.AgentTerminal.sessionControlsHelp)
+        } else {
+            sessionStatusLabel(tab)
+        }
+    }
+
+    private func sessionStatusLabel(_ tab: AgentTerminalTab) -> some View {
         let color = tab.isRunning ? interfacePalette.accent : interfacePalette.secondaryText
-        return Text(tab.isRunning ? L10n.AgentTerminal.sessionRunning : L10n.AgentTerminal.sessionExited)
-            .font(.system(size: 10, weight: .semibold))
-            .foregroundStyle(color)
-            .padding(.horizontal, 8)
-            .frame(height: SessionIdentityMetrics.controlHeight)
-            .background(
-                Capsule(style: .continuous)
-                    .fill(color.opacity(0.11))
-            )
-            .overlay(
-                Capsule(style: .continuous)
-                    .stroke(color.opacity(0.22), lineWidth: 1)
-            )
+        return HStack(spacing: 4) {
+            Text(tab.isRunning ? L10n.AgentTerminal.sessionRunning : L10n.AgentTerminal.sessionExited)
+            if tab.isRunning {
+                Image(systemName: "chevron.down")
+                    .font(.system(size: 7, weight: .bold))
+            }
+        }
+        .font(.system(size: 10, weight: .semibold))
+        .foregroundStyle(color)
+        .padding(.horizontal, 8)
+        .frame(height: SessionIdentityMetrics.controlHeight)
+        .background(
+            Capsule(style: .continuous)
+                .fill(color.opacity(0.11))
+        )
+        .overlay(
+            Capsule(style: .continuous)
+                .stroke(color.opacity(0.22), lineWidth: 1)
+        )
     }
 
     private func hostIdentityButton(_ tab: AgentTerminalTab) -> some View {

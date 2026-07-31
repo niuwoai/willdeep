@@ -21,6 +21,11 @@ import ImageIO
 import UniformTypeIdentifiers
 
 enum AgentCaptureTools {
+    struct PersistedCapture {
+        let originalURL: URL
+        let attachment: AgentImageAttachment
+    }
+
     /// Anthropic's recommended max long edge — larger buys no quality but
     /// costs tokens and memory linearly.
     private static let maxLongEdge: CGFloat = 1568
@@ -48,24 +53,27 @@ enum AgentCaptureTools {
             .lowercased()
         let device = arguments["device"]?.stringValue()?.trimmingCharacters(in: .whitespacesAndNewlines)
         let displayIndex = arguments["display"]?.intValue()
+        let localObservationGuard = try await AgentComputerUseExecution
+            .prepareLocalObservation(
+                toolName: "capture_screenshot",
+                arguments: arguments
+            )
 
-        // Raw full-resolution capture lands here; kept on disk so a later
-        // `visual_qa_screenshot` can re-open it at full quality.
-        let captureDir = FileManager.default.temporaryDirectory
-            .appendingPathComponent("willdeep-captures", isDirectory: true)
-        try? FileManager.default.createDirectory(at: captureDir, withIntermediateDirectories: true)
-        let stamp = Int(Date().timeIntervalSince1970)
-        let rawURL = captureDir.appendingPathComponent("capture-\(target)-\(stamp).png")
-
+        let rawURL: URL
         let label: String
         switch target {
         case "mac_screen", "mac", "screen", "desktop":
-            try await captureMacScreen(to: rawURL, displayIndex: displayIndex)
+            rawURL = try await AgentComputerUseTools.captureDisplay(
+                displayIndex: displayIndex,
+                sessionPersistenceBarrier: context.sessionPersistenceBarrier
+            )
             label = "Mac screen"
         case "android", "adb", "device":
+            rawURL = try temporaryCaptureURL(target: target)
             try await captureAndroid(to: rawURL, device: device)
             label = device?.isEmpty == false ? "Android \(device!)" : "Android device"
         case "ios_simulator", "ios", "simulator", "simctl":
+            rawURL = try temporaryCaptureURL(target: target)
             try await captureIOSSimulator(to: rawURL, device: device)
             label = "iOS simulator"
         default:
@@ -74,64 +82,147 @@ enum AgentCaptureTools {
             )
         }
 
-        // Validate we actually got a non-empty image.
-        let size = (try? rawURL.resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? 0
-        guard size > 0 else {
-            throw AgentToolError.commandFailed(1, "screenshot command produced an empty file")
+        do {
+            // Validate we actually got a non-empty image.
+            let size = (try? rawURL.resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? 0
+            guard size > 0 else {
+                throw AgentToolError.commandFailed(1, "screenshot command produced an empty file")
+            }
+
+            let info = try ImageWorkflowSupport.loadImage(path: rawURL.path)
+            let originalWidth = info.image.width
+            let originalHeight = info.image.height
+
+            // Downscale for the wire; OCR runs on the full-res original.
+            let scaled = downscaled(info.image)
+            guard let jpegData = encodeJPEG(scaled, quality: jpegQuality) else {
+                throw AgentToolError.commandFailed(1, "failed to encode captured screenshot")
+            }
+            let ocrLines = (try? ImageWorkflowSupport.recognizeText(in: info.image)) ?? []
+            let ocrSection = ocrMarkdown(ocrLines)
+            let scaledNote = (scaled.width != originalWidth || scaled.height != originalHeight)
+                ? " (downscaled to \(scaled.width)x\(scaled.height) for the model)"
+                : ""
+
+            // Do not persist pixels captured across a private takeover boundary.
+            try await AgentComputerUseExecution.validateLocalObservation(
+                localObservationGuard
+            )
+            let persistedCapture = try persistCaptureArtifacts(
+                originalURL: rawURL,
+                previewData: jpegData
+            )
+            do {
+                // Close the final race between persistence and result return.
+                try await AgentComputerUseExecution.validateLocalObservation(
+                    localObservationGuard
+                )
+            } catch {
+                try? FileManager.default.removeItem(
+                    at: persistedCapture.originalURL.deletingLastPathComponent()
+                )
+                throw error
+            }
+            let attachment = persistedCapture.attachment
+
+            let payload = """
+            # Screenshot captured
+
+            Target: \(label)
+            Original size: \(originalWidth)x\(originalHeight)\(scaledNote)
+            Saved (full resolution): `\(persistedCapture.originalURL.path)`
+
+            The image is attached to this tool result. If you can see it, describe/act on it directly. If your model cannot see images, call `visual_qa_screenshot` on the saved path above for a VL description, or rely on the OCR below.
+
+            ## OCR text (local, best-effort)
+
+            \(ocrSection)
+            """
+
+            return AgentToolResult(
+                summary: "Captured \(label) (\(originalWidth)x\(originalHeight))",
+                payload: payload,
+                images: [attachment]
+            )
+        } catch {
+            if localObservationGuard != nil {
+                try? FileManager.default.removeItem(at: rawURL)
+            }
+            throw error
         }
-
-        let info = try ImageWorkflowSupport.loadImage(path: rawURL.path)
-        let originalWidth = info.image.width
-        let originalHeight = info.image.height
-
-        // Downscale for the wire; OCR runs on the full-res original.
-        let scaled = downscaled(info.image)
-        guard let jpegData = encodeJPEG(scaled, quality: jpegQuality) else {
-            throw AgentToolError.commandFailed(1, "failed to encode captured screenshot")
-        }
-        let attachment = AgentImageAttachment(
-            mimeType: "image/jpeg",
-            dataBase64: jpegData.base64EncodedString()
-        )
-
-        let ocrLines = (try? ImageWorkflowSupport.recognizeText(in: info.image)) ?? []
-        let ocrSection = ocrMarkdown(ocrLines)
-        let scaledNote = (scaled.width != originalWidth || scaled.height != originalHeight)
-            ? " (downscaled to \(scaled.width)x\(scaled.height) for the model)"
-            : ""
-
-        let payload = """
-        # Screenshot captured
-
-        Target: \(label)
-        Original size: \(originalWidth)x\(originalHeight)\(scaledNote)
-        Saved (full resolution): `\(rawURL.path)`
-
-        The image is attached to this tool result. If you can see it, describe/act on it directly. If your model cannot see images, call `visual_qa_screenshot` on the saved path above for a VL description, or rely on the OCR below.
-
-        ## OCR text (local, best-effort)
-
-        \(ocrSection)
-        """
-
-        return AgentToolResult(
-            summary: "Captured \(label) (\(originalWidth)x\(originalHeight))",
-            payload: payload,
-            images: [attachment]
-        )
     }
 
     // MARK: - Capture backends
 
-    private static func captureMacScreen(to url: URL, displayIndex: Int?) async throws {
-        // `-x` silences the shutter; `-D n` targets a specific display.
-        var args = ["-x"]
-        if let displayIndex, displayIndex > 0 {
-            args.append("-D")
-            args.append(String(displayIndex))
+    static func persistCaptureArtifacts(
+        originalURL: URL,
+        previewData: Data,
+        captureID: UUID = UUID(),
+        capturesRoot: URL = FileManager.default.homeDirectoryForCurrentUser
+            .appendingPathComponent(".willdeep/captures", isDirectory: true)
+    ) throws -> PersistedCapture {
+        let captureDirectory = capturesRoot
+            .appendingPathComponent(captureID.uuidString.lowercased(), isDirectory: true)
+        try FileManager.default.createDirectory(
+            at: captureDirectory,
+            withIntermediateDirectories: true
+        )
+
+        let originalExtension = originalURL.pathExtension.isEmpty
+            ? "png"
+            : originalURL.pathExtension.lowercased()
+        let persistedOriginalURL = captureDirectory
+            .appendingPathComponent("original.\(originalExtension)", isDirectory: false)
+        if originalURL.standardizedFileURL != persistedOriginalURL.standardizedFileURL {
+            do {
+                try FileManager.default.moveItem(at: originalURL, to: persistedOriginalURL)
+            } catch {
+                try FileManager.default.copyItem(at: originalURL, to: persistedOriginalURL)
+                try? FileManager.default.removeItem(at: originalURL)
+            }
         }
-        args.append(url.path)
-        try await runProcess(executable: "screencapture", arguments: args, stdoutToFile: nil)
+
+        let previewURL = captureDirectory.appendingPathComponent("preview.jpg", isDirectory: false)
+        try previewData.write(to: previewURL, options: [.atomic])
+        let attachment = AgentImageAttachment(
+            id: captureID,
+            mimeType: "image/jpeg",
+            filePath: previewURL.standardizedFileURL.path,
+            byteCount: previewData.count,
+            source: .capture,
+            createdAt: Date()
+        )
+        return PersistedCapture(
+            originalURL: persistedOriginalURL.standardizedFileURL,
+            attachment: attachment
+        )
+    }
+
+    static func discardPersistedCaptureArtifacts(in result: AgentToolResult) {
+        let capturesRoot = FileManager.default.homeDirectoryForCurrentUser
+            .appendingPathComponent(".willdeep/captures", isDirectory: true)
+            .standardizedFileURL
+        for image in result.images {
+            guard let filePath = image.filePath else { continue }
+            let imageURL = URL(fileURLWithPath: filePath)
+                .standardizedFileURL
+            let captureDirectory = imageURL.deletingLastPathComponent()
+            guard captureDirectory.deletingLastPathComponent() == capturesRoot else {
+                continue
+            }
+            try? FileManager.default.removeItem(at: captureDirectory)
+        }
+    }
+
+    private static func temporaryCaptureURL(target: String) throws -> URL {
+        let captureDirectory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("willdeep-captures", isDirectory: true)
+        try FileManager.default.createDirectory(
+            at: captureDirectory,
+            withIntermediateDirectories: true
+        )
+        let stamp = Int(Date().timeIntervalSince1970)
+        return captureDirectory.appendingPathComponent("capture-\(target)-\(stamp).png")
     }
 
     private static func captureAndroid(to url: URL, device: String?) async throws {

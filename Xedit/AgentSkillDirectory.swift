@@ -105,27 +105,122 @@ nonisolated struct AgentSkillEntry: Identifiable, Equatable, Sendable {
     var id: String { identifier }
 }
 
+/// Process-wide cache for filesystem skill discovery.
+///
+/// Discovery walks bundled, user, legacy, and plugin roots and may read
+/// hundreds of SKILL.md files. Keep one snapshot until a real filesystem
+/// mutation invalidates it, and collapse concurrent cold loads into one scan.
+nonisolated final class AgentSkillCatalogCache: @unchecked Sendable {
+    private let condition = NSCondition()
+    private var records: [AgentSkillEntry]?
+    private var revisionValue = 0
+    private var loadingRevision: Int?
+
+    var revision: Int {
+        condition.lock()
+        let value = revisionValue
+        condition.unlock()
+        return value
+    }
+
+    func value(loader: () -> [AgentSkillEntry]) -> [AgentSkillEntry] {
+        while true {
+            condition.lock()
+            if let records {
+                condition.unlock()
+                return records
+            }
+
+            if loadingRevision == nil {
+                let targetRevision = revisionValue
+                loadingRevision = targetRevision
+                condition.unlock()
+
+                let loadedRecords = loader()
+
+                condition.lock()
+                if revisionValue == targetRevision {
+                    records = loadedRecords
+                }
+                loadingRevision = nil
+                let currentRecords = records
+                condition.broadcast()
+                condition.unlock()
+
+                if let currentRecords {
+                    return currentRecords
+                }
+                continue
+            }
+
+            condition.wait()
+            condition.unlock()
+        }
+    }
+
+    func invalidate() {
+        condition.lock()
+        revisionValue &+= 1
+        records = nil
+        condition.broadcast()
+        condition.unlock()
+    }
+}
+
 nonisolated enum AgentSkillDirectory {
     private struct SkillRoot {
         let url: URL
         let source: AgentSkillSource
     }
 
+    private static let catalogCache = AgentSkillCatalogCache()
+
     /// Discovers built-in skills, user skills under ~/.codex/skills,
     /// and plugin-cache skills. Returns up to ~300 records sorted by
     /// source and identifier.
     static func list(includeDisabled: Bool = false) -> [AgentSkillEntry] {
         let settings = AgentSkillSettingsStore.load()
+        let records = catalogCache.value {
+            scanSkillRoots()
+        }
+
+        return records.compactMap { record in
+            let isEnabled = settings.isEnabled(identifier: record.identifier)
+            guard includeDisabled || isEnabled else { return nil }
+            return AgentSkillEntry(
+                identifier: record.identifier,
+                name: record.name,
+                description: record.description,
+                url: record.url,
+                source: record.source,
+                isEnabled: isEnabled
+            )
+        }
+    }
+
+    /// Current filesystem cache revision. UI consumers can cheaply decide
+    /// whether an already displayed catalog needs an asynchronous refresh.
+    static var cacheRevision: Int {
+        catalogCache.revision
+    }
+
+    /// Call after a skill file or directory is created, updated, or removed.
+    /// Enabled/disabled settings do not need invalidation because `list`
+    /// overlays those flags on the cached filesystem records.
+    static func invalidateCache() {
+        catalogCache.invalidate()
+    }
+
+    private static func scanSkillRoots() -> [AgentSkillEntry] {
         var records: [AgentSkillEntry] = []
 
         for root in skillRoots() {
-            records.append(contentsOf: discover(in: root, settings: settings))
+            records.append(contentsOf: discover(in: root))
             if records.count >= 300 { break }
         }
 
         let deduped = dedupe(records)
-        let filtered = includeDisabled ? deduped : deduped.filter(\.isEnabled)
-        return filtered.sorted { lhs, rhs in
+        return deduped.sorted { lhs, rhs in
             if lhs.source != rhs.source {
                 return sourceOrder(lhs.source) < sourceOrder(rhs.source)
             }
@@ -135,9 +230,15 @@ nonisolated enum AgentSkillDirectory {
 
     /// Settings panes are created on the main actor. Keep directory walking
     /// and SKILL.md parsing off that actor so switching panes stays responsive.
-    static func listAsync(includeDisabled: Bool = false) async -> [AgentSkillEntry] {
+    static func listAsync(
+        includeDisabled: Bool = false,
+        forceRefresh: Bool = false
+    ) async -> [AgentSkillEntry] {
         await Task.detached(priority: .userInitiated) {
-            list(includeDisabled: includeDisabled)
+            if forceRefresh {
+                invalidateCache()
+            }
+            return list(includeDisabled: includeDisabled)
         }.value
     }
 
@@ -215,7 +316,7 @@ nonisolated enum AgentSkillDirectory {
         return roots
     }
 
-    private static func discover(in root: SkillRoot, settings: AgentSkillSettings) -> [AgentSkillEntry] {
+    private static func discover(in root: SkillRoot) -> [AgentSkillEntry] {
         guard FileManager.default.fileExists(atPath: root.url.path),
               let enumerator = FileManager.default.enumerator(
                 at: root.url,
@@ -244,7 +345,7 @@ nonisolated enum AgentSkillDirectory {
                 description: metadata.description.isEmpty ? "(no description)" : metadata.description,
                 url: url,
                 source: root.source,
-                isEnabled: settings.isEnabled(identifier: identifier)
+                isEnabled: true
             ))
 
             if records.count >= 300 { break }

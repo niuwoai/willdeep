@@ -157,23 +157,22 @@ struct AgentStatsDashboard: View {
         }
     }
 
+    /// All aggregates come from AppState's memoized model: recomputed only
+    /// when the snapshots change, not on every body evaluation.
+    private var dashboardModel: AgentUsageDashboardModel {
+        appState.agentUsageDashboardModel()
+    }
+
     private var overview: AgentUsageOverview {
-        AgentUsageStats.overview(
-            for: filteredUsageSnapshots,
-            allTimeStreakSessions: appState.agentUsageSnapshots
-        )
+        dashboardModel.overview
     }
 
     private var modelUsageRows: [AgentModelUsageRow] {
-        AgentUsageStats.modelUsage(for: filteredUsageSnapshots)
+        dashboardModel.modelUsage
     }
 
     private var capabilityRows: [AgentCapabilityUsageRow] {
-        AgentUsageStats.capabilityUsage(for: filteredUsageSnapshots)
-    }
-
-    private var filteredUsageSnapshots: [AgentUsageSessionSnapshot] {
-        appState.agentUsageSnapshots
+        dashboardModel.capabilityUsage
     }
 
     private var profileHeader: some View {
@@ -454,10 +453,7 @@ struct AgentStatsDashboard: View {
     }
 
     private var activityCells: [[AgentHeatmapCell]] {
-        AgentUsageStats.heatmap(
-            for: filteredUsageSnapshots,
-            weekCount: AgentStatsDashboardLayout.maximumHeatmapWeeks
-        )
+        dashboardModel.heatmapCells
     }
 
     private func activityDisplayCounts(_ cells: [[AgentHeatmapCell]]) -> [[Int]] {
@@ -507,36 +503,19 @@ struct AgentStatsDashboard: View {
     }
 
     private var peakTaskTokenCount: Int {
-        filteredUsageSnapshots.map { session in
-            session.messages.reduce(0) { $0 + dashboardTokenCount(for: $1) }
-        }.max() ?? 0
+        dashboardModel.peakTaskTokenCount
     }
 
     private var longestTaskDuration: TimeInterval {
-        filteredUsageSnapshots.compactMap { session -> TimeInterval? in
-            let dates = session.messages.map(\.createdAt)
-            guard let first = dates.min(), let last = dates.max(), last > first else {
-                return nil
-            }
-            return last.timeIntervalSince(first)
-        }.max() ?? 0
+        dashboardModel.longestTaskDuration
     }
 
     private var managedRoutingRate: Double {
-        guard !filteredUsageSnapshots.isEmpty else { return 0 }
-        let managed = filteredUsageSnapshots.count(where: \.isManagedRouting)
-        return Double(managed) / Double(filteredUsageSnapshots.count)
+        dashboardModel.managedRoutingRate
     }
 
     private var reasoningUsageRate: Double {
-        let assistantMessages = filteredUsageSnapshots
-            .flatMap(\.messages)
-            .filter { $0.role == .assistant }
-        guard !assistantMessages.isEmpty else { return 0 }
-        let reasoned = assistantMessages.count {
-            ($0.reasoningTokens ?? 0) > 0 || $0.reasoningCharacterCount > 0
-        }
-        return Double(reasoned) / Double(assistantMessages.count)
+        dashboardModel.reasoningUsageRate
     }
 
     private var reasoningStrengthLabel: String {
@@ -555,17 +534,7 @@ struct AgentStatsDashboard: View {
     }
 
     private var uniqueToolCount: Int {
-        Set(filteredUsageSnapshots.flatMap(\.messages).flatMap(\.toolCallNames)).count
-    }
-
-    private func dashboardTokenCount(for message: AgentUsageMessageSnapshot) -> Int {
-        if let usage = message.usageTokens, usage > 0 {
-            return usage
-        }
-        let textCharacters = message.contentCharacterCount
-            + message.reasoningCharacterCount
-            + message.toolCallArgumentCharacterCount
-        return max(1, textCharacters / 4 + message.imageCount * 256)
+        dashboardModel.uniqueToolCount
     }
 
     private func pluginTint(at index: Int) -> Color {
@@ -1279,6 +1248,7 @@ struct PlanStatusPill: View {
 struct AgentRunningTasksRow: View {
     let count: Int
     var isAgentTurnActive: Bool = true
+    var labelOverride: String? = nil
     var detail: String? = nil
     var onTap: (() -> Void)? = nil
 
@@ -1326,6 +1296,9 @@ struct AgentRunningTasksRow: View {
     }
 
     private var label: String {
+        if let labelOverride, !labelOverride.isEmpty {
+            return labelOverride
+        }
         if isAgentTurnActive {
             return count == 1
                 ? L10n.Transcript.runningTaskOne

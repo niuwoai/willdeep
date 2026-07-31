@@ -48,7 +48,7 @@ struct AgentContextBuilderPromptTests {
         #expect(!compact.contains("list_mcp_servers"))
     }
 
-    @Test("stable v11 prompt text is guarded by a deterministic hash snapshot")
+    @Test("stable v22 prompt text is guarded by a deterministic hash snapshot")
     func testStablePromptSnapshotHash() {
         let prompt = AgentContextBuilder.stableSystemPromptPrefix(
             toolsEnabled: true,
@@ -61,8 +61,29 @@ struct AgentContextBuilderPromptTests {
             promptProfile: .standard
         )
 
-        #expect(AgentContextBuilder.stablePrefixVersion == "willdeep-agent-system-v11")
+        #expect(AgentContextBuilder.stablePrefixVersion == "willdeep-agent-system-v22")
         #expect(diagnostics.hash == AgentContextBuilder.stablePrefixSnapshotHash)
+    }
+
+    @Test("stable prompt keeps background work productive and verification sound")
+    func testStablePromptBackgroundWorkContract() {
+        let standard = AgentContextBuilder.stableSystemPromptPrefix(
+            toolsEnabled: true,
+            promptProfile: .standard
+        )
+        let compact = AgentContextBuilder.stableSystemPromptPrefix(
+            toolsEnabled: true,
+            promptProfile: .compact
+        )
+
+        for prompt in [standard, compact] {
+            #expect(prompt.contains("continue independent"))
+            #expect(prompt.contains("completion notice"))
+        }
+        #expect(standard.contains("result stale"))
+        #expect(compact.contains("result as stale"))
+        #expect(standard.contains("CHANGELOG"))
+        #expect(standard.contains("Never edit source code, build configuration"))
     }
 
     @Test("compact and extended prompt texts carry their own hash guards")

@@ -356,7 +356,7 @@ final class AgentChatHistoryNSTextView: NSTextView {
             self.dismissSelectionAction()
             self.onAddSelectionToTask?(selectedText)
         }
-        addSubview(actionView)
+        addSubview(actionView, positioned: .above, relativeTo: nil)
         selectionActionView = actionView
         return actionView
     }
@@ -585,7 +585,13 @@ final class AgentChatHistoryNSTextView: NSTextView {
     }
 
     func applySearch(query: String, activeMatchIndex: Int?, isDark: Bool) {
-        currentSearchQuery = AgentTranscriptSearch.normalizedQuery(query)
+        let normalizedQuery = AgentTranscriptSearch.normalizedQuery(query)
+        guard normalizedQuery != currentSearchQuery
+                || activeMatchIndex != currentActiveSearchMatchIndex
+                || isDark != currentSearchIsDark else {
+            return
+        }
+        currentSearchQuery = normalizedQuery
         currentActiveSearchMatchIndex = activeMatchIndex
         currentSearchIsDark = isDark
         applySearchHighlight()
@@ -598,10 +604,37 @@ final class AgentChatHistoryNSTextView: NSTextView {
             activeMatchIndex: currentActiveSearchMatchIndex,
             isDark: currentSearchIsDark
         )
-        textStorage?.setAttributedString(result.attributedString)
+        replaceTranscriptStoragePreservingSelection(with: result.attributedString)
         reportSearchResultCountIfNeeded(result.matchCount)
         scrollActiveSearchMatchIfNeeded(ranges: result.matchRanges)
         invalidateIntrinsicContentSize()
+    }
+
+    /// Hover and search highlighting only change attributes. Replacing the
+    /// whole NSTextStorage normally collapses the selection, which makes the
+    /// selection action disappear immediately after it is shown. Preserve a
+    /// valid selection whenever the underlying conversation text is unchanged.
+    private func replaceTranscriptStoragePreservingSelection(
+        with attributedString: NSAttributedString
+    ) {
+        guard let textStorage else { return }
+        let range = selectedRange()
+        let canPreserveSelection = range.location != NSNotFound
+            && range.length > 0
+            && NSMaxRange(range) <= attributedString.length
+            && textStorage.string == attributedString.string
+
+        if canPreserveSelection {
+            delegate = nil
+        }
+        textStorage.setAttributedString(attributedString)
+        if canPreserveSelection {
+            setSelectedRange(range)
+            delegate = self
+            if let selectedText = currentSelectedConversationText() {
+                showSelectionAction(selectedText: selectedText)
+            }
+        }
     }
 
     private func reportSearchResultCountIfNeeded(_ count: Int) {
@@ -749,37 +782,67 @@ final class AgentChatHistoryNSTextView: NSTextView {
     }
 }
 
-private final class AgentChatSelectionActionView: NSVisualEffectView {
+enum AgentChatSelectionActionMetrics {
+    static let cornerRadius: CGFloat = 8
+    static let horizontalPadding: CGFloat = 9
+    static let height: CGFloat = 28
+    static let borderWidth: CGFloat = 0.5
+    static let shadowRadius: CGFloat = 7
+    static let shadowOffset = NSSize(width: 0, height: -2)
+    static let lightShadowOpacity: Float = 0.16
+    static let darkShadowOpacity: Float = 0.36
+
+    static func backgroundColor(isDark: Bool, isHovered: Bool) -> NSColor {
+        if isDark {
+            return NSColor(calibratedWhite: isHovered ? 0.22 : 0.16, alpha: 0.98)
+        }
+        return NSColor(calibratedWhite: isHovered ? 0.965 : 1, alpha: 0.98)
+    }
+
+    static func borderColor(isDark: Bool) -> NSColor {
+        isDark
+            ? NSColor.white.withAlphaComponent(0.16)
+            : NSColor.black.withAlphaComponent(0.13)
+    }
+}
+
+private final class AgentChatSelectionActionView: NSView {
     private let actionButton: NSButton
+    private var hoverTrackingArea: NSTrackingArea?
+    private var isHovered = false
     var onAdd: (() -> Void)?
 
     init(title: String) {
         actionButton = NSButton(title: title, target: nil, action: nil)
         super.init(frame: .zero)
 
-        material = .popover
-        blendingMode = .withinWindow
-        state = .active
         wantsLayer = true
-        layer?.cornerRadius = 8
+        layer?.cornerRadius = AgentChatSelectionActionMetrics.cornerRadius
         layer?.masksToBounds = false
-        shadow = NSShadow()
-        shadow?.shadowColor = NSColor.black.withAlphaComponent(0.18)
-        shadow?.shadowBlurRadius = 8
-        shadow?.shadowOffset = NSSize(width: 0, height: -2)
+        layer?.shadowColor = NSColor.black.cgColor
+        layer?.shadowRadius = AgentChatSelectionActionMetrics.shadowRadius
+        layer?.shadowOffset = AgentChatSelectionActionMetrics.shadowOffset
+        applyAppearance()
 
         actionButton.target = self
         actionButton.action = #selector(addToTask(_:))
         actionButton.isBordered = false
+        actionButton.focusRingType = .none
         actionButton.font = NSFont.systemFont(ofSize: 13, weight: .medium)
         actionButton.contentTintColor = .labelColor
         actionButton.translatesAutoresizingMaskIntoConstraints = false
         addSubview(actionButton)
         NSLayoutConstraint.activate([
-            actionButton.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 10),
-            actionButton.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -10),
-            actionButton.topAnchor.constraint(equalTo: topAnchor, constant: 5),
-            actionButton.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -5),
+            actionButton.leadingAnchor.constraint(
+                equalTo: leadingAnchor,
+                constant: AgentChatSelectionActionMetrics.horizontalPadding
+            ),
+            actionButton.trailingAnchor.constraint(
+                equalTo: trailingAnchor,
+                constant: -AgentChatSelectionActionMetrics.horizontalPadding
+            ),
+            actionButton.topAnchor.constraint(equalTo: topAnchor),
+            actionButton.bottomAnchor.constraint(equalTo: bottomAnchor),
         ])
     }
 
@@ -788,7 +851,80 @@ private final class AgentChatSelectionActionView: NSVisualEffectView {
     }
 
     var preferredSize: NSSize {
-        NSSize(width: ceil(actionButton.intrinsicContentSize.width) + 20, height: 30)
+        NSSize(
+            width: ceil(actionButton.intrinsicContentSize.width)
+                + AgentChatSelectionActionMetrics.horizontalPadding * 2,
+            height: AgentChatSelectionActionMetrics.height
+        )
+    }
+
+    override func viewDidChangeEffectiveAppearance() {
+        super.viewDidChangeEffectiveAppearance()
+        applyAppearance()
+    }
+
+    override func updateTrackingAreas() {
+        if let hoverTrackingArea {
+            removeTrackingArea(hoverTrackingArea)
+        }
+        let trackingArea = NSTrackingArea(
+            rect: .zero,
+            options: [.activeInKeyWindow, .inVisibleRect, .mouseEnteredAndExited],
+            owner: self,
+            userInfo: nil
+        )
+        addTrackingArea(trackingArea)
+        hoverTrackingArea = trackingArea
+        super.updateTrackingAreas()
+    }
+
+    override func mouseEntered(with event: NSEvent) {
+        isHovered = true
+        needsDisplay = true
+        super.mouseEntered(with: event)
+    }
+
+    override func mouseExited(with event: NSEvent) {
+        isHovered = false
+        needsDisplay = true
+        super.mouseExited(with: event)
+    }
+
+    override func layout() {
+        super.layout()
+        layer?.shadowPath = CGPath(
+            roundedRect: bounds,
+            cornerWidth: AgentChatSelectionActionMetrics.cornerRadius,
+            cornerHeight: AgentChatSelectionActionMetrics.cornerRadius,
+            transform: nil
+        )
+    }
+
+    override func draw(_ dirtyRect: NSRect) {
+        super.draw(dirtyRect)
+        let isDark = effectiveAppearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
+        let borderInset = AgentChatSelectionActionMetrics.borderWidth / 2
+        let path = NSBezierPath(
+            roundedRect: bounds.insetBy(dx: borderInset, dy: borderInset),
+            xRadius: AgentChatSelectionActionMetrics.cornerRadius,
+            yRadius: AgentChatSelectionActionMetrics.cornerRadius
+        )
+        AgentChatSelectionActionMetrics.backgroundColor(
+            isDark: isDark,
+            isHovered: isHovered
+        ).setFill()
+        path.fill()
+        AgentChatSelectionActionMetrics.borderColor(isDark: isDark).setStroke()
+        path.lineWidth = AgentChatSelectionActionMetrics.borderWidth
+        path.stroke()
+    }
+
+    private func applyAppearance() {
+        let isDark = effectiveAppearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
+        layer?.shadowOpacity = isDark
+            ? AgentChatSelectionActionMetrics.darkShadowOpacity
+            : AgentChatSelectionActionMetrics.lightShadowOpacity
+        needsDisplay = true
     }
 
     @objc private func addToTask(_ sender: NSButton) {

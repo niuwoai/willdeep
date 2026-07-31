@@ -1,72 +1,31 @@
 ---
 name: send-file
-description: "Send files, photos, audio, or videos to the current conversation (channel chat or GUI thread). MUST use whenever you need to deliver any file to the user. Covers: sending images, selfies, generated art, documents, music, videos, voice messages, screenshots, or ANY file the user asks to see. Triggers: 'send it to me', 'send it over', 'let me see', 'send me', 'show me', 'send photo', 'send file', sharing any file path. NEVER paste raw file paths in text — ALWAYS use this skill to send files."
-allowed-tools:
-  - Bash
+description: Deliver a local file, image, audio clip, video, or document through the current WillDeep conversation. Use when the user asks to see, open, download, or receive a generated or existing artifact.
 ---
 
-# Send File Skill
+# Send a File
 
-Send files directly to the current conversation. For channel chats, `ALMA_CHAT_ID` is auto-injected; for GUI threads, `ALMA_THREAD_ID` is auto-injected.
+## WillDeep Conversation
 
-## Commands
+1. Verify that the file exists and is the intended artifact.
+2. For an image, video, or audio file, embed it with Markdown image syntax using the absolute local path.
+3. For code, documents, archives, and other downloadable files, use a Markdown link with an absolute local path.
+4. Use a concise descriptive label instead of exposing an unexplained raw path.
+5. Mention the file type and what it contains.
 
-```bash
-# Send a photo/image
-alma send photo /path/to/image.jpg "optional caption"
+Examples:
 
-# Force target chat explicitly
-alma send photo --chat 12345 /path/to/image.jpg "optional caption"
-
-# Force target GUI thread explicitly
-alma send photo --thread <threadId> /path/to/image.jpg "optional caption"
-
-# Send a document/file
-alma send file /path/to/document.pdf "optional caption"
-
-# Send audio/music
-alma send audio /path/to/song.mp3 "optional caption"
-
-# Send a video
-alma send video /path/to/video.mp4 "optional caption"
-
-# Send a voice message (ogg format)
-alma send voice /path/to/voice.ogg
+```markdown
+![界面截图](/absolute/path/screenshot.png)
+[下载报告](/absolute/path/report.pdf)
 ```
 
-## Type Aliases
+## External Channels
 
-- `photo` / `image` → sends as photo (compressed, inline preview)
-- `file` / `document` / `doc` → sends as document (original quality, download)
-- `audio` / `music` → sends as audio (with player UI)
-- `video` → sends as video (inline player)
-- `voice` → sends as voice message
+For Discord, Telegram, Feishu, or another channel, use only a configured connector:
 
-## Target Resolution
+1. Discover it with `list_mcp_servers` and `list_mcp_tools`, or use `lark_cli` for supported Feishu operations.
+2. Confirm the target conversation.
+3. Call the exact discovered upload or send tool.
 
-- Preferred explicit flags: `--chat <chatId>` or `--thread <threadId>`
-- If no explicit target is provided:
-  - use `ALMA_CHAT_ID` when present
-  - otherwise use `ALMA_THREAD_ID`
-
-## GUI Thread Limitation
-
-- In GUI thread mode (`--thread` or `ALMA_THREAD_ID`), only `photo`/`image` is currently supported
-- `file`/`audio`/`video`/`voice` are only supported for channel chat targets
-
-## Tips
-
-- **Photos** are compressed by Telegram. If quality matters, send as `file` instead.
-- **Caption** is optional — omit it if not needed.
-- `ALMA_CHAT_ID` / `ALMA_THREAD_ID` are set automatically in normal tool execution.
-- If you want to send to another destination, pass `--chat` or `--thread` explicitly.
-- Always verify the file exists before sending.
-
-## ⚠️ IMPORTANT
-
-When you generate an image, create a file, or produce any output the user should receive as a file:
-1. Generate/create the file
-2. Use `alma send` to deliver it
-3. Mention what you sent in your text reply (but do NOT include the raw file path)
-
-Do NOT just paste file paths in your reply and expect them to be auto-sent. YOU must explicitly send files.
+Never invent an upload command. Do not send secrets, credentials, unrelated private files, or artifacts outside the user's requested destination.

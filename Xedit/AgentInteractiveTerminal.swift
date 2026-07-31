@@ -85,6 +85,7 @@ struct RuntimeTerminalProfile: Codable, Equatable {
 struct AgentTerminalRawSnapshot: Sendable {
     let tabID: UUID
     let isRunning: Bool
+    let isZModemTransferActive: Bool
     let runtimeName: String
     let runtimeTarget: String
     let recentCommands: [String]
@@ -94,6 +95,15 @@ struct AgentTerminalRawSnapshot: Sendable {
     /// up before capture even if a resize hasn't reflowed it yet.
     let cols: Int
     let rows: Int
+}
+
+struct AgentTerminalCommandDispatch: Sendable {
+    let result: AgentToolResult
+    /// Exact tab that received the command. The tool layer uses this for its
+    /// bounded follow-up snapshot even if the user switches the active tab
+    /// while output is arriving.
+    let terminalTabID: UUID
+    let zmodemTicket: TerminalZModemTransferTicket?
 }
 
 /// Result of the "提取主机标识" probe: what machine the tab's shell is
@@ -108,12 +118,16 @@ struct AgentTerminalHostIdentity: Equatable {
 
 enum AgentTerminalControl: String, CaseIterable {
     case ctrlC = "ctrl_c"
+    case ctrlD = "ctrl_d"
+    case ctrlRightBracket = "ctrl_right_bracket"
     case enter
     case escape
 
     var bytes: [UInt8] {
         switch self {
         case .ctrlC: return [3]
+        case .ctrlD: return [4]
+        case .ctrlRightBracket: return [29]
         case .enter: return [13]
         case .escape: return [27]
         }
@@ -122,6 +136,8 @@ enum AgentTerminalControl: String, CaseIterable {
     var displayName: String {
         switch self {
         case .ctrlC: return "Ctrl-C"
+        case .ctrlD: return "Ctrl-D"
+        case .ctrlRightBracket: return "Ctrl-]"
         case .enter: return "Enter"
         case .escape: return "Esc"
         }
@@ -1029,14 +1045,46 @@ final class AgentLocalProcessTerminalView: TerminalView, TerminalViewDelegate, L
         feed(text: "")
     }
 
-    func prepareZModemPathSelection(_ selection: TerminalZModemPathSelection?) {
+    var isZModemTransferActive: Bool {
+        zmodemActive
+    }
+
+    func prepareZModemPathSelection(
+        _ selection: TerminalZModemPathSelection?
+    ) -> TerminalZModemTransferTicket? {
         zmodemBridge.preparePathSelection(selection)
+    }
+
+    /// Called by the ZMODEM bridge at session boundaries so the mirror
+    /// gate reacts immediately instead of one PTY chunk late.
+    func zmodemStateDidChange(active: Bool) {
+        zmodemActive = active
+    }
+
+    /// Feed a ZMODEM status line to BOTH the visible terminal and the
+    /// snapshot mirror. During a transfer the raw PTY stream bypasses the
+    /// mirror, so status lines are the only thing keeping the agent's
+    /// `terminal_snapshot` truthful about what the terminal is doing.
+    func feedZModemStatusLine(_ text: String) {
+        let bytes = Array(text.utf8)
+        feed(byteArray: bytes[...])
+        snapshotMirror.queue.async { [snapshotMirror] in
+            snapshotMirror.feedOnQueue(bytes)
+        }
+        refreshVisibleTerminalDisplay()
     }
 
     // MARK: TerminalViewDelegate
 
     func send(source: TerminalView, data: ArraySlice<UInt8>) {
         onUserActivity?()
+        // While a ZMODEM transfer owns the PTY, keystrokes must not reach
+        // the remote — they would be injected into the protocol stream and
+        // corrupt frames. The bridge swallows them; Ctrl+C aborts the
+        // transfer on both ends.
+        if zmodemActive, zmodemBridge.handleUserInput(Array(data)) {
+            return
+        }
         if shouldRecordInput?() == true {
             let bytes = Array(data)
             let echoEnabled = cachedTerminalEchoEnabled()
@@ -1121,13 +1169,17 @@ final class AgentLocalProcessTerminalView: TerminalView, TerminalViewDelegate, L
         }
         DispatchQueue.main.async { [weak self] in
             guard let self else { return }
-            let consumed = self.zmodemBridge.handleRemoteBytes(bytes)
+            // The bridge returns the bytes the terminal should render:
+            // usually the chunk unchanged, nil while a transfer consumes the
+            // stream, or a substitute chunk when the detector releases bytes
+            // it had held across a read boundary.
+            let renderable = self.zmodemBridge.handleRemoteBytes(bytes)
             self.zmodemActive = self.zmodemBridge.isActive
-            if consumed { return }
-            if self.shouldRecordInput?() == true, !self.isExpectedEcho(bytes[...]) {
+            guard let renderable, !renderable.isEmpty else { return }
+            if self.shouldRecordInput?() == true, !self.isExpectedEcho(renderable[...]) {
                 self.invalidateTerminalEchoCache()
             }
-            self.feed(byteArray: bytes[...])
+            self.feed(byteArray: renderable[...])
             self.refreshVisibleTerminalDisplay()
         }
     }
@@ -1169,6 +1221,14 @@ final class AgentLocalProcessTerminalView: TerminalView, TerminalViewDelegate, L
     }
 
     func terminate() {
+        let rootPID = process.shellPid
+        if rootPID > 0 {
+            // SwiftTerm only SIGTERMs its immediate child. Capture and signal
+            // the complete tree first, then let SwiftTerm close the PTY so an
+            // SSH peer receives hangup. Survivors are SIGKILLed after the
+            // shared grace period with PID-reuse protection.
+            AgentProcessSupport.terminateProcessTree(rootPID: rootPID)
+        }
         process.terminate()
     }
 
@@ -1218,6 +1278,13 @@ final class AgentLocalProcessTerminalView: TerminalView, TerminalViewDelegate, L
 @MainActor
 final class AgentTerminalTab: ObservableObject, Identifiable, AgentTerminalProcessDelegate {
     nonisolated static let delegatedShellExecutable = "/bin/sh"
+
+    /// Hard ceiling on a single automation command typed into the pty. The
+    /// tty input queue (MAX_INPUT, 1024 bytes on Darwin) drops the tail of
+    /// anything larger once the interactive shell's echo backs up the output
+    /// queue. Delegated invocations are `/bin/sh <runner path>` — ~100 bytes —
+    /// so this only fires if someone reintroduces an inline wrapper.
+    nonisolated static let maximumAutomationCommandBytes = 512
 
     let id: UUID
     /// Which Agent session opened this tab. nil for tabs the user opened
@@ -1286,7 +1353,11 @@ final class AgentTerminalTab: ObservableObject, Identifiable, AgentTerminalProce
     ) {
         terminalView.invalidateTerminalEchoCache()
         applyAppearance(settings, skin: skin)
-        let env = Self.environmentArray(settings: settings)
+        let env = EditorTerminalLaunchEnvironment.array(
+            settings: settings,
+            injectClaudeCodeCompatibility: kind == .localShell,
+            markAsAgentTerminal: true
+        )
         switch kind {
         case .localShell:
             let shell = Self.loginShellPath(settings.shellPath)
@@ -1549,6 +1620,18 @@ final class AgentTerminalTab: ObservableObject, Identifiable, AgentTerminalProce
         zmodemPathSelection: TerminalZModemPathSelection? = nil,
         secretRedactionValues: [String] = []
     ) throws -> AgentToolResult {
+        try sendApprovedCommandDispatch(
+            command,
+            zmodemPathSelection: zmodemPathSelection,
+            secretRedactionValues: secretRedactionValues
+        ).result
+    }
+
+    func sendApprovedCommandDispatch(
+        _ command: String,
+        zmodemPathSelection: TerminalZModemPathSelection? = nil,
+        secretRedactionValues: [String] = []
+    ) throws -> AgentTerminalCommandDispatch {
         let trimmed = command.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { throw AgentToolError.missingArgument("command") }
         guard isRunning else {
@@ -1557,11 +1640,13 @@ final class AgentTerminalTab: ObservableObject, Identifiable, AgentTerminalProce
         let visibleCommand = AgentSecretStore.redact(trimmed, secretValues: secretRedactionValues)
         recordCommand(visibleCommand)
         lastActivity = Date()
-        terminalView.prepareZModemPathSelection(zmodemPathSelection)
+        let zmodemTicket = terminalView.prepareZModemPathSelection(zmodemPathSelection)
         terminalView.send(txt: trimmed + "\n")
         var payload = """
-        Sent command to Agent Terminal tab \"\(title)\".
+        Command dispatch confirmed for Agent Terminal tab \"\(title)\".
         Command: \(visibleCommand)
+
+        This dispatch confirmation does not contain command output.
         """
         switch zmodemPathSelection {
         case .upload(let files):
@@ -1571,17 +1656,26 @@ final class AgentTerminalTab: ObservableObject, Identifiable, AgentTerminalProce
         case nil:
             break
         }
-        return AgentToolResult(summary: "terminal: \(visibleCommand.prefix(80))", payload: payload)
+        return AgentTerminalCommandDispatch(
+            result: AgentToolResult(summary: "terminal: \(visibleCommand.prefix(80))", payload: payload),
+            terminalTabID: id,
+            zmodemTicket: zmodemTicket
+        )
     }
 
     func sendApprovedControl(_ control: AgentTerminalControl) throws -> AgentToolResult {
         guard isRunning else {
             throw AgentToolError.invalidArgument("Open and start an Agent Terminal tab before sending control input.")
         }
-        lastActivity = Date()
-        terminalView.send(control.bytes)
+        sendUserControl(control)
         let payload = "Sent \(control.displayName) to Agent Terminal tab \"\(title)\"."
         return AgentToolResult(summary: "terminal: \(control.displayName)", payload: payload)
+    }
+
+    func sendUserControl(_ control: AgentTerminalControl) {
+        guard isRunning else { return }
+        lastActivity = Date()
+        terminalView.send(control.bytes)
     }
 
     func sendAutomationCommand(_ command: String, displayCommand: String) throws {
@@ -1590,6 +1684,14 @@ final class AgentTerminalTab: ObservableObject, Identifiable, AgentTerminalProce
         }
         guard !isAutomationBusy else {
             throw AgentToolError.invalidArgument("The bound Agent Terminal tab is already running another delegated task.")
+        }
+        // Typed into the pty as input, so it is bound by the tty input queue —
+        // see AgentDelegatedTerminalRunner for the full failure mode. Anything
+        // large must be staged in a runner file and invoked by path.
+        guard command.utf8.count <= Self.maximumAutomationCommandBytes else {
+            throw AgentToolError.invalidArgument(
+                "Automation command is \(command.utf8.count) bytes; the pty input queue truncates past \(Self.maximumAutomationCommandBytes). Stage it in a runner file and send `/bin/sh <path>` instead."
+            )
         }
         isAutomationBusy = true
         title = "\(displayCommand) · sh"
@@ -1691,17 +1793,6 @@ final class AgentTerminalTab: ObservableObject, Identifiable, AgentTerminalProce
             return shell
         }
         return "/bin/zsh"
-    }
-
-    private static func environmentArray(settings: EditorTerminalSettings) -> [String] {
-        var environment = ProcessInfo.processInfo.environment
-        environment["TERM"] = "xterm-256color"
-        environment["WILLDEEP_AGENT_TERMINAL"] = "1"
-        environment["LANG"] = environment["LANG"] ?? "en_US.UTF-8"
-        for (key, value) in settings.environment {
-            environment[key] = value
-        }
-        return environment.sorted { $0.key < $1.key }.map { "\($0.key)=\($0.value)" }
     }
 
     private static func expandedPath(_ value: String) -> String {
@@ -1908,6 +1999,16 @@ final class AgentInteractiveTerminalController: ObservableObject {
         if activeTabID == id {
             activeTabID = tabs.last?.id
         }
+    }
+
+    func stopTab(id: UUID) {
+        guard let target = tab(id: id), !target.isAutomationBusy else { return }
+        target.terminate()
+    }
+
+    func sendUserControl(_ control: AgentTerminalControl, toTabID id: UUID) {
+        guard let target = tab(id: id), !target.isAutomationBusy else { return }
+        target.sendUserControl(control)
     }
 
     func closeTabs(openedBy sessionID: UUID) {
@@ -2379,6 +2480,7 @@ final class AgentInteractiveTerminalController: ObservableObject {
         return AgentTerminalRawSnapshot(
             tabID: tab.id,
             isRunning: tab.isRunning,
+            isZModemTransferActive: tab.terminalView.isZModemTransferActive,
             runtimeName: tab.title,
             runtimeTarget: tab.runtimeTarget,
             recentCommands: tab.recentCommands,
@@ -2401,6 +2503,25 @@ final class AgentInteractiveTerminalController: ObservableObject {
             opensLocalTabIfNeeded: true
         )
         return try tab.sendApprovedCommand(
+            command,
+            zmodemPathSelection: zmodemPathSelection,
+            secretRedactionValues: secretRedactionValues
+        )
+    }
+
+    func sendApprovedCommandDispatch(
+        _ command: String,
+        targetTabID: UUID? = nil,
+        sessionID: UUID? = nil,
+        zmodemPathSelection: TerminalZModemPathSelection? = nil,
+        secretRedactionValues: [String] = []
+    ) throws -> AgentTerminalCommandDispatch {
+        let tab = try tabForToolUse(
+            targetTabID: targetTabID,
+            sessionID: sessionID,
+            opensLocalTabIfNeeded: true
+        )
+        return try tab.sendApprovedCommandDispatch(
             command,
             zmodemPathSelection: zmodemPathSelection,
             secretRedactionValues: secretRedactionValues
@@ -2517,7 +2638,8 @@ final class AgentInteractiveTerminalController: ObservableObject {
         sessionID: UUID,
         displayCommand: String,
         timeout: TimeInterval,
-        secretRedactionValues: [String]
+        secretRedactionValues: [String],
+        progressSink: (@MainActor (AgentDelegatedTerminalProgressUpdate) -> Void)? = nil
     ) async throws -> AgentToolResult {
         guard let config = defaultLocalTabProvider?(sessionID) else {
             throw AgentToolError.invalidArgument(
@@ -2558,6 +2680,36 @@ final class AgentInteractiveTerminalController: ObservableObject {
 
         let startupDeadline = Date().addingTimeInterval(15)
         var didStart = false
+        var nextProgressReadAt = Date()
+        var lastProgressSnapshot: AgentDelegatedLiveOutputSnapshot?
+
+        func publishProgress(force: Bool = false) {
+            let rawOutput = AgentDelegatedTerminalRunner.readOutputTail(
+                from: artifacts.outputURL
+            )
+            let redacted = AgentSecretStore.redact(
+                rawOutput,
+                secretValues: secretRedactionValues
+            )
+            let snapshot = AgentDelegatedLiveOutputSnapshot.make(from: redacted)
+            guard force || snapshot != lastProgressSnapshot else { return }
+            lastProgressSnapshot = snapshot
+            progressSink?(
+                AgentDelegatedTerminalProgressUpdate(
+                    terminalTabID: tab.id,
+                    currentActivity: snapshot.currentActivity,
+                    recentOutput: snapshot.recentOutput
+                )
+            )
+        }
+
+        progressSink?(
+            AgentDelegatedTerminalProgressUpdate(
+                terminalTabID: tab.id,
+                currentActivity: nil,
+                recentOutput: nil
+            )
+        )
         while Date() < deadline {
             if Task.isCancelled {
                 _ = try? tab.sendApprovedControl(.ctrlC)
@@ -2572,8 +2724,13 @@ final class AgentInteractiveTerminalController: ObservableObject {
                     )
                 }
             }
+            if didStart, Date() >= nextProgressReadAt {
+                publishProgress()
+                nextProgressReadAt = Date().addingTimeInterval(1)
+            }
             if FileManager.default.fileExists(atPath: artifacts.statusURL.path) {
                 try? await Task.sleep(nanoseconds: 100_000_000)
+                publishProgress(force: true)
                 let statusText = (try? String(contentsOf: artifacts.statusURL, encoding: .utf8))?
                     .trimmingCharacters(in: .whitespacesAndNewlines) ?? "1"
                 let exitCode = Int(statusText) ?? 1

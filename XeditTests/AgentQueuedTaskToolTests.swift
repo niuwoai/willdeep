@@ -18,9 +18,19 @@ struct AgentQueuedTaskToolTests {
     func testListQueuedTasksReportsSessionAndBuildQueues() async throws {
         let workspace = FileManager.default.temporaryDirectory
             .appendingPathComponent("WillDeepQueuedTaskToolTests-\(UUID().uuidString)", isDirectory: true)
-        let queueDirectory = workspace.appendingPathComponent(".codex-build/queue", isDirectory: true)
+        let localStateDirectory = workspace.appendingPathComponent(".codex-build", isDirectory: true)
+        let queueDirectory = workspace.appendingPathComponent("shared-build-queue", isDirectory: true)
+        try FileManager.default.createDirectory(at: localStateDirectory, withIntermediateDirectories: true)
         try FileManager.default.createDirectory(at: queueDirectory, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: workspace) }
+        let coordinationData = try JSONSerialization.data(
+            withJSONObject: ["queue_dir": queueDirectory.path],
+            options: [.prettyPrinted]
+        )
+        try coordinationData.write(
+            to: localStateDirectory.appendingPathComponent("coordination.json", isDirectory: false),
+            options: [.atomic]
+        )
 
         let buildEntry: [String: Any] = [
             "id": "queued-build-1",
@@ -96,6 +106,7 @@ struct AgentQueuedTaskToolTests {
                         title: "修复登录流程",
                         workspaceRootPath: "/tmp/WillDeepProject",
                         workspaceDisplayName: "WillDeepProject",
+                        presentationScope: .dispatchBoard,
                         isActive: true,
                         isPinned: true,
                         isArchived: false,
@@ -107,7 +118,16 @@ struct AgentQueuedTaskToolTests {
                         interactionMode: .goal,
                         approvalMode: .smart,
                         executionAgent: .willDeep,
-                        titleIsUserSet: true
+                        titleIsUserSet: true,
+                        goalStatement: "完成登录流程修复",
+                        goalCompletedItemCount: 1,
+                        goalTotalItemCount: 2,
+                        goalIsComplete: false,
+                        goalPlanningPhase: .executing,
+                        dispatchParentProjectID: nil,
+                        dispatchTaskID: nil,
+                        isDispatchProject: true,
+                        isDispatchPaused: false
                     )
                 ]
             }
@@ -124,6 +144,9 @@ struct AgentQueuedTaskToolTests {
         #expect(result.payload.contains("provider-queued"))
         #expect(result.payload.contains("queued_messages=2"))
         #expect(result.payload.contains("\"interaction_mode\":\"goal\""))
+        #expect(result.payload.contains("\"goal_statement\":\"完成登录流程修复\""))
+        #expect(result.payload.contains("\"goal_completed_item_count\":1"))
+        #expect(result.payload.contains("\"is_dispatch_project\":true"))
     }
 
     @Test("suggest_session_title returns flash-backed suggestion snapshot")

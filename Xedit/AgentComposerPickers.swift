@@ -14,9 +14,8 @@
 //     menus for ad-hoc model IDs not in the library entries.
 //   - `AgentExecutionPickerPill`: WillDeep / Claude Code / Codex
 //     execution backend selector for the next composer turn.
-//   - `AgentModePickerPill`: Normal / Plan / Goal selector. Plan locks
-//     writes until approval; Goal gathers the objective through chat
-//     and pins it to every reply once defined.
+//   - `AgentModePickerPill`: Ordinary / Goal selector. Ordinary mode plans
+//     and executes as needed; Goal repeatedly checks a persistent objective.
 //   - `AgentApprovalModePickerPill`: per-session tool approval posture
 //     selector — request every time, smart approval, or workspace access.
 //   - `AgentExpertPickerPill`: per-session opt-in specialist tool packs
@@ -625,7 +624,9 @@ struct AgentPluginPickerPill: View {
         .focusable(false)
         .fixedSize()
         .help(L10n.PluginPicker.help)
-        .onAppear(perform: refresh)
+        .task {
+            await refresh()
+        }
     }
 
     private var pluginGroups: [PluginSkillGroup] {
@@ -660,9 +661,14 @@ struct AgentPluginPickerPill: View {
         }
     }
 
-    private func refresh() {
-        pluginSkills = AgentSkillDirectory.list(includeDisabled: false)
-        mcpServers = AgentMCPServerDirectory.list(includeDisabled: false)
+    @MainActor
+    private func refresh() async {
+        let loadedSkills = await AgentSkillDirectory.listAsync(includeDisabled: false)
+        guard !Task.isCancelled else { return }
+        let loadedServers = await AgentMCPServerDirectory.listAsync(includeDisabled: false)
+        guard !Task.isCancelled else { return }
+        pluginSkills = loadedSkills
+        mcpServers = loadedServers
     }
 
     private struct PluginSkillGroup {
@@ -713,7 +719,7 @@ struct ModelPickerPill: View {
                 HStack(spacing: 5) {
                     Image(systemName: Self.modelSymbol)
                         .font(.system(size: 10, weight: .semibold))
-                        .foregroundStyle(menuSnapshot.managedActive ? Color.teal : Color.secondary)
+                        .foregroundStyle(isManagedRoutingActive ? Color.teal : Color.secondary)
                     Text(pillLabel)
                         .font(AgentDesign.chatSupportingFont(
                             baseFontSize: appState.agentChatBaseFontSize
@@ -2417,11 +2423,21 @@ struct ModelPickerPill: View {
 
     private var pillLabel: String {
         AgentModelPickerPresentation.pillLabel(
-            managedActive: menuSnapshot.managedActive,
-            currentModelLabel: menuSnapshot.currentModelLabel,
+            managedActive: isManagedRoutingActive,
+            currentModelLabel: currentModelLabel,
             managedLabel: L10n.AgentModelPicker.managed,
             selectModelLabel: L10n.AgentModelPicker.selectModel
         )
+    }
+
+    /// The compact composer pill must read the active runtime directly.
+    /// `menuSnapshot` is intentionally a stable copy for the open model panel,
+    /// but using it for the always-visible pill could leave the old managed
+    /// label on screen for one or more turns after an explicit model choice.
+    /// The runtime already forwards changes through `AppState.objectWillChange`,
+    /// so this value follows the actual request configuration.
+    private var isManagedRoutingActive: Bool {
+        appState.activeRuntime?.managedRouting != nil
     }
 
     private func isCatalogItemCurrent(_ item: AgentModelCatalogItem) -> Bool {

@@ -43,12 +43,66 @@ struct AgentSidebarListVisualMetricsTests {
         #expect(AgentStatsDashboardLayout.maximumHeatmapWeeks == 52)
     }
 
+    @Test("idle session rows return unused action width to the title")
+    func idleSessionRowsUseAvailableSidebarWidth() {
+        #expect(
+            AgentSidebarSessionTrailingLayout.reservedActionsWidth(
+                isHovered: false,
+                isPinned: false
+            ) == 0
+        )
+        #expect(
+            AgentSidebarSessionTrailingLayout.reservedActionsWidth(
+                isHovered: false,
+                isPinned: true
+            ) < AgentDesign.sidebarSessionTrailingActionsWidth
+        )
+        #expect(
+            AgentSidebarSessionTrailingLayout.reservedActionsWidth(
+                isHovered: true,
+                isPinned: false
+            ) == AgentDesign.sidebarSessionTrailingActionsWidth
+        )
+    }
+
     @Test("Token activity tooltip includes the hovered day and its usage")
     func tokenActivityTooltipCarriesDailyUsage() {
         let tooltip = L10n.HeatmapCell.tooltip("7月10日", "10.3亿")
 
         #expect(tooltip.contains("7月10日"))
         #expect(tooltip.contains("10.3亿"))
+    }
+
+    @Test("truncated tooltip labels remain free of hover-driven layout work")
+    func truncatedTooltipLabelsStayLayoutInert() throws {
+        let repositoryRoot = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+        let planSource = try String(
+            contentsOf: repositoryRoot.appendingPathComponent("Xedit/AgentPlanGoalCards.swift"),
+            encoding: .utf8
+        )
+        let sidebarSource = try String(
+            contentsOf: repositoryRoot.appendingPathComponent("Xedit/AgentSessionsSidebar.swift"),
+            encoding: .utf8
+        )
+        let componentStart = try #require(
+            planSource.range(of: "struct TruncatedTooltipText: View")
+        )
+        let componentSuffix = planSource[componentStart.lowerBound...]
+        let componentEnd = try #require(
+            componentSuffix.range(of: "/// One row of the plan card")
+        )
+        let componentSource = String(componentSuffix[..<componentEnd.lowerBound])
+
+        #expect(componentSource.contains(".truncationMode(.tail)"))
+        #expect(componentSource.contains(".help(tooltip ?? \"\")"))
+        #expect(!componentSource.contains("@State"))
+        #expect(!componentSource.contains("GeometryReader"))
+        #expect(!componentSource.contains("PreferenceKey"))
+        #expect(!componentSource.contains(".onHover"))
+        #expect(!componentSource.contains("repeatForever"))
+        #expect(sidebarSource.contains("tooltip: session.title"))
     }
 
     @Test("workspace and conversation titles share the Codex text column")

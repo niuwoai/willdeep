@@ -9,6 +9,10 @@
 import SwiftUI
 import AppKit
 
+nonisolated enum ComposerPaletteLayout {
+    static let maximumListHeight: CGFloat = 440
+}
+
 // MARK: - Slash commands
 
 /// A single command shown in the "/" palette. Pure local actions — no
@@ -179,10 +183,24 @@ struct SlashCommandMenu: View {
                     .padding(.horizontal, 10)
                     .padding(.vertical, 8)
             } else {
-                ForEach(Array(commands.enumerated()), id: \.element.id) { index, command in
-                    SlashCommandRow(command: command, isSelected: index == selection)
-                        .contentShape(Rectangle())
-                        .onTapGesture { onPick(index) }
+                ScrollViewReader { proxy in
+                    ScrollView {
+                        LazyVStack(alignment: .leading, spacing: 0) {
+                            ForEach(Array(commands.enumerated()), id: \.element.id) { index, command in
+                                SlashCommandRow(command: command, isSelected: index == selection)
+                                    .contentShape(Rectangle())
+                                    .onTapGesture { onPick(index) }
+                                    .id(command.id)
+                            }
+                        }
+                    }
+                    .frame(maxHeight: ComposerPaletteLayout.maximumListHeight)
+                    .onCompatibleChange(of: selection) { _, newSelection in
+                        guard commands.indices.contains(newSelection) else { return }
+                        withAnimation(.easeOut(duration: 0.12)) {
+                            proxy.scrollTo(commands[newSelection].id, anchor: .center)
+                        }
+                    }
                 }
             }
         }
@@ -198,7 +216,6 @@ struct SlashCommandMenu: View {
         )
         .shadow(color: Color.black.opacity(0.18), radius: 12, y: 4)
         .alignmentGuide(.top) { $0[.bottom] }
-        .fixedSize()
     }
 }
 
@@ -412,11 +429,6 @@ enum SkillPickerEntry: Identifiable, Equatable {
 }
 
 struct AtPickerMenu: View {
-    private enum Metrics {
-        static let width: CGFloat = 540
-        static let maxListHeight: CGFloat = 340
-    }
-
     let entries: [AtPickerEntry]
     @Binding var query: String
     @Binding var selection: Int
@@ -473,11 +485,11 @@ struct AtPickerMenu: View {
                         }
                     }
                 }
-                .frame(maxHeight: Metrics.maxListHeight)
+                .frame(maxHeight: ComposerPaletteLayout.maximumListHeight)
             }
         }
         .padding(.bottom, 6)
-        .frame(width: Metrics.width, alignment: .leading)
+        .frame(width: 540, alignment: .leading)
         .background(
             RoundedRectangle(cornerRadius: 8, style: .continuous)
                 .fill(Color(nsColor: .controlBackgroundColor))
@@ -522,7 +534,6 @@ private struct AtPickerRow: View {
 nonisolated enum SkillPickerLayout {
     static let minimumVisibleRowCount = 3
     static let rowHeight: CGFloat = 38
-    static let maximumListHeight: CGFloat = 340
 
     static func minimumListHeight(entryCount: Int) -> CGFloat {
         CGFloat(min(max(entryCount, 0), minimumVisibleRowCount)) * rowHeight
@@ -530,10 +541,6 @@ nonisolated enum SkillPickerLayout {
 }
 
 struct SkillPickerMenu: View {
-    private enum Metrics {
-        static let width: CGFloat = 540
-    }
-
     let entries: [SkillPickerEntry]
     @Binding var query: String
     @Binding var selection: Int
@@ -592,12 +599,12 @@ struct SkillPickerMenu: View {
                 }
                 .frame(
                     minHeight: SkillPickerLayout.minimumListHeight(entryCount: entries.count),
-                    maxHeight: SkillPickerLayout.maximumListHeight
+                    maxHeight: ComposerPaletteLayout.maximumListHeight
                 )
             }
         }
         .padding(.bottom, 6)
-        .frame(width: Metrics.width, alignment: .leading)
+        .frame(width: 540, alignment: .leading)
         .background(
             RoundedRectangle(cornerRadius: 8, style: .continuous)
                 .fill(Color(nsColor: .controlBackgroundColor))
@@ -750,12 +757,6 @@ enum AgentSessionTodoSummaryLogic {
            let goal = session.currentGoal,
            !goal.checklist.isEmpty {
             return goalSummary(goal)
-        }
-        if session.interactionMode == .plan,
-           let plan = session.currentPlan,
-           !plan.steps.isEmpty,
-           plan.status != .rejected {
-            return planSummary(plan)
         }
         if let plan = session.currentPlan,
            !plan.steps.isEmpty,

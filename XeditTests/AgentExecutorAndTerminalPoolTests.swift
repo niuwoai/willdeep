@@ -1,3 +1,4 @@
+import Darwin
 import Foundation
 import Testing
 @testable import WillDeep
@@ -24,6 +25,113 @@ struct AgentExecutorAndTerminalPoolTests {
         #expect(catalogEntry?.integration == .directTool("codex_cli"))
     }
 
+    @Test("调度台发现 Codex、Claude 与 Hermes Profile 并安全传参")
+    func dispatchCLIProfilesAreDiscoveredAndForwarded() throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(
+            "WillDeepCLIProfiles-\(UUID().uuidString)",
+            isDirectory: true
+        )
+        let codexHome = root.appendingPathComponent("codex", isDirectory: true)
+        let userAgents = root
+            .appendingPathComponent(".claude", isDirectory: true)
+            .appendingPathComponent("agents", isDirectory: true)
+        let workspace = root.appendingPathComponent("workspace", isDirectory: true)
+        let projectAgents = workspace
+            .appendingPathComponent(".claude", isDirectory: true)
+            .appendingPathComponent("agents", isDirectory: true)
+        let hermesProfile = root
+            .appendingPathComponent(".hermes", isDirectory: true)
+            .appendingPathComponent("profiles", isDirectory: true)
+            .appendingPathComponent("worker", isDirectory: true)
+        for directory in [codexHome, userAgents, projectAgents, hermesProfile] {
+            try FileManager.default.createDirectory(
+                at: directory,
+                withIntermediateDirectories: true
+            )
+        }
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        try "model = \"codex-model\"\n".write(
+            to: codexHome.appendingPathComponent("fast.config.toml"),
+            atomically: true,
+            encoding: .utf8
+        )
+        try "".write(
+            to: userAgents.appendingPathComponent("reviewer.md"),
+            atomically: true,
+            encoding: .utf8
+        )
+        try "".write(
+            to: projectAgents.appendingPathComponent("implementer.md"),
+            atomically: true,
+            encoding: .utf8
+        )
+        try "model:\n  default: hermes-model\n".write(
+            to: hermesProfile.appendingPathComponent("config.yaml"),
+            atomically: true,
+            encoding: .utf8
+        )
+
+        let profiles = LocalAgentCLIProfile.discover(
+            workspacePath: workspace.path,
+            homeDirectory: root,
+            codexHomeDirectory: codexHome
+        )
+        #expect(profiles.map(\.id) == [
+            "codex:fast",
+            "claude-agent:implementer",
+            "claude-agent:reviewer",
+            "hermes:default",
+            "hermes:worker",
+        ])
+        #expect(profiles.first { $0.id == "codex:fast" }?.modelID == "codex-model")
+        #expect(profiles.first { $0.id == "hermes:worker" }?.modelID == "hermes-model")
+
+        let codex = AgentToolRunner.codexCLICommandLine(
+            executable: "/x/codex",
+            prompt: "implement",
+            permissionMode: "workspaceWrite",
+            model: nil,
+            workspacePath: workspace.path,
+            profile: "fast"
+        )
+        #expect(codex.contains("--profile 'fast'"))
+
+        let claude = AgentToolRunner.claudeCodeCommandLine(
+            executable: "/x/claude",
+            prompt: "review",
+            permissionMode: "plan",
+            model: nil,
+            agent: "reviewer"
+        )
+        #expect(claude.contains("--agent 'reviewer'"))
+
+        let hermes = AgentToolRunner.hermesCLICommandLine(
+            executable: "/x/hermes",
+            prompt: "implement",
+            model: "hermes-model",
+            provider: "someim",
+            profile: "worker",
+            planningOnly: true,
+            homeDirectory: "/Users/tester"
+        )
+        #expect(hermes.contains("HERMES_HOME='/Users/tester/.hermes/profiles/worker'"))
+        #expect(hermes.contains("--model 'hermes-model'"))
+        #expect(hermes.contains("--provider 'someim'"))
+        #expect(hermes.contains("--toolsets context_engine"))
+
+        let remoteHermes = AgentToolRunner.hermesCLICommandLine(
+            executable: "hermes",
+            prompt: "review",
+            model: nil,
+            provider: nil,
+            profile: "default",
+            homeDirectory: nil
+        )
+        #expect(remoteHermes.contains("HERMES_HOME=\"$HOME/.hermes\""))
+        #expect(!LocalAgentCLIProfile.profileNameIsSafe("bad profile; rm"))
+    }
+
     @Test("delegated terminal pool uses reusable sh tabs with a hard cap")
     func delegatedTerminalPoolPolicy() {
         #expect(AgentTerminalTab.delegatedShellExecutable == "/bin/sh")
@@ -32,6 +140,38 @@ struct AgentExecutorAndTerminalPoolTests {
         #expect(AgentInteractiveTerminalController.canCreateDelegatedShellTab(existingCount: 2))
         #expect(!AgentInteractiveTerminalController.canCreateDelegatedShellTab(existingCount: 3))
         #expect(!AgentInteractiveTerminalController.canCreateDelegatedShellTab(existingCount: 4))
+    }
+
+    @Test("terminal control keys map to exact PTY bytes")
+    func terminalControlBytes() {
+        #expect(AgentTerminalControl.ctrlC.bytes == [3])
+        #expect(AgentTerminalControl.ctrlD.bytes == [4])
+        #expect(AgentTerminalControl.ctrlRightBracket.bytes == [29])
+        #expect(AgentTerminalControl.enter.bytes == [13])
+        #expect(AgentTerminalControl.escape.bytes == [27])
+    }
+
+    @Test("PID terminal cleanup escalates when the process tree ignores TERM")
+    func terminalProcessTreeTerminationEscalates() async throws {
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/bin/sh")
+        process.arguments = ["-c", "trap '' TERM; while true; do sleep 1; done"]
+        try process.run()
+        let rootPID = process.processIdentifier
+        defer {
+            if process.isRunning {
+                _ = Darwin.kill(rootPID, SIGKILL)
+            }
+        }
+
+        try await Task.sleep(nanoseconds: 50_000_000)
+        AgentProcessSupport.terminateProcessTree(rootPID: rootPID, gracePeriod: 0.1)
+
+        let deadline = Date().addingTimeInterval(3)
+        while process.isRunning, Date() < deadline {
+            try await Task.sleep(nanoseconds: 25_000_000)
+        }
+        #expect(!process.isRunning)
     }
 
     @MainActor

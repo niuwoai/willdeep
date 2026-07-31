@@ -28,11 +28,13 @@ nonisolated enum AgentToolDisplay {
         return "\(localized)（\(toolName)）"
     }
 
-    /// `terminal_send_control` 的 control 取值（ctrl_c / enter / escape）
+    /// `terminal_send_control` 的 control 取值。
     /// 直接显示原始别名既不直观也容易被误会，这里展开成「人话 + 作用」。
     static func controlLabel(for raw: String) -> String {
         switch raw {
         case "ctrl_c": return "Ctrl-C（中断当前命令 / SIGINT）"
+        case "ctrl_d": return "Ctrl-D（发送 EOF）"
+        case "ctrl_right_bracket": return "Ctrl-]（打开 telnet 退出提示符）"
         case "enter": return "Enter（回车提交当前行）"
         case "escape": return "Esc（取消 / 退出终端 UI 模式）"
         default: return raw
@@ -68,6 +70,7 @@ nonisolated enum AgentToolDisplay {
         "activate_expert": "激活技能包",
         "add_memory": "记忆要点",
         "create_user_skill": "新建技能",
+        "create_user_skills": "批量新建技能",
         "update_user_skill": "更新技能",
         "delete_user_skill": "删除技能",
         "search_mcp_servers": "搜索 MCP 服务",
@@ -121,6 +124,7 @@ nonisolated enum AgentToolDisplay {
         "lark_cli": "飞书 CLI",
         "claude_code": "Claude Code",
         "codex_cli": "Codex CLI",
+        "hermes_cli": "Hermes",
         "cursor_agent": "Cursor Agent",
         "cline_cli": "Cline CLI",
         "spawn_agent": "派生子代理",
@@ -175,6 +179,25 @@ private struct AgentApprovalOutlinedButtonStyle: ButtonStyle {
     }
 }
 
+/// Codex-style high-contrast approval action. Light appearances use a black
+/// button with white text; dark appearances invert the pair so the primary
+/// action remains clearly visible instead of disappearing into the card.
+private struct AgentApprovalPrimaryButtonStyle: ButtonStyle {
+    let colorScheme: ColorScheme
+    let cornerRadius: CGFloat
+
+    func makeBody(configuration: Configuration) -> some View {
+        let shape = RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+        let background: Color = colorScheme == .dark ? .white : .black
+        let foreground: Color = colorScheme == .dark ? .black : .white
+        return configuration.label
+            .foregroundStyle(foreground)
+            .background(shape.fill(background))
+            .contentShape(shape)
+            .opacity(configuration.isPressed ? 0.72 : 1)
+    }
+}
+
 /// Layout contract for the soft, skin-aware authorization notice.
 /// The same geometry is shared by commands, web access, visible terminal
 /// handoffs, and other tools so confirmations feel like one product system.
@@ -207,8 +230,10 @@ nonisolated enum AgentCompactAuthorizationMetrics {
     static let horizontalPadding: CGFloat = 14
     static let verticalPadding: CGFloat = 15
     static let contentSpacing: CGFloat = 15
-    static let actionSpacing: CGFloat = 8
-    static let minimumButtonHeight: CGFloat = 22
+    static let actionSpacing: CGFloat = 10
+    static let minimumButtonWidth: CGFloat = 76
+    static let primaryButtonMinimumWidth: CGFloat = 112
+    static let minimumButtonHeight: CGFloat = 36
     static let cornerRadius: CGFloat = 20
     static let buttonCornerRadius: CGFloat = 14
     static let horizontalMinimumWidth: CGFloat = 520
@@ -350,6 +375,24 @@ nonisolated enum AgentApprovalNoticeCopy {
                 approveTitle: "本次允许",
                 usesOutlinedApproveAction: false
             )
+        case "create_user_skills":
+            let drafts = (try? AgentSelfLearning.decodeSkillBatch(
+                arguments["skills_json"]?.stringValue() ?? ""
+            )) ?? []
+            let count = drafts.count
+            return AgentApprovalNoticeDescriptor(
+                iconName: "wand.and.stars",
+                title: "Agent 准备创建 \(count) 个技能",
+                subtitle: "所有技能会先整体校验，再作为同一批次写入；任一项失败都会撤销本批已创建内容。",
+                detailTitle: "技能清单",
+                metadata: ["\(count) 个技能", "一次确认", "失败整批回滚"],
+                explanationTitle: "查看批量创建说明",
+                decisionTitle: "创建这批技能吗？",
+                decisionSubtitle: "确认一次即可处理清单中的全部技能，结果会逐项显示。",
+                declineTitle: "暂不创建",
+                approveTitle: "创建全部",
+                usesOutlinedApproveAction: false
+            )
         default:
             let displayName = AgentToolDisplay.name(for: toolName)
             return AgentApprovalNoticeDescriptor(
@@ -414,6 +457,7 @@ struct AgentToolCallGroup: View {
 
     private var interactiveCallsBody: some View {
         VStack(alignment: .leading, spacing: 4) {
+            AgentToolBatchApprovalBar(calls: calls)
             ForEach(calls) { call in
                 AgentToolCallCard(call: call)
             }
@@ -467,6 +511,7 @@ struct AgentToolCallGroup: View {
 
             if detailsVisible {
                 VStack(alignment: .leading, spacing: 4) {
+                    AgentToolBatchApprovalBar(calls: calls)
                     ForEach(calls) { call in
                         AgentToolCallCard(call: call)
                     }
@@ -554,6 +599,51 @@ struct AgentToolCallGroup: View {
     }
 }
 
+/// One-click batch release for a staged round: shown whenever two or more
+/// ordinary write-tier approval cards are waiting at once. Danger-tier typed
+/// confirmations, sandbox-escalation retries, and ask_user cards never enter
+/// the batch — they keep their individual controls.
+struct AgentToolBatchApprovalBar: View {
+    @EnvironmentObject var appState: AppState
+    let calls: [AgentToolCall]
+
+    var body: some View {
+        let approvableIDs = appState.batchApprovableAgentToolCallIDs(among: calls)
+        if approvableIDs.count >= 2 {
+            let palette = appState.editorSettings.interfaceSkin.palette
+            HStack(spacing: 8) {
+                Image(systemName: "checklist")
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(palette.accent)
+                Text("本轮共 \(approvableIDs.count) 项操作待批准")
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundStyle(palette.primaryText)
+                Spacer(minLength: 12)
+                Button {
+                    appState.approveAgentToolCalls(ids: approvableIDs)
+                } label: {
+                    Text("全部允许")
+                        .font(.system(size: 12, weight: .semibold))
+                        .padding(.horizontal, 2)
+                }
+                .buttonStyle(.bordered)
+                .tint(palette.accent)
+                .cursor(.arrow)
+                .help("一键批准这 \(approvableIDs.count) 项待审批操作；危险操作与沙箱升权仍需单独确认")
+            }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 8)
+            .background(palette.accent.opacity(0.06))
+            .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    .stroke(palette.accent.opacity(0.25), lineWidth: 1)
+            )
+            .accessibilityIdentifier("agent-batch-approval-bar")
+        }
+    }
+}
+
 /// Live, phase-aware activity surface for the current assistant turn. The
 /// current operation is one quiet disclosure row by default. Expanding it
 /// reveals the recent timeline. Interactive approvals keep their full controls.
@@ -569,6 +659,7 @@ struct AgentLiveActivityTimeline: View {
             if isExpanded, presentation.hiddenOperationCount > 0 {
                 AgentActivityTimelineSummaryRow(count: presentation.hiddenOperationCount)
             }
+            AgentToolBatchApprovalBar(calls: calls)
             ForEach(presentation.visibleCalls) { call in
                 if call.status.isBlockingForUserDecision {
                     AgentToolCallCard(call: call)
@@ -838,8 +929,113 @@ struct AgentActivityHeadlineView: View {
     }
 }
 
+private struct AgentDelegatedLiveProgressView: View {
+    @EnvironmentObject var appState: AppState
+    let progress: AgentDelegatedLiveProgress
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 5) {
+            HStack(spacing: 6) {
+                Image(systemName: phaseSymbol)
+                    .font(.system(size: 10, weight: .semibold))
+                    .foregroundStyle(phaseTint)
+                    .frame(width: 14)
+                Text(
+                    L10n.DelegatedTask.liveProgress(
+                        phase: progress.phase,
+                        attempt: progress.attempt,
+                        maximum: progress.maximumAttempts
+                    )
+                )
+                .font(AgentDesign.chatSupportingFont(
+                    baseFontSize: appState.agentChatBaseFontSize,
+                    visualMinimum: 10,
+                    weight: .semibold
+                ))
+                .foregroundStyle(phaseTint)
+                .lineLimit(1)
+                if !progress.phase.isTerminal {
+                    ProgressView()
+                        .controlSize(.small)
+                        .scaleEffect(0.55)
+                        .frame(width: 12, height: 12)
+                }
+                Spacer(minLength: 0)
+            }
+
+            if let activity = progress.currentActivity, !activity.isEmpty {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(L10n.DelegatedTask.currentActivity)
+                        .font(.caption2)
+                        .foregroundStyle(.tertiary)
+                    Text(activity)
+                        .font(.system(size: 10.5, design: .monospaced))
+                        .foregroundStyle(.secondary)
+                        .lineLimit(2)
+                        .truncationMode(.middle)
+                        .textSelection(.enabled)
+                }
+            }
+
+            if progress.terminalTabID != nil {
+                Label(
+                    L10n.DelegatedTask.fullOutputInTerminal,
+                    systemImage: "terminal"
+                )
+                .font(.caption2)
+                .foregroundStyle(.tertiary)
+            }
+        }
+        .padding(.horizontal, 7)
+        .padding(.vertical, 6)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(phaseTint.opacity(0.06))
+        .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
+        .accessibilityIdentifier("agent-delegated-live-progress")
+    }
+
+    private var phaseSymbol: String {
+        switch progress.phase {
+        case .contracted:
+            return "doc.badge.gearshape"
+        case .executing:
+            return "hammer"
+        case .selfVerifying:
+            return "person.crop.circle.badge.checkmark"
+        case .willDeepVerifying:
+            return "checkmark.shield"
+        case .reworkRequired:
+            return "arrow.uturn.backward.circle"
+        case .readyForDelivery:
+            return "checkmark.seal.fill"
+        case .failed:
+            return "xmark.octagon.fill"
+        case .cancelled:
+            return "stop.circle"
+        }
+    }
+
+    private var phaseTint: Color {
+        switch progress.phase {
+        case .contracted:
+            return .secondary
+        case .executing, .selfVerifying, .willDeepVerifying:
+            return appState.editorSettings.interfaceSkin.palette.accent
+        case .reworkRequired:
+            return .orange
+        case .readyForDelivery:
+            return .green
+        case .failed:
+            return .red
+        case .cancelled:
+            return .secondary
+        }
+    }
+}
+
 struct AgentToolCallCard: View {
     @EnvironmentObject var appState: AppState
+    @Environment(\.colorScheme) private var colorScheme
     let call: AgentToolCall
     @State private var isExpanded = false
     @State private var answerInput = ""
@@ -929,6 +1125,10 @@ struct AgentToolCallCard: View {
                 }
             }
 
+            if let progress = call.delegatedProgress {
+                AgentDelegatedLiveProgressView(progress: progress)
+            }
+
             if let images = call.result?.images, !images.isEmpty {
                 AgentToolResultImageStrip(images: images)
             }
@@ -939,6 +1139,13 @@ struct AgentToolCallCard: View {
                 }
                 if let payload = call.result?.payload, !payload.isEmpty {
                     expandableBlock(title: L10n.ToolCard.output, text: payload)
+                }
+                if let recentOutput = call.delegatedProgress?.recentOutput,
+                   !recentOutput.isEmpty {
+                    expandableBlock(
+                        title: L10n.DelegatedTask.recentOutput,
+                        text: recentOutput
+                    )
                 }
                 if let errorMessage = call.errorMessage, !errorMessage.isEmpty {
                     expandableBlock(title: L10n.ToolCard.error, text: errorMessage)
@@ -1022,17 +1229,29 @@ struct AgentToolCallCard: View {
         } else {
             ViewThatFits(in: .horizontal) {
                 HStack(spacing: AgentCompactAuthorizationMetrics.actionSpacing) {
-                    compactAlwaysAllowButton
-                    Spacer(minLength: 16)
                     compactDenyButton
-                    compactConversationAllowButton
+                    Spacer(minLength: 16)
+                    if alwaysAllowSignature != nil {
+                        compactAlwaysAllowButton
+                    } else if conversationAllowSignature == nil {
+                        compactAllowOnceButton
+                    }
+                    if conversationAllowSignature != nil {
+                        compactConversationAllowButton
+                    }
                 }
                 VStack(alignment: .leading, spacing: AgentCompactAuthorizationMetrics.actionSpacing) {
-                    compactAlwaysAllowButton
                     HStack(spacing: AgentCompactAuthorizationMetrics.actionSpacing) {
-                        Spacer(minLength: 0)
                         compactDenyButton
-                        compactConversationAllowButton
+                        Spacer(minLength: 0)
+                        if alwaysAllowSignature != nil {
+                            compactAlwaysAllowButton
+                        } else if conversationAllowSignature == nil {
+                            compactAllowOnceButton
+                        }
+                        if conversationAllowSignature != nil {
+                            compactConversationAllowButton
+                        }
                     }
                 }
             }
@@ -1046,9 +1265,27 @@ struct AgentToolCallCard: View {
         } label: {
             compactAuthorizationActionLabel(L10n.ToolCard.alwaysAllow)
         }
-        .buttonStyle(.bordered)
-        .approvalButtonBorderShape(cornerRadius: AgentCompactAuthorizationMetrics.buttonCornerRadius)
-        .tint(appState.editorSettings.interfaceSkin.palette.accent)
+        .buttonStyle(
+            AgentApprovalPrimaryButtonStyle(
+                colorScheme: colorScheme,
+                cornerRadius: AgentCompactAuthorizationMetrics.buttonCornerRadius
+            )
+        )
+        .cursor(.arrow)
+    }
+
+    private var compactAllowOnceButton: some View {
+        Button {
+            appState.approveAgentToolCall(id: call.id)
+        } label: {
+            compactAuthorizationActionLabel(L10n.ToolCard.allow)
+        }
+        .buttonStyle(
+            AgentApprovalPrimaryButtonStyle(
+                colorScheme: colorScheme,
+                cornerRadius: AgentCompactAuthorizationMetrics.buttonCornerRadius
+            )
+        )
         .cursor(.arrow)
     }
 
@@ -1068,23 +1305,33 @@ struct AgentToolCallCard: View {
         Button {
             appState.allowAgentToolFamilyForConversation(id: call.id)
         } label: {
-            compactAuthorizationActionLabel(L10n.ToolCard.allowConversation)
+            compactAuthorizationActionLabel(
+                call.toolName.hasPrefix("computer_use_")
+                    ? L10n.ToolCard.allowComputerUseSession
+                    : L10n.ToolCard.allowConversation,
+                minimumWidth: AgentCompactAuthorizationMetrics.primaryButtonMinimumWidth
+            )
         }
         .buttonStyle(
-            AgentApprovalOutlinedButtonStyle(
-                accent: appState.editorSettings.interfaceSkin.palette.accent,
+            AgentApprovalPrimaryButtonStyle(
+                colorScheme: colorScheme,
                 cornerRadius: AgentCompactAuthorizationMetrics.buttonCornerRadius
             )
         )
-        .tint(appState.editorSettings.interfaceSkin.palette.accent)
         .cursor(.arrow)
     }
 
-    private func compactAuthorizationActionLabel(_ title: String) -> some View {
+    private func compactAuthorizationActionLabel(
+        _ title: String,
+        minimumWidth: CGFloat = AgentCompactAuthorizationMetrics.minimumButtonWidth
+    ) -> some View {
         Text(title)
-            .font(.system(size: 12, weight: .semibold))
-            .padding(.horizontal, 2)
-            .frame(minHeight: AgentCompactAuthorizationMetrics.minimumButtonHeight)
+            .font(.system(size: 13, weight: .semibold))
+            .padding(.horizontal, 12)
+            .frame(
+                minWidth: minimumWidth,
+                minHeight: AgentCompactAuthorizationMetrics.minimumButtonHeight
+            )
             .contentShape(
                 RoundedRectangle(
                     cornerRadius: AgentCompactAuthorizationMetrics.buttonCornerRadius,
@@ -2243,6 +2490,17 @@ struct AgentToolCallCard: View {
            !url.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
             return ("访问地址", url)
         }
+        if call.toolName == "create_user_skills",
+           let rawJSON = call.arguments["skills_json"]?.stringValue(),
+           let drafts = try? AgentSelfLearning.decodeSkillBatch(rawJSON) {
+            let lines = drafts.enumerated().flatMap { index, draft in
+                [
+                    "\(index + 1). \(draft.name)",
+                    "   \(draft.description)",
+                ]
+            }
+            return ("技能清单", lines.joined(separator: "\n"))
+        }
         guard !argumentsLines.isEmpty else { return nil }
         return ("操作内容", argumentsLines)
     }
@@ -2272,6 +2530,13 @@ struct AgentToolCallCard: View {
         AgentToolAuthorization.suggestedPersistentSignature(
             toolName: call.toolName,
             arguments: call.arguments
+        )
+    }
+
+    private var conversationAllowSignature: String? {
+        guard call.risk == .write else { return nil }
+        return AgentToolAuthorization.interactiveSurfaceSignature(
+            toolName: call.toolName
         )
     }
 
@@ -2354,6 +2619,7 @@ struct AgentToolCallCard: View {
         return terminalShortcutProtectedInputState != nil
         || !argumentsLines.isEmpty
         || !(call.result?.payload.isEmpty ?? true)
+        || !(call.delegatedProgress?.recentOutput?.isEmpty ?? true)
         || !(call.errorMessage?.isEmpty ?? true)
     }
 
@@ -2371,6 +2637,7 @@ struct AgentToolCallCard: View {
         case .llmJudge: return "AI OK"
         case .goalMode: return "GOAL"
         case .workspaceAccess: return "WORKSPACE"
+        case .controlLease: return L10n.ToolCard.approvalControlLeaseBadge
         case .escalated: return "ESCALATED"
         case .trustedServer: return "TRUSTED"
         }
@@ -2385,6 +2652,7 @@ struct AgentToolCallCard: View {
         case .llmJudge: return "An LLM judge classified this call as non-malicious normal work."
         case .goalMode: return "Auto-approved because this session is in Goal mode. Danger-tier commands still ask."
         case .workspaceAccess: return "Auto-approved by this session's Workspace Access approval mode. Danger-tier commands still ask."
+        case .controlLease: return L10n.ToolCard.approvalControlLeaseTooltip
         case .escalated: return "You approved this call to run outside the default sandbox boundary."
         case .trustedServer: return "You marked this MCP server as fully trusted — all its calls auto-run."
         }

@@ -45,4 +45,41 @@ struct AgentToolApprovalNotifierTests {
         #expect(body?.contains("/private/workspace") == false)
         #expect(body?.contains("edit_file") == false)
     }
+
+    @Test("background job notifications only interrupt for unseen failures")
+    func backgroundJobNotificationPolicy() {
+        let noisyStatuses: [AgentBackgroundJob.Status] = [
+            .running,
+            .completed,
+            .killed,
+        ]
+        for status in noisyStatuses {
+            #expect(
+                !AgentToolApprovalNotifier.shouldNotifyJobFinished(
+                    status: status,
+                    isAppActive: false
+                )
+            )
+        }
+
+        let actionableStatuses: [AgentBackgroundJob.Status] = [
+            .failed,
+            .timedOut,
+            .launchFailed,
+        ]
+        for status in actionableStatuses {
+            #expect(
+                AgentToolApprovalNotifier.shouldNotifyJobFinished(
+                    status: status,
+                    isAppActive: false
+                )
+            )
+            #expect(
+                !AgentToolApprovalNotifier.shouldNotifyJobFinished(
+                    status: status,
+                    isAppActive: true
+                )
+            )
+        }
+    }
 }

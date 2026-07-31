@@ -259,6 +259,19 @@ enum DesktopPetHibernation {
     }
 }
 
+enum DesktopPetAnimationCadence {
+    nonisolated static let foregroundFramesPerSecond: Double = 15
+    nonisolated static let backgroundFramesPerSecond: Double = 24
+
+    nonisolated static func framesPerSecond(appIsActive: Bool) -> Double {
+        appIsActive ? foregroundFramesPerSecond : backgroundFramesPerSecond
+    }
+
+    nonisolated static func minimumInterval(appIsActive: Bool) -> TimeInterval {
+        1.0 / framesPerSecond(appIsActive: appIsActive)
+    }
+}
+
 enum DesktopPetMessageCardVisibility {
     nonisolated static func shouldShowMessageCards(
         appIsActive: Bool,
@@ -332,10 +345,12 @@ final class DesktopPetWindowManager: ObservableObject {
     @Published private(set) var appearance: DesktopPetAppearance
     @Published private(set) var isDraggingPet = false
     @Published private(set) var isMessageBubbleCollapsed = false
+    @Published private(set) var appIsActive: Bool
 
     private weak var appState: AppState?
     private var window: NSPanel?
     private var pollingTimer: Timer?
+    private var appActivityCancellables = Set<AnyCancellable>()
     private var wasBusy = false
     private var celebrationEndsAt: Date?
     private var jumpEndsAt: Date?
@@ -349,6 +364,34 @@ final class DesktopPetWindowManager: ObservableObject {
         isEnabled = UserDefaults.standard.object(forKey: DefaultsKey.isEnabled) as? Bool ?? true
         appearance = UserDefaults.standard.string(forKey: DefaultsKey.appearance)
             .flatMap(DesktopPetAppearance.init(rawValue:)) ?? .robotFox
+        appIsActive = NSApplication.shared.isActive
+        observeApplicationActivity()
+    }
+
+    private func observeApplicationActivity() {
+        let becameActive = NotificationCenter.default
+            .publisher(for: NSApplication.didBecomeActiveNotification)
+            .map { _ in true }
+        let resignedActive = NotificationCenter.default
+            .publisher(for: NSApplication.didResignActiveNotification)
+            .map { _ in false }
+
+        becameActive
+            .merge(with: resignedActive)
+            .sink { [weak self] isActive in
+                Task { @MainActor [weak self] in
+                    guard self?.updateApplicationActivity(isActive) == true else { return }
+                    self?.refresh()
+                }
+            }
+            .store(in: &appActivityCancellables)
+    }
+
+    @discardableResult
+    private func updateApplicationActivity(_ isActive: Bool) -> Bool {
+        guard appIsActive != isActive else { return false }
+        appIsActive = isActive
+        return true
     }
 
     func attach(to appState: AppState) {
@@ -497,6 +540,7 @@ final class DesktopPetWindowManager: ObservableObject {
 
     private func refresh() {
         guard isEnabled else { return }
+        updateApplicationActivity(NSApplication.shared.isActive)
         let now = Date()
         if let hibernationEndsAt {
             guard !DesktopPetHibernation.isActive(endsAt: hibernationEndsAt, now: now) else { return }
@@ -531,12 +575,10 @@ final class DesktopPetWindowManager: ObservableObject {
 
         let needsAttention = runtimes.contains { runtime in
             runtime.toolCalls.contains { $0.status.isBlockingForUserDecision }
-                || runtime.pendingPlanModeSuggestion != nil
         }
         let isRunningTool = runtimes.contains { runtime in
             runtime.toolCalls.contains { $0.status == .running }
         }
-        let appIsActive = NSApplication.shared.isActive
         let outputPreviews = appIsActive ? [] : Self.outputPreviews(from: appState, now: now)
         let shouldShowMessageCards = DesktopPetMessageCardVisibility.shouldShowMessageCards(
             appIsActive: appIsActive,
@@ -770,11 +812,14 @@ struct DesktopPetOverlayView: View {
     }
 
     var body: some View {
-        // A desktop pet does not need to redraw at a 120 Hz ProMotion refresh
-        // rate. Capping the animation schedule at 30 fps keeps motion smooth
-        // at this small size while preventing an always-on window from
-        // consuming a measurable fraction of one CPU core.
-        TimelineView(.animation(minimumInterval: 1.0 / 30.0)) { context in
+        // When WillDeep is active, the pet stays peripheral and can redraw less
+        // often. Once the app moves to the background, the pet becomes the
+        // primary visible surface and receives the smoother cadence.
+        TimelineView(.animation(
+            minimumInterval: DesktopPetAnimationCadence.minimumInterval(
+                appIsActive: manager.appIsActive
+            )
+        )) { context in
             let animation = DesktopPetAnimationValues(
                 mood: displayMood,
                 date: context.date

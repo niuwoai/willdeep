@@ -1,78 +1,29 @@
 ---
 name: file-manager
-description: Find, organize, and manage files on the user's computer. Search by name, type, size, or date. Move, rename, compress, and clean up files.
-allowed-tools:
-  - Bash
-  - Read
-  - Write
-  - Glob
-  - Grep
+description: Find, inspect, organize, rename, move, compress, or clean up files with WillDeep's workspace tools and approved macOS app control. Use for file searches and file operations with explicit, bounded targets.
 ---
 
-# File Manager Skill
+# File Management
 
-Help users find and organize files on their computer.
+## Workspace Files
 
-## Find Files
+- Search names with `search_files`.
+- Search contents with `grep_files`.
+- Inspect directories with `list_directory`.
+- Read files with `read_file`.
+- Create and edit text files with `create_file`, `edit_file`, or `apply_patch`.
+- Use `run_command` for read-only metadata queries and standard archive tools when necessary.
 
-```bash
-# By name (case-insensitive)
-find ~/Desktop ~/Documents ~/Downloads -iname "*report*" -type f 2>/dev/null
+## Files Outside the Workspace
 
-# By extension
-find ~/Downloads -name "*.pdf" -type f
+Use Computer Use to operate Finder when the user asks to manage files outside the active workspace. Inspect the current app state before every action and verify the result.
 
-# By size (larger than 100MB)
-find ~ -size +100M -type f 2>/dev/null | head -20
+## Safety
 
-# Recently modified (last 7 days)
-find ~/Documents -mtime -7 -type f | head -20
-
-# Duplicates by size (potential dupes)
-find ~/Downloads -type f -exec ls -la {} + | sort -k5 -n | uniq -d -f4
-```
-
-## Organize
-
-```bash
-# Move all PDFs from Downloads to Documents
-mv ~/Downloads/*.pdf ~/Documents/
-
-# Create dated folder and move files
-mkdir -p ~/Documents/$(date +%Y-%m-%d)
-
-# Rename files (pattern)
-for f in *.jpeg; do mv "$f" "${f%.jpeg}.jpg"; done
-```
-
-## Cleanup
-
-```bash
-# Show large files in Downloads
-du -sh ~/Downloads/* | sort -rh | head -20
-
-# Empty trash (macOS)
-rm -rf ~/.Trash/*
-
-# Clear old downloads (older than 30 days)
-find ~/Downloads -mtime +30 -type f
-```
-
-## Compress/Extract
-
-```bash
-# Create zip
-zip -r archive.zip folder/
-
-# Create tar.gz
-tar czf archive.tar.gz folder/
-
-# Extract
-unzip archive.zip
-tar xzf archive.tar.gz
-```
-
-## Tips
-- Always use `trash` over `rm` when available (recoverable)
-- Preview file lists before bulk operations
-- Ask before deleting — show what would be affected first
+1. Resolve exact source and destination paths before changing anything.
+2. Preview the affected file list before bulk operations.
+3. Preserve unrelated files and existing user changes.
+4. Prefer recoverable Finder Trash operations over permanent deletion.
+5. Ask immediately before overwriting, deleting, emptying Trash, or moving a broad set of files.
+6. Never target a home directory, filesystem root, workspace root, unresolved variable, or broad wildcard with a destructive command.
+7. Report what changed and whether it is recoverable.

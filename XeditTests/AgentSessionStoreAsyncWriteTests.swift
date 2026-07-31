@@ -181,11 +181,10 @@ struct AgentSessionStoreAsyncWriteTests {
         let active = appState.startNewAgentSession()
         let stale = AgentSession(title: "Recoverable history")
         AgentSessionStore.delete(id: stale.id)
-        AgentSessionStore.markMetadataOnlyForTesting(stale.id, hasUserMessage: true)
-        defer {
-            AgentSessionStore.clearMetadataOnlyForTesting(stale.id)
-            AgentSessionStore.delete(id: active.id)
-        }
+        // Metadata-only classification is per-AppState now, so seed the
+        // instance under test rather than the process-wide tracker.
+        appState.markAgentSessionMetadataOnlyForTesting(stale.id, hasUserMessage: true)
+        defer { AgentSessionStore.delete(id: active.id) }
         appState.agentSessions.insert(stale, at: 0)
 
         let selected = appState.selectAgentSession(id: stale.id)

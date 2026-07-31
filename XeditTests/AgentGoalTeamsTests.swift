@@ -116,9 +116,9 @@ struct AgentGoalTeamsTests {
         for plan in lockedPlans {
             let runtime = AgentRuntime(session: AgentSession(
                 interactionMode: .goal,
-                currentPlan: plan,
                 currentGoal: goal
             ))
+            runtime.currentPlan = plan
             #expect(runtime.isPlanGateActive)
         }
 
@@ -144,17 +144,42 @@ struct AgentGoalTeamsTests {
         let runtime = AgentRuntime(session: AgentSession(interactionMode: .goal))
         let arguments = ["command": AgentJSONValue.string("swift build")]
 
-        #expect(AppState.planGateBlocks(
+        #expect(AppState.goalPlanningGateBlocks(
             toolName: "run_command",
             arguments: arguments,
             risk: .write,
             isActive: runtime.isPlanGateActive
         ))
-        #expect(AppState.planGateBlocks(
+        #expect(AppState.goalPlanningGateBlocks(
             toolName: "run_command",
             arguments: arguments,
             risk: .danger,
             isActive: runtime.isPlanGateActive
+        ))
+    }
+
+    @Test("Goal 规划门禁只允许外部执行器的只规划调用")
+    func goalPlanningGateAllowsPlanningOnlyDelegation() {
+        let planningArguments = [
+            "prompt": AgentJSONValue.string("plan only"),
+            "permission_mode": AgentJSONValue.string("plan"),
+        ]
+        #expect(!AppState.goalPlanningGateBlocks(
+            toolName: "hermes_cli",
+            arguments: planningArguments,
+            risk: .write,
+            isActive: true
+        ))
+
+        let executionArguments = [
+            "prompt": AgentJSONValue.string("edit files"),
+            "permission_mode": AgentJSONValue.string("workspaceWrite"),
+        ]
+        #expect(AppState.goalPlanningGateBlocks(
+            toolName: "hermes_cli",
+            arguments: executionArguments,
+            risk: .write,
+            isActive: true
         ))
     }
 
@@ -294,14 +319,15 @@ struct AgentGoalTeamsTests {
                 .init(roleID: "requirements", displayName: "需求分析-目标边界质疑", status: .completed),
                 .init(roleID: "architecture", displayName: "架构-实现路径论证", status: .completed),
                 .init(roleID: "testing", displayName: "测试-失败路径审查", status: .completed),
-            ]
+            ],
+            arbitration: .init(status: .completed, report: "verified planning evidence")
         )
         let encoded = try JSONEncoder().encode(state)
         let decoded = try JSONDecoder().decode(AgentGoalPlanningState.self, from: encoded)
         #expect(decoded.revisionNote == "缩小范围并补充失败恢复")
     }
 
-    @Test("完整 Goal Teams 账本与 proposed Plan 可持久化并安全恢复")
+    @Test("旧版待批准 Goal Plan 恢复后自动进入执行")
     func completePlanningLedgerAndPlanRoundTrip() throws {
         let generationID = UUID()
         let plan = AgentPlan(status: .proposed, summary: "Goal Teams", stepTexts: ["GT-003 实现"])
@@ -349,8 +375,9 @@ struct AgentGoalTeamsTests {
         #expect(restoredMemberReport == expectedMemberReport)
         #expect(restored.goalPlanningState?.members[2].errorMessage == "测试成员超时")
         #expect(restoredArbitrationReport == expectedArbitrationReport)
-        #expect(restored.goalPlanningState?.phase == .awaitingApproval)
-        #expect(restored.isPlanGateActive)
+        #expect(restored.currentPlan?.status == .approved)
+        #expect(restored.goalPlanningState?.phase == .executing)
+        #expect(!restored.isPlanGateActive)
     }
 
     @Test
@@ -571,12 +598,13 @@ struct AgentGoalTeamsTests {
         #expect(runtime.isPlanGateActive)
     }
 
-    @Test("Goal Plan 明确确认后派发 progress 与 goal-check 双合同")
-    func approvedGoalPlanQueuesProgressAndGoalCheckContract() {
-        let plan = AgentPlan(status: .proposed, summary: "", stepTexts: ["GT-003 实现"])
+    @Test("有效 Goal Plan 无需确认即进入执行")
+    func validGoalPlanStartsExecutingWithoutApproval() {
+        let generationID = UUID()
         let state = AgentGoalPlanningState(
+            generationID: generationID,
             goalFingerprint: "Ship safely\u{1F}Verified",
-            phase: .awaitingApproval,
+            phase: .readyForProposal,
             members: [
                 .init(roleID: "requirements", displayName: "需求分析-目标边界质疑", status: .completed),
                 .init(roleID: "architecture", displayName: "架构-实现路径论证", status: .completed),
@@ -584,53 +612,20 @@ struct AgentGoalTeamsTests {
             ],
             arbitration: .init(status: .completed, report: validArbitrationReport())
         )
-        let (appState, runtime) = makeAppRuntime(plan: plan, planningState: state)
+        let (appState, runtime) = makeAppRuntime(planningState: state)
+        runtime.goalPlanningState = state
+        runtime.messages = [AgentMessage(
+            role: .assistant,
+            content: "<!-- goal-planning-generation:\(generationID.uuidString) -->\n"
+                + validProposalContent()
+        )]
 
-        appState.confirmAgentPlanAndExecute()
+        let outcome = appState.captureAgentPlanFromLatestMessage(for: runtime)
+
+        #expect(outcome == .captured)
         #expect(runtime.currentPlan?.status == .approved)
         #expect(runtime.goalPlanningState?.phase == .executing)
-        let instruction = runtime.queuedMessages.last?.text ?? ""
-        #expect(instruction.contains("```progress"))
-        #expect(instruction.contains("```goal-check"))
-        #expect(instruction.contains("compact Goal round delivery summary"))
-        #expect(instruction.contains("omit command transcripts, failed attempts, raw tool output"))
-    }
-
-    @Test("拒绝清空 Plan、保留 Goal并创建新代次，旧回复不能复活")
-    func rejectStartsNewGenerationAndDefendsAgainstStalePlan() {
-        let oldGeneration = UUID()
-        let plan = AgentPlan(status: .proposed, summary: "", stepTexts: ["GT-003 实现"])
-        let state = AgentGoalPlanningState(
-            generationID: oldGeneration,
-            goalFingerprint: "Ship safely\u{1F}Verified",
-            phase: .awaitingApproval,
-            members: [
-                .init(roleID: "requirements", displayName: "需求分析-目标边界质疑", status: .completed),
-                .init(roleID: "architecture", displayName: "架构-实现路径论证", status: .completed),
-                .init(roleID: "testing", displayName: "测试-失败路径审查", status: .completed),
-            ],
-            arbitration: .init(status: .completed, report: validArbitrationReport())
-        )
-        let (appState, runtime) = makeAppRuntime(plan: plan, planningState: state)
-        let originalGoal = runtime.currentGoal
-        appState.agentSubagentRegistry.runOperation = { _, _, _, _, _, _, _ in
-            try await Task.sleep(nanoseconds: 30_000_000_000)
-            return .init(report: "", usageTokens: 0, roundCount: 0, toolInvocationCount: 0)
-        }
-
-        appState.rejectAgentPlan()
-        #expect(runtime.currentPlan == nil)
-        #expect(runtime.currentGoal == originalGoal)
-        #expect(runtime.goalPlanningState?.generationID != oldGeneration)
-        #expect(runtime.goalPlanningState?.phase == .collecting)
-        #expect(runtime.isPlanGateActive)
-
-        runtime.messages.append(AgentMessage(role: .assistant, content: validProposalContent()))
-        appState.captureAgentPlanFromLatestMessage(for: runtime)
-        appState.confirmAgentPlanAndExecute()
-        #expect(runtime.currentPlan == nil)
-        #expect(runtime.goalPlanningState?.phase == .collecting)
-        appState.agentSubagentRegistry.cancelAll(forParentRuntime: runtime.id)
+        #expect(!runtime.isPlanGateActive)
     }
 
     @Test("revision 强制换代会释放旧并发槽并忽略迟到完成")
@@ -698,24 +693,33 @@ struct AgentGoalTeamsTests {
             content: "<!-- goal-planning-generation:\(newGeneration.uuidString) -->\n" + validProposalContent()
         ))
         appState.captureAgentPlanFromLatestMessage(for: runtime)
-        #expect(try #require(runtime.currentPlan).status == .proposed)
-        #expect(runtime.goalPlanningState?.phase == .awaitingApproval)
+        #expect(try #require(runtime.currentPlan).status == .approved)
+        #expect(runtime.goalPlanningState?.phase == .executing)
     }
 
-    @Test("done 且 checklist 未完成自动重规划；空 checklist 不循环")
-    func donePlanReplansOnlyForIncompleteNonEmptyChecklist() {
+    @Test("done 且 checklist 未完成继续验收同一计划，不重新规划")
+    func donePlanContinuesAcceptanceWithoutReplanning() {
         let donePlan = AgentPlan(status: .done, summary: "", stepTexts: ["GT-003 done"])
-        let (appState, runtime) = makeAppRuntime(plan: donePlan)
-        appState.agentSubagentRegistry.runOperation = { _, _, _, _, _, _, _ in
-            try await Task.sleep(nanoseconds: 30_000_000_000)
-            return .init(report: "", usageTokens: 0, roundCount: 0, toolInvocationCount: 0)
-        }
+        let goal = AgentGoal(statement: "Ship safely", checklist: [.init(text: "Verified")])
+        let state = AgentGoalPlanningState(
+            goalFingerprint: AgentGoalPlanningState.fingerprint(for: goal),
+            phase: .executing,
+            members: []
+        )
+        let (appState, runtime) = makeAppRuntime(
+            goal: goal,
+            plan: donePlan,
+            planningState: state
+        )
+        runtime.isResponding = true
 
         appState.prepareNextAgentGoalPlanningCycleIfNeeded(for: runtime)
-        #expect(runtime.currentPlan == nil)
-        #expect(runtime.goalPlanningState?.phase == .collecting)
-        #expect(runtime.isPlanGateActive)
-        appState.agentSubagentRegistry.cancelAll(forParentRuntime: runtime.id)
+        #expect(runtime.currentPlan?.status == .done)
+        #expect(runtime.goalPlanningState?.phase == .executing)
+        #expect(!runtime.isPlanGateActive)
+        #expect(runtime.queuedMessages.count == 1)
+        #expect(runtime.queuedMessages[0].text.contains("without creating or replacing a plan"))
+        #expect(runtime.queuedMessages[0].text.contains("without restarting Goal Teams"))
 
         let emptyGoal = AgentGoal(statement: "Goal without checklist")
         let (_, emptyRuntime) = makeAppRuntime(goal: emptyGoal, plan: donePlan)
@@ -725,35 +729,149 @@ struct AgentGoalTeamsTests {
         #expect(emptyRuntime.isPlanGateActive)
     }
 
-    @Test("普通 Plan 行为不回归，danger 不能借研究例外绕过门禁")
-    func ordinaryPlanAndDangerGateRegression() {
-        let proposed = AgentRuntime(session: AgentSession(
-            interactionMode: .plan,
-            currentPlan: AgentPlan(status: .proposed, summary: "", stepTexts: ["A"])
+    @Test("Goal 连续两轮验收无进展会暂停，不会重新规划")
+    func repeatedNoProgressPausesWithoutReplanning() {
+        let goal = AgentGoal(statement: "Ship safely", checklist: [.init(text: "Verified")])
+        let donePlan = AgentPlan(status: .done, summary: "", stepTexts: ["GT-003 done"])
+        let state = AgentGoalPlanningState(
+            goalFingerprint: AgentGoalPlanningState.fingerprint(for: goal),
+            phase: .executing,
+            members: []
+        )
+        let (appState, runtime) = makeAppRuntime(
+            goal: goal,
+            plan: donePlan,
+            planningState: state
+        )
+
+        appState.prepareNextAgentGoalPlanningCycleIfNeeded(
+            for: runtime,
+            didAdvanceChecklist: false
+        )
+        #expect(runtime.consecutiveGoalRoundsWithoutChecklistProgress == 1)
+        #expect(runtime.queuedMessages.count == 1)
+        #expect(runtime.currentPlan?.status == .done)
+
+        appState.prepareNextAgentGoalPlanningCycleIfNeeded(
+            for: runtime,
+            didAdvanceChecklist: false
+        )
+        #expect(runtime.consecutiveGoalRoundsWithoutChecklistProgress == 2)
+        #expect(runtime.errorMessage?.contains("连续两轮验收清单没有进展") == true)
+        #expect(runtime.queuedMessages.count == 1)
+        #expect(runtime.currentPlan?.status == .done)
+        #expect(runtime.goalPlanningState?.phase == .executing)
+    }
+
+    @Test("额度中断后保留已完成 Plan，续跑只做 Goal 验收")
+    func interruptedDonePlanResumesFinalizationWithoutReplanning() {
+        let goal = AgentGoal(
+            statement: "Ship safely",
+            checklist: [.init(text: "Verified")]
+        )
+        let donePlan = AgentPlan(
+            status: .done,
+            summary: "",
+            stepTexts: ["GT-003 implement", "GT-004 test"]
+        )
+        let state = AgentGoalPlanningState(
+            goalFingerprint: AgentGoalPlanningState.fingerprint(for: goal),
+            phase: .executing,
+            members: [
+                .init(roleID: "requirements", displayName: "需求分析-目标边界质疑", status: .completed),
+                .init(roleID: "architecture", displayName: "架构-实现路径论证", status: .completed),
+                .init(roleID: "testing", displayName: "测试-失败路径审查", status: .completed),
+            ]
+        )
+        let (appState, runtime) = makeAppRuntime(
+            goal: goal,
+            plan: donePlan,
+            planningState: state
+        )
+
+        #expect(!appState.startAgentGoalPlanningIfNeeded(for: runtime))
+        #expect(runtime.currentPlan?.status == .done)
+        #expect(runtime.goalPlanningState?.phase == .executing)
+        #expect(!runtime.isPlanGateActive)
+        #expect(!AppState.goalPlanningGateBlocks(
+            toolName: "run_command",
+            arguments: ["command": .string("swift test")],
+            risk: .write,
+            isActive: runtime.isPlanGateActive
         ))
-        // Plan mode is planning-only: the gate NEVER lifts inside Plan mode,
-        // even for an approved plan. Approval flips the session to Normal
-        // mode, and only there does the gate go inactive.
-        let approvedStillInPlanMode = AgentRuntime(session: AgentSession(
-            interactionMode: .plan,
-            currentPlan: AgentPlan(status: .approved, summary: "", stepTexts: ["A"])
+
+        let prompt = AgentContextBuilder.systemPrompt(
+            rootDirectory: nil,
+            openedFileURL: nil,
+            fileContent: "",
+            selectedText: "",
+            language: nil,
+            toolsEnabled: true,
+            interactionMode: .goal,
+            currentPlan: runtime.currentPlan,
+            currentGoal: runtime.currentGoal,
+            goalPlanningState: runtime.goalPlanningState,
+            globalRules: nil
+        )
+        #expect(prompt.contains("Resume this exact Goal loop and preserve its progress"))
+        #expect(prompt.contains("Do not emit a new `plan`"))
+        #expect(prompt.contains("Run only the remaining verification"))
+        #expect(!prompt.contains(
+            "A valid proposal must include the exact ten-column Teams table"
         ))
+    }
+
+    @Test("已完成 Goal 不保留中断验收写权限")
+    func completedGoalClosesInterruptedFinalizationGate() {
+        let completedGoal = AgentGoal(
+            statement: "Ship safely",
+            checklist: [.init(text: "Verified", done: true)]
+        )
+        let donePlan = AgentPlan(
+            status: .done,
+            summary: "",
+            stepTexts: ["GT-003 implement"]
+        )
+        let state = AgentGoalPlanningState(
+            goalFingerprint: AgentGoalPlanningState.fingerprint(for: completedGoal),
+            phase: .executing,
+            members: [
+                .init(roleID: "requirements", displayName: "需求分析-目标边界质疑", status: .completed),
+                .init(roleID: "architecture", displayName: "架构-实现路径论证", status: .completed),
+                .init(roleID: "testing", displayName: "测试-失败路径审查", status: .completed),
+            ]
+        )
+        let (_, runtime) = makeAppRuntime(
+            goal: completedGoal,
+            plan: donePlan,
+            planningState: state
+        )
+
+        #expect(runtime.goalPlanningState?.phase == .completed)
+        #expect(runtime.isPlanGateActive)
+
+        // Guard the live-state path too: even before persistence normalization,
+        // a stale executing phase must not reopen write tools.
+        runtime.goalPlanningState?.phase = .executing
+        #expect(runtime.isPlanGateActive)
+    }
+
+    @Test("普通模式没有规划门禁，danger 不能借 Goal 研究例外绕过门禁")
+    func ordinaryModeAndDangerGateRegression() {
         let approvedInNormalMode = AgentRuntime(session: AgentSession(
             interactionMode: .normal,
             currentPlan: AgentPlan(status: .approved, summary: "", stepTexts: ["A"])
         ))
-        #expect(proposed.isPlanGateActive)
-        #expect(approvedStillInPlanMode.isPlanGateActive)
         #expect(!approvedInNormalMode.isPlanGateActive)
 
         let publicFetch = ["url": AgentJSONValue.string("https://developer.apple.com/documentation")]
-        #expect(AppState.planGateBlocks(
+        #expect(AppState.goalPlanningGateBlocks(
             toolName: "web_fetch",
             arguments: publicFetch,
             risk: .danger,
             isActive: true
         ))
-        #expect(!AppState.planGateBlocks(
+        #expect(!AppState.goalPlanningGateBlocks(
             toolName: "web_fetch",
             arguments: publicFetch,
             risk: .danger,
@@ -821,9 +939,7 @@ struct AgentGoalTeamsTests {
         let cases: [(AgentGoalPlanningState.Phase, AgentPlan?)] = [
             (.readyForProposal, nil),
             (.awaitingApproval, nil),
-            (.awaitingApproval, AgentPlan(status: .approved, summary: "", stepTexts: ["A"])),
             (.executing, nil),
-            (.executing, AgentPlan(status: .proposed, summary: "", stepTexts: ["A"])),
             (.completed, AgentPlan(status: .approved, summary: "", stepTexts: ["A"])),
         ]
 
@@ -853,8 +969,9 @@ struct AgentGoalTeamsTests {
                 members: members
             )
         ))
-        #expect(awaiting.goalPlanningState?.phase == .awaitingApproval)
-        #expect(awaiting.isPlanGateActive)
+        #expect(awaiting.currentPlan?.status == .approved)
+        #expect(awaiting.goalPlanningState?.phase == .executing)
+        #expect(!awaiting.isPlanGateActive)
 
         let staleGoalRuntime = AgentRuntime(session: AgentSession(
             interactionMode: .goal,

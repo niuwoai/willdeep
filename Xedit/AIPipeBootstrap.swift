@@ -20,12 +20,21 @@ final class WillDeepAppDelegate: NSObject, NSApplicationDelegate {
         // and starts forwarding cross-app login/logout changes.
         SomeIMIntegrationStore.configureSharedSession()
         guard !Self.isRunningUnderXCTest else { return }
+        // Skill discovery touches bundled, user, legacy, and plugin trees.
+        // Warm the shared catalog away from AppKit's main thread so mobile
+        // gateway snapshots and the first composer `$` menu are cache hits.
+        _ = Task.detached(priority: .utility) {
+            _ = AgentSkillDirectory.list(includeDisabled: true)
+        }
         AIPipeBootstrap.initialize()
         ChromeNativeHostInstaller.installAtLaunch()
         // Route taps on agent approval / job notifications back to the
         // session that posted them (see AgentNotificationResponder).
         UNUserNotificationCenter.current().delegate = AgentNotificationResponder.shared
         MainActor.assumeIsolated {
+            // The menu-bar status and local preview feed must outlive
+            // AgentModeView navigation while another app is being controlled.
+            AgentComputerUseStatusController.shared.install()
             FnPushToTalkMonitor.shared.install()
             VoiceModelLifecycleController.shared.install()
             // 手机网关(互联网中继)开机自连并常驻：不再等用户打开设置页，
@@ -41,6 +50,11 @@ final class WillDeepAppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
         guard !isFlushingBeforeTermination else { return .terminateLater }
+        guard AppTerminationGuard.shouldAllowTermination(
+            appStates: EditorAppStateRegistry.shared.appStatesForTerminationCheck
+        ) else {
+            return .terminateCancel
+        }
         isFlushingBeforeTermination = true
         AIPipe.flush()
         // Do not synchronously block AppKit while a large transcript is still

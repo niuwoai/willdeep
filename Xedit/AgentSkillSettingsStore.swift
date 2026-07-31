@@ -14,7 +14,7 @@ nonisolated struct AgentSkillSettings: Codable, Equatable, Sendable {
 
     static let `default` = AgentSkillSettings(
         autoExtractionEnabled: true,
-        minimumToolCallCount: 3,
+        minimumToolCallCount: 6,
         disabledSkillIdentifiers: []
     )
 
@@ -32,7 +32,7 @@ nonisolated struct AgentSkillSettings: Codable, Equatable, Sendable {
 
 nonisolated enum AgentSkillSettingsStore {
     private static let settingsKey = "com.willdeep.agentSkillSettings.v1"
-    private static let defaultThresholdMigrationKey = "com.willdeep.agentSkillSettings.defaultThreshold.rc85"
+    private static let defaultThresholdMigrationKey = "com.willdeep.agentSkillSettings.defaultThreshold.rc219"
 
     static func load() -> AgentSkillSettings {
         guard let data = UserDefaults.standard.data(forKey: settingsKey),
@@ -42,7 +42,7 @@ nonisolated enum AgentSkillSettingsStore {
         var normalized = settings.normalized
         let defaults = UserDefaults.standard
         if !defaults.bool(forKey: defaultThresholdMigrationKey),
-           normalized.minimumToolCallCount == 5 {
+           [3, 5].contains(normalized.minimumToolCallCount) {
             normalized.minimumToolCallCount = AgentSkillSettings.default.minimumToolCallCount
             save(normalized)
         }
@@ -142,6 +142,7 @@ nonisolated enum AgentSkillFileManager {
         \(body.trimmingCharacters(in: .whitespacesAndNewlines))
         """
         try markdown.write(to: skillURL, atomically: true, encoding: .utf8)
+        AgentSkillDirectory.invalidateCache()
         return skillURL
     }
 
@@ -164,6 +165,7 @@ nonisolated enum AgentSkillFileManager {
         }
 
         try FileManager.default.removeItem(at: skillDirectory)
+        AgentSkillDirectory.invalidateCache()
     }
 
     static func updateUserSkill(
@@ -210,9 +212,10 @@ nonisolated enum AgentSkillFileManager {
         \(nextBody)
         """
         try markdown.write(to: skillURL, atomically: true, encoding: .utf8)
+        AgentSkillDirectory.invalidateCache()
     }
 
-    private static func skillSlug(from name: String) -> String {
+    static func skillSlug(from name: String) -> String {
         let lowercased = name.lowercased()
         var slug = ""
         var previousWasDash = false

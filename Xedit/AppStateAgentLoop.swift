@@ -39,6 +39,11 @@ extension AppState {
         existingUserMessageID: AgentMessage.ID? = nil,
         source: AgentMessageSource = .operatorInput
     ) {
+        runtime.currentTurnPlanningOnly = source == .operatorInput
+            && AgentExecutionIntentPolicy.requestsPlanningOnly(text)
+        if source == .operatorInput {
+            runtime.consecutiveGoalRoundsWithoutChecklistProgress = 0
+        }
         resolvePendingAgentPatchProposalsBeforeNewMessage(for: runtime)
 
         let shouldArmGoalRecovery = AgentGoalLaunchRecoveryPolicy.shouldArmExecutionCheckpoint(
@@ -241,117 +246,6 @@ extension AppState {
         }
     }
 
-    func prepareImagesForTextOnlyProvider(
-        for runtime: AgentRuntime,
-        userMessageID: AgentMessage.ID,
-        mainConfiguration: AgentConfiguration,
-        imageDescriptionConfiguration: AgentConfiguration
-    ) async throws {
-        guard !mainConfiguration.supportsImageInput else { return }
-        guard let index = runtime.messages.firstIndex(where: { $0.id == userMessageID }) else { return }
-        let images = runtime.messages[index].images
-        guard !images.isEmpty else { return }
-
-        let description = try await describeImagesForTextOnlyProvider(
-            images,
-            configuration: imageDescriptionConfiguration
-        )
-
-        guard !Task.isCancelled,
-              let liveIndex = runtime.messages.firstIndex(where: { $0.id == userMessageID }) else {
-            return
-        }
-        runtime.messages[liveIndex].content = Self.contentByAppendingImageDescription(
-            to: runtime.messages[liveIndex].content,
-            description: description,
-            imageCount: images.count,
-            providerID: imageDescriptionConfiguration.providerID,
-            model: imageDescriptionConfiguration.model
-        )
-        persistAgentSession(runtime: runtime)
-    }
-
-    func describeImagesForTextOnlyProvider(
-        _ images: [AgentImageAttachment],
-        configuration: AgentConfiguration
-    ) async throws -> String {
-        var lastError: Error?
-        for candidate in imageDescriptionConfigurationCandidates(fallback: configuration) {
-            do {
-                return try await requestImageDescription(images, configuration: candidate)
-            } catch {
-                lastError = error
-                continue
-            }
-        }
-        if let lastError {
-            throw lastError
-        }
-        return try await requestImageDescription(images, configuration: configuration)
-    }
-
-    private func requestImageDescription(
-        _ images: [AgentImageAttachment],
-        configuration: AgentConfiguration
-    ) async throws -> String {
-        let normalized = configuration.normalized
-        guard normalized.supportsImageInput else {
-            throw AgentClientError.serverStatus(
-                AgentProviderHTTPError(
-                    statusCode: 400,
-                    method: "POST",
-                    url: normalized.baseURL,
-                    providerID: normalized.providerID,
-                    model: normalized.model,
-                    requestSummary: "Image description provider does not support image input.",
-                    requestBody: "(not sent)",
-                    responseBody: "Choose an image-capable provider/model for Image Understanding."
-                )
-            )
-        }
-
-        let prompt = """
-        Describe each attached image for a coding agent that cannot see images directly.
-        Return concise but information-dense notes. For screenshots, include visible UI text, error messages, dialogs, file names, code snippets, tables, controls, layout, and anything likely relevant to debugging or implementation.
-        If there are multiple images, number them as Image 1, Image 2, etc.
-        """
-        let message = AgentMessage(role: .user, content: prompt, images: images)
-        let messages: [AgentMessage]
-        if AgentLocalModelPrompting.prefersLocalLanguageInstruction(normalized) {
-            messages = AgentLocalModelPrompting.messagesWithLanguageInstruction(
-                systemPrompt: "You describe images for a coding agent.",
-                userMessages: [message],
-                configuration: normalized
-            )
-        } else {
-            messages = [message]
-        }
-        let collector = CompressionSummaryCollector()
-        try await AgentClient(configuration: normalized).streamChat(messages: messages) { event in
-            if case .textDelta(let delta) = event {
-                await collector.append(delta)
-            }
-        }
-        let result = await collector.value.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !result.isEmpty else {
-            throw AgentClientError.invalidResponse
-        }
-        return result
-    }
-
-    nonisolated static func contentByAppendingImageDescription(
-        to content: String,
-        description: String,
-        imageCount: Int,
-        providerID: String,
-        model: String
-    ) -> String {
-        let header = "[Image description generated by \(providerID) / \(model) for \(imageCount) attached image\(imageCount == 1 ? "" : "s")]"
-        let block = "\(header)\n\(description)"
-        let trimmed = content.trimmingCharacters(in: .whitespacesAndNewlines)
-        return trimmed.isEmpty ? block : "\(content)\n\n\(block)"
-    }
-
     func consumeNextQueuedMessageIfNeeded(for runtime: AgentRuntime) {
         // Wait for any in-flight compression to finish — otherwise the
         // user's queued message would race a compression that just got
@@ -524,6 +418,30 @@ extension AppState {
         refreshAgentWorkspaceCollision()
         _ = startAgentGoalPlanningIfNeeded(for: runtime)
         defer {
+            let computerUseLeaseID: AgentComputerUseLease.ID? = {
+                guard let lease = AgentComputerUseCoordinator.shared.state.lease,
+                      lease.owner.runtimeID == runtime.id,
+                      lease.owner.turnID == turnID else {
+                    return nil
+                }
+                return lease.id
+            }()
+            AgentComputerUseCoordinator.shared.finishTurn(
+                runtimeID: runtime.id,
+                turnID: turnID
+            )
+            // Computer Use approvals are intentionally turn-scoped. The
+            // exclusive lease binds calls to one target during this turn;
+            // retaining `computer_use:*` into a later turn would silently
+            // authorize a different target or newly consequential action.
+            runtime.conversationAllowedToolSignatures.remove("computer_use:*")
+            if let computerUseLeaseID {
+                Task {
+                    try? await AgentComputerUseBridge.shared.endControlSession(
+                        controlLeaseID: computerUseLeaseID.uuidString.lowercased()
+                    )
+                }
+            }
             let shouldConsumeQueueAfterStop = runtime.shouldConsumeQueueAfterStop
             runtime.isResponding = false
             runtime.turnStartedAt = nil
@@ -539,8 +457,12 @@ extension AppState {
             refreshAgentWorkspaceCollision()
             captureAgentPlanFromLatestMessage(for: runtime)
             let didDefineGoal = captureAgentGoalDefinitionFromLatestMessage(for: runtime)
-            captureAgentGoalEvaluationFromLatestMessage(for: runtime)
-            prepareNextAgentGoalPlanningCycleIfNeeded(for: runtime)
+            // Do not advance a completed Plan into a fresh planning cycle
+            // from unconditional turn cleanup. This defer also runs after
+            // quota errors, timeouts, cancellation, and empty streams; in
+            // those cases even a closed, partially streamed goal-check is not
+            // authoritative. The successful prose-only reply path owns both
+            // evaluation capture and cycle advancement.
             startAgentGoalPlanningAfterCaptureIfNeeded(didDefineGoal, for: runtime)
             persistAgentSession(runtime: runtime)
             if !shouldConsumeQueueAfterStop {
@@ -644,7 +566,11 @@ extension AppState {
 
         // `var` so a managed output-quality failure can swap in an escalated
         // client and re-run the round (see the no-tool-call guard below).
-        var client = AgentClient(configuration: turnConfiguration, someIMContext: someIMContext)
+        var client = AgentClient(
+            configuration: turnConfiguration,
+            someIMContext: someIMContext,
+            openAIResponsesContinuationState: runtime.openAIResponsesContinuationState
+        )
         // Resolve the runtime's workspace path for tool execution —
         // never read AppState.rootDirectory here. Concurrent runtimes
         // can be running against different workspaces; the window's
@@ -832,6 +758,12 @@ extension AppState {
             )
             runtime.messages.append(assistantMessage)
             let assistantID = assistantMessage.id
+            // Cancellation, provider retry, or any other early exit must not
+            // strand a visible patch card in the non-interactive collecting
+            // state.
+            defer {
+                runtime.collectingPatchReviewMessageIDs.remove(assistantID)
+            }
             // Stamp the wall-clock start so we can attach an elapsed
             // seconds value to the message footer once the stream
             // finishes. We use the moment we hand the request off to
@@ -862,6 +794,7 @@ extension AppState {
                 goalPlanningState: runtime.goalPlanningState,
                 currentSessionTitle: runtime.session.title,
                 currentSessionTitleIsLocked: runtime.session.titleIsUserSet,
+                workspaceSessions: workspaceSessionSnapshots(for: runtime),
                 activeExperts: activeExperts,
                 promptProfile: promptProfile
             )
@@ -880,12 +813,12 @@ extension AppState {
                 RUN ON THE REMOTE RUNTIME (these reach \(remoteRuntimeDescriptor.sshTarget)):
                 - search_files, grep_files, read_file, list_directory, git_status — read remote files.
                 - run_command — executes on the remote box, in the remote root. This is your main hands-on tool here; use it for edits too (e.g. targeted `sed` / `perl` replacements, checked-in scripts, `git apply` with an existing patch file, explicit file transfer, or a small auditable heredoc/patch fallback when transfer tools such as rz/sz cannot be installed), inspecting processes, services, disk, logs. Avoid heredoc/here-string file creation as the first choice, but it is an allowed fallback when no safer auditable path exists.
-                - claude_code / codex_cli / cursor_agent / cline_cli — the delegated CLI runs on the remote box (it must be installed there).
+                - claude_code / codex_cli / hermes_cli / cursor_agent / cline_cli — the delegated CLI runs on the remote box (it must be installed there).
 
                 RUN ON THE LOCAL MAC, NOT the remote box — do NOT use these to change or inspect the remote workspace:
                 - create_file / edit_file / apply_patch — create or edit LOCAL files; they do NOT touch remote files. For remote file creation or edits use run_command.
                 - terminal_snapshot / terminal_send_command / terminal_send_control / terminal_list_tabs / terminal_select_tab — drive the ACTIVE side-panel terminal tab, the one the user currently sees. It is a LOCAL shell by default (unless an SSH tab is active)\(remoteRuntimeDescriptor.transport == .daemon ? "; for a daemon runtime it can never reach the remote box" : ""). To run something on the remote box, use run_command, not the terminal tools.
-                - skills / memory / MCP management (list_skills, read_skill, add_memory, create_user_skill, update_user_skill, delete_user_skill, search_mcp_servers, suggest_mcp_server, configure_mcp_server), chrome_*, computer_use_*, web_search, web_fetch, generate_image, visual_qa_screenshot, capture_screenshot — these are about the local WillDeep install / this Mac, not the remote host. web_fetch also can't reach the remote box's private/loopback services.
+                - skills / memory / MCP management (list_skills, read_skill, add_memory, create_user_skill, create_user_skills, update_user_skill, delete_user_skill, search_mcp_servers, suggest_mcp_server, configure_mcp_server), chrome_*, computer_use_*, web_search, web_fetch, generate_image, visual_qa_screenshot, capture_screenshot — these are about the local WillDeep install / this Mac, not the remote host. web_fetch also can't reach the remote box's private/loopback services.
 
                 Tell the user when an action is local vs remote if it matters.
                 """
@@ -1120,7 +1053,11 @@ extension AppState {
                             runtime.messages.remove(at: dropIndex)
                         }
                         turnConfiguration.model = escalatedModel
-                        client = AgentClient(configuration: turnConfiguration, someIMContext: someIMContext)
+                        client = AgentClient(
+                            configuration: turnConfiguration,
+                            someIMContext: someIMContext,
+                            openAIResponsesContinuationState: runtime.openAIResponsesContinuationState
+                        )
                         let escalatedTier = SomeIMManagedModel.tier(of: escalatedModel)
                         if let escalatedTier {
                             // Cap the persisted floor at one step above the
@@ -1162,7 +1099,7 @@ extension AppState {
                     runtime.messages.append(AgentMessage(role: .system, content: notice))
                     continue
                 }
-                attachRecentGeneratedToolImages(to: assistantID, in: runtime)
+                attachRecentVisibleToolImages(to: assistantID, in: runtime)
                 captureAgentPatchProposals(for: runtime, fromMessageID: assistantID)
                 // A stream can end "successfully" having produced nothing
                 // (provider hiccup, content filter, empty stop). Drop the
@@ -1200,8 +1137,40 @@ extension AppState {
                     // the proposal instead of ending the turn deadlocked.
                     continue
                 }
-                captureAgentGoalEvaluationFromLatestMessage(for: runtime)
-                prepareNextAgentGoalPlanningCycleIfNeeded(for: runtime)
+                let goalChecklistCount = runtime.currentGoal?.checklist.count
+                let hasValidClosedGoalCheck = runtime.messages
+                    .first(where: { $0.id == assistantID })
+                    .map {
+                        AgentGoalChecklistParser.containsEvaluationBlock(
+                            in: $0.content,
+                            checklistCount: goalChecklistCount,
+                            finishReason: finishReason
+                        )
+                    } ?? false
+                let assistantReplyContainsGoalCheck = hasValidClosedGoalCheck
+                if assistantReplyContainsGoalCheck {
+                    let didAdvanceGoalChecklist = captureAgentGoalEvaluationFromLatestMessage(
+                        for: runtime,
+                        finishReason: finishReason
+                    )
+                    // Advance only from this round's explicit Goal
+                    // evaluation. A stale checklist plus an interrupted
+                    // response must resume finalization, not erase the
+                    // completed Plan and launch Goal Teams again.
+                    prepareNextAgentGoalPlanningCycleIfNeeded(
+                        for: runtime,
+                        didAdvanceChecklist: didAdvanceGoalChecklist
+                    )
+                } else if runtime.interactionMode == .goal,
+                          runtime.currentPlan?.status == .done,
+                          runtime.currentGoal?.checklist.contains(where: { !$0.done }) == true {
+                    // Missing Goal evidence must continue the same acceptance
+                    // loop rather than silently ending or creating a new Plan.
+                    prepareNextAgentGoalPlanningCycleIfNeeded(
+                        for: runtime,
+                        didAdvanceChecklist: false
+                    )
+                }
                 let planStatusesAfterReply = runtime.currentPlan?.steps.map(\.status)
                 if didAdvancePlanSinceLastContinuationDecision
                     || planStatusesBeforeReply != planStatusesAfterReply {
@@ -1215,7 +1184,8 @@ extension AppState {
                     for: runtime.currentPlan,
                     automaticContinuationCount: planAutomaticContinuationCount,
                     consecutiveNoProgressReplies: consecutivePlanRepliesWithoutProgress,
-                    hasQueuedUserMessages: !runtime.queuedMessages.isEmpty
+                    hasQueuedUserMessages: !runtime.queuedMessages.isEmpty,
+                    allowsAutomaticExecution: !runtime.currentTurnPlanningOnly
                 ) {
                 case .continueExecution:
                     planAutomaticContinuationCount += 1
@@ -1243,6 +1213,32 @@ extension AppState {
             // Execute every tool call, gating on the user when necessary.
             var anyDenied = false
             var changedWorkspacePath: String?
+            // Git status refreshes are coalesced: instead of one blocking
+            // `git status` subprocess after EVERY write-ish tool (a round
+            // with six edits paid six), non-artifact refreshes set this flag
+            // and run once after the round's tools finish. Attribution is
+            // unchanged — the diff is always taken against the same
+            // turn-level baseline.
+            var roundNeedsGitStatusRefresh = false
+
+            // Stage 1 — surface the whole round before running any of it.
+            // Every tool call is parsed, risk-classified, auto-approval-
+            // resolved, and appended to the transcript up front, so all the
+            // approval cards this round needs light up at once (and can be
+            // resolved in one click via 全部允许) instead of appearing one by
+            // one as each earlier call finishes. Execution stays strictly
+            // sequential in stage 2 below; decisions submitted ahead of
+            // execution are parked in `runtime.pendingToolDecisions` and
+            // consumed by `awaitToolDecision`'s fast path.
+            struct StagedRoundToolCall {
+                let call: AgentMessageToolCall
+                let arguments: [String: AgentJSONValue]
+                let risk: AgentToolRisk
+                let sandboxDecision: AgentSandboxDecision
+                let autoApproval: AgentToolApprovalSource?
+                let recordID: AgentToolCall.ID
+            }
+            var stagedCalls: [StagedRoundToolCall] = []
             for call in latestToolCalls {
                 // Parse argumentsJSON into a dict for downstream risk/dispatch.
                 // The model occasionally emits malformed JSON (especially on
@@ -1315,38 +1311,6 @@ extension AppState {
                     continue
                 }
 
-                // A successful workspace rebind invalidates the root captured
-                // for this model round. Answer every remaining tool_call so
-                // provider history stays structurally valid, but do not run it
-                // against either the stale or newly rebound directory.
-                if let changedWorkspacePath {
-                    let skipped = AgentToolCall(
-                        messageID: assistantID,
-                        externalID: call.externalID,
-                        toolName: call.toolName,
-                        arguments: argsDict,
-                        risk: AgentToolRegistry.risk(
-                            for: call.toolName,
-                            arguments: argsDict,
-                            rootDirectory: workspaceURL
-                        ),
-                        status: .denied,
-                        approvalSource: nil
-                    )
-                    var record = skipped
-                    record.errorMessage = "Skipped after workspace change"
-                    runtime.toolCalls.append(record)
-                        appendToolMessage(
-                            for: runtime,
-                            toolCallID: call.externalID,
-                            payload: "Skipped: the workspace changed to \(changedWorkspacePath). Continue with workspace tools after the user's next message.",
-                            source: .systemNotice,
-                            outcomeStatus: .denied,
-                            errorMessage: record.errorMessage
-                    )
-                    continue
-                }
-
                 let risk = AgentToolRegistry.risk(
                     for: call.toolName,
                     arguments: argsDict,
@@ -1365,7 +1329,8 @@ extension AppState {
                     rootDirectory: workspaceURL,
                     interactionMode: runtime.interactionMode,
                     approvalMode: runtime.approvalMode,
-                    conversationAllowedToolSignatures: runtime.conversationAllowedToolSignatures
+                    conversationAllowedToolSignatures: runtime.conversationAllowedToolSignatures,
+                    computerUseOwner: runtime.computerUseOwner
                 )
                 let isAlwaysAllowed = autoApproval != nil
                 let initialStatus: AgentToolCallStatus
@@ -1407,6 +1372,24 @@ extension AppState {
                 runtime.toolCalls.append(record)
                 let recordID = record.id
 
+                if runtime.currentTurnPlanningOnly,
+                   AgentExecutionIntentPolicy.blocksExecution(risk: risk) {
+                    anyDenied = true
+                    if let index = runtime.toolCalls.firstIndex(where: { $0.id == recordID }) {
+                        runtime.toolCalls[index].status = .denied
+                        runtime.toolCalls[index].errorMessage = "Planning-only request"
+                    }
+                    appendToolMessage(
+                        for: runtime,
+                        toolCallID: call.externalID,
+                        payload: "Blocked: the operator explicitly requested planning or analysis without execution. Return the plan and stop; do not ask for approval.",
+                        source: .systemNotice,
+                        outcomeStatus: .denied,
+                        errorMessage: "Planning-only request"
+                    )
+                    continue
+                }
+
                 // rc2: if the user isn't looking at the app when a tool
                 // call needs them (approve / confirm / answer), surface
                 // a system banner so they don't sit on a stalled turn.
@@ -1418,9 +1401,287 @@ extension AppState {
                     status: initialStatus
                 )
 
+                // Goal evidence planning blocks writes until the host validates
+                // a plan, while still allowing validated public web GETs needed
+                // for research. Resolved during
+                // staging (synchronously, right after the record is appended)
+                // so a gated call never sits on screen as an approvable card.
+                // `ask_user` is exempt exactly as in the old serial flow,
+                // where its handler ran ahead of this gate.
+                if risk != .userInput,
+                   Self.goalPlanningGateBlocks(
+                    toolName: call.toolName,
+                    arguments: argsDict,
+                    risk: risk,
+                    isActive: runtime.isPlanGateActive
+                ) {
+                    anyDenied = true
+                    if let index = runtime.toolCalls.firstIndex(where: { $0.id == recordID }) {
+                        runtime.toolCalls[index].status = .denied
+                        runtime.toolCalls[index].errorMessage = "Goal planning validation required"
+                    }
+                    appendToolMessage(
+                        for: runtime,
+                        toolCallID: call.externalID,
+                        payload: "Blocked: Goal evidence planning has not produced a validated execution plan yet. Finish the host-owned planning flow without asking for user approval.",
+                        source: .systemNotice,
+                        outcomeStatus: .denied,
+                        errorMessage: "Goal planning validation required"
+                    )
+                    continue
+                }
+
+                stagedCalls.append(StagedRoundToolCall(
+                    call: call,
+                    arguments: argsDict,
+                    risk: risk,
+                    sandboxDecision: sandboxDecision,
+                    autoApproval: autoApproval,
+                    recordID: recordID
+                ))
+            }
+
+            // Stage 2 — run the staged calls strictly in order, waiting on
+            // each pending user decision individually. A decision the user
+            // already submitted (per card, or via the batch 全部允许 action)
+            // is consumed instantly by `awaitToolDecision`'s fast path.
+            //
+            // Because staging pre-created records for calls that have not
+            // executed yet (including auto-approved ones already showing
+            // `.running`), every early exit out of this loop must settle the
+            // unexecuted remainder — otherwise a cancelled turn leaves
+            // zombie spinner/approval cards behind. In the old serial flow
+            // those records simply did not exist yet.
+            func settleUnexecutedStagedCalls(from index: Int, reason: String) {
+                guard index < stagedCalls.count else { return }
+                for pending in stagedCalls[index...] {
+                    runtime.pendingToolDecisions.removeValue(forKey: pending.recordID)
+                    guard let recordIndex = runtime.toolCalls.firstIndex(where: { $0.id == pending.recordID }) else {
+                        continue
+                    }
+                    let status = runtime.toolCalls[recordIndex].status
+                    if status == .running || status.isBlockingForUserDecision {
+                        runtime.toolCalls[recordIndex].status = .denied
+                        runtime.toolCalls[recordIndex].errorMessage = reason
+                    }
+                }
+            }
+            // Consecutive read-tier staged calls collected for concurrent
+            // execution. The system prompt already tells the model to batch
+            // independent reads into one reply; honoring that with a fan-out
+            // turns N sequential grep/read round-trips into one. Records
+            // were appended during staging, so collection here only defers
+            // execution — order in `runtime.toolCalls` is already fixed.
+            var pendingParallelReads: [AgentPendingParallelRead] = []
+            // Shared AgentToolContext builder for the concurrent read batch
+            // and the serial path below. Captures this round's workspace
+            // binding plus the `changedWorkspacePath` slot the
+            // workspace-change sink writes into.
+            var needsPatchReviewBoundary = false
+            var pendingPatchReviewPathKeys: Set<String>? = []
+            func awaitPatchReviewBoundary() async {
+                // Seal before suspending. The UI can now enable Apply /
+                // Reject, and a very fast click is still safe because the
+                // waiter re-reads cards that were already resolved.
+                runtime.collectingPatchReviewMessageIDs.remove(assistantID)
+                _ = await awaitPendingAgentPatchProposals(
+                    forMessageID: assistantID,
+                    runtime: runtime
+                )
+            }
+            func makeToolContext(
+                sandboxMode: AgentSandboxMode,
+                patchAutoApplySource: AgentToolApprovalSource?,
+                delegatedProgressSink: (@MainActor (AgentDelegatedTerminalProgressUpdate) -> Void)? = nil
+            ) -> AgentToolContext {
+                AgentToolContext(
+                    rootDirectory: workspaceURL,
+                    workspaceLocation: workspaceLocation,
+                    runtimeDescriptor: remoteRuntimeDescriptor,
+                    runtimeID: runtime.id,
+                    turnID: runtime.activeTurnID,
+                    computerUseSessionTitle: runtime.session.title,
+                    jobRegistry: agentJobRegistry,
+                    mediaTaskRegistry: agentMediaTaskRegistry,
+                    shortDramaStore: agentShortDramaStore,
+                    sessionQueueSnapshotProvider: {
+                        AgentSessionQueueSnapshot(
+                            queuedMessages: runtime.queuedMessages,
+                            pendingDispatches: self.pendingDispatchQueue
+                                .filter { $0.runtimeID == runtime.id }
+                                .map { entry in
+                                    AgentQueuedDispatchSnapshot(
+                                        userMessageID: entry.userMessageID,
+                                        text: entry.text,
+                                        imageCount: entry.images.count,
+                                        textAttachmentCount: entry.textAttachments.count,
+                                        skillCount: entry.attachedSkills.count,
+                                        providerID: entry.providerID,
+                                        enqueuedAt: entry.enqueuedAt
+                                    )
+                                }
+                        )
+                    },
+                    workspaceSessionsSnapshotProvider: {
+                        self.workspaceSessionSnapshots(for: runtime)
+                    },
+                    sessionTitleSuggestionProvider: {
+                        await self.sessionTitleSuggestionSnapshot(for: runtime)
+                    },
+                    sessionPersistenceBarrier: {
+                        self.persistAgentSession(
+                            runtime: runtime,
+                            touchUpdatedAt: false,
+                            moveToFront: false
+                        )
+                        AgentSessionStore.flushPendingWrites()
+                    },
+                    localCommandEnvironment: AgentToolRunner.localCommandEnvironment(
+                        settings: editorTerminalSettings
+                    ),
+                    sandboxMode: sandboxMode,
+                    patchProposalSink: { title, diff, applyImmediately in
+                        try self.enqueueAgentPatchProposal(
+                            for: runtime,
+                            messageID: assistantID,
+                            title: title,
+                            diff: diff,
+                            autoApplySource: patchAutoApplySource,
+                            applyImmediately: applyImmediately
+                        )
+                    },
+                    // edit_file matches old_string against the same content
+                    // the patch applier will later apply to (open tab buffer
+                    // first, then disk) so tab-vs-disk drift can't break it.
+                    editableContentProvider: { url in
+                        try self.editableContent(forAgentPatchURL: url)
+                    },
+                    patchAutoApplySource: patchAutoApplySource,
+                    terminalController: agentTerminalController,
+                    delegatedProgressSink: delegatedProgressSink,
+                    sessionRenameSink: { title in
+                        try self.renameAgentSessionAfterApproval(
+                            runtimeID: runtime.id,
+                            to: title
+                        )
+                    },
+                    workspaceChangeSink: { path in
+                        let appliedPath = try self.changeAgentSessionWorkspaceAfterApproval(
+                            runtimeID: runtime.id,
+                            to: path
+                        )
+                        changedWorkspacePath = appliedPath
+                        return appliedPath
+                    }
+                )
+            }
+            for (stagedIndex, staged) in stagedCalls.enumerated() {
+                let call = staged.call
+                let argsDict = staged.arguments
+                let risk = staged.risk
+                let sandboxDecision = staged.sandboxDecision
+                let autoApproval = staged.autoApproval
+                let isAlwaysAllowed = autoApproval != nil
+                let recordID = staged.recordID
+                let currentPatchReviewPathKeys = Self.patchReviewPathKeys(
+                    toolName: call.toolName,
+                    arguments: argsDict
+                )
+                let isPatchReviewTool = Self.patchReviewToolNames.contains(call.toolName)
+                let overlapsPendingPatchReview = {
+                    guard isPatchReviewTool,
+                          let pendingPatchReviewPathKeys,
+                          let currentPatchReviewPathKeys else {
+                        return isPatchReviewTool
+                    }
+                    return !pendingPatchReviewPathKeys.isDisjoint(with: currentPatchReviewPathKeys)
+                }()
+
+                // File-edit tools enqueue review proposals without blocking
+                // inside the first tool. Before any different kind of tool
+                // or an overlapping file edit runs, settle the accumulated
+                // disjoint edits as one review group. The overlap boundary is
+                // important: a second edit to the same path must read the
+                // first approved result, not the stale pre-review content.
+                if needsPatchReviewBoundary,
+                   !isPatchReviewTool || overlapsPendingPatchReview {
+                    await awaitPatchReviewBoundary()
+                    needsPatchReviewBoundary = false
+                    pendingPatchReviewPathKeys = []
+                    if Task.isCancelled {
+                        settleUnexecutedStagedCalls(from: stagedIndex, reason: "Cancelled")
+                        return
+                    }
+                }
+
+                // Fan out consecutive read-tier calls instead of paying each
+                // one serially. Only whitelisted pure local workspace reads
+                // qualify: they always auto-run (`.read` never awaits an
+                // approval card or the plan gate) and never enter the
+                // sandbox-escalation flow, which prompts through the single
+                // per-runtime decision waiter that concurrent calls must not
+                // share. Remote workspaces stay serial so the SSH backend
+                // never sees interleaved requests.
+                if changedWorkspacePath == nil,
+                   remoteRuntimeDescriptor == nil,
+                   risk == .read,
+                   Self.parallelReadBatchToolNames.contains(call.toolName) {
+                    pendingParallelReads.append(
+                        AgentPendingParallelRead(
+                            externalID: call.externalID,
+                            toolName: call.toolName,
+                            arguments: argsDict,
+                            sandboxDecision: sandboxDecision,
+                            recordID: recordID,
+                            context: makeToolContext(
+                                sandboxMode: sandboxModeForToolExecution(
+                                    risk: risk,
+                                    approvalSource: autoApproval,
+                                    sandboxDecision: sandboxDecision
+                                ),
+                                patchAutoApplySource: nil
+                            )
+                        )
+                    )
+                    continue
+                }
+
+                // Anything not batched settles the pending reads first so
+                // tool messages keep the model's original call order.
+                if await executeParallelReadBatch(&pendingParallelReads, runtime: runtime) {
+                    settleUnexecutedStagedCalls(from: stagedIndex, reason: "Response stopped")
+                    return
+                }
+
+                // A successful workspace rebind invalidates the root captured
+                // for this model round. Answer every remaining tool_call so
+                // provider history stays structurally valid, but do not run it
+                // against either the stale or newly rebound directory. The
+                // record already exists from staging — settle it in place,
+                // dropping any decision the user parked on it early.
+                if let changedWorkspacePath {
+                    runtime.pendingToolDecisions.removeValue(forKey: recordID)
+                    if let index = runtime.toolCalls.firstIndex(where: { $0.id == recordID }) {
+                        runtime.toolCalls[index].status = .denied
+                        runtime.toolCalls[index].errorMessage = "Skipped after workspace change"
+                    }
+                    appendToolMessage(
+                        for: runtime,
+                        toolCallID: call.externalID,
+                        payload: "Skipped: the workspace changed to \(changedWorkspacePath). Continue with workspace tools after the user's next message.",
+                        source: .systemNotice,
+                        outcomeStatus: .denied,
+                        errorMessage: "Skipped after workspace change"
+                    )
+                    continue
+                }
+
                 if risk == .userInput {
                     let decision = await awaitToolDecision(for: runtime, forCallID: recordID)
-                    if Task.isCancelled { return }
+                    if Task.isCancelled {
+                        settleUnexecutedStagedCalls(from: stagedIndex, reason: "Cancelled")
+                        return
+                    }
                     let answer: String
                     switch decision {
                     case .answered(let typed):
@@ -1460,35 +1721,12 @@ extension AppState {
                     continue
                 }
 
-                // Plan approval gate blocks writes until the user approves,
-                // while still allowing validated public web GETs needed to
-                // research that plan. Blocked calls go back as tool errors so
-                // the model knows to stop and emit a plan.
-                if Self.planGateBlocks(
-                    toolName: call.toolName,
-                    arguments: argsDict,
-                    risk: risk,
-                    isActive: runtime.isPlanGateActive
-                ) {
-                    anyDenied = true
-                    if let index = runtime.toolCalls.firstIndex(where: { $0.id == recordID }) {
-                        runtime.toolCalls[index].status = .denied
-                        runtime.toolCalls[index].errorMessage = "Plan approval required"
-                    }
-                    appendToolMessage(
-                        for: runtime,
-                        toolCallID: call.externalID,
-                        payload: "Blocked: no current plan has explicit user approval. Complete the required planning flow, then stop and wait for approval.",
-                        source: .systemNotice,
-                        outcomeStatus: .denied,
-                        errorMessage: "Plan approval required"
-                    )
-                    continue
-                }
-
                 if risk != .read && !isAlwaysAllowed {
                     let decision = await awaitToolDecision(for: runtime, forCallID: recordID)
-                    if Task.isCancelled { return }
+                    if Task.isCancelled {
+                        settleUnexecutedStagedCalls(from: stagedIndex, reason: "Cancelled")
+                        return
+                    }
                     if case .denied(let reason) = decision {
                         anyDenied = true
                         if let index = runtime.toolCalls.firstIndex(where: { $0.id == recordID }) {
@@ -1544,81 +1782,12 @@ extension AppState {
                     continue
                 }
 
+                if isPatchReviewTool {
+                    runtime.collectingPatchReviewMessageIDs.insert(assistantID)
+                }
                 let patchAutoApplySource = patchAutoApplySource(
                     forToolName: call.toolName,
                     runtime: runtime
-                )
-                let context = AgentToolContext(
-                    rootDirectory: workspaceURL,
-                    workspaceLocation: workspaceLocation,
-                    runtimeDescriptor: remoteRuntimeDescriptor,
-                    runtimeID: runtime.id,
-                    turnID: runtime.activeTurnID,
-                    jobRegistry: agentJobRegistry,
-                    mediaTaskRegistry: agentMediaTaskRegistry,
-                    shortDramaStore: agentShortDramaStore,
-                    sessionQueueSnapshotProvider: {
-                        AgentSessionQueueSnapshot(
-                            queuedMessages: runtime.queuedMessages,
-                            pendingDispatches: self.pendingDispatchQueue
-                                .filter { $0.runtimeID == runtime.id }
-                                .map { entry in
-                                    AgentQueuedDispatchSnapshot(
-                                        userMessageID: entry.userMessageID,
-                                        text: entry.text,
-                                        imageCount: entry.images.count,
-                                        textAttachmentCount: entry.textAttachments.count,
-                                        skillCount: entry.attachedSkills.count,
-                                        providerID: entry.providerID,
-                                        enqueuedAt: entry.enqueuedAt
-                                    )
-                                }
-                        )
-                    },
-                    workspaceSessionsSnapshotProvider: {
-                        self.workspaceSessionSnapshots(for: runtime)
-                    },
-                    sessionTitleSuggestionProvider: {
-                        await self.sessionTitleSuggestionSnapshot(for: runtime)
-                    },
-                    sandboxMode: sandboxModeForToolExecution(
-                        risk: risk,
-                        approvalSource: autoApproval,
-                        sandboxDecision: sandboxDecision
-                    ),
-                    patchProposalSink: { title, diff, applyImmediately in
-                        let proposal = try self.enqueueAgentPatchProposal(
-                            for: runtime,
-                            messageID: assistantID,
-                            title: title,
-                            diff: diff,
-                            autoApplySource: patchAutoApplySource,
-                            applyImmediately: applyImmediately
-                        )
-                        return await self.awaitAgentPatchDecision(proposal, runtime: runtime)
-                    },
-                    // edit_file matches old_string against the same content
-                    // the patch applier will later apply to (open tab buffer
-                    // first, then disk) so tab-vs-disk drift can't break it.
-                    editableContentProvider: { url in
-                        try self.editableContent(forAgentPatchURL: url)
-                    },
-                    patchAutoApplySource: patchAutoApplySource,
-                    terminalController: agentTerminalController,
-                    sessionRenameSink: { title in
-                        try self.renameAgentSessionAfterApproval(
-                            runtimeID: runtime.id,
-                            to: title
-                        )
-                    },
-                    workspaceChangeSink: { path in
-                        let appliedPath = try self.changeAgentSessionWorkspaceAfterApproval(
-                            runtimeID: runtime.id,
-                            to: path
-                        )
-                        changedWorkspacePath = appliedPath
-                        return appliedPath
-                    }
                 )
                 var effectiveArguments = argsDict
                 var delegatedControl: (
@@ -1660,6 +1829,9 @@ extension AppState {
                     effectiveArguments["timeout_seconds"] = .number(
                         Double(contract.timeoutSeconds)
                     )
+                    effectiveArguments["delegated_task_id"] = .string(
+                        contract.id.uuidString
+                    )
                     let delegatedBaselineTask = workspaceURL.map { workspaceURL in
                         Task.detached(priority: .utility) {
                             await Self.loadAgentWorktreeSnapshot(for: workspaceURL)
@@ -1672,6 +1844,30 @@ extension AppState {
                     )
                     persistAgentSession(runtime: runtime)
                 }
+                if let index = runtime.toolCalls.firstIndex(where: { $0.id == recordID }) {
+                    runtime.toolCalls[index].arguments = effectiveArguments
+                }
+                let liveProgressSink: (@MainActor (AgentDelegatedTerminalProgressUpdate) -> Void)?
+                if let delegatedControl {
+                    liveProgressSink = { update in
+                        self.updateDelegatedTerminalProgress(
+                            id: delegatedControl.runID,
+                            runtime: runtime,
+                            update: update
+                        )
+                    }
+                } else {
+                    liveProgressSink = nil
+                }
+                let context = makeToolContext(
+                    sandboxMode: sandboxModeForToolExecution(
+                        risk: risk,
+                        approvalSource: autoApproval,
+                        sandboxDecision: sandboxDecision
+                    ),
+                    patchAutoApplySource: patchAutoApplySource,
+                    delegatedProgressSink: liveProgressSink
+                )
                 let guardedMutation: AgentGuardedGitMutation? = {
                     guard call.toolName == "run_command",
                           let command = argsDict["command"]?.stringValue() else {
@@ -1847,12 +2043,18 @@ extension AppState {
                     )
                     if call.toolName != "change_workspace",
                        call.toolName == "run_command" || risk != .read || patchAutoApplySource != nil {
-                        await refreshGitStatusAfterAgentTool(
-                            for: runtime,
-                            workspaceURL: workspaceURL,
-                            baselineSnapshot: toolBaselineSnapshot,
-                            producesArtifacts: producesArtifacts
-                        )
+                        if producesArtifacts {
+                            // Artifact harvesting needs this tool's own
+                            // artifact baseline — refresh inline as before.
+                            await refreshGitStatusAfterAgentTool(
+                                for: runtime,
+                                workspaceURL: workspaceURL,
+                                baselineSnapshot: toolBaselineSnapshot,
+                                producesArtifacts: true
+                            )
+                        } else {
+                            roundNeedsGitStatusRefresh = true
+                        }
                     }
                     appendToolMessage(
                         for: runtime,
@@ -1861,6 +2063,17 @@ extension AppState {
                         images: result.images,
                         outcomeStatus: .succeeded
                     )
+                    if isPatchReviewTool {
+                        needsPatchReviewBoundary = true
+                        if let currentPatchReviewPathKeys,
+                           let existingPathKeys = pendingPatchReviewPathKeys {
+                            pendingPatchReviewPathKeys = existingPathKeys.union(currentPatchReviewPathKeys)
+                        } else {
+                            // An unparseable target is deliberately
+                            // unbatchable with the next file operation.
+                            pendingPatchReviewPathKeys = nil
+                        }
+                    }
                 } catch is CancellationError {
                     workspaceMutationLease = nil
                     if let delegatedControl {
@@ -1885,8 +2098,26 @@ extension AppState {
                         outcomeStatus: .denied,
                         errorMessage: "Response stopped"
                     )
+                    settleUnexecutedStagedCalls(from: stagedIndex + 1, reason: "Response stopped")
                     return
                 } catch {
+                    if isPatchReviewTool,
+                       runtime.patchProposals.contains(where: {
+                           $0.messageID == assistantID && $0.status == .pending
+                       }) {
+                        // A file tool normally returns immediately after
+                        // enqueueing its proposal. Preserve the review
+                        // boundary even if later result construction throws.
+                        needsPatchReviewBoundary = true
+                        if let currentPatchReviewPathKeys,
+                           let existingPathKeys = pendingPatchReviewPathKeys {
+                            pendingPatchReviewPathKeys = existingPathKeys.union(
+                                currentPatchReviewPathKeys
+                            )
+                        } else {
+                            pendingPatchReviewPathKeys = nil
+                        }
+                    }
                     // Deinit unlocks and closes the cross-process flock.
                     // This is a no-op for ordinary, unguarded tools.
                     workspaceMutationLease = nil
@@ -1919,15 +2150,61 @@ extension AppState {
                             ?? patchAutoApplySource,
                         outcome: "failed"
                     )
+                    // If the command actually ran under seatbelt, say so
+                    // explicitly — the escalation card only covers denials
+                    // the heuristic recognizes; everything else used to
+                    // reach the model as a bare stderr it would blindly
+                    // retry. `_sandbox` on the record reflects the mode the
+                    // command really ran with (escalation retries overwrite
+                    // it), so a post-escalation failure gets no note.
+                    var sandboxNote = ""
+                    if let toolError = error as? AgentToolError,
+                       case .commandFailed = toolError {
+                        let recordedMode = runtime.toolCalls.first(where: { $0.id == recordID })?
+                            .arguments["_sandbox"]?.stringValue()
+                            .flatMap(AgentSandboxMode.init(rawValue:))
+                        if let note = AgentSandboxPolicy.sandboxedFailureNote(
+                            toolName: call.toolName,
+                            command: argsDict["command"]?.stringValue(),
+                            effectiveMode: recordedMode ?? context.sandboxMode
+                        ) {
+                            sandboxNote = "\n\n" + note
+                        }
+                    }
                     appendToolMessage(
                         for: runtime,
                         toolCallID: call.externalID,
-                        payload: "Tool error: \(errorMessage)\n\n(WillDeep: this tool call failed. Do not stop here — diagnose the cause from the exit code/stderr above and try another approach to accomplish the goal. Only give up if you are genuinely blocked, and then explain what you tried and what you still need.)",
+                        payload: "Tool error: \(errorMessage)\(sandboxNote)\n\n(WillDeep: this tool call failed. Do not stop here — diagnose the cause from the exit code/stderr above and try another approach to accomplish the goal. Only give up if you are genuinely blocked, and then explain what you tried and what you still need.)",
                         source: .systemNotice,
                         outcomeStatus: .failed,
                         errorMessage: errorMessage
                     )
                 }
+            }
+
+            // A round that ended on read calls still has an unflushed batch.
+            if await executeParallelReadBatch(&pendingParallelReads, runtime: runtime) {
+                return
+            }
+
+            // A round ending with file edits has no following non-patch tool
+            // to create the review boundary. Wait here after every adjacent
+            // proposal is visible, before asking the provider for another
+            // response (which could otherwise repeat the same edit).
+            if needsPatchReviewBoundary {
+                await awaitPatchReviewBoundary()
+                if Task.isCancelled {
+                    return
+                }
+            }
+
+            if roundNeedsGitStatusRefresh {
+                await refreshGitStatusAfterAgentTool(
+                    for: runtime,
+                    workspaceURL: workspaceURL,
+                    baselineSnapshot: turnBaselineSnapshot,
+                    producesArtifacts: false
+                )
             }
 
             if let changedWorkspacePath {
@@ -1956,6 +2233,204 @@ extension AppState {
         runtime.errorDetails = nil
     }
 
+    /// Read-tier tools safe to execute concurrently inside one model round:
+    /// pure local workspace reads with no side effects. `.read` risk already
+    /// guarantees auto-run (no approval card, no plan gate), and none of
+    /// these can enter the sandbox-escalation flow — that flow suspends on
+    /// the runtime's single tool-decision waiter, which concurrent calls
+    /// must never share. `run_command` stays serial even when classified
+    /// read-only for exactly that reason; `spawn_agent` has its own
+    /// dispatch path and is likewise excluded.
+    nonisolated static let parallelReadBatchToolNames: Set<String> = [
+        "read_file", "search_files", "grep_files", "list_directory", "glob", "git_status"
+    ]
+
+    /// Local file tools whose pending proposals can share one review boundary
+    /// when the model emits them consecutively in the same assistant turn.
+    /// Other write surfaces keep their existing per-call authorization.
+    nonisolated static let patchReviewToolNames: Set<String> = [
+        "create_file", "edit_file", "apply_patch"
+    ]
+
+    /// Conservative path identities used only to decide whether adjacent
+    /// patch tools may share a review boundary. Nil means "unknown target" and
+    /// forces the current batch to settle before another file tool runs.
+    static func patchReviewPathKeys(
+        toolName: String,
+        arguments: [String: AgentJSONValue]
+    ) -> Set<String>? {
+        let rawPaths: [String]
+        switch toolName {
+        case "create_file", "edit_file":
+            guard let path = arguments["path"]?.stringValue() else { return nil }
+            rawPaths = [path]
+        case "apply_patch":
+            guard let rawDiff = arguments["diff"]?.stringValue()?
+                .trimmingCharacters(in: .whitespacesAndNewlines),
+                !rawDiff.isEmpty else {
+                return nil
+            }
+            let extractedBlocks = AgentPatchApplier.extractDiffBlocks(from: rawDiff)
+            let diff = extractedBlocks.count == 1 ? extractedBlocks[0] : rawDiff
+            guard let changes = try? AgentPatchApplier.parse(diff), !changes.isEmpty else {
+                return nil
+            }
+            rawPaths = changes.map(\.path)
+        default:
+            return nil
+        }
+
+        let keys = rawPaths.compactMap { rawPath -> String? in
+            let trimmed = rawPath.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !trimmed.isEmpty else { return nil }
+            return URL(fileURLWithPath: trimmed)
+                .standardizedFileURL
+                .path
+                .precomposedStringWithCanonicalMapping
+                .lowercased()
+        }
+        guard keys.count == rawPaths.count else { return nil }
+        return Set(keys)
+    }
+
+    /// One read-tier staged call collected for concurrent execution. Risk,
+    /// sandbox decision, tool record, and execution context are all resolved
+    /// at collection time; only `AgentToolRunner.run` itself fans out.
+    struct AgentPendingParallelRead {
+        let externalID: String
+        let toolName: String
+        let arguments: [String: AgentJSONValue]
+        let sandboxDecision: AgentSandboxDecision
+        let recordID: AgentToolCall.ID
+        let context: AgentToolContext
+    }
+
+    /// Execute a collected batch of read-tier tool calls concurrently and
+    /// fold the outcomes back in the model's original call order — records
+    /// in `runtime.toolCalls` were already appended in order during staging,
+    /// and tool messages are appended in order here. Returns `true` when the
+    /// enclosing turn must stop (cancellation), mirroring the serial path's
+    /// early return.
+    private func executeParallelReadBatch(
+        _ batch: inout [AgentPendingParallelRead],
+        runtime: AgentRuntime
+    ) async -> Bool {
+        guard !batch.isEmpty else { return false }
+        let entries = batch
+        batch.removeAll()
+
+        var outcomes = [Result<AgentToolResult, Error>?](repeating: nil, count: entries.count)
+        if entries.count == 1 {
+            // Single read: skip the group machinery, byte-identical to the
+            // old serial execution.
+            do {
+                outcomes[0] = .success(
+                    try await AgentToolRunner.run(
+                        name: entries[0].toolName,
+                        arguments: entries[0].arguments,
+                        context: entries[0].context
+                    )
+                )
+            } catch {
+                outcomes[0] = .failure(error)
+            }
+        } else {
+            await withTaskGroup(of: (Int, Result<AgentToolResult, Error>).self) { group in
+                for (index, entry) in entries.enumerated() {
+                    let toolName = entry.toolName
+                    let arguments = entry.arguments
+                    let context = entry.context
+                    group.addTask {
+                        do {
+                            let result = try await AgentToolRunner.run(
+                                name: toolName,
+                                arguments: arguments,
+                                context: context
+                            )
+                            return (index, .success(result))
+                        } catch {
+                            return (index, .failure(error))
+                        }
+                    }
+                }
+                for await (index, outcome) in group {
+                    outcomes[index] = outcome
+                }
+            }
+        }
+
+        var stopTurn = false
+        for (index, entry) in entries.enumerated() {
+            switch outcomes[index] {
+            case .success(let result):
+                if let recordIndex = runtime.toolCalls.firstIndex(where: { $0.id == entry.recordID }) {
+                    runtime.toolCalls[recordIndex].status = .succeeded
+                    runtime.toolCalls[recordIndex].result = result
+                    runtime.toolCalls[recordIndex].arguments[AgentSandboxPolicy.sandboxEscalationRequestArgumentKey] = .bool(false)
+                }
+                runtime.recordComputerUseActivity(toolName: entry.toolName, images: result.images)
+                AgentSandboxAuditLog.append(
+                    toolName: entry.toolName,
+                    arguments: entry.arguments,
+                    decision: entry.sandboxDecision,
+                    approvalSource: nil,
+                    outcome: "succeeded"
+                )
+                appendToolMessage(
+                    for: runtime,
+                    toolCallID: entry.externalID,
+                    payload: result.payload,
+                    images: result.images,
+                    outcomeStatus: .succeeded
+                )
+            case .failure(is CancellationError), nil:
+                // User stopped the turn mid-batch. Answer this call like the
+                // serial cancel path so no record is left spinning, and stop
+                // the turn after the whole batch is folded back.
+                stopTurn = true
+                if let recordIndex = runtime.toolCalls.firstIndex(where: { $0.id == entry.recordID }) {
+                    runtime.toolCalls[recordIndex].status = .denied
+                    runtime.toolCalls[recordIndex].errorMessage = "Response stopped"
+                }
+                appendToolMessage(
+                    for: runtime,
+                    toolCallID: entry.externalID,
+                    payload: "Tool execution stopped with the current Agent turn.",
+                    source: .systemNotice,
+                    outcomeStatus: .denied,
+                    errorMessage: "Response stopped"
+                )
+            case .failure(let error):
+                let workspaceIssue = diagnoseLocalWorkspaceIfNeeded(
+                    after: error,
+                    runtime: runtime,
+                    workspaceURL: entry.context.rootDirectory
+                )
+                let errorMessage = workspaceIssue ?? error.localizedDescription
+                if let recordIndex = runtime.toolCalls.firstIndex(where: { $0.id == entry.recordID }) {
+                    runtime.toolCalls[recordIndex].status = .failed
+                    runtime.toolCalls[recordIndex].errorMessage = errorMessage
+                }
+                AgentSandboxAuditLog.append(
+                    toolName: entry.toolName,
+                    arguments: entry.arguments,
+                    decision: entry.sandboxDecision,
+                    approvalSource: nil,
+                    outcome: "failed"
+                )
+                appendToolMessage(
+                    for: runtime,
+                    toolCallID: entry.externalID,
+                    payload: "Tool error: \(errorMessage)\n\n(WillDeep: this tool call failed. Do not stop here — diagnose the cause from the exit code/stderr above and try another approach to accomplish the goal. Only give up if you are genuinely blocked, and then explain what you tried and what you still need.)",
+                    source: .systemNotice,
+                    outcomeStatus: .failed,
+                    errorMessage: errorMessage
+                )
+            }
+        }
+        return stopTurn
+    }
+
     private func patchAutoApplySource(
         forToolName toolName: String,
         runtime: AgentRuntime
@@ -1964,9 +2439,11 @@ extension AppState {
         if runtime.interactionMode == .goal {
             return .goalMode
         }
-        if runtime.interactionMode != .plan,
-           runtime.approvalMode == .workspaceAccess {
+        if runtime.approvalMode == .workspaceAccess {
             return .workspaceAccess
+        }
+        if runtime.approvalMode == .smart {
+            return .staticAllowlist
         }
         return nil
     }
@@ -2038,7 +2515,7 @@ extension AppState {
     /// — the conservative case where the payload contains arbitrary
     /// bytes from the workspace / MCP / shell, any of which could carry
     /// injection markers. Callers that hand-author the payload string
-    /// (denial notices, plan-mode blocks) should pass `.systemNotice`
+    /// (denial notices, host-owned Goal gates) should pass `.systemNotice`
     /// to skip the neutralizer; the `ask_user` reply path should pass
     /// `.userAnswer` so the content gets wrapped in `<user_answer>` and
     /// the model can tell a typed reply apart from a tool result.
@@ -2511,259 +2988,6 @@ extension AppState {
             return nil
         }
         return value
-    }
-
-    /// Execute one `spawn_agent` tool call: synchronous runs await the
-    /// child loop and return its report inline; background runs return
-    /// a handle and deliver via `subagentReportNotice` on a later round.
-    func executeSpawnAgentToolCall(
-        _ call: AgentMessageToolCall,
-        recordID: AgentToolCall.ID,
-        arguments: [String: AgentJSONValue],
-        runtime: AgentRuntime,
-        configuration: AgentConfiguration,
-        workspaceURL: URL?,
-        runtimeDescriptor: RuntimeDescriptor?,
-        workspaceLocation: WorkspaceLocation?
-    ) async {
-        func finishRecord(status: AgentToolCallStatus, summary: String, payload: String, errorMessage: String? = nil) {
-            if let index = runtime.toolCalls.firstIndex(where: { $0.id == recordID }) {
-                runtime.toolCalls[index].status = status
-                runtime.toolCalls[index].errorMessage = errorMessage
-                runtime.toolCalls[index].subagentProgress = nil
-                if status == .succeeded {
-                    runtime.toolCalls[index].result = AgentToolResult(summary: summary, payload: payload)
-                }
-            }
-            appendToolMessage(
-                for: runtime,
-                toolCallID: call.externalID,
-                payload: payload,
-                source: status == .succeeded ? .toolOutput : .systemNotice,
-                outcomeStatus: status,
-                errorMessage: errorMessage
-            )
-        }
-
-        // Stamp the child's effective model + a live progress line onto the
-        // tool-call record so the card can show "用的哪个子代理 · 进度到哪了"
-        // instead of an opaque spinner. Both fields are render-only.
-        func updateSubagent(model: String? = nil, progress: String? = nil) {
-            guard let index = runtime.toolCalls.firstIndex(where: { $0.id == recordID }) else { return }
-            if let model { runtime.toolCalls[index].subagentModel = model }
-            if let progress { runtime.toolCalls[index].subagentProgress = progress }
-        }
-
-        let prompt = arguments["prompt"]?.stringValue()?
-            .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-        guard !prompt.isEmpty else {
-            finishRecord(
-                status: .failed,
-                summary: "missing prompt",
-                payload: "Tool error: \(AgentSubagentError.missingPrompt.localizedDescription)",
-                errorMessage: AgentSubagentError.missingPrompt.localizedDescription
-            )
-            return
-        }
-
-        let label: String = {
-            if let raw = arguments["label"]?.stringValue()?.trimmingCharacters(in: .whitespacesAndNewlines),
-               !raw.isEmpty {
-                return String(raw.prefix(60))
-            }
-            return String(prompt.prefix(40))
-        }()
-        let runInBackground = arguments["run_in_background"]?.boolValue() ?? false
-
-        var childConfiguration = configuration
-        if let modelOverride = arguments["model"]?.stringValue()?.trimmingCharacters(in: .whitespacesAndNewlines),
-           !modelOverride.isEmpty {
-            childConfiguration.model = modelOverride
-        }
-        updateSubagent(model: childConfiguration.model, progress: "启动中…")
-
-        if runInBackground {
-            do {
-                let run = try agentSubagentRegistry.startBackground(
-                    prompt: prompt,
-                    label: label,
-                    configuration: childConfiguration,
-                    workspaceURL: workspaceURL,
-                    runtimeDescriptor: runtimeDescriptor,
-                    workspaceLocation: workspaceLocation,
-                    parentRuntimeID: runtime.id,
-                    originatingTurnID: runtime.activeTurnID
-                )
-                finishRecord(
-                    status: .succeeded,
-                    summary: "started \(run.displayHandle)",
-                    payload: "Subagent \(run.displayHandle) (\(label)) started in the background on model \(childConfiguration.model). Its report will arrive as a <subagent-report> system message when it finishes — keep working on other things or end your turn; do not poll."
-                )
-            } catch {
-                finishRecord(
-                    status: .failed,
-                    summary: "spawn failed",
-                    payload: "Tool error: \(error.localizedDescription)",
-                    errorMessage: error.localizedDescription
-                )
-            }
-            return
-        }
-
-        do {
-            let outcome = try await AgentSubagentRunner.run(
-                prompt: prompt,
-                configuration: childConfiguration,
-                workspaceURL: workspaceURL,
-                runtimeDescriptor: runtimeDescriptor,
-                workspaceLocation: workspaceLocation,
-                onProgress: { round, toolInvocations in
-                    let toolPart = toolInvocations > 0 ? " · \(toolInvocations) 次工具" : ""
-                    updateSubagent(progress: "第 \(round)/\(AgentSubagentRunner.maxRounds) 轮\(toolPart)")
-                }
-            )
-            let stats = "(subagent \(label): \(outcome.roundCount) round\(outcome.roundCount == 1 ? "" : "s"), \(outcome.toolInvocationCount) tool call\(outcome.toolInvocationCount == 1 ? "" : "s")\(outcome.usageTokens > 0 ? ", \(outcome.usageTokens) tokens" : ""))"
-            finishRecord(
-                status: .succeeded,
-                summary: stats,
-                payload: "\(outcome.report)\n\n\(stats)"
-            )
-        } catch is CancellationError {
-            finishRecord(
-                status: .failed,
-                summary: "cancelled",
-                payload: "Subagent cancelled.",
-                errorMessage: "Cancelled"
-            )
-        } catch {
-            finishRecord(
-                status: .failed,
-                summary: "subagent failed",
-                payload: "Tool error: \(error.localizedDescription)",
-                errorMessage: error.localizedDescription
-            )
-        }
-    }
-
-    nonisolated static func subagentReportNotice(for run: AgentSubagentRun) -> String {
-        let durationText: String = {
-            let total = Int(run.duration.rounded())
-            if total < 60 { return "\(total)s" }
-            let m = total / 60, s = total % 60
-            if m < 60 { return "\(m)m\(s)s" }
-            let h = m / 60, mm = m % 60
-            return "\(h)h\(mm)m"
-        }()
-        return """
-        <subagent-report>
-        Subagent \(run.displayHandle) (\(run.label)) finished: \(run.status.rawValue), duration \(durationText), \(run.roundCount) rounds, \(run.toolInvocationCount) tool calls.
-        Report:
-        \(run.report)
-        </subagent-report>
-        """
-    }
-
-    func appendToolMessage(
-        for runtime: AgentRuntime,
-        toolCallID: String,
-        payload: String,
-        images: [AgentImageAttachment] = [],
-        source: AgentInjectionDefense.ToolMessageSource = .toolOutput,
-        outcomeStatus: AgentToolCallStatus? = nil,
-        errorMessage: String? = nil
-    ) {
-        let sanitized = AgentInjectionDefense.sanitizedToolMessageContent(
-            payload: payload,
-            source: source
-        )
-        let limited: String
-        let maxPayload = 24_000
-        if sanitized.count > maxPayload {
-            limited = String(sanitized.prefix(maxPayload)) + "\n...[tool output truncated]"
-        } else {
-            limited = sanitized
-        }
-        // Images ride on the tool message so vision-capable providers
-        // re-see them every turn (Anthropic re-attaches as tool_result
-        // image blocks). Text-only providers ignore `images` and use the
-        // sanitized text payload.
-        runtime.messages.append(
-            AgentMessage(
-                role: .tool,
-                content: limited,
-                images: images,
-                toolCallID: toolCallID,
-                toolCallStatus: outcomeStatus,
-                toolErrorMessage: errorMessage
-            )
-        )
-    }
-
-    private func attachRecentGeneratedToolImages(to assistantID: UUID, in runtime: AgentRuntime) {
-        guard let assistantIndex = runtime.messages.firstIndex(where: { $0.id == assistantID }) else {
-            return
-        }
-        let images = recentGeneratedToolImages(before: assistantIndex, in: runtime.messages)
-        guard !images.isEmpty else { return }
-        let existingIDs = Set(runtime.messages[assistantIndex].images.map(\.id))
-        let newImages = images.filter { !existingIDs.contains($0.id) }
-        guard !newImages.isEmpty else { return }
-        runtime.messages[assistantIndex].images.append(contentsOf: newImages)
-    }
-
-    private func recentGeneratedToolImages(before assistantIndex: Int, in messages: [AgentMessage]) -> [AgentImageAttachment] {
-        guard assistantIndex > 0 else { return [] }
-        var grouped: [[AgentImageAttachment]] = []
-        var index = assistantIndex - 1
-        while index >= 0 {
-            let message = messages[index]
-            if message.role == .assistant {
-                break
-            }
-            if message.role == .tool {
-                let generated = message.images.filter { $0.source == .generated }
-                if !generated.isEmpty {
-                    grouped.append(generated)
-                }
-            }
-            index -= 1
-        }
-        return grouped.reversed().flatMap { $0 }
-    }
-
-    private func diagnoseLocalWorkspaceIfNeeded(
-        after error: Error,
-        runtime: AgentRuntime,
-        workspaceURL: URL?
-    ) -> String? {
-        guard workspaceURL != nil else { return nil }
-        if let availabilityError = error as? AgentWorkspaceAvailabilityError {
-            return availabilityError.localizedDescription
-        }
-        guard let availability = runtime.diagnoseLocalWorkspaceAfterFailure(),
-              availability.blocksLocalWorkspaceUse,
-              let message = availability.message else {
-            return nil
-        }
-        runtime.errorMessage = message
-        runtime.errorDetails = nil
-        persistAgentSession(runtime: runtime)
-        return message
-    }
-
-    private func terminalShortcutResultRequiresChatPasswordCard(_ result: AgentToolResult) -> Bool {
-        guard let data = result.payload.data(using: .utf8),
-              let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
-            return false
-        }
-        if object["has_pending_protected_input"] as? Bool == true {
-            return true
-        }
-        if let pendingCount = object["pending_protected_input_count"] as? Int,
-           pendingCount > 0 {
-            return true
-        }
-        return false
     }
 
 }

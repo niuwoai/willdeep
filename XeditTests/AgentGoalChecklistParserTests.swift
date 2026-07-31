@@ -113,6 +113,97 @@ struct AgentGoalChecklistParserTests {
         #expect(AgentGoalChecklistParser.applyEvaluation(to: g, from: "Just prose.") == nil)
     }
 
+    @Test
+    func proseDoesNotCountAsCurrentRoundEvaluation() {
+        #expect(!AgentGoalChecklistParser.containsEvaluationBlock(
+            in: "The provider stopped before Goal verification."
+        ))
+    }
+
+    @Test
+    func noChangesBlockStillCountsAsCurrentRoundEvaluation() {
+        let reply = """
+        Verification finished without changing checklist state.
+
+        ```goal-check
+        # no changes
+        ```
+        """
+        #expect(AgentGoalChecklistParser.containsEvaluationBlock(in: reply))
+    }
+
+    @Test
+    func truncatedGoalCheckCannotAdvanceGoalLifecycle() {
+        let reply = """
+        Verification was cut off.
+
+        ```goal-check
+        1: done
+        """
+        #expect(!AgentGoalChecklistParser.containsEvaluationBlock(
+            in: reply,
+            checklistCount: 1
+        ))
+        #expect(AgentGoalChecklistParser.applyEvaluation(
+            to: goal(1),
+            from: reply
+        ) == nil)
+    }
+
+    @Test
+    func emptyUnknownAndOutOfRangeGoalChecksAreInvalid() {
+        let empty = """
+        ```goal-check
+        ```
+        """
+        let invalid = """
+        ```goal-check
+        1: warp-speed
+        99: done
+        ```
+        """
+        #expect(!AgentGoalChecklistParser.containsEvaluationBlock(
+            in: empty,
+            checklistCount: 2
+        ))
+        #expect(!AgentGoalChecklistParser.containsEvaluationBlock(
+            in: invalid,
+            checklistCount: 2
+        ))
+    }
+
+    @Test
+    func closedInRangeGoalCheckIsValidEvenWhenStateDoesNotChange() {
+        let reply = """
+        ```goal-check
+        2: undone
+        ```
+        """
+        #expect(AgentGoalChecklistParser.containsEvaluationBlock(
+            in: reply,
+            checklistCount: 2
+        ))
+    }
+
+    @Test
+    func lengthTruncatedReplyCannotAdvanceEvenWithAClosedGoalCheck() {
+        let reply = """
+        ```goal-check
+        1: done
+        ```
+        """
+        #expect(!AgentGoalChecklistParser.containsEvaluationBlock(
+            in: reply,
+            checklistCount: 1,
+            finishReason: "length"
+        ))
+        #expect(AgentGoalChecklistParser.applyEvaluation(
+            to: goal(1),
+            from: reply,
+            finishReason: "length"
+        ) == nil)
+    }
+
     /// A no-op block (every entry already matches current state)
     /// returns nil so the caller can skip persistence.
     @Test
@@ -177,5 +268,54 @@ struct AgentGoalChecklistParserTests {
         #expect(prompt.contains("# no changes"))
         #expect(prompt.contains("compact delivery summary"))
         #expect(prompt.contains("Do not repeat command transcripts, failed attempts, raw tool output"))
+    }
+
+    @Test
+    func workspaceGoalAwarenessPreventsDuplicateGoalCreation() {
+        let existingSessionID = UUID()
+        let prompt = AgentContextBuilder.systemPrompt(
+            rootDirectory: URL(fileURLWithPath: "/tmp/project"),
+            openedFileURL: nil,
+            fileContent: "",
+            selectedText: "",
+            language: nil,
+            currentSessionTitle: "新会话",
+            workspaceSessions: [
+                AgentWorkspaceSessionSnapshot(
+                    id: existingSessionID,
+                    title: "登录重构调度台",
+                    workspaceRootPath: "/tmp/project",
+                    workspaceDisplayName: "project",
+                    presentationScope: .dispatchBoard,
+                    isActive: false,
+                    isPinned: false,
+                    isArchived: false,
+                    isResponding: true,
+                    isAwaitingProviderSlot: false,
+                    queuedMessageCount: 0,
+                    updatedAt: Date(timeIntervalSince1970: 2_000),
+                    lastActivityAt: Date(timeIntervalSince1970: 2_000),
+                    interactionMode: .goal,
+                    approvalMode: .smart,
+                    executionAgent: .willDeep,
+                    titleIsUserSet: true,
+                    goalStatement: "重构登录流程",
+                    goalCompletedItemCount: 1,
+                    goalTotalItemCount: 3,
+                    goalIsComplete: false,
+                    goalPlanningPhase: .executing,
+                    dispatchParentProjectID: nil,
+                    dispatchTaskID: nil,
+                    isDispatchProject: true,
+                    isDispatchPaused: false
+                )
+            ]
+        )
+
+        #expect(prompt.contains("=== WORKSPACE GOAL AWARENESS ==="))
+        #expect(prompt.contains("[dispatch-project, running] 登录重构调度台"))
+        #expect(prompt.contains(existingSessionID.uuidString))
+        #expect(prompt.contains("Do not emit a new `goal` block"))
+        #expect(prompt.contains("only one non-paused unfinished dispatch project"))
     }
 }

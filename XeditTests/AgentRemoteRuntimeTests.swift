@@ -4,6 +4,7 @@
 //
 
 import Foundation
+import Security
 import Testing
 @testable import WillDeep
 
@@ -18,6 +19,34 @@ struct AgentRemoteRuntimeTests {
         #expect(AgentSettingsStore.serviceName(debugBuild: false) == "com.willdeep.agent")
         #expect(AgentCredentialStore.serviceName(debugBuild: true) == "com.willdeep.credentials.debug")
         #expect(AgentCredentialStore.serviceName(debugBuild: false) == "com.willdeep.credentials")
+        #expect(AgentCredentialStore.usesDataProtectionKeychain)
+        #expect(AgentCredentialStore.appCredentialAccessGroup == "ZH2S7D6PL6.com.willdeep.app")
+    }
+
+    @Test("all WillDeep credential services use the signed Data Protection Keychain query")
+    func allCredentialServicesUseDataProtectionKeychain() {
+        let services = [
+            AgentSettingsStore.serviceName(debugBuild: true),
+            AgentSettingsStore.serviceName(debugBuild: false),
+            AgentCredentialStore.serviceName(debugBuild: true),
+            AgentCredentialStore.serviceName(debugBuild: false),
+            RemoteRuntimeSecretStore.serviceName(debugBuild: true),
+            RemoteRuntimeSecretStore.serviceName(debugBuild: false),
+            MobileGatewaySettingsStore.keychainService,
+        ]
+
+        for service in services {
+            let query = WillDeepKeychainStore.query(
+                service: service,
+                account: "contract-test",
+                dataProtection: true
+            )
+            #expect(query[kSecUseDataProtectionKeychain as String] as? Bool == true)
+            #expect(
+                query[kSecAttrAccessGroup as String] as? String
+                    == "ZH2S7D6PL6.com.willdeep.app"
+            )
+        }
     }
 
     @Test("runtime store starts empty without seeding personal SSH hosts")
@@ -106,6 +135,33 @@ struct AgentRemoteRuntimeTests {
         #expect(RuntimeArch.parse("aarch64") == .arm64)
         #expect(RuntimeArch.parse("x86_64") == .x86_64)
         #expect(RuntimeArch.parse("amd64") == .x86_64)
+    }
+
+    @Test("runtime capability decoding remains backward compatible and exposes agent CLIs")
+    func runtimeCapabilitiesDecodeAgentCLIs() throws {
+        let legacyJSON = """
+        {
+          "hasGit": true,
+          "hasRipgrep": true,
+          "shellPath": "/bin/zsh"
+        }
+        """
+        let legacy = try JSONDecoder().decode(
+            RuntimeCapabilities.self,
+            from: Data(legacyJSON.utf8)
+        )
+        #expect(legacy.agentCLIPaths.isEmpty)
+        #expect(legacy.availableExecutionAgents == [.willDeep])
+
+        var probed = RuntimeCapabilities.empty
+        probed.agentCLIPaths = [
+            AgentExecutionAgent.claudeCode.rawValue: "/usr/local/bin/claude",
+            AgentExecutionAgent.codexCLI.rawValue: "/usr/local/bin/codex",
+        ]
+        #expect(
+            probed.availableExecutionAgents
+                == [.willDeep, .claudeCode, .codexCLI]
+        )
     }
 
     @Test("remote path validator keeps paths inside workspace")

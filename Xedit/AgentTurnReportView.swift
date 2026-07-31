@@ -9,11 +9,14 @@ import AppKit
 import SwiftUI
 
 struct AgentTurnReportCard: View {
+    private static let initiallyVisibleToolCount = 8
+
     let report: AgentTurnReport
     /// rc13:popover 形态下传 `true`,让卡片以展开态出现 —— popover 本身
     /// 已经是 affordance,再让用户多点一下折叠 header 是冗余。
     var initiallyExpanded: Bool = false
     @State private var didCopy = false
+    @State private var showsAllTools = false
     // Collapsed by default — the report is reference detail, not something
     // the user needs in their face every turn. One line until clicked,
     // same affordance as a collapsed tool-call group.
@@ -141,7 +144,7 @@ struct AgentTurnReportCard: View {
                 }
             }
 
-            ForEach(report.tools) { call in
+            ForEach(visibleTools) { call in
                 HStack(alignment: .top, spacing: 6) {
                     Image(systemName: iconName(for: call))
                         .font(.system(size: 11, weight: .medium))
@@ -170,7 +173,41 @@ struct AgentTurnReportCard: View {
                     }
                 }
             }
+
+            if report.tools.count > Self.initiallyVisibleToolCount {
+                Button {
+                    withAnimation(.easeInOut(duration: 0.12)) {
+                        showsAllTools.toggle()
+                    }
+                } label: {
+                    HStack(spacing: 5) {
+                        Image(systemName: showsAllTools ? "chevron.up" : "chevron.down")
+                            .font(.system(size: 9, weight: .semibold))
+                        Text(
+                            showsAllTools
+                                ? L10n.Transcript.turnReportShowLess
+                                : L10n.Transcript.turnReportShowRemaining("\(hiddenToolCount)")
+                        )
+                        .agentChatSupportingFont(weight: .medium)
+                    }
+                    .foregroundStyle(.blue)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .focusable(false)
+            }
         }
+    }
+
+    private var visibleTools: [AgentToolCall] {
+        showsAllTools
+            ? report.tools
+            : Array(report.tools.prefix(Self.initiallyVisibleToolCount))
+    }
+
+    private var hiddenToolCount: Int {
+        max(0, report.tools.count - Self.initiallyVisibleToolCount)
     }
 
     private var recallSection: some View {
@@ -440,6 +477,8 @@ struct AgentTurnReportCard: View {
             return L10n.Transcript.turnReportApprovalGoal
         case .workspaceAccess:
             return L10n.Transcript.turnReportApprovalWorkspace
+        case .controlLease:
+            return L10n.Transcript.turnReportApprovalControlLease
         case .escalated:
             return L10n.Transcript.turnReportApprovalEscalated
         case .trustedServer:

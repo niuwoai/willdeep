@@ -49,13 +49,6 @@ enum AgentSettingsStore {
     private static let anthropicMaxOutputTokensKey = "com.willdeep.agentSettings.anthropicMaxOutputTokens.v1"
     private static let webSearchProviderKey = "com.willdeep.agentSettings.webSearchProvider.v1"
     private static let localModelSettingsKey = "com.willdeep.agentSettings.localModelSettings.v1"
-    /// Global toggle: 关掉后 plan 自动执行 banner 不再做 destructive keyword
-    /// 扫描，所有 plan 都跑倒计时自动执行。默认开。
-    private static let planAutoExecuteDangerScanKey = "com.willdeep.agentSettings.planAutoExecuteDangerScan.v1"
-    /// Per-workspace 偏好：勾选"本工作区记住"后写入；下次 plan 就绪不再
-    /// 弹 banner，直接走 confirmPlanAndExecute。key 形如
-    /// `com.willdeep.agentSettings.planAutoExecuteSilently.v1.<workspaceHash>`。
-    private static let planAutoExecuteSilentlyKeyPrefix = "com.willdeep.agentSettings.planAutoExecuteSilently.v1."
 
     /// Hard bounds for the Agent chat base font slider. The lower
     /// bound matches the prior caption size so the picker can't shrink
@@ -288,59 +281,6 @@ enum AgentSettingsStore {
         if let data = try? JSONEncoder().encode(settings.normalized) {
             defaults.set(data, forKey: localModelSettingsKey)
         }
-    }
-
-    // MARK: - Plan auto-execution (1.79.0)
-
-    /// 是否在 plan 自动执行 banner 弹出前扫 destructive 关键词；命中后
-    /// 倒计时被禁用，需要用户手动点确认。默认 true（保守 + 可关）。
-    static func loadPlanAutoExecuteDangerScanEnabled() -> Bool {
-        if defaults.object(forKey: planAutoExecuteDangerScanKey) == nil {
-            return true
-        }
-        return defaults.bool(forKey: planAutoExecuteDangerScanKey)
-    }
-
-    static func savePlanAutoExecuteDangerScanEnabled(_ enabled: Bool) {
-        defaults.set(enabled, forKey: planAutoExecuteDangerScanKey)
-    }
-
-    /// 「本工作区记住」：勾选后，下次同 workspace 下 plan 就绪不再弹
-    /// banner，直接 confirm。workspace 用绝对路径的 SHA256 前缀做 key
-    /// 后缀，避免把完整路径写进 defaults。nil workspace（无 workspace
-    /// 的场景）走特殊 key。
-    static func loadPlanAutoExecuteSilently(workspacePath: String?) -> Bool {
-        defaults.bool(forKey: planAutoExecuteSilentlyKey(for: workspacePath))
-    }
-
-    static func savePlanAutoExecuteSilently(_ enabled: Bool, workspacePath: String?) {
-        let key = planAutoExecuteSilentlyKey(for: workspacePath)
-        if enabled {
-            defaults.set(true, forKey: key)
-        } else {
-            defaults.removeObject(forKey: key)
-        }
-    }
-
-    private static func planAutoExecuteSilentlyKey(for workspacePath: String?) -> String {
-        let suffix: String
-        if let path = workspacePath, !path.isEmpty {
-            suffix = workspaceHash(path)
-        } else {
-            suffix = "no-workspace"
-        }
-        return planAutoExecuteSilentlyKeyPrefix + suffix
-    }
-
-    /// 稳定、与平台无关的 workspace 路径短哈希。用 DJB2（djb2a 变体）
-    /// 是为了避免引入 CryptoKit 在所有 target 上的传染；这里只是
-    /// per-workspace 偏好 key 的命名空间，无安全/抗碰撞要求。
-    private static func workspaceHash(_ path: String) -> String {
-        var hash: UInt64 = 5381
-        for byte in path.utf8 {
-            hash = ((hash << 5) &+ hash) &+ UInt64(byte)
-        }
-        return String(hash, radix: 16)
     }
 
     /// Cap on simultaneous in-flight Agent turns per provider. The
@@ -710,21 +650,10 @@ enum AgentSettingsStore {
         if isRunningUnderXCTest {
             return xctestKeychainStorage[keychainStorageKey(account: account)] ?? ""
         }
-        let query: [String: Any] = [
-            kSecClass as String: kSecClassGenericPassword,
-            kSecAttrService as String: keychainService,
-            kSecAttrAccount as String: account,
-            kSecReturnData as String: true,
-            kSecMatchLimit as String: kSecMatchLimitOne
-        ]
-
-        var item: CFTypeRef?
-        guard SecItemCopyMatching(query as CFDictionary, &item) == errSecSuccess,
-              let data = item as? Data,
-              let value = String(data: data, encoding: .utf8) else {
-            return ""
-        }
-        return value
+        return WillDeepKeychainStore.load(
+            service: keychainService,
+            account: account
+        ) ?? ""
     }
 
     private static func keychainStorageKey(account: String) -> String {
@@ -736,12 +665,7 @@ enum AgentSettingsStore {
             xctestKeychainStorage.removeValue(forKey: keychainStorageKey(account: account))
             return
         }
-        let query: [String: Any] = [
-            kSecClass as String: kSecClassGenericPassword,
-            kSecAttrService as String: keychainService,
-            kSecAttrAccount as String: account
-        ]
-        SecItemDelete(query as CFDictionary)
+        WillDeepKeychainStore.delete(service: keychainService, account: account)
     }
 
     /// Why this is more careful than "delete then add":
@@ -755,19 +679,16 @@ enum AgentSettingsStore {
     ///    "WillDeep wants to access 'com.willdeep.agent'"
     ///    prompt repeatedly. We now read the current stored value
     ///    first and skip the entire write if it's identical.
-    /// 2. **Prefer `SecItemUpdate` over delete+add.** When the value
-    ///    actually changed we update the existing row in place. Delete
-    ///    + add severs the Keychain ACL (the list of binaries that
-    ///    were granted access via "Always Allow"), forcing the user to
-    ///    re-grant on next read. `SecItemUpdate` keeps the ACL intact.
-    /// 3. **`kSecAttrAccessible: AfterFirstUnlock`.** Without this the
-    ///    row gets a default policy that some macOS releases interpret
-    ///    as "ask the user on every access". After-first-unlock means
-    ///    once the user has logged into the Mac after boot, the row is
-    ///    readable for the rest of the session without prompting.
+    /// 2. **Data Protection Keychain.** The shared transport scopes rows to
+    ///    WillDeep's signed access group instead of the legacy per-binary ACL,
+    ///    so app updates no longer reopen the password-only authorization
+    ///    dialog. Existing rows migrate after their first successful read.
+    /// 3. **`kSecAttrAccessible: AfterFirstUnlock`.** Once macOS has been
+    ///    unlocked by login / Touch ID after boot, the row stays available
+    ///    without repeated prompts.
     private static func saveAPIKey(_ apiKey: String, account: String) {
         // Empty value → delete the row (don't store empty data).
-        guard !apiKey.isEmpty, let data = apiKey.data(using: .utf8) else {
+        guard !apiKey.isEmpty else {
             deleteAPIKey(account: account)
             return
         }
@@ -784,30 +705,11 @@ enum AgentSettingsStore {
         let existing = loadAPIKey(account: account)
         if existing == apiKey { return }
 
-        let baseQuery: [String: Any] = [
-            kSecClass as String: kSecClassGenericPassword,
-            kSecAttrService as String: keychainService,
-            kSecAttrAccount as String: account
-        ]
-        // Try update first; if the row doesn't exist (`errSecItemNotFound`)
-        // fall through to add. This keeps the ACL list intact so users
-        // who have clicked "Always Allow" stay granted.
-        let updateAttrs: [String: Any] = [
-            kSecValueData as String: data,
-            kSecAttrAccessible as String: kSecAttrAccessibleAfterFirstUnlock
-        ]
-        let updateStatus = SecItemUpdate(baseQuery as CFDictionary, updateAttrs as CFDictionary)
-        if updateStatus == errSecSuccess { return }
-        if updateStatus != errSecItemNotFound {
-            // Something weirder than "row doesn't exist" — wipe and
-            // re-add so we don't leave a half-written row behind.
-            SecItemDelete(baseQuery as CFDictionary)
-        }
-
-        var addQuery = baseQuery
-        addQuery[kSecValueData as String] = data
-        addQuery[kSecAttrAccessible as String] = kSecAttrAccessibleAfterFirstUnlock
-        SecItemAdd(addQuery as CFDictionary, nil)
+        WillDeepKeychainStore.save(
+            apiKey,
+            service: keychainService,
+            account: account
+        )
     }
 }
 
@@ -815,6 +717,13 @@ enum AgentCredentialStore {
     nonisolated static let referencePrefix = "keychain://"
     nonisolated private static let releaseKeychainService = "com.willdeep.credentials"
     nonisolated private static let debugKeychainService = "com.willdeep.credentials.debug"
+    /// Unsandboxed macOS apps otherwise fall back to the legacy file-based
+    /// Keychain, whose per-binary ACL can repeatedly show the password-only
+    /// "wants to use your confidential information" dialog after an update.
+    /// The Data Protection Keychain uses the signed app access group instead
+    /// and follows the Mac's normal login / Touch ID unlock state.
+    nonisolated static let usesDataProtectionKeychain = WillDeepKeychainStore.usesDataProtectionKeychain
+    nonisolated static let appCredentialAccessGroup = WillDeepKeychainStore.accessGroup
 
     nonisolated(unsafe) private static var testKeychainServiceOverride: String?
     nonisolated(unsafe) private static var testKeychainStorage: [String: String]?
@@ -906,7 +815,7 @@ enum AgentCredentialStore {
     nonisolated static func saveReportingStatus(_ secret: String, account: String) -> OSStatus {
         testSaveCounts[account, default: 0] += 1
         let trimmed = secret.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty, let data = trimmed.data(using: .utf8) else {
+        guard !trimmed.isEmpty else {
             delete(account: account)
             return errSecSuccess
         }
@@ -921,25 +830,11 @@ enum AgentCredentialStore {
             return errSecSuccess
         }
 
-        let baseQuery: [String: Any] = [
-            kSecClass as String: kSecClassGenericPassword,
-            kSecAttrService as String: keychainService,
-            kSecAttrAccount as String: account
-        ]
-        let updateAttrs: [String: Any] = [
-            kSecValueData as String: data,
-            kSecAttrAccessible as String: kSecAttrAccessibleAfterFirstUnlock
-        ]
-        let updateStatus = SecItemUpdate(baseQuery as CFDictionary, updateAttrs as CFDictionary)
-        if updateStatus == errSecSuccess { return errSecSuccess }
-        if updateStatus != errSecItemNotFound {
-            SecItemDelete(baseQuery as CFDictionary)
-        }
-
-        var addQuery = baseQuery
-        addQuery[kSecValueData as String] = data
-        addQuery[kSecAttrAccessible as String] = kSecAttrAccessibleAfterFirstUnlock
-        return SecItemAdd(addQuery as CFDictionary, nil)
+        return WillDeepKeychainStore.save(
+            trimmed,
+            service: keychainService,
+            account: account
+        )
     }
 
     nonisolated static func load(account: String) -> String {
@@ -952,21 +847,10 @@ enum AgentCredentialStore {
             return xctestKeychainStorage[account] ?? ""
         }
 
-        let query: [String: Any] = [
-            kSecClass as String: kSecClassGenericPassword,
-            kSecAttrService as String: keychainService,
-            kSecAttrAccount as String: account,
-            kSecReturnData as String: true,
-            kSecMatchLimit as String: kSecMatchLimitOne
-        ]
-
-        var item: CFTypeRef?
-        guard SecItemCopyMatching(query as CFDictionary, &item) == errSecSuccess,
-              let data = item as? Data,
-              let value = String(data: data, encoding: .utf8) else {
-            return ""
-        }
-        return value
+        return WillDeepKeychainStore.load(
+            service: keychainService,
+            account: account
+        ) ?? ""
     }
 
     /// Returns account names only; secret bytes never leave Keychain. This is
@@ -981,27 +865,10 @@ enum AgentCredentialStore {
             return xctestKeychainStorage.keys.filter { $0.hasPrefix(prefix) }.sorted()
         }
 
-        let query: [String: Any] = [
-            kSecClass as String: kSecClassGenericPassword,
-            kSecAttrService as String: keychainService,
-            kSecReturnAttributes as String: true,
-            kSecMatchLimit as String: kSecMatchLimitAll
-        ]
-        var item: CFTypeRef?
-        guard SecItemCopyMatching(query as CFDictionary, &item) == errSecSuccess else {
-            return []
-        }
-        let rows: [[String: Any]]
-        if let many = item as? [[String: Any]] {
-            rows = many
-        } else if let one = item as? [String: Any] {
-            rows = [one]
-        } else {
-            return []
-        }
-        return rows.compactMap { $0[kSecAttrAccount as String] as? String }
-            .filter { $0.hasPrefix(prefix) }
-            .sorted()
+        return WillDeepKeychainStore.accounts(
+            service: keychainService,
+            matchingPrefix: prefix
+        )
     }
 
     nonisolated static func delete(account: String) {
@@ -1015,12 +882,7 @@ enum AgentCredentialStore {
             return
         }
 
-        let query: [String: Any] = [
-            kSecClass as String: kSecClassGenericPassword,
-            kSecAttrService as String: keychainService,
-            kSecAttrAccount as String: account
-        ]
-        SecItemDelete(query as CFDictionary)
+        WillDeepKeychainStore.delete(service: keychainService, account: account)
     }
 
     nonisolated static func isReference(_ value: String) -> Bool {
@@ -1059,4 +921,5 @@ enum AgentCredentialStore {
         }
         return String(scalars).trimmingCharacters(in: CharacterSet(charactersIn: "-"))
     }
+
 }

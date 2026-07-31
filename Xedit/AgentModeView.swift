@@ -19,6 +19,7 @@ nonisolated enum AgentSidePanelResizeMetrics {
 
 struct AgentModeView: View {
     @EnvironmentObject var appState: AppState
+    @ObservedObject private var computerUseCoordinator = AgentComputerUseCoordinator.shared
     @State private var sidebarWidth: CGFloat = 230
     /// Whether the leftmost session list is shown. Toggled from the chat
     /// header (rc24) so a user who lives in one long conversation can
@@ -133,7 +134,8 @@ struct AgentModeView: View {
         )
         // `.backgroundTasks` remains decodable for persisted sessions, but it
         // is never a renderable destination after the monitor rail redesign.
-        let activeSidePanel: AgentSidePanelKind? = if appState.agentPrimaryDestination == .scheduledTasks {
+        let activeSidePanel: AgentSidePanelKind? = if appState.agentPrimaryDestination == .scheduledTasks
+            || appState.agentPrimaryDestination == .dispatchBoard {
             nil
         } else if appState.agentSidePanelKind == .backgroundTasks {
             nil
@@ -163,6 +165,8 @@ struct AgentModeView: View {
             VStack(spacing: 0) {
                 if appState.agentPrimaryDestination == .scheduledTasks {
                     AgentScheduledTasksPage()
+                } else if appState.agentPrimaryDestination == .dispatchBoard {
+                    AgentDispatchBoardPage()
                 } else if appState.agentPrimaryDestination == .roundtable {
                     RoundtableEmbeddedView()
                 } else {
@@ -260,15 +264,13 @@ struct AgentModeView: View {
             }
         }
         .overlay {
-            if appState.agentPrimaryDestination == .conversation {
-                AgentComputerUsePresentationLayer(
-                    activity: appState.activeRuntime?.latestComputerUseActivity,
-                    isActive: appState.activeRuntime?.isResponding == true,
-                    sessionID: appState.activeAgentSessionID,
-                    turnStartedAt: appState.activeRuntime?.turnStartedAt,
-                    thumbnailTrailingInset: activeSidePanel == nil ? 0 : CGFloat(panelWidth + 1)
-                )
-            }
+            // Computer Use is globally exclusive and may be owned by a
+            // background conversation. Keep its status visible when the user
+            // switches sessions or Agent destinations.
+            AgentComputerUsePresentationLayer(
+                coordinator: computerUseCoordinator,
+                thumbnailTrailingInset: activeSidePanel == nil ? 0 : CGFloat(panelWidth + 1)
+            )
         }
         .sheet(isPresented: $isSessionSearchPresented) {
             AgentSessionSearchView()
@@ -276,6 +278,7 @@ struct AgentModeView: View {
         }
         .onAppear {
             DesktopPetWindowManager.shared.attach(to: appState)
+            AgentComputerUseStatusController.shared.install()
             // Keep decoding the legacy enum case for persisted sessions, but
             // never resurrect the retired task-monitor rail.
             if appState.agentSidePanelKind == .backgroundTasks {
@@ -705,6 +708,24 @@ enum AgentDesign {
             weight: weight,
             design: design
         )
+    }
+}
+
+extension View {
+    /// Keep transcript cards and Composer in one centered readable column.
+    /// Capping only each child while leaving its parent full-width lets the
+    /// two regions choose different horizontal origins on wide windows.
+    /// Explicit `minWidth: 0` also prevents narrow/right-panel layouts from
+    /// preserving an intrinsic width and overflowing toward one side.
+    func agentChatReadableColumn(verticalPadding: CGFloat) -> some View {
+        frame(
+            minWidth: 0,
+            maxWidth: AgentDesign.chatMaxContentWidth,
+            alignment: .leading
+        )
+        .padding(.horizontal, AgentDesign.chatHorizontalInset)
+        .padding(.vertical, verticalPadding)
+        .frame(minWidth: 0, maxWidth: .infinity, alignment: .center)
     }
 }
 

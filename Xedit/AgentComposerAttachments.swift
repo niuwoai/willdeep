@@ -78,14 +78,6 @@ struct SendStopButton: View {
                         Image(systemName: "square.fill")
                             .font(.system(size: 9, weight: .bold))
                             .foregroundStyle(Color.red.opacity(0.85))
-                    } else if appState.agentIsAskingPlanModeFlash {
-                        // Parked while the Plan-mode flash judge decides — the
-                        // send is in flight, just not dispatched yet.
-                        Circle()
-                            .fill(Color.secondary.opacity(0.3))
-                            .frame(width: 26, height: 26)
-                        ProgressView()
-                            .controlSize(.small)
                     } else {
                         Circle()
                             .fill(canSend ? Color.accentColor : Color.secondary.opacity(0.3))
@@ -97,7 +89,7 @@ struct SendStopButton: View {
                 }
             }
             .buttonStyle(.plain)
-            .disabled(appState.agentIsAskingPlanModeFlash || (!appState.isAgentResponding && !canSend))
+            .disabled(!appState.isAgentResponding && !canSend)
             .help(
                 appState.isAgentResponding
                     ? L10n.Composer.stopHelp

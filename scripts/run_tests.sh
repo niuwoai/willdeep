@@ -35,12 +35,16 @@ set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 OUT_DIR="${ROOT_DIR}/build/ci"
+LOCAL_XCODE_CACHE_ROOT="${WILLDEEP_XCODE_CACHE_ROOT:-${HOME}/Library/Caches/WillDeep/Xcode/Xedit}"
+DERIVED_DATA="${WILLDEEP_XCODE_DERIVED_DATA_PATH:-${LOCAL_XCODE_CACHE_ROOT}/DerivedData}"
+SOURCE_PACKAGES_DIR="${WILLDEEP_XCODE_SOURCE_PACKAGES_DIR:-${LOCAL_XCODE_CACHE_ROOT}/SourcePackages}"
+PACKAGE_CACHE_DIR="${WILLDEEP_XCODE_PACKAGE_CACHE_DIR:-${LOCAL_XCODE_CACHE_ROOT}/PackageCache}"
 XCRESULT="${OUT_DIR}/XeditTests.xcresult"
 LOG="${OUT_DIR}/xcodebuild.log"
 REPORT_MD="${OUT_DIR}/report.md"
 REPORT_JSON="${OUT_DIR}/report.json"
 
-mkdir -p "${OUT_DIR}"
+mkdir -p "${OUT_DIR}" "${DERIVED_DATA}" "${SOURCE_PACKAGES_DIR}" "${PACKAGE_CACHE_DIR}"
 
 ruby "${ROOT_DIR}/scripts/complexity_guard.rb" "${OUT_DIR}/complexity_report.md" "${OUT_DIR}/complexity_report.json"
 ruby "${ROOT_DIR}/scripts/version_consistency.rb" "${OUT_DIR}/version_report.md" "${OUT_DIR}/version_report.json"
@@ -84,10 +88,19 @@ ruby "${ROOT_DIR}/scripts/project_build_guard.rb" \
     -- \
     xcodebuild test \
       -project "${ROOT_DIR}/Xedit.xcodeproj" \
-      -scheme Xedit \
+      -scheme XeditUnitTests \
       -destination 'platform=macOS' \
       -resultBundlePath "${XCRESULT}" \
-      -derivedDataPath "${OUT_DIR}/DerivedData" \
+      -derivedDataPath "${DERIVED_DATA}" \
+      -clonedSourcePackagesDirPath "${SOURCE_PACKAGES_DIR}" \
+      -packageCachePath "${PACKAGE_CACHE_DIR}" \
+      -skipPackageUpdates \
+      -onlyUsePackageVersionsFromResolvedFile \
+      -enableCodeCoverage NO \
+      -showBuildTimingSummary \
+      COMPILATION_CACHE_ENABLE_CACHING="${WILLDEEP_XCODE_COMPILATION_CACHE:-YES}" \
+      COMPILATION_CACHE_ENABLE_DIAGNOSTIC_REMARKS="${WILLDEEP_XCODE_CACHE_REMARKS:-NO}" \
+      COMPILER_INDEX_STORE_ENABLE="${WILLDEEP_XCODE_INDEX_STORE:-NO}" \
       CODE_SIGNING_ALLOWED=NO \
       CODE_SIGNING_REQUIRED=NO \
       CODE_SIGN_IDENTITY="" \

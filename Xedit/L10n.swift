@@ -122,6 +122,25 @@ nonisolated enum L10n {
     enum ComputerUsePreview {
         static let close = String(localized: "computer-use-preview.close", defaultValue: "Close Computer Use preview")
         static let open = String(localized: "computer-use-preview.open", defaultValue: "Open latest Computer Use screenshot")
+        static let idle = String(localized: "computer-use-preview.state.idle", defaultValue: "Computer Use idle")
+        static let observing = String(localized: "computer-use-preview.state.observing", defaultValue: "Observing")
+        static let controlling = String(localized: "computer-use-preview.state.controlling", defaultValue: "Controlling")
+        static let paused = String(localized: "computer-use-preview.state.paused", defaultValue: "Computer Use paused")
+        static let userTakeover = String(localized: "computer-use-preview.state.user-takeover", defaultValue: "You are in control")
+        static let stopping = String(localized: "computer-use-preview.state.stopping", defaultValue: "Stopping Computer Use")
+        static let stoppingDetail = String(localized: "computer-use-preview.stopping-detail", defaultValue: "Finishing the current action and releasing control…")
+        static let failed = String(localized: "computer-use-preview.state.failed", defaultValue: "Computer Use failed")
+        static let unknownTarget = String(localized: "computer-use-preview.unknown-target", defaultValue: "Unknown application")
+        static let pause = String(localized: "computer-use-preview.action.pause", defaultValue: "Pause")
+        static let takeOver = String(localized: "computer-use-preview.action.take-over", defaultValue: "I'll take over")
+        static let resume = String(localized: "computer-use-preview.action.resume", defaultValue: "Resume")
+        static let stop = String(localized: "computer-use-preview.action.stop", defaultValue: "Stop")
+        static let statusAccessibility = String(localized: "computer-use-preview.status-accessibility", defaultValue: "Computer Use control status")
+
+        static func owningTask(_ title: String) -> String {
+            let template = String(localized: "computer-use-preview.owning-task", defaultValue: "Task: %@")
+            return String(format: template, title)
+        }
     }
 
     enum AgentSelection {
@@ -136,21 +155,23 @@ nonisolated enum L10n {
     }
 
     enum InteractionMode {
-        // 1.96.0-rc3:composer 上的 Normal / Plan / Goal 三档 badge 文案。
-        // 之前是硬编码英文 displayName,简体中文用户看着突兀。
+        // 顶层只区分普通对话和持续验收的 Goal；计划属于任务进度。
         static let normal = String(localized: "interaction-mode.normal", defaultValue: "Normal")
-        static let plan = String(localized: "interaction-mode.plan", defaultValue: "Plan")
         static let goal = String(localized: "interaction-mode.goal", defaultValue: "Goal")
+        static let help = String(
+            localized: "interaction-mode.help",
+            defaultValue: "Conversation mode — Ordinary plans and executes as needed; Goal repeatedly checks a persistent objective."
+        )
     }
 
     enum ApprovalMode {
         static let pickerHelp = String(localized: "approval-mode.picker-help", defaultValue: "Choose how this session approves Agent tool calls.")
-        static let requestEveryTime = String(localized: "approval-mode.request-every-time", defaultValue: "Ask every time")
-        static let requestEveryTimeSummary = String(localized: "approval-mode.request-every-time.summary", defaultValue: "Ask before write, command, network, or remote actions.")
-        static let smart = String(localized: "approval-mode.smart", defaultValue: "Smart approval")
-        static let smartSummary = String(localized: "approval-mode.smart.summary", defaultValue: "AI-approve normal work; ask for risky actions.")
-        static let workspaceAccess = String(localized: "approval-mode.workspace-access", defaultValue: "Workspace access")
-        static let workspaceAccessSummary = String(localized: "approval-mode.workspace-access.summary", defaultValue: "Allow current workspace actions; keep hard safety gates.")
+        static let requestEveryTime = String(localized: "approval-mode.request-every-time", defaultValue: "Strict mode")
+        static let requestEveryTimeSummary = String(localized: "approval-mode.request-every-time.summary", defaultValue: "Ask before every write or external action.")
+        static let smart = String(localized: "approval-mode.smart", defaultValue: "Smart review")
+        static let smartSummary = String(localized: "approval-mode.smart.summary", defaultValue: "Auto-write in the workspace; intelligently review external actions.")
+        static let workspaceAccess = String(localized: "approval-mode.workspace-access", defaultValue: "Workspace write")
+        static let workspaceAccessSummary = String(localized: "approval-mode.workspace-access.summary", defaultValue: "Allow workspace writes; ask before external actions.")
     }
 
     enum Expert {
@@ -761,7 +782,7 @@ nonisolated enum L10n {
         static let customFont = String(localized: "editor-terminal.custom-font", defaultValue: "Custom font")
         static let customFontFootnote = String(localized: "editor-terminal.custom-font-footnote", defaultValue: "Type the exact name of any installed font to override the picker — use this to apply a Nerd Font that isn't auto-detected so powerline/icon glyphs stop showing as boxes. Leave empty to use the selection above.")
         static let customFontPlaceholder = String(localized: "editor-terminal.custom-font-placeholder", defaultValue: "e.g. JetBrainsMono Nerd Font")
-        static let environmentFootnote = String(localized: "editor-terminal.environment-footnote", defaultValue: "One KEY=value per line. These values are added to commands launched from the editor terminal.")
+        static let environmentFootnote = String(localized: "editor-terminal.environment-footnote", defaultValue: "One KEY=value per line. Values are shared by the editor terminal and local Agent commands; $VAR references expand in order.")
         static let environmentSection = String(localized: "editor-terminal.environment-section", defaultValue: "Environment")
         static let followAppSkin = String(localized: "editor-terminal.follow-app-skin", defaultValue: "Follow App Skin")
         static let font = String(localized: "editor-terminal.font", defaultValue: "Font")
@@ -934,8 +955,16 @@ nonisolated enum L10n {
             let template = String(localized: "agent-patch-error.target-already-exists", defaultValue: "Cannot create %@ — it already exists. Use a modify diff instead.")
             return String(format: template, a1)
         }
+        static func duplicateTarget(_ a1: String) -> String {
+            let template = String(localized: "agent-patch-error.duplicate-target", defaultValue: "The same file appears more than once in this patch batch: %@")
+            return String(format: template, a1)
+        }
         static func writeVerificationFailed(_ a1: String) -> String {
             let template = String(localized: "agent-patch-error.write-verification-failed", defaultValue: "The patch reported a write for %@, but the file could not be verified on disk.")
+            return String(format: template, a1)
+        }
+        static func rollbackFailed(_ a1: String) -> String {
+            let template = String(localized: "agent-patch-error.rollback-failed", defaultValue: "Applying the patch failed, and WillDeep could not fully restore: %@")
             return String(format: template, a1)
         }
     }
@@ -1148,15 +1177,12 @@ nonisolated enum L10n {
     }
 
     enum PlanCard {
-        static let approveButton = String(localized: "plan-card.approve-button", defaultValue: "Approve")
         static let collapseHelp = String(localized: "plan-card.collapse-help", defaultValue: "Collapse plan")
         static let collapsed = String(localized: "plan-card.collapsed", defaultValue: "Collapsed")
         static let expandHelp = String(localized: "plan-card.expand-help", defaultValue: "Expand plan")
         static let expanded = String(localized: "plan-card.expanded", defaultValue: "Expanded")
         static let header = String(localized: "plan-card.header", defaultValue: "Plan")
-        static let infoText = String(localized: "plan-card.info-text", defaultValue: "Plan mode blocks writes until you Approve.")
         static let markCompleteButton = String(localized: "plan-card.mark-complete-button", defaultValue: "Mark plan complete")
-        static let rejectButton = String(localized: "plan-card.reject-button", defaultValue: "Reject")
     }
 
     enum PlanRevision {
@@ -1169,15 +1195,15 @@ nonisolated enum L10n {
     }
 
     enum PlanStatus {
-        static let approved = String(localized: "plan-status.approved", defaultValue: "Approved")
+        static let approved = String(localized: "plan-status.approved", defaultValue: "Ready")
         static let done = String(localized: "plan-status.done", defaultValue: "Done")
         static let executing = String(localized: "plan-status.executing", defaultValue: "Executing")
-        static let proposed = String(localized: "plan-status.proposed", defaultValue: "Awaiting Approval")
+        static let proposed = String(localized: "plan-status.proposed", defaultValue: "Planned")
         static let rejected = String(localized: "plan-status.rejected", defaultValue: "Rejected")
     }
 
     enum PlanStep {
-        static let cycleStatusHelp = String(localized: "plan-step.cycle-status.help", defaultValue: "Approve the plan to track step progress")
+        static let cycleStatusHelp = String(localized: "plan-step.cycle-status.help", defaultValue: "This legacy plan is no longer active")
         static let menuEdit = String(localized: "plan-step.menu.edit", defaultValue: "Edit step…")
         static let menuInsertAbove = String(localized: "plan-step.menu.insert-above", defaultValue: "Insert step above…")
         static let menuInsertBelow = String(localized: "plan-step.menu.insert-below", defaultValue: "Insert step below…")
@@ -1355,12 +1381,15 @@ nonisolated enum L10n {
     enum ToolCard {
         static let allow = String(localized: "tool-card.allow", defaultValue: "Allow")
         static let allowConversation = String(localized: "tool-card.allow-conversation", defaultValue: "Allow for This Conversation")
+        static let allowComputerUseSession = String(localized: "tool-card.allow-computer-use-session", defaultValue: "Allow This Control Session")
+        static let approvalControlLeaseBadge = String(localized: "tool-card.approval.control-lease.badge", defaultValue: "CONTROL")
+        static let approvalControlLeaseTooltip = String(localized: "tool-card.approval.control-lease.tooltip", defaultValue: "Auto-approved by the current runtime-, turn-, and target-bound Computer Use controlling lease.")
         static let alwaysAllow = String(localized: "tool-card.always-allow", defaultValue: "Always Allow")
         static let browserAuthorizationTitle = String(localized: "tool-card.authorization.browser.title", defaultValue: "Browser")
         static let browserChromeAuthorizationQuestion = String(localized: "tool-card.authorization.browser.chrome-question", defaultValue: "Allow WillDeep to control Chrome?")
         static let browserEmbeddedAuthorizationQuestion = String(localized: "tool-card.authorization.browser.embedded-question", defaultValue: "Allow WillDeep to control Browser?")
         static let computerUseAuthorizationTitle = String(localized: "tool-card.authorization.computer-use.title", defaultValue: "Computer Use")
-        static let computerUseAuthorizationQuestion = String(localized: "tool-card.authorization.computer-use.question", defaultValue: "Allow WillDeep to use Computer Use?")
+        static let computerUseAuthorizationQuestion = String(localized: "tool-card.authorization.computer-use.question", defaultValue: "Allow WillDeep to control this Mac?")
         static func alwaysAllowHelp(_ a1: String) -> String {
             let template = String(localized: "tool-card.always-allow.help", defaultValue: "Always allow future %@ commands")
             return String(format: template, a1)
@@ -2724,6 +2753,11 @@ nonisolated enum L10n {
             let template = String(localized: "transcript.turn-report.tools-inline", defaultValue: "%@ tools")
             return String(format: template, a1)
         }
+        static func turnReportShowRemaining(_ a1: String) -> String {
+            let template = String(localized: "transcript.turn-report.show-remaining", defaultValue: "Show remaining %@")
+            return String(format: template, a1)
+        }
+        static let turnReportShowLess = String(localized: "transcript.turn-report.show-less", defaultValue: "Show less")
         static let turnReportApprovals = String(localized: "transcript.turn-report.approvals", defaultValue: "Approvals")
         static let turnReportLearning = String(localized: "transcript.turn-report.learning", defaultValue: "Learning")
         static let turnReportElapsed = String(localized: "transcript.turn-report.elapsed", defaultValue: "Elapsed")
@@ -2742,7 +2776,7 @@ nonisolated enum L10n {
         }
         static let turnReportLearningSection = String(localized: "transcript.turn-report.learning-section", defaultValue: "Learning actions")
         static func turnReportApprovalSummary(_ a1: String, _ a2: String) -> String {
-            let template = String(localized: "transcript.turn-report.approval-summary", defaultValue: "%1$@ auto / %2$@ user")
+            let template = String(localized: "transcript.turn-report.approval-summary", defaultValue: "%1$@ auto-approved / %2$@ user-approved")
             return String(format: template, a1, a2)
         }
         static func turnReportSucceeded(_ a1: String) -> String {
@@ -2774,6 +2808,7 @@ nonisolated enum L10n {
         static let turnReportStatusDenied = String(localized: "transcript.turn-report.status.denied", defaultValue: "Denied")
         static let turnReportApprovalUser = String(localized: "transcript.turn-report.approval.user", defaultValue: "User approved")
         static let turnReportApprovalAlwaysAllow = String(localized: "transcript.turn-report.approval.always-allow", defaultValue: "Always allow")
+        static let turnReportApprovalControlLease = String(localized: "transcript.turn-report.approval.control-lease", defaultValue: "Control lease")
         static let turnReportApprovalStatic = String(localized: "transcript.turn-report.approval.static", defaultValue: "Static allow")
         static let turnReportApprovalJudge = String(localized: "transcript.turn-report.approval.judge", defaultValue: "Judge allow")
         static let turnReportApprovalGoal = String(localized: "transcript.turn-report.approval.goal", defaultValue: "Goal mode")
@@ -2937,63 +2972,6 @@ nonisolated enum L10n {
         // 1.85.0-rc16:popover 里 Approve 按钮的 tooltip。仅当事件有
         // pending memoryDrafts 时显示;点击会把 draft 真正写入 memory store。
         static let learningApproveHelp = String(localized: "transcript.learning.approve-help", defaultValue: "Save these memories to your memory store")
-        static let messageTruncatedHelp = String(localized: "transcript.message-truncated.help", defaultValue: "Open in standalone window to view full message content")
-        static func messageTruncatedText(_ a1: String, _ a2: String) -> String {
-            let template = String(localized: "transcript.message-truncated.text", defaultValue: "Message preview keeps start and end (%@ chars max, %@ omitted)")
-            return String(format: template, a1, a2)
-        }
-        static func messageMiddleOmittedText(_ a1: String) -> String {
-            let template = String(localized: "transcript.message-middle-omitted.text", defaultValue: "… %@ characters omitted; showing message start and end …")
-            return String(format: template, a1)
-        }
-        static let searchPlaceholder = String(localized: "transcript.search.placeholder", defaultValue: "Search conversation...")
-        static let searchNoResults = String(localized: "transcript.search.no-results", defaultValue: "No results")
-        static func searchResultPosition(_ a1: String, _ a2: String) -> String {
-            let template = String(localized: "transcript.search.result-position", defaultValue: "%1$@ / %2$@ results")
-            return String(format: template, a1, a2)
-        }
-        static let searchPreviousHelp = String(localized: "transcript.search.previous-help", defaultValue: "Previous result")
-        static let searchNextHelp = String(localized: "transcript.search.next-help", defaultValue: "Next result")
-        static let searchCloseHelp = String(localized: "transcript.search.close-help", defaultValue: "Close conversation search")
-        static let olderHistoryHelp = String(localized: "transcript.older-history.help", defaultValue: "Open in standalone window to view full conversation history")
-        static func olderHistoryText(_ a1: String) -> String {
-            let template = String(localized: "transcript.older-history.text", defaultValue: "More messages earlier in conversation")
-            return String(format: template, a1)
-        }
-        static let olderHistoryPreviewHelp = String(localized: "transcript.older-history.preview-help", defaultValue: "Show a lightweight text-only preview of older messages")
-        static func olderHistoryPreviewLimit(_ a1: String) -> String {
-            let template = String(localized: "transcript.older-history.preview-limit", defaultValue: "Text preview · %@ chars max")
-            return String(format: template, a1)
-        }
-        static func olderHistoryPreviewSummary(_ a1: String, _ a2: String, _ a3: String) -> String {
-            let template = String(localized: "transcript.older-history.preview-summary", defaultValue: "Showing %@ of %@ text chars · %@ omitted")
-            return String(format: template, a1, a2, a3)
-        }
-        static func olderHistoryOmittedText(_ a1: String) -> String {
-            let template = String(localized: "transcript.older-history.omitted", defaultValue: "… %@ older text characters omitted …")
-            return String(format: template, a1)
-        }
-        static let olderHistoryNoText = String(localized: "transcript.older-history.no-text", defaultValue: "Older messages have no plain text preview.")
-        static let olderHistoryOpenFull = String(localized: "transcript.older-history.open-full", defaultValue: "Full details")
-        static let olderHistoryRoleSystem = String(localized: "transcript.older-history.role.system", defaultValue: "System")
-        static let olderHistoryRoleUser = String(localized: "transcript.older-history.role.user", defaultValue: "User")
-        static let olderHistoryRoleAssistant = String(localized: "transcript.older-history.role.assistant", defaultValue: "Assistant")
-        static let olderHistoryRoleTool = String(localized: "transcript.older-history.role.tool", defaultValue: "Tool")
-        static let olderHistoryRoleWorkflow = String(localized: "transcript.older-history.role.workflow", defaultValue: "Workflow")
-        static let olderHistoryRoleWidget = String(localized: "transcript.older-history.role.widget", defaultValue: "Widget")
-        static let olderHistoryRoleScheduledTask = String(localized: "transcript.older-history.role.scheduled-task", defaultValue: "Scheduled task")
-        static let minimapEmptyUserText = String(localized: "transcript.minimap.empty-user-text", defaultValue: "(no text)")
-        static let runningTaskOne = String(localized: "transcript.running-tasks.one", defaultValue: "1 running task")
-        static func runningTasksMany(_ a1: String) -> String {
-            let template = String(localized: "transcript.running-tasks.many", defaultValue: "%@ running tasks")
-            return String(format: template, a1)
-        }
-        static let backgroundTaskOne = String(localized: "transcript.background-tasks.one", defaultValue: "Turn ended · 1 background task running")
-        static func backgroundTasksMany(_ a1: String) -> String {
-            let template = String(localized: "transcript.background-tasks.many", defaultValue: "Turn ended · %@ background tasks running")
-            return String(format: template, a1)
-        }
-        static let runningTasksHelp = String(localized: "transcript.running-tasks.help", defaultValue: "Tasks are still running — output resumes when they finish")
     }
 
 }

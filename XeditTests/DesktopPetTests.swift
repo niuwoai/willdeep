@@ -201,6 +201,16 @@ struct DesktopPetTests {
         ))
     }
 
+    @Test
+    func animationCadenceUsesFifteenFPSInForegroundAndTwentyFourInBackground() {
+        #expect(DesktopPetAnimationCadence.framesPerSecond(appIsActive: true) == 15)
+        #expect(DesktopPetAnimationCadence.framesPerSecond(appIsActive: false) == 24)
+        #expect(
+            DesktopPetAnimationCadence.minimumInterval(appIsActive: true)
+                > DesktopPetAnimationCadence.minimumInterval(appIsActive: false)
+        )
+    }
+
     @Test @MainActor
     func desktopPetAcceptsTheFirstMouseEventWhileAppIsInactive() {
         #expect(DesktopPetFirstMousePolicy.accepts(nil))

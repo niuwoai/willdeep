@@ -2,9 +2,8 @@
 //  AppStateAgentSandboxEscalation.swift
 //  WillDeep
 //
-//  When a local sandboxed `run_command` is blocked by seatbelt, pause and ask
-//  the user whether to re-run the same command outside the sandbox instead of
-//  treating the denial as a dead-end tool failure.
+//  When a local sandboxed `run_command` is blocked by seatbelt, either retry
+//  automatically under Smart Approval or pause for the user's decision.
 //
 
 import Foundation
@@ -14,8 +13,12 @@ enum AgentSandboxEscalationResolution: Equatable {
     case notApplicable
     /// User declined; surface as a denied tool call with this reason.
     case declined(reason: String)
-    /// Re-run immediately with `.escalated`.
-    case retryEscalated(approvalSource: AgentToolApprovalSource)
+    /// Re-run immediately with `.escalated`. `requiresUserApproval` keeps the
+    /// audit trail honest when Smart Approval performed the retry itself.
+    case retryEscalated(
+        approvalSource: AgentToolApprovalSource,
+        requiresUserApproval: Bool
+    )
 }
 
 enum AgentSandboxedCommandRunOutcome {
@@ -52,7 +55,29 @@ extension AppState {
         // A pinned Always Allow signature means the user already trusted this
         // command family — don't make them click through the same wall twice.
         if isAgentCommandSignatureAlwaysAllowed(toolName: toolName, arguments: arguments) {
-            return .retryEscalated(approvalSource: .escalated)
+            return .retryEscalated(
+                approvalSource: .alwaysAllowList,
+                requiresUserApproval: false
+            )
+        }
+
+        // The exact command has already cleared the normal tool gate before
+        // it can reach this failure path. Smart Approval therefore owns the
+        // same-command retry as well; asking again would turn the mode into
+        // Request Every Time by accident. Workspace Access stays manual here
+        // because leaving seatbelt broadens access beyond the workspace that
+        // mode explicitly grants.
+        if Self.smartApprovalAutomaticallyRetriesSandboxDenial(
+            approvalMode: runtime.approvalMode
+        ) {
+            let priorSource = runtime.toolCalls
+                .first(where: { $0.id == recordID })?
+                .approvalSource
+                ?? .staticAllowlist
+            return .retryEscalated(
+                approvalSource: priorSource,
+                requiresUserApproval: false
+            )
         }
 
         let denialDetail = sandboxDenialDetail(from: error)
@@ -91,8 +116,17 @@ extension AppState {
                 toolName: toolName,
                 arguments: arguments
             )
-            return .retryEscalated(approvalSource: pinned ? .alwaysAllowList : .escalated)
+            return .retryEscalated(
+                approvalSource: pinned ? .alwaysAllowList : .escalated,
+                requiresUserApproval: true
+            )
         }
+    }
+
+    nonisolated static func smartApprovalAutomaticallyRetriesSandboxDenial(
+        approvalMode: AgentApprovalMode
+    ) -> Bool {
+        approvalMode == .smart
     }
 
     /// Signature pin check that does not require `.write` risk — sandbox
@@ -101,6 +135,9 @@ extension AppState {
         toolName: String,
         arguments: [String: AgentJSONValue]
     ) -> Bool {
+        guard !toolName.hasPrefix("computer_use_") else {
+            return false
+        }
         guard !agentAlwaysAllowedCommands.isEmpty else { return false }
         let signatures = Set(
             AgentToolAuthorization.matchingSignatures(toolName: toolName, arguments: arguments)
@@ -170,34 +207,34 @@ extension AppState {
                         reason: reason,
                         denialDetail: sandboxDenialDetail(from: error)
                     )
-                case .retryEscalated(let approvalSource):
+                case .retryEscalated(let approvalSource, let requiresUserApproval):
                     escalationAttempted = true
                     executionContext = context.withSandboxMode(.escalated)
+                    let effectiveApprovalSource: AgentToolApprovalSource = requiresUserApproval
+                        ? .escalated
+                        : approvalSource
+                    let approvalReason = requiresUserApproval
+                        ? L10n.ToolCard.sandboxEscalationApprovalReason
+                        : L10n.ToolCard.sandboxEscalationAutomaticApprovalReason
                     if let index = runtime.toolCalls.firstIndex(where: { $0.id == recordID }) {
                         runtime.toolCalls[index].status = .running
-                        // The retry literally leaves the sandbox — keep the
-                        // audit badge honest even when Always Allow also pinned.
-                        runtime.toolCalls[index].approvalSource = approvalSource == .alwaysAllowList
-                            ? .escalated
-                            : approvalSource
+                        runtime.toolCalls[index].approvalSource = effectiveApprovalSource
                         runtime.toolCalls[index].errorMessage = nil
                         runtime.toolCalls[index].arguments[AgentSandboxPolicy.sandboxEscalationRequestArgumentKey] = .bool(false)
                         runtime.toolCalls[index].arguments["_sandbox"] = .string(AgentSandboxMode.escalated.rawValue)
-                        runtime.toolCalls[index].arguments["_approval_reason"] = .string(
-                            L10n.ToolCard.sandboxEscalationApprovalReason
-                        )
+                        runtime.toolCalls[index].arguments["_approval_reason"] = .string(approvalReason)
                     }
                     AgentSandboxAuditLog.append(
                         toolName: toolName,
                         arguments: displayArguments,
                         decision: AgentSandboxDecision(
                             mode: .escalated,
-                            requiresUserApproval: true,
+                            requiresUserApproval: requiresUserApproval,
                             requiresTypedConfirmation: false,
-                            reason: L10n.ToolCard.sandboxEscalationApprovalReason,
+                            reason: approvalReason,
                             prefixRule: nil
                         ),
-                        approvalSource: .escalated,
+                        approvalSource: effectiveApprovalSource,
                         outcome: "sandbox_escalation_retry"
                     )
                     continue

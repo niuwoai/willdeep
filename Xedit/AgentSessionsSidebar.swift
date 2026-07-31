@@ -29,23 +29,40 @@ private struct SidebarWorkspaceGroup: Identifiable {
 }
 
 enum AgentSidebarSessionVisibility {
+    /// `isMetadataOnly` / `metadataOnlyHasUserMessage` come from the
+    /// caller's AppState instance — the classification is per-instance,
+    /// so it cannot be looked up from a global here. Defaults treat every
+    /// session as fully materialized, which is what in-memory-only
+    /// callers (tests, previews) have.
     static func visibleSessions(
         from sessions: [AgentSession],
-        activeID: AgentSession.ID?
+        activeID: AgentSession.ID?,
+        isMetadataOnly: (AgentSession.ID) -> Bool = { _ in false },
+        metadataOnlyHasUserMessage: (AgentSession.ID) -> Bool = { _ in false }
     ) -> [AgentSession] {
+        let workspaceSessions = sessions.filter(\.belongsInWorkspaceSidebar)
+
+        func hasUserMessage(_ session: AgentSession) -> Bool {
+            Self.hasUserMessage(
+                session,
+                isMetadataOnly: isMetadataOnly,
+                metadataOnlyHasUserMessage: metadataOnlyHasUserMessage
+            )
+        }
+
         var workspaceKeysWithHistory: Set<String> = []
-        for session in sessions where hasUserMessage(session) {
+        for session in workspaceSessions where hasUserMessage(session) {
             workspaceKeysWithHistory.insert(session.workspaceSidebarGroupKey)
         }
 
         var fallbackPlaceholderIDs: Set<AgentSession.ID> = []
         var placeholderWorkspaceKeys: Set<String> = []
         if let activeID,
-           let activeSession = sessions.first(where: { $0.id == activeID }),
+           let activeSession = workspaceSessions.first(where: { $0.id == activeID }),
            !hasUserMessage(activeSession) {
             placeholderWorkspaceKeys.insert(activeSession.workspaceSidebarGroupKey)
         }
-        for session in sessions {
+        for session in workspaceSessions {
             if session.id == activeID || hasUserMessage(session) { continue }
             let key = session.workspaceSidebarGroupKey
             if workspaceKeysWithHistory.contains(key) { continue }
@@ -53,7 +70,7 @@ enum AgentSidebarSessionVisibility {
             fallbackPlaceholderIDs.insert(session.id)
         }
 
-        return sessions.filter { session in
+        return workspaceSessions.filter { session in
             session.isPinned
                 || session.id == activeID
                 || hasUserMessage(session)
@@ -61,9 +78,13 @@ enum AgentSidebarSessionVisibility {
         }
     }
 
-    private static func hasUserMessage(_ session: AgentSession) -> Bool {
-        if AgentSessionStore.isMetadataOnly(session.id) {
-            return AgentSessionStore.metadataOnlySessionHasUserMessage(session.id)
+    private static func hasUserMessage(
+        _ session: AgentSession,
+        isMetadataOnly: (AgentSession.ID) -> Bool,
+        metadataOnlyHasUserMessage: (AgentSession.ID) -> Bool
+    ) -> Bool {
+        if isMetadataOnly(session.id) {
+            return metadataOnlyHasUserMessage(session.id)
         }
         return session.messages.contains { $0.role == .user }
     }
@@ -77,7 +98,7 @@ enum AgentSidebarSessionVisibility {
 enum AgentSidebarSessionPlacement {
     static func globalPinnedSessions(from sessions: [AgentSession]) -> [AgentSession] {
         sessions
-            .filter { $0.isPinned && !$0.isArchived }
+            .filter { $0.belongsInWorkspaceSidebar && $0.isPinned && !$0.isArchived }
             .sorted { lhs, rhs in
                 let lhsPinnedAt = lhs.pinnedAt ?? .distantPast
                 let rhsPinnedAt = rhs.pinnedAt ?? .distantPast
@@ -89,7 +110,9 @@ enum AgentSidebarSessionPlacement {
     }
 
     static func workspaceSessions(from sessions: [AgentSession]) -> [AgentSession] {
-        sessions.filter { !$0.isPinned || $0.isArchived }
+        sessions.filter {
+            $0.belongsInWorkspaceSidebar && (!$0.isPinned || $0.isArchived)
+        }
     }
 
     static func workspaceOrder(_ lhs: AgentSession, _ rhs: AgentSession) -> Bool {
@@ -101,6 +124,19 @@ enum AgentSidebarSessionPlacement {
         case (false, false):
             return lhs.lastActivityAt > rhs.lastActivityAt
         }
+    }
+}
+
+enum AgentSidebarSessionTrailingLayout {
+    /// A pinned row only needs enough idle width for its compact pin glyph.
+    /// The full action lane is restored when the pointer enters the row.
+    private static let pinnedIndicatorWidth: CGFloat = 16
+
+    static func reservedActionsWidth(isHovered: Bool, isPinned: Bool) -> CGFloat {
+        if isHovered {
+            return AgentDesign.sidebarSessionTrailingActionsWidth
+        }
+        return isPinned ? pinnedIndicatorWidth : 0
     }
 }
 
@@ -156,17 +192,23 @@ struct AgentSessionsSidebar: View {
                 LazyVStack(alignment: .leading, spacing: 0) {
                     primaryActions
                     Spacer().frame(height: 18)
-                    pinnedSessionsSection
-                    workspacesHeader
-                    ForEach(groupedSessions) { group in
-                        workspaceGroup(group)
-                    }
-                    if appState.agentSessions.isEmpty {
-                        Text(L10n.Sidebar.emptyState)
-                            .font(AgentDesign.secondaryFont)
-                            .foregroundStyle(.secondary)
-                            .padding(.horizontal, 14)
-                            .padding(.top, 16)
+                    if appState.agentPrimaryDestination == .dispatchBoard {
+                        AgentDispatchSidebarSections(
+                            coordinator: appState.agentDispatchCoordinator
+                        )
+                    } else {
+                        pinnedSessionsSection
+                        workspacesHeader
+                        ForEach(groupedSessions) { group in
+                            workspaceGroup(group)
+                        }
+                        if appState.agentSessions.isEmpty {
+                            Text(L10n.Sidebar.emptyState)
+                                .font(AgentDesign.secondaryFont)
+                                .foregroundStyle(.secondary)
+                                .padding(.horizontal, 14)
+                                .padding(.top, 16)
+                        }
                     }
                 }
                 // 30pt 交通灯安全区继续保留；顶部只补 3pt 呼吸感，
@@ -276,6 +318,19 @@ struct AgentSessionsSidebar: View {
                 appState.agentPrimaryDestination = .scheduledTasks
                 appState.agentSidePanelKind = nil
                 appState.agentSidePanelRequest = nil
+            }
+            SidebarActionRow(
+                icon: "point.3.connected.trianglepath.dotted",
+                title: L10n.Dispatch.navigationTitle,
+                shortcut: nil,
+                isSelected: appState.agentPrimaryDestination == .dispatchBoard
+            ) {
+                appState.agentPrimaryDestination = .dispatchBoard
+                appState.agentSidePanelKind = nil
+                appState.agentSidePanelRequest = nil
+                appState.agentDispatchCoordinator.synchronizeInBackground(
+                    with: appState.agentSessions
+                )
             }
             // 专家圆桌:切到嵌入的 .roundtable 目的地(和「已安排」同级,不切主
             // Agent 会话流);嵌入页内还提供「弹出到独立窗口」入口。
@@ -531,16 +586,16 @@ struct AgentSessionsSidebar: View {
                         .foregroundStyle(palette.accent)
                         .help(L10n.Sidebar.hasActiveScheduledTasksTooltip)
                 }
-                // 被截断的标题在悬停时向左滚动整段可读(照 Claude 侧栏),
-                // 松开指针回位;放得下的标题静止不动。hugWidth 用 NSFont
-                // 同步测出自然宽度,保证短标题仍紧贴内容、徽章跟在标题后。
-                MarqueeOnHoverText(
+                // 标题保持单行并以省略号截断，完整内容通过系统 tooltip
+                // 提供。hugWidth 用 NSFont 同步测出自然宽度，保证短标题
+                // 仍紧贴内容、徽章跟在标题后。
+                TruncatedTooltipText(
                     attributed: AttributedString(session.title),
                     font: AgentDesign.sidebarRowFont,
                     color: palette.primaryText.opacity(
                         isActive ? 1 : AgentDesign.sidebarPrimaryTextOpacity
                     ),
-                    tooltip: L10n.Sidebar.sessionMenuRename,
+                    tooltip: session.title,
                     hugWidth: Self.sessionTitleNaturalWidth(session.title)
                 )
                 // sidebar 收窄时:title 优先保留(给它 priority 1),
@@ -686,10 +741,9 @@ struct AgentSessionsSidebar: View {
     /// alert is modal to the active window, so the user can't keep
     /// typing into the session list while it's open.
     /// 会话标题的自然排版宽度(单行、sidebarRowFont)。给
-    /// MarqueeOnHoverText 的 hugWidth 用:同步测出结果,首帧就有正确
-    /// 上限,不用等 PreferenceKey 回填(那会让徽章闪一下)。+2 的余量
-    /// 抵消 NSString 测宽与 SwiftUI Text 渲染间的亚像素差,防止刚好
-    /// 放得下的标题被削掉最后一个字符的边。
+    /// TruncatedTooltipText 的 hugWidth 用：同步测出结果，首帧就有正确
+    /// 上限。+2 的余量抵消 NSString 测宽与 SwiftUI Text 渲染间的
+    /// 亚像素差，防止刚好放得下的标题被削掉最后一个字符的边。
     private static func sessionTitleNaturalWidth(_ title: String) -> CGFloat {
         let font = NSFont.systemFont(ofSize: AgentDesign.sidebarRowFontSize)
         let width = (title as NSString).size(withAttributes: [.font: font]).width
@@ -721,9 +775,9 @@ struct AgentSessionsSidebar: View {
     /// Trailing icon cluster on each session row — pin & archive
     /// buttons that fade in on hover, plus a persistent `pin.fill`
     /// badge when the row is pinned so users can see the state at a
-    /// glance even without hovering. The cluster always reserves its
-    /// hover width so rows with plan/goal badges do not reflow as the
-    /// pointer enters and exits.
+    /// glance even without hovering. Idle unpinned rows release this lane
+    /// back to the title; hovering restores the full controls, while a
+    /// pinned row reserves only the compact pin glyph.
     @ViewBuilder
     private func sessionRowTrailingActions(session: AgentSession, isHovered: Bool) -> some View {
         HStack(spacing: 4) {
@@ -762,7 +816,14 @@ struct AgentSessionsSidebar: View {
                     .rotationEffect(.degrees(45))
             }
         }
-        .frame(width: AgentDesign.sidebarSessionTrailingActionsWidth, alignment: .trailing)
+        .frame(
+            width: AgentSidebarSessionTrailingLayout.reservedActionsWidth(
+                isHovered: isHovered,
+                isPinned: session.isPinned
+            ),
+            alignment: .trailing
+        )
+        .clipped()
     }
 
     private var groupedSessions: [SidebarWorkspaceGroup] {
@@ -775,7 +836,9 @@ struct AgentSessionsSidebar: View {
         // added project does not vanish the moment the next project is added.
         let visibleSessions = AgentSidebarSessionVisibility.visibleSessions(
             from: appState.agentSessions,
-            activeID: appState.activeAgentSessionID
+            activeID: appState.activeAgentSessionID,
+            isMetadataOnly: appState.agentSessionIsMetadataOnly,
+            metadataOnlyHasUserMessage: appState.agentSessionMetadataOnlyHasUserMessage
         )
         let groups = Dictionary(grouping: visibleSessions) { session in
             session.workspaceSidebarGroupKey
@@ -820,7 +883,9 @@ struct AgentSessionsSidebar: View {
     private var globalPinnedSessions: [AgentSession] {
         let visibleSessions = AgentSidebarSessionVisibility.visibleSessions(
             from: appState.agentSessions,
-            activeID: appState.activeAgentSessionID
+            activeID: appState.activeAgentSessionID,
+            isMetadataOnly: appState.agentSessionIsMetadataOnly,
+            metadataOnlyHasUserMessage: appState.agentSessionMetadataOnlyHasUserMessage
         )
         return AgentSidebarSessionPlacement.globalPinnedSessions(from: visibleSessions)
     }

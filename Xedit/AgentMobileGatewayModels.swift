@@ -130,6 +130,11 @@ struct AgentMobileGatewayPatchSnapshot: Equatable {
     var path: String
     var stats: String
     var sessionID: UUID
+    /// Stable review-group identity. Legacy test/fake snapshots may omit it,
+    /// but every live desktop proposal publishes its assistant message id.
+    var batchID: UUID? = nil
+    var batchCount: Int = 1
+    var batchCollecting: Bool = false
 }
 
 struct AgentMobileGatewayDiffSnapshot: Equatable {
@@ -383,6 +388,8 @@ enum AgentMobileGatewayCommandError: LocalizedError, Equatable {
     case confirmationRequired(String)
     case invalidPatchID(String)
     case patchNotFound(UUID)
+    case patchBatchCollecting(UUID)
+    case patchApplyFailed(UUID, String)
     case jobNotFound(String)
     case queueMessageNotFound(UUID)
     case noWorkspace
@@ -428,6 +435,10 @@ enum AgentMobileGatewayCommandError: LocalizedError, Equatable {
             return "Invalid patch id: \(value)."
         case .patchNotFound(let id):
             return "Patch proposal not found: \(id.uuidString)."
+        case .patchBatchCollecting(let id):
+            return "Patch batch is still collecting changes: \(id.uuidString). Retry after the review group is complete."
+        case .patchApplyFailed(let id, let message):
+            return "Patch batch \(id.uuidString) failed to apply: \(message)"
         case .jobNotFound(let id):
             return "Background job not found: \(id)."
         case .queueMessageNotFound(let id):

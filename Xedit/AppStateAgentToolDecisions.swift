@@ -25,6 +25,17 @@ extension AppState {
             addAgentAlwaysAllowedCommand(rule)
         }
         resolveAgentToolCallDecision(id: id, decision: .approved)
+        // The staged pre-pass can have sibling cards of the same command
+        // family already on screen — release them under the freshly pinned
+        // rule too. Candidates are pre-filtered to pin matches, so this
+        // never pays an LLM-judge round trip.
+        reevaluatePendingAgentToolApprovals(for: runtime) { pending in
+            isAgentToolCallAlwaysAllowed(
+                toolName: pending.toolName,
+                arguments: pending.arguments,
+                risk: pending.risk
+            )
+        }
     }
 
     func allowAgentToolFamilyForConversation(id: AgentToolCall.ID) {
@@ -38,10 +49,54 @@ extension AppState {
         ) else { return }
         runtime.conversationAllowedToolSignatures.insert(signature)
         resolveAgentToolCallDecision(id: id, decision: .approved)
+        // Same-surface cards staged for this round unlock with the new
+        // conversation grant instead of asking once per card.
+        reevaluatePendingAgentToolApprovals(for: runtime) { pending in
+            AgentToolAuthorization.interactiveSurfaceSignature(
+                toolName: pending.toolName
+            ) == signature
+        }
     }
 
     func denyAgentToolCall(id: AgentToolCall.ID) {
         resolveAgentToolCallDecision(id: id, decision: .denied(reason: "User denied"))
+    }
+
+    /// Whether a call is eligible for the one-click batch 全部允许 action.
+    /// Only ordinary write-tier approval cards qualify. Explicitly excluded:
+    /// danger-tier typed confirmations (`.awaitingConfirm` — those cards ask
+    /// for a deliberate per-command "confirm"), sandbox-escalation retries
+    /// (same `.pendingApproval` status, but the question is "leave the
+    /// sandbox?", flagged via `sandboxEscalationRequestArgumentKey`), and
+    /// `ask_user` cards. Local `#1983#` preview cards are filtered by the
+    /// instance-level helpers below, not here — this predicate stays pure so
+    /// it can be unit-tested without an AppState.
+    nonisolated static func isBatchApprovableAgentToolCall(_ call: AgentToolCall) -> Bool {
+        call.status == .pendingApproval
+            && call.risk == .write
+            && call.arguments[AgentSandboxPolicy.sandboxEscalationRequestArgumentKey]?.boolValue() != true
+    }
+
+    /// IDs among `calls` that one 全部允许 click would resolve right now.
+    /// Calls whose decision was already submitted (approve/deny clicked while
+    /// an earlier tool was still running) and local confirmation previews are
+    /// skipped.
+    func batchApprovableAgentToolCallIDs(among calls: [AgentToolCall]) -> [AgentToolCall.ID] {
+        calls.filter { call in
+            Self.isBatchApprovableAgentToolCall(call)
+                && !hasPendingAgentToolDecision(id: call.id)
+                && !isLocalConfirmationPreviewCall(id: call.id)
+        }.map(\.id)
+    }
+
+    /// Resolve a batch of approval cards in one action. Each ID goes through
+    /// the normal `resolveAgentToolCallDecision` path: the call the loop is
+    /// currently awaiting resumes immediately; the rest park their approval
+    /// in `pendingToolDecisions` and are consumed in execution order.
+    func approveAgentToolCalls(ids: [AgentToolCall.ID]) {
+        for id in ids {
+            resolveAgentToolCallDecision(id: id, decision: .approved)
+        }
     }
 
     func confirmAgentToolCall(id: AgentToolCall.ID, typedConfirmation: String) -> Bool {
@@ -118,6 +173,12 @@ extension AppState {
         arguments: [String: AgentJSONValue],
         risk: AgentToolRisk
     ) -> Bool {
+        // Legacy builds could persist the over-broad `computer_use:*`
+        // signature. Never honor it: native app control must stay tied to the
+        // current visible control lease and conversation.
+        guard !toolName.hasPrefix("computer_use_") else {
+            return false
+        }
         guard risk == .write,
               !agentAlwaysAllowedCommands.isEmpty else {
             return false
@@ -138,7 +199,8 @@ extension AppState {
         rootDirectory: URL?,
         interactionMode: AgentInteractionMode = .normal,
         approvalMode: AgentApprovalMode = .smart,
-        conversationAllowedToolSignatures: Set<String> = []
+        conversationAllowedToolSignatures: Set<String> = [],
+        computerUseOwner: AgentComputerUseOwner? = nil
     ) async -> AgentToolApprovalSource? {
         guard risk == .write else { return nil }
 
@@ -160,14 +222,24 @@ extension AppState {
             rootDirectory: rootDirectory
         )
 
-        // Plan mode still needs read-like research before the user can judge
-        // the proposed plan. A validated public GET has no workspace side
-        // effects, so let it run instead of turning the investigation into a
-        // confusing "denied" tool result. Keep every other write-tier call
-        // behind the plan gate.
-        if interactionMode == .plan,
-           Self.planModeCanAutoApprove(toolName: toolName, arguments: arguments) {
-            return .staticAllowlist
+        // Computer Use never participates in the generic Goal, conversation,
+        // durable, or workspace auto-approval paths below. A small reversible
+        // action may run only while the same runtime and turn own a controlling
+        // target-bound lease. Strict mode and a read-only observing lease both
+        // require an explicit user decision.
+        if toolName.hasPrefix("computer_use_") {
+            guard approvalMode != .requestEveryTime,
+                  let source = Self.computerUseLeaseApprovalSource(
+                      toolName: toolName,
+                      arguments: arguments,
+                      interactionMode: interactionMode,
+                      approvalMode: approvalMode,
+                      owner: computerUseOwner,
+                      controlState: AgentComputerUseCoordinator.shared.state
+                  ) else {
+                return nil
+            }
+            return source
         }
 
         if let signature = AgentToolAuthorization.interactiveSurfaceSignature(
@@ -195,7 +267,7 @@ extension AppState {
         if interactionMode == .goal,
            !sandboxDecision.requiresTypedConfirmation,
            !Self.isCommandShapedTool(toolName),
-           sandboxDecision.mode != .escalated || Self.planModeCanAutoApprove(
+           sandboxDecision.mode != .escalated || Self.goalPlanningCanAutoApprove(
                toolName: toolName,
                arguments: arguments
            ) {
@@ -206,14 +278,10 @@ extension AppState {
             return nil
         }
 
-        // Delegated coding agents (Claude Code / Codex / Cursor / Cline) are
-        // trusted to run without WillDeep's per-call gate by default: each
-        // ships its own approval + sandbox review, so asking again is
-        // redundant friction. `requestEveryTime` above still forces a manual
-        // prompt for users who opt into asking for everything, and goal mode
-        // already auto-approves them earlier. This only skips WillDeep's outer
-        // gate — `.staticAllowlist` keeps the subprocess under the sandbox
-        // mode the policy computed (see `sandboxModeForToolExecution`).
+        // Delegated coding agents can modify many files in one call. Smart
+        // review and Workspace Access both let workspace-scoped delegated
+        // work pass WillDeep's outer gate; the delegated runner keeps its own
+        // sandbox and review boundary. Strict mode returned above.
         if Self.isTrustedDelegatedAgentTool(toolName) {
             return .staticAllowlist
         }
@@ -231,18 +299,16 @@ extension AppState {
         }
 
         // Workspace Access is resolved HERE — before the escalated /
-        // safety-judge gates below — so workspace-scoped tools the sandbox
-        // marks `.escalated` (notably `web_fetch` and `lark_cli` network
-        // calls) get approved by the workspace whitelist instead of being
-        // short-circuited into a manual prompt by the `run_command`-only
-        // `canSendToSafetyJudge` gate. Previously this block sat after that
-        // gate, so its `web_fetch` / `lark_cli` whitelist entries were dead
-        // code and "general network access" kept prompting in Workspace
-        // mode. Hard safety gates still win: the typed-confirmation danger
-        // gate above pauses destructive ops, and the delegated-agent /
-        // media allowlists already ran earlier.
+        // safety-judge gates below. This mode authorizes workspace-scoped
+        // writes, not arbitrary external effects: escalated network/remote
+        // actions remain manual. Smart review is the mode that can ask the
+        // safety judge to approve safe curl/web/remote operations.
         if approvalMode == .workspaceAccess {
-            if workspaceAccessCanAutoApprove(toolName: toolName, arguments: arguments) {
+            if workspaceAccessCanAutoApprove(
+                toolName: toolName,
+                arguments: arguments,
+                sandboxDecision: sandboxDecision
+            ) {
                 return .workspaceAccess
             }
             // User-pinned always-allow signatures still count in Workspace
@@ -343,7 +409,7 @@ extension AppState {
             guard judgeAutoApprove,
                   let control = arguments["control"]?.stringValue()?
                       .trimmingCharacters(in: .whitespacesAndNewlines).lowercased(),
-                  ["ctrl_c", "enter", "escape"].contains(control) else {
+                  ["ctrl_c", "ctrl_d", "ctrl_right_bracket", "enter", "escape"].contains(control) else {
                 return nil
             }
             let pseudo = AgentToolAuthorization.terminalControlJudgePseudoCommand(control: control)
@@ -356,11 +422,18 @@ extension AppState {
             return nil
         }
 
-        if AgentSandboxPolicy.canAutoApproveWorkspaceWriteCommand(
-            command: command,
-            rootDirectory: rootDirectory
-        ) {
-            return .staticAllowlist
+        if sandboxDecision.mode == .workspaceWrite
+            || sandboxDecision.mode == .workspaceWriteNetwork {
+            // Smart review treats workspace containment as the local write
+            // boundary. Git remains useful for recovery, but its absence must
+            // not turn every in-workspace change into a user approval card.
+            // External effects continue through the classifier/judge below.
+            if AgentSandboxPolicy.canAutoApproveWorkspaceWriteCommand(
+                command: command,
+                rootDirectory: rootDirectory
+            ) {
+                return .staticAllowlist
+            }
         }
 
         switch SafeCommand.classify(command: command) {
@@ -375,6 +448,46 @@ extension AppState {
         return await safetyJudgeApproval(toolName: toolName, command: command)
     }
 
+    nonisolated static func canAutoApproveComputerUse(
+        toolName: String,
+        arguments: [String: AgentJSONValue],
+        interactionMode: AgentInteractionMode,
+        approvalMode: AgentApprovalMode,
+        owner: AgentComputerUseOwner?,
+        controlState: AgentComputerUseControlState
+    ) -> Bool {
+        guard approvalMode != .requestEveryTime else {
+            return false
+        }
+        return AgentComputerUsePolicy.canAutoApproveInOperationalLease(
+            toolName: toolName,
+            arguments: arguments,
+            owner: owner,
+            controlState: controlState
+        )
+    }
+
+    nonisolated static func computerUseLeaseApprovalSource(
+        toolName: String,
+        arguments: [String: AgentJSONValue],
+        interactionMode: AgentInteractionMode,
+        approvalMode: AgentApprovalMode,
+        owner: AgentComputerUseOwner?,
+        controlState: AgentComputerUseControlState
+    ) -> AgentToolApprovalSource? {
+        guard canAutoApproveComputerUse(
+            toolName: toolName,
+            arguments: arguments,
+            interactionMode: interactionMode,
+            approvalMode: approvalMode,
+            owner: owner,
+            controlState: controlState
+        ) else {
+            return nil
+        }
+        return .controlLease
+    }
+
     // MARK: - Safety judge (LLM) with cached operator history
 
     /// TTL for the cached few-shot history block fed to the safety judge.
@@ -384,6 +497,18 @@ extension AppState {
     /// keeping the provider's prompt cache hot. 30 min balances "new
     /// approve-this habits show up quickly" against cache thrash.
     private static let safetyJudgeHistoryTTL: TimeInterval = 30 * 60
+
+    /// How long a judge YES stays reusable for the same tool + command
+    /// family before the next occurrence pays a real judge round trip
+    /// again. 30 min mirrors the few-shot history TTL: long enough to cover
+    /// a work session's repeated `git commit` / `swift build` cadence,
+    /// short enough that a stale allow doesn't outlive the session context
+    /// it was judged in.
+    private static let safetyJudgeVerdictCacheTTL: TimeInterval = 30 * 60
+
+    /// Hard cap on cached verdict entries; beyond it, expired entries are
+    /// pruned first and the cache is cleared as a last resort.
+    private static let safetyJudgeVerdictCacheLimit = 256
 
     /// Cached operator-decision context appended to the judge system prompt.
     /// Bounded and deduped by `AgentSandboxAuditLog.judgeHistorySamples` +
@@ -414,6 +539,27 @@ extension AppState {
         toolName: String,
         command: String
     ) async -> AgentToolApprovalSource? {
+        // A recent YES for this tool + command family skips the network
+        // round trip entirely. Only allows are cached (a deny still falls
+        // through to the user each time), and the static danger gates run
+        // BEFORE this point, so a cached family can never smuggle a
+        // typed-confirmation command past the judge.
+        let cacheKey = AgentToolAuthorization.judgeVerdictCacheKey(
+            toolName: toolName,
+            command: command
+        )
+        if let grantedAt = cachedJudgeAllowedVerdicts[cacheKey],
+           Date().timeIntervalSince(grantedAt) < Self.safetyJudgeVerdictCacheTTL {
+            AgentSandboxAuditLog.recordJudge(
+                toolName: toolName,
+                command: command,
+                model: "verdict-cache",
+                verdict: "allow",
+                detail: "cached family: \(cacheKey)"
+            )
+            return .llmJudge
+        }
+
         let configuration = configurationForSafetyJudge()
         let client = AgentClient(configuration: configuration)
         let result = await client.judgeCommandSafety(
@@ -440,6 +586,16 @@ extension AppState {
             verdict: verdict,
             detail: detail
         )
+        if result == .allow {
+            if cachedJudgeAllowedVerdicts.count >= Self.safetyJudgeVerdictCacheLimit {
+                let cutoff = Date().addingTimeInterval(-Self.safetyJudgeVerdictCacheTTL)
+                cachedJudgeAllowedVerdicts = cachedJudgeAllowedVerdicts.filter { $0.value > cutoff }
+                if cachedJudgeAllowedVerdicts.count >= Self.safetyJudgeVerdictCacheLimit {
+                    cachedJudgeAllowedVerdicts.removeAll()
+                }
+            }
+            cachedJudgeAllowedVerdicts[cacheKey] = Date()
+        }
         return result == .allow ? .llmJudge : nil
     }
 
@@ -469,6 +625,7 @@ extension AppState {
     nonisolated static let trustedDelegatedAgentToolNames: Set<String> = [
         "claude_code",
         "codex_cli",
+        "hermes_cli",
         "cursor_agent",
         "cline_cli"
     ]
@@ -521,7 +678,8 @@ extension AppState {
             return .readOnly
         }
         switch approvalSource {
-        case .workspaceAccess, .goalMode, .alwaysAllowList, .trustedServer, .user:
+        case .workspaceAccess, .goalMode, .alwaysAllowList, .trustedServer,
+             .user, .controlLease:
             return sandboxDecision.mode == .workspaceWriteNetwork ? .workspaceWriteNetwork : .workspaceWrite
         case .escalated:
             return .escalated
@@ -693,24 +851,56 @@ extension AppState {
     /// active Plan-gate, session/workspace identity, and untrusted MCP calls
     /// keep their existing user gate.
     func reevaluatePendingToolCallsForWorkspaceAccess(for runtime: AgentRuntime) {
-        let pendingCallIDs = runtime.toolCalls.compactMap { call in
-            call.status == .pendingApproval ? call.id : nil
-        }
-        guard !pendingCallIDs.isEmpty else { return }
+        reevaluatePendingAgentToolApprovals(
+            for: runtime,
+            requiringApprovalMode: .workspaceAccess
+        ) { _ in true }
+    }
 
-        Task { @MainActor [weak self, weak runtime] in
+    /// Re-run the auto-approval policy for calls already parked at
+    /// `.pendingApproval`, resolving the ones the policy now clears. Shared
+    /// by the Workspace-access posture bridge above and by the Always-Allow /
+    /// conversation-allow click hooks: with the staged pre-pass, a whole
+    /// round's approval cards are on screen at once, so a rule pinned from
+    /// one card must release its siblings too instead of forcing one click
+    /// per card.
+    ///
+    /// `candidateFilter` narrows which pending calls are re-evaluated —
+    /// rule-change callers pass a filter matching only the new rule, so a
+    /// re-evaluation can never send an unrelated command back to the LLM
+    /// judge (a second judge pass could approve something the first pass
+    /// left manual). Sandbox-escalation retry cards and calls with an
+    /// already-submitted decision are never re-evaluated.
+    @discardableResult
+    func reevaluatePendingAgentToolApprovals(
+        for runtime: AgentRuntime,
+        requiringApprovalMode: AgentApprovalMode? = nil,
+        matching candidateFilter: (AgentToolCall) -> Bool
+    ) -> Task<Void, Never>? {
+        let pendingCallIDs = runtime.toolCalls.compactMap { call in
+            Self.isBatchApprovableAgentToolCall(call)
+                && runtime.pendingToolDecisions[call.id] == nil
+                && !runtime.localConfirmationPreviewCallIDs.contains(call.id)
+                && candidateFilter(call)
+                ? call.id : nil
+        }
+        guard !pendingCallIDs.isEmpty else { return nil }
+
+        return Task { @MainActor [weak self, weak runtime] in
             guard let self, let runtime else { return }
             let rootDirectory = try? runtime.localWorkspaceURLForOptimisticUse()
 
             for callID in pendingCallIDs {
-                guard runtime.approvalMode == .workspaceAccess,
-                      let index = runtime.toolCalls.firstIndex(where: { $0.id == callID }),
+                if let requiringApprovalMode, runtime.approvalMode != requiringApprovalMode {
+                    continue
+                }
+                guard let index = runtime.toolCalls.firstIndex(where: { $0.id == callID }),
                       runtime.toolCalls[index].status == .pendingApproval else {
                     continue
                 }
 
                 let call = runtime.toolCalls[index]
-                guard !Self.planGateBlocks(
+                guard !Self.goalPlanningGateBlocks(
                     toolName: call.toolName,
                     arguments: call.arguments,
                     risk: call.risk,
@@ -726,10 +916,11 @@ extension AppState {
                     rootDirectory: rootDirectory,
                     interactionMode: runtime.interactionMode,
                     approvalMode: runtime.approvalMode,
-                    conversationAllowedToolSignatures: runtime.conversationAllowedToolSignatures
+                    conversationAllowedToolSignatures: runtime.conversationAllowedToolSignatures,
+                    computerUseOwner: runtime.computerUseOwner
                 )
                 guard let source,
-                      runtime.approvalMode == .workspaceAccess,
+                      requiringApprovalMode == nil || runtime.approvalMode == requiringApprovalMode,
                       let currentIndex = runtime.toolCalls.firstIndex(where: { $0.id == callID }),
                       runtime.toolCalls[currentIndex].status == .pendingApproval else {
                     continue
@@ -754,19 +945,21 @@ extension AppState {
         return nil
     }
 
-    nonisolated static func planModeCanAutoApprove(
+    nonisolated static func goalPlanningCanAutoApprove(
         toolName: String,
         arguments: [String: AgentJSONValue]
     ) -> Bool {
         switch toolName {
         case "web_fetch":
             return arguments["url"]?.stringValue().flatMap(AgentWebTools.validatedPublicURL(_:)) != nil
+        case "claude_code", "codex_cli", "hermes_cli", "cursor_agent", "cline_cli":
+            return arguments["permission_mode"]?.stringValue() == "plan"
         default:
             return false
         }
     }
 
-    nonisolated static func planGateBlocks(
+    nonisolated static func goalPlanningGateBlocks(
         toolName: String,
         arguments: [String: AgentJSONValue],
         risk: AgentToolRisk,
@@ -775,18 +968,25 @@ extension AppState {
         guard isActive, risk != .read else { return false }
         // The narrow public-web research exception applies only to ordinary
         // write-tier classification. A danger-tier call can never use it to
-        // bypass the Plan/Goal gate.
+        // bypass the Goal evidence gate.
         guard risk == .write else { return true }
-        return !planModeCanAutoApprove(toolName: toolName, arguments: arguments)
+        return !goalPlanningCanAutoApprove(toolName: toolName, arguments: arguments)
     }
 
     private func workspaceAccessCanAutoApprove(
         toolName: String,
-        arguments: [String: AgentJSONValue]
+        arguments: [String: AgentJSONValue],
+        sandboxDecision: AgentSandboxDecision
     ) -> Bool {
         switch toolName {
-        case "run_command", "kill_job", "claude_code", "codex_cli", "cursor_agent", "cline_cli", "lark_cli", "web_fetch",
-             "add_memory", "create_user_skill", "update_user_skill", "suggest_mcp_server", "configure_mcp_server":
+        case "run_command":
+            guard let command = arguments["command"]?.stringValue(),
+                  !AgentSandboxPolicy.commandUsesExternalAccess(command) else {
+                return false
+            }
+            return sandboxDecision.mode == .readOnly || sandboxDecision.mode == .workspaceWrite
+        case "kill_job", "claude_code", "codex_cli", "hermes_cli", "cursor_agent", "cline_cli",
+             "add_memory", "create_user_skill", "create_user_skills", "update_user_skill", "suggest_mcp_server", "configure_mcp_server":
             return true
         case "call_mcp_tool":
             guard let server = arguments["server"]?.stringValue() else {

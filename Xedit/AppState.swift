@@ -240,6 +240,13 @@ final class AppState: ObservableObject {
     /// for provider prompt caching. Not `@Published`: UI never renders it.
     var cachedJudgeHistoryContext: String = ""
     var cachedJudgeHistoryBuiltAt: Date?
+    /// App-lifetime cache of safety-judge YES verdicts, keyed by
+    /// `AgentToolAuthorization.judgeVerdictCacheKey` (tool + command family)
+    /// with a grant timestamp. A fresh YES for `git commit` covers every
+    /// `git commit …` within the TTL — without this, each repeated command
+    /// paid a full flash-model round trip per call. Deny verdicts are never
+    /// cached, and danger-tier commands never reach the judge at all.
+    var cachedJudgeAllowedVerdicts: [String: Date] = [:]
     /// User-tunable base font size (in points) for the Agent chat
     /// transcript body — applies to user/assistant message prose and
     /// rendered Markdown blocks. Supporting chat chrome (tool summaries,
@@ -264,13 +271,54 @@ final class AppState: ObservableObject {
     /// edge to run Goal recovery only after every persisted candidate is
     /// visible, avoiding a race with the initial empty in-memory list.
     @Published private(set) var hasLoadedAgentSessionCatalog = false
+    /// Ids whose entry in `agentSessions` is still the catalog skeleton
+    /// (messages stripped) and must be materialized from disk before it
+    /// can be read or persisted. Owned per instance: several AppState
+    /// instances exist (Settings window, desktop pet), and while this
+    /// lived in a process-wide table another instance's `load(id:)` could
+    /// clear the flag here, after which this instance handed out — and
+    /// eventually persisted — an empty transcript.
+    private var metadataOnlySessionIDs: Set<AgentSession.ID> = []
+    /// Subset of `metadataOnlySessionIDs` whose stored transcript does
+    /// contain a user message. Sidebar visibility needs that fact before
+    /// the session is materialized.
+    private var metadataOnlyUserMessageIDs: Set<AgentSession.ID> = []
     /// Set only when a metadata-only sidebar row can no longer be
     /// materialized from disk. The row is deliberately retained so a
     /// recovered JSON file can reconnect without losing its visible title.
     @Published var agentSessionLoadFailure: AgentSessionLoadFailure?
     /// Lightweight usage snapshots decoded only when the stats dashboard is
     /// shown. Launch no longer scans every full conversation for analytics.
-    @Published var agentUsageSnapshots: [AgentUsageSessionSnapshot] = []
+    @Published var agentUsageSnapshots: [AgentUsageSessionSnapshot] = [] {
+        didSet { agentUsageStatsRevision &+= 1 }
+    }
+    /// Monotonic write counter for `agentUsageSnapshots`. Keys the memoized
+    /// dashboard aggregates so cache checks never have to compare the
+    /// snapshot payloads themselves.
+    private(set) var agentUsageStatsRevision: UInt64 = 0
+    private var agentUsageDashboardCache:
+        (revision: UInt64, day: Date, model: AgentUsageDashboardModel)?
+
+    /// Memoized dashboard aggregates. Recomputed only when the snapshots
+    /// change or the local calendar day rolls over (streaks and the heatmap
+    /// are day-anchored); every other SwiftUI body evaluation gets the
+    /// cached value instead of re-walking all messages of all sessions.
+    func agentUsageDashboardModel(now: Date = Date()) -> AgentUsageDashboardModel {
+        let day = Calendar.current.startOfDay(for: now)
+        if let cache = agentUsageDashboardCache,
+           cache.revision == agentUsageStatsRevision,
+           cache.day == day {
+            return cache.model
+        }
+        let model = AgentUsageStats.dashboardModel(
+            for: agentUsageSnapshots,
+            heatmapWeekCount: AgentStatsDashboardLayout.maximumHeatmapWeeks,
+            now: now
+        )
+        agentUsageDashboardCache = (agentUsageStatsRevision, day, model)
+        return model
+    }
+
     @Published var hasLoadedAgentUsageSnapshots = false
     @Published var isLoadingAgentUsageSnapshots = false
     /// Sidebar group keys the user has removed from view. Removal only
@@ -282,6 +330,11 @@ final class AppState: ObservableObject {
     /// drives the AgentRoutineScheduler that wakes them up on schedule.
     @Published var agentRoutines: [AgentRoutine] = []
     let agentRoutineScheduler = AgentRoutineScheduler()
+
+    /// Goal-first dispatch console state. The coordinator owns durable task
+    /// metadata while AppState remains responsible for creating/running the
+    /// underlying Agent sessions.
+    let agentDispatchCoordinator = AgentDispatchCoordinator()
 
     /// Process-wide registry of background `run_command` jobs. Scoped
     /// by `runtime.id` inside the registry so concurrent sessions can't
@@ -735,16 +788,26 @@ final class AppState: ObservableObject {
             }
         startAgentSidePanelResourceReaper()
         Task { @MainActor [weak self] in
-            let persistedSessions = await Task.detached(priority: .utility) {
-                AgentSessionStore.loadAll()
+            let loaded = await Task.detached(priority: .utility) {
+                AgentSessionStore.loadAllWithMetadata()
             }.value
             guard let self, !Task.isCancelled else { return }
 
             // A user can create a session while the disk index is loading.
             // In-memory state is newer and therefore wins on ID collisions.
-            var sessionsByID = Dictionary(uniqueKeysWithValues: persistedSessions.map { ($0.id, $0) })
-            for session in self.agentSessions { sessionsByID[session.id] = session }
+            var sessionsByID = Dictionary(uniqueKeysWithValues: loaded.sessions.map { ($0.id, $0) })
+            var metadataOnlyIDs = loaded.metadataOnlyIDs
+            var metadataOnlyUserMessageIDs = loaded.metadataOnlyUserMessageIDs
+            for session in self.agentSessions {
+                sessionsByID[session.id] = session
+                // The skeleton lost — what stays in the list is a real
+                // session, so it must not be marked metadata-only.
+                metadataOnlyIDs.remove(session.id)
+                metadataOnlyUserMessageIDs.remove(session.id)
+            }
             self.agentSessions = sessionsByID.values.sorted { $0.updatedAt > $1.updatedAt }
+            self.metadataOnlySessionIDs = metadataOnlyIDs
+            self.metadataOnlyUserMessageIDs = metadataOnlyUserMessageIDs
             self.hasLoadedAgentSessionCatalog = true
 
             // Empty placeholders are filtered by sidebar visibility instead
@@ -810,6 +873,37 @@ final class AppState: ObservableObject {
                 self.scheduleActiveRuntimeForward()
             }
     }
+
+    // MARK: - Metadata-only session classification
+
+    /// True while `agentSessions` still holds the catalog skeleton for
+    /// `id`. Declared here (rather than exposing the sets) because the
+    /// backing state is per-instance and must stay writable only through
+    /// the two mutators below.
+    func agentSessionIsMetadataOnly(_ id: AgentSession.ID) -> Bool {
+        metadataOnlySessionIDs.contains(id)
+    }
+
+    func agentSessionMetadataOnlyHasUserMessage(_ id: AgentSession.ID) -> Bool {
+        metadataOnlyUserMessageIDs.contains(id)
+    }
+
+    /// Call whenever `agentSessions` gains the full session for `id`.
+    func clearAgentSessionMetadataOnlyFlag(_ id: AgentSession.ID) {
+        metadataOnlySessionIDs.remove(id)
+        metadataOnlyUserMessageIDs.remove(id)
+    }
+
+#if DEBUG
+    func markAgentSessionMetadataOnlyForTesting(_ id: AgentSession.ID, hasUserMessage: Bool) {
+        metadataOnlySessionIDs.insert(id)
+        if hasUserMessage {
+            metadataOnlyUserMessageIDs.insert(id)
+        } else {
+            metadataOnlyUserMessageIDs.remove(id)
+        }
+    }
+#endif
 
     private func startAgentSidePanelResourceReaper() {
         agentSidePanelResourceReaperTimer?.invalidate()
@@ -1781,13 +1875,17 @@ final class AppState: ObservableObject {
     private func scheduleEditorSettingsSideEffects() {
         editorSettingsSideEffectsWorkItem?.cancel()
 
+        // Capture the value at interaction time. The Settings scene can swap
+        // to another registry AppState (or release a fallback AppState) before
+        // this main-queue work item runs. Persistence must not depend on that
+        // view-owned object still being alive.
+        let normalizedSettings = editorSettings.normalized()
         let workItem = DispatchWorkItem { [weak self] in
+            EditorSettingsStore.save(normalizedSettings)
             guard let self else { return }
-            let normalizedSettings = self.editorSettings.normalized()
             if self.inspectorMode != normalizedSettings.preferredInspectorMode {
                 self.inspectorMode = normalizedSettings.preferredInspectorMode
             }
-            EditorSettingsStore.save(normalizedSettings)
             self.bumpEditorRenderRevision()
             self.bumpEditorHighlightRevision()
         }

@@ -47,7 +47,15 @@ final class AgentRuntime: ObservableObject, Identifiable {
     @Published var contextSummary: String?
     @Published var contextSummaryThroughMessageID: AgentMessage.ID?
     @Published var patchProposals: [AgentPatchProposal] = []
+    /// Assistant messages whose consecutive local file edits are still being
+    /// collected into one review batch. Patch decision controls stay disabled
+    /// until the tool loop seals the batch at a dependency boundary.
+    @Published var collectingPatchReviewMessageIDs: Set<AgentMessage.ID> = []
     @Published var toolCalls: [AgentToolCall] = []
+    /// Decisions clicked before the tool loop has registered its waiter.
+    /// This state drives the approval card's immediate "submitted" receipt,
+    /// so it must publish even though the loop consumes entries in order.
+    @Published var pendingToolDecisions: [AgentToolCall.ID: AgentToolDecision] = [:]
     /// Runtime-only tool cards installed by the exact `#1983#` composer
     /// trigger. They deliberately never enter `AgentSession.messages`, so a
     /// confirmation-surface preview cannot leak into a later model request or
@@ -96,14 +104,6 @@ final class AgentRuntime: ObservableObject, Identifiable {
     @Published var delegatedTaskRuns: [AgentDelegatedTaskRun] = []
     @Published var activeExperts: Set<AgentExpert> = []
     @Published var currentPlan: AgentPlan?
-    /// Runtime-only pre-dispatch prompt for complex Normal-mode tasks.
-    /// Keeping it per session prevents one chat's countdown from appearing
-    /// after the user switches to another conversation.
-    @Published var pendingPlanModeSuggestion: AgentPlanModeSuggestion?
-    /// True while a locally-ambiguous input is parked awaiting the flash
-    /// judge's verdict. Drives the composer's input-field spinner and blocks
-    /// repeated sends from sneaking past the preflight.
-    @Published var isAskingPlanModeFlash: Bool = false
     @Published var currentGoal: AgentGoal?
     @Published var goalPlanningState: AgentGoalPlanningState?
     @Published var goalTurnRecoveryCheckpoint: AgentGoalTurnRecoveryCheckpoint?
@@ -172,10 +172,25 @@ final class AgentRuntime: ObservableObject, Identifiable {
     /// when idle. Cancelled when the session is closed or the user
     /// stops the response.
     var requestTask: Task<Void, Never>?
+    /// Conversation-scoped Responses cursor. The lock-protected live state
+    /// survives tool rounds and is mirrored into AgentSession so reopening the
+    /// conversation after an app restart can continue from the stored response.
+    let openAIResponsesContinuationState: OpenAIResponsesContinuationState
     /// Stable ownership token for work started by the active turn. Background
     /// jobs and subagents inherit it so Stop can clean up only the newest
     /// turn without touching an older dev server or watcher in this session.
     var activeTurnID: UUID?
+    /// Stable owner identity handed to the global Computer Use coordinator.
+    /// Keeping the turn id in the identity prevents a late helper callback
+    /// from an older turn dismissing or mutating a newer control session.
+    var computerUseOwner: AgentComputerUseOwner? {
+        guard let activeTurnID else { return nil }
+        return AgentComputerUseOwner(
+            runtimeID: id,
+            turnID: activeTurnID,
+            sessionTitle: session.title
+        )
+    }
     /// The already-resolved configuration for the active turn. Stop cleanup
     /// reuses this in-memory value for its lightweight process decision and
     /// therefore does not re-scan Keychain credentials.
@@ -202,14 +217,6 @@ final class AgentRuntime: ObservableObject, Identifiable {
     /// delivered back to the parent model. The next agent-loop round consumes
     /// these report ids into host-only system notices.
     var pendingWorkflowCompletionReportIDs: [UUID] = []
-    /// Runtime-side fallback for the Plan suggestion countdown. The banner
-    /// also renders its own per-second progress, but auto-resolution must not
-    /// depend on the composer currently being mounted on screen.
-    var planModeSuggestionAutoResolveTask: Task<Void, Never>?
-    /// In-flight flash-judge task for the `.askFlash` preflight band. Task
-    /// handle only (not @Published); cancelled/cleared alongside the
-    /// suggestion state.
-    var planModeFlashJudgeTask: Task<Void, Never>?
     /// Skills that were explicitly attached to the in-flight user turn.
     /// They are cleared/overwritten on the next dispatch and used only
     /// to explain turn recall in reports.
@@ -219,6 +226,13 @@ final class AgentRuntime: ObservableObject, Identifiable {
     /// cancelled turn skips post-turn compression so the queue head can
     /// dispatch as soon as the provider/tool loop unwinds.
     var shouldConsumeQueueAfterStop: Bool = false
+    /// True only for a user turn that explicitly asks for analysis/a plan
+    /// without execution. The plan remains visible, but host auto-continuation
+    /// must stop after the planning reply.
+    var currentTurnPlanningOnly: Bool = false
+    /// Goal may continue across several provider turns, but repeated
+    /// no-change self-checks must pause instead of spinning forever.
+    var consecutiveGoalRoundsWithoutChecklistProgress: Int = 0
 
     /// Continuation resumed when the user resolves a blocking tool
     /// call (Allow / Deny / Confirm / answer ask_user). Per-runtime
@@ -228,10 +242,6 @@ final class AgentRuntime: ObservableObject, Identifiable {
     /// Without this guard, clicking a different pending card could resume
     /// the wrong continuation when multiple approval cards are visible.
     var toolDecisionWaiterCallID: AgentToolCall.ID?
-    /// Decisions clicked before the tool loop has registered its waiter.
-    /// This closes the race where the UI card accepts a click but the
-    /// continuation slot is not ready yet, leaving an apparently dead card.
-    var pendingToolDecisions: [AgentToolCall.ID: AgentToolDecision] = [:]
     /// A proposal-only edit suspends its tool result until the user resolves
     /// the inline patch card. This prevents the provider from receiving a
     /// stale "pending" result while the user's Apply click is still in flight.
@@ -241,19 +251,23 @@ final class AgentRuntime: ObservableObject, Identifiable {
     /// disk persistence: closing/reopening the conversation asks again.
     var conversationAllowedToolSignatures: Set<String> = []
 
-    // MARK: - Plan gate
+    // MARK: - Goal planning gate
 
-    /// Approval gate shared by Plan mode and Goal-backed Plans. Goal setup,
-    /// planning, rejected, proposed, blocked, and completed cycles stay locked.
-    ///
-    /// Plan mode is planning-only: the gate never lifts inside Plan mode,
-    /// regardless of plan status. Approving a plan switches the session back
-    /// to Normal mode, and execution happens there.
+    /// Goal setup and host-owned evidence gathering stay read-only until a
+    /// validated plan exists. Ordinary mode never uses a plan gate: its plan
+    /// is progress UI, while AgentApprovalMode remains the safety boundary.
     var isPlanGateActive: Bool {
-        if interactionMode == .plan { return true }
         guard interactionMode == .goal else { return false }
         guard let plan = currentPlan else { return true }
-        return plan.status != .approved && plan.status != .executing
+        let hasIncompleteGoalChecklist = currentGoal.map {
+            !$0.checklist.isEmpty && $0.checklist.contains(where: { !$0.done })
+        } ?? false
+        let isInterruptedFinalization = plan.status == .done
+            && goalPlanningState?.phase == .executing
+            && hasIncompleteGoalChecklist
+        return plan.status != .approved
+            && plan.status != .executing
+            && !isInterruptedFinalization
     }
 
     // MARK: - Init
@@ -263,6 +277,9 @@ final class AgentRuntime: ObservableObject, Identifiable {
         self.session = session
         self.workspaceRootPath = session.workspaceRootPath
         self.workspaceLocation = session.workspaceLocation
+        self.openAIResponsesContinuationState = OpenAIResponsesContinuationState(
+            persistedSnapshot: session.openAIResponsesContinuation
+        )
 
         // Seed live state from persisted session.
         self.messages = session.messages.map(Self.normalizingInterruptedWorkflow)
@@ -277,11 +294,15 @@ final class AgentRuntime: ObservableObject, Identifiable {
         self.executionAgent = session.executionAgent
         self.delegatedTaskRuns = session.delegatedTaskRuns.map(Self.normalizingInterruptedDelegatedTask)
         self.activeExperts = session.activeExperts
-        self.currentPlan = session.currentPlan
+        var restoredPlan = session.currentPlan
+        if restoredPlan?.status == .proposed {
+            restoredPlan?.status = .approved
+        }
+        self.currentPlan = restoredPlan
         self.currentGoal = session.currentGoal
         self.goalTurnRecoveryCheckpoint = session.goalTurnRecoveryCheckpoint
         let restoredGoalPlanningState = session.goalPlanningState?.normalizedForRestore(
-            currentPlan: session.currentPlan,
+            currentPlan: restoredPlan,
             currentGoal: session.currentGoal
         )
         self.goalPlanningState = restoredGoalPlanningState
@@ -450,6 +471,7 @@ final class AgentRuntime: ObservableObject, Identifiable {
         session.redactSensitiveAttachmentContent = redactSensitiveAttachmentContent
         session.sidePanelState = sidePanelState
         session.managedRouting = managedRouting
+        session.openAIResponsesContinuation = openAIResponsesContinuationState.persistedSnapshot
         if touchUpdatedAt {
             session.updatedAt = Date()
         }

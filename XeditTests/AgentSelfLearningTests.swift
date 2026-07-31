@@ -61,6 +61,63 @@ struct AgentSelfLearningTests {
     }
 
     @Test
+    func createUserSkillsToolCreatesOneValidatedBatch() throws {
+        let root = try temporarySkillRoot()
+        defer { try? FileManager.default.removeItem(at: root.deletingLastPathComponent()) }
+        let skillsJSON = """
+        [
+          {
+            "name": "release-guardian",
+            "description": "Use before shipping a release.",
+            "body": "Run the release checks and verify the artifact."
+          },
+          {
+            "name": "incident-reviewer",
+            "description": "Use after a production incident.",
+            "body": "Collect evidence, identify causes, and verify follow-ups."
+          }
+        ]
+        """
+
+        let result = try AgentSelfLearning.createUserSkills(
+            arguments: ["skills_json": .string(skillsJSON)],
+            root: root
+        )
+
+        #expect(result.summary == "Created 2 user skills")
+        #expect(result.payload.contains("release-guardian"))
+        #expect(result.payload.contains("incident-reviewer"))
+        #expect(FileManager.default.fileExists(
+            atPath: root.appendingPathComponent("release-guardian/SKILL.md").path
+        ))
+        #expect(FileManager.default.fileExists(
+            atPath: root.appendingPathComponent("incident-reviewer/SKILL.md").path
+        ))
+    }
+
+    @Test
+    func createUserSkillsToolRejectsWholeBatchBeforeWriting() throws {
+        let root = try temporarySkillRoot()
+        defer { try? FileManager.default.removeItem(at: root.deletingLastPathComponent()) }
+        let skillsJSON = """
+        [
+          {"name":"same skill","description":"First.","body":"First body."},
+          {"name":"same-skill","description":"Second.","body":"Second body."}
+        ]
+        """
+
+        #expect(throws: AgentToolError.self) {
+            try AgentSelfLearning.createUserSkills(
+                arguments: ["skills_json": .string(skillsJSON)],
+                root: root
+            )
+        }
+        #expect(!FileManager.default.fileExists(
+            atPath: root.appendingPathComponent("same-skill").path
+        ))
+    }
+
+    @Test
     func suggestMCPServerToolRecordsCapabilityGapMemory() throws {
         let root = URL(fileURLWithPath: "/tmp/WillDeepProject")
         let state = AgentMemoryState(settings: .default, memories: [])
@@ -247,10 +304,10 @@ struct AgentSelfLearningTests {
     }
 
     @Test
-    func legacyDefaultSkillThresholdMigratesToThreeTools() throws {
+    func legacyDefaultSkillThresholdMigratesToSixTools() throws {
         let defaults = UserDefaults.standard
         let settingsKey = "com.willdeep.agentSkillSettings.v1"
-        let migrationKey = "com.willdeep.agentSkillSettings.defaultThreshold.rc85"
+        let migrationKey = "com.willdeep.agentSkillSettings.defaultThreshold.rc219"
         let previousSettings = defaults.data(forKey: settingsKey)
         let previousMigration = defaults.object(forKey: migrationKey)
         defer {
@@ -277,14 +334,14 @@ struct AgentSelfLearningTests {
 
         let migrated = AgentSkillSettingsStore.load()
 
-        #expect(migrated.minimumToolCallCount == 3)
+        #expect(migrated.minimumToolCallCount == 6)
     }
 
     @Test
     func explicitCustomSkillThresholdIsPreservedDuringMigration() throws {
         let defaults = UserDefaults.standard
         let settingsKey = "com.willdeep.agentSkillSettings.v1"
-        let migrationKey = "com.willdeep.agentSkillSettings.defaultThreshold.rc85"
+        let migrationKey = "com.willdeep.agentSkillSettings.defaultThreshold.rc219"
         let previousSettings = defaults.data(forKey: settingsKey)
         let previousMigration = defaults.object(forKey: migrationKey)
         defer {
@@ -328,7 +385,7 @@ struct AgentSelfLearningTests {
             createdAt: started.addingTimeInterval(10)
         )
         let runtime = AgentRuntime(session: AgentSession(messages: [user, assistant]))
-        runtime.toolCalls = (0..<3).map { index in
+        runtime.toolCalls = (0..<6).map { index in
             AgentToolCall(
                 messageID: assistant.id,
                 externalID: "audit-tool-\(index)",
@@ -350,7 +407,7 @@ struct AgentSelfLearningTests {
         #expect(audit.mcpSuggestion?.capability == "GitHub")
         #expect(audit.mcpSuggestion?.searchQuery.contains("Model Context Protocol") == true)
         #expect(audit.skillCandidate?.body.contains("Observed tool sequence") == true)
-        #expect(audit.relevantToolCallCount == 3)
+        #expect(audit.relevantToolCallCount == 6)
         #expect(audit.relevantToolNames == ["grep_files", "run_command"])
         #expect(audit.explicitSkillDirective)
     }
@@ -397,6 +454,7 @@ struct AgentSelfLearningTests {
         let events = AgentSelfLearning.captureAutomaticSkillCandidate(
             for: runtime,
             workspaceURL: URL(fileURLWithPath: "/tmp/WillDeepProject"),
+            skillSettings: .default,
             root: root
         )
 
@@ -418,7 +476,7 @@ struct AgentSelfLearningTests {
     }
 
     @Test
-    func explicitSkillDirectiveAllowsThreeToolWorkflow() throws {
+    func explicitSkillDirectiveRequiresFourToolWorkflow() throws {
         let root = try temporarySkillRoot()
         defer { try? FileManager.default.removeItem(at: root.deletingLastPathComponent()) }
 
@@ -434,7 +492,7 @@ struct AgentSelfLearningTests {
             createdAt: started.addingTimeInterval(10)
         )
         let runtime = AgentRuntime(session: AgentSession(messages: [user, assistant]))
-        runtime.toolCalls = (0..<3).map { index in
+        runtime.toolCalls = (0..<4).map { index in
             AgentToolCall(
                 messageID: assistant.id,
                 externalID: "explicit-tool-\(index)",
@@ -449,6 +507,7 @@ struct AgentSelfLearningTests {
         AgentSelfLearning.captureAutomaticSkillCandidate(
             for: runtime,
             workspaceURL: URL(fileURLWithPath: "/tmp/WillDeepProject"),
+            skillSettings: .default,
             root: root
         )
 
@@ -459,11 +518,11 @@ struct AgentSelfLearningTests {
         #expect(skillFiles.count == 1)
         let body = try String(contentsOf: try #require(skillFiles.first), encoding: .utf8)
         #expect(body.contains("Observed tool sequence"))
-        #expect(body.contains("explicit step 2"))
+        #expect(body.contains("explicit step 3"))
     }
 
     @Test
-    func defaultReusableWorkflowThresholdIsThreeTools() throws {
+    func implicitReusableWorkflowBecomesReviewCandidateAtSixTools() throws {
         let root = try temporarySkillRoot()
         defer { try? FileManager.default.removeItem(at: root.deletingLastPathComponent()) }
         let settingsKey = "com.willdeep.agentSkillSettings.v1"
@@ -480,7 +539,7 @@ struct AgentSelfLearningTests {
         let started = Date(timeIntervalSince1970: 1_800_000_300)
         let user = AgentMessage(
             role: .user,
-            content: "Next time this artifact verification workflow appears, reuse this workflow.",
+            content: "以后每次遇到这类制品验证工作流，都复用这个流程。",
             createdAt: started
         )
         let assistant = AgentMessage(
@@ -489,7 +548,7 @@ struct AgentSelfLearningTests {
             createdAt: started.addingTimeInterval(10)
         )
         let runtime = AgentRuntime(session: AgentSession(messages: [user, assistant]))
-        runtime.toolCalls = (0..<3).map { index in
+        runtime.toolCalls = (0..<6).map { index in
             AgentToolCall(
                 messageID: assistant.id,
                 externalID: "default-tool-\(index)",
@@ -501,9 +560,10 @@ struct AgentSelfLearningTests {
             )
         }
 
-        AgentSelfLearning.captureAutomaticSkillCandidate(
+        let events = AgentSelfLearning.captureAutomaticSkillCandidate(
             for: runtime,
             workspaceURL: URL(fileURLWithPath: "/tmp/WillDeepProject"),
+            skillSettings: .default,
             root: root
         )
 
@@ -511,10 +571,52 @@ struct AgentSelfLearningTests {
         let skillFiles = (enumerator?.compactMap { $0 as? URL } ?? [])
             .filter { $0.lastPathComponent == "SKILL.md" }
 
-        #expect(AgentSkillSettings.default.minimumToolCallCount == 3)
-        #expect(skillFiles.count == 1)
-        let body = try String(contentsOf: try #require(skillFiles.first), encoding: .utf8)
-        #expect(body.contains("default step 2"))
+        #expect(AgentSkillSettings.default.minimumToolCallCount == 6)
+        #expect(skillFiles.isEmpty)
+        #expect(events.contains { $0.kind == .skill && $0.status == .suggested })
+        #expect(events.first?.action?.requiresUserConfirmation == true)
+    }
+
+    @Test
+    func assistantSkillNarrationCannotAuthorizeAutomaticCreation() throws {
+        let root = try temporarySkillRoot()
+        defer { try? FileManager.default.removeItem(at: root.deletingLastPathComponent()) }
+
+        let started = Date(timeIntervalSince1970: 1_800_000_350)
+        let user = AgentMessage(
+            role: .user,
+            content: "请修复通知太多的问题。",
+            createdAt: started
+        )
+        let assistant = AgentMessage(
+            role: .assistant,
+            content: "这个流程可以自动沉淀成 skill，以后复用。",
+            createdAt: started.addingTimeInterval(10)
+        )
+        let runtime = AgentRuntime(session: AgentSession(messages: [user, assistant]))
+        runtime.toolCalls = (0..<8).map { index in
+            AgentToolCall(
+                messageID: assistant.id,
+                externalID: "narration-tool-\(index)",
+                toolName: index.isMultiple(of: 2) ? "read_file" : "run_command",
+                arguments: [:],
+                risk: .read,
+                status: .succeeded,
+                result: AgentToolResult(summary: "step \(index)", payload: "")
+            )
+        }
+
+        let events = AgentSelfLearning.captureAutomaticSkillCandidate(
+            for: runtime,
+            workspaceURL: URL(fileURLWithPath: "/tmp/WillDeepProject"),
+            root: root
+        )
+
+        #expect(events.isEmpty)
+        let enumerator = FileManager.default.enumerator(at: root, includingPropertiesForKeys: nil)
+        let skillFiles = (enumerator?.compactMap { $0 as? URL } ?? [])
+            .filter { $0.lastPathComponent == "SKILL.md" }
+        #expect(skillFiles.isEmpty)
     }
 
     @Test
@@ -602,12 +704,31 @@ struct AgentSelfLearningTests {
                 risk: .read,
                 status: .succeeded,
                 result: AgentToolResult(summary: "checked artifacts", payload: "")
+            ),
+            AgentToolCall(
+                messageID: assistantID,
+                externalID: "tool-3",
+                toolName: "search_files",
+                arguments: [:],
+                risk: .read,
+                status: .succeeded,
+                result: AgentToolResult(summary: "found release files", payload: "")
+            ),
+            AgentToolCall(
+                messageID: assistantID,
+                externalID: "tool-4",
+                toolName: "run_command",
+                arguments: [:],
+                risk: .read,
+                status: .succeeded,
+                result: AgentToolResult(summary: "verified release", payload: "")
             )
         ]
 
         let events = AgentSelfLearning.captureAutomaticSkillCandidate(
             for: runtime,
-            workspaceURL: URL(fileURLWithPath: "/tmp/WillDeepProject")
+            workspaceURL: URL(fileURLWithPath: "/tmp/WillDeepProject"),
+            skillSettings: disabled
         )
 
         let event = try #require(events.first)

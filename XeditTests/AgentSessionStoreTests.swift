@@ -202,6 +202,46 @@ struct AgentSessionStoreTests {
         #expect(workspaceRows.map(\.id) == [regular.id, archivedPin.id])
     }
 
+    @Test("工作区侧栏排除调度台与专家圆桌专属会话")
+    func workspaceSidebarExcludesDedicatedDestinationSessions() {
+        let regular = AgentSession(
+            title: "Regular",
+            workspaceRootPath: "/tmp/project",
+            messages: [AgentMessage(role: .user, content: "普通对话")]
+        )
+        let dispatch = AgentSession(
+            title: "Goal",
+            workspaceRootPath: "/tmp/project",
+            presentationScope: .dispatchBoard,
+            messages: [AgentMessage(role: .user, content: "调度任务")],
+            interactionMode: .goal,
+            currentGoal: AgentGoal(statement: "交付", checklist: [])
+        )
+        let roundtable = AgentSession(
+            title: "Roundtable",
+            presentationScope: .roundtable,
+            messages: [AgentMessage(role: .user, content: "圆桌议题")],
+            pinnedAt: Date()
+        )
+
+        let visible = AgentSidebarSessionVisibility.visibleSessions(
+            from: [dispatch, roundtable, regular],
+            activeID: dispatch.id
+        )
+
+        #expect(visible.map(\.id) == [regular.id])
+        #expect(
+            AgentSidebarSessionPlacement.globalPinnedSessions(
+                from: [roundtable, regular]
+            ).isEmpty
+        )
+        #expect(
+            AgentSidebarSessionPlacement.workspaceSessions(
+                from: [dispatch, roundtable, regular]
+            ).map(\.id) == [regular.id]
+        )
+    }
+
     /// Skip non-user roles when picking the title source.
     @Test
     func deriveTitleUsesFirstUserMessageNotAssistant() {
@@ -335,6 +375,57 @@ struct AgentSessionStoreTests {
         #expect(indexed.session.providerDisplayName == nil)
     }
 
+    @Test("旧圆桌会话的轻量索引会推断专属展示归属")
+    func lightweightSessionIndexInfersLegacyRoundtableScope() throws {
+        let json = """
+        {
+          "id": "11111111-1111-1111-1111-111111111111",
+          "title": "Legacy Roundtable",
+          "createdAt": "2026-07-27T00:00:00Z",
+          "updatedAt": "2026-07-27T00:01:00Z",
+          "messages": [
+            {
+              "role": "workflowReport",
+              "workflowReport": {
+                "roundtable": {}
+              }
+            }
+          ]
+        }
+        """
+
+        let indexed = try AgentSessionStore.decodeSessionIndexForTesting(Data(json.utf8))
+
+        #expect(indexed.session.presentationScope == .roundtable)
+        #expect(!indexed.session.belongsInWorkspaceSidebar)
+    }
+
+    @Test("旧 Goal 会话缺少展示归属时自动迁移到调度台")
+    func legacyGoalSessionInfersDispatchPresentationScope() throws {
+        let original = AgentSession(
+            title: "Legacy Goal",
+            workspaceRootPath: "/tmp/project",
+            interactionMode: .goal,
+            currentGoal: AgentGoal(statement: "交付", checklist: [])
+        )
+        let encoder = JSONEncoder()
+        encoder.dateEncodingStrategy = .iso8601
+        let encoded = try encoder.encode(original)
+        var object = try #require(
+            JSONSerialization.jsonObject(with: encoded) as? [String: Any]
+        )
+        object.removeValue(forKey: "presentationScope")
+        let legacyData = try JSONSerialization.data(withJSONObject: object)
+
+        let decoded = try JSONDecoder.iso8601Decoder.decode(
+            AgentSession.self,
+            from: legacyData
+        )
+
+        #expect(decoded.presentationScope == .dispatchBoard)
+        #expect(!decoded.belongsInWorkspaceSidebar)
+    }
+
     @Test
     func usageSnapshotRestoresStatsFromLightweightSessionJSON() throws {
         let json = """
@@ -441,7 +532,7 @@ struct AgentSessionStoreTests {
     /// orphan every user's existing sessions.
     @Test
     func directoryLivesUnderApplicationSupportWillDeep() {
-        let path = AgentSessionStore.directory.path
+        let path = AgentSessionStore.applicationSupportDirectory.path
         #expect(path.contains("Application Support"))
         #expect(path.contains("WillDeep"))
         #expect(path.hasSuffix("agent-sessions"))

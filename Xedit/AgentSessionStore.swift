@@ -181,6 +181,11 @@ nonisolated enum AgentSessionStore {
             do {
                 try ensureDirectory()
                 let url = directory.appendingPathComponent("\(id.uuidString).json")
+                guard !wouldTruncateStoredTranscript(payload, at: url) else {
+                    print("AgentSessionStore: refused to overwrite session \(id) with an empty transcript")
+                    pendingWrites.finish(id)
+                    return
+                }
                 let data = try encoder.encode(payload.externalizingAttachmentContent())
                 try coordinatedWrite(data, to: url)
                 writeCatalogEntryBestEffort(for: payload, sourceURL: url)
@@ -208,14 +213,32 @@ nonisolated enum AgentSessionStore {
 
     private struct MessageIndex: Decodable {
         let role: String?
+        let containsRoundtableReport: Bool
 
         enum CodingKeys: String, CodingKey {
-            case role
+            case role, workflowReport
+        }
+
+        private struct WorkflowReportIndex: Decodable {
+            let containsRoundtableReport: Bool
+
+            enum CodingKeys: String, CodingKey {
+                case roundtable
+            }
+
+            init(from decoder: Decoder) throws {
+                let c = try decoder.container(keyedBy: CodingKeys.self)
+                containsRoundtableReport = c.contains(.roundtable)
+                    && (try? c.decodeNil(forKey: .roundtable)) == false
+            }
         }
 
         init(from decoder: Decoder) throws {
             let c = try decoder.container(keyedBy: CodingKeys.self)
             role = try c.decodeIfPresent(String.self, forKey: .role)
+            containsRoundtableReport = (
+                try c.decodeIfPresent(WorkflowReportIndex.self, forKey: .workflowReport)
+            )?.containsRoundtableReport ?? false
         }
     }
 
@@ -225,6 +248,7 @@ nonisolated enum AgentSessionStore {
         let workspaceRootPath: String?
         let workspaceLocation: WorkspaceLocation?
         let sidebarWorkspaceRootPath: String?
+        let presentationScope: AgentSessionPresentationScope
         let localWorkspaceIdentity: LocalWorkspaceIdentity?
         let modelID: String?
         let providerID: String?
@@ -249,7 +273,7 @@ nonisolated enum AgentSessionStore {
         let hasUserMessage: Bool
 
         enum CodingKeys: String, CodingKey {
-            case id, title, workspaceRootPath, workspaceLocation, sidebarWorkspaceRootPath, localWorkspaceIdentity, modelID
+            case id, title, workspaceRootPath, workspaceLocation, sidebarWorkspaceRootPath, presentationScope, localWorkspaceIdentity, modelID
             case providerID, providerDisplayName
             case createdAt, updatedAt, messages
             case didEditFiles, agentEditedPaths, interactionMode, approvalMode, executionAgent, activeExperts
@@ -291,6 +315,16 @@ nonisolated enum AgentSessionStore {
             titleIsUserSet = try c.decodeIfPresent(Bool.self, forKey: .titleIsUserSet) ?? false
             let messageIndex = try c.decodeIfPresent([MessageIndex].self, forKey: .messages) ?? []
             hasUserMessage = messageIndex.contains { $0.role == AgentRole.user.rawValue }
+            presentationScope = try c.decodeIfPresent(
+                AgentSessionPresentationScope.self,
+                forKey: .presentationScope
+            ) ?? AgentSession.inferredPresentationScope(
+                interactionMode: interactionMode,
+                currentGoal: currentGoal,
+                containsRoundtableReport: messageIndex.contains(
+                    where: \.containsRoundtableReport
+                )
+            )
         }
 
         var session: AgentSession {
@@ -300,6 +334,7 @@ nonisolated enum AgentSessionStore {
                 workspaceRootPath: workspaceRootPath,
                 workspaceLocation: workspaceLocation,
                 sidebarWorkspaceRootPath: sidebarWorkspaceRootPath,
+                presentationScope: presentationScope,
                 localWorkspaceIdentity: localWorkspaceIdentity,
                 modelID: modelID,
                 providerID: providerID,
@@ -577,12 +612,43 @@ nonisolated enum AgentSessionStore {
         }
     }
 
-    /// Disk location for session JSON files. Created lazily.
-    static var directory: URL {
+    /// Test seam: when set, session JSON lives here instead of Application
+    /// Support. Set it before the store is first touched in a test.
+    nonisolated(unsafe) static var directoryOverride: URL?
+
+    /// The shipping location, never redirected. The rename guard asserts on
+    /// this so it keeps checking the path users actually own.
+    static var applicationSupportDirectory: URL {
         let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
             ?? FileManager.default.temporaryDirectory
         return base.appendingPathComponent("WillDeep", isDirectory: true)
             .appendingPathComponent("agent-sessions", isDirectory: true)
+    }
+
+    /// Every test process gets a throwaway library. Tests build `AppState`,
+    /// whose session list loads from disk asynchronously, then delete every
+    /// id absent from a set captured before that load returned — an empty
+    /// set, so the cleanup swept the user's entire real history. Redirecting
+    /// the whole process is the only version of this that a newly added test
+    /// cannot get wrong.
+    private static let testSandboxDirectory: URL? = {
+        let environment = ProcessInfo.processInfo.environment
+        let underTest = NSClassFromString("XCTestCase") != nil
+            || NSClassFromString("XCTest") != nil
+            || environment["XCTestConfigurationFilePath"] != nil
+            || environment["XCTestBundlePath"] != nil
+        guard underTest else { return nil }
+        return FileManager.default.temporaryDirectory
+            .appendingPathComponent(
+                "WillDeepTests-\(ProcessInfo.processInfo.processIdentifier)",
+                isDirectory: true
+            )
+            .appendingPathComponent("agent-sessions", isDirectory: true)
+    }()
+
+    /// Disk location for session JSON files. Created lazily.
+    static var directory: URL {
+        directoryOverride ?? testSandboxDirectory ?? applicationSupportDirectory
     }
 
     /// The product was named VeilWriter before 1.59. The rename changed the
@@ -763,6 +829,19 @@ nonisolated enum AgentSessionStore {
         }
     }
 
+    /// True when writing `session` would replace a stored transcript with an
+    /// empty one. A skeleton carrying no messages is what `metadataSession`
+    /// produces for the sidebar, and several paths persist whatever is in
+    /// `agentSessions[index]` without materializing it first — one stale
+    /// metadata-only flag is enough to flush that skeleton over real history.
+    /// An empty session whose file is also empty (or absent) writes normally.
+    private static func wouldTruncateStoredTranscript(_ session: AgentSession, at url: URL) -> Bool {
+        guard session.messages.isEmpty else { return false }
+        guard let data = try? Data(contentsOf: url) else { return false }
+        guard let stored = try? decoder.decode(AgentSession.self, from: data) else { return false }
+        return !stored.messages.isEmpty
+    }
+
     private static func metadataSession(from session: AgentSession) -> AgentSession {
         var copy = session
         copy.messages = []
@@ -783,12 +862,29 @@ nonisolated enum AgentSessionStore {
         return SourceSignature(fileSize: size, modificationTime: date.timeIntervalSince1970)
     }
 
+    /// A catalog load plus the classification that belongs to it. The id
+    /// sets travel with the result so each caller can own its own answer
+    /// to "is this entry still a skeleton": several AppState instances
+    /// exist (Settings window, desktop pet), and with only the
+    /// process-wide tracker one instance's `load(id:)` could clear a flag
+    /// another instance was still relying on — that instance then
+    /// persisted its skeleton over real history.
+    struct LoadedSessions: Sendable {
+        let sessions: [AgentSession]
+        let metadataOnlyIDs: Set<UUID>
+        let metadataOnlyUserMessageIDs: Set<UUID>
+    }
+
+    static func loadAll() -> [AgentSession] {
+        loadAllWithMetadata().sessions
+    }
+
     /// Loads the lightweight sidebar catalog, newest-updated first. Normal
     /// launches read only small sidecars; a missing/stale sidecar triggers a
     /// one-time full-session decode and is repaired for the next launch.
     /// Full messages are materialized by `load(id:)` when the user opens a
     /// session. Usage analytics are deliberately not loaded here.
-    static func loadAll() -> [AgentSession] {
+    static func loadAllWithMetadata() -> LoadedSessions {
         importLegacySessionsIfNeeded()
 
         var sessions: [AgentSession] = []
@@ -839,8 +935,15 @@ nonisolated enum AgentSessionStore {
             }
         }
 
+        // The process-wide tracker is still refreshed here so the legacy
+        // `isMetadataOnly` API keeps answering for callers that have no
+        // per-instance state; AppState reads the returned sets instead.
         metadataOnlySessions.replace(with: metadataOnlyIDs, userMessageIDs: metadataOnlyUserMessageIDs)
-        return sessions.sorted { $0.updatedAt > $1.updatedAt }
+        return LoadedSessions(
+            sessions: sessions.sorted { $0.updatedAt > $1.updatedAt },
+            metadataOnlyIDs: metadataOnlyIDs,
+            metadataOnlyUserMessageIDs: metadataOnlyUserMessageIDs
+        )
     }
 
     static func loadUsageSnapshots() -> [AgentUsageSessionSnapshot] {
@@ -928,6 +1031,10 @@ nonisolated enum AgentSessionStore {
             do {
                 try ensureDirectory()
                 let url = directory.appendingPathComponent("\(session.id.uuidString).json")
+                guard !wouldTruncateStoredTranscript(session, at: url) else {
+                    print("AgentSessionStore: refused to overwrite session \(session.id) with an empty transcript")
+                    return false
+                }
                 let data = try encoder.encode(session.externalizingAttachmentContent())
                 try coordinatedWrite(data, to: url)
                 writeCatalogEntryBestEffort(for: session, sourceURL: url)

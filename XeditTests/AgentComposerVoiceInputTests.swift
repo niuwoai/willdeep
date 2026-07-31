@@ -14,12 +14,15 @@ struct AgentComposerVoiceInputTests {
     @Test("voice input creates an active session before appending")
     func voiceInputCreatesSessionBeforeAppending() {
         let appState = AppState(rootDirectory: nil)
-        let existingIDs = Set(appState.agentSessions.map(\.id))
-        defer { deleteSessionsCreatedByTest(appState, existingIDs: existingIDs) }
+        var createdSessionIDs: [AgentSession.ID] = []
+        defer { deleteSessionsCreatedByTest(createdSessionIDs) }
 
         #expect(appState.activeRuntime == nil)
 
         let appended = appState.appendAgentInputTextCreatingSessionIfNeeded("  语音输入  ")
+        if let createdID = appState.activeAgentSessionID {
+            createdSessionIDs.append(createdID)
+        }
 
         #expect(appended == true)
         #expect(appState.activeRuntime != nil)
@@ -29,10 +32,9 @@ struct AgentComposerVoiceInputTests {
     @Test("voice input appends to existing composer text")
     func voiceInputAppendsToExistingComposerText() {
         let appState = AppState(rootDirectory: nil)
-        let existingIDs = Set(appState.agentSessions.map(\.id))
-        defer { deleteSessionsCreatedByTest(appState, existingIDs: existingIDs) }
+        let session = appState.startNewAgentSession()
+        defer { AgentSessionStore.delete(id: session.id) }
 
-        appState.startNewAgentSession()
         appState.agentInput = "前半句"
 
         let appended = appState.appendAgentInputTextCreatingSessionIfNeeded("后半句")
@@ -48,10 +50,13 @@ struct AgentComposerVoiceInputTests {
         defer { UserPreferences.shared.transcriptCleanupMode = oldMode }
 
         let appState = AppState(rootDirectory: nil)
-        let existingIDs = Set(appState.agentSessions.map(\.id))
-        defer { deleteSessionsCreatedByTest(appState, existingIDs: existingIDs) }
+        var createdSessionIDs: [AgentSession.ID] = []
+        defer { deleteSessionsCreatedByTest(createdSessionIDs) }
 
         let appended = await appState.appendVoiceTranscriptCreatingSessionIfNeeded("  先修一下登录，然后补测试  ")
+        if let createdID = appState.activeAgentSessionID {
+            createdSessionIDs.append(createdID)
+        }
 
         #expect(appended == true)
         #expect(appState.agentInput == "先修一下登录，然后补测试")
@@ -73,8 +78,8 @@ struct AgentComposerVoiceInputTests {
         #expect(cleaned == "- 先修登录\n- 再补测试")
     }
 
-    private func deleteSessionsCreatedByTest(_ appState: AppState, existingIDs: Set<AgentSession.ID>) {
-        for id in appState.agentSessions.map(\.id) where !existingIDs.contains(id) {
+    private func deleteSessionsCreatedByTest(_ ids: [AgentSession.ID]) {
+        for id in ids {
             AgentSessionStore.delete(id: id)
         }
     }

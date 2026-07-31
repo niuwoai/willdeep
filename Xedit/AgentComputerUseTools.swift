@@ -17,9 +17,69 @@ enum AgentComputerUseTools {
         return AgentToolResult(summary: "Computer Use permission status", payload: jsonPayload(result))
     }
 
-    static func requestPermissions(arguments: [String: AgentJSONValue]) async throws -> AgentToolResult {
-        let result = try await AgentComputerUseBridge.shared.invoke(action: "request_permissions", arguments: arguments)
+    static func requestPermissions(
+        arguments: [String: AgentJSONValue],
+        sessionPersistenceBarrier: (@MainActor () -> Void)? = nil
+    ) async throws -> AgentToolResult {
+        if arguments["screen_capture"]?.boolValue() != false {
+            try await persistBeforeScreenCapturePermissionIfNeeded(sessionPersistenceBarrier)
+        }
+        var result = try await AgentComputerUseBridge.shared.invoke(
+            action: "request_permissions",
+            arguments: arguments
+        )
+        if result["needs_helper_restart"] as? Bool == true {
+            await AgentComputerUseBridge.shared.restart()
+            result = try await AgentComputerUseBridge.shared.invoke(action: "permissions")
+        }
         return AgentToolResult(summary: "Requested Computer Use permissions", payload: jsonPayload(result))
+    }
+
+    static func captureDisplay(
+        displayIndex: Int?,
+        sessionPersistenceBarrier: (@MainActor () -> Void)? = nil
+    ) async throws -> URL {
+        var arguments: [String: AgentJSONValue] = [:]
+        if let displayIndex {
+            arguments["display"] = .number(Double(displayIndex))
+        }
+
+        try await persistBeforeScreenCapturePermissionIfNeeded(sessionPersistenceBarrier)
+        var result = try await AgentComputerUseBridge.shared.invoke(
+            action: "capture_display",
+            arguments: arguments
+        )
+        if result["needs_helper_restart"] as? Bool == true {
+            await AgentComputerUseBridge.shared.restart()
+            result = try await AgentComputerUseBridge.shared.invoke(
+                action: "capture_display",
+                arguments: arguments
+            )
+        }
+
+        guard let screenshot = result["screenshot"] as? [String: Any],
+              let path = screenshot["path"] as? String,
+              !path.isEmpty else {
+            throw AgentToolError.commandFailed(
+                1,
+                "Screen & System Audio Recording permission is not available to WillDeep Computer Use. Enable it in System Settings; only the helper needs to restart. This is separate from microphone permission."
+            )
+        }
+        return URL(fileURLWithPath: path)
+    }
+
+    private static func persistBeforeScreenCapturePermissionIfNeeded(
+        _ sessionPersistenceBarrier: (@MainActor () -> Void)?
+    ) async throws {
+        let status = try await AgentComputerUseBridge.shared.invoke(action: "permissions")
+        guard status["screen_capture_granted"] as? Bool != true else { return }
+        guard let sessionPersistenceBarrier else {
+            throw AgentToolError.commandFailed(
+                1,
+                "Screen & System Audio Recording permission must be requested from a persisted WillDeep conversation. This is separate from microphone permission."
+            )
+        }
+        sessionPersistenceBarrier()
     }
 
     static func listApps() async throws -> AgentToolResult {
@@ -27,38 +87,82 @@ enum AgentComputerUseTools {
         return AgentToolResult(summary: "Listed running macOS apps", payload: jsonPayload(result))
     }
 
-    static func launchApp(arguments: [String: AgentJSONValue]) async throws -> AgentToolResult {
-        let result = try await AgentComputerUseBridge.shared.invoke(action: "launch_app", arguments: arguments)
+    static func launchApp(
+        arguments: [String: AgentJSONValue],
+        controlLeaseID: String? = nil
+    ) async throws -> AgentToolResult {
+        let result = try await AgentComputerUseBridge.shared.invoke(
+            action: "launch_app",
+            arguments: arguments,
+            controlLeaseID: controlLeaseID
+        )
         return AgentToolResult(summary: "Launched macOS app", payload: jsonPayload(result))
     }
 
-    static func activateApp(arguments: [String: AgentJSONValue]) async throws -> AgentToolResult {
-        let result = try await AgentComputerUseBridge.shared.invoke(action: "activate_app", arguments: arguments)
+    static func activateApp(
+        arguments: [String: AgentJSONValue],
+        controlLeaseID: String? = nil
+    ) async throws -> AgentToolResult {
+        let result = try await AgentComputerUseBridge.shared.invoke(
+            action: "activate_app",
+            arguments: arguments,
+            controlLeaseID: controlLeaseID
+        )
         return AgentToolResult(summary: "Activated macOS app", payload: jsonPayload(result))
     }
 
-    static func getAppState(arguments: [String: AgentJSONValue]) async throws -> AgentToolResult {
-        let result = try await AgentComputerUseBridge.shared.invoke(action: "get_app_state", arguments: arguments)
+    static func getAppState(
+        arguments: [String: AgentJSONValue],
+        controlLeaseID: String? = nil
+    ) async throws -> AgentToolResult {
+        let result = try await AgentComputerUseBridge.shared.invoke(
+            action: "get_app_state",
+            arguments: arguments,
+            controlLeaseID: controlLeaseID
+        )
         return try stateResult(summary: "Captured macOS app state", result: result)
     }
 
-    static func inspectApp(arguments: [String: AgentJSONValue]) async throws -> AgentToolResult {
+    static func inspectApp(
+        arguments: [String: AgentJSONValue],
+        controlLeaseID: String? = nil
+    ) async throws -> AgentToolResult {
         var safeArguments = arguments
         safeArguments["include_screenshot"] = .bool(false)
-        let result = try await AgentComputerUseBridge.shared.invoke(action: "get_app_state", arguments: safeArguments)
+        let result = try await AgentComputerUseBridge.shared.invoke(
+            action: "get_app_state",
+            arguments: safeArguments,
+            controlLeaseID: controlLeaseID
+        )
         return try stateResult(summary: "Inspected macOS app Accessibility state", result: result)
     }
 
-    static func waitFor(arguments: [String: AgentJSONValue]) async throws -> AgentToolResult {
-        let result = try await AgentComputerUseBridge.shared.invoke(action: "wait_for", arguments: arguments)
+    static func waitFor(
+        arguments: [String: AgentJSONValue],
+        controlLeaseID: String? = nil
+    ) async throws -> AgentToolResult {
+        let result = try await AgentComputerUseBridge.shared.invoke(
+            action: "wait_for",
+            arguments: arguments,
+            controlLeaseID: controlLeaseID
+        )
         return try stateResult(summary: "Waited for macOS app state", result: result)
     }
 
-    static func perform(action: String, arguments: [String: AgentJSONValue]) async throws -> AgentToolResult {
-        if action == "type_text" || action == "set_value" || action == "select_text" {
-            try rejectSensitiveText(arguments)
-        }
-        let result = try await AgentComputerUseBridge.shared.invoke(action: action, arguments: arguments)
+    static func perform(
+        action: String,
+        arguments: [String: AgentJSONValue],
+        controlLeaseID: String? = nil
+    ) async throws -> AgentToolResult {
+        try AgentComputerUsePolicy.validateBeforeHelper(
+            action: action,
+            arguments: arguments
+        )
+        let result = try await AgentComputerUseBridge.shared.invoke(
+            action: action,
+            arguments: arguments,
+            controlLeaseID: controlLeaseID
+        )
         return try stateResult(summary: "Performed computer-use \(action)", result: result)
     }
 
@@ -72,7 +176,7 @@ enum AgentComputerUseTools {
     private static func stateResult(summary: String, result: [String: Any]) throws -> AgentToolResult {
         let image = try result["screenshot"].flatMap { $0 as? [String: Any] }.flatMap(attachment)
         var payload = jsonPayload(result)
-        payload += "\n\nCoordinate rule: element refs are valid only for this fresh state. Pixel x/y values are relative to the returned screenshot unless coordinate_space is explicitly `screen`. A null screenshot means this was an Accessibility-only inspection and pixel fallback is intentionally unavailable."
+        payload += "\n\nAX-first rule: inspect this fresh Accessibility tree before considering pixels. Every action must include this state's snapshot_id, and element refs must share its snapshot prefix. A null screenshot is the normal AX-only result; request computer_use_get_app_state with include_screenshot=true only when the AX tree has no usable target. Pixel x/y values are relative to that returned target-window screenshot; screen-space coordinates are not accepted."
         return AgentToolResult(summary: summary, payload: payload, images: image.map { [$0] } ?? [])
     }
 
@@ -109,13 +213,4 @@ enum AgentComputerUseTools {
         return text
     }
 
-    private static func rejectSensitiveText(_ arguments: [String: AgentJSONValue]) throws {
-        let candidate = (arguments["text"] ?? arguments["value"])?.stringValue() ?? ""
-        let lowered = candidate.lowercased()
-        let prefixes = ["sk-", "ghp_", "github_pat_", "akia", "bearer ", "xoxb-", "xoxp-", "-----begin"]
-        let looksLikeOneTimeCode = candidate.range(of: "^\\d{6,8}$", options: .regularExpression) != nil
-        if prefixes.contains(where: lowered.hasPrefix) || looksLikeOneTimeCode {
-            throw AgentToolError.invalidArgument("Computer Use refuses to type a likely secret or one-time code. Ask the user to take over.")
-        }
-    }
 }

@@ -30,12 +30,18 @@ nonisolated enum AgentComposerLocalPanelTrigger {
 }
 
 extension AppState {
-    func sendAgentMessage(allowPlanModeSuggestion: Bool = true) {
+    func sendAgentMessage() {
         // The UI's send button always targets whatever session is on
         // screen — that's the active runtime by definition. If there
         // isn't one, lazily create one so a brand-new install can fire
         // off its first message without manually picking ⌘N first.
         guard let runtime = activeRuntime ?? activeRuntimeAfterCreatingNewSession() else { return }
+        if runtime.interactionMode == .goal,
+           runtime.workspaceLocation == nil,
+           (runtime.workspaceRootPath?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ?? true) {
+            runtime.errorMessage = L10n.Dispatch.workspaceRequired
+            return
+        }
         if refreshChangedAgentSessionDocumentsIfNeeded(in: runtime) {
             return
         }
@@ -59,7 +65,6 @@ extension AppState {
                 // falling through into a model request.
                 return
             }
-            clearAgentPlanModeSuggestion(for: runtime)
             runtime.input = ""
             runtime.installLocalConfirmationPreview(
                 localConfirmationPreviewCalls(for: runtime)
@@ -96,50 +101,6 @@ extension AppState {
         // starts a real turn, remove its synthetic cards before any normal
         // activity accounting or approval routing runs.
         runtime.clearLocalConfirmationPreview()
-
-        if allowPlanModeSuggestion,
-           runtime.interactionMode == .normal,
-           !runtime.isResponding {
-            // While the prompt is visible, only its two explicit actions may
-            // resolve the parked send. Repeated Return presses must not sneak
-            // past the preflight and dispatch in Normal mode.
-            if runtime.pendingPlanModeSuggestion != nil {
-                return
-            }
-            // Same guard for the flash-judge window: a second Return while we
-            // are still asking the judge must not dispatch behind its back.
-            if runtime.isAskingPlanModeFlash {
-                return
-            }
-            let attachmentCount = images.count + textAttachments.count + pendingFiles.count + skills.count
-            switch AgentPlanModeSuggestionPolicy.band(
-                userText: userText,
-                attachmentCount: attachmentCount,
-                includesWorkspaceOverview: includeWorkspaceOverview
-            ) {
-            case .suggest:
-                runtime.pendingPlanModeSuggestion = AgentPlanModeSuggestion()
-                scheduleAgentPlanModeSuggestionAutoResolution(for: runtime)
-                notifyPlanModeSuggestionIfBackgrounded(for: runtime)
-                return
-            case .askFlash:
-                startPlanModeFlashJudge(
-                    for: runtime,
-                    userText: userText,
-                    attachmentCount: attachmentCount,
-                    includesWorkspaceOverview: includeWorkspaceOverview,
-                    localScore: AgentPlanModeSuggestionPolicy.score(
-                        userText: userText,
-                        attachmentCount: attachmentCount,
-                        includesWorkspaceOverview: includeWorkspaceOverview
-                    ) ?? 0
-                )
-                return
-            case .skip:
-                break
-            }
-        }
-        clearAgentPlanModeSuggestion(for: runtime)
 
         let prompt = composeAttachedPrompt(
             userText: userText,
@@ -220,6 +181,29 @@ extension AppState {
             ),
             AgentToolCall(
                 messageID: messageID,
+                externalID: "local-confirmation-preview-skill-batch",
+                toolName: "create_user_skills",
+                arguments: [
+                    "skills_json": .string("""
+                    [
+                      {
+                        "name": "release-guardian",
+                        "description": "发布前检查版本、变更记录与构建产物。",
+                        "body": "Run release checks and verify artifacts."
+                      },
+                      {
+                        "name": "incident-reviewer",
+                        "description": "生产事故后整理证据、根因与改进项。",
+                        "body": "Collect evidence and verify follow-ups."
+                      }
+                    ]
+                    """)
+                ],
+                risk: .write,
+                status: .pendingApproval
+            ),
+            AgentToolCall(
+                messageID: messageID,
                 externalID: "local-confirmation-preview-browser",
                 toolName: "embedded_browser_navigate",
                 arguments: ["url": .string("https://example.com")],
@@ -240,131 +224,6 @@ extension AppState {
         ]
     }
 
-    func resolveAgentPlanModeSuggestion(enterPlanMode: Bool, autoResolved: Bool = false) {
-        guard let runtime = activeRuntime,
-              runtime.pendingPlanModeSuggestion != nil else { return }
-        clearAgentPlanModeSuggestion(for: runtime)
-        if enterPlanMode {
-            setAgentInteractionMode(.plan)
-            // Only the timeout path leaves a transcript trail — a manual
-            // choice is self-explanatory and needs no note.
-            if autoResolved {
-                appendAutoPlanModeEnteredNotice(to: runtime)
-            }
-        }
-        sendAgentMessage(allowPlanModeSuggestion: false)
-    }
-
-    @MainActor
-    private func appendAutoPlanModeEnteredNotice(to runtime: AgentRuntime) {
-        let event = AgentMessage(
-            role: .system,
-            content: L10n.PlanModeSuggestion.autoEnteredNotice(
-                seconds: AgentPlanModeSuggestionPolicy.autoResolutionSeconds
-            ),
-            transcriptEvent: .autoPlanModeEntered
-        )
-        runtime.messages.append(event)
-        persistAgentSession(runtime: runtime, touchUpdatedAt: false, moveToFront: false)
-    }
-
-    /// Ask the flash judge whether a locally-ambiguous input warrants Plan
-    /// mode. Parks the send behind an input-field spinner; on the verdict we
-    /// either surface the banner or dispatch normally. Non-some.im providers
-    /// (no judge model) and any failure fall through to a normal send.
-    private func startPlanModeFlashJudge(
-        for runtime: AgentRuntime,
-        userText: String,
-        attachmentCount: Int,
-        includesWorkspaceOverview: Bool,
-        localScore: Int
-    ) {
-        runtime.planModeFlashJudgeTask?.cancel()
-        let configuration = configurationForCurrentTurn(for: runtime)
-        // The judge runs on the some.im "someim-judge" alias; without a
-        // some.im provider there is no judge to ask, so send normally.
-        guard configuration.providerID == AgentProviderPreset.someIMID else {
-            sendAgentMessage(allowPlanModeSuggestion: false)
-            return
-        }
-        runtime.isAskingPlanModeFlash = true
-        let workspaceAvailable = runtime.workspaceLocation != nil
-            || (runtime.workspaceRootPath?.isEmpty == false)
-        let someIMContext = SomeIMRequestContext(
-            sessionID: runtime.id.uuidString,
-            workspaceID: AgentWorkspaceIdentityStore.workspaceID(
-                forWorkspaceKey: Self.managedWorkspaceKey(for: runtime)
-            )
-        )
-        let judgeClient = AgentClient(configuration: configuration, someIMContext: someIMContext)
-
-        runtime.planModeFlashJudgeTask = Task { [weak self, weak runtime] in
-            let suggest = await AgentPlanModeFlashJudge.shouldSuggest(
-                userText: userText,
-                attachmentCount: attachmentCount,
-                includesWorkspaceOverview: includesWorkspaceOverview,
-                workspaceAvailable: workspaceAvailable,
-                localScore: localScore
-            ) { system, user, maxTokens in
-                await judgeClient.routeJudge(
-                    model: SomeIMManagedModel.judge,
-                    systemPrompt: system,
-                    userPayload: user,
-                    maxTokens: maxTokens
-                )
-            }
-            // Mirror the auto-resolution guards: bail if cancelled, the app or
-            // runtime went away, the user switched sessions, or the wait was
-            // already cleared out from under us.
-            guard !Task.isCancelled,
-                  let self,
-                  let runtime,
-                  self.activeRuntime === runtime,
-                  runtime.isAskingPlanModeFlash else { return }
-            runtime.isAskingPlanModeFlash = false
-            runtime.planModeFlashJudgeTask = nil
-            if suggest {
-                runtime.pendingPlanModeSuggestion = AgentPlanModeSuggestion()
-                self.scheduleAgentPlanModeSuggestionAutoResolution(for: runtime)
-                self.notifyPlanModeSuggestionIfBackgrounded(for: runtime)
-            } else {
-                self.sendAgentMessage(allowPlanModeSuggestion: false)
-            }
-        }
-    }
-
-    private func notifyPlanModeSuggestionIfBackgrounded(for runtime: AgentRuntime) {
-        AgentToolApprovalNotifier.notifyPlanModeSuggestionIfBackgrounded(runtimeID: runtime.id)
-    }
-
-    func cancelAgentPlanModeSuggestion() {
-        guard let runtime = activeRuntime else { return }
-        clearAgentPlanModeSuggestion(for: runtime)
-    }
-
-    private func scheduleAgentPlanModeSuggestionAutoResolution(for runtime: AgentRuntime) {
-        runtime.planModeSuggestionAutoResolveTask?.cancel()
-        let delay = UInt64(AgentPlanModeSuggestionPolicy.autoResolutionSeconds) * 1_000_000_000
-        runtime.planModeSuggestionAutoResolveTask = Task { [weak self, weak runtime] in
-            try? await Task.sleep(nanoseconds: delay)
-            guard !Task.isCancelled,
-                  let self,
-                  let runtime,
-                  self.activeRuntime === runtime,
-                  runtime.pendingPlanModeSuggestion != nil else { return }
-            self.resolveAgentPlanModeSuggestion(enterPlanMode: true, autoResolved: true)
-        }
-    }
-
-    private func clearAgentPlanModeSuggestion(for runtime: AgentRuntime) {
-        runtime.planModeSuggestionAutoResolveTask?.cancel()
-        runtime.planModeSuggestionAutoResolveTask = nil
-        runtime.pendingPlanModeSuggestion = nil
-        runtime.planModeFlashJudgeTask?.cancel()
-        runtime.planModeFlashJudgeTask = nil
-        runtime.isAskingPlanModeFlash = false
-    }
-
     func dispatchAgentMessageUsingSelectedExecutor(
         _ executionAgent: AgentExecutionAgent,
         for runtime: AgentRuntime,
@@ -372,6 +231,7 @@ extension AppState {
         images: [AgentImageAttachment],
         textAttachments: [AgentTextAttachment] = [],
         attachedSkills: [AgentSkillEntry] = [],
+        delegatedProfile: LocalAgentCLIProfile? = nil,
         source: AgentMessageSource = .operatorInput
     ) {
         switch executionAgent {
@@ -384,7 +244,7 @@ extension AppState {
                 attachedSkills: attachedSkills,
                 source: source
             )
-        case .claudeCode, .codexCLI, .cursorAgent, .clineCLI:
+        case .claudeCode, .codexCLI, .hermesCLI, .cursorAgent, .clineCLI:
             dispatchDelegatedAgentMessage(
                 for: runtime,
                 text: text,
@@ -392,6 +252,7 @@ extension AppState {
                 textAttachments: textAttachments,
                 attachedSkills: attachedSkills,
                 executionAgent: executionAgent,
+                delegatedProfile: delegatedProfile,
                 source: source
             )
         }
@@ -404,6 +265,7 @@ extension AppState {
         textAttachments: [AgentTextAttachment] = [],
         attachedSkills: [AgentSkillEntry] = [],
         executionAgent: AgentExecutionAgent,
+        delegatedProfile: LocalAgentCLIProfile? = nil,
         source: AgentMessageSource = .operatorInput
     ) {
         guard let toolName = executionAgent.toolName else {
@@ -417,6 +279,13 @@ extension AppState {
             )
             return
         }
+
+        runtime.currentTurnPlanningOnly = source == .operatorInput
+            && AgentExecutionIntentPolicy.requestsPlanningOnly(text)
+        let delegatedUserText = AgentPlanContinuationPolicy.delegatedExecutionTask(
+            userText: text,
+            currentPlan: runtime.currentPlan
+        )
 
         resolvePendingAgentPatchProposalsBeforeNewMessage(for: runtime)
 
@@ -438,7 +307,7 @@ extension AppState {
         runtime.latestTurnRecall = nil
 
         let delegatedContract = AgentDelegatedTaskControl.makeContract(
-            objective: text,
+            objective: delegatedUserText,
             executor: executionAgent,
             goal: runtime.currentGoal
         )
@@ -450,7 +319,7 @@ extension AppState {
             runtime.delegatedTaskRuns.removeLast(runtime.delegatedTaskRuns.count - 20)
         }
         let prompt = delegatedAgentPrompt(
-            userText: text,
+            userText: delegatedUserText,
             conversationMessages: runtime.messages,
             textAttachments: textAttachments,
             images: images,
@@ -463,7 +332,9 @@ extension AppState {
         let arguments = Self.delegatedAgentArguments(
             prompt: prompt,
             executionAgent: executionAgent,
-            contract: delegatedContract
+            contract: delegatedContract,
+            planningOnly: runtime.currentTurnPlanningOnly,
+            profile: delegatedProfile
         )
         let externalID = "composer-\(executionAgent.rawValue)-\(UUID().uuidString)"
         let assistantMessage = AgentMessage(
@@ -497,7 +368,7 @@ extension AppState {
             await self.runDelegatedAgentToolCall(
                 toolName: toolName,
                 arguments: arguments,
-                userText: text,
+                userText: delegatedUserText,
                 textAttachments: textAttachments,
                 images: images,
                 executionAgent: executionAgent,
@@ -523,6 +394,7 @@ extension AppState {
         runtime: AgentRuntime
     ) async {
         var arguments = initialArguments
+        var delegatedSucceeded = false
         let workspaceLocation = runtime.workspaceLocation
             ?? runtime.workspaceRootPath.map { .local(path: $0) }
         let workspaceURL: URL?
@@ -566,8 +438,23 @@ extension AppState {
             runtime.isResponding = false
             runtime.turnStartedAt = nil
             runtime.requestTask = nil
+            let shouldRetryPlanning = finishExternalDispatchPlanningIfNeeded(
+                for: runtime,
+                succeeded: delegatedSucceeded
+            )
             persistAgentSession(runtime: runtime)
             consumeNextQueuedMessageIfNeeded(for: runtime)
+            if shouldRetryPlanning {
+                Task { @MainActor [weak self, weak runtime] in
+                    await Task.yield()
+                    guard let self, let runtime else { return }
+                    _ = self.startAgentGoalPlanningIfNeeded(
+                        for: runtime,
+                        forceRestart: true,
+                        revisionNote: runtime.goalPlanningState?.revisionNote
+                    )
+                }
+            }
         }
 
         if !images.isEmpty {
@@ -623,7 +510,7 @@ extension AppState {
         )
         let autoApproval = Self.delegatedComposerApprovalSource(risk: risk)
 
-        if Self.planGateBlocks(
+        if Self.goalPlanningGateBlocks(
             toolName: toolName,
             arguments: arguments,
             risk: risk,
@@ -632,7 +519,7 @@ extension AppState {
             updateDelegatedTaskRun(id: delegatedRunID, runtime: runtime) { run in
                 run.phase = .cancelled
                 run.finishedAt = Date()
-                run.lastError = "Plan approval required"
+                run.lastError = "Goal planning validation required"
             }
             finishDelegatedAgentRecord(
                 runtime: runtime,
@@ -641,8 +528,8 @@ extension AppState {
                 executionAgent: executionAgent,
                 status: .denied,
                 result: nil,
-                errorMessage: "Plan approval required",
-                toolPayload: "Blocked: no current plan has explicit user approval."
+                errorMessage: "Goal planning validation required",
+                toolPayload: "Blocked: Goal evidence planning has not produced a validated execution plan yet."
             )
             return
         }
@@ -716,12 +603,30 @@ extension AppState {
             jobRegistry: agentJobRegistry,
             mediaTaskRegistry: agentMediaTaskRegistry,
             shortDramaStore: agentShortDramaStore,
+            sessionPersistenceBarrier: {
+                self.persistAgentSession(
+                    runtime: runtime,
+                    touchUpdatedAt: false,
+                    moveToFront: false
+                )
+                AgentSessionStore.flushPendingWrites()
+            },
+            localCommandEnvironment: AgentToolRunner.localCommandEnvironment(
+                settings: editorTerminalSettings
+            ),
             sandboxMode: sandboxModeForToolExecution(
                 risk: risk,
                 approvalSource: approvalSource,
                 sandboxDecision: sandboxDecision
             ),
-            terminalController: agentTerminalController
+            terminalController: agentTerminalController,
+            delegatedProgressSink: { update in
+                self.updateDelegatedTerminalProgress(
+                    id: delegatedRunID,
+                    runtime: runtime,
+                    update: update
+                )
+            }
         )
 
         do {
@@ -752,6 +657,7 @@ extension AppState {
                 errorMessage: outcome.accepted ? nil : outcome.errorMessage,
                 toolPayload: outcome.result.payload
             )
+            delegatedSucceeded = outcome.accepted
             refreshDelegatedAgentWorktreeInBackground(
                 runtimeID: runtime.id,
                 workspaceURL: workspaceURL,
@@ -821,6 +727,24 @@ extension AppState {
         workspaceURL: URL?,
         baselineTask: Task<AgentWorktreeSnapshot, Never>?
     ) async throws -> DelegatedAcceptanceOutcome {
+        if initialArguments["permission_mode"]?.stringValue() == "plan" {
+            let result = try await AgentToolRunner.run(
+                name: toolName,
+                arguments: initialArguments,
+                context: context
+            )
+            updateDelegatedTaskRun(id: delegatedRunID, runtime: runtime) { run in
+                run.phase = .readyForDelivery
+                run.attempt = 1
+                run.startedAt = run.startedAt ?? Date()
+                run.finishedAt = Date()
+            }
+            return DelegatedAcceptanceOutcome(
+                accepted: true,
+                result: result,
+                errorMessage: nil
+            )
+        }
         guard let contract = delegatedTaskRun(id: delegatedRunID, runtime: runtime)?.contract else {
             let result = try await AgentToolRunner.run(
                 name: toolName,
@@ -880,6 +804,9 @@ extension AppState {
                     prompt: reviewPrompt,
                     executionAgent: executionAgent
                 )
+                for key in ["profile", "agent", "model"] {
+                    reviewArguments[key] = arguments[key]
+                }
                 reviewArguments["permission_mode"] = .string("plan")
                 reviewArguments["run_in_background"] = .bool(false)
                 reviewArguments["use_visible_terminal"] = .bool(true)
@@ -1087,7 +1014,57 @@ extension AppState {
             return
         }
         update(&runtime.delegatedTaskRuns[index])
+        syncDelegatedToolProgress(
+            run: runtime.delegatedTaskRuns[index],
+            runtime: runtime
+        )
         persistAgentSession(runtime: runtime)
+    }
+
+    private func syncDelegatedToolProgress(
+        run: AgentDelegatedTaskRun,
+        runtime: AgentRuntime
+    ) {
+        guard let callIndex = runtime.toolCalls.firstIndex(where: {
+            $0.arguments["delegated_task_id"]?.stringValue() == run.id.uuidString
+        }) else {
+            return
+        }
+        var progress = runtime.toolCalls[callIndex].delegatedProgress
+            ?? AgentDelegatedLiveProgress(
+                maximumAttempts: run.contract.maxAttempts
+            )
+        progress.phase = run.phase
+        progress.attempt = run.attempt
+        progress.maximumAttempts = run.contract.maxAttempts
+        runtime.toolCalls[callIndex].delegatedProgress = progress
+    }
+
+    func updateDelegatedTerminalProgress(
+        id: UUID,
+        runtime: AgentRuntime,
+        update: AgentDelegatedTerminalProgressUpdate
+    ) {
+        guard let run = delegatedTaskRun(id: id, runtime: runtime),
+              let callIndex = runtime.toolCalls.firstIndex(where: {
+                  $0.arguments["delegated_task_id"]?.stringValue() == id.uuidString
+              }) else {
+            return
+        }
+        var progress = runtime.toolCalls[callIndex].delegatedProgress
+            ?? AgentDelegatedLiveProgress(
+                phase: run.phase,
+                attempt: run.attempt,
+                maximumAttempts: run.contract.maxAttempts
+            )
+        progress.terminalTabID = update.terminalTabID
+        if let currentActivity = update.currentActivity {
+            progress.currentActivity = currentActivity
+        }
+        if let recentOutput = update.recentOutput {
+            progress.recentOutput = recentOutput
+        }
+        runtime.toolCalls[callIndex].delegatedProgress = progress
     }
 
     nonisolated private static func delegatedAcceptedPayload(
@@ -1552,7 +1529,9 @@ extension AppState {
     static func delegatedAgentArguments(
         prompt: String,
         executionAgent: AgentExecutionAgent,
-        contract: AgentDelegatedTaskContract? = nil
+        contract: AgentDelegatedTaskContract? = nil,
+        planningOnly: Bool = false,
+        profile: LocalAgentCLIProfile? = nil
     ) -> [String: AgentJSONValue] {
         var arguments: [String: AgentJSONValue] = [
             "prompt": .string(prompt),
@@ -1560,7 +1539,9 @@ extension AppState {
             "use_visible_terminal": .bool(true),
             "visible_terminal_label": .string(executionAgent.displayName),
         ]
-        if let permissionMode = executionAgent.defaultPermissionMode {
+        if planningOnly {
+            arguments["permission_mode"] = .string("plan")
+        } else if let permissionMode = executionAgent.defaultPermissionMode {
             arguments["permission_mode"] = .string(permissionMode)
         }
         if let contract {
@@ -1570,6 +1551,16 @@ extension AppState {
             arguments["verification_policy"] = .string(
                 contract.requiresFreshSelfReview ? "double" : "self"
             )
+        }
+        if let profile, profile.executor == executionAgent,
+           let argument = profile.argument {
+            arguments[argument.name] = .string(argument.value)
+        }
+        if let modelID = profile?.modelID, !modelID.isEmpty {
+            arguments["model"] = .string(modelID)
+        }
+        if let providerID = profile?.providerID, !providerID.isEmpty {
+            arguments["provider"] = .string(providerID)
         }
         return arguments
     }
@@ -1938,7 +1929,7 @@ extension AppState {
         let productContext = parsed.options["context"].map { " Product context: \($0)." } ?? ""
         runtime.input = L10n.Composer.designToCodePrompt + framework + productContext
         preparePendingImagesForDesignToCode()
-        sendAgentMessage(allowPlanModeSuggestion: false)
+        sendAgentMessage()
     }
 
     func detachAgentSkill(identifier: String) {

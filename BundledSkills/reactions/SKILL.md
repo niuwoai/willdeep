@@ -1,56 +1,17 @@
 ---
 name: reactions
-description: React to a message with an emoji. Works on Telegram, Discord, and Feishu.
-allowed-tools:
-    - Bash
+description: Add an emoji reaction through a messaging MCP server configured in WillDeep, or through the built-in Lark CLI for Feishu when available. Use only when the target platform, conversation, message, and reaction are known.
 ---
 
-# Reactions Skill
+# Message Reactions
 
-React to a message with an emoji reaction. Platform is auto-detected from the current chat context.
+## Workflow
 
-## Telegram
+1. Identify the platform, conversation or channel, message identifier, and emoji.
+2. For Feishu, use `lark_cli` only after confirming the relevant reaction operation and arguments.
+3. For Discord, Telegram, or another platform, call `list_mcp_servers`, then `list_mcp_tools`, and invoke the exact reaction tool through `call_mcp_tool`.
+4. Verify the returned message or reaction state.
 
-```bash
-curl -s -X POST http://localhost:23001/api/reaction/set \
-  -H 'Content-Type: application/json' \
-  -d '{"emoji": "👌", "messageId": 12345}'
-```
+If the integration is missing, use `search_mcp_servers` or `suggest_mcp_server`. Do not call undocumented localhost endpoints or invent platform commands.
 
-## Discord
-
-```bash
-curl -s -X POST http://localhost:23001/api/discord/reaction \
-  -H 'Content-Type: application/json' \
-  -d '{"channelId": "CHANNEL_ID", "messageId": "MSG_ID", "emoji": "👌"}'
-```
-
-## Feishu
-
-Feishu uses emoji type strings (e.g. "THUMBSUP", "HEART", "LAUGH", "OK", "FIRE").
-
-```bash
-curl -s -X POST http://localhost:23001/api/feishu/messages/MSG_ID/reaction \
-  -H 'Content-Type: application/json' \
-  -d '{"emoji": "THUMBSUP"}'
-```
-
-Common Feishu emoji types: THUMBSUP, HEART, LAUGH, SURPRISED, CRY, OK, FIRE, CLAP, PRAY, MUSCLE, PARTY, FACEPALM, JIAYI (加一/+1)
-
-## Emoji
-
-Choose any emoji that fits the mood naturally. Common ones: 👍 ❤ 🎉 😂 😢 😮 🔥 🤔 👎 🙏 🥰 🤣 👌 🫡 💯 🤝
-
-Note: Each platform has different supported emoji. If rejected, just means that emoji isn't supported on the platform.
-
-## When to Use
-
-- Message evokes genuine emotion — excitement, gratitude, humor, surprise
-- Something funny or heartwarming
-- A simple acknowledgment when words aren't needed
-- **In group chats: react 👌 when you agree to someone's request** (use messageId from `[msg:xxx]`)
-
-## When NOT to Use
-
-- Don't react to every message
-- Neutral or factual messages don't need reactions
+Do not react to every message. Avoid reactions that could be interpreted as approval for legal, financial, security, or other consequential decisions.

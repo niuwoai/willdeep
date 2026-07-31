@@ -1,56 +1,25 @@
 ---
 name: screenshot
-description: Take screenshots of the screen using macOS screencapture. Use when users ask to see the screen, debug UI, or capture what's displayed. Resize before returning to avoid blowing up model context.
-allowed-tools:
-  - Bash
-  - Read
+description: Capture a Mac display, Android device, iOS Simulator, Chrome tab, Embedded Browser page, or native app window with WillDeep's screenshot tools. Use for user-requested captures and visual verification after UI changes.
 ---
 
-# Screenshot Skill
+# Screenshots
 
-Take screenshots using macOS `screencapture` command via Bash.
+Choose the narrowest capture surface:
 
-## Important: Always Resize for Context
+- Whole Mac display, Android device, or iOS Simulator: `capture_screenshot`
+- Native macOS app window plus Accessibility state: `computer_use_get_app_state`
+- Chrome tab: `chrome_capture_tab`
+- Embedded Browser page: `embedded_browser_capture_screenshot`
 
-Full-resolution screenshots (especially on Retina/5K displays) produce huge base64 that will exceed the model's context length. **Always resize before reading.**
+## Workflow
 
-## Take and View a Screenshot
+1. Confirm the intended surface and display or device when ambiguous.
+2. Use the appropriate status or discovery tool first.
+3. Capture directly as a read-only tool call. On the first Mac capture, macOS may still show its “Screen & System Audio Recording” permission prompt. That system category does not mean WillDeep requested microphone access; microphone permission is separate.
+4. Successful platform captures are persisted under `~/.willdeep/captures/<capture-id>/` and surfaced as a clickable image in the final assistant message. Use the full-resolution path from the tool payload when later local analysis needs the original pixels.
+5. Use the image attached to the tool result for immediate inspection.
+6. Call `visual_qa_screenshot` only when the user asks for UI, color, layout, theme, or accessibility review.
+7. Return the saved image with an absolute Markdown image link when the user asks to see or keep it.
 
-```bash
-# 1. Capture full screen
-/usr/sbin/screencapture -x -t jpg /tmp/alma-screenshot.jpg
-
-# 2. Resize to 1024px wide (critical for context size!)
-/usr/bin/sips --resampleWidth 1024 --setProperty formatOptions 60 /tmp/alma-screenshot.jpg --out /tmp/alma-screenshot-thumb.jpg 2>/dev/null
-
-# 3. Get dimensions
-/usr/bin/sips -g pixelWidth -g pixelHeight /tmp/alma-screenshot.jpg 2>/dev/null
-```
-
-Then use the Read tool to read `/tmp/alma-screenshot-thumb.jpg` (the resized version, NOT the full-size one).
-
-## Capture Options
-
-```bash
-# Full screen (default)
-/usr/sbin/screencapture -x -t jpg /tmp/alma-screenshot.jpg
-
-# Interactive window selection
-/usr/sbin/screencapture -x -w -t jpg /tmp/alma-screenshot.jpg
-
-# Specific region (x,y,w,h)
-/usr/sbin/screencapture -x -R 0,0,800,600 -t jpg /tmp/alma-screenshot.jpg
-
-# With 3-second delay
-/usr/sbin/screencapture -x -T 3 -t jpg /tmp/alma-screenshot.jpg
-```
-
-## Send Screenshot to User (Telegram)
-
-If the user wants to see the screenshot directly, use the `alma` CLI or just describe what you see. The full-resolution file is at `/tmp/alma-screenshot.jpg`.
-
-## Tips
-- **Always resize** before reading into context — use the thumb version
-- `-x` flag suppresses the capture sound
-- `-t jpg` outputs JPEG (smaller than PNG)
-- Use `sips --setProperty formatOptions 60` for higher compression if needed
+Screenshots may contain private information. Capture the smallest useful area and avoid unrelated displays or apps. Pure capture does not need a WillDeep confirmation card; uploading pixels to an external provider remains separately approval-gated.

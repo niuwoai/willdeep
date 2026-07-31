@@ -11,6 +11,131 @@
 import Foundation
 import Darwin
 
+nonisolated enum AgentRunCommandExecutionPolicy {
+    enum ActivityKind: Equatable {
+        case test
+        case build
+        case server
+
+        var operationName: String {
+            switch self {
+            case .test: return "运行测试"
+            case .build: return "编译项目"
+            case .server: return "启动开发服务"
+            }
+        }
+    }
+
+    /// An explicit model/user choice always wins. Otherwise, promote only
+    /// well-known test/build/dev-server entry points. This intentionally does
+    /// not infer from arbitrary words such as "build" inside script paths:
+    /// release, publish, notarization, and deployment workflows must opt in.
+    static func shouldRunInBackground(arguments: [String: AgentJSONValue]) -> Bool {
+        if let explicitChoice = arguments["run_in_background"]?.boolValue() {
+            return explicitChoice
+        }
+        guard let command = arguments["command"]?.stringValue() else { return false }
+        return inferredActivityKind(for: command) != nil
+    }
+
+    static func inferredActivityKind(for command: String) -> ActivityKind? {
+        for segment in SafeCommand.splitPipeline(command) {
+            let tokens = normalizedInvocationTokens(from: SafeCommand.tokenize(segment))
+            guard let executable = tokens.first else { continue }
+            let arguments = Array(tokens.dropFirst())
+
+            switch executable {
+            case "xcodebuild":
+                if arguments.contains("test") { return .test }
+                if arguments.contains(where: { ["build", "archive"].contains($0) }) { return .build }
+                if !arguments.contains(where: {
+                    ["-list", "-showbuildsettings", "-showsdks", "-version", "clean"].contains($0)
+                }) {
+                    return .build
+                }
+            case "swift", "go", "cargo":
+                if arguments.first == "test" { return .test }
+                if arguments.first == "build" { return .build }
+            case "pytest", "rspec":
+                return .test
+            case "python", "python3":
+                if arguments.starts(with: ["-m", "pytest"]) { return .test }
+            case "bundle":
+                if arguments.starts(with: ["exec", "rspec"]) { return .test }
+            case "npm", "yarn", "pnpm", "bun":
+                if let kind = packageScriptActivityKind(arguments) { return kind }
+            case "make", "gmake":
+                if let kind = makeActivityKind(arguments) { return kind }
+            case "gradle", "gradlew", "mvn", "mvnw":
+                if arguments.contains(where: { ["test", "check", "verify"].contains($0) }) { return .test }
+                if arguments.contains(where: { ["build", "assemble", "package"].contains($0) }) { return .build }
+            case "docker":
+                if arguments.first == "build" { return .build }
+                if arguments.starts(with: ["compose", "build"]) { return .build }
+                if arguments.starts(with: ["compose", "up"]) { return .server }
+            default:
+                let basename = URL(fileURLWithPath: executable).lastPathComponent
+                if ["run_tests.sh", "run-tests.sh", "test.sh", "tests.sh"].contains(basename) {
+                    return .test
+                }
+                if ["build.sh", "build.rb"].contains(basename) {
+                    return .build
+                }
+            }
+        }
+        return nil
+    }
+
+    private static func normalizedInvocationTokens(from rawTokens: [String]) -> [String] {
+        var tokens = rawTokens.map { $0.lowercased() }
+        while let first = tokens.first, isEnvironmentAssignment(first) {
+            tokens.removeFirst()
+        }
+        if tokens.first == "env" {
+            tokens.removeFirst()
+            while let first = tokens.first, isEnvironmentAssignment(first) {
+                tokens.removeFirst()
+            }
+        }
+        while let first = tokens.first, ["time", "nice", "nohup"].contains(first) {
+            tokens.removeFirst()
+        }
+        guard let first = tokens.first else { return [] }
+        tokens[0] = URL(fileURLWithPath: first).lastPathComponent
+        return tokens
+    }
+
+    private static func isEnvironmentAssignment(_ token: String) -> Bool {
+        guard let separator = token.firstIndex(of: "="), separator != token.startIndex else {
+            return false
+        }
+        return token[..<separator].allSatisfy { $0 == "_" || $0.isLetter || $0.isNumber }
+    }
+
+    private static func packageScriptActivityKind(_ rawArguments: [String]) -> ActivityKind? {
+        var arguments = rawArguments
+        if arguments.first == "run" {
+            arguments.removeFirst()
+        }
+        guard let script = arguments.first?.split(separator: ":", maxSplits: 1).first.map(String.init) else {
+            return nil
+        }
+        switch script {
+        case "test", "tests", "check", "ci": return .test
+        case "build", "compile": return .build
+        case "dev", "serve", "start": return .server
+        default: return nil
+        }
+    }
+
+    private static func makeActivityKind(_ arguments: [String]) -> ActivityKind? {
+        if arguments.contains(where: { ["test", "tests", "check"].contains($0) }) { return .test }
+        if arguments.contains(where: { ["build", "compile", "all"].contains($0) }) { return .build }
+        if arguments.contains(where: { ["dev", "serve", "start"].contains($0) }) { return .server }
+        return nil
+    }
+}
+
 enum AgentProcessSupport {
     static func waitUntilExit(_ process: Process) async {
         let waiter = Waiter()
@@ -32,7 +157,20 @@ enum AgentProcessSupport {
         _ process: Process,
         gracePeriod: TimeInterval = 2
     ) {
-        let rootPID = process.processIdentifier
+        terminateProcessTree(rootPID: process.processIdentifier, gracePeriod: gracePeriod)
+    }
+
+    /// PID-based variant for PTY-backed processes such as SwiftTerm's
+    /// `LocalProcess`, which does not expose a Foundation `Process`.
+    ///
+    /// Capture descendants before sending TERM: the root shell/ssh process
+    /// can exit immediately, after which libproc can no longer discover
+    /// children that ignored the first signal. The delayed identity check
+    /// protects the SIGKILL fallback from PID reuse.
+    nonisolated static func terminateProcessTree(
+        rootPID: pid_t,
+        gracePeriod: TimeInterval = 2
+    ) {
         guard rootPID > 0 else { return }
         let trackedPIDs = descendantPIDs(of: rootPID) + [rootPID]
         let trackedIdentities = trackedPIDs.compactMap(ProcessIdentity.init(pid:))
@@ -156,13 +294,36 @@ enum AgentToolRunner {
             activeArguments = arguments
         }
         let activeContext = context.withAdditionalSecretRedactionValues(resolution.secretValues)
+        var computerUseControl: AgentComputerUsePreparedControl?
+        var localObservationGuard: AgentComputerUseLocalObservationGuard?
+        var computerUseMaintenance:
+            AgentComputerUseMaintenanceReservation?
         do {
+            computerUseMaintenance = try await AgentComputerUseExecution
+                .prepareMaintenanceReservation(toolName: name)
+            localObservationGuard = try await AgentComputerUseExecution
+                .prepareLocalObservation(
+                    toolName: name,
+                    arguments: activeArguments
+                )
+            computerUseControl = try await AgentComputerUseExecution.prepare(
+                toolName: name,
+                arguments: activeArguments,
+                context: activeContext
+            )
+            let computerUseLeaseID = computerUseControl?
+                .leaseID
+                .uuidString
+                .lowercased()
             let result: AgentToolResult
             if AgentShortDramaToolDispatcher.canHandle(name) {
                 result = try await AgentShortDramaToolDispatcher.run(
                     name: name,
                     arguments: activeArguments,
                     context: activeContext
+                )
+                await AgentComputerUseExecution.finishMaintenanceReservation(
+                    computerUseMaintenance
                 )
                 return AgentSecretStore.redact(result, secretValues: activeContext.secretRedactionValues)
             }
@@ -219,6 +380,8 @@ enum AgentToolRunner {
                 result = try await claudeCode(arguments: activeArguments, context: activeContext)
             case "codex_cli":
                 result = try await codexCLI(arguments: activeArguments, context: activeContext)
+            case "hermes_cli":
+                result = try await hermesCLI(arguments: activeArguments, context: activeContext)
             case "cursor_agent":
                 result = try await cursorAgent(arguments: activeArguments, context: activeContext)
             case "cline_cli":
@@ -241,6 +404,8 @@ enum AgentToolRunner {
                 result = try AgentSelfLearning.addMemory(arguments: activeArguments, rootDirectory: activeContext.rootDirectory)
             case "create_user_skill":
                 result = try AgentSelfLearning.createUserSkill(arguments: activeArguments)
+            case "create_user_skills":
+                result = try AgentSelfLearning.createUserSkills(arguments: activeArguments)
             case "update_user_skill":
                 result = try AgentConfigurationTools.updateUserSkill(arguments: activeArguments)
             case "delete_user_skill":
@@ -300,39 +465,97 @@ enum AgentToolRunner {
             case "computer_use_permissions":
                 result = try await AgentComputerUseTools.permissions()
             case "computer_use_request_permissions":
-                result = try await AgentComputerUseTools.requestPermissions(arguments: activeArguments)
+                result = try await AgentComputerUseTools.requestPermissions(
+                    arguments: activeArguments,
+                    sessionPersistenceBarrier: activeContext.sessionPersistenceBarrier
+                )
             case "computer_use_list_apps":
                 result = try await AgentComputerUseTools.listApps()
             case "computer_use_launch_app":
-                result = try await AgentComputerUseTools.launchApp(arguments: activeArguments)
+                result = try await AgentComputerUseTools.launchApp(
+                    arguments: activeArguments,
+                    controlLeaseID: computerUseLeaseID
+                )
             case "computer_use_activate_app":
-                result = try await AgentComputerUseTools.activateApp(arguments: activeArguments)
+                result = try await AgentComputerUseTools.activateApp(
+                    arguments: activeArguments,
+                    controlLeaseID: computerUseLeaseID
+                )
             case "computer_use_get_app_state":
-                result = try await AgentComputerUseTools.getAppState(arguments: activeArguments)
+                result = try await AgentComputerUseTools.getAppState(
+                    arguments: activeArguments,
+                    controlLeaseID: computerUseLeaseID
+                )
             case "computer_use_inspect_app":
-                result = try await AgentComputerUseTools.inspectApp(arguments: activeArguments)
+                result = try await AgentComputerUseTools.inspectApp(
+                    arguments: activeArguments,
+                    controlLeaseID: computerUseLeaseID
+                )
             case "computer_use_wait_for":
-                result = try await AgentComputerUseTools.waitFor(arguments: activeArguments)
+                result = try await AgentComputerUseTools.waitFor(
+                    arguments: activeArguments,
+                    controlLeaseID: computerUseLeaseID
+                )
             case "computer_use_click":
-                result = try await AgentComputerUseTools.perform(action: "click", arguments: activeArguments)
+                result = try await AgentComputerUseTools.perform(
+                    action: "click",
+                    arguments: activeArguments,
+                    controlLeaseID: computerUseLeaseID
+                )
             case "computer_use_secondary_action":
-                result = try await AgentComputerUseTools.perform(action: "secondary_action", arguments: activeArguments)
+                result = try await AgentComputerUseTools.perform(
+                    action: "secondary_action",
+                    arguments: activeArguments,
+                    controlLeaseID: computerUseLeaseID
+                )
             case "computer_use_scroll":
-                result = try await AgentComputerUseTools.perform(action: "scroll", arguments: activeArguments)
+                result = try await AgentComputerUseTools.perform(
+                    action: "scroll",
+                    arguments: activeArguments,
+                    controlLeaseID: computerUseLeaseID
+                )
             case "computer_use_drag":
-                result = try await AgentComputerUseTools.perform(action: "drag", arguments: activeArguments)
+                result = try await AgentComputerUseTools.perform(
+                    action: "drag",
+                    arguments: activeArguments,
+                    controlLeaseID: computerUseLeaseID
+                )
             case "computer_use_type_text":
-                result = try await AgentComputerUseTools.perform(action: "type_text", arguments: activeArguments)
+                result = try await AgentComputerUseTools.perform(
+                    action: "type_text",
+                    arguments: activeArguments,
+                    controlLeaseID: computerUseLeaseID
+                )
             case "computer_use_press_key":
-                result = try await AgentComputerUseTools.perform(action: "press_key", arguments: activeArguments)
+                result = try await AgentComputerUseTools.perform(
+                    action: "press_key",
+                    arguments: activeArguments,
+                    controlLeaseID: computerUseLeaseID
+                )
             case "computer_use_set_value":
-                result = try await AgentComputerUseTools.perform(action: "set_value", arguments: activeArguments)
+                result = try await AgentComputerUseTools.perform(
+                    action: "set_value",
+                    arguments: activeArguments,
+                    controlLeaseID: computerUseLeaseID
+                )
             case "computer_use_focus":
-                result = try await AgentComputerUseTools.perform(action: "focus", arguments: activeArguments)
+                result = try await AgentComputerUseTools.perform(
+                    action: "focus",
+                    arguments: activeArguments,
+                    controlLeaseID: computerUseLeaseID
+                )
             case "computer_use_hover":
-                result = try await AgentComputerUseTools.perform(action: "hover", arguments: activeArguments)
+                result = try await AgentComputerUseTools.perform(
+                    action: "hover",
+                    arguments: activeArguments,
+                    controlLeaseID: computerUseLeaseID
+                )
             case "computer_use_select_text":
-                result = try await AgentComputerUseTools.perform(action: "select_text", arguments: activeArguments)
+                result = try await AgentComputerUseTools.perform(
+                    action: "select_text",
+                    arguments: activeArguments,
+                    controlLeaseID: computerUseLeaseID
+                )
             case "computer_use_restart_helper":
                 result = try await AgentComputerUseTools.restartHelper()
             case "chrome_status":
@@ -418,8 +641,42 @@ enum AgentToolRunner {
             default:
                 throw AgentToolError.unknownTool(name)
             }
+            try await AgentComputerUseExecution.complete(
+                computerUseControl,
+                result: result
+            )
+            do {
+                try await AgentComputerUseExecution.validateLocalObservation(
+                    localObservationGuard
+                )
+            } catch {
+                if name == "capture_screenshot",
+                   localObservationGuard != nil {
+                    AgentCaptureTools.discardPersistedCaptureArtifacts(in: result)
+                }
+                throw error
+            }
+            await AgentComputerUseExecution.finishMaintenanceReservation(
+                computerUseMaintenance
+            )
             return AgentSecretStore.redact(result, secretValues: activeContext.secretRedactionValues)
         } catch {
+            await AgentComputerUseExecution.finishMaintenanceReservation(
+                computerUseMaintenance
+            )
+            if computerUseControl != nil {
+                do {
+                    try await AgentComputerUseExecution.handleFailure(
+                        error,
+                        prepared: computerUseControl
+                    )
+                } catch {
+                    throw redactedToolError(
+                        error,
+                        secretValues: activeContext.secretRedactionValues
+                    )
+                }
+            }
             throw redactedToolError(error, secretValues: activeContext.secretRedactionValues)
         }
     }
@@ -489,8 +746,8 @@ enum AgentToolRunner {
 
         let rawTitle = arguments["title"]?.stringValue()?.trimmingCharacters(in: .whitespacesAndNewlines)
         let title = (rawTitle?.isEmpty == false) ? rawTitle! : "创建文件: \(path)"
-        // New files always write immediately — mirror the long-standing
-        // new-file behavior of apply_patch.
+        // The host decides whether this creation can write immediately from
+        // the active approval mode and recoverable git baseline.
         let patchArguments: [String: AgentJSONValue] = [
             "diff": .string(diff),
             "title": .string(title),
@@ -679,8 +936,12 @@ enum AgentToolRunner {
 
     // MARK: run_command
 
-    nonisolated private static let defaultCommandTimeout: TimeInterval = 20
-    nonisolated private static let maxCommandTimeout: TimeInterval = 120
+    // 20s/120s starved real builds and test runs: the command got killed,
+    // the model retried with a bigger timeout_seconds, and every retry cost
+    // a full model round trip. 60s absorbs typical lint/test/build steps;
+    // long jobs should still go through run_in_background.
+    nonisolated private static let defaultCommandTimeout: TimeInterval = 60
+    nonisolated private static let maxCommandTimeout: TimeInterval = 600
     nonisolated private static let maxCommandOutput = 32 * 1024
     nonisolated static let supplementalCommandPathEntries = [
         "/opt/homebrew/bin",
@@ -713,33 +974,52 @@ enum AgentToolRunner {
         return environment
     }
 
+    static func localCommandEnvironment(
+        from base: [String: String] = ProcessInfo.processInfo.environment,
+        settings: EditorTerminalSettings
+    ) -> [String: String] {
+        EditorTerminalLaunchEnvironment.variables(
+            from: shellEnvironment(from: base),
+            settings: settings,
+            injectClaudeCodeCompatibility: false,
+            markAsAgentTerminal: true
+        )
+    }
+
     private static func runCommand(
         arguments: [String: AgentJSONValue],
         context: AgentToolContext,
         foregroundMaxTimeout: TimeInterval = maxCommandTimeout
     ) async throws -> AgentToolResult {
+        var effectiveArguments = arguments
+        let selectedBackgroundAutomatically =
+            arguments["run_in_background"] == nil
+            && AgentRunCommandExecutionPolicy.shouldRunInBackground(arguments: arguments)
+        if selectedBackgroundAutomatically {
+            effectiveArguments["run_in_background"] = .bool(true)
+        }
         if let backend = context.remoteBackend {
             return try await backend.runCommand(
-                arguments: arguments,
+                arguments: effectiveArguments,
                 context: context,
                 foregroundMaxTimeout: foregroundMaxTimeout
             )
         }
         let root = context.rootDirectory?.standardizedFileURL
             ?? FileManager.default.homeDirectoryForCurrentUser.standardizedFileURL
-        guard let command = arguments["command"]?.stringValue(),
+        guard let command = effectiveArguments["command"]?.stringValue(),
               !command.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
             throw AgentToolError.missingArgument("command")
         }
-        let timeoutArg = arguments["timeout_seconds"]?.intValue().map { Double($0) } ?? defaultCommandTimeout
+        let timeoutArg = effectiveArguments["timeout_seconds"]?.intValue().map { Double($0) } ?? defaultCommandTimeout
         let timeout = min(max(timeoutArg, 1), max(1, foregroundMaxTimeout))
 
         // Background path: hand the Process off to the registry, return
         // immediately with the job handle, let the agent loop pull the
         // completion event at the top of a later turn.
-        let wantsBackground = arguments["run_in_background"]?.boolValue() ?? false
+        let wantsBackground = effectiveArguments["run_in_background"]?.boolValue() ?? false
         if wantsBackground, let registry = context.jobRegistry, let runtimeID = context.runtimeID {
-            let bgTimeout: Double? = arguments["timeout_seconds"]?.intValue().map { Double(min(max($0, 1), 3600 * 6)) }
+            let bgTimeout: Double? = effectiveArguments["timeout_seconds"]?.intValue().map { Double(min(max($0, 1), 3600 * 6)) }
             let job: AgentBackgroundJob
             do {
                 job = try await MainActor.run {
@@ -750,6 +1030,7 @@ enum AgentToolRunner {
                         turnID: context.turnID,
                         timeoutSeconds: bgTimeout,
                         sandboxMode: context.sandboxMode,
+                        environment: context.localCommandEnvironment,
                         displayCommand: AgentSecretStore.redact(command, secretValues: context.secretRedactionValues),
                         secretRedactionValues: context.secretRedactionValues
                     )
@@ -762,16 +1043,24 @@ enum AgentToolRunner {
             }
             let cwd = job.workingDirectoryPath ?? root.path
             let timeoutLine = bgTimeout.map { "\nTimeout: \(Int($0))s" } ?? ""
+            let selectionLine = selectedBackgroundAutomatically
+                ? "\nBackground mode: selected automatically for this test/build/server command."
+                : ""
             let payload = """
             Started background job \(job.displayHandle).
             Command: \(AgentSecretStore.redact(command, secretValues: context.secretRedactionValues))
             PID: \(job.pid)
-            cwd: \(cwd)\(timeoutLine)
+            cwd: \(cwd)\(timeoutLine)\(selectionLine)
 
             The job is running. You will receive a `<background-task-notification>` system message at the start of a later turn when it finishes (or fails). Until then, call `get_job_output` to inspect partial output, `list_jobs` to see all alive jobs, or `kill_job` to stop it.
             """
+            let activityLabel = effectiveArguments["label"]?.stringValue()?
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            let summary = activityLabel.flatMap { $0.isEmpty ? nil : String($0.prefix(60)) }
+                ?? AgentRunCommandExecutionPolicy.inferredActivityKind(for: command)?.operationName
+                ?? job.displayHandle
             return AgentToolResult(
-                summary: "▶ \(job.displayHandle) started",
+                summary: "▶ \(summary) · \(job.displayHandle)",
                 payload: payload
             )
         }
@@ -789,7 +1078,7 @@ enum AgentToolRunner {
             process.executableURL = launch.executableURL
             process.arguments = launch.arguments
             process.currentDirectoryURL = root
-            let baseEnvironment = shellEnvironment()
+            let baseEnvironment = context.localCommandEnvironment ?? shellEnvironment()
             var environment = AgentSandboxPolicy.sandboxedEnvironment(
                 mode: context.sandboxMode,
                 rootDirectory: context.rootDirectory,
@@ -959,7 +1248,8 @@ enum AgentToolRunner {
         prompt: String,
         permissionMode: String,
         model: String?,
-        imagePaths: [String] = []
+        imagePaths: [String] = [],
+        agent: String? = nil
     ) -> String {
         var parts = [shellQuoted(executable)]
         let imageDirectories = Array(Set(imagePaths.map {
@@ -975,6 +1265,9 @@ enum AgentToolRunner {
         ]
         if let model, !model.isEmpty {
             parts += ["--model", shellQuoted(model)]
+        }
+        if let agent, !agent.isEmpty {
+            parts += ["--agent", shellQuoted(agent)]
         }
         return parts.joined(separator: " ")
     }
@@ -1011,19 +1304,27 @@ enum AgentToolRunner {
                 "Claude Code CLI not found on this Mac. Install it first (e.g. `npm install -g @anthropic-ai/claude-code` or the native installer from https://claude.com/claude-code), then retry. Tell the user instead of retrying blindly."
             )
         }
+        let agent = arguments["agent"]?.stringValue()?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        if let agent, !LocalAgentCLIProfile.profileNameIsSafe(agent) {
+            throw AgentToolError.invalidArgument(
+                "agent must contain only letters, numbers, dot, underscore, or hyphen"
+            )
+        }
 
         let command = claudeCodeCommandLine(
             executable: executable,
             prompt: prompt,
             permissionMode: permissionMode,
             model: arguments["model"]?.stringValue(),
-            imagePaths: delegatedImagePaths(arguments)
+            imagePaths: delegatedImagePaths(arguments),
+            agent: agent
         )
 
         return try await runDelegatedAgentCommand(command, arguments: arguments, context: context)
     }
 
-    // MARK: codex_cli / cursor_agent / cline_cli
+    // MARK: codex_cli / hermes_cli / cursor_agent / cline_cli
 
     nonisolated static let delegatedAgentForegroundTimeout: TimeInterval = 3600 * 6
     nonisolated static let codexCLIPermissionModes: Set<String> = ["plan", "workspaceWrite", "default"]
@@ -1092,6 +1393,17 @@ enum AgentToolRunner {
         ], environment: environment, isExecutable: isExecutable)
     }
 
+    nonisolated static func hermesCLIExecutablePath(
+        environment: [String: String] = shellEnvironment(),
+        isExecutable: (String) -> Bool = { FileManager.default.isExecutableFile(atPath: $0) }
+    ) -> String? {
+        executablePath(commandName: "hermes", preferredPaths: [
+            "\(NSHomeDirectory())/.local/bin/hermes",
+            "/opt/homebrew/bin/hermes",
+            "/usr/local/bin/hermes",
+        ], environment: environment, isExecutable: isExecutable)
+    }
+
     nonisolated static func executablePath(
         commandName: String,
         preferredPaths: [String],
@@ -1120,7 +1432,8 @@ enum AgentToolRunner {
         permissionMode: String,
         model: String?,
         workspacePath: String?,
-        imagePaths: [String] = []
+        imagePaths: [String] = [],
+        profile: String? = nil
     ) -> String {
         let sandbox = permissionMode == "plan" ? "read-only" : "workspace-write"
         var parts = [
@@ -1131,6 +1444,9 @@ enum AgentToolRunner {
             "--skip-git-repo-check",
             "--sandbox", sandbox,
         ]
+        if let profile, !profile.isEmpty {
+            parts += ["--profile", shellQuoted(profile)]
+        }
         if let workspacePath, !workspacePath.isEmpty {
             parts += ["--cd", shellQuoted(workspacePath)]
         }
@@ -1203,6 +1519,48 @@ enum AgentToolRunner {
         return parts.joined(separator: " ")
     }
 
+    nonisolated static func hermesCLICommandLine(
+        executable: String,
+        prompt: String,
+        model: String?,
+        provider: String?,
+        profile: String?,
+        planningOnly: Bool = false,
+        homeDirectory: String? = NSHomeDirectory()
+    ) -> String {
+        let normalizedProfile = profile?.isEmpty == false ? profile! : "default"
+        let profileSuffix = normalizedProfile == "default"
+            ? "/.hermes"
+            : "/.hermes/profiles/\(normalizedProfile)"
+        let hermesHome: String
+        if let homeDirectory {
+            hermesHome = shellQuoted("\(homeDirectory)\(profileSuffix)")
+        } else {
+            // Remote execution must resolve the remote account's home, not
+            // serialize this Mac's local NSHomeDirectory into the command.
+            hermesHome = "\"$HOME\(profileSuffix)\""
+        }
+        var parts = [
+            "/usr/bin/env",
+            "HERMES_HOME=\(hermesHome)",
+            shellQuoted(executable),
+            "--oneshot", shellQuoted(prompt),
+        ]
+        if let model, !model.isEmpty {
+            parts += ["--model", shellQuoted(model)]
+        }
+        if let provider, !provider.isEmpty {
+            parts += ["--provider", shellQuoted(provider)]
+        }
+        if planningOnly {
+            // Hermes --oneshot bypasses its interactive approval prompts.
+            // Planning therefore receives an intentionally empty toolset so
+            // the external planner cannot mutate the workspace.
+            parts += ["--toolsets", "context_engine"]
+        }
+        return parts.joined(separator: " ")
+    }
+
     private static func codexCLI(
         arguments: [String: AgentJSONValue],
         context: AgentToolContext
@@ -1226,13 +1584,21 @@ enum AgentToolRunner {
                 "Codex CLI not found on this Mac. Install Codex CLI or the Codex desktop app, then retry. Tell the user instead of retrying blindly."
             )
         }
+        let profile = arguments["profile"]?.stringValue()?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        if let profile, !LocalAgentCLIProfile.profileNameIsSafe(profile) {
+            throw AgentToolError.invalidArgument(
+                "profile must contain only letters, numbers, dot, underscore, or hyphen"
+            )
+        }
         let command = codexCLICommandLine(
             executable: executable,
             prompt: prompt,
             permissionMode: permissionMode,
             model: arguments["model"]?.stringValue(),
             workspacePath: context.workspaceLocation?.path ?? context.rootDirectory?.standardizedFileURL.path,
-            imagePaths: delegatedImagePaths(arguments)
+            imagePaths: delegatedImagePaths(arguments),
+            profile: profile
         )
         return try await runDelegatedAgentCommand(command, arguments: arguments, context: context)
     }
@@ -1268,6 +1634,45 @@ enum AgentToolRunner {
             workspacePath: context.workspaceLocation?.path ?? context.rootDirectory?.standardizedFileURL.path
         )
         return try await runDelegatedAgentCommand(command, arguments: arguments, context: context)
+    }
+
+    private static func hermesCLI(
+        arguments: [String: AgentJSONValue],
+        context: AgentToolContext
+    ) async throws -> AgentToolResult {
+        let prompt = try delegatedAgentPrompt(arguments: arguments)
+        let executable: String
+        if context.remoteBackend != nil {
+            executable = "hermes"
+        } else if let localExecutable = hermesCLIExecutablePath() {
+            executable = localExecutable
+        } else {
+            throw AgentToolError.commandFailed(
+                127,
+                "Hermes CLI not found on this Mac. Install Hermes Agent, then retry."
+            )
+        }
+        let profile = arguments["hermes_profile"]?.stringValue()?
+            .trimmingCharacters(in: .whitespacesAndNewlines) ?? "default"
+        guard LocalAgentCLIProfile.profileNameIsSafe(profile) else {
+            throw AgentToolError.invalidArgument(
+                "hermes_profile must contain only letters, numbers, dot, underscore, or hyphen"
+            )
+        }
+        let command = hermesCLICommandLine(
+            executable: executable,
+            prompt: prompt,
+            model: arguments["model"]?.stringValue(),
+            provider: arguments["provider"]?.stringValue(),
+            profile: profile,
+            planningOnly: arguments["permission_mode"]?.stringValue() == "plan",
+            homeDirectory: context.remoteBackend == nil ? NSHomeDirectory() : nil
+        )
+        return try await runDelegatedAgentCommand(
+            command,
+            arguments: arguments,
+            context: context
+        )
     }
 
     private static func clineCLI(
@@ -1349,7 +1754,8 @@ enum AgentToolRunner {
                 sessionID: sessionID,
                 displayCommand: displayCommand,
                 timeout: timeout,
-                secretRedactionValues: context.secretRedactionValues
+                secretRedactionValues: context.secretRedactionValues,
+                progressSink: context.delegatedProgressSink
             )
         }
         var forwarded = delegatedAgentForwardedCommandArguments(
@@ -1657,9 +2063,19 @@ enum AgentToolRunner {
 
     private static func projectBuildGuardQueueEntries(rootDirectory: URL?) -> [ProjectBuildQueueEntry] {
         guard let rootDirectory else { return [] }
-        let queueURL = rootDirectory
+        let localStateURL = rootDirectory
             .standardizedFileURL
-            .appendingPathComponent(".codex-build/queue", isDirectory: true)
+            .appendingPathComponent(".codex-build", isDirectory: true)
+        let coordinationURL = localStateURL.appendingPathComponent("coordination.json", isDirectory: false)
+        let queueURL: URL
+        if let data = try? Data(contentsOf: coordinationURL),
+           let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+           let sharedQueuePath = object["queue_dir"] as? String,
+           !sharedQueuePath.isEmpty {
+            queueURL = URL(fileURLWithPath: sharedQueuePath, isDirectory: true).standardizedFileURL
+        } else {
+            queueURL = localStateURL.appendingPathComponent("queue", isDirectory: true)
+        }
         guard let urls = try? FileManager.default.contentsOfDirectory(
             at: queueURL,
             includingPropertiesForKeys: nil,

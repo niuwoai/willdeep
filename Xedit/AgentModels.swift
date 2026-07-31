@@ -22,6 +22,45 @@ nonisolated struct AgentGoalTurnRecoveryCheckpoint: Codable, Equatable, Identifi
     }
 }
 
+/// Durable Responses API cursor metadata for one conversation.
+///
+/// Only opaque response ids and SHA-256 request signatures are persisted.
+/// Prompt text, tool schemas, credentials, and duplicate message bodies are
+/// deliberately excluded from this snapshot.
+nonisolated struct AgentOpenAIResponsesContinuationSnapshot: Codable, Equatable {
+    let responseID: String
+    let contextSignature: Data
+    let inputItemSignatures: [Data]
+    let updatedAt: Date
+    /// Start of the relay-managed hard retention epoch. Nil for native
+    /// OpenAI cursors and for snapshots written before the WillDeep relay
+    /// state protocol existed.
+    let stateEpochStartedAt: Date?
+
+    init(
+        responseID: String,
+        contextSignature: Data,
+        inputItemSignatures: [Data],
+        updatedAt: Date,
+        stateEpochStartedAt: Date? = nil
+    ) {
+        self.responseID = responseID
+        self.contextSignature = contextSignature
+        self.inputItemSignatures = inputItemSignatures
+        self.updatedAt = updatedAt
+        self.stateEpochStartedAt = stateEpochStartedAt
+    }
+}
+
+/// The product surface that owns a persisted session. Dedicated workflow
+/// sessions still reuse AgentSessionStore, but must not leak into the ordinary
+/// workspace conversation list.
+nonisolated enum AgentSessionPresentationScope: String, Codable, Equatable {
+    case workspace
+    case dispatchBoard
+    case roundtable
+}
+
 /// A persisted Agent conversation. Lives as one JSON file under the app's
 /// Application Support directory. `workspaceLocation` is the canonical
 /// workspace binding; `workspaceRootPath` remains for local legacy sessions.
@@ -42,6 +81,14 @@ nonisolated struct AgentSession: Identifiable, Codable, Equatable {
     /// Git worktree. The tools use `workspaceLocation`; the sidebar continues
     /// to group the conversation under the original project workspace.
     var sidebarWorkspaceRootPath: String?
+    /// Dedicated workflow sessions are persisted like conversations, but are
+    /// presented only by their owning surface.
+    var presentationScope: AgentSessionPresentationScope
+    /// Dispatch task conversations belong to one top-level project. Keeping
+    /// this ownership on the session prevents task runtimes from being
+    /// projected back into the dispatch sidebar as duplicate projects.
+    var dispatchParentProjectID: UUID?
+    var dispatchTaskID: UUID?
     /// Best-effort local folder identity for recovering from Finder moves
     /// or renames. Tools do not poll this on the happy path; it is consulted
     /// only after the recorded path appears to have failed.
@@ -53,6 +100,10 @@ nonisolated struct AgentSession: Identifiable, Codable, Equatable {
     /// can group historical sessions by the actual configured provider.
     var providerID: String?
     var providerDisplayName: String?
+    /// Server-side Responses continuation cursor and stable request hashes.
+    /// Optional for backwards compatibility and cleared automatically when
+    /// the upstream reports that the stored response no longer exists.
+    var openAIResponsesContinuation: AgentOpenAIResponsesContinuationSnapshot?
     /// Per-session "省心托管" (some.im managed routing) state. Non-nil only
     /// when the user selected managed routing for this session; carries the
     /// only-goes-up capability floor. Orthogonal to `modelID` / override —
@@ -84,7 +135,7 @@ nonisolated struct AgentSession: Identifiable, Codable, Equatable {
     /// it survives Git commits and excludes transient build/cache output.
     var agentArtifactPaths: [String]
     /// Per-session interaction mode. Persisted so re-selecting a session
-    /// resumes plan/goal context without the user having to redo setup.
+    /// resumes ordinary/goal context without the user having to redo setup.
     var interactionMode: AgentInteractionMode
     /// Per-session tool approval behavior. Defaults to smart approval
     /// for backwards compatibility with existing sessions.
@@ -100,8 +151,8 @@ nonisolated struct AgentSession: Identifiable, Codable, Equatable {
     /// domain-specific tools out of ordinary chats until the user turns
     /// an expert on.
     var activeExperts: Set<AgentExpert>
-    /// Plan-mode state (proposed → approved → done). Nil outside Plan
-    /// mode, or when Plan mode is on but no plan has been drafted yet.
+    /// Visible execution plan used by both ordinary and Goal conversations.
+    /// Planning is a task phase, not a top-level interaction mode.
     var currentPlan: AgentPlan?
     /// Goal-mode definition (statement + acceptance checklist). Nil
     /// outside Goal mode, or when Goal mode is on but the user hasn't
@@ -163,10 +214,14 @@ nonisolated struct AgentSession: Identifiable, Codable, Equatable {
         workspaceRootPath: String? = nil,
         workspaceLocation: WorkspaceLocation? = nil,
         sidebarWorkspaceRootPath: String? = nil,
+        presentationScope: AgentSessionPresentationScope = .workspace,
+        dispatchParentProjectID: UUID? = nil,
+        dispatchTaskID: UUID? = nil,
         localWorkspaceIdentity: LocalWorkspaceIdentity? = nil,
         modelID: String? = nil,
         providerID: String? = nil,
         providerDisplayName: String? = nil,
+        openAIResponsesContinuation: AgentOpenAIResponsesContinuationSnapshot? = nil,
         managedRouting: AgentManagedRoutingState? = nil,
         createdAt: Date = Date(),
         updatedAt: Date = Date(),
@@ -201,11 +256,15 @@ nonisolated struct AgentSession: Identifiable, Codable, Equatable {
         self.workspaceRootPath = workspaceRootPath
         self.workspaceLocation = workspaceLocation ?? workspaceRootPath.map { .local(path: $0) }
         self.sidebarWorkspaceRootPath = sidebarWorkspaceRootPath
+        self.presentationScope = presentationScope
+        self.dispatchParentProjectID = dispatchParentProjectID
+        self.dispatchTaskID = dispatchTaskID
         self.localWorkspaceIdentity = localWorkspaceIdentity
             ?? AgentWorkspaceAvailabilityResolver.captureIdentity(for: self.workspaceLocation?.localPath ?? workspaceRootPath)
         self.modelID = modelID
         self.providerID = providerID
         self.providerDisplayName = providerDisplayName
+        self.openAIResponsesContinuation = openAIResponsesContinuation
         self.managedRouting = managedRouting
         self.createdAt = createdAt
         self.updatedAt = updatedAt
@@ -238,6 +297,11 @@ nonisolated struct AgentSession: Identifiable, Codable, Equatable {
 
     var isPinned: Bool { pinnedAt != nil }
     var isArchived: Bool { archivedAt != nil }
+    var belongsInWorkspaceSidebar: Bool {
+        presentationScope == .workspace
+            && interactionMode != .goal
+            && currentGoal == nil
+    }
 
     /// When the AI last produced output in this session — the timestamp the
     /// sidebar shows and sorts by. Deliberately NOT `updatedAt`: that field
@@ -294,8 +358,8 @@ nonisolated struct AgentSession: Identifiable, Codable, Equatable {
     // currentGoal) loads cleanly — every newer field uses
     // decodeIfPresent with a default.
     enum CodingKeys: String, CodingKey {
-        case id, title, workspaceRootPath, workspaceLocation, sidebarWorkspaceRootPath, localWorkspaceIdentity, modelID
-        case providerID, providerDisplayName, managedRouting
+        case id, title, workspaceRootPath, workspaceLocation, sidebarWorkspaceRootPath, presentationScope, dispatchParentProjectID, dispatchTaskID, localWorkspaceIdentity, modelID
+        case providerID, providerDisplayName, openAIResponsesContinuation, managedRouting
         case createdAt, updatedAt, messages, contextSummary, contextSummaryThroughMessageID
         case didEditFiles, agentEditedPaths, agentArtifactPaths, interactionMode, approvalMode, executionAgent, delegatedTaskRuns, activeExperts, currentPlan, currentGoal, goalPlanningState, goalTurnRecoveryCheckpoint, learningEvents, latestTurnRecall, documentAttachments, knowledgeFolders, documentTaskMode, redactSensitiveAttachmentContent, sidePanelState
         case pinnedAt, archivedAt, titleIsUserSet
@@ -309,10 +373,19 @@ nonisolated struct AgentSession: Identifiable, Codable, Equatable {
         self.workspaceLocation = try c.decodeIfPresent(WorkspaceLocation.self, forKey: .workspaceLocation)
             ?? self.workspaceRootPath.map { .local(path: $0) }
         self.sidebarWorkspaceRootPath = try c.decodeIfPresent(String.self, forKey: .sidebarWorkspaceRootPath)
+        self.dispatchParentProjectID = try c.decodeIfPresent(
+            UUID.self,
+            forKey: .dispatchParentProjectID
+        )
+        self.dispatchTaskID = try c.decodeIfPresent(UUID.self, forKey: .dispatchTaskID)
         self.localWorkspaceIdentity = try c.decodeIfPresent(LocalWorkspaceIdentity.self, forKey: .localWorkspaceIdentity)
         self.modelID = try c.decodeIfPresent(String.self, forKey: .modelID)
         self.providerID = try c.decodeIfPresent(String.self, forKey: .providerID)
         self.providerDisplayName = try c.decodeIfPresent(String.self, forKey: .providerDisplayName)
+        self.openAIResponsesContinuation = try c.decodeIfPresent(
+            AgentOpenAIResponsesContinuationSnapshot.self,
+            forKey: .openAIResponsesContinuation
+        )
         self.managedRouting = try c.decodeIfPresent(AgentManagedRoutingState.self, forKey: .managedRouting)
         self.createdAt = try c.decode(Date.self, forKey: .createdAt)
         self.updatedAt = try c.decode(Date.self, forKey: .updatedAt)
@@ -365,6 +438,30 @@ nonisolated struct AgentSession: Identifiable, Codable, Equatable {
         self.pinnedAt = try c.decodeIfPresent(Date.self, forKey: .pinnedAt)
         self.archivedAt = try c.decodeIfPresent(Date.self, forKey: .archivedAt)
         self.titleIsUserSet = try c.decodeIfPresent(Bool.self, forKey: .titleIsUserSet) ?? false
+        self.presentationScope = try c.decodeIfPresent(
+            AgentSessionPresentationScope.self,
+            forKey: .presentationScope
+        ) ?? Self.inferredPresentationScope(
+            interactionMode: interactionMode,
+            currentGoal: currentGoal,
+            containsRoundtableReport: messages.contains {
+                $0.workflowReport?.roundtable != nil
+            }
+        )
+    }
+
+    static func inferredPresentationScope(
+        interactionMode: AgentInteractionMode,
+        currentGoal: AgentGoal?,
+        containsRoundtableReport: Bool
+    ) -> AgentSessionPresentationScope {
+        if containsRoundtableReport {
+            return .roundtable
+        }
+        if interactionMode == .goal || currentGoal != nil {
+            return .dispatchBoard
+        }
+        return .workspace
     }
 }
 
@@ -662,20 +759,44 @@ nonisolated struct AgentSidePanelState: Codable, Equatable {
 
 // MARK: - Plan & Goal modes
 
-/// Top-level interaction mode for an Agent session. Plan locks all write
-/// tools until the user approves a plan; Goal pins a long-term objective
-/// + checklist to every system prompt. Normal is the default.
+/// Top-level interaction mode for an Agent session. Ordinary conversations
+/// may plan and execute in one flow; Goal additionally pins a long-term
+/// objective and acceptance checklist to every turn.
 nonisolated enum AgentInteractionMode: String, Codable, CaseIterable, Identifiable {
     case normal
-    case plan
     case goal
 
     var id: String { rawValue }
 
+    init(from decoder: Decoder) throws {
+        let container = try decoder.singleValueContainer()
+        let rawValue = try container.decode(String.self)
+        switch rawValue {
+        case Self.normal.rawValue:
+            self = .normal
+        case "plan":
+            // Sessions written before 1.211.0-rc6 used Plan as a top-level
+            // mode. Planning now lives inside ordinary mode, so migrate them
+            // without losing the visible plan or transcript.
+            self = .normal
+        case Self.goal.rawValue:
+            self = .goal
+        default:
+            throw DecodingError.dataCorruptedError(
+                in: container,
+                debugDescription: "Unknown AgentInteractionMode: \(rawValue)"
+            )
+        }
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.singleValueContainer()
+        try container.encode(rawValue)
+    }
+
     var displayName: String {
         switch self {
         case .normal: return L10n.InteractionMode.normal
-        case .plan: return L10n.InteractionMode.plan
         case .goal: return L10n.InteractionMode.goal
         }
     }
@@ -683,7 +804,6 @@ nonisolated enum AgentInteractionMode: String, Codable, CaseIterable, Identifiab
     var symbol: String {
         switch self {
         case .normal: return "bubble.left.and.bubble.right"
-        case .plan: return "list.number"
         case .goal: return "target"
         }
     }
@@ -691,13 +811,12 @@ nonisolated enum AgentInteractionMode: String, Codable, CaseIterable, Identifiab
 
 /// Per-session approval posture exposed from the Agent composer. It
 /// influences only write-tier auto-approval; read tools still run
-/// automatically, danger-tier tools still require typed confirmation,
-/// and Plan mode keeps its own plan-approval gate except for validated
-/// public web research needed to prepare the plan.
+/// automatically, and danger-tier tools still require typed confirmation.
+/// Goal's host-owned evidence phase remains read-only until validation.
 nonisolated enum AgentApprovalMode: String, Codable, CaseIterable, Identifiable {
-    case requestEveryTime
     case smart
     case workspaceAccess
+    case requestEveryTime
 
     var id: String { rawValue }
 
@@ -720,20 +839,20 @@ nonisolated enum AgentApprovalMode: String, Codable, CaseIterable, Identifiable 
     var systemPromptDescription: String {
         switch self {
         case .requestEveryTime:
-            return "Ask before every write-tier tool call. Read-only tools may run automatically. Danger-tier tools still require typed confirmation."
+            return "Strict mode: ask before every write or external action. Read-only tools may run automatically. Danger-tier tools still require typed confirmation."
         case .smart:
-            return "Use WillDeep's smart approval policy: read-only tools run automatically; pinned, trusted, built-in allowlisted, or AI-classified normal non-malicious calls may auto-run; uncertain writes ask the user."
+            return "Use WillDeep's smart review policy: read-only tools and workspace-scoped writes run automatically; safe external actions may be AI-approved; uncertain or risky external actions ask the user."
         case .workspaceAccess:
-            return "Allow write-tier workspace actions and shell/delegated agent work inside the current workspace to auto-run. Danger-tier tools, Plan gate, and untrusted MCP calls still require user approval."
+            return "Allow write-tier actions and delegated agent work inside the current workspace to auto-run. External/network actions, danger-tier tools, the Plan gate, and untrusted MCP calls still require user approval."
         }
     }
 
     var conciseSystemPromptDescription: String {
         switch self {
         case .requestEveryTime:
-            return "Reads auto-run; every write asks; danger-tier commands require typed confirmation."
+            return "Strict: reads auto-run; every write or external action asks; danger-tier commands require typed confirmation."
         case .smart:
-            return "Reads auto-run; normal non-malicious work may be AI-approved; uncertain writes ask; danger-tier commands require typed confirmation."
+            return "Reads and workspace-scoped writes auto-run; safe external actions may pass intelligent review; uncertain external actions ask; danger-tier commands require typed confirmation."
         case .workspaceAccess:
             return "Reads and workspace-scoped writes auto-run; untrusted external actions ask; danger-tier commands require typed confirmation."
         }
@@ -815,10 +934,11 @@ nonisolated enum AgentExpert: String, Codable, CaseIterable, Identifiable, Hasha
 /// choose the LLM API used by WillDeep itself, while this chooses whether
 /// the submitted task is handled by WillDeep or delegated to an external
 /// coding agent CLI through the existing tool/approval boundary.
-nonisolated enum AgentExecutionAgent: String, Codable, CaseIterable, Identifiable {
+nonisolated enum AgentExecutionAgent: String, Codable, CaseIterable, Identifiable, Hashable {
     case willDeep
     case claudeCode
     case codexCLI
+    case hermesCLI
     case cursorAgent
     case clineCLI
 
@@ -829,6 +949,7 @@ nonisolated enum AgentExecutionAgent: String, Codable, CaseIterable, Identifiabl
         case .willDeep: return L10n.ExecutionAgent.willDeepName
         case .claudeCode: return L10n.ExecutionAgent.claudeCodeName
         case .codexCLI: return L10n.ExecutionAgent.codexName
+        case .hermesCLI: return L10n.ExecutionAgent.hermesName
         case .cursorAgent: return L10n.ExecutionAgent.cursorName
         case .clineCLI: return L10n.ExecutionAgent.clineName
         }
@@ -839,6 +960,7 @@ nonisolated enum AgentExecutionAgent: String, Codable, CaseIterable, Identifiabl
         case .willDeep: return L10n.ExecutionAgent.willDeepSummary
         case .claudeCode: return L10n.ExecutionAgent.claudeCodeSummary
         case .codexCLI: return L10n.ExecutionAgent.codexSummary
+        case .hermesCLI: return L10n.ExecutionAgent.hermesSummary
         case .cursorAgent: return L10n.ExecutionAgent.cursorSummary
         case .clineCLI: return L10n.ExecutionAgent.clineSummary
         }
@@ -849,6 +971,7 @@ nonisolated enum AgentExecutionAgent: String, Codable, CaseIterable, Identifiabl
         case .willDeep: return "hammer.fill"
         case .claudeCode: return "sparkles.rectangle.stack"
         case .codexCLI: return "terminal"
+        case .hermesCLI: return "h.circle"
         case .cursorAgent: return "cursorarrow.click"
         case .clineCLI: return "chevron.left.forwardslash.chevron.right"
         }
@@ -859,6 +982,7 @@ nonisolated enum AgentExecutionAgent: String, Codable, CaseIterable, Identifiabl
         case .willDeep: return nil
         case .claudeCode: return "claude_code"
         case .codexCLI: return "codex_cli"
+        case .hermesCLI: return "hermes_cli"
         case .cursorAgent: return "cursor_agent"
         case .clineCLI: return "cline_cli"
         }
@@ -869,6 +993,7 @@ nonisolated enum AgentExecutionAgent: String, Codable, CaseIterable, Identifiabl
         case .willDeep: return nil
         case .claudeCode: return "acceptEdits"
         case .codexCLI: return "workspaceWrite"
+        case .hermesCLI: return "workspaceWrite"
         case .cursorAgent: return "default"
         case .clineCLI: return "act"
         }
@@ -880,6 +1005,8 @@ nonisolated enum AgentExecutionAgent: String, Codable, CaseIterable, Identifiabl
             self = .claudeCode
         case "codex_cli":
             self = .codexCLI
+        case "hermes_cli":
+            self = .hermesCLI
         case "cursor_agent":
             self = .cursorAgent
         case "cline_cli":
@@ -1052,6 +1179,17 @@ nonisolated struct AgentGoalPlanningState: Codable, Equatable {
         if let currentGoal, copy.goalFingerprint != Self.fingerprint(for: currentGoal) {
             copy.phase = .blocked
         }
+        let hasIncompleteGoalChecklist = currentGoal.map {
+            !$0.checklist.isEmpty && $0.checklist.contains(where: { !$0.done })
+        } ?? false
+        let hasCompletedGoalChecklist = currentGoal.map {
+            !$0.checklist.isEmpty && $0.checklist.allSatisfy(\.done)
+        } ?? false
+        if copy.phase == .executing,
+           currentPlan?.status == .done,
+           hasCompletedGoalChecklist {
+            copy.phase = .completed
+        }
         switch copy.phase {
         case .readyForProposal:
             // The synthesis wake is runtime-only and cannot be reconstructed
@@ -1059,9 +1197,26 @@ nonisolated struct AgentGoalPlanningState: Codable, Equatable {
             // leaving a permanently ready-but-silent session.
             copy.phase = .blocked
         case .awaitingApproval:
-            if currentPlan?.status != .proposed { copy.phase = .blocked }
+            // Legacy sessions may still carry the removed approval phase.
+            // A valid plan now proceeds automatically.
+            if currentPlan?.status == .proposed
+                || currentPlan?.status == .approved
+                || currentPlan?.status == .executing {
+                copy.phase = .executing
+            } else {
+                copy.phase = .blocked
+            }
         case .executing:
-            if currentPlan?.status != .approved && currentPlan?.status != .executing {
+            // `.done + .executing` is a valid narrow recovery state: every
+            // Plan step reached a terminal status, but the provider stopped
+            // before the same Goal round completed its checklist. Keep the
+            // ledger only while a real acceptance item remains unfinished,
+            // so a completed or empty Goal cannot retain write permission.
+            let canResumeInterruptedFinalization = currentPlan?.status == .done
+                && hasIncompleteGoalChecklist
+            if currentPlan?.status != .approved
+                && currentPlan?.status != .executing
+                && !canResumeInterruptedFinalization {
                 copy.phase = .blocked
             }
         case .completed:
@@ -1073,12 +1228,11 @@ nonisolated struct AgentGoalPlanningState: Codable, Equatable {
     }
 }
 
-/// A user-approvable execution plan parsed from the agent's reply.
+/// A visible execution plan parsed from the agent's reply.
 /// Lifecycle:
-///   proposed → awaiting user click
-///   approved → write tools unlocked, agent continues
-///   rejected → user dismissed; agent should re-plan on next turn
-///   executing/done used purely for display once approved.
+///   proposed/rejected are retained for persisted-session compatibility.
+///   New plans become approved (ready) immediately, then executing/done as
+///   progress arrives. Tool safety is governed by AgentApprovalMode.
 nonisolated struct AgentPlan: Codable, Equatable {
     enum Status: String, Codable { case proposed, approved, rejected, executing, done }
 
@@ -1130,6 +1284,15 @@ nonisolated struct AgentPlan: Codable, Equatable {
 nonisolated struct AgentGoal: Codable, Equatable {
     var statement: String
     var checklist: [Item]
+    /// AI-authored execution graph. Acceptance criteria remain in
+    /// `checklist`; they are not execution steps and must never be projected
+    /// into an artificial linear chain.
+    var dispatchPlan: AgentGoalDispatchPlan? = nil
+    /// Stable profile IDs selected before planning starts. The primary
+    /// planner can be a WillDeep model or an external coding-agent CLI.
+    var planningProfileID: String? = nil
+    var planningFallbackProfileIDs: [String]? = nil
+    var planningAttemptedProfileIDs: [String]? = nil
 
     struct Item: Codable, Equatable, Identifiable {
         var id: UUID
@@ -1143,9 +1306,20 @@ nonisolated struct AgentGoal: Codable, Equatable {
         }
     }
 
-    init(statement: String = "", checklist: [Item] = []) {
+    init(
+        statement: String = "",
+        checklist: [Item] = [],
+        dispatchPlan: AgentGoalDispatchPlan? = nil,
+        planningProfileID: String? = nil,
+        planningFallbackProfileIDs: [String]? = nil,
+        planningAttemptedProfileIDs: [String]? = nil
+    ) {
         self.statement = statement
         self.checklist = checklist
+        self.dispatchPlan = dispatchPlan
+        self.planningProfileID = planningProfileID
+        self.planningFallbackProfileIDs = planningFallbackProfileIDs
+        self.planningAttemptedProfileIDs = planningAttemptedProfileIDs
     }
 
     var isEmpty: Bool { statement.isEmpty && checklist.isEmpty }
@@ -1465,6 +1639,58 @@ struct AgentConfiguration: Codable, Equatable {
             return override
         }
         return AgentProviderPreset.preset(id: providerID)?.kind ?? .openAIChat
+    }
+
+    /// Transport used for model inference. GPT-5-family ids are routed through
+    /// `/responses` even when their OpenAI-compatible provider entry still
+    /// uses the legacy Chat protocol. Native Anthropic/Gemini configurations
+    /// remain pinned to their own incompatible wire formats.
+    var inferenceProviderKind: AgentProviderKind {
+        let configuredKind = providerKind
+        guard configuredKind == .openAIChat || configuredKind == .openAIResponses else {
+            return configuredKind
+        }
+        if model.range(of: "gpt-5", options: [.caseInsensitive]) != nil {
+            return .openAIResponses
+        }
+        if usesDeepSeekV4FlashResponsesBehavior {
+            return .openAIResponses
+        }
+        return configuredKind
+    }
+
+    /// Model ids backed by DeepSeek V4 Flash on the some.im gateway.
+    /// The unsuffixed coding-plan id is retained for server-side/legacy aliases;
+    /// managed routing currently selects `someim-coding-plan-low`.
+    private static let someIMDeepSeekV4FlashModelIDs: Set<String> = [
+        "deepseek-v4-flash",
+        SomeIMManagedModel.autoFlash,
+        SomeIMManagedModel.codeLow,
+        "someim-coding-plan",
+        SomeIMManagedModel.codingPlanLow
+    ]
+
+    var isDeepSeekV4FlashResponsesModel: Bool {
+        let normalizedModel = model.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        if providerID == AgentProviderPreset.deepSeekID {
+            return normalizedModel == "deepseek-v4-flash"
+        }
+        if providerID == AgentProviderPreset.someIMID {
+            return Self.someIMDeepSeekV4FlashModelIDs.contains(normalizedModel)
+        }
+        return false
+    }
+
+    var usesDeepSeekV4FlashResponsesBehavior: Bool {
+        isDeepSeekV4FlashResponsesModel
+    }
+
+    var usesWillDeepGatewayResponsesState: Bool {
+        providerID == AgentProviderPreset.someIMID && isDeepSeekV4FlashResponsesModel
+    }
+
+    var usesStatelessDeepSeekResponses: Bool {
+        providerID == AgentProviderPreset.deepSeekID && isDeepSeekV4FlashResponsesModel
     }
 }
 
@@ -1883,7 +2109,9 @@ enum AgentPatchError: LocalizedError {
     case missingFile(String)
     case hunkDidNotMatch(String)
     case targetAlreadyExists(String)
+    case duplicateTarget(String)
     case writeVerificationFailed(String)
+    case rollbackFailed(String)
 
     var errorDescription: String? {
         switch self {
@@ -1901,8 +2129,12 @@ enum AgentPatchError: LocalizedError {
             return L10n.AgentPatchError.hunkDidNotMatch(path)
         case .targetAlreadyExists(let path):
             return L10n.AgentPatchError.targetAlreadyExists(path)
+        case .duplicateTarget(let path):
+            return L10n.AgentPatchError.duplicateTarget(path)
         case .writeVerificationFailed(let path):
             return L10n.AgentPatchError.writeVerificationFailed(path)
+        case .rollbackFailed(let path):
+            return L10n.AgentPatchError.rollbackFailed(path)
         }
     }
 }
@@ -1912,6 +2144,10 @@ enum AgentClientError: LocalizedError {
     case invalidBaseURL
     case invalidResponse
     case serverStatus(AgentProviderHTTPError)
+    /// A dedicated vision-model preflight failed before the text-only main
+    /// model was called. Keeping this separate prevents the error banner from
+    /// implying that the main chat model received the image.
+    case imageDescriptionServerStatus(AgentProviderHTTPError)
     /// The provider accepted the request (HTTP 2xx) but the SSE stream
     /// closed without emitting a single meaningful event — no text, no
     /// reasoning, no tool call, not even a finish_reason. A relay whose
@@ -1936,6 +2172,8 @@ enum AgentClientError: LocalizedError {
             return "The model provider returned an invalid response."
         case .serverStatus(let error):
             return "The model provider returned HTTP \(error.statusCode)."
+        case .imageDescriptionServerStatus(let error):
+            return "The vision model \(error.model) returned HTTP \(error.statusCode)."
         case .emptyStream(let providerID, let model):
             return "The provider \(providerID) (\(model)) returned an empty stream."
         case .unsupportedProviderKind(let kind):

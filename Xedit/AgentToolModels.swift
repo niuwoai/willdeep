@@ -86,6 +86,7 @@ struct AgentWorkspaceSessionSnapshot: Equatable {
     let title: String
     let workspaceRootPath: String?
     let workspaceDisplayName: String
+    let presentationScope: AgentSessionPresentationScope
     let isActive: Bool
     let isPinned: Bool
     let isArchived: Bool
@@ -98,6 +99,15 @@ struct AgentWorkspaceSessionSnapshot: Equatable {
     let approvalMode: AgentApprovalMode
     let executionAgent: AgentExecutionAgent
     let titleIsUserSet: Bool
+    let goalStatement: String?
+    let goalCompletedItemCount: Int
+    let goalTotalItemCount: Int
+    let goalIsComplete: Bool
+    let goalPlanningPhase: AgentGoalPlanningState.Phase?
+    let dispatchParentProjectID: UUID?
+    let dispatchTaskID: UUID?
+    let isDispatchProject: Bool
+    let isDispatchPaused: Bool
 }
 
 struct AgentSessionTitleSuggestionSnapshot: Equatable {
@@ -124,6 +134,10 @@ struct AgentToolContext {
     /// work records it separately from `runtimeID` so a user Stop targets only
     /// work created by the latest turn.
     let turnID: UUID?
+    /// User-visible title of the conversation that owns a native Computer Use
+    /// lease. Kept separate from runtimeID so the global control indicator can
+    /// identify a background task without reaching back into AppState.
+    let computerUseSessionTitle: String?
     /// Shared background-job registry. Nil in non-app call paths;
     /// when nil, `run_command` with `run_in_background: true` falls
     /// back to the foreground path so behavior is still defined.
@@ -147,6 +161,16 @@ struct AgentToolContext {
     /// session. The model can ask for a cheap candidate, then use
     /// rename_session when the title is stale.
     let sessionTitleSuggestionProvider: (@MainActor () async -> AgentSessionTitleSuggestionSnapshot)?
+    /// Synchronous persistence barrier used immediately before a helper may
+    /// trigger a macOS system permission prompt. The interactive host installs
+    /// this closure so the current transcript is on disk even if macOS asks the
+    /// user to restart a permissioned process.
+    let sessionPersistenceBarrier: (@MainActor () -> Void)?
+    /// Resolved environment for commands executed on this Mac. App-owned
+    /// contexts merge Settings → Terminal variables into the normal command
+    /// PATH before installing this value. Remote backends intentionally ignore
+    /// it and resolve their environment on the remote runtime.
+    let localCommandEnvironment: [String: String]?
     /// Effective sandbox mode chosen by the AppState approval gateway.
     /// Read-only tools and auto-approved commands get a scrubbed local
     /// environment; user-approved write/network/credential commands run
@@ -167,6 +191,9 @@ struct AgentToolContext {
     /// tied to the visible side-panel session instead of creating hidden SSH
     /// sessions on the model's behalf.
     let terminalController: AgentInteractiveTerminalController?
+    /// Receives throttled, bounded and already-redacted output from a visible
+    /// delegated CLI terminal. Nil for ordinary tools and non-app harnesses.
+    let delegatedProgressSink: (@MainActor (AgentDelegatedTerminalProgressUpdate) -> Void)?
     /// Host-owned session actions. These closures are only installed by the
     /// interactive AppState loop; ad-hoc runners and subagents cannot rename
     /// or move a user's conversation behind the host's approval boundary.
@@ -186,17 +213,21 @@ struct AgentToolContext {
         runtimeDescriptor: RuntimeDescriptor? = nil,
         runtimeID: UUID? = nil,
         turnID: UUID? = nil,
+        computerUseSessionTitle: String? = nil,
         jobRegistry: AgentJobRegistry? = nil,
         mediaTaskRegistry: AgentMediaTaskRegistry? = nil,
         shortDramaStore: AgentShortDramaStore? = nil,
         sessionQueueSnapshotProvider: (@MainActor () -> AgentSessionQueueSnapshot)? = nil,
         workspaceSessionsSnapshotProvider: (@MainActor () -> [AgentWorkspaceSessionSnapshot])? = nil,
         sessionTitleSuggestionProvider: (@MainActor () async -> AgentSessionTitleSuggestionSnapshot)? = nil,
+        sessionPersistenceBarrier: (@MainActor () -> Void)? = nil,
+        localCommandEnvironment: [String: String]? = nil,
         sandboxMode: AgentSandboxMode = .readOnly,
         patchProposalSink: (@MainActor (String?, String, Bool) async throws -> AgentPatchProposal)? = nil,
         editableContentProvider: (@MainActor (URL) throws -> String)? = nil,
         patchAutoApplySource: AgentToolApprovalSource? = nil,
         terminalController: AgentInteractiveTerminalController? = nil,
+        delegatedProgressSink: (@MainActor (AgentDelegatedTerminalProgressUpdate) -> Void)? = nil,
         sessionRenameSink: (@MainActor (String) throws -> String)? = nil,
         workspaceChangeSink: (@MainActor (String) throws -> String)? = nil,
         secretRedactionValues: [String] = []
@@ -206,17 +237,21 @@ struct AgentToolContext {
         self.runtimeDescriptor = runtimeDescriptor
         self.runtimeID = runtimeID
         self.turnID = turnID
+        self.computerUseSessionTitle = computerUseSessionTitle
         self.jobRegistry = jobRegistry
         self.mediaTaskRegistry = mediaTaskRegistry
         self.shortDramaStore = shortDramaStore
         self.sessionQueueSnapshotProvider = sessionQueueSnapshotProvider
         self.workspaceSessionsSnapshotProvider = workspaceSessionsSnapshotProvider
         self.sessionTitleSuggestionProvider = sessionTitleSuggestionProvider
+        self.sessionPersistenceBarrier = sessionPersistenceBarrier
+        self.localCommandEnvironment = localCommandEnvironment
         self.sandboxMode = sandboxMode
         self.patchProposalSink = patchProposalSink
         self.editableContentProvider = editableContentProvider
         self.patchAutoApplySource = patchAutoApplySource
         self.terminalController = terminalController
+        self.delegatedProgressSink = delegatedProgressSink
         self.sessionRenameSink = sessionRenameSink
         self.workspaceChangeSink = workspaceChangeSink
         self.secretRedactionValues = Self.uniqueNonEmpty(secretRedactionValues)
@@ -253,17 +288,21 @@ struct AgentToolContext {
             runtimeDescriptor: runtimeDescriptor,
             runtimeID: runtimeID,
             turnID: turnID,
+            computerUseSessionTitle: computerUseSessionTitle,
             jobRegistry: jobRegistry,
             mediaTaskRegistry: mediaTaskRegistry,
             shortDramaStore: shortDramaStore,
             sessionQueueSnapshotProvider: sessionQueueSnapshotProvider,
             workspaceSessionsSnapshotProvider: workspaceSessionsSnapshotProvider,
             sessionTitleSuggestionProvider: sessionTitleSuggestionProvider,
+            sessionPersistenceBarrier: sessionPersistenceBarrier,
+            localCommandEnvironment: localCommandEnvironment,
             sandboxMode: sandboxMode,
             patchProposalSink: patchProposalSink,
             editableContentProvider: editableContentProvider,
             patchAutoApplySource: patchAutoApplySource,
             terminalController: terminalController,
+            delegatedProgressSink: delegatedProgressSink,
             sessionRenameSink: sessionRenameSink,
             workspaceChangeSink: workspaceChangeSink,
             secretRedactionValues: secretRedactionValues + values
@@ -277,17 +316,21 @@ struct AgentToolContext {
             runtimeDescriptor: runtimeDescriptor,
             runtimeID: runtimeID,
             turnID: turnID,
+            computerUseSessionTitle: computerUseSessionTitle,
             jobRegistry: jobRegistry,
             mediaTaskRegistry: mediaTaskRegistry,
             shortDramaStore: shortDramaStore,
             sessionQueueSnapshotProvider: sessionQueueSnapshotProvider,
             workspaceSessionsSnapshotProvider: workspaceSessionsSnapshotProvider,
             sessionTitleSuggestionProvider: sessionTitleSuggestionProvider,
+            sessionPersistenceBarrier: sessionPersistenceBarrier,
+            localCommandEnvironment: localCommandEnvironment,
             sandboxMode: mode,
             patchProposalSink: patchProposalSink,
             editableContentProvider: editableContentProvider,
             patchAutoApplySource: patchAutoApplySource,
             terminalController: terminalController,
+            delegatedProgressSink: delegatedProgressSink,
             sessionRenameSink: sessionRenameSink,
             workspaceChangeSink: workspaceChangeSink,
             secretRedactionValues: secretRedactionValues
@@ -389,7 +432,7 @@ enum AgentToolError: LocalizedError {
             }
             return "Command exited with status \(code): \(trimmed)"
         case .commandTimeout:
-            return "Command timed out."
+            return "Command timed out before completing. Do not retry the same command unchanged: for long-running work (builds, test suites, servers) re-run it with run_in_background=true, or pass a larger timeout_seconds."
         case .unknownTool(let name):
             return "Unknown tool: \(name)"
         case .invalidRegex(let detail):
@@ -449,8 +492,9 @@ enum AgentToolDecision {
 /// session was in Goal mode, which auto-approves write-tier calls
 /// (danger-tier still gates on the user). `.workspaceAccess` means the
 /// current session's composer approval mode grants write-tier access
-/// inside the active workspace. nil = either pure read (never gated) or
-/// still pending.
+/// inside the active workspace. `.controlLease` means the same runtime,
+/// turn, and target already owns a live Computer Use controlling lease.
+/// nil = either pure read (never gated) or still pending.
 enum AgentToolApprovalSource: String, Equatable, Codable {
     case user
     case alwaysAllowList
@@ -458,6 +502,9 @@ enum AgentToolApprovalSource: String, Equatable, Codable {
     case llmJudge
     case goalMode
     case workspaceAccess
+    /// A reversible Computer Use action was authorized by the current
+    /// runtime- and target-bound in-memory control lease.
+    case controlLease
     /// The user approved a call that requires access outside the default
     /// sandbox boundary (network, credentials/keychain, system paths, or
     /// destructive shell syntax).
@@ -491,6 +538,10 @@ struct AgentToolCall: Identifiable, Equatable {
     /// ("第 3/12 轮 · 5 次工具"), refreshed each round so the card shows
     /// forward motion instead of an opaque "委派中" spinner.
     var subagentProgress: String?
+    /// For Claude Code / Codex CLI / Cursor Agent / Cline CLI: host-owned
+    /// phase, attempt and bounded redacted output tail. Render-only; the
+    /// durable acceptance state lives in `AgentDelegatedTaskRun`.
+    var delegatedProgress: AgentDelegatedLiveProgress?
 
     init(
         id: UUID = UUID(),
@@ -504,7 +555,8 @@ struct AgentToolCall: Identifiable, Equatable {
         errorMessage: String? = nil,
         approvalSource: AgentToolApprovalSource? = nil,
         subagentModel: String? = nil,
-        subagentProgress: String? = nil
+        subagentProgress: String? = nil,
+        delegatedProgress: AgentDelegatedLiveProgress? = nil
     ) {
         self.id = id
         self.messageID = messageID
@@ -518,6 +570,7 @@ struct AgentToolCall: Identifiable, Equatable {
         self.approvalSource = approvalSource
         self.subagentModel = subagentModel
         self.subagentProgress = subagentProgress
+        self.delegatedProgress = delegatedProgress
     }
 }
 

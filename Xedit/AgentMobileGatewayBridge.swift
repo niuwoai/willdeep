@@ -528,14 +528,20 @@ enum AgentMobileGatewayCommandRouter {
     }
 
     private static func patchProposalPayload(_ proposal: AgentMobileGatewayPatchSnapshot) -> [String: AgentMobileGatewayJSON] {
-        [
+        var payload: [String: AgentMobileGatewayJSON] = [
             "id": .string(proposal.id.uuidString),
             "title": .string(proposal.title),
             "summary": .string(proposal.summary),
             "path": .string(proposal.path),
             "stats": .string(proposal.stats),
-            "session_id": .string(proposal.sessionID.uuidString)
+            "session_id": .string(proposal.sessionID.uuidString),
+            "batch_count": .int(proposal.batchCount),
+            "batch_collecting": .bool(proposal.batchCollecting)
         ]
+        if let batchID = proposal.batchID {
+            payload["batch_id"] = .string(batchID.uuidString)
+        }
+        return payload
     }
 
     private static func jobJSON(_ job: AgentMobileGatewayJobSnapshot) -> AgentMobileGatewayJSON {

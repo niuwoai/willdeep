@@ -144,7 +144,7 @@ struct AgentSkillSettingsView: View {
             }
         }
         .task {
-            await reloadSkills()
+            await reloadSkills(forceRefresh: true)
         }
     }
 
@@ -530,17 +530,22 @@ struct AgentSkillSettingsView: View {
     }
 
     @MainActor
-    private func reloadSkills() async {
+    private func reloadSkills(forceRefresh: Bool = false) async {
         if isLoadingSkills {
             needsSkillReload = true
             return
         }
 
+        var shouldForceRefresh = forceRefresh
         repeat {
             isLoadingSkills = true
             needsSkillReload = false
 
-            let loadedSkills = await AgentSkillDirectory.listAsync(includeDisabled: true)
+            let loadedSkills = await AgentSkillDirectory.listAsync(
+                includeDisabled: true,
+                forceRefresh: shouldForceRefresh
+            )
+            shouldForceRefresh = false
             guard !Task.isCancelled else { return }
 
             settings = AgentSkillSettingsStore.load()

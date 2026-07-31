@@ -14,6 +14,29 @@ import Foundation
 @Suite
 @MainActor
 struct AgentSessionPersistenceTests {
+    @Test("dispatch task ownership survives session persistence")
+    func dispatchTaskOwnershipRoundTrip() throws {
+        let parentID = UUID()
+        let taskID = UUID()
+        let session = AgentSession(
+            presentationScope: .dispatchBoard,
+            dispatchParentProjectID: parentID,
+            dispatchTaskID: taskID,
+            currentGoal: AgentGoal(
+                statement: "执行任务",
+                checklist: [AgentGoal.Item(text: "完成")]
+            )
+        )
+
+        let decoded = try JSONDecoder().decode(
+            AgentSession.self,
+            from: JSONEncoder().encode(session)
+        )
+
+        #expect(decoded.dispatchParentProjectID == parentID)
+        #expect(decoded.dispatchTaskID == taskID)
+    }
+
     /// Older session JSON written before plan/goal persistence existed
     /// must still decode — fields default to normal/nil/false.
     @Test
@@ -78,7 +101,7 @@ struct AgentSessionPersistenceTests {
             didEditFiles: true,
             agentEditedPaths: ["Sources/App.swift", "reports/result.pdf"],
             agentArtifactPaths: ["reports/result.pdf"],
-            interactionMode: .plan,
+            interactionMode: .normal,
             currentPlan: plan,
             currentGoal: goal,
             goalTurnRecoveryCheckpoint: recoveryCheckpoint,
@@ -120,7 +143,7 @@ struct AgentSessionPersistenceTests {
         let encoded = try JSONEncoder().encode(original)
         let decoded = try JSONDecoder().decode(AgentSession.self, from: encoded)
 
-        #expect(decoded.interactionMode == .plan)
+        #expect(decoded.interactionMode == .normal)
         #expect(decoded.currentPlan?.status == .executing)
         #expect(decoded.currentPlan?.steps.map(\.text) == plan.steps.map(\.text))
         #expect(decoded.currentPlan?.steps.map(\.status) == plan.steps.map(\.status))

@@ -272,19 +272,10 @@ struct AgentSidebarAccountFooter: View {
     }
 
     private func accountAvatar(_ account: SomeIMAccount) -> some View {
-        ZStack {
-            Circle()
-                .fill(appState.editorSettings.interfaceSkin.palette.accent.opacity(0.22))
-            if let url = validatedAvatarURL(account.avatarURL) {
-                CachedAvatarImage(url: url) {
-                    avatarInitial(account.displayName)
-                }
-            } else {
-                avatarInitial(account.displayName)
-            }
-        }
-        .frame(width: AgentSidebarAccountMetrics.avatarSize, height: AgentSidebarAccountMetrics.avatarSize)
-        .clipShape(Circle())
+        AgentSidebarAccountAvatar(
+            account: account,
+            size: AgentSidebarAccountMetrics.avatarSize
+        )
     }
 
     private var anonymousAvatar: some View {
@@ -294,20 +285,6 @@ struct AgentSidebarAccountFooter: View {
             .frame(width: AgentSidebarAccountMetrics.avatarSize, height: AgentSidebarAccountMetrics.avatarSize)
     }
 
-    private func avatarInitial(_ value: String) -> some View {
-        Text(value.trimmingCharacters(in: .whitespacesAndNewlines).first.map { String($0).uppercased() } ?? "S")
-            .font(.system(size: 9, weight: .bold))
-            .foregroundStyle(appState.editorSettings.interfaceSkin.palette.accent)
-    }
-
-    private func validatedAvatarURL(_ value: String?) -> URL? {
-        guard let value,
-              let url = URL(string: value),
-              ["http", "https"].contains(url.scheme?.lowercased() ?? "") else {
-            return nil
-        }
-        return url
-    }
 }
 
 struct AgentSidebarAccountMenu: View {
@@ -324,14 +301,10 @@ struct AgentSidebarAccountMenu: View {
     var body: some View {
         VStack(spacing: 0) {
             HStack(spacing: 9) {
-                Circle()
-                    .fill(appState.editorSettings.interfaceSkin.palette.accent.opacity(0.22))
-                    .overlay {
-                        Text(account.displayName.prefix(1).uppercased())
-                            .font(.system(size: 9, weight: .bold))
-                            .foregroundStyle(appState.editorSettings.interfaceSkin.palette.accent)
-                    }
-                    .frame(width: 20, height: 20)
+                AgentSidebarAccountAvatar(
+                    account: account,
+                    size: AgentSidebarAccountMetrics.avatarSize
+                )
                 Text(account.displayName)
                     .font(.system(size: 13, weight: .semibold))
                     .foregroundStyle(.primary)
@@ -370,6 +343,49 @@ struct AgentSidebarAccountMenu: View {
         }
         .padding(6)
         .frame(width: AgentSidebarAccountMetrics.menuWidth)
+    }
+}
+
+private struct AgentSidebarAccountAvatar: View {
+    @EnvironmentObject private var appState: AppState
+
+    let account: SomeIMAccount
+    let size: CGFloat
+
+    var body: some View {
+        ZStack {
+            Circle()
+                .fill(appState.editorSettings.interfaceSkin.palette.accent.opacity(0.22))
+            if let url = validatedAvatarURL {
+                CachedAvatarImage(url: url) {
+                    avatarInitial
+                }
+            } else {
+                avatarInitial
+            }
+        }
+        .frame(width: size, height: size)
+        .clipShape(Circle())
+    }
+
+    private var avatarInitial: some View {
+        Text(
+            account.displayName
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+                .first
+                .map { String($0).uppercased() } ?? "S"
+        )
+        .font(.system(size: 9, weight: .bold))
+        .foregroundStyle(appState.editorSettings.interfaceSkin.palette.accent)
+    }
+
+    private var validatedAvatarURL: URL? {
+        guard let value = account.avatarURL,
+              let url = URL(string: value),
+              ["http", "https"].contains(url.scheme?.lowercased() ?? "") else {
+            return nil
+        }
+        return url
     }
 }
 

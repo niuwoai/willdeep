@@ -7,7 +7,6 @@
 //
 
 import Foundation
-import Security
 
 enum RuntimePlatform: String, Codable, CaseIterable, Identifiable {
     case macOS
@@ -85,6 +84,10 @@ struct RuntimeCapabilities: Codable, Equatable {
     var npmHTTPSProxy: String?
     var pipProxy: String?
     var proxyEnvironment: [String: String]
+    /// Coding-agent executables discovered during the last runtime probe.
+    /// Keys use `AgentExecutionAgent.rawValue`; values are absolute command
+    /// paths reported by `command -v`.
+    var agentCLIPaths: [String: String]
 
     static let empty = RuntimeCapabilities(
         hasGit: false,
@@ -105,14 +108,15 @@ struct RuntimeCapabilities: Codable, Equatable {
         npmProxy: nil,
         npmHTTPSProxy: nil,
         pipProxy: nil,
-        proxyEnvironment: [:]
+        proxyEnvironment: [:],
+        agentCLIPaths: [:]
     )
 
     enum CodingKeys: String, CodingKey {
         case hasGit, hasRipgrep, shellPath
         case nodeVersion, npmVersion, yarnVersion, pythonVersion, pipVersion
         case rubyVersion, goVersion, javaVersion, ghVersion, ghAuthStatus
-        case npmRegistry, yarnRegistry, npmProxy, npmHTTPSProxy, pipProxy, proxyEnvironment
+        case npmRegistry, yarnRegistry, npmProxy, npmHTTPSProxy, pipProxy, proxyEnvironment, agentCLIPaths
     }
 
     init(
@@ -134,7 +138,8 @@ struct RuntimeCapabilities: Codable, Equatable {
         npmProxy: String? = nil,
         npmHTTPSProxy: String? = nil,
         pipProxy: String? = nil,
-        proxyEnvironment: [String: String] = [:]
+        proxyEnvironment: [String: String] = [:],
+        agentCLIPaths: [String: String] = [:]
     ) {
         self.hasGit = hasGit
         self.hasRipgrep = hasRipgrep
@@ -155,6 +160,7 @@ struct RuntimeCapabilities: Codable, Equatable {
         self.npmHTTPSProxy = npmHTTPSProxy
         self.pipProxy = pipProxy
         self.proxyEnvironment = proxyEnvironment
+        self.agentCLIPaths = agentCLIPaths
     }
 
     init(from decoder: Decoder) throws {
@@ -178,6 +184,17 @@ struct RuntimeCapabilities: Codable, Equatable {
         self.npmHTTPSProxy = try c.decodeIfPresent(String.self, forKey: .npmHTTPSProxy)
         self.pipProxy = try c.decodeIfPresent(String.self, forKey: .pipProxy)
         self.proxyEnvironment = try c.decodeIfPresent([String: String].self, forKey: .proxyEnvironment) ?? [:]
+        self.agentCLIPaths = try c.decodeIfPresent([String: String].self, forKey: .agentCLIPaths) ?? [:]
+    }
+
+    var availableExecutionAgents: Set<AgentExecutionAgent> {
+        var result: Set<AgentExecutionAgent> = [.willDeep]
+        for key in agentCLIPaths.keys {
+            if let agent = AgentExecutionAgent(rawValue: key) {
+                result.insert(agent)
+            }
+        }
+        return result
     }
 }
 
@@ -290,57 +307,18 @@ enum RemoteRuntimeSecretStore {
     }
 
     static func deleteDaemonToken(runtimeID: UUID) {
-        save("", account: daemonTokenPrefix + runtimeID.uuidString)
+        WillDeepKeychainStore.delete(
+            service: service,
+            account: daemonTokenPrefix + runtimeID.uuidString
+        )
     }
 
     private static func load(account: String) -> String {
-        let query: [String: Any] = [
-            kSecClass as String: kSecClassGenericPassword,
-            kSecAttrService as String: service,
-            kSecAttrAccount as String: account,
-            kSecReturnData as String: true,
-            kSecMatchLimit as String: kSecMatchLimitOne
-        ]
-        var item: CFTypeRef?
-        guard SecItemCopyMatching(query as CFDictionary, &item) == errSecSuccess,
-              let data = item as? Data,
-              let value = String(data: data, encoding: .utf8) else {
-            return ""
-        }
-        return value
+        WillDeepKeychainStore.load(service: service, account: account) ?? ""
     }
 
     private static func save(_ value: String, account: String) {
-        guard !value.isEmpty, let data = value.data(using: .utf8) else {
-            let deleteQuery: [String: Any] = [
-                kSecClass as String: kSecClassGenericPassword,
-                kSecAttrService as String: service,
-                kSecAttrAccount as String: account
-            ]
-            SecItemDelete(deleteQuery as CFDictionary)
-            return
-        }
-
-        let baseQuery: [String: Any] = [
-            kSecClass as String: kSecClassGenericPassword,
-            kSecAttrService as String: service,
-            kSecAttrAccount as String: account
-        ]
-        let existing = load(account: account)
-        if existing == value { return }
-        let updateAttrs: [String: Any] = [
-            kSecValueData as String: data,
-            kSecAttrAccessible as String: kSecAttrAccessibleAfterFirstUnlock
-        ]
-        let updateStatus = SecItemUpdate(baseQuery as CFDictionary, updateAttrs as CFDictionary)
-        if updateStatus == errSecSuccess { return }
-        if updateStatus != errSecItemNotFound {
-            SecItemDelete(baseQuery as CFDictionary)
-        }
-        var addQuery = baseQuery
-        addQuery[kSecValueData as String] = data
-        addQuery[kSecAttrAccessible as String] = kSecAttrAccessibleAfterFirstUnlock
-        SecItemAdd(addQuery as CFDictionary, nil)
+        WillDeepKeychainStore.save(value, service: service, account: account)
     }
 }
 

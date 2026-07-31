@@ -88,7 +88,7 @@ struct AgentGoalLaunchRecoveryTests {
             plan: approved
         ))
         #expect(!AgentGoalLaunchRecoveryPolicy.shouldArmExecutionCheckpoint(
-            interactionMode: .plan,
+            interactionMode: .normal,
             executionAgent: .willDeep,
             goal: goal,
             plan: approved

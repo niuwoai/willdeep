@@ -8,7 +8,7 @@
 //  worktree-change summary:
 //
 //    - GitFileStatusKind / GitRepositoryStatus value types
-//    - ProcessOutputCollector / TimedProcessState helpers
+//    - TimedProcessState helper
 //    - The nonisolated static `loadGitStatus`, `loadAgentWorktreeChangeSummary`,
 //      and parsing helpers, attached to AppState by extension
 //
@@ -284,10 +284,27 @@ extension AppState {
                 return currentURL
             }
 
-            let parentURL = currentURL.deletingLastPathComponent()
+            // Foundation can represent the parent of "/" as "/..". Normalize
+            // every step so the root comparison converges instead of growing
+            // into "/../.." forever and exhausting memory.
+            let parentURL = currentURL.deletingLastPathComponent().standardizedFileURL
             guard parentURL.path != currentURL.path else { return nil }
             currentURL = parentURL
         }
+    }
+
+    /// Reports whether git can restore the workspace to a committed
+    /// baseline. Approval policy no longer depends on this diagnostic: Smart
+    /// review trusts the workspace boundary, while Strict mode always asks.
+    nonisolated static func hasRecoverableGitBaseline(startingAt directoryURL: URL?) -> Bool {
+        guard let directoryURL,
+              let repositoryRoot = findGitRepositoryRoot(startingAt: directoryURL) else {
+            return false
+        }
+        return runGitCommand(
+            arguments: ["rev-parse", "--verify", "HEAD"],
+            in: repositoryRoot
+        ).succeeded
     }
 
     nonisolated static let maxGitOutputBytes = 512 * 1024
@@ -357,10 +374,40 @@ extension AppState {
         timeout: TimeInterval
     ) -> GitCommandResult {
         let process = Process()
-        let stdoutPipe = Pipe()
-        let stderrPipe = Pipe()
-        let stdoutCollector = ProcessOutputCollector(limit: maxGitOutputBytes)
-        let stderrCollector = ProcessOutputCollector(limit: maxGitOutputBytes)
+        let outputID = UUID().uuidString
+        let temporaryDirectory = FileManager.default.temporaryDirectory
+        let stdoutURL = temporaryDirectory
+            .appendingPathComponent("willdeep-git-\(outputID).stdout")
+        let stderrURL = temporaryDirectory
+            .appendingPathComponent("willdeep-git-\(outputID).stderr")
+        guard FileManager.default.createFile(atPath: stdoutURL.path, contents: nil),
+              FileManager.default.createFile(atPath: stderrURL.path, contents: nil) else {
+            try? FileManager.default.removeItem(at: stdoutURL)
+            try? FileManager.default.removeItem(at: stderrURL)
+            return GitCommandResult(
+                status: -1,
+                stdout: "",
+                stderr: "Unable to create temporary Git output files.",
+                timedOut: false
+            )
+        }
+        defer {
+            try? FileManager.default.removeItem(at: stdoutURL)
+            try? FileManager.default.removeItem(at: stderrURL)
+        }
+        let stdoutHandle: FileHandle
+        let stderrHandle: FileHandle
+        do {
+            stdoutHandle = try FileHandle(forWritingTo: stdoutURL)
+            stderrHandle = try FileHandle(forWritingTo: stderrURL)
+        } catch {
+            return GitCommandResult(
+                status: -1,
+                stdout: "",
+                stderr: error.localizedDescription,
+                timedOut: false
+            )
+        }
         let runState = TimedProcessState()
         process.executableURL = URL(fileURLWithPath: "/usr/bin/git")
         // `core.quotePath=false`:git 默认把路径里的非 ASCII 字节用八进制
@@ -375,24 +422,22 @@ extension AppState {
             "GIT_OPTIONAL_LOCKS": "0",
             "GIT_TERMINAL_PROMPT": "0"
         ]) { current, _ in current }
-        process.standardOutput = stdoutPipe
-        process.standardError = stderrPipe
-        stdoutPipe.fileHandleForReading.readabilityHandler = { handle in
-            let data = handle.availableData
-            if !data.isEmpty { stdoutCollector.append(data) }
-        }
-        stderrPipe.fileHandleForReading.readabilityHandler = { handle in
-            let data = handle.availableData
-            if !data.isEmpty { stderrCollector.append(data) }
-        }
+        process.standardOutput = stdoutHandle
+        process.standardError = stderrHandle
 
         do {
             try process.run()
         } catch {
-            stdoutPipe.fileHandleForReading.readabilityHandler = nil
-            stderrPipe.fileHandleForReading.readabilityHandler = nil
+            stdoutHandle.closeFile()
+            stderrHandle.closeFile()
             return GitCommandResult(status: -1, stdout: "", stderr: error.localizedDescription, timedOut: false)
         }
+
+        // `Process` has duplicated these descriptors into the child. Closing
+        // the parent copies prevents descriptor accumulation while regular
+        // files avoid pipe backpressure and DispatchGroup/EOF deadlocks.
+        stdoutHandle.closeFile()
+        stderrHandle.closeFile()
 
         let timeoutWorkItem = DispatchWorkItem {
             runState.markTimedOut()
@@ -409,26 +454,41 @@ extension AppState {
 
         process.waitUntilExit()
         timeoutWorkItem.cancel()
-        stdoutPipe.fileHandleForReading.readabilityHandler = nil
-        stderrPipe.fileHandleForReading.readabilityHandler = nil
-        if let tail = try? stdoutPipe.fileHandleForReading.readToEnd() {
-            stdoutCollector.append(tail)
-        }
-        if let tail = try? stderrPipe.fileHandleForReading.readToEnd() {
-            stderrCollector.append(tail)
-        }
+        let stdoutData = readLimitedProcessOutput(
+            at: stdoutURL,
+            limit: maxGitOutputBytes
+        )
+        let stderrData = readLimitedProcessOutput(
+            at: stderrURL,
+            limit: maxGitOutputBytes
+        )
 
         return GitCommandResult(
             status: process.terminationStatus,
-            stdout: stdoutCollector.stringValue,
-            stderr: stderrCollector.stringValue,
+            stdout: decodeProcessOutput(stdoutData),
+            stderr: decodeProcessOutput(stderrData),
             timedOut: runState.didTimeout,
             allowedExitStatuses: allowedExitStatuses
         )
     }
+
+    private nonisolated static func readLimitedProcessOutput(
+        at url: URL,
+        limit: Int
+    ) -> Data {
+        guard let handle = try? FileHandle(forReadingFrom: url) else {
+            return Data()
+        }
+        defer { handle.closeFile() }
+        return (try? handle.read(upToCount: limit)) ?? Data()
+    }
+
+    private nonisolated static func decodeProcessOutput(_ data: Data) -> String {
+        String(data: data, encoding: .utf8) ?? decodeText(from: data)
+    }
 }
 
-struct GitCommandResult: Equatable {
+nonisolated struct GitCommandResult: Equatable, Sendable {
     var status: Int32
     var stdout: String
     var stderr: String
@@ -460,33 +520,6 @@ struct GitCommandResult: Equatable {
         let output = stdout.trimmingCharacters(in: .whitespacesAndNewlines)
         if !output.isEmpty { return output }
         return "git exited with status \(status)"
-    }
-}
-
-nonisolated final class ProcessOutputCollector: @unchecked Sendable {
-    private let limit: Int
-    private var data = Data()
-    private let lock = NSLock()
-
-    init(limit: Int) {
-        self.limit = limit
-    }
-
-    func append(_ chunk: Data) {
-        guard !chunk.isEmpty else { return }
-        lock.lock()
-        defer { lock.unlock() }
-
-        let remaining = max(0, limit - data.count)
-        guard remaining > 0 else { return }
-        data.append(chunk.prefix(remaining))
-    }
-
-    var stringValue: String {
-        lock.lock()
-        let snapshot = data
-        lock.unlock()
-        return String(data: snapshot, encoding: .utf8) ?? AppState.decodeText(from: snapshot)
     }
 }
 
@@ -868,8 +901,7 @@ extension AppState {
     /// as conversation artifacts. Transient trees are pruned before descent,
     /// avoiding the cost and noise of build products, dependencies and caches.
     nonisolated static func agentArtifactFileSignatures(in directoryURL: URL) -> [String: String] {
-        let root = directoryURL.standardizedFileURL
-        let rootPrefix = root.path.hasSuffix("/") ? root.path : root.path + "/"
+        let root = directoryURL
         let keys: Set<URLResourceKey> = [
             .isDirectoryKey,
             .isRegularFileKey,
@@ -891,12 +923,13 @@ extension AppState {
         for case let fileURL as URL in enumerator {
             visitedNodes += 1
             if visitedNodes > maximumTraversalNodes || Task.isCancelled { break }
-            // Prefer the enumerator path as-is — `standardizedFileURL` rewrites
-            // via path-component APIs and dominates CPU on large trees.
-            let filePath = fileURL.path
-            guard filePath.hasPrefix(rootPrefix) else { continue }
-            let relativePath = String(filePath.dropFirst(rootPrefix.count))
-            guard !relativePath.isEmpty else { continue }
+            // Prefer the enumerator path as-is — avoid per-node
+            // `standardizedFileURL` / symlink resolution on large trees.
+            // Root matching goes through `agentRelativePath`, which normalizes
+            // macOS `/private/var` vs `/var` without touching every URL object.
+            guard let relativePath = agentRelativePath(of: fileURL.path, under: root) else {
+                continue
+            }
             let values = try? fileURL.resourceValues(forKeys: keys)
             if values?.isDirectory == true {
                 if isAgentTransientArtifactDirectory(relativePath) {
@@ -913,6 +946,29 @@ extension AppState {
             signatures[relativePath] = "size=\(size)|mtime=\(modified)"
         }
         return signatures
+    }
+
+    /// Collapse macOS `/private/var` vs `/var` so enumerator paths can be
+    /// compared with the caller's directory URL. `FileManager.enumerator`
+    /// commonly yields `/private/var/...` while `temporaryDirectory` / many
+    /// workspace URLs keep the `/var/...` form; `standardizedFileURL` does
+    /// not bridge that gap on current macOS.
+    nonisolated static func agentCanonicalFilePath(_ path: String) -> String {
+        if path.hasPrefix("/private/") {
+            return String(path.dropFirst("/private".count))
+        }
+        return path
+    }
+
+    /// Returns the relative path of `filePath` under `rootURL`, or `nil`
+    /// when the file is outside that root after `/private` normalization.
+    nonisolated static func agentRelativePath(of filePath: String, under rootURL: URL) -> String? {
+        let rootPath = agentCanonicalFilePath(rootURL.path)
+        let rootPrefix = rootPath.hasSuffix("/") ? rootPath : rootPath + "/"
+        let canonicalFilePath = agentCanonicalFilePath(filePath)
+        guard canonicalFilePath.hasPrefix(rootPrefix) else { return nil }
+        let relativePath = String(canonicalFilePath.dropFirst(rootPrefix.count))
+        return relativePath.isEmpty ? nil : relativePath
     }
 
     nonisolated static func isAgentTransientArtifactDirectory(_ path: String) -> Bool {

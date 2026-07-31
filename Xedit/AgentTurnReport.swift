@@ -75,7 +75,10 @@ extension AgentTurnReport {
             completionTokens: sumOptional(assistantMessages.map(\.completionTokens)),
             recallSnapshot: runtime.latestTurnRecall?.createdAt ?? .distantPast >= latestUser.createdAt ? runtime.latestTurnRecall : nil,
             toolSummary: summarizeTools(tools),
-            tools: Array(tools.prefix(8)),
+            // Preserve the complete audit trail. The card decides how many
+            // rows to reveal initially; truncating here also made copied
+            // reports permanently lose every call after the eighth.
+            tools: tools,
             sourceReferences: summarizeSources(tools),
             learningEvents: Array(learningEvents.prefix(6))
         )

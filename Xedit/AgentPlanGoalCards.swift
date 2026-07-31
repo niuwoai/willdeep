@@ -7,8 +7,8 @@
 //
 //   - `AgentPlanCard`: orange-tinted card listing every plan step
 //     with a status glyph the user can cycle (pending → in-progress →
-//     done → skipped → pending). While `.proposed`, the card surfaces
-//     Approve / Reject buttons; once approved, it offers Mark Complete.
+//     done → skipped → pending). Plans execute without a separate approval
+//     mode; the card remains editable progress UI.
 //     `AgentPlanRevisionRow` sits at the bottom — collapsed Replan
 //     button that expands into a one-line note field for mid-execution
 //     guidance.
@@ -39,7 +39,7 @@ enum AgentPlanStepLayoutMetrics {
 
 nonisolated enum AgentPlanCardExpansionPolicy {
     static func initiallyExpanded(for status: AgentPlan.Status) -> Bool {
-        status == .proposed
+        status == .proposed || status == .approved
     }
 
     static func shouldCollapseForAssistantRound(
@@ -103,7 +103,7 @@ struct AgentPlanCard: View {
                         AgentPlanStepRow(
                             index: index + 1,
                             step: step,
-                            interactive: plan.status != .proposed && plan.status != .rejected,
+                            interactive: plan.status != .rejected,
                             onCycle: { next in
                                 appState.setAgentPlanStepStatus(id: step.id, status: next)
                             }
@@ -111,22 +111,9 @@ struct AgentPlanCard: View {
                     }
                 }
 
-                if plan.status == .proposed {
-                    // rc16:Reject 在左、Approve 在右(borderedProminent),对齐
-                    // macOS「拒绝远离主操作位」防误触习惯。
-                    HStack(spacing: 8) {
-                        Button(L10n.PlanCard.rejectButton) { appState.rejectAgentPlan() }
-                            .buttonStyle(.bordered)
-                            .controlSize(.small)
-                        Button(L10n.PlanCard.approveButton) { appState.approveAgentPlan() }
-                            .buttonStyle(.borderedProminent)
-                            .controlSize(.small)
-                        Spacer(minLength: 0)
-                        Text(L10n.PlanCard.infoText)
-                            .font(.system(size: 10))
-                            .foregroundStyle(.secondary)
-                    }
-                } else if plan.status == .approved || plan.status == .executing {
+                if plan.status == .proposed
+                    || plan.status == .approved
+                    || plan.status == .executing {
                     Button(L10n.PlanCard.markCompleteButton) { appState.completeAgentPlan() }
                         .buttonStyle(.bordered)
                         .controlSize(.small)
@@ -242,91 +229,39 @@ struct AgentPlanRevisionRow: View {
     }
 }
 
-/// A single-line label that scrolls its overflow to the left while the
-/// pointer hovers, so a long plan step stays one row tall yet stays fully
-/// readable on demand. When the text already fits, it renders as a plain
-/// static line and never animates. macOS 13 compatible — measures widths
-/// with a classic `GeometryReader` + `PreferenceKey` (no `onGeometryChange`).
-struct MarqueeOnHoverText: View {
+/// A stable single-line label that truncates overflowing content and exposes
+/// the complete value through the native tooltip. It deliberately avoids
+/// geometry feedback, hover state, and perpetual animation so list rows remain
+/// inert while SwiftUI measures or reuses them.
+struct TruncatedTooltipText: View {
     let attributed: AttributedString
     var font: Font = .system(size: 12)
     var color: Color = .primary
     var strikethrough: Bool = false
-    /// Full text surfaced as a native tooltip, so the whole step is
-    /// reachable even without waiting out the scroll.
+    /// Full text surfaced as a native tooltip.
     var tooltip: String? = nil
     /// When set, caps the container at the text's natural width so the
     /// label hugs its content —— sidebar 会话行这类「标题后面紧跟徽章」
-    /// 的布局需要;不传保持原来的贪婪整行行为(计划卡步骤)。调用方
-    /// 用 NSFont 同步测宽,避免首帧靠 PreferenceKey 回填时的布局抖动。
+    /// 的布局需要;不传保持原来的贪婪整行行为(计划卡步骤)。
     var hugWidth: CGFloat? = nil
 
-    /// Pixels-per-second the overflow slides at; keeps long and short
-    /// steps feeling like the same gesture.
-    private let velocity: CGFloat = 26
-
-    @State private var textSize: CGSize = .init(width: 0, height: 16)
-    @State private var containerWidth: CGFloat = 0
-    @State private var hovering = false
-
-    private var overflow: CGFloat { max(0, textSize.width - containerWidth) }
-    private var scrollable: Bool { overflow > 0.5 }
-
-    private var line: some View {
+    var body: some View {
         Text(attributed)
             .font(font)
             .strikethrough(strikethrough, color: .secondary)
             .foregroundStyle(color)
             .lineLimit(1)
-            .fixedSize(horizontal: true, vertical: false)
-    }
-
-    private var marqueeAnimation: Animation {
-        guard hovering, scrollable else { return .easeOut(duration: 0.22) }
-        let duration = max(0.6, Double(overflow) / Double(velocity))
-        return .linear(duration: duration).delay(0.35).repeatForever(autoreverses: true)
-    }
-
-    var body: some View {
-        GeometryReader { geo in
-            line
-                .background(
-                    GeometryReader { inner in
-                        Color.clear.preference(key: MarqueeSizeKey.self, value: inner.size)
-                    }
-                )
-                .offset(x: hovering && scrollable ? -overflow : 0)
-                .frame(width: geo.size.width, alignment: .leading)
-                .clipped()
-                .animation(marqueeAnimation, value: hovering)
-                .onAppear { containerWidth = geo.size.width }
-                .onChange(of: geo.size.width) { containerWidth = $0 }
-        }
-        .frame(height: textSize.height)
-        .frame(maxWidth: hugWidth ?? .infinity, alignment: .leading)
-        .contentShape(Rectangle())
-        .onPreferenceChange(MarqueeSizeKey.self) { textSize = $0 }
-        .onHover { inside in
-            // Only arm the scroll when there is actually hidden overflow;
-            // a fitting step should never twitch on hover.
-            hovering = inside && scrollable
-        }
-        .help(tooltip ?? "")
-    }
-}
-
-private struct MarqueeSizeKey: PreferenceKey {
-    static let defaultValue: CGSize = .zero
-    static func reduce(value: inout CGSize, nextValue: () -> CGSize) {
-        value = nextValue()
+            .truncationMode(.tail)
+            .frame(maxWidth: hugWidth ?? .infinity, alignment: .leading)
+            .contentShape(Rectangle())
+            .help(tooltip ?? "")
     }
 }
 
 /// One row of the plan card. The status glyph doubles as a button that
 /// cycles pending → in_progress → done → skipped → pending, so the
 /// user can override whatever the agent reported. While the plan is
-/// still .proposed (awaiting approval), the glyph is shown but not
-/// interactive — checking off steps before approval doesn't make sense.
+/// still active, the glyph can be adjusted by the user.
 struct AgentPlanStepRow: View {
     @EnvironmentObject var appState: AppState
     let index: Int
@@ -373,7 +308,7 @@ struct AgentPlanStepRow: View {
                 .lineLimit(1)
                 .fixedSize(horizontal: true, vertical: false)
                 .frame(width: AgentPlanStepLayoutMetrics.indexColumnWidth, alignment: .trailing)
-            MarqueeOnHoverText(
+            TruncatedTooltipText(
                 attributed: MarkdownInline.attributedString(from: step.text),
                 color: textColor,
                 strikethrough: step.status == .done || step.status == .skipped,
@@ -388,10 +323,6 @@ struct AgentPlanStepRow: View {
             if interactive {
                 Divider()
                 Button(L10n.PlanStep.menuRestart) { sheet = .restart }
-                    .disabled(
-                        appState.agentInteractionMode != .plan
-                            && appState.agentInteractionMode != .goal
-                    )
             }
             Divider()
             Button(L10n.PlanStep.menuRemove, role: .destructive) {

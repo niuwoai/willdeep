@@ -64,14 +64,14 @@ struct AgentPatchProposalCard: View {
                 } label: {
                     Label(L10n.AgentPatch.reject, systemImage: "xmark.circle")
                 }
-                .disabled(proposal.status != .pending)
+                .disabled(proposal.status != .pending || isCollectingReviewBatch)
 
                 Button {
                     appState.applyAgentPatchProposal(id: proposal.id)
                 } label: {
                     Label(L10n.AgentPatch.apply, systemImage: "checkmark.circle")
                 }
-                .disabled(proposal.status != .pending)
+                .disabled(proposal.status != .pending || isCollectingReviewBatch)
 
                 Spacer(minLength: 0)
             }
@@ -111,6 +111,10 @@ struct AgentPatchProposalCard: View {
 
     private var statusText: String {
         proposal.statusMessage ?? proposal.status.rawValue.capitalized
+    }
+
+    private var isCollectingReviewBatch: Bool {
+        appState.isAgentPatchReviewCollecting(forMessageID: proposal.messageID)
     }
 }
 
@@ -170,6 +174,7 @@ struct AgentPatchProposalGroup: View {
                     }
                     Spacer(minLength: 0)
                 }
+                .disabled(isCollectingReviewBatch)
                 .labelStyle(.titleAndIcon)
                 .font(.caption)
             }
@@ -184,6 +189,10 @@ struct AgentPatchProposalGroup: View {
     }
 
     private var pendingCount: Int { count(of: .pending) }
+
+    private var isCollectingReviewBatch: Bool {
+        appState.isAgentPatchReviewCollecting(forMessageID: messageID)
+    }
 
     private func count(of status: AgentPatchStatus) -> Int {
         proposals.filter { $0.status == status }.count
@@ -277,6 +286,7 @@ struct AgentPatchProposalList: View {
             RoundedRectangle(cornerRadius: 7)
                 .stroke(Color.accentColor.opacity(0.25), lineWidth: 1)
         )
+        .disabled(hasCollectingPendingBatch)
     }
 
     @ViewBuilder
@@ -300,6 +310,13 @@ struct AgentPatchProposalList: View {
             buckets[proposal.messageID, default: []].append(proposal)
         }
         return order.map { ($0, buckets[$0] ?? []) }
+    }
+
+    private var hasCollectingPendingBatch: Bool {
+        proposals.contains {
+            $0.status == .pending
+                && appState.isAgentPatchReviewCollecting(forMessageID: $0.messageID)
+        }
     }
 }
 

@@ -17,6 +17,9 @@ extension L10n {
         static let noTasks = String(localized: "delegated-task.no-tasks", defaultValue: "No delegated task ledger yet")
         static let changedFiles = String(localized: "delegated-task.changed-files", defaultValue: "Changed files")
         static let findings = String(localized: "delegated-task.findings", defaultValue: "Findings")
+        static let currentActivity = String(localized: "delegated-task.current-activity", defaultValue: "Current activity")
+        static let recentOutput = String(localized: "delegated-task.recent-output", defaultValue: "Recent output")
+        static let fullOutputInTerminal = String(localized: "delegated-task.full-output-in-terminal", defaultValue: "Full output remains available in Agent Terminal.")
 
         static func attempt(_ current: Int, _ maximum: Int) -> String {
             let template = String(localized: "delegated-task.attempt", defaultValue: "Attempt %1$d / %2$d")
@@ -36,6 +39,31 @@ extension L10n {
         static func findingCount(_ count: Int) -> String {
             let template = String(localized: "delegated-task.finding-count", defaultValue: "%d acceptance finding(s)")
             return String(format: template, count)
+        }
+
+        static func liveProgress(
+            phase: AgentDelegatedTaskPhase,
+            attempt current: Int,
+            maximum: Int
+        ) -> String {
+            guard current > 0 else { return self.phase(phase) }
+            let template = String(
+                localized: "delegated-task.live-progress",
+                defaultValue: "%1$@ · %2$@"
+            )
+            return String(
+                format: template,
+                self.phase(phase),
+                attempt(current, maximum)
+            )
+        }
+
+        static func liveHeadline(executor: String, progress: String) -> String {
+            let template = String(
+                localized: "delegated-task.live-headline",
+                defaultValue: "%1$@ · %2$@"
+            )
+            return String(format: template, executor, progress)
         }
 
         static func phase(_ phase: AgentDelegatedTaskPhase) -> String {

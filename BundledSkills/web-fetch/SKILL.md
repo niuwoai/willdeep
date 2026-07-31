@@ -1,71 +1,23 @@
 ---
 name: web-fetch
-description: Fetch and read web pages, APIs, and online content. Use when users share URLs or ask about web content.
-allowed-tools:
-  - Bash
-  - WebFetch
-  - ChromeRelayNavigate
-  - ChromeRelayRead
-  - ChromeRelayReadDom
-  - ChromeRelayListTabs
-  - ChromeRelayClick
-  - ChromeRelayScreenshot
-  - ChromeRelayScroll
-  - ChromeRelayEval
+description: Fetch and read a known public web page or HTTP API with WillDeep's built-in web tool, using Chrome or the Embedded Browser only when authentication or interaction is required. Use when the user provides a URL or a search result needs full-page content.
 ---
 
-# Web Fetch Skill
+# Web Fetch
 
-Fetch web content using the best available method, in priority order:
+## Public Content
 
-## 1. Chrome Relay (Primary — always try this first)
+1. Validate that the URL is absolute HTTP or HTTPS.
+2. Call `web_fetch` with a suitable character cap.
+3. Read the returned text, JSON, or reduced HTML.
+4. Cite the source URL and distinguish facts from inference.
 
-Use **Chrome Relay** tools for all web fetching. Chrome Relay controls the user's real Chrome browser with existing sessions, cookies, and logins — critical for sites that require authentication (Twitter/X, GitHub, email, etc.).
+`web_fetch` refuses private, loopback, and link-local targets, including redirects. Do not use it for local services, intranet pages, authenticated pages, or cookie-dependent content.
 
-```
-# List open tabs
-ChromeRelayListTabs()
+## Authenticated or Interactive Content
 
-# Navigate to a URL (opens in existing or new tab)
-ChromeRelayNavigate(url="https://x.com/notifications", tabId=<id>)
+- Use `chrome_status` and the `chrome_*` tools for the user's existing signed-in Chrome tabs.
+- Use `embedded_browser_*` tools for an isolated in-app browsing session.
+- Load the `browser` skill for multi-step interaction.
 
-# Read page content as clean text
-ChromeRelayRead(tabId=<id>)
-
-# Read page DOM structure
-ChromeRelayReadDom(tabId=<id>)
-
-# Take a screenshot
-ChromeRelayScreenshot(tabId=<id>)
-
-# Click elements
-ChromeRelayClick(tabId=<id>, selector="button.load-more")
-
-# Scroll the page
-ChromeRelayScroll(tabId=<id>, direction="down")
-```
-
-**Always start with Chrome Relay.** It handles:
-- Authenticated pages (Twitter/X, GitHub, Google, etc.)
-- JavaScript-rendered SPAs
-- Anti-bot protections (using real Chrome fingerprint)
-- Pages behind login walls
-
-## 2. WebFetch Tool (Fallback for simple/public pages)
-
-If Chrome Relay is not connected or the page is simple public content, fall back to **WebFetch**:
-
-```
-WebFetch(url="https://example.com/article", prompt="Extract the main content")
-```
-
-- Renders pages in Electron BrowserWindow with JavaScript
-- Good for public articles, docs, APIs
-- No authentication/login capability
-
-## Tips
-
-- **Chrome Relay first, always.** It has the user's real login sessions.
-- WebFetch only for public pages when Chrome Relay is unavailable.
-- For Twitter/X: ALWAYS use Chrome Relay — WebFetch cannot access authenticated Twitter content.
-- Check `ChromeRelayListTabs()` first to see if Chrome is connected and find existing tabs.
+Never extract cookies, tokens, passwords, hidden form values, or unrelated private page data. Use `web_search` first when the exact URL is unknown.

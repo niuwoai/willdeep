@@ -63,14 +63,14 @@ nonisolated enum AgentMessageSource: String, Codable, Equatable {
 nonisolated enum AgentTranscriptEvent: String, Codable, Equatable {
     case modelChanged
     case responseStopped
-    /// A complex task auto-entered Plan mode after the suggestion banner
-    /// timed out without an explicit user choice.
+    /// Legacy event retained so old transcripts remain decodable.
     case autoPlanModeEntered
 }
 
 nonisolated enum AgentImageAttachmentSource: String, Codable, Equatable, Sendable {
     case userUpload
     case generated
+    case capture
 }
 
 /// An image surfaced in the transcript. Unifies two storage models:
@@ -261,8 +261,15 @@ nonisolated struct AgentImageAttachment: Codable, Equatable, Identifiable, Senda
     nonisolated func removeStoredFileIfNeeded() {
         guard let fileURL else { return }
         let directory = fileURL.deletingLastPathComponent()
-        guard directory.lastPathComponent == id.uuidString,
-              directory.deletingLastPathComponent().lastPathComponent == "AgentAttachments" else {
+        let isLegacyAgentAttachment = directory.lastPathComponent == id.uuidString
+            && directory.deletingLastPathComponent().lastPathComponent == "AgentAttachments"
+        let isWillDeepCapture = directory.lastPathComponent == id.uuidString.lowercased()
+            && directory.deletingLastPathComponent().lastPathComponent == "captures"
+            && directory
+                .deletingLastPathComponent()
+                .deletingLastPathComponent()
+                .lastPathComponent == ".willdeep"
+        guard isLegacyAgentAttachment || isWillDeepCapture else {
             return
         }
         try? FileManager.default.removeItem(at: directory)

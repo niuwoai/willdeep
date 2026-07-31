@@ -50,6 +50,18 @@ final class WillDeepTextView: NSTextView {
         static let rightArrow: UInt16 = 124
     }
 
+    /// AppKit's default selection overlay may preserve syntax-token foreground
+    /// colors. A light system selection background can therefore leave light
+    /// code text on a light fill. Apply the system foreground/background as a
+    /// semantic pair so every editor theme gets the platform's intended
+    /// contrast in both active appearances.
+    static var codeSelectionTextAttributes: [NSAttributedString.Key: Any] {
+        [
+            .backgroundColor: NSColor.selectedTextBackgroundColor,
+            .foregroundColor: NSColor.selectedTextColor,
+        ]
+    }
+
     var currentLineColor: NSColor = NSColor.selectedTextBackgroundColor.withAlphaComponent(0.16)
     var foldedPlaceholderColor: NSColor = NSColor.secondaryLabelColor
     var foldedPlaceholderBackgroundColor: NSColor = NSColor.secondaryLabelColor.withAlphaComponent(0.12)
@@ -121,12 +133,13 @@ final class WillDeepTextView: NSTextView {
         static let plainText = "__plain_text"
     }
 
-    /// NSTextView inherits macOS writing assistance defaults, including smart
-    /// quotes and text replacement. Those defaults are useful for prose but
-    /// corrupt source text (for example, ASCII quotes can become curly quotes).
-    /// Keep the editor byte-faithful even though syntax highlighting requires
-    /// rich-text mode.
+    /// NSTextView inherits rich-text import and macOS writing assistance. Those
+    /// defaults are useful for prose, but a code editor only needs plain source
+    /// input; parsing pasted RTF/HTML and running text checking delays the first
+    /// visible paint without contributing to syntax highlighting. Programmatic
+    /// attributes on text storage remain available in plain-text editing mode.
     func configureCodeEditingBehavior() {
+        isRichText = false
         isAutomaticQuoteSubstitutionEnabled = false
         isAutomaticDashSubstitutionEnabled = false
         isAutomaticTextReplacementEnabled = false
@@ -134,6 +147,10 @@ final class WillDeepTextView: NSTextView {
         smartInsertDeleteEnabled = false
         isAutomaticDataDetectionEnabled = false
         isAutomaticLinkDetectionEnabled = false
+        isContinuousSpellCheckingEnabled = false
+        isGrammarCheckingEnabled = false
+        isAutomaticTextCompletionEnabled = false
+        selectedTextAttributes = Self.codeSelectionTextAttributes
     }
 
     override func menu(for event: NSEvent) -> NSMenu? {

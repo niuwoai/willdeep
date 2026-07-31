@@ -78,6 +78,16 @@ enum AgentSandboxAuditLog {
         if toolName == "lark_cli" {
             return AgentLarkCLI.commandPreview(arguments: arguments["arguments"]?.stringArrayValue() ?? [])
         }
+        if toolName.hasPrefix("computer_use_") {
+            let targetPID = arguments["pid"]?.intValue().map(String.init)
+            let target = arguments["target_label"]?.stringValue()
+                ?? arguments["app"]?.stringValue()
+                ?? targetPID
+                ?? "?"
+            let purpose = arguments["purpose"]?.stringValue() ?? "-"
+            let consequence = arguments["consequence"]?.stringValue() ?? "-"
+            return "\(toolName) target=\(target) purpose=\(purpose) consequence=\(consequence)"
+        }
         return toolName
     }
 
@@ -527,9 +537,27 @@ enum AgentCommandAuthorization {
 ///    file_remove are deliberately not pinnable because their blast
 ///    radius depends entirely on the path argument.
 enum AgentToolAuthorization {
+    /// Cache key for safety-judge YES verdicts: tool name + command family
+    /// signature. Family granularity matches the Always-Allow pin contract
+    /// (`AgentCommandAuthorization.signature`); commands with no derivable
+    /// family (MCP pseudo-commands, exotic shells) fall back to the exact
+    /// trimmed command text so caching stays strictly per-command there.
+    nonisolated static func judgeVerdictCacheKey(
+        toolName: String,
+        command: String
+    ) -> String {
+        let family = AgentCommandAuthorization.signature(for: command)
+            ?? command.trimmingCharacters(in: .whitespacesAndNewlines)
+        return "\(toolName)|\(family)"
+    }
+
     static func interactiveSurfaceSignature(toolName: String) -> String? {
         if toolName.hasPrefix("computer_use_") {
-            return "computer_use:*"
+            // Native desktop control never uses the generic conversation
+            // allow-list. Ordinary actions are approved only by the live
+            // runtime/target-bound Computer Use lease; consequential actions
+            // remain per-action confirmations.
+            return nil
         }
         if toolName.hasPrefix("chrome_") {
             return "browser:chrome"
@@ -551,6 +579,18 @@ enum AgentToolAuthorization {
         toolName: String,
         arguments: [String: AgentJSONValue]
     ) -> String? {
+        // Native desktop control is intentionally never durable. A remembered
+        // `computer_use:*` rule would outlive the current target/turn and let
+        // an approval for a harmless scroll authorize a later send, delete,
+        // purchase, permission change, or entirely different app.
+        if toolName.hasPrefix("computer_use_") {
+            return nil
+        }
+        if ["run_command", "terminal_send_command"].contains(toolName),
+           let command = arguments["command"]?.stringValue(),
+           AgentSandboxPolicy.commandRequiresSensitiveDesktopConfirmation(command) {
+            return nil
+        }
         let baseSignature = signature(toolName: toolName, arguments: arguments)
 
         switch toolName {
@@ -645,7 +685,7 @@ enum AgentToolAuthorization {
             return signature
         case "terminal_send_control":
             guard let control = AgentCommandAuthorization.cleaned(arguments["control"]?.stringValue() ?? "")?.lowercased(),
-                  ["ctrl_c", "enter", "escape"].contains(control) else {
+                  ["ctrl_c", "ctrl_d", "ctrl_right_bracket", "enter", "escape"].contains(control) else {
                 return nil
             }
             return "terminal_control:\(control)"
@@ -674,6 +714,10 @@ enum AgentToolAuthorization {
             let mode = arguments["permission_mode"]?.stringValue()?
                 .trimmingCharacters(in: .whitespacesAndNewlines) ?? "workspaceWrite"
             return "codex_cli:\(mode)"
+        case "hermes_cli":
+            let mode = arguments["permission_mode"]?.stringValue()?
+                .trimmingCharacters(in: .whitespacesAndNewlines) ?? "workspaceWrite"
+            return "hermes_cli:\(mode)"
         case "cursor_agent":
             let mode = arguments["permission_mode"]?.stringValue()?
                 .trimmingCharacters(in: .whitespacesAndNewlines) ?? "default"
@@ -745,7 +789,8 @@ enum AgentToolAuthorization {
 
     /// Render a `terminal_send_control` call as a pseudo command line for
     /// the LLM safety judge. The control key is one of the whitelisted set
-    /// (`ctrl_c` / `enter` / `escape`); the judge sees the intent and can
+    /// (`ctrl_c` / `ctrl_d` / `ctrl_right_bracket` / `enter` / `escape`);
+    /// the judge sees the intent and can
     /// YES the harmless interrupt/cancel keys while staying cautious about
     /// `enter` submitting a queued line.
     static func terminalControlJudgePseudoCommand(control: String) -> String {

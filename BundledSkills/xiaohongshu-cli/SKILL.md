@@ -1,15 +1,13 @@
 ---
 name: xiaohongshu-cli
 description: "Use for ANY Xiaohongshu / 小红书 / Rednote / Little Red Book task: login, account status, search notes/users/topics, read note details/comments, browse feed and hot lists, like/favorite/comment/reply, follow/unfollow, check favorites/notifications/my-notes, post image notes, and delete your own notes."
-license: Apache-2.0
-allowed-tools:
-  - Bash
 ---
 
 # Xiaohongshu CLI Skill
 
 This bundled skill wraps the upstream `xiaohongshu-cli` project by `jackwener`.
 Source reviewed from `https://github.com/jackwener/xiaohongshu-cli` at commit `95b21d2062c72357fde4fd760c40f250de2d1551` (`2026-03-11`, version `0.5.0`).
+License: Apache-2.0.
 
 ## Runtime
 

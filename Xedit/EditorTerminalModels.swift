@@ -424,25 +424,177 @@ struct EditorTerminalColorScheme: Identifiable, Equatable {
 }
 
 enum EditorTerminalEnvironmentParser {
+    private struct Assignment {
+        let key: String
+        let value: String
+        let expandsVariables: Bool
+    }
+
     static func parse(_ text: String) -> [String: String] {
-        var environment: [String: String] = [:]
+        merging(text, into: [:])
+    }
+
+    /// Applies KEY=value lines in source order, using the environment built by
+    /// earlier lines when expanding `$VAR` / `${VAR}` references. Keeping the
+    /// assignments ordered is important for shell-style PATH composition:
+    ///
+    ///     PATH=$JAVA_HOME/bin:$PATH
+    ///     PATH=$MAVEN_HOME/bin:$PATH
+    ///
+    /// A dictionary-only parser silently discarded the first PATH assignment.
+    static func merging(_ text: String, into base: [String: String]) -> [String: String] {
+        var environment = base
+        for assignment in assignments(in: text) {
+            environment[assignment.key] = assignment.expandsVariables
+                ? expandVariables(in: assignment.value, environment: environment)
+                : assignment.value
+        }
+        return environment
+    }
+
+    private static func assignments(in text: String) -> [Assignment] {
+        var result: [Assignment] = []
         for line in text.components(separatedBy: .newlines) {
             let trimmed = line.trimmingCharacters(in: .whitespacesAndNewlines)
             guard !trimmed.isEmpty, !trimmed.hasPrefix("#") else { continue }
             guard let separator = trimmed.firstIndex(of: "=") else { continue }
             let key = String(trimmed[..<separator]).trimmingCharacters(in: .whitespacesAndNewlines)
             var value = String(trimmed[trimmed.index(after: separator)...]).trimmingCharacters(in: .whitespacesAndNewlines)
+            var expandsVariables = true
             if value.count >= 2,
                let first = value.first,
                let last = value.last,
                (first == "\"" && last == "\"") || (first == "'" && last == "'") {
+                expandsVariables = first != "'"
                 value.removeFirst()
                 value.removeLast()
             }
             guard !key.isEmpty else { continue }
-            environment[key] = value
+            result.append(Assignment(key: key, value: value, expandsVariables: expandsVariables))
         }
-        return environment
+        return result
+    }
+
+    private static func expandVariables(
+        in value: String,
+        environment: [String: String]
+    ) -> String {
+        var result = ""
+        var index = value.startIndex
+
+        while index < value.endIndex {
+            guard value[index] == "$" else {
+                result.append(value[index])
+                index = value.index(after: index)
+                continue
+            }
+
+            let afterDollar = value.index(after: index)
+            guard afterDollar < value.endIndex else {
+                result.append("$")
+                break
+            }
+
+            if value[afterDollar] == "{" {
+                let keyStart = value.index(after: afterDollar)
+                guard let closingBrace = value[keyStart...].firstIndex(of: "}") else {
+                    result.append("$")
+                    index = afterDollar
+                    continue
+                }
+                let key = String(value[keyStart..<closingBrace])
+                if isValidVariableName(key) {
+                    result.append(contentsOf: environment[key] ?? "")
+                } else {
+                    result.append(contentsOf: value[index...closingBrace])
+                }
+                index = value.index(after: closingBrace)
+                continue
+            }
+
+            guard isVariableStart(value[afterDollar]) else {
+                result.append("$")
+                index = afterDollar
+                continue
+            }
+
+            var keyEnd = value.index(after: afterDollar)
+            while keyEnd < value.endIndex, isVariableContinuation(value[keyEnd]) {
+                keyEnd = value.index(after: keyEnd)
+            }
+            let key = String(value[afterDollar..<keyEnd])
+            result.append(contentsOf: environment[key] ?? "")
+            index = keyEnd
+        }
+
+        return result
+    }
+
+    private static func isValidVariableName(_ value: String) -> Bool {
+        guard let first = value.first, isVariableStart(first) else { return false }
+        for character in value.dropFirst() where !isVariableContinuation(character) {
+            return false
+        }
+        return true
+    }
+
+    private static func isVariableStart(_ character: Character) -> Bool {
+        character == "_" || character.isASCII && character.isLetter
+    }
+
+    private static func isVariableContinuation(_ character: Character) -> Bool {
+        isVariableStart(character) || character.isASCII && character.isNumber
+    }
+}
+
+/// Builds the environment for WillDeep-owned interactive shells.
+///
+/// `CLAUDECODE=1` is intentionally limited to local user shells so `.zshrc`
+/// can use the same lightweight prompt path it uses for Claude Code. Delegated
+/// executor shells and SSH sessions must not receive the marker: otherwise a
+/// Claude CLI launched by WillDeep can mistake itself for a nested session.
+enum EditorTerminalLaunchEnvironment {
+    static let claudeCodeCompatibilityKey = "CLAUDECODE"
+    static let agentTerminalKey = "WILLDEEP_AGENT_TERMINAL"
+    private static let enabledValue = "1"
+
+    static func variables(
+        from base: [String: String] = ProcessInfo.processInfo.environment,
+        settings: EditorTerminalSettings,
+        injectClaudeCodeCompatibility: Bool,
+        markAsAgentTerminal: Bool
+    ) -> [String: String] {
+        var environment = base
+        environment["TERM"] = "xterm-256color"
+        environment["LANG"] = environment["LANG"] ?? "en_US.UTF-8"
+        if injectClaudeCodeCompatibility {
+            environment[claudeCodeCompatibilityKey] = enabledValue
+        }
+        if markAsAgentTerminal {
+            environment[agentTerminalKey] = enabledValue
+        }
+        // Explicit Terminal settings remain the final authority, including
+        // allowing a user to clear CLAUDECODE when launching Claude manually.
+        return EditorTerminalEnvironmentParser.merging(
+            settings.environmentText,
+            into: environment
+        )
+    }
+
+    static func array(
+        from base: [String: String] = ProcessInfo.processInfo.environment,
+        settings: EditorTerminalSettings,
+        injectClaudeCodeCompatibility: Bool,
+        markAsAgentTerminal: Bool
+    ) -> [String] {
+        variables(
+            from: base,
+            settings: settings,
+            injectClaudeCodeCompatibility: injectClaudeCodeCompatibility,
+            markAsAgentTerminal: markAsAgentTerminal
+        )
+        .sorted { $0.key < $1.key }
+        .map { "\($0.key)=\($0.value)" }
     }
 }
 
@@ -490,10 +642,13 @@ enum EditorProjectCommandResolver {
                 if !roots.contains(current) {
                     roots.append(current)
                 }
-                if current.path == stop || current.path == current.deletingLastPathComponent().path {
+                // Standardize the parent: on macOS 13 Foundation "/" becomes
+                // "/.." otherwise, and the termination check never fires.
+                let parent = current.deletingLastPathComponent().standardizedFileURL
+                if current.path == stop || parent.path == current.path || parent.path.count >= current.path.count {
                     break
                 }
-                current.deleteLastPathComponent()
+                current = parent
             }
         }
         return roots

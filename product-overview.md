@@ -1,6 +1,6 @@
 # WillDeep Product Overview
 
-> Last updated: 2026-07-25 | Current version: v1.206.0-rc1
+> Last updated: 2026-08-01 | Current version: v1.220.0-rc11
 
 ## Positioning
 
@@ -11,6 +11,142 @@ Official product domain: [willdeep.com](https://willdeep.com).
 WillDeep is configured for non-App-Store distribution without App Sandbox so it can access local project files with fewer permission interruptions.
 
 ## 架构概览
+
+- **some.im Flash 别名统一使用 Responses（1.220.0-rc11）** —— `someim-auto-flash`、`someim-code-low`、兼容别名 `someim-coding-plan` 与托管型号 `someim-coding-plan-low` 复用 `deepseek-v4-flash` 的 Responses、无服务端存储请求和网关状态续接链路；高档 coding-plan 型号及其他提供商不受影响。
+
+- **Computer Use 截图直通（1.220.0-rc10）** —— 模型按需获取的目标窗口截图与聊天区右上角本地控制预览暂时跳过 Accessibility 敏感区域扫描和像素遮罩，避免钉钉等动态 AX 树因扫描超时或节点瞬时失效而丢弃整张截图；密码、验证码等自动读写限制仍独立保留。
+
+- **Computer Use 提示词缓存契约校准（1.220.0-rc9）** —— 后台 AX 操作、PID 定向输入和窗口截图规则已纳入 v22 稳定提示词版本，并为 standard、compact、extended 三档重新记录确定性快照哈希，避免客户端继续复用旧缓存契约或在合并时静默丢失 Computer Use 行为约束。
+
+- **DeepSeek Responses 服务端历史拼装修复（1.220.0-rc8）** —— WillDeep 在有有效游标时只发送新增 user/tool input，some.im 服务端继续从状态存储拼装原始 input/output 历史；客户端会把 reasoning、assistant message、function/custom tool call 与 web search call 识别为已有服务端输出并从增量请求剥离。只有首次请求、游标失效或状态后端不可用时才回退到完整本地历史，此时 reasoning 使用 DeepSeek Responses 接受的 `reasoning_text` 内容块数组，避免字符串类型触发 HTTP 400。
+
+- **Computer Use 后台控制与单一状态界面（1.220.0-rc7）** —— 普通 AX 操作、PID 定向输入和目标窗口截图不再把目标 App 激活到前台，`computer_use_activate_app` 仅作为少数应用拒绝后台事件时的兼容兜底。重复的屏幕底部浮动控制条已移除，聊天区右上角保留唯一控制卡并持续展示由 Helper 单独采集的目标窗口缩略图；该本地预览不进入模型上下文、不重建 AX 树、不使当前 ref 失效，暂停或用户接管时立即停止并清除。菜单栏以目标 App 图标叠加 Computer Use 标识显示当前控制对象，并提供暂停、接管、恢复和停止操作。
+
+- **Computer Use 开发期终端开放（1.220.0-rc6）** —— 为完成原生 UI 操作能力开发，Host 与 Helper 暂时关闭终端应用黑名单和终端关键词整片脱敏，Terminal、iTerm、Warp 以及带“终端/控制台”AX 文案的自研应用均可被观察和操作。规则清单保留并由 Host/Helper 双层开关控制，便于后续按低误报、可解释、分层策略逐步恢复；WillDeep 自控边界、真实密码/验证码/密钥输入保护、剪贴板禁用和高影响动作确认继续生效。
+
+- **Computer Use 单次授权与 AX-first 控制（1.220.0-rc5）** —— 同一任务、同一轮、同一目标应用的控制租约首次获批后，后续基于新鲜 AX ref 或截图坐标的点击与右键点击直接复用该授权，不再逐次弹卡；严格审批模式、暂停、用户接管、停止、目标切换和私密输入边界仍会中断自动执行。状态读取和每次动作后的刷新默认只返回 AX 树，只有 AX 没有可用目标时才显式申请窗口截图并进入像素兜底。
+
+- **Computer Use 激活与窗口绑定自愈（1.220.0-rc4）** —— 应用切换不再把 `NSRunningApplication.activate()` 的一次瞬时 `false` 当作致命失败，而是验证目标是否真正到达前台、短时重试并通过 Accessibility Raise 兜底；目标窗口的 CGWindow/AXWindow 绑定会等待界面稳定，并在窗口号缺失时使用受尺寸、重叠率和中心偏差约束的几何匹配。同一任务、同一轮、同一目标的控制租约建立后，重复激活无需再次确认；严格审批模式仍按设计逐次询问。
+
+- **Computer Use 权限自检（1.220.0-rc3）** —— 设置 → Agent 工具 → 工具新增 WillDeep Computer Use 独立 Helper 权限区，分别展示辅助功能与屏幕录制状态并支持一键申请；屏幕录制授权后仅重启 Helper 即可刷新状态，无需重启 WillDeep。界面明确两项权限均绑定 Helper，主程序同名授权不能替代。
+
+- **简洁一致的 Computer Use 授权卡（1.220.0-rc2）** —— Computer Use 授权提问缩短为“允许 WillDeep 操作电脑？”，审批操作统一为拒绝在左、允许在右；正向按钮采用浅色模式黑底白字、深色模式白底黑字的高对比圆角样式。
+
+- **DeepSeek V4 Flash Responses 与安全续接（1.220.0-rc1）** —— 直连 DeepSeek 和 some.im 中转的精确模型 `deepseek-v4-flash` 自动改走 `/responses`，`deepseek-v4-pro` 在官方支持前仍保留 Chat 协议。直连始终发送完整历史与 `store: false`；some.im 通过仅 WillDeep 使用的显式状态协议发送 `previous_response_id + 增量 input`，本地使用 23 小时安全窗，超时、服务端 410 或状态后端不可用时自动清除游标并改发完整历史。若状态后端在流式回答中途失效，当前回答不会重放，客户端丢弃游标并在下一轮发送完整历史。完整历史包含 DeepSeek 明文 reasoning item，流式解析补齐 `response.reasoning_text.delta` 与 `response.incomplete`。
+
+- **真实 Home 路径升级执行（1.219.0-rc9）** —— `run_command` 识别 `~/...`、`$HOME/...` 与 `${HOME}/...` 后不再使用隔离沙箱的临时 `HOME`；它会在执行前请求 workspace 外升级访问，获批后对用户真实路径执行。工具契约同步明确：workspace 外路径应保留原值并走审批，不因“路径映射”改发可见终端命令；提示词契约升级为 `willdeep-agent-system-v20`。
+
+- **提示词契约快照同步（1.219.0-rc8）** —— 多技能批量创建工具加入稳定工具契约后，系统提示词契约升级为 `willdeep-agent-system-v19`，并同步重录 standard、compact、extended 三档字节级哈希，确保发布门禁能区分预期契约升级与意外漂移。
+
+- **活动状态低开销渲染（1.219.0-rc7）** —— “处理中/思考中”扫光动画从 30 FPS 限制为最多 12 FPS；聊天记录只在搜索条件实际变化时更新 TextKit 高亮，避免长对话在活动状态刷新时反复重写全文、重新排版并拉高主线程 CPU。
+
+- **聊天选区操作稳定性（1.219.0-rc6）** —— 聊天记录的搜索和 hover 样式刷新在正文不变时保留现有文本选区；相同搜索状态不再重复重写 TextKit 存储，“添加到任务”浮层不会因无关的 SwiftUI 刷新或鼠标移动立即消失。
+
+- **高门槛自动技能学习（1.219.0-rc5）** —— 自动提取 Skill 默认要求同一回合至少 6 次成功工具调用；Assistant 自己的叙述不能构成创建授权。没有用户明确创建指令的流程只生成待审阅草稿，不直接写入 Skill 目录；用户明确要求创建时也至少需要 4 次成功工具证据。
+
+- **低打扰后台任务通知（1.219.0-rc4）** —— 系统横幅只用于应用处于后台时发生的失败、超时或启动失败；成功完成、用户主动停止以及应用前台已经可见的异常只在任务抽屉和会话记录中呈现，避免重复提醒。
+
+- **视觉路由自动恢复（1.219.0-rc3）** —— 图片预解析遇到上游暂时无法保留 `input_modality:image` 能力的特定 422 时，客户端在同一次发送中执行最多 3 次指数退避重试（0.8s、1.6s、3.2s），无需用户手动点击“重试”；其他 422 不参与重试。
+
+- **授权按钮可点击性修复（1.219.0-rc2）** —— 浏览器与 Computer Use 紧凑授权卡的普通操作采用至少 76×36pt 的点击区，主操作采用至少 112×36pt，并同步增大字号和水平内边距；宽栏保持单行，窄栏自动换行。
+
+- **多技能一次确认与原子创建（1.219.0-rc1）** —— 用户一次要求生成多个技能时，Agent 必须通过 `create_user_skills` 把 1–10 个完整草稿合并成一个批次；确认卡集中展示名称和用途，用户只确认一次。宿主在写入前统一校验数量、字段、规范化重名与已存在目录，执行中任一项失败会撤销本批已创建内容，成功结果逐项返回路径；单技能 `create_user_skill` 继续兼容。
+
+- **Composer 选择器大视窗与命令滚动（1.218.0-rc3）** —— `$` 技能、`@` 文件/工作区和 `/` 命令弹层采用统一的 440pt 列表高度上限；命令列表补齐纵向滚动与键盘选择自动跟随，候选较多时不再截断在小弹窗里。
+
+- **Smart 审批发布门禁对齐（1.218.0-rc2）** —— 手动补丁应用与批量重复目标校验的回归用例显式使用“每次请求审批”模式，受控委托式编码 Agent 的 Smart 模式用例按现行策略断言静态白名单；发布测试既覆盖人工审批路径，也不再把 Smart 自动应用工作区变更误判为回归。
+
+- **GPT-5 自动 Responses 路由与跨重启续接（1.218.0-rc1）** —— OpenAI-compatible Provider 中模型 ID 只要包含 `gpt-5`（大小写不敏感，例如 `gpt-5.4`、`gpt-5.5`、`gpt-5.6-sol`）就自动通过 `/responses` 推理，无需用户另选 Responses Provider；Anthropic 与 Gemini 原生协议不参与误判。成功 Response 的 `response_id`、上下文哈希和 wire-input 哈希随会话 JSON 持久化，应用重启后仍可通过 `previous_response_id + 增量 input` 继续；落盘内容不包含重复提示词、工具 schema、凭据或消息正文。上游游标失效，或 Provider/Base URL/API Key、模型、提示词、工具及历史前缀变化时安全回退完整请求；some.im 会话/工作区头及 OpenRouter branding 在自动路由后继续保留。
+
+- **Responses 有状态增量续接（1.217.0-rc1）** —— 选择 OpenAI Responses 协议的模型后，每个打开的会话会保留最近一次成功 Response 的游标；只有模型、instructions、工具 schema、图像能力与既有消息严格不变且历史仅追加时，后续工具轮次或用户轮次才发送 `previous_response_id + 增量 input`。请求显式使用 `store: true`，独立安全判定使用 `store: false`；上游返回游标不存在、过期或不支持时自动清除游标并以完整历史重试，修改上下文、切换模型/工具或压缩历史也会直接走完整请求。
+
+- **工作区 Goal 感知与单实例调度（1.216.0-rc1）** —— 普通会话会从宿主获取当前工作区其他未完成 Goal 的目标、进度、运行状态与调度归属，并同时注入 Agent 上下文、工作区会话工具和早期 Composer 提示，避免重复建立目标或与已有执行争抢同一现场。同一逻辑项目（本机按 Git common directory、远端按精确位置）只允许一个未暂停且未完成的调度项目运行；重复创建会直接打开现有调度，暂停或全部任务合并后释放名额，恢复、提交草稿和启动子任务都会再次执行冲突校验，历史重复记录同步时自动只保留一个运行实例。
+
+- **无管道 Git 探测与后台调度投影（1.215.0-rc6）** —— Git 子进程输出写入每次调用独占的临时普通文件，退出后限量读取并立即清理，不再依赖管道 EOF、共享读线程或 `DispatchGroup.wait()`；调度台的仓库探测与会话投影在 utility 后台任务完成，并以修订号保证只有最新结果写回主线程。
+
+- **独立视觉模型有界重试（1.215.0-rc5）** —— 图片先由专用视觉模型转成文字，再交给纯文本主模型；some.im 明确返回视觉路由暂不可用的 HTTP 422 时，整个解析操作最多额外重试一次。错误卡会标明视觉阶段与模型名，解析失败则硬停止，绝不把原图继续透传给文本模型。
+
+- **编辑设置可靠落盘（1.215.0-rc4）** —— `EditorSettings` 的异步保存任务在排队时捕获不可变快照，并在弱引用 `AppState` 的界面副作用之前完成持久化；设置窗口关闭、切换当前编辑器或替换临时状态时，行号、当前行高亮等开关不会再因原状态对象释放而复位。
+
+- **账号头像统一渲染（1.215.0-rc3）** —— 侧栏底部账号条与弹出菜单顶部共用同一个远程头像组件和进程级缓存，不再由弹出菜单硬编码昵称首字母；只有未配置头像、加载中或请求失败时才显示首字母占位。
+
+- **侧栏标题稳定截断（1.215.0-rc2）** —— 会话标题和计划步骤恢复为无状态的单行尾部省略号，并通过系统 tooltip 展示完整内容；移除行内 GeometryReader、PreferenceKey、hover 状态回写与无限跑马灯动画，避免侧栏在命中测试和 LazyVStack 布局之间形成主线程反馈环。
+
+- **AI 原生 DAG 与多 Profile 调度（1.215.0-rc1）** —— 调度台不再把 Goal 验收清单投影成固定单线任务：规划模型必须输出独立的 `dispatch-graph`，由 AI 决定最小可执行节点、并行分支、多个前置依赖与显式汇聚节点；节点 key 在项目内映射为稳定 UUID，规划重试不会冲掉既有执行历史。规划本身和每个执行节点都绑定统一 Profile，Profile 可组合 WillDeep、Codex CLI、Claude Code、Hermes、Cursor Agent 或 Cline，以及对应模型、Provider、原生 Profile/Agent 名称；主 Profile 失败后按持久化回退链自动切换并记录尝试，防止循环重跑。调度台内置 Profile 管理器并自动合并 Codex、Claude 与 Hermes 的本机配置；人工节点编辑保留为直接干预入口。桌面宠物和系统通知会按项目/任务归属返回对应调度台，不再把调度任务打开成聊天。
+
+- **项目级图工程调度与分角色模型路由（1.214.0-rc1）** —— 调度台左侧顶层对象统一为“项目”，任务执行产生的子会话通过项目/任务归属字段留在项目内部，不再被同步器提升成新的侧栏项目；历史版本已经产生的重复项会按任务运行时关联自动收敛。项目级主操作改为“启动执行”，执行活跃时保持幂等，仍可在具体任务节点上显式并行启动。每个项目可分别选择规划模型与执行模型，默认以 `kimi-k3` 负责整体规划、`deepseek-v4-pro` 负责常规执行；本地 Codex 与 Claude Code 会发现已配置的多个 Profile/Agent，并把项目选择安全传入对应 CLI。
+
+- **Graph Engineer 图工程调度台（1.213.0-rc1）** —— Goal 的真实 `dependencyIDs` 现在驱动可滚动、可缩放的二维 DAG 画布，任务节点按依赖层级自动布局并通过端口与曲线连接；分支末端统一汇入可选中的验收关卡，多前置任务会明确呈现合流关系。任务节点、验收关卡和右侧 Inspector 使用同一选择模型，点击后详情同步切换；“追加任务 / 调整计划”不再把文字塞进聊天框，而是打开结构化节点编辑器，用于维护标题、多个前置节点和逐条验收标准，并在保存时拒绝循环依赖。底部聊天式输入降级为可折叠的运行时指令控制台，画布主操作集中到添加/编辑节点、暂停/恢复与缩放工具栏。
+- **审批模式边界（1.213.0-rc2）** —— 智能审核和工作区可写都会直接应用经过路径校验的工作区文件变更，只有严格模式逐个展示文件审核卡；智能审核继续对外部操作做安全分类与模型判断，工作区可写则对外部操作保持人工确认。模式菜单按自动化程度从高到低排列，严格模式固定在最后。
+- **外部执行器实时监督反馈（1.212.0-rc9）** —— Claude Code、Codex CLI、Cursor Agent 与 Cline CLI 的可见终端输出继续完整保留在 Agent Terminal，同时由 runner 约每秒读取有限尾部、移除 ANSI 控制序列并完成密钥脱敏后，向 Composer 活动行、工具时间线和详情卡回传当前动作与最近输出。UI 使用宿主真实状态机展示“执行中 / 执行器独立验收 / WillDeep 二次验收 / 定点返工 / 验收通过”和尝试次数，不根据日志猜测虚假百分比；实时日志尾部仅用于内存渲染，不写入会话 JSON。
+- **调度台 Goal 创建改为结构化工作台（1.212.0-rc8）** —— 调度台选择工作区后直接展示目标陈述、逐项验收清单、工作区与自动调度策略摘要；提交后原位进入任务图。创建阶段不再复用聊天 transcript、消息气泡、普通 Composer 或聊天状态栏，结构化草稿也不会制造伪聊天消息。
+- **本地编译、单测与发布预热共享热缓存（1.212.0-rc7）** —— `ruby scripts/build_fast.rb` 作为 Debug/Release 增量编译入口，默认将 DerivedData、SwiftPM checkout、独立 package 下载缓存与 Xcode compilation cache 固定在 `~/Library/Caches/WillDeep/Xcode/Xedit`；本地快速单测和完整单测也默认复用同一路径，因此一次编译可以直接为后续测试预热，反向亦然。CLI 构建默认关闭 index store 以减少额外工作，但不修改 Xcode IDE 的工程索引设置；可用 `--index`、`--sign`、`--release`、`--destination` 或环境变量显式覆盖。`generic/platform=macOS` 可为 new83d 正式 archive 预热目标架构，但正式签名、公证、上传与 appcast 仍由发布引擎完成。每次编译输出 Markdown、JSON、原始日志及项目构建守卫报告；当前工作区实测冷构建 683.9 秒、无变更热构建 24.8 秒，源码回退时 compilation cache 命中 2/3 个任务并在 24.6 秒完成。
+- **分层并行 CI 与持久 Xcode 缓存（1.212.0-rc5）** —— Ruby quality/interaction/short-drama 守门、Go agent 测试和 macOS 原生单测拆为独立 Job 并行执行；Mac Runner 先 `build-for-testing`、再 `test-without-building`，只承担 Xcode 必需工作。DerivedData、SwiftPM checkout/package cache 固定在仓库外的 Runner 缓存目录，本地测试入口也允许通过 `WILLDEEP_XCODE_DERIVED_DATA_PATH` 复用同一策略；Xcode 测试构建默认启用 compilation cache 并关闭 CI index store。本地无编译复测的有效性指纹只跟踪真实构建输入，文档与测试报告变化不会让现有测试二进制失效。图像理解回退、Transcript 历史文案与 Workflow Report 渲染测试同步拆出独立文件，所有 Swift/测试源文件重新低于 3000 行硬限制。
+- **Skills 目录缓存与后台刷新（1.212.0-rc4）** —— 技能发现结果由进程级线程安全缓存统一持有，并发调用只执行一次磁盘加载；创建、更新、删除、安装与卸载会显式使缓存失效，启用状态变化则直接重新应用设置。应用启动会在 utility 后台任务预热缓存，Composer 的 `$` 补全、插件选择器和技能设置页均异步取数，避免 SwiftUI 主线程反复遍历技能目录和读取 `SKILL.md`。
+- **Editor 高对比选区与轻量纯文本输入（1.212.0-rc3）** —— 原生 `NSTextView` 编辑器使用系统配套的选区前景色与背景色，避免浅色代码文字落在浅色选区上；编辑行为明确采用纯文本模式，程序化语法着色仍由 attributed text storage 保留，并关闭拼写、语法及自动补全等非代码写作服务。未命名 `.txt` 标签页继续跳过语法高亮，粘贴不再承担富文本编辑和文本检查链路的额外同步成本。
+- **侧栏标题按需跑马灯（1.212.0-rc2）** —— 会话标题和计划步骤放不下时，静止状态使用标准尾部省略号，不再被硬裁剪；指针悬停约 0.35 秒后才创建完整文本滚动层，移开或视图消失时立即销毁滚动层并以禁用动画事务复位，避免 `repeatForever` 在后台残留。没有溢出的短标题保持静止。
+- **长任务自动后台编排（1.212.0-rc1）** —— `run_command` 在模型未显式选择时，会保守识别常见测试、构建和开发服务入口并自动交给后台 Job；显式前台仍优先，发布、上传、公证与部署流程不会被模糊匹配。后台任务通过可选 `label` 或安全分类在聊天中显示“正在运行前端测试”“正在编译项目”等自然活动标题，完整命令继续隐藏。模型在任务运行时会继续处理不与当前构建输入冲突的 CHANGELOG、发布说明、API 文档等工作；活动验证的源码、构建配置、依赖锁、生成输入或版本文件一旦变化，旧结果即视为过期并必须重跑。Job 完成通知会自动恢复所属 runtime，驱动最终检查、失败修复与验收闭环。
+- **普通 / Goal 两种顶层模式（1.211.0-rc6）** —— 顶层交互不再提供独立 Plan 模式：普通模式会为真正的多步骤任务只生成一次可见计划，并在同一流程直接执行；用户明确说“只规划、不要执行”时才停在计划结果。活动计划会持续显示进度且不可被后续模型回复静默覆盖。Goal 模式保留独立证据规划与验收循环，有效 Plan 经宿主验证后自动执行，不再等待一次计划批准；Plan 完成但 Goal checklist 尚未闭合时继续验证同一目标，不清空 Plan、不重启 Goal Teams，连续两轮无验收进展则暂停请用户补充。旧会话中的 `"plan"` 模式与 `awaitingApproval` 状态会分别迁移到普通模式和自动执行态。
+- **统一聊天可读列（1.211.0-rc6）** —— 聊天记录、排队内容、计划进度与 Composer 共用同一条居中的限宽列；宽窗口不再因记录区左对齐而显得 Composer 单独右移，右侧面板打开或窗口收窄时各区域也会按同一边界平滑收缩。
+- **中断续跑保留原 Plan（1.211.0-rc4）** —— 额度耗尽、请求超时、用户停止或 provider 空响应不会再把已完成但尚待 Goal 验收的 Plan 清空；切换模型后继续时复用原步骤与进度，并保留原执行合同对剩余验证工具的授权。只有成功、未截断、闭合且语义有效的当前轮 `goal-check` 才能改写 checklist 并推进 Goal 生命周期；失败清理不会采纳已流出的半截验收，全部验收完成后也不会继续放开写工具。
+- **本地文件修改批量审核（1.211.0-rc3）** —— 同一模型回复中连续且目标路径互不重叠的 `create_file`、`edit_file` 与 `apply_patch` 会先完整收集，再以一组内联补丁供用户展开检查并“全部应用/全部拒绝”，不再生成一个文件就暂停一次。收集阶段暂不开放决策按钮，封口后一次审核；批量应用会预检全部目标和 hunk、写前复核文件基线，并在后续写入失败时回滚此前文件。停止等待会原子拒绝整批并同步 UI 与模型历史；移动端快照携带批次 ID、数量及收集态，手机决定同样按整批执行并回传真实失败。同路径或顺序依赖修改会拆批，符号链接/硬链接别名会在真实目标校验时整组拒绝，外部命令、危险操作、升权、终端、MCP 与 Computer Use 保持各自原有审批边界。
+- **多命令审批即时回执（1.211.0-rc2）** —— 同一轮预亮多条命令时，用户可以先批准尚未轮到执行的卡片；暂存决定会立即发布到界面并将按钮替换为“已提交决定”，不再像点击失效。敏感参数检测改为凭据词边界匹配，`tokenhub`、`tokenhub-redis` 等普通业务标识不会再因包含 `token` 子串而被错误升级为高风险确认；真实的 `--token`、secret/credential 路径及密钥目录仍保持强制确认。
+- **Computer Use 全局控制会话（1.211.0-rc1）** —— WillDeep 的原生 macOS Computer Use 已升级为窗口截图与 Accessibility 双通道控制：每个动作绑定 runtime、turn、目标进程、目标窗口、独占 lease 和 fresh snapshot，主窗口状态卡与跨 App 悬浮条提供暂停、用户接管、恢复和停止。真实键鼠输入会立即让权并废弃在途结果，接管期间禁止本机截图；登录、验证码、凭据与支付由用户私下完成。Host 与 Helper 双层拒绝控制 WillDeep 自身和终端应用。只读观察不会自动取得控制权；用户批准首个普通写动作后，普通非敏感输入、导航键、滚动、聚焦、悬停及带 fresh Accessibility ref 的 `none/navigation` 点击才可在当前 runtime、turn 与目标强绑定的 controlling lease 内连续执行。无法证明语义目标的坐标点击、坐标右键和当前仅支持坐标的拖拽始终逐动作确认；严格模式同样逐次询问，lease 不进入会话级或持久授权。高影响动作继续逐次确认，剪贴板操作永久拒绝。敏感截图遮罩独立完整扫描当前 AXWindow 子树，任何读取异常、结构畸形、超时或超预算都会失败关闭为 `screenshot = null`，不会保存不确定的像素。动作后的截图会以 OpenAI Chat、OpenAI Responses 与 Gemini 各自支持的多模态工具结果格式回送视觉模型；provider 上下文只携带最近 4 组工具结果中的截图，完整附件继续保留在本机会话记录。
+- **截图结果可靠显示（1.210.0-rc19）** —— 工具结果经过统一敏感信息脱敏时会完整保留图片附件；`capture_screenshot`、浏览器截图及其他产图工具不再出现“提示已附图但聊天记录没有图片”的数据折损。
+- **委托终端命令被 pty 截断修复（1.210.0-rc18）** —— 分派给 Claude Code / Codex 等外部 CLI 的任务重新通过私有 runner 脚本执行，可见终端只接收一行 `/bin/sh <runner>` 调用；超长中文提示词不再因交互式 shell 回显撑爆 tty 输入队列而被丢字节，也不会让终端停在续行提示符下静默空等。真实命令仍会在执行前回显到终端供用户审阅。
+- **Git 根目录检测内存失控修复（1.210.0-rc17）** —— 无 Git 工作区的仓库根目录探测会在文件系统根目录稳定终止；兼容 Foundation 将 `/` 的父路径暂时表示为 `/..` 的行为，避免路径字符串无限增长、主线程卡死并耗尽内存。
+
+- **Git 感知的智能审核（1.210.0-rc16）** —— Agent 会话默认使用“智能审核”：只读操作自动执行，存在已提交 Git `HEAD` 时自动执行受控工作区写入，外部与联网操作继续经过静态规则或 AI 安全判断；无 Git、仅初始化但尚未提交、已有未保存或脏文件时，写入会要求用户确认。“每次询问”已更名为“严格模式”；用户主动选择“工作区访问”后可在无 Git 工作区自动写入，但外部与联网操作仍需确认。
+
+- **Agent-only 技能包激活闭环（1.210.0-rc14）** —— 模型通过 `activate_expert` 激活 Web Programming、Browser Ops 或短剧技能包时，runtime 查找会覆盖活跃编辑器、默认 Agent 窗口的 headless AppState，以及关闭最后一个编辑器后仍被保留的会话；用户无需先打开编辑器或工作区即可完成激活。
+
+- **桌面宠物自适应动画帧率（1.210.0-rc13）** —— WillDeep 主窗口处于前台时，桌面宠物以 15 FPS 低功耗刷新；App 退到后台、宠物成为主要可见界面时自动提升到 24 FPS。前后台通知直接驱动同一个活动状态，动画调度和后台消息卡同步切换。
+
+- **提示词快照与终端契约同步（1.210.0-rc12）** —— 终端发送回执与自动回读契约变更后，同步升级稳定提示词契约版本并重录 standard、compact、extended 三档字节级哈希，确保发布前全量测试既能拦住意外漂移，也不会把有意更新误判为回归。
+
+- **可见终端命令自动回读（1.210.0-rc11）** —— `terminal_send_command` 将发送确认与执行输出明确分开，并在普通命令发送后自动回读同一标签页的短时快照；慢命令或交互命令尚未出结果时，Agent 必须继续调用 `terminal_snapshot`，不能把首轮未见输出误报为终端不稳定。自动回读失败不会触发命令重发。
+
+- **本轮报告完整工具审计（1.210.0-rc10）** —— Agent 本轮报告保留并可复制全部工具调用，不再在数据层丢弃第 9 条之后的明细；界面默认展示前 8 条，并按实际数量提供展开其余调用与收起操作。审批指标明确标注为“自动批准 / 用户批准”，与工具调用总数分开表达。
+
+- **终端与本地 Agent 共享环境（1.210.0-rc9）** —— 设置 → 终端中的 `KEY=value` 配置由可见编辑器终端、本地前台 `run_command` 与后台任务统一解析和注入；多行配置按顺序生效，重复 `PATH=` 可通过 `$PATH` 逐段累加，同时支持 `$VAR` 与 `${VAR}` 展开。SSH 与远程 daemon 继续维护自己的运行环境，不继承本机终端配置。
+
+- **Codex 风格聊天划词浮层（1.210.0-rc8）** —— 聊天历史中选中文字后会就近显示「添加到任务」轻量胶囊；浮层使用稳定的实底、发丝描边、8pt 圆角和柔和阴影，并提供悬停与深色模式状态。选区内容与原有添加到当前任务的行为保持不变。
+
+- **截屏免确认、持久展示与 Helper 权限隔离（1.210.0-rc6）** —— Mac 显示器、Chrome 标签页、Embedded Browser 页面及 Computer Use 只读界面快照统一按只读工具直接执行，不再显示 WillDeep 逐次确认卡；外部视觉模型分析仍独立审批。Mac 全屏或指定显示器截取由固定 Bundle ID、独立签名的 Computer Use Helper 完成；首次请求 macOS“屏幕与系统音频录制”权限前，主进程会立即持久化当前会话并同步排空写队列，授权后只重启 Helper 并重试一次，不中断主 App 与当前对话。Android adb 与 iOS Simulator simctl 截屏保持独立，不经过 macOS 屏幕录制权限。所有平台截图归档到 `~/.willdeep/captures/<截图ID>/`，工具图片会自动挂到本轮最终助手消息并在聊天中显示，删除会话时清理对应目录。正式发布会拒绝 Bundle ID 或签名团队发生漂移的 Helper。
+
+- **WillDeep 原生内置技能契约（1.210.0-rc3）** —— 39 个 `BundledSkills` 已统一为 WillDeep 语境，技能正文与中英展示描述不再引用外部产品名称、旧目录、旧 localhost API 或不存在的 CLI；图片、截图、定时任务、记忆、浏览器、Computer Use、会话、MCP 与文件流程全部对齐当前运行时工具。音乐生成、Discord、Telegram 等依赖外部服务的能力会先发现已配置 MCP，缺失时明确提示能力边界。仓库新增 Ruby 审计器与 Swift 回归测试，持续校验 frontmatter、禁用词、旧工具名和关键工具契约。
+
+- **智能审批无沙箱重跑（1.210.0-rc2）** —— 本地 `run_command` 已通过智能审批、但被 macOS seatbelt 拒绝时，会以完全相同的命令自动进行一次无沙箱重跑，不再额外弹出人工确认；自动重跑会保留原审批来源，并在工具记录和沙箱审计中明确标记为智能审批授权。“每次询问”仍显示确认卡，“工作区访问”因无沙箱会越出其授权边界，也继续要求确认。
+
+- **调度与圆桌会话分区（1.210.0-rc1）** —— 调度台 Goal 支持右键删除：尚未收到任何 Goal 指令的空 Goal 直接删除，已收到指令的 Goal 必须经用户确认，确认后先停止父会话及所有已启动 Task，再清理 Goal 与专属会话。会话新增持久化展示域，调度台与专家圆桌产生的父/子会话不再混入普通工作区列表；旧数据会依据 Goal 模式和圆桌报告保守推断归属，仍可在各自专属入口查看。
+
+- **显式模型与系统钥匙串稳定性（1.209.0-rc8）** —— 模型胶囊直接读取当前会话运行时，不再因菜单快照滞后把已选 `glm-5.2` 错显为“省心托管”；显式模型会随会话持久化并在重载后继续驱动真实请求。Provider/API Key、远程 Runtime token、Composer Secret、MCP/Skill 凭据与 Mobile Gateway token 全部迁入绑定应用签名访问组的 macOS Data Protection Keychain，覆盖 `com.willdeep.agent`、`com.willdeep.credentials`、`com.willdeep.mobile-gateway` 及 Debug 变体，并跟随系统登录/Touch ID 解锁；旧版凭据首次成功读取后自动迁移并共享进程缓存，避免工具连续调用时反复出现密码型旧钥匙串授权框。
+
+- **Agent 主循环职责拆分（1.209.0-rc7）** —— 子 Agent 工具执行与工具消息持久化辅助逻辑已从流式 Agent 主循环提取到独立文件，主循环文件低于仓库 3000 行硬限制，同时保留原有 `AppState` 扩展调用契约和运行行为。
+
+- **活跃任务退出保护（1.209.0-rc6）** —— 用户通过菜单、⌘Q 或 Dock 正常退出 WillDeep 时，应用会先汇总所有窗口与后台会话中的模型回复、等待执行、上下文压缩、工作流、专家咨询/圆桌、Goal 调度、后台命令、子 Agent 和媒体任务；只要仍有活跃工作，就显示中英双语确认框，默认保留任务，只有用户明确选择“仍要退出”才继续落盘并终止。系统强制结束、崩溃、断电与 `SIGKILL` 无法由 AppKit 拦截，继续依赖既有会话恢复能力。
+
+- **Goal 固定逻辑项目边界（1.209.0-rc5）** —— Goal 不再只是持有可替换路径，而是持久化一个固定逻辑项目；创建时必须选择或继承工作区，旧的无工作区记录保持“未绑定”直至人工绑定一次。顶部明确展示“项目名 · 主项目路径”，本机 checkout 用 Git common directory 验证同仓库，SSH 必须显式填写该项目远端目录；Task 可以选择同项目的不同 worktree/SSH checkout，但失效或跨项目映射会在启动前被拒绝。
+
+- **新聊天空态统计缓存（1.209.0-rc4）** —— 空态统计仪表盘将 overview、模型与能力用量、热力图及任务指标统一构建为一次聚合结果，并由 AppState 按快照修订号与本地日期记忆化；用量快照改为单点有序插入，避免新建聊天时在主线程反复遍历、排序全部历史会话。
+
+- **本地交互 Shell 轻量启动（1.209.0-rc2）** —— WillDeep 创建的编辑器终端和 Agent Terminal 本地 Shell 会注入 `CLAUDECODE=1`，可复用用户 `.zshrc` 中面向 Claude Code 的轻量 prompt 分支，跳过 powerlevel10k/gitstatus 等高成本初始化；Claude/Codex 委派 Shell、SSH 与后台命令不注入该变量，避免执行器误判嵌套会话。终端高级环境设置仍可显式覆盖或清空该变量。
+
+- **Goal 工作区强绑定（1.209.0-rc3）** —— Goal 现在必须明确属于一个本机或 SSH 工作区后才能进入 Goal 模式、发指令或启动任务；旧 Goal 以“未绑定工作区”保守迁移并提供补绑入口。执行环境不再冒充工作区，调度器只允许选择已显式映射的同项目 checkout，任务运行时严格使用映射路径，不再回落到机器默认目录。
+
+- **Goal-first 调度台（1.209.0-rc1）** —— 左侧一级入口展示 Goal 与本机/SSH 执行环境，中间把 Goal 清单投影为可持久化的任务依赖图，右侧提供单任务执行器、环境、分支、工作区与验收信息；Goal 运行中普通指令在当前步骤结束后的安全点生效，暂停、恢复、追加任务可即时执行，需要抢占时显式确认。执行器默认由 WillDeep 按任务能力自动选择，也允许在 Goal 或任务层强制指定；SSH Runtime 会探测 Claude Code、Codex、Cursor Agent 与 Cline CLI。
+
+- **侧栏会话标题利用空闲操作区（1.208.0-rc5）** —— 普通未悬停会话不再长期为隐藏的固定、归档按钮预留 40pt，标题可以使用完整的剩余行宽；已固定会话仅保留紧凑图标宽度，鼠标悬停时再恢复完整操作区，在不改变侧栏宽度和字号的情况下展示更多标题文字。
+
+- **ZMODEM 下载完成态与协议对齐（1.208.0-rc4）** —— Agent 通过可见终端执行带本地路径的 `rz/sz` 传输时，`terminal_send_command` 会等待匹配握手、本地 lrzsz 进程退出以及最终协议输出排空后才返回成功；下载初期生成但仍在增长的本地文件不再被当作完成。`terminal_snapshot` 同时输出结构化 ZMODEM 活跃状态，明确禁止把传输中的文件作为最终数据分析；握手超时、方向不匹配、取消、空闲超时和非零退出均返回失败。
+
+- **活跃终端会话可控停止（1.208.0-rc3）** —— 运行状态胶囊提供 `Ctrl-C`、telnet 转义键 `Ctrl-]`、`Ctrl-D` 和停止会话入口；停止或关闭标签页时对本地 PTY 的整棵进程树执行 TERM、关闭 PTY、超时 KILL，并用进程启动身份防止 PID 复用误杀。
+
+- **密码占位符换行高亮修复（1.208.0-rc2）** —— Agent 输入框中的 `${secret:...}` 受 Keychain 保护占位符如果在行尾换行，胶囊高亮会按 TextKit 的每个真实行片段分别绘制，不再用跨行外接矩形覆盖前面的普通提示词；单行占位符仍保持一个紧凑胶囊。
+
+- **本地 Agent 搜索优先使用 ripgrep（1.208.0-rc1）** —— `search_files` 与 `grep_files` 在本机可发现 `rg` 时走 JSON 流式快路径，保留大小写、正则、include glob、结果上限、工作区相对路径和生成目录排除语义；`rg` 缺失、启动失败或无法处理兼容正则时自动回退原 Swift 扫描器，不影响远端 workspace。
+
+- **跨工作树冷启动测试减负（1.208.0-rc1）** —— 项目构建守卫改为按 Git common dir 派生仓库级共享队列和锁，同一仓库的主工作树、Claude/Codex worktree 不再同时争抢 Xcode；缓存 manifest 和 DerivedData 仍按工作树隔离，避免错用产物。新增不包含 `XeditUITests` 的 `XeditUnitTests` Scheme 与 `scripts/run_tests_fast.rb`：稳定复用 DerivedData、SwiftPM checkout/package cache，跳过包更新、关闭本地 coverage、输出 build timing；显式 `--without-building` 只有在源码、未跟踪文件、工程、依赖锁和 Scheme 指纹完全一致时才允许运行。
 
 - **打开大项目主线程假死修复（1.205.0-rc2）** —— Quick Open 文件列表的缓存回填与扫盘后 URL 重建全部离开 MainActor；不再用会探盘的 `appendingPathComponent` 拼相对路径，降低老 Intel Mac 上打开巨型工作区时的 Beachball 与内存尖峰。
 
@@ -174,7 +310,7 @@ WillDeep is configured for non-App-Store distribution without App Sandbox so it 
 
 - **Editor 字体菜单与中文即时渲染（1.192.0-rc5）** —— Editor 设置的字体菜单会从系统已安装字体中补充等宽/编程字体，不再只列固定 4 项；正文编辑时会立即给 CJK 字符应用中文 fallback 字体，plain text 模式和语法高亮延迟期间也能显示汉字。
 
-- **执行器选择与委派边界（1.192.0-rc4）** —— Composer 执行器支持 WillDeep、Claude Code、Codex、Cursor Agent 与 Cline。选择 WillDeep 时，普通模式和计划模式不向模型暴露外部 CLI 委派工具；Goal 模式只把它们作为原生工具链无效后的兜底。选择外部执行器时，本轮任务直接路由到对应 CLI，并只暴露该执行器对应的委派工具。
+- **执行器选择与委派边界（1.192.0-rc4）** —— Composer 执行器支持 WillDeep、Claude Code、Codex、Cursor Agent 与 Cline。选择 WillDeep 时，普通模式不向模型暴露外部 CLI 委派工具；Goal 模式只把它们作为原生工具链无效后的兜底。选择外部执行器时，本轮任务直接路由到对应 CLI，并只暴露该执行器对应的委派工具。
 
 - **委派状态目标工具可见（1.192.0-rc3）** —— 顶部活动条不再把所有委派统一写成“委派中”，而是按实际工具显示“委派给子代理 / Claude Code / Codex / Cursor Agent / Cline”。内置 `spawn_agent` 仍显示真实轮次与工具次数，外部 CLI 委派只展示目标工具，不伪造 `n/m` 进度。
 
@@ -241,12 +377,12 @@ WillDeep is configured for non-App-Store distribution without App Sandbox so it 
 - **Sparkle 签名自动更新（1.180.0-rc1）** —— WillDeep 启动后由 Sparkle 读取 some.im 动态 appcast，自动下载并校验 Ed25519 签名；用户确认安装时，独立 helper 会等待当前 App 退出，再原子替换 `.app`、失败回滚并重新启动新版，因此不再要求用户打开 DMG 手动覆盖。发布脚本在 Developer ID 签名和 Apple 公证完成后生成 Sparkle 签名，并把递增构建号、文件大小、SHA-256 和签名元数据发布到 muchtoken。
 - **会话内模型切换提示（1.179.0-rc10）** —— 切换具体模型、跨供应商选模型或切入省心托管后，聊天流会以居中的立方体图标和两侧分隔线记录“模型已从 A 更改为 B”。提示跟随会话持久化，便于回看当时的选择，却不会被发给模型作为上下文；再次选择当前模型也不会刷出重复记录。
 - **柔和圆角授权通知与多场景确认（1.179.0-rc9）** —— 命令审批、强确认、侧边栏终端命令、终端控制键、网页抓取及其他工具共用一套圆角通知组件，按场景切换标题、说明、元信息和按钮语义。界面不再用红色危险框制造压迫感，按钮提升到 42pt 命中高度，“以后允许”降为次要文字操作；全部 7 套界面皮肤沿用各自面板、控件、描边和强调色。
-- **工作区切换轻量化与知识目录按模式索引（1.179.0-rc8）** —— 重选当前工作区不再重复启动 Quick Open、编辑器 Git 与 Agent Git 扫描；首次 Git 快照只汇总未跟踪目录，不再用 `-uall` 递归展开海量生成文件，同路径刷新可合并、切换目录会取消旧任务。知识文件夹在普通/计划模式先保持待索引并由用户手动启动，目标模式自动后台索引。`$` 技能选择框在候选充足时至少完整显示三行。
+- **工作区切换轻量化与知识目录按模式索引（1.179.0-rc8）** —— 重选当前工作区不再重复启动 Quick Open、编辑器 Git 与 Agent Git 扫描；首次 Git 快照只汇总未跟踪目录，不再用 `-uall` 递归展开海量生成文件，同路径刷新可合并、切换目录会取消旧任务。知识文件夹在普通模式先保持待索引并由用户手动启动，Goal 模式自动后台索引。`$` 技能选择框在候选充足时至少完整显示三行。
 - **模型可先于工作目录选择（1.179.0-rc7）** —— 用户尚未选择工作目录或创建会话时，也可以先选省心托管或具体模型；选择动作会建立一个未绑定工作区的空会话，之后选择目录时原地绑定，保留刚才的模型选择。省心托管状态卡整块均可点击，不必精确点击右上角的小按钮。
 - **旧品牌会话与用量自动恢复（1.179.0-rc6）** —— 启动和首次打开统计时会校验并幂等导入 `Application Support/VeilWriter/agent-sessions` 中遗留的会话 JSON 到当前 WillDeep 会话存储；当前同 ID 会话始终优先，旧文件保留不删，损坏文件单独跳过。导入后的历史消息会继续进入现有 token、活跃天数和连续使用统计，避免品牌改名后旧记录被留在旧目录而显示清零。
 - **Agent 壁纸设置归位（1.179.0-rc5）** —— Agent 全局壁纸从 AI Agents 配置页迁入“编辑器 → 格式”，与工作区壁纸图库和图片布局参数相邻；重复图库被合并，Agent 专属区域只保留启用开关、界面遮罩透明度及毛玻璃参数，外观设置与模型、记忆、规则等能力配置不再混放。
 - **macOS Release 签名与 DMG 链路修复（1.179.0-rc4）** —— Ruby 发布脚本在导出 Developer ID App 后，会按由内到外的顺序重新签名 `willdeep-agent`、Computer Use Helper 可执行文件及 Helper App，强制启用时间戳与 Hardened Runtime，再保留主 App 的标识、entitlement 和签名要求重新封装；`create-dmg` 与 `hdiutil` 路径也分别负责自己的 Applications 链接，避免严格签名通过后仍在公证或 DMG 制作阶段断链。
-- **计划模式公开网页调研放行（1.179.0-rc3）** —— 未批准计划前，经过公网 URL 校验的 `web_fetch` GET 调研请求不再被直接拒绝，而是按静态安全策略自动执行；localhost、私网、link-local、危险命令和真实写操作仍保留原计划门禁，避免“为了写计划先查资料，却先吃一张拒绝卡”的挫败体验。
+- **Goal 规划公开网页调研放行（1.179.0-rc3）** —— Goal 尚未形成有效执行计划时，经过公网 URL 校验的 `web_fetch` GET 调研请求可按受控策略执行；localhost、私网、link-local、危险命令和真实写操作仍受 Goal 规划门禁约束。
 - **悬浮语音连续波形与明亮配色（1.179.0-rc1）** —— 悬浮转写条在原有柱状波形之外新增跟随实时音量的正弦波、余弦波和心电图动态曲线；颜色库新增 8 组天空蓝、薄荷绿、薰衣草紫、蜜桃橙、玫瑰粉、柠檬黄、水色青与暖沙金浅色背景，并为每组提供高对比波形渐变和描边。
 - **AI Agent 全局壁纸与认证状态统一（1.178.0-rc1）** —— 设置 → 编辑器 → 格式可将 8 张内置 4K 壁纸或自定义图片应用到整个 Agent 工作区，支持填充、适应、拉伸、居中、平铺、缩放、图片与内容表面透明度，以及可选材质和强度的毛玻璃；some.im 设置页与左下账号区共用同一认证快照，不再因残留账号缓存显示互相矛盾的登录状态。
 - **Agent 长任务工具轮次扩容（1.177.0-rc3）** —— 单轮任务的工具调用安全上限从 64 轮提高到 256 轮，支持更长的排查、实现和验证链路；到达上限后仍会暂停并等待用户继续，保留意外循环保护。
@@ -1323,7 +1459,7 @@ WillDeep 是 SwiftUI + AppKit 桥接的 macOS 应用，单进程多窗口。代�
 - **bugfix**（含文档、release 流程改进）：只递增 `rcN`。
 - **feature 新增**：可提升 `PATCH` / `MINOR`，rc 归位 `rc1`。
 - 前后端版本号必须一致——这里"后端"指 `AgentClient` 出站请求的 `X-App-Version` header（值从 `Bundle.main.CFBundleShortVersionString` 取，等价 pbxproj `MARKETING_VERSION`）。
-- 版本同步位点：`Xedit.xcodeproj/project.pbxproj` 里 6 个 `MARKETING_VERSION` 块（debug / release × 三个 target）、`willdeep-agent/internal/agent/version.go`、`Help/WillDeep.help/Contents/Info.plist`、`ComputerUseHelper/Info.plist`、README version badge、本文件顶部 `Current version`、`docs/MOBILE_GATEWAY_REQUIREMENTS.md` 与 `docs/AGENT_HARNESS_IMPROVEMENT_PRIORITIES.md` 一并同步。
+- 版本同步位点：`Xedit.xcodeproj/project.pbxproj` 里 6 个 `MARKETING_VERSION` / `CURRENT_PROJECT_VERSION` 块（debug / release × 三个 target）、`willdeep-agent/internal/agent/version.go`、`Help/WillDeep.help/Contents/Info.plist`、`ComputerUseHelper/Info.plist`、README version badge、`chrome-extension/willdeep-browser/manifest.json` 及其 README、本文件顶部 `Current version`、`docs/MOBILE_GATEWAY_REQUIREMENTS.md` 与 `docs/AGENT_HARNESS_IMPROVEMENT_PRIORITIES.md` 一并同步。
 - 每次版本变更必须同步在 `CHANGELOG.md` 顶部写一节、更新本文件头部的 `Current version` 字段。
 - git commit 后建议打 `v{版本号}` tag 并推送 origin（`scripts/release.sh` 公证完成后会交互确认是否打 tag/push）。
 
@@ -1335,7 +1471,7 @@ CLAUDE.md §2 要求 React 部分必须走 i18n，但 WillDeep 是 SwiftUI macOS
 
 ## 测试与 CI
 
-- **本地测试**：详见 [TESTING.md](./TESTING.md)。`XeditTests/` 12 个 Swift Testing（`@Suite` / `@Test`）风格的单测，覆盖 Agent 历史渲染、模型选路、目标 checklist 解析、MCP 服务发现、Memory 存储、Plan 进度、Provider library、Session 持久化、Skill 目录、Markdown 列表嵌套与表格解析。Xcode 跑：`Cmd+U`；命令行跑：`xcodebuild test -project Xedit.xcodeproj -scheme Xedit -destination 'platform=macOS'`。
+- **本地测试**：详见 [TESTING.md](./TESTING.md)。开发阶段使用 `ruby scripts/run_tests_fast.rb -only-testing:XeditTests/<Suite>`；同一源码指纹下可显式追加 `--without-building` 快速复跑。完整本地门禁使用 `scripts/run_tests.sh`。两个入口都使用不包含 UI Tests 的 `XeditUnitTests` Scheme，并通过仓库级构建守卫协调所有 Git worktree；Xcode 图形界面仍可使用 `Cmd+U`。
 - **已知 flaky**：CHANGELOG rc41 提到的 7-8 个测试由 AppState init 中的磁盘 IO 在测试间相互污染引起，已 spawn 独立任务追踪，不在本轮范围。
 - **CI**：`.github/workflows/test.yml` 已落地基础 `Tests` workflow，PR / push / 手动触发会运行复杂度守门、版本一致性检查、`willdeep-agent` Go 测试和 `XeditTests`，并上传 Xcode 测试报告、复杂度报告与版本一致性 Markdown/JSON artifact。仍待补齐高风险 E2E smoke 和更细的 Agent turn report。
 
@@ -1383,7 +1519,7 @@ CLAUDE.md §2 要求 React 部分必须走 i18n，但 WillDeep 是 SwiftUI macOS
 - Fetch Agent model IDs from provider `/models` endpoints and assign returned models to separate Flash and Pro slots in Settings. Agent routing can run cost-first through Auto/Flash or force Pro for stronger turns. API keys remain stored in Keychain.
 - Review Agent-generated unified diff proposals in the Agent panel, then apply or reject them explicitly. Accepted patches are limited to existing files inside the current workspace and update open tabs plus Git status.
 - Let the Agent call built-in workspace tools (`search_files`, `grep_files`, `read_file`, `list_directory`, `git_status`, `run_command`, `ask_user`) via OpenAI function-calling. `search_files` does literal text matching while `grep_files` supports full regular expressions plus an optional filename `include` glob (e.g. `*.swift`). Read-only tools run automatically; `run_command` requires per-call Allow/Deny approval, or an explicit Always Allow rule for matching command families such as `git push`; destructive commands additionally require typing `confirm` before running. `ask_user` lets the agent pause mid-turn and ask the user a clarifying question; when the answer is one of a small known set the model can pass `options` so the card renders clickable choice buttons (or checkboxes for `multi_select`), with a free-form text input still available as an escape hatch.
-- Let the Agent discover built-in, user-created, and plugin Codex skills with `list_skills` and load a selected `SKILL.md` with `read_skill`, so specialized workflows can be pulled into context only when needed. Built-in skills are bundled from Alma under `BundledSkills`; user skills live in `~/.codex/skills`; plugin skills continue to come from `~/.codex/plugins/cache`.
+- Let the Agent discover WillDeep built-in, user-created, and plugin skills with `list_skills` and load a selected `SKILL.md` with `read_skill`, so specialized workflows can be pulled into context only when needed. Built-in skills live under `BundledSkills`; user skills use `~/.willdeep/skills` with legacy `~/.codex/skills` compatibility; plugin skills continue to come from `~/.codex/plugins/cache`.
 - Configure SSH remote runtimes from Settings → Runtimes, bind Agent sessions to a remote workspace from the composer workspace picker, and run Agent file reads, search/grep, Git status, foreground/background shell commands, builds, tests, and delegated local-agent CLI calls on that remote host while keeping chat UI, approvals, and session persistence local.
 - Let the Agent inspect configured MCP servers with `list_mcp_servers`, list one server's MCP tools with `list_mcp_tools`, and call a selected MCP tool with `call_mcp_tool`; server discovery merges App user MCP servers, Cursor `~/.cursor/mcp.json`, and Codex `~/.codex/config.toml`. Both stdio and Cursor-style `streamable-http` MCP transports are supported, with sensitive headers and environment values redacted before display; MCP tool calls still require approval.
 - Automatically run conservatively parsed read-only `run_command` chains, such as workspace-relative or workspace-absolute `cd` prefixes followed by `git diff`, `ls`, `cat`, `rg`, or `grep`, plus workspace-safe `git -C ... diff`; commands that write, redirect, pipe, substitute, or move outside the workspace still require approval or confirmation. When no workspace is bound, `run_command` executes from the user's home directory. Shell commands inherit a supplemental macOS PATH with common Homebrew and local binary directories so tools such as `rg` remain available when WillDeep is launched from the GUI.

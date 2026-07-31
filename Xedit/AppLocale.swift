@@ -9,7 +9,7 @@
 //  这里把「用户偏好语言」收成一个全局单例,供两个上游消费:
 //   1) AgentContextBuilder 往 system prompt 末尾追加一句「Respond in
 //      <language> unless the user asks otherwise」—— 让模型输出文字、
-//      它调 add_memory / create_user_skill 时塞进去的 content,以及
+//      它调 add_memory / create_user_skill / create_user_skills 时塞进去的 content,以及
 //      ask_user 的提问,自然落到用户的母语上。
 //   2) 任何未来需要按用户语言走的 UI / 提示文案,都从这里读。
 //
@@ -53,7 +53,7 @@ enum AppLocale {
     /// 多语言变体。
     static var systemPromptDirective: String {
         """
-        User's preferred language: \(displayName) (\(languageTag)). Reply to the user, write memory entries created via add_memory, generate skill content via create_user_skill, draft ask_user questions, and produce any other user-facing artifact in this language unless the user explicitly asks for another. If the user's global or project rules specify a reply language, those rules win over this locale default.
+        User's preferred language: \(displayName) (\(languageTag)). Reply to the user, write memory entries created via add_memory, generate skill content via create_user_skill or create_user_skills, draft ask_user questions, and produce any other user-facing artifact in this language unless the user explicitly asks for another. If the user's global or project rules specify a reply language, those rules win over this locale default.
         """
     }
 }

@@ -78,7 +78,7 @@ enum AgentChatToolSummaryFormatter {
         let preferredKeys: [String]
         switch call.toolName {
         case "run_command":
-            preferredKeys = ["command", "cwd", "timeout"]
+            preferredKeys = ["label", "command", "cwd", "timeout_seconds", "run_in_background"]
         case "terminal_send_command":
             preferredKeys = ["command"]
         case "terminal_send_control":
@@ -101,7 +101,7 @@ enum AgentChatToolSummaryFormatter {
             preferredKeys = ["server", "tool", "name"]
         case "spawn_agent":
             preferredKeys = ["label", "prompt"]
-        case "claude_code", "codex_cli", "cursor_agent":
+        case "claude_code", "codex_cli", "hermes_cli", "cursor_agent", "cline_cli":
             preferredKeys = ["prompt", "permission_mode"]
         case "create_file":
             preferredKeys = ["path", "title"]

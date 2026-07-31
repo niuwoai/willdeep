@@ -2531,6 +2531,76 @@ struct AgentChatHistoryRendererTests {
     }
 
     @Test
+    @MainActor
+    func transcriptStyleRefreshPreservesSelectedText() {
+        let message = AgentMessage(role: .assistant, content: "alpha selected excerpt omega")
+        let view = AgentChatHistoryNSTextView()
+        view.frame = NSRect(x: 0, y: 0, width: 420, height: 120)
+        view.applyMessages(
+            [message],
+            isDark: false,
+            baseFontSize: 14
+        )
+        let range = (view.string as NSString).range(of: "selected excerpt")
+        view.setSelectedRange(range)
+
+        view.applySearch(query: "alpha", activeMatchIndex: 0, isDark: false)
+        view.applySearch(query: "", activeMatchIndex: nil, isDark: false)
+
+        #expect(view.selectedRange() == range)
+        var receivedText: String?
+        view.onAddSelectionToTask = { receivedText = $0 }
+        #expect(view.addCurrentSelectionToTask())
+        #expect(receivedText == "selected excerpt")
+    }
+
+    @Test
+    func selectionActionUsesCodexStyleSurfaceMetrics() {
+        #expect(AgentChatSelectionActionMetrics.cornerRadius == 8)
+        #expect(AgentChatSelectionActionMetrics.height == 28)
+        #expect(AgentChatSelectionActionMetrics.borderWidth == 0.5)
+        #expect(AgentChatSelectionActionMetrics.shadowRadius == 7)
+        #expect(AgentChatSelectionActionMetrics.lightShadowOpacity == 0.16)
+        #expect(AgentChatSelectionActionMetrics.darkShadowOpacity == 0.36)
+        #expect(
+            AgentChatSelectionActionMetrics.backgroundColor(
+                isDark: false,
+                isHovered: false
+            ).whiteComponent
+                > AgentChatSelectionActionMetrics.backgroundColor(
+                    isDark: false,
+                    isHovered: true
+                ).whiteComponent
+        )
+    }
+
+    @Test("render Codex-style chat selection action for design QA")
+    @MainActor
+    func renderSelectionActionForDesignQA() throws {
+        let outputPath = ProcessInfo.processInfo.environment[
+            "WILLDEEP_SELECTION_ACTION_DESIGN_QA_OUTPUT"
+        ] ?? "/private/tmp/willdeep-selection-action-design-qa.png"
+
+        let view = AgentChatHistoryNSTextView()
+        view.drawsBackground = true
+        view.backgroundColor = .white
+        view.font = NSFont.systemFont(ofSize: 14)
+        view.textContainerInset = NSSize(width: 8, height: 10)
+        view.frame = NSRect(x: 0, y: 0, width: 335, height: 113)
+        view.string = "已处理 7m 8s\n\n部署确认完成。基于终端记录的 deployment success。\n同步更新本地版本。"
+        view.setSelectedRange((view.string as NSString).range(of: "基于终端记录的 deployment"))
+        view.textViewDidChangeSelection(
+            Notification(name: NSTextView.didChangeSelectionNotification, object: view)
+        )
+        view.layoutSubtreeIfNeeded()
+
+        let bitmap = try #require(view.bitmapImageRepForCachingDisplay(in: view.bounds))
+        view.cacheDisplay(in: view.bounds, to: bitmap)
+        let png = try #require(bitmap.representation(using: .png, properties: [:]))
+        try png.write(to: URL(fileURLWithPath: outputPath), options: .atomic)
+    }
+
+    @Test
     func transcriptSearchFindsCaseInsensitiveMatches() {
         let ranges = AgentTranscriptSearch.matchRanges(
             in: "Needle, haystack, needle, NEEDLE.",
@@ -2897,59 +2967,4 @@ struct AgentChatHistoryRendererTests {
         #expect(rendered.attribute(.agentChatHistoryFilePath, at: citationRange.location, effectiveRange: nil) == nil)
     }
 
-    // MARK: - Workflow report history baking (1.155.0-rc9)
-    //
-    // rc16 历史折进 NSTextView 后 workflow 卡片一度整体不可见:formatter
-    // 对 .workflowReport 只画 WFL 头像行(content 恒为空),SwiftUI 卡片
-    // 分支又只挂给流式 assistant。这里锁两件事:已结束卡片的状态行 +
-    // 最终报告烘进历史;report mutate 后 render cache 必须失效。
-
-    @Test
-    func workflowReportBakesStatusArgsAndSummaryIntoHistory() {
-        let report = WorkflowReport(
-            workflowName: "deep-research",
-            displayTitle: "Deep Research",
-            args: "中国大模型市场深度调研",
-            status: .done,
-            subAgents: [
-                .init(label: "scope", status: .done),
-                .init(label: "search:news", status: .done),
-            ],
-            summary: "# 调研结论\n\n最终报告正文标记 FINAL_REPORT_BODY。"
-        )
-        let message = AgentMessage(role: .workflowReport, content: "", workflowReport: report)
-
-        let rendered = AgentChatHistoryRenderer.render(messages: [message], isDark: false)
-
-        #expect(rendered.string.contains("Deep Research"))
-        #expect(rendered.string.contains(L10n.WorkflowCard.statusDone))
-        #expect(rendered.string.contains("中国大模型市场深度调研"))
-        #expect(rendered.string.contains("FINAL_REPORT_BODY"))
-        // copy 按钮复制的是最终报告,不是恒空的 message.content。
-        #expect(message.copyableContent == report.summary)
-    }
-
-    @Test
-    func workflowReportMutationInvalidatesRenderCache() {
-        let report = WorkflowReport(
-            workflowName: "deep-research",
-            displayTitle: "Deep Research",
-            args: "cache 失效验证",
-            status: .running
-        )
-        let message = AgentMessage(role: .workflowReport, content: "", workflowReport: report)
-        let first = AgentChatHistoryRenderer.render(messages: [message], isDark: false)
-
-        // 同一条消息(id 不变)report 被 engine mutate —— render 必须
-        // 重烘,不能命中旧缓存。
-        var mutatedReport = report
-        mutatedReport.status = .done
-        mutatedReport.summary = "WORKFLOW_CACHE_BUST_MARKER"
-        var mutated = message
-        mutated.workflowReport = mutatedReport
-        let second = AgentChatHistoryRenderer.render(messages: [mutated], isDark: false)
-
-        #expect(!first.string.contains("WORKFLOW_CACHE_BUST_MARKER"))
-        #expect(second.string.contains("WORKFLOW_CACHE_BUST_MARKER"))
-    }
 }

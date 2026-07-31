@@ -67,7 +67,7 @@ enum AgentToolRegistry {
         ),
         AgentToolDescriptor(
             name: "list_workspace_sessions",
-            description: "List WillDeep Agent sessions that belong to the CURRENT workspace group, including title, mode, activity time, running/queued state, and whether the title is locked. Read-only. Use this when the user asks what sessions exist in this workspace, or before deciding whether a new user input belongs in the current session or should be renamed.",
+            description: "List WillDeep Agent sessions that belong to the CURRENT workspace group, including title, mode, activity time, running/queued state, Goal summary/progress, and dispatch-console ownership. Read-only. Use this when the user asks what sessions or Goals exist in this workspace, or before deciding whether new work would duplicate an existing Goal.",
             risk: .read,
             parameters: [
                 AgentToolParameter(name: "include_archived", type: .boolean, description: "When true, include archived sessions in this workspace. Defaults to false.", required: false),
@@ -98,12 +98,13 @@ enum AgentToolRegistry {
         ),
         AgentToolDescriptor(
             name: "run_command",
-            description: "Run a shell command in the workspace root. This is the DEFAULT way to execute any shell command — including ones that reach other machines (scp / rsync / ssh remote-host), file copies, builds, installs, and tests. Only use terminal_send_command instead when the user explicitly asks for the command to be run in the visible side-panel terminal. Requires user approval. Refuses commands that escape the workspace. Pass `run_in_background: true` for long-running tasks (dev servers, watchers, big builds, test suites that take minutes) — the call returns immediately with a job handle and you receive a system notification when the job finishes; meanwhile inspect partial output with `get_job_output` or stop it with `kill_job`.",
+            description: "Run a shell command in the workspace root. This is the DEFAULT way to execute any shell command — including ones that reach other machines (scp / rsync / ssh remote-host), file copies, builds, installs, and tests. Only use terminal_send_command instead when the user explicitly asks for the command to be run in the visible side-panel terminal. Requires user approval. Commands stay in the workspace sandbox by default; when the user explicitly requests a path outside the workspace (including `~/...` or `$HOME/...`), keep that exact path and let this tool request escalated access to the real location — do not invent a sandbox path mapping or reroute to the visible terminal. Well-known test/build/dev-server commands are automatically moved to the background when `run_in_background` is omitted. Pass `run_in_background: true` for any other task expected to take at least ~30 seconds; the call returns immediately with a job handle and you receive a system notification when the job finishes. Continue independent, non-conflicting work while it runs.",
             risk: .write,
             parameters: [
                 AgentToolParameter(name: "command", type: .string, description: "Shell command line. Runs through /bin/sh -c.", required: true),
-                AgentToolParameter(name: "timeout_seconds", type: .integer, description: "Hard timeout in seconds. Foreground default 20s (max 120). Background default unlimited (max 21600 = 6h).", required: false),
-                AgentToolParameter(name: "run_in_background", type: .boolean, description: "When true, do not block on the command. Returns a job handle (job_xxxxxx); the host injects a system message when the job finishes. Use for tasks expected to take more than ~30 seconds. Defaults to false.", required: false)
+                AgentToolParameter(name: "timeout_seconds", type: .integer, description: "Hard timeout in seconds. Foreground default 60s (max 600). Background default unlimited (max 21600 = 6h).", required: false),
+                AgentToolParameter(name: "run_in_background", type: .boolean, description: "When true, do not block on the command. When false, force foreground execution. When omitted, recognized test/build/dev-server commands run in the background automatically; other commands remain foreground.", required: false),
+                AgentToolParameter(name: "label", type: .string, description: "Optional concise user-facing action phrase for the live chat row, such as `运行前端测试` or `编译 macOS Release`. Never include secrets.", required: false)
             ]
         ),
         AgentToolDescriptor(
@@ -153,7 +154,7 @@ enum AgentToolRegistry {
         ),
         AgentToolDescriptor(
             name: "terminal_send_command",
-            description: "Type one command line into the ACTIVE Agent Terminal side-panel tab (the one the user currently sees; or the exact terminal_tab_id) and press Enter, so the user sees it run live. Use this ONLY when the user EXPLICITLY asks for execution in the side-panel terminal. Before sending a machine-specific command, use terminal_snapshot to confirm whether the active tab is local or SSH and which host/user it shows; never send a local-intended command into an SSH tab. IMPORTANT: when continuing in the active visible tab you just inspected, OMIT terminal_tab_id so approval-time routing follows that live tab instead of retaining a stale UUID. Include terminal_tab_id only when deliberately targeting a different, non-active tab; for that case, refresh it with terminal_list_tabs immediately before sending. To operate a different tab, switching it first with terminal_select_tab is preferred because the user sees the target change. Avoid heredoc, here-string, `cat > file`, `echo > file`, or similar pasted multi-line file writes by default; prefer create_file/edit_file/apply_patch, run_command, or explicit transfer tools. WillDeep supports rz/sz ZMODEM with zmodem_upload_paths and zmodem_download_directory. For all ordinary shell work not explicitly requested in the visible terminal, use run_command. If no usable tab is open, WillDeep opens a local shell tab owned by this conversation. Requires user approval and does not read hidden/password input.",
+            description: "Type one command line into the ACTIVE Agent Terminal side-panel tab (the one the user currently sees; or the exact terminal_tab_id) and press Enter, so the user sees it run live. Use this ONLY when the user EXPLICITLY asks for execution in the side-panel terminal. Before sending a machine-specific command, use terminal_snapshot to confirm whether the active tab is local or SSH and which host/user it shows; never send a local-intended command into an SSH tab. IMPORTANT OUTPUT CONTRACT: dispatch confirmation only proves the command was sent and never contains its output. For ordinary commands WillDeep automatically appends a bounded follow-up screen snapshot; it may be partial for slow, long-running, or interactive commands. If the expected output or returned prompt is not visible, wait briefly and call terminal_snapshot again for the same tab before drawing conclusions. Never label the terminal unstable merely because output is absent from the dispatch confirmation or first bounded snapshot. IMPORTANT ROUTING: when continuing in the active visible tab you just inspected, OMIT terminal_tab_id so approval-time routing follows that live tab instead of retaining a stale UUID. Include terminal_tab_id only when deliberately targeting a different, non-active tab; for that case, refresh it with terminal_list_tabs immediately before sending. To operate a different tab, switching it first with terminal_select_tab is preferred because the user sees the target change. Avoid heredoc, here-string, `cat > file`, `echo > file`, or similar pasted multi-line file writes by default; prefer create_file/edit_file/apply_patch, run_command, or explicit transfer tools. WillDeep supports rz/sz ZMODEM with zmodem_upload_paths and zmodem_download_directory. When either ZMODEM path argument is present, this tool waits for the local lrzsz process and final protocol tail before returning success; a destination file merely appearing on disk is never completion. For all ordinary shell work not explicitly requested in the visible terminal, use run_command. If no usable tab is open, WillDeep opens a local shell tab owned by this conversation. Requires user approval and does not read hidden/password input.",
             risk: .write,
             parameters: [
                 AgentToolParameter(name: "command", type: .string, description: "Command line to send, without a trailing newline. WillDeep appends Enter after approval.", required: true),
@@ -164,10 +165,10 @@ enum AgentToolRegistry {
         ),
         AgentToolDescriptor(
             name: "terminal_send_control",
-            description: "Send a whitelisted control key to the ACTIVE Agent Terminal side-panel tab, or the exact terminal_tab_id when supplied. Requires user approval; use ctrl_c to interrupt a foreground command, enter to submit the current line, or escape to cancel terminal UI modes.",
+            description: "Send a whitelisted control key to the ACTIVE Agent Terminal side-panel tab, or the exact terminal_tab_id when supplied. Requires user approval; use ctrl_c to interrupt a foreground command, ctrl_d to send EOF, ctrl_right_bracket to open a telnet-style escape prompt, enter to submit the current line, or escape to cancel terminal UI modes.",
             risk: .write,
             parameters: [
-                AgentToolParameter(name: "control", type: .string, description: "One of: ctrl_c, enter, escape.", required: true),
+                AgentToolParameter(name: "control", type: .string, description: "One of: ctrl_c, ctrl_d, ctrl_right_bracket, enter, escape.", required: true),
                 AgentToolParameter(name: "terminal_tab_id", type: .string, description: "Optional exact terminal tab UUID. Omit to target the active side-panel tab.", required: false)
             ]
         ),
@@ -187,7 +188,7 @@ enum AgentToolRegistry {
         ),
         AgentToolDescriptor(
             name: "create_file",
-            description: "Create a BRAND-NEW file and write it to disk IMMEDIATELY. This is the ONLY correct way to make a new file — do NOT use edit_file or apply_patch for creation. Pass the workspace-relative path and the full file content directly; no diff to hand-craft. Fails if the path already exists (to change an existing file, use edit_file instead). Missing parent directories are created. A file card showing the new file appears inline in the chat for auditability.",
+            description: "Create a BRAND-NEW file. This is the ONLY correct way to make a new file — do NOT use edit_file or apply_patch for creation. Pass the workspace-relative path and the full file content directly; no diff to hand-craft. Fails if the path already exists. Goal mode, Smart review, and Workspace Access write validated workspace files immediately; Strict mode presents an inline file card for the user to Apply. For several independent files, emit all create_file/edit_file calls in one assistant response so WillDeep can present one Apply All review group.",
             risk: .read,
             parameters: [
                 AgentToolParameter(name: "path", type: .string, description: "Workspace-relative path of the NEW file, e.g. `src/utils/date.ts` or `docs/README.md`. Must not already exist.", required: true),
@@ -197,7 +198,7 @@ enum AgentToolRegistry {
         ),
         AgentToolDescriptor(
             name: "edit_file",
-            description: "EDIT an EXISTING file by EXACT STRING REPLACEMENT — the PREFERRED way to edit files. Pass the workspace-relative path, the exact current text to replace (old_string) and its replacement (new_string). old_string must match the file content EXACTLY — including whitespace and indentation, WITHOUT read_file line-number prefixes — and must appear exactly ONCE in the file unless replace_all=true; include a few surrounding lines to make it unique. The host locates the match and builds the diff itself. If every edited file is already tracked by git and clean against HEAD, the edit writes to disk immediately; otherwise it shows a patch card INLINE IN THE CHAT (below your message; there is NO separate right-side review panel) for the user to review and click Apply. Goal mode or workspace-access approval mode also applies immediately. To CREATE a new file, use `create_file` — NOT this tool.",
+            description: "EDIT an EXISTING file by EXACT STRING REPLACEMENT — the PREFERRED way to edit files. Pass the workspace-relative path, the exact current text to replace (old_string) and its replacement (new_string). old_string must match the file content EXACTLY and appear exactly ONCE unless replace_all=true. Goal mode, Smart review, and Workspace Access apply validated workspace edits immediately; Strict mode always asks. For several independent files, emit all create_file/edit_file calls in one assistant response so WillDeep can present one Apply All review group. Keep dependent edits to the same file ordered. To CREATE a new file, use `create_file`.",
             risk: .read,
             parameters: [
                 AgentToolParameter(name: "path", type: .string, description: "Workspace-relative path of the EXISTING file to edit, e.g. `src/utils/date.ts`.", required: true),
@@ -205,17 +206,17 @@ enum AgentToolRegistry {
                 AgentToolParameter(name: "new_string", type: .string, description: "Replacement text. Pass an empty string to delete old_string. Must differ from old_string.", required: true),
                 AgentToolParameter(name: "replace_all", type: .boolean, description: "Replace EVERY occurrence of old_string instead of requiring a unique match (e.g. renaming a symbol). Defaults to false.", required: false),
                 AgentToolParameter(name: "title", type: .string, description: "Optional short title for the patch card. Defaults to `编辑文件: <path>`.", required: false),
-                AgentToolParameter(name: "apply_immediately", type: .boolean, description: "Set true ONLY when the user explicitly asked to write / save directly without review (e.g. \"直接写\", \"直接落盘\", \"不用审核\", \"just write it\", \"save it directly\"). The edit then writes to disk immediately instead of waiting for the user to click Apply. Defaults to false.", required: false)
+                AgentToolParameter(name: "apply_immediately", type: .boolean, description: "Set true ONLY when the user explicitly asked to write / save directly without review (e.g. \"直接写\", \"直接落盘\", \"不用审核\", \"just write it\", \"save it directly\"). Smart review and Workspace Access already write immediately. Strict mode ignores this flag because every workspace change requires review. Defaults to false.", required: false)
             ]
         ),
         AgentToolDescriptor(
             name: "apply_patch",
-            description: "LEGACY fallback for editing an EXISTING file via a hand-written unified diff. PREFER `edit_file` (exact string replacement) — hand-crafted diffs frequently fail hunk matching. Use apply_patch only when edit_file cannot express the change (e.g. many scattered edits in one atomic patch). To CREATE a new file, use `create_file` instead — NOT this tool. If every edited file is already tracked by git and clean against HEAD, the edit writes to disk immediately; otherwise it shows a patch card INLINE IN THE CHAT, right below your message — there is NO separate right-side review panel — for the user to review and click Apply. Goal mode or workspace-access approval mode also applies immediately. Validates the diff shape before queuing.",
+            description: "LEGACY fallback for editing an EXISTING file via a hand-written unified diff. PREFER `edit_file`; use apply_patch only when exact replacement cannot express the change. To CREATE a new file, use `create_file`. Goal mode, Smart review, and Workspace Access apply validated workspace edits immediately; Strict mode presents the patch card INLINE IN THE CHAT. Validates the diff shape before queuing.",
             risk: .read,
             parameters: [
                 AgentToolParameter(name: "diff", type: .string, description: "Unified diff for an EXISTING file. Use workspace-relative paths (`--- a/path`, `+++ b/path`) and standard @@ hunks. (New files: use `create_file`, not a `/dev/null` diff here.)", required: true),
                 AgentToolParameter(name: "title", type: .string, description: "Optional short title for the patch card. Defaults to Agent Patch.", required: false),
-                AgentToolParameter(name: "apply_immediately", type: .boolean, description: "Set true ONLY when the user explicitly asked to write / save directly without review (e.g. \"直接写\", \"直接落盘\", \"不用审核\", \"just write it\", \"save it directly\"). The edit then writes to disk immediately instead of waiting for the user to click Apply. Defaults to false.", required: false)
+                AgentToolParameter(name: "apply_immediately", type: .boolean, description: "Set true ONLY when the user explicitly asked to write / save directly without review (e.g. \"直接写\", \"直接落盘\", \"不用审核\", \"just write it\", \"save it directly\"). Smart review and Workspace Access already write immediately. Strict mode ignores this flag because every workspace change requires review. Defaults to false.", required: false)
             ]
         ),
         AgentToolDescriptor(
@@ -245,7 +246,7 @@ enum AgentToolRegistry {
         ),
         AgentToolDescriptor(
             name: "list_skills",
-            description: "List installed Codex skills from CODEX_HOME so the agent can choose a specialized workflow before acting. Read-only.",
+            description: "List installed skills from WillDeep's bundled skills, user skill roots, and plugin cache so the agent can choose a specialized workflow before acting. Read-only.",
             risk: .read,
             parameters: [
                 AgentToolParameter(name: "query", type: .string, description: "Optional case-insensitive text filter for skill name or description.", required: false)
@@ -281,12 +282,20 @@ enum AgentToolRegistry {
         ),
         AgentToolDescriptor(
             name: "create_user_skill",
-            description: "Create a local user Codex skill under ~/.willdeep/skills when a reusable workflow has emerged and should be available via $skill/list_skills in future turns. Include when to use it, steps, verification, and safety notes. Requires approval outside autonomous modes.",
+            description: "Create exactly one local user Codex skill under ~/.willdeep/skills when a reusable workflow has emerged. When the user asks for multiple skills, do not call this repeatedly; call create_user_skills once so the user can review and approve the full batch in one confirmation. Include when to use it, steps, verification, and safety notes. Requires approval outside autonomous modes.",
             risk: .write,
             parameters: [
                 AgentToolParameter(name: "name", type: .string, description: "Short skill name, e.g. `release-guardian` or `ppt-qc-workflow`.", required: true),
                 AgentToolParameter(name: "description", type: .string, description: "One sentence describing when the Agent should use this skill.", required: true),
                 AgentToolParameter(name: "body", type: .string, description: "Markdown skill instructions. Must avoid secrets and stale outputs.", required: true)
+            ]
+        ),
+        AgentToolDescriptor(
+            name: "create_user_skills",
+            description: "Create multiple local user Codex skills as one reviewed batch under ~/.willdeep/skills. Use this whenever one user request asks for two or more skills. Put every requested skill in a single call; never split the batch into repeated create_user_skill calls. The host shows one confirmation containing the whole batch, validates every draft before writing, and rolls back the batch if creation fails.",
+            risk: .write,
+            parameters: [
+                AgentToolParameter(name: "skills_json", type: .string, description: "JSON array with 1-10 objects: [{\"name\":\"release-guardian\",\"description\":\"Use before releases.\",\"body\":\"Markdown instructions...\"}]. Each body must include when to use the skill, steps, verification, and safety boundaries. Do not include secrets.", required: true)
             ]
         ),
         AgentToolDescriptor(
@@ -1094,10 +1103,10 @@ enum AgentToolRegistry {
         ),
         AgentToolDescriptor(
             name: "visual_qa_screenshot",
-            description: "Inspect a screenshot or UI image for on-demand visual QA. Use only when the user explicitly asks for screenshot/UI/color/theme/accessibility/layout review, or after a browser screenshot was captured with approval for visual verification. Returns local palette/OCR/theme signals and, by default, may send the image to the configured Image Understanding provider for visual review; pass `allow_vl: false` for local-only inspection. Requires approval because screenshots can contain private information and VL analysis may send image bytes to a provider.",
+            description: "Inspect a screenshot or UI image for on-demand visual QA. Use only when the user explicitly asks for screenshot/UI/color/theme/accessibility/layout review, or after a fresh browser screenshot when visual verification is needed. Returns local palette/OCR/theme signals and, by default, may send the image to the configured Image Understanding provider for visual review; pass `allow_vl: false` for local-only inspection. Requires approval because VL analysis may send image bytes to a provider; the separate screenshot capture itself is read-only.",
             risk: .write,
             parameters: [
-                AgentToolParameter(name: "path", type: .string, description: "Screenshot/image path. Prefer workspace-relative paths; absolute local paths are allowed for approved screenshots or user-provided images.", required: true),
+                AgentToolParameter(name: "path", type: .string, description: "Screenshot/image path. Prefer workspace-relative paths; absolute local paths are allowed for fresh tool captures or user-provided images.", required: true),
                 AgentToolParameter(name: "context", type: .string, description: "Optional short context such as page, route, expected state, or recent UI change being verified.", required: false),
                 AgentToolParameter(name: "focus", type: .string, description: "Optional focus area such as `colors`, `dark-mode`, `layout`, `accessibility`, `regression`, or `general`.", required: false),
                 AgentToolParameter(name: "allow_vl", type: .boolean, description: "When true (default), call the configured Image Understanding provider if available. Set false to restrict analysis to local palette/OCR/theme signals.", required: false)
@@ -1105,7 +1114,7 @@ enum AgentToolRegistry {
         ),
         AgentToolDescriptor(
             name: "design_to_code_acceptance",
-            description: "Perform the mandatory final visual acceptance for a pasted-image Design-to-Code run. Call only after production files were written, the implementation was actually run, and a fresh screenshot was captured through the in-app browser, Chrome extension, Computer Use, or an approved platform screenshot tool. Compares the source and rendered pixels, OCR coverage, and palettes; writes design-qa.md plus .willdeep/design-to-code/visual-diff.png. If status is NEEDS_ITERATION, fix the UI and repeat capture + acceptance before finalizing.",
+            description: "Perform the mandatory final visual acceptance for a pasted-image Design-to-Code run. Call only after production files were written, the implementation was actually run, and a fresh screenshot was captured through the in-app browser, Chrome extension, Computer Use, or a platform screenshot tool. Compares the source and rendered pixels, OCR coverage, and palettes; writes design-qa.md plus .willdeep/design-to-code/visual-diff.png. If status is NEEDS_ITERATION, fix the UI and repeat capture + acceptance before finalizing.",
             risk: .write,
             parameters: [
                 AgentToolParameter(name: "source_path", type: .string, description: "Absolute source image path from the Design-to-Code run contract.", required: true),
@@ -1119,8 +1128,8 @@ enum AgentToolRegistry {
         ),
         AgentToolDescriptor(
             name: "capture_screenshot",
-            description: "Capture a screenshot and hand the pixels back to you for visual analysis. Targets: `mac_screen` (this Mac's display), `android` (a connected device/emulator via adb), or `ios_simulator` (a booted simulator via simctl). The image is attached to the tool result so vision-capable models see it directly; the payload also carries the saved full-resolution path and local OCR text so text-only models can follow up with `visual_qa_screenshot`. Use for UI verification after a change, inspecting app/device state, or when the user asks what something looks like. Requires approval because screenshots can contain private information.",
-            risk: .write,
+            description: "Capture a screenshot and hand the pixels back to you for visual analysis. Targets: `mac_screen` (this Mac's display through the separately permissioned Computer Use helper), `android` (a connected device/emulator via adb), or `ios_simulator` (a booted simulator via simctl). The image is attached to the tool result so vision-capable models see it directly; the payload also carries the saved full-resolution path and local OCR text so text-only models can follow up with `visual_qa_screenshot`. Screenshot capture is read-only and does not require a WillDeep confirmation card; macOS may still request its one-time “Screen & System Audio Recording” permission. That system category is separate from microphone permission.",
+            risk: .read,
             parameters: [
                 AgentToolParameter(name: "target", type: .string, description: "What to capture: `mac_screen` (default), `android`, or `ios_simulator`.", required: false),
                 AgentToolParameter(name: "device", type: .string, description: "Optional device selector: adb serial for Android (from `adb devices`), or simulator UDID for iOS (defaults to the booted simulator).", required: false),
@@ -1135,7 +1144,7 @@ enum AgentToolRegistry {
         ),
         AgentToolDescriptor(
             name: "computer_use_request_permissions",
-            description: "Open macOS permission prompts for the separate WillDeep Computer Use helper. Ask only after the user has explicitly approved enabling desktop control. It may request Accessibility for app controls and Screen & System Audio Recording for visual state screenshots.",
+            description: "Open macOS permission prompts for the separate WillDeep Computer Use helper. Ask only after the user has explicitly approved enabling desktop control. It may request Accessibility for app controls and Screen & System Audio Recording for visual state screenshots. This one-off host operation never creates a reusable Computer Use session grant.",
             risk: .write,
             parameters: [
                 AgentToolParameter(name: "accessibility", type: .boolean, description: "Request Accessibility permission. Defaults to true.", required: false),
@@ -1156,7 +1165,7 @@ enum AgentToolRegistry {
         ),
         AgentToolDescriptor(
             name: "computer_use_activate_app",
-            description: "Bring a running macOS app and its windows to the foreground before keyboard-heavy interaction. Requires approval because it changes the user's active application.",
+            description: "Compatibility fallback for a running macOS app that explicitly rejects background AX or PID-targeted input. Do not call this before ordinary inspection, clicks, typing, or selected-window capture; those work without foregrounding the target. Requires approval because activation changes the user's active application.",
             risk: .write,
             parameters: [
                 AgentToolParameter(name: "app", type: .string, description: "Running application bundle identifier or localized app name. Omit only when pid is provided.", required: false),
@@ -1165,12 +1174,12 @@ enum AgentToolRegistry {
         ),
         AgentToolDescriptor(
             name: "computer_use_get_app_state",
-            description: "Read a macOS app's Accessibility tree and optionally capture only its visible front window. Returns fresh element refs plus a screenshot by default. Requires approval because the screenshot may contain private information. Always refresh before desktop actions.",
-            risk: .write,
+            description: "Read a macOS app's Accessibility tree first and optionally capture only its visible front window. Returns fresh element refs without a screenshot by default. Inspect the AX tree before opting into pixels, and request a screenshot only when no usable semantic target is exposed. This read-only state call runs without a WillDeep confirmation card after the separate helper has macOS permission. Always refresh before desktop actions.",
+            risk: .read,
             parameters: [
                 AgentToolParameter(name: "app", type: .string, description: "Running application bundle identifier or localized app name. Omit only when pid is provided.", required: false),
                 AgentToolParameter(name: "pid", type: .integer, description: "Running application process ID. Omit only when app is provided.", required: false),
-                AgentToolParameter(name: "include_screenshot", type: .boolean, description: "Capture the visible front window. Defaults to true. Prefer computer_use_inspect_app when no screenshot is needed.", required: false)
+                AgentToolParameter(name: "include_screenshot", type: .boolean, description: "Capture the visible front window only after the AX tree proves insufficient. Defaults to false.", required: false)
             ]
         ),
         AgentToolDescriptor(
@@ -1184,12 +1193,13 @@ enum AgentToolRegistry {
         ),
         AgentToolDescriptor(
             name: "computer_use_wait_for",
-            description: "Wait read-only for a fresh Accessibility ref, element value, or window title condition. Returns a refreshed Accessibility tree; screenshot capture is opt-in.",
+            description: "Wait read-only for a fresh Accessibility ref, element value, or window title condition. When condition is ref_exists or value_contains, both ref and its matching snapshot_id are required. title_contains does not require either one. Returns a refreshed Accessibility tree; screenshot capture is opt-in.",
             risk: .read,
             parameters: [
                 AgentToolParameter(name: "app", type: .string, description: "Running app identifier or name. Omit when pid or ref is provided.", required: false),
                 AgentToolParameter(name: "pid", type: .integer, description: "Target process ID. Omit when app or ref is provided.", required: false),
-                AgentToolParameter(name: "ref", type: .string, description: "Fresh ref required by ref_exists and value_contains.", required: false),
+                AgentToolParameter(name: "ref", type: .string, description: "Fresh Accessibility ref required by ref_exists and value_contains. Its prefix must match snapshot_id.", required: false),
+                AgentToolParameter(name: "snapshot_id", type: .string, description: "Fresh snapshot_id matching ref. Required whenever condition is ref_exists or value_contains; omit for title_contains.", required: false),
                 AgentToolParameter(name: "condition", type: .string, description: "ref_exists, value_contains, or title_contains.", required: true),
                 AgentToolParameter(name: "expected", type: .string, description: "Expected substring for value_contains or title_contains.", required: false),
                 AgentToolParameter(name: "timeout_ms", type: .integer, description: "100 through 15000 milliseconds; defaults to 5000.", required: false),
@@ -1199,108 +1209,139 @@ enum AgentToolRegistry {
         ),
         AgentToolDescriptor(
             name: "computer_use_click",
-            description: "Click a fresh Accessibility element ref, or click coordinates in the most recent target-window screenshot. Requires approval. Use element refs first; use pixels only when the app exposes no usable Accessibility tree.",
+            description: "Click a fresh Accessibility element ref, or fall back to screenshot-relative coordinates only after the AX tree has no usable target. Requires a plain-language purpose, target label, and truthful consequence classification. Once the first control action for this app is approved, subsequent fresh ref or pixel clicks run automatically inside the current runtime-, turn-, and target-bound controlling lease, including declared consequential clicks; Strict mode still asks. The lease is never persisted or reused across tasks. Authentication, CAPTCHA, credential entry, and financial transactions require private user takeover. Copy/Cut/Paste controls are prohibited.",
             risk: .write,
             parameters: [
                 AgentToolParameter(name: "ref", type: .string, description: "Fresh element ref from computer_use_get_app_state. Omit for pixel fallback.", required: false),
                 AgentToolParameter(name: "pid", type: .integer, description: "Target process ID; optional when ref is supplied.", required: false),
+                AgentToolParameter(name: "snapshot_id", type: .string, description: "Fresh snapshot_id from computer_use_get_app_state. It must match the active snapshot and any supplied ref prefix.", required: true),
                 AgentToolParameter(name: "x", type: .integer, description: "Screenshot-relative x coordinate for pixel fallback.", required: false),
                 AgentToolParameter(name: "y", type: .integer, description: "Screenshot-relative y coordinate for pixel fallback.", required: false),
-                AgentToolParameter(name: "click_count", type: .integer, description: "1, 2, or 3. Defaults to 1.", required: false)
+                AgentToolParameter(name: "click_count", type: .integer, description: "1, 2, or 3. Defaults to 1.", required: false),
+                AgentToolParameter(name: "target_label", type: .string, description: "Visible label or concise description of the control being clicked.", required: true),
+                AgentToolParameter(name: "purpose", type: .string, description: "Why this click is needed, in one concise sentence.", required: true),
+                AgentToolParameter(name: "consequence", type: .string, description: "One of: none, navigation, authentication, captcha, credential_entry, send, delete, purchase, financial_transaction, legal_agreement, permission_change, account_change, sensitive_data_transfer.", required: true)
             ]
         ),
         AgentToolDescriptor(
             name: "computer_use_secondary_action",
-            description: "Open an element's context menu with Accessibility, falling back to a right-click at screenshot coordinates. Requires approval.",
+            description: "Open an element's context menu with Accessibility, falling back to screenshot-relative coordinates only when the AX tree has no usable target. Once the first control action for this app is approved, subsequent fresh ref or pixel secondary clicks run automatically inside the current runtime-, turn-, and target-bound controlling lease; Strict mode still asks. Requires a purpose, target label, and truthful consequence classification. Copy/Cut/Paste controls are prohibited.",
             risk: .write,
             parameters: [
                 AgentToolParameter(name: "ref", type: .string, description: "Fresh element ref; omit for pixel fallback.", required: false),
                 AgentToolParameter(name: "pid", type: .integer, description: "Target process ID; optional when ref is supplied.", required: false),
+                AgentToolParameter(name: "snapshot_id", type: .string, description: "Fresh snapshot_id. It must match the active snapshot and any supplied ref.", required: true),
                 AgentToolParameter(name: "x", type: .integer, description: "Screenshot-relative x coordinate for pixel fallback.", required: false),
-                AgentToolParameter(name: "y", type: .integer, description: "Screenshot-relative y coordinate for pixel fallback.", required: false)
+                AgentToolParameter(name: "y", type: .integer, description: "Screenshot-relative y coordinate for pixel fallback.", required: false),
+                AgentToolParameter(name: "target_label", type: .string, description: "Visible label or concise description of the target.", required: true),
+                AgentToolParameter(name: "purpose", type: .string, description: "Why the context menu is needed.", required: true),
+                AgentToolParameter(name: "consequence", type: .string, description: "One of the Computer Use consequence values documented on computer_use_click.", required: true)
             ]
         ),
         AgentToolDescriptor(
             name: "computer_use_scroll",
-            description: "Scroll the target macOS app after a fresh state snapshot. Requires approval.",
+            description: "Scroll the target macOS app after a fresh state snapshot. Ordinary scrolling runs automatically only while the same runtime and turn own the current approved controlling lease; the first control action and Strict mode still ask.",
             risk: .write,
             parameters: [
                 AgentToolParameter(name: "pid", type: .integer, description: "Target process ID.", required: true),
+                AgentToolParameter(name: "snapshot_id", type: .string, description: "Fresh snapshot_id for the target window.", required: true),
                 AgentToolParameter(name: "direction", type: .string, description: "up, down, left, or right.", required: true),
                 AgentToolParameter(name: "pages", type: .integer, description: "1 through 8 pages; defaults to 1.", required: false)
             ]
         ),
         AgentToolDescriptor(
             name: "computer_use_drag",
-            description: "Drag from one screenshot-relative coordinate to another in the target macOS app. Requires approval.",
+            description: "Drag from one screenshot-relative coordinate to another in the target macOS app. The current drag protocol is coordinate-only and cannot prove semantic source and destination controls, so every drag requires fresh per-action typed confirmation and is never auto-approved by a control lease. Requires purpose and consequence classification.",
             risk: .write,
             parameters: [
                 AgentToolParameter(name: "pid", type: .integer, description: "Target process ID.", required: true),
+                AgentToolParameter(name: "snapshot_id", type: .string, description: "Fresh snapshot_id for these screenshot-relative coordinates.", required: true),
                 AgentToolParameter(name: "from_x", type: .integer, description: "Screenshot-relative starting x coordinate.", required: true),
                 AgentToolParameter(name: "from_y", type: .integer, description: "Screenshot-relative starting y coordinate.", required: true),
                 AgentToolParameter(name: "to_x", type: .integer, description: "Screenshot-relative ending x coordinate.", required: true),
-                AgentToolParameter(name: "to_y", type: .integer, description: "Screenshot-relative ending y coordinate.", required: true)
+                AgentToolParameter(name: "to_y", type: .integer, description: "Screenshot-relative ending y coordinate.", required: true),
+                AgentToolParameter(name: "target_label", type: .string, description: "Concise description of what is being dragged and where.", required: true),
+                AgentToolParameter(name: "purpose", type: .string, description: "Why this drag is needed.", required: true),
+                AgentToolParameter(name: "consequence", type: .string, description: "One of the Computer Use consequence values documented on computer_use_click.", required: true)
             ]
         ),
         AgentToolDescriptor(
             name: "computer_use_type_text",
-            description: "Type text into the target macOS app. Requires approval because it can change external app state. Never use for passwords, API keys, one-time codes, or other sensitive data.",
+            description: "Type non-sensitive text into the target macOS app. Ordinary none/navigation text without control characters may run automatically only inside the current runtime-, turn-, and target-bound controlling lease with a fresh snapshot. Consequential text requires fresh confirmation. Never use for passwords, API keys, one-time codes, payment data, recovery material, or other sensitive data; ask the user to take over privately.",
             risk: .write,
             parameters: [
                 AgentToolParameter(name: "pid", type: .integer, description: "Target process ID.", required: true),
-                AgentToolParameter(name: "text", type: .string, description: "Non-sensitive text to type.", required: true)
+                AgentToolParameter(name: "snapshot_id", type: .string, description: "Fresh snapshot_id proving the target and focused window.", required: true),
+                AgentToolParameter(name: "text", type: .string, description: "Non-sensitive text to type.", required: true),
+                AgentToolParameter(name: "target_label", type: .string, description: "Visible label or concise description of the destination field.", required: true),
+                AgentToolParameter(name: "purpose", type: .string, description: "Why this text is needed.", required: true),
+                AgentToolParameter(name: "consequence", type: .string, description: "One of the Computer Use consequence values documented on computer_use_click.", required: true)
             ]
         ),
         AgentToolDescriptor(
             name: "computer_use_press_key",
-            description: "Send a keyboard key or modifier combination such as `cmd+s`, `tab`, or `return` to the target macOS app. Requires approval.",
+            description: "Send one keyboard key to the target macOS app. Tab, Shift-Tab, arrows, Escape, Home, End, PageUp, and PageDown may run automatically only inside the current approved controlling lease with a fresh snapshot and none/navigation consequence. Return/Enter, deletion keys, modifier combinations, and unknown keys require fresh typed confirmation. Requires purpose and consequence classification. Cmd-C, Cmd-X, and Cmd-V are prohibited because the clipboard is private external state.",
             risk: .write,
             parameters: [
                 AgentToolParameter(name: "pid", type: .integer, description: "Target process ID.", required: true),
-                AgentToolParameter(name: "key", type: .string, description: "Key or combination such as cmd+s, ctrl+shift+t, tab, return, escape, or left.", required: true)
+                AgentToolParameter(name: "snapshot_id", type: .string, description: "Fresh snapshot_id proving the target and focused window.", required: true),
+                AgentToolParameter(name: "key", type: .string, description: "Key or combination such as cmd+s, ctrl+shift+t, tab, return, escape, or left. cmd+c, cmd+x, and cmd+v are not allowed.", required: true),
+                AgentToolParameter(name: "target_label", type: .string, description: "Concise description of the focused control.", required: true),
+                AgentToolParameter(name: "purpose", type: .string, description: "Why this key is needed.", required: true),
+                AgentToolParameter(name: "consequence", type: .string, description: "One of the Computer Use consequence values documented on computer_use_click.", required: true)
             ]
         ),
         AgentToolDescriptor(
             name: "computer_use_set_value",
-            description: "Set a value through a fresh Accessibility element ref, for example a text field or slider. Requires approval and should not be used for secrets.",
+            description: "Set a value through a fresh Accessibility element ref, for example a text field or slider. An ordinary non-sensitive none/navigation value without control characters may run automatically only inside the current approved controlling lease. Consequential values require fresh confirmation. Requires purpose and consequence classification and must never be used for secrets.",
             risk: .write,
             parameters: [
                 AgentToolParameter(name: "ref", type: .string, description: "Fresh editable element ref.", required: true),
-                AgentToolParameter(name: "value", type: .string, description: "Non-sensitive value to set.", required: true)
+                AgentToolParameter(name: "snapshot_id", type: .string, description: "Fresh snapshot_id matching the editable element ref.", required: true),
+                AgentToolParameter(name: "value", type: .string, description: "Non-sensitive value to set.", required: true),
+                AgentToolParameter(name: "target_label", type: .string, description: "Visible label or concise description of the target control.", required: true),
+                AgentToolParameter(name: "purpose", type: .string, description: "Why this value change is needed.", required: true),
+                AgentToolParameter(name: "consequence", type: .string, description: "One of the Computer Use consequence values documented on computer_use_click.", required: true)
             ]
         ),
         AgentToolDescriptor(
             name: "computer_use_focus",
-            description: "Focus a fresh Accessibility element ref before typing or sending keys. Requires approval. Use this when a field or control is visible but not receiving keyboard input.",
+            description: "Focus a fresh Accessibility element ref before typing or sending keys. With a matching fresh snapshot, focus may run automatically only inside the current approved controlling lease. Use this when a field or control is visible but not receiving keyboard input.",
             risk: .write,
             parameters: [
-                AgentToolParameter(name: "ref", type: .string, description: "Fresh focusable element ref from computer_use_get_app_state.", required: true)
+                AgentToolParameter(name: "ref", type: .string, description: "Fresh focusable element ref from computer_use_get_app_state.", required: true),
+                AgentToolParameter(name: "snapshot_id", type: .string, description: "Fresh snapshot_id matching the focusable element ref.", required: true)
             ]
         ),
         AgentToolDescriptor(
             name: "computer_use_hover",
-            description: "Move the pointer to the center of a fresh Accessibility element ref, or to screenshot-relative coordinates. Useful for hover-only controls and tooltips. Requires approval.",
+            description: "Move the pointer to the center of a fresh Accessibility element ref, or to screenshot-relative coordinates. With complete fresh snapshot arguments, hover may run automatically only inside the current approved controlling lease. Useful for hover-only controls and tooltips.",
             risk: .write,
             parameters: [
                 AgentToolParameter(name: "ref", type: .string, description: "Fresh element ref. Omit for pixel fallback.", required: false),
                 AgentToolParameter(name: "pid", type: .integer, description: "Target process ID; optional when ref is supplied.", required: false),
+                AgentToolParameter(name: "snapshot_id", type: .string, description: "Fresh snapshot_id matching the active target and any supplied ref.", required: true),
                 AgentToolParameter(name: "x", type: .integer, description: "Screenshot-relative x coordinate for pixel fallback.", required: false),
                 AgentToolParameter(name: "y", type: .integer, description: "Screenshot-relative y coordinate for pixel fallback.", required: false)
             ]
         ),
         AgentToolDescriptor(
             name: "computer_use_select_text",
-            description: "Select matching text, or place the cursor before or after it, inside a fresh editable Accessibility element. Requires approval and never accepts secret text.",
+            description: "Select matching text, or place the cursor before or after it, inside a fresh editable Accessibility element. Ordinary non-sensitive selection without control characters may run automatically only inside the current approved controlling lease; consequential selection requires fresh confirmation. Requires purpose and consequence classification and never accepts secret text.",
             risk: .write,
             parameters: [
                 AgentToolParameter(name: "ref", type: .string, description: "Fresh editable element ref.", required: true),
+                AgentToolParameter(name: "snapshot_id", type: .string, description: "Fresh snapshot_id matching the editable element ref.", required: true),
                 AgentToolParameter(name: "text", type: .string, description: "Non-sensitive text to select.", required: true),
-                AgentToolParameter(name: "selection_type", type: .string, description: "text (default), cursor_before, or cursor_after.", required: false)
+                AgentToolParameter(name: "selection_type", type: .string, description: "text (default), cursor_before, or cursor_after.", required: false),
+                AgentToolParameter(name: "target_label", type: .string, description: "Visible label or concise description of the target control.", required: true),
+                AgentToolParameter(name: "purpose", type: .string, description: "Why this selection or cursor move is needed.", required: true),
+                AgentToolParameter(name: "consequence", type: .string, description: "One of the Computer Use consequence values documented on computer_use_click.", required: true)
             ]
         ),
         AgentToolDescriptor(
             name: "computer_use_restart_helper",
-            description: "Restart only the separate WillDeep Computer Use helper and then report its permissions. Use after the user changes macOS permissions; WillDeep itself does not need a restart.",
+            description: "Restart only the separate WillDeep Computer Use helper and then report its permissions. Use after the user changes macOS permissions; WillDeep itself does not need a restart. This one-off lifecycle operation never creates a reusable Computer Use session grant.",
             risk: .write,
             parameters: []
         ),
@@ -1436,8 +1477,8 @@ enum AgentToolRegistry {
         ),
         AgentToolDescriptor(
             name: "chrome_capture_tab",
-            description: "Capture the visible area of the active Chrome tab through the WillDeep Browser extension and return it as an image attachment. Requires approval because screenshots may expose private information.",
-            risk: .write,
+            description: "Capture the visible area of the active Chrome tab through the WillDeep Browser extension and return it as an image attachment. This read-only capture runs without a WillDeep confirmation card.",
+            risk: .read,
             parameters: []
         ),
         AgentToolDescriptor(
@@ -1580,8 +1621,8 @@ enum AgentToolRegistry {
         ),
         AgentToolDescriptor(
             name: "embedded_browser_capture_screenshot",
-            description: "Capture the visible in-app Embedded Browser side panel as a PNG and return the local file path. Requires approval because screenshots may expose private information. Requires the Browser Ops expert.",
-            risk: .write,
+            description: "Capture the visible in-app Embedded Browser side panel as a PNG and return the local file path. This read-only capture runs without a WillDeep confirmation card. Requires the Browser Ops expert.",
+            risk: .read,
             parameters: []
         ),
         AgentToolDescriptor(
@@ -1625,6 +1666,7 @@ enum AgentToolRegistry {
                 AgentToolParameter(name: "prompt", type: .string, description: "Self-contained task description. Include relevant file paths, acceptance criteria, and constraints — Claude Code cannot ask follow-up questions in headless mode.", required: true),
                 AgentToolParameter(name: "permission_mode", type: .string, description: "One of `plan` (read-only, returns a plan), `acceptEdits` (may create/edit files in the workspace), `default` (permission-needing actions are auto-denied). Defaults to acceptEdits.", required: false),
                 AgentToolParameter(name: "model", type: .string, description: "Optional Claude model alias forwarded as `--model` (e.g. `sonnet`, `opus`, `haiku`).", required: false),
+                AgentToolParameter(name: "agent", type: .string, description: "Optional installed Claude Code named agent forwarded with `--agent`. WillDeep dispatch projects use this for Claude profiles discovered from user or project `.claude/agents` directories.", required: false),
                 AgentToolParameter(name: "run_in_background", type: .boolean, description: "Defaults to true: returns a job handle (job_xxxxxx) and the result arrives as a background-task notification; inspect progress with get_job_output. Set false when the caller needs to wait for the final CLI response inline.", required: false),
                 AgentToolParameter(name: "timeout_seconds", type: .integer, description: "Optional hard timeout. Local/SSH background default has no hard timeout; delegated foreground default/cap is 21600 seconds.", required: false)
             ]
@@ -1637,8 +1679,23 @@ enum AgentToolRegistry {
                 AgentToolParameter(name: "prompt", type: .string, description: "Self-contained task description. Include relevant file paths, acceptance criteria, and constraints — the delegated Codex CLI session cannot ask follow-up questions here.", required: true),
                 AgentToolParameter(name: "permission_mode", type: .string, description: "One of `plan` (read-only), `workspaceWrite` (may edit files inside the workspace), or `default` (alias for workspaceWrite). Defaults to workspaceWrite.", required: false),
                 AgentToolParameter(name: "model", type: .string, description: "Optional Codex model id forwarded with `--model`.", required: false),
+                AgentToolParameter(name: "profile", type: .string, description: "Optional Codex configuration profile forwarded with `--profile`. WillDeep discovers `<name>.config.toml` files in `$CODEX_HOME` for dispatch projects.", required: false),
                 AgentToolParameter(name: "run_in_background", type: .boolean, description: "Defaults to true: returns a job handle (job_xxxxxx) and the result arrives as a background-task notification; inspect progress with get_job_output. Set false when the caller needs to wait for the final CLI response inline.", required: false),
                 AgentToolParameter(name: "timeout_seconds", type: .integer, description: "Optional hard timeout. Local/SSH background default has no hard timeout; delegated foreground default/cap is 21600 seconds.", required: false)
+            ]
+        ),
+        AgentToolDescriptor(
+            name: "hermes_cli",
+            description: "Delegate a coding or planning task to a locally installed Hermes Agent profile in one-shot mode. The selected profile gets its own Hermes home, model, provider, tools, and memory. Requires user approval and remains inside WillDeep's workspace sandbox.",
+            risk: .write,
+            parameters: [
+                AgentToolParameter(name: "prompt", type: .string, description: "Self-contained task description for Hermes.", required: true),
+                AgentToolParameter(name: "permission_mode", type: .string, description: "Use `plan` for planning-only dispatch metadata; otherwise defaults to workspaceWrite.", required: false),
+                AgentToolParameter(name: "model", type: .string, description: "Optional Hermes model override.", required: false),
+                AgentToolParameter(name: "provider", type: .string, description: "Optional Hermes provider override.", required: false),
+                AgentToolParameter(name: "hermes_profile", type: .string, description: "Hermes profile name. Defaults to `default`.", required: false),
+                AgentToolParameter(name: "run_in_background", type: .boolean, description: "Run in the background when true.", required: false),
+                AgentToolParameter(name: "timeout_seconds", type: .integer, description: "Optional hard timeout.", required: false)
             ]
         ),
         AgentToolDescriptor(
@@ -1769,7 +1826,7 @@ enum AgentToolRegistry {
 
     static func isDelegatedCodingTool(_ name: String) -> Bool {
         switch name {
-        case "claude_code", "codex_cli", "cursor_agent", "cline_cli":
+        case "claude_code", "codex_cli", "hermes_cli", "cursor_agent", "cline_cli":
             return true
         default:
             return false
@@ -1821,8 +1878,20 @@ enum AgentToolRegistry {
             }
             return .read
         }
+        if descriptor.name == "terminal_send_command",
+           let command = arguments["command"]?.stringValue(),
+           AgentSandboxPolicy.commandRequiresSensitiveDesktopConfirmation(command) {
+            return .danger
+        }
         if descriptor.name == "lark_cli" {
             return AgentLarkCLI.risk(arguments: arguments["arguments"]?.stringArrayValue() ?? [])
+        }
+        if descriptor.name.hasPrefix("computer_use_") {
+            return AgentComputerUsePolicy.risk(
+                toolName: descriptor.name,
+                arguments: arguments,
+                declaredRisk: descriptor.risk
+            )
         }
         return descriptor.risk
     }

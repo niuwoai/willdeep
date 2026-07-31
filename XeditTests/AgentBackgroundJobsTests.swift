@@ -310,6 +310,25 @@ struct AgentBackgroundJobsTests {
         #expect(registry.consumePendingCompletions(forRuntime: runtimeID).isEmpty)
     }
 
+    @Test
+    func backgroundCommandUsesInjectedEnvironment() async throws {
+        let registry = AgentJobRegistry()
+        let runtimeID = UUID()
+        let job = try registry.start(
+            command: "printf '%s' \"$WILLDEEP_BACKGROUND_ENV\"",
+            workingDirectory: nil,
+            runtimeID: runtimeID,
+            timeoutSeconds: nil,
+            environment: [
+                "PATH": "/usr/bin:/bin",
+                "WILLDEEP_BACKGROUND_ENV": "from-terminal-settings"
+            ]
+        )
+
+        #expect(await waitUntilFinished(registry: registry, id: job.id))
+        #expect(registry.output(id: job.id).contains("from-terminal-settings"))
+    }
+
     /// Host-side transcript surfacing can consume exactly one finished
     /// background job while leaving unrelated completions queued for
     /// the normal next-turn agent notification path.

@@ -10,7 +10,7 @@
 
 [![macOS](https://img.shields.io/badge/macOS-13.7%2B-black?logo=apple)](https://www.apple.com/macos/)
 [![Swift](https://img.shields.io/badge/Swift-SwiftUI-orange?logo=swift)](https://developer.apple.com/swift/)
-[![Version](https://img.shields.io/badge/version-1.206.0--rc1-blue)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-1.220.0--rc11-blue)](CHANGELOG.md)
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue)](LICENSE)
 
 *它不只是坐在编辑器旁边回答问题。它会看现场、做事情、留下证据，也知道什么时候该停下来问你。*
@@ -104,6 +104,31 @@ open Xedit.xcodeproj
 ```
 
 需要 Xcode 和 macOS 13.7+。产物名为 **WillDeep.app**。
+
+日常命令行编译优先使用共享热缓存入口：
+
+```bash
+ruby scripts/build_fast.rb             # Debug 增量编译，默认不生成索引、不签名
+ruby scripts/build_fast.rb --sign      # 需要运行签名链路时
+ruby scripts/build_fast.rb --release   # Release 编译
+ruby scripts/build_fast.rb --index     # 这次 CLI 编译也生成索引
+ruby scripts/build_fast.rb --release --destination 'generic/platform=macOS'
+                                      # 为正式 archive 预热全部目标架构
+```
+
+默认缓存位于 `~/Library/Caches/WillDeep/Xcode/Xedit`，DerivedData、SwiftPM checkout、package 下载缓存与 Xcode compilation cache 会跨终端和 Codex 任务复用；脚本不会修改 Xcode IDE 的索引设置。构建报告写入 `build/local/build_report.md` 与 `build/local/build_report.json`。
+
+完整的缓存布局、测试入口、CI Runner 与正式发布边界见 [本地构建与测试提速](docs/BUILD_TEST_ACCELERATION.md)。
+
+开发阶段优先通过仓库测试入口执行单测，避免多个 Agent 或 Git worktree 同时冷构建：
+
+```bash
+ruby scripts/run_tests_fast.rb -only-testing:XeditTests/YourTestSuite
+ruby scripts/run_tests_fast.rb --without-building -only-testing:XeditTests/YourTestSuite
+scripts/run_tests.sh
+```
+
+快速入口与本地编译共用稳定的 DerivedData、SwiftPM 和 compilation cache，只构建 `XeditTests` Scheme；`--without-building` 会核对源码指纹，源码变化后拒绝运行旧测试二进制。完整本地门禁仍使用 `scripts/run_tests.sh`。
 
 要把当前 worktree 的 Debug 版本直接装进 `/Applications`，先在不会提交的 `.env.local` 中配置登录密钥：
 
@@ -220,7 +245,7 @@ WillDeep 采用 [Apache License 2.0](LICENSE) + [Open Core](OPEN_CORE.md) 模式
 
 [![macOS](https://img.shields.io/badge/macOS-13.7%2B-black?logo=apple)](https://www.apple.com/macos/)
 [![Swift](https://img.shields.io/badge/Swift-SwiftUI-orange?logo=swift)](https://developer.apple.com/swift/)
-[![Version](https://img.shields.io/badge/version-1.206.0--rc1-blue)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-1.220.0--rc11-blue)](CHANGELOG.md)
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue)](LICENSE)
 
 *It does not merely answer questions beside an editor. It inspects the work, takes action, leaves evidence, and knows when to stop and ask.*

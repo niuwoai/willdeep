@@ -39,7 +39,7 @@ extension AppState {
         }
     }
 
-    /// Explicit user entry point for Normal/Plan mode. Goal mode calls the
+    /// Explicit user entry point for ordinary mode. Goal mode calls the
     /// same path automatically after a folder is attached.
     func startAgentKnowledgeFolderIndexing(id: String) {
         guard let runtime = activeRuntime,

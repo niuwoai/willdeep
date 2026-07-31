@@ -153,7 +153,7 @@ struct AgentToolActivityRowPresentation: Identifiable, Equatable {
     }
 
     private static func statusTitle(for call: AgentToolCall) -> String {
-        let operation = operationName(for: call.toolName)
+        let operation = operationName(for: call)
         switch call.status {
         case .running:
             return "正在\(operation)"
@@ -170,13 +170,21 @@ struct AgentToolActivityRowPresentation: Identifiable, Equatable {
         }
     }
 
-    private static func operationName(for toolName: String) -> String {
-        switch toolName {
+    private static func operationName(for call: AgentToolCall) -> String {
+        switch call.toolName {
         case "read_file": return "读取文件"
         case "list_directory": return "浏览目录"
         case "grep_files", "search_files": return "搜索代码"
         case "git_status": return "查看 Git 状态"
-        case "run_command": return "运行命令"
+        case "run_command":
+            if let label = compact(call.arguments["label"]?.stringValue()) {
+                return label.count > 60 ? String(label.prefix(60)) + "…" : label
+            }
+            if let command = call.arguments["command"]?.stringValue(),
+               let inferred = AgentRunCommandExecutionPolicy.inferredActivityKind(for: command) {
+                return inferred.operationName
+            }
+            return "运行命令"
         case "terminal_snapshot": return "读取终端快照"
         case "terminal_send_command": return "发送终端命令"
         case "terminal_send_control": return "发送终端控制键"
@@ -185,7 +193,7 @@ struct AgentToolActivityRowPresentation: Identifiable, Equatable {
         case "edit_file": return "编辑文件"
         case "create_file": return "创建文件"
         case "apply_patch": return "应用补丁"
-        default: return AgentToolDisplay.name(for: toolName)
+        default: return AgentToolDisplay.name(for: call.toolName)
         }
     }
 
@@ -219,6 +227,17 @@ struct AgentToolActivityRowPresentation: Identifiable, Equatable {
             return host
         case "spawn_agent":
             return compact(call.arguments["label"]?.stringValue())
+        case "claude_code", "codex_cli", "hermes_cli", "cursor_agent", "cline_cli":
+            guard let progress = call.delegatedProgress else { return nil }
+            var detail = L10n.DelegatedTask.liveProgress(
+                phase: progress.phase,
+                attempt: progress.attempt,
+                maximum: progress.maximumAttempts
+            )
+            if let activity = compact(progress.currentActivity) {
+                detail += " · \(activity)"
+            }
+            return detail
         default:
             return nil
         }
@@ -365,6 +384,7 @@ nonisolated enum AgentToolKind: Equatable, Sendable {
     case subagent
     case claudeCode
     case codexCLI
+    case hermesCLI
     case cursorAgent
     case clineCLI
     case fileMutation
@@ -388,6 +408,8 @@ nonisolated enum AgentToolKind: Equatable, Sendable {
             return .claudeCode
         case "codex_cli":
             return .codexCLI
+        case "hermes_cli":
+            return .hermesCLI
         case "cursor_agent":
             return .cursorAgent
         case "cline_cli":
@@ -427,6 +449,8 @@ nonisolated enum AgentToolKind: Equatable, Sendable {
             return "已委派 \(count) 个 Claude Code 任务"
         case .codexCLI:
             return "已委派 \(count) 个 Codex CLI 任务"
+        case .hermesCLI:
+            return "已委派 \(count) 个 Hermes 任务"
         case .cursorAgent:
             return "已委派 \(count) 个 Cursor Agent 任务"
         case .clineCLI:
@@ -463,6 +487,7 @@ nonisolated enum AgentToolKind: Equatable, Sendable {
         case .subagent: return "person.2"
         case .claudeCode: return "sparkles.rectangle.stack"
         case .codexCLI: return "terminal.fill"
+        case .hermesCLI: return "h.circle"
         case .cursorAgent: return "cursorarrow.rays"
         case .clineCLI: return "chevron.left.forwardslash.chevron.right"
         case .fileMutation: return "square.and.pencil"
@@ -482,6 +507,8 @@ extension AgentToolKind {
             return "委派给 Claude Code"
         case .codexCLI:
             return "委派给 Codex"
+        case .hermesCLI:
+            return "委派给 Hermes"
         case .cursorAgent:
             return "委派给 Cursor Agent"
         case .clineCLI:

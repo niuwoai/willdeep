@@ -510,6 +510,7 @@ module WillDeepRelease
 
     def verify_exported_app
       @runner.run!(["codesign", "--verify", "--deep", "--strict", "--verbose=4", @paths[:app]])
+      verify_computer_use_helper_identity
       info_plist = File.join(@paths[:app], "Contents", "Info.plist")
       %w[WillDeepSomeIMClientLoginSecret AIPipeAPIKey].each do |key|
         _stdout, _stderr, status = Open3.capture3(
@@ -518,6 +519,27 @@ module WillDeepRelease
           info_plist
         )
         raise ReleaseError, "拒绝发布：#{key} 不应出现在 Info.plist" if status.success?
+      end
+    end
+
+    def verify_computer_use_helper_identity
+      helper_app = File.join(
+        @paths[:app],
+        "Contents", "Resources", "WillDeepComputerUseHelper.app"
+      )
+      helper_info = File.join(helper_app, "Contents", "Info.plist")
+      bundle_id = @runner.capture!(
+        ["/usr/libexec/PlistBuddy", "-c", "Print :CFBundleIdentifier", helper_info]
+      ).strip
+      unless bundle_id == "com.willdeep.computer-use-helper"
+        raise ReleaseError, "拒绝发布：Computer Use Helper Bundle ID 发生变化（#{bundle_id}）"
+      end
+
+      signature = @runner.run!(["codesign", "--display", "--verbose=4", helper_app])
+      team_identifier = signature[/^TeamIdentifier=(.+)$/, 1]&.strip
+      unless team_identifier == @options[:team_id]
+        raise ReleaseError,
+              "拒绝发布：Computer Use Helper 签名团队不稳定（期望 #{@options[:team_id]}，实际 #{team_identifier || '缺失'}）"
       end
     end
 

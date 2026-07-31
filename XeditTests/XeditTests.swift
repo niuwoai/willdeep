@@ -129,7 +129,9 @@ struct WillDeepTests {
     @Test("agent activity stays textual and hides for user decisions")
     func testAgentActivityTextIndicatorState() {
         let appState = AppState()
-        appState.startNewAgentSession()
+        appState.startNewAgentSession(
+            inWorkspaceAt: FileManager.default.temporaryDirectory.path
+        )
         appState.isAgentResponding = true
         appState.agentMessages = [AgentMessage(role: .assistant, content: "Streaming response")]
 
@@ -167,7 +169,9 @@ struct WillDeepTests {
     @Test("goal running status bar only shows during an active goal turn")
     func testGoalRunningStatusBarVisibility() {
         let appState = AppState()
-        appState.startNewAgentSession()
+        appState.startNewAgentSession(
+            inWorkspaceAt: FileManager.default.temporaryDirectory.path
+        )
 
         appState.agentInteractionMode = .goal
         appState.setAgentGoal(statement: "Ship the thing", items: ["Build", "Verify"])
@@ -192,7 +196,9 @@ struct WillDeepTests {
     @Test("editing goal while agent is responding queues updated goal follow-up")
     func testEditingGoalWhileRespondingQueuesGoalUpdate() {
         let appState = AppState()
-        appState.startNewAgentSession()
+        appState.startNewAgentSession(
+            inWorkspaceAt: FileManager.default.temporaryDirectory.path
+        )
         appState.agentInteractionMode = .goal
         appState.setAgentGoal(statement: "Old target", items: ["First"])
 
@@ -210,7 +216,9 @@ struct WillDeepTests {
     @Test("old goal-check is ignored after a mid-turn goal edit")
     func testOldGoalCheckIgnoredAfterGoalEdit() {
         let appState = AppState()
-        appState.startNewAgentSession()
+        appState.startNewAgentSession(
+            inWorkspaceAt: FileManager.default.temporaryDirectory.path
+        )
         appState.agentInteractionMode = .goal
         appState.setAgentGoal(statement: "Old target", items: ["Old first"])
         appState.agentMessages.append(
@@ -243,13 +251,8 @@ struct WillDeepTests {
         defer { try? FileManager.default.removeItem(at: workspace) }
 
         let appState = AppState(rootDirectory: nil)
-        let existingIDs = Set(appState.agentSessions.map(\.id))
         let session = appState.startNewAgentSession()
-        defer {
-            for id in appState.agentSessions.map(\.id) where !existingIDs.contains(id) {
-                AgentSessionStore.delete(id: id)
-            }
-        }
+        defer { AgentSessionStore.delete(id: session.id) }
         let initialCount = appState.agentSessions.count
 
         let rebound = appState.moveActiveAgentSessionToWorkspace(at: workspace.path)
@@ -269,13 +272,8 @@ struct WillDeepTests {
         defer { try? FileManager.default.removeItem(at: workspace) }
 
         let appState = AppState(rootDirectory: nil)
-        let existingIDs = Set(appState.agentSessions.map(\.id))
         let session = appState.startNewAgentSession()
-        defer {
-            for id in appState.agentSessions.map(\.id) where !existingIDs.contains(id) {
-                AgentSessionStore.delete(id: id)
-            }
-        }
+        defer { AgentSessionStore.delete(id: session.id) }
         appState.agentMessages = [
             AgentMessage(role: .user, content: "先聊一个没有工作区的问题"),
             AgentMessage(role: .assistant, content: "可以，等你选工作区后我继续。")
@@ -301,13 +299,8 @@ struct WillDeepTests {
         defer { try? FileManager.default.removeItem(at: workspace) }
 
         let appState = AppState(rootDirectory: nil)
-        let existingIDs = Set(appState.agentSessions.map(\.id))
         let session = appState.startNewAgentSession(inWorkspaceAt: workspace.path)
-        defer {
-            for id in appState.agentSessions.map(\.id) where !existingIDs.contains(id) {
-                AgentSessionStore.delete(id: id)
-            }
-        }
+        defer { AgentSessionStore.delete(id: session.id) }
         appState.agentMessages = [AgentMessage(role: .user, content: "keep this conversation")]
         let initialCount = appState.agentSessions.count
 
@@ -1013,6 +1006,43 @@ struct WillDeepTests {
     }
 
     @MainActor
+    @Test("terminal command returns an automatic follow-up snapshot instead of dispatch-only output")
+    func testTerminalCommandReturnsAutomaticFollowUpSnapshot() async throws {
+        let controller = AgentInteractiveTerminalController()
+        let settings = EditorTerminalSettings.default
+        let sessionID = UUID()
+        let tab = controller.openLocalTab(
+            originAgentSessionID: sessionID,
+            workingDirectory: FileManager.default.temporaryDirectory.path,
+            settings: settings,
+            skin: nil
+        )
+        defer { controller.closeTab(id: tab.id) }
+        try await Task.sleep(nanoseconds: 300_000_000)
+
+        let marker = "willdeep-terminal-follow-up-\(UUID().uuidString)"
+        let result = try await AgentTerminalTools.sendCommand(
+            arguments: [
+                "command": .string("printf '\(marker)\\n'"),
+                "terminal_tab_id": .string(tab.id.uuidString)
+            ],
+            context: AgentToolContext(
+                rootDirectory: FileManager.default.temporaryDirectory,
+                runtimeID: sessionID,
+                sandboxMode: .workspaceWrite,
+                terminalController: controller
+            )
+        )
+
+        #expect(result.payload.contains("Command dispatch confirmed"))
+        #expect(result.payload.contains("does not contain command output"))
+        #expect(result.payload.contains("Automatic follow-up snapshot"))
+        #expect(result.payload.contains(marker))
+        #expect(result.payload.contains(tab.id.uuidString))
+        #expect(result.payload.contains("call terminal_snapshot again"))
+    }
+
+    @MainActor
     @Test("terminal command explains when its approved tab exited")
     func testTerminalCommandExplainsExitedApprovedTab() throws {
         let controller = AgentInteractiveTerminalController()
@@ -1701,6 +1731,14 @@ struct WillDeepTests {
         #expect(descriptor?.parameters.contains(where: { $0.name == "model" }) == true)
     }
 
+    @Test("run_command exposes background override and user-facing label")
+    func testRunCommandBackgroundPresentationRegistration() {
+        let descriptor = AgentToolRegistry.descriptor(for: "run_command")
+        #expect(descriptor?.parameters.contains(where: { $0.name == "run_in_background" }) == true)
+        #expect(descriptor?.parameters.contains(where: { $0.name == "label" }) == true)
+        #expect(descriptor?.description.contains("automatically moved to the background") == true)
+    }
+
     @Test("MCP read-style tool names pass the static heuristic")
     func testMCPReadOnlyToolNameHeuristic() {
         #expect(AgentToolAuthorization.mcpToolNameLooksReadOnly("get_issue"))
@@ -1910,7 +1948,7 @@ struct WillDeepTests {
         )
         #expect(curlApproval == nil)
 
-        // 普通模式下，委托式编码 Agent 由静态白名单免去重复审批。
+        // Smart 模式信任受控委托式编码 Agent；其自身仍受沙箱约束。
         let normalApproval = await appState.autoApprovalSource(
             toolName: "claude_code",
             arguments: ["prompt": .string("do x")],
@@ -2051,18 +2089,39 @@ struct WillDeepTests {
 
     @Test("approval mode controls write-tier auto approval")
     @MainActor
-    func testApprovalModeControlsWriteTierAutoApproval() async {
+    func testApprovalModeControlsWriteTierAutoApproval() async throws {
         let sandbox = KeychainSandbox()
         defer { withExtendedLifetime(sandbox) {} }
         let appState = AppState()
         appState.autoApproveSafeCommands = true
-        let root = URL(fileURLWithPath: "/tmp/willdeep-test-workspace")
+        let testRoot = FileManager.default.temporaryDirectory
+            .appendingPathComponent("willdeep_approval_modes_\(UUID().uuidString)", isDirectory: true)
+        let gitRoot = testRoot.appendingPathComponent("git-workspace", isDirectory: true)
+        let noGitRoot = testRoot.appendingPathComponent("plain-workspace", isDirectory: true)
+        try FileManager.default.createDirectory(at: gitRoot, withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: noGitRoot, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: testRoot) }
+
+        func runGit(_ arguments: [String]) throws {
+            let result = AppState.runGitCommand(arguments: arguments, in: gitRoot)
+            try #require(result.succeeded, "git \(arguments.joined(separator: " ")) failed: \(result.stderr)")
+        }
+        try runGit(["init"])
+        try runGit(["config", "user.email", "tests@example.invalid"])
+        try runGit(["config", "user.name", "WillDeep Tests"])
+        try "baseline\n".write(
+            to: gitRoot.appendingPathComponent("README.md"),
+            atomically: true,
+            encoding: .utf8
+        )
+        try runGit(["add", "README.md"])
+        try runGit(["commit", "-m", "baseline"])
 
         let askEveryTime = await appState.autoApprovalSource(
             toolName: "run_command",
             arguments: ["command": .string("ls")],
             risk: .write,
-            rootDirectory: root,
+            rootDirectory: gitRoot,
             approvalMode: .requestEveryTime
         )
         #expect(askEveryTime == nil)
@@ -2071,7 +2130,7 @@ struct WillDeepTests {
             toolName: "run_command",
             arguments: ["command": .string("ls")],
             risk: .write,
-            rootDirectory: root,
+            rootDirectory: noGitRoot,
             approvalMode: .smart
         )
         #expect(smart == .staticAllowlist)
@@ -2083,7 +2142,7 @@ struct WillDeepTests {
                 "zmodem_upload_paths": .array([.string("build/app.tar.gz")]),
             ],
             risk: .write,
-            rootDirectory: root,
+            rootDirectory: gitRoot,
             approvalMode: .smart
         )
         #expect(zmodemPathSelection == nil)
@@ -2092,7 +2151,7 @@ struct WillDeepTests {
             toolName: "run_command",
             arguments: ["command": .string("swift test")],
             risk: .write,
-            rootDirectory: root,
+            rootDirectory: noGitRoot,
             approvalMode: .workspaceAccess
         )
         #expect(workspace == .workspaceAccess)
@@ -2104,24 +2163,30 @@ struct WillDeepTests {
                 "tool": .string("create_issue"),
             ],
             risk: .write,
-            rootDirectory: root,
+            rootDirectory: gitRoot,
             approvalMode: .workspaceAccess
         )
         #expect(untrustedMCP == nil)
 
-        // Regression: `web_fetch` is sandbox `.escalated`, so before the
-        // Workspace-Access block was hoisted above the `run_command`-only
-        // `canSendToSafetyJudge` short-circuit it never reached its own
-        // whitelist entry and always prompted. General network access must
-        // now auto-approve under Workspace Access.
+        // Workspace Access authorizes workspace writes, not external network
+        // effects. Smart review is responsible for judging web/curl actions.
         let workspaceFetch = await appState.autoApprovalSource(
             toolName: "web_fetch",
             arguments: ["url": .string("https://docs.example.com/guide")],
             risk: .write,
-            rootDirectory: root,
+            rootDirectory: gitRoot,
             approvalMode: .workspaceAccess
         )
-        #expect(workspaceFetch == .workspaceAccess)
+        #expect(workspaceFetch == nil)
+
+        let workspaceCurl = await appState.autoApprovalSource(
+            toolName: "run_command",
+            arguments: ["command": .string("curl https://example.com/status")],
+            risk: .write,
+            rootDirectory: gitRoot,
+            approvalMode: .workspaceAccess
+        )
+        #expect(workspaceCurl == nil)
 
         // A destructive typed-confirmation command still pauses in
         // Workspace Access — the hard safety gate must survive the hoist.
@@ -2129,7 +2194,7 @@ struct WillDeepTests {
             toolName: "run_command",
             arguments: ["command": .string("rm -rf /tmp/willdeep-test-workspace")],
             risk: .write,
-            rootDirectory: root,
+            rootDirectory: gitRoot,
             approvalMode: .workspaceAccess
         )
         #expect(workspaceDestructive == nil)
@@ -2138,16 +2203,43 @@ struct WillDeepTests {
             toolName: "run_command",
             arguments: ["command": .string("go build -o bin/app . 2>&1")],
             risk: .write,
-            rootDirectory: root,
+            rootDirectory: gitRoot,
             approvalMode: .smart
         )
         #expect(goBuild == .staticAllowlist)
+
+        let noGitBuild = await appState.autoApprovalSource(
+            toolName: "run_command",
+            arguments: ["command": .string("go build -o bin/app . 2>&1")],
+            risk: .write,
+            rootDirectory: noGitRoot,
+            approvalMode: .smart
+        )
+        #expect(noGitBuild == .staticAllowlist)
+
+        let gitDelegatedAgent = await appState.autoApprovalSource(
+            toolName: "claude_code",
+            arguments: ["prompt": .string("update the project")],
+            risk: .write,
+            rootDirectory: gitRoot,
+            approvalMode: .smart
+        )
+        #expect(gitDelegatedAgent == .staticAllowlist)
+
+        let noGitDelegatedAgent = await appState.autoApprovalSource(
+            toolName: "claude_code",
+            arguments: ["prompt": .string("update the project")],
+            risk: .write,
+            rootDirectory: noGitRoot,
+            approvalMode: .smart
+        )
+        #expect(noGitDelegatedAgent == .staticAllowlist)
 
         let yarnBuild = await appState.autoApprovalSource(
             toolName: "run_command",
             arguments: ["command": .string("yarn run build")],
             risk: .write,
-            rootDirectory: root,
+            rootDirectory: gitRoot,
             approvalMode: .smart
         )
         #expect(yarnBuild == .staticAllowlist)
@@ -2155,13 +2247,13 @@ struct WillDeepTests {
         let heredocGeneration = await appState.autoApprovalSource(
             toolName: "run_command",
             arguments: ["command": .string("""
-            cd /tmp/willdeep-test-workspace && python3 << 'PYEOF'
+            cd \(gitRoot.path) && python3 << 'PYEOF'
             from pathlib import Path
             Path("Generated.swift").write_text("let value = 1\\n")
             PYEOF
             """)],
             risk: .write,
-            rootDirectory: root,
+            rootDirectory: gitRoot,
             approvalMode: .smart
         )
         #expect(heredocGeneration == .staticAllowlist)
@@ -2169,15 +2261,46 @@ struct WillDeepTests {
         let outsideWorkspaceGeneration = await appState.autoApprovalSource(
             toolName: "run_command",
             arguments: ["command": .string("""
-            cd /tmp/willdeep-test-workspace && cat > /tmp/outside.txt << 'EOF'
+            cd \(gitRoot.path) && cat > /tmp/outside.txt << 'EOF'
             generated
             EOF
             """)],
             risk: .write,
-            rootDirectory: root,
+            rootDirectory: gitRoot,
             approvalMode: .smart
         )
         #expect(outsideWorkspaceGeneration == nil)
+    }
+
+    @Test("git baseline detection remains available for recovery diagnostics")
+    func testRecoverableGitBaselineDetection() throws {
+        #expect(AppState.findGitRepositoryRoot(startingAt: URL(fileURLWithPath: "/")) == nil)
+
+        let workspace = FileManager.default.temporaryDirectory
+            .appendingPathComponent("willdeep_git_baseline_\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: workspace, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: workspace) }
+
+        #expect(!AppState.hasRecoverableGitBaseline(startingAt: workspace))
+        #expect(AppState.runGitCommand(arguments: ["init"], in: workspace).succeeded)
+        #expect(!AppState.hasRecoverableGitBaseline(startingAt: workspace))
+
+        #expect(AppState.runGitCommand(
+            arguments: ["config", "user.email", "tests@example.invalid"],
+            in: workspace
+        ).succeeded)
+        #expect(AppState.runGitCommand(
+            arguments: ["config", "user.name", "WillDeep Tests"],
+            in: workspace
+        ).succeeded)
+        try "baseline\n".write(
+            to: workspace.appendingPathComponent("README.md"),
+            atomically: true,
+            encoding: .utf8
+        )
+        #expect(AppState.runGitCommand(arguments: ["add", "README.md"], in: workspace).succeeded)
+        #expect(AppState.runGitCommand(arguments: ["commit", "-m", "baseline"], in: workspace).succeeded)
+        #expect(AppState.hasRecoverableGitBaseline(startingAt: workspace))
     }
 
     @Test("legacy agent session JSON defaults to smart approval")
@@ -2684,7 +2807,10 @@ struct WillDeepTests {
 
     @Test("agent token estimate includes tool schemas without exploding short chats")
     func testAgentTokenEstimateIncludesTools() {
-        let maximumExpectedToolSchemaTokens = 35_000
+        // Keep a narrow ceiling above the current complete registry so this
+        // catches accidental schema explosions without rejecting intentional
+        // additions to the built-in tool surface.
+        let maximumExpectedToolSchemaTokens = 37_000
         let messages = [AgentMessage(role: .user, content: "hi")]
         let withoutTools = AppState.estimateAgentTokens(messages: messages, tools: [])
         let withTools = AppState.estimateAgentTokens(messages: messages, tools: AgentToolRegistry.all)

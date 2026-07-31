@@ -75,6 +75,7 @@ struct AgentExecutionPickerPill: View {
         case .willDeep: return Color.secondary.opacity(0.10)
         case .claudeCode: return Color.purple
         case .codexCLI: return Color.accentColor
+        case .hermesCLI: return Color.indigo
         case .cursorAgent: return Color.green
         case .clineCLI: return Color.orange
         }
@@ -91,7 +92,7 @@ struct AgentExecutionPickerPill: View {
     }
 }
 
-// MARK: - Mode picker (Normal / Plan / Goal)
+// MARK: - Mode picker (Ordinary / Goal)
 
 struct AgentModePickerPill: View {
     @EnvironmentObject var appState: AppState
@@ -104,6 +105,12 @@ struct AgentModePickerPill: View {
                 } label: {
                     Label(mode.displayName, systemImage: mode.symbol)
                 }
+                .disabled(
+                    mode == .goal
+                        && appState.activeRuntime?.workspaceLocation == nil
+                        && (appState.activeRuntime?.workspaceRootPath?
+                            .trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ?? true)
+                )
             }
         } label: {
             HStack(spacing: 4) {
@@ -128,7 +135,7 @@ struct AgentModePickerPill: View {
         .menuIndicator(.hidden)
         .focusable(false)
         .fixedSize()
-        .help("Conversation mode — Plan locks writes until you approve; Goal pins an objective to every reply.")
+        .help(L10n.InteractionMode.help)
     }
 
     private var pillForeground: Color {
@@ -138,7 +145,6 @@ struct AgentModePickerPill: View {
     private var pillBackground: Color {
         switch appState.agentInteractionMode {
         case .normal: return Color.secondary.opacity(0.10)
-        case .plan: return Color.orange
         case .goal: return Color.accentColor
         }
     }

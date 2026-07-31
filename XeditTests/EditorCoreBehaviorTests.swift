@@ -278,6 +278,23 @@ struct EditorCoreBehaviorTests {
         #expect(settings.interfaceSkinID == EditorSettings.default.interfaceSkinID)
     }
 
+    @Test("editor settings are persisted before weak AppState side effects")
+    func testEditorSettingsPersistenceSurvivesAppStateRelease() throws {
+        let repositoryRoot = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+        let sourceURL = repositoryRoot
+            .appendingPathComponent("Xedit", isDirectory: true)
+            .appendingPathComponent("AppState.swift")
+        let source = try String(contentsOf: sourceURL, encoding: .utf8)
+        let scheduler = try #require(source.range(of: "private func scheduleEditorSettingsSideEffects()"))
+        let trailingSource = source[scheduler.lowerBound...]
+        let save = try #require(trailingSource.range(of: "EditorSettingsStore.save(normalizedSettings)"))
+        let weakSelfExit = try #require(trailingSource.range(of: "guard let self else { return }"))
+
+        #expect(save.lowerBound < weakSelfExit.lowerBound)
+    }
+
     @Test("interface skins are registered with localized names and editor themes")
     func testInterfaceSkinsAreRegistered() {
         #expect(EditorInterfaceSkin.allCases.count == 7)

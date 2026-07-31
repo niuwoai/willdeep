@@ -71,6 +71,26 @@ struct AgentToolCallGroupingPresentationTests {
         )
     }
 
+    @Test("external CLI activity exposes phase attempt and latest redacted action")
+    func delegatedCLILiveProgressIsVisible() throws {
+        var call = makeCall("codex_cli")
+        call.delegatedProgress = AgentDelegatedLiveProgress(
+            phase: .executing,
+            attempt: 1,
+            maximumAttempts: 2,
+            terminalTabID: UUID(),
+            currentActivity: "go test ./internal/payment",
+            recentOutput: "ok example/internal/payment"
+        )
+
+        let presentation = AgentToolActivityRowPresentation(call: call)
+        let detail = try #require(presentation.detail)
+
+        #expect(detail.contains(L10n.DelegatedTask.phase(.executing)))
+        #expect(detail.contains(L10n.DelegatedTask.attempt(1, 2)))
+        #expect(detail.contains("go test ./internal/payment"))
+    }
+
     @Test("live activity timeline hides a failed exact edit after the same file is repaired")
     func liveActivityTimelineCompactsRecoveredEditFailure() {
         let path = "deploy/k8s/tokenhub-deployment.yaml"
@@ -290,6 +310,27 @@ extension WillDeepTests {
         #expect(command.title == "已运行命令")
         #expect(command.detail == "Xedit 工作区")
         #expect(command.detail?.contains("super-sensitive-value") == false)
+    }
+
+    @Test("live command rows use model labels and safe inferred activity names")
+    func liveCommandRowsUseNaturalActivityNames() {
+        let labeled = AgentToolActivityRowPresentation(call: makeCall(
+            "run_command",
+            status: .running,
+            arguments: [
+                "label": .string("运行前端测试"),
+                "command": .string("yarn test"),
+            ]
+        ))
+        let inferred = AgentToolActivityRowPresentation(call: makeCall(
+            "run_command",
+            arguments: ["command": .string("xcodebuild -scheme WillDeep test")]
+        ))
+
+        #expect(labeled.title == "正在运行前端测试")
+        #expect(inferred.title == "已运行测试")
+        #expect(labeled.detail == nil)
+        #expect(!labeled.title.contains("yarn"))
     }
 
     @Test("live activity timeline keeps recent rows and never hides approvals")
@@ -570,13 +611,8 @@ extension WillDeepTests {
     @MainActor
     func testToolApprovalClickedBeforeWaiterRegistrationIsDelivered() async throws {
         let appState = AppState()
-        let existingIDs = Set(appState.agentSessions.map(\.id))
         let session = appState.startNewAgentSession()
-        defer {
-            for id in appState.agentSessions.map(\.id) where !existingIDs.contains(id) {
-                AgentSessionStore.delete(id: id)
-            }
-        }
+        defer { AgentSessionStore.delete(id: session.id) }
         guard let runtime = appState.agentRuntimes[session.id] else {
             Issue.record("Expected runtime for new agent session")
             return
@@ -614,18 +650,11 @@ extension WillDeepTests {
         defer { try? FileManager.default.removeItem(at: workspace) }
 
         let appState = AppState(rootDirectory: workspace)
-        let existingIDs = Set(appState.agentSessions.map(\.id))
         let session = appState.startNewAgentSession()
-        defer {
-            for id in appState.agentSessions.map(\.id) where !existingIDs.contains(id) {
-                AgentSessionStore.delete(id: id)
-            }
-        }
+        defer { AgentSessionStore.delete(id: session.id) }
         let runtime = try #require(appState.agentRuntimes[session.id])
-        // An approved/executing plan lives in Normal mode: Plan mode is
-        // planning-only and approval flips the session back to Normal for
-        // execution. So a long-running execution session is Normal mode with
-        // the plan carried over — and the plan gate is inactive there.
+        // A long-running ordinary execution can carry a visible Plan, but the
+        // Plan itself is progress state and does not create an approval gate.
         runtime.interactionMode = .normal
         runtime.currentPlan = AgentPlan(
             status: .executing,
@@ -678,13 +707,8 @@ extension WillDeepTests {
     @MainActor
     func testWorkspaceAccessModeChangeKeepsDangerConfirmationBlocked() async throws {
         let appState = AppState()
-        let existingIDs = Set(appState.agentSessions.map(\.id))
         let session = appState.startNewAgentSession()
-        defer {
-            for id in appState.agentSessions.map(\.id) where !existingIDs.contains(id) {
-                AgentSessionStore.delete(id: id)
-            }
-        }
+        defer { AgentSessionStore.delete(id: session.id) }
         let runtime = try #require(appState.agentRuntimes[session.id])
         runtime.approvalMode = .requestEveryTime
 
@@ -709,13 +733,8 @@ extension WillDeepTests {
     @MainActor
     func testToolApprovalResumesOnlyMatchingWaiter() async throws {
         let appState = AppState()
-        let existingIDs = Set(appState.agentSessions.map(\.id))
         let session = appState.startNewAgentSession()
-        defer {
-            for id in appState.agentSessions.map(\.id) where !existingIDs.contains(id) {
-                AgentSessionStore.delete(id: id)
-            }
-        }
+        defer { AgentSessionStore.delete(id: session.id) }
         guard let runtime = appState.agentRuntimes[session.id] else {
             Issue.record("Expected runtime for new agent session")
             return
@@ -844,5 +863,21 @@ struct AgentAuthorizationNoticeTests {
         #expect(web.declineTitle == "暂不访问")
         #expect(web.metadata.contains("仅发送 GET 请求"))
         #expect(web.metadata.contains { $0.hasPrefix("最多读取 12") })
+
+        let skillBatch = AgentApprovalNoticeCopy.descriptor(
+            toolName: "create_user_skills",
+            arguments: [
+                "skills_json": .string("""
+                [
+                  {"name":"release-guardian","description":"Release checks.","body":"Run checks."},
+                  {"name":"incident-reviewer","description":"Incident review.","body":"Review evidence."}
+                ]
+                """)
+            ]
+        )
+        #expect(skillBatch.title == "Agent 准备创建 2 个技能")
+        #expect(skillBatch.approveTitle == "创建全部")
+        #expect(skillBatch.metadata.contains("一次确认"))
+        #expect(skillBatch.metadata.contains("失败整批回滚"))
     }
 }

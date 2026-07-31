@@ -35,13 +35,6 @@ struct AgentChatComposer: View {
     @EnvironmentObject var appState: AppState
     @FocusState private var inputFocused: Bool
 
-    /// Per-plan banner 显示状态。用 plan summary 做"指纹"识别"是不
-    /// 是同一个 plan"，避免用户拒绝后下一次 body 重算又把 banner 弹
-    /// 回来。一旦用户拒绝、开始打字、或确认完成 → dismissedPlanFingerprint
-    /// 记下这个 plan 的指纹，本 plan 不再弹。下一个新 plan 来时
-    /// 指纹不同会重置。
-    @State private var dismissedPlanFingerprint: String?
-
     var body: some View {
         VStack(spacing: 0) {
             VStack(spacing: 6) {
@@ -76,6 +69,11 @@ struct AgentChatComposer: View {
                         .frame(maxWidth: AgentDesign.chatMaxContentWidth)
                 }
 
+                if let relatedGoal = relatedWorkspaceGoal, shouldShowWorkspaceGoalAwareness {
+                    AgentComposerWorkspaceGoalCard(session: relatedGoal)
+                        .frame(maxWidth: AgentDesign.chatMaxContentWidth)
+                }
+
                 if appState.shouldShowComposerGoalCard, let goal = appState.agentCurrentGoal {
                     AgentComposerGoalCard(goal: goal)
                         .frame(maxWidth: AgentDesign.chatMaxContentWidth)
@@ -86,53 +84,7 @@ struct AgentChatComposer: View {
                         .frame(maxWidth: AgentDesign.chatMaxContentWidth)
                 }
 
-                if let suggestion = planModeSuggestion() {
-                    AgentPlanModeSuggestionBanner(
-                        onEnterPlan: {
-                            appState.resolveAgentPlanModeSuggestion(enterPlanMode: true)
-                        },
-                        onContinueNormally: {
-                            appState.resolveAgentPlanModeSuggestion(enterPlanMode: false)
-                        }
-                    )
-                    .frame(maxWidth: AgentDesign.chatMaxContentWidth)
-                    .id(suggestion.id)
-                    .transition(.opacity.combined(with: .move(edge: .bottom)))
-                }
-
-                if let plan = bannerPlan() {
-                    AgentPlanAutoExecutionBanner(
-                        plan: plan,
-                        workspacePath: appState.rootDirectory?.path,
-                        onConfirm: {
-                            dismissedPlanFingerprint = planFingerprint(plan)
-                            appState.confirmAgentPlanAndExecute()
-                        },
-                        onReject: {
-                            dismissedPlanFingerprint = planFingerprint(plan)
-                        },
-                        onRememberChange: { _ in }
-                    )
-                    .frame(maxWidth: AgentDesign.chatMaxContentWidth)
-                    .id(planFingerprint(plan))
-                    .transition(.opacity.combined(with: .move(edge: .bottom)))
-                }
-
-                ComposerCard(onUserEdit: { oldValue, newValue in
-                    if appState.agentPendingPlanModeSuggestion != nil,
-                       newValue != oldValue {
-                        appState.cancelAgentPlanModeSuggestion()
-                    }
-                    // 用户在 composer 继续打字（输入框字数变多）→ 视作"我有
-                    // 补充，留在 Plan 模式"，立刻 dismiss banner。**只在 banner
-                    // 还显示时记 fingerprint**，否则任何普通输入都会无意义地写
-                    // state。rc482 起从 `onChange(of: appState.agentInput)` 改走
-                    // 这个回调（打字不再重渲染 appState）。
-                    guard let plan = currentProposedPlanIfBannerVisible() else { return }
-                    if newValue.count > oldValue.count {
-                        dismissedPlanFingerprint = planFingerprint(plan)
-                    }
-                })
+                ComposerCard()
                 // Keep the card tied to the chat column instead of its
                 // bottom control row's intrinsic width. The control row
                 // changes when the draft crosses empty ↔ non-empty (queue /
@@ -141,9 +93,7 @@ struct AgentChatComposer: View {
                 .frame(maxWidth: .infinity)
                 .frame(maxWidth: AgentDesign.chatMaxContentWidth)
             }
-            .frame(maxWidth: .infinity)
-            .padding(.horizontal, AgentDesign.chatHorizontalInset)
-            .padding(.vertical, 14)
+            .agentChatReadableColumn(verticalPadding: 14)
         }
         .onAppear {
             appState.refreshActiveAgentWorktreeChanges()
@@ -154,49 +104,10 @@ struct AgentChatComposer: View {
             appState.refreshActiveAgentWorktreeChanges()
             appState.refreshAgentGitWorktrees()
             appState.refreshAgentWorkspaceCollision()
-            // 切 session 后重置 banner 状态：新 session 的 plan 该弹照弹。
-            dismissedPlanFingerprint = nil
-        }
-        .onCompatibleChange(of: appState.agentCurrentPlan?.status) { _, newStatus in
-            // 新 plan 刚解析出来变成 .proposed —— 如果用户之前在本
-            // workspace 勾过「记住」，跳过 banner 直接 confirm。
-            guard newStatus == .proposed,
-                  appState.agentInteractionMode == .plan,
-                  AgentSettingsStore.loadPlanAutoExecuteSilently(
-                    workspacePath: appState.rootDirectory?.path
-                  ) else { return }
-            appState.confirmAgentPlanAndExecute()
         }
         .sheet(item: $appState.agentWorktreeDiffPreview) { preview in
             AgentWorktreeDiffPreviewSheet(preview: preview)
         }
-    }
-
-    private func bannerPlan() -> AgentPlan? {
-        guard appState.agentInteractionMode == .plan,
-              let plan = appState.agentCurrentPlan,
-              plan.status == .proposed else {
-            return nil
-        }
-        if dismissedPlanFingerprint == planFingerprint(plan) {
-            return nil
-        }
-        return plan
-    }
-
-    private func planModeSuggestion() -> AgentPlanModeSuggestion? {
-        guard appState.agentInteractionMode == .normal else { return nil }
-        return appState.agentPendingPlanModeSuggestion
-    }
-
-    private func currentProposedPlanIfBannerVisible() -> AgentPlan? {
-        guard let plan = appState.agentCurrentPlan,
-              plan.status == .proposed,
-              appState.agentInteractionMode == .plan,
-              dismissedPlanFingerprint != planFingerprint(plan) else {
-            return nil
-        }
-        return plan
     }
 
     /// 是否显示「另有会话在此目录工作」碰撞提示条。碰撞事实由
@@ -207,10 +118,42 @@ struct AgentChatComposer: View {
     /// 到别的会话时 `agentMessages` 自动带出新会话的消息数，天然重新计数。
     private var shouldShowWorkspaceCollision: Bool {
         guard !appState.agentWorkspaceCollision.isEmpty else { return false }
+        return currentSessionUserTurnCount <= 3
+    }
+
+    private var shouldShowWorkspaceGoalAwareness: Bool {
+        currentSessionUserTurnCount <= 3
+    }
+
+    private var currentSessionUserTurnCount: Int {
         let userTurnCount = appState.agentMessages.reduce(into: 0) { count, message in
             if message.role == .user { count += 1 }
         }
-        return userTurnCount <= 3
+        return userTurnCount
+    }
+
+    private var relatedWorkspaceGoal: AgentWorkspaceSessionSnapshot? {
+        guard let runtime = appState.activeRuntime,
+              runtime.session.presentationScope == .workspace else {
+            return nil
+        }
+        return appState.workspaceSessionSnapshots(for: runtime)
+            .filter {
+                !$0.isActive
+                    && !$0.isArchived
+                    && $0.goalStatement?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false
+                    && !$0.goalIsComplete
+            }
+            .sorted {
+                if $0.isDispatchProject != $1.isDispatchProject {
+                    return $0.isDispatchProject && !$1.isDispatchProject
+                }
+                if $0.isResponding != $1.isResponding {
+                    return $0.isResponding && !$1.isResponding
+                }
+                return $0.lastActivityAt > $1.lastActivityAt
+            }
+            .first
     }
 
     private var shouldShowActivityStatus: Bool {
@@ -230,15 +173,52 @@ struct AgentChatComposer: View {
         )
     }
 
-    private func planFingerprint(_ plan: AgentPlan) -> String {
-        // summary + 每步 text 的拼接哈希就够区分两个不同 plan；
-        // agent 重新规划时 summary 或步骤会变。
-        let body = plan.summary + "\u{1F}" + plan.steps.map(\.text).joined(separator: "\u{1F}")
-        var hash: UInt64 = 5381
-        for byte in body.utf8 {
-            hash = ((hash << 5) &+ hash) &+ UInt64(byte)
+}
+
+private struct AgentComposerWorkspaceGoalCard: View {
+    @EnvironmentObject private var appState: AppState
+    let session: AgentWorkspaceSessionSnapshot
+
+    var body: some View {
+        HStack(spacing: 8) {
+            Image(systemName: session.isDispatchProject ? "point.3.connected.trianglepath.dotted" : "target")
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundStyle(Color.accentColor)
+
+            Text(
+                L10n.AgentWorkspaceGoalAwareness.summary(
+                    session.title,
+                    session.goalCompletedItemCount,
+                    session.goalTotalItemCount,
+                    session.isResponding,
+                    session.isDispatchProject
+                )
+            )
+            .font(.system(size: 12, weight: .medium))
+            .foregroundStyle(.primary)
+            .lineLimit(2)
+            .fixedSize(horizontal: false, vertical: true)
+
+            Spacer(minLength: 8)
+
+            Button(L10n.AgentWorkspaceGoalAwareness.open) {
+                appState.revealAgentSessionFromNotification(id: session.id)
+            }
+            .buttonStyle(.plain)
+            .focusable(false)
+            .font(.system(size: 12, weight: .semibold))
+            .foregroundStyle(Color.accentColor)
         }
-        return String(hash, radix: 16)
+        .padding(.horizontal, 12)
+        .padding(.vertical, 7)
+        .background(
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .fill(Color.accentColor.opacity(0.08))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .strokeBorder(Color.accentColor.opacity(0.28), lineWidth: 1)
+        )
     }
 }
 
@@ -588,13 +568,6 @@ struct AgentWorktreeDiffPreviewSheet: View {
 }
 
 private struct ComposerCard: View {
-    /// Called on every composer edit with (oldText, newText). rc482: typing
-    /// no longer repaints `appState`, so the plan-banner "dismiss when the
-    /// user keeps typing" rule — which used to ride `onChange(of:
-    /// appState.agentInput)` up in `AgentChatComposer` — is driven through
-    /// this callback instead.
-    let onUserEdit: (_ oldText: String, _ newText: String) -> Void
-
     @EnvironmentObject var appState: AppState
     @FocusState private var inputFocused: Bool
     @State private var slashMenuVisible: Bool = false
@@ -612,10 +585,12 @@ private struct ComposerCard: View {
     @State private var skillMenuVisible: Bool = false
     @State private var skillMenuSelection: Int = 0
     @State private var skillMenuQuery: String = ""
-    /// Cached skill list — re-fetched whenever the $ popover opens so we
-    /// pick up newly installed skills without recomputing on every
-    /// keystroke.
+    /// View-local projection of the process-wide filesystem catalog.
+    /// Cold discovery always runs off MainActor; later opens only compare a
+    /// cheap revision until a real skill mutation invalidates the cache.
     @State private var skillCatalog: [AgentSkillEntry] = []
+    @State private var skillCatalogRevision: Int = -1
+    @State private var skillCatalogLoadTask: Task<Void, Never>?
     /// Strong ref to the coordinator so the @-token replacement helper
     /// can call back into it from SwiftUI callbacks.
     @State private var coordinatorRef = ComposerCoordinatorRef()
@@ -876,7 +851,6 @@ private struct ComposerCard: View {
                             appState.suppressActiveRuntimeForward = (wasEmpty == nowEmpty)
                             defer { appState.suppressActiveRuntimeForward = false }
                             appState.agentInput = newValue
-                            onUserEdit(oldValue, newValue)
                         }
                     ),
                     placeholder: L10n.Composer.inputPlaceholder,
@@ -1163,15 +1137,28 @@ private struct ComposerCard: View {
             if atMenuVisible {
                 closeAtMenu()
             }
-            // Refresh the catalog on transition from closed → open so a
-            // newly installed skill shows up the next time `$` is typed.
-            if !skillMenuVisible || skillCatalog.isEmpty {
-                skillCatalog = AgentSkillDirectory.list()
+            if !skillMenuVisible
+                || skillCatalogRevision != AgentSkillDirectory.cacheRevision {
+                refreshSkillCatalogIfNeeded()
             }
             skillMenuQuery = q
         } else {
             skillMenuQuery = ""
             skillMenuVisible = false
+        }
+    }
+
+    private func refreshSkillCatalogIfNeeded() {
+        guard skillCatalogLoadTask == nil else { return }
+        let expectedRevision = AgentSkillDirectory.cacheRevision
+        guard skillCatalogRevision != expectedRevision else { return }
+
+        skillCatalogLoadTask = Task { @MainActor in
+            defer { skillCatalogLoadTask = nil }
+            let loadedSkills = await AgentSkillDirectory.listAsync()
+            guard !Task.isCancelled else { return }
+            skillCatalog = loadedSkills
+            skillCatalogRevision = AgentSkillDirectory.cacheRevision
         }
     }
 
