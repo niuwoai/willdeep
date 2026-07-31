@@ -69,12 +69,53 @@ struct AgentToolResultImageEncodingTests {
             model: "deepseek-v4-pro",
             apiKey: "test"
         ).normalized
+        let someIMFlashAliases = [
+            "someim-auto-flash",
+            "someim-code-low",
+            "someim-coding-plan",
+            "someim-coding-plan-low"
+        ]
+        let nonFlashSomeIMModels = [
+            "someim-coding-plan-high",
+            "someim-coding-plan-premium"
+        ]
 
         #expect(directFlash.inferenceProviderKind == .openAIResponses)
         #expect(directFlash.usesStatelessDeepSeekResponses)
         #expect(gatewayFlash.inferenceProviderKind == .openAIResponses)
         #expect(gatewayFlash.usesWillDeepGatewayResponsesState)
         #expect(directPro.inferenceProviderKind == .openAIChat)
+
+        for model in someIMFlashAliases {
+            let configuration = AgentConfiguration(
+                providerID: AgentProviderPreset.someIMID,
+                baseURL: "https://some.im/v1",
+                model: model,
+                apiKey: "test"
+            ).normalized
+            #expect(configuration.inferenceProviderKind == .openAIResponses)
+            #expect(configuration.usesWillDeepGatewayResponsesState)
+
+            let customConfiguration = AgentConfiguration(
+                providerID: AgentProviderPreset.customID,
+                baseURL: "https://example.com/v1",
+                model: model,
+                apiKey: "test"
+            ).normalized
+            #expect(customConfiguration.inferenceProviderKind == .openAIChat)
+            #expect(!customConfiguration.isDeepSeekV4FlashResponsesModel)
+        }
+
+        for model in nonFlashSomeIMModels {
+            let configuration = AgentConfiguration(
+                providerID: AgentProviderPreset.someIMID,
+                baseURL: "https://some.im/v1",
+                model: model,
+                apiKey: "test"
+            ).normalized
+            #expect(configuration.inferenceProviderKind == .openAIChat)
+            #expect(!configuration.usesWillDeepGatewayResponsesState)
+        }
     }
 
     @Test

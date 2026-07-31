@@ -176,36 +176,25 @@ record.call(
   helper_source.include?('result["value_redacted"] = true') &&
     helper_source.include?("secureInputRejected") &&
     helper_source.include?("rejectSecureFocusedElement") &&
-    helper_source.include?("redactedWindowCapture") &&
-    helper_source.include?("SensitiveAccessibilityScanner.scan") &&
     scanner_source.include?('"seed phrase"') &&
     scanner_source.include?('"private key"') &&
     scanner_source.include?('"验证码"') &&
     build_tree_source.include?("redactsContent: isSensitiveContent") &&
     build_tree_source.include?("ancestorRedacted: isSensitiveContent") &&
     helper_source.scan("guard !isSecureInputElement(element)").length >= 3,
-  "secure and protected fields recursively omit content, mask screenshots and reject reads or writes"
+  "secure and protected AX fields recursively omit values and reject reads or writes independently of the temporarily unmasked screenshot path"
 )
 
 record.call(
-  "complete-sensitive-subtree-scan",
-  scanner_source.include?("maximumSensitiveScanElementVisits = 20_000") &&
-    scanner_source.include?("maximumSensitiveScanDuration: TimeInterval = 5") &&
-    scanner_source.include?("private struct VisitedSet") &&
-    scanner_source.include?("CFHash(element)") &&
-    scanner_source.include?("CFEqual($0.element, element)") &&
-    scanner_source.include?("AXUIElementCopyAttributeNames") &&
-    scanner_source.include?("AXUIElementCopyMultipleAttributeValues") &&
-    scanner_source.include?("AXCopyMultipleAttributeOptions(rawValue: 1)") &&
-    scanner_source.include?("ProcessInfo.processInfo.systemUptime < deadline") &&
-    helper_source.include?('"sensitive_accessibility_scan_incomplete"') &&
-    helper_source.include?('result["screenshot"] = NSNull()') &&
-    !build_tree_source.include?("sensitiveFrames.append") &&
-    project_source.include?(
-      'ComputerUseHelper/SensitiveAccessibilityScanner.swift'
-    ) &&
-    project_source.include?('\"$main_source\" \"$scanner_source\"'),
-  "screenshot masking traverses the independently budgeted, cycle-safe full AX child graph and fails closed when completeness is uncertain"
+  "unmasked-window-capture",
+  state_source.include?("sensitiveFrames: []") &&
+    preview_source.include?("sensitiveFrames: []") &&
+    !state_source.include?("SensitiveAccessibilityScanner.scan") &&
+    !preview_source.include?("SensitiveAccessibilityScanner.scan") &&
+    !helper_source.include?('"sensitive_accessibility_scan_incomplete"') &&
+    !preview_source.include?('result["screenshot"] = NSNull()') &&
+    helper_source.include?("redactedWindowCapture"),
+  "window screenshots bypass AX privacy scanning and redaction while preserving the existing capture coordinate space"
 )
 
 record.call(

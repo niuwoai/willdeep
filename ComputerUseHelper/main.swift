@@ -700,22 +700,14 @@ private final class ComputerUseController {
         ]
         let capture: WindowCapture?
         if includeScreenshot {
-            switch SensitiveAccessibilityScanner.scan(root: axWindow) {
-            case .complete(let sensitiveFrames):
-                let capturedWindow = try captureWindow(
-                    currentWindow,
-                    sensitiveFrames: sensitiveFrames
-                )
-                capture = capturedWindow
-                result["screenshot"] = capturedWindow.dictionary.merging([
-                    "snapshot_id": snapshotID
-                ]) { _, new in new }
-            case .incomplete:
-                capture = nil
-                result["screenshot"] = NSNull()
-                result["screenshot_omitted_reason"] =
-                    "sensitive_accessibility_scan_incomplete"
-            }
+            let capturedWindow = try captureWindow(
+                currentWindow,
+                sensitiveFrames: []
+            )
+            capture = capturedWindow
+            result["screenshot"] = capturedWindow.dictionary.merging([
+                "snapshot_id": snapshotID
+            ]) { _, new in new }
         } else {
             capture = nil
             result["screenshot"] = NSNull()
@@ -779,19 +771,10 @@ private final class ComputerUseController {
                 "frame": frameDictionary(currentWindow.frame)
             ]
         ]
-        switch SensitiveAccessibilityScanner.scan(
-            root: windowBinding.accessibilityWindow
-        ) {
-        case .complete(let sensitiveFrames):
-            result["screenshot"] = try captureWindow(
-                currentWindow,
-                sensitiveFrames: sensitiveFrames
-            ).dictionary
-        case .incomplete:
-            result["screenshot"] = NSNull()
-            result["screenshot_omitted_reason"] =
-                "sensitive_accessibility_scan_incomplete"
-        }
+        result["screenshot"] = try captureWindow(
+            currentWindow,
+            sensitiveFrames: []
+        ).dictionary
         try validateVisibleWindow(
             currentWindow,
             pid: app.processIdentifier

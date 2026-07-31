@@ -1,7 +1,51 @@
 # Changelog
 
-> 当前文件保留最新版本（1.220.0-rc8 至 1.109.0-rc340）。
+> 当前文件保留最新版本（1.220.0-rc11 至 1.109.0-rc340）。
 > 更早的 1000 个版本已移至 [CHANGELOG-ARCHIVE.md](CHANGELOG-ARCHIVE.md)。
+
+## 1.220.0-rc11 - 2026-08-01
+
+### Fixed
+
+- 将 some.im 下由 DeepSeek V4 Flash 承载的 `someim-auto-flash`、`someim-code-low`、`someim-coding-plan` 与实际托管低档型号 `someim-coding-plan-low` 切换到 Responses 路由，并复用网关状态续接与 `store=false` 行为。
+- Responses 协议覆盖同时受提供商与精确型号约束；`someim-coding-plan-high/premium` 和自定义提供商的同名模型继续使用原协议，避免误路由。
+
+### Tests
+
+- 扩充模型路由契约测试，覆盖四个 Flash 别名、some.im 状态续接、自定义提供商隔离，以及 coding-plan 高档型号不受影响。
+
+### Meta
+
+- Bugfix 预发布版本从 **1.220.0-rc10** 递增为 **1.220.0-rc11**，内部构建号从 **242** 递增为 **243**，Help 与 Computer Use Helper 构建号从 **159** 递增为 **160**；App、Go agent、Help、Helper、浏览器扩展、README、响应头契约与产品文档保持一致。
+
+## 1.220.0-rc10 - 2026-08-01
+
+### Fixed
+
+- 修复钉钉等动态 Accessibility 树因敏感区域扫描超时或节点瞬时失效而触发 `sensitive_accessibility_scan_incomplete`，继而丢弃整张目标窗口截图并让坐标点击失去截图坐标空间的问题。
+- 模型按需截图与聊天区右上角本地控制预览现阶段均直接采集目标窗口，不再执行 Accessibility 敏感区域扫描或像素遮罩；密码、验证码等自动读写限制继续独立生效。
+
+### Tests
+
+- 更新 Computer Use v6 契约测试，确保两条窗口截图路径都传入空遮罩集合、不会调用敏感树扫描，也不会恢复“扫描不完整即返回空截图”的旧逻辑。
+
+### Meta
+
+- Bugfix 预发布版本从 **1.220.0-rc9** 递增为 **1.220.0-rc10**，内部构建号从 **241** 递增为 **242**，Help 与 Computer Use Helper 构建号从 **158** 递增为 **159**；App、Go agent、Help、Helper、浏览器扩展、README、响应头契约与产品文档保持一致。
+
+## 1.220.0-rc9 - 2026-08-01
+
+### Fixed
+
+- 将后台 AX 操作、PID 定向输入和目标窗口截图规则对应的稳定提示词契约从 v21 推进至 v22，防止请求继续命中旧提示词缓存而恢复“先激活 App、再截图”的过时行为。
+
+### Tests
+
+- 重新记录 standard、compact、extended 三档提示词的确定性快照哈希，确保 Computer Use 后台控制约束发生意外漂移时测试会直接失败。
+
+### Meta
+
+- Bugfix 预发布版本从 **1.220.0-rc8** 递增为 **1.220.0-rc9**，内部构建号从 **240** 递增为 **241**，Help 与 Computer Use Helper 构建号从 **157** 递增为 **158**；App、Go agent、Help、Helper、浏览器扩展、README、响应头契约与产品文档保持一致。
 
 ## 1.220.0-rc8 - 2026-08-01
 

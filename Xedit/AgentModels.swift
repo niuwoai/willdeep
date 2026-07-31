@@ -1653,19 +1653,36 @@ struct AgentConfiguration: Codable, Equatable {
         if model.range(of: "gpt-5", options: [.caseInsensitive]) != nil {
             return .openAIResponses
         }
-        if isDeepSeekV4FlashResponsesModel,
-           providerID == AgentProviderPreset.deepSeekID ||
-           providerID == AgentProviderPreset.someIMID {
+        if usesDeepSeekV4FlashResponsesBehavior {
             return .openAIResponses
         }
         return configuredKind
     }
 
-    /// DeepSeek currently exposes Responses only for the exact V4 Flash id.
-    /// Keep Pro on Chat until the provider actually ships that endpoint.
+    /// Model ids backed by DeepSeek V4 Flash on the some.im gateway.
+    /// The unsuffixed coding-plan id is retained for server-side/legacy aliases;
+    /// managed routing currently selects `someim-coding-plan-low`.
+    private static let someIMDeepSeekV4FlashModelIDs: Set<String> = [
+        "deepseek-v4-flash",
+        SomeIMManagedModel.autoFlash,
+        SomeIMManagedModel.codeLow,
+        "someim-coding-plan",
+        SomeIMManagedModel.codingPlanLow
+    ]
+
     var isDeepSeekV4FlashResponsesModel: Bool {
-        model.trimmingCharacters(in: .whitespacesAndNewlines)
-            .lowercased() == "deepseek-v4-flash"
+        let normalizedModel = model.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        if providerID == AgentProviderPreset.deepSeekID {
+            return normalizedModel == "deepseek-v4-flash"
+        }
+        if providerID == AgentProviderPreset.someIMID {
+            return Self.someIMDeepSeekV4FlashModelIDs.contains(normalizedModel)
+        }
+        return false
+    }
+
+    var usesDeepSeekV4FlashResponsesBehavior: Bool {
+        isDeepSeekV4FlashResponsesModel
     }
 
     var usesWillDeepGatewayResponsesState: Bool {

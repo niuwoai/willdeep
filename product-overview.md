@@ -1,6 +1,6 @@
 # WillDeep Product Overview
 
-> Last updated: 2026-08-01 | Current version: v1.220.0-rc8
+> Last updated: 2026-08-01 | Current version: v1.220.0-rc11
 
 ## Positioning
 
@@ -11,6 +11,12 @@ Official product domain: [willdeep.com](https://willdeep.com).
 WillDeep is configured for non-App-Store distribution without App Sandbox so it can access local project files with fewer permission interruptions.
 
 ## 架构概览
+
+- **some.im Flash 别名统一使用 Responses（1.220.0-rc11）** —— `someim-auto-flash`、`someim-code-low`、兼容别名 `someim-coding-plan` 与托管型号 `someim-coding-plan-low` 复用 `deepseek-v4-flash` 的 Responses、无服务端存储请求和网关状态续接链路；高档 coding-plan 型号及其他提供商不受影响。
+
+- **Computer Use 截图直通（1.220.0-rc10）** —— 模型按需获取的目标窗口截图与聊天区右上角本地控制预览暂时跳过 Accessibility 敏感区域扫描和像素遮罩，避免钉钉等动态 AX 树因扫描超时或节点瞬时失效而丢弃整张截图；密码、验证码等自动读写限制仍独立保留。
+
+- **Computer Use 提示词缓存契约校准（1.220.0-rc9）** —— 后台 AX 操作、PID 定向输入和窗口截图规则已纳入 v22 稳定提示词版本，并为 standard、compact、extended 三档重新记录确定性快照哈希，避免客户端继续复用旧缓存契约或在合并时静默丢失 Computer Use 行为约束。
 
 - **DeepSeek Responses 服务端历史拼装修复（1.220.0-rc8）** —— WillDeep 在有有效游标时只发送新增 user/tool input，some.im 服务端继续从状态存储拼装原始 input/output 历史；客户端会把 reasoning、assistant message、function/custom tool call 与 web search call 识别为已有服务端输出并从增量请求剥离。只有首次请求、游标失效或状态后端不可用时才回退到完整本地历史，此时 reasoning 使用 DeepSeek Responses 接受的 `reasoning_text` 内容块数组，避免字符串类型触发 HTTP 400。
 
