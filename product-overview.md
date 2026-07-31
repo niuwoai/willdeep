@@ -1,6 +1,6 @@
 # WillDeep Product Overview
 
-> Last updated: 2026-08-01 | Current version: v1.220.0-rc11
+> Last updated: 2026-08-01 | Current version: v1.220.0-rc12
 
 ## Positioning
 
@@ -11,6 +11,8 @@ Official product domain: [willdeep.com](https://willdeep.com).
 WillDeep is configured for non-App-Store distribution without App Sandbox so it can access local project files with fewer permission interruptions.
 
 ## 架构概览
+
+- **some.im 裁判模型统一使用 Responses（1.220.0-rc12）** —— `someim-judge` 作为 DeepSeek V4 Flash 的托管别名，现与其他 Flash 型号共用 Responses、无服务端存储请求和网关状态续接链路；其他提供商的同名模型不受影响。
 
 - **some.im Flash 别名统一使用 Responses（1.220.0-rc11）** —— `someim-auto-flash`、`someim-code-low`、兼容别名 `someim-coding-plan` 与托管型号 `someim-coding-plan-low` 复用 `deepseek-v4-flash` 的 Responses、无服务端存储请求和网关状态续接链路；高档 coding-plan 型号及其他提供商不受影响。
 

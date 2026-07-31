@@ -70,6 +70,7 @@ struct AgentToolResultImageEncodingTests {
             apiKey: "test"
         ).normalized
         let someIMFlashAliases = [
+            "someim-judge",
             "someim-auto-flash",
             "someim-code-low",
             "someim-coding-plan",

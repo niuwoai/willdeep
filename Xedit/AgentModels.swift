@@ -1664,6 +1664,7 @@ struct AgentConfiguration: Codable, Equatable {
     /// managed routing currently selects `someim-coding-plan-low`.
     private static let someIMDeepSeekV4FlashModelIDs: Set<String> = [
         "deepseek-v4-flash",
+        SomeIMManagedModel.judge,
         SomeIMManagedModel.autoFlash,
         SomeIMManagedModel.codeLow,
         "someim-coding-plan",

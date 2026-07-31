@@ -1,7 +1,22 @@
 # Changelog
 
-> 当前文件保留最新版本（1.220.0-rc11 至 1.109.0-rc340）。
+> 当前文件保留最新版本（1.220.0-rc12 至 1.109.0-rc340）。
 > 更早的 1000 个版本已移至 [CHANGELOG-ARCHIVE.md](CHANGELOG-ARCHIVE.md)。
+
+## 1.220.0-rc12 - 2026-08-01
+
+### Fixed
+
+- 将 some.im 托管裁判模型 `someim-judge` 纳入 DeepSeek V4 Flash Responses 路由，复用 `store=false` 与网关状态续接行为。
+- 路由覆盖继续受 some.im 提供商约束，自定义提供商的同名模型不会被误切换协议。
+
+### Tests
+
+- 扩充 Flash 别名路由契约，验证 `someim-judge` 使用 Responses、启用网关状态续接，并保持自定义提供商隔离。
+
+### Meta
+
+- Bugfix 预发布版本从 **1.220.0-rc11** 递增为 **1.220.0-rc12**，内部构建号从 **243** 递增为 **244**，Help 与 Computer Use Helper 构建号从 **160** 递增为 **161**；App、Go agent、Help、Helper、浏览器扩展、README、响应头契约与产品文档保持一致。
 
 ## 1.220.0-rc11 - 2026-08-01
 
