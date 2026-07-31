@@ -62,8 +62,8 @@ struct AgentComputerUsePresentationTests {
         )
     }
 
-    @Test("floating controls appear only for an attributed active lease")
-    func floatingPanelVisibilityPolicy() {
+    @Test("menu-bar status appears only for an attributed active lease")
+    func statusItemVisibilityPolicy() {
         let lease = AgentComputerUseLease(
             owner: AgentComputerUseOwner(
                 runtimeID: UUID(),
@@ -80,51 +80,46 @@ struct AgentComputerUsePresentationTests {
         )
 
         #expect(
-            AgentComputerUseFloatingPanelPolicy.shouldPresent(
+            AgentComputerUseStatusItemPolicy.shouldPresent(
                 state: .controlling(lease)
             )
         )
         #expect(
-            !AgentComputerUseFloatingPanelPolicy.shouldPresent(state: .idle)
+            !AgentComputerUseStatusItemPolicy.shouldPresent(state: .idle)
         )
         #expect(
-            !AgentComputerUseFloatingPanelPolicy.shouldPresent(
+            !AgentComputerUseStatusItemPolicy.shouldPresent(
                 state: .failed(nil, message: "No lease")
             )
         )
     }
 
-    @Test("floating controls stay compact and centered above the screen edge")
-    func floatingPanelGeometryPolicy() {
-        let wideSize = AgentComputerUseFloatingPanelPolicy.size(
-            availableWidth: 1_000
+    @Test("local previews refresh only while control is operational")
+    func previewVisibilityPolicy() {
+        #expect(
+            AgentComputerUseStatusItemPolicy.shouldRefreshPreview(
+                phase: .observing
+            )
         )
-        #expect(wideSize == CGSize(width: 660, height: 70))
-
-        let narrowSize = AgentComputerUseFloatingPanelPolicy.size(
-            availableWidth: 500
+        #expect(
+            AgentComputerUseStatusItemPolicy.shouldRefreshPreview(
+                phase: .controlling
+            )
         )
-        #expect(narrowSize == CGSize(width: 468, height: 70))
-
-        let origin = AgentComputerUseFloatingPanelPolicy.origin(
-            panelSize: wideSize,
-            visibleFrame: CGRect(x: 100, y: 50, width: 1_000, height: 700)
+        #expect(
+            !AgentComputerUseStatusItemPolicy.shouldRefreshPreview(
+                phase: .userTakeover
+            )
         )
-        #expect(origin == CGPoint(x: 270, y: 68))
-
-        let displayIndex = AgentComputerUseFloatingPanelPolicy.displayIndex(
-            forWindowBounds: CGRect(
-                x: 2_100,
-                y: 120,
-                width: 1_000,
-                height: 800
-            ),
-            displayBounds: [
-                CGRect(x: 0, y: 0, width: 1_920, height: 1_080),
-                CGRect(x: 1_920, y: 0, width: 2_560, height: 1_440),
-            ]
+        #expect(
+            !AgentComputerUsePresentationPolicy.showsPreview(
+                for: .paused
+            )
         )
-        #expect(displayIndex == 1)
+        #expect(
+            AgentComputerUseStatusItemPolicy.menuBarIconSize
+                == CGSize(width: 30, height: 18)
+        )
     }
 
     @Test("all visible Computer Use labels come from non-empty localized resources")

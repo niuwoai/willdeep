@@ -47,6 +47,7 @@ nonisolated final class OpenAIResponsesContinuationState: @unchecked Sendable {
         let responseID: String?
         fileprivate let contextSignature: Data
         fileprivate let inputItemSignatures: [Data]
+        fileprivate let stateEpochStartedAt: Date?
 
         var usesPreviousResponse: Bool { responseID != nil }
     }
@@ -69,7 +70,12 @@ nonisolated final class OpenAIResponsesContinuationState: @unchecked Sendable {
         lock.withLock { snapshot }
     }
 
-    func prepare(fullBody: Data, transportIdentity: String = "") throws -> PreparedRequest {
+    func prepare(
+        fullBody: Data,
+        transportIdentity: String = "",
+        maximumContinuationAge: TimeInterval? = nil,
+        now: Date = Date()
+    ) throws -> PreparedRequest {
         let requestObject = try Self.requestObject(from: fullBody)
         let contextSignature = try Self.contextSignature(
             for: requestObject,
@@ -79,8 +85,14 @@ nonisolated final class OpenAIResponsesContinuationState: @unchecked Sendable {
         let inputItemSignatures = try input.map(Self.inputItemSignature)
 
         return try lock.withLock {
+            let continuationIsFresh = maximumContinuationAge.map { maximumAge in
+                guard let epoch = snapshot?.stateEpochStartedAt else { return false }
+                let age = now.timeIntervalSince(epoch)
+                return age >= 0 && age < maximumAge
+            } ?? true
             guard let snapshot,
                   snapshot.contextSignature == contextSignature,
+                  continuationIsFresh,
                   inputItemSignatures.count > snapshot.inputItemSignatures.count,
                   Array(inputItemSignatures.prefix(snapshot.inputItemSignatures.count))
                     == snapshot.inputItemSignatures else {
@@ -88,7 +100,8 @@ nonisolated final class OpenAIResponsesContinuationState: @unchecked Sendable {
                     body: fullBody,
                     responseID: nil,
                     contextSignature: contextSignature,
-                    inputItemSignatures: inputItemSignatures
+                    inputItemSignatures: inputItemSignatures,
+                    stateEpochStartedAt: maximumContinuationAge == nil ? nil : now
                 )
             }
 
@@ -99,7 +112,8 @@ nonisolated final class OpenAIResponsesContinuationState: @unchecked Sendable {
                     body: fullBody,
                     responseID: nil,
                     contextSignature: contextSignature,
-                    inputItemSignatures: inputItemSignatures
+                    inputItemSignatures: inputItemSignatures,
+                    stateEpochStartedAt: maximumContinuationAge == nil ? nil : now
                 )
             }
             let deltaInput = Array(appendedInput.dropFirst(serverOutputCount))
@@ -108,7 +122,8 @@ nonisolated final class OpenAIResponsesContinuationState: @unchecked Sendable {
                     body: fullBody,
                     responseID: nil,
                     contextSignature: contextSignature,
-                    inputItemSignatures: inputItemSignatures
+                    inputItemSignatures: inputItemSignatures,
+                    stateEpochStartedAt: maximumContinuationAge == nil ? nil : now
                 )
             }
 
@@ -123,7 +138,8 @@ nonisolated final class OpenAIResponsesContinuationState: @unchecked Sendable {
                 body: continuationBody,
                 responseID: snapshot.responseID,
                 contextSignature: contextSignature,
-                inputItemSignatures: inputItemSignatures
+                inputItemSignatures: inputItemSignatures,
+                stateEpochStartedAt: snapshot.stateEpochStartedAt
             )
         }
     }
@@ -135,7 +151,8 @@ nonisolated final class OpenAIResponsesContinuationState: @unchecked Sendable {
                 responseID: responseID,
                 contextSignature: preparedRequest.contextSignature,
                 inputItemSignatures: preparedRequest.inputItemSignatures,
-                updatedAt: Date()
+                updatedAt: Date(),
+                stateEpochStartedAt: preparedRequest.stateEpochStartedAt
             )
         }
     }
@@ -175,15 +192,23 @@ nonisolated final class OpenAIResponsesContinuationState: @unchecked Sendable {
     }
 
     private static func isServerOutputItem(_ inputItem: [String: Any]) -> Bool {
-        if inputItem["type"] as? String == "function_call" {
+        switch inputItem["type"] as? String {
+        case "reasoning", "function_call", "custom_tool_call", "web_search_call":
             return true
+        case "message":
+            return inputItem["role"] as? String == "assistant"
+        default:
+            return false
         }
-        return inputItem["type"] as? String == "message"
-            && inputItem["role"] as? String == "assistant"
     }
 }
 
 struct OpenAIResponsesAdapter {
+    /// Muchtoken retains a WillDeep state epoch for 24 hours. Stop using the
+    /// cursor one hour early so clock skew and in-flight turns cannot cross
+    /// the server boundary.
+    static let willDeepGatewayContinuationMaxAge: TimeInterval = 23 * 60 * 60
+
     private let configuration: AgentConfiguration
     private let session: URLSession
     private let continuationState: OpenAIResponsesContinuationState
@@ -221,22 +246,30 @@ struct OpenAIResponsesAdapter {
             model: configuration.model,
             messages: requestMessages,
             tools: tools,
-            supportsImages: configuration.supportsImageInput
+            supportsImages: configuration.supportsImageInput,
+            store: !configuration.isDeepSeekV4FlashResponsesModel
         )
-        var mayUseContinuation = true
+        var mayUseContinuation = !configuration.usesStatelessDeepSeekResponses
+        var mayRequestGatewayState = configuration.usesWillDeepGatewayResponsesState
 
         while true {
             let preparedRequest: OpenAIResponsesContinuationState.PreparedRequest
             if mayUseContinuation {
                 preparedRequest = try continuationState.prepare(
                     fullBody: fullRequestBody,
-                    transportIdentity: continuationTransportIdentity
+                    transportIdentity: continuationTransportIdentity,
+                    maximumContinuationAge: mayRequestGatewayState
+                        ? Self.willDeepGatewayContinuationMaxAge
+                        : nil
                 )
             } else {
                 continuationState.invalidate()
                 preparedRequest = try continuationState.prepare(
                     fullBody: fullRequestBody,
-                    transportIdentity: continuationTransportIdentity
+                    transportIdentity: continuationTransportIdentity,
+                    maximumContinuationAge: mayRequestGatewayState
+                        ? Self.willDeepGatewayContinuationMaxAge
+                        : nil
                 )
             }
 
@@ -244,6 +277,12 @@ struct OpenAIResponsesAdapter {
             request.timeoutInterval = AgentNetworkSupport.requestTimeout
             request.httpMethod = "POST"
             applyAuthenticationHeaders(to: &request)
+            if mayRequestGatewayState {
+                request.setValue(
+                    AgentNetworkSupport.willDeepResponsesStateProtocol,
+                    forHTTPHeaderField: AgentNetworkSupport.willDeepResponsesStateHeaderName
+                )
+            }
             request.setValue("application/json", forHTTPHeaderField: "Content-Type")
             request.setValue("text/event-stream", forHTTPHeaderField: "Accept")
             request.httpBody = preparedRequest.body
@@ -255,6 +294,16 @@ struct OpenAIResponsesAdapter {
             SomeIMCreditsResponseObserver.capture(httpResponse, providerID: configuration.providerID)
             guard (200..<300).contains(httpResponse.statusCode) else {
                 let responseBody = try await AgentNetworkSupport.collectBody(from: bytes)
+                if mayRequestGatewayState,
+                   Self.isGatewayStateUnavailable(
+                       statusCode: httpResponse.statusCode,
+                       responseBody: responseBody
+                   ) {
+                    continuationState.invalidate()
+                    mayUseContinuation = false
+                    mayRequestGatewayState = false
+                    continue
+                }
                 if preparedRequest.usesPreviousResponse,
                    Self.isInvalidContinuation(
                        statusCode: httpResponse.statusCode,
@@ -310,13 +359,21 @@ struct OpenAIResponsesAdapter {
                     model: configuration.model
                 )
             }
+            let gatewayStateActive = !configuration.usesWillDeepGatewayResponsesState ||
+                httpResponse.value(
+                    forHTTPHeaderField: AgentNetworkSupport.willDeepResponsesStateHeaderName
+                )?.lowercased().contains("v1; active") == true
             if state.didCompleteResponse,
                !state.didFailResponse,
+               !state.didLoseGatewayState,
+               gatewayStateActive,
                let responseID = state.responseID {
                 continuationState.commit(
                     responseID: responseID,
                     preparedRequest: preparedRequest
                 )
+            } else if configuration.usesWillDeepGatewayResponsesState {
+                continuationState.invalidate()
             }
             return
         }
@@ -493,6 +550,7 @@ struct OpenAIResponsesAdapter {
         var responseID: String?
         var didCompleteResponse = false
         var didFailResponse = false
+        var didLoseGatewayState = false
     }
 
     private struct PendingFunctionCall {
@@ -543,6 +601,7 @@ struct OpenAIResponsesAdapter {
             }
 
         case "response.reasoning.delta",
+             "response.reasoning_text.delta",
              "response.reasoning_summary.delta",
              "response.reasoning_summary_text.delta":
             // o-series reasoning trace. Route to the same channel that
@@ -619,7 +678,7 @@ struct OpenAIResponsesAdapter {
                 }
             }
 
-        case "response.completed":
+        case "response.completed", "response.incomplete":
             await emitToolCallsIfChanged(state: &state, onEvent: onEvent, force: true)
             // Final event — carries the full Response object including
             // usage and stop reason. Translate the OpenAI Responses
@@ -667,6 +726,14 @@ struct OpenAIResponsesAdapter {
             state.didFailResponse = true
             state.didEmitStreamEvent = true
             await onEvent(.finishedTurn(reason))
+
+        case "response.state_unavailable":
+            // The relay may discover a Redis/affinity failure only after
+            // output deltas are already visible. Replaying that request would
+            // duplicate user-visible text, so finish this response normally,
+            // discard its cursor, and send full history on the next turn.
+            state.didLoseGatewayState = true
+            state.didEmitStreamEvent = true
 
         default:
             // `response.created` / `response.in_progress` / `response.
@@ -790,12 +857,22 @@ struct OpenAIResponsesAdapter {
     }
 
     private static func isInvalidContinuation(statusCode: Int, responseBody: String) -> Bool {
-        guard statusCode == 400 || statusCode == 404 || statusCode == 410 else { return false }
+        guard statusCode == 400 || statusCode == 404 || statusCode == 410 || statusCode == 422 else {
+            return false
+        }
         let lower = responseBody.lowercased()
         return lower.contains("previous_response_id")
             || lower.contains("previous response")
             || lower.contains("response not found")
             || lower.contains("response expired")
+            || lower.contains("response_affinity_not_found")
+    }
+
+    private static func isGatewayStateUnavailable(statusCode: Int, responseBody: String) -> Bool {
+        guard statusCode == 503 else { return false }
+        let lower = responseBody.lowercased()
+        return lower.contains("state_backend_unavailable")
+            || lower.contains("responses state")
     }
 
     // MARK: - Request body encoding
@@ -821,7 +898,8 @@ struct OpenAIResponsesAdapter {
         model: String,
         messages: [AgentMessage],
         tools: [AgentToolDescriptor],
-        supportsImages: Bool
+        supportsImages: Bool,
+        store: Bool = true
     ) throws -> Data {
         var systemBlobs: [String] = []
         var input: [[String: Any]] = []
@@ -858,6 +936,16 @@ struct OpenAIResponsesAdapter {
                 ])
 
             case .assistant:
+                if let reasoning = message.reasoningContent,
+                   !reasoning.isEmpty {
+                    input.append([
+                        "type": "reasoning",
+                        "content": [[
+                            "type": "reasoning_text",
+                            "text": reasoning
+                        ]]
+                    ])
+                }
                 let text = message.modelContent
                 if !text.isEmpty {
                     input.append([
@@ -922,7 +1010,7 @@ struct OpenAIResponsesAdapter {
             "model": model,
             "input": input,
             "stream": true,
-            "store": true
+            "store": store
         ]
         if !systemBlobs.isEmpty {
             body["instructions"] = systemBlobs.joined(separator: "\n\n")

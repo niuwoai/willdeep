@@ -98,7 +98,7 @@ enum AgentToolRegistry {
         ),
         AgentToolDescriptor(
             name: "run_command",
-            description: "Run a shell command in the workspace root. This is the DEFAULT way to execute any shell command — including ones that reach other machines (scp / rsync / ssh remote-host), file copies, builds, installs, and tests. Only use terminal_send_command instead when the user explicitly asks for the command to be run in the visible side-panel terminal. Requires user approval. Refuses commands that escape the workspace. Well-known test/build/dev-server commands are automatically moved to the background when `run_in_background` is omitted. Pass `run_in_background: true` for any other task expected to take at least ~30 seconds; the call returns immediately with a job handle and you receive a system notification when the job finishes. Continue independent, non-conflicting work while it runs.",
+            description: "Run a shell command in the workspace root. This is the DEFAULT way to execute any shell command — including ones that reach other machines (scp / rsync / ssh remote-host), file copies, builds, installs, and tests. Only use terminal_send_command instead when the user explicitly asks for the command to be run in the visible side-panel terminal. Requires user approval. Commands stay in the workspace sandbox by default; when the user explicitly requests a path outside the workspace (including `~/...` or `$HOME/...`), keep that exact path and let this tool request escalated access to the real location — do not invent a sandbox path mapping or reroute to the visible terminal. Well-known test/build/dev-server commands are automatically moved to the background when `run_in_background` is omitted. Pass `run_in_background: true` for any other task expected to take at least ~30 seconds; the call returns immediately with a job handle and you receive a system notification when the job finishes. Continue independent, non-conflicting work while it runs.",
             risk: .write,
             parameters: [
                 AgentToolParameter(name: "command", type: .string, description: "Shell command line. Runs through /bin/sh -c.", required: true),
@@ -1165,7 +1165,7 @@ enum AgentToolRegistry {
         ),
         AgentToolDescriptor(
             name: "computer_use_activate_app",
-            description: "Bring a running macOS app and its windows to the foreground before keyboard-heavy interaction. Requires approval because it changes the user's active application.",
+            description: "Compatibility fallback for a running macOS app that explicitly rejects background AX or PID-targeted input. Do not call this before ordinary inspection, clicks, typing, or selected-window capture; those work without foregrounding the target. Requires approval because activation changes the user's active application.",
             risk: .write,
             parameters: [
                 AgentToolParameter(name: "app", type: .string, description: "Running application bundle identifier or localized app name. Omit only when pid is provided.", required: false),
@@ -1174,12 +1174,12 @@ enum AgentToolRegistry {
         ),
         AgentToolDescriptor(
             name: "computer_use_get_app_state",
-            description: "Read a macOS app's Accessibility tree and optionally capture only its visible front window. Returns fresh element refs plus a screenshot by default. This read-only state capture runs without a WillDeep confirmation card after the separate helper has macOS permission. Always refresh before desktop actions.",
+            description: "Read a macOS app's Accessibility tree first and optionally capture only its visible front window. Returns fresh element refs without a screenshot by default. Inspect the AX tree before opting into pixels, and request a screenshot only when no usable semantic target is exposed. This read-only state call runs without a WillDeep confirmation card after the separate helper has macOS permission. Always refresh before desktop actions.",
             risk: .read,
             parameters: [
                 AgentToolParameter(name: "app", type: .string, description: "Running application bundle identifier or localized app name. Omit only when pid is provided.", required: false),
                 AgentToolParameter(name: "pid", type: .integer, description: "Running application process ID. Omit only when app is provided.", required: false),
-                AgentToolParameter(name: "include_screenshot", type: .boolean, description: "Capture the visible front window. Defaults to true. Prefer computer_use_inspect_app when no screenshot is needed.", required: false)
+                AgentToolParameter(name: "include_screenshot", type: .boolean, description: "Capture the visible front window only after the AX tree proves insufficient. Defaults to false.", required: false)
             ]
         ),
         AgentToolDescriptor(
@@ -1209,7 +1209,7 @@ enum AgentToolRegistry {
         ),
         AgentToolDescriptor(
             name: "computer_use_click",
-            description: "Click a fresh Accessibility element ref, or click screenshot-relative coordinates in the most recent target-window screenshot. Requires a plain-language purpose and consequence classification. After the first control action is approved, only ref-based ordinary none/navigation clicks may run automatically inside the current runtime-, turn-, and target-bound controlling lease. A coordinate-only pixel fallback always requires fresh per-action typed confirmation because it cannot prove the semantic target. The lease is never persisted or reused across tasks. Consequential actions require fresh confirmation, while authentication, CAPTCHA, credential entry, and financial transactions require private user takeover. Copy/Cut/Paste controls are prohibited. Use element refs first; use pixels only when the app exposes no usable Accessibility tree.",
+            description: "Click a fresh Accessibility element ref, or fall back to screenshot-relative coordinates only after the AX tree has no usable target. Requires a plain-language purpose, target label, and truthful consequence classification. Once the first control action for this app is approved, subsequent fresh ref or pixel clicks run automatically inside the current runtime-, turn-, and target-bound controlling lease, including declared consequential clicks; Strict mode still asks. The lease is never persisted or reused across tasks. Authentication, CAPTCHA, credential entry, and financial transactions require private user takeover. Copy/Cut/Paste controls are prohibited.",
             risk: .write,
             parameters: [
                 AgentToolParameter(name: "ref", type: .string, description: "Fresh element ref from computer_use_get_app_state. Omit for pixel fallback.", required: false),
@@ -1225,7 +1225,7 @@ enum AgentToolRegistry {
         ),
         AgentToolDescriptor(
             name: "computer_use_secondary_action",
-            description: "Open an element's context menu with Accessibility, falling back to a right-click at screenshot-relative coordinates. Only a fresh ref-based ordinary none/navigation action may run automatically inside the current approved controlling lease. A coordinate-only right-click always requires fresh per-action typed confirmation because it cannot prove the semantic target. Consequential actions still require confirmation. Requires purpose and consequence classification; Copy/Cut/Paste controls are prohibited.",
+            description: "Open an element's context menu with Accessibility, falling back to screenshot-relative coordinates only when the AX tree has no usable target. Once the first control action for this app is approved, subsequent fresh ref or pixel secondary clicks run automatically inside the current runtime-, turn-, and target-bound controlling lease; Strict mode still asks. Requires a purpose, target label, and truthful consequence classification. Copy/Cut/Paste controls are prohibited.",
             risk: .write,
             parameters: [
                 AgentToolParameter(name: "ref", type: .string, description: "Fresh element ref; omit for pixel fallback.", required: false),

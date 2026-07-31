@@ -278,7 +278,7 @@ struct AgentModeView: View {
         }
         .onAppear {
             DesktopPetWindowManager.shared.attach(to: appState)
-            AgentComputerUseFloatingPanelController.shared.install()
+            AgentComputerUseStatusController.shared.install()
             // Keep decoding the legacy enum case for persisted sessions, but
             // never resurrect the retired task-monitor rail.
             if appState.agentSidePanelKind == .backgroundTasks {

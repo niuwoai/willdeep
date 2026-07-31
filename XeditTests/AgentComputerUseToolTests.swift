@@ -259,10 +259,10 @@ struct AgentComputerUseToolTests {
             arguments: arguments,
             rootDirectory: nil
         )
-        #expect(risk == .danger)
+        #expect(risk == .write)
         #expect(decision.mode == .escalated)
         #expect(decision.requiresUserApproval)
-        #expect(decision.requiresTypedConfirmation)
+        #expect(!decision.requiresTypedConfirmation)
 
         let appState = AppState()
         let approval = await appState.autoApprovalSource(
@@ -368,6 +368,12 @@ struct AgentComputerUseToolTests {
         #expect(hover.parameters.contains { $0.name == "ref" && !$0.required })
         #expect(select.parameters.contains { $0.name == "selection_type" && !$0.required })
         #expect(state.parameters.contains { $0.name == "include_screenshot" && !$0.required })
+        let includeScreenshot = try #require(
+            state.parameters.first { $0.name == "include_screenshot" }
+        )
+        #expect(includeScreenshot.description.contains("Defaults to false"))
+        #expect(state.description.contains("Accessibility tree first"))
+        #expect(state.description.contains("without a screenshot by default"))
         #expect(wait.parameters.contains { $0.name == "condition" && $0.required })
         let waitSnapshot = try #require(
             wait.parameters.first { $0.name == "snapshot_id" }

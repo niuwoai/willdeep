@@ -10,7 +10,23 @@ import Testing
 @Suite
 struct AgentComputerUsePolicyTests {
     @Test
-    func consequentialComputerUseActionsAlwaysRequireFreshConfirmation() {
+    @MainActor
+    func consequentialClicksReuseMatchingControlLease() {
+        let owner = AgentComputerUseOwner(
+            runtimeID: UUID(),
+            turnID: UUID(),
+            sessionTitle: "DingTalk control"
+        )
+        let lease = AgentComputerUseLease(
+            owner: owner,
+            target: AgentComputerUseTarget(
+                pid: 123,
+                applicationName: "DingTalk",
+                bundleIdentifier: "com.alibaba.DingTalkMac",
+                windowTitle: "DingTalk"
+            ),
+            operation: .controlling
+        )
         for consequence in [
             "send",
             "delete",
@@ -21,6 +37,9 @@ struct AgentComputerUsePolicyTests {
             "sensitive_data_transfer",
         ] {
             let arguments: [String: AgentJSONValue] = [
+                "pid": .number(123),
+                "snapshot_id": .string("snapshot"),
+                "ref": .string("snapshot:e1"),
                 "purpose": .string("Complete the requested action"),
                 "target_label": .string("Continue"),
                 "consequence": .string(consequence),
@@ -29,15 +48,31 @@ struct AgentComputerUsePolicyTests {
                 AgentToolRegistry.risk(
                     for: "computer_use_click",
                     arguments: arguments
-                ) == .danger,
-                "\(consequence) must bypass session-wide approval"
+                ) == .write,
+                "\(consequence) click should be eligible for the matching control lease"
             )
             #expect(
-                AgentSandboxPolicy.decision(
+                !AgentSandboxPolicy.decision(
                     toolName: "computer_use_click",
                     arguments: arguments,
                     rootDirectory: nil
                 ).requiresTypedConfirmation
+            )
+            #expect(
+                AgentComputerUsePolicy.canAutoApproveInOperationalLease(
+                    toolName: "computer_use_click",
+                    arguments: arguments,
+                    owner: owner,
+                    controlState: .controlling(lease)
+                )
+            )
+            #expect(
+                !AgentComputerUsePolicy.canAutoApproveInOperationalLease(
+                    toolName: "computer_use_click",
+                    arguments: arguments,
+                    owner: owner,
+                    controlState: .paused(lease)
+                )
             )
         }
     }
@@ -147,7 +182,7 @@ struct AgentComputerUsePolicyTests {
 
     @Test
     @MainActor
-    func coordinateMutationsAlwaysRequirePerActionTypedConfirmation() {
+    func coordinateClicksReuseLeaseWhileDragStillRequiresConfirmation() {
         let owner = AgentComputerUseOwner(
             runtimeID: UUID(),
             turnID: UUID(),
@@ -163,7 +198,7 @@ struct AgentComputerUsePolicyTests {
             ),
             operation: .controlling
         )
-        let cases: [(String, [String: AgentJSONValue])] = [
+        let clickCases: [(String, [String: AgentJSONValue])] = [
             (
                 "computer_use_click",
                 [
@@ -188,38 +223,24 @@ struct AgentComputerUsePolicyTests {
                     "consequence": .string("none"),
                 ]
             ),
-            (
-                "computer_use_drag",
-                [
-                    "pid": .number(123),
-                    "snapshot_id": .string("snapshot"),
-                    "from_x": .number(20),
-                    "from_y": .number(40),
-                    "to_x": .number(100),
-                    "to_y": .number(120),
-                    "purpose": .string("Move the requested item"),
-                    "target_label": .string("Document"),
-                    "consequence": .string("none"),
-                ]
-            ),
         ]
 
-        for (toolName, arguments) in cases {
+        for (toolName, arguments) in clickCases {
             #expect(
                 AgentToolRegistry.risk(
                     for: toolName,
                     arguments: arguments
-                ) == .danger
+                ) == .write
             )
             #expect(
-                AgentSandboxPolicy.decision(
+                !AgentSandboxPolicy.decision(
                     toolName: toolName,
                     arguments: arguments,
                     rootDirectory: nil
                 ).requiresTypedConfirmation
             )
             #expect(
-                !AgentComputerUsePolicy.canAutoApproveInOperationalLease(
+                AgentComputerUsePolicy.canAutoApproveInOperationalLease(
                     toolName: toolName,
                     arguments: arguments,
                     owner: owner,
@@ -227,6 +248,39 @@ struct AgentComputerUsePolicyTests {
                 )
             )
         }
+
+        let dragArguments: [String: AgentJSONValue] = [
+            "pid": .number(123),
+            "snapshot_id": .string("snapshot"),
+            "from_x": .number(20),
+            "from_y": .number(40),
+            "to_x": .number(100),
+            "to_y": .number(120),
+            "purpose": .string("Move the requested item"),
+            "target_label": .string("Document"),
+            "consequence": .string("none"),
+        ]
+        #expect(
+            AgentToolRegistry.risk(
+                for: "computer_use_drag",
+                arguments: dragArguments
+            ) == .danger
+        )
+        #expect(
+            AgentSandboxPolicy.decision(
+                toolName: "computer_use_drag",
+                arguments: dragArguments,
+                rootDirectory: nil
+            ).requiresTypedConfirmation
+        )
+        #expect(
+            !AgentComputerUsePolicy.canAutoApproveInOperationalLease(
+                toolName: "computer_use_drag",
+                arguments: dragArguments,
+                owner: owner,
+                controlState: .controlling(lease)
+            )
+        )
     }
 
     @Test

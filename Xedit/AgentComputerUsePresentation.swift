@@ -106,6 +106,12 @@ nonisolated enum AgentComputerUsePresentationPolicy {
     static func interceptsTransparentRegion(isExpanded: Bool) -> Bool {
         isExpanded
     }
+
+    static func showsPreview(
+        for phase: AgentComputerUseControlPhase
+    ) -> Bool {
+        AgentComputerUseStatusItemPolicy.shouldShowPreview(phase: phase)
+    }
 }
 
 struct AgentComputerUsePresentationLayer: View {
@@ -146,7 +152,9 @@ struct AgentComputerUsePresentationLayer: View {
         .animation(.easeOut(duration: 0.16), value: isExpanded)
         .animation(.easeOut(duration: 0.16), value: coordinator.state.phase)
         .onCompatibleChange(of: coordinator.state.phase) { _, newPhase in
-            if newPhase == .idle {
+            if !AgentComputerUsePresentationPolicy.showsPreview(
+                for: newPhase
+            ) {
                 isExpanded = false
             }
         }
@@ -220,7 +228,9 @@ struct AgentComputerUsePresentationLayer: View {
                     .fixedSize(horizontal: false, vertical: true)
             }
 
-            if let activity = lease?.latestActivity {
+            if AgentComputerUsePresentationPolicy.showsPreview(
+                for: state.phase
+            ), let activity = lease?.latestActivity {
                 thumbnail(activity)
             }
 

@@ -14,6 +14,14 @@ private let maximumWindowCaptureLongEdge = 1_568
 private let maximumProcessPathBytes = 4 * 1_024
 private let snapshotLifetime: TimeInterval = 60
 private let axMessagingTimeoutSeconds: Float = 2
+private let applicationActivationAttemptCount = 24
+private let applicationActivationRetryInterval: TimeInterval = 0.125
+private let windowBindingAttemptCount = 16
+private let windowBindingRetryInterval: TimeInterval = 0.125
+private let windowBindingMinimumDimensionRatio: CGFloat = 0.9
+private let windowBindingMinimumOverlapRatio: CGFloat = 0.94
+private let windowBindingMaximumHorizontalCenterDelta: CGFloat = 12
+private let windowBindingMaximumVerticalCenterDelta: CGFloat = 24
 private let syntheticEventUserDataTag: Int64 = 0x5744_4355_5636
 private let axWindowNumberAttribute = "AXWindowNumber"
 private let forbiddenControlBundleIdentifiers: Set<String> = [
@@ -203,7 +211,12 @@ private enum HelperFailure: LocalizedError {
         case .controlLeaseMismatch: return "The Computer Use control lease is missing, stale, or owned by another session."
         case .controlSessionPaused: return "The Computer Use control session is paused; resume it before inspecting or acting."
         case .controlTargetMismatch: return "The requested app or PID does not match the active Computer Use control target."
-        case .forbiddenControlTarget(let target): return "Computer Use is not allowed to control WillDeep or terminal surfaces: \(target)."
+        case .forbiddenControlTarget(let target):
+            if ComputerUseSafetyPolicy
+                .terminalSurfaceRestrictionsEnabled {
+                return "Computer Use is not allowed to control WillDeep or terminal surfaces: \(target)."
+            }
+            return "Computer Use is not allowed to control WillDeep: \(target)."
         case .controlEpochChanged: return "Computer Use yielded to physical user input; discard this result and refresh after resuming."
         case .displayCaptureBlocked: return "Display capture is disabled while a Computer Use control session exists."
         case .actionDeclarationMismatch(let reason): return "Computer Use rejected a high-impact AX target because the declared consequence or target_label does not match: \(reason). Refresh, declare the real impact, and request per-action confirmation."
@@ -351,6 +364,10 @@ private final class ComputerUseController {
         let arguments = request["arguments"] as? [String: Any] ?? [:]
         let leaseID = normalizedLeaseID(request["control_lease_id"])
         switch action {
+#if WILLDEEP_COMPUTER_USE_CONTRACT_TEST
+        case "contract_window_binding":
+            return contractWindowBinding()
+#endif
         case "permissions":
             return permissionStatus()
         case "request_permissions":
@@ -373,6 +390,8 @@ private final class ComputerUseController {
             return try activateApp(arguments, leaseID: leaseID)
         case "get_app_state":
             return try getAppState(arguments, leaseID: leaseID)
+        case "capture_control_preview":
+            return try captureControlPreview(arguments, leaseID: leaseID)
         case "wait_for":
             return try waitFor(arguments, leaseID: leaseID)
         case "click", "secondary_action", "scroll", "drag", "type_text", "press_key", "set_value", "focus", "hover", "select_text":
@@ -626,19 +645,15 @@ private final class ComputerUseController {
         let leaseID = try requiredLeaseID(leaseID)
         let app = try controlledApplication(arguments, leaseID: leaseID)
         let controlEpoch = try captureControlEpoch(leaseID: leaseID)
-        let activated = try withControlMutation(controlEpoch) {
-            app.activate(
-                options: [
-                    .activateAllWindows,
-                    .activateIgnoringOtherApps
-                ]
-            )
-        }
-        guard activated else {
-            throw HelperFailure.invalidRequest("Could not activate \(app.localizedName ?? "the target app").")
-        }
+        let activationAttempts = try activateAndWaitUntilFrontmost(
+            app,
+            epoch: controlEpoch
+        )
         pendingResponseEpoch = controlEpoch
-        return appDictionary(app, launched: false).merging(["activated": true]) { _, new in new }
+        return appDictionary(app, launched: false).merging([
+            "activated": true,
+            "activation_attempts": activationAttempts
+        ]) { _, new in new }
     }
 
     private func getAppState(
@@ -649,22 +664,21 @@ private final class ComputerUseController {
         let leaseID = try requiredLeaseID(leaseID)
         let app = try controlledApplication(arguments, leaseID: leaseID)
         let controlEpoch = try captureControlEpoch(leaseID: leaseID)
-        let includeScreenshot = bool(arguments, "include_screenshot", default: true)
+        let includeScreenshot = bool(arguments, "include_screenshot", default: false)
         if includeScreenshot,
            !CGPreflightScreenCaptureAccess() {
             throw HelperFailure.screenCaptureNotGranted
         }
-        guard let currentWindow = visibleWindow(for: app.processIdentifier) else {
-            throw HelperFailure.captureFailed
-        }
+        let windowBinding = try stableAccessibilityWindow(
+            for: app,
+            epoch: controlEpoch
+        )
+        let currentWindow = windowBinding.visibleWindow
         try updateControlWindow(
             currentWindow,
             leaseID: leaseID
         )
-        let axWindow = try accessibilityWindow(
-            for: app,
-            matching: currentWindow
-        )
+        let axWindow = windowBinding.accessibilityWindow
         invalidateSnapshot()
         let snapshotID = UUID().uuidString.lowercased()
         let counter = UnsafeMutablePointer<Int>.allocate(capacity: 1)
@@ -730,6 +744,59 @@ private final class ComputerUseController {
             currentWindow,
             leaseID: leaseID
         )
+        pendingResponseEpoch = controlEpoch
+        return result
+    }
+
+    /// Captures the currently controlled app window for WillDeep's local
+    /// control-session UI. Unlike `getAppState`, this does not rebuild the AX
+    /// tree, invalidate element refs, or replace the model's active snapshot.
+    /// CGWindow captures the selected window directly, so the target app may
+    /// remain behind WillDeep or another application.
+    private func captureControlPreview(
+        _ arguments: [String: Any],
+        leaseID: String?
+    ) throws -> [String: Any] {
+        try requireAccessibility()
+        guard CGPreflightScreenCaptureAccess() else {
+            throw HelperFailure.screenCaptureNotGranted
+        }
+        let leaseID = try requiredLeaseID(leaseID)
+        let app = try controlledApplication(arguments, leaseID: leaseID)
+        let controlEpoch = try captureControlEpoch(leaseID: leaseID)
+        let windowBinding = try stableAccessibilityWindow(
+            for: app,
+            epoch: controlEpoch
+        )
+        let currentWindow = windowBinding.visibleWindow
+        var result: [String: Any] = [
+            "app": appDictionary(app, launched: false),
+            "control_lease_id": leaseID,
+            "preserved_active_snapshot": true,
+            "target_frontmost": isFrontmost(app),
+            "window": [
+                "id": Int(currentWindow.id),
+                "frame": frameDictionary(currentWindow.frame)
+            ]
+        ]
+        switch SensitiveAccessibilityScanner.scan(
+            root: windowBinding.accessibilityWindow
+        ) {
+        case .complete(let sensitiveFrames):
+            result["screenshot"] = try captureWindow(
+                currentWindow,
+                sensitiveFrames: sensitiveFrames
+            ).dictionary
+        case .incomplete:
+            result["screenshot"] = NSNull()
+            result["screenshot_omitted_reason"] =
+                "sensitive_accessibility_scan_incomplete"
+        }
+        try validateVisibleWindow(
+            currentWindow,
+            pid: app.processIdentifier
+        )
+        try validateControlEpoch(controlEpoch)
         pendingResponseEpoch = controlEpoch
         return result
     }
@@ -907,9 +974,7 @@ private final class ComputerUseController {
         return try getAppState(
             [
                 "pid": Int(app.processIdentifier),
-                "include_screenshot":
-                    snapshot.coordinateImageSize != nil
-                        && CGPreflightScreenCaptureAccess()
+                "include_screenshot": false
             ],
             leaseID: leaseID
         ).merging([
@@ -1598,10 +1663,146 @@ private final class ComputerUseController {
         }) {
             return frameMatch
         }
+        if let tolerantFrameMatch = candidates
+            .compactMap({ candidate -> (AXUIElement, CGFloat)? in
+                guard let frame = elementFrame(candidate),
+                      let score = windowBindingScore(
+                          frame,
+                          window.frame
+                      ) else {
+                    return nil
+                }
+                return (candidate, score)
+            })
+            .max(by: { $0.1 < $1.1 })?.0 {
+            return tolerantFrameMatch
+        }
         throw HelperFailure.staleSnapshot(
             "the topmost CGWindow is not bound to a matching AX window"
         )
     }
+
+    private func stableAccessibilityWindow(
+        for app: NSRunningApplication,
+        epoch: ControlEpoch
+    ) throws -> (
+        visibleWindow: VisibleWindow,
+        accessibilityWindow: AXUIElement
+    ) {
+        var lastBindingError: Error?
+        for attempt in 0..<windowBindingAttemptCount {
+            try validateControlEpoch(epoch)
+            if let visibleWindow = visibleWindow(
+                for: app.processIdentifier
+            ) {
+                do {
+                    let accessibilityWindow = try accessibilityWindow(
+                        for: app,
+                        matching: visibleWindow
+                    )
+                    try validateVisibleWindow(
+                        visibleWindow,
+                        pid: app.processIdentifier
+                    )
+                    try validateControlEpoch(epoch)
+                    return (visibleWindow, accessibilityWindow)
+                } catch {
+                    lastBindingError = error
+                }
+            } else {
+                lastBindingError = HelperFailure.staleSnapshot(
+                    "the target app has no stable visible window"
+                )
+            }
+            guard attempt + 1 < windowBindingAttemptCount else { break }
+            Thread.sleep(forTimeInterval: windowBindingRetryInterval)
+        }
+        if let lastBindingError {
+            throw lastBindingError
+        }
+        throw HelperFailure.staleSnapshot(
+            "the target app window did not stabilize"
+        )
+    }
+
+    private func windowBindingScore(
+        _ accessibilityFrame: CGRect,
+        _ visibleFrame: CGRect
+    ) -> CGFloat? {
+        guard accessibilityFrame.width > 0,
+              accessibilityFrame.height > 0,
+              visibleFrame.width > 0,
+              visibleFrame.height > 0 else {
+            return nil
+        }
+        let widthRatio = min(
+            accessibilityFrame.width,
+            visibleFrame.width
+        ) / max(accessibilityFrame.width, visibleFrame.width)
+        let heightRatio = min(
+            accessibilityFrame.height,
+            visibleFrame.height
+        ) / max(accessibilityFrame.height, visibleFrame.height)
+        guard widthRatio >= windowBindingMinimumDimensionRatio,
+              heightRatio >= windowBindingMinimumDimensionRatio,
+              abs(accessibilityFrame.midX - visibleFrame.midX)
+                <= windowBindingMaximumHorizontalCenterDelta,
+              abs(accessibilityFrame.midY - visibleFrame.midY)
+                <= windowBindingMaximumVerticalCenterDelta else {
+            return nil
+        }
+        let intersection = accessibilityFrame.intersection(visibleFrame)
+        guard !intersection.isNull, !intersection.isEmpty else { return nil }
+        let smallerArea = min(
+            accessibilityFrame.width * accessibilityFrame.height,
+            visibleFrame.width * visibleFrame.height
+        )
+        let overlapRatio = intersection.width * intersection.height
+            / smallerArea
+        guard overlapRatio >= windowBindingMinimumOverlapRatio else {
+            return nil
+        }
+        return overlapRatio + widthRatio + heightRatio
+    }
+
+#if WILLDEEP_COMPUTER_USE_CONTRACT_TEST
+    private func contractWindowBinding() -> [String: Any] {
+        let visible = CGRect(x: 100, y: 100, width: 1_000, height: 700)
+        let titlebarAdjusted = CGRect(
+            x: 100,
+            y: 120,
+            width: 1_000,
+            height: 680
+        )
+        let unrelatedOverlay = CGRect(
+            x: 200,
+            y: 200,
+            width: 300,
+            height: 200
+        )
+        let shiftedWindow = CGRect(
+            x: 160,
+            y: 100,
+            width: 1_000,
+            height: 700
+        )
+        return [
+            "exact_match": windowBindingScore(visible, visible) != nil,
+            "titlebar_adjustment_match": windowBindingScore(
+                titlebarAdjusted,
+                visible
+            ) != nil,
+            "overlay_rejected": windowBindingScore(
+                unrelatedOverlay,
+                visible
+            ) == nil,
+            "shifted_window_rejected": windowBindingScore(
+                shiftedWindow,
+                visible
+            ) == nil
+        ]
+    }
+#endif
 
     private func accessibilityWindowID(
         _ window: AXUIElement
@@ -1920,9 +2121,13 @@ private final class ComputerUseController {
         }
         let isWillDeep = normalized == "com.willdeep.app"
             || normalized.hasPrefix("com.willdeep.")
-        guard !isWillDeep,
-              !forbiddenControlBundleIdentifiers.contains(normalized),
-              !forbiddenControlApplicationNames.contains(normalized) else {
+        let isRestrictedTerminal = ComputerUseSafetyPolicy
+            .terminalSurfaceRestrictionsEnabled
+            && (
+                forbiddenControlBundleIdentifiers.contains(normalized)
+                    || forbiddenControlApplicationNames.contains(normalized)
+            )
+        guard !isWillDeep, !isRestrictedTerminal else {
             throw HelperFailure.forbiddenControlTarget(identifier)
         }
     }
@@ -1959,9 +2164,15 @@ private final class ComputerUseController {
         .compactMap { $0 }
         .map(normalizedApplicationIdentifier)
         return identifiers.contains { identifier in
-            identifier == "com.willdeep.app"
-                || identifier.hasPrefix("com.willdeep.")
-                || forbiddenControlBundleIdentifiers.contains(identifier)
+            if identifier == "com.willdeep.app"
+                || identifier.hasPrefix("com.willdeep.") {
+                return true
+            }
+            guard ComputerUseSafetyPolicy
+                .terminalSurfaceRestrictionsEnabled else {
+                return false
+            }
+            return forbiddenControlBundleIdentifiers.contains(identifier)
                 || forbiddenControlApplicationNames.contains(identifier)
         }
     }
@@ -2472,6 +2683,95 @@ private final class ComputerUseController {
             value: Int64(max(1, clickState))
         )
         event?.postToPid(pid)
+    }
+
+    private func activateAndWaitUntilFrontmost(
+        _ app: NSRunningApplication,
+        epoch: ControlEpoch
+    ) throws -> Int {
+        if isFrontmost(app) { return 0 }
+
+        for attempt in 1...applicationActivationAttemptCount {
+            try validateControlEpoch(epoch)
+            guard !app.isTerminated else {
+                throw HelperFailure.appNotFound(
+                    app.bundleIdentifier
+                        ?? app.localizedName
+                        ?? String(app.processIdentifier)
+                )
+            }
+            _ = try withControlMutation(epoch) {
+                if app.isHidden {
+                    _ = app.unhide()
+                }
+                app.activate(
+                    options: [
+                        .activateAllWindows,
+                        .activateIgnoringOtherApps
+                    ]
+                )
+            }
+            if isFrontmost(app) { return attempt }
+
+            if attempt == 2, AXIsProcessTrusted() {
+                try raiseAccessibilityWindow(for: app, epoch: epoch)
+                if isFrontmost(app) { return attempt }
+            }
+            guard attempt < applicationActivationAttemptCount else { break }
+            Thread.sleep(
+                forTimeInterval: applicationActivationRetryInterval
+            )
+        }
+        throw HelperFailure.invalidRequest(
+            "Could not bring \(app.localizedName ?? "the target app") to the foreground after retrying. Confirm the app has a visible window, then refresh its state."
+        )
+    }
+
+    private func raiseAccessibilityWindow(
+        for app: NSRunningApplication,
+        epoch: ControlEpoch
+    ) throws {
+        let application = AXUIElementCreateApplication(
+            app.processIdentifier
+        )
+        _ = AXUIElementSetMessagingTimeout(
+            application,
+            axMessagingTimeoutSeconds
+        )
+        try withControlMutation(epoch) {
+            _ = AXUIElementSetAttributeValue(
+                application,
+                kAXFrontmostAttribute as CFString,
+                kCFBooleanTrue
+            )
+            let focused = attributeValue(
+                application,
+                kAXFocusedWindowAttribute
+            )
+            let focusedWindow = focused.flatMap { value -> AXUIElement? in
+                guard CFGetTypeID(value as CFTypeRef)
+                    == AXUIElementGetTypeID() else {
+                    return nil
+                }
+                return value as! AXUIElement
+            }
+            let firstWindow = (
+                attributeValue(application, kAXWindowsAttribute)
+                    as? [AXUIElement]
+            )?.first
+            if let window = focusedWindow ?? firstWindow {
+                _ = AXUIElementPerformAction(
+                    window,
+                    kAXRaiseAction as CFString
+                )
+            }
+        }
+    }
+
+    private func isFrontmost(_ app: NSRunningApplication) -> Bool {
+        app.isActive
+            || NSWorkspace.shared.frontmostApplication?
+                .processIdentifier == app.processIdentifier
     }
 
     private func taggedSyntheticEvent(_ event: CGEvent?) -> CGEvent? {

@@ -221,8 +221,8 @@ enum AgentSandboxPolicy {
                 requiresUserApproval: true,
                 requiresTypedConfirmation: explicitConfirmation,
                 reason: explicitConfirmation
-                    ? "Computer Use requires fresh per-action confirmation for consequential or ambiguous actions, non-navigation keys, sensitive/control-character input, and private-takeover boundaries; an operational lease cannot bypass it."
-                    : "This ordinary Computer Use action may run automatically only inside the current runtime-, turn-, and target-bound controlling lease; the first control action and Strict mode still require user approval.",
+                    ? "Computer Use requires fresh per-action confirmation for malformed or ambiguous actions, non-navigation keys, sensitive/control-character input, and private-takeover boundaries; an operational lease cannot bypass it."
+                    : "This Computer Use action may run automatically only inside the current runtime-, turn-, and target-bound controlling lease; the first control action and Strict mode still require user approval.",
                 prefixRule: nil
             )
         default:
@@ -299,6 +299,18 @@ enum AgentSandboxPolicy {
             let tokens = invocation.commandTokens
             let head = invocation.head
             let assignmentValues = invocation.environmentAssignments.map(environmentAssignmentValue)
+            let localPathTokens = localPathCheckTokens(for: tokens, head: head)
+
+            // Non-escalated commands intentionally receive an isolated HOME.
+            // Running a command that spells `~/...` or `$HOME/...` there would
+            // silently target the sandbox home instead of the user's real
+            // home. Escalate before launch so the exact user-requested path is
+            // preserved rather than relying on a failing seatbelt retry.
+            if assignmentValues.contains(where: referencesSandboxRemappedHome)
+                || localPathTokens.contains(where: referencesSandboxRemappedHome) {
+                needsEscalation = true
+                reasons.append("Home-relative paths require access to the user's real home outside the workspace sandbox.")
+            }
 
             if invocation.environmentAssignments.contains(where: environmentAssignmentKeyLooksSensitive) {
                 needsEscalation = true
@@ -413,7 +425,7 @@ enum AgentSandboxPolicy {
                 reasons.append("Command references a sensitive path or credential-like value.")
             }
 
-            if localPathCheckTokens(for: tokens, head: head).contains(where: { token in
+            if localPathTokens.contains(where: { token in
                 guard looksLikePath(token),
                       let resolved = resolvePath(token, workingDirectory: workingDirectory, rootDirectory: rootDirectory) else {
                     return false
@@ -1169,6 +1181,9 @@ enum AgentSandboxPolicy {
     nonisolated private static func resolvePath(_ raw: String, workingDirectory: URL?, rootDirectory: URL?) -> URL? {
         let cleaned = raw.trimmingCharacters(in: CharacterSet(charactersIn: "\"'"))
         guard looksLikePath(cleaned) else { return nil }
+        if let expandedHomePath = expandedSandboxRemappedHomePath(cleaned) {
+            return URL(fileURLWithPath: expandedHomePath).standardizedFileURL
+        }
         if cleaned.hasPrefix("/") {
             return URL(fileURLWithPath: cleaned).standardizedFileURL
         }
@@ -1193,6 +1208,39 @@ enum AgentSandboxPolicy {
 
     nonisolated private static func looksLikePath(_ token: String) -> Bool {
         token.hasPrefix("/") || token.hasPrefix("./") || token.hasPrefix("../") || token == ".."
+            || expandedSandboxRemappedHomePath(token) != nil
+    }
+
+    nonisolated private static func referencesSandboxRemappedHome(_ raw: String) -> Bool {
+        expandedSandboxRemappedHomePath(raw) != nil
+    }
+
+    /// Expands only the shell forms whose meaning changes when the sandbox
+    /// replaces HOME. Leading redirection syntax is ignored so both
+    /// `> ~/bin/file` and `>~/bin/file` are recognized.
+    nonisolated private static func expandedSandboxRemappedHomePath(_ raw: String) -> String? {
+        var cleaned = raw.trimmingCharacters(in: CharacterSet(charactersIn: "\"'"))
+        while let first = cleaned.first,
+              first == ">" || first == "<" || first.isNumber {
+            cleaned.removeFirst()
+        }
+
+        let suffix: Substring
+        if cleaned == "~" || cleaned == "$HOME" || cleaned == "${HOME}" {
+            suffix = ""
+        } else if cleaned.hasPrefix("~/") {
+            suffix = cleaned.dropFirst(2)
+        } else if cleaned.hasPrefix("$HOME/") {
+            suffix = cleaned.dropFirst("$HOME/".count)
+        } else if cleaned.hasPrefix("${HOME}/") {
+            suffix = cleaned.dropFirst("${HOME}/".count)
+        } else {
+            return nil
+        }
+
+        let home = FileManager.default.homeDirectoryForCurrentUser.standardizedFileURL
+        guard !suffix.isEmpty else { return home.path }
+        return home.appendingPathComponent(String(suffix)).standardizedFileURL.path
     }
 
     nonisolated private static func isSafeRelativeDirectoryHop(_ raw: String) -> Bool {

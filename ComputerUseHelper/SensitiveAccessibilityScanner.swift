@@ -2,6 +2,13 @@ import ApplicationServices
 import CoreGraphics
 import Foundation
 
+enum ComputerUseSafetyPolicy {
+    // Development phase: terminal applications and surfaces remain available
+    // to Computer Use. Re-enable this switch as terminal-specific safeguards
+    // are rebuilt with observable, low-false-positive rules.
+    static let terminalSurfaceRestrictionsEnabled = false
+}
+
 enum SensitiveAccessibilityScanResult {
     case complete([CGRect])
     case incomplete
@@ -291,6 +298,10 @@ enum SensitiveAccessibilityScanner {
     private static func isTerminalSurfaceMetadata(
         _ attributes: [String: Any]
     ) -> Bool {
+        guard ComputerUseSafetyPolicy
+            .terminalSurfaceRestrictionsEnabled else {
+            return false
+        }
         let metadata = [
             attributes[kAXIdentifierAttribute],
             attributes[kAXTitleAttribute],

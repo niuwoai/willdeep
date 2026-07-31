@@ -10,7 +10,7 @@ WillDeep ships its own independently restartable **WillDeep Computer Use** helpe
 The helper has its own macOS privacy entries:
 
 - **Accessibility** permits reading app controls and invoking supported actions.
-- **Screen & System Audio Recording** permits capturing only the chosen app's visible window so the Agent can verify every step.
+- **Screen & System Audio Recording** permits capturing only the chosen app's visible window when the AX tree is insufficient and a pixel fallback is needed.
 
 If the user changes either permission, call `computer_use_restart_helper`. Restarting WillDeep itself is unnecessary.
 
@@ -20,17 +20,18 @@ If the user changes either permission, call `computer_use_restart_helper`. Resta
 2. If either needed permission is missing, explain why and wait for the user to approve desktop control.
 3. Then call `computer_use_request_permissions` and let macOS show its own prompt.
 4. Never type passwords, API keys, one-time codes, recovery codes, or any other secret. Ask the user to take over instead.
-5. Treat any action that sends, deletes, purchases, changes access, or makes a public/external commitment as an immediate user-confirmation point.
+5. Truthfully declare any action that sends, deletes, purchases, changes access, or makes a public/external commitment. A click may reuse the current runtime-, turn-, and target-bound control approval; private authentication, payment, credential, or recovery steps still require user takeover, and non-click consequential mutations retain their confirmation boundary.
 
 ## Required control loop
 
 Every desktop turn follows this loop:
 
 1. `computer_use_list_apps` when the target app is unknown.
-2. `computer_use_get_app_state` with `app` or `pid`.
-3. Prefer the returned Accessibility `ref` in `computer_use_click` or `computer_use_set_value`.
-4. When the app has no useful AX tree, use screenshot-relative pixels with `computer_use_click`, `computer_use_secondary_action`, or `computer_use_drag`.
-5. Each action returns a fresh AX tree and an inline screenshot. Re-evaluate it; never reuse an old `ref`.
+2. Call `computer_use_inspect_app`, or rely on `computer_use_get_app_state` with its default `include_screenshot: false`.
+3. Inspect the fresh AX tree and prefer its `ref` in `computer_use_click` or `computer_use_set_value`.
+4. Only when the AX tree has no useful target, call `computer_use_get_app_state` with `include_screenshot: true` and use screenshot-relative pixels.
+5. Each action returns a fresh AX-only state. Re-evaluate its tree; never reuse an old `ref` or pixel snapshot.
+6. Keep the target app in the background for normal AX actions, PID-targeted input, and selected-window capture. Call `computer_use_activate_app` only if that specific app rejects the background operation.
 
 ## Tool map
 
@@ -38,16 +39,16 @@ Every desktop turn follows this loop:
 | --- | --- |
 | Permission status / prompt / restart | `computer_use_permissions`, `computer_use_request_permissions`, `computer_use_restart_helper` |
 | Discover or background-launch an app | `computer_use_list_apps`, `computer_use_launch_app` |
-| AX tree plus selected-window screenshot | `computer_use_get_app_state` |
+| AX-only semantic inspection | `computer_use_inspect_app`, `computer_use_get_app_state` |
+| Explicit selected-window screenshot fallback | `computer_use_get_app_state` with `include_screenshot: true` |
+| Foreground compatibility fallback only | `computer_use_activate_app` |
 | Normal click / context menu | `computer_use_click`, `computer_use_secondary_action` |
 | Scroll / drag | `computer_use_scroll`, `computer_use_drag` |
 | Non-sensitive text / keys / AX field value | `computer_use_type_text`, `computer_use_press_key`, `computer_use_set_value` |
 
 ## Coordinates
 
-The screenshot from `computer_use_get_app_state` is cropped to the selected window. Pixel coordinates are relative to that screenshot, including on Retina displays. The helper maps them to native screen points from the same snapshot.
-
-Pass `coordinate_space: "screen"` only when a tool explicitly needs raw macOS screen coordinates. Otherwise use the default screenshot-relative space.
+The opt-in screenshot from `computer_use_get_app_state` is cropped to the selected window. Pixel coordinates are relative to that screenshot, including on Retina displays. The helper maps them to native screen points from the same snapshot; arbitrary screen-space coordinates are rejected.
 
 ## Limits
 

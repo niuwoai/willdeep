@@ -50,6 +50,34 @@ struct AgentToolResultImageEncodingTests {
     }
 
     @Test
+    func deepSeekV4FlashUsesResponsesOnlyOnSupportedProviders() {
+        let directFlash = AgentConfiguration(
+            providerID: AgentProviderPreset.deepSeekID,
+            baseURL: "https://api.deepseek.com",
+            model: "deepseek-v4-flash",
+            apiKey: "test"
+        ).normalized
+        let gatewayFlash = AgentConfiguration(
+            providerID: AgentProviderPreset.someIMID,
+            baseURL: "https://some.im/v1",
+            model: "deepseek-v4-flash",
+            apiKey: "test"
+        ).normalized
+        let directPro = AgentConfiguration(
+            providerID: AgentProviderPreset.deepSeekID,
+            baseURL: "https://api.deepseek.com",
+            model: "deepseek-v4-pro",
+            apiKey: "test"
+        ).normalized
+
+        #expect(directFlash.inferenceProviderKind == .openAIResponses)
+        #expect(directFlash.usesStatelessDeepSeekResponses)
+        #expect(gatewayFlash.inferenceProviderKind == .openAIResponses)
+        #expect(gatewayFlash.usesWillDeepGatewayResponsesState)
+        #expect(directPro.inferenceProviderKind == .openAIChat)
+    }
+
+    @Test
     func openAIResponsesUsesPreviousResponseForStrictlyAppendedToolOutput() throws {
         let state = OpenAIResponsesContinuationState()
         let initialMessages = [
@@ -70,6 +98,7 @@ struct AgentToolResultImageEncodingTests {
             AgentMessage(
                 role: .assistant,
                 content: "",
+                reasoningContent: "Inspecting the repository.",
                 toolCalls: [
                     AgentMessageToolCall(
                         externalID: "call_read",
@@ -134,7 +163,11 @@ struct AgentToolResultImageEncodingTests {
             AgentMessage(role: .user, content: "Inspect the project.")
         ]
         let appendedMessages = replayedMessages + [
-            AgentMessage(role: .assistant, content: "The project uses Swift."),
+            AgentMessage(
+                role: .assistant,
+                content: "The project uses Swift.",
+                reasoningContent: "Reviewing the project files."
+            ),
             AgentMessage(role: .user, content: "Now inspect its tests.")
         ]
         let appendedBody = try OpenAIResponsesAdapter.encodeRequestBody(
@@ -216,6 +249,245 @@ struct AgentToolResultImageEncodingTests {
         #expect(!fallbackRequest.usesPreviousResponse)
         #expect(fallbackObject["previous_response_id"] == nil)
         #expect(fullInput.count == 3)
+    }
+
+    @Test
+    func willDeepGatewayResponsesStopsUsingCursorBeforeServerExpiry() throws {
+        let state = OpenAIResponsesContinuationState()
+        let epoch = Date(timeIntervalSince1970: 1_800_000_000)
+        let initialMessages = [
+            AgentMessage(role: .user, content: "First question")
+        ]
+        let initialBody = try OpenAIResponsesAdapter.encodeRequestBody(
+            model: "deepseek-v4-flash",
+            messages: initialMessages,
+            tools: [],
+            supportsImages: false,
+            store: false
+        )
+        let initialRequest = try state.prepare(
+            fullBody: initialBody,
+            maximumContinuationAge: OpenAIResponsesAdapter.willDeepGatewayContinuationMaxAge,
+            now: epoch
+        )
+        state.commit(responseID: "resp_first", preparedRequest: initialRequest)
+        let persistedData = try JSONEncoder().encode(AgentSession(
+            openAIResponsesContinuation: try #require(state.persistedSnapshot)
+        ))
+        let restoredSession = try JSONDecoder().decode(AgentSession.self, from: persistedData)
+        let restoredState = OpenAIResponsesContinuationState(
+            persistedSnapshot: restoredSession.openAIResponsesContinuation
+        )
+
+        let appendedMessages = initialMessages + [
+            AgentMessage(role: .assistant, content: "First answer"),
+            AgentMessage(role: .user, content: "Follow-up")
+        ]
+        let appendedBody = try OpenAIResponsesAdapter.encodeRequestBody(
+            model: "deepseek-v4-flash",
+            messages: appendedMessages,
+            tools: [],
+            supportsImages: false,
+            store: false
+        )
+        let withinWindow = try restoredState.prepare(
+            fullBody: appendedBody,
+            maximumContinuationAge: OpenAIResponsesAdapter.willDeepGatewayContinuationMaxAge,
+            now: epoch.addingTimeInterval(22 * 60 * 60)
+        )
+        let atSafetyBoundary = try restoredState.prepare(
+            fullBody: appendedBody,
+            maximumContinuationAge: OpenAIResponsesAdapter.willDeepGatewayContinuationMaxAge,
+            now: epoch.addingTimeInterval(23 * 60 * 60)
+        )
+
+        #expect(withinWindow.usesPreviousResponse)
+        #expect(!atSafetyBoundary.usesPreviousResponse)
+        let fullObject = try toolResultImageJSONObject(atSafetyBoundary.body)
+        #expect(fullObject["previous_response_id"] == nil)
+        #expect((fullObject["input"] as? [[String: Any]])?.count == 3)
+    }
+
+    @Test
+    func deepSeekResponsesFullHistoryIncludesReasoningAndDisablesStore() throws {
+        let data = try OpenAIResponsesAdapter.encodeRequestBody(
+            model: "deepseek-v4-flash",
+            messages: [
+                AgentMessage(role: .user, content: "Question"),
+                AgentMessage(
+                    role: .assistant,
+                    content: "Answer",
+                    reasoningContent: "Private chain"
+                )
+            ],
+            tools: [],
+            supportsImages: false,
+            store: false
+        )
+        let body = try toolResultImageJSONObject(data)
+        let input = try #require(body["input"] as? [[String: Any]])
+
+        #expect(body["store"] as? Bool == false)
+        #expect(input.compactMap { $0["type"] as? String } == [
+            "message", "reasoning", "message"
+        ])
+        let reasoningContent = try #require(input[1]["content"] as? [[String: Any]])
+        #expect(reasoningContent.count == 1)
+        #expect(reasoningContent[0]["type"] as? String == "reasoning_text")
+        #expect(reasoningContent[0]["text"] as? String == "Private chain")
+    }
+
+    @Test
+    func willDeepGatewayStateFailuresFallBackWithoutDuplicatingOutput() async throws {
+        let stateProtocol = AgentNetworkSupport.willDeepResponsesStateProtocol
+        let configuration = AgentConfiguration(
+            providerID: AgentProviderPreset.someIMID,
+            baseURL: "https://example.com/v1",
+            model: "deepseek-v4-flash",
+            apiKey: "test"
+        )
+        defer { WillDeepResponsesFallbackURLProtocol.handler = nil }
+
+        // A request-time 503 is safe to replay immediately because no output
+        // has reached the user. Retry once with full history and no state opt-in.
+        do {
+            let recorder = WillDeepResponsesFallbackRecorder()
+            let session = willDeepResponsesTestSession()
+            let continuationState = OpenAIResponsesContinuationState()
+            WillDeepResponsesFallbackURLProtocol.handler = { request in
+                let attempt = recorder.record(request)
+                let url = try #require(request.url)
+                if attempt == 1 {
+                    return try willDeepResponsesHTTPResult(
+                        url: url,
+                        statusCode: 503,
+                        body: #"{"error":{"code":"state_backend_unavailable","message":"Responses state unavailable"}}"#
+                    )
+                }
+                return try willDeepResponsesSSE(
+                    url: url,
+                    responseID: "resp_full",
+                    stateActive: false
+                )
+            }
+
+            let adapter = OpenAIResponsesAdapter(
+                configuration: configuration,
+                session: session,
+                continuationState: continuationState,
+                someIMContext: SomeIMRequestContext(sessionID: "session-503")
+            )
+            try await adapter.streamChat(
+                messages: [AgentMessage(role: .user, content: "Keep all history")]
+            ) { _ in }
+            session.invalidateAndCancel()
+
+            let requests = recorder.requests
+            #expect(requests.count == 2)
+            #expect(requests[0].stateHeader == stateProtocol)
+            #expect(requests[0].sessionID == "session-503")
+            #expect(requests[0].userAgent?.hasPrefix("some.im/WillDeep-") == true)
+            #expect(requests[0].path == "/v1/responses")
+            #expect(requests[1].stateHeader == nil)
+            #expect(requests.allSatisfy { !$0.body.contains("previous_response_id") })
+            #expect(continuationState.persistedSnapshot == nil)
+        }
+
+        // A 410 proves the cursor is gone. Older nodes may report the same
+        // condition as 422 response_affinity_not_found; both must keep state
+        // opt-in enabled, resend full history, and establish a fresh epoch.
+        let cursorRecoveryErrors = [
+            (
+                statusCode: 410,
+                body: #"{"error":{"code":"previous_response_expired","message":"previous_response_id expired"}}"#
+            ),
+            (
+                statusCode: 422,
+                body: #"{"error":{"code":"response_affinity_not_found","message":"response affinity not found"}}"#
+            )
+        ]
+        for recoveryError in cursorRecoveryErrors {
+            let recorder = WillDeepResponsesFallbackRecorder()
+            let session = willDeepResponsesTestSession()
+            let continuationState = OpenAIResponsesContinuationState()
+            WillDeepResponsesFallbackURLProtocol.handler = { request in
+                let attempt = recorder.record(request)
+                let url = try #require(request.url)
+                if attempt == 2 {
+                    return try willDeepResponsesHTTPResult(
+                        url: url,
+                        statusCode: recoveryError.statusCode,
+                        body: recoveryError.body
+                    )
+                }
+                return try willDeepResponsesSSE(
+                    url: url,
+                    responseID: attempt == 1 ? "resp_first" : "resp_recovered",
+                    stateActive: true
+                )
+            }
+            let adapter = OpenAIResponsesAdapter(
+                configuration: configuration,
+                session: session,
+                continuationState: continuationState,
+                someIMContext: SomeIMRequestContext(
+                    sessionID: "session-\(recoveryError.statusCode)"
+                )
+            )
+            let firstMessages = [AgentMessage(role: .user, content: "First question")]
+            try await adapter.streamChat(messages: firstMessages) { _ in }
+            let appendedMessages = firstMessages + [
+                AgentMessage(role: .assistant, content: "First answer"),
+                AgentMessage(role: .user, content: "Follow-up")
+            ]
+            try await adapter.streamChat(messages: appendedMessages) { _ in }
+            session.invalidateAndCancel()
+
+            let requests = recorder.requests
+            #expect(requests.count == 3)
+            #expect(!requests[0].body.contains("previous_response_id"))
+            #expect(requests[1].body.contains(#""previous_response_id":"resp_first""#))
+            #expect(!requests[2].body.contains("previous_response_id"))
+            #expect(requests[2].body.contains("First question"))
+            #expect(requests[2].body.contains("First answer"))
+            #expect(requests[2].body.contains("Follow-up"))
+            #expect(requests.allSatisfy {
+                $0.stateHeader == stateProtocol
+            })
+            #expect(continuationState.persistedSnapshot?.responseID == "resp_recovered")
+        }
+
+        // Once deltas are visible, replay would duplicate text. A terminal
+        // state_unavailable marker therefore preserves this answer but drops
+        // its cursor so the next user turn starts from complete local history.
+        do {
+            let recorder = WillDeepResponsesFallbackRecorder()
+            let session = willDeepResponsesTestSession()
+            let continuationState = OpenAIResponsesContinuationState()
+            WillDeepResponsesFallbackURLProtocol.handler = { request in
+                _ = recorder.record(request)
+                let url = try #require(request.url)
+                return try willDeepResponsesSSE(
+                    url: url,
+                    responseID: "resp_unstored",
+                    stateActive: true,
+                    stateUnavailableBeforeTerminal: true
+                )
+            }
+            let adapter = OpenAIResponsesAdapter(
+                configuration: configuration,
+                session: session,
+                continuationState: continuationState,
+                someIMContext: SomeIMRequestContext(sessionID: "session-stream-loss")
+            )
+            try await adapter.streamChat(
+                messages: [AgentMessage(role: .user, content: "Do not duplicate this")]
+            ) { _ in }
+            session.invalidateAndCancel()
+
+            #expect(recorder.requests.count == 1)
+            #expect(continuationState.persistedSnapshot == nil)
+        }
     }
 
     @Test
@@ -414,6 +686,137 @@ struct AgentToolResultImageEncodingTests {
                 .map(\.id) == [firstToolImage.id, secondToolImage.id]
         )
     }
+}
+
+private final class WillDeepResponsesFallbackRecorder: @unchecked Sendable {
+    struct RecordedRequest {
+        let stateHeader: String?
+        let sessionID: String?
+        let userAgent: String?
+        let path: String?
+        let body: String
+    }
+
+    private let lock = NSLock()
+    private var storage: [RecordedRequest] = []
+
+    func record(_ request: URLRequest) -> Int {
+        lock.withLock {
+            storage.append(RecordedRequest(
+                stateHeader: request.value(
+                    forHTTPHeaderField: AgentNetworkSupport.willDeepResponsesStateHeaderName
+                ),
+                sessionID: request.value(
+                    forHTTPHeaderField: AgentNetworkSupport.willDeepSessionHeaderName
+                ),
+                userAgent: request.value(forHTTPHeaderField: "User-Agent"),
+                path: request.url?.path,
+                body: Self.bodyString(from: request)
+            ))
+            return storage.count
+        }
+    }
+
+    var requests: [RecordedRequest] {
+        lock.withLock { storage }
+    }
+
+    private static func bodyString(from request: URLRequest) -> String {
+        if let body = request.httpBody {
+            return String(decoding: body, as: UTF8.self)
+        }
+        guard let stream = request.httpBodyStream else { return "" }
+        stream.open()
+        defer { stream.close() }
+        var data = Data()
+        var buffer = [UInt8](repeating: 0, count: 4_096)
+        while true {
+            let count = stream.read(&buffer, maxLength: buffer.count)
+            if count <= 0 { break }
+            data.append(buffer, count: count)
+        }
+        return String(decoding: data, as: UTF8.self)
+    }
+}
+
+private final class WillDeepResponsesFallbackURLProtocol: URLProtocol {
+    static var handler: ((URLRequest) throws -> (HTTPURLResponse, Data))?
+
+    override class func canInit(with request: URLRequest) -> Bool { true }
+
+    override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
+
+    override func startLoading() {
+        guard let handler = Self.handler else {
+            client?.urlProtocol(self, didFailWithError: URLError(.badServerResponse))
+            return
+        }
+        do {
+            let (response, data) = try handler(request)
+            client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
+            client?.urlProtocol(self, didLoad: data)
+            client?.urlProtocolDidFinishLoading(self)
+        } catch {
+            client?.urlProtocol(self, didFailWithError: error)
+        }
+    }
+
+    override func stopLoading() {}
+}
+
+private func willDeepResponsesTestSession() -> URLSession {
+    let configuration = URLSessionConfiguration.ephemeral
+    configuration.protocolClasses = [WillDeepResponsesFallbackURLProtocol.self]
+    return URLSession(configuration: configuration)
+}
+
+private func willDeepResponsesHTTPResult(
+    url: URL,
+    statusCode: Int,
+    body: String,
+    headers: [String: String] = ["Content-Type": "application/json"]
+) throws -> (HTTPURLResponse, Data) {
+    let response = try #require(HTTPURLResponse(
+        url: url,
+        statusCode: statusCode,
+        httpVersion: nil,
+        headerFields: headers
+    ))
+    return (response, Data(body.utf8))
+}
+
+private func willDeepResponsesSSE(
+    url: URL,
+    responseID: String,
+    stateActive: Bool,
+    stateUnavailableBeforeTerminal: Bool = false
+) throws -> (HTTPURLResponse, Data) {
+    var headers = ["Content-Type": "text/event-stream"]
+    if stateActive {
+        headers[AgentNetworkSupport.willDeepResponsesStateHeaderName] = "v1; active"
+    }
+    let stateUnavailable = stateUnavailableBeforeTerminal ? """
+    event: response.state_unavailable
+    data: {"type":"response.state_unavailable","error":{"code":"state_backend_unavailable"}}
+
+    """ : ""
+    let body = """
+    event: response.created
+    data: {"response":{"id":"\(responseID)"}}
+
+    event: response.output_text.delta
+    data: {"delta":"ok"}
+
+    \(stateUnavailable)event: response.completed
+    data: {"response":{"id":"\(responseID)","status":"completed","output":[]}}
+
+    """
+    return try willDeepResponsesHTTPResult(
+        url: url,
+        statusCode: 200,
+        body: body,
+        headers: headers
+    )
 }
 
 private let firstToolImage = AgentImageAttachment(

@@ -31,6 +31,12 @@ build_tree_source = helper_source[
 mutation_wrapper_source = helper_source[
   /private func withControlMutation<T>\(.*?private func beginControlMutation/m
 ] || ""
+preview_source = helper_source[
+  /private func captureControlPreview\(.*?private func waitFor/m
+] || ""
+state_source = helper_source[
+  /private func getAppState\(.*?private func captureControlPreview/m
+] || ""
 checks = []
 
 record = lambda do |name, ok, detail|
@@ -79,11 +85,22 @@ record.call(
 record.call(
   "ax-window-identity",
   helper_source.include?("accessibilityWindow(") &&
+    helper_source.include?("stableAccessibilityWindow(") &&
+    helper_source.include?("windowBindingScore(") &&
     helper_source.include?("axWindowNumberAttribute") &&
     helper_source.include?("ElementReference") &&
     helper_source.include?("elementReference.windowID == snapshot.windowID") &&
     helper_source.include?("layer == 0"),
   "tree, refs, screenshots and visible layer-0 CGWindow identity are bound together"
+)
+
+record.call(
+  "activation-verification",
+  helper_source.include?("activateAndWaitUntilFrontmost(") &&
+    helper_source.include?("raiseAccessibilityWindow(") &&
+    helper_source.include?("NSWorkspace.shared.frontmostApplication") &&
+    helper_source.include?("applicationActivationAttemptCount"),
+  "application activation is verified, retried, and backed by AXRaise"
 )
 
 record.call(
@@ -133,17 +150,18 @@ record.call(
 )
 
 record.call(
-  "forbidden-control-targets",
+  "development-control-targets",
   helper_source.include?("ensureAllowedControlPID") &&
     helper_source.include?("ensureAllowedControlApplication") &&
     helper_source.include?('"com.willdeep.app"') &&
+    scanner_source.include?("terminalSurfaceRestrictionsEnabled = false") &&
     helper_source.include?('"com.apple.terminal"') &&
     helper_source.include?('"com.googlecode.iterm2"') &&
     helper_source.include?('"dev.warp.warp"') &&
     helper_source.include?('"org.alacritty"') &&
     helper_source.include?('"net.kovidgoyal.kitty"') &&
     helper_source.include?('"com.github.wez.wezterm"'),
-  "WillDeep, its parent PID and common terminal surfaces are rejected in the Helper"
+  "WillDeep and its parent remain rejected while the development switch allows terminal applications"
 )
 
 record.call(
@@ -166,7 +184,7 @@ record.call(
     build_tree_source.include?("redactsContent: isSensitiveContent") &&
     build_tree_source.include?("ancestorRedacted: isSensitiveContent") &&
     helper_source.scan("guard !isSecureInputElement(element)").length >= 3,
-  "secure/protected and terminal fields recursively omit content, mask screenshots and reject reads or writes"
+  "secure and protected fields recursively omit content, mask screenshots and reject reads or writes"
 )
 
 record.call(
@@ -227,8 +245,27 @@ record.call(
   helper_source.include?("if requiresCoordinateImage,") &&
     helper_source.include?('"include_screenshot":') &&
     helper_source.include?("snapshot.coordinateImageSize != nil") &&
-    helper_source.include?("isTerminalSurfaceElement"),
-  "semantic AX refs remain actionable without Screen Recording while terminal surfaces stay redacted and non-writable"
+    scanner_source.include?("terminalSurfaceRestrictionsEnabled = false"),
+  "semantic AX refs remain actionable without Screen Recording and terminal surfaces stay open during development"
+)
+
+record.call(
+  "ax-first-observation",
+  helper_source.include?('let includeScreenshot = bool(arguments, "include_screenshot", default: false)') &&
+    helper_source.include?('"include_screenshot": false'),
+  "initial and post-action state refreshes inspect the AX tree before any opt-in screenshot fallback"
+)
+
+record.call(
+  "background-target-window-preview",
+  helper_source.include?('case "capture_control_preview"') &&
+    preview_source.include?('"preserved_active_snapshot": true') &&
+    preview_source.include?('"target_frontmost": isFrontmost(app)') &&
+    preview_source.include?("captureWindow(") &&
+    !preview_source.include?("invalidateSnapshot()") &&
+    !preview_source.include?("activateAndWaitUntilFrontmost(") &&
+    !state_source.include?("activateAndWaitUntilFrontmost("),
+  "target-window preview and AX state reads work without foreground activation or ref invalidation"
 )
 
 compile_command = [
@@ -277,6 +314,23 @@ if compile_status.success?
   runtime_checks = {}
   events = []
   Open3.popen3(HELPER_BINARY) do |stdin, stdout, stderr, wait_thread|
+    window_binding = exchange(
+      stdin,
+      stdout,
+      {
+        "id" => "contract-window-binding",
+        "action" => "contract_window_binding",
+        "arguments" => {}
+      },
+      events
+    )
+    runtime_checks["window-binding"] =
+      window_binding["ok"] &&
+      window_binding.dig("result", "exact_match") == true &&
+      window_binding.dig("result", "titlebar_adjustment_match") == true &&
+      window_binding.dig("result", "overlay_rejected") == true &&
+      window_binding.dig("result", "shifted_window_rejected") == true
+
     permissions = exchange(
       stdin,
       stdout,
@@ -286,20 +340,35 @@ if compile_status.success?
     runtime_checks["permissions"] =
       permissions["ok"] && permissions.dig("result", "protocol_version") == "willdeep-computer-use.v6"
 
-    forbidden_terminal = exchange(
+    allowed_terminal = exchange(
       stdin,
       stdout,
       {
-        "id" => "forbidden-terminal",
+        "id" => "allowed-terminal",
         "action" => "start_control_session",
-        "control_lease_id" => "lease-forbidden",
+        "control_lease_id" => "lease-terminal",
         "arguments" => { "app" => "com.apple.Terminal" }
       },
       events
     )
-    runtime_checks["forbidden-terminal"] =
-      forbidden_terminal["ok"] == false &&
-      forbidden_terminal["error"].to_s.include?("not allowed to control")
+    runtime_checks["allowed-terminal"] =
+      allowed_terminal["ok"] &&
+      allowed_terminal.dig("result", "control_lease_id") == "lease-terminal"
+
+    ended_terminal = exchange(
+      stdin,
+      stdout,
+      {
+        "id" => "end-terminal",
+        "action" => "end_control_session",
+        "control_lease_id" => "lease-terminal",
+        "arguments" => {}
+      },
+      events
+    )
+    runtime_checks["end-terminal"] =
+      ended_terminal["ok"] &&
+      ended_terminal.dig("result", "ended") == true
 
     forbidden_parent = exchange(
       stdin,
@@ -416,10 +485,15 @@ if compile_status.success?
     stderr.read
   end
   failed_runtime_checks = runtime_checks.reject { |_, ok| ok }.keys
+  runtime_detail = if failed_runtime_checks.empty?
+    "window-binding/permissions/lease/pause/resume/end/shutdown passed"
+  else
+    "failed=#{failed_runtime_checks.join(",")}"
+  end
   record.call(
     "tcc-free-runtime",
     failed_runtime_checks.empty?,
-    failed_runtime_checks.empty? ? "permissions/lease/pause/resume/end/shutdown passed" : "failed=#{failed_runtime_checks.join(",")}"
+    runtime_detail
   )
 end
 

@@ -71,6 +71,23 @@ struct AgentComputerUseCoordinatorTests {
                 controlState: .controlling(lease)
             )
         )
+
+        #expect(
+            AgentComputerUsePolicy.canAutoApproveInOperationalLease(
+                toolName: "computer_use_activate_app",
+                arguments: ["pid": .number(741)],
+                owner: owner,
+                controlState: .controlling(lease)
+            )
+        )
+        #expect(
+            !AgentComputerUsePolicy.canAutoApproveInOperationalLease(
+                toolName: "computer_use_activate_app",
+                arguments: ["pid": .number(999)],
+                owner: owner,
+                controlState: .controlling(lease)
+            )
+        )
     }
 
     @Test("non-operational lease phases never auto-approve control")
@@ -370,6 +387,49 @@ struct AgentComputerUseCoordinatorTests {
 
         coordinator.complete(leaseID: lease.id)
         #expect(coordinator.state.phase == .idle)
+    }
+
+    @Test("local preview never crosses a user-control privacy boundary")
+    func localPreviewRespectsPrivacyEpoch() throws {
+        let coordinator = AgentComputerUseCoordinator()
+        let lease = try #require(
+            coordinator.begin(
+                operation: .controlling,
+                owner: makeOwner(),
+                target: makeTarget()
+            )
+        )
+        let previewEpoch = try #require(
+            coordinator.beginLocalObservation()
+        )
+        let activity = AgentComputerUseActivity(
+            image: AgentImageAttachment(
+                mimeType: "image/jpeg",
+                dataBase64: "cHJldmlldw==",
+                source: .capture
+            ),
+            toolName: "computer_use_preview",
+            capturedAt: Date()
+        )
+
+        #expect(
+            coordinator.publishLocalPreview(
+                activity,
+                leaseID: lease.id,
+                startedAtPrivacyEpoch: previewEpoch
+            )
+        )
+        #expect(coordinator.state.lease?.latestActivity == activity)
+
+        #expect(coordinator.takeover(leaseID: lease.id, emitIntent: false))
+        #expect(coordinator.state.lease?.latestActivity == nil)
+        #expect(
+            !coordinator.publishLocalPreview(
+                activity,
+                leaseID: lease.id,
+                startedAtPrivacyEpoch: previewEpoch
+            )
+        )
     }
 
     @Test("real user input takes over only the matching helper lease")
@@ -776,8 +836,8 @@ struct AgentComputerUseCoordinatorTests {
         )
     }
 
-    @Test("host boundary rejects WillDeep and terminal targets")
-    func hostTargetBoundaryRejectsSelfAndTerminals() {
+    @Test("host boundary rejects WillDeep while terminal targets stay open")
+    func hostTargetBoundaryRejectsSelfAndAllowsTerminals() {
         #expect(
             AgentComputerUseHostTargetBoundary.denialReason(
                 pid: 500,
@@ -798,7 +858,7 @@ struct AgentComputerUseCoordinatorTests {
                 resolvedBundleIdentifier: "com.apple.Terminal",
                 hostPID: 500,
                 parentPID: 400
-            ) != nil
+            ) == nil
         )
         #expect(
             AgentComputerUseHostTargetBoundary.denialReason(
@@ -809,7 +869,7 @@ struct AgentComputerUseCoordinatorTests {
                 resolvedBundleIdentifier: "dev.warp.Warp-Stable",
                 hostPID: 500,
                 parentPID: 400
-            ) != nil
+            ) == nil
         )
         #expect(
             AgentComputerUseHostTargetBoundary.denialReason(

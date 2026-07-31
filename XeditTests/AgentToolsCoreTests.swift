@@ -1328,6 +1328,28 @@ struct AgentToolsCoreTests {
         #expect(decision.requiresTypedConfirmation == true)
     }
 
+    @Test("home-relative paths use direct escalation instead of the sandbox home")
+    func sandboxPolicyPreservesRealHomePaths() {
+        let root = URL(fileURLWithPath: "/tmp/willdeep-workspace")
+        let commands = [
+            "mkdir -p ~/bin",
+            "printf '%s' script >~/bin/watchlog",
+            "TARGET=$HOME/bin/watchlog touch \"$TARGET\"",
+            "TARGET=${HOME}/bin/watchlog touch \"$TARGET\"",
+        ]
+
+        for command in commands {
+            let decision = AgentSandboxPolicy.commandDecision(
+                command: command,
+                rootDirectory: root
+            )
+            #expect(decision.mode == .escalated, "\(command) must preserve the real home path")
+            #expect(decision.requiresUserApproval == true)
+            #expect(decision.requiresTypedConfirmation == false)
+            #expect(decision.reason.contains("real home"))
+        }
+    }
+
     @Test
     func sandboxedEnvironmentScrubsSecretsAndUsesTemporaryHome() {
         let root = URL(fileURLWithPath: "/tmp/willdeep-workspace")

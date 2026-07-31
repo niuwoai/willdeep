@@ -1,6 +1,6 @@
 # WillDeep Product Overview
 
-> Last updated: 2026-07-31 | Current version: v1.219.0-rc8
+> Last updated: 2026-08-01 | Current version: v1.220.0-rc8
 
 ## Positioning
 
@@ -11,6 +11,24 @@ Official product domain: [willdeep.com](https://willdeep.com).
 WillDeep is configured for non-App-Store distribution without App Sandbox so it can access local project files with fewer permission interruptions.
 
 ## 架构概览
+
+- **DeepSeek Responses 服务端历史拼装修复（1.220.0-rc8）** —— WillDeep 在有有效游标时只发送新增 user/tool input，some.im 服务端继续从状态存储拼装原始 input/output 历史；客户端会把 reasoning、assistant message、function/custom tool call 与 web search call 识别为已有服务端输出并从增量请求剥离。只有首次请求、游标失效或状态后端不可用时才回退到完整本地历史，此时 reasoning 使用 DeepSeek Responses 接受的 `reasoning_text` 内容块数组，避免字符串类型触发 HTTP 400。
+
+- **Computer Use 后台控制与单一状态界面（1.220.0-rc7）** —— 普通 AX 操作、PID 定向输入和目标窗口截图不再把目标 App 激活到前台，`computer_use_activate_app` 仅作为少数应用拒绝后台事件时的兼容兜底。重复的屏幕底部浮动控制条已移除，聊天区右上角保留唯一控制卡并持续展示由 Helper 单独采集的目标窗口缩略图；该本地预览不进入模型上下文、不重建 AX 树、不使当前 ref 失效，暂停或用户接管时立即停止并清除。菜单栏以目标 App 图标叠加 Computer Use 标识显示当前控制对象，并提供暂停、接管、恢复和停止操作。
+
+- **Computer Use 开发期终端开放（1.220.0-rc6）** —— 为完成原生 UI 操作能力开发，Host 与 Helper 暂时关闭终端应用黑名单和终端关键词整片脱敏，Terminal、iTerm、Warp 以及带“终端/控制台”AX 文案的自研应用均可被观察和操作。规则清单保留并由 Host/Helper 双层开关控制，便于后续按低误报、可解释、分层策略逐步恢复；WillDeep 自控边界、真实密码/验证码/密钥输入保护、剪贴板禁用和高影响动作确认继续生效。
+
+- **Computer Use 单次授权与 AX-first 控制（1.220.0-rc5）** —— 同一任务、同一轮、同一目标应用的控制租约首次获批后，后续基于新鲜 AX ref 或截图坐标的点击与右键点击直接复用该授权，不再逐次弹卡；严格审批模式、暂停、用户接管、停止、目标切换和私密输入边界仍会中断自动执行。状态读取和每次动作后的刷新默认只返回 AX 树，只有 AX 没有可用目标时才显式申请窗口截图并进入像素兜底。
+
+- **Computer Use 激活与窗口绑定自愈（1.220.0-rc4）** —— 应用切换不再把 `NSRunningApplication.activate()` 的一次瞬时 `false` 当作致命失败，而是验证目标是否真正到达前台、短时重试并通过 Accessibility Raise 兜底；目标窗口的 CGWindow/AXWindow 绑定会等待界面稳定，并在窗口号缺失时使用受尺寸、重叠率和中心偏差约束的几何匹配。同一任务、同一轮、同一目标的控制租约建立后，重复激活无需再次确认；严格审批模式仍按设计逐次询问。
+
+- **Computer Use 权限自检（1.220.0-rc3）** —— 设置 → Agent 工具 → 工具新增 WillDeep Computer Use 独立 Helper 权限区，分别展示辅助功能与屏幕录制状态并支持一键申请；屏幕录制授权后仅重启 Helper 即可刷新状态，无需重启 WillDeep。界面明确两项权限均绑定 Helper，主程序同名授权不能替代。
+
+- **简洁一致的 Computer Use 授权卡（1.220.0-rc2）** —— Computer Use 授权提问缩短为“允许 WillDeep 操作电脑？”，审批操作统一为拒绝在左、允许在右；正向按钮采用浅色模式黑底白字、深色模式白底黑字的高对比圆角样式。
+
+- **DeepSeek V4 Flash Responses 与安全续接（1.220.0-rc1）** —— 直连 DeepSeek 和 some.im 中转的精确模型 `deepseek-v4-flash` 自动改走 `/responses`，`deepseek-v4-pro` 在官方支持前仍保留 Chat 协议。直连始终发送完整历史与 `store: false`；some.im 通过仅 WillDeep 使用的显式状态协议发送 `previous_response_id + 增量 input`，本地使用 23 小时安全窗，超时、服务端 410 或状态后端不可用时自动清除游标并改发完整历史。若状态后端在流式回答中途失效，当前回答不会重放，客户端丢弃游标并在下一轮发送完整历史。完整历史包含 DeepSeek 明文 reasoning item，流式解析补齐 `response.reasoning_text.delta` 与 `response.incomplete`。
+
+- **真实 Home 路径升级执行（1.219.0-rc9）** —— `run_command` 识别 `~/...`、`$HOME/...` 与 `${HOME}/...` 后不再使用隔离沙箱的临时 `HOME`；它会在执行前请求 workspace 外升级访问，获批后对用户真实路径执行。工具契约同步明确：workspace 外路径应保留原值并走审批，不因“路径映射”改发可见终端命令；提示词契约升级为 `willdeep-agent-system-v20`。
 
 - **提示词契约快照同步（1.219.0-rc8）** —— 多技能批量创建工具加入稳定工具契约后，系统提示词契约升级为 `willdeep-agent-system-v19`，并同步重录 standard、compact、extended 三档字节级哈希，确保发布门禁能区分预期契约升级与意外漂移。
 

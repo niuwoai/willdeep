@@ -592,6 +592,8 @@ struct EditorSettingsView: View {
                         .foregroundStyle(.secondary)
                 }
             }
+
+            AgentComputerUsePermissionSettingsSection()
         }
         .formStyle(.grouped)
     }

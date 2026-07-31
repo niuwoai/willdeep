@@ -785,8 +785,14 @@ nonisolated enum AgentComputerUseExecution {
 }
 
 nonisolated enum AgentComputerUseHostTargetBoundary {
+    // Keep terminal control open while Computer Use is under active
+    // development. The Helper mirrors this switch and still blocks WillDeep
+    // itself plus protected or credential-like input fields.
+    private static let terminalApplicationRestrictionsEnabled = false
     private static let forbiddenBundlePrefixes = [
         "com.willdeep.",
+    ]
+    private static let terminalBundlePrefixes = [
         "com.apple.terminal",
         "com.googlecode.iterm",
         "dev.warp.",
@@ -803,6 +809,8 @@ nonisolated enum AgentComputerUseHostTargetBoundary {
     private static let forbiddenApplicationNames: Set<String> = [
         "willdeep",
         "willdeep computer use helper",
+    ]
+    private static let terminalApplicationNames: Set<String> = [
         "terminal",
         "iterm",
         "iterm2",
@@ -840,7 +848,15 @@ nonisolated enum AgentComputerUseHostTargetBoundary {
                 identifier.hasPrefix(prefix)
             }
         }) {
-            return "Computer Use cannot target WillDeep or a terminal application. Use the audited command and terminal tools instead."
+            return "Computer Use cannot target WillDeep or its helper. This prevents an agent from operating its own approval and control UI."
+        }
+        if terminalApplicationRestrictionsEnabled,
+           bundleIdentifiers.contains(where: { identifier in
+               terminalBundlePrefixes.contains { prefix in
+                   identifier.hasPrefix(prefix)
+               }
+           }) {
+            return "Computer Use cannot target a terminal application. Use the audited command and terminal tools instead."
         }
 
         let applicationNames = [
@@ -848,7 +864,11 @@ nonisolated enum AgentComputerUseHostTargetBoundary {
             resolvedApplicationName,
         ].compactMap(normalizedApplicationName)
         if applicationNames.contains(where: forbiddenApplicationNames.contains) {
-            return "Computer Use cannot target WillDeep or a terminal application. Use the audited command and terminal tools instead."
+            return "Computer Use cannot target WillDeep or its helper. This prevents an agent from operating its own approval and control UI."
+        }
+        if terminalApplicationRestrictionsEnabled,
+           applicationNames.contains(where: terminalApplicationNames.contains) {
+            return "Computer Use cannot target a terminal application. Use the audited command and terminal tools instead."
         }
         return nil
     }

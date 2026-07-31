@@ -64,6 +64,7 @@ nonisolated enum AgentComputerUsePolicy {
     ]
 
     private static let leaseAutoApprovalTools: Set<String> = [
+        "computer_use_activate_app",
         "computer_use_click",
         "computer_use_secondary_action",
         "computer_use_scroll",
@@ -85,6 +86,10 @@ nonisolated enum AgentComputerUsePolicy {
             arguments: arguments
         ) {
             return .danger
+        }
+        if isLeaseEligibleClickTool(toolName),
+           hasLeaseEligibleClickShape(arguments) {
+            return requiresUserTakeover(arguments) ? .danger : declaredRisk
         }
         guard consequenceAwareTools.contains(toolName) else {
             return declaredRisk
@@ -112,6 +117,10 @@ nonisolated enum AgentComputerUsePolicy {
             arguments: arguments
         ) {
             return true
+        }
+        if isLeaseEligibleClickTool(toolName),
+           hasLeaseEligibleClickShape(arguments) {
+            return requiresUserTakeover(arguments)
         }
         guard consequenceAwareTools.contains(toolName) else { return false }
         guard let consequence = declaredConsequence(arguments) else { return true }
@@ -335,10 +344,7 @@ nonisolated enum AgentComputerUsePolicy {
                 allowEmpty: false
             ) || !hasFreshRef(arguments)
         case "computer_use_click", "computer_use_secondary_action":
-            return !hasAutoApprovableActionShape(
-                toolName: toolName,
-                arguments: arguments
-            )
+            return !hasLeaseEligibleClickShape(arguments)
         case "computer_use_drag":
             // The current drag protocol is coordinate-only. A fresh screenshot
             // constrains the window, but it cannot prove the semantic source
@@ -357,6 +363,10 @@ nonisolated enum AgentComputerUsePolicy {
         guard !referencesClipboardAccess(arguments) else { return false }
 
         switch toolName {
+        case "computer_use_activate_app":
+            return arguments["pid"]?.intValue().map { $0 > 0 } == true
+                || nonEmptyString(arguments["app"]) != nil
+
         case "computer_use_type_text":
             return hasOrdinaryTextInput(
                 arguments["text"]?.stringValue(),
@@ -387,11 +397,7 @@ nonisolated enum AgentComputerUsePolicy {
                 )
 
         case "computer_use_click", "computer_use_secondary_action":
-            // Coordinate fallbacks cannot be tied to an Accessibility
-            // control. Only a fresh semantic ref is eligible for the short
-            // control lease; pixel clicks always require a new confirmation.
-            return hasConsequentialActionMetadata(arguments)
-                && hasFreshRef(arguments)
+            return hasLeaseEligibleClickShape(arguments)
 
         case "computer_use_drag":
             return false
@@ -456,6 +462,54 @@ nonisolated enum AgentComputerUsePolicy {
             return true
         }
         return inferred == .none || inferred == .navigation
+    }
+
+    private static func isLeaseEligibleClickTool(_ toolName: String) -> Bool {
+        toolName == "computer_use_click"
+            || toolName == "computer_use_secondary_action"
+    }
+
+    private static func hasLeaseEligibleClickShape(
+        _ arguments: [String: AgentJSONValue]
+    ) -> Bool {
+        guard !referencesClipboardAccess(arguments),
+              hasTruthfulActionMetadata(arguments),
+              hasFreshSnapshot(arguments) else {
+            return false
+        }
+
+        if nonEmptyString(arguments["ref"]) != nil {
+            return hasFreshRef(arguments)
+        }
+
+        guard arguments["pid"]?.intValue().map({ $0 > 0 }) == true,
+              arguments["x"]?.intValue() != nil,
+              arguments["y"]?.intValue() != nil else {
+            return false
+        }
+        if let coordinateSpace = nonEmptyString(arguments["coordinate_space"]),
+           coordinateSpace.lowercased() != "screenshot" {
+            return false
+        }
+        if let clickCount = arguments["click_count"]?.intValue(),
+           !(1...3).contains(clickCount) {
+            return false
+        }
+        return true
+    }
+
+    private static func hasTruthfulActionMetadata(
+        _ arguments: [String: AgentJSONValue]
+    ) -> Bool {
+        guard nonEmptyString(arguments["purpose"]) != nil,
+              nonEmptyString(arguments["target_label"]) != nil,
+              let declared = declaredConsequence(arguments) else {
+            return false
+        }
+        guard let inferred = inferredConsequence(arguments) else {
+            return true
+        }
+        return inferred == declared
     }
 
     private static func hasFreshSnapshot(

@@ -176,7 +176,7 @@ enum AgentComputerUseTools {
     private static func stateResult(summary: String, result: [String: Any]) throws -> AgentToolResult {
         let image = try result["screenshot"].flatMap { $0 as? [String: Any] }.flatMap(attachment)
         var payload = jsonPayload(result)
-        payload += "\n\nCoordinate rule: every action must include this state's snapshot_id. Element refs are valid only for this fresh state and must share its snapshot prefix. Pixel x/y values are always relative to the returned target-window screenshot; screen-space coordinates are not accepted. A null screenshot means this was an Accessibility-only inspection and pixel fallback is intentionally unavailable."
+        payload += "\n\nAX-first rule: inspect this fresh Accessibility tree before considering pixels. Every action must include this state's snapshot_id, and element refs must share its snapshot prefix. A null screenshot is the normal AX-only result; request computer_use_get_app_state with include_screenshot=true only when the AX tree has no usable target. Pixel x/y values are relative to that returned target-window screenshot; screen-space coordinates are not accepted."
         return AgentToolResult(summary: summary, payload: payload, images: image.map { [$0] } ?? [])
     }
 

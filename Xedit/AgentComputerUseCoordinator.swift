@@ -406,6 +406,32 @@ final class AgentComputerUseCoordinator: ObservableObject {
         }
     }
 
+    /// Publishes a helper-captured target-window preview only to the local
+    /// control-session UI. It never enters the runtime transcript or model
+    /// context, and a Pause / Take Over privacy boundary invalidates it.
+    @discardableResult
+    func publishLocalPreview(
+        _ activity: AgentComputerUseActivity,
+        leaseID: AgentComputerUseLease.ID,
+        startedAtPrivacyEpoch: UInt64
+    ) -> Bool {
+        guard permitsLocalObservation(startedAt: startedAtPrivacyEpoch),
+              var lease = state.lease,
+              lease.id == leaseID else {
+            return false
+        }
+        lease.latestActivity = activity
+        switch state.phase {
+        case .observing:
+            state = .observing(lease)
+        case .controlling:
+            state = .controlling(lease)
+        case .idle, .paused, .userTakeover, .stopping, .failed:
+            return false
+        }
+        return true
+    }
+
     func resultPublicationDisposition(
         leaseID: AgentComputerUseLease.ID,
         owner: AgentComputerUseOwner,
@@ -528,11 +554,12 @@ final class AgentComputerUseCoordinator: ObservableObject {
         leaseID: AgentComputerUseLease.ID? = nil,
         emitIntent: Bool = true
     ) -> Bool {
-        guard let lease = matchingLease(leaseID),
+        guard var lease = matchingLease(leaseID),
               state.phase == .observing || state.phase == .controlling else {
             return false
         }
         advancePrivacyEpoch(requiresTransportBarrier: true)
+        lease.latestActivity = nil
         state = .paused(lease)
         if emitIntent {
             post(intent: .pause, lease: lease)
@@ -545,7 +572,7 @@ final class AgentComputerUseCoordinator: ObservableObject {
         leaseID: AgentComputerUseLease.ID? = nil,
         emitIntent: Bool = true
     ) -> Bool {
-        guard let lease = matchingLease(leaseID),
+        guard var lease = matchingLease(leaseID),
               state.phase == .observing
                 || state.phase == .controlling
                 || state.phase == .paused else {
@@ -553,6 +580,7 @@ final class AgentComputerUseCoordinator: ObservableObject {
         }
         pendingResumeRequest = nil
         advancePrivacyEpoch(requiresTransportBarrier: true)
+        lease.latestActivity = nil
         state = .userTakeover(lease)
         if emitIntent {
             post(intent: .takeover, lease: lease)

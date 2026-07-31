@@ -16798,6 +16798,19 @@
         }
       }
     },
+    "settings.computer-use.accessibility-detail" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Required to click, type, scroll, and inspect app controls." } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "用于点击、输入、滚动和读取应用控件。" } } } },
+    "settings.computer-use.accessibility-title" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Accessibility" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "辅助功能" } } } },
+    "settings.computer-use.explanation" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "These permissions belong to the separately signed WillDeep Computer Use helper. Granting them to the main WillDeep app does not grant them to the helper. System audio is not recorded or saved by Computer Use." } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "这些权限属于独立签名的 WillDeep Computer Use 辅助程序；授权 WillDeep 主程序并不会同时授权该辅助程序。Computer Use 不会录制或保存系统音频。" } } } },
+    "settings.computer-use.helper-name" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "WillDeep Computer Use" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "WillDeep Computer Use" } } } },
+    "settings.computer-use.refresh-button-help" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Refresh permission status" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "刷新权限状态" } } } },
+    "settings.computer-use.request-button" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Request Permission" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "申请权限" } } } },
+    "settings.computer-use.screen-capture-detail" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Required to capture the visible interface and verify Computer Use results." } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "用于捕获可见界面并验证 Computer Use 操作结果。" } } } },
+    "settings.computer-use.screen-capture-title" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Screen & System Audio Recording" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "屏幕与系统音频录制" } } } },
+    "settings.computer-use.section-title" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Computer Use Permissions" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "Computer Use 权限" } } } },
+    "settings.computer-use.status.checking" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Checking Accessibility permission…" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "正在检查辅助功能权限…" } } } },
+    "settings.computer-use.status.failed" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Could not read permission status: %@" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "无法读取权限状态：%@" } } } },
+    "settings.computer-use.status.granted" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Granted" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "已授权" } } } },
+    "settings.computer-use.status.not-granted" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Not granted" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "未授权" } } } },
     "settings.connectors.advanced-configuration" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -31761,13 +31774,13 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Allow WillDeep to use Computer Use?"
+            "value" : "Allow WillDeep to control this Mac?"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "允许 WillDeep 使用 Computer Use？"
+            "value" : "允许 WillDeep 操作电脑？"
           }
         }
       }

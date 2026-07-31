@@ -32,6 +32,24 @@ nonisolated struct AgentOpenAIResponsesContinuationSnapshot: Codable, Equatable 
     let contextSignature: Data
     let inputItemSignatures: [Data]
     let updatedAt: Date
+    /// Start of the relay-managed hard retention epoch. Nil for native
+    /// OpenAI cursors and for snapshots written before the WillDeep relay
+    /// state protocol existed.
+    let stateEpochStartedAt: Date?
+
+    init(
+        responseID: String,
+        contextSignature: Data,
+        inputItemSignatures: [Data],
+        updatedAt: Date,
+        stateEpochStartedAt: Date? = nil
+    ) {
+        self.responseID = responseID
+        self.contextSignature = contextSignature
+        self.inputItemSignatures = inputItemSignatures
+        self.updatedAt = updatedAt
+        self.stateEpochStartedAt = stateEpochStartedAt
+    }
 }
 
 /// The product surface that owns a persisted session. Dedicated workflow
@@ -1635,7 +1653,27 @@ struct AgentConfiguration: Codable, Equatable {
         if model.range(of: "gpt-5", options: [.caseInsensitive]) != nil {
             return .openAIResponses
         }
+        if isDeepSeekV4FlashResponsesModel,
+           providerID == AgentProviderPreset.deepSeekID ||
+           providerID == AgentProviderPreset.someIMID {
+            return .openAIResponses
+        }
         return configuredKind
+    }
+
+    /// DeepSeek currently exposes Responses only for the exact V4 Flash id.
+    /// Keep Pro on Chat until the provider actually ships that endpoint.
+    var isDeepSeekV4FlashResponsesModel: Bool {
+        model.trimmingCharacters(in: .whitespacesAndNewlines)
+            .lowercased() == "deepseek-v4-flash"
+    }
+
+    var usesWillDeepGatewayResponsesState: Bool {
+        providerID == AgentProviderPreset.someIMID && isDeepSeekV4FlashResponsesModel
+    }
+
+    var usesStatelessDeepSeekResponses: Bool {
+        providerID == AgentProviderPreset.deepSeekID && isDeepSeekV4FlashResponsesModel
     }
 }
 

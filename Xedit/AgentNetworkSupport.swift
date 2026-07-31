@@ -57,6 +57,8 @@ enum AgentNetworkSupport {
     /// `some-im` requests — never generated in this helper.
     static let willDeepSessionHeaderName = "x-willdeep-session-id"
     static let willDeepWorkspaceHeaderName = "x-willdeep-workspace-id"
+    static let willDeepResponsesStateHeaderName = "x-willdeep-responses-state"
+    static let willDeepResponsesStateProtocol = "v1"
 
     static func defaultSession() -> URLSession {
         let configuration = URLSessionConfiguration.default

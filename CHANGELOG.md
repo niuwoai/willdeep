@@ -1,7 +1,163 @@
 # Changelog
 
-> 当前文件保留最新版本（1.219.0-rc8 至 1.109.0-rc340）。
+> 当前文件保留最新版本（1.220.0-rc8 至 1.109.0-rc340）。
 > 更早的 1000 个版本已移至 [CHANGELOG-ARCHIVE.md](CHANGELOG-ARCHIVE.md)。
+
+## 1.220.0-rc8 - 2026-08-01
+
+### Fixed
+
+- 修复 DeepSeek V4 Flash Responses 完整历史把 reasoning 的 `content` 编码为字符串，导致上游要求序列并返回 HTTP 400 的问题；reasoning 现按 `reasoning_text` 内容块数组编码。
+- 修复 Responses 增量续接未把 reasoning、custom tool call 与 web search call 识别为服务端输出，导致客户端放弃游标并重发超长完整历史的问题；有效游标下只发送新增 user/tool input，由 some.im 服务端从状态存储拼装原始 input/output 历史。
+
+### Tests
+
+- 扩展 Responses 编码与续接测试，覆盖 reasoning 内容块数组、reasoning 加 assistant/function call 输出剥离，以及仅发送新用户或工具增量。
+
+### Meta
+
+- Bugfix 预发布版本从 **1.220.0-rc7** 递增为 **1.220.0-rc8**，内部构建号从 **239** 递增为 **240**，Help 与 Computer Use Helper 构建号从 **156** 递增为 **157**；App、Go agent、Help、Helper、浏览器扩展、README、响应头契约与产品文档保持一致。
+
+## 1.220.0-rc7 - 2026-08-01
+
+### Fixed
+
+- 修复模型把 `computer_use_activate_app` 当作键盘操作前置步骤、导致钉钉等目标被反复切到前台并在激活失败时中断的问题；AX 操作、PID 定向输入与目标窗口截图现在明确支持后台运行，激活仅保留为目标应用拒绝后台事件时的兼容兜底。
+- 修复 Computer Use 同时显示聊天区右上角控制卡和屏幕底部浮动控制条的重复状态；底部浮条已移除，右上角控制卡成为唯一主状态界面。
+
+### Added
+
+- 右上角控制卡新增 Helper 本地目标窗口预览流；预览不会发送给模型、不会重建 AX 树或使当前 ref/snapshot 失效，暂停和用户接管时会立即停止并清除。
+- 菜单栏新增“目标 App 图标 + Computer Use 标识”的组合状态项，并提供暂停、接管、恢复和停止操作。
+
+### Tests
+
+- 新增后台目标窗口预览、快照保持、隐私 epoch、单一控制面板和菜单栏组合状态契约覆盖；同步更新单次授权、AX-first 和提示词快照测试。
+
+### Meta
+
+- Bugfix 预发布版本从 **1.220.0-rc6** 递增为 **1.220.0-rc7**，内部构建号从 **238** 递增为 **239**，Help 与 Computer Use Helper 构建号从 **155** 递增为 **156**；App、Go agent、Help、Helper、浏览器扩展、README、响应头契约与产品文档保持一致。
+
+## 1.220.0-rc6 - 2026-08-01
+
+### Changed
+
+- Computer Use 开发期暂时放开终端应用与终端表面：Host 与 Helper 不再按 Terminal、iTerm、Warp 等 Bundle ID/应用名拒绝目标，Accessibility 元数据中的 `terminal`、`终端`、`控制台`等词也不再触发整片子树脱敏或禁止输入。
+- 终端规则和已知应用清单继续保留在代码中，由 Host/Helper 各自明确的开发期开关停用，后续可在补齐命中原因、低误报识别与分层策略后逐步恢复。
+
+### Security
+
+- 继续拒绝 Computer Use 控制 WillDeep、Helper 自身及父进程；`AXProtectedContent`、SecureTextField、密码、验证码、密钥、令牌等真实敏感输入仍会脱敏并拒绝自动读写，剪贴板和高影响动作门禁保持不变。
+
+### Tests
+
+- 更新 Host 目标边界单测与 Helper v6 契约：验证开发期开关允许 Terminal/Warp，Helper 运行时可建立并结束 Terminal 控制租约，同时自控边界和敏感输入保护继续存在。
+
+### Meta
+
+- Bugfix 预发布版本从 **1.220.0-rc5** 递增为 **1.220.0-rc6**，内部构建号从 **237** 递增为 **238**，Help 与 Computer Use Helper 构建号从 **154** 递增为 **155**；App、Go agent、Help、Helper、浏览器扩展、README、响应头契约与产品文档保持一致。
+
+## 1.220.0-rc5 - 2026-08-01
+
+### Fixed
+
+- 修复同一 Computer Use 控制租约已获批后，截图坐标点击仍被无条件升级为 danger 并反复展示确认卡的问题；同一 runtime、turn 和目标应用内，带新鲜快照及完整动作声明的 AX 点击、坐标点击和右键点击现在都会复用本轮授权，包括已如实声明的有外部影响点击。
+- 修复 Computer Use 状态读取和动作后刷新默认附带截图、导致模型跳过 Accessibility 树直接进入视觉方案的问题；`computer_use_get_app_state` 与每次动作后的新状态现在默认 AX-only，只有 AX 树没有可用目标时才显式传入 `include_screenshot=true` 获取窗口截图。
+- 保留严格审批模式、控制暂停、用户接管、停止、目标切换、无效或不诚实动作声明、剪贴板操作及认证/验证码/凭据/金融交易私密接管边界，不把跨任务授权持久化。
+
+### Changed
+
+- 系统提示词契约升级为 `willdeep-agent-system-v21`，Computer Use 内置技能、工具描述和结果提示统一为“AX 树优先，截图与像素仅作显式兜底”。
+
+### Tests
+
+- 新增控制租约内 AX/坐标/有外部影响点击复用授权、坐标拖拽继续逐次确认、AX-only 默认状态与 Helper 契约回归覆盖。
+
+### Meta
+
+- Bugfix 预发布版本从 **1.220.0-rc4** 递增为 **1.220.0-rc5**，内部构建号从 **236** 递增为 **237**，Help 与 Computer Use Helper 构建号从 **153** 递增为 **154**；App、Go agent、Help、Helper、浏览器扩展、README、响应头契约与产品文档保持一致。
+
+## 1.220.0-rc4 - 2026-07-31
+
+### Fixed
+
+- 修复 Computer Use 将应用激活 API 的一次瞬时失败直接视为致命错误的问题；现在会验证目标是否真正到达前台、短时重试，并在已授予辅助功能权限时通过 AXRaise 兜底。
+- 修复钉钉等应用的最上层 CGWindow 与 AXWindow 窗口号缺失或边框几何存在小幅差异时频繁触发 `stale_snapshot` 的问题；窗口绑定会等待界面稳定，并仅在尺寸、重叠率和中心偏差均满足保守阈值时采用几何匹配。
+- 同一 runtime、turn 和目标应用的控制租约建立后，重复的普通应用激活自动沿用本轮授权，不再反复展示“允许使用该应用”；严格审批模式仍保持逐次确认。
+
+### Tests
+
+- Computer Use Helper v6 契约 19 项、基础 Helper 契约 7 项通过；Computer Use Coordinator、Policy 与 Tool 三个定向测试套件共 54 项通过。
+
+### Meta
+
+- Bugfix 预发布版本从 **1.220.0-rc3** 递增为 **1.220.0-rc4**，内部构建号从 **235** 递增为 **236**，Help 与 Computer Use Helper 构建号从 **152** 递增为 **153**；App、Go agent、Help、Helper、浏览器扩展、README、响应头契约与产品文档保持一致。
+
+## 1.220.0-rc3 - 2026-07-31
+
+### Added
+
+- 设置 → Agent 工具 → 工具新增 WillDeep Computer Use 权限区，分别显示独立 Helper 的“辅助功能”和“屏幕与系统音频录制”授权状态，并为每项提供独立申请与刷新操作。
+- 屏幕录制授权后自动重启 Computer Use Helper 并轮询新状态，无需重启 WillDeep；界面说明主程序权限不能替代 Helper 权限，Computer Use 不录制或保存系统音频。
+
+### Tests
+
+- 验证 String Catalog JSON、版本一致性与 Xcode Debug 构建。
+
+### Meta
+
+- Bugfix 预发布版本从 **1.220.0-rc2** 递增为 **1.220.0-rc3**，内部构建号从 **234** 递增为 **235**，Help 与 Computer Use Helper 构建号从 **151** 递增为 **152**；App、Go agent、Help、Helper、浏览器扩展、README、响应头契约与产品文档保持一致。
+
+## 1.220.0-rc2 - 2026-07-31
+
+### Fixed
+
+- 修复 Computer Use 授权卡将“允许”放在左侧、“拒绝”放在右侧的问题；现在拒绝固定在左、正向操作固定在右，窄宽布局保持一致。
+- Computer Use 授权提问收敛为“允许 WillDeep 操作电脑？”，减少标题与正文重复，更接近 Codex 的简洁确认样式。
+- 正向审批按钮改为 Codex 风格的高对比圆角实心按钮：浅色模式黑底白字，深色模式白底黑字；拒绝按钮保留低强调样式。
+
+### Tests
+
+- 版本一致性检查通过；定向 XeditTests 因共享 Xcode 构建锁长时间被其他任务占用而未启动。
+
+### Meta
+
+- Bugfix 预发布版本从 **1.220.0-rc1** 递增为 **1.220.0-rc2**，内部构建号从 **233** 递增为 **234**，Help 与 Computer Use Helper 构建号从 **150** 递增为 **151**；App、Go agent、Help、Helper、浏览器扩展、README、响应头契约与产品文档保持一致。
+
+## 1.220.0-rc1 - 2026-07-31
+
+### Added
+
+- `deepseek-v4-flash` 在 DeepSeek 直连与 some.im 中转配置下自动使用官方 `/responses`；`deepseek-v4-pro` 在官方支持前继续使用 Chat Completions。
+- some.im 为 WillDeep 增加显式 `X-WillDeep-Responses-State: v1` 协议：客户端在 23 小时安全窗内使用增量续接，超过窗口改发完整历史；服务端游标、路由亲和过期或状态后端不可用时自动安全回退，并兼容旧网关的 `422 response_affinity_not_found`。若流式回答已开始后状态持久化失败，当前回答正常结束但不保存游标，下一轮改发完整历史，避免重放造成重复文本。
+
+### Changed
+
+- DeepSeek Responses 请求固定使用 `store: false`；完整历史会回传已捕获的明文 reasoning item，流式事件新增 `response.reasoning_text.delta` 与 `response.incomplete` 支持。
+
+### Tests
+
+- 新增 DeepSeek Flash/Pro 路由、直连无状态编码、reasoning 历史、23 小时游标边界以及状态后端降级测试；Responses 编码定向测试共 15 项通过。
+
+### Meta
+
+- 功能预发布版本从 **1.219.0-rc9** 提升为 **1.220.0-rc1**，内部构建号从 **232** 递增为 **233**，Help 与 Computer Use Helper 构建号从 **149** 递增为 **150**；App、Go agent、Help、Helper、浏览器扩展、README、响应头契约与产品文档保持一致。
+
+## 1.219.0-rc9 - 2026-07-31
+
+### Fixed
+
+- 修复 `run_command` 中 `~/...`、`$HOME/...` 和 `${HOME}/...` 被隔离 `HOME` 静默映射到临时沙箱目录的问题；这些路径现在会在执行前直接请求升级访问，并在获批后保持用户真实 Home 语义。
+- 更新命令工具契约：用户明确要求操作 workspace 外路径时保留原路径并走升级审批，不再误称“路径映射有问题”或无故改发可见终端命令。
+- 系统提示词契约升级为 `willdeep-agent-system-v20`，同步重录 standard、compact、extended 三档字节级哈希。
+
+### Tests
+
+- 新增真实 Home 路径授权回归测试，覆盖 `~/bin`、无空格重定向、`$HOME` 与 `${HOME}` 环境变量形式；Agent 工具核心测试与三档提示词快照测试通过。
+
+### Meta
+
+- Bugfix 预发布版本从 **1.219.0-rc8** 递增为 **1.219.0-rc9**，内部构建号从 **231** 递增为 **232**，Help 与 Computer Use Helper 构建号从 **148** 递增为 **149**；App、Go agent、Help、Helper、浏览器扩展、README、响应头契约与产品文档保持一致。
 
 ## 1.219.0-rc8 - 2026-07-31
 

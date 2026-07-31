@@ -179,6 +179,25 @@ private struct AgentApprovalOutlinedButtonStyle: ButtonStyle {
     }
 }
 
+/// Codex-style high-contrast approval action. Light appearances use a black
+/// button with white text; dark appearances invert the pair so the primary
+/// action remains clearly visible instead of disappearing into the card.
+private struct AgentApprovalPrimaryButtonStyle: ButtonStyle {
+    let colorScheme: ColorScheme
+    let cornerRadius: CGFloat
+
+    func makeBody(configuration: Configuration) -> some View {
+        let shape = RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+        let background: Color = colorScheme == .dark ? .white : .black
+        let foreground: Color = colorScheme == .dark ? .black : .white
+        return configuration.label
+            .foregroundStyle(foreground)
+            .background(shape.fill(background))
+            .contentShape(shape)
+            .opacity(configuration.isPressed ? 0.72 : 1)
+    }
+}
+
 /// Layout contract for the soft, skin-aware authorization notice.
 /// The same geometry is shared by commands, web access, visible terminal
 /// handoffs, and other tools so confirmations feel like one product system.
@@ -1016,6 +1035,7 @@ private struct AgentDelegatedLiveProgressView: View {
 
 struct AgentToolCallCard: View {
     @EnvironmentObject var appState: AppState
+    @Environment(\.colorScheme) private var colorScheme
     let call: AgentToolCall
     @State private var isExpanded = false
     @State private var answerInput = ""
@@ -1209,26 +1229,26 @@ struct AgentToolCallCard: View {
         } else {
             ViewThatFits(in: .horizontal) {
                 HStack(spacing: AgentCompactAuthorizationMetrics.actionSpacing) {
+                    compactDenyButton
+                    Spacer(minLength: 16)
                     if alwaysAllowSignature != nil {
                         compactAlwaysAllowButton
                     } else if conversationAllowSignature == nil {
                         compactAllowOnceButton
                     }
-                    Spacer(minLength: 16)
-                    compactDenyButton
                     if conversationAllowSignature != nil {
                         compactConversationAllowButton
                     }
                 }
                 VStack(alignment: .leading, spacing: AgentCompactAuthorizationMetrics.actionSpacing) {
-                    if alwaysAllowSignature != nil {
-                        compactAlwaysAllowButton
-                    } else if conversationAllowSignature == nil {
-                        compactAllowOnceButton
-                    }
                     HStack(spacing: AgentCompactAuthorizationMetrics.actionSpacing) {
-                        Spacer(minLength: 0)
                         compactDenyButton
+                        Spacer(minLength: 0)
+                        if alwaysAllowSignature != nil {
+                            compactAlwaysAllowButton
+                        } else if conversationAllowSignature == nil {
+                            compactAllowOnceButton
+                        }
                         if conversationAllowSignature != nil {
                             compactConversationAllowButton
                         }
@@ -1245,9 +1265,12 @@ struct AgentToolCallCard: View {
         } label: {
             compactAuthorizationActionLabel(L10n.ToolCard.alwaysAllow)
         }
-        .buttonStyle(.bordered)
-        .approvalButtonBorderShape(cornerRadius: AgentCompactAuthorizationMetrics.buttonCornerRadius)
-        .tint(appState.editorSettings.interfaceSkin.palette.accent)
+        .buttonStyle(
+            AgentApprovalPrimaryButtonStyle(
+                colorScheme: colorScheme,
+                cornerRadius: AgentCompactAuthorizationMetrics.buttonCornerRadius
+            )
+        )
         .cursor(.arrow)
     }
 
@@ -1257,11 +1280,12 @@ struct AgentToolCallCard: View {
         } label: {
             compactAuthorizationActionLabel(L10n.ToolCard.allow)
         }
-        .buttonStyle(.bordered)
-        .approvalButtonBorderShape(
-            cornerRadius: AgentCompactAuthorizationMetrics.buttonCornerRadius
+        .buttonStyle(
+            AgentApprovalPrimaryButtonStyle(
+                colorScheme: colorScheme,
+                cornerRadius: AgentCompactAuthorizationMetrics.buttonCornerRadius
+            )
         )
-        .tint(appState.editorSettings.interfaceSkin.palette.accent)
         .cursor(.arrow)
     }
 
@@ -1289,12 +1313,11 @@ struct AgentToolCallCard: View {
             )
         }
         .buttonStyle(
-            AgentApprovalOutlinedButtonStyle(
-                accent: appState.editorSettings.interfaceSkin.palette.accent,
+            AgentApprovalPrimaryButtonStyle(
+                colorScheme: colorScheme,
                 cornerRadius: AgentCompactAuthorizationMetrics.buttonCornerRadius
             )
         )
-        .tint(appState.editorSettings.interfaceSkin.palette.accent)
         .cursor(.arrow)
     }
 

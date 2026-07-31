@@ -1389,7 +1389,7 @@ nonisolated enum L10n {
         static let browserChromeAuthorizationQuestion = String(localized: "tool-card.authorization.browser.chrome-question", defaultValue: "Allow WillDeep to control Chrome?")
         static let browserEmbeddedAuthorizationQuestion = String(localized: "tool-card.authorization.browser.embedded-question", defaultValue: "Allow WillDeep to control Browser?")
         static let computerUseAuthorizationTitle = String(localized: "tool-card.authorization.computer-use.title", defaultValue: "Computer Use")
-        static let computerUseAuthorizationQuestion = String(localized: "tool-card.authorization.computer-use.question", defaultValue: "Allow WillDeep to use Computer Use?")
+        static let computerUseAuthorizationQuestion = String(localized: "tool-card.authorization.computer-use.question", defaultValue: "Allow WillDeep to control this Mac?")
         static func alwaysAllowHelp(_ a1: String) -> String {
             let template = String(localized: "tool-card.always-allow.help", defaultValue: "Always allow future %@ commands")
             return String(format: template, a1)
