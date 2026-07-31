@@ -1,6 +1,6 @@
 # WillDeep Product Overview
 
-> Last updated: 2026-07-31 | Current version: v1.219.0-rc7
+> Last updated: 2026-07-31 | Current version: v1.219.0-rc8
 
 ## Positioning
 
@@ -11,6 +11,8 @@ Official product domain: [willdeep.com](https://willdeep.com).
 WillDeep is configured for non-App-Store distribution without App Sandbox so it can access local project files with fewer permission interruptions.
 
 ## 架构概览
+
+- **提示词契约快照同步（1.219.0-rc8）** —— 多技能批量创建工具加入稳定工具契约后，系统提示词契约升级为 `willdeep-agent-system-v19`，并同步重录 standard、compact、extended 三档字节级哈希，确保发布门禁能区分预期契约升级与意外漂移。
 
 - **活动状态低开销渲染（1.219.0-rc7）** —— “处理中/思考中”扫光动画从 30 FPS 限制为最多 12 FPS；聊天记录只在搜索条件实际变化时更新 TextKit 高亮，避免长对话在活动状态刷新时反复重写全文、重新排版并拉高主线程 CPU。
 

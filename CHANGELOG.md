@@ -1,7 +1,18 @@
 # Changelog
 
-> 当前文件保留最新版本（1.219.0-rc7 至 1.109.0-rc340）。
+> 当前文件保留最新版本（1.219.0-rc8 至 1.109.0-rc340）。
 > 更早的 1000 个版本已移至 [CHANGELOG-ARCHIVE.md](CHANGELOG-ARCHIVE.md)。
+
+## 1.219.0-rc8 - 2026-07-31
+
+### Fixed
+
+- 多技能批量创建工具与对应稳定工具规则加入系统提示词后，将契约版本从 `willdeep-agent-system-v18` 升级为 `willdeep-agent-system-v19`，避免发布测试把预期契约更新判定为未审阅漂移。
+- 同步重录 standard、compact、extended 三档提示词字节级哈希，恢复完整测试与发布门禁。
+
+### Meta
+
+- Bugfix 预发布版本从 **1.219.0-rc7** 递增为 **1.219.0-rc8**，内部构建号从 **230** 递增为 **231**，Help 与 Computer Use Helper 构建号从 **147** 递增为 **148**；App、Go agent、Help、Helper、浏览器扩展、README、响应头契约与产品文档保持一致。
 
 ## 1.219.0-rc7 - 2026-07-31
 
