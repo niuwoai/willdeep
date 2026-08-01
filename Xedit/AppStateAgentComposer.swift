@@ -594,6 +594,9 @@ extension AppState {
             persistAgentSidePanelState(runtime: runtime)
         }
 
+        let delegatedMessageID = runtime.toolCalls.first {
+            $0.id == recordID
+        }?.messageID ?? recordID
         let context = AgentToolContext(
             rootDirectory: workspaceURL,
             workspaceLocation: workspaceLocation,
@@ -619,12 +622,33 @@ extension AppState {
                 approvalSource: approvalSource,
                 sandboxDecision: sandboxDecision
             ),
+            editableContentProvider: { url in
+                try self.editableContent(forAgentPatchURL: url)
+            },
+            delegatedFileWriteHandler: workspaceURL.map { workspaceRoot in
+                { @MainActor @Sendable url, content in
+                    try self.writeDelegatedAgentContent(
+                        content,
+                        to: url,
+                        runtime: runtime,
+                        workspaceRoot: workspaceRoot
+                    )
+                }
+            },
             terminalController: agentTerminalController,
             delegatedProgressSink: { update in
                 self.updateDelegatedTerminalProgress(
                     id: delegatedRunID,
                     runtime: runtime,
                     update: update
+                )
+            },
+            delegatedApprovalHandler: { request in
+                await self.resolveDelegatedExecutorApproval(
+                    request,
+                    runtime: runtime,
+                    messageID: delegatedMessageID,
+                    rootDirectory: workspaceURL
                 )
             }
         )
@@ -809,7 +833,9 @@ extension AppState {
                 }
                 reviewArguments["permission_mode"] = .string("plan")
                 reviewArguments["run_in_background"] = .bool(false)
-                reviewArguments["use_visible_terminal"] = .bool(true)
+                reviewArguments["use_visible_terminal"] = .bool(
+                    !executionAgent.supportsStructuredExecution
+                )
                 reviewArguments["visible_terminal_label"] = .string(
                     "\(executionAgent.displayName) · \(L10n.DelegatedTask.selfReview)"
                 )
@@ -1536,7 +1562,7 @@ extension AppState {
         var arguments: [String: AgentJSONValue] = [
             "prompt": .string(prompt),
             "run_in_background": .bool(false),
-            "use_visible_terminal": .bool(true),
+            "use_visible_terminal": .bool(!executionAgent.supportsStructuredExecution),
             "visible_terminal_label": .string(executionAgent.displayName),
         ]
         if planningOnly {

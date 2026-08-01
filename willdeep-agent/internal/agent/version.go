@@ -2,7 +2,7 @@ package agent
 
 import "runtime"
 
-const Version = "1.220.0-rc17"
+const Version = "1.221.0-rc1"
 
 type VersionReport struct {
 	Name      string `json:"name"`

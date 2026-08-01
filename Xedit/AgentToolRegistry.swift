@@ -1667,6 +1667,7 @@ enum AgentToolRegistry {
                 AgentToolParameter(name: "permission_mode", type: .string, description: "One of `plan` (read-only, returns a plan), `acceptEdits` (may create/edit files in the workspace), `default` (permission-needing actions are auto-denied). Defaults to acceptEdits.", required: false),
                 AgentToolParameter(name: "model", type: .string, description: "Optional Claude model alias forwarded as `--model` (e.g. `sonnet`, `opus`, `haiku`).", required: false),
                 AgentToolParameter(name: "agent", type: .string, description: "Optional installed Claude Code named agent forwarded with `--agent`. WillDeep dispatch projects use this for Claude profiles discovered from user or project `.claude/agents` directories.", required: false),
+                AgentToolParameter(name: "session_id", type: .string, description: "Optional Claude session id returned by an earlier structured run. Resumes that session with this prompt.", required: false),
                 AgentToolParameter(name: "run_in_background", type: .boolean, description: "Defaults to true: returns a job handle (job_xxxxxx) and the result arrives as a background-task notification; inspect progress with get_job_output. Set false when the caller needs to wait for the final CLI response inline.", required: false),
                 AgentToolParameter(name: "timeout_seconds", type: .integer, description: "Optional hard timeout. Local/SSH background default has no hard timeout; delegated foreground default/cap is 21600 seconds.", required: false)
             ]
@@ -1680,6 +1681,7 @@ enum AgentToolRegistry {
                 AgentToolParameter(name: "permission_mode", type: .string, description: "One of `plan` (read-only), `workspaceWrite` (may edit files inside the workspace), or `default` (alias for workspaceWrite). Defaults to workspaceWrite.", required: false),
                 AgentToolParameter(name: "model", type: .string, description: "Optional Codex model id forwarded with `--model`.", required: false),
                 AgentToolParameter(name: "profile", type: .string, description: "Optional Codex configuration profile forwarded with `--profile`. WillDeep discovers `<name>.config.toml` files in `$CODEX_HOME` for dispatch projects.", required: false),
+                AgentToolParameter(name: "session_id", type: .string, description: "Optional Codex session id returned by an earlier structured run. Resumes that session with this prompt.", required: false),
                 AgentToolParameter(name: "run_in_background", type: .boolean, description: "Defaults to true: returns a job handle (job_xxxxxx) and the result arrives as a background-task notification; inspect progress with get_job_output. Set false when the caller needs to wait for the final CLI response inline.", required: false),
                 AgentToolParameter(name: "timeout_seconds", type: .integer, description: "Optional hard timeout. Local/SSH background default has no hard timeout; delegated foreground default/cap is 21600 seconds.", required: false)
             ]

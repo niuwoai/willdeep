@@ -53,6 +53,7 @@ const (
 	maxSearchFileSize    = 512 * 1024
 	maxSearchFiles       = 4_000
 	maxSearchVisitedPath = 50_000
+	maxProcessStdinBytes = 1024 * 1024
 )
 
 var skippedDirectoryNames = map[string]struct{}{
@@ -295,9 +296,12 @@ func (s *Server) handleGitStatus(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) handleRunStart(w http.ResponseWriter, r *http.Request) {
 	var request struct {
-		Command        string `json:"command"`
-		Cwd            string `json:"cwd,omitempty"`
-		TimeoutSeconds int    `json:"timeout_seconds,omitempty"`
+		Command        string   `json:"command"`
+		Executable     string   `json:"executable"`
+		Arguments      []string `json:"arguments,omitempty"`
+		StdinBase64    string   `json:"stdin_base64,omitempty"`
+		Cwd            string   `json:"cwd,omitempty"`
+		TimeoutSeconds int      `json:"timeout_seconds,omitempty"`
 	}
 	if err := decodeJSON(r.Body, &request); err != nil {
 		writeError(w, http.StatusBadRequest, err.Error())
@@ -308,12 +312,46 @@ func (s *Server) handleRunStart(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, err.Error())
 		return
 	}
-	job, err := s.jobs.Start(r.Context(), request.Command, cwd, time.Duration(request.TimeoutSeconds)*time.Second)
+	stdin, err := decodeProcessStdin(request.StdinBase64)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	spec := ProcessSpec{
+		Command:    request.Command,
+		Executable: request.Executable,
+		Arguments:  request.Arguments,
+		Stdin:      stdin,
+		Cwd:        cwd,
+		Timeout:    time.Duration(request.TimeoutSeconds) * time.Second,
+	}
+	if err := ValidateProcessSpec(spec); err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	job, err := s.jobs.StartProcess(r.Context(), spec)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
 	writeOK(w, job.Snapshot())
+}
+
+func decodeProcessStdin(encoded string) ([]byte, error) {
+	if encoded == "" {
+		return nil, nil
+	}
+	if base64.StdEncoding.DecodedLen(len(encoded)) > maxProcessStdinBytes {
+		return nil, errors.New("stdin exceeds 1 MiB limit")
+	}
+	data, err := base64.StdEncoding.DecodeString(encoded)
+	if err != nil {
+		return nil, fmt.Errorf("invalid stdin_base64: %w", err)
+	}
+	if len(data) > maxProcessStdinBytes {
+		return nil, errors.New("stdin exceeds 1 MiB limit")
+	}
+	return data, nil
 }
 
 func (s *Server) handleJobGet(w http.ResponseWriter, r *http.Request) {

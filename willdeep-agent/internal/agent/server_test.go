@@ -1,10 +1,16 @@
 package agent
 
 import (
+	"bytes"
+	"encoding/base64"
+	"encoding/json"
 	"fmt"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 )
 
 func TestNewServerConfigLoadsTokenFile(t *testing.T) {
@@ -65,5 +71,73 @@ func TestListDirectorySkipsDependenciesAndCapsEntries(t *testing.T) {
 		case "node_modules", "target", "bazel-sample":
 			t.Fatalf("dependency directory leaked into listing")
 		}
+	}
+}
+
+func TestRunStartAcceptsExecutableArgumentsAndStdin(t *testing.T) {
+	root := t.TempDir()
+	workspace, err := NewWorkspaceRoot(root)
+	if err != nil {
+		t.Fatalf("workspace: %v", err)
+	}
+	server := NewServer(ServerConfig{Workspace: workspace})
+	stdin := "literal ' $(not-expanded)\nsecond line\n"
+	requestBody := map[string]any{
+		"executable":      "/bin/cat",
+		"arguments":       []string{},
+		"stdin_base64":    base64.StdEncoding.EncodeToString([]byte(stdin)),
+		"cwd":             ".",
+		"timeout_seconds": 5,
+	}
+	var encoded bytes.Buffer
+	if err := json.NewEncoder(&encoded).Encode(requestBody); err != nil {
+		t.Fatalf("encode request: %v", err)
+	}
+	request := httptest.NewRequest(http.MethodPost, "/v1/run/start", &encoded)
+	recorder := httptest.NewRecorder()
+
+	server.handleRunStart(recorder, request)
+
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("status = %d, body = %s", recorder.Code, recorder.Body.String())
+	}
+	var response struct {
+		OK   bool `json:"ok"`
+		Data Job  `json:"data"`
+	}
+	if err := json.NewDecoder(recorder.Body).Decode(&response); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	job, ok := server.jobs.Get(response.Data.ID)
+	if !ok {
+		t.Fatalf("job %q not registered", response.Data.ID)
+	}
+	select {
+	case <-job.WaitChannel():
+	case <-time.After(5 * time.Second):
+		t.Fatal("job did not finish")
+	}
+	if output := job.Output(); output != stdin {
+		t.Fatalf("output = %q, want stdin %q", output, stdin)
+	}
+}
+
+func TestRunStartRejectsAmbiguousLaunchMode(t *testing.T) {
+	root := t.TempDir()
+	workspace, err := NewWorkspaceRoot(root)
+	if err != nil {
+		t.Fatalf("workspace: %v", err)
+	}
+	server := NewServer(ServerConfig{Workspace: workspace})
+	body := bytes.NewBufferString(
+		`{"command":"true","executable":"/usr/bin/true","cwd":"."}`,
+	)
+	request := httptest.NewRequest(http.MethodPost, "/v1/run/start", body)
+	recorder := httptest.NewRecorder()
+
+	server.handleRunStart(recorder, request)
+
+	if recorder.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, body = %s", recorder.Code, recorder.Body.String())
 	}
 }

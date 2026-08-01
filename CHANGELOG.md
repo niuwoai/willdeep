@@ -1,7 +1,33 @@
 # Changelog
 
-> 当前文件保留最新版本（1.220.0-rc17 至 1.109.0-rc340）。
+> 当前文件保留最新版本（1.221.0-rc1 至 1.109.0-rc340）。
 > 更早的 1000 个版本已移至 [CHANGELOG-ARCHIVE.md](CHANGELOG-ARCHIVE.md)。
+
+## 1.221.0-rc1 - 2026-08-01
+
+### Added
+
+- Claude Code 与 Codex 新增结构化执行通道：提示词通过 stdin 传入，流式事件统一为会话、消息、思考、工具、文件变更、用量、警告与完成状态。
+- 本机 Codex 可通过 app-server 承接双向审批，本机 Claude Code 可在 ACP adapter 可用时承接审批、文件读写和反向终端；不可用时安全回退到 JSONL 进程通道。
+- `claude_code` 与 `codex_cli` 支持 `session_id` 续接；右侧任务面板和 `get_job_output` 展示统一事件、会话与 Token 用量。
+- 远端 daemon 支持互斥的结构化 `executable + arguments + stdin_base64` 启动模式，并将 stdout、stderr、退出与结构化事件实时同步回本机任务。
+
+### Changed
+
+- Composer、Goal 与自检委托默认使用结构化执行；显式 Claude Agent、Codex Profile、Cursor、Cline、Hermes 及可见终端继续使用对应兼容路径。
+- 前后台任务共享停止、超时、完成通知和密钥脱敏规则；提示词不再出现在 argv、进程列表或审批预览中。
+
+### Security
+
+- ACP 文件访问解析符号链接后校验工作区边界，写入与反向终端继续经过 WillDeep 审批和 sandbox；daemon 结构化 stdin 限制为 1 MiB。
+
+### Tests
+
+- 新增结构化进程工厂、Claude/Codex 事件解码、session resume、脱敏、Codex app-server、Claude ACP、路径守卫与远端 daemon 结构化启动测试。
+
+### Meta
+
+- 功能预发布版本从 **1.220.0-rc17** 提升为 **1.221.0-rc1**，内部构建号从 **249** 递增为 **250**，Help 与 Computer Use Helper 构建号从 **166** 递增为 **167**；App、Go agent、Help、Helper、浏览器扩展、README、响应头契约与产品文档保持一致。
 
 ## 1.220.0-rc17 - 2026-08-01
 

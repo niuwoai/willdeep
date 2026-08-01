@@ -999,6 +999,15 @@ nonisolated enum AgentExecutionAgent: String, Codable, CaseIterable, Identifiabl
         }
     }
 
+    var supportsStructuredExecution: Bool {
+        switch self {
+        case .claudeCode, .codexCLI:
+            return true
+        case .willDeep, .hermesCLI, .cursorAgent, .clineCLI:
+            return false
+        }
+    }
+
     init?(delegatedToolName: String) {
         switch delegatedToolName {
         case "claude_code":

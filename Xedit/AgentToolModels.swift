@@ -116,6 +116,31 @@ struct AgentSessionTitleSuggestionSnapshot: Equatable {
     let modelID: String?
 }
 
+nonisolated enum AgentDelegatedApprovalKind: String, Sendable {
+    case command
+    case fileChange
+    case permissions
+}
+
+nonisolated struct AgentDelegatedApprovalRequest: Sendable {
+    let id: String
+    let executor: AgentExecutionAgent
+    let kind: AgentDelegatedApprovalKind
+    let command: String?
+    let cwd: String?
+    let reason: String?
+    let filePaths: [String]
+    let requestedPermissions: String?
+    let allowsSessionApproval: Bool
+}
+
+nonisolated enum AgentDelegatedApprovalDecision: Sendable {
+    case accept
+    case acceptForSession
+    case decline
+    case cancel
+}
+
 struct AgentToolContext {
     /// Workspace root. All filesystem tools must refuse paths outside this.
     let rootDirectory: URL?
@@ -187,6 +212,10 @@ struct AgentToolContext {
     /// match against. Nil in non-app call paths (tests, skill harness); tools
     /// then read straight from disk.
     let editableContentProvider: (@MainActor (URL) throws -> String)?
+    /// Applies an ACP reverse-file write through the host editor and disk
+    /// bookkeeping after the protocol driver has enforced workspace bounds
+    /// and obtained delegated approval.
+    let delegatedFileWriteHandler: (@MainActor (URL, String) throws -> Void)?
     /// Live Agent-mode terminal controller. Terminal tools are intentionally
     /// tied to the visible side-panel session instead of creating hidden SSH
     /// sessions on the model's behalf.
@@ -199,6 +228,10 @@ struct AgentToolContext {
     /// or move a user's conversation behind the host's approval boundary.
     let sessionRenameSink: (@MainActor (String) throws -> String)?
     let workspaceChangeSink: (@MainActor (String) throws -> String)?
+    /// Nested approval requests from bidirectional coding-agent transports.
+    /// Interactive AppState contexts route these through the same cards and
+    /// decision waiter as first-party WillDeep tools.
+    let delegatedApprovalHandler: (@MainActor (AgentDelegatedApprovalRequest) async -> AgentDelegatedApprovalDecision)?
     /// When set, apply_patch should ask the host to immediately apply the
     /// queued proposal using the existing patch applier and audit status.
     let patchAutoApplySource: AgentToolApprovalSource?
@@ -225,11 +258,13 @@ struct AgentToolContext {
         sandboxMode: AgentSandboxMode = .readOnly,
         patchProposalSink: (@MainActor (String?, String, Bool) async throws -> AgentPatchProposal)? = nil,
         editableContentProvider: (@MainActor (URL) throws -> String)? = nil,
+        delegatedFileWriteHandler: (@MainActor (URL, String) throws -> Void)? = nil,
         patchAutoApplySource: AgentToolApprovalSource? = nil,
         terminalController: AgentInteractiveTerminalController? = nil,
         delegatedProgressSink: (@MainActor (AgentDelegatedTerminalProgressUpdate) -> Void)? = nil,
         sessionRenameSink: (@MainActor (String) throws -> String)? = nil,
         workspaceChangeSink: (@MainActor (String) throws -> String)? = nil,
+        delegatedApprovalHandler: (@MainActor (AgentDelegatedApprovalRequest) async -> AgentDelegatedApprovalDecision)? = nil,
         secretRedactionValues: [String] = []
     ) {
         self.rootDirectory = rootDirectory
@@ -249,11 +284,13 @@ struct AgentToolContext {
         self.sandboxMode = sandboxMode
         self.patchProposalSink = patchProposalSink
         self.editableContentProvider = editableContentProvider
+        self.delegatedFileWriteHandler = delegatedFileWriteHandler
         self.patchAutoApplySource = patchAutoApplySource
         self.terminalController = terminalController
         self.delegatedProgressSink = delegatedProgressSink
         self.sessionRenameSink = sessionRenameSink
         self.workspaceChangeSink = workspaceChangeSink
+        self.delegatedApprovalHandler = delegatedApprovalHandler
         self.secretRedactionValues = Self.uniqueNonEmpty(secretRedactionValues)
     }
 
@@ -300,11 +337,13 @@ struct AgentToolContext {
             sandboxMode: sandboxMode,
             patchProposalSink: patchProposalSink,
             editableContentProvider: editableContentProvider,
+            delegatedFileWriteHandler: delegatedFileWriteHandler,
             patchAutoApplySource: patchAutoApplySource,
             terminalController: terminalController,
             delegatedProgressSink: delegatedProgressSink,
             sessionRenameSink: sessionRenameSink,
             workspaceChangeSink: workspaceChangeSink,
+            delegatedApprovalHandler: delegatedApprovalHandler,
             secretRedactionValues: secretRedactionValues + values
         )
     }
@@ -328,11 +367,13 @@ struct AgentToolContext {
             sandboxMode: mode,
             patchProposalSink: patchProposalSink,
             editableContentProvider: editableContentProvider,
+            delegatedFileWriteHandler: delegatedFileWriteHandler,
             patchAutoApplySource: patchAutoApplySource,
             terminalController: terminalController,
             delegatedProgressSink: delegatedProgressSink,
             sessionRenameSink: sessionRenameSink,
             workspaceChangeSink: workspaceChangeSink,
+            delegatedApprovalHandler: delegatedApprovalHandler,
             secretRedactionValues: secretRedactionValues
         )
     }

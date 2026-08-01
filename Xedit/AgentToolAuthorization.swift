@@ -677,6 +677,32 @@ enum AgentSandboxPolicy {
         )
     }
 
+    /// Launch a known executable with a typed argv vector. External coding
+    /// agents use this path so prompts and paths are never reparsed by a shell.
+    /// The process still inherits the same seatbelt profile as run_command.
+    nonisolated static func processLaunch(
+        executableURL: URL,
+        arguments: [String],
+        mode: AgentSandboxMode,
+        rootDirectory: URL?
+    ) -> AgentSandboxLaunch {
+        if mode == .escalated
+            || !FileManager.default.isExecutableFile(atPath: sandboxExecPath) {
+            return AgentSandboxLaunch(
+                executableURL: executableURL,
+                arguments: arguments
+            )
+        }
+        return AgentSandboxLaunch(
+            executableURL: URL(fileURLWithPath: sandboxExecPath),
+            arguments: [
+                "-p",
+                seatbeltProfile(mode: mode, rootDirectory: rootDirectory),
+                executableURL.path,
+            ] + arguments
+        )
+    }
+
     /// Whether `shellLaunch` should skip `sandbox-exec` for this command.
     nonisolated static func shouldRunWithoutSeatbelt(
         command: String,

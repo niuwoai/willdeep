@@ -1,6 +1,6 @@
 # WillDeep Product Overview
 
-> Last updated: 2026-08-01 | Current version: v1.220.0-rc17
+> Last updated: 2026-08-01 | Current version: v1.221.0-rc1
 
 ## Positioning
 
@@ -11,6 +11,8 @@ Official product domain: [willdeep.com](https://willdeep.com).
 WillDeep is configured for non-App-Store distribution without App Sandbox so it can access local project files with fewer permission interruptions.
 
 ## 架构概览
+
+- **结构化外部 Agent 执行器（1.221.0-rc1）** —— capability resolver 会在 Claude ACP、Codex app-server、结构化进程、远端 daemon、可见终端和兼容 shell 之间选路；所有路径共享会话、思考、工具、文件、usage、警告、停止、超时、脱敏和 sandbox 生命周期。显式 Claude Agent、Codex Profile、可见终端、SSH、Cursor、Cline 与 Hermes 继续走兼容路径。详细能力矩阵见 `docs/STRUCTURED_AGENT_EXECUTORS.md`。
 
 - **测试报告拒绝“假绿”（1.220.0-rc17）** —— xcresult 无法验证时报告明确标记为 `unknown` 并返回非零状态；半成品 bundle 可从 xcodebuild 原始日志恢复结论，完整测试、快速测试与 CI 使用同一套判定契约。
 

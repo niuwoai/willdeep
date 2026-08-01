@@ -797,7 +797,7 @@ enum AgentToolRunner {
 
         let currentContent: String
         if let provider = context.editableContentProvider {
-            currentContent = try await provider(url)
+            currentContent = try provider(url)
         } else {
             currentContent = AppState.decodeText(from: try Data(contentsOf: url))
         }
@@ -1285,13 +1285,16 @@ enum AgentToolRunner {
             throw AgentToolError.missingArgument("prompt")
         }
 
-        let permissionMode = arguments["permission_mode"]?.stringValue()?
+        let requestedPermissionMode = arguments["permission_mode"]?.stringValue()?
             .trimmingCharacters(in: .whitespacesAndNewlines) ?? "acceptEdits"
-        guard claudeCodePermissionModes.contains(permissionMode) else {
+        guard claudeCodePermissionModes.contains(requestedPermissionMode) else {
             throw AgentToolError.invalidArgument(
                 "permission_mode must be one of: \(claudeCodePermissionModes.sorted().joined(separator: ", "))"
             )
         }
+        let permissionMode = claudeCodeCLIPermissionMode(
+            requestedPermissionMode
+        )
 
         let executable: String
         if context.remoteBackend != nil {
@@ -1312,6 +1315,87 @@ enum AgentToolRunner {
             )
         }
 
+        if agent == nil,
+           context.remoteBackend == nil,
+           arguments["use_visible_terminal"]?.boolValue() != true {
+            let root = context.rootDirectory?.standardizedFileURL
+                ?? FileManager.default.homeDirectoryForCurrentUser.standardizedFileURL
+            let environment = context.localCommandEnvironment ?? shellEnvironment()
+            let acpExecutable = claudeCodeACPExecutablePath(
+                environment: environment
+            )
+            let capabilities = AgentExecutorCapabilityResolver.select(
+                executor: .claudeCode,
+                isRemote: false,
+                usesDaemon: false,
+                usesVisibleTerminal: false,
+                hasHostApproval: context.delegatedApprovalHandler != nil,
+                hasACPAdapter: acpExecutable != nil
+            )
+            if capabilities.transport == .agentClientProtocol,
+               let acpExecutable {
+                let configuration = AgentACPConfiguration(
+                    executableURL: URL(fileURLWithPath: acpExecutable),
+                    claudeExecutableURL: URL(fileURLWithPath: executable),
+                    prompt: prompt,
+                    model: arguments["model"]?.stringValue(),
+                    sessionID: delegatedAgentSessionID(arguments),
+                    imagePaths: delegatedImagePaths(arguments),
+                    workingDirectory: root,
+                    environment: environment,
+                    sandboxMode: context.sandboxMode,
+                    permissionMode: permissionMode,
+                    secretRedactionValues: context.secretRedactionValues
+                )
+                return try await runACPDelegatedAgent(
+                    configuration,
+                    arguments: arguments,
+                    context: context
+                )
+            }
+            let specification = AgentExecutorProcessFactory.claudeCode(
+                executable: executable,
+                prompt: prompt,
+                permissionMode: permissionMode,
+                model: arguments["model"]?.stringValue(),
+                sessionID: delegatedAgentSessionID(arguments),
+                imagePaths: delegatedImagePaths(arguments),
+                workingDirectory: root,
+                environment: environment,
+                sandboxMode: context.sandboxMode
+            )
+            return try await runStructuredDelegatedAgent(
+                specification,
+                arguments: arguments,
+                context: context
+            )
+        }
+        if agent == nil,
+           let daemonBackend = context.daemonBackend,
+           arguments["use_visible_terminal"]?.boolValue() != true {
+            let root = URL(
+                fileURLWithPath: context.workspaceLocation?.path
+                    ?? daemonBackend.descriptor.defaultWorkspacePath
+            )
+            let specification = AgentExecutorProcessFactory.claudeCode(
+                executable: executable,
+                prompt: prompt,
+                permissionMode: permissionMode,
+                model: arguments["model"]?.stringValue(),
+                sessionID: delegatedAgentSessionID(arguments),
+                imagePaths: delegatedImagePaths(arguments),
+                workingDirectory: root,
+                environment: [:],
+                sandboxMode: context.sandboxMode
+            )
+            return try await daemonBackend.runExecutor(
+                specification: specification,
+                arguments: arguments,
+                context: context,
+                foregroundMaxTimeout: delegatedAgentForegroundTimeout
+            )
+        }
+
         let command = claudeCodeCommandLine(
             executable: executable,
             prompt: prompt,
@@ -1323,6 +1407,7 @@ enum AgentToolRunner {
 
         return try await runDelegatedAgentCommand(command, arguments: arguments, context: context)
     }
+
 
     // MARK: codex_cli / hermes_cli / cursor_agent / cline_cli
 
@@ -1402,28 +1487,6 @@ enum AgentToolRunner {
             "/opt/homebrew/bin/hermes",
             "/usr/local/bin/hermes",
         ], environment: environment, isExecutable: isExecutable)
-    }
-
-    nonisolated static func executablePath(
-        commandName: String,
-        preferredPaths: [String],
-        environment: [String: String],
-        isExecutable: (String) -> Bool
-    ) -> String? {
-        var seen = Set<String>()
-        var candidates: [String] = []
-
-        func append(_ path: String) {
-            guard !seen.contains(path) else { return }
-            seen.insert(path)
-            candidates.append(path)
-        }
-
-        preferredPaths.forEach(append)
-        for entry in (environment["PATH"] ?? "").split(separator: ":").map(String.init) {
-            append("\(entry)/\(commandName)")
-        }
-        return candidates.first(where: isExecutable)
     }
 
     nonisolated static func codexCLICommandLine(
@@ -1591,6 +1654,74 @@ enum AgentToolRunner {
                 "profile must contain only letters, numbers, dot, underscore, or hyphen"
             )
         }
+        if profile == nil,
+           context.remoteBackend == nil,
+           arguments["use_visible_terminal"]?.boolValue() != true {
+            let root = context.rootDirectory?.standardizedFileURL
+                ?? FileManager.default.homeDirectoryForCurrentUser.standardizedFileURL
+            if context.delegatedApprovalHandler != nil {
+                let configuration = AgentCodexAppServerConfiguration(
+                    executableURL: URL(fileURLWithPath: executable),
+                    prompt: prompt,
+                    model: arguments["model"]?.stringValue(),
+                    sessionID: delegatedAgentSessionID(arguments),
+                    imagePaths: delegatedImagePaths(arguments),
+                    workingDirectory: root,
+                    environment: context.localCommandEnvironment
+                        ?? shellEnvironment(),
+                    sandboxMode: context.sandboxMode,
+                    permissionMode: permissionMode,
+                    secretRedactionValues: context.secretRedactionValues
+                )
+                return try await runCodexAppServerDelegatedAgent(
+                    configuration,
+                    arguments: arguments,
+                    context: context
+                )
+            }
+            let specification = AgentExecutorProcessFactory.codexCLI(
+                executable: executable,
+                prompt: prompt,
+                permissionMode: permissionMode,
+                model: arguments["model"]?.stringValue(),
+                sessionID: delegatedAgentSessionID(arguments),
+                workspacePath: context.workspaceLocation?.path
+                    ?? context.rootDirectory?.standardizedFileURL.path,
+                imagePaths: delegatedImagePaths(arguments),
+                workingDirectory: root,
+                environment: context.localCommandEnvironment ?? shellEnvironment(),
+                sandboxMode: context.sandboxMode
+            )
+            return try await runStructuredDelegatedAgent(
+                specification,
+                arguments: arguments,
+                context: context
+            )
+        }
+        if profile == nil,
+           let daemonBackend = context.daemonBackend,
+           arguments["use_visible_terminal"]?.boolValue() != true {
+            let workspacePath = context.workspaceLocation?.path
+                ?? daemonBackend.descriptor.defaultWorkspacePath
+            let specification = AgentExecutorProcessFactory.codexCLI(
+                executable: executable,
+                prompt: prompt,
+                permissionMode: permissionMode,
+                model: arguments["model"]?.stringValue(),
+                sessionID: delegatedAgentSessionID(arguments),
+                workspacePath: workspacePath,
+                imagePaths: delegatedImagePaths(arguments),
+                workingDirectory: URL(fileURLWithPath: workspacePath),
+                environment: [:],
+                sandboxMode: context.sandboxMode
+            )
+            return try await daemonBackend.runExecutor(
+                specification: specification,
+                arguments: arguments,
+                context: context,
+                foregroundMaxTimeout: delegatedAgentForegroundTimeout
+            )
+        }
         let command = codexCLICommandLine(
             executable: executable,
             prompt: prompt,
@@ -1602,6 +1733,8 @@ enum AgentToolRunner {
         )
         return try await runDelegatedAgentCommand(command, arguments: arguments, context: context)
     }
+
+
 
     private static func cursorAgent(
         arguments: [String: AgentJSONValue],
@@ -1717,23 +1850,6 @@ enum AgentToolRunner {
         return prompt
     }
 
-    nonisolated static func delegatedImagePaths(
-        _ arguments: [String: AgentJSONValue],
-        fileManager: FileManager = .default
-    ) -> [String] {
-        guard let candidates = arguments["image_paths"]?.stringArrayValue() else { return [] }
-        return candidates.compactMap { path in
-            let url = URL(fileURLWithPath: path).standardizedFileURL
-            let directory = url.deletingLastPathComponent()
-            guard url.path.hasPrefix(FileManager.default.temporaryDirectory.standardizedFileURL.path + "/"),
-                  directory.lastPathComponent.hasPrefix(AgentDelegatedImageBundle.directoryPrefix),
-                  fileManager.fileExists(atPath: url.path) else {
-                return nil
-            }
-            return url.path
-        }
-    }
-
     private static func runDelegatedAgentCommand(
         _ command: String,
         arguments: [String: AgentJSONValue],
@@ -1837,19 +1953,71 @@ enum AgentToolRunner {
             throw AgentToolError.missingArgument("job_id")
         }
         let tailLines = arguments["tail_lines"]?.intValue()
-        let snapshot: (job: AgentBackgroundJob, output: String)? = await MainActor.run {
+        let snapshot: (
+            job: AgentBackgroundJob,
+            output: String,
+            events: [AgentExecutorEvent]
+        )? = await MainActor.run {
             guard let job = registry.job(matchingHandle: handle, runtimeID: runtimeID) else { return nil }
-            return (job, registry.output(id: job.id, tailLines: tailLines))
+            return (
+                job,
+                registry.output(id: job.id, tailLines: tailLines),
+                registry.executorEvents(id: job.id)
+            )
         }
         guard let snapshot else {
             throw AgentJobError.jobNotFound(handle)
         }
         let header = describe(job: snapshot.job)
-        let body = snapshot.output.isEmpty ? "(no output captured yet)" : snapshot.output
+        let structuredEvents = tailLines.map {
+            Array(snapshot.events.suffix(max(1, $0)))
+        } ?? snapshot.events
+        let structuredBody = structuredEvents.map(structuredEventDescription).joined(separator: "\n")
+        let body: String
+        let outputLabel: String
+        if snapshot.job.executor != nil, !structuredBody.isEmpty {
+            body = structuredBody
+            outputLabel = "events"
+        } else {
+            body = snapshot.output.isEmpty ? "(no output captured yet)" : snapshot.output
+            outputLabel = "output"
+        }
         return AgentToolResult(
             summary: "\(snapshot.job.displayHandle): \(snapshot.job.status.rawValue)",
-            payload: "\(header)\n--- output ---\n\(body)"
+            payload: "\(header)\n--- \(outputLabel) ---\n\(body)"
         )
+    }
+
+    nonisolated private static func structuredEventDescription(
+        _ event: AgentExecutorEvent
+    ) -> String {
+        var fields = ["event=\(event.kind.rawValue)"]
+        if let status = event.status {
+            fields.append("status=\(status.rawValue)")
+        }
+        if let sessionID = event.sessionID {
+            fields.append("session_id=\(sessionID)")
+        }
+        if let toolName = event.toolName {
+            fields.append("tool=\(toolName)")
+        }
+        if let filePath = event.filePath {
+            fields.append("file=\(filePath)")
+        }
+        if let detail = event.detail?
+            .trimmingCharacters(in: .whitespacesAndNewlines),
+           !detail.isEmpty {
+            fields.append("detail=\(detail.replacingOccurrences(of: "\n", with: "\\n"))")
+        }
+        if let usage = event.usage {
+            if let input = usage.inputTokens {
+                fields.append("input_tokens=\(input)")
+            }
+            if let output = usage.outputTokens {
+                fields.append("output_tokens=\(output)")
+            }
+        }
+        return fields.joined(separator: " ")
     }
 
     private static func killJob(

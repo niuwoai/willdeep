@@ -1556,6 +1556,16 @@ extension AppState {
                     editableContentProvider: { url in
                         try self.editableContent(forAgentPatchURL: url)
                     },
+                    delegatedFileWriteHandler: workspaceURL.map { workspaceRoot in
+                        { @MainActor @Sendable url, content in
+                            try self.writeDelegatedAgentContent(
+                                content,
+                                to: url,
+                                runtime: runtime,
+                                workspaceRoot: workspaceRoot
+                            )
+                        }
+                    },
                     patchAutoApplySource: patchAutoApplySource,
                     terminalController: agentTerminalController,
                     delegatedProgressSink: delegatedProgressSink,
@@ -1572,6 +1582,14 @@ extension AppState {
                         )
                         changedWorkspacePath = appliedPath
                         return appliedPath
+                    },
+                    delegatedApprovalHandler: { request in
+                        await self.resolveDelegatedExecutorApproval(
+                            request,
+                            runtime: runtime,
+                            messageID: assistantID,
+                            rootDirectory: workspaceURL
+                        )
                     }
                 )
             }
@@ -1822,7 +1840,9 @@ extension AppState {
                         """
                     )
                     effectiveArguments["run_in_background"] = .bool(false)
-                    effectiveArguments["use_visible_terminal"] = .bool(true)
+                    effectiveArguments["use_visible_terminal"] = .bool(
+                        !executionAgent.supportsStructuredExecution
+                    )
                     effectiveArguments["visible_terminal_label"] = .string(
                         "\(executionAgent.displayName) · \(L10n.DelegatedTask.sectionTitle)"
                     )
@@ -2560,6 +2580,11 @@ extension AppState {
             "Status: \(job.status.rawValue) (\(exitText)), duration \(durationText).",
             outputHint
         ]
+        if let executor = job.executor, let sessionID = job.executorSessionID {
+            lines.append(
+                "Reusable session: executor=\(executor.rawValue), session_id=\(sessionID)."
+            )
+        }
         if let recentOutput, !recentOutput.isEmpty {
             lines.append("Recent output (tail, secrets redacted):")
             lines.append("```")
