@@ -101,7 +101,10 @@ side_panel_source = read_file(repo_root, "Xedit/AgentSidePanel.swift")
 mode_view_source = read_file(repo_root, "Xedit/AgentModeView.swift")
 conversation_activity_overlay_source = read_file(repo_root, "Xedit/AgentConversationActivityOverlay.swift")
 app_state_source = read_file(repo_root, "Xedit/AppState.swift")
-app_state_loop_source = read_file(repo_root, "Xedit/AppStateAgentLoop.swift")
+app_state_loop_source = [
+  read_file(repo_root, "Xedit/AppStateAgentLoop.swift"),
+  read_file(repo_root, "Xedit/AppStateAgentMediaTaskNotices.swift")
+].join("\n")
 chat_header_source = read_file(repo_root, "Xedit/AgentChatHeader.swift")
 widget_registry_source = read_file(repo_root, "Xedit/AgentWidgetRegistry.swift")
 widget_source = read_file(repo_root, "Xedit/AgentWidget.swift")
@@ -1751,7 +1754,7 @@ plan_import_contract = {
     app_state_loop_source.include?("short_drama_show_image_choice_widget") &&
     app_state_loop_source.include?("candidate_arguments: project_id=\\(projectID), episode_id=\\(episodeID), shot_id=\\(shotID)\\(reviewSuffix)") &&
     app_state_loop_source.include?("let candidateImagePaths = task.artifacts.filter(Self.isImageArtifact).map(\\.filePath)") &&
-    app_state_loop_source.include?("private static func isImageArtifact(_ artifact: AgentMediaArtifact)") &&
+    app_state_loop_source.include?("static func isImageArtifact(_ artifact: AgentMediaArtifact)") &&
     app_state_loop_source.include?("candidate_image_paths: \\(candidateImages)") &&
     app_state_loop_source.include?("candidate_preview_tool: show_image_choice_widget") &&
     app_state_loop_source.include?("candidate_preview_arguments: image_paths=\\(candidateImages), project_id=\\(projectID), episode_id=\\(episodeID), shot_id=\\(shotID)\\(reviewSuffix)") &&
@@ -1761,7 +1764,7 @@ plan_import_contract = {
     app_state_loop_source.include?("completed_video_action: continue_from_completed_video_artifact") &&
     app_state_loop_source.include?("storyboard_widget_tool: short_drama_show_storyboard_widget") &&
     app_state_loop_source.include?("This completed video is available at") &&
-    app_state_loop_source.include?("private static func isVideoArtifact(_ artifact: AgentMediaArtifact)") &&
+    app_state_loop_source.include?("static func isVideoArtifact(_ artifact: AgentMediaArtifact)") &&
     app_state_loop_source.include?("generate_video_from_image") &&
     app_state_loop_source.include?("video_from_image_tool: generate_video_from_image") &&
     app_state_loop_source.include?("short_drama_generate_shot_media") &&

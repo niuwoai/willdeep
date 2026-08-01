@@ -236,6 +236,9 @@ struct AgentDispatchGoalHeader: View {
         if goal.isPaused {
             return L10n.Dispatch.resumeExecution
         }
+        if !goal.hasExecutablePlan {
+            return L10n.Dispatch.planningInProgress
+        }
         if goal.isExecutionActive {
             return L10n.Dispatch.executionRunning
         }
@@ -249,7 +252,8 @@ struct AgentDispatchGoalHeader: View {
         if goal.isPaused {
             return true
         }
-        return goal.activeTaskCount < max(1, goal.effectiveWorkerProfileIDs.count)
+        return goal.hasExecutablePlan
+            && goal.activeTaskCount < max(1, goal.effectiveWorkerProfileIDs.count)
             && goal.hasReadyTask
     }
 

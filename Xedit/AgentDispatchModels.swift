@@ -163,6 +163,19 @@ nonisolated struct AgentDispatchExecutorDecision: Equatable {
 }
 
 nonisolated enum AgentDispatchProfileResolver {
+    static func planningCatalog(
+        primaryProfileID: String?,
+        fallbackProfileIDs: [String],
+        profiles: [AgentExecutionProfile]
+    ) -> [AgentExecutionProfile] {
+        let planningIDs = Set(candidateIDs(
+            primaryProfileID: primaryProfileID,
+            fallbackProfileIDs: fallbackProfileIDs,
+            selectedWorkerProfileIDs: []
+        ))
+        return profiles.filter { planningIDs.contains($0.id) }
+    }
+
     static func candidateIDs(
         primaryProfileID: String?,
         fallbackProfileIDs: [String],
@@ -385,6 +398,13 @@ nonisolated struct AgentDispatchGoal: Codable, Equatable, Identifiable {
 
     var hasReadyTask: Bool {
         tasks.contains { $0.state == .queued }
+    }
+
+    /// Acceptance checklist items are project-level evidence, not executable
+    /// nodes. Workers may launch only after the planner has produced a
+    /// captured dispatch graph whose projected tasks carry stable plan keys.
+    var hasExecutablePlan: Bool {
+        tasks.contains { $0.planNodeKey != nil }
     }
 
     var effectiveModelRouting: AgentDispatchModelRouting {

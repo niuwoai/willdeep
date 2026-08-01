@@ -579,6 +579,61 @@ struct AgentGoalTeamsTests {
         appState.agentSubagentRegistry.cancelAll(forParentRuntime: runtime.id)
     }
 
+    @Test("WillDeep 规划合成失败后切换备用 Profile 并重新规划")
+    func willDeepPlanningFailureStartsConfiguredFallback() async {
+        let primaryID = AgentExecutionProfile.recommendedPlannerID
+        let fallbackID = AgentExecutionProfile.recommendedWorkerID
+        let goal = AgentGoal(
+            statement: "构建经典小游戏平台",
+            checklist: [.init(text: "分层 DAG 通过验收")],
+            planningProfileID: primaryID,
+            planningFallbackProfileIDs: [fallbackID],
+            planningAttemptedProfileIDs: [primaryID]
+        )
+        let state = AgentGoalPlanningState(
+            goalFingerprint: AgentGoalPlanningState.fingerprint(for: goal),
+            phase: .readyForProposal,
+            members: [
+                .init(roleID: "requirements", displayName: "需求分析-目标边界质疑", status: .completed),
+                .init(roleID: "architecture", displayName: "架构-实现路径论证", status: .completed),
+                .init(roleID: "testing", displayName: "测试-失败路径审查", status: .completed),
+            ],
+            arbitration: .init(status: .completed, report: validArbitrationReport())
+        )
+        let session = AgentSession(
+            presentationScope: .dispatchBoard,
+            interactionMode: .goal,
+            currentGoal: goal,
+            goalPlanningState: state
+        )
+        let runtime = AgentRuntime(session: session)
+        // Restored ready-without-plan sessions intentionally normalize to
+        // blocked; this test models the live synthesis phase instead.
+        runtime.goalPlanningState = state
+        runtime.executionAgent = AgentExecutionAgent.willDeep
+        runtime.isResponding = true
+        let appState = AppState()
+        appState.agentSessions = [session]
+        appState.agentRuntimes = [session.id: runtime]
+        appState.activeAgentSessionID = session.id
+        appState.subscribeToActiveRuntime()
+        appState.agentSubagentRegistry.runOperation = { [self] prompt, _, _, _, _, _, _ in
+            let report = prompt.contains("评审-分歧证据仲裁")
+                ? validArbitrationReport()
+                : validMemberReport(prompt)
+            return .init(report: report, usageTokens: 1, roundCount: 1, toolInvocationCount: 0)
+        }
+
+        #expect(appState.retryDispatchPlanningAfterWillDeepFailureIfNeeded(for: runtime))
+        #expect(runtime.currentGoal?.planningAttemptedProfileIDs == [primaryID, fallbackID])
+        #expect(runtime.sessionModelOverride == "deepseek-v4-flash")
+        #expect(runtime.sessionProviderIDOverride == AgentProviderPreset.someIMID)
+
+        await waitUntil("备用 Profile 完成重新规划") {
+            runtime.goalPlanningState?.phase == .readyForProposal
+        }
+    }
+
     @Test("ready 之前的提前 Plan 不会被捕获为 proposed")
     func earlyPlanIsRejectedBeforePlanningReadiness() {
         let state = AgentGoalPlanningState(

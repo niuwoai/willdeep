@@ -213,6 +213,15 @@ nonisolated enum AgentGoalProposalCaptureOutcome: Equatable {
     case proposalRejectedGaveUp
 }
 
+nonisolated enum AgentDispatchPlanHandoffPolicy {
+    static func shouldHandoffToTaskRuntimes(
+        captureOutcome: AgentGoalProposalCaptureOutcome,
+        presentationScope: AgentSessionPresentationScope
+    ) -> Bool {
+        captureOutcome == .captured && presentationScope == .dispatchBoard
+    }
+}
+
 @MainActor
 extension AppState {
     private static let goalPlanningMembers: [(id: String, name: String, focus: String)] = [
@@ -329,11 +338,15 @@ extension AppState {
         for runtime: AgentRuntime,
         goal: AgentGoal
     ) -> AgentExecutionProfile? {
-        let selectedWorkerIDs = Set(goal.selectedWorkerProfileIDs
-            ?? [AgentExecutionProfile.recommendedWorkerID])
-        let profiles = AgentExecutionProfileStore().availableProfiles(
+        let allProfiles = AgentExecutionProfileStore().availableProfiles(
             workspacePath: runtime.workspaceLocation?.path ?? runtime.workspaceRootPath
-        ).filter { selectedWorkerIDs.contains($0.id) }
+        )
+        let profiles = AgentDispatchProfileResolver.planningCatalog(
+            primaryProfileID: goal.planningProfileID
+                ?? AgentExecutionProfile.recommendedPlannerID,
+            fallbackProfileIDs: goal.planningFallbackProfileIDs ?? [],
+            profiles: allProfiles
+        )
         let availableExecutors = AgentDispatchExecutorResolver.localAvailableExecutors()
         return AgentDispatchProfileResolver.next(
             primaryProfileID: goal.planningProfileID
@@ -364,6 +377,7 @@ extension AppState {
         to runtime: AgentRuntime
     ) {
         runtime.executionAgent = .willDeep
+        runtime.sessionProviderIDOverride = profile.providerID
         guard let modelID = profile.modelID else {
             runtime.sessionModelOverride = nil
             return
@@ -433,7 +447,7 @@ extension AppState {
         Emit exactly one fenced `dispatch-graph` JSON block:
         {"nodes":[{"id":"TASK-1","title":"specific deliverable","depends_on":[],"profile":"profile-id","fallback_profiles":["fallback-profile-id"],"acceptance":["observable evidence"]}]}
 
-        Choose the smallest useful DAG. Parallelize independent work. If branches must converge, create an explicit integration/validation node that depends on every required upstream node. Never flatten independent work into a serial chain. Give nontrivial nodes at least one fallback profile when another suitable profile is available. Choose profile IDs only from:
+        Choose the smallest useful DAG. Parallelize independent work, but never emit every node as an independent root for a multi-part project. The UI acceptance gate is synthetic and cannot merge code, integrate deliverables, test, or repair work. A graph with 3+ nodes must have exactly one executable terminal test/regression/verification node and at least three execution layers. Every parallel implementation wave must feed a distinct merge/integration execution node whose depends_on explicitly lists the upstream coding nodes; the terminal verification node must then depend on that merge/integration node. For software projects, model the usual foundation/shared-contract → parallel implementation → distinct code merge/integration → independent test/regression flow. Never flatten independent work into a serial chain. Give nontrivial nodes at least one fallback profile when another suitable profile is available. Choose profile IDs only from:
         <execution_profiles>
         \(catalog)
         </execution_profiles>
@@ -465,7 +479,9 @@ extension AppState {
         if succeeded {
             let outcome = captureAgentPlanFromLatestMessage(for: runtime)
             if outcome == .captured {
+                persistAgentSession(runtime: runtime, touchUpdatedAt: false, moveToFront: false)
                 agentDispatchCoordinator.synchronize(with: agentSessions)
+                resumeDispatchGoal(goalID: runtime.id)
                 return false
             }
         }
@@ -479,6 +495,40 @@ extension AppState {
         }
         runtime.goalPlanningState = nil
         return true
+    }
+
+    /// A WillDeep-backed planner uses the normal chat streaming loop, so its
+    /// transport failures do not pass through the external-planner completion
+    /// hook above. Keep dispatch planning bounded by moving to the next
+    /// configured planning profile instead of leaving the board indefinitely
+    /// at `readyForProposal`.
+    @discardableResult
+    func retryDispatchPlanningAfterWillDeepFailureIfNeeded(
+        for runtime: AgentRuntime
+    ) -> Bool {
+        guard runtime.session.presentationScope == .dispatchBoard,
+              runtime.interactionMode == .goal,
+              runtime.executionAgent == .willDeep,
+              let state = runtime.goalPlanningState,
+              state.phase == .readyForProposal,
+              let goal = runtime.currentGoal else {
+            return false
+        }
+        guard nextDispatchPlanningProfile(for: runtime, goal: goal) != nil else {
+            var blockedState = state
+            blockedState.phase = .blocked
+            runtime.goalPlanningState = blockedState
+            persistAgentSession(runtime: runtime, touchUpdatedAt: false, moveToFront: false)
+            return false
+        }
+
+        runtime.errorMessage = nil
+        runtime.errorDetails = nil
+        return startAgentGoalPlanningIfNeeded(
+            for: runtime,
+            forceRestart: true,
+            revisionNote: state.revisionNote
+        )
     }
 
     /// Continue checking the same Goal without throwing away the plan and
@@ -776,7 +826,7 @@ extension AppState {
             Also emit exactly one fenced `dispatch-graph` JSON block after the numbered plan. This is the executable DAG and is separate from the Goal acceptance checklist. Use this exact shape:
             {"nodes":[{"id":"TASK-1","title":"specific deliverable","depends_on":[],"profile":"profile-id","fallback_profiles":["fallback-profile-id"],"acceptance":["observable evidence"]}]}
 
-            Choose the smallest useful DAG from the actual task. Parallelize independent work. When two or more branches must converge, add an explicit integration or validation node whose `depends_on` contains every required upstream node; do not flatten the graph into a serial chain and do not invent parallelism when the work is truly sequential. Give nontrivial nodes at least one fallback profile when another suitable profile is available. Pick each node's primary profile and ordered fallbacks from this catalog only:
+            Choose the smallest useful DAG from the actual task. Parallelize independent work, but never emit every node as an independent root for a multi-part project. The UI acceptance gate is synthetic and cannot merge code, integrate deliverables, test, or repair work. A graph with 3+ nodes must have exactly one executable terminal test/regression/verification node and at least three execution layers. Every parallel implementation wave must feed a distinct merge/integration execution node whose depends_on explicitly lists the upstream coding nodes; the terminal verification node must then depend on that merge/integration node. For software projects, model the usual foundation/shared-contract → parallel implementation → distinct code merge/integration → independent test/regression flow. Do not flatten the graph into a serial chain and do not invent parallelism when the work is truly sequential. Give nontrivial nodes at least one fallback profile when another suitable profile is available. Pick each node's primary profile and ordered fallbacks from this catalog only:
             <execution_profiles>
             \(profileCatalog)
             </execution_profiles>
