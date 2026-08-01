@@ -1,6 +1,6 @@
 # WillDeep Product Overview
 
-> Last updated: 2026-08-01 | Current version: v1.221.0-rc2
+> Last updated: 2026-08-01 | Current version: v1.222.0-rc1
 
 ## Positioning
 
@@ -11,6 +11,8 @@ Official product domain: [willdeep.com](https://willdeep.com).
 WillDeep is configured for non-App-Store distribution without App Sandbox so it can access local project files with fewer permission interruptions.
 
 ## 架构概览
+
+- **调度台多 Worker 池（1.222.0-rc1）** —— 每个调度项目可勾选多个 Worker，包括 WillDeep + some.im 模型、Codex CLI 原生 Profile 和 Claude Code Agent；外部执行器在统一管理页预发现并显示可用性。就绪节点按 Worker 容量并行启动，优先分配空闲 Worker，失败后自动切换尚未尝试的可用 Worker。WillDeep Worker 同时固定 Provider 与模型，默认 `some-im / deepseek-v4-flash / Responses`，登录态刷新不会把它改回省心托管；本机 Git 节点使用独立 worktree，重启后会恢复完成监控并对账验收清单，再自动解锁后继节点。
 
 - **工作区侧栏布局稳定性（1.221.0-rc2）** —— 工作区会话列表使用规模受控的 eager stack，并在每次视图求值中复用同一份分组快照，避开 macOS 26 的 SwiftUI lazy-stack 项目阶段缓存失效循环；侧栏空闲时不再因 AttributeGraph 持续布局而占满单个 CPU 核心。
 

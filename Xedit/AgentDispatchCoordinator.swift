@@ -293,6 +293,15 @@ final class AgentDispatchCoordinator: ObservableObject {
         }
     }
 
+    func updateWorkerProfiles(_ profileIDs: [String], goalID: UUID) {
+        let normalized = Self.uniqueStrings(profileIDs)
+        guard !normalized.isEmpty else { return }
+        updateGoal(id: goalID) { goal in
+            goal.selectedWorkerProfileIDs = normalized
+            goal.updatedAt = Date()
+        }
+    }
+
     func updateTaskTargetChoice(
         _ choice: AgentDispatchTargetChoice,
         goalID: UUID,
@@ -783,6 +792,9 @@ final class AgentDispatchCoordinator: ObservableObject {
                 ?? AgentExecutionProfile.recommendedPlannerID,
             planningFallbackProfileIDs: sourceGoal.planningFallbackProfileIDs
                 ?? existing?.planningFallbackProfileIDs,
+            selectedWorkerProfileIDs: sourceGoal.selectedWorkerProfileIDs
+                ?? existing?.selectedWorkerProfileIDs
+                ?? [AgentExecutionProfile.recommendedWorkerID],
             cliProfileSelections: existing?.cliProfileSelections,
             isPaused: existing?.isPaused ?? false,
             commands: existing?.commands ?? [],

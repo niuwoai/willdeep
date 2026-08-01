@@ -139,6 +139,10 @@ final class AgentRuntime: ObservableObject, Identifiable {
     /// ask the chat loop to run tools, but never execute them directly.
     @Published var latestWidgetToolAction: AgentWidgetToolAction?
     @Published var sessionModelOverride: String?
+    /// Runtime-scoped provider pin used by dispatch Workers. A Worker profile
+    /// binds both model and provider so its visible assignment matches the
+    /// transport that actually handles the request.
+    @Published var sessionProviderIDOverride: String?
     /// Per-session some.im managed-routing state ("省心托管"). Mirrors
     /// `AgentSession.managedRouting`; non-nil only for managed sessions and
     /// carries the only-goes-up capability floor.
@@ -320,6 +324,9 @@ final class AgentRuntime: ObservableObject, Identifiable {
         self.redactSensitiveAttachmentContent = session.redactSensitiveAttachmentContent
         self.sidePanelState = session.sidePanelState
         self.managedRouting = session.managedRouting
+        if session.dispatchParentProjectID != nil {
+            self.sessionProviderIDOverride = session.providerID
+        }
     }
 
     private static func normalizingInterruptedWorkflow(_ message: AgentMessage) -> AgentMessage {

@@ -189,6 +189,50 @@ extension AppState {
         persistAgentSession(runtime: runtime, touchUpdatedAt: false, moveToFront: false)
     }
 
+    func updateDispatchWorkerProfiles(_ profileIDs: [String], goalID: UUID) {
+        agentDispatchCoordinator.updateWorkerProfiles(profileIDs, goalID: goalID)
+        guard let goal = agentDispatchCoordinator.goals.first(where: { $0.id == goalID }),
+              let runtime = runtime(for: goal.sessionID) else {
+            return
+        }
+        var sourceGoal = runtime.currentGoal ?? AgentGoal()
+        sourceGoal.selectedWorkerProfileIDs = profileIDs
+        runtime.currentGoal = sourceGoal
+        persistAgentSession(runtime: runtime, touchUpdatedAt: false, moveToFront: false)
+    }
+
+    func updateDispatchTaskProfiles(
+        primaryProfileID: String?,
+        fallbackProfileIDs: [String],
+        goalID: UUID,
+        taskID: UUID
+    ) {
+        agentDispatchCoordinator.updateTaskProfiles(
+            primaryProfileID: primaryProfileID,
+            fallbackProfileIDs: fallbackProfileIDs,
+            goalID: goalID,
+            taskID: taskID
+        )
+        guard let goal = agentDispatchCoordinator.goals.first(where: { $0.id == goalID }),
+              let task = goal.tasks.first(where: { $0.id == taskID }),
+              let runtimeID = task.runtimeSessionID,
+              let taskRuntime = runtime(for: runtimeID),
+              let profile = dispatchExecutionProfiles(for: goal).first(where: {
+                  $0.id == primaryProfileID
+              }) else {
+            return
+        }
+        taskRuntime.executionAgent = profile.executor
+        if profile.executor == .willDeep {
+            taskRuntime.sessionProviderIDOverride = profile.providerID
+            applyDispatchModel(profile.modelID, to: taskRuntime)
+        } else {
+            taskRuntime.sessionProviderIDOverride = nil
+            taskRuntime.sessionModelOverride = nil
+        }
+        persistAgentSession(runtime: taskRuntime, touchUpdatedAt: false, moveToFront: false)
+    }
+
     func chooseLocalWorkspaceForDispatchGoal(
         goalID: UUID,
         completion: @escaping (String?) -> Void
@@ -436,7 +480,10 @@ extension AppState {
         guard goal.isWorkspaceBound else {
             return .blocked(message: L10n.Dispatch.workspaceRequired)
         }
-        guard task.state == .queued || task.state == .failed || task.state == .cancelled else {
+        guard task.state == .queued
+                || task.state == .reviewing
+                || task.state == .failed
+                || task.state == .cancelled else {
             return .blocked(message: L10n.Dispatch.waitingForDependencies)
         }
 
@@ -444,24 +491,43 @@ extension AppState {
             return .blocked(message: L10n.Dispatch.workspaceMappingRequired)
         }
         let target = workspaceBinding.targetChoice
-        let workspaceLocation = workspaceBinding.location
         let available = availableDispatchExecutors(on: target)
-        let profiles = dispatchExecutionProfiles(for: goal).filter {
-            $0.executor != .willDeep
-                || $0.modelID == nil
-                || agentModelIsCompatibleWithActiveProvider($0.modelID ?? "")
+        let profiles = dispatchExecutionProfiles(for: goal)
+        let selectedWorkerIDs = goal.effectiveWorkerProfileIDs
+        let selectedWorkerSet = Set(selectedWorkerIDs)
+        let taskPrimary = task.primaryProfileID.flatMap {
+            selectedWorkerSet.contains($0) ? $0 : nil
         }
+        let taskFallbacks = (task.fallbackProfileIDs ?? []).filter(selectedWorkerSet.contains)
+        let busyProfileIDs = Set(goal.tasks.compactMap { candidate -> String? in
+            guard candidate.id != task.id,
+                  candidate.state == .running || candidate.state == .reviewing else {
+                return nil
+            }
+            return candidate.activeProfileID
+        })
         let profile = AgentDispatchProfileResolver.next(
-            primaryProfileID: task.primaryProfileID,
-            fallbackProfileIDs: task.fallbackProfileIDs ?? [],
+            primaryProfileID: taskPrimary,
+            fallbackProfileIDs: taskFallbacks,
+            selectedWorkerProfileIDs: selectedWorkerIDs,
             attemptedProfileIDs: task.attemptedProfileIDs ?? [],
+            busyProfileIDs: busyProfileIDs,
             availableExecutors: available,
             profiles: profiles
         )
-        let hasProfilePolicy = task.primaryProfileID != nil
-            || !(task.fallbackProfileIDs ?? []).isEmpty
+        let hasProfilePolicy = !selectedWorkerIDs.isEmpty
         if task.executorChoice == .automatic, hasProfilePolicy, profile == nil {
             return .blocked(message: L10n.Dispatch.noProfileAvailable)
+        }
+        let workspaceLocation: WorkspaceLocation
+        switch isolatedDispatchWorkspaceLocation(
+            task: task,
+            source: workspaceBinding.location
+        ) {
+        case .success(let isolatedLocation):
+            workspaceLocation = isolatedLocation
+        case .failure(let message):
+            return .blocked(message: message)
         }
         let executorChoice = task.executorChoice == .automatic
             ? goal.executorChoice
@@ -497,8 +563,14 @@ extension AppState {
             statement: task.title,
             checklist: task.acceptanceCriteria.map { AgentGoal.Item(text: $0) }
         )
+        runtime.currentPlan = AgentPlan(
+            status: .executing,
+            steps: [AgentPlan.Step(text: task.title, status: .inProgress)],
+            summary: L10n.Dispatch.executionRunning
+        )
         runtime.executionAgent = decision.executor
         if decision.executor == .willDeep {
+            runtime.sessionProviderIDOverride = profile?.providerID
             applyDispatchModel(
                 profile?.modelID ?? goal.effectiveModelRouting.executionModelID,
                 to: runtime
@@ -523,7 +595,7 @@ extension AppState {
             text: Self.dispatchTaskPrompt(
                 goal: goal,
                 task: task,
-                workspaceBinding: workspaceBinding
+                workspaceLocation: workspaceLocation
             ),
             images: [],
             delegatedProfile: delegatedProfile,
@@ -536,6 +608,48 @@ extension AppState {
             taskID: taskID
         )
         return .started(runtimeSessionID: runtime.id)
+    }
+
+    @discardableResult
+    func launchReadyDispatchTasks(goalID: UUID) -> [AgentDispatchLaunchResult] {
+        guard let goal = agentDispatchCoordinator.goals.first(where: { $0.id == goalID }),
+              !goal.isPaused else {
+            return [.blocked(message: L10n.Dispatch.goalPausedLaunch)]
+        }
+        let capacity = max(1, goal.effectiveWorkerProfileIDs.count)
+        let availableSlots = max(0, capacity - goal.activeTaskCount)
+        guard availableSlots > 0 else { return [] }
+        let readyTaskIDs = goal.tasks
+            .filter { $0.state == .queued }
+            .prefix(availableSlots)
+            .map(\.id)
+        return readyTaskIDs.map {
+            launchDispatchTask(goalID: goalID, taskID: $0)
+        }
+    }
+
+    /// Reattaches task completion monitoring after the app or dispatch board
+    /// is reopened. Child runtimes are durable, so their final goal state must
+    /// be reconciled before the coordinator can unlock downstream nodes.
+    func resumeDispatchGoal(goalID: UUID) {
+        guard let goal = agentDispatchCoordinator.goals.first(where: { $0.id == goalID }),
+              !goal.isPaused else {
+            return
+        }
+        for task in goal.tasks where task.state == .running || task.state == .reviewing {
+            guard let runtimeSessionID = task.runtimeSessionID,
+                  let taskRuntime = runtime(for: runtimeSessionID) else {
+                continue
+            }
+            monitorDispatchTaskRuntime(
+                taskRuntime,
+                goalID: goalID,
+                taskID: task.id
+            )
+        }
+        if goal.activeTaskCount == 0 {
+            _ = launchReadyDispatchTasks(goalID: goalID)
+        }
     }
 
     func openDispatchTaskConversation(runtimeSessionID: UUID) {
@@ -575,20 +689,68 @@ extension AppState {
         }
     }
 
+    private enum DispatchWorkspaceResolution {
+        case success(WorkspaceLocation)
+        case failure(String)
+    }
+
+    private func isolatedDispatchWorkspaceLocation(
+        task: AgentDispatchTask,
+        source: WorkspaceLocation
+    ) -> DispatchWorkspaceResolution {
+        guard case .local(let sourcePath) = source else {
+            return .success(source)
+        }
+        if let previousRuntimeID = task.runtimeSessionID,
+           let previousRuntime = runtime(for: previousRuntimeID),
+           case .local(let previousPath)? = previousRuntime.workspaceLocation,
+           FileManager.default.fileExists(atPath: previousPath) {
+            return .success(.local(path: previousPath))
+        }
+        let sourceURL = URL(fileURLWithPath: sourcePath).standardizedFileURL
+        guard Self.findGitRepositoryRoot(startingAt: sourceURL) != nil else {
+            return .success(source)
+        }
+        let branchName = "\(task.branchName)-\(task.id.uuidString.prefix(8).lowercased())"
+        switch Self.createGitWorktree(from: sourceURL, branchName: branchName) {
+        case .success(let created):
+            return .success(.local(path: created.worktree.path))
+        case .failure(let failure):
+            return .failure(failure.message)
+        }
+    }
+
     private func monitorDispatchTaskRuntime(
         _ runtime: AgentRuntime,
         goalID: UUID,
         taskID: UUID
     ) {
+        guard dispatchMonitoredRuntimeIDsByTaskID[taskID] != runtime.id else {
+            return
+        }
+        dispatchMonitoredRuntimeIDsByTaskID[taskID] = runtime.id
         Task { @MainActor [weak self, weak runtime] in
             guard let self, let runtime else { return }
+            defer {
+                if self.dispatchMonitoredRuntimeIDsByTaskID[taskID] == runtime.id {
+                    self.dispatchMonitoredRuntimeIDsByTaskID[taskID] = nil
+                }
+            }
             while runtime.isResponding || runtime.isAwaitingProviderSlot {
                 try? await Task.sleep(nanoseconds: 500_000_000)
                 guard !Task.isCancelled else { return }
             }
-            let state: AgentDispatchTaskState = runtime.errorMessage == nil
-                ? .reviewing
-                : .failed
+            let hasCompletedAcceptance = runtime.currentGoal.map {
+                !$0.checklist.isEmpty && $0.checklist.allSatisfy(\.done)
+            } ?? false
+            let state: AgentDispatchTaskState
+            if runtime.errorMessage != nil {
+                state = .failed
+            } else if hasCompletedAcceptance {
+                state = .merged
+            } else {
+                state = .reviewing
+            }
             self.agentDispatchCoordinator.updateTaskState(
                 goalID: goalID,
                 taskID: taskID,
@@ -604,16 +766,18 @@ extension AppState {
                refreshedTask.executorChoice == .automatic,
                AgentDispatchProfileResolver.hasUntriedFallback(
                    fallbackProfileIDs: refreshedTask.fallbackProfileIDs ?? [],
+                   selectedWorkerProfileIDs: refreshedGoal.effectiveWorkerProfileIDs,
                    attemptedProfileIDs: refreshedTask.attemptedProfileIDs ?? []
                ) {
                 _ = self.launchDispatchTask(goalID: goalID, taskID: taskID)
+            } else if state == .merged {
+                _ = self.launchReadyDispatchTasks(goalID: goalID)
             }
         }
     }
 
     private func applyDispatchModel(_ modelID: String?, to runtime: AgentRuntime) {
-        guard let modelID,
-              agentModelIsCompatibleWithActiveProvider(modelID) else {
+        guard let modelID else {
             runtime.sessionModelOverride = nil
             return
         }
@@ -657,7 +821,7 @@ extension AppState {
     nonisolated private static func dispatchTaskPrompt(
         goal: AgentDispatchGoal,
         task: AgentDispatchTask,
-        workspaceBinding: AgentDispatchWorkspaceBinding
+        workspaceLocation: WorkspaceLocation
     ) -> String {
         let criteria = task.acceptanceCriteria.map { "- \($0)" }.joined(separator: "\n")
         let project = goal.logicalProject
@@ -668,12 +832,14 @@ extension AppState {
         Suggested branch: \(task.branchName)
         Logical project: \(project?.displayName ?? "Unbound")
         Project root: \(project?.primaryWorkspacePath ?? "Unbound")
-        Assigned checkout: \(workspaceBinding.location.path)
+        Assigned checkout: \(workspaceLocation.path)
 
         Acceptance criteria:
         \(criteria)
 
-        Work only inside the assigned checkout. It is a checkout of the fixed logical project above; do not switch this Task to another repository. Preserve unrelated changes. Before reporting completion, provide concrete evidence such as tests, build output, or a focused diff summary. Do not merge into a shared branch; WillDeep owns review and integration.
+        Execute this node directly. Do not create another Goal, dispatch graph, or team of agents. Work only inside the assigned checkout. It is a checkout of the fixed logical project above; do not switch this Task to another repository. Preserve unrelated changes. Before reporting completion, provide concrete evidence such as tests, build output, or a focused diff summary. Do not merge into a shared branch; WillDeep owns review and integration.
+
+        In the final response, update the visible execution step with a closed `progress` block and evaluate every acceptance criterion with a closed `goal-check` block. Mark an item done only when the evidence actually proves it.
         """
     }
 }

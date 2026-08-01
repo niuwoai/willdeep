@@ -10,12 +10,15 @@ struct AgentDispatchGoalSetupView: View {
     let workspaceName: String
     let profiles: [AgentExecutionProfile]
     let onManageProfiles: () -> Void
-    let onCreate: (String, [String], String, [String]) -> Void
+    let onCreate: (String, [String], String, [String], [String]) -> Void
 
     @State private var statement = ""
     @State private var checklistText = ""
     @State private var planningProfileID = AgentExecutionProfile.recommendedPlannerID
     @State private var planningFallbackProfileIDs: Set<String> = [
+        AgentExecutionProfile.recommendedWorkerID,
+    ]
+    @State private var selectedWorkerProfileIDs: Set<String> = [
         AgentExecutionProfile.recommendedWorkerID,
     ]
     @FocusState private var focusedField: Field?
@@ -218,6 +221,44 @@ struct AgentDispatchGoalSetupView: View {
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
             }
+
+            summaryCard(
+                title: L10n.Dispatch.workers,
+                symbol: "person.2.badge.gearshape"
+            ) {
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 5) {
+                        ForEach(profiles) { profile in
+                            Button {
+                                toggleWorker(profile.id)
+                            } label: {
+                                HStack(spacing: 7) {
+                                    Image(systemName: selectedWorkerProfileIDs.contains(profile.id)
+                                        ? "checkmark.square.fill"
+                                        : "square")
+                                    Image(systemName: profile.executor.symbol)
+                                    VStack(alignment: .leading, spacing: 1) {
+                                        Text(profile.name)
+                                            .lineLimit(1)
+                                        Text(profile.displayDetail)
+                                            .font(.system(size: 9))
+                                            .foregroundStyle(.secondary)
+                                            .lineLimit(1)
+                                    }
+                                }
+                                .font(.system(size: 11))
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                            }
+                            .buttonStyle(.plain)
+                        }
+                    }
+                }
+                .frame(maxHeight: 150)
+                Text(L10n.Dispatch.workerPoolHelp)
+                    .font(.system(size: 10))
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
         }
         .frame(width: 250)
     }
@@ -237,7 +278,8 @@ struct AgentDispatchGoalSetupView: View {
                     normalizedStatement,
                     checklistItems,
                     planningProfileID,
-                    orderedPlanningFallbackIDs
+                    orderedPlanningFallbackIDs,
+                    orderedWorkerProfileIDs
                 )
             } label: {
                 Label(L10n.Dispatch.createProject, systemImage: "plus")
@@ -262,6 +304,19 @@ struct AgentDispatchGoalSetupView: View {
 
     private var orderedPlanningFallbackIDs: [String] {
         profiles.map(\.id).filter(planningFallbackProfileIDs.contains)
+    }
+
+    private var orderedWorkerProfileIDs: [String] {
+        profiles.map(\.id).filter(selectedWorkerProfileIDs.contains)
+    }
+
+    private func toggleWorker(_ profileID: String) {
+        if selectedWorkerProfileIDs.contains(profileID) {
+            guard selectedWorkerProfileIDs.count > 1 else { return }
+            selectedWorkerProfileIDs.remove(profileID)
+        } else {
+            selectedWorkerProfileIDs.insert(profileID)
+        }
     }
 
     private func fieldCard<Content: View>(

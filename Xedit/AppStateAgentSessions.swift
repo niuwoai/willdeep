@@ -384,9 +384,15 @@ extension AppState {
         let current = agentConfiguration.normalized
         let usesSomeIM = current.providerID == AgentProviderPreset.someIMID
             || agentProviderLibrary.active?.providerID == AgentProviderPreset.someIMID
+            || runtime.sessionProviderIDOverride == AgentProviderPreset.someIMID
             || runtime.managedRouting != nil
         guard usesSomeIM else { return false }
-        guard current.apiKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+        let configuredAPIKey = runtime.sessionProviderIDOverride == AgentProviderPreset.someIMID
+            ? agentProviderLibrary.entries.first(where: {
+                $0.providerID == AgentProviderPreset.someIMID
+            })?.apiKey ?? ""
+            : current.apiKey
+        guard configuredAPIKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
             return true
         }
 
@@ -400,9 +406,9 @@ extension AppState {
                 || agentProviderLibrary.active?.providerID == AgentProviderPreset.someIMID
         )
         syncSomeIMImageUnderstanding(apiKey: apiKey)
-        return !agentConfiguration.apiKey
+        return configurationForCurrentTurn(for: runtime).apiKey
             .trimmingCharacters(in: .whitespacesAndNewlines)
-            .isEmpty
+            .isEmpty == false
     }
 
     func refreshSomeIMRelayRouting(
@@ -639,12 +645,8 @@ extension AppState {
             if runtime.goalPlanningState?.phase == .readyForProposal {
                 let requiresDispatchGraph = runtime.session.presentationScope == .dispatchBoard
                 let availableProfiles = requiresDispatchGraph
-                    ? Set(
-                        AgentExecutionProfileStore().availableProfiles(
-                            workspacePath: runtime.workspaceLocation?.path
-                                ?? runtime.workspaceRootPath
-                        ).map(\.id)
-                    )
+                    ? Set(runtime.currentGoal?.selectedWorkerProfileIDs
+                        ?? [AgentExecutionProfile.recommendedWorkerID])
                     : nil
                 let failures = AgentGoalPlanProposalValidator.validationFailures(
                     content: last.content,
@@ -872,7 +874,8 @@ extension AppState {
         statement: String,
         items: [String],
         planningProfileID: String? = nil,
-        planningFallbackProfileIDs: [String] = []
+        planningFallbackProfileIDs: [String] = [],
+        selectedWorkerProfileIDs: [String]? = nil
     ) {
         guard let runtime = activeRuntime else { return }
         let trimmedStatement = statement.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -939,7 +942,10 @@ extension AppState {
             planningFallbackProfileIDs: planningProfileID == nil
                 ? previousGoal?.planningFallbackProfileIDs
                 : planningFallbackProfileIDs,
-            planningAttemptedProfileIDs: previousGoal?.planningAttemptedProfileIDs
+            planningAttemptedProfileIDs: previousGoal?.planningAttemptedProfileIDs,
+            selectedWorkerProfileIDs: selectedWorkerProfileIDs
+                ?? previousGoal?.selectedWorkerProfileIDs
+                ?? [AgentExecutionProfile.recommendedWorkerID]
         )
         runtime.currentGoal = updatedGoal
         if previousGoal != updatedGoal {
@@ -2166,7 +2172,9 @@ extension AppState {
             runtime.session.modelID = agentConfiguration.normalized.model(for: .interactive)
         }
         let activeProvider = agentProviderLibrary.active
-        runtime.session.providerID = activeProvider?.providerID ?? agentConfiguration.normalized.providerID
+        runtime.session.providerID = runtime.sessionProviderIDOverride
+            ?? activeProvider?.providerID
+            ?? agentConfiguration.normalized.providerID
         runtime.session.providerDisplayName = AgentProviderPreset.normalizedDisplayName(
             providerID: runtime.session.providerID,
             storedDisplayName: activeProvider?.displayName
@@ -2427,6 +2435,8 @@ extension AppState {
               runtime.isEmpty,
               !runtime.isResponding,
               runtime.managedRouting == nil,
+              runtime.sessionProviderIDOverride == nil,
+              runtime.sessionModelOverride == nil,
               defaultSomeIMManagedRoutingState() != nil else {
             return
         }
