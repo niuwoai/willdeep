@@ -470,6 +470,9 @@ extension AppState {
         guard !goal.isPaused else {
             return .blocked(message: L10n.Dispatch.goalPausedLaunch)
         }
+        guard goal.hasExecutablePlan else {
+            return .blocked(message: L10n.Dispatch.planNotReady)
+        }
         if let conflict = agentDispatchCoordinator.conflictingActiveGoal(for: goalID) {
             return .blocked(
                 message: L10n.Dispatch.projectAlreadyRunning(
@@ -615,6 +618,9 @@ extension AppState {
         guard let goal = agentDispatchCoordinator.goals.first(where: { $0.id == goalID }),
               !goal.isPaused else {
             return [.blocked(message: L10n.Dispatch.goalPausedLaunch)]
+        }
+        guard goal.hasExecutablePlan else {
+            return [.blocked(message: L10n.Dispatch.planNotReady)]
         }
         let capacity = max(1, goal.effectiveWorkerProfileIDs.count)
         let availableSlots = max(0, capacity - goal.activeTaskCount)

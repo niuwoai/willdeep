@@ -84,6 +84,7 @@ nonisolated struct AgentExecutionProfile: Codable, Equatable, Identifiable {
             name: "Kimi K3 Planner",
             executor: .willDeep,
             modelID: AgentDispatchModelRouting.recommendedPlanningModel,
+            providerID: someIMProviderID,
             origin: .builtIn
         ),
         AgentExecutionProfile(
@@ -328,14 +329,124 @@ nonisolated enum AgentGoalDispatchPlanParser {
         }
         if hasCycle(payload.nodes) {
             failures.append("dispatch-graph dependencies must form an acyclic graph")
+        } else if keySet.count == keys.count, !keys.contains(where: \.isEmpty) {
+            failures += semanticGraphFailures(payload.nodes)
         }
         return failures
     }
 
+    /// A syntactically valid graph can still be operationally useless. The
+    /// most common failure is a planner emitting every task as a root and
+    /// relying on the synthetic UI acceptance gate as its only convergence
+    /// point. That gate is not an execution node: it cannot integrate code,
+    /// run tests, or repair a failed deliverable. Multi-node projects must
+    /// therefore contain their own staged convergence before they reach it.
+    private static func semanticGraphFailures(_ nodes: [Payload.Node]) -> [String] {
+        guard nodes.count >= 3 else { return [] }
+
+        let dependenciesByKey = Dictionary(nodes.map { ($0.id, $0.dependsOn) }) {
+            _, latest in latest
+        }
+        let dependencyKeys = Set(nodes.flatMap(\.dependsOn))
+        let terminalKeys = nodes.map(\.id).filter { !dependencyKeys.contains($0) }
+        var failures: [String] = []
+
+        if nodes.allSatisfy({ $0.dependsOn.isEmpty }) {
+            failures.append(
+                "a dispatch graph with three or more nodes cannot put every node in the first parallel wave; add real prerequisite edges plus explicit integration and verification work before the synthetic acceptance gate"
+            )
+        }
+        if terminalKeys.count != 1 {
+            failures.append(
+                "a dispatch graph with three or more nodes must converge to exactly one executable terminal integration/verification node before the synthetic acceptance gate; found \(terminalKeys.count) terminal nodes"
+            )
+        }
+
+        var depths: [String: Int] = [:]
+        func depth(of key: String) -> Int {
+            if let existing = depths[key] { return existing }
+            let value = dependenciesByKey[key, default: []]
+                .map { depth(of: $0) }
+                .max()
+                .map { $0 + 1 } ?? 0
+            depths[key] = value
+            return value
+        }
+        let maximumDepth = nodes.map { depth(of: $0.id) }.max() ?? 0
+        if maximumDepth < 2 {
+            failures.append(
+                "a dispatch graph with three or more nodes needs at least three execution layers (foundation, implementation/integration, verification); the synthetic acceptance gate does not count as a layer"
+            )
+        }
+
+        let nodesByDepth = Dictionary(grouping: nodes) { depth(of: $0.id) }
+        let containsParallelWave = nodesByDepth.values.contains { $0.count > 1 }
+        let convergenceNodes = nodes.filter { node in
+            node.dependsOn.count >= 2 && hasIntegrationSemantics(node)
+        }
+        if containsParallelWave, convergenceNodes.isEmpty {
+            failures.append(
+                "parallel dispatch branches need a distinct merge/integration node whose depends_on lists the upstream implementation nodes"
+            )
+        }
+
+        if terminalKeys.count == 1,
+           let terminalKey = terminalKeys.first,
+           let terminalNode = nodes.first(where: { $0.id == terminalKey }) {
+            if !hasVerificationSemantics(terminalNode) {
+                failures.append(
+                    "the executable terminal node must be a distinct test, regression, or verification task before the synthetic acceptance gate"
+                )
+            }
+            if containsParallelWave {
+                let integrationKeys = Set(convergenceNodes.map(\.id))
+                let directIntegrationDependencies = Set(terminalNode.dependsOn)
+                    .intersection(integrationKeys)
+                if directIntegrationDependencies.isEmpty {
+                    failures.append(
+                        "the terminal verification node must depend directly on the distinct merge/integration node; merging code is execution work, not part of the synthetic acceptance gate"
+                    )
+                }
+            }
+        }
+        return failures
+    }
+
+    private static func hasIntegrationSemantics(_ node: Payload.Node) -> Bool {
+        containsSemanticMarker(
+            node,
+            markers: [
+                "merge", "integrat", "consolidat", "assemble",
+                "合并", "集成", "汇合", "汇总", "整合", "组装",
+            ]
+        )
+    }
+
+    private static func hasVerificationSemantics(_ node: Payload.Node) -> Bool {
+        containsSemanticMarker(
+            node,
+            markers: [
+                "test", "verify", "verification", "validation", "regression",
+                "review", "quality assurance", "acceptance",
+                "测试", "验证", "回归", "复核", "审查", "质检", "验收",
+            ]
+        )
+    }
+
+    private static func containsSemanticMarker(
+        _ node: Payload.Node,
+        markers: [String]
+    ) -> Bool {
+        let searchable = ([node.title] + node.acceptance)
+            .joined(separator: "\n")
+            .lowercased()
+        return markers.contains { searchable.contains($0) }
+    }
+
     private static func hasCycle(_ nodes: [Payload.Node]) -> Bool {
-        let dependencies = Dictionary(uniqueKeysWithValues: nodes.map {
-            ($0.id, $0.dependsOn)
-        })
+        let dependencies = Dictionary(nodes.map { ($0.id, $0.dependsOn) }) {
+            _, latest in latest
+        }
         var visiting: Set<String> = []
         var visited: Set<String> = []
 
