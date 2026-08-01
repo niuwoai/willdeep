@@ -1,6 +1,6 @@
 # WillDeep Product Overview
 
-> Last updated: 2026-08-01 | Current version: v1.220.0-rc16
+> Last updated: 2026-08-01 | Current version: v1.220.0-rc17
 
 ## Positioning
 
@@ -11,6 +11,8 @@ Official product domain: [willdeep.com](https://willdeep.com).
 WillDeep is configured for non-App-Store distribution without App Sandbox so it can access local project files with fewer permission interruptions.
 
 ## 架构概览
+
+- **测试报告拒绝“假绿”（1.220.0-rc17）** —— xcresult 无法验证时报告明确标记为 `unknown` 并返回非零状态；半成品 bundle 可从 xcodebuild 原始日志恢复结论，完整测试、快速测试与 CI 使用同一套判定契约。
 
 - **快速测试链路统一 UTF-8（1.220.0-rc16）** —— 快速测试入口固定 Ruby 与子进程使用 UTF-8，并清理 Git 输出中的非法字节；包含中文的工作区 diff 不再让源码指纹生成异常退出。
 

@@ -1,7 +1,23 @@
 # Changelog
 
-> 当前文件保留最新版本（1.220.0-rc16 至 1.109.0-rc340）。
+> 当前文件保留最新版本（1.220.0-rc17 至 1.109.0-rc340）。
 > 更早的 1000 个版本已移至 [CHANGELOG-ARCHIVE.md](CHANGELOG-ARCHIVE.md)。
+
+## 1.220.0-rc17 - 2026-08-01
+
+### Fixed
+
+- 测试报告无法解析 xcresult 时不再把零计数渲染成“通过”；报告明确区分 `passed`、`failed` 与 `unknown`，无法确认时以非零状态退出。
+- xcresult 损坏或收尾不完整时，报告器可从原始 xcodebuild 日志恢复测试结论与计数；看门狗先发送 SIGTERM 并等待收尾，超时后才升级为 SIGKILL。
+- 完整测试、快速测试与 CI 都向报告器传入对应日志，并保留报告器的失败或未知退出状态。
+
+### Tests
+
+- 新增 xcresult 报告契约，覆盖半成品 bundle、通过/失败日志回退、缺失 bundle、显式日志路径及零用例门禁。
+
+### Meta
+
+- Bugfix 预发布版本从 **1.220.0-rc16** 递增为 **1.220.0-rc17**，内部构建号从 **248** 递增为 **249**，Help 与 Computer Use Helper 构建号从 **165** 递增为 **166**；App、Go agent、Help、Helper、浏览器扩展、README、响应头契约与产品文档保持一致。
 
 ## 1.220.0-rc16 - 2026-08-01
 
@@ -916,7 +932,6 @@
 ### Meta
 
 - 版本号从 **1.210.0-rc19** 提升为 **1.211.0-rc1**（新增完整 Computer Use 控制会话与安全接管能力），内部构建号从 **194** 递增为 **195**，Help 与 Computer Use Helper 构建号从 **111** 递增为 **112**；App、Go agent、Help、Helper、浏览器扩展、README、响应头契约与产品文档保持一致。
-
 ## 1.210.0-rc19 - 2026-07-28
 
 ### Fixed

@@ -104,6 +104,9 @@ jobs:
           SOMEIM_DEPLOY_KEY: ${{ secrets.SOMEIM_DEPLOY_KEY }}
         run: ruby scripts/configure_ci_private_spm.rb
 
+      - name: Run xcresult report contract guard
+        run: ruby scripts/xcresult_report_contract_test.rb build/ci/xcresult_report_contract_report.md build/ci/xcresult_report_contract_report.json
+
       - name: Build test products
         run: |
           CACHE_ROOT="${HOME}/Library/Caches/WillDeepCI/Xcode/${RUNNER_NAME:-default}"
@@ -165,7 +168,7 @@ jobs:
 
       - name: Generate Markdown and JSON report
         if: always()
-        run: ruby scripts/xcresult_report.rb build/ci/XeditTests.xcresult build/ci/report.md build/ci/report.json
+        run: ruby scripts/xcresult_report.rb build/ci/XeditTests.xcresult build/ci/report.md build/ci/report.json --log build/ci/xcodebuild-test.log
 
       - name: Append report to job summary
         if: always()

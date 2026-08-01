@@ -254,14 +254,24 @@ unless without_building
   )
 end
 
+# xcodebuild exited 0, but that alone is not proof: xcodebuild_ci.rb also exits
+# 0 after reclaiming a hung run, and a bundle killed mid-finalization is
+# unreadable. The reporter exits non-zero unless it can actually verify the run
+# (falling back to the raw log when the bundle is broken), so treat its verdict
+# as authoritative and echo the report — callers routinely pipe us through
+# `tail`, where a swallowed exit code would leave nothing but the report text.
 report_success = system(
   "ruby",
   File.join(ROOT, "scripts", "xcresult_report.rb"),
   XCRESULT,
   REPORT_MD,
   REPORT_JSON,
+  "--log", LOG,
   chdir: ROOT
 )
-abort "Tests passed, but report generation failed." unless report_success
+unless report_success
+  puts File.read(REPORT_MD, encoding: "UTF-8") if File.file?(REPORT_MD)
+  abort "❌ xcodebuild exited 0, but the test report could not confirm a pass — see #{REPORT_MD}."
+end
 
 puts "✅ Fast test report: #{REPORT_MD}"
