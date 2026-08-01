@@ -178,6 +178,12 @@ struct AgentSessionsSidebar: View {
     private let trafficLightReserve: CGFloat = 30
 
     var body: some View {
+        // Materialize one stable snapshot per body evaluation. Passing the
+        // computed grouping directly into ForEach made every sidebar
+        // invalidation rebuild its filter/group/sort pipeline while SwiftUI
+        // was also reconciling the list.
+        let workspaceGroups = groupedSessions
+
         VStack(spacing: 0) {
             // Keep the traffic-light safe area, but let the real navigation
             // start immediately below it. The former "Chats" / provider
@@ -185,11 +191,14 @@ struct AgentSessionsSidebar: View {
             // valuable vertical space in the sidebar.
             Color.clear.frame(height: trafficLightReserve)
             ScrollView {
-                // Workspace groups are the expensive unit: each contains up
-                // to five transcript rows plus badges/actions. Keeping them
-                // as direct LazyVStack children prevents off-screen projects
-                // from participating in every AttributeGraph layout pass.
-                LazyVStack(alignment: .leading, spacing: 0) {
+                // Keep the workspace stack eager. On macOS 26 the lazy-stack
+                // item-phase cache can continuously invalidate when these
+                // dynamic workspace groups contain nested ForEach rows. That
+                // traps the main thread in AttributeGraph transactions and
+                // consumes a full CPU core even while the sidebar is idle.
+                // Each collapsed group renders at most five active rows, so
+                // the bounded eager layout is the safer trade-off here.
+                VStack(alignment: .leading, spacing: 0) {
                     primaryActions
                     Spacer().frame(height: 18)
                     if appState.agentPrimaryDestination == .dispatchBoard {
@@ -199,7 +208,7 @@ struct AgentSessionsSidebar: View {
                     } else {
                         pinnedSessionsSection
                         workspacesHeader
-                        ForEach(groupedSessions) { group in
+                        ForEach(workspaceGroups) { group in
                             workspaceGroup(group)
                         }
                         if appState.agentSessions.isEmpty {

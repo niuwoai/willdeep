@@ -105,6 +105,21 @@ struct AgentSidebarListVisualMetricsTests {
         #expect(sidebarSource.contains("tooltip: session.title"))
     }
 
+    @Test("conversation sidebar avoids the unstable SwiftUI lazy-stack cache")
+    func conversationSidebarKeepsWorkspaceLayoutEager() throws {
+        let repositoryRoot = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+        let sidebarSource = try String(
+            contentsOf: repositoryRoot.appendingPathComponent("Xedit/AgentSessionsSidebar.swift"),
+            encoding: .utf8
+        )
+
+        #expect(sidebarSource.contains("ForEach(workspaceGroups)"))
+        #expect(sidebarSource.contains("VStack(alignment: .leading, spacing: 0)"))
+        #expect(!sidebarSource.contains("LazyVStack"))
+    }
+
     @Test("workspace and conversation titles share the Codex text column")
     func titleColumnsAlign() {
         let workspaceTitleX = AgentDesign.sidebarWorkspaceHorizontalInset

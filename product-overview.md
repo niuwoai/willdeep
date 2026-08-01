@@ -1,6 +1,6 @@
 # WillDeep Product Overview
 
-> Last updated: 2026-08-01 | Current version: v1.221.0-rc1
+> Last updated: 2026-08-01 | Current version: v1.221.0-rc2
 
 ## Positioning
 
@@ -11,6 +11,8 @@ Official product domain: [willdeep.com](https://willdeep.com).
 WillDeep is configured for non-App-Store distribution without App Sandbox so it can access local project files with fewer permission interruptions.
 
 ## 架构概览
+
+- **工作区侧栏布局稳定性（1.221.0-rc2）** —— 工作区会话列表使用规模受控的 eager stack，并在每次视图求值中复用同一份分组快照，避开 macOS 26 的 SwiftUI lazy-stack 项目阶段缓存失效循环；侧栏空闲时不再因 AttributeGraph 持续布局而占满单个 CPU 核心。
 
 - **结构化外部 Agent 执行器（1.221.0-rc1）** —— capability resolver 会在 Claude ACP、Codex app-server、结构化进程、远端 daemon、可见终端和兼容 shell 之间选路；所有路径共享会话、思考、工具、文件、usage、警告、停止、超时、脱敏和 sandbox 生命周期。显式 Claude Agent、Codex Profile、可见终端、SSH、Cursor、Cline 与 Hermes 继续走兼容路径。详细能力矩阵见 `docs/STRUCTURED_AGENT_EXECUTORS.md`。
 

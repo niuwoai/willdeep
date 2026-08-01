@@ -1,7 +1,22 @@
 # Changelog
 
-> 当前文件保留最新版本（1.221.0-rc1 至 1.109.0-rc340）。
+> 当前文件保留最新版本（1.221.0-rc2 至 1.109.0-rc340）。
 > 更早的 1000 个版本已移至 [CHANGELOG-ARCHIVE.md](CHANGELOG-ARCHIVE.md)。
+
+## 1.221.0-rc2 - 2026-08-01
+
+### Fixed
+
+- 工作区会话侧栏改用有界的 eager `VStack`，避开 macOS 26 上 `LazyVStack` 项目阶段缓存持续失效导致的主线程 AttributeGraph 布局风暴和单核满载。
+- 工作区过滤、分组与排序结果在每次视图求值中只生成一份稳定快照，不再把计算属性直接交给 `ForEach` 协调。
+
+### Tests
+
+- 新增侧栏布局回归门禁，确保工作区列表继续使用 eager stack，并保留现有 16 项视觉、渲染和布局测试。
+
+### Meta
+
+- Bugfix 预发布版本从 **1.221.0-rc1** 递增为 **1.221.0-rc2**，内部构建号从 **250** 递增为 **251**，Help 与 Computer Use Helper 构建号从 **167** 递增为 **168**；App、Go agent、Help、Helper、浏览器扩展、README、响应头契约与产品文档保持一致。
 
 ## 1.221.0-rc1 - 2026-08-01
 
