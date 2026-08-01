@@ -127,6 +127,76 @@ struct AgentDispatchCoordinatorTests {
         )
     }
 
+    @Test("规划 Profile 独立于 Worker 池并同时固定 some.im Provider 与 Kimi 模型")
+    func planningProfileIsIndependentFromWorkerPool() throws {
+        let planner = try #require(
+            AgentExecutionProfile.builtIns.first {
+                $0.id == AgentExecutionProfile.recommendedPlannerID
+            }
+        )
+        let worker = try #require(
+            AgentExecutionProfile.builtIns.first {
+                $0.id == AgentExecutionProfile.recommendedWorkerID
+            }
+        )
+        let selectedWorkerProfileIDs = [worker.id]
+        let catalog = AgentDispatchProfileResolver.planningCatalog(
+            primaryProfileID: planner.id,
+            fallbackProfileIDs: [],
+            profiles: AgentExecutionProfile.builtIns
+        )
+
+        #expect(selectedWorkerProfileIDs == [AgentExecutionProfile.recommendedWorkerID])
+        #expect(catalog.map(\.id) == [AgentExecutionProfile.recommendedPlannerID])
+        #expect(planner.providerID == AgentProviderPreset.someIMID)
+        #expect(planner.modelID == "kimi-k3")
+    }
+
+    @Test("调度项目捕获计划后交给子任务运行时而不是父会话续跑")
+    func capturedDispatchPlanHandsOffToTaskRuntimes() {
+        #expect(AgentDispatchPlanHandoffPolicy.shouldHandoffToTaskRuntimes(
+            captureOutcome: .captured,
+            presentationScope: .dispatchBoard
+        ))
+        #expect(!AgentDispatchPlanHandoffPolicy.shouldHandoffToTaskRuntimes(
+            captureOutcome: .captured,
+            presentationScope: .workspace
+        ))
+        #expect(!AgentDispatchPlanHandoffPolicy.shouldHandoffToTaskRuntimes(
+            captureOutcome: .proposalRejectedNeedsRetry,
+            presentationScope: .dispatchBoard
+        ))
+    }
+
+    @Test("规划完成前验收清单不投影为可执行根节点")
+    func acceptanceChecklistDoesNotBecomeExecutableTasks() throws {
+        let sandbox = try makeSandbox()
+        defer { sandbox.cleanup() }
+        let coordinator = AgentDispatchCoordinator(
+            store: AgentDispatchStore(defaults: sandbox.defaults)
+        )
+        let session = AgentSession(
+            title: "等待规划",
+            workspaceRootPath: "/tmp/planning",
+            presentationScope: .dispatchBoard,
+            currentGoal: AgentGoal(
+                statement: "实现并验收",
+                checklist: [
+                    .init(text: "构建通过"),
+                    .init(text: "回归通过"),
+                    .init(text: "文档完整"),
+                ]
+            )
+        )
+
+        coordinator.synchronize(with: [session])
+
+        let projected = try #require(coordinator.selectedGoal)
+        #expect(projected.tasks.isEmpty)
+        #expect(!projected.hasExecutablePlan)
+        #expect(!projected.hasReadyTask)
+    }
+
     @Test("Worker 池补齐节点回退链并优先分配空闲 Worker")
     func workerPoolExtendsFallbackAndPrefersIdleWorker() throws {
         let profiles = [
@@ -189,7 +259,18 @@ struct AgentDispatchCoordinatorTests {
             presentationScope: .dispatchBoard,
             currentGoal: AgentGoal(
                 statement: "交付项目",
-                checklist: [AgentGoal.Item(id: taskID, text: "实现")]
+                checklist: [AgentGoal.Item(text: "实现")],
+                dispatchPlan: AgentGoalDispatchPlan(nodes: [
+                    .init(
+                        id: taskID,
+                        key: "TASK-1",
+                        title: "实现",
+                        dependencyIDs: [],
+                        primaryProfileID: AgentExecutionProfile.recommendedWorkerID,
+                        fallbackProfileIDs: [],
+                        acceptanceCriteria: ["实现完成"]
+                    ),
+                ])
             )
         )
         coordinator.synchronize(with: [projectSession])
@@ -333,11 +414,19 @@ struct AgentDispatchCoordinatorTests {
             },
             {
               "id": "MERGE-1",
-              "title": "集成验收",
+              "title": "合并并集成左右分支代码",
               "depends_on": ["LEFT-1", "RIGHT-1"],
               "profile": "planner",
               "fallback_profiles": ["fallback"],
-              "acceptance": ["集成测试通过"]
+              "acceptance": ["分支代码合并且构建成功"]
+            },
+            {
+              "id": "VERIFY-1",
+              "title": "独立回归测试",
+              "depends_on": ["MERGE-1"],
+              "profile": "worker",
+              "fallback_profiles": ["fallback"],
+              "acceptance": ["集成测试全部通过"]
             }
           ]
         }
@@ -379,12 +468,14 @@ struct AgentDispatchCoordinatorTests {
         let tasks = try #require(coordinator.selectedGoal?.tasks)
         let left = try #require(tasks.first { $0.title == "实现左分支" })
         let right = try #require(tasks.first { $0.title == "实现右分支" })
-        let merge = try #require(tasks.first { $0.title == "集成验收" })
-        #expect(tasks.count == 4)
+        let merge = try #require(tasks.first { $0.title == "合并并集成左右分支代码" })
+        let verification = try #require(tasks.first { $0.title == "独立回归测试" })
+        #expect(tasks.count == 5)
         #expect(Set(merge.dependencyIDs) == Set([left.id, right.id]))
         #expect(merge.primaryProfileID == "planner")
         #expect(merge.fallbackProfileIDs == ["fallback"])
         #expect(merge.state == .blocked)
+        #expect(verification.dependencyIDs == [merge.id])
 
         let manual = try #require(
             coordinator.appendTask(
@@ -402,7 +493,129 @@ struct AgentDispatchCoordinatorTests {
         let revisedTasks = try #require(coordinator.selectedGoal?.tasks)
         #expect(revisedTasks.contains { $0.id == manual.id })
         #expect(!revisedTasks.contains { $0.title == "实现右分支" })
-        #expect(!revisedTasks.contains { $0.title == "集成验收" })
+        #expect(!revisedTasks.contains { $0.title == "合并并集成左右分支代码" })
+    }
+
+    @Test("多节点任务图拒绝全部首轮并行后直连虚拟验收关卡")
+    func aiDispatchGraphRejectsFlatParallelWave() {
+        let content = """
+        ```dispatch-graph
+        {"nodes":[
+          {"id":"GAME-1","title":"贪吃蛇","depends_on":[],"profile":"worker","fallback_profiles":[],"acceptance":["可运行"]},
+          {"id":"GAME-2","title":"俄罗斯方块","depends_on":[],"profile":"worker","fallback_profiles":[],"acceptance":["可运行"]},
+          {"id":"GAME-3","title":"扫雷","depends_on":[],"profile":"worker","fallback_profiles":[],"acceptance":["可运行"]}
+        ]}
+        ```
+        """
+
+        let failures = AgentGoalDispatchPlanParser.validationFailures(
+            content: content,
+            availableProfileIDs: ["worker"]
+        )
+        #expect(failures.contains { $0.contains("cannot put every node in the first parallel wave") })
+        #expect(failures.contains { $0.contains("exactly one executable terminal") })
+        #expect(AgentGoalDispatchPlanParser.extract(
+            from: content,
+            availableProfileIDs: ["worker"]
+        ) == nil)
+    }
+
+    @Test("重复任务 ID 安全返回校验失败而不是构造依赖图崩溃")
+    func aiDispatchGraphRejectsDuplicateIDsSafely() {
+        let content = """
+        ```dispatch-graph
+        {"nodes":[
+          {"id":"TASK-1","title":"实现 A","depends_on":[],"profile":"worker","fallback_profiles":[],"acceptance":["A 完成"]},
+          {"id":"TASK-1","title":"实现 B","depends_on":[],"profile":"worker","fallback_profiles":[],"acceptance":["B 完成"]},
+          {"id":"VERIFY-1","title":"回归测试","depends_on":["TASK-1"],"profile":"worker","fallback_profiles":[],"acceptance":["测试通过"]}
+        ]}
+        ```
+        """
+
+        let failures = AgentGoalDispatchPlanParser.validationFailures(
+            content: content,
+            availableProfileIDs: ["worker"]
+        )
+        #expect(failures.contains { $0.contains("non-empty and unique") })
+        #expect(AgentGoalDispatchPlanParser.extract(
+            from: content,
+            availableProfileIDs: ["worker"]
+        ) == nil)
+    }
+
+    @Test("多节点任务图拒绝有分叉但没有集成汇聚的两层计划")
+    func aiDispatchGraphRejectsUnconvergedFanOut() {
+        let content = """
+        ```dispatch-graph
+        {"nodes":[
+          {"id":"BASE-1","title":"公共框架","depends_on":[],"profile":"worker","fallback_profiles":[],"acceptance":["框架可用"]},
+          {"id":"GAME-1","title":"贪吃蛇","depends_on":["BASE-1"],"profile":"worker","fallback_profiles":[],"acceptance":["可运行"]},
+          {"id":"GAME-2","title":"俄罗斯方块","depends_on":["BASE-1"],"profile":"worker","fallback_profiles":[],"acceptance":["可运行"]}
+        ]}
+        ```
+        """
+
+        let failures = AgentGoalDispatchPlanParser.validationFailures(
+            content: content,
+            availableProfileIDs: ["worker"]
+        )
+        #expect(failures.contains { $0.contains("exactly one executable terminal") })
+        #expect(failures.contains { $0.contains("at least three execution layers") })
+        #expect(failures.contains { $0.contains("distinct merge/integration node") })
+    }
+
+    @Test("并行代码分支拒绝把合并和测试塞进同一个末端节点")
+    func aiDispatchGraphRejectsCombinedMergeAndVerification() {
+        let content = """
+        ```dispatch-graph
+        {"nodes":[
+          {"id":"BASE-1","title":"公共框架","depends_on":[],"profile":"worker","fallback_profiles":[],"acceptance":["框架可用"]},
+          {"id":"GAME-1","title":"实现贪吃蛇","depends_on":["BASE-1"],"profile":"worker","fallback_profiles":[],"acceptance":["可运行"]},
+          {"id":"GAME-2","title":"实现俄罗斯方块","depends_on":["BASE-1"],"profile":"worker","fallback_profiles":[],"acceptance":["可运行"]},
+          {"id":"MERGE-VERIFY-1","title":"合并代码并测试验收","depends_on":["GAME-1","GAME-2"],"profile":"worker","fallback_profiles":[],"acceptance":["全部测试通过"]}
+        ]}
+        ```
+        """
+
+        let failures = AgentGoalDispatchPlanParser.validationFailures(
+            content: content,
+            availableProfileIDs: ["worker"]
+        )
+        #expect(failures.contains { $0.contains("terminal verification node must depend directly") })
+        #expect(AgentGoalDispatchPlanParser.extract(
+            from: content,
+            availableProfileIDs: ["worker"]
+        ) == nil)
+    }
+
+    @Test("小游戏平台任务图通过基础、并行实现、集成与独立回归四层语义门禁")
+    func aiDispatchGraphAcceptsStagedGamePlatform() throws {
+        let content = """
+        ```dispatch-graph
+        {"nodes":[
+          {"id":"BASE-1","title":"公共框架与游戏契约","depends_on":[],"profile":"worker","fallback_profiles":[],"acceptance":["公共 API 固定"]},
+          {"id":"GAME-1","title":"贪吃蛇","depends_on":["BASE-1"],"profile":"worker","fallback_profiles":[],"acceptance":["可运行"]},
+          {"id":"GAME-2","title":"俄罗斯方块","depends_on":["BASE-1"],"profile":"worker","fallback_profiles":[],"acceptance":["可运行"]},
+          {"id":"INTEGRATE-1","title":"平台集成","depends_on":["GAME-1","GAME-2"],"profile":"worker","fallback_profiles":[],"acceptance":["路由、计分和存储连通"]},
+          {"id":"VERIFY-1","title":"浏览器回归测试","depends_on":["INTEGRATE-1"],"profile":"worker","fallback_profiles":[],"acceptance":["自动化测试全部通过"]}
+        ]}
+        ```
+        """
+
+        let plan = try #require(AgentGoalDispatchPlanParser.extract(
+            from: content,
+            availableProfileIDs: ["worker"]
+        ))
+        #expect(plan.nodes.count == 5)
+        let layout = AgentDispatchGraphLayout(tasks: plan.nodes.map { node in
+            AgentDispatchTask(
+                id: node.id,
+                title: node.title,
+                dependencyIDs: node.dependencyIDs
+            )
+        })
+        #expect(layout.levelCount == 5)
+        #expect(layout.edges.filter { $0.targetID == nil }.count == 1)
     }
 
     @Test("结构化节点编辑拒绝循环依赖并保留原计划")
@@ -472,6 +685,8 @@ struct AgentDispatchCoordinatorTests {
         let coordinator = AgentDispatchCoordinator(
             store: AgentDispatchStore(defaults: sandbox.defaults)
         )
+        let firstID = UUID()
+        let secondID = UUID()
         coordinator.synchronize(
             with: [
                 AgentSession(
@@ -482,7 +697,27 @@ struct AgentDispatchCoordinatorTests {
                         checklist: [
                             AgentGoal.Item(text: "任务 A"),
                             AgentGoal.Item(text: "任务 B"),
-                        ]
+                        ],
+                        dispatchPlan: AgentGoalDispatchPlan(nodes: [
+                            .init(
+                                id: firstID,
+                                key: "TASK-A",
+                                title: "任务 A",
+                                dependencyIDs: [],
+                                primaryProfileID: nil,
+                                fallbackProfileIDs: [],
+                                acceptanceCriteria: ["A 完成"]
+                            ),
+                            .init(
+                                id: secondID,
+                                key: "TASK-B",
+                                title: "任务 B",
+                                dependencyIDs: [],
+                                primaryProfileID: nil,
+                                fallbackProfileIDs: [],
+                                acceptanceCriteria: ["B 完成"]
+                            ),
+                        ])
                     )
                 ),
             ]
@@ -512,6 +747,7 @@ struct AgentDispatchCoordinatorTests {
             store: AgentDispatchStore(defaults: sandbox.defaults)
         )
         let firstID = UUID()
+        let secondID = UUID()
         let session = AgentSession(
             title: "Orchestrator MVP",
             workspaceRootPath: "/tmp/Orchestrator",
@@ -519,8 +755,28 @@ struct AgentDispatchCoordinatorTests {
                 statement: "交付可交互调度台",
                 checklist: [
                     AgentGoal.Item(id: firstID, text: "搭建任务图"),
-                    AgentGoal.Item(text: "接入 SSH"),
-                ]
+                    AgentGoal.Item(id: secondID, text: "接入 SSH"),
+                ],
+                dispatchPlan: AgentGoalDispatchPlan(nodes: [
+                    .init(
+                        id: firstID,
+                        key: "TASK-1",
+                        title: "搭建任务图",
+                        dependencyIDs: [],
+                        primaryProfileID: nil,
+                        fallbackProfileIDs: [],
+                        acceptanceCriteria: ["任务图可用"]
+                    ),
+                    .init(
+                        id: secondID,
+                        key: "TASK-2",
+                        title: "接入 SSH",
+                        dependencyIDs: [firstID],
+                        primaryProfileID: nil,
+                        fallbackProfileIDs: [],
+                        acceptanceCriteria: ["SSH 可用"]
+                    ),
+                ])
             )
         )
 
@@ -535,6 +791,14 @@ struct AgentDispatchCoordinatorTests {
         let appended = try #require(
             coordinator.appendTask(title: "视觉验收", goalID: goalID)
         )
+        coordinator.markTaskStarted(
+            goalID: goalID,
+            taskID: firstID,
+            executor: .willDeep,
+            target: .local,
+            runtimeSessionID: UUID()
+        )
+        coordinator.updateTaskState(goalID: goalID, taskID: firstID, state: .merged)
 
         var updatedSession = session
         updatedSession.currentGoal?.checklist[0].done = true
@@ -546,7 +810,7 @@ struct AgentDispatchCoordinatorTests {
         #expect(synchronized.commands.map(\.text).contains("先补测试"))
         #expect(synchronized.tasks.contains(where: { $0.id == appended.id }))
         #expect(synchronized.tasks.first(where: { $0.id == firstID })?.state == .merged)
-        #expect(synchronized.tasks[1].state == .queued)
+        #expect(synchronized.tasks.first(where: { $0.id == secondID })?.state == .queued)
         #expect(synchronized.workspaceLocation == .local(path: "/tmp/Orchestrator"))
         #expect(synchronized.isWorkspaceBound)
         #expect(synchronized.logicalProject?.displayName == "Orchestrator")
@@ -1148,9 +1412,7 @@ struct AgentDispatchCoordinatorTests {
         )
         appState.setAgentGoal(statement: "通知路由", items: ["执行节点"])
         appState.agentDispatchCoordinator.synchronize(with: appState.agentSessions)
-        let taskID = try #require(
-            appState.agentDispatchCoordinator.selectedGoal?.tasks.first?.id
-        )
+        let taskID = UUID()
 
         appState.agentPrimaryDestination = .conversation
         appState.revealAgentSessionFromNotification(id: project.id)

@@ -144,6 +144,14 @@ extension L10n {
             localized: "dispatch.start-execution",
             defaultValue: "Start Execution"
         )
+        static let planningInProgress = String(
+            localized: "dispatch.planning-in-progress",
+            defaultValue: "Planning…"
+        )
+        static let planNotReady = String(
+            localized: "dispatch.plan-not-ready",
+            defaultValue: "Wait for the planner to produce a validated task graph before launching Workers."
+        )
         static let continueExecution = String(
             localized: "dispatch.continue-execution",
             defaultValue: "Continue Execution"

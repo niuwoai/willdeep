@@ -736,31 +736,12 @@ final class AgentDispatchCoordinator: ObservableObject {
                 return task
             }
         } else {
-            // Until the planner emits a dispatch graph, acceptance items are
-            // independent placeholders. They must never be converted into a
-            // fake serial execution plan.
+            // Until the planner emits a dispatch graph, acceptance items stay
+            // exclusively in the synthetic acceptance gate. Projecting them
+            // as task cards makes the board look like one flat parallel wave
+            // and, worse, lets the scheduler mistake evidence for work.
             sourceTaskIDs = Set(sourceGoal.checklist.map(\.id))
-            projectedTasks = sourceGoal.checklist.map { item in
-                var task = oldTasks[item.id] ?? AgentDispatchTask(
-                    id: item.id,
-                    title: item.text,
-                    dependencyIDs: [],
-                    primaryProfileID: AgentExecutionProfile.recommendedWorkerID,
-                    branchName: branchName(for: item.text),
-                    acceptanceCriteria: [item.text],
-                    createdAt: session.createdAt,
-                    updatedAt: session.updatedAt
-                )
-                task.title = item.text
-                task.dependencyIDs = []
-                if item.done {
-                    task.state = .merged
-                } else if task.runtimeSessionID == nil {
-                    task.state = .queued
-                }
-                task.updatedAt = max(task.updatedAt, session.updatedAt)
-                return task
-            }
+            projectedTasks = []
         }
         let acceptancePlaceholderIDs = Set(sourceGoal.checklist.map(\.id))
         let manuallyAppendedTasks = (existing?.tasks ?? []).filter {

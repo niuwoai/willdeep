@@ -1,6 +1,6 @@
 # WillDeep Product Overview
 
-> Last updated: 2026-08-01 | Current version: v1.222.0-rc1
+> Last updated: 2026-08-02 | Current version: v1.222.0-rc3
 
 ## Positioning
 
@@ -11,6 +11,9 @@ Official product domain: [willdeep.com](https://willdeep.com).
 WillDeep is configured for non-App-Store distribution without App Sandbox so it can access local project files with fewer permission interruptions.
 
 ## 架构概览
+
+- **调度图阶段语义门禁（1.222.0-rc2）** —— 多节点规划不能再把所有任务塞进首轮并行后直接连接虚拟验收关卡。宿主会拒绝并自动要求规划器修正没有真实依赖、没有唯一末端任务或没有显式汇合的 DAG；并行写代码节点必须依赖清晰的前置契约，并汇入独立的代码合并/集成节点，随后由另一个独立测试/回归节点验证，最后才连接仅用于展示最终状态的验收关卡。规划 Profile 与 Worker 池独立选路，`Kimi K3 Planner` 固定使用 `some-im / kimi-k3`，不会因执行 Worker 选择而静默切换模型；最终合成失败会沿规划回退链有界切换。有效 DAG 被捕获后，父项目会话只保留规划与调度职责，实际执行立即交给按依赖创建的隔离子任务运行时，避免父会话绕过 worktree、Worker 路由和独立合并节点自行写完整项目。
+- **规划前调度硬门禁（1.222.0-rc3）** —— 项目验收清单只属于虚拟验收关卡，不再在规划完成前伪装成一排可执行任务卡。调度页会显示“规划中”，所有手动启动入口和恢复调度路径都由宿主二次检查：只有已捕获、已校验并带稳定计划节点标识的正式 DAG 才能占用 Worker；因此不会再出现“所有验收项第一步全并行，然后直接验收”的假任务图。
 
 - **调度台多 Worker 池（1.222.0-rc1）** —— 每个调度项目可勾选多个 Worker，包括 WillDeep + some.im 模型、Codex CLI 原生 Profile 和 Claude Code Agent；外部执行器在统一管理页预发现并显示可用性。就绪节点按 Worker 容量并行启动，优先分配空闲 Worker，失败后自动切换尚未尝试的可用 Worker。WillDeep Worker 同时固定 Provider 与模型，默认 `some-im / deepseek-v4-flash / Responses`，登录态刷新不会把它改回省心托管；本机 Git 节点使用独立 worktree，重启后会恢复完成监控并对账验收清单，再自动解锁后继节点。
 
