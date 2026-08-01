@@ -269,9 +269,12 @@ struct AgentEntryModelSelectionTests {
     }
 
     @Test
-    func signedInSomeIMDefaultsNewChatsToManagedRouting() {
+    func signedInSomeIMDefaultsNewChatsToDeepSeekV4Flash() {
         let _sandbox = installKeychainSandbox(); _ = _sandbox
         let app = AppState()
+        let previousPreference = AgentSettingsStore.loadDefaultModelModePreference()
+        AgentSettingsStore.saveDefaultModelModePreference(.automatic)
+        defer { AgentSettingsStore.saveDefaultModelModePreference(previousPreference) }
         SomeIMIntegrationStore._setTestSharedSessionOverride(enabled: true)
         defer { SomeIMIntegrationStore._setTestSharedSessionOverride(enabled: false) }
         #expect(SomeIMIntegrationStore.saveAPIKey("test-fixture-someim-key"))
@@ -283,9 +286,10 @@ struct AgentEntryModelSelectionTests {
         let session = app.startNewAgentSession()
 
         #expect(app.agentProviderLibrary.active?.providerID == AgentProviderPreset.someIMID)
-        #expect(session.modelID == nil)
-        #expect(session.managedRouting != nil)
-        #expect(app.activeRuntime?.managedRouting != nil)
+        #expect(session.modelID == "deepseek-v4-flash")
+        #expect(session.managedRouting == nil)
+        #expect(app.activeRuntime?.managedRouting == nil)
+        #expect(app.activeAgentModelID == "deepseek-v4-flash")
         #expect(AgentSettingsStore.loadDefaultModelModePreference() == .automatic)
     }
 
@@ -293,6 +297,9 @@ struct AgentEntryModelSelectionTests {
     func manualModelChoiceOnlyOverridesCurrentChatManagedDefault() {
         let _sandbox = installKeychainSandbox(); _ = _sandbox
         let app = AppState()
+        let previousPreference = AgentSettingsStore.loadDefaultModelModePreference()
+        AgentSettingsStore.saveDefaultModelModePreference(.managed)
+        defer { AgentSettingsStore.saveDefaultModelModePreference(previousPreference) }
         SomeIMIntegrationStore._setTestSharedSessionOverride(enabled: true)
         defer { SomeIMIntegrationStore._setTestSharedSessionOverride(enabled: false) }
         #expect(SomeIMIntegrationStore.saveAPIKey("test-fixture-someim-key"))
@@ -303,7 +310,7 @@ struct AgentEntryModelSelectionTests {
         app.startNewAgentSession()
 
         app.setAgentSessionModel("someim-auto-flash")
-        #expect(AgentSettingsStore.loadDefaultModelModePreference() == .automatic)
+        #expect(AgentSettingsStore.loadDefaultModelModePreference() == .managed)
         let managedSession = app.startNewAgentSession()
         #expect(managedSession.modelID == nil)
         #expect(managedSession.managedRouting != nil)
@@ -313,6 +320,9 @@ struct AgentEntryModelSelectionTests {
     func explicitSomeIMModelSurvivesPersistAndRuntimeRestoration() throws {
         let _sandbox = installKeychainSandbox(); _ = _sandbox
         let app = AppState()
+        let previousPreference = AgentSettingsStore.loadDefaultModelModePreference()
+        AgentSettingsStore.saveDefaultModelModePreference(.managed)
+        defer { AgentSettingsStore.saveDefaultModelModePreference(previousPreference) }
         SomeIMIntegrationStore._setTestSharedSessionOverride(enabled: true)
         defer { SomeIMIntegrationStore._setTestSharedSessionOverride(enabled: false) }
         #expect(SomeIMIntegrationStore.saveAPIKey("test-fixture-someim-key"))
@@ -339,9 +349,11 @@ struct AgentEntryModelSelectionTests {
     }
 
     @Test
-    func disablingManagedDefaultStartsNewChatsWithSomeIMAutoFlash() {
+    func disablingManagedDefaultStartsNewChatsWithSomeIMDeepSeekV4Flash() {
         let _sandbox = installKeychainSandbox(); _ = _sandbox
         let app = AppState()
+        let previousPreference = AgentSettingsStore.loadDefaultModelModePreference()
+        defer { AgentSettingsStore.saveDefaultModelModePreference(previousPreference) }
         SomeIMIntegrationStore._setTestSharedSessionOverride(enabled: true)
         defer { SomeIMIntegrationStore._setTestSharedSessionOverride(enabled: false) }
         #expect(SomeIMIntegrationStore.saveAPIKey("test-fixture-someim-key"))

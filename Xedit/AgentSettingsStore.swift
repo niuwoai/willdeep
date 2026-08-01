@@ -15,8 +15,8 @@ struct AgentModelDiscovery: Codable, Equatable {
 }
 
 enum AgentDefaultModelModePreference: String, Equatable {
-    /// No explicit choice yet. A signed-in some.im account may default new
-    /// chats to managed routing.
+    /// No explicit choice yet. Fresh installs default to some.im's concrete
+    /// DeepSeek V4 Flash model; managed routing remains an explicit opt-in.
     case automatic
     /// The user explicitly selected some.im managed routing.
     case managed
@@ -24,7 +24,7 @@ enum AgentDefaultModelModePreference: String, Equatable {
     case explicitModel
 
     var usesManagedRoutingForNewSessions: Bool {
-        self != .explicitModel
+        self == .managed
     }
 }
 
@@ -221,9 +221,9 @@ enum AgentSettingsStore {
            let preference = AgentDefaultModelModePreference(rawValue: raw) {
             return preference
         }
-        // Fresh installs and upgrades default to managed routing. Composer
-        // picks are conversation-scoped and must not silently change this
-        // new-tab preference; only the some.im Settings control persists it.
+        // Fresh installs and upgrades default to some.im's concrete text
+        // model. Composer picks remain conversation-scoped; only the some.im
+        // Settings control persists an explicit managed-routing preference.
         return .automatic
     }
 

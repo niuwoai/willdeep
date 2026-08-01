@@ -98,6 +98,24 @@ check.call("appcast 发布说明固定使用 WillDeep changelog 页面") do
   )
 end
 
+check.call("appcast 发布说明优先使用面向用户的摘要") do
+  release = WillDeepRelease::Release.new(
+    dry_run: true,
+    clean: false,
+    skip_tests: true,
+    skip_notarize: true,
+    skip_upload: true,
+    skip_update_metadata: true,
+    release_version: "1.220.0-rc13",
+    bundle_version: 245,
+    build_root: File.join(Dir.tmpdir, "willdeep-release-contract")
+  )
+  notes = release.send(:release_notes_for_current_version)
+  assert.call(notes.include?("更新亮点"), "missing user-facing release heading")
+  assert.call(notes.include?("更新弹窗"), "missing curated release summary")
+  assert.call(!notes.include?("### Tests") && !notes.include?("### Meta"), "internal changelog sections leaked into appcast")
+end
+
 check.call("OSS 同时生成版本对象和 latest 对象") do
   release = WillDeepRelease::Release.new(
     dry_run: true,

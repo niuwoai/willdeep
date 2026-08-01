@@ -27477,13 +27477,13 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "someim-auto-flash"
+            "value" : "DeepSeek V4 Flash"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "someim-auto-flash"
+            "value" : "DeepSeek V4 Flash"
           }
         }
       }
@@ -27511,13 +27511,13 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "New tabs use someim-auto-flash and let you choose another concrete model in the composer."
+            "value" : "New tabs use some.im's deepseek-v4-flash and let you choose another concrete model in the composer."
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "新标签页默认使用 someim-auto-flash，并可在输入区改选其他具体模型。"
+            "value" : "新标签页默认使用 some.im 的 deepseek-v4-flash，并可在输入区改选其他具体模型。"
           }
         }
       }

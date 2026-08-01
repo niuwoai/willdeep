@@ -1,7 +1,64 @@
 # Changelog
 
-> 当前文件保留最新版本（1.220.0-rc12 至 1.109.0-rc340）。
+> 当前文件保留最新版本（1.220.0-rc15 至 1.109.0-rc340）。
 > 更早的 1000 个版本已移至 [CHANGELOG-ARCHIVE.md](CHANGELOG-ARCHIVE.md)。
+
+## 1.220.0-rc15 - 2026-08-01
+
+### 用户可见变化
+
+- 省心托管的路由判断与回答质检现在会正确通过 Responses API 调用 `someim-judge`，避免其切换到 DeepSeek V4 Flash 后仍按旧 Chat 格式发送。
+
+### Fixed
+
+- `routeJudge` 先用目标裁判型号生成独立配置，再按该型号的推理协议分发；不会继续错误继承当前主模型的 Chat 协议。
+- 新增无状态 Responses 裁判请求，使用 `instructions`、类型化 `input`、`max_output_tokens` 与 `store=false`，并保留 some.im 会话和工作区诊断头。
+
+### Tests
+
+- 新增请求级回归测试，锁定 `someim-judge` 使用 `/v1/responses`、Responses 请求体字段及严格 JSON 文本解析。
+
+### Meta
+
+- Bugfix 预发布版本从 **1.220.0-rc14** 递增为 **1.220.0-rc15**，内部构建号从 **246** 递增为 **247**，Help 与 Computer Use Helper 构建号从 **163** 递增为 **164**；App、Go agent、Help、Helper、浏览器扩展、README、响应头契约与产品文档保持一致。
+
+## 1.220.0-rc14 - 2026-08-01
+
+### 用户可见变化
+
+- “编程推荐”新增 some.im 的 `gpt-5.6-sol`、`gpt-5.6-luna`、`gpt-5.6-terra` 和 `deepseek-v4-flash`；新用户及未明确设置默认模式的用户，新会话默认选中 some.im 的 `deepseek-v4-flash`。
+
+### Added
+
+- 编程推荐列表将四个新推荐型号固定归属到 some.im，并保留原有 DeepSeek V4 Pro 与 GLM 推荐。
+- some.im 默认模型模式仍可在设置中显式切换为“省心托管”；已显式选择该模式的用户不受默认值调整影响。
+
+### Tests
+
+- 扩展模型选择器与会话默认值单测，覆盖推荐型号、some.im 归属、默认顺序及省心托管显式选择。
+
+### Meta
+
+- 预发布版本从 **1.220.0-rc13** 递增为 **1.220.0-rc14**，内部构建号从 **245** 递增为 **246**，Help 与 Computer Use Helper 构建号从 **162** 递增为 **163**；App、Go agent、Help、Helper、浏览器扩展、README、响应头契约与产品文档保持一致。
+
+## 1.220.0-rc13 - 2026-08-01
+
+### 用户可见变化
+
+- 更新弹窗现在打开 some.im 上的 WillDeep 专属更新日志，只展示这次升级真正影响使用的内容，不再把测试记录、内部版本同步和工程术语一股脑塞给用户。
+
+### Fixed
+
+- 发布脚本优先读取人工撰写的“用户可见变化”，没有专门摘要时才从 Added、Changed、Fixed 等用户相关分段生成发布说明。
+- 自动生成发布说明时排除 Tests、Meta 等内部章节，避免 Sparkle 内嵌页面退化为 Git/工程日志陈列柜。
+
+### Tests
+
+- 扩展 macOS 发布契约测试，锁定专属 Changelog URL、用户摘要优先级和内部章节过滤。
+
+### Meta
+
+- Bugfix 预发布版本从 **1.220.0-rc12** 递增为 **1.220.0-rc13**，内部构建号从 **244** 递增为 **245**，Help 与 Computer Use Helper 构建号从 **161** 递增为 **162**；App、Go agent、Help、Helper、浏览器扩展、README、响应头契约与产品文档保持一致。
 
 ## 1.220.0-rc12 - 2026-08-01
 

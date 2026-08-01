@@ -1,6 +1,6 @@
 # WillDeep Product Overview
 
-> Last updated: 2026-08-01 | Current version: v1.220.0-rc12
+> Last updated: 2026-08-01 | Current version: v1.220.0-rc15
 
 ## Positioning
 
@@ -11,6 +11,12 @@ Official product domain: [willdeep.com](https://willdeep.com).
 WillDeep is configured for non-App-Store distribution without App Sandbox so it can access local project files with fewer permission interruptions.
 
 ## 架构概览
+
+- **省心托管裁判请求改用 Responses（1.220.0-rc15）** —— 路由判断与输出质检调用 `someim-judge` 时，客户端会按裁判型号自身选择协议并发送无状态 Responses 请求，不再继承当前主模型的 Chat 协议；请求继续携带 some.im 会话与工作区诊断上下文，但不会污染主会话的 Responses 游标。
+
+- **编程推荐与 some.im 默认模型（1.220.0-rc14）** —— 编程推荐集中展示 some.im 的 `deepseek-v4-flash`、`gpt-5.6-sol`、`gpt-5.6-luna` 与 `gpt-5.6-terra`，并继续保留既有 Pro / GLM 选项；新用户及未明确设置默认模式的用户，新会话默认使用 some.im 的 `deepseek-v4-flash`，省心托管改为显式选择且不会覆盖已有偏好。
+
+- **自动更新说明改为用户摘要（1.220.0-rc13）** —— Sparkle 更新弹窗固定打开 some.im 的 WillDeep Changelog 页面；发布时优先采用人工撰写的“用户可见变化”，回退生成也只保留新功能、体验改进、问题修复与安全更新，不再展示测试和内部版本同步记录。
 
 - **some.im 裁判模型统一使用 Responses（1.220.0-rc12）** —— `someim-judge` 作为 DeepSeek V4 Flash 的托管别名，现与其他 Flash 型号共用 Responses、无服务端存储请求和网关状态续接链路；其他提供商的同名模型不受影响。
 

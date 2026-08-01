@@ -454,6 +454,63 @@ struct OpenAIResponsesAdapter {
         }
     }
 
+    /// Stateless non-streaming JSON judge used by some.im managed routing.
+    /// The target model is already installed into `configuration` by the
+    /// facade, so protocol selection and the payload can never disagree.
+    func routeJudge(
+        systemPrompt: String,
+        userPayload: String,
+        maxTokens: Int
+    ) async -> String? {
+        guard !configuration.requiresAPIKey || !configuration.apiKey.isEmpty else { return nil }
+
+        let body: [String: Any] = [
+            "model": configuration.model,
+            "instructions": systemPrompt,
+            "input": [
+                [
+                    "type": "message",
+                    "role": "user",
+                    "content": [
+                        ["type": "input_text", "text": userPayload]
+                    ]
+                ]
+            ],
+            "max_output_tokens": maxTokens,
+            "stream": false,
+            "store": false
+        ]
+        return await nonStreamingResponseText(body: body)
+    }
+
+    private func nonStreamingResponseText(body: [String: Any]) async -> String? {
+        guard let endpoint = try? responsesEndpoint(from: configuration.baseURL),
+              let payload = try? JSONSerialization.data(withJSONObject: body, options: []) else {
+            return nil
+        }
+
+        var request = URLRequest(url: endpoint)
+        request.httpMethod = "POST"
+        request.timeoutInterval = AgentInjectionDefense.judgeTimeout
+        applyAuthenticationHeaders(to: &request)
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.httpBody = payload
+
+        do {
+            let (data, response) = try await session.data(for: request)
+            guard let http = response as? HTTPURLResponse else { return nil }
+            SomeIMCreditsResponseObserver.capture(http, providerID: configuration.providerID)
+            guard (200..<300).contains(http.statusCode),
+                  let decoded = try? JSONDecoder().decode(NonStreamResponse.self, from: data) else {
+                return nil
+            }
+            let text = decoded.outputText
+            return text.isEmpty ? nil : text
+        } catch {
+            return nil
+        }
+    }
+
     // MARK: - fetchModels
 
     /// `GET /models` is identical across OpenAI's Chat and Responses
@@ -1182,6 +1239,15 @@ private struct ErrorEvent: Decodable {
 
 private struct NonStreamResponse: Decodable {
     let output: [OutputItem]?
+
+    var outputText: String {
+        (output ?? [])
+            .compactMap(\.content)
+            .flatMap { $0 }
+            .compactMap(\.text)
+            .joined()
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+    }
 
     struct OutputItem: Decodable {
         let type: String?

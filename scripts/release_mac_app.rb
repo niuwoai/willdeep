@@ -802,7 +802,27 @@ module WillDeepRelease
     def release_notes_for_current_version
       changelog = File.read(File.join(REPO_ROOT, "CHANGELOG.md"), encoding: "UTF-8")
       section = changelog[/^## #{Regexp.escape(@version)}\b.*?\n(.*?)(?=^## |\z)/m, 1].to_s.strip
-      section.empty? ? "WillDeep #{@version}" : section[0, 8_000]
+      return "WillDeep #{@version}" if section.empty?
+
+      sections = section.scan(/^###\s+(.+?)\s*$\n(.*?)(?=^###\s+|\z)/m).to_h
+      curated = sections["用户可见变化"] || sections["Highlights"]
+      return "### 更新亮点\n\n#{curated.strip}"[0, 8_000] if curated && !curated.strip.empty?
+
+      user_facing_labels = {
+        "Added" => "新功能",
+        "Changed" => "体验改进",
+        "Fixed" => "问题修复",
+        "Security" => "安全更新",
+        "Removed" => "功能调整",
+        "Deprecated" => "功能调整"
+      }
+      notes = user_facing_labels.filter_map do |source, label|
+        body = sections[source].to_s.strip
+        next if body.empty?
+
+        "### #{label}\n\n#{body}"
+      end.join("\n\n")
+      notes.empty? ? "WillDeep #{@version}" : notes[0, 8_000]
     end
 
     def database_timestamp(time = Time.now.utc)

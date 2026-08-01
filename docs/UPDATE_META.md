@@ -38,7 +38,7 @@ macOS 更新记录缺少 `bundle_version`、`file_size_bytes` 或有效 `ed_sign
 3. 使用 `SOMEIM_ADMIN_TOKEN` 创建或更新 muchtoken 的 `willdeep/macos/stable` 发布记录；`published_at` 使用数据库兼容的 UTC `YYYY-MM-DD HH:MM:SS` 格式。
 4. 客户端下次自动检查或用户主动检查时，经 appcast 获取并安装该版本。
 
-WillDeep 的 `release_notes_url` 固定为 `https://some.im/zh/products/willdeep/changelog`。该页面直接读取 stable appcast 当前发布记录中的 `release_notes`，因此更新窗口只展示本次发布说明，不再嵌入产品介绍页或完整仓库 CHANGELOG。
+WillDeep 的 `release_notes_url` 固定为 `https://some.im/zh/products/willdeep/changelog`。该页面直接读取 stable appcast 当前发布记录中的 `release_notes`，因此更新窗口只展示本次发布说明，不再嵌入产品介绍页或完整仓库 CHANGELOG。发布脚本优先读取当前版本的 `### 用户可见变化`（英文可用 `### Highlights`）；未提供时仅从 Added、Changed、Fixed、Security、Removed、Deprecated 生成回退说明，Tests 与 Meta 永不进入更新弹窗。
 
 如果 DMG 已公证并上传，但最后的元数据写入失败，可执行 `release_mac_app.rb --publish-metadata-only <DMG> --release-version <VERSION> --bundle-version <BUILD>`。脚本会重新校验 DMG 签名、公证票据、OSS 版本对象和 Sparkle 签名后再补发元数据，不重复构建、公证或上传。
 

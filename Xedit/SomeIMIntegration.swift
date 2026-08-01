@@ -133,7 +133,7 @@ struct SomeIMIntegrationSettings: Codable, Equatable {
     static let defaultBaseURL = SomeIMRelayRegion.internationalBaseURL
     static let defaultImageModel = "gpt-image-2"
     static let defaultVideoModel = "seedance-2.0"
-    static let defaultTextModel = "someim-auto-flash"
+    static let defaultTextModel = "deepseek-v4-flash"
     static let defaultVisionModel = "qwen3-vl-plus"
 
     var enabled: Bool

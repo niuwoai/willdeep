@@ -120,6 +120,60 @@ struct AgentToolResultImageEncodingTests {
     }
 
     @Test
+    @MainActor
+    func someIMRouteJudgeUsesResponsesRequestShape() async throws {
+        let recorder = WillDeepResponsesFallbackRecorder()
+        let session = managedJudgeTestSession()
+        defer {
+            ManagedJudgeURLProtocol.handler = nil
+            session.invalidateAndCancel()
+        }
+        ManagedJudgeURLProtocol.handler = { request in
+            _ = recorder.record(request)
+            let url = try #require(request.url)
+            return try willDeepResponsesHTTPResult(
+                url: url,
+                statusCode: 200,
+                body: #"{"id":"resp_judge","output":[{"type":"message","content":[{"type":"output_text","text":"{\"domain\":\"coding\"}"}]}]}"#
+            )
+        }
+
+        let configuration = AgentConfiguration(
+            providerID: AgentProviderPreset.someIMID,
+            baseURL: "https://some.im/v1",
+            model: SomeIMManagedModel.autoPro,
+            apiKey: "test"
+        )
+        let response = await AgentClient(
+            configuration: configuration,
+            session: session,
+            someIMContext: SomeIMRequestContext(
+                sessionID: "managed-session",
+                workspaceID: "managed-workspace"
+            )
+        ).routeJudge(
+            model: SomeIMManagedModel.judge,
+            systemPrompt: "Return strict JSON.",
+            userPayload: "Classify this request.",
+            maxTokens: 256
+        )
+
+        #expect(response == #"{"domain":"coding"}"#)
+        let request = try #require(recorder.requests.first)
+        #expect(recorder.requests.count == 1)
+        #expect(request.path == "/v1/responses")
+        #expect(request.sessionID == "managed-session")
+        let bodyData = try #require(request.body.data(using: .utf8))
+        let body = try #require(JSONSerialization.jsonObject(with: bodyData) as? [String: Any])
+        #expect(body["model"] as? String == SomeIMManagedModel.judge)
+        #expect(body["instructions"] as? String == "Return strict JSON.")
+        #expect(body["max_output_tokens"] as? Int == 256)
+        #expect(body["stream"] as? Bool == false)
+        #expect(body["store"] as? Bool == false)
+        #expect(body["messages"] == nil)
+    }
+
+    @Test
     func openAIResponsesUsesPreviousResponseForStrictlyAppendedToolOutput() throws {
         let state = OpenAIResponsesContinuationState()
         let initialMessages = [
@@ -806,9 +860,40 @@ private final class WillDeepResponsesFallbackURLProtocol: URLProtocol {
     override func stopLoading() {}
 }
 
+private final class ManagedJudgeURLProtocol: URLProtocol {
+    static var handler: ((URLRequest) throws -> (HTTPURLResponse, Data))?
+
+    override class func canInit(with request: URLRequest) -> Bool { true }
+
+    override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
+
+    override func startLoading() {
+        guard let handler = Self.handler else {
+            client?.urlProtocol(self, didFailWithError: URLError(.badServerResponse))
+            return
+        }
+        do {
+            let (response, data) = try handler(request)
+            client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
+            client?.urlProtocol(self, didLoad: data)
+            client?.urlProtocolDidFinishLoading(self)
+        } catch {
+            client?.urlProtocol(self, didFailWithError: error)
+        }
+    }
+
+    override func stopLoading() {}
+}
+
 private func willDeepResponsesTestSession() -> URLSession {
     let configuration = URLSessionConfiguration.ephemeral
     configuration.protocolClasses = [WillDeepResponsesFallbackURLProtocol.self]
+    return URLSession(configuration: configuration)
+}
+
+private func managedJudgeTestSession() -> URLSession {
+    let configuration = URLSessionConfiguration.ephemeral
+    configuration.protocolClasses = [ManagedJudgeURLProtocol.self]
     return URLSession(configuration: configuration)
 }
 

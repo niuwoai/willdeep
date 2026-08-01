@@ -181,18 +181,30 @@ struct AgentClient {
 
     /// Non-streaming JSON judge round trip for some.im managed routing.
     /// Returns the raw assistant text (expected strict JSON), or nil on any
-    /// failure so the caller can apply a local fallback. Managed routing is
-    /// some.im-only (always `.openAIChat`); other kinds return nil.
+    /// failure so the caller can apply a local fallback. Resolve the transport
+    /// from the judge model itself: the session's main model may speak Chat
+    /// while `someim-judge` is backed by DeepSeek V4 Flash and requires the
+    /// Responses wire format.
     func routeJudge(
         model: String,
         systemPrompt: String,
         userPayload: String,
         maxTokens: Int
     ) async -> String? {
-        switch configuration.providerKind {
+        var judgeConfiguration = configuration
+        judgeConfiguration.model = model
+        judgeConfiguration = judgeConfiguration.normalized
+
+        switch judgeConfiguration.inferenceProviderKind {
         case .openAIChat:
-            return await OpenAIChatAdapter(configuration: configuration, session: session, someIMContext: someIMContext)
+            return await OpenAIChatAdapter(configuration: judgeConfiguration, session: session, someIMContext: someIMContext)
                 .routeJudge(model: model, systemPrompt: systemPrompt, userPayload: userPayload, maxTokens: maxTokens)
+        case .openAIResponses:
+            return await OpenAIResponsesAdapter(
+                configuration: judgeConfiguration,
+                session: session,
+                someIMContext: someIMContext
+            ).routeJudge(systemPrompt: systemPrompt, userPayload: userPayload, maxTokens: maxTokens)
         default:
             return nil
         }

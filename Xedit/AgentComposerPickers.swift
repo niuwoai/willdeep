@@ -2840,7 +2840,7 @@ struct ModelPickerPill: View {
         )
     }
 
-    private struct CodingRecommendation: Identifiable {
+    struct CodingRecommendation: Identifiable {
         var id: String { "\(providerID)::\(model)" }
         let providerID: String
         let title: String
@@ -2858,7 +2858,39 @@ struct ModelPickerPill: View {
         let tags: [String]
     }
 
-    private static let codingRecommendations: [CodingRecommendation] = [
+    static let codingRecommendations: [CodingRecommendation] = [
+        CodingRecommendation(
+            providerID: AgentProviderPreset.someIMID,
+            title: "DeepSeek V4 Flash",
+            model: "deepseek-v4-flash",
+            note: L10n.AgentModelPicker.fastCodingNote,
+            tags: [L10n.AgentModelPicker.coding, L10n.AgentModelPicker.fast],
+            tier: .flash
+        ),
+        CodingRecommendation(
+            providerID: AgentProviderPreset.someIMID,
+            title: "GPT-5.6 Sol",
+            model: "gpt-5.6-sol",
+            note: L10n.AgentModelPicker.complexCodingNote,
+            tags: [L10n.AgentModelPicker.coding, L10n.AgentModelPicker.pro],
+            tier: .pro
+        ),
+        CodingRecommendation(
+            providerID: AgentProviderPreset.someIMID,
+            title: "GPT-5.6 Luna",
+            model: "gpt-5.6-luna",
+            note: L10n.AgentModelPicker.repositoryCodingNote,
+            tags: [L10n.AgentModelPicker.coding],
+            tier: nil
+        ),
+        CodingRecommendation(
+            providerID: AgentProviderPreset.someIMID,
+            title: "GPT-5.6 Terra",
+            model: "gpt-5.6-terra",
+            note: L10n.AgentModelPicker.dailyCodingNote,
+            tags: [L10n.AgentModelPicker.coding, L10n.AgentModelPicker.affordable],
+            tier: nil
+        ),
         CodingRecommendation(
             providerID: AgentProviderPreset.someIMID,
             title: "DeepSeek V4 Pro",
@@ -2882,14 +2914,6 @@ struct ModelPickerPill: View {
             note: L10n.AgentModelPicker.dailyCodingNote,
             tags: [L10n.AgentModelPicker.coding, L10n.AgentModelPicker.affordable],
             tier: nil
-        ),
-        CodingRecommendation(
-            providerID: AgentProviderPreset.deepSeekID,
-            title: "DeepSeek V4 Flash",
-            model: "deepseek-v4-flash",
-            note: L10n.AgentModelPicker.fastCodingNote,
-            tags: [L10n.AgentModelPicker.coding, L10n.AgentModelPicker.fast],
-            tier: .flash
         )
     ]
 

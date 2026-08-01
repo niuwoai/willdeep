@@ -101,4 +101,21 @@ struct AgentModelPickerCatalogTests {
         )
         #expect(label == "省心托管")
     }
+
+    @Test
+    func codingRecommendationsExposeRequestedSomeIMModelsWithDeepSeekDefaultFirst() {
+        let recommendations = ModelPickerPill.codingRecommendations
+
+        #expect(recommendations.first?.providerID == AgentProviderPreset.someIMID)
+        #expect(recommendations.first?.model == SomeIMIntegrationSettings.defaultTextModel)
+        #expect(Set(recommendations.prefix(4).map(\.model)) == [
+            "deepseek-v4-flash",
+            "gpt-5.6-sol",
+            "gpt-5.6-luna",
+            "gpt-5.6-terra",
+        ])
+        #expect(recommendations.prefix(4).allSatisfy {
+            $0.providerID == AgentProviderPreset.someIMID
+        })
+    }
 }
