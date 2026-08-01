@@ -246,13 +246,34 @@ extension L10n {
             localized: "dispatch.manage-profiles",
             defaultValue: "Manage Profiles…"
         )
+        static let workers = String(
+            localized: "dispatch.workers",
+            defaultValue: "Workers"
+        )
+        static let workerPoolHelp = String(
+            localized: "dispatch.worker-pool-help",
+            defaultValue: "Selected Workers run ready nodes in parallel and provide the automatic failover order."
+        )
+        static let workerUnavailable = String(
+            localized: "dispatch.worker-unavailable",
+            defaultValue: "Unavailable"
+        )
+        static func selectedWorkerCount(_ count: Int) -> String {
+            String(
+                format: String(
+                    localized: "dispatch.selected-worker-count",
+                    defaultValue: "%@ Workers"
+                ),
+                String(count)
+            )
+        }
         static let profileManagerTitle = String(
             localized: "dispatch.profile-manager-title",
-            defaultValue: "Execution Profiles"
+            defaultValue: "Workers & Execution Profiles"
         )
         static let profileManagerMessage = String(
             localized: "dispatch.profile-manager-message",
-            defaultValue: "Profiles bind an executor, model, and native CLI configuration. AI planning assigns these profiles to graph nodes."
+            defaultValue: "Workers bind WillDeep models or discovered external CLI profiles. Selected Workers execute graph nodes and fail over automatically."
         )
         static let addProfile = String(
             localized: "dispatch.add-profile",

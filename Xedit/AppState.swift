@@ -335,6 +335,11 @@ final class AppState: ObservableObject {
     /// metadata while AppState remains responsible for creating/running the
     /// underlying Agent sessions.
     let agentDispatchCoordinator = AgentDispatchCoordinator()
+    /// Tracks the runtime currently monitored for each dispatch task. This
+    /// prevents duplicate completion pumps when the board and session list
+    /// refresh at the same time, while still allowing a retry runtime to take
+    /// over monitoring for the same task.
+    var dispatchMonitoredRuntimeIDsByTaskID: [UUID: UUID] = [:]
 
     /// Process-wide registry of background `run_command` jobs. Scoped
     /// by `runtime.id` inside the registry so concurrent sessions can't

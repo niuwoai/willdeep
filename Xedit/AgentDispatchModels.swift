@@ -74,7 +74,7 @@ nonisolated enum AgentDispatchTargetChoice: Codable, Equatable, Hashable {
 /// some.im can combine model families without changing the project shape.
 nonisolated struct AgentDispatchModelRouting: Codable, Equatable {
     static let recommendedPlanningModel = "kimi-k3"
-    static let recommendedExecutionModel = "deepseek-v4-pro"
+    static let recommendedExecutionModel = "deepseek-v4-flash"
 
     var planningModelID: String?
     var executionModelID: String?
@@ -163,27 +163,49 @@ nonisolated struct AgentDispatchExecutorDecision: Equatable {
 }
 
 nonisolated enum AgentDispatchProfileResolver {
+    static func candidateIDs(
+        primaryProfileID: String?,
+        fallbackProfileIDs: [String],
+        selectedWorkerProfileIDs: [String]
+    ) -> [String] {
+        var seen: Set<String> = []
+        return ([primaryProfileID].compactMap { $0 }
+            + fallbackProfileIDs
+            + selectedWorkerProfileIDs)
+            .filter { seen.insert($0).inserted }
+    }
+
     static func next(
         primaryProfileID: String?,
         fallbackProfileIDs: [String],
+        selectedWorkerProfileIDs: [String] = [],
         attemptedProfileIDs: [String],
+        busyProfileIDs: Set<String> = [],
         availableExecutors: Set<AgentExecutionAgent>,
         profiles: [AgentExecutionProfile]
     ) -> AgentExecutionProfile? {
-        let candidates = [primaryProfileID].compactMap { $0 } + fallbackProfileIDs
+        let candidates = candidateIDs(
+            primaryProfileID: primaryProfileID,
+            fallbackProfileIDs: fallbackProfileIDs,
+            selectedWorkerProfileIDs: selectedWorkerProfileIDs
+        )
         let attempted = Set(attemptedProfileIDs)
-        return candidates
+        let available = candidates
             .filter { !attempted.contains($0) }
             .compactMap { id in profiles.first(where: { $0.id == id }) }
-            .first { availableExecutors.contains($0.executor) }
+            .filter { availableExecutors.contains($0.executor) }
+        return available.first { !busyProfileIDs.contains($0.id) }
+            ?? available.first
     }
 
     static func hasUntriedFallback(
         fallbackProfileIDs: [String],
+        selectedWorkerProfileIDs: [String] = [],
         attemptedProfileIDs: [String]
     ) -> Bool {
         let attempted = Set(attemptedProfileIDs)
-        return fallbackProfileIDs.contains { !attempted.contains($0) }
+        return (fallbackProfileIDs + selectedWorkerProfileIDs)
+            .contains { !attempted.contains($0) }
     }
 }
 
@@ -314,6 +336,9 @@ nonisolated struct AgentDispatchGoal: Codable, Equatable, Identifiable {
     var modelRouting: AgentDispatchModelRouting? = nil
     var planningProfileID: String? = nil
     var planningFallbackProfileIDs: [String]? = nil
+    /// Ordered Worker pool selected for this project. Each profile binds an
+    /// executor to either a WillDeep model or an external CLI native profile.
+    var selectedWorkerProfileIDs: [String]? = nil
     /// Selected local CLI profile IDs keyed by `AgentExecutionAgent.rawValue`.
     /// Profiles are discovered from the user's Codex/Claude configuration;
     /// only the stable ID is stored with the project.
@@ -376,6 +401,13 @@ nonisolated struct AgentDispatchGoal: Codable, Equatable, Identifiable {
 
     var effectivePlanningFallbackProfileIDs: [String] {
         planningFallbackProfileIDs ?? []
+    }
+
+    var effectiveWorkerProfileIDs: [String] {
+        let configured = selectedWorkerProfileIDs ?? []
+        return configured.isEmpty
+            ? [AgentExecutionProfile.recommendedWorkerID]
+            : configured
     }
 
     var deletionRequiresConfirmation: Bool {

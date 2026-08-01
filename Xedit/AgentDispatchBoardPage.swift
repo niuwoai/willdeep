@@ -54,13 +54,16 @@ private struct AgentDispatchBoardContent: View {
             coordinator.synchronizeInBackground(with: appState.agentSessions)
             localExecutors = AgentDispatchExecutorResolver.localAvailableExecutors()
             reloadExecutionProfiles()
+            resumeSelectedGoalAfterSynchronization()
         }
         .onReceive(appState.$agentSessions) { sessions in
             coordinator.synchronizeInBackground(with: sessions)
+            resumeSelectedGoalAfterSynchronization()
         }
         .onChange(of: coordinator.selectedGoalID) { _ in
             graphSelection = coordinator.selectedTaskID.map(AgentDispatchGraphSelection.task)
             reloadExecutionProfiles()
+            resumeSelectedGoalAfterSynchronization()
         }
         .alert(item: $alertTarget) { target in
             switch target {
@@ -125,18 +128,21 @@ private struct AgentDispatchBoardContent: View {
                 ?? L10n.Workspace.noWorkspace,
             profiles: executionProfiles,
             onManageProfiles: { isProfileManagerPresented = true }
-        ) { statement, checklist, planningProfileID, fallbackProfileIDs in
+        ) { statement, checklist, planningProfileID, fallbackProfileIDs, workerProfileIDs in
             appState.setAgentGoal(
                 statement: statement,
                 items: checklist,
                 planningProfileID: planningProfileID,
-                planningFallbackProfileIDs: fallbackProfileIDs
+                planningFallbackProfileIDs: fallbackProfileIDs,
+                selectedWorkerProfileIDs: workerProfileIDs
             )
         }
     }
 
     private func goalContent(_ goal: AgentDispatchGoal) -> some View {
         let runtimeDescriptors = AgentRuntimeStore.loadDescriptors()
+        let selectedWorkerSet = Set(goal.effectiveWorkerProfileIDs)
+        let workerProfiles = executionProfiles.filter { selectedWorkerSet.contains($0.id) }
         return VStack(spacing: 0) {
             AgentDispatchGoalHeader(
                 goal: goal,
@@ -149,6 +155,9 @@ private struct AgentDispatchBoardContent: View {
                         fallbackProfileIDs: fallbackProfileIDs,
                         goalID: goal.id
                     )
+                },
+                onWorkerProfiles: {
+                    appState.updateDispatchWorkerProfiles($0, goalID: goal.id)
                 },
                 onManageProfiles: { isProfileManagerPresented = true },
                 onChooseLocalWorkspace: {
@@ -210,7 +219,7 @@ private struct AgentDispatchBoardContent: View {
                         task: task,
                         localExecutors: localExecutors,
                         runtimeDescriptors: runtimeDescriptors,
-                        profiles: executionProfiles,
+                        profiles: workerProfiles,
                         onExecutorChoice: {
                             coordinator.updateTaskExecutorChoice(
                                 $0,
@@ -226,7 +235,7 @@ private struct AgentDispatchBoardContent: View {
                             )
                         },
                         onProfiles: { primaryProfileID, fallbackProfileIDs in
-                            coordinator.updateTaskProfiles(
+                            appState.updateDispatchTaskProfiles(
                                 primaryProfileID: primaryProfileID,
                                 fallbackProfileIDs: fallbackProfileIDs,
                                 goalID: goal.id,
@@ -502,15 +511,28 @@ private struct AgentDispatchBoardContent: View {
     }
 
     private func launchFirstReadyTask(in goal: AgentDispatchGoal) {
-        guard !goal.isExecutionActive,
-              let task = goal.tasks.first(where: { $0.state == .queued }) else {
+        let results = appState.launchReadyDispatchTasks(goalID: goal.id)
+        guard !results.isEmpty else {
             alertTarget = .message(
                 title: L10n.Dispatch.launchFailed,
                 message: L10n.Dispatch.waitingForDependencies
             )
             return
         }
-        launchTask(goalID: goal.id, taskID: task.id)
+        if case .blocked(let message)? = results.first(where: {
+            if case .blocked = $0 { return true }
+            return false
+        }) {
+            alertTarget = .message(title: L10n.Dispatch.launchFailed, message: message)
+        }
+    }
+
+    private func resumeSelectedGoalAfterSynchronization() {
+        Task { @MainActor in
+            try? await Task.sleep(nanoseconds: 150_000_000)
+            guard let goalID = coordinator.selectedGoalID else { return }
+            appState.resumeDispatchGoal(goalID: goalID)
+        }
     }
 
     private func dispatchModelIDs(for goal: AgentDispatchGoal) -> [String] {

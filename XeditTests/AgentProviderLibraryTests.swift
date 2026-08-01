@@ -624,6 +624,43 @@ struct AgentProviderLibraryTests {
     }
 
     @MainActor
+    @Test("dispatch Worker pins some.im provider and Flash Responses independently of global provider")
+    func dispatchWorkerPinsProviderAndResponsesTransport() {
+        let sandbox = KeychainSandbox()
+        _ = sandbox
+        let deepSeek = AgentProviderEntry(
+            providerID: AgentProviderPreset.deepSeekID,
+            baseURL: "https://api.deepseek.com",
+            apiKey: "fixture-deepseek-key",
+            flashPrimary: "deepseek-chat",
+            proPrimary: "deepseek-reasoner"
+        )
+        let someIM = AgentProviderEntry(
+            providerID: AgentProviderPreset.someIMID,
+            baseURL: "https://some.im/v1",
+            apiKey: "fixture-someim-key",
+            flashPrimary: "deepseek-v4-flash",
+            proPrimary: "deepseek-v4-flash",
+            routingMode: .flash
+        )
+        let appState = AppState()
+        appState.agentProviderLibrary = AgentProviderLibrary(
+            entries: [deepSeek, someIM],
+            activeID: deepSeek.id
+        )
+        let runtime = AgentRuntime(session: AgentSession())
+        runtime.sessionProviderIDOverride = AgentProviderPreset.someIMID
+        runtime.sessionModelOverride = "deepseek-v4-flash"
+
+        let configuration = appState.configurationForCurrentTurn(for: runtime)
+
+        #expect(configuration.providerID == AgentProviderPreset.someIMID)
+        #expect(configuration.model == "deepseek-v4-flash")
+        #expect(configuration.inferenceProviderKind == .openAIResponses)
+        #expect(configuration.usesWillDeepGatewayResponsesState)
+    }
+
+    @MainActor
     @Test("relay location probe failure keeps the shared credential usable")
     func failedRelayProbeDoesNotBlockCredentialSync() async {
         let sandbox = KeychainSandbox()

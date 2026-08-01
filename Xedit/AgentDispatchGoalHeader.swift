@@ -11,6 +11,7 @@ struct AgentDispatchGoalHeader: View {
     let profiles: [AgentExecutionProfile]
     let onTargetChoice: (AgentDispatchTargetChoice) -> Void
     let onPlanningProfiles: (String, [String]) -> Void
+    let onWorkerProfiles: ([String]) -> Void
     let onManageProfiles: () -> Void
     let onChooseLocalWorkspace: () -> Void
     let onBindRemoteWorkspace: (RuntimeDescriptor) -> Void
@@ -53,6 +54,7 @@ struct AgentDispatchGoalHeader: View {
                 Spacer(minLength: 10)
                 workspaceMenu
                 routingMenu
+                workerMenu
                 targetMenu
                 Button(action: goal.isPaused ? onResume : onLaunch) {
                     Label(
@@ -191,6 +193,42 @@ struct AgentDispatchGoalHeader: View {
             ?? L10n.Dispatch.planningProfile
     }
 
+    private var workerMenu: some View {
+        Menu {
+            ForEach(profiles) { profile in
+                Button {
+                    var selected = goal.effectiveWorkerProfileIDs
+                    if let index = selected.firstIndex(of: profile.id) {
+                        guard selected.count > 1 else { return }
+                        selected.remove(at: index)
+                    } else {
+                        selected.append(profile.id)
+                    }
+                    onWorkerProfiles(selected)
+                } label: {
+                    Label(
+                        profile.name,
+                        systemImage: goal.effectiveWorkerProfileIDs.contains(profile.id)
+                            ? "checkmark.square.fill"
+                            : profile.executor.symbol
+                    )
+                }
+            }
+            Divider()
+            Text(L10n.Dispatch.workerPoolHelp)
+            Button(action: onManageProfiles) {
+                Label(L10n.Dispatch.manageProfiles, systemImage: "gearshape")
+            }
+        } label: {
+            policyPill(
+                symbol: "person.2.badge.gearshape",
+                text: L10n.Dispatch.selectedWorkerCount(goal.effectiveWorkerProfileIDs.count)
+            )
+        }
+        .menuStyle(.borderlessButton)
+        .fixedSize()
+    }
+
     private var launchButtonTitle: String {
         guard goal.isWorkspaceBound else {
             return L10n.Dispatch.selectWorkspaceFirst
@@ -211,7 +249,8 @@ struct AgentDispatchGoalHeader: View {
         if goal.isPaused {
             return true
         }
-        return !goal.isExecutionActive && goal.hasReadyTask
+        return goal.activeTaskCount < max(1, goal.effectiveWorkerProfileIDs.count)
+            && goal.hasReadyTask
     }
 
     private var targetMenu: some View {
