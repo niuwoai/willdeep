@@ -1,7 +1,22 @@
 # Changelog
 
-> 当前文件保留最新版本（1.220.0-rc15 至 1.109.0-rc340）。
+> 当前文件保留最新版本（1.220.0-rc16 至 1.109.0-rc340）。
 > 更早的 1000 个版本已移至 [CHANGELOG-ARCHIVE.md](CHANGELOG-ARCHIVE.md)。
+
+## 1.220.0-rc16 - 2026-08-01
+
+### Fixed
+
+- `scripts/run_tests_fast.rb` 现在显式使用 UTF-8 locale，并对 Git 子进程输出执行 UTF-8 转码与非法字节清理；中文未提交改动不再令源码指纹生成在 `JSON.generate` 阶段崩溃。
+- Ruby 的默认外部与内部编码统一固定为 UTF-8，避免调用者 locale 缺失时把合法中文输出误标记为 US-ASCII。
+
+### Tests
+
+- 快速测试入口契约共 53 项通过，现有构建缓存、指纹与 CI 分组约束保持不变。
+
+### Meta
+
+- Bugfix 预发布版本从 **1.220.0-rc15** 递增为 **1.220.0-rc16**，内部构建号从 **247** 递增为 **248**，Help 与 Computer Use Helper 构建号从 **164** 递增为 **165**；App、Go agent、Help、Helper、浏览器扩展、README、响应头契约与产品文档保持一致。
 
 ## 1.220.0-rc15 - 2026-08-01
 

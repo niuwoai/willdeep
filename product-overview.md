@@ -1,6 +1,6 @@
 # WillDeep Product Overview
 
-> Last updated: 2026-08-01 | Current version: v1.220.0-rc15
+> Last updated: 2026-08-01 | Current version: v1.220.0-rc16
 
 ## Positioning
 
@@ -11,6 +11,8 @@ Official product domain: [willdeep.com](https://willdeep.com).
 WillDeep is configured for non-App-Store distribution without App Sandbox so it can access local project files with fewer permission interruptions.
 
 ## 架构概览
+
+- **快速测试链路统一 UTF-8（1.220.0-rc16）** —— 快速测试入口固定 Ruby 与子进程使用 UTF-8，并清理 Git 输出中的非法字节；包含中文的工作区 diff 不再让源码指纹生成异常退出。
 
 - **省心托管裁判请求改用 Responses（1.220.0-rc15）** —— 路由判断与输出质检调用 `someim-judge` 时，客户端会按裁判型号自身选择协议并发送无状态 Responses 请求，不再继承当前主模型的 Chat 协议；请求继续携带 some.im 会话与工作区诊断上下文，但不会污染主会话的 Responses 游标。
 
