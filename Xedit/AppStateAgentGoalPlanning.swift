@@ -329,13 +329,11 @@ extension AppState {
         for runtime: AgentRuntime,
         goal: AgentGoal
     ) -> AgentExecutionProfile? {
+        let selectedWorkerIDs = Set(goal.selectedWorkerProfileIDs
+            ?? [AgentExecutionProfile.recommendedWorkerID])
         let profiles = AgentExecutionProfileStore().availableProfiles(
             workspacePath: runtime.workspaceLocation?.path ?? runtime.workspaceRootPath
-        ).filter {
-            $0.executor != .willDeep
-                || $0.modelID == nil
-                || agentModelIsCompatibleWithActiveProvider($0.modelID ?? "")
-        }
+        ).filter { selectedWorkerIDs.contains($0.id) }
         let availableExecutors = AgentDispatchExecutorResolver.localAvailableExecutors()
         return AgentDispatchProfileResolver.next(
             primaryProfileID: goal.planningProfileID
@@ -366,8 +364,7 @@ extension AppState {
         to runtime: AgentRuntime
     ) {
         runtime.executionAgent = .willDeep
-        guard let modelID = profile.modelID,
-              agentModelIsCompatibleWithActiveProvider(modelID) else {
+        guard let modelID = profile.modelID else {
             runtime.sessionModelOverride = nil
             return
         }
@@ -765,9 +762,11 @@ extension AppState {
             let body = member.report ?? "FAILED: \(member.errorMessage ?? "no valid report")"
             return "<member role=\"\(member.displayName)\">\n\(body)\n</member>"
         }.joined(separator: "\n\n")
+        let selectedWorkerIDs = Set(goal.selectedWorkerProfileIDs
+            ?? [AgentExecutionProfile.recommendedWorkerID])
         let dispatchProfiles = AgentExecutionProfileStore().availableProfiles(
             workspacePath: runtime.workspaceLocation?.path ?? runtime.workspaceRootPath
-        )
+        ).filter { selectedWorkerIDs.contains($0.id) }
         let profileCatalog = dispatchProfiles.map { profile in
             "- \(profile.id) | \(profile.name) | executor=\(profile.executor.rawValue) | model=\(profile.modelID ?? "default")"
         }.joined(separator: "\n")

@@ -1,7 +1,38 @@
 # Changelog
 
-> 当前文件保留最新版本（1.221.0-rc2 至 1.109.0-rc340）。
+> 当前文件保留最新版本（1.222.0-rc1 至 1.109.0-rc340）。
 > 更早的 1000 个版本已移至 [CHANGELOG-ARCHIVE.md](CHANGELOG-ARCHIVE.md)。
+
+## 1.222.0-rc1 - 2026-08-01
+
+### Added
+
+- 调度台新增项目级 Worker 池，可同时勾选多个 WillDeep 模型、Codex CLI Profile 与 Claude Code Agent，并按 Worker 数量并行启动就绪节点。
+- 内建编程 Worker 覆盖 some.im `deepseek-v4-flash`、`gpt-5.6-sol`、`gpt-5.6-luna` 与 `gpt-5.6-terra`，新调度项目默认选中 DeepSeek V4 Flash。
+- Worker 管理统一展示内建、手工配置和自动发现的外部执行器，并标记本机不可用的执行器。
+
+### Changed
+
+- 调度节点同时固定 Provider、模型与执行器；some.im Flash Worker 即使在其他 Provider 为全局当前项时仍使用 `some-im / deepseek-v4-flash / Responses`。
+- 每个本机 Git 调度节点自动创建独立 worktree，节点直接执行当前任务，不再递归创建子 Goal 或共享同一 checkout。
+- 自动调度优先分配空闲 Worker；执行器失败时沿节点回退链与项目 Worker 池切换到尚未尝试的可用 Worker。
+
+### Fixed
+
+- `goal-check` 全部通过后节点立即进入已合并状态、解锁依赖并补充启动下一批就绪节点，不再停在验证中。
+- 调度规划与节点 Profile 选择严格限制在项目勾选的 Worker 池内，避免界面选择与实际执行模型不一致。
+- 重启 App 或重新打开调度台后会重新挂接运行中/验收中子会话，自动对账已完成清单并继续解锁后继节点；验收中的节点也可显式重试。
+- some.im 登录态刷新不再把已固定 Provider/模型的 Worker 空会话改回省心托管；运行中切换 Worker 会同步更新或清除 Provider 与模型覆盖。
+
+### Tests
+
+- 调度协调器、Provider 与 Responses 编码专项测试共 86 项通过，覆盖 Worker 池顺序、空闲分配、执行器跳过、持久化、调度会话恢复、some.im Provider 固定及 Responses 协议选择。
+- 签名 Debug 包实际创建 10 节点经典小游戏平台项目并勾选 3 个 Worker；重启后已完成节点从 0% 自动对账至 10%，重试会话明确显示并实际使用 `some.im · deepseek-v4-flash`。
+- 生成站点首页与 5 个游戏页共 6 个 URL 均返回 HTTP 200；独立回归同时抓到俄罗斯方块测试 13 项中 7 项失败，验证最终验收节点不会只凭子节点自报结果放行。
+
+### Meta
+
+- 功能预发布版本从 **1.221.0-rc2** 提升为 **1.222.0-rc1**，内部构建号从 **251** 递增为 **252**，Help 与 Computer Use Helper 构建号从 **168** 递增为 **169**；App、Go agent、Help、Helper、浏览器扩展、README、响应头契约与产品文档保持一致。
 
 ## 1.221.0-rc2 - 2026-08-01
 

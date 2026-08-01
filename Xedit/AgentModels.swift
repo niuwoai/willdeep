@@ -1302,6 +1302,8 @@ nonisolated struct AgentGoal: Codable, Equatable {
     var planningProfileID: String? = nil
     var planningFallbackProfileIDs: [String]? = nil
     var planningAttemptedProfileIDs: [String]? = nil
+    /// Project Worker pool selected before dispatch planning begins.
+    var selectedWorkerProfileIDs: [String]? = nil
 
     struct Item: Codable, Equatable, Identifiable {
         var id: UUID
@@ -1321,7 +1323,8 @@ nonisolated struct AgentGoal: Codable, Equatable {
         dispatchPlan: AgentGoalDispatchPlan? = nil,
         planningProfileID: String? = nil,
         planningFallbackProfileIDs: [String]? = nil,
-        planningAttemptedProfileIDs: [String]? = nil
+        planningAttemptedProfileIDs: [String]? = nil,
+        selectedWorkerProfileIDs: [String]? = nil
     ) {
         self.statement = statement
         self.checklist = checklist
@@ -1329,6 +1332,7 @@ nonisolated struct AgentGoal: Codable, Equatable {
         self.planningProfileID = planningProfileID
         self.planningFallbackProfileIDs = planningFallbackProfileIDs
         self.planningAttemptedProfileIDs = planningAttemptedProfileIDs
+        self.selectedWorkerProfileIDs = selectedWorkerProfileIDs
     }
 
     var isEmpty: Bool { statement.isEmpty && checklist.isEmpty }

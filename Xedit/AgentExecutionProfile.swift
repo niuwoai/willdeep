@@ -16,7 +16,8 @@ nonisolated enum AgentExecutionProfileOrigin: String, Codable, Equatable {
 
 nonisolated struct AgentExecutionProfile: Codable, Equatable, Identifiable {
     static let recommendedPlannerID = "builtin:willdeep:kimi-k3"
-    static let recommendedWorkerID = "builtin:willdeep:deepseek-v4-pro"
+    static let recommendedWorkerID = "builtin:willdeep:deepseek-v4-flash"
+    private static let someIMProviderID = "some-im"
 
     var id: String
     var name: String
@@ -87,9 +88,34 @@ nonisolated struct AgentExecutionProfile: Codable, Equatable, Identifiable {
         ),
         AgentExecutionProfile(
             id: recommendedWorkerID,
-            name: "DeepSeek V4 Pro Worker",
+            name: "DeepSeek V4 Flash Worker",
             executor: .willDeep,
             modelID: AgentDispatchModelRouting.recommendedExecutionModel,
+            providerID: someIMProviderID,
+            origin: .builtIn
+        ),
+        AgentExecutionProfile(
+            id: "builtin:willdeep:gpt-5.6-sol",
+            name: "GPT-5.6 Sol Worker",
+            executor: .willDeep,
+            modelID: "gpt-5.6-sol",
+            providerID: someIMProviderID,
+            origin: .builtIn
+        ),
+        AgentExecutionProfile(
+            id: "builtin:willdeep:gpt-5.6-luna",
+            name: "GPT-5.6 Luna Worker",
+            executor: .willDeep,
+            modelID: "gpt-5.6-luna",
+            providerID: someIMProviderID,
+            origin: .builtIn
+        ),
+        AgentExecutionProfile(
+            id: "builtin:willdeep:gpt-5.6-terra",
+            name: "GPT-5.6 Terra Worker",
+            executor: .willDeep,
+            modelID: "gpt-5.6-terra",
+            providerID: someIMProviderID,
             origin: .builtIn
         ),
     ]

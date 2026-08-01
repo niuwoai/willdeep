@@ -10,6 +10,18 @@ import Testing
 @Suite(.serialized)
 @MainActor
 struct AgentDispatchCoordinatorTests {
+    @Test("调度子会话恢复后保留固定 Provider")
+    func restoredDispatchRuntimeKeepsProviderPin() {
+        var session = AgentSession()
+        session.dispatchParentProjectID = UUID()
+        session.dispatchTaskID = UUID()
+        session.providerID = AgentProviderPreset.someIMID
+
+        let runtime = AgentRuntime(session: session)
+
+        #expect(runtime.sessionProviderIDOverride == AgentProviderPreset.someIMID)
+    }
+
     @Test("Goal 指令按运行状态进入立即、安全点或中断确认")
     func commandEffectsRespectExecutionBoundary() {
         #expect(
@@ -115,6 +127,54 @@ struct AgentDispatchCoordinatorTests {
         )
     }
 
+    @Test("Worker 池补齐节点回退链并优先分配空闲 Worker")
+    func workerPoolExtendsFallbackAndPrefersIdleWorker() throws {
+        let profiles = [
+            AgentExecutionProfile(id: "flash", name: "Flash", executor: .willDeep),
+            AgentExecutionProfile(id: "codex", name: "Codex", executor: .codexCLI),
+            AgentExecutionProfile(id: "claude", name: "Claude", executor: .claudeCode),
+        ]
+        #expect(
+            AgentDispatchProfileResolver.candidateIDs(
+                primaryProfileID: "flash",
+                fallbackProfileIDs: ["codex"],
+                selectedWorkerProfileIDs: ["flash", "codex", "claude"]
+            ) == ["flash", "codex", "claude"]
+        )
+        let selected = try #require(
+            AgentDispatchProfileResolver.next(
+                primaryProfileID: "flash",
+                fallbackProfileIDs: [],
+                selectedWorkerProfileIDs: ["flash", "codex", "claude"],
+                attemptedProfileIDs: [],
+                busyProfileIDs: ["flash", "codex"],
+                availableExecutors: [.willDeep, .codexCLI, .claudeCode],
+                profiles: profiles
+            )
+        )
+        #expect(selected.id == "claude")
+        #expect(
+            AgentDispatchProfileResolver.hasUntriedFallback(
+                fallbackProfileIDs: [],
+                selectedWorkerProfileIDs: ["flash", "codex"],
+                attemptedProfileIDs: ["flash"]
+            )
+        )
+    }
+
+    @Test("内建 Worker 覆盖推荐模型且默认执行模型为 DeepSeek Flash")
+    func builtInWorkersIncludeRecommendedCodingModels() {
+        #expect(AgentDispatchModelRouting.recommendedExecutionModel == "deepseek-v4-flash")
+        #expect(AgentExecutionProfile.recommendedWorkerID.contains("deepseek-v4-flash"))
+        let models = Set(AgentExecutionProfile.builtIns.compactMap(\.modelID))
+        #expect(models.isSuperset(of: [
+            "deepseek-v4-flash",
+            "gpt-5.6-sol",
+            "gpt-5.6-luna",
+            "gpt-5.6-terra",
+        ]))
+    }
+
     @Test("任务执行会话不会再次投影成侧栏项目")
     func taskSessionsDoNotBecomeProjects() throws {
         let sandbox = try makeSandbox()
@@ -200,12 +260,20 @@ struct AgentDispatchCoordinatorTests {
             executor: .codexCLI,
             goalID: session.id
         )
+        coordinator.updateWorkerProfiles(
+            [AgentExecutionProfile.recommendedWorkerID, "codex:fast"],
+            goalID: session.id
+        )
         coordinator.synchronize(with: [session])
 
         let project = try #require(coordinator.selectedGoal)
         #expect(project.effectiveModelRouting.planningModelID == "planner-large")
         #expect(project.effectiveModelRouting.executionModelID == "worker-small")
         #expect(project.selectedCLIProfileID(for: .codexCLI) == "codex:fast")
+        #expect(project.effectiveWorkerProfileIDs == [
+            AgentExecutionProfile.recommendedWorkerID,
+            "codex:fast",
+        ])
     }
 
     @Test("任务图按真实依赖分层并把末端节点连接到验收关卡")

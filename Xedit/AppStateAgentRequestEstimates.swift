@@ -14,7 +14,33 @@ extension AppState {
     /// pick up their own override rather than whatever happened to be on
     /// the currently-selected one.
     func configurationForCurrentTurn(for runtime: AgentRuntime) -> AgentConfiguration {
-        var configuration = agentConfiguration.normalized.resolved(for: .interactive)
+        let providerID = runtime.sessionProviderIDOverride?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        var configuration: AgentConfiguration
+        if let providerID, !providerID.isEmpty {
+            if let entry = agentProviderLibrary.entries.first(where: { $0.providerID == providerID }) {
+                configuration = entry.makeConfiguration(
+                    imageDescription: agentConfiguration.imageDescription
+                ).normalized.resolved(for: .interactive)
+            } else if providerID == AgentProviderPreset.someIMID {
+                let settings = SomeIMIntegrationStore.loadSettings().normalized
+                let entry = AgentProviderEntry(
+                    providerID: AgentProviderPreset.someIMID,
+                    baseURL: settings.baseURL,
+                    apiKey: SomeIMIntegrationStore.loadAPIKey(),
+                    flashPrimary: SomeIMIntegrationSettings.defaultTextModel,
+                    proPrimary: SomeIMIntegrationSettings.defaultTextModel,
+                    routingMode: .flash
+                )
+                configuration = entry.makeConfiguration(
+                    imageDescription: agentConfiguration.imageDescription
+                ).normalized.resolved(for: .interactive)
+            } else {
+                configuration = agentConfiguration.normalized.resolved(for: .interactive)
+            }
+        } else {
+            configuration = agentConfiguration.normalized.resolved(for: .interactive)
+        }
         if let override = runtime.sessionModelOverride?.trimmingCharacters(in: .whitespacesAndNewlines),
            !override.isEmpty {
             configuration.model = override

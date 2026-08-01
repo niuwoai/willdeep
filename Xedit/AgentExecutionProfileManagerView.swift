@@ -13,6 +13,7 @@ struct AgentExecutionProfileManagerView: View {
     @State private var profiles: [AgentExecutionProfile] = []
     @State private var selectedID: String?
     @State private var draft: AgentExecutionProfile?
+    @State private var availableExecutors = AgentDispatchExecutorResolver.localAvailableExecutors()
 
     private let store = AgentExecutionProfileStore()
 
@@ -71,6 +72,11 @@ struct AgentExecutionProfileManagerView: View {
                         Text(originLabel(profile.origin))
                             .font(.system(size: 8, weight: .semibold))
                             .foregroundStyle(.secondary)
+                        if !availableExecutors.contains(profile.executor) {
+                            Text(L10n.Dispatch.workerUnavailable)
+                                .font(.system(size: 8, weight: .semibold))
+                                .foregroundStyle(.orange)
+                        }
                     }
                     .tag(profile.id)
                 }
@@ -183,6 +189,7 @@ struct AgentExecutionProfileManagerView: View {
     }
 
     private func reload() {
+        availableExecutors = AgentDispatchExecutorResolver.localAvailableExecutors()
         profiles = store.availableProfiles(workspacePath: workspacePath)
         selectedID = profiles.first?.id
         draft = profiles.first
