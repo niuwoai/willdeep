@@ -843,7 +843,7 @@ extension AppState {
         Acceptance criteria:
         \(criteria)
 
-        Execute this node directly. Do not create another Goal, dispatch graph, or team of agents. Work only inside the assigned checkout. It is a checkout of the fixed logical project above; do not switch this Task to another repository. Preserve unrelated changes. Before reporting completion, provide concrete evidence such as tests, build output, or a focused diff summary. Do not merge into a shared branch; WillDeep owns review and integration.
+        Execute this node directly as an unattended run. Do not create another Goal, dispatch graph, or team of agents. Work only inside the assigned checkout. It is a checkout of the fixed logical project above; do not switch this Task to another repository. Preserve unrelated changes. Diagnose and recover from ordinary Git/worktree, dependency, build, test, path, and transient tool failures yourself; prefer safe reversible repairs and retry before stopping. Do not ask the user for implementation preferences already covered by this locked task. Pause only when missing authority or credentials, private interactive control, a destructive/irreversible choice, or a material product decision makes autonomous progress unsafe. Before reporting completion, provide concrete evidence such as tests, build output, or a focused diff summary. Do not merge into a shared branch; WillDeep owns review and integration.
 
         In the final response, update the visible execution step with a closed `progress` block and evaluate every acceptance criterion with a closed `goal-check` block. Mark an item done only when the evidence actually proves it.
         """

@@ -271,6 +271,29 @@ struct AgentGoalChecklistParserTests {
     }
 
     @Test
+    func activeGoalPlanRunsUnattendedAndSelfRecoversOrdinaryFailures() {
+        let prompt = AgentContextBuilder.systemPrompt(
+            rootDirectory: URL(fileURLWithPath: "/tmp/project"),
+            openedFileURL: nil,
+            fileContent: "",
+            selectedText: "",
+            language: nil,
+            interactionMode: .goal,
+            currentPlan: AgentPlan(
+                status: .approved,
+                steps: [AgentPlan.Step(text: "完成实现并验证")],
+                summary: ""
+            ),
+            currentGoal: goal(2)
+        )
+
+        #expect(prompt.contains("A validated Goal-backed Plan is active"))
+        #expect(prompt.contains("Treat the run as unattended"))
+        #expect(prompt.contains("ordinary Git/worktree"))
+        #expect(prompt.contains("Re-contact the user only for missing authority or credentials"))
+    }
+
+    @Test
     func workspaceGoalAwarenessPreventsDuplicateGoalCreation() {
         let existingSessionID = UUID()
         let prompt = AgentContextBuilder.systemPrompt(

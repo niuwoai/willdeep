@@ -728,5 +728,17 @@ struct GitWorktreeCoreTests {
         let worktrees = AppState.listGitWorktrees(for: result.worktree.url)
         #expect(worktrees.contains { $0.url == repository.standardizedFileURL && $0.isPrimary })
         #expect(worktrees.contains { $0.url == result.worktree.url && $0.branch == "feature-test" })
+
+        let relaunched = AppState.createGitWorktree(
+            from: repository,
+            branchName: "feature test",
+            worktreeRoot: worktreeRoot
+        )
+        guard case .success(let reused) = relaunched else {
+            Issue.record("Expected an occupied task branch to reuse its existing worktree")
+            return
+        }
+        #expect(reused.worktree.url == result.worktree.url)
+        #expect(reused.output.contains("Reusing existing WillDeep worktree"))
     }
 }

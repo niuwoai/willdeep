@@ -48,7 +48,7 @@ struct AgentContextBuilderPromptTests {
         #expect(!compact.contains("list_mcp_servers"))
     }
 
-    @Test("stable v22 prompt text is guarded by a deterministic hash snapshot")
+    @Test("stable v23 prompt text is guarded by a deterministic hash snapshot")
     func testStablePromptSnapshotHash() {
         let prompt = AgentContextBuilder.stableSystemPromptPrefix(
             toolsEnabled: true,
@@ -61,7 +61,7 @@ struct AgentContextBuilderPromptTests {
             promptProfile: .standard
         )
 
-        #expect(AgentContextBuilder.stablePrefixVersion == "willdeep-agent-system-v22")
+        #expect(AgentContextBuilder.stablePrefixVersion == "willdeep-agent-system-v23")
         #expect(diagnostics.hash == AgentContextBuilder.stablePrefixSnapshotHash)
     }
 
@@ -116,6 +116,9 @@ struct AgentContextBuilderPromptTests {
                 promptProfile: .extended
             ).hash == AgentContextBuilder.extendedPrefixSnapshotHash
         )
+        #expect(extended.contains("Front-load user communication"))
+        #expect(extended.contains("ordinary Git/worktree conflicts"))
+        #expect(extended.contains("Diagnose, repair, retry, and continue"))
     }
 
     @Test("request prompt keeps dynamic context out of system and appends it to user")

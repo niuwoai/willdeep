@@ -10,6 +10,7 @@ struct AgentDispatchGoalSetupView: View {
     let workspaceName: String
     let profiles: [AgentExecutionProfile]
     let onManageProfiles: () -> Void
+    let onAssess: (String, String, [String]) async throws -> AgentDispatchGoalAssessment
     let onCreate: (String, [String], String, [String], [String]) -> Void
 
     @State private var statement = ""
@@ -21,6 +22,11 @@ struct AgentDispatchGoalSetupView: View {
     @State private var selectedWorkerProfileIDs: Set<String> = [
         AgentExecutionProfile.recommendedWorkerID,
     ]
+    @State private var assessment: AgentDispatchGoalAssessment?
+    @State private var assessmentStatement = ""
+    @State private var assessmentError: String?
+    @State private var isAssessing = false
+    @State private var assessmentRequestID = UUID()
     @FocusState private var focusedField: Field?
 
     private enum Field {
@@ -40,7 +46,19 @@ struct AgentDispatchGoalSetupView: View {
     }
 
     private var canCreate: Bool {
-        !normalizedStatement.isEmpty && !checklistItems.isEmpty
+        // Goal assessment is advisory. A user may accept responsibility for
+        // an under-specified goal and continue once a checklist exists.
+        AgentDispatchGoalSetupPolicy.canCreateProject(
+            statement: normalizedStatement,
+            acceptanceCriteria: checklistItems
+        )
+    }
+
+    private var assessmentIsStale: Bool {
+        assessment != nil && AgentDispatchGoalSetupPolicy.assessmentIsStale(
+            assessedStatement: assessmentStatement,
+            currentStatement: normalizedStatement
+        )
     }
 
     var body: some View {
@@ -61,6 +79,9 @@ struct AgentDispatchGoalSetupView: View {
         .background(Color.primary.opacity(0.012))
         .onAppear {
             focusedField = .statement
+        }
+        .onDisappear {
+            assessmentRequestID = UUID()
         }
         .accessibilityIdentifier("dispatch.goal-setup")
     }
@@ -112,6 +133,45 @@ struct AgentDispatchGoalSetupView: View {
                     RoundedRectangle(cornerRadius: 8, style: .continuous)
                         .stroke(Color.secondary.opacity(0.18), lineWidth: 1)
                 )
+
+                HStack(spacing: 10) {
+                    Button(action: assessGoal) {
+                        if isAssessing {
+                            HStack(spacing: 7) {
+                                ProgressView()
+                                    .controlSize(.small)
+                                Text(L10n.Dispatch.goalAssessmentAnalyzing)
+                            }
+                        } else {
+                            Label(
+                                assessment == nil
+                                    ? L10n.Dispatch.goalAssessmentAction
+                                    : L10n.Dispatch.goalAssessmentAgain,
+                                systemImage: "wand.and.stars"
+                            )
+                        }
+                    }
+                    .buttonStyle(.bordered)
+                    .disabled(normalizedStatement.isEmpty || isAssessing)
+                    .accessibilityIdentifier("dispatch.goal-setup.assess")
+
+                    Text(L10n.Dispatch.goalAssessmentHelp)
+                        .font(.system(size: 11))
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+
+                if let assessment {
+                    goalAssessmentCard(assessment)
+                }
+
+                if let assessmentError {
+                    Label(assessmentError, systemImage: "exclamationmark.triangle")
+                        .font(.system(size: 11))
+                        .foregroundStyle(.red)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .accessibilityIdentifier("dispatch.goal-setup.assessment-error")
+                }
             }
 
             fieldCard(
@@ -265,12 +325,19 @@ struct AgentDispatchGoalSetupView: View {
 
     private var footer: some View {
         HStack(spacing: 12) {
-            Label(
-                L10n.Dispatch.taskCount(checklistItems.count),
-                systemImage: "point.3.connected.trianglepath.dotted"
-            )
-            .font(.system(size: 11))
-            .foregroundStyle(.secondary)
+            VStack(alignment: .leading, spacing: 2) {
+                Label(
+                    L10n.Dispatch.taskCount(checklistItems.count),
+                    systemImage: "point.3.connected.trianglepath.dotted"
+                )
+                .font(.system(size: 11))
+                .foregroundStyle(.secondary)
+                if assessment?.verdict == .needsRevision, !assessmentIsStale {
+                    Text(L10n.Dispatch.goalAssessmentCanIgnore)
+                        .font(.system(size: 10))
+                        .foregroundStyle(.orange)
+                }
+            }
             Spacer()
             Button {
                 focusedField = nil
@@ -317,6 +384,118 @@ struct AgentDispatchGoalSetupView: View {
         } else {
             selectedWorkerProfileIDs.insert(profileID)
         }
+    }
+
+    private func assessGoal() {
+        let sourceStatement = normalizedStatement
+        guard !sourceStatement.isEmpty, !isAssessing else { return }
+        focusedField = nil
+        isAssessing = true
+        assessmentError = nil
+        let requestID = UUID()
+        assessmentRequestID = requestID
+        let fallbackIDs = orderedPlanningFallbackIDs
+
+        Task { @MainActor in
+            defer {
+                if assessmentRequestID == requestID {
+                    isAssessing = false
+                }
+            }
+            do {
+                let result = try await onAssess(
+                    sourceStatement,
+                    planningProfileID,
+                    fallbackIDs
+                )
+                guard assessmentRequestID == requestID else { return }
+                assessment = result
+                assessmentStatement = sourceStatement
+                if normalizedStatement == sourceStatement {
+                    checklistText = result.acceptanceCriteria.joined(separator: "\n")
+                }
+            } catch is CancellationError {
+                return
+            } catch {
+                guard assessmentRequestID == requestID else { return }
+                assessmentError = L10n.Dispatch.goalAssessmentFailed(error.localizedDescription)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func goalAssessmentCard(_ result: AgentDispatchGoalAssessment) -> some View {
+        let current = !assessmentIsStale
+        let color: Color = current && result.isReady ? .green : .orange
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(spacing: 7) {
+                Image(systemName: current && result.isReady
+                    ? "checkmark.seal.fill"
+                    : "lightbulb.max.fill")
+                Text(current
+                    ? (result.isReady
+                        ? L10n.Dispatch.goalAssessmentReady
+                        : L10n.Dispatch.goalAssessmentNeedsRevision)
+                    : L10n.Dispatch.goalAssessmentStale)
+                    .font(.system(size: 12, weight: .semibold))
+            }
+            .foregroundStyle(color)
+
+            Text(current ? result.summary : L10n.Dispatch.goalAssessmentStaleHelp)
+                .font(.system(size: 11))
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+
+            if current, !result.missingInformation.isEmpty {
+                VStack(alignment: .leading, spacing: 5) {
+                    Text(L10n.Dispatch.goalAssessmentMissingInformation)
+                        .font(.system(size: 11, weight: .semibold))
+                    ForEach(Array(result.missingInformation.enumerated()), id: \.offset) { entry in
+                        Label(entry.element, systemImage: "arrow.turn.down.right")
+                            .font(.system(size: 11))
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                }
+            }
+
+            if current, !result.suggestedGoalStatement.isEmpty {
+                VStack(alignment: .leading, spacing: 6) {
+                    Text(L10n.Dispatch.goalAssessmentSuggestedStatement)
+                        .font(.system(size: 11, weight: .semibold))
+                    Text(result.suggestedGoalStatement)
+                        .font(.system(size: 11))
+                        .textSelection(.enabled)
+                        .fixedSize(horizontal: false, vertical: true)
+                    Button {
+                        statement = result.suggestedGoalStatement
+                        focusedField = .statement
+                    } label: {
+                        Label(
+                            L10n.Dispatch.goalAssessmentUseSuggestion,
+                            systemImage: "arrow.up.left"
+                        )
+                    }
+                    .buttonStyle(.borderless)
+                    .font(.system(size: 11, weight: .medium))
+                    .accessibilityIdentifier("dispatch.goal-setup.use-suggested-goal")
+                }
+            }
+
+            if current, !result.isReady {
+                Text(L10n.Dispatch.goalAssessmentCanIgnore)
+                    .font(.system(size: 10))
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+        .padding(12)
+        .background(color.opacity(0.07))
+        .clipShape(RoundedRectangle(cornerRadius: 9, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 9, style: .continuous)
+                .stroke(color.opacity(0.22), lineWidth: 1)
+        )
+        .accessibilityIdentifier("dispatch.goal-setup.assessment")
     }
 
     private func fieldCard<Content: View>(

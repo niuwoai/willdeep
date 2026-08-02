@@ -507,6 +507,9 @@ struct AgentPlanProgressTests {
         #expect(prompt.contains("continue executing it in the same turn"))
         #expect(prompt.contains("Do not plan again on later tool rounds"))
         #expect(prompt.contains("explicitly asks only for analysis or a plan"))
+        #expect(prompt.contains("privately preflight the complete request"))
+        #expect(prompt.contains("Once execution starts, continue as an unattended run"))
+        #expect(prompt.contains("ordinary Git/worktree"))
 
         let executionPrompt = AgentContextBuilder.systemPrompt(
             rootDirectory: nil,
@@ -524,5 +527,8 @@ struct AgentPlanProgressTests {
         #expect(executionPrompt.contains("=== ACTIVE PLAN — CONTINUE, DO NOT RE-PLAN ==="))
         #expect(executionPrompt.contains("refresh the visible checklist immediately"))
         #expect(executionPrompt.contains("Do not emit a replacement `plan` block"))
+        #expect(executionPrompt.contains("The plan is now in unattended execution"))
+        #expect(executionPrompt.contains("ordinary Git/worktree conflicts"))
+        #expect(executionPrompt.contains("Re-contact the user only for missing authority or credentials"))
     }
 }
