@@ -13,20 +13,24 @@ import Testing
 @Suite
 struct AgentToolResultImageEncodingTests {
     @Test
-    func gpt5ModelsUseResponsesForOpenAICompatibleInference() {
-        let gpt5FamilyModels = [
+    func gptModelsUseChatCompletionsForOpenAICompatibleInference() throws {
+        let gptFamilyModels = [
+            "gpt-4.1",
             "gpt-5",
             "gpt-5.4",
             "gpt-5.5",
+            "gpt5.5",
             "gpt-5.6-sol",
+            "chatgpt-4o-latest",
             "openai/gpt-5.4-codex",
             "vendor/GPT-5.6-sol"
         ]
-        let legacyConfiguration = AgentConfiguration(
-            providerID: AgentProviderPreset.openAIID,
-            baseURL: "https://api.openai.com/v1",
-            model: "gpt-4.1",
-            apiKey: "test"
+        let explicitResponsesConfiguration = AgentConfiguration(
+            providerID: AgentProviderPreset.customID,
+            baseURL: "https://example.com/v1",
+            model: "gpt-5.6-luna",
+            apiKey: "test",
+            customKindOverride: .openAIResponses
         ).normalized
         let nativeAnthropicConfiguration = AgentConfiguration(
             providerID: AgentProviderPreset.customID,
@@ -36,17 +40,30 @@ struct AgentToolResultImageEncodingTests {
             customKindOverride: .anthropicMessages
         ).normalized
 
-        for model in gpt5FamilyModels {
+        for model in gptFamilyModels {
             let configuration = AgentConfiguration(
                 providerID: AgentProviderPreset.openAIID,
                 baseURL: "https://api.openai.com/v1",
                 model: model,
                 apiKey: "test"
             ).normalized
-            #expect(configuration.inferenceProviderKind == .openAIResponses)
+            #expect(configuration.inferenceProviderKind == .openAIChat)
+            #expect(AgentConfiguration.isGPTFamilyModel(model))
         }
-        #expect(legacyConfiguration.inferenceProviderKind == .openAIChat)
+        #expect(explicitResponsesConfiguration.inferenceProviderKind == .openAIChat)
         #expect(nativeAnthropicConfiguration.inferenceProviderKind == .anthropicMessages)
+        #expect(!AgentConfiguration.isGPTFamilyModel("deepseek-v4-flash"))
+
+        let chatRequest = try OpenAIChatAdapter.encodeChatRequest(
+            model: "gpt-5.6-luna",
+            messages: [AgentMessage(role: .user, content: "Hello")],
+            tools: []
+        )
+        let chatBody = try #require(
+            JSONSerialization.jsonObject(with: chatRequest) as? [String: Any]
+        )
+        #expect(chatBody["model"] as? String == "gpt-5.6-luna")
+        #expect(chatBody["store"] == nil)
     }
 
     @Test

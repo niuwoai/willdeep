@@ -27,6 +27,7 @@ private struct AgentDispatchBoardContent: View {
     @State private var isCommandConsoleExpanded = false
     @State private var executionProfiles: [AgentExecutionProfile] = []
     @State private var isProfileManagerPresented = false
+    @State private var takeoverSessionID: UUID?
 
     private enum AlertTarget: Identifiable {
         case interrupt(goalID: UUID, command: AgentDispatchCommand)
@@ -61,6 +62,7 @@ private struct AgentDispatchBoardContent: View {
             resumeSelectedGoalAfterSynchronization()
         }
         .onChange(of: coordinator.selectedGoalID) { _ in
+            takeoverSessionID = nil
             graphSelection = coordinator.selectedTaskID.map(AgentDispatchGraphSelection.task)
             reloadExecutionProfiles()
             resumeSelectedGoalAfterSynchronization()
@@ -211,10 +213,26 @@ private struct AgentDispatchBoardContent: View {
                             goalID: goal.id,
                             taskID: $0
                         )
+                    },
+                    onOpenConversation: {
+                        openTaskTakeover(goalID: goal.id, taskID: $0)
                     }
                 )
                 Divider().opacity(0.55)
-                if effectiveGraphSelection == .acceptance {
+                if let takeover = takeoverContext(in: goal) {
+                    AgentDispatchTakeoverDrawer(
+                        runtime: takeover.runtime,
+                        goal: goal,
+                        task: takeover.task,
+                        onClose: { takeoverSessionID = nil },
+                        onOpenFullConversation: {
+                            takeoverSessionID = nil
+                            appState.openDispatchTaskConversation(
+                                runtimeSessionID: takeover.runtime.id
+                            )
+                        }
+                    )
+                } else if effectiveGraphSelection == .acceptance {
                     AgentDispatchAcceptanceInspectorView(
                         goal: goal,
                         onSelectTask: { selectGraphNode(.task($0)) }
@@ -252,8 +270,7 @@ private struct AgentDispatchBoardContent: View {
                         onManageProfiles: { isProfileManagerPresented = true },
                         onLaunch: { launchTask(goalID: goal.id, taskID: task.id) },
                         onOpenConversation: {
-                            guard let runtimeID = task.runtimeSessionID else { return }
-                            appState.openDispatchTaskConversation(runtimeSessionID: runtimeID)
+                            openTaskTakeover(goalID: goal.id, taskID: task.id)
                         },
                         onEdit: {
                             editorRequest = AgentDispatchEditorRequest(
@@ -472,10 +489,41 @@ private struct AgentDispatchBoardContent: View {
     }
 
     private func selectGraphNode(_ selection: AgentDispatchGraphSelection) {
+        if case .task(let taskID) = selection,
+           coordinator.selectedGoal?.tasks.first(where: { $0.id == taskID })?.runtimeSessionID
+                != takeoverSessionID {
+            takeoverSessionID = nil
+        } else if selection == .acceptance {
+            takeoverSessionID = nil
+        }
         graphSelection = selection
         if case .task(let taskID) = selection {
             coordinator.selectTask(taskID)
         }
+    }
+
+    private func openTaskTakeover(goalID: UUID, taskID: UUID) {
+        guard let goal = coordinator.goals.first(where: { $0.id == goalID }),
+              let task = goal.tasks.first(where: { $0.id == taskID }),
+              let runtimeSessionID = task.runtimeSessionID,
+              appState.prepareDispatchTaskTakeover(runtimeSessionID: runtimeSessionID) else {
+            return
+        }
+        coordinator.selectGoal(goalID)
+        coordinator.selectTask(taskID)
+        graphSelection = .task(taskID)
+        takeoverSessionID = runtimeSessionID
+    }
+
+    private func takeoverContext(
+        in goal: AgentDispatchGoal
+    ) -> (task: AgentDispatchTask, runtime: AgentRuntime)? {
+        guard let takeoverSessionID,
+              let task = goal.tasks.first(where: { $0.runtimeSessionID == takeoverSessionID }),
+              let runtime = appState.runtime(for: takeoverSessionID) else {
+            return nil
+        }
+        return (task, runtime)
     }
 
     private func saveTaskEditor(

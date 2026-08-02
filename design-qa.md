@@ -32,7 +32,6 @@
 - 版本一致性与变更文件完整性由仓库脚本继续校验。
 
 final result: passed
-
 ---
 
 # Design QA：Goal-first 调度台
@@ -1671,3 +1670,50 @@ final result: passed
 ## 最终结果
 
 **passed**
+
+---
+
+# Design QA — Dispatch Task Observability and Takeover
+
+- Version: `1.224.0-rc1`
+- Date: 2026-08-02
+- Source visual: `/Users/rocky/.codex/generated_images/019fc103-3d3a-7d03-b1aa-1e8b57e45695/exec-3f641c04-436b-4ea6-9550-976e373f7aa5.png`
+- Final implementation screenshot: `/var/folders/np/rjc0y5w52x324x21pv6g33440000gp/T/com.openai.sky.CUAService/WillDeep Screenshot 2026-08-02 at 7.34.17 PM.jpeg`
+- Actual app viewport: `1277 × 768`, macOS native scale.
+- Reference canvas: `1487 × 1058`; the final comparison used the same dispatch-project state and the product's actual desktop viewport rather than stretching the native window to the mock canvas.
+
+## State alignment
+
+- Project: 仲裁游戏平台并行任务图
+- Selected task: 冻结共享契约与可运行大厅骨架
+- Task state: failed, with a persisted task runtime
+- Expected fixture difference: this historical task has no provider token usage, so Token and cost correctly render as unavailable while elapsed time remains visible. Running/provider-backed tasks render concrete values and the estimate marker according to the tested metrics policy.
+
+## Combined comparison evidence
+
+The source visual and final screenshot were opened together in one visual comparison input after the final build. The implementation preserves the existing WillDeep canvas, wallpaper, node geometry, status colors, typography, and native controls while adding the selected-task entry and a right-side takeover surface.
+
+## Visual and interaction review
+
+- Typography: native hierarchy remains consistent; project breadcrumb, task title, state, executor, metrics, transcript, composer, and tool labels remain legible at the actual viewport.
+- Spacing and layout: the takeover drawer is fixed-width and does not overlap the command console; graph content remains scrollable and node cards preserve their dependency ports and badges.
+- Colors and tokens: existing palette/accent/status colors are reused; failed/running states remain distinguishable without introducing a separate visual language.
+- Assets and icons: only system SF Symbols and existing product assets are used; no approximate or placeholder icon drawings were added.
+- Copy and content: every new user-facing string is localized through `Localizable.xcstrings`; missing usage and unavailable pricing are represented explicitly instead of fabricated.
+- Accessibility and interaction: node selection, task-conversation entry, drawer close, full-conversation entry, composer, primary tools, More menu, project breadcrumb, and return-to-dispatch help text are exposed through native accessibility roles.
+
+## Interaction evidence
+
+1. Selected a failed dispatch task and opened its task conversation from the Inspector.
+2. Verified the takeover drawer showed the dispatch-project breadcrumb, task title/state/executor, Token/time/cost row, transcript, composer, and Plan/Files/Terminal/Review/More controls.
+3. Opened the full task conversation and verified the project breadcrumb appears to the left of the session title with the compact task-specific tool set.
+4. Activated the breadcrumb and returned to the same dispatch project and graph state.
+
+## Findings
+
+- P0: none.
+- P1: none.
+- P2: none.
+- The final all-tests run passed `1850/1850`; targeted dispatch/GPT transport suites also passed.
+
+final result: passed

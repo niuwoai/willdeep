@@ -1,6 +1,6 @@
 # WillDeep Product Overview
 
-> Last updated: 2026-08-02 | Current version: v1.223.0-rc2
+> Last updated: 2026-08-02 | Current version: v1.224.0-rc1
 
 ## Positioning
 
@@ -12,6 +12,8 @@ WillDeep is configured for non-App-Store distribution without App Sandbox so it 
 
 ## 架构概览
 
+- **调度节点可观测与人工接管（1.224.0-rc1）** —— 任务图节点直接显示 Token、墙钟用时和预估费用，运行态按秒刷新；真实 provider 用量不会重复计算用户文本，外部 CLI 缺少可靠账单时明确显示不可定价。选中节点可在调度台右侧打开上下文保持的任务接管抽屉，查看消息并发送会在安全点生效的人工指令；计划、文件、终端和 Diff 作为主要干预工具，预览等低频能力收进更多菜单。打开完整任务对话后，标题左侧会显示所属调度项目并可一键返回原项目节点。
+- **GPT 统一使用 Chat Completions（1.224.0-rc1）** —— GPT 全系列模型不再自动切换到 Responses；`gpt-5.5`、`gpt5.5`、`gpt-5.6-sol/luna/terra` 及带 Provider 命名空间的别名一律通过 `/v1/chat/completions` 推理，即使自定义 Provider 选择了 Responses 也会回落到 Chat，避免中转服务不支持 `store` 参数时请求失败。DeepSeek V4 Flash 的专用 Responses 与状态续接不受影响。
 - **调度节点真正无人值守（1.223.0-rc2）** —— 调度台创建的执行子会话由宿主归属字段开启专用无人值守策略：WillDeep 工具不再弹人工审批或问题卡，无法自主解决时把明确阻塞原因交回调度器；Claude Code 固定使用非交互跳过确认参数并绕开宿主 ACP 审批回调，同时继续受 WillDeep 外层隔离 worktree 沙箱约束。普通聊天、手动 Goal 与模型自行调用 Claude Code 不受影响，也不能伪造该权限。
 - **先对齐、后无人值守（1.223.0-rc1）** —— 调度项目的目标描述下新增 AI 目标体检：一键判断目标是否可收敛、列出必须提前确认的边界、给出可编辑的改写建议，并自动填充 3–10 条可观察验收标准；诊断是建议而非门禁，用户可修改后复检，也可忽略提示继续创建。普通聊天、Goal 计划与调度节点共享同一执行原则：写入或高成本动作前集中发现用户真正必须决定的范围、凭据、外部副作用和不可逆选择，计划启动后则自行处理普通 Git/worktree、依赖、构建、测试、路径和瞬态故障，只有缺少授权/凭据、需要用户私密接管、不可逆操作或会改变目标的产品决策才暂停。
 - **重复任务 worktree 自动接续（1.223.0-rc1）** —— 调度任务的确定性分支如果已在有效隔离 worktree 中检出，宿主会直接复用该工作区；若仅剩陈旧 Git 元数据则先 prune 再重查，不再把 `branch is already used by worktree` 直接弹给用户。主检出目录永远不会被误当成隔离任务 worktree。
@@ -81,7 +83,7 @@ WillDeep is configured for non-App-Store distribution without App Sandbox so it 
 
 - **Smart 审批发布门禁对齐（1.218.0-rc2）** —— 手动补丁应用与批量重复目标校验的回归用例显式使用“每次请求审批”模式，受控委托式编码 Agent 的 Smart 模式用例按现行策略断言静态白名单；发布测试既覆盖人工审批路径，也不再把 Smart 自动应用工作区变更误判为回归。
 
-- **GPT-5 自动 Responses 路由与跨重启续接（1.218.0-rc1）** —— OpenAI-compatible Provider 中模型 ID 只要包含 `gpt-5`（大小写不敏感，例如 `gpt-5.4`、`gpt-5.5`、`gpt-5.6-sol`）就自动通过 `/responses` 推理，无需用户另选 Responses Provider；Anthropic 与 Gemini 原生协议不参与误判。成功 Response 的 `response_id`、上下文哈希和 wire-input 哈希随会话 JSON 持久化，应用重启后仍可通过 `previous_response_id + 增量 input` 继续；落盘内容不包含重复提示词、工具 schema、凭据或消息正文。上游游标失效，或 Provider/Base URL/API Key、模型、提示词、工具及历史前缀变化时安全回退完整请求；some.im 会话/工作区头及 OpenRouter branding 在自动路由后继续保留。
+- **GPT-5 Responses 路由历史（1.218.0-rc1，已于 1.224.0-rc1 停用）** —— 该版本曾为 GPT-5 自动启用 `/responses` 与跨重启游标续接；由于部分 OpenAI-compatible 中转不支持 Responses 的 `store` 契约，现行版本已统一回到 `/v1/chat/completions`。Responses 的持久化续接实现继续供明确支持该协议的非 GPT 模型使用。
 
 - **Responses 有状态增量续接（1.217.0-rc1）** —— 选择 OpenAI Responses 协议的模型后，每个打开的会话会保留最近一次成功 Response 的游标；只有模型、instructions、工具 schema、图像能力与既有消息严格不变且历史仅追加时，后续工具轮次或用户轮次才发送 `previous_response_id + 增量 input`。请求显式使用 `store: true`，独立安全判定使用 `store: false`；上游返回游标不存在、过期或不支持时自动清除游标并以完整历史重试，修改上下文、切换模型/工具或压缩历史也会直接走完整请求。
 

@@ -392,6 +392,134 @@ extension L10n {
             localized: "dispatch.open-task-conversation",
             defaultValue: "Open Task Conversation"
         )
+        static let openFullTaskConversation = String(
+            localized: "dispatch.open-full-task-conversation",
+            defaultValue: "Open Full Task Conversation"
+        )
+        static let returnToDispatchBoard = String(
+            localized: "dispatch.return-to-board",
+            defaultValue: "Return to the dispatch board"
+        )
+        static let moreTaskTools = String(
+            localized: "dispatch.more-task-tools",
+            defaultValue: "More task tools"
+        )
+        static let takeoverInstructionPlaceholder = String(
+            localized: "dispatch.takeover-instruction-placeholder",
+            defaultValue: "Send an instruction to the running task…"
+        )
+        static let sendTakeoverInstruction = String(
+            localized: "dispatch.send-takeover-instruction",
+            defaultValue: "Send Instruction"
+        )
+        static let takeoverQueuesAtSafePoint = String(
+            localized: "dispatch.takeover-queues-at-safe-point",
+            defaultValue: "The instruction will be queued and applied at a safe point."
+        )
+        static let takeoverStartsNextTurn = String(
+            localized: "dispatch.takeover-starts-next-turn",
+            defaultValue: "The instruction starts the next task turn."
+        )
+        static let metricUnavailable = String(
+            localized: "dispatch.metric.unavailable",
+            defaultValue: "—"
+        )
+        static let metricUnpricedHelp = String(
+            localized: "dispatch.metric.unpriced-help",
+            defaultValue: "This executor did not report billable usage or WillDeep has no matching price."
+        )
+
+        static func taskConversationProjectBreadcrumb(_ project: String) -> String {
+            let template = String(
+                localized: "dispatch.task-conversation-project-breadcrumb",
+                defaultValue: "Task Graph · %@"
+            )
+            return String(format: template, project)
+        }
+
+        static func metricApproximate(_ value: String) -> String {
+            let template = String(
+                localized: "dispatch.metric.approximate",
+                defaultValue: "≈%@"
+            )
+            return String(format: template, value)
+        }
+
+        static func metricTokensLabel(_ value: String) -> String {
+            let template = String(
+                localized: "dispatch.metric.tokens-label",
+                defaultValue: "%@ Token"
+            )
+            return String(format: template, value)
+        }
+
+        static func metricDurationHours(_ hours: Int, _ minutes: Int) -> String {
+            let template = String(
+                localized: "dispatch.metric.duration-hours",
+                defaultValue: "%dh %02dm"
+            )
+            return String(format: template, hours, minutes)
+        }
+
+        static func metricDurationMinutes(_ minutes: Int, _ seconds: Int) -> String {
+            let template = String(
+                localized: "dispatch.metric.duration-minutes",
+                defaultValue: "%dm %02ds"
+            )
+            return String(format: template, minutes, seconds)
+        }
+
+        static func metricDurationSeconds(_ seconds: Int) -> String {
+            let template = String(
+                localized: "dispatch.metric.duration-seconds",
+                defaultValue: "%ds"
+            )
+            return String(format: template, seconds)
+        }
+
+        static func metricEstimatedCost(_ value: String) -> String {
+            let template = String(
+                localized: "dispatch.metric.estimated-cost",
+                defaultValue: "≈ $%@"
+            )
+            return String(format: template, value)
+        }
+
+        static func metricTokensHelp(_ value: String) -> String {
+            let template = String(
+                localized: "dispatch.metric.tokens-help",
+                defaultValue: "Token usage: %@"
+            )
+            return String(format: template, value)
+        }
+
+        static func metricDurationHelp(_ value: String) -> String {
+            let template = String(
+                localized: "dispatch.metric.duration-help",
+                defaultValue: "Elapsed time: %@"
+            )
+            return String(format: template, value)
+        }
+
+        static func metricCostHelp(_ value: String) -> String {
+            let template = String(
+                localized: "dispatch.metric.cost-help",
+                defaultValue: "Estimated cost: %@"
+            )
+            return String(format: template, value)
+        }
+
+        static func metricsAccessibility(
+            _ tokens: String,
+            _ duration: String,
+            _ cost: String
+        ) -> String {
+            let template = String(
+                localized: "dispatch.metric.accessibility",
+                defaultValue: "Tokens %@, elapsed %@, estimated cost %@"
+            )
+            return String(format: template, tokens, duration, cost)
+        }
         static let waitingForDependencies = String(
             localized: "dispatch.waiting-dependencies",
             defaultValue: "Waiting for dependencies"

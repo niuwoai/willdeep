@@ -1654,22 +1654,36 @@ struct AgentConfiguration: Codable, Equatable {
         return AgentProviderPreset.preset(id: providerID)?.kind ?? .openAIChat
     }
 
-    /// Transport used for model inference. GPT-5-family ids are routed through
-    /// `/responses` even when their OpenAI-compatible provider entry still
-    /// uses the legacy Chat protocol. Native Anthropic/Gemini configurations
-    /// remain pinned to their own incompatible wire formats.
+    /// Transport used for model inference. GPT-family ids always use Chat
+    /// Completions because several OpenAI-compatible relays expose those
+    /// models without implementing the Responses `store` contract. Native
+    /// Anthropic/Gemini configurations remain pinned to their own wire
+    /// formats; supported DeepSeek V4 Flash routes keep Responses behavior.
     var inferenceProviderKind: AgentProviderKind {
         let configuredKind = providerKind
         guard configuredKind == .openAIChat || configuredKind == .openAIResponses else {
             return configuredKind
         }
-        if model.range(of: "gpt-5", options: [.caseInsensitive]) != nil {
-            return .openAIResponses
+        if Self.isGPTFamilyModel(model) {
+            return .openAIChat
         }
         if usesDeepSeekV4FlashResponsesBehavior {
             return .openAIResponses
         }
         return configuredKind
+    }
+
+    nonisolated static func isGPTFamilyModel(_ model: String) -> Bool {
+        let tokens = model.lowercased().split { !$0.isLetter && !$0.isNumber }
+        return tokens.contains { token in
+            for prefix in ["gpt", "chatgpt"] where token.hasPrefix(prefix) {
+                let suffix = token.dropFirst(prefix.count)
+                if suffix.isEmpty || suffix.first?.isNumber == true {
+                    return true
+                }
+            }
+            return false
+        }
     }
 
     /// Model ids backed by DeepSeek V4 Flash on the some.im gateway.
