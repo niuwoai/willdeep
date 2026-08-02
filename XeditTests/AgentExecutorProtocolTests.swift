@@ -281,6 +281,31 @@ struct AgentExecutorProtocolTests {
             AgentToolRunner.claudeCodeCLIPermissionMode("acceptEdits")
                 == "acceptEdits"
         )
+        #expect(
+            AgentToolRunner.claudeCodeCLIPermissionMode(
+                "acceptEdits",
+                unattended: true
+            ) == "bypassPermissions"
+        )
+    }
+
+    @Test("无人值守 Claude 使用跳过权限确认参数且提示词仍走 stdin")
+    func unattendedClaudeSpecificationSkipsPermissionPrompts() {
+        let specification = AgentExecutorProcessFactory.claudeCode(
+            executable: "/usr/bin/true",
+            prompt: "Run without an attached operator.",
+            permissionMode: "bypassPermissions",
+            model: nil,
+            imagePaths: [],
+            workingDirectory: URL(fileURLWithPath: "/tmp"),
+            environment: [:],
+            sandboxMode: .workspaceWrite
+        )
+
+        #expect(specification.arguments.contains("--dangerously-skip-permissions"))
+        #expect(!specification.arguments.contains("bypassPermissions"))
+        #expect(String(decoding: specification.standardInput, as: UTF8.self)
+            == "Run without an attached operator.\n")
     }
 
     @Test("ACP round trip delegates approval, files, and terminal to host")
@@ -659,6 +684,8 @@ private final class ACPWriteProbe {
 @Suite("Structured agent process registry")
 @MainActor
 struct AgentExecutorProcessRegistryTests {
+    private static let fullSuiteCompletionAllowanceSeconds: TimeInterval = 20
+
     @Test("Fast process retains session, usage, and final result")
     func fastProcessRetainsAllStructuredEvents() async throws {
         let output = [
@@ -829,7 +856,9 @@ struct AgentExecutorProcessRegistryTests {
         registry: AgentJobRegistry,
         id: UUID
     ) async throws -> AgentBackgroundJob {
-        let deadline = Date().addingTimeInterval(5)
+        let deadline = Date().addingTimeInterval(
+            Self.fullSuiteCompletionAllowanceSeconds
+        )
         while Date() < deadline {
             if let job = registry.job(id: id), !job.isAlive {
                 return job

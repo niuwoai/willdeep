@@ -2636,6 +2636,7 @@ struct AgentToolCallCard: View {
         case .staticAllowlist: return "AUTO"
         case .llmJudge: return "AI OK"
         case .goalMode: return "GOAL"
+        case .dispatchTask: return "UNATTENDED"
         case .workspaceAccess: return "WORKSPACE"
         case .controlLease: return L10n.ToolCard.approvalControlLeaseBadge
         case .escalated: return "ESCALATED"
@@ -2651,6 +2652,7 @@ struct AgentToolCallCard: View {
         case .staticAllowlist: return "Matched the built-in read-only allowlist (safe shell commands / read-style MCP tools)."
         case .llmJudge: return "An LLM judge classified this call as non-malicious normal work."
         case .goalMode: return "Auto-approved because this session is in Goal mode. Danger-tier commands still ask."
+        case .dispatchTask: return "Auto-approved because this scheduler-owned task is running unattended."
         case .workspaceAccess: return "Auto-approved by this session's Workspace Access approval mode. Danger-tier commands still ask."
         case .controlLease: return L10n.ToolCard.approvalControlLeaseTooltip
         case .escalated: return "You approved this call to run outside the default sandbox boundary."

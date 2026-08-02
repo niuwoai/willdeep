@@ -20,6 +20,22 @@ struct AgentDispatchCoordinatorTests {
         let runtime = AgentRuntime(session: session)
 
         #expect(runtime.sessionProviderIDOverride == AgentProviderPreset.someIMID)
+        #expect(runtime.isUnattendedDispatchTask)
+    }
+
+    @Test("普通 Goal 与调度项目父会话不会误用无人值守审批")
+    func onlyDispatchChildrenAreUnattended() {
+        var projectSession = AgentSession()
+        projectSession.presentationScope = .dispatchBoard
+        let projectRuntime = AgentRuntime(session: projectSession)
+
+        var taskSession = AgentSession()
+        taskSession.presentationScope = .dispatchBoard
+        taskSession.dispatchParentProjectID = UUID()
+        let taskRuntime = AgentRuntime(session: taskSession)
+
+        #expect(!projectRuntime.isUnattendedDispatchTask)
+        #expect(taskRuntime.isUnattendedDispatchTask)
     }
 
     @Test("Goal 指令按运行状态进入立即、安全点或中断确认")

@@ -562,6 +562,8 @@ extension AppState {
         switch source {
         case .goalMode:
             return "Auto-applied by Goal mode"
+        case .dispatchTask:
+            return "Auto-applied by unattended dispatch task"
         case .workspaceAccess:
             return "Auto-applied by workspace access approval"
         case .staticAllowlist:
@@ -572,6 +574,9 @@ extension AppState {
     }
 
     private func pendingPatchAutoApplySource(for runtime: AgentRuntime) -> AgentToolApprovalSource? {
+        if runtime.isUnattendedDispatchTask {
+            return .dispatchTask
+        }
         if runtime.interactionMode == .goal {
             return .goalMode
         }

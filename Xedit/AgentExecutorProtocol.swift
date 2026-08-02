@@ -133,8 +133,12 @@ nonisolated enum AgentExecutorProcessFactory {
             "--input-format", "text",
             "--output-format", "stream-json",
             "--verbose",
-            "--permission-mode", permissionMode,
         ]
+        if permissionMode == "bypassPermissions" {
+            arguments.append("--dangerously-skip-permissions")
+        } else {
+            arguments += ["--permission-mode", permissionMode]
+        }
         if let sessionID, !sessionID.isEmpty {
             arguments += ["--resume", sessionID]
         }
