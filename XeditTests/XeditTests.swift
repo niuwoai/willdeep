@@ -2353,6 +2353,15 @@ struct WillDeepTests {
             model: nil
         )
         #expect(!noModel.contains("--model"))
+
+        let unattended = AgentToolRunner.claudeCodeCommandLine(
+            executable: "/x/claude",
+            prompt: "implement",
+            permissionMode: "bypassPermissions",
+            model: nil
+        )
+        #expect(unattended.contains("--dangerously-skip-permissions"))
+        #expect(!unattended.contains("--permission-mode"))
     }
 
     @Test("claude_code executable discovery prefers the native install path")

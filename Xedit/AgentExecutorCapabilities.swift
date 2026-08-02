@@ -123,9 +123,13 @@ nonisolated enum AgentExecutorCapabilityResolver {
 
 extension AgentToolRunner {
     nonisolated static func claudeCodeCLIPermissionMode(
-        _ requestedMode: String
+        _ requestedMode: String,
+        unattended: Bool = false
     ) -> String {
-        requestedMode == "default" ? "dontAsk" : requestedMode
+        if unattended {
+            return "bypassPermissions"
+        }
+        return requestedMode == "default" ? "dontAsk" : requestedMode
     }
 
     nonisolated static func claudeCodeACPExecutablePath(

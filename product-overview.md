@@ -1,6 +1,6 @@
 # WillDeep Product Overview
 
-> Last updated: 2026-08-02 | Current version: v1.223.0-rc1
+> Last updated: 2026-08-02 | Current version: v1.223.0-rc2
 
 ## Positioning
 
@@ -12,6 +12,7 @@ WillDeep is configured for non-App-Store distribution without App Sandbox so it 
 
 ## 架构概览
 
+- **调度节点真正无人值守（1.223.0-rc2）** —— 调度台创建的执行子会话由宿主归属字段开启专用无人值守策略：WillDeep 工具不再弹人工审批或问题卡，无法自主解决时把明确阻塞原因交回调度器；Claude Code 固定使用非交互跳过确认参数并绕开宿主 ACP 审批回调，同时继续受 WillDeep 外层隔离 worktree 沙箱约束。普通聊天、手动 Goal 与模型自行调用 Claude Code 不受影响，也不能伪造该权限。
 - **先对齐、后无人值守（1.223.0-rc1）** —— 调度项目的目标描述下新增 AI 目标体检：一键判断目标是否可收敛、列出必须提前确认的边界、给出可编辑的改写建议，并自动填充 3–10 条可观察验收标准；诊断是建议而非门禁，用户可修改后复检，也可忽略提示继续创建。普通聊天、Goal 计划与调度节点共享同一执行原则：写入或高成本动作前集中发现用户真正必须决定的范围、凭据、外部副作用和不可逆选择，计划启动后则自行处理普通 Git/worktree、依赖、构建、测试、路径和瞬态故障，只有缺少授权/凭据、需要用户私密接管、不可逆操作或会改变目标的产品决策才暂停。
 - **重复任务 worktree 自动接续（1.223.0-rc1）** —— 调度任务的确定性分支如果已在有效隔离 worktree 中检出，宿主会直接复用该工作区；若仅剩陈旧 Git 元数据则先 prune 再重查，不再把 `branch is already used by worktree` 直接弹给用户。主检出目录永远不会被误当成隔离任务 worktree。
 

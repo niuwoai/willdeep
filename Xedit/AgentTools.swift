@@ -1213,9 +1213,9 @@ enum AgentToolRunner {
 
     // MARK: claude_code
 
-    /// Permission modes we forward to `claude -p`. Deliberately NOT
-    /// including `bypassPermissions` — headless full-bypass from a
-    /// model-initiated tool call is an instruction-injection foot-gun.
+    /// Permission modes accepted from model-authored `claude_code` calls.
+    /// `bypassPermissions` remains unavailable here; only the host-derived
+    /// unattended-dispatch bit may select it below.
     nonisolated static let claudeCodePermissionModes: Set<String> = ["plan", "acceptEdits", "default"]
 
     /// Locate the Claude Code CLI. Checks the native-installer location
@@ -1261,8 +1261,12 @@ enum AgentToolRunner {
         parts += [
             "-p", shellQuoted(prompt),
             "--output-format", "text",
-            "--permission-mode", permissionMode,
         ]
+        if permissionMode == "bypassPermissions" {
+            parts.append("--dangerously-skip-permissions")
+        } else {
+            parts += ["--permission-mode", permissionMode]
+        }
         if let model, !model.isEmpty {
             parts += ["--model", shellQuoted(model)]
         }
@@ -1293,7 +1297,8 @@ enum AgentToolRunner {
             )
         }
         let permissionMode = claudeCodeCLIPermissionMode(
-            requestedPermissionMode
+            requestedPermissionMode,
+            unattended: context.isUnattendedDispatchTask
         )
 
         let executable: String

@@ -597,6 +597,19 @@ extension AppState {
         let delegatedMessageID = runtime.toolCalls.first {
             $0.id == recordID
         }?.messageID ?? recordID
+        let delegatedApprovalHandler: (@MainActor (AgentDelegatedApprovalRequest) async -> AgentDelegatedApprovalDecision)?
+        if runtime.isUnattendedDispatchTask {
+            delegatedApprovalHandler = nil
+        } else {
+            delegatedApprovalHandler = { request in
+                await self.resolveDelegatedExecutorApproval(
+                    request,
+                    runtime: runtime,
+                    messageID: delegatedMessageID,
+                    rootDirectory: workspaceURL
+                )
+            }
+        }
         let context = AgentToolContext(
             rootDirectory: workspaceURL,
             workspaceLocation: workspaceLocation,
@@ -622,6 +635,7 @@ extension AppState {
                 approvalSource: approvalSource,
                 sandboxDecision: sandboxDecision
             ),
+            isUnattendedDispatchTask: runtime.isUnattendedDispatchTask,
             editableContentProvider: { url in
                 try self.editableContent(forAgentPatchURL: url)
             },
@@ -643,14 +657,7 @@ extension AppState {
                     update: update
                 )
             },
-            delegatedApprovalHandler: { request in
-                await self.resolveDelegatedExecutorApproval(
-                    request,
-                    runtime: runtime,
-                    messageID: delegatedMessageID,
-                    rootDirectory: workspaceURL
-                )
-            }
+            delegatedApprovalHandler: delegatedApprovalHandler
         )
 
         do {
