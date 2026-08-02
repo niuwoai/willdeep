@@ -80,16 +80,16 @@ enum AgentContextBuilder {
     private static let maxSelectionCharacters = 6_000
     private static let maxRulesCharacters = 6_000
     private static let dynamicContextMarker = "=== Dynamic Turn Context ==="
-    static let stablePrefixVersion = "willdeep-agent-system-v22"
+    static let stablePrefixVersion = "willdeep-agent-system-v23"
     /// Byte-level snapshot hashes for all three prompt profiles (computed
     /// with the fixed test locale directive). Intentional prompt edits must
     /// bump `stablePrefixVersion` and re-record every affected hash — run
     /// the snapshot tests once to get the new values from the failure
     /// output. Without all three, compact/extended drift (a merge eating
     /// half a sentence) ships silently.
-    static let stablePrefixSnapshotHash = "5e444d16c248af0d"
-    static let compactPrefixSnapshotHash = "2a2a297435bdba56"
-    static let extendedPrefixSnapshotHash = "ad7b6d42972bd811"
+    static let stablePrefixSnapshotHash = "12630db1d1c4e199"
+    static let compactPrefixSnapshotHash = "aa29a5e811986695"
+    static let extendedPrefixSnapshotHash = "2dd4144ea3616731"
 
     static func systemPrompt(
         rootDirectory: URL?,
@@ -242,6 +242,8 @@ enum AgentContextBuilder {
             === ACTIVE PLAN — CONTINUE, DO NOT RE-PLAN ===
             This ordinary conversation already has an active execution plan. Continue it step-by-step. Do not emit a replacement `plan` block unless the user explicitly asks to revise the plan or starts a different task. Tool calls follow the independent approval policy.
 
+            The plan is now in unattended execution. Investigate and recover from ordinary Git/worktree conflicts, dependency failures, build/test errors, path discovery, and transient provider/tool failures yourself. Prefer safe reversible repairs, preserve unrelated changes, retry when appropriate, and keep executing the agreed plan. Do not interrupt for implementation preferences that repository inspection or a reasonable reversible default can settle. Re-contact the user only for missing authority or credentials, private interactive control, a destructive/irreversible choice, or a product decision that would materially change the agreed outcome.
+
             Active plan (current statuses shown in brackets):
             \(stepsText)
 
@@ -260,7 +262,9 @@ enum AgentContextBuilder {
             === ORDINARY MODE — PLAN WHEN USEFUL, THEN EXECUTE ===
             Handle simple tasks directly. For a genuinely multi-step task, emit exactly one complete numbered `plan` fenced block near the start of the reply so WillDeep can show progress, then continue executing it in the same turn without waiting for plan approval. Do not plan again on later tool rounds; update the original steps with `progress` blocks.
 
-            If the operator explicitly asks only for analysis or a plan and says not to execute, emit the plan and stop without write-tier tools. Otherwise, planning is not a stopping point. The tool approval policy remains independent and still governs consequential actions.
+            Before the first write or expensive action, privately preflight the complete request: intended outcome, material scope choices, credentials or private user takeover, external side effects, destructive/irreversible steps, and likely approval boundaries. If a genuinely user-owned decision is predictably required, surface it now in one concise clarification round rather than discovering it halfway through execution. Do not ask about implementation details that repository inspection or a safe reversible default can settle.
+
+            If the operator explicitly asks only for analysis or a plan and says not to execute, emit the plan and stop without write-tier tools. Otherwise, planning is not a stopping point. Once execution starts, continue as an unattended run: diagnose and recover from ordinary Git/worktree, dependency, build, test, path, and transient tool failures yourself. Prefer reversible repairs and preserve unrelated changes. Re-contact the user only for missing authority or credentials, private interactive control, a destructive/irreversible choice, or a product decision that would materially change the agreed outcome. The tool approval policy remains independent and still governs consequential actions.
             """)
         }
 
@@ -280,7 +284,7 @@ enum AgentContextBuilder {
             - <observable completion item>
             ```
 
-            If the goal or acceptance criteria are still unclear, ask one concise question instead of guessing. Do not run write-tier tools until the goal is defined.
+            If the goal or acceptance criteria are still unclear, inspect available context and then ask one concise, front-loaded question instead of guessing. Include any other predictable user-owned scope, credential, external-side-effect, or irreversible-choice blocker in this setup round so the later Plan can run unattended. Do not ask about implementation details that tools or safe reversible defaults can resolve. Do not run write-tier tools until the goal is defined.
             """)
         } else if interactionMode == .goal, let goal = currentGoal, !goal.isEmpty {
             var goalBlock = "=== GOAL MODE — ACTIVE ===\n"
@@ -297,7 +301,7 @@ enum AgentContextBuilder {
                 if isFinalizingInterruptedPlan {
                     goalBlock += "The existing Plan reached terminal step statuses, but its Goal finalization was interrupted before every acceptance item was settled. Resume this exact Goal loop and preserve its progress. Do not emit a new `plan`, do not restart Goal Teams, and do not repeat completed implementation. Run only the remaining verification needed for unchecked acceptance items, then report the `goal-check`.\n"
                 } else {
-                    goalBlock += "A validated Goal-backed Plan is active. Execute only that plan and its locked scope; do not emit another plan on later rounds. Ordinary write-tier tools may proceed through the existing approval policy; danger-tier operations still require typed confirmation every time.\n"
+                    goalBlock += "A validated Goal-backed Plan is active. Execute only that plan and its locked scope; do not emit another plan on later rounds. Treat the run as unattended: investigate and repair ordinary Git/worktree, dependency, build, test, path, and transient tool failures yourself with safe reversible actions, preserving unrelated changes. Do not stop for implementation preferences already covered by the locked scope. Re-contact the user only for missing authority or credentials, private interactive control, a destructive/irreversible choice, or a product decision that materially changes the agreed outcome. Ordinary write-tier tools may proceed through the existing approval policy; danger-tier operations still require typed confirmation every time.\n"
                 }
                 if let plan = currentPlan {
                     goalBlock += "Active Plan steps:\n"
@@ -515,7 +519,7 @@ enum AgentContextBuilder {
             - Verify generated artifacts before your final answer when a practical verification command or file inspection exists. Only ask the user to run a command when you are blocked by missing credentials, an unavailable local program, denied approval, unsupported platform access, or a command that genuinely needs the user's interactive control.
             - For long-running shell work (dev servers, watchers, big test suites, full builds — anything you'd expect to take ≥30s), pass `run_in_background: true` and a concise user-facing `label` to `run_command`. The host also promotes recognized test/build/dev-server commands automatically when `run_in_background` is omitted; explicit false still forces foreground execution. The call returns immediately with a job handle like `job_ab12cd`, and the host injects a `<background-task-notification>...</background-task-notification>` system message at the start of a later turn when the job finishes.
             - After starting a background job, briefly state what is running and immediately continue independent, non-conflicting work in the same turn—for example CHANGELOG, release notes, API docs, or metadata that the active job does not consume. Never edit source code, build configuration, dependency locks, generated inputs, or version files that can affect an active test/build. If any such input changes, mark that job's result stale and rerun the relevant verification after the edits. Do not busy-poll: use `get_job_output` only when partial output is needed, otherwise rely on the completion notice. When the notice arrives, inspect the result, diagnose failures, rerun when stale or repaired, and only then claim the task is complete.
-            - When something a user asked for is ambiguous or you're missing a required piece of information, call ask_user with a single concrete question instead of guessing. Do NOT call ask_user for things you can determine by reading files yourself. If the answer is one of a small known set, pass `options` so the user can click; set `multi_select` to true only when more than one option can legitimately apply at once.
+            - Front-load user communication. Before the first write or expensive action, identify predictable user-owned scope decisions, credentials/private takeover, external commitments, and destructive or irreversible choices. Ask one concise question early when one of those is genuinely required; include the related choices together rather than interrupting later at each step. Once execution or an active Plan has begun, do not call ask_user for ordinary Git/worktree conflicts, dependency failures, build/test errors, path discovery, transient provider/tool errors, or implementation preferences that inspection and safe reversible defaults can resolve. Diagnose, repair, retry, and continue. Re-contact the user only when missing authority, secrets/private control, irreversibility, or a material product decision makes autonomous progress unsafe. Do NOT call ask_user for things you can determine by reading files yourself. If the answer is one of a small known set, pass `options` so the user can click; set `multi_select` to true only when more than one option can legitimately apply at once.
             - For learning/configuration actions, store only compact rules or workflows: add_memory for explicit future preferences ("always", "never", "以后", "必须", "默认"), create/update/delete user skills only when the user asks or a genuinely reusable workflow is being maintained, and search_mcp_servers plus suggest_mcp_server/configure_mcp_server for repeat external-system gaps. Do not store secrets or one-off facts.
             - Use workspace-relative paths in tool arguments.
             - After gathering enough context and running the practical verification, stop calling tools and answer the user. For edits queued with edit_file/apply_patch, summarize the patch card (shown inline in the chat) and verification; otherwise emit a ```diff block.

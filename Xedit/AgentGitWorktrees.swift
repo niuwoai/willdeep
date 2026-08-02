@@ -337,6 +337,15 @@ extension AppState {
         }
 
         let branchName = sanitizedGitWorktreeName(rawBranchName)
+        if let existing = reusableGitWorktree(
+            forBranch: branchName,
+            repositoryRoot: repositoryRoot
+        ) {
+            return .success(AgentGitWorktreeCreateResult(
+                worktree: existing,
+                output: "Reusing existing WillDeep worktree: \(existing.path)"
+            ))
+        }
         let worktreeURL = defaultGitWorktreeURL(
             repositoryRoot: repositoryRoot,
             branchName: branchName,
@@ -397,6 +406,17 @@ extension AppState {
         }
 
         let branchName = sanitizedGitWorktreeName(rawBranchName)
+        if let existing = reusableGitWorktree(
+            forBranch: branchName,
+            repositoryRoot: repositoryRoot
+        ) {
+            let message = "Reusing existing WillDeep worktree: \(existing.path)"
+            onOutput(message)
+            return .success(AgentGitWorktreeCreateResult(
+                worktree: existing,
+                output: message
+            ))
+        }
         let worktreeURL = defaultGitWorktreeURL(
             repositoryRoot: repositoryRoot,
             branchName: branchName,
@@ -486,6 +506,38 @@ extension AppState {
             isPrimary: false
         )
         return .success(AgentGitWorktreeCreateResult(worktree: created, output: output))
+    }
+
+    /// A deterministic dispatch branch identifies one logical task. When an
+    /// earlier launch already created its worktree, reuse that checkout
+    /// instead of asking Git to check out the same branch twice. Stale
+    /// metadata is pruned first; primary checkouts are never treated as task
+    /// isolation.
+    nonisolated static func reusableGitWorktree(
+        forBranch branchName: String,
+        repositoryRoot: URL,
+        fileManager: FileManager = .default
+    ) -> AgentGitWorktree? {
+        let normalizedBranch = sanitizedGitWorktreeName(branchName)
+        var worktrees = listGitWorktrees(for: repositoryRoot)
+        let matching = worktrees.filter {
+            !$0.isPrimary && $0.branch == normalizedBranch
+        }
+        if let usable = matching.first(where: {
+            !$0.isPrunable && fileManager.fileExists(atPath: $0.path)
+        }) {
+            return usable
+        }
+        guard !matching.isEmpty else { return nil }
+
+        _ = runGitCommand(arguments: ["worktree", "prune"], in: repositoryRoot)
+        worktrees = listGitWorktrees(for: repositoryRoot)
+        return worktrees.first {
+            !$0.isPrimary
+                && $0.branch == normalizedBranch
+                && !$0.isPrunable
+                && fileManager.fileExists(atPath: $0.path)
+        }
     }
 
     nonisolated private static func prepareGitWorktreeParentDirectory(
