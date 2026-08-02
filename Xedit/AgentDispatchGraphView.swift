@@ -63,7 +63,7 @@ nonisolated struct AgentDispatchGraphEdge: Equatable {
 }
 
 nonisolated struct AgentDispatchGraphLayout: Equatable {
-    static let taskSize = CGSize(width: 216, height: 156)
+    static let taskSize = CGSize(width: 216, height: 204)
     static let gateSize = CGSize(width: 168, height: 124)
     static let columnSpacing: CGFloat = 92
     static let rowSpacing: CGFloat = 38
@@ -152,12 +152,14 @@ nonisolated struct AgentDispatchGraphLayout: Equatable {
 }
 
 struct AgentDispatchGraphView: View {
+    @EnvironmentObject private var appState: AppState
     let goal: AgentDispatchGoal
     let selection: AgentDispatchGraphSelection?
     let runtimeDescriptors: [RuntimeDescriptor]
     let onSelect: (AgentDispatchGraphSelection) -> Void
     let onAddTask: () -> Void
     let onEditTask: (UUID) -> Void
+    let onOpenConversation: (UUID) -> Void
 
     @State private var zoom: CGFloat = 1
 
@@ -304,97 +306,112 @@ struct AgentDispatchGraphView: View {
     private func taskCard(_ task: AgentDispatchTask, index: Int) -> some View {
         let selected = selection == .task(task.id)
         let stateColor = AgentDispatchPresentation.taskStateColor(task.state)
+        let canOpenConversation = task.runtimeSessionID != nil
         let displayTarget = task.resolvedTarget
             ?? goal.resolvedTargetChoice(taskChoice: task.targetChoice)
             ?? .automatic
-        return Button {
-            onSelect(.task(task.id))
-        } label: {
-            VStack(alignment: .leading, spacing: 9) {
-                HStack(spacing: 6) {
-                    Text(L10n.Dispatch.nodeOrdinal(index + 1))
-                        .font(.system(size: 9, weight: .bold, design: .monospaced))
-                        .foregroundStyle(stateColor)
-                    Spacer(minLength: 4)
-                    Label(
-                        task.resolvedExecutor?.displayName
-                            ?? AgentDispatchPresentation.executorChoiceName(task.executorChoice),
-                        systemImage: task.resolvedExecutor?.symbol ?? "cpu"
-                    )
-                    .font(.system(size: 9, weight: .medium))
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
-                }
-
-                Text(task.title)
-                    .font(.system(size: 13, weight: .semibold))
-                    .foregroundStyle(.primary)
-                    .lineLimit(3)
-                    .frame(maxWidth: .infinity, minHeight: 48, alignment: .topLeading)
-
-                HStack(spacing: 6) {
-                    Circle()
-                        .fill(stateColor)
-                        .frame(width: 7, height: 7)
-                    Text(L10n.Dispatch.state(task.state))
-                        .font(.system(size: 10, weight: .semibold))
-                        .foregroundStyle(stateColor)
-                    Spacer()
-                    if !task.dependencyIDs.isEmpty {
-                        Label("\(task.dependencyIDs.count)", systemImage: "arrow.triangle.merge")
-                            .font(.system(size: 9))
-                            .foregroundStyle(.secondary)
-                    }
-                }
-
-                Divider().opacity(0.42)
-
-                HStack(spacing: 6) {
-                    badge(
-                        AgentDispatchPresentation.targetChoiceName(
-                            displayTarget,
-                            runtimes: runtimeDescriptors
-                        ),
-                        symbol: displayTarget.isRemoteTarget ? "network" : "desktopcomputer"
-                    )
-                    badge(task.branchName, symbol: "arrow.triangle.branch")
-                }
+        return VStack(alignment: .leading, spacing: 7) {
+            HStack(spacing: 6) {
+                Text(L10n.Dispatch.nodeOrdinal(index + 1))
+                    .font(.system(size: 9, weight: .bold, design: .monospaced))
+                    .foregroundStyle(stateColor)
+                Spacer(minLength: 4)
+                Label(
+                    task.resolvedExecutor?.displayName
+                        ?? AgentDispatchPresentation.executorChoiceName(task.executorChoice),
+                    systemImage: task.resolvedExecutor?.symbol ?? "cpu"
+                )
+                .font(.system(size: 9, weight: .medium))
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
             }
-            .padding(12)
-            .frame(
-                width: AgentDispatchGraphLayout.taskSize.width,
-                height: AgentDispatchGraphLayout.taskSize.height,
-                alignment: .topLeading
-            )
-            .background(Color(nsColor: .controlBackgroundColor).opacity(selected ? 0.96 : 0.82))
-            .overlay(alignment: .leading) {
-                Rectangle()
+
+            Text(task.title)
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundStyle(.primary)
+                .lineLimit(2)
+                .frame(maxWidth: .infinity, minHeight: 38, alignment: .topLeading)
+
+            HStack(spacing: 6) {
+                Circle()
                     .fill(stateColor)
-                    .frame(width: selected ? 4 : 3)
+                    .frame(width: 7, height: 7)
+                Text(L10n.Dispatch.state(task.state))
+                    .font(.system(size: 10, weight: .semibold))
+                    .foregroundStyle(stateColor)
+                Spacer()
+                if !task.dependencyIDs.isEmpty {
+                    Label("\(task.dependencyIDs.count)", systemImage: "arrow.triangle.merge")
+                        .font(.system(size: 9))
+                        .foregroundStyle(.secondary)
+                }
             }
-            .overlay(
-                RoundedRectangle(cornerRadius: 11)
-                    .stroke(
-                        selected ? Color.accentColor : Color.secondary.opacity(0.18),
-                        lineWidth: selected ? 2 : 1
-                    )
-            )
-            .clipShape(RoundedRectangle(cornerRadius: 11))
-            .shadow(
-                color: selected ? Color.accentColor.opacity(0.16) : Color.black.opacity(0.045),
-                radius: selected ? 12 : 5,
-                y: 2
-            )
-            .overlay(alignment: .leading) {
-                graphPort(color: stateColor)
-                    .offset(x: -5)
+
+            taskMetrics(task)
+                .frame(maxWidth: .infinity, alignment: .leading)
+
+            Divider().opacity(0.42)
+
+            HStack(spacing: 6) {
+                badge(
+                    AgentDispatchPresentation.targetChoiceName(
+                        displayTarget,
+                        runtimes: runtimeDescriptors
+                    ),
+                    symbol: displayTarget.isRemoteTarget ? "network" : "desktopcomputer"
+                )
+                badge(task.branchName, symbol: "arrow.triangle.branch")
             }
-            .overlay(alignment: .trailing) {
-                graphPort(color: stateColor)
-                    .offset(x: 5)
+
+            if selected && canOpenConversation {
+                Button {
+                    onOpenConversation(task.id)
+                } label: {
+                    Label(L10n.Dispatch.openTaskConversation, systemImage: "bubble.left.and.text.bubble.right")
+                        .font(.system(size: 10, weight: .semibold))
+                        .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.borderedProminent)
+                .controlSize(.mini)
             }
         }
-        .buttonStyle(.plain)
+        .padding(10)
+        .frame(
+            width: AgentDispatchGraphLayout.taskSize.width,
+            height: AgentDispatchGraphLayout.taskSize.height,
+            alignment: .topLeading
+        )
+        .background(Color(nsColor: .controlBackgroundColor).opacity(selected ? 0.96 : 0.82))
+        .overlay(alignment: .leading) {
+            Rectangle()
+                .fill(stateColor)
+                .frame(width: selected ? 4 : 3)
+        }
+        .overlay(
+            RoundedRectangle(cornerRadius: 11)
+                .stroke(
+                    selected ? Color.accentColor : Color.secondary.opacity(0.18),
+                    lineWidth: selected ? 2 : 1
+                )
+        )
+        .clipShape(RoundedRectangle(cornerRadius: 11))
+        .shadow(
+            color: selected ? Color.accentColor.opacity(0.16) : Color.black.opacity(0.045),
+            radius: selected ? 12 : 5,
+            y: 2
+        )
+        .overlay(alignment: .leading) {
+            graphPort(color: stateColor)
+                .offset(x: -5)
+        }
+        .overlay(alignment: .trailing) {
+            graphPort(color: stateColor)
+                .offset(x: 5)
+        }
+        .contentShape(RoundedRectangle(cornerRadius: 11))
+        .onTapGesture {
+            onSelect(.task(task.id))
+        }
         .contextMenu {
             Button {
                 onEditTask(task.id)
@@ -406,6 +423,27 @@ struct AgentDispatchGraphView: View {
         .accessibilityLabel(L10n.Dispatch.taskNodeAccessibility(index + 1, task.title))
         .accessibilityValue(L10n.Dispatch.state(task.state))
         .accessibilityHint(L10n.Dispatch.nodeSelectionHint)
+        .accessibilityAddTraits(.isButton)
+        .accessibilityAction {
+            onSelect(.task(task.id))
+        }
+    }
+
+    @ViewBuilder
+    private func taskMetrics(_ task: AgentDispatchTask) -> some View {
+        if let runtimeSessionID = task.runtimeSessionID,
+           let runtime = appState.runtime(for: runtimeSessionID) {
+            AgentDispatchTaskMetricsView(
+                runtime: runtime,
+                task: task,
+                presentation: .compact
+            )
+        } else {
+            AgentDispatchTaskMetricsContent(
+                metrics: .empty,
+                presentation: .compact
+            )
+        }
     }
 
     private var acceptanceGate: some View {
