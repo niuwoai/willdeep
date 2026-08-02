@@ -210,6 +210,7 @@ struct AgentToolsCoreTests {
                        .staticAllowlist,
                        .llmJudge,
                        .goalMode,
+                       .dispatchTask,
                        .workspaceAccess,
                        .escalated,
                        .trustedServer] {
@@ -285,6 +286,26 @@ struct AgentToolsCoreTests {
         #expect(AppState.delegatedComposerApprovalSource(risk: .read) == nil)
         #expect(AppState.delegatedComposerApprovalSource(risk: .write) == .user)
         #expect(AppState.delegatedComposerApprovalSource(risk: .danger) == .user)
+    }
+
+    @Test("调度子任务的写入和高风险工具不再等待人工审批")
+    func unattendedDispatchTasksBypassInteractiveApproval() {
+        #expect(AppState.unattendedDispatchApprovalSource(
+            risk: .write,
+            isUnattendedDispatchTask: true
+        ) == .dispatchTask)
+        #expect(AppState.unattendedDispatchApprovalSource(
+            risk: .danger,
+            isUnattendedDispatchTask: true
+        ) == .dispatchTask)
+        #expect(AppState.unattendedDispatchApprovalSource(
+            risk: .read,
+            isUnattendedDispatchTask: true
+        ) == nil)
+        #expect(AppState.unattendedDispatchApprovalSource(
+            risk: .write,
+            isUnattendedDispatchTask: false
+        ) == nil)
     }
 
     @Test

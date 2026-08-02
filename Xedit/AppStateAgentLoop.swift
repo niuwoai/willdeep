@@ -1338,16 +1338,51 @@ extension AppState {
                     rootDirectory: workspaceURL
                 )
 
-                let autoApproval = await autoApprovalSource(
-                    toolName: call.toolName,
-                    arguments: argsDict,
+                // A dispatch-board child has no operator attached. Never
+                // create an input card that can strand the scheduler; feed a
+                // deterministic denial back so the agent can choose a safe
+                // fallback or finish with a concrete blocked reason.
+                if runtime.isUnattendedDispatchTask, risk == .userInput {
+                    var record = AgentToolCall(
+                        messageID: assistantID,
+                        externalID: call.externalID,
+                        toolName: call.toolName,
+                        arguments: argsDict,
+                        risk: risk,
+                        status: .denied,
+                        approvalSource: nil
+                    )
+                    record.errorMessage = "Unavailable in unattended dispatch task"
+                    runtime.toolCalls.append(record)
+                    appendToolMessage(
+                        for: runtime,
+                        toolCallID: call.externalID,
+                        payload: "Unavailable in unattended dispatch task: no operator is attached. Continue autonomously with the locked task, or report a concrete blocked reason to the scheduler.",
+                        source: .systemNotice,
+                        outcomeStatus: .denied,
+                        errorMessage: record.errorMessage
+                    )
+                    continue
+                }
+
+                let autoApproval: AgentToolApprovalSource?
+                if let unattendedApproval = Self.unattendedDispatchApprovalSource(
                     risk: risk,
-                    rootDirectory: workspaceURL,
-                    interactionMode: runtime.interactionMode,
-                    approvalMode: runtime.approvalMode,
-                    conversationAllowedToolSignatures: runtime.conversationAllowedToolSignatures,
-                    computerUseOwner: runtime.computerUseOwner
-                )
+                    isUnattendedDispatchTask: runtime.isUnattendedDispatchTask
+                ) {
+                    autoApproval = unattendedApproval
+                } else {
+                    autoApproval = await autoApprovalSource(
+                        toolName: call.toolName,
+                        arguments: argsDict,
+                        risk: risk,
+                        rootDirectory: workspaceURL,
+                        interactionMode: runtime.interactionMode,
+                        approvalMode: runtime.approvalMode,
+                        conversationAllowedToolSignatures: runtime.conversationAllowedToolSignatures,
+                        computerUseOwner: runtime.computerUseOwner
+                    )
+                }
                 let isAlwaysAllowed = autoApproval != nil
                 let initialStatus: AgentToolCallStatus
                 if isAlwaysAllowed {
@@ -1510,7 +1545,20 @@ extension AppState {
                 patchAutoApplySource: AgentToolApprovalSource?,
                 delegatedProgressSink: (@MainActor (AgentDelegatedTerminalProgressUpdate) -> Void)? = nil
             ) -> AgentToolContext {
-                AgentToolContext(
+                let delegatedApprovalHandler: (@MainActor (AgentDelegatedApprovalRequest) async -> AgentDelegatedApprovalDecision)?
+                if runtime.isUnattendedDispatchTask {
+                    delegatedApprovalHandler = nil
+                } else {
+                    delegatedApprovalHandler = { request in
+                        await self.resolveDelegatedExecutorApproval(
+                            request,
+                            runtime: runtime,
+                            messageID: assistantID,
+                            rootDirectory: workspaceURL
+                        )
+                    }
+                }
+                return AgentToolContext(
                     rootDirectory: workspaceURL,
                     workspaceLocation: workspaceLocation,
                     runtimeDescriptor: remoteRuntimeDescriptor,
@@ -1556,6 +1604,7 @@ extension AppState {
                         settings: editorTerminalSettings
                     ),
                     sandboxMode: sandboxMode,
+                    isUnattendedDispatchTask: runtime.isUnattendedDispatchTask,
                     patchProposalSink: { title, diff, applyImmediately in
                         try self.enqueueAgentPatchProposal(
                             for: runtime,
@@ -1599,14 +1648,7 @@ extension AppState {
                         changedWorkspacePath = appliedPath
                         return appliedPath
                     },
-                    delegatedApprovalHandler: { request in
-                        await self.resolveDelegatedExecutorApproval(
-                            request,
-                            runtime: runtime,
-                            messageID: assistantID,
-                            rootDirectory: workspaceURL
-                        )
-                    }
+                    delegatedApprovalHandler: delegatedApprovalHandler
                 )
             }
             for (stagedIndex, staged) in stagedCalls.enumerated() {
@@ -2472,6 +2514,9 @@ extension AppState {
         runtime: AgentRuntime
     ) -> AgentToolApprovalSource? {
         guard toolName == "apply_patch" || toolName == "edit_file" || toolName == "create_file" else { return nil }
+        if runtime.isUnattendedDispatchTask {
+            return .dispatchTask
+        }
         if runtime.interactionMode == .goal {
             return .goalMode
         }

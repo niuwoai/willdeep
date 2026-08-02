@@ -201,6 +201,10 @@ struct AgentToolContext {
     /// environment; user-approved write/network/credential commands run
     /// in the escalated/full-user environment.
     let sandboxMode: AgentSandboxMode
+    /// True only for scheduler-owned dispatch child sessions. External agent
+    /// adapters use this host-derived bit to select their non-interactive
+    /// permission mode; it is intentionally not accepted from model arguments.
+    let isUnattendedDispatchTask: Bool
     /// Optional bridge for proposal-only patch tools. The tool submits a
     /// unified diff into the session's review UI; applying it to disk is
     /// still handled by the existing user-approved patch flow.
@@ -256,6 +260,7 @@ struct AgentToolContext {
         sessionPersistenceBarrier: (@MainActor () -> Void)? = nil,
         localCommandEnvironment: [String: String]? = nil,
         sandboxMode: AgentSandboxMode = .readOnly,
+        isUnattendedDispatchTask: Bool = false,
         patchProposalSink: (@MainActor (String?, String, Bool) async throws -> AgentPatchProposal)? = nil,
         editableContentProvider: (@MainActor (URL) throws -> String)? = nil,
         delegatedFileWriteHandler: (@MainActor (URL, String) throws -> Void)? = nil,
@@ -282,6 +287,7 @@ struct AgentToolContext {
         self.sessionPersistenceBarrier = sessionPersistenceBarrier
         self.localCommandEnvironment = localCommandEnvironment
         self.sandboxMode = sandboxMode
+        self.isUnattendedDispatchTask = isUnattendedDispatchTask
         self.patchProposalSink = patchProposalSink
         self.editableContentProvider = editableContentProvider
         self.delegatedFileWriteHandler = delegatedFileWriteHandler
@@ -335,6 +341,7 @@ struct AgentToolContext {
             sessionPersistenceBarrier: sessionPersistenceBarrier,
             localCommandEnvironment: localCommandEnvironment,
             sandboxMode: sandboxMode,
+            isUnattendedDispatchTask: isUnattendedDispatchTask,
             patchProposalSink: patchProposalSink,
             editableContentProvider: editableContentProvider,
             delegatedFileWriteHandler: delegatedFileWriteHandler,
@@ -365,6 +372,7 @@ struct AgentToolContext {
             sessionPersistenceBarrier: sessionPersistenceBarrier,
             localCommandEnvironment: localCommandEnvironment,
             sandboxMode: mode,
+            isUnattendedDispatchTask: isUnattendedDispatchTask,
             patchProposalSink: patchProposalSink,
             editableContentProvider: editableContentProvider,
             delegatedFileWriteHandler: delegatedFileWriteHandler,
@@ -542,6 +550,9 @@ enum AgentToolApprovalSource: String, Equatable, Codable {
     case staticAllowlist
     case llmJudge
     case goalMode
+    /// A scheduler-owned dispatch child is running without an attached
+    /// operator, so its tool call bypassed interactive approval.
+    case dispatchTask
     case workspaceAccess
     /// A reversible Computer Use action was authorized by the current
     /// runtime- and target-bound in-memory control lease.

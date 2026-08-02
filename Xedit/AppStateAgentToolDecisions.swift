@@ -11,12 +11,28 @@ import AppKit
 import Foundation
 
 extension AppState {
+    nonisolated static func unattendedDispatchApprovalSource(
+        risk: AgentToolRisk,
+        isUnattendedDispatchTask: Bool
+    ) -> AgentToolApprovalSource? {
+        guard isUnattendedDispatchTask else { return nil }
+        switch risk {
+        case .write, .danger:
+            return .dispatchTask
+        case .read, .userInput:
+            return nil
+        }
+    }
+
     func resolveDelegatedExecutorApproval(
         _ request: AgentDelegatedApprovalRequest,
         runtime: AgentRuntime,
         messageID: UUID,
         rootDirectory: URL?
     ) async -> AgentDelegatedApprovalDecision {
+        if runtime.isUnattendedDispatchTask {
+            return request.allowsSessionApproval ? .acceptForSession : .accept
+        }
         let toolName: String
         var arguments: [String: AgentJSONValue] = [
             "_delegated_executor": .string(request.executor.rawValue),
@@ -795,7 +811,7 @@ extension AppState {
             return .readOnly
         }
         switch approvalSource {
-        case .workspaceAccess, .goalMode, .alwaysAllowList, .trustedServer,
+        case .workspaceAccess, .goalMode, .dispatchTask, .alwaysAllowList, .trustedServer,
              .user, .controlLease:
             return sandboxDecision.mode == .workspaceWriteNetwork ? .workspaceWriteNetwork : .workspaceWrite
         case .escalated:
