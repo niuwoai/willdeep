@@ -1,6 +1,6 @@
 # WillDeep Product Overview
 
-> Last updated: 2026-08-02 | Current version: v1.222.0-rc3
+> Last updated: 2026-08-02 | Current version: v1.223.0-rc1
 
 ## Positioning
 
@@ -11,6 +11,9 @@ Official product domain: [willdeep.com](https://willdeep.com).
 WillDeep is configured for non-App-Store distribution without App Sandbox so it can access local project files with fewer permission interruptions.
 
 ## 架构概览
+
+- **先对齐、后无人值守（1.223.0-rc1）** —— 调度项目的目标描述下新增 AI 目标体检：一键判断目标是否可收敛、列出必须提前确认的边界、给出可编辑的改写建议，并自动填充 3–10 条可观察验收标准；诊断是建议而非门禁，用户可修改后复检，也可忽略提示继续创建。普通聊天、Goal 计划与调度节点共享同一执行原则：写入或高成本动作前集中发现用户真正必须决定的范围、凭据、外部副作用和不可逆选择，计划启动后则自行处理普通 Git/worktree、依赖、构建、测试、路径和瞬态故障，只有缺少授权/凭据、需要用户私密接管、不可逆操作或会改变目标的产品决策才暂停。
+- **重复任务 worktree 自动接续（1.223.0-rc1）** —— 调度任务的确定性分支如果已在有效隔离 worktree 中检出，宿主会直接复用该工作区；若仅剩陈旧 Git 元数据则先 prune 再重查，不再把 `branch is already used by worktree` 直接弹给用户。主检出目录永远不会被误当成隔离任务 worktree。
 
 - **调度图阶段语义门禁（1.222.0-rc2）** —— 多节点规划不能再把所有任务塞进首轮并行后直接连接虚拟验收关卡。宿主会拒绝并自动要求规划器修正没有真实依赖、没有唯一末端任务或没有显式汇合的 DAG；并行写代码节点必须依赖清晰的前置契约，并汇入独立的代码合并/集成节点，随后由另一个独立测试/回归节点验证，最后才连接仅用于展示最终状态的验收关卡。规划 Profile 与 Worker 池独立选路，`Kimi K3 Planner` 固定使用 `some-im / kimi-k3`，不会因执行 Worker 选择而静默切换模型；最终合成失败会沿规划回退链有界切换。有效 DAG 被捕获后，父项目会话只保留规划与调度职责，实际执行立即交给按依赖创建的隔离子任务运行时，避免父会话绕过 worktree、Worker 路由和独立合并节点自行写完整项目。
 - **规划前调度硬门禁（1.222.0-rc3）** —— 项目验收清单只属于虚拟验收关卡，不再在规划完成前伪装成一排可执行任务卡。调度页会显示“规划中”，所有手动启动入口和恢复调度路径都由宿主二次检查：只有已捕获、已校验并带稳定计划节点标识的正式 DAG 才能占用 Worker；因此不会再出现“所有验收项第一步全并行，然后直接验收”的假任务图。

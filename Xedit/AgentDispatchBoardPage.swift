@@ -127,7 +127,14 @@ private struct AgentDispatchBoardContent: View {
             workspaceName: appState.activeRuntime?.session.workspaceName
                 ?? L10n.Workspace.noWorkspace,
             profiles: executionProfiles,
-            onManageProfiles: { isProfileManagerPresented = true }
+            onManageProfiles: { isProfileManagerPresented = true },
+            onAssess: { statement, planningProfileID, fallbackProfileIDs in
+                try await appState.assessDispatchGoal(
+                    statement: statement,
+                    planningProfileID: planningProfileID,
+                    planningFallbackProfileIDs: fallbackProfileIDs
+                )
+            }
         ) { statement, checklist, planningProfileID, fallbackProfileIDs, workerProfileIDs in
             appState.setAgentGoal(
                 statement: statement,

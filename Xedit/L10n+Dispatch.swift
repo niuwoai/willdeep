@@ -47,6 +47,63 @@ extension L10n {
             localized: "dispatch.goal-setup-message",
             defaultValue: "Describe the outcome and acceptance criteria. WillDeep will turn them into an executable plan here."
         )
+        static let goalAssessmentAction = String(
+            localized: "dispatch.goal-assessment-action",
+            defaultValue: "Ask AI to check the goal and draft acceptance criteria"
+        )
+        static let goalAssessmentAgain = String(
+            localized: "dispatch.goal-assessment-again",
+            defaultValue: "Check again"
+        )
+        static let goalAssessmentAnalyzing = String(
+            localized: "dispatch.goal-assessment-analyzing",
+            defaultValue: "Analyzing the goal…"
+        )
+        static let goalAssessmentHelp = String(
+            localized: "dispatch.goal-assessment-help",
+            defaultValue: "AI will front-load missing decisions and fill an editable checklist so execution can run unattended."
+        )
+        static let goalAssessmentReady = String(
+            localized: "dispatch.goal-assessment-ready",
+            defaultValue: "This goal can converge"
+        )
+        static let goalAssessmentNeedsRevision = String(
+            localized: "dispatch.goal-assessment-needs-revision",
+            defaultValue: "This goal needs a little more focus"
+        )
+        static let goalAssessmentStale = String(
+            localized: "dispatch.goal-assessment-stale",
+            defaultValue: "The goal changed — check it again"
+        )
+        static let goalAssessmentStaleHelp = String(
+            localized: "dispatch.goal-assessment-stale-help",
+            defaultValue: "The previous diagnosis no longer matches the current goal. Run the check again to refresh it."
+        )
+        static let goalAssessmentMissingInformation = String(
+            localized: "dispatch.goal-assessment-missing-information",
+            defaultValue: "Add these decisions"
+        )
+        static let goalAssessmentSuggestedStatement = String(
+            localized: "dispatch.goal-assessment-suggested-statement",
+            defaultValue: "Suggested goal statement"
+        )
+        static let goalAssessmentUseSuggestion = String(
+            localized: "dispatch.goal-assessment-use-suggestion",
+            defaultValue: "Use this draft"
+        )
+        static let goalAssessmentCanIgnore = String(
+            localized: "dispatch.goal-assessment-can-ignore",
+            defaultValue: "This is advice, not a gate. You can ignore it and create the project with the current checklist."
+        )
+        static func goalAssessmentFailed(_ reason: String) -> String {
+            String(
+                format: String(
+                    localized: "dispatch.goal-assessment-failed",
+                    defaultValue: "AI goal check failed: %@"
+                ),
+                reason
+            )
+        }
         static let addWorkspaceMapping = String(
             localized: "dispatch.add-workspace-mapping",
             defaultValue: "Add checkout mapping"
