@@ -30,15 +30,25 @@ struct AgentChatHeader: View {
         HStack(spacing: 8) {
             sessionSearchButton
 
+            if let dispatchContext {
+                dispatchProjectBreadcrumb(dispatchContext)
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 8, weight: .semibold))
+                    .foregroundStyle(.tertiary)
+            }
+
             Text(title)
                 .font(AgentDesign.titleFont)
                 .lineLimit(1)
                 .truncationMode(.middle)
+                .layoutPriority(1)
 
             Spacer(minLength: 8)
 
             sidePanelShortcutStrip
-            desktopPetToggle
+            if dispatchContext == nil {
+                desktopPetToggle
+            }
         }
         .padding(.leading, 18 + leadingWindowChromeInset)
         .padding(.trailing, 18)
@@ -72,8 +82,32 @@ struct AgentChatHeader: View {
             ForEach(visibleKinds) { item in
                 sidePanelShortcutButton(for: item)
             }
+            if !dispatchOverflowKinds.isEmpty {
+                dispatchMoreToolsMenu
+            }
         }
         .fixedSize()
+    }
+
+    private func dispatchProjectBreadcrumb(_ context: DispatchContext) -> some View {
+        Button {
+            appState.openDispatchProject(
+                goalID: context.goal.id,
+                taskID: context.task.id
+            )
+        } label: {
+            Label(
+                L10n.Dispatch.taskConversationProjectBreadcrumb(context.goal.statement),
+                systemImage: "point.3.connected.trianglepath.dotted"
+            )
+            .font(.system(size: 11, weight: .semibold))
+            .lineLimit(1)
+            .truncationMode(.middle)
+            .frame(maxWidth: 280)
+        }
+        .buttonStyle(.plain)
+        .foregroundStyle(appState.editorSettings.interfaceSkin.palette.accent)
+        .help(L10n.Dispatch.returnToDispatchBoard)
     }
 
     private func sidePanelShortcutButton(for item: AgentSidePanelKind) -> some View {
@@ -112,10 +146,35 @@ struct AgentChatHeader: View {
         .accessibilityLabel(Text(L10n.DesktopPet.toggleHelp))
     }
 
+    private var dispatchMoreToolsMenu: some View {
+        Menu {
+            ForEach(dispatchOverflowKinds) { kind in
+                Button {
+                    toggleSidePanel(kind)
+                } label: {
+                    Label(sidePanelTitle(for: kind), systemImage: kind.systemImage)
+                }
+            }
+        } label: {
+            Image(systemName: "ellipsis.circle")
+                .font(.system(size: 12, weight: .semibold))
+                .frame(width: 24, height: 22)
+        }
+        .menuStyle(.borderlessButton)
+        .fixedSize()
+        .help(L10n.Dispatch.moreTaskTools)
+    }
+
     /// Plan 一项只在 active runtime 真的有 plan 时出现 — 没有 plan
     /// 还展示这个入口是浪费一行 + 误导用户。其它项始终可见。
     private var visibleKinds: [AgentSidePanelKind] {
-        AgentSidePanelKind.allCases.filter { kind in
+        if dispatchContext != nil {
+            return AgentDispatchTaskToolPolicy.primaryKinds(
+                hasPlan: appState.agentCurrentPlan != nil,
+                activeExperts: appState.agentActiveExperts
+            )
+        }
+        return AgentSidePanelKind.allCases.filter { kind in
             guard kind.isAvailable(activeExperts: appState.agentActiveExperts) else { return false }
             switch kind {
             case .backgroundTasks:
@@ -126,6 +185,13 @@ struct AgentChatHeader: View {
             default: return true
             }
         }
+    }
+
+    private var dispatchOverflowKinds: [AgentSidePanelKind] {
+        guard dispatchContext != nil else { return [] }
+        return AgentDispatchTaskToolPolicy.overflowKinds(
+            activeExperts: appState.agentActiveExperts
+        )
     }
 
     private var visibleMediaTasks: [AgentMediaTask] {
@@ -174,11 +240,31 @@ struct AgentChatHeader: View {
     }
 
     private var title: String {
-        guard let id = appState.activeAgentSessionID,
-              let session = appState.agentSessions.first(where: { $0.id == id }) else {
+        guard let activeSession else {
             return L10n.Header.newChat
         }
-        return session.title
+        return activeSession.title
+    }
+
+    private var activeSession: AgentSession? {
+        guard let id = appState.activeAgentSessionID else { return nil }
+        return appState.agentSessions.first(where: { $0.id == id })
+    }
+
+    private var dispatchContext: DispatchContext? {
+        guard let session = activeSession,
+              let goalID = session.dispatchParentProjectID,
+              let taskID = session.dispatchTaskID,
+              let goal = appState.agentDispatchCoordinator.goals.first(where: { $0.id == goalID }),
+              let task = goal.tasks.first(where: { $0.id == taskID }) else {
+            return nil
+        }
+        return DispatchContext(goal: goal, task: task)
+    }
+
+    private struct DispatchContext: Equatable {
+        let goal: AgentDispatchGoal
+        let task: AgentDispatchTask
     }
 }
 

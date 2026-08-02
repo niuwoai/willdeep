@@ -1650,8 +1650,13 @@ extension AppState {
     }
 
     @discardableResult
-    func selectAgentSession(id: AgentSession.ID) -> Bool {
-        agentPrimaryDestination = .conversation
+    func selectAgentSession(
+        id: AgentSession.ID,
+        preservingPrimaryDestination: Bool = false
+    ) -> Bool {
+        if !preservingPrimaryDestination {
+            agentPrimaryDestination = .conversation
+        }
         guard let targetSession = agentSessions.first(where: { $0.id == id }) else { return false }
         guard activeAgentSessionID != id else {
             agentSessionLoadFailure = nil

@@ -663,6 +663,22 @@ extension AppState {
         agentPrimaryDestination = .conversation
     }
 
+    @discardableResult
+    func prepareDispatchTaskTakeover(runtimeSessionID: UUID) -> Bool {
+        selectAgentSession(
+            id: runtimeSessionID,
+            preservingPrimaryDestination: true
+        )
+    }
+
+    func openDispatchProject(goalID: UUID, taskID: UUID?) {
+        agentDispatchCoordinator.selectGoal(goalID)
+        if let taskID {
+            agentDispatchCoordinator.selectTask(taskID)
+        }
+        agentPrimaryDestination = .dispatchBoard
+    }
+
     private func availableDispatchExecutors(
         on target: AgentDispatchTargetChoice
     ) -> Set<AgentExecutionAgent> {
