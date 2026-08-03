@@ -836,7 +836,7 @@ extension L10n {
 
         static func state(_ state: AgentDispatchTaskState) -> String {
             switch state {
-            case .blocked: return String(localized: "dispatch.state-blocked", defaultValue: "Blocked")
+            case .blocked: return String(localized: "dispatch.state-blocked", defaultValue: "Pending start")
             case .queued: return String(localized: "dispatch.state-queued", defaultValue: "Queued")
             case .running: return String(localized: "dispatch.state-running", defaultValue: "Running")
             case .reviewing: return String(localized: "dispatch.state-reviewing", defaultValue: "Reviewing")

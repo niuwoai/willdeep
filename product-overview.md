@@ -1,6 +1,6 @@
 # WillDeep Product Overview
 
-> Last updated: 2026-08-02 | Current version: v1.224.0-rc1
+> Last updated: 2026-08-03 | Current version: v1.224.0-rc2
 
 ## Positioning
 
@@ -12,6 +12,7 @@ WillDeep is configured for non-App-Store distribution without App Sandbox so it 
 
 ## 架构概览
 
+- **调度人工干预闭环（1.224.0-rc2）** —— 失败节点收到人工指令后会重新进入执行态并恢复完成监听；干预轮通过验收后自动标记完成、解锁依赖并继续调度后续节点。尚在等待前置任务的节点显示“待启动”，任务接管输入框上方常驻展示思考、工具活动或 Provider 排队状态，避免长响应期间被误认为卡死。
 - **调度节点可观测与人工接管（1.224.0-rc1）** —— 任务图节点直接显示 Token、墙钟用时和预估费用，运行态按秒刷新；真实 provider 用量不会重复计算用户文本，外部 CLI 缺少可靠账单时明确显示不可定价。选中节点可在调度台右侧打开上下文保持的任务接管抽屉，查看消息并发送会在安全点生效的人工指令；计划、文件、终端和 Diff 作为主要干预工具，预览等低频能力收进更多菜单。打开完整任务对话后，标题左侧会显示所属调度项目并可一键返回原项目节点。
 - **GPT 统一使用 Chat Completions（1.224.0-rc1）** —— GPT 全系列模型不再自动切换到 Responses；`gpt-5.5`、`gpt5.5`、`gpt-5.6-sol/luna/terra` 及带 Provider 命名空间的别名一律通过 `/v1/chat/completions` 推理，即使自定义 Provider 选择了 Responses 也会回落到 Chat，避免中转服务不支持 `store` 参数时请求失败。DeepSeek V4 Flash 的专用 Responses 与状态续接不受影响。
 - **调度节点真正无人值守（1.223.0-rc2）** —— 调度台创建的执行子会话由宿主归属字段开启专用无人值守策略：WillDeep 工具不再弹人工审批或问题卡，无法自主解决时把明确阻塞原因交回调度器；Claude Code 固定使用非交互跳过确认参数并绕开宿主 ACP 审批回调，同时继续受 WillDeep 外层隔离 worktree 沙箱约束。普通聊天、手动 Goal 与模型自行调用 Claude Code 不受影响，也不能伪造该权限。
