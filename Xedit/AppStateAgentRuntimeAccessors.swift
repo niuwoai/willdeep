@@ -19,7 +19,17 @@ extension AppState {
 
     var activeRuntime: AgentRuntime? {
         guard let id = activeAgentSessionID else { return nil }
-        return agentRuntimes[id]
+        return loadedRuntime(for: id)
+    }
+
+    /// Side-effect-free lookup for rendering and snapshot paths.
+    ///
+    /// Unlike `runtime(for:)`, this accessor never materializes a persisted
+    /// session, starts watchers, applies pending proposals, or evicts another
+    /// runtime. SwiftUI `body` evaluation must use this read-only path so a
+    /// render pass cannot publish new state and recursively invalidate itself.
+    func loadedRuntime(for sessionID: AgentSession.ID) -> AgentRuntime? {
+        agentRuntimes[sessionID]
     }
 
     var agentMessages: [AgentMessage] {
