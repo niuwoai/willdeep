@@ -1032,7 +1032,10 @@ enum AgentToolRunner {
                         sandboxMode: context.sandboxMode,
                         environment: context.localCommandEnvironment,
                         displayCommand: AgentSecretStore.redact(command, secretValues: context.secretRedactionValues),
-                        secretRedactionValues: context.secretRedactionValues
+                        secretRedactionValues: context.secretRedactionValues,
+                        automaticSandboxRetryApprovalSource: context.isUnattendedDispatchTask
+                            ? .dispatchTask
+                            : nil
                     )
                 }
             } catch {

@@ -10,6 +10,61 @@ import Testing
 @Suite(.serialized)
 @MainActor
 struct AgentDispatchCoordinatorTests {
+    @Test("无人值守节点验收未完成时有界自动恢复")
+    func unattendedRecoveryRetriesOnlyRecoverableIncompleteAcceptance() {
+        #expect(AgentDispatchUnattendedRecoveryPolicy.shouldRetry(
+            hasCompletedAcceptance: false,
+            hasRuntimeError: false,
+            isGoalPaused: false,
+            attempts: 0
+        ))
+        #expect(AgentDispatchUnattendedRecoveryPolicy.shouldRetry(
+            hasCompletedAcceptance: false,
+            hasRuntimeError: false,
+            isGoalPaused: false,
+            attempts: 1
+        ))
+        #expect(!AgentDispatchUnattendedRecoveryPolicy.shouldRetry(
+            hasCompletedAcceptance: false,
+            hasRuntimeError: false,
+            isGoalPaused: false,
+            attempts: 2
+        ))
+        #expect(!AgentDispatchUnattendedRecoveryPolicy.shouldRetry(
+            hasCompletedAcceptance: true,
+            hasRuntimeError: false,
+            isGoalPaused: false,
+            attempts: 0
+        ))
+        #expect(!AgentDispatchUnattendedRecoveryPolicy.shouldRetry(
+            hasCompletedAcceptance: false,
+            hasRuntimeError: true,
+            isGoalPaused: false,
+            attempts: 0
+        ))
+        #expect(!AgentDispatchUnattendedRecoveryPolicy.shouldRetry(
+            hasCompletedAcceptance: false,
+            hasRuntimeError: false,
+            isGoalPaused: true,
+            attempts: 0
+        ))
+    }
+
+    @Test("无人值守恢复提示明确处理 Playwright 沙箱失败")
+    func unattendedRecoveryPromptCarriesConcretePlaywrightFallbacks() {
+        let prompt = AgentDispatchUnattendedRecoveryPolicy.prompt(
+            attempt: 1,
+            remainingAcceptance: ["Playwright 端到端回归通过"]
+        )
+
+        #expect(prompt.contains("Automatic recovery attempt 1/2"))
+        #expect(prompt.contains("Playwright 端到端回归通过"))
+        #expect(prompt.contains("TMPDIR"))
+        #expect(prompt.contains("foreground"))
+        #expect(prompt.contains("loopback test port"))
+        #expect(prompt.contains("macOS privacy permission"))
+    }
+
     @Test("人工干预新一轮会恢复节点并重新挂载完成监听")
     func takeoverInstructionRestartsFailedTaskMonitoring() async throws {
         let workspace = FileManager.default.temporaryDirectory

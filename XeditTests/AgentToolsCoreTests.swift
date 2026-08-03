@@ -1391,6 +1391,10 @@ struct AgentToolsCoreTests {
         #expect(env["MY_SECRET"] == nil)
         #expect(env["LANG"] == "en_US.UTF-8")
         #expect(env["HOME"] != "/Users/real")
+        #expect(env["TMPDIR"] == env["TMP"])
+        #expect(env["TMPDIR"] == env["TEMP"])
+        #expect(env["TMPDIR"]?.contains("willdeep-agent-sandbox-tmp") == true)
+        #expect(FileManager.default.fileExists(atPath: env["TMPDIR"] ?? "") == true)
         #expect(env["WILLDEEP_AGENT_SANDBOX"] == AgentSandboxMode.workspaceWriteNetwork.rawValue)
         #expect(env["WILLDEEP_WORKSPACE_ROOT"] == root.path)
     }
