@@ -17,6 +17,7 @@ final class AgentMobileGatewayDesktopPeer: ObservableObject {
     private weak var appState: AppState?
     private var webSocketTask: URLSessionWebSocketTask?
     private var reconnectTask: Task<Void, Never>?
+    private var connectionVerificationTask: Task<Void, Never>?
     private var reconnectWebSocketURL: URL?
     private var reconnectToken: String?
     private var reconnectSession: URLSession = .shared
@@ -28,6 +29,7 @@ final class AgentMobileGatewayDesktopPeer: ObservableObject {
     private var consecutiveFailures = 0
     private static let reconnectBaseDelay: UInt64 = 750_000_000  // 750ms
     private static let reconnectMaxDelay: UInt64 = 30_000_000_000  // 30s
+    private static let connectionVerificationTimeout: UInt64 = 10_000_000_000  // 10s
     private var appStateCancellable: AnyCancellable?
     /// 监听系统网络路径。断线后原本只能等指数退避 tick（最长 30s）才重连；
     /// 网络切换 / 睡眠唤醒后路径一旦恢复 satisfied，就取消退避、立即重连，
@@ -80,6 +82,8 @@ final class AgentMobileGatewayDesktopPeer: ObservableObject {
         stopPathMonitor()
         reconnectTask?.cancel()
         reconnectTask = nil
+        connectionVerificationTask?.cancel()
+        connectionVerificationTask = nil
         snapshotTask?.cancel()
         snapshotTask = nil
         messageEventState.reset()
@@ -137,11 +141,71 @@ final class AgentMobileGatewayDesktopPeer: ObservableObject {
         request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
         let task = session.webSocketTask(with: request)
         webSocketTask = task
-        isConnected = true
+        // `resume()` only starts the HTTP upgrade. Treating that moment as a
+        // live WebSocket made Settings report "connected" even when the relay
+        // later rejected or stalled the handshake. A successful WebSocket
+        // ping is the first transport-level proof that the upgrade completed.
+        isConnected = false
         lastErrorMessage = nil
         task.resume()
         receiveNext()
+        verifyConnection(task)
+    }
+
+    private func verifyConnection(_ task: URLSessionWebSocketTask) {
+        connectionVerificationTask?.cancel()
+        connectionVerificationTask = Task { @MainActor [weak self, weak task] in
+            try? await Task.sleep(nanoseconds: Self.connectionVerificationTimeout)
+            guard let self,
+                  let task,
+                  !Task.isCancelled,
+                  self.webSocketTask === task,
+                  !self.isConnected else {
+                return
+            }
+            self.handleConnectionFailure(
+                URLError(.timedOut, userInfo: [
+                    NSLocalizedDescriptionKey: "Mobile Gateway WebSocket handshake timed out."
+                ])
+            )
+        }
+        task.sendPing { [weak self, weak task] error in
+            Task { @MainActor [weak self, weak task] in
+                guard let self,
+                      let task,
+                      self.webSocketTask === task else {
+                    return
+                }
+                if let error {
+                    self.handleConnectionFailure(error)
+                    return
+                }
+                self.markConnectionVerified()
+            }
+        }
+    }
+
+    private func markConnectionVerified() {
+        connectionVerificationTask?.cancel()
+        connectionVerificationTask = nil
+        consecutiveFailures = 0
+        guard !isConnected else { return }
+        isConnected = true
+        lastErrorMessage = nil
+        // The desktop often joins before Android. Publish only after the
+        // handshake is real so the initial snapshot cannot be lost to a
+        // pre-upgrade send.
         publishSnapshot()
+    }
+
+    private func handleConnectionFailure(_ error: Error) {
+        connectionVerificationTask?.cancel()
+        connectionVerificationTask = nil
+        isConnected = false
+        lastErrorMessage = error.localizedDescription
+        webSocketTask?.cancel(with: .goingAway, reason: nil)
+        webSocketTask = nil
+        scheduleReconnect()
     }
 
     private func scheduleSnapshot() {
@@ -160,16 +224,14 @@ final class AgentMobileGatewayDesktopPeer: ObservableObject {
         task.receive { [weak self] result in
             Task { @MainActor [weak self] in
                 guard let self else { return }
+                guard self.webSocketTask === task else { return }
                 switch result {
                 case .success(let message):
-                    self.consecutiveFailures = 0
+                    self.markConnectionVerified()
                     self.handle(message)
                     self.receiveNext()
                 case .failure(let error):
-                    self.isConnected = false
-                    self.lastErrorMessage = error.localizedDescription
-                    self.webSocketTask = nil
-                    self.scheduleReconnect()
+                    self.handleConnectionFailure(error)
                 }
             }
         }
@@ -205,11 +267,13 @@ final class AgentMobileGatewayDesktopPeer: ObservableObject {
             guard let text = String(data: data, encoding: .utf8) else { return }
             task.send(.string(text)) { [weak self] error in
                 guard let error else { return }
-                Task { @MainActor [weak self] in
-                    self?.lastErrorMessage = error.localizedDescription
-                    self?.isConnected = false
-                    self?.webSocketTask = nil
-                    self?.scheduleReconnect()
+                Task { @MainActor [weak self, weak task] in
+                    guard let self,
+                          let task,
+                          self.webSocketTask === task else {
+                        return
+                    }
+                    self.handleConnectionFailure(error)
                 }
             }
         } catch {

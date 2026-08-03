@@ -1,6 +1,6 @@
 # WillDeep Product Overview
 
-> Last updated: 2026-08-03 | Current version: v1.225.0-rc3
+> Last updated: 2026-08-03 | Current version: v1.225.0-rc4
 
 ## Positioning
 
@@ -12,6 +12,7 @@ WillDeep is configured for non-App-Store distribution without App Sandbox so it 
 
 ## 架构概览
 
+- **Android 中继真连接与配对恢复（1.225.0-rc4）** —— Mac 桌面端只有在 WebSocket 握手经 ping 验证后才报告在线并发布首个状态快照；中继地址或房间发生变化时会自动重连，避免二维码指向新房间而桌面端仍停在旧房间。Android 若保存了旧 token，会表现为服务器通道已建立但收不到 Mac 消息，此时需要扫描 Mac 当前二维码重新配对。
 - **调度图 runtime 查询无副作用（1.225.0-rc3）** —— 任务卡片渲染只观察已经加载的 runtime，不再从 SwiftUI `body` 内物化历史会话、启动监听或触发空闲 runtime 淘汰；超过驻留上限的调度图不会再陷入“创建、淘汰、持久化、重新渲染”的主线程反馈环。已淘汰节点继续从持久化会话读取累计 Token、执行时长与费用，不以牺牲历史指标换取界面稳定性。
 - **调度重试指标与网络能力连续（1.225.0-rc2）** —— 调度节点的 Token、执行时长和费用按节点拥有的全部运行尝试累计，失败重试或 Worker 切换不会清零；时长只累计每次实际运行区间，不把重试间隔算成执行耗时。调度台无人值守节点固定使用允许网络的隔离工作区沙箱，使 Playwright、本地服务、端口绑定和依赖测试无需依赖命令名称猜测网络需求；普通会话继续按最小权限判定。
 - **调度节点模型透明与安全换模（1.225.0-rc1）** —— 选中运行节点后，任务接管抽屉直接展示当前请求实际使用的模型；WillDeep Worker 可从项目已选 Worker Profile 中切换模型。运行中的 Provider 请求继续使用启动时的配置快照，新模型只从下一轮生效并显示待生效提示，避免半轮切换造成上下文和计费归属混乱；外部 CLI 的模型仍由其原生 Profile 管理。
