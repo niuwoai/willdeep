@@ -54,6 +54,25 @@ enum AgentStatsDashboardLayout {
     static let maximumHeatmapWeeks = 52
 }
 
+enum AgentStatsDashboardFormatting {
+    static func duration(_ value: TimeInterval) -> String {
+        guard value.isFinite, value >= 60 else { return "0m" }
+
+        let totalMinutes = Int(value / 60)
+        let days = totalMinutes / (24 * 60)
+        let hours = (totalMinutes / 60) % 24
+        let minutes = totalMinutes % 60
+
+        if days > 0 {
+            return "\(days)d\(hours)h\(minutes)m"
+        }
+        if hours > 0 {
+            return "\(hours)h\(minutes)m"
+        }
+        return "\(minutes)m"
+    }
+}
+
 struct AgentStatsDashboard: View {
     @EnvironmentObject var appState: AppState
     @Environment(\.colorScheme) private var colorScheme
@@ -285,7 +304,7 @@ struct AgentStatsDashboard: View {
             )
             metricDivider
             CodexDashboardMetric(
-                value: formatDuration(longestTaskDuration),
+                value: AgentStatsDashboardFormatting.duration(longestTaskDuration),
                 title: L10n.StatsDashboard.metricLongestTask
             )
             metricDivider
@@ -864,19 +883,6 @@ struct AgentStatsDashboard: View {
 
     private func formatPercentage(_ value: Double) -> String {
         String(format: "%.0f%%", min(1, max(0, value)) * 100)
-    }
-
-    private func formatDuration(_ value: TimeInterval) -> String {
-        guard value >= 60 else {
-            return L10n.StatsDashboard.durationMinutes("0")
-        }
-        let formatter = DateComponentsFormatter()
-        formatter.allowedUnits = value >= 3_600 ? [.hour, .minute] : [.minute]
-        formatter.unitsStyle = .abbreviated
-        formatter.maximumUnitCount = 2
-        formatter.zeroFormattingBehavior = .dropAll
-        return formatter.string(from: value)
-            ?? L10n.StatsDashboard.durationMinutes("\(Int(value / 60))")
     }
 
     private func formatTokens(_ count: Int) -> String {

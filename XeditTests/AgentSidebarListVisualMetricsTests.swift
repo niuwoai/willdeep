@@ -43,6 +43,16 @@ struct AgentSidebarListVisualMetricsTests {
         #expect(AgentStatsDashboardLayout.maximumHeatmapWeeks == 52)
     }
 
+    @Test("longest task duration uses compact day, hour, and minute units")
+    func longestTaskDurationUsesCompactUnits() {
+        #expect(AgentStatsDashboardFormatting.duration(59) == "0m")
+        #expect(AgentStatsDashboardFormatting.duration(60) == "1m")
+        #expect(AgentStatsDashboardFormatting.duration(3_600) == "1h0m")
+        #expect(AgentStatsDashboardFormatting.duration(24 * 3_600) == "1d0h0m")
+        #expect(AgentStatsDashboardFormatting.duration((103 * 60 + 27) * 60) == "4d7h27m")
+        #expect(AgentStatsDashboardFormatting.duration((9 * 24 * 60 + 10 * 60 + 3) * 60) == "9d10h3m")
+    }
+
     @Test("idle session rows return unused action width to the title")
     func idleSessionRowsUseAvailableSidebarWidth() {
         #expect(

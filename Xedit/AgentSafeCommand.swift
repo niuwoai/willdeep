@@ -34,14 +34,24 @@ nonisolated enum SafeCommand {
         guard !trimmed.isEmpty else { return .alwaysDangerous }
         let policyCommand = commandByReplacingSafeShellExpansions(trimmed)
 
-        // Strict: redirections and command substitution are too easy to
-        // weaponize. `>`, `>>`, `<(`, `$(`, backticks → not safe.
-        if containsAny(of: [">", ">>", "<(", "$(", "`"], in: policyCommand) {
+        // Shell metacharacters inside quotes are inert data (`printf '>'`,
+        // `printf 'rm'`). Executable substitutions remain gated, including
+        // those inside double quotes.
+        if AgentShellCommandParser.containsExecutableSubstitution(policyCommand) {
+            return .alwaysDangerous
+        }
+        guard let unquotedPolicyCommand = AgentShellCommandParser.unquotedText(policyCommand) else {
+            return .needsJudgment
+        }
+
+        // Strict: active redirections are too easy to weaponize. Allow only
+        // the small stderr/dev-null family already handled below.
+        if containsAny(of: [">", "<"], in: unquotedPolicyCommand) {
             // Allow `2>&1`, `2>/dev/null` patterns through only as part
             // of an otherwise-safe-segment check by stripping known
             // benign stderr redirections before scanning. Conservative
             // baseline: refuse anything with `>`/`>>` to a file.
-            if !onlyContainsHarmlessRedirections(in: policyCommand) {
+            if !onlyContainsHarmlessRedirections(in: unquotedPolicyCommand) {
                 return .alwaysDangerous
             }
         }
@@ -51,17 +61,19 @@ nonisolated enum SafeCommand {
         // pattern — splitPipeline would shred them into harmless-looking
         // fragments. Scan dangerousSubstrings against the un-split
         // command FIRST so those shapes can't sneak through.
-        let lowerTrimmed = policyCommand.lowercased()
+        let lowerTrimmed = unquotedPolicyCommand.lowercased()
         for needle in dangerousSubstrings where lowerTrimmed.contains(needle) {
             return .alwaysDangerous
         }
 
-        let segments = splitPipeline(policyCommand)
-        guard !segments.isEmpty else { return .alwaysDangerous }
+        guard let chain = AgentShellCommandParser.parse(policyCommand),
+              !chain.segments.isEmpty else {
+            return .needsJudgment
+        }
 
-        var hasJudgmentSegment = false
-        for segment in segments {
-            switch classifySegment(segment) {
+        var hasJudgmentSegment = chain.requiresBackgroundJudgment
+        for segment in chain.segments {
+            switch classifySegment(segment.text) {
             case .alwaysDangerous:
                 return .alwaysDangerous
             case .needsJudgment:
@@ -86,7 +98,7 @@ nonisolated enum SafeCommand {
         // file inspection
         "cat", "head", "tail", "less", "more", "wc", "nl",
         "file", "stat", "du", "df",
-        "od", "hexdump", "xxd", "strings",
+        "od", "hexdump", "strings",
         // path helpers (resolve / split — no FS mutation)
         "realpath", "readlink", "dirname", "basename",
         // compare (read both sides; writes only via shell redirection,
@@ -97,17 +109,17 @@ nonisolated enum SafeCommand {
         // search
         "rg", "ripgrep", "grep", "egrep", "fgrep", "ag",
         // sorting / dedup / cut etc — pure stdin transforms
-        "sort", "uniq", "cut", "tr", "awk", "sed", "tee",
+        "uniq", "cut", "tr",
         "column", "paste", "join", "comm",
         "fold", "fmt", "expand", "unexpand", "rev", "tac",
         // hashing / encoding
-        "md5", "shasum", "sha256sum", "sha512sum", "base64",
+        "md5", "shasum", "sha256sum", "sha512sum",
         "cksum", "sum",
         // structured data filters (stdout only; file writes need `>` which
         // is already refused as alwaysDangerous)
-        "jq", "yq", "iconv",
+        "jq",
         // env / introspection
-        "echo", "printf", "which", "whereis", "type", "command",
+        "echo", "printf", "which", "whereis", "type",
         "printenv", "uname", "whoami", "id", "date", "uptime",
         "sw_vers", "arch", "hostname", "getconf", "locale",
         "groups", "logname", "man",
@@ -150,9 +162,10 @@ nonisolated enum SafeCommand {
         "npm", "yarn", "pnpm", "cargo", "swift", "make", "python", "python3",
         "node", "ruby", "go", "rake",
         "sh", "bash", "zsh", "/bin/sh", "/bin/bash", "/bin/zsh",
-        "env", "/usr/bin/env",
+        "env", "/usr/bin/env", "command",
         // list/inspect only — extract/write forms stay needsJudgment
-        "defaults", "unzip"
+        "defaults", "unzip", "sed", "tee", "sort", "awk", "yq",
+        "base64", "iconv", "xxd"
     ]
 
     /// Token-level dangerous words. classifySegment walks EVERY token
@@ -228,59 +241,7 @@ nonisolated enum SafeCommand {
     /// (heredocs, escape continuations) falls back to .needsJudgment by
     /// way of the dangerous-needle scan.
     static func splitPipeline(_ command: String) -> [String] {
-        var segments: [String] = []
-        var current = ""
-        var inSingle = false
-        var inDouble = false
-        var index = command.startIndex
-        while index < command.endIndex {
-            let ch = command[index]
-            if ch == "'" && !inDouble { inSingle.toggle(); current.append(ch); index = command.index(after: index); continue }
-            if ch == "\"" && !inSingle { inDouble.toggle(); current.append(ch); index = command.index(after: index); continue }
-
-            if !inSingle && !inDouble {
-                // Check for two-character operators first.
-                let next = command.index(after: index)
-                if next < command.endIndex {
-                    let pair = String(command[index...next])
-                    if pair == "&&" || pair == "||" {
-                        segments.append(current)
-                        current = ""
-                        index = command.index(after: next)
-                        continue
-                    }
-                }
-                if ch == "|" || ch == ";" || ch == "\n" {
-                    segments.append(current)
-                    current = ""
-                    index = command.index(after: index)
-                    continue
-                }
-                // File descriptor redirects like `2>&1` contain `&` but do
-                // not start a background job. Keep them inside the segment so
-                // the harmless-redirection precheck and the following command
-                // classifier see the original shell shape.
-                if ch == "&", current.last == ">" {
-                    current.append(ch)
-                    index = command.index(after: index)
-                    continue
-                }
-                // Background operator `&` (without `&&`) is suspicious —
-                // treat as a segment break so downstream judgment kicks in.
-                if ch == "&" {
-                    segments.append(current)
-                    current = ""
-                    index = command.index(after: index)
-                    continue
-                }
-            }
-            current.append(ch)
-            index = command.index(after: index)
-        }
-        segments.append(current)
-        return segments
-            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
-            .filter { !$0.isEmpty }
+        AgentShellCommandParser.parse(command)?.segments.map(\.text) ?? []
     }
 
     private static func classifySegment(_ segment: String) -> CommandSafety {
@@ -292,18 +253,15 @@ nonisolated enum SafeCommand {
         let tokens = commandTokensSkippingEnvironmentAssignments(tokenize(segment))
         guard let head = tokens.first else { return .alwaysSafe }
 
-        // Walk every token (not just the head). Catches
-        // `<safe_head> ... rm <args>` and pipeline tails like
-        // `xargs rm`, `find . -print0 | xargs -0 rm`. The pre-rc3 code
-        // only checked substring against the joined segment; this catches
-        // the same shapes more precisely and stops "perm "-style false
-        // positives.
-        let loweredTokens = tokens.map { $0.lowercased() }
-        if loweredTokens.contains(where: { dangerousTokens.contains($0) }) {
+        let firstToken = head.lowercased()
+
+        // Only the executable position is authority. Arguments are inert
+        // data unless a command-specific classifier says otherwise, so
+        // `printf 'rm'` and `grep sudo file` stay read-only. Wrapper commands
+        // (`xargs`, `env`, shell -c) recursively inspect their payload.
+        if dangerousTokens.contains(firstToken) {
             return .alwaysDangerous
         }
-
-        let firstToken = head.lowercased()
 
         // `cp -r ...` / `ln -s ...` — head + any `-`-prefixed token.
         // Plain `cp src dst` falls through to .needsJudgment.
@@ -358,6 +316,8 @@ nonisolated enum SafeCommand {
             return classifyShellWrapper(tokens: tokens)
         case "env", "/usr/bin/env":
             return classifyEnv(tokens: tokens)
+        case "command":
+            return classifyCommandBuiltin(tokens: tokens)
         case "npm", "pnpm", "yarn":
             return AgentPackageCommandPolicy.classify(firstToken: firstToken, tokens: tokens)
         case "defaults":
@@ -365,8 +325,9 @@ nonisolated enum SafeCommand {
         case "unzip":
             return classifyUnzip(tokens: tokens)
         case "xargs":
-            // xargs by itself wraps another command — defer to judgment.
-            return .needsJudgment
+            return classifyXargs(tokens: tokens)
+        case "sed", "tee", "sort", "awk", "yq", "base64", "iconv", "xxd":
+            return classifyStreamTransformer(firstToken: firstToken, tokens: tokens)
         default:
             return .needsJudgment
         }
@@ -412,6 +373,12 @@ nonisolated enum SafeCommand {
         }
         let sub = tokens[subcommandIndex].lowercased()
         if safeGitSubcommands.contains(sub) {
+            if ["branch", "tag", "remote", "reflog", "symbolic-ref"].contains(sub) {
+                return classifyMutableGitInspector(
+                    subcommand: sub,
+                    arguments: Array(tokens.dropFirst(subcommandIndex + 1))
+                )
+            }
             // git config --global SOMETHING value would write, but
             // detecting that needs full arg parsing. `git config X` to
             // READ is fine; `git config -l/--list/--get` clearly read.
@@ -435,6 +402,17 @@ nonisolated enum SafeCommand {
                 let next = tokens.count > nextIndex ? tokens[nextIndex].lowercased() : ""
                 let readOnlyStash: Set<String> = ["list", "show"]
                 return readOnlyStash.contains(next) ? .alwaysSafe : .needsJudgment
+            }
+            if ["diff", "log", "show"].contains(sub),
+               gitArgumentsWriteOutput(Array(tokens.dropFirst(subcommandIndex + 1))) {
+                return .needsJudgment
+            }
+            if sub == "grep",
+               tokens.dropFirst(subcommandIndex + 1).contains(where: {
+                   $0.lowercased() == "--open-files-in-pager"
+                       || $0.lowercased().hasPrefix("--open-files-in-pager=")
+               }) {
+                return .needsJudgment
             }
             return .alwaysSafe
         }
@@ -482,7 +460,226 @@ nonisolated enum SafeCommand {
         if ["sh", "bash", "zsh", "/bin/sh", "/bin/bash", "/bin/zsh"].contains(executable) {
             return classifyShellWrapper(tokens: Array(tokens[index...]))
         }
-        return .needsJudgment
+        return classifySegment(Array(tokens[index...]).joined(separator: " "))
+    }
+
+    private static func classifyXargs(tokens: [String]) -> CommandSafety {
+        guard let commandIndex = xargsCommandIndex(tokens: tokens) else {
+            // Bare xargs invokes echo. Options without an explicit command
+            // only change how stdin is grouped for that built-in default.
+            return .alwaysSafe
+        }
+        return classifySegment(Array(tokens[commandIndex...]).joined(separator: " "))
+    }
+
+    private static func xargsCommandIndex(tokens: [String]) -> Int? {
+        let optionsWithSeparateValue: Set<String> = [
+            "-E", "-I", "-L", "-n", "-P", "-s", "-a", "-d",
+            "--arg-file", "--delimiter", "--eof", "--replace",
+            "--max-lines", "--max-args", "--max-procs", "--max-chars",
+            "--process-slot-var"
+        ]
+        let shortOptionsWithAttachedValue: Set<Character> = ["E", "I", "L", "n", "P", "s", "a", "d"]
+        var index = 1
+        while index < tokens.count {
+            let token = tokens[index]
+            if token == "--" {
+                let commandIndex = index + 1
+                return commandIndex < tokens.count ? commandIndex : nil
+            }
+            guard token.hasPrefix("-") else { return index }
+            if optionsWithSeparateValue.contains(token) {
+                index += 2
+            } else if token.hasPrefix("--"), token.contains("=") {
+                index += 1
+            } else if token.count > 2,
+                      token.first == "-",
+                      token.dropFirst().first.map(shortOptionsWithAttachedValue.contains) == true {
+                index += 1
+            } else {
+                index += 1
+            }
+        }
+        return nil
+    }
+
+    private static func classifyStreamTransformer(
+        firstToken: String,
+        tokens: [String]
+    ) -> CommandSafety {
+        let arguments = tokens.dropFirst().map { $0.lowercased() }
+        switch firstToken {
+        case "tee":
+            let valueFlags: Set<String> = ["-i", "--ignore-interrupts", "-p"]
+            let fileArguments = arguments.filter { !$0.hasPrefix("-") }
+            return fileArguments.isEmpty && arguments.allSatisfy({ valueFlags.contains($0) })
+                ? .alwaysSafe
+                : .needsJudgment
+        case "sed":
+            return arguments.contains(where: {
+                $0 == "--in-place"
+                    || $0.hasPrefix("--in-place=")
+                    || ($0.hasPrefix("-") && !$0.hasPrefix("--") && $0.dropFirst().contains("i"))
+            })
+                ? .needsJudgment
+                : .alwaysSafe
+        case "sort":
+            return arguments.contains(where: {
+                $0 == "--output" || $0.hasPrefix("--output=")
+                    || ($0.hasPrefix("-o") && !$0.hasPrefix("--"))
+            })
+                ? .needsJudgment
+                : .alwaysSafe
+        case "yq":
+            return arguments.contains(where: { $0 == "-i" || $0 == "--inplace" || $0 == "--in-place" })
+                ? .needsJudgment
+                : .alwaysSafe
+        case "awk":
+            let compactProgram = arguments.joined().filter { !$0.isWhitespace }
+            return compactProgram.contains("system(")
+                    || compactProgram.contains(">")
+                    || compactProgram.contains("|")
+                ? .needsJudgment
+                : .alwaysSafe
+        case "base64", "iconv":
+            return arguments.contains(where: {
+                $0 == "-o" || $0 == "--output" || $0.hasPrefix("--output=")
+                    || ($0.hasPrefix("-o") && !$0.hasPrefix("--") && $0.count > 2)
+            })
+                ? .needsJudgment
+                : .alwaysSafe
+        case "xxd":
+            return xxdHasOutputFile(Array(tokens.dropFirst()))
+                ? .needsJudgment
+                : .alwaysSafe
+        default:
+            return .needsJudgment
+        }
+    }
+
+    private static func xxdHasOutputFile(_ arguments: [String]) -> Bool {
+        let optionsWithSeparateValue: Set<String> = [
+            "-c", "-cols", "-g", "-groupsize", "-l", "-len", "-n", "-name",
+            "-o", "-offset", "-s", "-seek"
+        ]
+        var positionals = 0
+        var index = 0
+        while index < arguments.count {
+            let argument = arguments[index].lowercased()
+            if argument == "--" {
+                positionals += arguments.count - index - 1
+                break
+            }
+            if optionsWithSeparateValue.contains(argument) {
+                index += 2
+                continue
+            }
+            if !argument.hasPrefix("-") {
+                positionals += 1
+            }
+            index += 1
+        }
+        return positionals >= 2
+    }
+
+    private static func classifyMutableGitInspector(
+        subcommand: String,
+        arguments: [String]
+    ) -> CommandSafety {
+        let lowered = arguments.map { $0.lowercased() }
+        switch subcommand {
+        case "branch":
+            let writeFlags: Set<String> = [
+                "-d", "-m", "-c", "-f", "--delete", "--move",
+                "--copy", "--force", "--edit-description", "--set-upstream-to", "--unset-upstream"
+            ]
+            if lowered.contains(where: { matchesMutationFlag($0, flags: writeFlags) }) {
+                return .needsJudgment
+            }
+            let listFlags = ["--contains", "--no-contains", "--merged", "--no-merged", "--points-at"]
+            if lowered.contains(where: { argument in
+                listFlags.contains(where: { argument == $0 || argument.hasPrefix($0 + "=") })
+            }) {
+                return .alwaysSafe
+            }
+            let positional = lowered.filter { !$0.hasPrefix("-") }
+            return positional.isEmpty ? .alwaysSafe : .needsJudgment
+        case "tag":
+            let writeFlags: Set<String> = [
+                "-a", "-s", "-u", "-f", "-d", "--annotate", "--sign", "--local-user",
+                "--force", "--delete", "--edit"
+            ]
+            if lowered.contains(where: { matchesMutationFlag($0, flags: writeFlags) }) {
+                return .needsJudgment
+            }
+            let listFlags = [
+                "-l", "--list", "--contains", "--no-contains", "--merged",
+                "--no-merged", "--points-at", "--sort", "--format", "--column"
+            ]
+            if lowered.contains(where: { argument in
+                listFlags.contains(where: { argument == $0 || argument.hasPrefix($0 + "=") })
+            }) {
+                return .alwaysSafe
+            }
+            let positional = lowered.filter { !$0.hasPrefix("-") }
+            return positional.isEmpty ? .alwaysSafe : .needsJudgment
+        case "remote":
+            guard let action = lowered.first(where: { !$0.hasPrefix("-") }) else {
+                return .alwaysSafe
+            }
+            return ["get-url", "show"].contains(action) ? .alwaysSafe : .needsJudgment
+        case "reflog":
+            guard let action = lowered.first(where: { !$0.hasPrefix("-") }) else {
+                return .alwaysSafe
+            }
+            return ["show", "exists"].contains(action) ? .alwaysSafe : .needsJudgment
+        case "symbolic-ref":
+            if lowered.contains("--delete") { return .needsJudgment }
+            let positional = lowered.filter { !$0.hasPrefix("-") }
+            return positional.count <= 1 ? .alwaysSafe : .needsJudgment
+        default:
+            return .needsJudgment
+        }
+    }
+
+    private static func matchesMutationFlag(_ argument: String, flags: Set<String>) -> Bool {
+        if flags.contains(argument) { return true }
+        if let equals = argument.firstIndex(of: "="),
+           flags.contains(String(argument[..<equals])) {
+            return true
+        }
+        return flags.contains(where: { flag in
+            flag.hasPrefix("-")
+                && !flag.hasPrefix("--")
+                && flag.count == 2
+                && argument.hasPrefix(flag)
+                && argument.count > flag.count
+        })
+    }
+
+    private static func gitArgumentsWriteOutput(_ arguments: [String]) -> Bool {
+        arguments.contains { argument in
+            let lowered = argument.lowercased()
+            return lowered == "--output" || lowered.hasPrefix("--output=")
+        }
+    }
+
+    private static func classifyCommandBuiltin(tokens: [String]) -> CommandSafety {
+        var index = 1
+        while index < tokens.count {
+            let token = tokens[index]
+            if token == "--" {
+                index += 1
+                break
+            }
+            if token == "-v" || token == "-V" {
+                return .alwaysSafe
+            }
+            guard token.hasPrefix("-") else { break }
+            index += 1
+        }
+        guard index < tokens.count else { return .alwaysSafe }
+        return classifySegment(Array(tokens[index...]).joined(separator: " "))
     }
 
     private static func shellCommandArgumentIndex(tokens: [String]) -> Int? {

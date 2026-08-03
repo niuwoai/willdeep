@@ -168,6 +168,20 @@ struct AgentInjectionDefenseTests {
     func judgePayloadWrapsCommandInFence() {
         let payload = AgentInjectionDefense.judgeUserPayload(command: "ls -la")
         #expect(payload.contains("<command>\nls -la\n</command>"))
+        #expect(payload.contains("segment_count=1"))
+        #expect(payload.contains("connectors=none"))
+    }
+
+    @Test
+    func judgePayloadIncludesCompoundShellStructure() {
+        let payload = AgentInjectionDefense.judgeUserPayload(
+            command: "cd repo && git ls-files | head -20 || git status"
+        )
+        #expect(payload.contains("segment_count=4"))
+        #expect(payload.contains("connectors=and,pipeline,or"))
+        #expect(payload.contains("background=false"))
+        #expect(AgentInjectionDefense.judgeSystemPrompt.contains("independently inspect every segment"))
+        #expect(AgentInjectionDefense.judgeSystemPrompt.contains("Conditional execution does not make an unsafe branch safe"))
     }
 
     // MARK: - ask_user options (rc4)
