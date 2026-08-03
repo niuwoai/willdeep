@@ -175,6 +175,42 @@ struct AgentDispatchTaskTakeoverTests {
         #expect(try #require(metrics.estimatedCostUSD) > 0)
     }
 
+    @Test("已完成节点不把后续会话元数据更新时间计入执行耗时")
+    func completedTaskDurationStopsAtFinalMessageEnd() {
+        let now = Date()
+        let sessionID = UUID()
+        let session = AgentSession(
+            id: sessionID,
+            title: "completed dispatch task",
+            modelID: "gpt-4o-mini",
+            providerID: "openai",
+            createdAt: now.addingTimeInterval(-5 * 3_600),
+            updatedAt: now,
+            messages: [
+                AgentMessage(
+                    role: .assistant,
+                    content: "done",
+                    elapsedSeconds: 15,
+                    createdAt: now.addingTimeInterval(-5 * 3_600 + 45)
+                ),
+            ]
+        )
+        let task = AgentDispatchTask(
+            title: "已完成节点",
+            state: .merged,
+            runtimeSessionID: sessionID,
+            runtimeSessionIDs: [sessionID]
+        )
+
+        let metrics = AgentDispatchTaskMetrics.make(
+            task: task,
+            sessions: [session],
+            now: now
+        )
+
+        #expect(metrics.duration == 60)
+    }
+
     @Test("无运行记录的排队节点不冒充已有消耗")
     func queuedTaskWithoutUsageShowsEmptyMetrics() {
         let metrics = AgentDispatchTaskMetrics.make(

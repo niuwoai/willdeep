@@ -79,9 +79,13 @@ struct AgentDispatchTaskMetrics: Equatable {
             }.max()
             let isCurrentActiveAttempt = task.runtimeSessionID == session.id
                 && (task.state == .running || task.state == .reviewing)
-            let endDate = isCurrentActiveAttempt
-                ? now
-                : max(session.updatedAt, latestMessageEnd ?? session.createdAt)
+            // `updatedAt` is session metadata time, not execution time. It can
+            // advance hours after completion when the app restores, renames,
+            // or re-persists a session. Once an attempt has messages, seal its
+            // interval at the final message's real end instead of letting
+            // later metadata writes inflate every completed graph node.
+            let completedAttemptEnd = latestMessageEnd ?? session.updatedAt
+            let endDate = isCurrentActiveAttempt ? now : completedAttemptEnd
             return total + max(0, endDate.timeIntervalSince(session.createdAt))
         }
 
