@@ -308,6 +308,43 @@ struct AgentToolsCoreTests {
         ) == nil)
     }
 
+    @Test("调度节点始终使用允许网络的工作区沙箱")
+    func unattendedDispatchTasksKeepNetworkAvailableForTests() {
+        let appState = AppState()
+        let readOnlyDecision = AgentSandboxDecision(
+            mode: .readOnly,
+            requiresUserApproval: false,
+            requiresTypedConfirmation: false,
+            reason: "test command was classified as local",
+            prefixRule: nil
+        )
+        let workspaceDecision = AgentSandboxDecision(
+            mode: .workspaceWrite,
+            requiresUserApproval: true,
+            requiresTypedConfirmation: false,
+            reason: "workspace write",
+            prefixRule: nil
+        )
+
+        #expect(appState.sandboxModeForToolExecution(
+            risk: .read,
+            approvalSource: nil,
+            sandboxDecision: readOnlyDecision,
+            isUnattendedDispatchTask: true
+        ) == .workspaceWriteNetwork)
+        #expect(appState.sandboxModeForToolExecution(
+            risk: .write,
+            approvalSource: .dispatchTask,
+            sandboxDecision: workspaceDecision,
+            isUnattendedDispatchTask: true
+        ) == .workspaceWriteNetwork)
+        #expect(appState.sandboxModeForToolExecution(
+            risk: .read,
+            approvalSource: nil,
+            sandboxDecision: readOnlyDecision
+        ) == .readOnly)
+    }
+
     @Test
     func visualQAScreenshotToolRequiresApprovalAndDocumentsBoundary() throws {
         let descriptor = try #require(AgentToolRegistry.descriptor(for: "visual_qa_screenshot"))

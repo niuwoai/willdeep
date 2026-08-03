@@ -224,6 +224,16 @@ private struct AgentDispatchBoardContent: View {
                         runtime: takeover.runtime,
                         goal: goal,
                         task: takeover.task,
+                        profiles: workerProfiles,
+                        onModelProfile: { profileID in
+                            appState.updateDispatchTaskProfiles(
+                                primaryProfileID: profileID,
+                                fallbackProfileIDs: (takeover.task.fallbackProfileIDs ?? [])
+                                    .filter { $0 != profileID },
+                                goalID: goal.id,
+                                taskID: takeover.task.id
+                            )
+                        },
                         onClose: { takeoverSessionID = nil },
                         onOpenFullConversation: {
                             takeoverSessionID = nil

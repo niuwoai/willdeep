@@ -11,34 +11,56 @@ enum AgentDispatchTaskMetricsPresentation: Equatable {
 }
 
 struct AgentDispatchTaskMetricsView: View {
+    @EnvironmentObject private var appState: AppState
     @ObservedObject var runtime: AgentRuntime
     let task: AgentDispatchTask
     let presentation: AgentDispatchTaskMetricsPresentation
 
     @ViewBuilder
     var body: some View {
-        let snapshot = metrics(now: Date())
         if task.state == .running || task.state == .reviewing {
             TimelineView(.periodic(from: .now, by: 1)) { context in
                 AgentDispatchTaskMetricsContent(
-                    metrics: snapshot.updatingDuration(
-                        max(0, context.date.timeIntervalSince(runtime.session.createdAt))
-                    ),
+                    metrics: metrics(now: context.date),
                     presentation: presentation
                 )
             }
         } else {
             AgentDispatchTaskMetricsContent(
-                metrics: snapshot,
+                metrics: metrics(now: Date()),
                 presentation: presentation
             )
         }
     }
 
     private func metrics(now: Date) -> AgentDispatchTaskMetrics {
-        var session = runtime.session
-        session.messages = runtime.messages
-        return AgentDispatchTaskMetrics.make(task: task, session: session, now: now)
+        AgentDispatchTaskMetrics.make(
+            task: task,
+            sessions: metricSessions,
+            now: now
+        )
+    }
+
+    private var metricSessions: [AgentSession] {
+        var sessionIDs = task.runtimeSessionIDs ?? []
+        if let currentSessionID = task.runtimeSessionID,
+           !sessionIDs.contains(currentSessionID) {
+            sessionIDs.append(currentSessionID)
+        }
+        if !sessionIDs.contains(runtime.id) {
+            sessionIDs.append(runtime.id)
+        }
+
+        var seenSessionIDs: Set<UUID> = []
+        return sessionIDs.compactMap { sessionID in
+            guard seenSessionIDs.insert(sessionID).inserted else { return nil }
+            if let liveRuntime = appState.agentRuntimes[sessionID] {
+                var session = liveRuntime.session
+                session.messages = liveRuntime.messages
+                return session
+            }
+            return appState.agentSessions.first { $0.id == sessionID }
+        }
     }
 }
 

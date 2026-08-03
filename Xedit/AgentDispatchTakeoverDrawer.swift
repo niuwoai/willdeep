@@ -28,6 +28,8 @@ struct AgentDispatchTakeoverDrawer: View {
     @ObservedObject var runtime: AgentRuntime
     let goal: AgentDispatchGoal
     let task: AgentDispatchTask
+    let profiles: [AgentExecutionProfile]
+    let onModelProfile: (String) -> Void
     let onClose: () -> Void
     let onOpenFullConversation: () -> Void
 
@@ -35,6 +37,33 @@ struct AgentDispatchTakeoverDrawer: View {
     @State private var selectedFile: URL?
 
     private let drawerWidth: CGFloat = 420
+
+    private var assignedProfile: AgentExecutionProfile? {
+        let assignedID = task.activeProfileID ?? task.primaryProfileID
+        return profiles.first { $0.id == assignedID }
+    }
+
+    private var modelPresentation: AgentDispatchTaskModelPresentation {
+        if runtime.executionAgent != .willDeep {
+            return AgentDispatchTaskModelPresentation.resolve(
+                activeTurnModelID: nil,
+                configuredModelID: assignedProfile?.modelID,
+                persistedModelID: nil
+            )
+        }
+        return AgentDispatchTaskModelPresentation.resolve(
+            activeTurnModelID: runtime.activeTurnConfiguration?.model,
+            configuredModelID: runtime.sessionModelOverride,
+            persistedModelID: runtime.session.modelID
+        )
+    }
+
+    private var switchableModelProfiles: [AgentExecutionProfile] {
+        guard runtime.executionAgent == .willDeep else { return [] }
+        return profiles.filter { profile in
+            profile.executor == .willDeep && profile.modelID != nil
+        }
+    }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -111,14 +140,71 @@ struct AgentDispatchTakeoverDrawer: View {
                     .font(.system(size: 10, weight: .semibold))
                     .foregroundStyle(AgentDispatchPresentation.taskStateColor(task.state))
                 Divider().frame(height: 12)
-                Text(runtime.session.executionAgent.displayName)
+                Text(runtime.executionAgent.displayName)
                     .font(.system(size: 10, weight: .medium))
                     .foregroundStyle(.secondary)
+                Spacer(minLength: 8)
+                modelMenu
+            }
+
+            if modelPresentation.switchAppliesNextTurn,
+               let nextModelID = modelPresentation.nextModelID {
+                Label(
+                    L10n.Dispatch.modelSwitchAppliesNextTurn(nextModelID),
+                    systemImage: "arrow.triangle.2.circlepath"
+                )
+                .font(.system(size: 9, weight: .medium))
+                .foregroundStyle(.orange)
+                .lineLimit(1)
             }
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 13)
         .background(drawerBackground.opacity(0.96))
+    }
+
+    @ViewBuilder
+    private var modelMenu: some View {
+        if let currentModelID = modelPresentation.currentModelID {
+            Menu {
+                if switchableModelProfiles.isEmpty {
+                    Text(L10n.Dispatch.modelSwitchUnavailableForExecutor)
+                } else {
+                    ForEach(switchableModelProfiles) { profile in
+                        Button {
+                            onModelProfile(profile.id)
+                        } label: {
+                            Label(
+                                profileMenuTitle(profile),
+                                systemImage: profile.modelID == modelPresentation.nextModelID
+                                    ? "checkmark"
+                                    : "cpu"
+                            )
+                        }
+                    }
+                    Divider()
+                    Text(L10n.Dispatch.modelSwitchSafePointHelp)
+                }
+            } label: {
+                Label(currentModelID, systemImage: "cpu")
+                    .font(.system(size: 10, weight: .medium, design: .monospaced))
+                    .lineLimit(1)
+            }
+            .menuStyle(.borderlessButton)
+            .fixedSize()
+            .help(L10n.Dispatch.currentExecutionModel)
+            .accessibilityLabel(L10n.Dispatch.currentExecutionModel)
+            .accessibilityValue(currentModelID)
+        } else {
+            Label(L10n.Dispatch.modelUnknown, systemImage: "cpu")
+                .font(.system(size: 10, weight: .medium))
+                .foregroundStyle(.secondary)
+        }
+    }
+
+    private func profileMenuTitle(_ profile: AgentExecutionProfile) -> String {
+        guard let modelID = profile.modelID else { return profile.name }
+        return "\(profile.name) · \(modelID)"
     }
 
     private var metricsStrip: some View {

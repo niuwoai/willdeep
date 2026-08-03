@@ -1,6 +1,6 @@
 # WillDeep Product Overview
 
-> Last updated: 2026-08-03 | Current version: v1.224.0-rc8
+> Last updated: 2026-08-03 | Current version: v1.225.0-rc2
 
 ## Positioning
 
@@ -12,6 +12,8 @@ WillDeep is configured for non-App-Store distribution without App Sandbox so it 
 
 ## 架构概览
 
+- **调度重试指标与网络能力连续（1.225.0-rc2）** —— 调度节点的 Token、执行时长和费用按节点拥有的全部运行尝试累计，失败重试或 Worker 切换不会清零；时长只累计每次实际运行区间，不把重试间隔算成执行耗时。调度台无人值守节点固定使用允许网络的隔离工作区沙箱，使 Playwright、本地服务、端口绑定和依赖测试无需依赖命令名称猜测网络需求；普通会话继续按最小权限判定。
+- **调度节点模型透明与安全换模（1.225.0-rc1）** —— 选中运行节点后，任务接管抽屉直接展示当前请求实际使用的模型；WillDeep Worker 可从项目已选 Worker Profile 中切换模型。运行中的 Provider 请求继续使用启动时的配置快照，新模型只从下一轮生效并显示待生效提示，避免半轮切换造成上下文和计费归属混乱；外部 CLI 的模型仍由其原生 Profile 管理。
 - **人工干预不改任务拓扑（1.224.0-rc8）** —— 调度台的人工干预只允许修正节点目标与验收标准，不展示前置节点选择，也不向业务层提交依赖 ID；节点的前后依赖仍由调度计划统一维护。新增节点保留前置节点配置能力，以便明确接入现有任务图。
 - **调度台补丁全自动落盘（1.224.0-rc7）** —— 调度台项目会话、执行节点和旧任务恢复会话统一按无人值守策略运行；工具补丁与 Agent 正文 fenced diff 都通过同一条验证和自动应用链路，历史 Pending 在会话恢复时也会自动处理。调度任务不再显示需要人工点击的 Apply/Reject 卡片，应用失败则记录为失败并交回调度器恢复。
 - **GitHub Actions 表达式可靠写入（1.224.0-rc6）** —— 文件工具把 `${{ ... }}` 与 `${{ secrets.NAME }}` 视为普通 workflow 文本；若 Provider 在工具参数 JSON 中错误生成 `\${{ ... }}`，解析边界会做窄范围修复后再交给 `create_file` / `edit_file` / `apply_patch`，不再整次拒绝或降级为 Python/Shell 写文件。回归测试覆盖合法参数、错误转义、新文件创建和已有 workflow 精确编辑，全程仅使用 secret 引用名而非真实值。

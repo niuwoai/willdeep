@@ -1713,7 +1713,8 @@ extension AppState {
                                 sandboxMode: sandboxModeForToolExecution(
                                     risk: risk,
                                     approvalSource: autoApproval,
-                                    sandboxDecision: sandboxDecision
+                                    sandboxDecision: sandboxDecision,
+                                    isUnattendedDispatchTask: runtime.isUnattendedDispatchTask
                                 ),
                                 patchAutoApplySource: nil
                             )
@@ -1941,7 +1942,8 @@ extension AppState {
                     sandboxMode: sandboxModeForToolExecution(
                         risk: risk,
                         approvalSource: autoApproval,
-                        sandboxDecision: sandboxDecision
+                        sandboxDecision: sandboxDecision,
+                        isUnattendedDispatchTask: runtime.isUnattendedDispatchTask
                     ),
                     patchAutoApplySource: patchAutoApplySource,
                     delegatedProgressSink: liveProgressSink

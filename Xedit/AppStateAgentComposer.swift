@@ -633,7 +633,8 @@ extension AppState {
             sandboxMode: sandboxModeForToolExecution(
                 risk: risk,
                 approvalSource: approvalSource,
-                sandboxDecision: sandboxDecision
+                sandboxDecision: sandboxDecision,
+                isUnattendedDispatchTask: runtime.isUnattendedDispatchTask
             ),
             isUnattendedDispatchTask: runtime.isUnattendedDispatchTask,
             editableContentProvider: { url in

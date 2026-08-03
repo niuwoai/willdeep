@@ -290,6 +290,31 @@ extension L10n {
             localized: "dispatch.model-routing-help",
             defaultValue: "Use different models for project planning and ordinary task execution."
         )
+        static let currentExecutionModel = String(
+            localized: "dispatch.current-execution-model",
+            defaultValue: "Current execution model"
+        )
+        static let modelUnknown = String(
+            localized: "dispatch.model-unknown",
+            defaultValue: "Model unknown"
+        )
+        static let modelSwitchSafePointHelp = String(
+            localized: "dispatch.model-switch-safe-point-help",
+            defaultValue: "A running request keeps its current model. The selection applies from the next turn."
+        )
+        static let modelSwitchUnavailableForExecutor = String(
+            localized: "dispatch.model-switch-unavailable-for-executor",
+            defaultValue: "This executor manages its model in its native profile."
+        )
+        static func modelSwitchAppliesNextTurn(_ modelID: String) -> String {
+            String(
+                format: String(
+                    localized: "dispatch.model-switch-applies-next-turn",
+                    defaultValue: "%@ will be used from the next turn"
+                ),
+                modelID
+            )
+        }
         static let profile = String(localized: "dispatch.profile", defaultValue: "Profile")
         static let planningProfile = String(
             localized: "dispatch.planning-profile",
