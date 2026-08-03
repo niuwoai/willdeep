@@ -1,6 +1,6 @@
 # WillDeep Product Overview
 
-> Last updated: 2026-08-04 | Current version: v1.225.0-rc5
+> Last updated: 2026-08-04 | Current version: v1.226.0-rc1
 
 ## Positioning
 
@@ -12,6 +12,7 @@ WillDeep is configured for non-App-Store distribution without App Sandbox so it 
 
 ## 架构概览
 
+- **调度节点 runtime 独立内置浏览器（1.226.0-rc1）** —— 每个调度 runtime 拥有独立的 WKWebView 与诊断事件缓存，后台工具调用无需先手动打开侧栏；用户随后打开节点浏览器会接回同一页面现场。调度节点默认启用浏览器专家，普通网页导航、点击、输入、截图、控制台与网络验收优先使用 `embedded_browser_*`，只有明确要求特定引擎或内置浏览器无法表达时才回退 Playwright。runtime 淘汰、侧栏资源回收或会话删除时同步释放浏览器，避免并行节点抢页或长期占用内存。
 - **调度节点耗时按执行消息封口（1.225.0-rc5）** —— 已完成或已合并节点以最后一条消息的真实结束时间计算耗时，不再使用可能被应用恢复、重命名或重新持久化推迟数小时的会话元数据更新时间；失败重试仍逐次累计真实运行区间。
 - **Android 中继真连接与配对恢复（1.225.0-rc4）** —— Mac 桌面端只有在 WebSocket 握手经 ping 验证后才报告在线并发布首个状态快照；中继地址或房间发生变化时会自动重连，避免二维码指向新房间而桌面端仍停在旧房间。Android 若保存了旧 token，会表现为服务器通道已建立但收不到 Mac 消息，此时需要扫描 Mac 当前二维码重新配对。
 - **调度图 runtime 查询无副作用（1.225.0-rc3）** —— 任务卡片渲染只观察已经加载的 runtime，不再从 SwiftUI `body` 内物化历史会话、启动监听或触发空闲 runtime 淘汰；超过驻留上限的调度图不会再陷入“创建、淘汰、持久化、重新渲染”的主线程反馈环。已淘汰节点继续从持久化会话读取累计 Token、执行时长与费用，不以牺牲历史指标换取界面稳定性。

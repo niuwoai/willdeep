@@ -601,6 +601,7 @@ extension AppState {
             steps: [AgentPlan.Step(text: task.title, status: .inProgress)],
             summary: L10n.Dispatch.executionRunning
         )
+        runtime.activeExperts = Self.dispatchTaskExperts(from: runtime.activeExperts)
         runtime.executionAgent = decision.executor
         if decision.executor == .willDeep {
             runtime.sessionProviderIDOverride = profile?.providerID
@@ -950,7 +951,15 @@ extension AppState {
         """
     }
 
-    nonisolated private static func dispatchTaskPrompt(
+    nonisolated static func dispatchTaskExperts(
+        from existingExperts: Set<AgentExpert>
+    ) -> Set<AgentExpert> {
+        var experts = existingExperts
+        experts.insert(.browserOps)
+        return experts
+    }
+
+    nonisolated static func dispatchTaskPrompt(
         goal: AgentDispatchGoal,
         task: AgentDispatchTask,
         workspaceLocation: WorkspaceLocation
@@ -969,7 +978,7 @@ extension AppState {
         Acceptance criteria:
         \(criteria)
 
-        Execute this node directly as an unattended run. Do not create another Goal, dispatch graph, or team of agents. Work only inside the assigned checkout. It is a checkout of the fixed logical project above; do not switch this Task to another repository. Preserve unrelated changes. Diagnose and recover from ordinary Git/worktree, dependency, build, test, path, and transient tool failures yourself; prefer safe reversible repairs and retry before stopping. Do not ask the user for confirmation or implementation preferences: no operator is attached to this task conversation. If missing credentials, private interactive control, or an unavoidable product decision makes completion impossible, report a concrete blocked reason to the scheduler instead of opening an approval or question card. Before reporting completion, provide concrete evidence such as tests, build output, or a focused diff summary. Do not merge into a shared branch; WillDeep owns review and integration.
+        Execute this node directly as an unattended run. Do not create another Goal, dispatch graph, or team of agents. Work only inside the assigned checkout. It is a checkout of the fixed logical project above; do not switch this Task to another repository. Preserve unrelated changes. Diagnose and recover from ordinary Git/worktree, dependency, build, test, path, and transient tool failures yourself; prefer safe reversible repairs and retry before stopping. For ordinary browser-backed UI verification, prefer the runtime-scoped `embedded_browser_*` tools: they work headlessly before the side panel is opened, and the user can later inspect the same page in the task browser. Use Playwright or an external Chromium process only when the acceptance criterion explicitly requires that engine or the embedded browser cannot express the required interaction. Do not ask the user for confirmation or implementation preferences: no operator is attached to this task conversation. If missing credentials, private interactive control, or an unavoidable product decision makes completion impossible, report a concrete blocked reason to the scheduler instead of opening an approval or question card. Before reporting completion, provide concrete evidence such as tests, build output, or a focused diff summary. Do not merge into a shared branch; WillDeep owns review and integration.
 
         In the final response, update the visible execution step with a closed `progress` block and evaluate every acceptance criterion with a closed `goal-check` block. Mark an item done only when the evidence actually proves it.
         """

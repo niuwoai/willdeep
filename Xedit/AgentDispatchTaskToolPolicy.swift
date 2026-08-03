@@ -23,7 +23,7 @@ nonisolated enum AgentDispatchTaskToolPolicy {
     static func overflowKinds(
         activeExperts: Set<AgentExpert>
     ) -> [AgentSidePanelKind] {
-        [.preview, .devServer, .widget].filter {
+        [.preview, .devServer, .embeddedBrowser, .widget].filter {
             $0.isAvailable(activeExperts: activeExperts)
         }
     }

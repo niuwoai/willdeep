@@ -677,7 +677,9 @@ private struct AgentDevServerActivityCard: View {
             openManager()
             return
         }
-        let controller = AgentEmbeddedBrowserController.shared
+        let controller = AgentEmbeddedBrowserController.controller(
+            for: appState.activeRuntime?.id
+        )
         controller.address = url.absoluteString
         if controller.isReady {
             try? controller.navigate(to: url.absoluteString)

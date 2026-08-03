@@ -228,19 +228,92 @@ struct AgentDispatchTaskTakeoverTests {
         #expect(AgentDispatchMetricFormatting.tokenCount(nil) == L10n.Dispatch.metricUnavailable)
     }
 
-    @Test("任务会话只保留干预和证据工具")
-    func taskToolPolicyHidesUnrelatedUtilities() {
+    @Test("任务会话保留干预证据工具并向浏览器专家开放内置浏览器")
+    func taskToolPolicyIncludesRuntimeBrowserForBrowserExpert() {
         let primary = AgentDispatchTaskToolPolicy.primaryKinds(
             hasPlan: true,
-            activeExperts: []
+            activeExperts: [.browserOps]
         )
-        let overflow = AgentDispatchTaskToolPolicy.overflowKinds(activeExperts: [])
+        let overflow = AgentDispatchTaskToolPolicy.overflowKinds(activeExperts: [.browserOps])
 
         #expect(primary == [.plan, .files, .terminal, .diff])
-        #expect(overflow == [.preview, .widget])
+        #expect(overflow == [.preview, .embeddedBrowser, .widget])
         #expect(!primary.contains(.mediaTasks))
         #expect(!primary.contains(.embeddedBrowser))
         #expect(!overflow.contains(.imageEditor))
+    }
+
+    @Test("调度节点默认启用浏览器专家并优先使用 runtime 内置浏览器")
+    func dispatchRuntimeEnablesAndPromptsForEmbeddedBrowser() {
+        let experts = AppState.dispatchTaskExperts(from: [])
+        let goal = AgentDispatchGoal(
+            id: UUID(),
+            sessionID: UUID(),
+            title: "Web 验收",
+            statement: "验证网页交互",
+            tasks: [],
+            executorChoice: .automatic,
+            targetChoice: .local,
+            isPaused: false,
+            commands: [],
+            createdAt: Date(),
+            updatedAt: Date()
+        )
+        let task = AgentDispatchTask(
+            title: "检查页面",
+            acceptanceCriteria: ["表单可以提交"]
+        )
+        let prompt = AppState.dispatchTaskPrompt(
+            goal: goal,
+            task: task,
+            workspaceLocation: .local(path: "/tmp/project")
+        )
+
+        #expect(experts.contains(.browserOps))
+        #expect(prompt.contains("embedded_browser_*"))
+        #expect(prompt.contains("Use Playwright"))
+    }
+
+    @Test("并行调度节点拥有互不抢页的独立内置浏览器")
+    func dispatchRuntimesOwnIndependentEmbeddedBrowsers() async throws {
+        let firstID = UUID()
+        let secondID = UUID()
+        defer {
+            AgentEmbeddedBrowserController.release(for: firstID)
+            AgentEmbeddedBrowserController.release(for: secondID)
+        }
+
+        let first = AgentEmbeddedBrowserController.controller(for: firstID)
+        let sameFirst = AgentEmbeddedBrowserController.controller(for: firstID)
+        let second = AgentEmbeddedBrowserController.controller(for: secondID)
+
+        #expect(first === sameFirst)
+        #expect(first !== second)
+        #expect(!first.isReady)
+        #expect(!second.isReady)
+
+        _ = try await AgentEmbeddedBrowserTools.navigate(
+            arguments: [
+                "url": .string(
+                    "data:text/html,%3Cp%20id%3D%22ready%22%3EBackground%20ready%3C%2Fp%3E"
+                ),
+            ],
+            runtimeID: firstID
+        )
+        let waitResult = try await AgentEmbeddedBrowserTools.waitFor(
+            arguments: [
+                "condition": .string("text"),
+                "value": .string("Background ready"),
+                "timeout_ms": .number(3_000),
+            ],
+            runtimeID: firstID
+        )
+
+        #expect(first.isReady)
+        #expect(!second.isReady)
+        #expect(waitResult.payload.contains("\"matched\" : true"))
+        #expect(AgentEmbeddedBrowserController.hasController(for: firstID))
+        #expect(AgentEmbeddedBrowserController.hasController(for: secondID))
     }
 
     @Test("调度台抽屉选中任务会话时不离开调度台")
