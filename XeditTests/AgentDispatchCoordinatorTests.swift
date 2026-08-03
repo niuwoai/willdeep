@@ -10,6 +10,95 @@ import Testing
 @Suite(.serialized)
 @MainActor
 struct AgentDispatchCoordinatorTests {
+    @Test("人工干预新一轮会恢复节点并重新挂载完成监听")
+    func takeoverInstructionRestartsFailedTaskMonitoring() async throws {
+        let workspace = FileManager.default.temporaryDirectory
+            .appendingPathComponent("willdeep-dispatch-takeover-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: workspace, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: workspace) }
+
+        let rootTaskID = UUID()
+        let downstreamTaskID = UUID()
+        let appState = AppState()
+        appState.agentDispatchCoordinator.resetForTests()
+        let projectSession = appState.startDispatchGoalSession(
+            inWorkspaceAt: workspace.path
+        )
+        let projectRuntime = try #require(appState.runtime(for: projectSession.id))
+        projectRuntime.currentGoal = AgentGoal(
+            statement: "人工干预后继续调度",
+            checklist: [AgentGoal.Item(text: "全部节点完成")],
+            dispatchPlan: AgentGoalDispatchPlan(nodes: [
+                .init(
+                    id: rootTaskID,
+                    key: "ROOT-1",
+                    title: "首节点",
+                    dependencyIDs: [],
+                    primaryProfileID: nil,
+                    fallbackProfileIDs: [],
+                    acceptanceCriteria: ["首节点完成"]
+                ),
+                .init(
+                    id: downstreamTaskID,
+                    key: "NEXT-1",
+                    title: "后续节点",
+                    dependencyIDs: [rootTaskID],
+                    primaryProfileID: nil,
+                    fallbackProfileIDs: [],
+                    acceptanceCriteria: ["后续节点完成"]
+                ),
+            ])
+        )
+        appState.persistAgentSession(runtime: projectRuntime)
+        appState.agentDispatchCoordinator.synchronize(with: appState.agentSessions)
+
+        let childSession = appState.startNewAgentSession(inWorkspaceAt: workspace.path)
+        let childRuntime = try #require(appState.runtime(for: childSession.id))
+        childRuntime.session.dispatchParentProjectID = projectSession.id
+        childRuntime.session.dispatchTaskID = rootTaskID
+        childRuntime.currentGoal = AgentGoal(
+            statement: "完成首节点",
+            checklist: [AgentGoal.Item(text: "验收通过", done: true)]
+        )
+        appState.persistAgentSession(runtime: childRuntime)
+        appState.agentDispatchCoordinator.markTaskStarted(
+            goalID: projectSession.id,
+            taskID: rootTaskID,
+            executor: .willDeep,
+            target: .local,
+            runtimeSessionID: childSession.id
+        )
+        appState.agentDispatchCoordinator.updateTaskState(
+            goalID: projectSession.id,
+            taskID: rootTaskID,
+            state: .failed
+        )
+
+        childRuntime.isResponding = true
+        childRuntime.input = "检查现有结果并确认完成"
+        #expect(appState.sendDispatchTaskTakeoverInstruction(
+            goalID: projectSession.id,
+            taskID: rootTaskID,
+            runtimeSessionID: childSession.id
+        ))
+        #expect(
+            appState.agentDispatchCoordinator.selectedGoal?.tasks
+                .first(where: { $0.id == rootTaskID })?.state == .running
+        )
+        #expect(childRuntime.queuedMessages.count == 1)
+
+        #expect(appState.agentDispatchCoordinator.setPaused(true, goalID: projectSession.id))
+        childRuntime.isResponding = false
+        try await Task.sleep(for: .milliseconds(700))
+
+        let tasks = try #require(
+            appState.agentDispatchCoordinator.goals
+                .first(where: { $0.id == projectSession.id })?.tasks
+        )
+        #expect(tasks.first(where: { $0.id == rootTaskID })?.state == .merged)
+        #expect(tasks.first(where: { $0.id == downstreamTaskID })?.state == .queued)
+    }
+
     @Test("调度子会话恢复后保留固定 Provider")
     func restoredDispatchRuntimeKeepsProviderPin() {
         var session = AgentSession()

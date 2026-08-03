@@ -56,6 +56,26 @@ struct AgentThinkingStatusVisualTests {
         ))
     }
 
+    @Test("dispatch takeover composer exposes active and provider-waiting states")
+    func dispatchTakeoverComposerActivityPolicy() {
+        #expect(AgentDispatchTakeoverActivityStatus.resolve(
+            isResponding: false,
+            isAwaitingProviderSlot: false
+        ) == .hidden)
+        #expect(AgentDispatchTakeoverActivityStatus.resolve(
+            isResponding: true,
+            isAwaitingProviderSlot: false
+        ) == .active)
+        #expect(AgentDispatchTakeoverActivityStatus.resolve(
+            isResponding: false,
+            isAwaitingProviderSlot: true
+        ) == .waitingForProvider)
+        #expect(AgentDispatchTakeoverActivityStatus.resolve(
+            isResponding: true,
+            isAwaitingProviderSlot: true
+        ) == .waitingForProvider)
+    }
+
     @Test("composer keeps a generic thinking fallback while the rail stays explicit")
     func composerThinkingFallbackScopedToComposerStyle() throws {
         let repositoryRoot = URL(fileURLWithPath: #filePath)

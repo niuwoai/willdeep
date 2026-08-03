@@ -7,6 +7,22 @@
 
 import SwiftUI
 
+nonisolated enum AgentDispatchTakeoverActivityStatus: Equatable {
+    case hidden
+    case waitingForProvider
+    case active
+
+    static func resolve(
+        isResponding: Bool,
+        isAwaitingProviderSlot: Bool
+    ) -> Self {
+        if isAwaitingProviderSlot {
+            return .waitingForProvider
+        }
+        return isResponding ? .active : .hidden
+    }
+}
+
 struct AgentDispatchTakeoverDrawer: View {
     @EnvironmentObject private var appState: AppState
     @ObservedObject var runtime: AgentRuntime
@@ -121,6 +137,8 @@ struct AgentDispatchTakeoverDrawer: View {
 
     private var takeoverComposer: some View {
         VStack(alignment: .leading, spacing: 8) {
+            takeoverActivityStatus
+
             ZStack(alignment: .topLeading) {
                 TextEditor(text: inputBinding)
                     .font(.system(size: 12))
@@ -173,6 +191,41 @@ struct AgentDispatchTakeoverDrawer: View {
         }
         .padding(12)
         .background(drawerBackground.opacity(0.94))
+    }
+
+    @ViewBuilder
+    private var takeoverActivityStatus: some View {
+        switch AgentDispatchTakeoverActivityStatus.resolve(
+            isResponding: runtime.isResponding,
+            isAwaitingProviderSlot: runtime.isAwaitingProviderSlot
+        ) {
+        case .hidden:
+            EmptyView()
+        case .waitingForProvider:
+            HStack(spacing: 7) {
+                ProgressView()
+                    .controlSize(.small)
+                Text(L10n.AgentPanel.queueWaiting)
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                Spacer(minLength: 0)
+            }
+            .padding(.horizontal, 12)
+            .frame(height: 26)
+            .background(
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    .fill(Color.secondary.opacity(0.10))
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    .stroke(Color.secondary.opacity(0.16), lineWidth: 1)
+            )
+            .accessibilityIdentifier("dispatch-takeover-provider-waiting")
+        case .active:
+            AgentSemanticActivityStatusLine(style: .composer)
+                .accessibilityIdentifier("dispatch-takeover-activity-status")
+        }
     }
 
     private var taskToolStrip: some View {
@@ -245,7 +298,10 @@ struct AgentDispatchTakeoverDrawer: View {
     }
 
     private func sendInstruction() {
-        guard appState.prepareDispatchTaskTakeover(runtimeSessionID: runtime.id) else { return }
-        appState.sendAgentMessage()
+        appState.sendDispatchTaskTakeoverInstruction(
+            goalID: goal.id,
+            taskID: task.id,
+            runtimeSessionID: runtime.id
+        )
     }
 }

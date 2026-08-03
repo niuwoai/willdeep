@@ -671,6 +671,49 @@ extension AppState {
         )
     }
 
+    /// Sends an operator intervention into an existing task runtime and
+    /// reattaches the graph-state monitor for that new turn. The original
+    /// monitor exits when a task fails, so a later successful intervention
+    /// must start a fresh monitor or the node remains failed forever and its
+    /// dependants never unlock.
+    @discardableResult
+    func sendDispatchTaskTakeoverInstruction(
+        goalID: UUID,
+        taskID: UUID,
+        runtimeSessionID: UUID
+    ) -> Bool {
+        guard prepareDispatchTaskTakeover(runtimeSessionID: runtimeSessionID),
+              let runtime = runtime(for: runtimeSessionID),
+              let goal = agentDispatchCoordinator.goals.first(where: { $0.id == goalID }),
+              let task = goal.tasks.first(where: { $0.id == taskID }),
+              task.runtimeSessionID == runtimeSessionID
+                || (task.runtimeSessionIDs ?? []).contains(runtimeSessionID) else {
+            return false
+        }
+
+        let previousMessageCount = runtime.messages.count
+        let previousQueuedMessageCount = runtime.queuedMessages.count
+        let wasResponding = runtime.isResponding
+        sendAgentMessage()
+
+        let didSubmitTurn = runtime.messages.count > previousMessageCount
+            || runtime.queuedMessages.count > previousQueuedMessageCount
+            || (!wasResponding && (runtime.isResponding || runtime.isAwaitingProviderSlot))
+        guard didSubmitTurn else { return false }
+
+        agentDispatchCoordinator.updateTaskState(
+            goalID: goalID,
+            taskID: taskID,
+            state: .running
+        )
+        monitorDispatchTaskRuntime(
+            runtime,
+            goalID: goalID,
+            taskID: taskID
+        )
+        return true
+    }
+
     func openDispatchProject(goalID: UUID, taskID: UUID?) {
         agentDispatchCoordinator.selectGoal(goalID)
         if let taskID {
