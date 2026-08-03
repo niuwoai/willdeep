@@ -691,6 +691,14 @@ extension L10n {
             localized: "dispatch.node-editor-message",
             defaultValue: "Define the node, its prerequisites, and the evidence required to pass."
         )
+        static let nodeOverrideMessage = String(
+            localized: "dispatch.node-override-message",
+            defaultValue: "Adjust the node objective and acceptance criteria. Its graph relationships stay managed by the dispatch plan."
+        )
+        static let nodeObjective = String(
+            localized: "dispatch.node-objective",
+            defaultValue: "Node objective"
+        )
         static let nodeTaskTitle = String(
             localized: "dispatch.node-task-title",
             defaultValue: "Task title"
@@ -734,6 +742,14 @@ extension L10n {
         static let planUpdateFailedMessage = String(
             localized: "dispatch.plan-update-failed-message",
             defaultValue: "Check that the title is present, the task is not running, and the selected prerequisites do not create a cycle."
+        )
+        static let outcomeUpdateFailedMessage = String(
+            localized: "dispatch.outcome-update-failed-message",
+            defaultValue: "Check that the node objective is present and the task is not currently running or under review."
+        )
+        static let saveIntervention = String(
+            localized: "dispatch.save-intervention",
+            defaultValue: "Save Changes"
         )
         static let acceptanceInspectorMessage = String(
             localized: "dispatch.acceptance-inspector-message",

@@ -519,6 +519,38 @@ final class AgentDispatchCoordinator: ObservableObject {
         return true
     }
 
+    /// Human intervention may clarify what a node should deliver and how it
+    /// is accepted, but it must not rewrite the scheduler-owned graph topology.
+    @discardableResult
+    func updateTaskOutcome(
+        goalID: UUID,
+        taskID: UUID,
+        title: String,
+        acceptanceCriteria requestedAcceptanceCriteria: [String]
+    ) -> Bool {
+        let trimmedTitle = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedTitle.isEmpty,
+              let goal = goals.first(where: { $0.id == goalID }),
+              let existingTask = goal.tasks.first(where: { $0.id == taskID }),
+              existingTask.state != .running,
+              existingTask.state != .reviewing else {
+            return false
+        }
+
+        let criteria = requestedAcceptanceCriteria
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+        updateTask(goalID: goalID, taskID: taskID) { task in
+            task.title = trimmedTitle
+            task.acceptanceCriteria = criteria.isEmpty
+                ? [L10n.Dispatch.defaultAcceptanceCriterion]
+                : criteria
+            task.branchName = Self.branchName(for: trimmedTitle)
+            task.updatedAt = Date()
+        }
+        return true
+    }
+
     func markTaskStarted(
         goalID: UUID,
         taskID: UUID,

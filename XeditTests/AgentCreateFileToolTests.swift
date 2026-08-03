@@ -55,6 +55,22 @@ struct AgentCreateFileToolTests {
         _ = try roundTrip(path: "tricky.txt", content: tricky)
     }
 
+    @Test("GitHub Actions secret references round-trip as literal YAML")
+    func githubActionsExpressionsRoundTrip() throws {
+        let workflow = """
+        name: Deploy
+        on: workflow_dispatch
+        jobs:
+          deploy:
+            runs-on: ubuntu-latest
+            steps:
+              - env:
+                  DEPLOY_TOKEN: ${{ secrets.DEPLOY_TOKEN }}
+                run: ./scripts/deploy
+        """
+        _ = try roundTrip(path: ".github/workflows/deploy.yml", content: workflow)
+    }
+
     @Test
     @MainActor
     func creationPatchUsesTargetRuntimeWorkspaceWhenAnotherSessionIsActive() throws {

@@ -649,6 +649,35 @@ struct AgentToolsCoreTests {
         #expect(value == .string("not { valid"))
     }
 
+    @Test("GitHub Actions expressions survive valid tool argument JSON verbatim")
+    func jsonValuePreservesGitHubActionsExpressions() {
+        let value = AgentJSONValue.decode(from: #"{"content":"token: ${{ secrets.DEPLOY_TOKEN }}"}"#)
+        guard case .object(let arguments) = value else {
+            Issue.record("expected tool argument object, got \(value)")
+            return
+        }
+        #expect(arguments["content"] == .string("token: ${{ secrets.DEPLOY_TOKEN }}"))
+    }
+
+    @Test("Invalid provider dollar escape is repaired for GitHub Actions expressions")
+    func jsonValueRepairsEscapedGitHubActionsExpressions() {
+        let value = AgentJSONValue.decode(from: #"{"content":"token: \${{ secrets.DEPLOY_TOKEN }}"}"#)
+        guard case .object(let arguments) = value else {
+            Issue.record("expected repaired tool argument object, got \(value)")
+            return
+        }
+        #expect(arguments["content"] == .string("token: ${{ secrets.DEPLOY_TOKEN }}"))
+    }
+
+    @Test("file tools advertise GitHub Actions expressions as literal content")
+    func fileToolDescriptionsKeepGitHubActionsLiteral() {
+        for name in ["create_file", "edit_file", "apply_patch"] {
+            let description = AgentToolRegistry.descriptor(for: name)?.description ?? ""
+            #expect(description.contains("${{ secrets.DEPLOY_TOKEN }}"))
+            #expect(description.contains("shell/Python"))
+        }
+    }
+
     /// Nested object/array shapes survive a wrap → rawAny round trip
     /// — the runner uses `rawAny` to feed `JSONSerialization` when it
     /// hands tool results back to the model.
