@@ -1050,9 +1050,9 @@ nonisolated enum L10n {
     }
 
     enum HeatmapCell {
-        static func tooltip(_ a1: String, _ a2: String) -> String {
-            let template = String(localized: "heatmap-cell.tooltip", defaultValue: "%1$@ used %2$@ tokens")
-            return String(format: template, a1, a2)
+        static func tooltip(_ a1: String, _ a2: String, _ a3: String) -> String {
+            let template = String(localized: "heatmap-cell.tooltip", defaultValue: "%1$@ · Requests: %2$@ · Tokens: %3$@")
+            return String(format: template, a1, a2, a3)
         }
     }
 

@@ -1,7 +1,23 @@
 # Changelog
 
-> 当前文件保留最新版本（1.226.0-rc2 至 1.109.0-rc340）。
+> 当前文件保留最新版本（1.226.0-rc3 至 1.109.0-rc340）。
 > 更早的 1000 个版本已移至 [CHANGELOG-ARCHIVE.md](CHANGELOG-ARCHIVE.md)。
+
+## 1.226.0-rc3 - 2026-08-04
+
+### Fixed
+
+- 新会话首页的 Token 活动热力格按本地自然日聚合请求次数与 Token 用量，悬停和辅助功能标签均展示完整的日期、请求数与 Token 数。
+- Agent 历史消息中的 Unicode 文件路径会保留完整 basename；`docs/中文文件名.md` 不再因等宽字体缺少 CJK 字形而显示成 `docs/.md`。
+- 终端凭据脱敏仅把独立的 snake_case / kebab-case 凭据字段视为敏感键；`tokenhub:0.196.0-rc2` 等镜像仓库与版本号不再被误替换，真实 Token、密码和 Bearer 凭据仍会脱敏。
+
+### Tests
+
+- 新增首页按日 Token 聚合、Unicode 文件路径渲染、镜像标签与语义化版本号脱敏边界回归测试。
+
+### Meta
+
+- Bugfix 预发布版本从 **1.226.0-rc2** 递增为 **1.226.0-rc3**，内部构建号从 **271** 递增为 **272**，Help 与 Computer Use Helper 构建号从 **188** 递增为 **189**；App、Go agent、Help、Helper、浏览器扩展、README、响应头契约与产品文档保持一致。
 
 ## 1.226.0-rc2 - 2026-08-04
 

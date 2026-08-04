@@ -305,7 +305,7 @@ extension WillDeepTests {
         #expect(stats.longestStreak == 31)
     }
 
-    @Test("AgentUsageStats heatmap returns daily Token totals in chronological order")
+    @Test("AgentUsageStats heatmap returns daily request and Token totals in chronological order")
     func testUsageStatsHeatmapShape() {
         let calendar = Calendar.current
         let now = Date()
@@ -313,8 +313,11 @@ extension WillDeepTests {
         let threeDaysAgo = calendar.date(byAdding: .day, value: -3, to: today)!
 
         let messages = [
+            AgentMessage(role: .user, content: "first", usageTokens: 10, createdAt: today),
+            AgentMessage(role: .user, content: "second", usageTokens: 20, createdAt: today),
             assistantMessage("a", usage: 120, at: today),
             assistantMessage("b", usage: 80, at: today),
+            AgentMessage(role: .user, content: "earlier", usageTokens: 5, createdAt: threeDaysAgo),
             assistantMessage("c", usage: 50, at: threeDaysAgo)
         ]
         let session = makeSession(modelID: nil, messages: messages)
@@ -326,8 +329,10 @@ extension WillDeepTests {
         let flat = cells.flatMap { $0 }
         let todayCell = flat.first { calendar.isDate($0.date, inSameDayAs: today) }
         let earlierCell = flat.first { calendar.isDate($0.date, inSameDayAs: threeDaysAgo) }
-        #expect(todayCell?.tokenCount == 200)
-        #expect(earlierCell?.tokenCount == 50)
+        #expect(todayCell?.requestCount == 2)
+        #expect(todayCell?.tokenCount == 230)
+        #expect(earlierCell?.requestCount == 1)
+        #expect(earlierCell?.tokenCount == 55)
     }
 
     @Test("AgentUsageStats falls back to built-in public prices for custom GPT models")

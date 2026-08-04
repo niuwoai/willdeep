@@ -75,11 +75,12 @@ struct AgentSidebarListVisualMetricsTests {
         )
     }
 
-    @Test("Token activity tooltip includes the hovered day and its usage")
+    @Test("Token activity tooltip includes the hovered day, request count, and Token usage")
     func tokenActivityTooltipCarriesDailyUsage() {
-        let tooltip = L10n.HeatmapCell.tooltip("7月10日", "10.3亿")
+        let tooltip = L10n.HeatmapCell.tooltip("7月10日", "42", "10.3亿")
 
         #expect(tooltip.contains("7月10日"))
+        #expect(tooltip.contains("42"))
         #expect(tooltip.contains("10.3亿"))
     }
 

@@ -2801,7 +2801,12 @@ final class AgentInteractiveTerminalController: ObservableObject {
 enum AgentTerminalRedactor {
     private static let patterns: [String] = [
         #"(?i)\b(Bearer|Basic)\s+[A-Za-z0-9._~+/=-]{12,}"#,
-        #"(?i)\b[A-Z0-9_]*(api[_-]?key|token|secret|password|jwt)[A-Z0-9_]*\s*[:=]\s*['"]?[^'"\s]{3,}"#,
+        // Credential markers embedded in environment/config keys must be
+        // separated as their own snake_case or kebab-case segment. The old
+        // unrestricted prefix/suffix matched ordinary business identifiers
+        // such as `tokenhub:0.196.0-rc2`, redacting the repository/image name
+        // and version together even though neither is a secret.
+        #"(?i)\b(?:[A-Z0-9]+[_-])*(api[_-]?key|token|secret|password|jwt)(?:[_-][A-Z0-9]+)*\s*[:=]\s*['"]?[^'"\s]{3,}"#,
         #"(?i)\b(api[_-]?key|token|secret|password|authorization)\s*[:=]\s*['"]?[^'"\s]{3,}"#,
         #"(?i)\b(sk-[A-Za-z0-9_-]{16,})\b"#,
         #"(?i)\b([A-Za-z0-9_-]{16,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,})\b"#

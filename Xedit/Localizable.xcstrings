@@ -12175,13 +12175,13 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "%1$@ used %2$@ tokens"
+            "value" : "%1$@ · Requests: %2$@ · Tokens: %3$@"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "%1$@ 使用了 %2$@ 个 Token"
+            "value" : "%1$@ · 请求：%2$@ 次 · Token：%3$@"
           }
         }
       }

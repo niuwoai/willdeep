@@ -379,12 +379,14 @@ struct AgentStatsDashboard: View {
                                     .help(
                                         L10n.HeatmapCell.tooltip(
                                             cellDateLabel(cell.date),
+                                            formatInteger(cell.requestCount),
                                             formatTokenCount(cell.tokenCount)
                                         )
                                     )
                                     .accessibilityLabel(
                                         L10n.HeatmapCell.tooltip(
                                             cellDateLabel(cell.date),
+                                            formatInteger(cell.requestCount),
                                             formatTokenCount(cell.tokenCount)
                                         )
                                     )
