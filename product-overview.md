@@ -1,6 +1,6 @@
 # WillDeep Product Overview
 
-> Last updated: 2026-08-04 | Current version: v1.226.0-rc3
+> Last updated: 2026-08-04 | Current version: v1.226.0-rc4
 
 ## Positioning
 
@@ -12,6 +12,7 @@ WillDeep is configured for non-App-Store distribution without App Sandbox so it 
 
 ## 架构概览
 
+- **ZMODEM 大文件有序传输与失败隔离（1.226.0-rc4）** —— rz/sz 数据通过专用同步 PTY 写入器严格保持协议块顺序，完整处理短写、可重试错误和写入超时，并启用控制字符转义；本地 lrzsz 异常退出后继续隔离远端 PTY 中尚未排空的二进制回显，待静默后才恢复普通终端渲染，避免上传中断时出现满屏 `^@` 乱码。
 - **终端版本号不再误脱敏（1.226.0-rc3）** —— 终端输出的凭据脱敏仅把 `token`、`secret`、`password` 等作为独立 snake_case / kebab-case 字段时视为敏感键；镜像仓库 `tokenhub`、版本号 `0.196.0-rc2` 与类似业务标识保持原文，真实 API Token、密码和 Bearer 凭据仍会脱敏。
 - **中文文件路径完整渲染（1.226.0-rc3）** —— Agent 最终历史消息的本地文件路径识别支持 Unicode 字母与数字；像 `docs/中文文件名.md` 这样的路径会保留完整 basename、作为一个可点击文件引用渲染，并与流式输出阶段的显示保持一致。
 - **首页 Token 活动日用量提示（1.226.0-rc3）** —— 新会话首页的 Token 活动热力格按本地自然日同时聚合用户请求次数与 Token 用量；鼠标悬停和辅助功能标签均展示日期、请求数与 Token 数，空白日期明确显示零用量。

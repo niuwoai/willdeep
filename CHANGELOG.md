@@ -1,7 +1,23 @@
 # Changelog
 
-> 当前文件保留最新版本（1.226.0-rc3 至 1.109.0-rc340）。
+> 当前文件保留最新版本（1.226.0-rc4 至 1.109.0-rc340）。
 > 更早的 1000 个版本已移至 [CHANGELOG-ARCHIVE.md](CHANGELOG-ARCHIVE.md)。
+
+## 1.226.0-rc4 - 2026-08-04
+
+### Fixed
+
+- ZMODEM 上传不再通过 SwiftTerm 的多路异步 `DispatchIO.write` 投递协议块；新增专用有序 PTY 写入器，逐块等待完整写入并正确处理短写、`EINTR`、`EAGAIN` 和写入超时，避免大文件传输中协议字节乱序导致远端 `rz` 中断。
+- ZMODEM 本地进程异常退出后，终端会继续隔离协议收尾字节，并在最多 5 秒内等待 0.5 秒静默窗口再恢复文本渲染，避免远端 Shell 把仍在排空的二进制数据回显成满屏 `^@` 乱码。
+- 本地 `sz` / `rz` 默认启用控制字符转义，降低 XON/XOFF 和中间 SSH/PTY 驱动转换破坏二进制帧的风险。
+
+### Tests
+
+- 新增 ZMODEM PTY 短写、重试、跨数据块顺序保持、远端写入失败及 2 MB 真实管道背压回归；`AgentGlobalRulesTests` 28 项全部通过。
+
+### Meta
+
+- Bugfix 预发布版本从 **1.226.0-rc3** 递增为 **1.226.0-rc4**，内部构建号从 **272** 递增为 **273**，Help 与 Computer Use Helper 构建号从 **189** 递增为 **190**；App、Go agent、Help、Helper、浏览器扩展、README、响应头契约与产品文档保持一致。
 
 ## 1.226.0-rc3 - 2026-08-04
 
