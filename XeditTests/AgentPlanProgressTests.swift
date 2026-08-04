@@ -464,12 +464,42 @@ struct AgentPlanProgressTests {
 
         let decision = AgentPlanAutoContinuationPolicy.decision(
             for: plan,
-            automaticContinuationCount: 1,
-            consecutiveNoProgressReplies: 2,
+            automaticContinuationCount: 2,
+            consecutiveNoProgressReplies: 3,
             hasQueuedUserMessages: false
         )
 
         #expect(decision == .pauseAfterNoProgress)
+    }
+
+    @Test("automatic continuation requests one status-only reconciliation before pausing")
+    func automaticContinuationReconcilesMissingProgressBeforePausing() {
+        let plan = AgentPlan(
+            status: .executing,
+            steps: [AgentPlan.Step(text: "Deploy", status: .inProgress)],
+            summary: ""
+        )
+
+        let decision = AgentPlanAutoContinuationPolicy.decision(
+            for: plan,
+            automaticContinuationCount: 2,
+            consecutiveNoProgressReplies: 2,
+            hasQueuedUserMessages: false
+        )
+        let notice = AgentPlanAutoContinuationPolicy.progressReconciliationNotice(
+            finishReason: "stop"
+        )
+
+        #expect(decision == .reconcileProgress)
+        #expect(notice.contains("minimum necessary read-only status or inspection tools"))
+        #expect(notice.contains("write, danger, and user-input tools are blocked"))
+        #expect(notice.contains("repeat the plan"))
+        #expect(notice.contains("exactly one closed `progress` fenced block"))
+        #expect(notice.contains("Do not infer completion without evidence"))
+        #expect(AgentPlanAutoContinuationPolicy.allowsToolRiskDuringProgressReconciliation(.read))
+        #expect(!AgentPlanAutoContinuationPolicy.allowsToolRiskDuringProgressReconciliation(.write))
+        #expect(!AgentPlanAutoContinuationPolicy.allowsToolRiskDuringProgressReconciliation(.danger))
+        #expect(!AgentPlanAutoContinuationPolicy.allowsToolRiskDuringProgressReconciliation(.userInput))
     }
 
     @Test("automatic continuation has a hard safety limit")
@@ -526,6 +556,7 @@ struct AgentPlanProgressTests {
         )
         #expect(executionPrompt.contains("=== ACTIVE PLAN — CONTINUE, DO NOT RE-PLAN ==="))
         #expect(executionPrompt.contains("refresh the visible checklist immediately"))
+        #expect(executionPrompt.contains("Only a valid `progress` fenced block changes WillDeep's visible checklist"))
         #expect(executionPrompt.contains("Do not emit a replacement `plan` block"))
         #expect(executionPrompt.contains("The plan is now in unattended execution"))
         #expect(executionPrompt.contains("ordinary Git/worktree conflicts"))

@@ -502,9 +502,40 @@ extension AppState {
         let diffs = AgentPatchApplier.extractDiffBlocks(from: message.content)
         guard !diffs.isEmpty else { return }
 
+        // Dispatch workers have no operator attached to their conversation.
+        // Plain fenced diffs must follow the same unattended auto-apply path
+        // as create_file / edit_file / apply_patch instead of becoming review
+        // cards that can suspend the scheduler forever.
+        if runtime.isUnattendedDispatchTask {
+            _ = autoApplyPendingAgentPatchProposals(for: runtime, source: .dispatchTask)
+        }
+
         let existingDiffs = Set(runtime.patchProposals.map(\.diff))
         for (offset, diff) in diffs.enumerated() where !existingDiffs.contains(diff) {
             let title = diffs.count == 1 ? "Agent Patch" : "Agent Patch \(offset + 1)"
+            if runtime.isUnattendedDispatchTask {
+                do {
+                    _ = try enqueueAgentPatchProposal(
+                        for: runtime,
+                        messageID: messageID,
+                        title: title,
+                        diff: diff,
+                        autoApplySource: .dispatchTask
+                    )
+                } catch {
+                    runtime.patchProposals.append(
+                        AgentPatchProposal(
+                            messageID: messageID,
+                            title: title,
+                            diff: diff,
+                            status: .failed,
+                            statusMessage: "Unattended dispatch auto-apply failed: \(error.localizedDescription)"
+                        )
+                    )
+                    persistAgentSession(runtime: runtime)
+                }
+                continue
+            }
             runtime.patchProposals.append(
                 AgentPatchProposal(messageID: messageID, title: title, diff: diff)
             )

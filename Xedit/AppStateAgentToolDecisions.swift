@@ -802,10 +802,19 @@ extension AppState {
     func sandboxModeForToolExecution(
         risk: AgentToolRisk,
         approvalSource: AgentToolApprovalSource?,
-        sandboxDecision: AgentSandboxDecision
+        sandboxDecision: AgentSandboxDecision,
+        isUnattendedDispatchTask: Bool = false
     ) -> AgentSandboxMode {
         if sandboxDecision.mode == .escalated {
             return .escalated
+        }
+        // Scheduler-owned nodes must be able to install dependencies, bind
+        // localhost ports, launch browser tests, and reach services even when
+        // the command itself does not look like a conventional network tool.
+        // They already run in isolated task worktrees and have no operator
+        // available to approve a second attempt after a seatbelt denial.
+        if isUnattendedDispatchTask {
+            return .workspaceWriteNetwork
         }
         if risk == .read {
             return .readOnly

@@ -98,6 +98,39 @@ nonisolated struct AgentDispatchModelRouting: Codable, Equatable {
     }
 }
 
+/// User-facing model state for a dispatch task runtime. A provider request
+/// snapshots its configuration when a turn starts, so changing the runtime
+/// override while that request is active can only affect the next turn.
+nonisolated struct AgentDispatchTaskModelPresentation: Equatable {
+    let currentModelID: String?
+    let nextModelID: String?
+    let switchAppliesNextTurn: Bool
+
+    static func resolve(
+        activeTurnModelID: String?,
+        configuredModelID: String?,
+        persistedModelID: String?
+    ) -> Self {
+        let active = normalized(activeTurnModelID)
+        let configured = normalized(configuredModelID)
+        let persisted = normalized(persistedModelID)
+        let current = active ?? configured ?? persisted
+        let next = configured ?? persisted ?? active
+        return Self(
+            currentModelID: current,
+            nextModelID: next,
+            switchAppliesNextTurn: active != nil
+                && next != nil
+                && active?.caseInsensitiveCompare(next ?? "") != .orderedSame
+        )
+    }
+
+    private static func normalized(_ value: String?) -> String? {
+        let trimmed = value?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        return trimmed.isEmpty ? nil : trimmed
+    }
+}
+
 /// Stable identity for the logical project owned by a Goal.
 ///
 /// Execution checkouts are deliberately kept outside this value: a Task may

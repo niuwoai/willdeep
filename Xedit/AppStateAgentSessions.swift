@@ -1760,10 +1760,18 @@ extension AppState {
     /// just deleted on disk).
     @discardableResult
     func runtime(for sessionID: AgentSession.ID) -> AgentRuntime? {
-        if let existing = agentRuntimes[sessionID] { return existing }
+        if let existing = agentRuntimes[sessionID] {
+            if existing.isUnattendedDispatchTask {
+                _ = autoApplyPendingAgentPatchProposals(for: existing, source: .dispatchTask)
+            }
+            return existing
+        }
         guard let session = materializeAgentSessionIfNeeded(id: sessionID) else { return nil }
         let runtime = AgentRuntime(session: session)
         agentRuntimes[sessionID] = runtime
+        if runtime.isUnattendedDispatchTask {
+            _ = autoApplyPendingAgentPatchProposals(for: runtime, source: .dispatchTask)
+        }
         startAgentKnowledgeFolderWatchers(for: runtime)
         evictInactiveAgentRuntimesIfNeeded()
         return runtime
@@ -1813,6 +1821,7 @@ extension AppState {
             cancelAllWorkflows(for: runtime)
             agentSubagentRegistry.cancelAll(forParentRuntime: runtime.id)
             cancelAgentKnowledgeFolderWatchers(sessionID: runtime.id)
+            AgentEmbeddedBrowserController.release(for: runtime.id)
             agentRuntimes.removeValue(forKey: runtime.id)
         }
     }
@@ -1850,6 +1859,7 @@ extension AppState {
         agentSessions.removeAll { $0.id == id }
         removeAgentUsageSnapshot(id: id)
         cancelAgentKnowledgeFolderWatchers(sessionID: id)
+        AgentEmbeddedBrowserController.release(for: id)
         agentRuntimes.removeValue(forKey: id)
         if activeAgentSessionID == id {
             activeAgentSessionID = nil

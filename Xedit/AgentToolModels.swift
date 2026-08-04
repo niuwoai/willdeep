@@ -670,6 +670,18 @@ enum AgentJSONValue: Equatable {
         do {
             return try decode(from: data)
         } catch {
+            // Some providers escape GitHub Actions expressions as `\${{ ... }}`
+            // while streaming tool arguments. `\$` is not a legal JSON escape,
+            // so JSONSerialization rejects the entire call before create_file /
+            // edit_file can write the otherwise ordinary text. Repair only this
+            // narrow, unambiguous provider mistake; valid JSON is always decoded
+            // above without modification.
+            let repaired = string.replacingOccurrences(of: #"\${{"#, with: "${{")
+            if repaired != string,
+               let repairedData = repaired.data(using: .utf8),
+               let decoded = try? decode(from: repairedData) {
+                return decoded
+            }
             return .string(string)
         }
     }

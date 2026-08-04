@@ -80,16 +80,16 @@ enum AgentContextBuilder {
     private static let maxSelectionCharacters = 6_000
     private static let maxRulesCharacters = 6_000
     private static let dynamicContextMarker = "=== Dynamic Turn Context ==="
-    static let stablePrefixVersion = "willdeep-agent-system-v23"
+    static let stablePrefixVersion = "willdeep-agent-system-v24"
     /// Byte-level snapshot hashes for all three prompt profiles (computed
     /// with the fixed test locale directive). Intentional prompt edits must
     /// bump `stablePrefixVersion` and re-record every affected hash — run
     /// the snapshot tests once to get the new values from the failure
     /// output. Without all three, compact/extended drift (a merge eating
     /// half a sentence) ships silently.
-    static let stablePrefixSnapshotHash = "12630db1d1c4e199"
-    static let compactPrefixSnapshotHash = "aa29a5e811986695"
-    static let extendedPrefixSnapshotHash = "2dd4144ea3616731"
+    static let stablePrefixSnapshotHash = "4d98af0ec7ce87be"
+    static let compactPrefixSnapshotHash = "f2db442de0d96169"
+    static let extendedPrefixSnapshotHash = "c5e581134383ae6"
 
     static func systemPrompt(
         rootDirectory: URL?,
@@ -254,6 +254,8 @@ enum AgentContextBuilder {
             1: done
             2: in_progress
             ```
+
+            Only a valid `progress` fenced block changes WillDeep's visible checklist. Completion prose, successful tool output, and a repeated `plan` block are evidence for your status decision, but they do not update the checklist by themselves.
 
             Steps you didn't touch this turn can be omitted. Mark a step `in_progress` before you start its tool calls; flip it to `done` (or `failed`) once finished. After receiving tool results, report the resulting step statuses before issuing more tool calls so WillDeep can refresh the visible checklist immediately. Never mark a partial/sample deliverable as `done` when the step promises the complete artifact. If the response budget forces a pause, leave the current step `in_progress`; WillDeep can continue it automatically. Once every step is `done`/`skipped`/`failed`, summarize what was accomplished.
             """)
@@ -482,7 +484,7 @@ enum AgentContextBuilder {
                 sections.append("""
                 Compact tool contract:
                 - Inspect with search_files, grep_files, read_file, list_directory, and git_status before guessing.
-                - Create new files with create_file. Edit existing files with exact-match edit_file; use apply_patch only when edit_file cannot express the change.
+                - Create new files with create_file. Edit existing files with exact-match edit_file; use apply_patch only when edit_file cannot express the change. File text is literal: `${{ ... }}` GitHub Actions expressions are supported, and their `secrets.NAME` references are not secret values. Never switch to shell/Python just because file content contains that syntax.
                 - Use run_command for practical build/test verification and debug a failed call before reporting a blocker.
                 - Put test/build/server commands expected to take at least 30 seconds in the background (recognized commands are promoted automatically when the flag is omitted), give them a concise `label`, and continue independent documentation or metadata work. Never change source/build inputs under an active verification job; if you do, treat its result as stale and rerun it. Inspect the automatic completion notice before claiming success.
                 - Terminal tools follow the ACTIVE side-panel terminal tab; treat it as a separate stateful local-or-SSH context and inspect terminal_snapshot before location-sensitive commands. terminal_send_command confirms dispatch and appends a bounded automatic snapshot for ordinary commands; if expected output is not visible yet, wait briefly and call terminal_snapshot again before concluding the terminal is unstable.
@@ -496,7 +498,7 @@ enum AgentContextBuilder {
             - Treat the visible side-panel terminal as a separate, stateful machine context. Terminal tools route to the ACTIVE side-panel tab — the one the user currently sees — unless terminal_tab_id explicitly targets another open tab. terminal_list_tabs enumerates every open tab; terminal_select_tab makes a tab active (the user sees the switch immediately), so when the user asks to operate a specific terminal tab, select it first. terminal_snapshot returns the exact tab id it read. Before using terminal_send_command for anything that depends on local-vs-remote location, inspect or rely on terminal_snapshot and keep a session-level note of whether the active tab is a local macOS shell or an SSH session, which host/user it is on, and what directory it shows. terminal_send_command's dispatch confirmation does not contain command output; ordinary commands receive a bounded automatic follow-up snapshot, but slow, long-running, or interactive commands may still be producing output. If expected output or a returned prompt is absent, wait briefly and call terminal_snapshot again for the same tab before drawing conclusions, and never call the terminal unstable merely because the dispatch confirmation or first bounded snapshot lacks output. If the active tab is SSH'd into a server, do not send commands meant for the local Mac or workspace runtime; use run_command instead. If the user explicitly asks to run in the side-panel terminal but the current host is unclear, check terminal_snapshot or ask one concrete confirmation question. If a terminal tool reports there is no usable tab, never tell the user the side panel or terminal is closed — terminal_send_command opens a local shell tab automatically, or retry with an explicit terminal_tab_id from the error/terminal_list_tabs.
             - When operating the visible side-panel terminal, avoid creating or overwriting files with heredoc, here-string, `cat > file`, `echo > file`, or similar pasted multi-line shell techniques by default. Prefer create_file/edit_file/apply_patch for local workspace files, run_command for ordinary command execution, and explicit file transfer tools for host-to-host copies. If the terminal is the only viable path to a remote host and transfer tools are unavailable, a small auditable heredoc or patch-style shell fallback is acceptable; verify the result afterwards.
             - WillDeep's visible side-panel terminal supports rz/sz ZMODEM transfers by intercepting lrzsz handshakes. With terminal_send_command, pass `zmodem_upload_paths` alongside remote `rz` to preselect local upload files, or `zmodem_download_directory` alongside remote `sz <file>` to preselect the local destination; omit them only when the user should choose through the macOS file panel. Before asking a remote shell to use `rz` or `sz`, check `command -v rz sz`; if missing, tell the user how to install lrzsz for that server OS (for example apt/yum/dnf/apk/brew install lrzsz). The local Mac also needs lrzsz; WillDeep prompts for `brew install lrzsz` if local `rz`/`sz` is missing. If the remote host cannot install lrzsz or ZMODEM setup fails, fall back to scp/rsync, workspace files, attachments, App edit/write flow, apply_patch for local files, or a careful remote shell edit fallback instead.
-            - To CREATE a new file, call create_file with the path and full content — it writes straight to disk. Do NOT craft a `/dev/null` diff for new files. For code EDITS to an existing file, use edit_file: pass the exact current text as old_string (copied verbatim from the file — same whitespace/indentation, WITHOUT read_file line-number prefixes) and the replacement as new_string; old_string must be unique in the file, so include a few surrounding lines, or set replace_all=true for bulk renames. The host locates the match and builds the diff itself. If every edited file is already tracked by git and clean against HEAD, the edit lands directly; if any file is untracked, already dirty, or has unsaved editor changes, a patch card appears inline in the chat for the user to Apply (Goal / workspace-access modes auto-apply). Do NOT hand-craft unified diffs with apply_patch unless edit_file genuinely cannot express the change — hand-written hunks frequently fail to match. Never tell the user to look in a "right-side review panel" — cards appear inline in the conversation. If the user explicitly asked to write/save an edit directly without review ("直接写", "直接落盘", "不用审核", "just write it"), pass apply_immediately=true so the edit lands without a card. If edit_file is unavailable or the edit requires unsupported deletion/binary changes, explain that limit and provide the diff or next step instead.
+            - To CREATE a new file, call create_file with the path and full content — it writes straight to disk. Do NOT craft a `/dev/null` diff for new files. For code EDITS to an existing file, use edit_file: pass the exact current text as old_string (copied verbatim from the file — same whitespace/indentation, WITHOUT read_file line-number prefixes) and the replacement as new_string; old_string must be unique in the file, so include a few surrounding lines, or set replace_all=true for bulk renames. File arguments are literal text: `${{ ... }}` in GitHub Actions YAML is fully supported, and a `${{ secrets.NAME }}` reference is not the secret value. Never claim the file tools reject that syntax or switch to shell/Python merely because it is present. The host locates the match and builds the diff itself. If every edited file is already tracked by git and clean against HEAD, the edit lands directly; if any file is untracked, already dirty, or has unsaved editor changes, a patch card appears inline in the chat for the user to Apply (Goal / workspace-access modes auto-apply). Do NOT hand-craft unified diffs with apply_patch unless edit_file genuinely cannot express the change — hand-written hunks frequently fail to match. Never tell the user to look in a "right-side review panel" — cards appear inline in the conversation. If the user explicitly asked to write/save an edit directly without review ("直接写", "直接落盘", "不用审核", "just write it"), pass apply_immediately=true so the edit lands without a card. If edit_file is unavailable or the edit requires unsupported deletion/binary changes, explain that limit and provide the diff or next step instead.
             - When tool calls are independent, batch them into one assistant turn so they can run in parallel. In particular, emit independent create_file/edit_file calls for multiple files together: WillDeep collects their patch cards into one review group with Apply All / Reject All instead of interrupting the user once per file. Keep dependent edits to the same file ordered.
             - You can discover installed skills with list_skills and read a selected skill's SKILL.md with read_skill. Use skills when the user's task matches a specialized workflow. With approval, you can create_user_skill, create_user_skills, update_user_skill, or delete_user_skill, but only user-created skills may be changed or deleted. When one request asks for two or more skills, submit every draft through one create_user_skills call so the user sees one complete batch confirmation; never issue repeated create_user_skill calls for that batch.
             - Expert guidance: if the user's task clearly enters a specialist domain and the relevant expert is not active, ask once with ask_user whether to activate it, then call activate_expert if they agree. Examples: short-drama production/storyboard work → shortDrama; web UI/frontend/static HTML/Vite/Next/React/Vue/screenshot-to-UI/dev-server orchestration → webCoding. If activating would only slow down a tiny one-off answer, continue without ceremony.
@@ -1003,6 +1005,7 @@ enum AgentPlanParser {
 nonisolated enum AgentPlanAutoContinuationDecision: Equatable {
     case stop
     case continueExecution
+    case reconcileProgress
     case pauseAfterNoProgress
     case pauseAfterLimit
 }
@@ -1010,6 +1013,7 @@ nonisolated enum AgentPlanAutoContinuationDecision: Equatable {
 nonisolated enum AgentPlanAutoContinuationPolicy {
     static let maximumAutomaticContinuations = 8
     static let maximumConsecutiveNoProgressReplies = 1
+    static let maximumProgressReconciliationAttempts = 1
 
     static func decision(
         for plan: AgentPlan?,
@@ -1028,8 +1032,13 @@ nonisolated enum AgentPlanAutoContinuationPolicy {
         guard automaticContinuationCount < maximumAutomaticContinuations else {
             return .pauseAfterLimit
         }
-        guard consecutiveNoProgressReplies <= maximumConsecutiveNoProgressReplies else {
+        let reconciliationLimit = maximumConsecutiveNoProgressReplies
+            + maximumProgressReconciliationAttempts
+        guard consecutiveNoProgressReplies <= reconciliationLimit else {
             return .pauseAfterNoProgress
+        }
+        if consecutiveNoProgressReplies > maximumConsecutiveNoProgressReplies {
+            return .reconcileProgress
         }
         return .continueExecution
     }
@@ -1040,6 +1049,18 @@ nonisolated enum AgentPlanAutoContinuationPolicy {
         Automatic plan continuation: the active plan still has non-terminal steps.\(reason)
         Continue from the current step statuses without restating completed work. Do not stop after a partial or sample deliverable. If the response budget forces another pause, leave the current step in_progress. If genuinely blocked, mark the step failed and explain why. End the reply with exactly one progress block containing the latest statuses touched in that reply.
         """
+    }
+
+    static func progressReconciliationNotice(finishReason: String?) -> String {
+        let reason = finishReason.map { " The provider ended the previous reply with finish reason '\($0)'." } ?? ""
+        return """
+        Plan status reconciliation: the last replies did not update WillDeep's machine-readable step statuses.\(reason)
+        First compare the active plan with the host-recorded tool results and completion evidence already in the conversation. If that evidence is insufficient, use only the minimum necessary read-only status or inspection tools; write, danger, and user-input tools are blocked during reconciliation. Do not repeat the plan, redo completed work, deploy again, or change external state. Then return exactly one closed `progress` fenced block covering every still non-terminal step: mark verified completed work `done`, genuine blockers `failed`, intentionally omitted work `skipped`, and work that still remains `in_progress` or `pending`. Do not infer completion without evidence. You may add one concise blocker sentence after the block only when needed.
+        """
+    }
+
+    static func allowsToolRiskDuringProgressReconciliation(_ risk: AgentToolRisk) -> Bool {
+        risk == .read
     }
 
     private static let terminalStatuses: Set<AgentPlan.StepStatus> = [.done, .skipped, .failed]

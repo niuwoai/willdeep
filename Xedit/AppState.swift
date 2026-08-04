@@ -340,6 +340,11 @@ final class AppState: ObservableObject {
     /// refresh at the same time, while still allowing a retry runtime to take
     /// over monitoring for the same task.
     var dispatchMonitoredRuntimeIDsByTaskID: [UUID: UUID] = [:]
+    /// An unattended node that returns with unchecked acceptance criteria is
+    /// not finished merely because its model turn stopped. Keep a small
+    /// host-owned retry budget so recoverable verification failures get a
+    /// fresh turn instead of silently parking the graph in review.
+    var dispatchAutomaticRecoveryAttemptsByTaskID: [UUID: Int] = [:]
 
     /// Process-wide registry of background `run_command` jobs. Scoped
     /// by `runtime.id` inside the registry so concurrent sessions can't

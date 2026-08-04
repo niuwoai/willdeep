@@ -432,7 +432,7 @@ struct AgentDispatchGraphView: View {
     @ViewBuilder
     private func taskMetrics(_ task: AgentDispatchTask) -> some View {
         if let runtimeSessionID = task.runtimeSessionID,
-           let runtime = appState.runtime(for: runtimeSessionID) {
+           let runtime = appState.loadedRuntime(for: runtimeSessionID) {
             AgentDispatchTaskMetricsView(
                 runtime: runtime,
                 task: task,
@@ -440,9 +440,29 @@ struct AgentDispatchGraphView: View {
             )
         } else {
             AgentDispatchTaskMetricsContent(
-                metrics: .empty,
+                metrics: AgentDispatchTaskMetrics.make(
+                    task: task,
+                    sessions: persistedMetricSessions(for: task)
+                ),
                 presentation: .compact
             )
+        }
+    }
+
+    /// Evicted runtimes still have durable session metrics. Reading those
+    /// snapshots keeps completed task cards informative without recreating a
+    /// runtime from inside SwiftUI view evaluation.
+    private func persistedMetricSessions(for task: AgentDispatchTask) -> [AgentSession] {
+        var sessionIDs = task.runtimeSessionIDs ?? []
+        if let currentSessionID = task.runtimeSessionID,
+           !sessionIDs.contains(currentSessionID) {
+            sessionIDs.append(currentSessionID)
+        }
+
+        var seenSessionIDs: Set<AgentSession.ID> = []
+        return sessionIDs.compactMap { sessionID in
+            guard seenSessionIDs.insert(sessionID).inserted else { return nil }
+            return appState.agentSessions.first { $0.id == sessionID }
         }
     }
 

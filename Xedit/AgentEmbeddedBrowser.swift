@@ -3,8 +3,9 @@
 //  WillDeep
 //
 //  In-app browser workbench for the Agent side panel. It intentionally
-//  controls only the visible WKWebView mounted in the right rail; the
-//  Chrome bridge remains the path for the user's real Chrome profile.
+//  owns a runtime-scoped WKWebView that can keep working before the right
+//  rail is opened; the Chrome bridge remains the path for the user's real
+//  Chrome profile.
 //
 
 import AppKit
@@ -17,6 +18,7 @@ import WebKit
 final class AgentEmbeddedBrowserController: NSObject, ObservableObject, WKNavigationDelegate, WKScriptMessageHandler {
     static let shared = AgentEmbeddedBrowserController()
     static let diagnosticsMessageHandlerName = "willdeepBrowserDiagnostics"
+    private static var runtimeControllers: [UUID: AgentEmbeddedBrowserController] = [:]
 
     @Published var address: String = "https://example.com"
     @Published private(set) var currentURL: String = ""
@@ -27,7 +29,7 @@ final class AgentEmbeddedBrowserController: NSObject, ObservableObject, WKNaviga
     @Published private(set) var canGoBack = false
     @Published private(set) var canGoForward = false
 
-    private weak var webView: WKWebView?
+    private var webView: WKWebView?
     private var consoleEvents: [[String: Any]] = []
     private let consoleEventLimit = 300
     private var requestEvents: [[String: Any]] = []
@@ -39,24 +41,56 @@ final class AgentEmbeddedBrowserController: NSObject, ObservableObject, WKNaviga
         super.init()
     }
 
-    func bind(_ webView: WKWebView) {
+    static func controller(for runtimeID: UUID?) -> AgentEmbeddedBrowserController {
+        guard let runtimeID else { return shared }
+        if let existing = runtimeControllers[runtimeID] {
+            return existing
+        }
+        let controller = AgentEmbeddedBrowserController()
+        runtimeControllers[runtimeID] = controller
+        return controller
+    }
+
+    static func release(for runtimeID: UUID) {
+        runtimeControllers.removeValue(forKey: runtimeID)?.resetForResourceReaper()
+    }
+
+    static func hasController(for runtimeID: UUID) -> Bool {
+        runtimeControllers[runtimeID] != nil
+    }
+
+    @discardableResult
+    func ensureWebView(loadInitialPage: Bool = true) -> WKWebView {
+        if let webView {
+            return webView
+        }
+        let configuration = WKWebViewConfiguration()
+        configuration.userContentController.addUserScript(Self.diagnosticsUserScript())
+        configuration.userContentController.add(
+            self,
+            name: Self.diagnosticsMessageHandlerName
+        )
+        let preferences = WKWebpagePreferences()
+        preferences.allowsContentJavaScript = true
+        configuration.defaultWebpagePreferences = preferences
+        let webView = WKWebView(frame: .zero, configuration: configuration)
         self.webView = webView
         webView.navigationDelegate = self
         updateState(from: webView)
-        if webView.url == nil, let url = normalizedURL(address) {
+        if loadInitialPage, let url = normalizedURL(address) {
             webView.load(URLRequest(url: url))
         }
-    }
-
-    func unbind(_ webView: WKWebView) {
-        if self.webView === webView {
-            self.webView = nil
-        }
+        return webView
     }
 
     func resetForResourceReaper() {
         webView?.stopLoading()
         webView?.loadHTMLString("", baseURL: nil)
+        webView?.navigationDelegate = nil
+        webView?.configuration.userContentController.removeScriptMessageHandler(
+            forName: Self.diagnosticsMessageHandlerName
+        )
+        webView?.removeFromSuperview()
         webView = nil
         address = "https://example.com"
         currentURL = ""
@@ -76,12 +110,10 @@ final class AgentEmbeddedBrowserController: NSObject, ObservableObject, WKNaviga
     }
 
     func navigate(to rawValue: String) throws {
-        guard let webView else {
-            throw AgentToolError.invalidArgument("Open the Embedded Browser side panel before using embedded browser tools.")
-        }
         guard let url = normalizedURL(rawValue) else {
             throw AgentToolError.invalidArgument("Invalid browser URL: \(rawValue)")
         }
+        let webView = ensureWebView(loadInitialPage: false)
         address = rawValue
         lastError = nil
         webView.load(URLRequest(url: url))
@@ -692,9 +724,7 @@ final class AgentEmbeddedBrowserController: NSObject, ObservableObject, WKNaviga
     }
 
     func captureScreenshot() async throws -> String {
-        guard let webView else {
-            throw AgentToolError.invalidArgument("Open the Embedded Browser side panel before taking screenshots.")
-        }
+        let webView = ensureWebView()
         let image: NSImage = try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<NSImage, any Error>) in
             webView.takeSnapshot(with: nil) { image, error in
                 if let error {
@@ -824,9 +854,7 @@ final class AgentEmbeddedBrowserController: NSObject, ObservableObject, WKNaviga
     }
 
     private func evaluateObject(_ script: String) async throws -> [String: Any] {
-        guard let webView else {
-            throw AgentToolError.invalidArgument("Open the Embedded Browser side panel before using embedded browser tools.")
-        }
+        let webView = ensureWebView()
         let value: Any = try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Any, any Error>) in
             webView.evaluateJavaScript(script) { value, error in
                 if let error {
@@ -1202,48 +1230,49 @@ final class AgentEmbeddedBrowserController: NSObject, ObservableObject, WKNaviga
 }
 
 enum AgentEmbeddedBrowserTools {
-    static func status(arguments: [String: AgentJSONValue]) async throws -> AgentToolResult {
-        let payload = AgentEmbeddedBrowserController.shared.statusPayload()
+    static func status(arguments: [String: AgentJSONValue], runtimeID: UUID? = nil) async throws -> AgentToolResult {
+        let payload = controller(for: runtimeID).statusPayload()
         return AgentToolResult(summary: "Embedded browser status", payload: prettyJSONString(payload))
     }
 
-    static func navigate(arguments: [String: AgentJSONValue]) async throws -> AgentToolResult {
+    static func navigate(arguments: [String: AgentJSONValue], runtimeID: UUID? = nil) async throws -> AgentToolResult {
         let url = try requiredString("url", arguments: arguments)
-        try AgentEmbeddedBrowserController.shared.navigate(to: url)
-        let payload = AgentEmbeddedBrowserController.shared.statusPayload()
+        let controller = controller(for: runtimeID, loadInitialPage: false)
+        try controller.navigate(to: url)
+        let payload = controller.statusPayload()
         return AgentToolResult(summary: "Navigated embedded browser", payload: prettyJSONString(payload))
     }
 
-    static func readPage(arguments: [String: AgentJSONValue]) async throws -> AgentToolResult {
+    static func readPage(arguments: [String: AgentJSONValue], runtimeID: UUID? = nil) async throws -> AgentToolResult {
         let maxChars = arguments["max_chars"]?.intValue().map { max(1_000, min($0, 100_000)) } ?? 20_000
-        let payload = try await AgentEmbeddedBrowserController.shared.readPage(maxChars: maxChars)
+        let payload = try await controller(for: runtimeID).readPage(maxChars: maxChars)
         return AgentToolResult(summary: "Read embedded browser page", payload: prettyJSONString(payload))
     }
 
-    static func snapshot(arguments: [String: AgentJSONValue]) async throws -> AgentToolResult {
+    static func snapshot(arguments: [String: AgentJSONValue], runtimeID: UUID? = nil) async throws -> AgentToolResult {
         let maxElements = arguments["max_elements"]?.intValue() ?? 100
-        let payload = try await AgentEmbeddedBrowserController.shared.snapshot(maxElements: maxElements)
+        let payload = try await controller(for: runtimeID).snapshot(maxElements: maxElements)
         return AgentToolResult(summary: "Snapshotted embedded browser elements", payload: prettyJSONString(payload))
     }
 
-    static func click(arguments: [String: AgentJSONValue]) async throws -> AgentToolResult {
+    static func click(arguments: [String: AgentJSONValue], runtimeID: UUID? = nil) async throws -> AgentToolResult {
         let selector = try requiredString("selector", arguments: arguments)
-        let payload = try await AgentEmbeddedBrowserController.shared.click(selector: selector)
+        let payload = try await controller(for: runtimeID).click(selector: selector)
         return AgentToolResult(summary: "Clicked embedded browser element", payload: prettyJSONString(payload))
     }
 
-    static func typeText(arguments: [String: AgentJSONValue]) async throws -> AgentToolResult {
+    static func typeText(arguments: [String: AgentJSONValue], runtimeID: UUID? = nil) async throws -> AgentToolResult {
         let selector = try requiredString("selector", arguments: arguments)
         let text = try requiredString("text", arguments: arguments)
-        let payload = try await AgentEmbeddedBrowserController.shared.typeText(selector: selector, text: text)
+        let payload = try await controller(for: runtimeID).typeText(selector: selector, text: text)
         return AgentToolResult(summary: "Typed into embedded browser element", payload: prettyJSONString(payload))
     }
 
-    static func waitFor(arguments: [String: AgentJSONValue]) async throws -> AgentToolResult {
+    static func waitFor(arguments: [String: AgentJSONValue], runtimeID: UUID? = nil) async throws -> AgentToolResult {
         let condition = try requiredString("condition", arguments: arguments)
         let value = try requiredString("value", arguments: arguments)
         let timeoutMS = arguments["timeout_ms"]?.intValue() ?? 5_000
-        let payload = try await AgentEmbeddedBrowserController.shared.waitFor(
+        let payload = try await controller(for: runtimeID).waitFor(
             condition: condition,
             value: value,
             timeoutMS: timeoutMS
@@ -1251,45 +1280,45 @@ enum AgentEmbeddedBrowserTools {
         return AgentToolResult(summary: "Waited for embedded browser condition", payload: prettyJSONString(payload))
     }
 
-    static func evaluate(arguments: [String: AgentJSONValue]) async throws -> AgentToolResult {
+    static func evaluate(arguments: [String: AgentJSONValue], runtimeID: UUID? = nil) async throws -> AgentToolResult {
         let source = try requiredString("javascript", arguments: arguments)
         let maxChars = arguments["max_chars"]?.intValue().map { max(1_000, min($0, 100_000)) } ?? 20_000
-        let payload = try await AgentEmbeddedBrowserController.shared.evaluate(source: source, maxChars: maxChars)
+        let payload = try await controller(for: runtimeID).evaluate(source: source, maxChars: maxChars)
         return AgentToolResult(summary: "Evaluated embedded browser JavaScript", payload: prettyJSONString(payload))
     }
 
-    static func console(arguments: [String: AgentJSONValue]) async throws -> AgentToolResult {
+    static func console(arguments: [String: AgentJSONValue], runtimeID: UUID? = nil) async throws -> AgentToolResult {
         let maxEntries = arguments["max_entries"]?.intValue() ?? 100
         let levels = arguments["levels"]?.stringArrayValue() ?? []
-        let payload = AgentEmbeddedBrowserController.shared.consolePayload(maxEntries: maxEntries, levels: levels)
+        let payload = controller(for: runtimeID).consolePayload(maxEntries: maxEntries, levels: levels)
         return AgentToolResult(summary: "Read embedded browser console", payload: prettyJSONString(payload))
     }
 
-    static func network(arguments: [String: AgentJSONValue]) async throws -> AgentToolResult {
+    static func network(arguments: [String: AgentJSONValue], runtimeID: UUID? = nil) async throws -> AgentToolResult {
         let maxEntries = arguments["max_entries"]?.intValue() ?? 150
         let includeDataURLs = arguments["include_data_urls"]?.boolValue() ?? false
-        let payload = try await AgentEmbeddedBrowserController.shared.networkPayload(
+        let payload = try await controller(for: runtimeID).networkPayload(
             maxEntries: maxEntries,
             includeDataURLs: includeDataURLs
         )
         return AgentToolResult(summary: "Read embedded browser network resources", payload: prettyJSONString(payload))
     }
 
-    static func requests(arguments: [String: AgentJSONValue]) async throws -> AgentToolResult {
+    static func requests(arguments: [String: AgentJSONValue], runtimeID: UUID? = nil) async throws -> AgentToolResult {
         let maxEntries = arguments["max_entries"]?.intValue() ?? 100
         let includeHeaders = arguments["include_headers"]?.boolValue() ?? true
-        let payload = AgentEmbeddedBrowserController.shared.requestsPayload(
+        let payload = controller(for: runtimeID).requestsPayload(
             maxEntries: maxEntries,
             includeHeaders: includeHeaders
         )
         return AgentToolResult(summary: "Read embedded browser AJAX/API requests", payload: prettyJSONString(payload))
     }
 
-    static func exportHAR(arguments: [String: AgentJSONValue]) async throws -> AgentToolResult {
+    static func exportHAR(arguments: [String: AgentJSONValue], runtimeID: UUID? = nil) async throws -> AgentToolResult {
         let maxEntries = arguments["max_entries"]?.intValue() ?? 500
         let includeResourceTimings = arguments["include_resource_timings"]?.boolValue() ?? true
         let includeHARJSON = arguments["include_har_json"]?.boolValue() ?? false
-        let payload = try await AgentEmbeddedBrowserController.shared.exportHAR(
+        let payload = try await controller(for: runtimeID).exportHAR(
             maxEntries: maxEntries,
             includeResourceTimings: includeResourceTimings,
             includeHARJSON: includeHARJSON
@@ -1297,11 +1326,11 @@ enum AgentEmbeddedBrowserTools {
         return AgentToolResult(summary: "Exported embedded browser HAR", payload: prettyJSONString(payload))
     }
 
-    static func storage(arguments: [String: AgentJSONValue]) async throws -> AgentToolResult {
+    static func storage(arguments: [String: AgentJSONValue], runtimeID: UUID? = nil) async throws -> AgentToolResult {
         let includeValues = arguments["include_values"]?.boolValue() ?? false
         let maxEntries = arguments["max_entries"]?.intValue() ?? 100
         let maxValueChars = arguments["max_value_chars"]?.intValue() ?? 500
-        let payload = try await AgentEmbeddedBrowserController.shared.storagePayload(
+        let payload = try await controller(for: runtimeID).storagePayload(
             includeValues: includeValues,
             maxEntries: maxEntries,
             maxValueChars: maxValueChars
@@ -1309,24 +1338,33 @@ enum AgentEmbeddedBrowserTools {
         return AgentToolResult(summary: "Read embedded browser storage", payload: prettyJSONString(payload))
     }
 
-    static func performance(arguments: [String: AgentJSONValue]) async throws -> AgentToolResult {
+    static func performance(arguments: [String: AgentJSONValue], runtimeID: UUID? = nil) async throws -> AgentToolResult {
         let maxEntries = arguments["max_entries"]?.intValue() ?? 150
-        let payload = try await AgentEmbeddedBrowserController.shared.performancePayload(maxEntries: maxEntries)
+        let payload = try await controller(for: runtimeID).performancePayload(maxEntries: maxEntries)
         return AgentToolResult(summary: "Read embedded browser page performance", payload: prettyJSONString(payload))
     }
 
-    static func failedResources(arguments: [String: AgentJSONValue]) async throws -> AgentToolResult {
+    static func failedResources(arguments: [String: AgentJSONValue], runtimeID: UUID? = nil) async throws -> AgentToolResult {
         let maxEntries = arguments["max_entries"]?.intValue() ?? 100
-        let payload = try await AgentEmbeddedBrowserController.shared.failedResourcesPayload(maxEntries: maxEntries)
+        let payload = try await controller(for: runtimeID).failedResourcesPayload(maxEntries: maxEntries)
         return AgentToolResult(summary: "Read embedded browser failed resources", payload: prettyJSONString(payload))
     }
 
-    static func captureScreenshot(arguments: [String: AgentJSONValue]) async throws -> AgentToolResult {
-        let path = try await AgentEmbeddedBrowserController.shared.captureScreenshot()
+    static func captureScreenshot(arguments: [String: AgentJSONValue], runtimeID: UUID? = nil) async throws -> AgentToolResult {
+        let path = try await controller(for: runtimeID).captureScreenshot()
         return AgentToolResult(
             summary: "Captured embedded browser screenshot",
             payload: prettyJSONString(["path": path])
         )
+    }
+
+    private static func controller(
+        for runtimeID: UUID?,
+        loadInitialPage: Bool = true
+    ) -> AgentEmbeddedBrowserController {
+        let controller = AgentEmbeddedBrowserController.controller(for: runtimeID)
+        controller.ensureWebView(loadInitialPage: loadInitialPage)
+        return controller
     }
 
     private static func prettyJSONString(_ value: Any) -> String {
@@ -1349,9 +1387,16 @@ enum AgentEmbeddedBrowserTools {
 }
 
 struct AgentEmbeddedBrowserPanel: View {
-    @ObservedObject private var controller = AgentEmbeddedBrowserController.shared
+    @ObservedObject private var controller: AgentEmbeddedBrowserController
     @State private var screenshotError: String?
-    var width: CGFloat
+    let width: CGFloat
+
+    init(runtimeID: UUID? = nil, width: CGFloat) {
+        self.width = width
+        _controller = ObservedObject(
+            wrappedValue: AgentEmbeddedBrowserController.controller(for: runtimeID)
+        )
+    }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -1485,29 +1530,36 @@ struct AgentEmbeddedBrowserPanel: View {
 private struct AgentEmbeddedBrowserWebView: NSViewRepresentable {
     let controller: AgentEmbeddedBrowserController
 
-    func makeNSView(context: Context) -> WKWebView {
-        let configuration = WKWebViewConfiguration()
-        configuration.userContentController.addUserScript(AgentEmbeddedBrowserController.diagnosticsUserScript())
-        configuration.userContentController.add(
-            controller,
-            name: AgentEmbeddedBrowserController.diagnosticsMessageHandlerName
-        )
-        let preferences = WKWebpagePreferences()
-        preferences.allowsContentJavaScript = true
-        configuration.defaultWebpagePreferences = preferences
-        let webView = WKWebView(frame: .zero, configuration: configuration)
-        controller.bind(webView)
-        return webView
+    func makeNSView(context: Context) -> AgentEmbeddedBrowserHostView {
+        let host = AgentEmbeddedBrowserHostView()
+        host.attach(controller.ensureWebView())
+        return host
     }
 
-    func updateNSView(_ webView: WKWebView, context: Context) {
-        controller.bind(webView)
+    func updateNSView(_ host: AgentEmbeddedBrowserHostView, context: Context) {
+        host.attach(controller.ensureWebView())
     }
 
-    static func dismantleNSView(_ nsView: WKWebView, coordinator: ()) {
-        nsView.configuration.userContentController.removeScriptMessageHandler(
-            forName: AgentEmbeddedBrowserController.diagnosticsMessageHandlerName
-        )
-        AgentEmbeddedBrowserController.shared.unbind(nsView)
+    static func dismantleNSView(_ host: AgentEmbeddedBrowserHostView, coordinator: ()) {
+        host.detach()
+    }
+}
+
+private final class AgentEmbeddedBrowserHostView: NSView {
+    private weak var hostedWebView: WKWebView?
+
+    func attach(_ webView: WKWebView) {
+        guard hostedWebView !== webView || webView.superview !== self else { return }
+        hostedWebView?.removeFromSuperview()
+        webView.removeFromSuperview()
+        webView.frame = bounds
+        webView.autoresizingMask = [.width, .height]
+        addSubview(webView)
+        hostedWebView = webView
+    }
+
+    func detach() {
+        hostedWebView?.removeFromSuperview()
+        hostedWebView = nil
     }
 }

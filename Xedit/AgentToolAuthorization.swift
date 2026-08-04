@@ -658,10 +658,25 @@ enum AgentSandboxPolicy {
         environment["WILLDEEP_WORKSPACE_ROOT"] = rootDirectory?.standardizedFileURL.path ?? ""
 
         if mode != .escalated {
-            let sandboxHome = FileManager.default.temporaryDirectory
+            let sandboxTemporaryDirectory = FileManager.default.temporaryDirectory
+                .appendingPathComponent("willdeep-agent-sandbox-tmp", isDirectory: true)
+            try? FileManager.default.createDirectory(
+                at: sandboxTemporaryDirectory,
+                withIntermediateDirectories: true
+            )
+            let sandboxHome = sandboxTemporaryDirectory
                 .appendingPathComponent("willdeep-agent-sandbox-home", isDirectory: true)
             try? FileManager.default.createDirectory(at: sandboxHome, withIntermediateDirectories: true)
             environment["HOME"] = sandboxHome.path
+            // Node/Playwright inherit the GUI process' TMPDIR by default. On
+            // macOS that path can be a parent of Foundation's actual
+            // temporaryDirectory, while the seatbelt profile only allows the
+            // latter. Keep every common temp variable on one host-created,
+            // explicitly allowed directory so transform caches and browser
+            // profiles do not fail with a misleading EPERM.
+            environment["TMPDIR"] = sandboxTemporaryDirectory.path
+            environment["TMP"] = sandboxTemporaryDirectory.path
+            environment["TEMP"] = sandboxTemporaryDirectory.path
             environment["SSH_AUTH_SOCK"] = nil
             environment["GITHUB_TOKEN"] = nil
             environment["GH_TOKEN"] = nil

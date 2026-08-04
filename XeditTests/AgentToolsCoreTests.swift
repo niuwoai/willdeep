@@ -308,6 +308,43 @@ struct AgentToolsCoreTests {
         ) == nil)
     }
 
+    @Test("调度节点始终使用允许网络的工作区沙箱")
+    func unattendedDispatchTasksKeepNetworkAvailableForTests() {
+        let appState = AppState()
+        let readOnlyDecision = AgentSandboxDecision(
+            mode: .readOnly,
+            requiresUserApproval: false,
+            requiresTypedConfirmation: false,
+            reason: "test command was classified as local",
+            prefixRule: nil
+        )
+        let workspaceDecision = AgentSandboxDecision(
+            mode: .workspaceWrite,
+            requiresUserApproval: true,
+            requiresTypedConfirmation: false,
+            reason: "workspace write",
+            prefixRule: nil
+        )
+
+        #expect(appState.sandboxModeForToolExecution(
+            risk: .read,
+            approvalSource: nil,
+            sandboxDecision: readOnlyDecision,
+            isUnattendedDispatchTask: true
+        ) == .workspaceWriteNetwork)
+        #expect(appState.sandboxModeForToolExecution(
+            risk: .write,
+            approvalSource: .dispatchTask,
+            sandboxDecision: workspaceDecision,
+            isUnattendedDispatchTask: true
+        ) == .workspaceWriteNetwork)
+        #expect(appState.sandboxModeForToolExecution(
+            risk: .read,
+            approvalSource: nil,
+            sandboxDecision: readOnlyDecision
+        ) == .readOnly)
+    }
+
     @Test
     func visualQAScreenshotToolRequiresApprovalAndDocumentsBoundary() throws {
         let descriptor = try #require(AgentToolRegistry.descriptor(for: "visual_qa_screenshot"))
@@ -647,6 +684,35 @@ struct AgentToolsCoreTests {
     func jsonValueDecodeFallsBackToStringOnMalformedJSON() {
         let value = AgentJSONValue.decode(from: "not { valid")
         #expect(value == .string("not { valid"))
+    }
+
+    @Test("GitHub Actions expressions survive valid tool argument JSON verbatim")
+    func jsonValuePreservesGitHubActionsExpressions() {
+        let value = AgentJSONValue.decode(from: #"{"content":"token: ${{ secrets.DEPLOY_TOKEN }}"}"#)
+        guard case .object(let arguments) = value else {
+            Issue.record("expected tool argument object, got \(value)")
+            return
+        }
+        #expect(arguments["content"] == .string("token: ${{ secrets.DEPLOY_TOKEN }}"))
+    }
+
+    @Test("Invalid provider dollar escape is repaired for GitHub Actions expressions")
+    func jsonValueRepairsEscapedGitHubActionsExpressions() {
+        let value = AgentJSONValue.decode(from: #"{"content":"token: \${{ secrets.DEPLOY_TOKEN }}"}"#)
+        guard case .object(let arguments) = value else {
+            Issue.record("expected repaired tool argument object, got \(value)")
+            return
+        }
+        #expect(arguments["content"] == .string("token: ${{ secrets.DEPLOY_TOKEN }}"))
+    }
+
+    @Test("file tools advertise GitHub Actions expressions as literal content")
+    func fileToolDescriptionsKeepGitHubActionsLiteral() {
+        for name in ["create_file", "edit_file", "apply_patch"] {
+            let description = AgentToolRegistry.descriptor(for: name)?.description ?? ""
+            #expect(description.contains("${{ secrets.DEPLOY_TOKEN }}"))
+            #expect(description.contains("shell/Python"))
+        }
     }
 
     /// Nested object/array shapes survive a wrap → rawAny round trip
@@ -1391,6 +1457,10 @@ struct AgentToolsCoreTests {
         #expect(env["MY_SECRET"] == nil)
         #expect(env["LANG"] == "en_US.UTF-8")
         #expect(env["HOME"] != "/Users/real")
+        #expect(env["TMPDIR"] == env["TMP"])
+        #expect(env["TMPDIR"] == env["TEMP"])
+        #expect(env["TMPDIR"]?.contains("willdeep-agent-sandbox-tmp") == true)
+        #expect(FileManager.default.fileExists(atPath: env["TMPDIR"] ?? "") == true)
         #expect(env["WILLDEEP_AGENT_SANDBOX"] == AgentSandboxMode.workspaceWriteNetwork.rawValue)
         #expect(env["WILLDEEP_WORKSPACE_ROOT"] == root.path)
     }

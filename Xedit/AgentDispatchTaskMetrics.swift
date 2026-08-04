@@ -22,27 +22,40 @@ struct AgentDispatchTaskMetrics: Equatable {
         hasUnpricedUsage: false
     )
 
-    func updatingDuration(_ duration: TimeInterval?) -> AgentDispatchTaskMetrics {
-        AgentDispatchTaskMetrics(
-            totalTokens: totalTokens,
-            hasEstimatedTokens: hasEstimatedTokens,
-            duration: duration,
-            estimatedCostUSD: estimatedCostUSD,
-            hasUnpricedUsage: hasUnpricedUsage
-        )
-    }
-
     static func make(
         task: AgentDispatchTask,
         session: AgentSession?,
         now: Date = Date()
     ) -> AgentDispatchTaskMetrics {
-        guard let session else { return .empty }
-        guard !session.messages.isEmpty || task.state == .running || task.state == .reviewing else {
+        make(
+            task: task,
+            sessions: session.map { [$0] } ?? [],
+            now: now
+        )
+    }
+
+    /// A dispatch node may own several runtime sessions after executor
+    /// failover or a manual retry. Metrics belong to the node, so every
+    /// attempt remains part of its cumulative usage instead of resetting to
+    /// the newest session.
+    static func make(
+        task: AgentDispatchTask,
+        sessions requestedSessions: [AgentSession],
+        now: Date = Date()
+    ) -> AgentDispatchTaskMetrics {
+        var seenSessionIDs: Set<UUID> = []
+        let sessions = requestedSessions.filter { seenSessionIDs.insert($0.id).inserted }
+        guard !sessions.isEmpty else { return .empty }
+        let hasRecordedRuntime = task.runtimeSessionID != nil
+            || !(task.runtimeSessionIDs ?? []).isEmpty
+        guard sessions.contains(where: { !$0.messages.isEmpty })
+                || task.state == .running
+                || task.state == .reviewing
+                || hasRecordedRuntime else {
             return .empty
         }
 
-        let usageRows = AgentUsageStats.modelUsage(for: [session])
+        let usageRows = AgentUsageStats.modelUsage(for: sessions)
         // Provider usage is recorded on assistant turns and already includes
         // the prompt side. Summing the generic overview would count operator
         // messages a second time whenever a provider supplied real totals.
@@ -57,19 +70,24 @@ struct AgentDispatchTaskMetrics: Equatable {
             usageRows.compactMap(\.estimatedCostUSD).reduce(0, +)
         }
 
-        // Dispatch runtimes are created immediately before launch, so their
-        // session creation time is the honest wall-clock start. Active nodes
-        // keep ticking; terminal nodes freeze at the latest persisted event.
-        let endDate: Date
-        if task.state == .running || task.state == .reviewing {
-            endDate = now
-        } else {
+        // Each retry is a separate runtime interval. Sum those intervals so
+        // the total neither resets on retry nor counts idle gaps between
+        // attempts. Only the current active attempt keeps ticking.
+        let duration = sessions.reduce(0) { total, session in
             let latestMessageEnd = session.messages.map { message in
                 message.createdAt.addingTimeInterval(max(0, message.elapsedSeconds ?? 0))
             }.max()
-            endDate = max(session.updatedAt, latestMessageEnd ?? session.createdAt)
+            let isCurrentActiveAttempt = task.runtimeSessionID == session.id
+                && (task.state == .running || task.state == .reviewing)
+            // `updatedAt` is session metadata time, not execution time. It can
+            // advance hours after completion when the app restores, renames,
+            // or re-persists a session. Once an attempt has messages, seal its
+            // interval at the final message's real end instead of letting
+            // later metadata writes inflate every completed graph node.
+            let completedAttemptEnd = latestMessageEnd ?? session.updatedAt
+            let endDate = isCurrentActiveAttempt ? now : completedAttemptEnd
+            return total + max(0, endDate.timeIntervalSince(session.createdAt))
         }
-        let duration = max(0, endDate.timeIntervalSince(session.createdAt))
 
         return AgentDispatchTaskMetrics(
             totalTokens: totalTokens,

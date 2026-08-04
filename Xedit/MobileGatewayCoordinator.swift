@@ -212,6 +212,12 @@ struct MobileGatewayHealth: Codable, Equatable {
 
 @MainActor
 final class MobileGatewayCoordinator: ObservableObject {
+    private struct RelayConnectionIdentity: Equatable {
+        let baseURL: String
+        let room: String
+        let token: String
+    }
+
     enum State: Equatable {
         case stopped
         case starting
@@ -233,6 +239,8 @@ final class MobileGatewayCoordinator: ObservableObject {
     private var monitorTask: Task<Void, Never>?
     private var tokenFileURL: URL?
     private var relayTokenFileURL: URL?
+    private var activeRelayConnection: RelayConnectionIdentity?
+    private var settingsRestartTask: Task<Void, Never>?
     private let session: URLSession
     /// Tail (~4KB) of the child's stdout/stderr. Surfaced live in the
     /// settings "Gateway log" panel so the user can see the gateway's own
@@ -267,6 +275,7 @@ final class MobileGatewayCoordinator: ObservableObject {
 
     deinit {
         monitorTask?.cancel()
+        settingsRestartTask?.cancel()
         if let appTerminationObserver {
             NotificationCenter.default.removeObserver(appTerminationObserver)
         }
@@ -287,8 +296,24 @@ final class MobileGatewayCoordinator: ObservableObject {
     }
 
     func updateSettings(_ newSettings: MobileGatewaySettings) {
+        let previous = settings
         settings = MobileGatewaySettingsStore.normalize(newSettings)
         MobileGatewaySettingsStore.save(settings)
+        guard isRunning,
+              previous.relayBaseURL != settings.relayBaseURL
+                || previous.relayRoom != settings.relayRoom else {
+            return
+        }
+        // Custom relay fields save as the user types. Debounce reconnects so
+        // the QR payload and the live desktop peer cannot quietly point at
+        // different rooms while also avoiding one dial per keystroke.
+        settingsRestartTask?.cancel()
+        settingsRestartTask = Task { @MainActor [weak self] in
+            try? await Task.sleep(nanoseconds: 500_000_000)
+            guard let self, !Task.isCancelled else { return }
+            self.settingsRestartTask = nil
+            await self.startRelayPeer()
+        }
     }
 
     func start() async {
@@ -307,15 +332,6 @@ final class MobileGatewayCoordinator: ObservableObject {
     /// payload itself from its own relay settings. Idempotent — re-entering
     /// the settings tab while already connected only refreshes the payload.
     private func startRelayPeer() async {
-        if case .running = state, desktopPeerIsConnected {
-            rebuildRelayPairingPayload()
-            return
-        }
-        // Drop any leftover Go process/state from a prior lanGateway session
-        // so switching modes never leaves an orphaned gateway running.
-        terminateActiveGatewayProcess()
-        state = .starting
-        recentOutput = ""
         do {
             let normalized = MobileGatewaySettingsStore.normalize(settings)
             settings = normalized
@@ -326,6 +342,22 @@ final class MobileGatewayCoordinator: ObservableObject {
             guard let relayURL = URL(string: relayBaseURL), !relayRoom.isEmpty, !relayToken.isEmpty else {
                 throw CoordinatorError.relayNotConfigured
             }
+            let desiredConnection = RelayConnectionIdentity(
+                baseURL: relayURL.absoluteString.trimmingCharacters(in: CharacterSet(charactersIn: "/")),
+                room: relayRoom.trimmingCharacters(in: CharacterSet(charactersIn: "/")),
+                token: relayToken
+            )
+            if case .running = state,
+               desktopPeerIsConnected,
+               activeRelayConnection == desiredConnection {
+                rebuildRelayPairingPayload()
+                return
+            }
+            // Drop any leftover Go process/state from a prior lanGateway
+            // session so switching modes never leaves an orphan running.
+            terminateActiveGatewayProcess()
+            state = .starting
+            recentOutput = ""
             health = nil
             devices = []
             displayBaseURL = relayURL
@@ -335,6 +367,7 @@ final class MobileGatewayCoordinator: ObservableObject {
                 room: relayRoom,
                 relayToken: relayToken
             )
+            activeRelayConnection = desiredConnection
             state = .running
         } catch {
             fail(error.localizedDescription)
@@ -445,6 +478,9 @@ final class MobileGatewayCoordinator: ObservableObject {
     }
 
     func stop() {
+        settingsRestartTask?.cancel()
+        settingsRestartTask = nil
+        activeRelayConnection = nil
         appState?.mobileGatewayDesktopPeer.disconnect()
         let activeProcess = process
         process = nil
@@ -653,6 +689,9 @@ final class MobileGatewayCoordinator: ObservableObject {
     }
 
     private func fail(_ message: String) {
+        settingsRestartTask?.cancel()
+        settingsRestartTask = nil
+        activeRelayConnection = nil
         appState?.mobileGatewayDesktopPeer.disconnect()
         let activeProcess = process
         process = nil

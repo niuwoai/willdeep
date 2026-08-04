@@ -13,6 +13,36 @@ nonisolated enum AgentDispatchLaunchResult: Equatable {
     case blocked(message: String)
 }
 
+nonisolated enum AgentDispatchUnattendedRecoveryPolicy {
+    static let maximumAttempts = 2
+
+    static func shouldRetry(
+        hasCompletedAcceptance: Bool,
+        hasRuntimeError: Bool,
+        isGoalPaused: Bool,
+        attempts: Int
+    ) -> Bool {
+        !hasCompletedAcceptance
+            && !hasRuntimeError
+            && !isGoalPaused
+            && attempts < maximumAttempts
+    }
+
+    static func prompt(attempt: Int, remainingAcceptance: [String]) -> String {
+        let remaining = remainingAcceptance.isEmpty
+            ? "- Re-evaluate the task acceptance evidence."
+            : remainingAcceptance.map { "- \($0)" }.joined(separator: "\n")
+        return """
+        [dispatch-unattended-recovery] Automatic recovery attempt \(attempt)/\(maximumAttempts).
+
+        This node returned without satisfying every acceptance criterion, so the scheduler is continuing it instead of treating the previous `blocked` self-check as a terminal review state. Preserve completed implementation and retry only the missing verification below:
+        \(remaining)
+
+        Inspect the concrete failure before retrying. For sandbox/EPERM failures, do not repeat an identical background command unchanged: use a workspace-writable TMPDIR/cache, or run the bounded verification in the foreground so WillDeep's sandbox-escalation path can recover it. Playwright local E2E normally needs only a writable temp directory, a Chromium process, and a loopback test port; do not claim that it needs macOS privacy permission without a specific OS permission error. Try safe reversible alternatives and provide fresh evidence. Report a terminal blocker only for missing credentials, private interactive control, an unavoidable product decision, or after this host retry budget is exhausted.
+        """
+    }
+}
+
 extension AppState {
     /// Pet/system-notification navigation follows the session's product
     /// scope. Dispatch child runtimes return to their owning project graph
@@ -571,6 +601,7 @@ extension AppState {
             steps: [AgentPlan.Step(text: task.title, status: .inProgress)],
             summary: L10n.Dispatch.executionRunning
         )
+        runtime.activeExperts = Self.dispatchTaskExperts(from: runtime.activeExperts)
         runtime.executionAgent = decision.executor
         if decision.executor == .willDeep {
             runtime.sessionProviderIDOverride = profile?.providerID
@@ -589,6 +620,7 @@ extension AppState {
             target: target,
             runtimeSessionID: runtime.id
         )
+        dispatchAutomaticRecoveryAttemptsByTaskID[taskID] = 0
 
         let delegatedProfile = profile?.delegatedProfile
             ?? selectedDispatchCLIProfile(goal: goal, executor: decision.executor)
@@ -701,6 +733,7 @@ extension AppState {
             || (!wasResponding && (runtime.isResponding || runtime.isAwaitingProviderSlot))
         guard didSubmitTurn else { return false }
 
+        dispatchAutomaticRecoveryAttemptsByTaskID[taskID] = 0
         agentDispatchCoordinator.updateTaskState(
             goalID: goalID,
             taskID: taskID,
@@ -801,42 +834,77 @@ extension AppState {
                     self.dispatchMonitoredRuntimeIDsByTaskID[taskID] = nil
                 }
             }
-            while runtime.isResponding || runtime.isAwaitingProviderSlot {
-                try? await Task.sleep(nanoseconds: 500_000_000)
-                guard !Task.isCancelled else { return }
-            }
-            let hasCompletedAcceptance = runtime.currentGoal.map {
-                !$0.checklist.isEmpty && $0.checklist.allSatisfy(\.done)
-            } ?? false
-            let state: AgentDispatchTaskState
-            if runtime.errorMessage != nil {
-                state = .failed
-            } else if hasCompletedAcceptance {
-                state = .merged
-            } else {
-                state = .reviewing
-            }
-            self.agentDispatchCoordinator.updateTaskState(
-                goalID: goalID,
-                taskID: taskID,
-                state: state
-            )
-            if state == .failed,
-               let refreshedGoal = self.agentDispatchCoordinator.goals.first(where: {
-                   $0.id == goalID
-               }),
-               let refreshedTask = refreshedGoal.tasks.first(where: {
-                   $0.id == taskID
-               }),
-               refreshedTask.executorChoice == .automatic,
-               AgentDispatchProfileResolver.hasUntriedFallback(
-                   fallbackProfileIDs: refreshedTask.fallbackProfileIDs ?? [],
-                   selectedWorkerProfileIDs: refreshedGoal.effectiveWorkerProfileIDs,
-                   attemptedProfileIDs: refreshedTask.attemptedProfileIDs ?? []
-               ) {
-                _ = self.launchDispatchTask(goalID: goalID, taskID: taskID)
-            } else if state == .merged {
-                _ = self.launchReadyDispatchTasks(goalID: goalID)
+            while true {
+                while runtime.isResponding || runtime.isAwaitingProviderSlot {
+                    try? await Task.sleep(nanoseconds: 500_000_000)
+                    guard !Task.isCancelled else { return }
+                }
+                let hasCompletedAcceptance = runtime.currentGoal.map {
+                    !$0.checklist.isEmpty && $0.checklist.allSatisfy(\.done)
+                } ?? false
+                let attempts = self.dispatchAutomaticRecoveryAttemptsByTaskID[taskID] ?? 0
+                let goalIsPaused = self.agentDispatchCoordinator.goals
+                    .first(where: { $0.id == goalID })?.isPaused ?? true
+                if AgentDispatchUnattendedRecoveryPolicy.shouldRetry(
+                    hasCompletedAcceptance: hasCompletedAcceptance,
+                    hasRuntimeError: runtime.errorMessage != nil,
+                    isGoalPaused: goalIsPaused,
+                    attempts: attempts
+                ) {
+                    let nextAttempt = attempts + 1
+                    self.dispatchAutomaticRecoveryAttemptsByTaskID[taskID] = nextAttempt
+                    let remaining = runtime.currentGoal?.checklist
+                        .filter { !$0.done }
+                        .map(\.text) ?? []
+                    self.agentDispatchCoordinator.updateTaskState(
+                        goalID: goalID,
+                        taskID: taskID,
+                        state: .running
+                    )
+                    self.dispatchAgentMessage(
+                        for: runtime,
+                        text: AgentDispatchUnattendedRecoveryPolicy.prompt(
+                            attempt: nextAttempt,
+                            remainingAcceptance: remaining
+                        ),
+                        images: [],
+                        source: .hostInstruction
+                    )
+                    continue
+                }
+
+                let state: AgentDispatchTaskState
+                if runtime.errorMessage != nil {
+                    state = .failed
+                } else if hasCompletedAcceptance {
+                    state = .merged
+                } else {
+                    state = .reviewing
+                }
+                self.agentDispatchCoordinator.updateTaskState(
+                    goalID: goalID,
+                    taskID: taskID,
+                    state: state
+                )
+                self.dispatchAutomaticRecoveryAttemptsByTaskID[taskID] = nil
+                if state == .failed,
+                   let refreshedGoal = self.agentDispatchCoordinator.goals.first(where: {
+                       $0.id == goalID
+                   }),
+                   let refreshedTask = refreshedGoal.tasks.first(where: {
+                       $0.id == taskID
+                   }),
+                   refreshedTask.executorChoice == .automatic,
+                   AgentDispatchProfileResolver.hasUntriedFallback(
+                       fallbackProfileIDs: refreshedTask.fallbackProfileIDs ?? [],
+                       selectedWorkerProfileIDs: refreshedGoal.effectiveWorkerProfileIDs,
+                       attemptedProfileIDs: refreshedTask.attemptedProfileIDs ?? []
+                   ) {
+                    _ = self.launchDispatchTask(goalID: goalID, taskID: taskID)
+                } else if state == .merged {
+                    _ = self.launchReadyDispatchTasks(goalID: goalID)
+                }
+                return
             }
         }
     }
@@ -883,7 +951,15 @@ extension AppState {
         """
     }
 
-    nonisolated private static func dispatchTaskPrompt(
+    nonisolated static func dispatchTaskExperts(
+        from existingExperts: Set<AgentExpert>
+    ) -> Set<AgentExpert> {
+        var experts = existingExperts
+        experts.insert(.browserOps)
+        return experts
+    }
+
+    nonisolated static func dispatchTaskPrompt(
         goal: AgentDispatchGoal,
         task: AgentDispatchTask,
         workspaceLocation: WorkspaceLocation
@@ -902,7 +978,7 @@ extension AppState {
         Acceptance criteria:
         \(criteria)
 
-        Execute this node directly as an unattended run. Do not create another Goal, dispatch graph, or team of agents. Work only inside the assigned checkout. It is a checkout of the fixed logical project above; do not switch this Task to another repository. Preserve unrelated changes. Diagnose and recover from ordinary Git/worktree, dependency, build, test, path, and transient tool failures yourself; prefer safe reversible repairs and retry before stopping. Do not ask the user for confirmation or implementation preferences: no operator is attached to this task conversation. If missing credentials, private interactive control, or an unavoidable product decision makes completion impossible, report a concrete blocked reason to the scheduler instead of opening an approval or question card. Before reporting completion, provide concrete evidence such as tests, build output, or a focused diff summary. Do not merge into a shared branch; WillDeep owns review and integration.
+        Execute this node directly as an unattended run. Do not create another Goal, dispatch graph, or team of agents. Work only inside the assigned checkout. It is a checkout of the fixed logical project above; do not switch this Task to another repository. Preserve unrelated changes. Diagnose and recover from ordinary Git/worktree, dependency, build, test, path, and transient tool failures yourself; prefer safe reversible repairs and retry before stopping. For ordinary browser-backed UI verification, prefer the runtime-scoped `embedded_browser_*` tools: they work headlessly before the side panel is opened, and the user can later inspect the same page in the task browser. Use Playwright or an external Chromium process only when the acceptance criterion explicitly requires that engine or the embedded browser cannot express the required interaction. Do not ask the user for confirmation or implementation preferences: no operator is attached to this task conversation. If missing credentials, private interactive control, or an unavoidable product decision makes completion impossible, report a concrete blocked reason to the scheduler instead of opening an approval or question card. Before reporting completion, provide concrete evidence such as tests, build output, or a focused diff summary. Do not merge into a shared branch; WillDeep owns review and integration.
 
         In the final response, update the visible execution step with a closed `progress` block and evaluate every acceptance criterion with a closed `goal-check` block. Mark an item done only when the evidence actually proves it.
         """

@@ -10,6 +10,34 @@
 import Foundation
 
 extension AppState {
+    func denyPlanProgressReconciliationToolCall(
+        _ call: AgentMessageToolCall,
+        messageID: UUID,
+        arguments: [String: AgentJSONValue],
+        risk: AgentToolRisk,
+        runtime: AgentRuntime
+    ) {
+        let errorMessage = "Unavailable during Plan status reconciliation"
+        let record = AgentToolCall(
+            messageID: messageID,
+            externalID: call.externalID,
+            toolName: call.toolName,
+            arguments: arguments,
+            risk: risk,
+            status: .denied,
+            errorMessage: errorMessage
+        )
+        runtime.toolCalls.append(record)
+        appendToolMessage(
+            for: runtime,
+            toolCallID: call.externalID,
+            payload: "Blocked: Plan status reconciliation permits only read-only inspection. Use existing evidence or read-only status tools, then emit the required progress block without repeating execution.",
+            source: .systemNotice,
+            outcomeStatus: .denied,
+            errorMessage: errorMessage
+        )
+    }
+
     /// Execute one `spawn_agent` tool call: synchronous runs await the
     /// child loop and return its report inline; background runs return
     /// a handle and deliver via `subagentReportNotice` on a later round.

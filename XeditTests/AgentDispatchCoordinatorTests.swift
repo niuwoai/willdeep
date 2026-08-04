@@ -10,6 +10,61 @@ import Testing
 @Suite(.serialized)
 @MainActor
 struct AgentDispatchCoordinatorTests {
+    @Test("无人值守节点验收未完成时有界自动恢复")
+    func unattendedRecoveryRetriesOnlyRecoverableIncompleteAcceptance() {
+        #expect(AgentDispatchUnattendedRecoveryPolicy.shouldRetry(
+            hasCompletedAcceptance: false,
+            hasRuntimeError: false,
+            isGoalPaused: false,
+            attempts: 0
+        ))
+        #expect(AgentDispatchUnattendedRecoveryPolicy.shouldRetry(
+            hasCompletedAcceptance: false,
+            hasRuntimeError: false,
+            isGoalPaused: false,
+            attempts: 1
+        ))
+        #expect(!AgentDispatchUnattendedRecoveryPolicy.shouldRetry(
+            hasCompletedAcceptance: false,
+            hasRuntimeError: false,
+            isGoalPaused: false,
+            attempts: 2
+        ))
+        #expect(!AgentDispatchUnattendedRecoveryPolicy.shouldRetry(
+            hasCompletedAcceptance: true,
+            hasRuntimeError: false,
+            isGoalPaused: false,
+            attempts: 0
+        ))
+        #expect(!AgentDispatchUnattendedRecoveryPolicy.shouldRetry(
+            hasCompletedAcceptance: false,
+            hasRuntimeError: true,
+            isGoalPaused: false,
+            attempts: 0
+        ))
+        #expect(!AgentDispatchUnattendedRecoveryPolicy.shouldRetry(
+            hasCompletedAcceptance: false,
+            hasRuntimeError: false,
+            isGoalPaused: true,
+            attempts: 0
+        ))
+    }
+
+    @Test("无人值守恢复提示明确处理 Playwright 沙箱失败")
+    func unattendedRecoveryPromptCarriesConcretePlaywrightFallbacks() {
+        let prompt = AgentDispatchUnattendedRecoveryPolicy.prompt(
+            attempt: 1,
+            remainingAcceptance: ["Playwright 端到端回归通过"]
+        )
+
+        #expect(prompt.contains("Automatic recovery attempt 1/2"))
+        #expect(prompt.contains("Playwright 端到端回归通过"))
+        #expect(prompt.contains("TMPDIR"))
+        #expect(prompt.contains("foreground"))
+        #expect(prompt.contains("loopback test port"))
+        #expect(prompt.contains("macOS privacy permission"))
+    }
+
     @Test("人工干预新一轮会恢复节点并重新挂载完成监听")
     func takeoverInstructionRestartsFailedTaskMonitoring() async throws {
         let workspace = FileManager.default.temporaryDirectory
@@ -112,18 +167,20 @@ struct AgentDispatchCoordinatorTests {
         #expect(runtime.isUnattendedDispatchTask)
     }
 
-    @Test("普通 Goal 与调度项目父会话不会误用无人值守审批")
-    func onlyDispatchChildrenAreUnattended() {
+    @Test("调度台项目与子任务均无人值守，普通 Goal 仍保留审批")
+    func everyDispatchBoardRuntimeIsUnattended() {
+        let ordinaryGoalRuntime = AgentRuntime(session: AgentSession())
+
         var projectSession = AgentSession()
         projectSession.presentationScope = .dispatchBoard
         let projectRuntime = AgentRuntime(session: projectSession)
 
         var taskSession = AgentSession()
-        taskSession.presentationScope = .dispatchBoard
-        taskSession.dispatchParentProjectID = UUID()
+        taskSession.dispatchTaskID = UUID()
         let taskRuntime = AgentRuntime(session: taskSession)
 
-        #expect(!projectRuntime.isUnattendedDispatchTask)
+        #expect(!ordinaryGoalRuntime.isUnattendedDispatchTask)
+        #expect(projectRuntime.isUnattendedDispatchTask)
         #expect(taskRuntime.isUnattendedDispatchTask)
     }
 
@@ -781,6 +838,64 @@ struct AgentDispatchCoordinatorTests {
 
         #expect(!updated)
         #expect(coordinator.selectedGoal?.tasks.first?.dependencyIDs.isEmpty == true)
+    }
+
+    @Test("人工干预只更新节点目标和验收标准并保留依赖关系")
+    func humanOverridePreservesGraphDependencies() throws {
+        let sandbox = try makeSandbox()
+        defer { sandbox.cleanup() }
+        let coordinator = AgentDispatchCoordinator(
+            store: AgentDispatchStore(defaults: sandbox.defaults)
+        )
+        let prerequisiteID = UUID()
+        let taskID = UUID()
+        coordinator.synchronize(with: [
+            AgentSession(
+                title: "Graph",
+                workspaceRootPath: "/tmp/Graph",
+                currentGoal: AgentGoal(
+                    statement: "构建任务图",
+                    checklist: [
+                        AgentGoal.Item(id: prerequisiteID, text: "准备环境"),
+                        AgentGoal.Item(id: taskID, text: "执行回归"),
+                    ],
+                    dispatchPlan: AgentGoalDispatchPlan(nodes: [
+                        .init(
+                            id: prerequisiteID,
+                            key: "PREPARE-1",
+                            title: "准备环境",
+                            dependencyIDs: [],
+                            primaryProfileID: nil,
+                            fallbackProfileIDs: [],
+                            acceptanceCriteria: ["环境可用"]
+                        ),
+                        .init(
+                            id: taskID,
+                            key: "VERIFY-1",
+                            title: "执行回归",
+                            dependencyIDs: [prerequisiteID],
+                            primaryProfileID: nil,
+                            fallbackProfileIDs: [],
+                            acceptanceCriteria: ["测试通过"]
+                        ),
+                    ])
+                )
+            ),
+        ])
+        let goalID = try #require(coordinator.selectedGoal?.id)
+
+        let updated = coordinator.updateTaskOutcome(
+            goalID: goalID,
+            taskID: taskID,
+            title: "完成独立回归",
+            acceptanceCriteria: ["  测试通过  ", "报告已归档"]
+        )
+        let task = try #require(coordinator.selectedGoal?.tasks.first { $0.id == taskID })
+
+        #expect(updated)
+        #expect(task.title == "完成独立回归")
+        #expect(task.acceptanceCriteria == ["测试通过", "报告已归档"])
+        #expect(task.dependencyIDs == [prerequisiteID])
     }
 
     @Test("追加节点可以显式选择多个前置节点和验收标准")

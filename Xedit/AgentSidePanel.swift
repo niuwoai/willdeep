@@ -149,7 +149,10 @@ struct AgentSidePanelKindContent: View {
         case .shortDrama:
             AgentShortDramaPanel(store: appState.agentShortDramaStore, width: layoutWidth)
         case .embeddedBrowser:
-            AgentEmbeddedBrowserPanel(width: layoutWidth)
+            AgentEmbeddedBrowserPanel(
+                runtimeID: appState.activeRuntime?.id,
+                width: layoutWidth
+            )
         case .widget:
             AgentSidePanelWidgetView(width: layoutWidth)
         case .imageEditor:

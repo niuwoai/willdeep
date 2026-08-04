@@ -1185,6 +1185,11 @@ nonisolated enum L10n {
         static let markCompleteButton = String(localized: "plan-card.mark-complete-button", defaultValue: "Mark plan complete")
     }
 
+    enum PlanContinuation {
+        static let missingProgressPaused = String(localized: "plan-continuation.missing-progress-paused", defaultValue: "Plan status sync paused: no valid step statuses arrived after reconciliation. This does not mean execution failed. Review the plan and mark it complete, or add guidance to continue.")
+        static let safetyLimitPaused = String(localized: "plan-continuation.safety-limit-paused", defaultValue: "Plan auto-continuation reached its 8-round safety limit. Review the current deliverables and step statuses before continuing.")
+    }
+
     enum PlanRevision {
         static let cancelButtonHelp = String(localized: "plan-revision.cancel-button.help", defaultValue: "Cancel")
         static let placeholder = String(localized: "plan-revision.placeholder", defaultValue: "Revision note optional e.g. skip step 2 use sed instead")

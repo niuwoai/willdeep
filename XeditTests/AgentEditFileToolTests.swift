@@ -179,6 +179,20 @@ struct AgentEditFileToolTests {
         #expect(edit.newContent == "第一行 🚀\n第二行已改 ✅\n第三行\n")
     }
 
+    @Test("GitHub Actions expressions remain literal during exact replacement")
+    func githubActionsExpressionsRoundTrip() throws {
+        let content = """
+        env:
+          DEPLOY_TOKEN: ${{ secrets.OLD_DEPLOY_TOKEN }}
+        """
+        let edit = try roundTrip(
+            content: content,
+            old: "${{ secrets.OLD_DEPLOY_TOKEN }}",
+            new: "${{ secrets.DEPLOY_TOKEN }}"
+        )
+        #expect(edit.newContent.contains("DEPLOY_TOKEN: ${{ secrets.DEPLOY_TOKEN }}"))
+    }
+
     @Test
     func oldStringNotFoundThrows() {
         #expect(throws: AgentEditFileError.oldStringNotFound("sample.txt")) {
