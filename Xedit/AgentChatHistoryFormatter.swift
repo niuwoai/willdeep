@@ -1403,7 +1403,7 @@ enum AgentChatHistoryRenderer {
     //   ① 带路径锚点的:以 `/`、`./`、`../`、`~/` 开头(绝对/相对/家目录路径,
     //      如 `/usr/bin/ssh`、`~/.willdeep/skills`、`./scripts/x`);
     //   ② 以已知文件后缀结尾的(可带任意层目录前缀,如 `README.md`、
-    //      `src/main.ts`、`Xedit/AppState.swift`)。
+    //      `src/main.ts`、`docs/中文文件名.md`、`Xedit/AppState.swift`)。
     // 两类都可带 `:行[:列]` 后缀,并要求后面不能继续跟域名 / 路径
     // 字符,避免把 `hub-beta.tsingfly.com` 中的 `hub-beta.ts` 当文件名。
     // `GB/T` 既无锚点又无后缀 → 不再命中。
@@ -1411,7 +1411,7 @@ enum AgentChatHistoryRenderer {
     // static let:每渲染一个文本块就编译一次正则曾是纯浪费——pattern
     // 是常量,编译一次终生复用。
     private static let pathChipRegex = try? NSRegularExpression(
-        pattern: #"(?<![\w@/])(?:(?:\.{1,2}/|~/|/)[A-Za-z0-9_.$@+~()-]+(?:/[A-Za-z0-9_.$@+~()-]+)*|(?:[A-Za-z0-9_.$@+~()-]+/)*[A-Za-z0-9_.$@+~()-]+\.(?:swift|go|ts|tsx|js|jsx|vue|md|markdown|json|yaml|yml|toml|rb|py|java|kt|rs|html|css|scss|sql|sh|zsh|txt))(?:\:\d+(?:\:\d+)?)?(?![A-Za-z0-9_./:-])"#
+        pattern: #"(?<![\w@/])(?:(?:\.{1,2}/|~/|/)[\p{L}\p{N}_.$@+~()-]+(?:/[\p{L}\p{N}_.$@+~()-]+)*|(?:[\p{L}\p{N}_.$@+~()-]+/)*[\p{L}\p{N}_.$@+~()-]+\.(?:swift|go|ts|tsx|js|jsx|vue|md|markdown|json|yaml|yml|toml|rb|py|java|kt|rs|html|css|scss|sql|sh|zsh|txt))(?:\:\d+(?:\:\d+)?)?(?![\p{L}\p{N}_./:-])"#
     )
     private static let pathLinkCharacterSpacing: CGFloat = 0.12
     private static let pathLinkTrailingSpacing: CGFloat = 1.5
@@ -1452,6 +1452,20 @@ enum AgentChatHistoryRenderer {
             attributed.removeAttribute(.backgroundColor, range: range)
             attributed.removeAttribute(swiftUIBackgroundColorKey, range: range)
             attributed.removeAttribute(.agentChatHistoryInlineCodeChipColor, range: range)
+
+            // TextKit on older supported macOS releases does not always
+            // synthesize a CJK fallback for an explicitly assigned SF Mono
+            // run. The characters remain in the attributed string but can
+            // receive missing/zero-width glyphs, which visually collapses
+            // `docs/中文文件名.md` to `docs/.md`. Give only the CJK
+            // scalars inside the detected path an explicit fallback font;
+            // ASCII path characters keep the monospaced link treatment.
+            SyntaxHighlighter.applyEditorCJKFallbackFonts(
+                to: attributed,
+                source: attributed.string,
+                defaultFont: baseFont,
+                range: range
+            )
         }
     }
 
