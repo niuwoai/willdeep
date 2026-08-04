@@ -1255,6 +1255,18 @@ struct AgentToolsCoreTests {
     }
 
     @Test
+    func agentTerminalOutputPreservesImageTagsAndVersionNumbers() {
+        let output = """
+        image: harbor.vibapp.net:30083/tokenhub/tokenhub:0.196.0-rc2
+        "image":"harbor.vibapp.net:30083/tokenhub/tokenhub:0.144.0-rc6"
+        tokenhub:0.212.0-rc2
+        tokenCount=196
+        """
+
+        #expect(AgentTerminalRedactor.redact(output) == output)
+    }
+
+    @Test
     func agentErrorDetailsPreviewMiddleEllipsizesLongSections() {
         let longLine = "prefix-" + String(repeating: "x", count: 2_000) + "-suffix"
         let preview = AgentErrorDetailsPreview.text(longLine, totalLimit: 500, lineLimit: 180)

@@ -1,7 +1,35 @@
 # Changelog
 
-> 当前文件保留最新版本（1.224.0-rc4 至 1.109.0-rc340）。
+> 当前文件保留最新版本（1.224.0-rc6 至 1.109.0-rc340）。
 > 更早的 1000 个版本已移至 [CHANGELOG-ARCHIVE.md](CHANGELOG-ARCHIVE.md)。
+
+## 1.224.0-rc6 - 2026-08-04
+
+### Fixed
+
+- 修复终端输出脱敏把镜像名 `tokenhub:0.196.0-rc2` 误判为 Token 凭据、渲染成 `[redacted]-rc2` 的问题；敏感键现在必须以独立 snake_case / kebab-case 字段出现，不再命中 `tokenhub`、`tokenCount` 等普通业务标识。
+
+### Tests
+
+- 新增 Harbor 镜像地址、容器镜像 JSON、独立镜像 tag 和 `tokenCount` 的保真回归用例；原有 API Token、Bearer、密码与 JWT 脱敏用例继续保留。
+
+### Meta
+
+- Bugfix 预发布版本从 **1.224.0-rc5** 递增为 **1.224.0-rc6**，内部构建号从 **261** 递增为 **262**，Help 与 Computer Use Helper 构建号从 **178** 递增为 **179**；App、Go agent、Help、Helper、浏览器扩展、README、响应头契约与产品文档保持一致。
+
+## 1.224.0-rc5 - 2026-08-04
+
+### Fixed
+
+- 修复 Agent 流式输出落成最终历史消息后，中文文件路径的 basename 在 inline-code 背景与文件链接处理阶段消失的问题；路径正则现在支持 Unicode 字母与数字，并将整段路径统一渲染为可点击文件引用。
+
+### Tests
+
+- 新增中文 basename 文件路径回归用例，验证完整文本、单一文件链接属性与 inline-code 背景清理；同时确认 `GB/T`、`TCP/IP` 与日期等普通斜杠文本仍不会被误判为路径。
+
+### Meta
+
+- Bugfix 预发布版本从 **1.224.0-rc4** 递增为 **1.224.0-rc5**，内部构建号从 **260** 递增为 **261**，Help 与 Computer Use Helper 构建号从 **177** 递增为 **178**；App、Go agent、Help、Helper、浏览器扩展、README、响应头契约与产品文档保持一致。
 
 ## 1.224.0-rc4 - 2026-08-04
 

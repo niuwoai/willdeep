@@ -2863,6 +2863,45 @@ struct AgentChatHistoryRendererTests {
     }
 
     @Test
+    func unicodeBasenameIsPreservedAsOneFilePath() throws {
+        let rawPath = "docs/沙箱环境编译轻邮的坑与解决.md"
+        let rendered = AgentChatHistoryRenderer.render(
+            messages: [
+                AgentMessage(
+                    role: .assistant,
+                    content: "文件已创建，完整路径是 `\(rawPath)`。请确认文件名。"
+                )
+            ],
+            isDark: false
+        )
+        let pathRange = try #require(firstAttributeRange(
+            .agentChatHistoryFilePath,
+            containing: rawPath,
+            in: rendered
+        ))
+
+        #expect((rendered.string as NSString).substring(with: pathRange) == rawPath)
+        #expect(
+            rendered.attribute(.agentChatHistoryFilePath, at: pathRange.location, effectiveRange: nil) as? String
+                == rawPath
+        )
+        #expect(rendered.attribute(.backgroundColor, at: pathRange.location, effectiveRange: nil) == nil)
+        #expect(rendered.attribute(
+            .agentChatHistoryInlineCodeChipColor,
+            at: pathRange.location,
+            effectiveRange: nil
+        ) == nil)
+
+        let basenameRange = (rendered.string as NSString).range(of: "沙箱环境编译轻邮的坑与解决")
+        let basenameFont = try #require(rendered.attribute(
+            .font,
+            at: basenameRange.location,
+            effectiveRange: nil
+        ) as? NSFont)
+        #expect(!basenameFont.fontDescriptor.symbolicTraits.contains(.monoSpace))
+    }
+
+    @Test
     func localPathLinksUseQuietTextStylingWithoutChipBackgrounds() throws {
         let rendered = AgentChatHistoryRenderer.render(
             messages: [

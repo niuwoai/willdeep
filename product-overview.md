@@ -1,6 +1,6 @@
 # WillDeep Product Overview
 
-> Last updated: 2026-08-04 | Current version: v1.224.0-rc4
+> Last updated: 2026-08-04 | Current version: v1.224.0-rc6
 
 ## Positioning
 
@@ -12,6 +12,8 @@ WillDeep is configured for non-App-Store distribution without App Sandbox so it 
 
 ## 架构概览
 
+- **终端版本号不再误脱敏（1.224.0-rc6）** —— 终端输出的凭据脱敏仅把 `token`、`secret`、`password` 等作为独立 snake_case / kebab-case 字段时视为敏感键；镜像仓库 `tokenhub`、版本号 `0.196.0-rc2` 与类似业务标识保持原文，真实 API Token、密码和 Bearer 凭据仍会脱敏。
+- **中文文件路径完整渲染（1.224.0-rc5）** —— Agent 最终历史消息的本地文件路径识别支持 Unicode 字母与数字；像 `docs/中文文件名.md` 这样的路径会保留完整 basename、作为一个可点击文件引用渲染，并与流式输出阶段的显示保持一致。
 - **首页 Token 活动日用量提示（1.224.0-rc4）** —— 新会话首页的 Token 活动热力格按本地自然日同时聚合用户请求次数与 Token 用量；鼠标悬停和辅助功能标签均展示日期、请求数与 Token 数，空白日期明确显示零用量。
 - **Plan 完成状态自动校准（1.224.0-rc3）** —— Plan 清单只由机器可读的 `progress` 状态更新；若 Agent 已输出完成结果却连续遗漏状态，宿主会在原本准备暂停并显示红字时主动追加一次状态核验回合，优先复用既有工具结果，证据不足时仅开放最少的只读状态检查，并阻止重新部署、写入或重复规划。校准仍失败时会明确提示这是状态同步问题而非任务执行失败，并保留人工标记完成入口。
 - **调度人工干预闭环（1.224.0-rc2）** —— 失败节点收到人工指令后会重新进入执行态并恢复完成监听；干预轮通过验收后自动标记完成、解锁依赖并继续调度后续节点。尚在等待前置任务的节点显示“待启动”，任务接管输入框上方常驻展示思考、工具活动或 Provider 排队状态，避免长响应期间被误认为卡死。
