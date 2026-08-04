@@ -633,6 +633,7 @@ extension AppState {
         var planAutomaticContinuationCount = 0
         var consecutivePlanRepliesWithoutProgress = 0
         var didAdvancePlanSinceLastContinuationDecision = false
+        var isPlanProgressReconciliationActive = false
         let designToCodeToolCallBaseline = runtime.toolCalls.count
         let latestUserImages = runtime.messages.last(where: { $0.isOperatorInput })?.images ?? []
         let requiresDesignToCodeAcceptance = workspaceURL != nil && AgentDesignToCode.isActive(
@@ -1191,6 +1192,7 @@ extension AppState {
                 if didAdvancePlanSinceLastContinuationDecision
                     || planStatusesBeforeReply != planStatusesAfterReply {
                     consecutivePlanRepliesWithoutProgress = 0
+                    isPlanProgressReconciliationActive = false
                 } else {
                     consecutivePlanRepliesWithoutProgress += 1
                 }
@@ -1214,11 +1216,23 @@ extension AppState {
                         )
                     )
                     continue
+                case .reconcileProgress:
+                    planAutomaticContinuationCount += 1
+                    isPlanProgressReconciliationActive = true
+                    runtime.messages.append(
+                        AgentMessage(
+                            role: .system,
+                            content: AgentPlanAutoContinuationPolicy.progressReconciliationNotice(
+                                finishReason: finishReason
+                            )
+                        )
+                    )
+                    continue
                 case .pauseAfterNoProgress:
-                    runtime.errorMessage = "Plan 自动续跑已暂停：连续两轮没有检测到步骤进展。请检查计划，或补充说明后继续。"
+                    runtime.errorMessage = L10n.PlanContinuation.missingProgressPaused
                     runtime.errorDetails = nil
                 case .pauseAfterLimit:
-                    runtime.errorMessage = "Plan 自动续跑已达到 8 轮安全上限。请检查当前产物与步骤状态后继续。"
+                    runtime.errorMessage = L10n.PlanContinuation.safetyLimitPaused
                     runtime.errorDetails = nil
                 case .stop:
                     break
@@ -1332,6 +1346,14 @@ extension AppState {
                     arguments: argsDict,
                     rootDirectory: workspaceURL
                 )
+                if isPlanProgressReconciliationActive,
+                   !AgentPlanAutoContinuationPolicy.allowsToolRiskDuringProgressReconciliation(risk) {
+                    anyDenied = true
+                    denyPlanProgressReconciliationToolCall(
+                        call, messageID: assistantID, arguments: argsDict, risk: risk, runtime: runtime
+                    )
+                    continue
+                }
                 let sandboxDecision = AgentSandboxPolicy.decision(
                     toolName: call.toolName,
                     arguments: argsDict,
