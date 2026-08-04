@@ -255,6 +255,8 @@ enum AgentContextBuilder {
             2: in_progress
             ```
 
+            Only a valid `progress` fenced block changes WillDeep's visible checklist. Completion prose, successful tool output, and a repeated `plan` block are evidence for your status decision, but they do not update the checklist by themselves.
+
             Steps you didn't touch this turn can be omitted. Mark a step `in_progress` before you start its tool calls; flip it to `done` (or `failed`) once finished. After receiving tool results, report the resulting step statuses before issuing more tool calls so WillDeep can refresh the visible checklist immediately. Never mark a partial/sample deliverable as `done` when the step promises the complete artifact. If the response budget forces a pause, leave the current step `in_progress`; WillDeep can continue it automatically. Once every step is `done`/`skipped`/`failed`, summarize what was accomplished.
             """)
         } else if interactionMode == .normal {
@@ -1003,6 +1005,7 @@ enum AgentPlanParser {
 nonisolated enum AgentPlanAutoContinuationDecision: Equatable {
     case stop
     case continueExecution
+    case reconcileProgress
     case pauseAfterNoProgress
     case pauseAfterLimit
 }
@@ -1010,6 +1013,7 @@ nonisolated enum AgentPlanAutoContinuationDecision: Equatable {
 nonisolated enum AgentPlanAutoContinuationPolicy {
     static let maximumAutomaticContinuations = 8
     static let maximumConsecutiveNoProgressReplies = 1
+    static let maximumProgressReconciliationAttempts = 1
 
     static func decision(
         for plan: AgentPlan?,
@@ -1028,8 +1032,13 @@ nonisolated enum AgentPlanAutoContinuationPolicy {
         guard automaticContinuationCount < maximumAutomaticContinuations else {
             return .pauseAfterLimit
         }
-        guard consecutiveNoProgressReplies <= maximumConsecutiveNoProgressReplies else {
+        let reconciliationLimit = maximumConsecutiveNoProgressReplies
+            + maximumProgressReconciliationAttempts
+        guard consecutiveNoProgressReplies <= reconciliationLimit else {
             return .pauseAfterNoProgress
+        }
+        if consecutiveNoProgressReplies > maximumConsecutiveNoProgressReplies {
+            return .reconcileProgress
         }
         return .continueExecution
     }
@@ -1040,6 +1049,18 @@ nonisolated enum AgentPlanAutoContinuationPolicy {
         Automatic plan continuation: the active plan still has non-terminal steps.\(reason)
         Continue from the current step statuses without restating completed work. Do not stop after a partial or sample deliverable. If the response budget forces another pause, leave the current step in_progress. If genuinely blocked, mark the step failed and explain why. End the reply with exactly one progress block containing the latest statuses touched in that reply.
         """
+    }
+
+    static func progressReconciliationNotice(finishReason: String?) -> String {
+        let reason = finishReason.map { " The provider ended the previous reply with finish reason '\($0)'." } ?? ""
+        return """
+        Plan status reconciliation: the last replies did not update WillDeep's machine-readable step statuses.\(reason)
+        First compare the active plan with the host-recorded tool results and completion evidence already in the conversation. If that evidence is insufficient, use only the minimum necessary read-only status or inspection tools; write, danger, and user-input tools are blocked during reconciliation. Do not repeat the plan, redo completed work, deploy again, or change external state. Then return exactly one closed `progress` fenced block covering every still non-terminal step: mark verified completed work `done`, genuine blockers `failed`, intentionally omitted work `skipped`, and work that still remains `in_progress` or `pending`. Do not infer completion without evidence. You may add one concise blocker sentence after the block only when needed.
+        """
+    }
+
+    static func allowsToolRiskDuringProgressReconciliation(_ risk: AgentToolRisk) -> Bool {
+        risk == .read
     }
 
     private static let terminalStatuses: Set<AgentPlan.StepStatus> = [.done, .skipped, .failed]
