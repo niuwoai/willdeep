@@ -593,37 +593,37 @@ enum AgentToolRunner {
             case "chrome_debugger_command":
                 result = try await AgentChromeTools.debuggerCommand(arguments: activeArguments)
             case "embedded_browser_status":
-                result = try await AgentEmbeddedBrowserTools.status(arguments: activeArguments)
+                result = try await AgentEmbeddedBrowserTools.status(arguments: activeArguments, runtimeID: activeContext.runtimeID)
             case "embedded_browser_navigate":
-                result = try await AgentEmbeddedBrowserTools.navigate(arguments: activeArguments)
+                result = try await AgentEmbeddedBrowserTools.navigate(arguments: activeArguments, runtimeID: activeContext.runtimeID)
             case "embedded_browser_read_page":
-                result = try await AgentEmbeddedBrowserTools.readPage(arguments: activeArguments)
+                result = try await AgentEmbeddedBrowserTools.readPage(arguments: activeArguments, runtimeID: activeContext.runtimeID)
             case "embedded_browser_snapshot":
-                result = try await AgentEmbeddedBrowserTools.snapshot(arguments: activeArguments)
+                result = try await AgentEmbeddedBrowserTools.snapshot(arguments: activeArguments, runtimeID: activeContext.runtimeID)
             case "embedded_browser_click":
-                result = try await AgentEmbeddedBrowserTools.click(arguments: activeArguments)
+                result = try await AgentEmbeddedBrowserTools.click(arguments: activeArguments, runtimeID: activeContext.runtimeID)
             case "embedded_browser_type":
-                result = try await AgentEmbeddedBrowserTools.typeText(arguments: activeArguments)
+                result = try await AgentEmbeddedBrowserTools.typeText(arguments: activeArguments, runtimeID: activeContext.runtimeID)
             case "embedded_browser_wait_for":
-                result = try await AgentEmbeddedBrowserTools.waitFor(arguments: activeArguments)
+                result = try await AgentEmbeddedBrowserTools.waitFor(arguments: activeArguments, runtimeID: activeContext.runtimeID)
             case "embedded_browser_eval":
-                result = try await AgentEmbeddedBrowserTools.evaluate(arguments: activeArguments)
+                result = try await AgentEmbeddedBrowserTools.evaluate(arguments: activeArguments, runtimeID: activeContext.runtimeID)
             case "embedded_browser_console":
-                result = try await AgentEmbeddedBrowserTools.console(arguments: activeArguments)
+                result = try await AgentEmbeddedBrowserTools.console(arguments: activeArguments, runtimeID: activeContext.runtimeID)
             case "embedded_browser_network":
-                result = try await AgentEmbeddedBrowserTools.network(arguments: activeArguments)
+                result = try await AgentEmbeddedBrowserTools.network(arguments: activeArguments, runtimeID: activeContext.runtimeID)
             case "embedded_browser_requests":
-                result = try await AgentEmbeddedBrowserTools.requests(arguments: activeArguments)
+                result = try await AgentEmbeddedBrowserTools.requests(arguments: activeArguments, runtimeID: activeContext.runtimeID)
             case "embedded_browser_export_har":
-                result = try await AgentEmbeddedBrowserTools.exportHAR(arguments: activeArguments)
+                result = try await AgentEmbeddedBrowserTools.exportHAR(arguments: activeArguments, runtimeID: activeContext.runtimeID)
             case "embedded_browser_storage":
-                result = try await AgentEmbeddedBrowserTools.storage(arguments: activeArguments)
+                result = try await AgentEmbeddedBrowserTools.storage(arguments: activeArguments, runtimeID: activeContext.runtimeID)
             case "embedded_browser_performance":
-                result = try await AgentEmbeddedBrowserTools.performance(arguments: activeArguments)
+                result = try await AgentEmbeddedBrowserTools.performance(arguments: activeArguments, runtimeID: activeContext.runtimeID)
             case "embedded_browser_failed_resources":
-                result = try await AgentEmbeddedBrowserTools.failedResources(arguments: activeArguments)
+                result = try await AgentEmbeddedBrowserTools.failedResources(arguments: activeArguments, runtimeID: activeContext.runtimeID)
             case "embedded_browser_capture_screenshot":
-                result = try await AgentEmbeddedBrowserTools.captureScreenshot(arguments: activeArguments)
+                result = try await AgentEmbeddedBrowserTools.captureScreenshot(arguments: activeArguments, runtimeID: activeContext.runtimeID)
             case "list_mcp_servers":
                 result = try AgentMCPBridge.listServers()
             case "list_mcp_tools":
@@ -1032,7 +1032,10 @@ enum AgentToolRunner {
                         sandboxMode: context.sandboxMode,
                         environment: context.localCommandEnvironment,
                         displayCommand: AgentSecretStore.redact(command, secretValues: context.secretRedactionValues),
-                        secretRedactionValues: context.secretRedactionValues
+                        secretRedactionValues: context.secretRedactionValues,
+                        automaticSandboxRetryApprovalSource: context.isUnattendedDispatchTask
+                            ? .dispatchTask
+                            : nil
                     )
                 }
             } catch {

@@ -14,6 +14,42 @@ import Foundation
 extension WillDeepTests {
     // MARK: - SafeCommand classification
 
+    @Test("shell parser preserves connectors and treats quoted operators as data")
+    func shellParserPreservesConnectorSemantics() throws {
+        let chain = try #require(AgentShellCommandParser.parse(
+            "cd repo && printf 'a | b || rm' | git status || git ls-files"
+        ))
+
+        #expect(chain.segments.map(\.text) == [
+            "cd repo",
+            "printf 'a | b || rm'",
+            "git status",
+            "git ls-files",
+        ])
+        #expect(chain.segments.map(\.connectorToNext) == [
+            .and,
+            .pipeline,
+            .or,
+            nil,
+        ])
+        #expect(chain.segments[1].runsInPipeline)
+        #expect(chain.segments[2].runsInPipeline)
+        #expect(!chain.requiresBackgroundJudgment)
+    }
+
+    @Test("shell parser strips unquoted comments and records background execution")
+    func shellParserHandlesCommentsAndBackgroundJobs() throws {
+        let commented = try #require(AgentShellCommandParser.parse(
+            "git status # inspect only\nprintf '# still data'"
+        ))
+        #expect(commented.segments.map(\.text) == ["git status", "printf '# still data'"])
+        #expect(commented.segments.first?.connectorToNext == .sequence)
+
+        let background = try #require(AgentShellCommandParser.parse("git status & git ls-files"))
+        #expect(background.segments.first?.connectorToNext == .background)
+        #expect(background.requiresBackgroundJudgment)
+    }
+
     @Test("SafeCommand classifies common read-only commands as alwaysSafe")
     func testSafeCommandAllowlist() {
         // Single safe commands.
@@ -35,6 +71,11 @@ extension WillDeepTests {
         #expect(SafeCommand.classify(command: "unzip archive.zip") == .needsJudgment)
         #expect(SafeCommand.classify(command: "unzip -ov archive.zip") == .needsJudgment)
 
+        // Quoted command-looking text is data, not authority.
+        #expect(SafeCommand.classify(command: "printf 'rm sudo > | &&'") == .alwaysSafe)
+        #expect(SafeCommand.classify(command: "printf '$(rm -rf /)'") == .alwaysSafe)
+        #expect(SafeCommand.classify(command: "printf \"$(rm -rf /)\"") == .alwaysDangerous)
+
         // git read-only subcommands.
         #expect(SafeCommand.classify(command: "git diff") == .alwaysSafe)
         #expect(SafeCommand.classify(command: "git log --oneline -10") == .alwaysSafe)
@@ -51,6 +92,37 @@ extension WillDeepTests {
         // git stash without args (writes) must NOT be auto-approved.
         #expect(SafeCommand.classify(command: "git stash") == .needsJudgment)
         #expect(SafeCommand.classify(command: "git stash list") == .alwaysSafe)
+
+        // Git inspectors with mutation-shaped arguments must not inherit the
+        // read-only classification of their bare subcommand.
+        #expect(SafeCommand.classify(command: "git branch") == .alwaysSafe)
+        #expect(SafeCommand.classify(command: "git branch feature/new") == .needsJudgment)
+        #expect(SafeCommand.classify(command: "git tag") == .alwaysSafe)
+        #expect(SafeCommand.classify(command: "git tag v1.2.3") == .needsJudgment)
+        #expect(SafeCommand.classify(command: "git remote -v") == .alwaysSafe)
+        #expect(SafeCommand.classify(command: "git remote show origin") == .alwaysSafe)
+        #expect(SafeCommand.classify(command: "git remote add origin https://example.com/repo.git") == .needsJudgment)
+        #expect(SafeCommand.classify(command: "git branch --contains HEAD") == .alwaysSafe)
+        #expect(SafeCommand.classify(command: "git tag --list 'v1.*'") == .alwaysSafe)
+        #expect(SafeCommand.classify(command: "git diff --output=changes.patch") == .needsJudgment)
+        #expect(SafeCommand.classify(command: "git grep --open-files-in-pager=vim needle") == .needsJudgment)
+
+        // Stream tools are read-only only when their own output options do
+        // not name a file or invoke a nested program.
+        #expect(SafeCommand.classify(command: "printf ok | tee") == .alwaysSafe)
+        #expect(SafeCommand.classify(command: "printf ok | tee status.txt") == .needsJudgment)
+        #expect(SafeCommand.classify(command: "sed -n '1,10p' file") == .alwaysSafe)
+        #expect(SafeCommand.classify(command: "sed -i '' 's/a/b/' file") == .needsJudgment)
+        #expect(SafeCommand.classify(command: "sort input.txt") == .alwaysSafe)
+        #expect(SafeCommand.classify(command: "sort -o output.txt input.txt") == .needsJudgment)
+        #expect(SafeCommand.classify(command: "yq -i '.enabled = true' config.yml") == .needsJudgment)
+        #expect(SafeCommand.classify(command: "awk '{print $1}' file") == .alwaysSafe)
+        #expect(SafeCommand.classify(command: "awk '{print > \"out\"}' file") == .needsJudgment)
+        #expect(SafeCommand.classify(command: "base64 input.bin") == .alwaysSafe)
+        #expect(SafeCommand.classify(command: "base64 -o output.txt input.bin") == .needsJudgment)
+        #expect(SafeCommand.classify(command: "iconv -o converted.txt input.txt") == .needsJudgment)
+        #expect(SafeCommand.classify(command: "xxd -l 10 input.bin") == .alwaysSafe)
+        #expect(SafeCommand.classify(command: "xxd input.bin output.hex") == .needsJudgment)
 
         // Common build/dev commands are low-risk workspace operations:
         // they may write build artifacts, but should not require a manual
@@ -96,6 +168,48 @@ extension WillDeepTests {
         #expect(SafeCommand.classify(command: "cat a.txt; sudo rm /tmp/x") == .alwaysDangerous)
         // An unknown segment downgrades safe → needsJudgment.
         #expect(SafeCommand.classify(command: "cat a.txt | xargs cargo run") == .needsJudgment)
+        #expect(SafeCommand.classify(command: "git status || rm -rf repo") == .alwaysDangerous)
+        #expect(SafeCommand.classify(command: "git status &") == .needsJudgment)
+        #expect(SafeCommand.classify(command: "command rm -rf repo") == .alwaysDangerous)
+        #expect(SafeCommand.classify(command: "command -v rm") == .alwaysSafe)
+        #expect(SafeCommand.classify(command: "xargs -0 rm") == .alwaysDangerous)
+        #expect(SafeCommand.classify(command: "xargs -I{} sh -c 'rm -rf repo'") == .alwaysDangerous)
+        #expect(SafeCommand.classify(command: "xargs -n1 printf") == .alwaysSafe)
+        #expect(SafeCommand.classify(command: "git branch -Dfeature/old") == .needsJudgment)
+        #expect(SafeCommand.classify(command: "git tag --delete=v1.0.0") == .needsJudgment)
+        #expect(SafeCommand.classify(command: "sed -ni '1,5p' file") == .needsJudgment)
+        #expect(SafeCommand.classify(command: "sort -ooutput.txt input.txt") == .needsJudgment)
+        #expect(SafeCommand.classify(command: "awk 'BEGIN { system (\"touch out\") }'") == .needsJudgment)
+    }
+
+    @Test("workspace read-only chain with cd, printf, pipes, and git ls-files never asks")
+    func workspaceReadOnlyCompositeCommandDoesNotAsk() {
+        let root = URL(fileURLWithPath: "/tmp/willdeep-composite-workspace")
+        let command = "cd \(root.path) && printf '\\n--- tracked files ---\\n' && git ls-files | head -20"
+
+        #expect(SafeCommand.classify(command: command) == .alwaysSafe)
+        let decision = AgentSandboxPolicy.commandDecision(command: command, rootDirectory: root)
+        #expect(decision.mode == .readOnly)
+        #expect(decision.requiresUserApproval == false)
+        #expect(decision.requiresTypedConfirmation == false)
+    }
+
+    @Test("pipeline cd does not leak its working directory into sibling commands")
+    func pipelineCDDoesNotChangeSiblingWorkingDirectory() {
+        let root = URL(fileURLWithPath: "/tmp/willdeep-pipeline-workspace")
+        let piped = AgentSandboxPolicy.commandDecision(
+            command: "cd \(root.path)/subdir | cat ../outside.txt",
+            rootDirectory: root
+        )
+        let sequenced = AgentSandboxPolicy.commandDecision(
+            command: "cd \(root.path)/subdir && cat ../inside.txt",
+            rootDirectory: root
+        )
+
+        #expect(piped.mode == .workspaceWrite)
+        #expect(piped.requiresUserApproval)
+        #expect(sequenced.mode == .readOnly)
+        #expect(!sequenced.requiresUserApproval)
     }
 
     @Test("SafeCommand rejects redirections and command substitution")

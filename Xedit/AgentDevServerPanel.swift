@@ -318,7 +318,9 @@ struct AgentDevServerPanel: View {
 
     private func openPreview() {
         guard let previewURL else { return }
-        let controller = AgentEmbeddedBrowserController.shared
+        let controller = AgentEmbeddedBrowserController.controller(
+            for: appState.activeRuntime?.id
+        )
         controller.address = previewURL.absoluteString
         if controller.isReady {
             try? controller.navigate(to: previewURL.absoluteString)

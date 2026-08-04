@@ -385,6 +385,64 @@ struct AgentGlobalRulesTests {
     }
 
     @Test
+    func zmodemPTYWriterCompletesShortWritesBeforeAdvancingToNextChunk() {
+        let first = Array((0..<4_096).map { UInt8($0 % 251) })
+        let second = Array((0..<8_192).map { UInt8(($0 + 73) % 251) })
+        var emitted: [UInt8] = []
+        var attemptCount = 0
+        let writer = TerminalZModemPTYWriter(writeTimeout: 1) { buffer in
+            attemptCount += 1
+            if attemptCount == 2 || attemptCount == 7 {
+                return .retry
+            }
+            let chunkSize = min((attemptCount % 97) + 1, buffer.count)
+            emitted.append(contentsOf: buffer.bindMemory(to: UInt8.self).prefix(chunkSize))
+            return .written(chunkSize)
+        }
+
+        #expect(writer.write(first))
+        #expect(writer.write(second))
+        #expect(emitted == first + second)
+    }
+
+    @Test
+    func zmodemPTYWriterDeliversLargePayloadThroughBackpressuredPipe() async throws {
+        let pipe = Pipe()
+        let payload = Array((0..<(2 * 1_024 * 1_024)).map { UInt8($0 % 251) })
+        let readTask = Task.detached {
+            try pipe.fileHandleForReading.readToEnd() ?? Data()
+        }
+        let writer = TerminalZModemPTYWriter(
+            fileDescriptor: pipe.fileHandleForWriting.fileDescriptor,
+            writeTimeout: 10
+        )
+
+        let delivered = writer.write(payload)
+        try pipe.fileHandleForWriting.close()
+        let received = try await readTask.value
+
+        #expect(delivered)
+        #expect(received == Data(payload))
+    }
+
+    @Test
+    func zmodemLocalProcessFailsWhenOrderedPTYDeliveryStops() throws {
+        let completion = DispatchSemaphore(value: 0)
+        let session = try TerminalZModemProcessSession(
+            executable: "/bin/cat",
+            arguments: [],
+            currentDirectory: nil,
+            sendToRemote: { _ in false },
+            finish: { _ in completion.signal() }
+        )
+
+        session.start()
+        #expect(isAccepted(session.writeRemoteBytes(Array("trigger output".utf8))))
+        #expect(completion.wait(timeout: .now() + 10) == .success)
+        #expect(session.endReason == .remoteWriteFailed)
+    }
+
+    @Test
     func zmodemLocalProcessDrainsOutputBeforeFinishingAndRejectsLateRemoteBytes() throws {
         let tempDir = try makeTemporaryDirectory()
         defer { try? FileManager.default.removeItem(at: tempDir) }
@@ -404,6 +462,7 @@ struct AgentGlobalRulesTests {
                 receivedLock.lock()
                 received.append(contentsOf: bytes)
                 receivedLock.unlock()
+                return true
             },
             finish: { _ in
                 receivedLock.lock()
@@ -441,6 +500,7 @@ struct AgentGlobalRulesTests {
                 sentLock.lock()
                 sent.append(contentsOf: bytes)
                 sentLock.unlock()
+                return true
             },
             finish: { _ in completion.signal() }
         )
@@ -474,6 +534,7 @@ struct AgentGlobalRulesTests {
                 let enough = sent.count >= payload.count
                 sentLock.unlock()
                 if enough { echoed.signal() }
+                return true
             },
             finish: { _ in completion.signal() }
         )

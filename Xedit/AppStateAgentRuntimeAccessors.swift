@@ -19,7 +19,17 @@ extension AppState {
 
     var activeRuntime: AgentRuntime? {
         guard let id = activeAgentSessionID else { return nil }
-        return agentRuntimes[id]
+        return loadedRuntime(for: id)
+    }
+
+    /// Side-effect-free lookup for rendering and snapshot paths.
+    ///
+    /// Unlike `runtime(for:)`, this accessor never materializes a persisted
+    /// session, starts watchers, applies pending proposals, or evicts another
+    /// runtime. SwiftUI `body` evaluation must use this read-only path so a
+    /// render pass cannot publish new state and recursively invalidate itself.
+    func loadedRuntime(for sessionID: AgentSession.ID) -> AgentRuntime? {
+        agentRuntimes[sessionID]
     }
 
     var agentMessages: [AgentMessage] {
@@ -361,7 +371,6 @@ extension AppState {
     func reapStaleAgentSidePanelResources(now: Date = Date()) {
         let timeout = Self.agentSidePanelResourceIdleTimeout
         let activeID = activeAgentSessionID
-        var resetEmbeddedBrowser = false
 
         for runtime in agentRuntimes.values {
             guard runtime.id != activeID,
@@ -369,7 +378,6 @@ extension AppState {
                 continue
             }
             releaseSidePanelResources(for: runtime.id, kind: runtime.sidePanelState.kind)
-            resetEmbeddedBrowser = resetEmbeddedBrowser || runtime.sidePanelState.kind == .embeddedBrowser
             var state = runtime.sidePanelState
             state.kind = nil
             runtime.sidePanelState = state
@@ -384,13 +392,8 @@ extension AppState {
             }
             let kind = agentSessions[index].sidePanelState.kind
             releaseSidePanelResources(for: agentSessions[index].id, kind: kind)
-            resetEmbeddedBrowser = resetEmbeddedBrowser || kind == .embeddedBrowser
             agentSessions[index].sidePanelState.kind = nil
             AgentSessionStore.saveAsync(agentSessions[index])
-        }
-
-        if resetEmbeddedBrowser, activeRuntime?.sidePanelState.kind != .embeddedBrowser {
-            AgentEmbeddedBrowserController.shared.resetForResourceReaper()
         }
     }
 
@@ -417,7 +420,7 @@ extension AppState {
         case .terminal:
             agentTerminalController.closeTabs(openedBy: sessionID)
         case .embeddedBrowser:
-            break
+            AgentEmbeddedBrowserController.release(for: sessionID)
         default:
             break
         }

@@ -379,6 +379,37 @@ struct AgentBackgroundJobsTests {
         #expect(updated?.exitCode == 7)
     }
 
+    /// Dispatch children have no operator attached. A background verification
+    /// command therefore cannot leave a normal foreground escalation card
+    /// behind after it exits. The registry must recognize the sandbox marker,
+    /// replay exactly once without seatbelt, and surface only that replay as
+    /// the terminal completion event.
+    @Test
+    func unattendedSandboxDenialAutomaticallyReplaysOnceEscalated() async throws {
+        let registry = AgentJobRegistry()
+        let runtimeID = UUID()
+        let first = try registry.start(
+            command: "printf 'listen EPERM: Operation not permitted\\n' >&2; exit 1",
+            workingDirectory: FileManager.default.temporaryDirectory,
+            runtimeID: runtimeID,
+            timeoutSeconds: nil,
+            sandboxMode: .workspaceWrite,
+            automaticSandboxRetryApprovalSource: .dispatchTask
+        )
+
+        #expect(await waitUntilFinished(registry: registry, id: first.id))
+        for _ in 0..<100 where registry.jobs.count < 2 || registry.jobs.first?.isAlive == true {
+            try await Task.sleep(for: .milliseconds(20))
+        }
+
+        let replay = try #require(registry.jobs.first { $0.id != first.id })
+        #expect(replay.status == .failed)
+        #expect(registry.jobs.count == 2)
+        #expect(registry.output(id: first.id).contains("automatically retried outside the sandbox"))
+        let completions = registry.consumePendingCompletions(forRuntime: runtimeID)
+        #expect(completions.map(\.id) == [replay.id])
+    }
+
     /// Explicit `kill_job` path: SIGTERM is delivered, the
     /// terminationHandler runs, and the resulting status is `.killed`
     /// (NOT `.timedOut` and NOT `.completed`). This is what lets the

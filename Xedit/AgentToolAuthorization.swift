@@ -58,7 +58,6 @@ struct AgentSandboxLaunch: Equatable {
 ///  - network/credential/system/destructive commands require escalation;
 ///  - remembered approvals are scoped to narrow command prefixes.
 enum AgentSandboxPolicy {
-    nonisolated private static let shellControlOperators: Set<Character> = ["|", "&", ";", "\n"]
     nonisolated private static let redirectionCharacters: Set<Character> = [">", "<"]
 
     nonisolated private static let workspaceWriteHeads: Set<String> = [
@@ -271,7 +270,8 @@ enum AgentSandboxPolicy {
         }
         let hasRedirection = containsRedirection(policyCommand)
 
-        guard let segments = splitCommandSegments(policyCommand), !segments.isEmpty else {
+        guard let chain = AgentShellCommandParser.parse(policyCommand),
+              !chain.segments.isEmpty else {
             return AgentSandboxDecision(
                 mode: .escalated,
                 requiresUserApproval: true,
@@ -288,12 +288,17 @@ enum AgentSandboxPolicy {
         var reasons: [String] = []
         var workingDirectory = rootDirectory?.standardizedFileURL
 
-        for segment in segments {
-            guard let rawTokens = AgentCommandAuthorization.shellTokens(from: segment),
+        if chain.requiresBackgroundJudgment {
+            needsWorkspaceWrite = true
+            reasons.append("Background shell execution requires approval.")
+        }
+
+        for (segmentIndex, segment) in chain.segments.enumerated() {
+            guard let rawTokens = AgentCommandAuthorization.shellTokens(from: segment.text),
                   let invocation = shellInvocation(from: rawTokens) else {
                 needsEscalation = true
                 needsConfirmation = true
-                reasons.append("Unable to parse command segment safely.")
+                reasons.append("Unable to parse command segment \(segmentIndex + 1) safely.")
                 continue
             }
             let tokens = invocation.commandTokens
@@ -350,15 +355,21 @@ enum AgentSandboxPolicy {
                 if let next = tokens.dropFirst().first {
                     if let resolved = resolvePath(next, workingDirectory: workingDirectory, rootDirectory: rootDirectory),
                        isInsideWorkspace(resolved, rootDirectory: rootDirectory) {
-                        workingDirectory = resolved
+                        if !segment.runsInPipeline {
+                            workingDirectory = resolved
+                        }
                     } else if rootDirectory == nil, isSafeRelativeDirectoryHop(next) {
-                        workingDirectory = resolveRelativeDirectoryHop(next, workingDirectory: workingDirectory)
+                        if !segment.runsInPipeline {
+                            workingDirectory = resolveRelativeDirectoryHop(next, workingDirectory: workingDirectory)
+                        }
                     } else {
                         needsWorkspaceWrite = true
                         reasons.append("Changing directory outside the workspace requires approval.")
                     }
                 } else {
-                    workingDirectory = rootDirectory?.standardizedFileURL ?? workingDirectory
+                    if !segment.runsInPipeline {
+                        workingDirectory = rootDirectory?.standardizedFileURL ?? workingDirectory
+                    }
                 }
                 continue
             }
@@ -389,7 +400,7 @@ enum AgentSandboxPolicy {
                     reasons.append("Package dependency installation may write inside the workspace and needs registry network access.")
                     continue
                 }
-                switch SafeCommand.classify(command: segment) {
+                switch SafeCommand.classify(command: segment.text) {
                 case .alwaysSafe:
                     // A SafeCommand-certified call is auto-approvable, but some
                     // of those still write (go build, npm run build, mkdir).
@@ -481,16 +492,16 @@ enum AgentSandboxPolicy {
             commandWithHeredocBodiesRemoved(trimmed)
         )
         guard !containsUnsafeShellExpansion(policyCommand),
-              let segments = splitCommandSegments(policyCommand),
-              !segments.isEmpty else {
+              let chain = AgentShellCommandParser.parse(policyCommand),
+              !chain.segments.isEmpty else {
             return false
         }
 
         let root = rootDirectory.standardizedFileURL
         var workingDirectory: URL? = root
 
-        for segment in segments {
-            guard let rawTokens = AgentCommandAuthorization.shellTokens(from: segment),
+        for segment in chain.segments {
+            guard let rawTokens = AgentCommandAuthorization.shellTokens(from: segment.text),
                   let invocation = shellInvocation(from: rawTokens) else {
                 return false
             }
@@ -523,9 +534,13 @@ enum AgentSandboxPolicy {
                           isInsideWorkspace(resolved, rootDirectory: root) else {
                         return false
                     }
-                    workingDirectory = resolved
+                    if !segment.runsInPipeline {
+                        workingDirectory = resolved
+                    }
                 } else {
-                    workingDirectory = root
+                    if !segment.runsInPipeline {
+                        workingDirectory = root
+                    }
                 }
                 continue
             }
@@ -534,7 +549,7 @@ enum AgentSandboxPolicy {
                 continue
             }
             if AgentPackageCommandPolicy.isPackageManager(head) {
-                guard SafeCommand.classify(command: segment) == .alwaysSafe else {
+                guard SafeCommand.classify(command: segment.text) == .alwaysSafe else {
                     return false
                 }
                 continue
@@ -572,13 +587,13 @@ enum AgentSandboxPolicy {
             commandWithHeredocBodiesRemoved(trimmed)
         )
         guard !containsUnsafeShellExpansion(policyCommand),
-              let segments = splitCommandSegments(policyCommand),
-              !segments.isEmpty else {
+              let chain = AgentShellCommandParser.parse(policyCommand),
+              !chain.segments.isEmpty else {
             return true
         }
 
-        for segment in segments {
-            guard let rawTokens = AgentCommandAuthorization.shellTokens(from: segment),
+        for segment in chain.segments {
+            guard let rawTokens = AgentCommandAuthorization.shellTokens(from: segment.text),
                   let invocation = shellInvocation(from: rawTokens) else {
                 return true
             }
@@ -643,10 +658,25 @@ enum AgentSandboxPolicy {
         environment["WILLDEEP_WORKSPACE_ROOT"] = rootDirectory?.standardizedFileURL.path ?? ""
 
         if mode != .escalated {
-            let sandboxHome = FileManager.default.temporaryDirectory
+            let sandboxTemporaryDirectory = FileManager.default.temporaryDirectory
+                .appendingPathComponent("willdeep-agent-sandbox-tmp", isDirectory: true)
+            try? FileManager.default.createDirectory(
+                at: sandboxTemporaryDirectory,
+                withIntermediateDirectories: true
+            )
+            let sandboxHome = sandboxTemporaryDirectory
                 .appendingPathComponent("willdeep-agent-sandbox-home", isDirectory: true)
             try? FileManager.default.createDirectory(at: sandboxHome, withIntermediateDirectories: true)
             environment["HOME"] = sandboxHome.path
+            // Node/Playwright inherit the GUI process' TMPDIR by default. On
+            // macOS that path can be a parent of Foundation's actual
+            // temporaryDirectory, while the seatbelt profile only allows the
+            // latter. Keep every common temp variable on one host-created,
+            // explicitly allowed directory so transform caches and browser
+            // profiles do not fail with a misleading EPERM.
+            environment["TMPDIR"] = sandboxTemporaryDirectory.path
+            environment["TMP"] = sandboxTemporaryDirectory.path
+            environment["TEMP"] = sandboxTemporaryDirectory.path
             environment["SSH_AUTH_SOCK"] = nil
             environment["GITHUB_TOKEN"] = nil
             environment["GH_TOKEN"] = nil
@@ -718,10 +748,14 @@ enum AgentSandboxPolicy {
         }
 
         guard SafeCommand.classify(command: command) == .alwaysSafe else { return false }
-        guard let segments = splitCommandSegments(command), !segments.isEmpty else { return false }
+        guard let chain = AgentShellCommandParser.parse(command),
+              !chain.segments.isEmpty,
+              !chain.requiresBackgroundJudgment else {
+            return false
+        }
 
-        for segment in segments {
-            guard let rawTokens = AgentCommandAuthorization.shellTokens(from: segment),
+        for segment in chain.segments {
+            guard let rawTokens = AgentCommandAuthorization.shellTokens(from: segment.text),
                   let invocation = shellInvocation(from: rawTokens) else {
                 return false
             }
@@ -928,7 +962,7 @@ enum AgentSandboxPolicy {
     }
 
     nonisolated private static func containsUnsafeShellExpansion(_ command: String) -> Bool {
-        command.contains("$(") || command.contains("`") || command.contains("<(")
+        AgentShellCommandParser.containsExecutableSubstitution(command)
     }
 
     nonisolated private static func commandWithHeredocBodiesRemoved(_ command: String) -> String {
@@ -974,8 +1008,11 @@ enum AgentSandboxPolicy {
     }
 
     nonisolated private static func containsRedirection(_ command: String) -> Bool {
-        guard command.contains(where: { redirectionCharacters.contains($0) }) else { return false }
-        return !onlyContainsHarmlessRedirections(command)
+        guard let unquoted = AgentShellCommandParser.unquotedText(command),
+              unquoted.contains(where: { redirectionCharacters.contains($0) }) else {
+            return false
+        }
+        return !onlyContainsHarmlessRedirections(unquoted)
     }
 
     nonisolated private static func onlyContainsHarmlessRedirections(_ command: String) -> Bool {
@@ -1134,74 +1171,6 @@ enum AgentSandboxPolicy {
             return index
         }
         return nil
-    }
-
-    nonisolated private static func splitCommandSegments(_ command: String) -> [String]? {
-        var segments: [String] = []
-        var current = ""
-        var activeQuote: Character?
-        var escaped = false
-        var index = command.startIndex
-
-        while index < command.endIndex {
-            let ch = command[index]
-            if escaped {
-                current.append(ch)
-                escaped = false
-                index = command.index(after: index)
-                continue
-            }
-            if ch == "\\" {
-                escaped = true
-                current.append(ch)
-                index = command.index(after: index)
-                continue
-            }
-            if let quote = activeQuote {
-                if ch == quote { activeQuote = nil }
-                current.append(ch)
-                index = command.index(after: index)
-                continue
-            }
-            if ch == "\"" || ch == "'" {
-                activeQuote = ch
-                current.append(ch)
-                index = command.index(after: index)
-                continue
-            }
-            if ch == "&", current.last == ">" {
-                current.append(ch)
-                index = command.index(after: index)
-                continue
-            }
-            if shellControlOperators.contains(ch) {
-                if ch == "&" {
-                    let next = command.index(after: index)
-                    guard next < command.endIndex, command[next] == "&" else { return nil }
-                    index = command.index(after: next)
-                } else if ch == "|" {
-                    let next = command.index(after: index)
-                    if next < command.endIndex, command[next] == "|" {
-                        index = command.index(after: next)
-                    } else {
-                        index = command.index(after: index)
-                    }
-                } else {
-                    index = command.index(after: index)
-                }
-                let trimmed = current.trimmingCharacters(in: .whitespacesAndNewlines)
-                if !trimmed.isEmpty { segments.append(trimmed) }
-                current = ""
-                continue
-            }
-            current.append(ch)
-            index = command.index(after: index)
-        }
-
-        if activeQuote != nil || escaped { return nil }
-        let tail = current.trimmingCharacters(in: .whitespacesAndNewlines)
-        if !tail.isEmpty { segments.append(tail) }
-        return segments
     }
 
     nonisolated private static func resolvePath(_ raw: String, workingDirectory: URL?, rootDirectory: URL?) -> URL? {

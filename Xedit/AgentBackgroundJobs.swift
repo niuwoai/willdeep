@@ -80,6 +80,25 @@ struct AgentBackgroundJob: Identifiable, Equatable {
     nonisolated var displayHandle: String { "job_\(shortID)" }
 }
 
+/// Host-only replay material for a sandboxed background command. The public
+/// job snapshot intentionally keeps only redacted display data; this side
+/// table is discarded with the process and is never persisted or rendered.
+private struct AgentBackgroundSandboxRetrySpecification {
+    let command: String
+    let workingDirectory: URL?
+    let runtimeID: UUID
+    let turnID: UUID?
+    let timeoutSeconds: Double?
+    let environment: [String: String]?
+    let runtimeDisplayName: String?
+    let runtimeIDForDisplay: UUID?
+    let remotePID: Int32?
+    let displayCommand: String?
+    let secretRedactionValues: [String]
+    let sandboxMode: AgentSandboxMode
+    let approvalSource: AgentToolApprovalSource
+}
+
 /// Per-app registry of background jobs. One instance lives on
 /// `AppState`; views observe it directly, the agent loop pulls
 /// completion events from it at the top of each turn.
@@ -137,6 +156,10 @@ final class AgentJobRegistry: ObservableObject {
     /// `jobs` (the publishable snapshot) so SwiftUI diffs only the
     /// cheap metadata.
     private var processes: [UUID: AgentJobProcess] = [:]
+    /// Sandboxed unattended commands may finish after their originating tool
+    /// call has already returned a job handle. Retain one bounded replay spec
+    /// so an EPERM can take the same escalation path as foreground commands.
+    private var sandboxRetrySpecifications: [UUID: AgentBackgroundSandboxRetrySpecification] = [:]
 
     /// Bidirectional protocol sessions own their Process inside the protocol
     /// driver. The registry keeps only cancellation, timeout, and normalized
@@ -163,7 +186,8 @@ final class AgentJobRegistry: ObservableObject {
         runtimeIDForDisplay: UUID? = nil,
         remotePID: Int32? = nil,
         displayCommand: String? = nil,
-        secretRedactionValues: [String] = []
+        secretRedactionValues: [String] = [],
+        automaticSandboxRetryApprovalSource: AgentToolApprovalSource? = nil
     ) throws -> AgentBackgroundJob {
         let trimmed = command.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else {
@@ -177,6 +201,24 @@ final class AgentJobRegistry: ObservableObject {
         let workingDirectoryPath = workingDirectory?.path
         if let turnID {
             originatingTurnIDs[id] = turnID
+        }
+        if sandboxMode != .escalated,
+           let automaticSandboxRetryApprovalSource {
+            sandboxRetrySpecifications[id] = AgentBackgroundSandboxRetrySpecification(
+                command: trimmed,
+                workingDirectory: workingDirectory,
+                runtimeID: runtimeID,
+                turnID: turnID,
+                timeoutSeconds: timeoutSeconds,
+                environment: environment,
+                runtimeDisplayName: runtimeDisplayName,
+                runtimeIDForDisplay: runtimeIDForDisplay,
+                remotePID: remotePID,
+                displayCommand: visibleCommand,
+                secretRedactionValues: secretRedactionValues,
+                sandboxMode: sandboxMode,
+                approvalSource: automaticSandboxRetryApprovalSource
+            )
         }
 
         let process = Process()
@@ -903,6 +945,7 @@ final class AgentJobRegistry: ObservableObject {
             managedExecutorTimeouts.removeValue(forKey: entry.element.id)?.cancel()
             originatingTurnIDs.removeValue(forKey: entry.element.id)
             suppressedCompletionJobIDs.remove(entry.element.id)
+            sandboxRetrySpecifications.removeValue(forKey: entry.element.id)
         }
     }
 
@@ -954,6 +997,55 @@ final class AgentJobRegistry: ObservableObject {
             updated.latestExecutorEvent = finished
         }
         jobs[index] = updated
+
+        if updated.status == .failed,
+           let specification = sandboxRetrySpecifications.removeValue(forKey: id),
+           let output = processes[id]?.collector.stringValue,
+           AgentSandboxPolicy.looksLikeSandboxDenial(
+               exitStatus: exitCode,
+               output: output,
+               sandboxMode: specification.sandboxMode
+           ),
+           let retry = try? start(
+               command: specification.command,
+               workingDirectory: specification.workingDirectory,
+               runtimeID: specification.runtimeID,
+               turnID: specification.turnID,
+               timeoutSeconds: specification.timeoutSeconds,
+               sandboxMode: .escalated,
+               environment: specification.environment,
+               runtimeDisplayName: specification.runtimeDisplayName,
+               runtimeIDForDisplay: specification.runtimeIDForDisplay,
+               remotePID: specification.remotePID,
+               displayCommand: specification.displayCommand,
+               secretRedactionValues: specification.secretRedactionValues,
+               automaticSandboxRetryApprovalSource: nil
+           ) {
+            processes[id]?.collector.appendString(
+                "\n[WillDeep] Sandbox denial detected; automatically retried outside the sandbox as \(retry.displayHandle).\n"
+            )
+            AgentSandboxAuditLog.append(
+                toolName: "run_command",
+                arguments: [
+                    "command": .string(specification.displayCommand ?? "[redacted]")
+                ],
+                decision: AgentSandboxDecision(
+                    mode: .escalated,
+                    requiresUserApproval: false,
+                    requiresTypedConfirmation: false,
+                    reason: L10n.ToolCard.sandboxEscalationAutomaticApprovalReason,
+                    prefixRule: nil
+                ),
+                approvalSource: specification.approvalSource,
+                outcome: "background_sandbox_escalation_retry"
+            )
+            // Only the escalated replay wakes the model. Surfacing this
+            // intermediate EPERM as a terminal failure would let an
+            // unattended node declare itself blocked while recovery is live.
+            suppressedCompletionJobIDs.remove(id)
+            return
+        }
+        sandboxRetrySpecifications.removeValue(forKey: id)
 
         let suppressCompletion = suppressedCompletionJobIDs.remove(id) != nil
         if !suppressCompletion {

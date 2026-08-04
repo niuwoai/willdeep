@@ -44,11 +44,13 @@ struct AgentContextBuilderPromptTests {
         #expect(compact.count < standard.count / 2)
         #expect(compact.contains("Compact tool contract"))
         #expect(compact.contains("exact-match edit_file"))
+        #expect(compact.contains("`${{ ... }}` GitHub Actions expressions are supported"))
+        #expect(standard.contains("`${{ secrets.NAME }}` reference is not the secret value"))
         #expect(!compact.contains("ZMODEM"))
         #expect(!compact.contains("list_mcp_servers"))
     }
 
-    @Test("stable v23 prompt text is guarded by a deterministic hash snapshot")
+    @Test("stable v24 prompt text is guarded by a deterministic hash snapshot")
     func testStablePromptSnapshotHash() {
         let prompt = AgentContextBuilder.stableSystemPromptPrefix(
             toolsEnabled: true,
@@ -61,7 +63,7 @@ struct AgentContextBuilderPromptTests {
             promptProfile: .standard
         )
 
-        #expect(AgentContextBuilder.stablePrefixVersion == "willdeep-agent-system-v23")
+        #expect(AgentContextBuilder.stablePrefixVersion == "willdeep-agent-system-v24")
         #expect(diagnostics.hash == AgentContextBuilder.stablePrefixSnapshotHash)
     }
 

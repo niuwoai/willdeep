@@ -224,6 +224,16 @@ private struct AgentDispatchBoardContent: View {
                         runtime: takeover.runtime,
                         goal: goal,
                         task: takeover.task,
+                        profiles: workerProfiles,
+                        onModelProfile: { profileID in
+                            appState.updateDispatchTaskProfiles(
+                                primaryProfileID: profileID,
+                                fallbackProfileIDs: (takeover.task.fallbackProfileIDs ?? [])
+                                    .filter { $0 != profileID },
+                                goalID: goal.id,
+                                taskID: takeover.task.id
+                            )
+                        },
                         onClose: { takeoverSessionID = nil },
                         onOpenFullConversation: {
                             takeoverSessionID = nil
@@ -533,16 +543,15 @@ private struct AgentDispatchBoardContent: View {
         acceptanceCriteria: [String]
     ) {
         if let taskID = request.taskID {
-            guard coordinator.updateTaskDefinition(
+            guard coordinator.updateTaskOutcome(
                 goalID: request.goalID,
                 taskID: taskID,
                 title: title,
-                dependencyIDs: dependencyIDs,
                 acceptanceCriteria: acceptanceCriteria
             ) else {
                 alertTarget = .message(
                     title: L10n.Dispatch.planUpdateFailed,
-                    message: L10n.Dispatch.planUpdateFailedMessage
+                    message: L10n.Dispatch.outcomeUpdateFailedMessage
                 )
                 return
             }
@@ -694,9 +703,13 @@ private struct AgentDispatchTaskEditorSheet: View {
                     .font(.system(size: 18, weight: .medium))
                     .foregroundStyle(Color.accentColor)
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(isEditing ? L10n.Dispatch.editNode : L10n.Dispatch.addNode)
+                    Text(isEditing ? L10n.Dispatch.humanOverride : L10n.Dispatch.addNode)
                         .font(.system(size: 17, weight: .semibold))
-                    Text(L10n.Dispatch.nodeEditorMessage)
+                    Text(
+                        isEditing
+                            ? L10n.Dispatch.nodeOverrideMessage
+                            : L10n.Dispatch.nodeEditorMessage
+                    )
                         .font(.system(size: 10))
                         .foregroundStyle(.secondary)
                 }
@@ -707,45 +720,47 @@ private struct AgentDispatchTaskEditorSheet: View {
             Divider()
 
             Form {
-                Section(L10n.Dispatch.nodeTaskTitle) {
+                Section(isEditing ? L10n.Dispatch.nodeObjective : L10n.Dispatch.nodeTaskTitle) {
                     TextField(L10n.Dispatch.nodeTaskTitlePlaceholder, text: $title)
                         .textFieldStyle(.roundedBorder)
                 }
 
-                Section {
-                    if availableDependencies.isEmpty {
-                        Text(L10n.Dispatch.noDependenciesAvailable)
-                            .font(.system(size: 11))
-                            .foregroundStyle(.secondary)
-                    } else {
-                        ForEach(availableDependencies) { task in
-                            Toggle(
-                                isOn: Binding(
-                                    get: { dependencyIDs.contains(task.id) },
-                                    set: { selected in
-                                        if selected {
-                                            dependencyIDs.insert(task.id)
-                                        } else {
-                                            dependencyIDs.remove(task.id)
+                if !isEditing {
+                    Section {
+                        if availableDependencies.isEmpty {
+                            Text(L10n.Dispatch.noDependenciesAvailable)
+                                .font(.system(size: 11))
+                                .foregroundStyle(.secondary)
+                        } else {
+                            ForEach(availableDependencies) { task in
+                                Toggle(
+                                    isOn: Binding(
+                                        get: { dependencyIDs.contains(task.id) },
+                                        set: { selected in
+                                            if selected {
+                                                dependencyIDs.insert(task.id)
+                                            } else {
+                                                dependencyIDs.remove(task.id)
+                                            }
                                         }
+                                    )
+                                ) {
+                                    HStack(spacing: 7) {
+                                        Circle()
+                                            .fill(AgentDispatchPresentation.taskStateColor(task.state))
+                                            .frame(width: 7, height: 7)
+                                        Text(task.title)
+                                            .lineLimit(2)
                                     }
-                                )
-                            ) {
-                                HStack(spacing: 7) {
-                                    Circle()
-                                        .fill(AgentDispatchPresentation.taskStateColor(task.state))
-                                        .frame(width: 7, height: 7)
-                                    Text(task.title)
-                                        .lineLimit(2)
                                 }
+                                .toggleStyle(.checkbox)
                             }
-                            .toggleStyle(.checkbox)
                         }
+                    } header: {
+                        Text(L10n.Dispatch.nodeDependencies)
+                    } footer: {
+                        Text(L10n.Dispatch.nodeDependenciesHelp)
                     }
-                } header: {
-                    Text(L10n.Dispatch.nodeDependencies)
-                } footer: {
-                    Text(L10n.Dispatch.nodeDependenciesHelp)
                 }
 
                 Section {
@@ -766,7 +781,7 @@ private struct AgentDispatchTaskEditorSheet: View {
                 Button(L10n.Dispatch.cancel, action: onCancel)
                     .keyboardShortcut(.cancelAction)
                 Spacer()
-                Button(L10n.Dispatch.saveNode) {
+                Button(isEditing ? L10n.Dispatch.saveIntervention : L10n.Dispatch.saveNode) {
                     onSave(trimmedTitle, Array(dependencyIDs), criteria)
                 }
                 .buttonStyle(.borderedProminent)
@@ -775,6 +790,6 @@ private struct AgentDispatchTaskEditorSheet: View {
             }
             .padding(16)
         }
-        .frame(width: 520, height: 590)
+        .frame(width: 520, height: isEditing ? 410 : 590)
     }
 }

@@ -124,11 +124,13 @@ final class AgentRuntime: ObservableObject, Identifiable {
     /// source/mask/task anchors as turn context even before the task finishes.
     @Published var latestImageEditSubmission: AgentImageEditSubmission?
 
-    /// Dispatch-board child runtimes are launched by the scheduler and have
-    /// no operator attached to their conversation. They must never park on an
-    /// approval or question card; failures are reported back to the scheduler.
+    /// Dispatch-board runtimes are scheduler-owned and must never park on an
+    /// approval or question card. Include durable task IDs as a migration
+    /// fallback for older sessions whose presentation scope was not restored.
     var isUnattendedDispatchTask: Bool {
-        session.dispatchParentProjectID != nil
+        session.presentationScope == .dispatchBoard
+            || session.dispatchParentProjectID != nil
+            || session.dispatchTaskID != nil
     }
     /// Most recent media task completion surfaced to this runtime. This keeps
     /// async image/video outputs actionable in the same turn that drains the

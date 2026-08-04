@@ -1350,8 +1350,7 @@ extension AppState {
                    !AgentPlanAutoContinuationPolicy.allowsToolRiskDuringProgressReconciliation(risk) {
                     anyDenied = true
                     denyPlanProgressReconciliationToolCall(
-                        call, messageID: assistantID, arguments: argsDict,
-                        risk: risk, runtime: runtime
+                        call, messageID: assistantID, arguments: argsDict, risk: risk, runtime: runtime
                     )
                     continue
                 }
@@ -1736,7 +1735,8 @@ extension AppState {
                                 sandboxMode: sandboxModeForToolExecution(
                                     risk: risk,
                                     approvalSource: autoApproval,
-                                    sandboxDecision: sandboxDecision
+                                    sandboxDecision: sandboxDecision,
+                                    isUnattendedDispatchTask: runtime.isUnattendedDispatchTask
                                 ),
                                 patchAutoApplySource: nil
                             )
@@ -1964,7 +1964,8 @@ extension AppState {
                     sandboxMode: sandboxModeForToolExecution(
                         risk: risk,
                         approvalSource: autoApproval,
-                        sandboxDecision: sandboxDecision
+                        sandboxDecision: sandboxDecision,
+                        isUnattendedDispatchTask: runtime.isUnattendedDispatchTask
                     ),
                     patchAutoApplySource: patchAutoApplySource,
                     delegatedProgressSink: liveProgressSink
