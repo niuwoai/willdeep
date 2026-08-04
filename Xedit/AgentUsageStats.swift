@@ -53,11 +53,12 @@ struct AgentUsageOverview: Equatable {
     var favoriteModel: String?
 }
 
-/// One cell of the GitHub-style heatmap: a calendar day plus the
-/// real-or-estimated Token usage recorded on that day.
+/// One cell of the GitHub-style heatmap: a calendar day plus its
+/// user-authored request count and real-or-estimated Token usage.
 struct AgentHeatmapCell: Identifiable, Equatable {
     var id: Date { date }
     let date: Date
+    let requestCount: Int
     let tokenCount: Int
 }
 
@@ -510,10 +511,10 @@ enum AgentUsageStats {
     }
 
     /// Produce a GitHub-style heatmap: `weekCount` columns of 7 rows
-    /// each (Mon..Sun), summing real-or-estimated Token usage per day in
-    /// the user's local timezone. Defaults to 12 weeks. Returned in
-    /// column-major order (oldest column first); the caller renders
-    /// left → right.
+    /// each (Mon..Sun), counting user-authored requests and summing
+    /// real-or-estimated Token usage per day in the user's local timezone.
+    /// Defaults to 12 weeks. Returned in column-major order (oldest column
+    /// first); the caller renders left → right.
     static func heatmap(
         for sessions: [AgentSession],
         weekCount: Int = 12,
@@ -534,13 +535,17 @@ enum AgentUsageStats {
         }
 
         let messages = sessions.flatMap(\.messages)
-        var perDay: [Date: Int] = [:]
+        var tokenCountByDay: [Date: Int] = [:]
+        var requestCountByDay: [Date: Int] = [:]
         for message in messages {
             let day = calendar.startOfDay(for: message.createdAt)
             if day < earliestStart { continue }
             let tokenCount = message.usageTokens.flatMap { $0 > 0 ? $0 : nil }
                 ?? estimateTokens(for: message)
-            perDay[day, default: 0] += tokenCount
+            tokenCountByDay[day, default: 0] += tokenCount
+            if message.role == .user {
+                requestCountByDay[day, default: 0] += 1
+            }
         }
 
         var columns: [[AgentHeatmapCell]] = []
@@ -549,8 +554,11 @@ enum AgentUsageStats {
             for day in 0..<7 {
                 let offset = week * 7 + day
                 guard let date = calendar.date(byAdding: .day, value: offset, to: earliestStart) else { continue }
-                let tokenCount = perDay[date] ?? 0
-                column.append(AgentHeatmapCell(date: date, tokenCount: tokenCount))
+                column.append(AgentHeatmapCell(
+                    date: date,
+                    requestCount: requestCountByDay[date] ?? 0,
+                    tokenCount: tokenCountByDay[date] ?? 0
+                ))
             }
             columns.append(column)
         }
