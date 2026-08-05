@@ -368,6 +368,17 @@ nonisolated enum AgentWorkspaceRevisionCapture {
         }.value
     }
 
+    static func repositoryIdentity(for directoryURL: URL?) async -> String? {
+        guard let directoryURL else { return nil }
+        let target = directoryURL.standardizedFileURL
+        return await Task.detached(priority: .utility) {
+            guard let repositoryRoot = AppState.findGitRepositoryRoot(startingAt: target) else {
+                return nil
+            }
+            return repositoryCommonDirectory(for: repositoryRoot).standardizedFileURL.path
+        }.value
+    }
+
     static func sha256(_ value: String) -> String {
         hexDigest(SHA256.hash(data: Data(value.utf8)))
     }
@@ -391,10 +402,7 @@ nonisolated enum AgentWorkspaceRevisionCapture {
             allowedExitStatuses: [0, 128],
             retryEmptyOutput: true
         )
-        let commonDirectory = resolvedGitPath(
-            AppState.runGit(arguments: ["rev-parse", "--git-common-dir"], in: repositoryRoot),
-            repositoryRoot: repositoryRoot
-        )?.path ?? repositoryRoot.appendingPathComponent(".git").path
+        let commonDirectory = repositoryCommonDirectory(for: repositoryRoot).path
         let stagedState = AppState.runGit(
             arguments: ["diff", "--cached", "--raw", "--no-abbrev", "--no-renames", "HEAD", "--"],
             in: repositoryRoot,
@@ -427,6 +435,12 @@ nonisolated enum AgentWorkspaceRevisionCapture {
 
             if values?.isRegularFile == true, values?.isSymbolicLink != true {
                 regularFilePaths.append((path: path, kind: kind))
+            } else if values?.isDirectory == true, values?.isSymbolicLink != true {
+                let digest = untrackedDirectoryDigest(
+                    relativePath: path,
+                    repositoryRoot: repositoryRoot
+                ) ?? directoryDigest(at: url)
+                fileStates[path] = "\(kind.rawValue)|directory:\(digest)"
             } else {
                 fileStates[path] = "\(kind.rawValue)|\(pathState(at: url))"
             }
@@ -509,6 +523,13 @@ nonisolated enum AgentWorkspaceRevisionCapture {
         return repositoryRoot.appendingPathComponent(trimmed).standardizedFileURL
     }
 
+    private static func repositoryCommonDirectory(for repositoryRoot: URL) -> URL {
+        resolvedGitPath(
+            AppState.runGit(arguments: ["rev-parse", "--git-common-dir"], in: repositoryRoot),
+            repositoryRoot: repositoryRoot
+        ) ?? repositoryRoot.appendingPathComponent(".git").standardizedFileURL
+    }
+
     static func batchedFileDigests(
         relativePaths: [String],
         repositoryRoot: URL
@@ -544,6 +565,70 @@ nonisolated enum AgentWorkspaceRevisionCapture {
             startIndex = endIndex
         }
         return result
+    }
+
+    private static func untrackedDirectoryDigest(
+        relativePath: String,
+        repositoryRoot: URL
+    ) -> String? {
+        let result = AppState.runGitCommand(
+            arguments: ["ls-files", "--others", "--exclude-standard", "-z", "--", relativePath],
+            in: repositoryRoot
+        )
+        guard result.succeeded,
+              result.stdout.isEmpty || result.stdout.hasSuffix("\0") else {
+            return nil
+        }
+
+        let maximumDigestEntries = 20_000
+        let listedPaths = result.stdout
+            .split(separator: "\0", omittingEmptySubsequences: true)
+            .map(String.init)
+            .filter { !AppState.isHiddenCacheWorktreePath($0) }
+            .sorted()
+        guard listedPaths.count <= maximumDigestEntries else { return nil }
+
+        var regularFilePaths: [String] = []
+        var specialStates: [String: String] = [:]
+        let rootPath = repositoryRoot.standardizedFileURL.path + "/"
+        for path in listedPaths {
+            let url = repositoryRoot.appendingPathComponent(path).standardizedFileURL
+            guard url.path.hasPrefix(rootPath) else {
+                specialStates[path] = "outside-repository"
+                continue
+            }
+            let values = try? url.resourceValues(
+                forKeys: [.isRegularFileKey, .isSymbolicLinkKey]
+            )
+            if values?.isRegularFile == true, values?.isSymbolicLink != true {
+                regularFilePaths.append(path)
+            } else {
+                specialStates[path] = pathState(at: url)
+            }
+        }
+
+        let contentDigests = batchedFileDigests(
+            relativePaths: regularFilePaths,
+            repositoryRoot: repositoryRoot
+        )
+        let regularFilePathSet = Set(regularFilePaths)
+        var hasher = SHA256()
+        for path in listedPaths {
+            let state: String
+            if let digest = contentDigests[path] {
+                state = "file:\(digest)"
+            } else if regularFilePathSet.contains(path) {
+                let url = repositoryRoot.appendingPathComponent(path)
+                state = "file:\((try? fileDigest(at: url)) ?? "unreadable")"
+            } else {
+                state = specialStates[path] ?? "missing"
+            }
+            hasher.update(data: Data(path.utf8))
+            hasher.update(data: Data([0]))
+            hasher.update(data: Data(state.utf8))
+            hasher.update(data: Data([0]))
+        }
+        return hexDigest(hasher.finalize())
     }
 
     private static func pathState(at url: URL) -> String {

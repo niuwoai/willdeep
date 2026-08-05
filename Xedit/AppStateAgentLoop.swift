@@ -1987,13 +1987,15 @@ extension AppState {
                             throw AgentWorkspaceMutationGuardError.backgroundGitMutation(guardedMutation.displayName)
                         }
 
-                        // Capture once before waiting for the lease only to
-                        // discover the common repository identity. The second
-                        // capture, after acquisition, is the authoritative CAS
-                        // comparison and closes races between WillDeep sessions.
-                        let preLeaseRevision = await AgentWorkspaceRevisionCapture.capture(for: workspaceURL)
+                        // Resolve only the common repository identity before
+                        // waiting for the lease. The full capture after
+                        // acquisition is the authoritative CAS comparison and
+                        // closes races between WillDeep sessions.
+                        let preLeaseIdentity = await AgentWorkspaceRevisionCapture.repositoryIdentity(
+                            for: workspaceURL
+                        )
                         let leaseIdentity = roundWorkspaceRevision?.repositoryCommonDirectoryPath
-                            ?? preLeaseRevision?.repositoryCommonDirectoryPath
+                            ?? preLeaseIdentity
                             ?? workspaceURL.standardizedFileURL.path
                         workspaceMutationLease = try await AgentWorkspaceMutationLease.acquire(
                             repositoryIdentity: leaseIdentity
