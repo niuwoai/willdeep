@@ -10,6 +10,48 @@ import Testing
 @Suite
 struct AgentTranscriptScrollPolicyTests {
     @Test
+    func horizontalReflowKeepsRelativeReadingPosition() {
+        let progress = AgentTranscriptViewportPolicy.relativeProgress(
+            documentHeight: 2_400,
+            viewportHeight: 600,
+            offsetFromTop: 900
+        )
+        let restored = AgentTranscriptViewportPolicy.restoredOffsetFromTop(
+            progress: progress,
+            documentHeight: 1_500,
+            viewportHeight: 600
+        )
+
+        #expect(progress == 0.5)
+        #expect(restored == 450)
+    }
+
+    @Test
+    func reflowAnchorClampsToScrollableRange() {
+        #expect(
+            AgentTranscriptViewportPolicy.relativeProgress(
+                documentHeight: 1_000,
+                viewportHeight: 400,
+                offsetFromTop: 900
+            ) == 1
+        )
+        #expect(
+            AgentTranscriptViewportPolicy.restoredOffsetFromTop(
+                progress: -0.5,
+                documentHeight: 1_000,
+                viewportHeight: 400
+            ) == 0
+        )
+        #expect(
+            AgentTranscriptViewportPolicy.restoredOffsetFromTop(
+                progress: 0.75,
+                documentHeight: 300,
+                viewportHeight: 400
+            ) == 0
+        )
+    }
+
+    @Test
     func taskUpdateKeepsHistoryPositionWhenOperatorScrolledUp() {
         let assistant = AgentMessage(role: .assistant, content: "Task update")
 

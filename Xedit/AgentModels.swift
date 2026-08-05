@@ -98,6 +98,9 @@ nonisolated struct AgentSession: Identifiable, Codable, Equatable {
     var modelID: String?
     /// Provider snapshot captured alongside `modelID` so usage analytics
     /// can group historical sessions by the actual configured provider.
+    /// `providerEntryID` identifies the exact library entry. `providerID`
+    /// alone is insufficient because multiple custom providers share it.
+    var providerEntryID: UUID?
     var providerID: String?
     var providerDisplayName: String?
     /// Server-side Responses continuation cursor and stable request hashes.
@@ -219,6 +222,7 @@ nonisolated struct AgentSession: Identifiable, Codable, Equatable {
         dispatchTaskID: UUID? = nil,
         localWorkspaceIdentity: LocalWorkspaceIdentity? = nil,
         modelID: String? = nil,
+        providerEntryID: UUID? = nil,
         providerID: String? = nil,
         providerDisplayName: String? = nil,
         openAIResponsesContinuation: AgentOpenAIResponsesContinuationSnapshot? = nil,
@@ -262,6 +266,7 @@ nonisolated struct AgentSession: Identifiable, Codable, Equatable {
         self.localWorkspaceIdentity = localWorkspaceIdentity
             ?? AgentWorkspaceAvailabilityResolver.captureIdentity(for: self.workspaceLocation?.localPath ?? workspaceRootPath)
         self.modelID = modelID
+        self.providerEntryID = providerEntryID
         self.providerID = providerID
         self.providerDisplayName = providerDisplayName
         self.openAIResponsesContinuation = openAIResponsesContinuation
@@ -359,7 +364,7 @@ nonisolated struct AgentSession: Identifiable, Codable, Equatable {
     // decodeIfPresent with a default.
     enum CodingKeys: String, CodingKey {
         case id, title, workspaceRootPath, workspaceLocation, sidebarWorkspaceRootPath, presentationScope, dispatchParentProjectID, dispatchTaskID, localWorkspaceIdentity, modelID
-        case providerID, providerDisplayName, openAIResponsesContinuation, managedRouting
+        case providerEntryID, providerID, providerDisplayName, openAIResponsesContinuation, managedRouting
         case createdAt, updatedAt, messages, contextSummary, contextSummaryThroughMessageID
         case didEditFiles, agentEditedPaths, agentArtifactPaths, interactionMode, approvalMode, executionAgent, delegatedTaskRuns, activeExperts, currentPlan, currentGoal, goalPlanningState, goalTurnRecoveryCheckpoint, learningEvents, latestTurnRecall, documentAttachments, knowledgeFolders, documentTaskMode, redactSensitiveAttachmentContent, sidePanelState
         case pinnedAt, archivedAt, titleIsUserSet
@@ -380,6 +385,7 @@ nonisolated struct AgentSession: Identifiable, Codable, Equatable {
         self.dispatchTaskID = try c.decodeIfPresent(UUID.self, forKey: .dispatchTaskID)
         self.localWorkspaceIdentity = try c.decodeIfPresent(LocalWorkspaceIdentity.self, forKey: .localWorkspaceIdentity)
         self.modelID = try c.decodeIfPresent(String.self, forKey: .modelID)
+        self.providerEntryID = try c.decodeIfPresent(UUID.self, forKey: .providerEntryID)
         self.providerID = try c.decodeIfPresent(String.self, forKey: .providerID)
         self.providerDisplayName = try c.decodeIfPresent(String.self, forKey: .providerDisplayName)
         self.openAIResponsesContinuation = try c.decodeIfPresent(
@@ -1982,6 +1988,11 @@ struct AgentProviderPreset: Identifiable, Equatable {
         all.first { $0.id == id }
     }
 
+    static func suggestedDisplayName(providerID: String) -> String {
+        let normalizedID = providerID.trimmingCharacters(in: .whitespacesAndNewlines)
+        return preset(id: normalizedID)?.displayName ?? normalizedID
+    }
+
     static func normalizedDisplayName(providerID: String?, storedDisplayName: String?) -> String? {
         let normalizedID = providerID?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         let display = storedDisplayName?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
@@ -2207,6 +2218,145 @@ enum AgentClientError: LocalizedError {
         case .unsupportedProviderKind(let kind):
             return "Support for the \(kind.rawValue) protocol is not enabled in this build yet."
         }
+    }
+}
+
+/// Replaces Foundation's opaque "data format is incorrect" decoding error
+/// with a compact description of the broken field and the payload shape that
+/// was actually returned. The response preview intentionally reports only JSON
+/// structure (or the body type), never raw response values.
+struct AgentModelListResponseFormatError: LocalizedError {
+    let decodingIssue: String
+    let payloadShape: String
+    let expectedSchema: String
+
+    var errorDescription: String? {
+        L10n.Settings.Provider.modelListInvalidFormat(
+            decodingIssue,
+            payloadShape,
+            expectedSchema
+        )
+    }
+
+    static func wrapping(
+        _ error: Error,
+        data: Data,
+        expectedSchema: String
+    ) -> AgentModelListResponseFormatError {
+        AgentModelListResponseFormatError(
+            decodingIssue: decodingIssue(for: error),
+            payloadShape: payloadShape(for: data),
+            expectedSchema: expectedSchema
+        )
+    }
+
+    private static func decodingIssue(for error: Error) -> String {
+        guard let decodingError = error as? DecodingError else {
+            return String(describing: error)
+        }
+        switch decodingError {
+        case .keyNotFound(let key, let context):
+            return "missing required key \"\(key.stringValue)\" at \(path(context.codingPath))"
+        case .typeMismatch(let type, let context):
+            return "\(path(context.codingPath)) has the wrong value type (expected \(type))"
+        case .valueNotFound(let type, let context):
+            return "\(path(context.codingPath)) is null or missing (expected \(type))"
+        case .dataCorrupted(let context):
+            return "invalid JSON value at \(path(context.codingPath)): \(context.debugDescription)"
+        @unknown default:
+            return String(describing: decodingError)
+        }
+    }
+
+    private static func path(_ codingPath: [CodingKey]) -> String {
+        guard !codingPath.isEmpty else { return "the top level" }
+        return codingPath.reduce(into: "$") { result, key in
+            if let index = key.intValue {
+                result += "[\(index)]"
+            } else {
+                result += ".\(key.stringValue)"
+            }
+        }
+    }
+
+    private static func payloadShape(for data: Data) -> String {
+        guard let value = try? JSONSerialization.jsonObject(with: data, options: [.fragmentsAllowed]) else {
+            return "not valid JSON"
+        }
+        switch value {
+        case let object as [String: Any]:
+            let keys = object.keys.sorted().prefix(8).map { "\"\($0)\"" }.joined(separator: ", ")
+            return keys.isEmpty ? "an empty JSON object" : "a JSON object with keys [\(keys)]"
+        case let array as [Any]:
+            return "a top-level JSON array with \(array.count) item(s)"
+        case is String:
+            return "a top-level JSON string"
+        case is NSNumber:
+            return "a top-level JSON number or boolean"
+        case is NSNull:
+            return "JSON null"
+        default:
+            return "an unsupported JSON value"
+        }
+    }
+}
+
+struct AgentProviderBaseURLV1Candidate: Equatable {
+    enum Adjustment: Equatable {
+        case append
+        case remove
+    }
+
+    let baseURL: String
+    let adjustment: Adjustment
+}
+
+/// Conservative `/v1` recovery for OpenAI-compatible endpoints. We only use
+/// the opposite candidate after the original model-list request returned HTTP
+/// 404, and Settings still requires an explicit user click before persisting it.
+struct AgentProviderBaseURLV1Probe {
+    static func candidate(
+        baseURL: String,
+        providerKind: AgentProviderKind
+    ) -> AgentProviderBaseURLV1Candidate? {
+        guard providerKind == .openAIChat || providerKind == .openAIResponses else {
+            return nil
+        }
+        let trimmed = baseURL.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty, var components = URLComponents(string: trimmed) else {
+            return nil
+        }
+        guard let scheme = components.scheme?.lowercased(),
+              scheme == "http" || scheme == "https",
+              components.host?.isEmpty == false else {
+            return nil
+        }
+        let path = components.path.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+        let lowercasedPath = path.lowercased()
+        guard !lowercasedPath.hasSuffix("chat/completions"),
+              !lowercasedPath.hasSuffix("responses"),
+              !lowercasedPath.hasSuffix("models") else {
+            return nil
+        }
+        let segments = path.split(separator: "/").map(String.init)
+        let adjustment: AgentProviderBaseURLV1Candidate.Adjustment
+        if segments.last?.lowercased() == "v1" {
+            let parent = segments.dropLast().joined(separator: "/")
+            components.path = parent.isEmpty ? "" : "/\(parent)"
+            adjustment = .remove
+        } else {
+            components.path = path.isEmpty ? "/v1" : "/\(path)/v1"
+            adjustment = .append
+        }
+        guard let candidate = components.url?.absoluteString else { return nil }
+        return AgentProviderBaseURLV1Candidate(baseURL: candidate, adjustment: adjustment)
+    }
+
+    static func shouldRetry(after error: Error) -> Bool {
+        guard case AgentClientError.serverStatus(let httpError) = error else {
+            return false
+        }
+        return httpError.statusCode == 404
     }
 }
 

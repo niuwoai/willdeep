@@ -29,9 +29,10 @@ struct SomeIMRequestContext: Equatable {
 enum AgentNetworkSupport {
     /// "No bytes seen for this long" — not a total budget. Reasoning
     /// models (Qwen3, QwQ, DeepSeek-R1, o-series, Claude extended
-    /// thinking) can spend 60+ seconds before the first visible delta
-    /// hits the SSE pipe; 120s covers the long tail.
-    static let requestTimeout: TimeInterval = 120
+    /// thinking) can spend well over two minutes before the first visible
+    /// delta hits the SSE pipe; 180s covers that long tail without turning
+    /// the request into an unbounded wait.
+    static let requestTimeout: TimeInterval = 180
     static let resourceTimeout: TimeInterval = 10 * 60
 
     /// Tag every outgoing request with our marketing version so the

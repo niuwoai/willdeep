@@ -84,7 +84,8 @@ extension AppState {
                 rootDirectory: rootDirectory,
                 interactionMode: runtime.interactionMode,
                 approvalMode: runtime.approvalMode,
-                conversationAllowedToolSignatures: runtime.conversationAllowedToolSignatures
+                conversationAllowedToolSignatures: runtime.conversationAllowedToolSignatures,
+                latestUserMessage: runtime.messages.last(where: { $0.isOperatorInput })?.content ?? ""
             )
         } else {
             autoApproval = nil
@@ -333,7 +334,8 @@ extension AppState {
         interactionMode: AgentInteractionMode = .normal,
         approvalMode: AgentApprovalMode = .smart,
         conversationAllowedToolSignatures: Set<String> = [],
-        computerUseOwner: AgentComputerUseOwner? = nil
+        computerUseOwner: AgentComputerUseOwner? = nil,
+        latestUserMessage: String = ""
     ) async -> AgentToolApprovalSource? {
         guard risk == .write else { return nil }
 
@@ -428,6 +430,30 @@ extension AppState {
         }
 
         if sandboxDecision.requiresTypedConfirmation {
+            return nil
+        }
+
+        // `write_file` is the sole host-native escape hatch for an exact file
+        // outside the workspace. The user's current message can itself be the
+        // one-shot authorization when it names that exact path and asks for a
+        // write. Otherwise Smart/Goal may auto-create only a missing,
+        // non-sensitive, bounded text document; overwrites fall back to a
+        // visible approval card. No durable directory grant is created.
+        if toolName == "write_file" {
+            if AgentExternalFileWritePolicy.currentUserExplicitlyAuthorizes(
+                arguments: arguments,
+                rootDirectory: rootDirectory,
+                latestUserMessage: latestUserMessage
+            ) {
+                return .user
+            }
+            if approvalMode == .smart || interactionMode == .goal,
+               AgentExternalFileWritePolicy.canAutoApproveNewDocument(
+                   arguments: arguments,
+                   rootDirectory: rootDirectory
+               ) {
+                return interactionMode == .goal ? .goalMode : .staticAllowlist
+            }
             return nil
         }
 
@@ -1059,7 +1085,8 @@ extension AppState {
                     interactionMode: runtime.interactionMode,
                     approvalMode: runtime.approvalMode,
                     conversationAllowedToolSignatures: runtime.conversationAllowedToolSignatures,
-                    computerUseOwner: runtime.computerUseOwner
+                    computerUseOwner: runtime.computerUseOwner,
+                    latestUserMessage: runtime.messages.last(where: { $0.isOperatorInput })?.content ?? ""
                 )
                 guard let source,
                       requiringApprovalMode == nil || runtime.approvalMode == requiringApprovalMode,

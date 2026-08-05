@@ -132,12 +132,8 @@ struct AgentModeView: View {
                 - CGFloat(committedPanelWidth),
             0
         )
-        // `.backgroundTasks` remains decodable for persisted sessions, but it
-        // is never a renderable destination after the monitor rail redesign.
         let activeSidePanel: AgentSidePanelKind? = if appState.agentPrimaryDestination == .scheduledTasks
             || appState.agentPrimaryDestination == .dispatchBoard {
-            nil
-        } else if appState.agentSidePanelKind == .backgroundTasks {
             nil
         } else {
             appState.agentSidePanelKind
@@ -279,30 +275,14 @@ struct AgentModeView: View {
         .onAppear {
             DesktopPetWindowManager.shared.attach(to: appState)
             AgentComputerUseStatusController.shared.install()
-            // Keep decoding the legacy enum case for persisted sessions, but
-            // never resurrect the retired task-monitor rail.
-            if appState.agentSidePanelKind == .backgroundTasks {
-                appState.agentSidePanelKind = nil
-            }
         }
         .onCompatibleChange(of: appState.agentSidePanelKind) { _, newPanel in
-            if newPanel == .backgroundTasks {
-                appState.agentSidePanelKind = nil
-                appState.agentSidePanelRequest = nil
-                liveSidePanelWidth = nil
-                return
-            }
             if newPanel == nil {
                 liveSidePanelWidth = nil
             }
         }
         .onCompatibleChange(of: appState.agentSidePanelRequest) { _, request in
             guard let request else { return }
-            guard request.kind != .backgroundTasks else {
-                appState.agentSidePanelRequest = nil
-                appState.agentSidePanelKind = nil
-                return
-            }
             guard request.kind.isAvailable(activeExperts: appState.agentActiveExperts) else {
                 appState.agentSidePanelRequest = nil
                 return
@@ -314,6 +294,8 @@ struct AgentModeView: View {
             if request.kind == .diff {
                 appState.agentSidePanelSelectedFile = request.file
                 sidePanelWidth = max(sidePanelWidth, AgentDesign.reviewPanelPreferredWidth)
+            } else if request.kind == .backgroundTasks {
+                sidePanelWidth = max(sidePanelWidth, 520)
             } else if let url = request.file {
                 appState.agentSidePanelSelectedFile = url
             }
@@ -336,14 +318,8 @@ struct AgentModeView: View {
 
     private var sidePanelBinding: Binding<AgentSidePanelKind?> {
         Binding(
-            get: {
-                appState.agentSidePanelKind == .backgroundTasks
-                    ? nil
-                    : appState.agentSidePanelKind
-            },
-            set: { newPanel in
-                appState.agentSidePanelKind = newPanel == .backgroundTasks ? nil : newPanel
-            }
+            get: { appState.agentSidePanelKind },
+            set: { appState.agentSidePanelKind = $0 }
         )
     }
 

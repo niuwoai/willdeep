@@ -223,6 +223,13 @@ extension AppState {
         set { activeRuntime?.sessionModelOverride = newValue }
     }
 
+    /// Provider library entry used by the active conversation, independent
+    /// from the Settings-wide default provider used for new conversations.
+    var activeAgentProviderEntry: AgentProviderEntry? {
+        guard let runtime = activeRuntime else { return agentProviderLibrary.active }
+        return providerEntry(for: runtime)
+    }
+
     /// Live `git status` snapshot for the active session's workspace.
     var agentWorktreeChanges: AgentWorktreeChangeSummary {
         get { activeRuntime?.worktreeChanges ?? .init() }

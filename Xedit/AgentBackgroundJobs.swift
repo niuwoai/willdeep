@@ -26,6 +26,14 @@ import Darwin
 import UserNotifications
 import AppKit
 
+nonisolated enum AgentJobOutputStream: String, CaseIterable, Identifiable {
+    case combined
+    case stdout
+    case stderr
+
+    var id: String { rawValue }
+}
+
 /// A single background `run_command` invocation tracked by the
 /// `AgentJobRegistry`. Identifiable + Equatable so SwiftUI lists can
 /// diff it cheaply. The full output buffer lives on a private actor
@@ -65,7 +73,7 @@ struct AgentBackgroundJob: Identifiable, Equatable {
     var latestExecutorEvent: AgentExecutorEvent? = nil
     var executorUsage: AgentExecutorUsage? = nil
 
-    var isAlive: Bool { status == .running }
+    nonisolated var isAlive: Bool { status == .running }
     nonisolated var needsAttention: Bool {
         switch status {
         case .failed, .timedOut, .launchFailed:
@@ -248,11 +256,11 @@ final class AgentJobRegistry: ObservableObject {
         let collector = AgentJobOutputCollector(limit: Self.maxOutputBytes, secretRedactionValues: secretRedactionValues)
         stdoutPipe.fileHandleForReading.readabilityHandler = { handle in
             let data = handle.availableData
-            if !data.isEmpty { collector.append(data) }
+            if !data.isEmpty { collector.append(data, stream: .stdout) }
         }
         stderrPipe.fileHandleForReading.readabilityHandler = { handle in
             let data = handle.availableData
-            if !data.isEmpty { collector.append(data) }
+            if !data.isEmpty { collector.append(data, stream: .stderr) }
         }
 
         do {
@@ -279,7 +287,7 @@ final class AgentJobRegistry: ObservableObject {
                 outputByteCount: 0
             )
             insertOrUpdate(job)
-            collector.appendString(error.localizedDescription)
+            collector.appendString(error.localizedDescription, stream: .stderr)
             processes[id] = AgentJobProcess(process: process, collector: collector)
             pendingCompletionEvents[runtimeID, default: []].append(id)
             return job
@@ -334,8 +342,14 @@ final class AgentJobRegistry: ObservableObject {
             stderrPipe.fileHandleForReading.readabilityHandler = nil
             if let processBox {
                 processBox.timeoutWork?.cancel()
-                processBox.collector.append(stdoutPipe.fileHandleForReading.availableData)
-                processBox.collector.append(stderrPipe.fileHandleForReading.availableData)
+                processBox.collector.append(
+                    stdoutPipe.fileHandleForReading.availableData,
+                    stream: .stdout
+                )
+                processBox.collector.append(
+                    stderrPipe.fileHandleForReading.availableData,
+                    stream: .stderr
+                )
             }
             let exitStatus = proc.terminationStatus
             let didTimeOut = processBox?.didTimeOut ?? false
@@ -412,7 +426,7 @@ final class AgentJobRegistry: ObservableObject {
         stdoutPipe.fileHandleForReading.readabilityHandler = { [weak self] handle in
             let data = handle.availableData
             guard !data.isEmpty else { return }
-            collector.append(data)
+            collector.append(data, stream: .stdout)
             let events = eventCollector.append(data)
             guard !events.isEmpty else { return }
             Task { @MainActor [weak self] in
@@ -422,7 +436,7 @@ final class AgentJobRegistry: ObservableObject {
         stderrPipe.fileHandleForReading.readabilityHandler = { handle in
             let data = handle.availableData
             if !data.isEmpty {
-                collector.append(data)
+                collector.append(data, stream: .stderr)
             }
         }
 
@@ -457,7 +471,7 @@ final class AgentJobRegistry: ObservableObject {
                     status: .failed
                 )
             )
-            collector.appendString(error.localizedDescription)
+            collector.appendString(error.localizedDescription, stream: .stderr)
             processes[id] = AgentJobProcess(
                 process: process,
                 collector: collector,
@@ -513,13 +527,14 @@ final class AgentJobRegistry: ObservableObject {
             if let processBox {
                 processBox.timeoutWork?.cancel()
                 let remainingOutput = stdoutPipe.fileHandleForReading.availableData
-                processBox.collector.append(remainingOutput)
+                processBox.collector.append(remainingOutput, stream: .stdout)
                 let remainingEvents = processBox.executorEventCollector?.append(
                     remainingOutput,
                     flush: true
                 ) ?? []
                 processBox.collector.append(
-                    stderrPipe.fileHandleForReading.availableData
+                    stderrPipe.fileHandleForReading.availableData,
+                    stream: .stderr
                 )
                 if !remainingEvents.isEmpty {
                     Task { @MainActor [weak self] in
@@ -558,7 +573,7 @@ final class AgentJobRegistry: ObservableObject {
                     error.localizedDescription,
                     secretValues: secretRedactionValues
                 )
-                processBox.collector.appendString(detail)
+                processBox.collector.appendString(detail, stream: .stderr)
                 let warning = AgentExecutorEvent(
                     kind: .warning,
                     detail: detail,
@@ -677,7 +692,7 @@ final class AgentJobRegistry: ObservableObject {
             status: .running
         )
         process.executorEventCollector?.append(event)
-        process.collector.appendString(detail + "\n")
+        process.collector.appendString(detail + "\n", stream: .stderr)
         recordExecutorEvents(id: id, events: [event])
     }
 
@@ -791,14 +806,23 @@ final class AgentJobRegistry: ObservableObject {
     /// would then return one fewer real line than the caller asked
     /// for. Drop a single trailing newline before splitting so the
     /// tail count matches user intuition.
-    func output(id: UUID, tailLines: Int? = nil) -> String {
+    func output(
+        id: UUID,
+        stream: AgentJobOutputStream = .combined,
+        tailLines: Int? = nil
+    ) -> String {
         let full: String
         if let proc = processes[id] {
-            full = proc.collector.stringValue
+            full = proc.collector.stringValue(for: stream)
         } else {
-            full = managedExecutorOutput(
-                events: managedExecutorEvents[id] ?? []
-            )
+            switch stream {
+            case .combined, .stdout:
+                full = managedExecutorOutput(
+                    events: managedExecutorEvents[id] ?? []
+                )
+            case .stderr:
+                full = ""
+            }
         }
         guard let tailLines, tailLines > 0 else { return full }
         let normalized = full.hasSuffix("\n") ? String(full.dropLast()) : full
@@ -1000,7 +1024,7 @@ final class AgentJobRegistry: ObservableObject {
 
         if updated.status == .failed,
            let specification = sandboxRetrySpecifications.removeValue(forKey: id),
-           let output = processes[id]?.collector.stringValue,
+           let output = processes[id]?.collector.stringValue(for: .combined),
            AgentSandboxPolicy.looksLikeSandboxDenial(
                exitStatus: exitCode,
                output: output,
@@ -1022,7 +1046,8 @@ final class AgentJobRegistry: ObservableObject {
                automaticSandboxRetryApprovalSource: nil
            ) {
             processes[id]?.collector.appendString(
-                "\n[WillDeep] Sandbox denial detected; automatically retried outside the sandbox as \(retry.displayHandle).\n"
+                "\n[WillDeep] Sandbox denial detected; automatically retried outside the sandbox as \(retry.displayHandle).\n",
+                stream: .stderr
             )
             AgentSandboxAuditLog.append(
                 toolName: "run_command",
@@ -1245,51 +1270,101 @@ private nonisolated final class AgentJobOutputCollector: @unchecked Sendable {
     private let limit: Int
     private let secretRedactionValues: [String]
     private let lock = NSLock()
-    private var data = Data()
-    private var truncated = false
+    private var combinedData = Data()
+    private var stdoutData = Data()
+    private var stderrData = Data()
+    private var combinedTruncated = false
+    private var stdoutTruncated = false
+    private var stderrTruncated = false
 
     init(limit: Int, secretRedactionValues: [String] = []) {
         self.limit = limit
         self.secretRedactionValues = secretRedactionValues
     }
 
-    func append(_ chunk: Data) {
+    func append(_ chunk: Data, stream: AgentJobOutputStream) {
         guard !chunk.isEmpty else { return }
         if !secretRedactionValues.isEmpty,
            let text = String(data: chunk, encoding: .utf8) {
             let redacted = AgentSecretStore.redact(text, secretValues: secretRedactionValues)
             guard let bytes = redacted.data(using: .utf8) else { return }
-            appendRaw(bytes)
+            appendRaw(bytes, stream: stream)
             return
         }
-        appendRaw(chunk)
+        appendRaw(chunk, stream: stream)
     }
 
-    private func appendRaw(_ chunk: Data) {
+    private func appendRaw(_ chunk: Data, stream: AgentJobOutputStream) {
         lock.lock(); defer { lock.unlock() }
-        let remaining = max(0, limit - data.count)
+        Self.appendBounded(
+            chunk,
+            to: &combinedData,
+            truncated: &combinedTruncated,
+            limit: limit
+        )
+        switch stream {
+        case .combined:
+            break
+        case .stdout:
+            Self.appendBounded(
+                chunk,
+                to: &stdoutData,
+                truncated: &stdoutTruncated,
+                limit: limit
+            )
+        case .stderr:
+            Self.appendBounded(
+                chunk,
+                to: &stderrData,
+                truncated: &stderrTruncated,
+                limit: limit
+            )
+        }
+    }
+
+    private static func appendBounded(
+        _ chunk: Data,
+        to destination: inout Data,
+        truncated: inout Bool,
+        limit: Int
+    ) {
+        let remaining = max(0, limit - destination.count)
         if remaining > 0 {
-            data.append(chunk.prefix(remaining))
+            destination.append(chunk.prefix(remaining))
         }
         if chunk.count > remaining {
             truncated = true
         }
     }
 
-    func appendString(_ s: String) {
+    func appendString(
+        _ s: String,
+        stream: AgentJobOutputStream = .combined
+    ) {
         guard let bytes = s.data(using: .utf8) else { return }
-        append(bytes)
+        append(bytes, stream: stream)
     }
 
     var byteCount: Int {
         lock.lock(); defer { lock.unlock() }
-        return data.count
+        return combinedData.count
     }
 
-    var stringValue: String {
+    func stringValue(for stream: AgentJobOutputStream) -> String {
         lock.lock()
-        let snapshot = data
-        let didTruncate = truncated
+        let snapshot: Data
+        let didTruncate: Bool
+        switch stream {
+        case .combined:
+            snapshot = combinedData
+            didTruncate = combinedTruncated
+        case .stdout:
+            snapshot = stdoutData
+            didTruncate = stdoutTruncated
+        case .stderr:
+            snapshot = stderrData
+            didTruncate = stderrTruncated
+        }
         lock.unlock()
         var text = String(data: snapshot, encoding: .utf8) ?? ""
         if didTruncate { text += "\n...[truncated]" }

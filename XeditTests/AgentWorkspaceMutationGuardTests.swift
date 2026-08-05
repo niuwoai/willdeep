@@ -77,12 +77,21 @@ struct AgentWorkspaceMutationGuardTests {
         try requireGit(["config", "user.name", "WillDeep Tests"], in: base)
         let tracked = base.appendingPathComponent("README.md")
         try "alpha\n".write(to: tracked, atomically: true, encoding: .utf8)
-        try requireGit(["add", "README.md"], in: base)
+        try "Scratch/*.tmp\n".write(
+            to: base.appendingPathComponent(".gitignore"),
+            atomically: true,
+            encoding: .utf8
+        )
+        try requireGit(["add", "README.md", ".gitignore"], in: base)
         try requireGit(["commit", "-m", "initial"], in: base)
 
         guard let clean = await AgentWorkspaceRevisionCapture.capture(for: base) else {
             throw TestError.missingRevision
         }
+        let identity = await AgentWorkspaceRevisionCapture.repositoryIdentity(
+            for: base.appendingPathComponent("README.md")
+        )
+        #expect(identity == clean.repositoryCommonDirectoryPath)
 
         // Same byte count as "alpha\n": a size-only signature would miss
         // this if timestamp resolution were coarse. The revision hashes bytes.
@@ -130,6 +139,28 @@ struct AgentWorkspaceMutationGuardTests {
             throw TestError.missingRevision
         }
         #expect(untrackedOther.difference(from: untrackedFirst).changedPaths == ["Notes.txt"])
+
+        let scratch = base.appendingPathComponent("Scratch", isDirectory: true)
+        try FileManager.default.createDirectory(at: scratch, withIntermediateDirectories: true)
+        let visibleScratchFile = scratch.appendingPathComponent("visible.txt")
+        let ignoredScratchFile = scratch.appendingPathComponent("ignored.tmp")
+        try "visible-one\n".write(to: visibleScratchFile, atomically: true, encoding: .utf8)
+        try "ignored-one\n".write(to: ignoredScratchFile, atomically: true, encoding: .utf8)
+        guard let nestedFirst = await AgentWorkspaceRevisionCapture.capture(for: base) else {
+            throw TestError.missingRevision
+        }
+
+        try "ignored-two\n".write(to: ignoredScratchFile, atomically: true, encoding: .utf8)
+        guard let ignoredOnly = await AgentWorkspaceRevisionCapture.capture(for: base) else {
+            throw TestError.missingRevision
+        }
+        #expect(ignoredOnly == nestedFirst)
+
+        try "visible-two\n".write(to: visibleScratchFile, atomically: true, encoding: .utf8)
+        guard let nestedOther = await AgentWorkspaceRevisionCapture.capture(for: base) else {
+            throw TestError.missingRevision
+        }
+        #expect(nestedOther.difference(from: nestedFirst).changedPaths == ["Scratch"])
     }
 
     @Test("regular file hashing is batched without weakening content detection")

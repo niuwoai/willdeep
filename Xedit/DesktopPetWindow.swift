@@ -260,8 +260,12 @@ enum DesktopPetHibernation {
 }
 
 enum DesktopPetAnimationCadence {
-    nonisolated static let foregroundFramesPerSecond: Double = 15
-    nonisolated static let backgroundFramesPerSecond: Double = 24
+    /// The pet uses deliberately pixelated artwork and does not benefit enough
+    /// from display-rate redraws to justify relaying out its hosting window on
+    /// every frame. Keep the background cadence slightly smoother because the
+    /// pet is the primary visible surface while WillDeep is inactive.
+    nonisolated static let foregroundFramesPerSecond: Double = 8
+    nonisolated static let backgroundFramesPerSecond: Double = 12
 
     nonisolated static func framesPerSecond(appIsActive: Bool) -> Double {
         appIsActive ? foregroundFramesPerSecond : backgroundFramesPerSecond
@@ -812,48 +816,34 @@ struct DesktopPetOverlayView: View {
     }
 
     var body: some View {
-        // When WillDeep is active, the pet stays peripheral and can redraw less
-        // often. Once the app moves to the background, the pet becomes the
-        // primary visible surface and receives the smoother cadence.
-        TimelineView(.animation(
-            minimumInterval: DesktopPetAnimationCadence.minimumInterval(
-                appIsActive: manager.appIsActive
-            )
-        )) { context in
-            let animation = DesktopPetAnimationValues(
-                mood: displayMood,
-                date: context.date
-            )
-
-            HStack(alignment: .center, spacing: -4) {
-                if manager.presentation.isMessageBubbleVisible {
-                    if manager.isMessageBubbleCollapsed {
-                        collapsedMessageIndicator
-                            .offset(x: 4)
-                    } else {
-                        messageBubble
-                    }
+        HStack(alignment: .center, spacing: -4) {
+            if manager.presentation.isMessageBubbleVisible {
+                if manager.isMessageBubbleCollapsed {
+                    collapsedMessageIndicator
+                        .offset(x: 4)
+                } else {
+                    messageBubble
                 }
-
-                petScene(animation: animation)
-                    .accessibilityLabel(L10n.DesktopPet.accessibilityLabel)
             }
-            .frame(width: 360, height: 260, alignment: .bottomTrailing)
-            .contentShape(Rectangle())
-            .gesture(dragGesture)
-            .contextMenu {
-                Button(L10n.DesktopPet.settingsAction) {
-                    manager.openSettings()
-                }
-                Button(L10n.DesktopPet.hibernateAction) {
-                    manager.hibernate()
-                }
-                Button(L10n.DesktopPet.hibernateUntilTomorrowAction) {
-                    manager.hibernateUntilTomorrow()
-                }
-                Button(L10n.DesktopPet.hideAction) {
-                    manager.setEnabled(false)
-                }
+
+            petScene
+                .accessibilityLabel(L10n.DesktopPet.accessibilityLabel)
+        }
+        .frame(width: 360, height: 260, alignment: .bottomTrailing)
+        .contentShape(Rectangle())
+        .gesture(dragGesture)
+        .contextMenu {
+            Button(L10n.DesktopPet.settingsAction) {
+                manager.openSettings()
+            }
+            Button(L10n.DesktopPet.hibernateAction) {
+                manager.hibernate()
+            }
+            Button(L10n.DesktopPet.hibernateUntilTomorrowAction) {
+                manager.hibernateUntilTomorrow()
+            }
+            Button(L10n.DesktopPet.hideAction) {
+                manager.setEnabled(false)
             }
         }
     }
@@ -964,10 +954,11 @@ struct DesktopPetOverlayView: View {
         .contentShape(Rectangle())
     }
 
-    private func petScene(animation: DesktopPetAnimationValues) -> some View {
-        DesktopPetSceneView(
+    private var petScene: some View {
+        DesktopPetAnimatedSceneView(
             appearance: manager.appearance,
-            animation: animation
+            mood: displayMood,
+            appIsActive: manager.appIsActive
         )
         .contentShape(Rectangle())
         .simultaneousGesture(
@@ -986,6 +977,30 @@ struct DesktopPetOverlayView: View {
             return .cyan
         case .idle:
             return .secondary
+        }
+    }
+}
+
+/// Owns the high-frequency timeline so status cards, menus, gestures, and the
+/// hosting window's outer layout remain stable between animation frames.
+struct DesktopPetAnimatedSceneView: View {
+    let appearance: DesktopPetAppearance
+    let mood: DesktopPetMood
+    let appIsActive: Bool
+
+    var body: some View {
+        TimelineView(.animation(
+            minimumInterval: DesktopPetAnimationCadence.minimumInterval(
+                appIsActive: appIsActive
+            )
+        )) { context in
+            DesktopPetSceneView(
+                appearance: appearance,
+                animation: DesktopPetAnimationValues(
+                    mood: mood,
+                    date: context.date
+                )
+            )
         }
     }
 }

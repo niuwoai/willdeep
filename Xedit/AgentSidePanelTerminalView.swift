@@ -132,65 +132,63 @@ private struct AgentSidePanelTerminalContentView: View {
     // MARK: Recording bar
 
     private var shortcutsBar: some View {
-        TimelineView(.periodic(from: .now, by: 1)) { timeline in
+        VStack(spacing: 0) {
+            recordingControlRow
+
+            Divider()
+                .opacity(0.45)
+
             VStack(spacing: 0) {
-                recordingControlRow(now: timeline.date)
+                HStack {
+                    Text(L10n.AgentTerminal.recentRecordings)
+                        .font(.system(size: 10, weight: .semibold))
+                        .foregroundStyle(interfacePalette.secondaryText)
+                    Spacer(minLength: 0)
+                }
+                .frame(height: TerminalRecordingMetrics.historyHeaderHeight)
+                .padding(.horizontal, TerminalRecordingMetrics.horizontalPadding + 2)
 
-                Divider()
-                    .opacity(0.45)
-
-                VStack(spacing: 0) {
+                if controller.shortcuts.isEmpty {
                     HStack {
-                        Text(L10n.AgentTerminal.recentRecordings)
-                            .font(.system(size: 10, weight: .semibold))
+                        Text(L10n.AgentTerminal.noShortcuts)
+                            .font(.system(size: 11, weight: .medium))
                             .foregroundStyle(interfacePalette.secondaryText)
                         Spacer(minLength: 0)
                     }
-                    .frame(height: TerminalRecordingMetrics.historyHeaderHeight)
+                    .frame(height: TerminalRecordingMetrics.emptyHistoryHeight)
                     .padding(.horizontal, TerminalRecordingMetrics.horizontalPadding + 2)
+                } else {
+                    ScrollView(.vertical, showsIndicators: controller.shortcuts.count > TerminalRecordingMetrics.visibleHistoryRows) {
+                        LazyVStack(spacing: 0) {
+                            ForEach(controller.shortcuts) { shortcut in
+                                shortcutControl(shortcut)
 
-                    if controller.shortcuts.isEmpty {
-                        HStack {
-                            Text(L10n.AgentTerminal.noShortcuts)
-                                .font(.system(size: 11, weight: .medium))
-                                .foregroundStyle(interfacePalette.secondaryText)
-                            Spacer(minLength: 0)
-                        }
-                        .frame(height: TerminalRecordingMetrics.emptyHistoryHeight)
-                        .padding(.horizontal, TerminalRecordingMetrics.horizontalPadding + 2)
-                    } else {
-                        ScrollView(.vertical, showsIndicators: controller.shortcuts.count > TerminalRecordingMetrics.visibleHistoryRows) {
-                            LazyVStack(spacing: 0) {
-                                ForEach(Array(controller.shortcuts.enumerated()), id: \.element.id) { index, shortcut in
-                                    shortcutControl(shortcut, now: timeline.date)
-
-                                    if index < controller.shortcuts.count - 1 {
-                                        Divider()
-                                            .padding(
-                                                .leading,
-                                                TerminalRecordingMetrics.horizontalPadding
-                                                    + TerminalRecordingMetrics.playButtonSize
-                                                    + TerminalRecordingMetrics.shortcutItemSpacing
-                                            )
-                                    }
+                                if shortcut.id != controller.shortcuts.last?.id {
+                                    Divider()
+                                        .padding(
+                                            .leading,
+                                            TerminalRecordingMetrics.horizontalPadding
+                                                + TerminalRecordingMetrics.playButtonSize
+                                                + TerminalRecordingMetrics.shortcutItemSpacing
+                                        )
                                 }
                             }
                         }
-                        .frame(height: shortcutHistoryHeight)
                     }
+                    .frame(height: shortcutHistoryHeight)
                 }
-                .background(interfacePalette.panelFill.opacity(0.96))
             }
+            .background(interfacePalette.panelFill.opacity(0.96))
         }
     }
 
-    private func recordingControlRow(now: Date) -> some View {
+    private var recordingControlRow: some View {
         HStack(spacing: 10) {
             recordButton
                 .layoutPriority(1)
 
             if controller.isRecording {
-                recordingStatus(now: now)
+                recordingStatus
                     .transition(.opacity)
             } else {
                 Text(L10n.AgentTerminal.recordingHelp)
@@ -245,7 +243,13 @@ private struct AgentSidePanelTerminalContentView: View {
         .help(controller.isRecording ? L10n.AgentTerminal.stopRecording : L10n.AgentTerminal.startRecording)
     }
 
-    private func recordingStatus(now: Date) -> some View {
+    private var recordingStatus: some View {
+        TimelineView(.periodic(from: .now, by: 1)) { timeline in
+            recordingStatusContent(now: timeline.date)
+        }
+    }
+
+    private func recordingStatusContent(now: Date) -> some View {
         let elapsed = controller.recordingStartedAt.map { now.timeIntervalSince($0) } ?? 0
         return HStack(spacing: 5) {
             Circle()
@@ -261,7 +265,7 @@ private struct AgentSidePanelTerminalContentView: View {
         .lineLimit(1)
     }
 
-    private func shortcutControl(_ shortcut: TerminalShortcut, now: Date) -> some View {
+    private func shortcutControl(_ shortcut: TerminalShortcut) -> some View {
         let playbackState = playbackState(for: shortcut)
         let isRunning = playbackState?.isRunning == true
         return HStack(spacing: TerminalRecordingMetrics.shortcutItemSpacing) {
@@ -291,7 +295,7 @@ private struct AgentSidePanelTerminalContentView: View {
             .focusable(false)
             .help(isRunning ? L10n.AgentTerminal.shortcutStopReplay : L10n.AgentTerminal.shortcutReplay)
 
-            shortcutDetails(shortcut, playbackState: playbackState, now: now)
+            shortcutDetails(shortcut, playbackState: playbackState)
                 .frame(maxWidth: .infinity, alignment: .leading)
 
             Menu {
@@ -342,25 +346,24 @@ private struct AgentSidePanelTerminalContentView: View {
         .padding(.horizontal, TerminalRecordingMetrics.horizontalPadding)
         .background(playbackState?.isRunning == true ? skinAccent.opacity(0.08) : Color.clear)
         .contentShape(Rectangle())
-        .help(shortcutTooltip(shortcut, playbackState: playbackState, now: now))
+        .help(shortcutTooltip(shortcut, playbackState: playbackState, now: .now))
     }
 
     @ViewBuilder
     private func shortcutDetails(
         _ shortcut: TerminalShortcut,
-        playbackState: TerminalShortcutPlaybackState?,
-        now: Date
+        playbackState: TerminalShortcutPlaybackState?
     ) -> some View {
         ViewThatFits(in: .horizontal) {
             HStack(spacing: 10) {
                 shortcutTitle(shortcut)
                 Spacer(minLength: 6)
-                shortcutMetadata(shortcut, playbackState: playbackState, now: now)
+                shortcutMetadata(shortcut, playbackState: playbackState)
             }
 
             VStack(alignment: .leading, spacing: 2) {
                 shortcutTitle(shortcut)
-                shortcutMetadata(shortcut, playbackState: playbackState, now: now)
+                shortcutMetadata(shortcut, playbackState: playbackState)
             }
         }
     }
@@ -383,8 +386,7 @@ private struct AgentSidePanelTerminalContentView: View {
 
     private func shortcutMetadata(
         _ shortcut: TerminalShortcut,
-        playbackState: TerminalShortcutPlaybackState?,
-        now: Date
+        playbackState: TerminalShortcutPlaybackState?
     ) -> some View {
         HStack(spacing: 6) {
             Text(
@@ -398,12 +400,26 @@ private struct AgentSidePanelTerminalContentView: View {
             .lineLimit(1)
 
             if let playbackState {
-                shortcutStatus(playbackState, now: now)
+                shortcutStatus(playbackState)
             }
         }
     }
 
-    private func shortcutStatus(_ playbackState: TerminalShortcutPlaybackState, now: Date) -> some View {
+    @ViewBuilder
+    private func shortcutStatus(_ playbackState: TerminalShortcutPlaybackState) -> some View {
+        if playbackState.isRunning {
+            TimelineView(.periodic(from: .now, by: 1)) { timeline in
+                shortcutStatusContent(playbackState, now: timeline.date)
+            }
+        } else {
+            shortcutStatusContent(playbackState, now: .now)
+        }
+    }
+
+    private func shortcutStatusContent(
+        _ playbackState: TerminalShortcutPlaybackState,
+        now: Date
+    ) -> some View {
         let presentation = shortcutStatusPresentation(playbackState, now: now)
         return HStack(spacing: 4) {
             Image(systemName: presentation.icon)
@@ -1102,13 +1118,12 @@ struct AgentTerminalViewRepresentable: NSViewRepresentable {
 
     func updateNSView(_ nsView: AgentLocalProcessTerminalView, context: Context) {
         // Deliberately empty. This used to force a refresh on every SwiftUI
-        // render pass — but the panel's TimelineView re-evaluates the whole
-        // body every second, so the terminal was being forced through
-        // layout continuously. Combined with the un-debounced resize →
-        // SIGWINCH chain, a layout that wobbled across a cell-height
-        // boundary made the remote shell redraw its prompt mid-screen and
-        // bake mixed-generation rows into the buffer. Mount-time refresh
-        // (makeNSView above + viewDidMoveToWindow) is sufficient; data
-        // arrival already schedules its own display pass.
+        // render pass. Parent state changes could therefore force the terminal
+        // through layout repeatedly. Combined with the un-debounced resize →
+        // SIGWINCH chain, a layout that wobbled across a cell-height boundary
+        // made the remote shell redraw its prompt mid-screen and bake
+        // mixed-generation rows into the buffer. Mount-time refresh
+        // (makeNSView above + viewDidMoveToWindow) is sufficient; data arrival
+        // already schedules its own display pass.
     }
 }

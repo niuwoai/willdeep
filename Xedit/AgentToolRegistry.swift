@@ -197,6 +197,16 @@ enum AgentToolRegistry {
             ]
         ),
         AgentToolDescriptor(
+            name: "write_file",
+            description: "Write a UTF-8 text file to an EXPLICIT absolute or home-relative path OUTSIDE the current workspace. Use this only when the user names an external destination; use create_file/edit_file for workspace files. WillDeep resolves the real target before authorization, rejects sensitive/system/persistence locations, never substitutes a sandbox path, writes atomically, and reads the same target back to verify the bytes. A missing low-risk document target may be auto-approved by Smart review; overwriting an existing file requires overwrite=true and either an exact write instruction from the current user turn or explicit approval. Parent directories must already exist.",
+            risk: .write,
+            parameters: [
+                AgentToolParameter(name: "path", type: .string, description: "Exact absolute or home-relative external file path, e.g. `~/Sites/project/docs/report.md`. Relative workspace paths are rejected; use create_file/edit_file for those.", required: true),
+                AgentToolParameter(name: "content", type: .string, description: "Full UTF-8 contents to write verbatim.", required: true),
+                AgentToolParameter(name: "overwrite", type: .boolean, description: "Set true only when replacing an existing file is intended. Defaults to false, so an unexpected existing target fails safely.", required: false)
+            ]
+        ),
+        AgentToolDescriptor(
             name: "edit_file",
             description: "EDIT an EXISTING file by EXACT STRING REPLACEMENT — the PREFERRED way to edit files. Pass the workspace-relative path, the exact current text to replace (old_string) and its replacement (new_string). Text is matched and written literally: GitHub Actions expressions such as `${{ secrets.DEPLOY_TOKEN }}` are supported and are references, not secret values. Never switch to shell/Python merely because content contains `${{ ... }}`. old_string must match the file content EXACTLY and appear exactly ONCE unless replace_all=true. Goal mode, Smart review, and Workspace Access apply validated workspace edits immediately; Strict mode always asks. For several independent files, emit all create_file/edit_file calls in one assistant response so WillDeep can present one Apply All review group. Keep dependent edits to the same file ordered. To CREATE a new file, use `create_file`.",
             risk: .read,
@@ -1879,6 +1889,14 @@ enum AgentToolRegistry {
                 return .write
             }
             return .read
+        }
+        if descriptor.name == "write_file" {
+            let decision = AgentSandboxPolicy.decision(
+                toolName: descriptor.name,
+                arguments: arguments,
+                rootDirectory: rootDirectory
+            )
+            return decision.requiresTypedConfirmation ? .danger : .write
         }
         if descriptor.name == "terminal_send_command",
            let command = arguments["command"]?.stringValue(),

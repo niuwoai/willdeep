@@ -78,6 +78,99 @@ struct AgentProviderLibraryTests {
         #expect(entry.allFlashModels == ["gpt-4.1-mini", "gpt-4o-mini"])
     }
 
+    @Test
+    func providerSelectionSuggestsCanonicalEditableDisplayName() {
+        #expect(AgentProviderPreset.suggestedDisplayName(providerID: "deepseek") == "DeepSeek")
+        #expect(AgentProviderPreset.suggestedDisplayName(providerID: " custom ") == "Custom")
+        #expect(AgentProviderPreset.suggestedDisplayName(providerID: "private-relay") == "private-relay")
+    }
+
+    @Test
+    func modelListFormatErrorDescribesMissingFieldAndActualShape() throws {
+        struct ExpectedResponse: Decodable {
+            let data: [Model]
+
+            struct Model: Decodable {
+                let id: String
+            }
+        }
+
+        let payload = Data(#"{"models":[{"name":"wrong-shape"}]}"#.utf8)
+        do {
+            _ = try JSONDecoder().decode(ExpectedResponse.self, from: payload)
+            Issue.record("Expected model-list decoding to fail")
+        } catch {
+            let wrapped = AgentModelListResponseFormatError.wrapping(
+                error,
+                data: payload,
+                expectedSchema: #"{"data":[{"id":"model-id"}]}"#
+            )
+            #expect(wrapped.decodingIssue.contains("missing required key \"data\""))
+            #expect(wrapped.payloadShape.contains("\"models\""))
+            #expect(wrapped.expectedSchema.contains("\"data\""))
+        }
+    }
+
+    @Test
+    func modelListFormatErrorIdentifiesNonJSONResponseWithoutEchoingBody() {
+        let payload = Data("<html>upstream login page</html>".utf8)
+        let wrapped = AgentModelListResponseFormatError.wrapping(
+            DecodingError.dataCorrupted(.init(codingPath: [], debugDescription: "Invalid JSON")),
+            data: payload,
+            expectedSchema: #"{"data":[{"id":"model-id"}]}"#
+        )
+        #expect(wrapped.payloadShape == "not valid JSON")
+        #expect(!wrapped.localizedDescription.contains("upstream login page"))
+    }
+
+    @Test
+    func openAIBaseURLProbeAdjustsV1InBothDirections() {
+        #expect(AgentProviderBaseURLV1Probe.candidate(
+            baseURL: "https://hub.example.com",
+            providerKind: .openAIChat
+        ) == AgentProviderBaseURLV1Candidate(baseURL: "https://hub.example.com/v1", adjustment: .append))
+        #expect(AgentProviderBaseURLV1Probe.candidate(
+            baseURL: "https://hub.example.com/gateway/",
+            providerKind: .openAIResponses
+        ) == AgentProviderBaseURLV1Candidate(baseURL: "https://hub.example.com/gateway/v1", adjustment: .append))
+        #expect(AgentProviderBaseURLV1Probe.candidate(
+            baseURL: "https://hub.example.com/v1/",
+            providerKind: .openAIChat
+        ) == AgentProviderBaseURLV1Candidate(baseURL: "https://hub.example.com", adjustment: .remove))
+        #expect(AgentProviderBaseURLV1Probe.candidate(
+            baseURL: "https://hub.example.com/gateway/v1",
+            providerKind: .openAIResponses
+        ) == AgentProviderBaseURLV1Candidate(baseURL: "https://hub.example.com/gateway", adjustment: .remove))
+        #expect(AgentProviderBaseURLV1Probe.candidate(
+            baseURL: "https://api.anthropic.com",
+            providerKind: .anthropicMessages
+        ) == nil)
+        #expect(AgentProviderBaseURLV1Probe.candidate(
+            baseURL: "https://hub.example.com/chat/completions",
+            providerKind: .openAIChat
+        ) == nil)
+        #expect(AgentProviderBaseURLV1Probe.candidate(
+            baseURL: "not-a-url",
+            providerKind: .openAIChat
+        ) == nil)
+    }
+
+    @Test
+    func openAIBaseURLProbeOnlyRetriesNotFoundResponses() {
+        let notFound = AgentClientError.serverStatus(AgentProviderHTTPError(
+            statusCode: 404,
+            method: "GET",
+            url: "https://hub.example.com/models",
+            providerID: "custom",
+            model: "",
+            requestSummary: "",
+            requestBody: "",
+            responseBody: ""
+        ))
+        #expect(AgentProviderBaseURLV1Probe.shouldRetry(after: notFound))
+        #expect(!AgentProviderBaseURLV1Probe.shouldRetry(after: AgentClientError.invalidResponse))
+    }
+
     // MARK: - Library
 
     @Test

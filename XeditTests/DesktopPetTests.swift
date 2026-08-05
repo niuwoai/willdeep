@@ -202,12 +202,16 @@ struct DesktopPetTests {
     }
 
     @Test
-    func animationCadenceUsesFifteenFPSInForegroundAndTwentyFourInBackground() {
-        #expect(DesktopPetAnimationCadence.framesPerSecond(appIsActive: true) == 15)
-        #expect(DesktopPetAnimationCadence.framesPerSecond(appIsActive: false) == 24)
+    func animationCadenceCapsForegroundAndBackgroundRedraws() {
+        #expect(DesktopPetAnimationCadence.framesPerSecond(appIsActive: true) == 8)
+        #expect(DesktopPetAnimationCadence.framesPerSecond(appIsActive: false) == 12)
         #expect(
             DesktopPetAnimationCadence.minimumInterval(appIsActive: true)
                 > DesktopPetAnimationCadence.minimumInterval(appIsActive: false)
+        )
+        #expect(
+            DesktopPetAnimationCadence.minimumInterval(appIsActive: false)
+                >= 1.0 / 12.0
         )
     }
 
