@@ -917,6 +917,9 @@ extension AppState {
                                     streamBuffer.flushPending()
                                     runtime.messages[index].toolCalls = calls
                                     latestToolCalls = calls
+                                case .sourceReferencesUpdated(let references):
+                                    streamBuffer.flushPending()
+                                    runtime.messages[index].sourceReferences = references
                                 case .finishedTurn(let reason):
                                     streamBuffer.flushPending()
                                     finishReason = reason

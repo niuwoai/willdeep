@@ -496,6 +496,11 @@ nonisolated struct AgentMessage: Identifiable, Codable, Equatable {
     /// Completion tokens spent on hidden reasoning/thinking traces when
     /// the provider reports them separately.
     var reasoningTokens: Int?
+    /// Public references reported directly by a provider-hosted tool, such as
+    /// Responses `web_search`. Client-executed tools keep their references on
+    /// `AgentToolResult`; this field preserves server-side citations without
+    /// inventing a local tool call.
+    var sourceReferences: [AgentSourceReference]
     /// Wall-clock seconds the assistant streamed for, from first stream
     /// connect to `.finishedTurn`. Only set on assistant messages once
     /// the stream terminates.
@@ -566,6 +571,7 @@ nonisolated struct AgentMessage: Identifiable, Codable, Equatable {
         cachedPromptTokens: Int? = nil,
         cacheWritePromptTokens: Int? = nil,
         reasoningTokens: Int? = nil,
+        sourceReferences: [AgentSourceReference] = [],
         elapsedSeconds: Double? = nil,
         source: AgentMessageSource? = nil,
         transcriptEvent: AgentTranscriptEvent? = nil,
@@ -596,6 +602,7 @@ nonisolated struct AgentMessage: Identifiable, Codable, Equatable {
         self.cachedPromptTokens = cachedPromptTokens
         self.cacheWritePromptTokens = cacheWritePromptTokens
         self.reasoningTokens = reasoningTokens
+        self.sourceReferences = sourceReferences
         self.elapsedSeconds = elapsedSeconds
         self.source = source
         self.transcriptEvent = transcriptEvent
@@ -616,7 +623,7 @@ nonisolated struct AgentMessage: Identifiable, Codable, Equatable {
         case id, role, content, reasoningContent, images, textAttachments, modelContext, toolCalls, toolCallID
         case toolCallStatus, toolErrorMessage
         case usageTokens, promptTokens, completionTokens
-        case cachedPromptTokens, cacheWritePromptTokens, reasoningTokens
+        case cachedPromptTokens, cacheWritePromptTokens, reasoningTokens, sourceReferences
         case elapsedSeconds, source, transcriptEvent
         case origin, originLabel, requestPrefixHash, requestStablePrefixCharacters
         case managedRoute, workflowReport
@@ -643,6 +650,7 @@ nonisolated struct AgentMessage: Identifiable, Codable, Equatable {
         cachedPromptTokens = try container.decodeIfPresent(Int.self, forKey: .cachedPromptTokens)
         cacheWritePromptTokens = try container.decodeIfPresent(Int.self, forKey: .cacheWritePromptTokens)
         reasoningTokens = try container.decodeIfPresent(Int.self, forKey: .reasoningTokens)
+        sourceReferences = try container.decodeIfPresent([AgentSourceReference].self, forKey: .sourceReferences) ?? []
         elapsedSeconds = try container.decodeIfPresent(Double.self, forKey: .elapsedSeconds)
         source = try container.decodeIfPresent(AgentMessageSource.self, forKey: .source)
         transcriptEvent = try container.decodeIfPresent(AgentTranscriptEvent.self, forKey: .transcriptEvent)

@@ -451,6 +451,105 @@ struct AgentToolResultImageEncodingTests {
     }
 
     @Test
+    func deepSeekResponsesEncodesWebSearchAsHostedToolOnlyWhenRequested() throws {
+        let webSearch = try #require(AgentToolRegistry.descriptor(for: "web_search"))
+        let searchFiles = try #require(AgentToolRegistry.descriptor(for: "search_files"))
+        let data = try OpenAIResponsesAdapter.encodeRequestBody(
+            model: "deepseek-v4-flash",
+            messages: [AgentMessage(role: .user, content: "Search current news")],
+            tools: [webSearch, searchFiles],
+            supportsImages: false,
+            store: false,
+            useHostedWebSearch: true
+        )
+        let body = try toolResultImageJSONObject(data)
+        let tools = try #require(body["tools"] as? [[String: Any]])
+
+        #expect(tools.count == 2)
+        #expect(tools[0]["type"] as? String == "web_search")
+        #expect(tools[0]["name"] == nil)
+        #expect(tools[1]["type"] as? String == "function")
+        #expect(tools[1]["name"] as? String == "search_files")
+    }
+
+    @Test
+    func deepSeekHostedWebSearchFallsBackLocallyAndPreservesCitations() async throws {
+        let configuration = AgentConfiguration(
+            providerID: AgentProviderPreset.someIMID,
+            baseURL: "https://example.com/v1",
+            model: "deepseek-v4-flash",
+            apiKey: "test"
+        )
+        let webSearch = try #require(AgentToolRegistry.descriptor(for: "web_search"))
+        let requestRecorder = WillDeepResponsesFallbackRecorder()
+        let eventRecorder = HostedSearchEventRecorder()
+        let session = hostedSearchTestSession()
+        defer {
+            HostedSearchURLProtocol.handler = nil
+            session.invalidateAndCancel()
+        }
+
+        HostedSearchURLProtocol.handler = { request in
+            let attempt = requestRecorder.record(request)
+            let url = try #require(request.url)
+            if attempt == 1 {
+                return try willDeepResponsesHTTPResult(
+                    url: url,
+                    statusCode: 422,
+                    body: #"{"error":{"message":"unsupported web_search tool"}}"#
+                )
+            }
+            let body = """
+            event: response.created
+            data: {"response":{"id":"resp_search"}}
+
+            event: response.output_text.delta
+            data: {"delta":"answer"}
+
+            event: response.output_text.annotation.added
+            data: {"annotation":{"type":"url_citation","url":"https://example.org/source","title":"Example source"}}
+
+            event: response.completed
+            data: {"response":{"id":"resp_search","status":"completed","output":[]}}
+
+            """
+            return try willDeepResponsesHTTPResult(
+                url: url,
+                statusCode: 200,
+                body: body,
+                headers: ["Content-Type": "text/event-stream"]
+            )
+        }
+
+        let adapter = OpenAIResponsesAdapter(
+            configuration: configuration,
+            session: session,
+            someIMContext: SomeIMRequestContext(sessionID: "hosted-search")
+        )
+        try await adapter.streamChat(
+            messages: [AgentMessage(role: .user, content: "Search current news")],
+            tools: [webSearch]
+        ) { event in
+            await eventRecorder.record(event)
+        }
+
+        let requests = requestRecorder.requests
+        try #require(requests.count == 2)
+        #expect(requests[0].body.contains(#""type":"web_search""#))
+        #expect(!requests[0].body.contains(#""name":"web_search""#))
+        #expect(requests[1].body.contains(#""type":"function""#))
+        #expect(requests[1].body.contains(#""name":"web_search""#))
+        let references = await eventRecorder.references
+        #expect(references == [
+            AgentSourceReference(
+                title: "Example source",
+                url: "https://example.org/source",
+                toolName: "web_search"
+            )
+        ])
+    }
+
+    @Test
     func willDeepGatewayStateFailuresFallBackWithoutDuplicatingOutput() async throws {
         let stateProtocol = AgentNetworkSupport.willDeepResponsesStateProtocol
         let configuration = AgentConfiguration(
@@ -852,7 +951,42 @@ private final class WillDeepResponsesFallbackRecorder: @unchecked Sendable {
     }
 }
 
+private actor HostedSearchEventRecorder {
+    private(set) var references: [AgentSourceReference] = []
+
+    func record(_ event: AgentClientEvent) {
+        if case .sourceReferencesUpdated(let updated) = event {
+            references = updated
+        }
+    }
+}
+
 private final class WillDeepResponsesFallbackURLProtocol: URLProtocol {
+    static var handler: ((URLRequest) throws -> (HTTPURLResponse, Data))?
+
+    override class func canInit(with request: URLRequest) -> Bool { true }
+
+    override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
+
+    override func startLoading() {
+        guard let handler = Self.handler else {
+            client?.urlProtocol(self, didFailWithError: URLError(.badServerResponse))
+            return
+        }
+        do {
+            let (response, data) = try handler(request)
+            client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
+            client?.urlProtocol(self, didLoad: data)
+            client?.urlProtocolDidFinishLoading(self)
+        } catch {
+            client?.urlProtocol(self, didFailWithError: error)
+        }
+    }
+
+    override func stopLoading() {}
+}
+
+private final class HostedSearchURLProtocol: URLProtocol {
     static var handler: ((URLRequest) throws -> (HTTPURLResponse, Data))?
 
     override class func canInit(with request: URLRequest) -> Bool { true }
@@ -905,6 +1039,12 @@ private final class ManagedJudgeURLProtocol: URLProtocol {
 private func willDeepResponsesTestSession() -> URLSession {
     let configuration = URLSessionConfiguration.ephemeral
     configuration.protocolClasses = [WillDeepResponsesFallbackURLProtocol.self]
+    return URLSession(configuration: configuration)
+}
+
+private func hostedSearchTestSession() -> URLSession {
+    let configuration = URLSessionConfiguration.ephemeral
+    configuration.protocolClasses = [HostedSearchURLProtocol.self]
     return URLSession(configuration: configuration)
 }
 

@@ -397,7 +397,7 @@ struct AgentToolContext {
     }
 }
 
-nonisolated struct AgentSourceReference: Equatable, Sendable, Identifiable {
+nonisolated struct AgentSourceReference: Codable, Equatable, Sendable, Identifiable {
     var id: String { url }
     let title: String?
     let url: String

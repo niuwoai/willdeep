@@ -1,6 +1,6 @@
 # WillDeep Product Overview
 
-> Last updated: 2026-08-05 | Current version: v1.227.0-rc3
+> Last updated: 2026-08-05 | Current version: v1.227.0-rc4
 
 ## Positioning
 
@@ -12,6 +12,7 @@ WillDeep is configured for non-App-Store distribution without App Sandbox so it 
 
 ## 架构概览
 
+- **DeepSeek V4 Flash 服务端优先联网搜索（1.227.0-rc4）** —— DeepSeek V4 Flash 的 Responses 请求会把 `web_search` 作为 hosted tool 交给模型服务端执行，并把服务端 `url_citation` 持久化到助手消息和现有来源胶囊；若网关以 400/422 明确拒绝该 hosted tool，则同一轮自动回退到既有本地工具编排（Exa、Brave 或 some.im managed search）。其他模型仍维持原有执行策略。
 - **长思考模型 180 秒静默等待（1.227.0-rc3）** —— OpenAI Chat/Responses、Anthropic 与 Gemini 请求统一允许连续 180 秒没有响应字节，资源总时限仍为 600 秒；错误提示直接读取同一超时常量，避免客户端行为与提示文案再次漂移。muchtoken 网关默认上游总时限保持 600 秒。
 - **终端时间线与工作区 revision 低开销化（1.227.0-rc3）** —— 终端快捷记录面板仅让录制计时和当前播放进度按秒更新，静态 `LazyVStack`、`ViewThatFits` 与快捷项集合不再被外层时间线反复布局。Git 变更保护以轻量仓库身份获取替代 pre-lease 全量快照；未跟踪目录使用 Git 原生枚举和批量内容哈希，正式 CAS 仍执行完整 revision 校验并保留遍历回退。
 - **按风险与当前意图授权的外部文件写入（1.227.0-rc2）** —— WillDeep 为工作区外的精确目标文件提供独立 `write_file` 能力：主机先解析真实绝对路径，再按敏感性、文件是否已存在、内容类型/大小和当前用户消息中的精确路径做决策。Smart 模式可自动批准缺失的低风险文本文件；覆盖已有文件必须同时声明 `overwrite=true` 且由用户当前消息精确授权，否则进入显式审批；系统、凭据、Shell 启动项和持久化路径始终要求输入式确认。写入采用原子替换并对同一路径回读校验，外部 Shell 路径也会在启动前直接预检，不再先落入工作区沙箱后失败重试。

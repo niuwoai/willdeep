@@ -1726,6 +1726,13 @@ struct AgentConfiguration: Codable, Equatable {
     var usesStatelessDeepSeekResponses: Bool {
         providerID == AgentProviderPreset.deepSeekID && isDeepSeekV4FlashResponsesModel
     }
+
+    /// DeepSeek V4 Flash Responses routes can execute hosted web search in
+    /// the inference service. The adapter keeps the local function tool as a
+    /// compatibility fallback when an older relay explicitly rejects it.
+    var prefersHostedWebSearch: Bool {
+        isDeepSeekV4FlashResponsesModel
+    }
 }
 
 /// Transport-protocol family a preset speaks. `providerID` identifies
