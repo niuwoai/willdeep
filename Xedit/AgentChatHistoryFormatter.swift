@@ -815,18 +815,17 @@ enum AgentChatHistoryRenderer {
             return merged
         }
 
-        /// One-line outcome for the whole group: any failure/denial wins
-        /// (that's what the user most needs to see), otherwise ✓ if every
-        /// resolved call succeeded, else nil (nothing resolved → no badge).
+        /// One-line exceptional outcome for the whole group. Successful work
+        /// already reads naturally as “修改了 1 个文件”等动作摘要，追加“完成”
+        /// both repeats the same fact and appears inconsistently in legacy
+        /// turns that do not carry receipts. Failures and denials remain.
         var outcomeBadge: String? {
             guard !receipts.isEmpty else { return nil }
             let statuses = receipts.values
             let failed = statuses.filter { $0 == .failed }.count
             let denied = statuses.filter { $0 == .denied }.count
-            let succeeded = statuses.filter { $0 == .succeeded }.count
             if failed > 0 { return "✗ \(failed) 失败" }
             if denied > 0 { return "✗ \(denied) 已拒绝" }
-            if succeeded > 0 { return "✓ 完成" }
             return nil
         }
     }

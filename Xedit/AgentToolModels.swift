@@ -34,6 +34,18 @@ enum AgentToolCallStatus: String, Codable {
     case denied
 }
 
+/// Runtime-only marker for a manual approval that belongs to the current
+/// provider round but has not reached its serial execution slot yet. Queued
+/// calls stay non-interactive until the preceding tool has settled, so the
+/// user can never submit a decision into a future continuation.
+nonisolated enum AgentSerialToolApprovalQueue {
+    static let argumentKey = "_serial_approval_queued"
+
+    static func contains(_ call: AgentToolCall) -> Bool {
+        call.arguments[argumentKey]?.boolValue() == true
+    }
+}
+
 extension AgentToolCallStatus {
     var isBlockingForUserDecision: Bool {
         switch self {
@@ -535,8 +547,8 @@ enum AgentToolDecision {
 /// How a write-tier tool call ended up running. `.user` covers both the
 /// per-call Allow button and the legacy auto-allow path. `.alwaysAllowList`
 /// means the user previously pinned this command signature. `.staticAllowlist`
-/// means a static safety policy flagged it as low-risk, including validated
-/// public web fetches used for Plan research. `.llmJudge`
+/// means a static safety policy flagged it as low-risk, including bounded
+/// local metadata changes and validated public web fetches. `.llmJudge`
 /// means the LLM judge classifier approved it as non-malicious work. `.goalMode` means the
 /// session was in Goal mode, which auto-approves write-tier calls
 /// (danger-tier still gates on the user). `.workspaceAccess` means the

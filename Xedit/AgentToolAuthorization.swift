@@ -423,18 +423,20 @@ enum AgentSandboxPolicy {
                     prefixRule: nil
                 )
             }
-            if commandRequiresSensitiveDesktopConfirmation(command) {
-                return commandDecision(command: command, rootDirectory: rootDirectory)
-            }
+            // The visible terminal is not a sandbox boundary. Reuse the full
+            // command preflight so sensitive paths, credentials, destructive
+            // operations and external targets cannot be hidden behind an
+            // otherwise read-only executable such as `cat`.
+            return commandDecision(command: command, rootDirectory: rootDirectory)
+        case "rename_session":
             return AgentSandboxDecision(
                 mode: .workspaceWrite,
-                requiresUserApproval: true,
+                requiresUserApproval: false,
                 requiresTypedConfirmation: false,
-                reason: "This tool can run external code in the visible terminal.",
+                reason: "Renaming the current session is a bounded, reversible local metadata change.",
                 prefixRule: nil
             )
-        case "rename_session", "change_workspace",
-             "call_mcp_tool", "kill_job", "activate_expert", "add_memory", "create_user_skill", "create_user_skills", "update_user_skill", "suggest_mcp_server", "configure_mcp_server",
+        case "change_workspace", "call_mcp_tool", "kill_job", "activate_expert", "add_memory", "create_user_skill", "create_user_skills", "update_user_skill", "suggest_mcp_server", "configure_mcp_server",
              "terminal_send_control", "terminal_create_shortcut", "terminal_edit_shortcut":
             return AgentSandboxDecision(
                 mode: .workspaceWrite,
@@ -1279,103 +1281,16 @@ enum AgentSandboxPolicy {
     nonisolated private static func classifyNetworkReadOnly(head: String, tokens: [String]) -> CommandSafety {
         switch head {
         case "curl":
-            return isReadOnlyCurl(tokens) ? .alwaysSafe : .needsJudgment
+            // A public-looking GET can redirect or be route-overridden to a
+            // private endpoint. Keep risk metadata conservative and send it
+            // through Smart review rather than treating network text as a
+            // purely local read.
+            return .needsJudgment
         case "ssh":
             return classifySSHRemoteCommand(tokens)
         default:
             return .needsJudgment
         }
-    }
-
-    nonisolated private static func isReadOnlyCurl(_ tokens: [String]) -> Bool {
-        guard tokens.first?.lowercased() == "curl" else { return false }
-        var requestMethod = "GET"
-        var sawPublicURL = false
-        var index = 1
-        let safeNoArgumentLongFlags: Set<String> = [
-            "--fail", "--fail-with-body", "--silent", "--show-error", "--verbose",
-            "--location", "--location-trusted", "--head", "--include",
-            "--compressed", "--http1.1", "--http2", "--http3", "--ipv4", "--ipv6",
-            "--insecure", "--no-progress-meter"
-        ]
-        let safeArgumentLongFlags: Set<String> = [
-            "--connect-timeout", "--max-time", "--retry", "--retry-delay",
-            "--retry-max-time", "--user-agent", "--referer", "--url",
-            "--cacert", "--capath", "--resolve", "--connect-to"
-        ]
-        let unsafeLongFlagPrefixes = [
-            "--data", "--form", "--upload-file", "--output", "--remote-name",
-            "--dump-header", "--cookie-jar", "--config", "--netrc", "--user",
-            "--proxy-user", "--oauth2-bearer", "--aws-sigv4", "--request-target"
-        ]
-
-        while index < tokens.count {
-            let token = tokens[index]
-            let lower = token.lowercased()
-            if lower == "--" {
-                index += 1
-                continue
-            }
-            if lower == "-x" || lower == "--request" {
-                guard index + 1 < tokens.count else { return false }
-                requestMethod = tokens[index + 1].uppercased()
-                index += 2
-                continue
-            }
-            if lower.hasPrefix("-x") && lower.count > 2 {
-                requestMethod = String(token.dropFirst(2)).uppercased()
-                index += 1
-                continue
-            }
-            if lower.hasPrefix("--request=") {
-                requestMethod = String(token.dropFirst("--request=".count)).uppercased()
-                index += 1
-                continue
-            }
-            if unsafeLongFlagPrefixes.contains(where: { lower == $0 || lower.hasPrefix($0 + "=") }) {
-                return false
-            }
-            if safeNoArgumentLongFlags.contains(lower) {
-                if lower == "--head" { requestMethod = "HEAD" }
-                index += 1
-                continue
-            }
-            if safeArgumentLongFlags.contains(lower) {
-                guard index + 1 < tokens.count else { return false }
-                if lower == "--url" {
-                    sawPublicURL = sawPublicURL || AgentWebTools.validatedPublicURL(tokens[index + 1]) != nil
-                }
-                index += 2
-                continue
-            }
-            if let flagName = lower.split(separator: "=", maxSplits: 1).first,
-               safeArgumentLongFlags.contains(String(flagName)) {
-                if flagName == "--url" {
-                    let rawURL = String(lower.dropFirst("--url=".count))
-                    sawPublicURL = sawPublicURL || AgentWebTools.validatedPublicURL(rawURL) != nil
-                }
-                index += 1
-                continue
-            }
-            if lower.hasPrefix("-") {
-                if lower.contains("o") || lower.contains("O") ||
-                    lower.contains("d") || lower.contains("F") ||
-                    lower.contains("T") || lower.contains("u") {
-                    return false
-                }
-                let safeShortFlags = Set("slivkf")
-                guard lower.dropFirst().allSatisfy({ safeShortFlags.contains($0) }) else {
-                    return false
-                }
-                if lower.contains("I") { requestMethod = "HEAD" }
-                index += 1
-                continue
-            }
-            sawPublicURL = sawPublicURL || AgentWebTools.validatedPublicURL(token) != nil
-            index += 1
-        }
-
-        return sawPublicURL && (requestMethod == "GET" || requestMethod == "HEAD")
     }
 
     nonisolated private static func classifySSHRemoteCommand(_ tokens: [String]) -> CommandSafety {

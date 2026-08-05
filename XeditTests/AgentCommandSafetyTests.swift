@@ -206,7 +206,10 @@ extension WillDeepTests {
             rootDirectory: root
         )
 
-        #expect(piped.mode == .workspaceWrite)
+        // `cd` on the left of a pipe runs in a subshell; the sibling `cat`
+        // still resolves from the workspace root, so `../outside.txt` is an
+        // external path and must be preflight-escalated.
+        #expect(piped.mode == .escalated)
         #expect(piped.requiresUserApproval)
         #expect(sequenced.mode == .readOnly)
         #expect(!sequenced.requiresUserApproval)
@@ -239,7 +242,7 @@ extension WillDeepTests {
         // 关键字剥掉后负载照常受走查约束——危险负载一票否决。
         #expect(SafeCommand.classify(command: "for f in a b; do rm \"$f\"; done") == .alwaysDangerous)
         #expect(SafeCommand.classify(command: "if true; then sudo reboot; fi") == .alwaysDangerous)
-        #expect(SafeCommand.classify(command: "while true; do curl http://x.example; done") == .alwaysDangerous)
+        #expect(SafeCommand.classify(command: "while true; do curl http://x.example; done") == .needsJudgment)
 
         // 未知负载仍然降级到 needsJudgment，不会因为有 for 头就放行。
         #expect(SafeCommand.classify(command: "for f in a b; do mycustomtool \"$f\"; done") == .needsJudgment)
@@ -247,6 +250,41 @@ extension WillDeepTests {
         // whois 与 dig/host 同族，直接安全。
         #expect(SafeCommand.classify(command: "whois example.com") == .alwaysSafe)
         #expect(SafeCommand.classify(command: "whois example.com 2>&1 | grep -i status") == .alwaysSafe)
+    }
+
+    @Test("SafeCommand: kubectl inspection and terminal clear auto-approve")
+    func testSafeCommandKubectlInspection() {
+        #expect(SafeCommand.classify(command: "clear") == .alwaysSafe)
+        #expect(SafeCommand.classify(command: "kubectl get pods -A") == .alwaysSafe)
+        #expect(SafeCommand.classify(command: "kubectl -n tokenhub describe deploy api") == .alwaysSafe)
+        #expect(SafeCommand.classify(command: "kubectl --context prod logs deploy/api --tail=100") == .alwaysSafe)
+        #expect(SafeCommand.classify(command: "kubectl config current-context") == .alwaysSafe)
+        #expect(SafeCommand.classify(command: "kubectl auth can-i get pods") == .alwaysSafe)
+        #expect(SafeCommand.classify(command: "kubectl rollout status deploy/api") == .alwaysSafe)
+        #expect(SafeCommand.classify(command: "NS=tokenhub; kubectl -n $NS get job perf-30m; date -u +%H:%M:%S") == .alwaysSafe)
+
+        #expect(SafeCommand.classify(command: "kubectl apply -f deploy.yaml") == .needsJudgment)
+        #expect(SafeCommand.classify(command: "kubectl diff -k overlays/prod") == .needsJudgment)
+        #expect(SafeCommand.classify(command: "kubectl delete pod api-0") == .needsJudgment)
+        #expect(SafeCommand.classify(command: "kubectl exec deploy/api -- sh") == .needsJudgment)
+        #expect(SafeCommand.classify(command: "kubectl --token secret get pods") == .alwaysDangerous)
+        #expect(SafeCommand.classify(command: "kubectl config use-context prod") == .needsJudgment)
+        #expect(SafeCommand.classify(command: "kubectl rollout restart deploy/api") == .needsJudgment)
+        #expect(SafeCommand.classify(command: "kubectl get secrets -A -o yaml") == .alwaysDangerous)
+        #expect(SafeCommand.classify(command: "kubectl config view --raw") == .alwaysDangerous)
+    }
+
+    @Test("SafeCommand: ordinary network reads use the judge, credential and mutation shapes stay manual")
+    func testSafeCommandNetworkFetcherBoundaries() {
+        #expect(SafeCommand.classify(command: "curl https://example.com/status") == .needsJudgment)
+        #expect(SafeCommand.classify(command: "curl -fsSL https://example.com/status | jq .") == .needsJudgment)
+        #expect(SafeCommand.classify(command: "wget https://example.com/report.json") == .needsJudgment)
+
+        #expect(SafeCommand.classify(command: "curl -X POST https://example.com/deploy") == .alwaysDangerous)
+        #expect(SafeCommand.classify(command: "curl -H 'Authorization: Bearer value' https://example.com") == .alwaysDangerous)
+        #expect(SafeCommand.classify(command: "curl -o payload.txt https://example.com") == .alwaysDangerous)
+        #expect(SafeCommand.classify(command: "curl file:///etc/passwd") == .alwaysDangerous)
+        #expect(SafeCommand.classify(command: "wget --post-data=a=1 https://example.com") == .alwaysDangerous)
     }
 
     @Test("SafeCommand rejects find with -delete or -exec")
@@ -483,7 +521,10 @@ extension WillDeepTests {
         #expect(grepRisk == .read)
         #expect(writeAfterCDRisk == .write)
         #expect(unsafeCDRisk == .write)
-        #expect(redirectedDecision.mode == .workspaceWrite)
+        // `/tmp/out.patch` is an explicit external target. The preflight
+        // preserves that target by escalating before launch instead of
+        // pretending it is a workspace-contained write.
+        #expect(redirectedDecision.mode == .escalated)
         #expect(redirectedDecision.requiresTypedConfirmation == false)
         #expect(harmlessRedirectionDecision.mode == .readOnly)
         #expect(harmlessRedirectionDecision.requiresTypedConfirmation == false)
@@ -626,8 +667,8 @@ extension WillDeepTests {
         #expect(sshGitStatusRisk == .read)
         #expect(sshDangerRisk == .danger)
         #expect(sshInteractiveRisk == .write)
-        #expect(curlGetRisk == .read)
-        #expect(curlHeadRisk == .read)
+        #expect(curlGetRisk == .write)
+        #expect(curlHeadRisk == .write)
         #expect(curlPostRisk == .write)
         #expect(curlOutputRisk == .write)
         #expect(curlMetadataRisk == .write)

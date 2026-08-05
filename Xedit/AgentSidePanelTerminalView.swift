@@ -288,6 +288,7 @@ private struct AgentSidePanelTerminalContentView: View {
             .disabled(
                 (!isRunning && controller.isRecording) ||
                     controller.activeTab?.isRunning != true ||
+                    (!isRunning && controller.activeTab?.inputState == .foregroundTask) ||
                     (!isRunning && controller.activeTab?.isPlayingShortcut == true) ||
                     shortcut.hasPendingProtectedInput
             )
@@ -708,9 +709,32 @@ private struct AgentSidePanelTerminalContentView: View {
     }
 
     private func sessionStatusLabel(_ tab: AgentTerminalTab) -> some View {
-        let color = tab.isRunning ? interfacePalette.accent : interfacePalette.secondaryText
+        let label: String
+        let color: Color
+        switch tab.inputState {
+        case .starting:
+            label = L10n.AgentTerminal.sessionStarting
+            color = interfacePalette.secondaryText
+        case .shellReady:
+            label = tab.kind.isSSH
+                ? L10n.AgentTerminal.sessionInteractiveProgram
+                : L10n.AgentTerminal.sessionShellReady
+            color = interfacePalette.accent
+        case .foregroundTask:
+            label = L10n.AgentTerminal.sessionForegroundTask
+            color = .orange
+        case .interactiveProgram:
+            label = L10n.AgentTerminal.sessionInteractiveProgram
+            color = interfacePalette.accent
+        case .unknown:
+            label = tab.isRunning ? L10n.AgentTerminal.sessionRunning : L10n.AgentTerminal.sessionExited
+            color = tab.isRunning ? interfacePalette.accent : interfacePalette.secondaryText
+        case .exited:
+            label = L10n.AgentTerminal.sessionExited
+            color = interfacePalette.secondaryText
+        }
         return HStack(spacing: 4) {
-            Text(tab.isRunning ? L10n.AgentTerminal.sessionRunning : L10n.AgentTerminal.sessionExited)
+            Text(label)
             if tab.isRunning {
                 Image(systemName: "chevron.down")
                     .font(.system(size: 7, weight: .bold))
@@ -1030,7 +1054,7 @@ struct AgentHostIdentityPopover: View {
             }
             .buttonStyle(.plain)
             .focusable(false)
-            .disabled(!tab.isRunning || tab.isExtractingHostIdentity || tab.isAutomationBusy)
+            .disabled(!tab.canExtractHostIdentity)
         }
         .padding(14)
         .frame(width: SessionIdentityMetrics.popoverWidth)

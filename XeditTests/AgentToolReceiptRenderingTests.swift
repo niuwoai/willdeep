@@ -2,11 +2,9 @@
 //  AgentToolReceiptRenderingTests.swift
 //  WillDeepTests
 //
-//  Covers the "intent line → ✓/✗ outcome receipt" rendering added so a
-//  settled assistant intent ("让我运行下一个生成器") shows whether the
-//  tool it triggered actually succeeded, instead of dangling with no
-//  result. Two layers: the group-level `outcomeBadge` verdict logic, and
-//  the end-to-end formatter render that bakes it into the TextKit history.
+//  Covers exceptional outcome receipts. Successful work keeps its concrete
+//  action summary (for example “已运行 1 条命令”) without an inconsistent
+//  “完成” suffix; failures and denials remain explicit.
 //
 
 import AppKit
@@ -32,9 +30,9 @@ struct AgentToolReceiptRenderingTests {
     }
 
     @Test
-    func allSucceededYieldsCheckmark() {
+    func allSucceededNeedsNoExtraBadge() {
         let group = inlineGroup(["a": .succeeded, "b": .succeeded])
-        #expect(group.outcomeBadge == "✓ 完成")
+        #expect(group.outcomeBadge == nil)
     }
 
     @Test
@@ -74,7 +72,7 @@ struct AgentToolReceiptRenderingTests {
     // MARK: - end-to-end render bakes the receipt into history
 
     @Test
-    func settledIntentLineRendersSuccessReceipt() {
+    func settledIntentLineKeepsActionSummaryWithoutCompletionSuffix() {
         let call = AgentMessageToolCall(
             externalID: "call_1",
             toolName: "run_command",
@@ -90,7 +88,8 @@ struct AgentToolReceiptRenderingTests {
 
         let rendered = AgentChatHistoryRenderer.render(messages: [intent], isDark: false)
         #expect(rendered.string.contains("让我运行下一个生成器"))
-        #expect(rendered.string.contains("✓ 完成"))
+        #expect(rendered.string.contains("已运行 1 条命令"))
+        #expect(!rendered.string.contains("✓ 完成"))
     }
 
     @Test
@@ -128,8 +127,8 @@ struct AgentToolReceiptRenderingTests {
 
     @Test
     func receiptChangeBustsRenderCache() {
-        // A call resolving running → succeeded must invalidate the render
-        // cache, otherwise the ✓ badge is skipped on the second render.
+        // A call resolving running → failed must invalidate the render
+        // cache, otherwise the exceptional receipt is skipped.
         let call = AgentMessageToolCall(
             externalID: "call_c",
             toolName: "run_command",
@@ -144,10 +143,10 @@ struct AgentToolReceiptRenderingTests {
         let first = AgentChatHistoryRenderer.render(messages: [base], isDark: false)
 
         var resolved = base
-        resolved.settledToolReceipts = ["call_c": .succeeded]
+        resolved.settledToolReceipts = ["call_c": .failed]
         let second = AgentChatHistoryRenderer.render(messages: [resolved], isDark: false)
 
-        #expect(!first.string.contains("✓ 完成"))
-        #expect(second.string.contains("✓ 完成"))
+        #expect(!first.string.contains("✗ 1 失败"))
+        #expect(second.string.contains("✗ 1 失败"))
     }
 }

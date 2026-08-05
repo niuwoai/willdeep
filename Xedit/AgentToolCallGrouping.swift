@@ -143,10 +143,12 @@ struct AgentToolActivityRowPresentation: Identifiable, Equatable {
     let detail: String?
     let systemImage: String
     let status: AgentToolCallStatus
+    let isQueuedForApproval: Bool
 
     init(call: AgentToolCall) {
         id = call.id
         status = call.status
+        isQueuedForApproval = AgentSerialToolApprovalQueue.contains(call)
         systemImage = Self.systemImage(for: call)
         title = Self.statusTitle(for: call)
         detail = Self.detail(for: call)
@@ -154,6 +156,9 @@ struct AgentToolActivityRowPresentation: Identifiable, Equatable {
 
     private static func statusTitle(for call: AgentToolCall) -> String {
         let operation = operationName(for: call)
+        if AgentSerialToolApprovalQueue.contains(call) {
+            return "排队等待确认：\(operation)"
+        }
         switch call.status {
         case .running:
             return "正在\(operation)"

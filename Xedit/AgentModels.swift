@@ -845,7 +845,7 @@ nonisolated enum AgentApprovalMode: String, Codable, CaseIterable, Identifiable 
     var systemPromptDescription: String {
         switch self {
         case .requestEveryTime:
-            return "Strict mode: ask before every write or external action. Read-only tools may run automatically. Danger-tier tools still require typed confirmation."
+            return "Strict mode: ask before security-relevant writes or external actions. Read-only tools and bounded harmless metadata changes such as the current session title may run automatically. Danger-tier tools still require typed confirmation."
         case .smart:
             return "Use WillDeep's smart review policy: read-only tools and workspace-scoped writes run automatically; safe external actions may be AI-approved; uncertain or risky external actions ask the user."
         case .workspaceAccess:
@@ -856,7 +856,7 @@ nonisolated enum AgentApprovalMode: String, Codable, CaseIterable, Identifiable 
     var conciseSystemPromptDescription: String {
         switch self {
         case .requestEveryTime:
-            return "Strict: reads auto-run; every write or external action asks; danger-tier commands require typed confirmation."
+            return "Strict: reads and bounded harmless title metadata auto-run; security-relevant writes or external actions ask; danger-tier commands require typed confirmation."
         case .smart:
             return "Reads and workspace-scoped writes auto-run; safe external actions may pass intelligent review; uncertain external actions ask; danger-tier commands require typed confirmation."
         case .workspaceAccess:

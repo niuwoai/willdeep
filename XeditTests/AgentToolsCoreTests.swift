@@ -55,8 +55,8 @@ struct AgentToolsCoreTests {
         #expect(AgentToolCallStatus.denied.rawValue == "denied")
     }
 
-    @Test("session mutation tools are write-tier and invoke host sinks")
-    func sessionMutationToolsUseApprovedHostActions() async throws {
+    @Test("session rename auto-runs as bounded metadata while workspace changes stay gated")
+    func sessionMutationToolsKeepRenameAutomaticAndWorkspaceGated() async throws {
         #expect(AgentToolRegistry.descriptor(for: "rename_session")?.risk == .write)
         #expect(AgentToolRegistry.descriptor(for: "change_workspace")?.risk == .write)
         let normalToolNames = Set(AgentToolRegistry.tools(activeExperts: []).map(\.name))
@@ -97,14 +97,43 @@ struct AgentToolsCoreTests {
         #expect(workspaceResult.payload.contains("Stop"))
 
         let appState = AppState()
-        let renameAutoApproval = await appState.autoApprovalSource(
+        let normalRenameAutoApproval = await appState.autoApprovalSource(
             toolName: "rename_session",
-            arguments: [:],
+            arguments: ["title": .string("New title")],
+            risk: .write,
+            rootDirectory: nil,
+            interactionMode: .normal,
+            approvalMode: .smart
+        )
+        #expect(normalRenameAutoApproval == .staticAllowlist)
+
+        let strictRenameAutoApproval = await appState.autoApprovalSource(
+            toolName: "rename_session",
+            arguments: ["title": .string("New title")],
+            risk: .write,
+            rootDirectory: nil,
+            interactionMode: .normal,
+            approvalMode: .requestEveryTime
+        )
+        #expect(strictRenameAutoApproval == .staticAllowlist)
+
+        let goalRenameAutoApproval = await appState.autoApprovalSource(
+            toolName: "rename_session",
+            arguments: ["title": .string("New title")],
             risk: .write,
             rootDirectory: nil,
             interactionMode: .goal
         )
-        #expect(renameAutoApproval == .goalMode)
+        #expect(goalRenameAutoApproval == .goalMode)
+
+        let renameSandboxDecision = AgentSandboxPolicy.decision(
+            toolName: "rename_session",
+            arguments: ["title": .string("New title")],
+            rootDirectory: nil
+        )
+        #expect(renameSandboxDecision.mode == .workspaceWrite)
+        #expect(!renameSandboxDecision.requiresUserApproval)
+        #expect(!renameSandboxDecision.requiresTypedConfirmation)
 
         let workspaceAutoApproval = await appState.autoApprovalSource(
             toolName: "change_workspace",
@@ -114,6 +143,28 @@ struct AgentToolsCoreTests {
             interactionMode: .goal
         )
         #expect(workspaceAutoApproval == nil)
+
+        let workspaceSandboxDecision = AgentSandboxPolicy.decision(
+            toolName: "change_workspace",
+            arguments: ["path": .string("/tmp/example")],
+            rootDirectory: nil
+        )
+        #expect(workspaceSandboxDecision.requiresUserApproval)
+
+        await #expect(throws: AgentToolError.self) {
+            try await AgentToolRunner.run(
+                name: "rename_session",
+                arguments: ["title": .string(" \n\t ")],
+                context: context
+            )
+        }
+        await #expect(throws: AgentToolError.self) {
+            try await AgentToolRunner.run(
+                name: "rename_session",
+                arguments: ["title": .string(String(repeating: "x", count: 121))],
+                context: context
+            )
+        }
     }
 
     @Test
@@ -982,6 +1033,35 @@ struct AgentToolsCoreTests {
         }
     }
 
+    @Test("visible terminal commands keep full path and credential preflight")
+    func terminalCommandPolicyDoesNotBypassSensitiveChecks() {
+        let root = URL(fileURLWithPath: "/tmp/willdeep-workspace")
+        let secretRead = AgentSandboxPolicy.decision(
+            toolName: "terminal_send_command",
+            arguments: ["command": .string("cat ~/.ssh/id_rsa")],
+            rootDirectory: root
+        )
+        #expect(secretRead.mode == .escalated)
+        #expect(secretRead.requiresTypedConfirmation)
+
+        let externalRead = AgentSandboxPolicy.decision(
+            toolName: "terminal_send_command",
+            arguments: ["command": .string("cat /var/log/system.log")],
+            rootDirectory: root
+        )
+        #expect(externalRead.mode == .escalated)
+        #expect(externalRead.requiresUserApproval)
+        #expect(!externalRead.requiresTypedConfirmation)
+
+        let workspaceRead = AgentSandboxPolicy.decision(
+            toolName: "terminal_send_command",
+            arguments: ["command": .string("git status --short")],
+            rootDirectory: root
+        )
+        #expect(workspaceRead.mode == .readOnly)
+        #expect(!workspaceRead.requiresTypedConfirmation)
+    }
+
     @Test
     func sandboxPolicyAutoApprovesShellWrappedEchoSentinel() {
         let root = URL(fileURLWithPath: "/tmp/willdeep-workspace")
@@ -1241,19 +1321,33 @@ struct AgentToolsCoreTests {
 
     @Test
     func alwaysAllowSuggestionOffersReusableShellCategories() {
+        let kubernetesRead = AgentToolAuthorization.suggestedPersistentSignature(
+            toolName: "terminal_send_command",
+            arguments: [
+                "command": .string("kubectl -n tokenhub get pods && kubectl -n tokenhub rollout status deployment/tokenhub")
+            ]
+        )
+        #expect(kubernetesRead == "shell_category:kubernetes_read")
+
         let kubernetesRollout = AgentToolAuthorization.suggestedPersistentSignature(
             toolName: "terminal_send_command",
             arguments: [
                 "command": .string("kubectl -n tokenhub set image deployment/tokenhub tokenhub=harbor.example/tokenhub:1.2.3 && kubectl -n tokenhub rollout status deployment/tokenhub")
             ]
         )
-        #expect(kubernetesRollout == "shell_category:kubernetes")
+        #expect(kubernetesRollout == nil)
 
         let curlGet = AgentToolAuthorization.suggestedPersistentSignature(
             toolName: "run_command",
+            arguments: ["command": .string("curl -fsS https://example.com/status")]
+        )
+        #expect(curlGet == "shell_category:http_get:example.com")
+
+        let redirectingCurl = AgentToolAuthorization.suggestedPersistentSignature(
+            toolName: "run_command",
             arguments: ["command": .string("curl -L https://example.com/status")]
         )
-        #expect(curlGet == "shell_category:http_get")
+        #expect(redirectingCurl == nil)
 
         let readOnlyInspection = AgentToolAuthorization.suggestedPersistentSignature(
             toolName: "terminal_send_command",
@@ -1274,8 +1368,15 @@ struct AgentToolsCoreTests {
             toolName: "terminal_send_command",
             arguments: ["command": .string("kubectl get pods -n tokenhub")]
         )
-        #expect(kubernetesSignatures.contains("shell_category:kubernetes"))
+        #expect(kubernetesSignatures.contains("shell_category:kubernetes_read"))
         #expect(kubernetesSignatures.contains("terminal_command:kubectl get pods -n tokenhub"))
+
+        let kubernetesMutationSignatures = AgentToolAuthorization.matchingSignatures(
+            toolName: "terminal_send_command",
+            arguments: ["command": .string("kubectl delete pod api-0")]
+        )
+        #expect(!kubernetesMutationSignatures.contains("shell_category:kubernetes_read"))
+        #expect(!kubernetesMutationSignatures.contains("shell_category:kubernetes"))
 
         let exactSignatures = AgentToolAuthorization.matchingSignatures(
             toolName: "terminal_send_command",
@@ -1842,13 +1943,17 @@ struct AgentToolsCoreTests {
     }
 
     @Test
-    func judgeVerdictCacheKeyGroupsByCommandFamily() {
+    func judgeVerdictCacheKeyIsExactPerToolAndArguments() {
         #expect(
             AgentToolAuthorization.judgeVerdictCacheKey(toolName: "run_command", command: "git commit -m 'a'")
-                == AgentToolAuthorization.judgeVerdictCacheKey(toolName: "run_command", command: "git commit --amend --no-edit")
+                == AgentToolAuthorization.judgeVerdictCacheKey(toolName: "run_command", command: "  git commit -m 'a'\n")
         )
         #expect(
             AgentToolAuthorization.judgeVerdictCacheKey(toolName: "run_command", command: "git commit -m 'a'")
+                != AgentToolAuthorization.judgeVerdictCacheKey(toolName: "run_command", command: "git commit --amend --no-edit")
+        )
+        #expect(
+            AgentToolAuthorization.judgeVerdictCacheKey(toolName: "run_command", command: "git push origin feature")
                 != AgentToolAuthorization.judgeVerdictCacheKey(toolName: "run_command", command: "git push origin main")
         )
         // Tool name is part of the key: a run_command YES must not leak to

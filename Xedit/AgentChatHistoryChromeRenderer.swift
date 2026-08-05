@@ -400,9 +400,9 @@ extension AgentChatHistoryRenderer {
                     .foregroundColor: secondaryColor,
                 ]
             ))
-            // Outcome receipt (✓ 完成 / ✗ N 失败) rides at the tail of the
-            // last activity row so every settled intent line ends with a
-            // clear "did it succeed" verdict instead of a dangling "我要做 X".
+            // Exceptional outcome receipt (✗ N 失败 / 已拒绝) rides at the
+            // tail of the last activity row. Success needs no extra “完成”:
+            // the action summary itself already says what was accomplished.
             // Keep the badge in the same secondary tone as the activity line:
             // command failures during a turn are routine (Agent retries), so a
             // red alarm would overstate the severity.

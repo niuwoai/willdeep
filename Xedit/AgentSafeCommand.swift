@@ -123,6 +123,8 @@ nonisolated enum SafeCommand {
         "printenv", "uname", "whoami", "id", "date", "uptime",
         "sw_vers", "arch", "hostname", "getconf", "locale",
         "groups", "logname", "man",
+        // terminal display reset; changes only the current terminal screen.
+        "clear",
         // process / memory snapshot (no signals)
         "ps", "top", "lsof", "vm_stat",
         // Spotlight metadata read (not mdutil — that mutates indexing)
@@ -158,7 +160,8 @@ nonisolated enum SafeCommand {
     /// Commands that COULD be safe but whose argument shape matters.
     /// `git`, `find`, `xargs`, etc.: dispatched to a per-tool checker.
     static let conditionalFirstTokens: Set<String> = [
-        "git", "find", "xargs", "ssh", "scp", "rsync",
+        "git", "find", "xargs", "ssh", "scp", "rsync", "kubectl",
+        "curl", "wget",
         "npm", "yarn", "pnpm", "cargo", "swift", "make", "python", "python3",
         "node", "ruby", "go", "rake",
         "sh", "bash", "zsh", "/bin/sh", "/bin/bash", "/bin/zsh",
@@ -194,9 +197,6 @@ nonisolated enum SafeCommand {
         "kill", "killall", "pkill",
         // file move (destructive)
         "mv",
-        // arbitrary network fetch (could exfiltrate; the policy was to
-        // require approval, not auto-run)
-        "curl", "wget",
         // disk / volume management
         "diskutil", "fdisk", "format",
         // launchd manipulation
@@ -312,6 +312,10 @@ nonisolated enum SafeCommand {
             return classifyFind(tokens: tokens)
         case "go":
             return classifyGo(tokens: tokens)
+        case "kubectl":
+            return classifyKubectl(tokens: tokens)
+        case "curl", "wget":
+            return classifyNetworkFetcher(firstToken: firstToken, tokens: tokens)
         case "sh", "bash", "zsh", "/bin/sh", "/bin/bash", "/bin/zsh":
             return classifyShellWrapper(tokens: tokens)
         case "env", "/usr/bin/env":
@@ -772,6 +776,196 @@ nonisolated enum SafeCommand {
             }
         }
         return .alwaysSafe
+    }
+
+    /// Kubernetes inspection commands are among the most frequent visible-
+    /// terminal operations. Keeping the read-only verbs deterministic avoids
+    /// a network judge round trip (and a manual approval when that judge is
+    /// unavailable), while mutations such as apply/delete/exec/port-forward
+    /// still fall through to intelligent review.
+    private static func classifyKubectl(tokens: [String]) -> CommandSafety {
+        guard tokens.count >= 2 else { return .alwaysSafe }
+
+        let lowered = tokens.map { $0.lowercased() }
+        let credentialFlags: Set<String> = [
+            "--token", "--client-key", "--client-certificate",
+            "--certificate-authority", "--password", "--username"
+        ]
+        if lowered.dropFirst().contains(where: { argument in
+            credentialFlags.contains(argument)
+                || credentialFlags.contains(where: { argument.hasPrefix($0 + "=") })
+        }) {
+            return .alwaysDangerous
+        }
+
+        guard let commandIndex = kubectlCommandIndex(tokens: lowered) else {
+            return .alwaysSafe
+        }
+        let command = lowered[commandIndex]
+        let sensitiveReadMarkers: Set<String> = ["secret", "secrets"]
+        if lowered.dropFirst(commandIndex + 1).contains(where: { argument in
+            sensitiveReadMarkers.contains(argument)
+                || sensitiveReadMarkers.contains(where: {
+                    argument.contains("/\($0)") || argument.hasPrefix("\($0)/")
+                })
+        }) {
+            return .alwaysDangerous
+        }
+        if command == "config",
+           lowered.dropFirst(commandIndex + 1).contains(where: {
+               $0 == "--raw" || $0.hasPrefix("--raw=")
+           }) {
+            return .alwaysDangerous
+        }
+        let readOnlyCommands: Set<String> = [
+            "api-resources", "api-versions", "cluster-info", "describe",
+            "events", "explain", "get", "help", "logs", "options",
+            "top", "version", "wait"
+        ]
+        if readOnlyCommands.contains(command) {
+            return .alwaysSafe
+        }
+
+        let arguments = Array(lowered.dropFirst(commandIndex + 1))
+        switch command {
+        case "auth":
+            return ["can-i", "whoami"].contains(arguments.first ?? "")
+                ? .alwaysSafe
+                : .needsJudgment
+        case "config":
+            return ["current-context", "get-contexts", "view"].contains(arguments.first ?? "")
+                ? .alwaysSafe
+                : .needsJudgment
+        case "rollout":
+            return ["history", "status"].contains(arguments.first ?? "")
+                ? .alwaysSafe
+                : .needsJudgment
+        default:
+            return .needsJudgment
+        }
+    }
+
+    /// Network fetchers never receive a static allow: even a GET can follow a
+    /// redirect into a private service or disclose data through its URL. A
+    /// plain read therefore goes to the short-lived AI judge, while request
+    /// bodies, credentials, explicit local output and transport overrides
+    /// stay behind a human decision.
+    private static func classifyNetworkFetcher(
+        firstToken: String,
+        tokens: [String]
+    ) -> CommandSafety {
+        let arguments = Array(tokens.dropFirst())
+        let lowered = arguments.map { $0.lowercased() }
+        let unsafeURLSchemes = ["file:", "data:", "dict:", "gopher:", "ldap:", "ldaps:", "smb:"]
+        if arguments.contains(where: { argument in
+            unsafeURLSchemes.contains(where: argument.lowercased().hasPrefix)
+                || URL(string: argument).map { $0.user != nil || $0.password != nil } == true
+        }) {
+            return .alwaysDangerous
+        }
+
+        if firstToken == "curl" {
+            let dangerousLongFlags: Set<String> = [
+                "--data", "--data-raw", "--data-binary", "--data-ascii",
+                "--data-urlencode", "--form", "--form-string", "--json",
+                "--upload-file", "--header", "--user",
+                "--cookie", "--cookie-jar", "--config",
+                "--netrc", "--netrc-file", "--proxy-user", "--oauth2-bearer",
+                "--aws-sigv4", "--cert", "--key", "--pass", "--output",
+                "--remote-name", "--remote-header-name", "--dump-header",
+                "--resolve", "--connect-to", "--unix-socket", "--proxy",
+                "--location-trusted"
+            ]
+            let dangerousShortFlags = Set("dFTHubcKoOx")
+            if arguments.contains(where: { argument in
+                let lower = argument.lowercased()
+                if argument.hasPrefix("--") {
+                    return dangerousLongFlags.contains(lower)
+                        || dangerousLongFlags.contains(where: { lower.hasPrefix($0 + "=") })
+                }
+                guard argument.hasPrefix("-"), argument.count > 1 else { return false }
+                return argument.dropFirst().contains(where: dangerousShortFlags.contains)
+            }) {
+                return .alwaysDangerous
+            }
+            if let method = explicitHTTPMethod(in: arguments),
+               method != "GET", method != "HEAD" {
+                return .alwaysDangerous
+            }
+            return .needsJudgment
+        }
+
+        let dangerousWgetFlags: Set<String> = [
+            "--post-data", "--post-file", "--body-data", "--body-file",
+            "--header", "--user", "--password", "--http-user", "--http-password",
+            "--proxy-user", "--proxy-password", "--load-cookies", "--save-cookies",
+            "--certificate", "--private-key", "--config"
+        ]
+        if lowered.contains(where: { argument in
+            dangerousWgetFlags.contains(argument)
+                || dangerousWgetFlags.contains(where: { argument.hasPrefix($0 + "=") })
+        }) {
+            return .alwaysDangerous
+        }
+        if let method = explicitWgetMethod(in: arguments),
+           method != "GET", method != "HEAD" {
+            return .alwaysDangerous
+        }
+        return .needsJudgment
+    }
+
+    private static func explicitHTTPMethod(in arguments: [String]) -> String? {
+        for (index, argument) in arguments.enumerated() {
+            let lower = argument.lowercased()
+            if argument == "-X" || lower == "--request" {
+                guard index + 1 < arguments.count else { return "" }
+                return arguments[index + 1].uppercased()
+            }
+            if argument.hasPrefix("-X"), argument.count > 2 {
+                return String(argument.dropFirst(2)).uppercased()
+            }
+            if lower.hasPrefix("--request=") {
+                return String(argument.dropFirst("--request=".count)).uppercased()
+            }
+        }
+        return nil
+    }
+
+    private static func explicitWgetMethod(in arguments: [String]) -> String? {
+        for (index, argument) in arguments.enumerated() {
+            let lower = argument.lowercased()
+            if lower == "--method" {
+                guard index + 1 < arguments.count else { return "" }
+                return arguments[index + 1].uppercased()
+            }
+            if lower.hasPrefix("--method=") {
+                return String(argument.dropFirst("--method=".count)).uppercased()
+            }
+        }
+        return nil
+    }
+
+    private static func kubectlCommandIndex(tokens: [String]) -> Int? {
+        let optionsWithSeparateValue: Set<String> = [
+            "-n", "-s", "--as", "--as-group", "--cache-dir", "--cluster",
+            "--context", "--kubeconfig", "--namespace", "--profile",
+            "--profile-output", "--request-timeout", "--server", "--user"
+        ]
+        var index = 1
+        while index < tokens.count {
+            let token = tokens[index]
+            if token == "--" {
+                index += 1
+                break
+            }
+            guard token.hasPrefix("-") else { return index }
+            if optionsWithSeparateValue.contains(token) {
+                index += 2
+            } else {
+                index += 1
+            }
+        }
+        return index < tokens.count ? index : nil
     }
 
     /// Minimal POSIX-ish tokenizer: splits on whitespace outside quotes.
