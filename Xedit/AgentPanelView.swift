@@ -250,11 +250,15 @@ struct AgentPanelView: View {
     }
 
     private func isEmptyThinkingPlaceholder(_ message: AgentMessage) -> Bool {
-        message.role == .assistant && message.content.isEmpty && message.toolCalls.isEmpty
+        message.role == .assistant
+            && !message.hasRenderableTextContent
+            && message.toolCalls.isEmpty
     }
 
     private func shouldShowMessageBubble(_ message: AgentMessage) -> Bool {
-        !(message.role == .assistant && message.content.isEmpty && !message.toolCalls.isEmpty)
+        !(message.role == .assistant
+            && !message.hasRenderableTextContent
+            && !message.toolCalls.isEmpty)
     }
 
     private func toolGroupScrollID(for messageID: AgentMessage.ID) -> String {

@@ -1,6 +1,6 @@
 # WillDeep Product Overview
 
-> Last updated: 2026-08-05 | Current version: v1.228.0-rc2
+> Last updated: 2026-08-05 | Current version: v1.228.0-rc3
 
 ## Positioning
 
@@ -12,6 +12,7 @@ WillDeep is configured for non-App-Store distribution without App Sandbox so it 
 
 ## 架构概览
 
+- **纯空白工具轮次不再显示空壳（1.228.0-rc3）** —— OpenAI 兼容网关若在工具调用前只返回换行或空格，流结束时会把该内容规范化为空串；主聊天、紧凑面板和历史 TextKit 渲染也统一按“是否含非空白字符”识别工具专用轮次。旧会话中的纯换行消息会直接折入工具活动摘要，不再单独出现只有“已处理”和 Token 页脚的空白轮次。
 - **会话列表移除计划模式残留徽标（1.228.0-rc2）** —— 普通会话即使保留过渡期 `currentPlan` 数据，也不再显示已取消的计划模式 `checklist` 图标；Goal 会话的靶心提示继续作为有效模式标识。
 - **智能审核成为单一授权策略（1.228.0-rc1）** —— 会话选择“智能审核”后，终端命令、工作区命令和标准可信 MCP 写操作会直接进入静态风险分类与一次性 Flash AI 安全裁判，不再受第二个全局开关阻断；严格模式仍逐次询问，Workspace Access 仍只自动批准工作区边界内操作，破坏性命令、ZMODEM 本地路径选择、AI 拒绝或不可用继续交给人工确认。
 - **上下文 Token 估算退出 SwiftUI 热路径（1.227.0-rc5）** —— 状态栏上下文圆环与压缩按钮仅读取已发布的估算快照；消息、模型或工作区上下文变化后统一尾随防抖，过期任务会被取消，完整 Unicode 扫描转入 utility 后台任务，避免流式输出期间反复在主线程重建并扫描整份请求。

@@ -343,7 +343,7 @@ enum AgentChatHistoryRenderer {
         // layout work bounded. The reader window shows the full body.
         let toolBodyLimit = 8_000
         let latestAssistantMessageID = messages.reversed().first {
-            $0.role == .assistant && (!$0.content.isEmpty || !$0.images.isEmpty)
+            $0.role == .assistant && ($0.hasRenderableTextContent || !$0.images.isEmpty)
         }?.id
         let latestAssistantTerminalSummaryMessageID = messages.reversed().first {
             $0.role == .assistant && (!$0.content.isEmpty || !$0.toolCalls.isEmpty)
@@ -379,7 +379,10 @@ enum AgentChatHistoryRenderer {
             }
             // Skip empty assistant placeholders (the loop emits them
             // while a turn is waiting on tool calls).
-            if message.role == .assistant && message.content.isEmpty && message.images.isEmpty && message.toolCalls.isEmpty {
+            if message.role == .assistant
+                && !message.hasRenderableTextContent
+                && message.images.isEmpty
+                && message.toolCalls.isEmpty {
                 index += 1
                 continue
             }
@@ -433,7 +436,9 @@ enum AgentChatHistoryRenderer {
             }
 
             // Role header.
-            let isToolCallOnly = message.role == .assistant && message.content.isEmpty && !message.toolCalls.isEmpty
+            let isToolCallOnly = message.role == .assistant
+                && !message.hasRenderableTextContent
+                && !message.toolCalls.isEmpty
             let turnPresentation = assistantTurnPresentations[message.id]
             let isActiveAssistantTurn = message.role == .assistant
                 && isAssistantTurnActive
@@ -862,7 +867,9 @@ enum AgentChatHistoryRenderer {
     }
 
     private static func isToolCallOnly(_ message: AgentMessage) -> Bool {
-        message.role == .assistant && message.content.isEmpty && !message.toolCalls.isEmpty
+        message.role == .assistant
+            && !message.hasRenderableTextContent
+            && !message.toolCalls.isEmpty
     }
 
     private static func visibleToolCalls(

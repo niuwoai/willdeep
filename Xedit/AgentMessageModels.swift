@@ -666,6 +666,16 @@ nonisolated struct AgentMessage: Identifiable, Codable, Equatable {
 }
 
 extension AgentMessage {
+    /// Whether `content` contains at least one user-visible scalar.
+    ///
+    /// OpenAI-compatible providers may stream newlines before a tool call and
+    /// persist them as the assistant content. Treating that payload with
+    /// `String.isEmpty` makes a tool-only round look like a prose reply and
+    /// leaves an empty status/footer shell in the transcript.
+    nonisolated var hasRenderableTextContent: Bool {
+        content.unicodeScalars.contains { !$0.properties.isWhitespace }
+    }
+
     nonisolated var isLocalTranscriptEvent: Bool {
         transcriptEvent != nil
     }
