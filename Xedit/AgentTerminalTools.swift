@@ -115,6 +115,7 @@ enum AgentTerminalTools {
                 return RedactedTerminalSnapshot(
                     tabID: raw.tabID,
                     isRunning: raw.isRunning,
+                    inputState: raw.inputState,
                     isZModemTransferActive: raw.isZModemTransferActive,
                     runtimeName: raw.runtimeName,
                     runtimeTarget: raw.runtimeTarget,
@@ -158,9 +159,13 @@ enum AgentTerminalTools {
             : snapshot.cursorLine
         let payload = """
         \(statusLine)
+        Input state: \(snapshot.inputState.rawValue)
         ZMODEM transfer: \(zmodemState)
 
         Terminal context rules:
+        - shell_ready means the shell line editor owns input and can accept a command.
+        - foreground_task means a quiet canonical foreground program owns this PTY. Do not send a command into it; wait, interrupt it with Ctrl-C, or use another tab.
+        - interactive_program means an interactive child such as SSH, vim, tmux, or a REPL owns input. Inspect the cursor and host before sending keys.
         - The cursor line below is the best current prompt/input indicator.
         - Lines above the cursor marker are prior visible output/history; they may describe a previous local shell before SSH or before directory changes.
         - If Runtime target is "local", the tab may still contain a nested manual SSH session; verify host/cwd from the cursor line or a command such as hostname/pwd before making machine-specific claims.
@@ -178,7 +183,7 @@ enum AgentTerminalTools {
         \(markedScreen)
         """
         let summary = snapshot.isRunning
-            ? "terminal connected: \(snapshot.runtimeName)"
+            ? "terminal \(snapshot.inputState.rawValue): \(snapshot.runtimeName)"
             : "terminal exited: \(snapshot.runtimeName)"
         return AgentToolResult(summary: summary, payload: payload)
     }
@@ -190,6 +195,7 @@ enum AgentTerminalTools {
     private struct RedactedTerminalSnapshot: Sendable {
         let tabID: UUID
         let isRunning: Bool
+        let inputState: AgentTerminalInputState
         let isZModemTransferActive: Bool
         let runtimeName: String
         let runtimeTarget: String
@@ -412,7 +418,8 @@ enum AgentTerminalTools {
         let sessionID = context.runtimeID
         let summaries = await MainActor.run {
             controller.tabs.map { tab in
-                tabSummary(tab, isActive: controller.activeTabID == tab.id, sessionID: sessionID)
+                tab.refreshInputState()
+                return tabSummary(tab, isActive: controller.activeTabID == tab.id, sessionID: sessionID)
             }
         }
         let payload = try jsonString(summaries)
@@ -457,6 +464,7 @@ enum AgentTerminalTools {
             "target": tab.runtimeTarget,
             "is_active": isActive,
             "is_running": tab.isRunning,
+            "input_state": tab.inputState.rawValue,
             "is_automation_busy": tab.isAutomationBusy,
             "opened_by_this_conversation": sessionID != nil && tab.originAgentSessionID == sessionID
         ]

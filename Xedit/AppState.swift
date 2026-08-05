@@ -234,11 +234,11 @@ final class AppState: ObservableObject {
     var cachedJudgeHistoryContext: String = ""
     var cachedJudgeHistoryBuiltAt: Date?
     /// App-lifetime cache of safety-judge YES verdicts, keyed by
-    /// `AgentToolAuthorization.judgeVerdictCacheKey` (tool + command family)
-    /// with a grant timestamp. A fresh YES for `git commit` covers every
-    /// `git commit …` within the TTL — without this, each repeated command
-    /// paid a full flash-model round trip per call. Deny verdicts are never
-    /// cached, and danger-tier commands never reach the judge at all.
+    /// `AgentToolAuthorization.judgeVerdictCacheKey` (tool + exact normalized
+    /// command) with a grant timestamp. Repeating the same command avoids a
+    /// flash-model round trip, but changed arguments always receive a fresh
+    /// verdict. Denials are never cached, and danger-tier commands never
+    /// reach the judge at all.
     var cachedJudgeAllowedVerdicts: [String: Date] = [:]
     /// User-tunable base font size (in points) for the Agent chat
     /// transcript body — applies to user/assistant message prose and

@@ -1,6 +1,6 @@
 # WillDeep Product Overview
 
-> Last updated: 2026-08-05 | Current version: v1.228.0-rc3
+> Last updated: 2026-08-05 | Current version: v1.228.0-rc7
 
 ## Positioning
 
@@ -12,9 +12,12 @@ WillDeep is configured for non-App-Store distribution without App Sandbox so it 
 
 ## 架构概览
 
+- **审批卡严格串行且 Composer 状态可靠（1.228.0-rc7）** —— 同一回合的多个人工审核项只会逐条激活，后续调用以不可操作的排队行展示，不再提前提交决定后卡在执行循环；Always-Allow 等明确授权仍可把匹配项转为可审计的自动批准。Composer 直接观察当前 runtime，输出中与 Provider 排队时持续显示停止图标。成功工具活动仅保留具体动作摘要，不再追加时有时无的“完成”。
+- **终端前台占用可见且防误投（1.228.0-rc6）** —— 终端按 PTY 前台进程组与 canonical/echo 模式区分 Shell 就绪、非交互前台任务和 SSH/TUI/REPL 交互程序；压测等静默任务运行时会显示“前台任务运行中”，方向键不再产生 `^[[A` 乱码。Agent 快照与标签列表可读取 `input_state`，且不能把新命令注入仍占用 PTY 的前台任务，可改为等待、Ctrl-C、新标签页或后台执行。
+- **会话标题更新不再打扰用户（1.228.0-rc5）** —— `rename_session` 只修改发起调用的当前会话，是可逆的本地元数据写入；普通、Goal 与“每次询问”模式均由宿主确定性免审，同时保留 write-tier 顺序、审计记录、非空单行与 120 字符校验。会改变后续工具边界的工作区切换继续要求人工批准。
 - **纯空白工具轮次不再显示空壳（1.228.0-rc3）** —— OpenAI 兼容网关若在工具调用前只返回换行或空格，流结束时会把该内容规范化为空串；主聊天、紧凑面板和历史 TextKit 渲染也统一按“是否含非空白字符”识别工具专用轮次。旧会话中的纯换行消息会直接折入工具活动摘要，不再单独出现只有“已处理”和 Token 页脚的空白轮次。
 - **会话列表移除计划模式残留徽标（1.228.0-rc2）** —— 普通会话即使保留过渡期 `currentPlan` 数据，也不再显示已取消的计划模式 `checklist` 图标；Goal 会话的靶心提示继续作为有效模式标识。
-- **智能审核成为单一授权策略（1.228.0-rc1）** —— 会话选择“智能审核”后，终端命令、工作区命令和标准可信 MCP 写操作会直接进入静态风险分类与一次性 Flash AI 安全裁判，不再受第二个全局开关阻断；严格模式仍逐次询问，Workspace Access 仍只自动批准工作区边界内操作，破坏性命令、ZMODEM 本地路径选择、AI 拒绝或不可用继续交给人工确认。
+- **智能审核成为单一授权策略（1.228.0-rc1，rc4 降低高频误问并收紧复用边界）** —— 会话选择“智能审核”后，终端命令、工作区命令和标准可信 MCP 写操作会进入“完整路径/凭据预检 → 本地静态分类 → 一次性 Flash AI 裁判”链路，不再受第二个全局开关阻断；rc4 将 Kubernetes 高频非敏感只读检查和终端清屏纳入确定性放行，普通 `curl`/`wget` 读取改由机器复核，当前 Provider 裁判不可用时可由 some.im 托管 Flash 兜底。裁判允许缓存只复用精确命令，Kubernetes 持久规则只覆盖静态只读动词，HTTP GET 持久规则限定公共 Host；Secret、原始 kubeconfig、请求体/上传/凭据、破坏性命令和 ZMODEM 本地路径仍交给人工。人工批准的外部命令也会立即进入后续裁判历史，终端审计保留脱敏命令摘要，便于继续定位误问。
 - **上下文 Token 估算退出 SwiftUI 热路径（1.227.0-rc5）** —— 状态栏上下文圆环与压缩按钮仅读取已发布的估算快照；消息、模型或工作区上下文变化后统一尾随防抖，过期任务会被取消，完整 Unicode 扫描转入 utility 后台任务，避免流式输出期间反复在主线程重建并扫描整份请求。
 - **DeepSeek V4 Flash 服务端优先联网搜索（1.227.0-rc4）** —— DeepSeek V4 Flash 的 Responses 请求会把 `web_search` 作为 hosted tool 交给模型服务端执行，并把服务端 `url_citation` 持久化到助手消息和现有来源胶囊；若网关以 400/422 明确拒绝该 hosted tool，则同一轮自动回退到既有本地工具编排（Exa、Brave 或 some.im managed search）。其他模型仍维持原有执行策略。
 - **长思考模型 180 秒静默等待（1.227.0-rc3）** —— OpenAI Chat/Responses、Anthropic 与 Gemini 请求统一允许连续 180 秒没有响应字节，资源总时限仍为 600 秒；错误提示直接读取同一超时常量，避免客户端行为与提示文案再次漂移。muchtoken 网关默认上游总时限保持 600 秒。
@@ -555,7 +558,7 @@ WillDeep is configured for non-App-Store distribution without App Sandbox so it 
 - **桌面宠物前台消息卡片隐藏（1.152.0-rc18）** —— WillDeep App 在前台时，桌面宠物不再展示最近 3 个会话输出卡片或收起计数，避免用户已经看着主窗口时重复弹消息；切到后台后仍保留最近输出提醒。
 - **Agent 模型选择大面板（1.152.0-rc17）** —— Composer 模型选择入口改为宽面板配置：未绑定 some.im 时仅显示用户自配 Flash / Pro；已绑定 some.im 时展示省心托管、Coding Plan 订阅购买入口、`someim-coding-plan-low/high` 快捷选择，以及 deepseek-v4、glm、grok-4.5 等重点推荐模型。不熟悉模型差异的用户可直接选「省心托管」，由 WillDeep 按任务路由。
 - **专家介入锁定提示（1.152.0-rc16）** —— Agent 专家弹窗现在区分“只打开过”和“已经对话过”：空会话里误开的专家可以关闭；一旦会话已有用户消息，已启用专家会保持锁定，并在专家区顶部显示提示条说明“专家介入对话后，本会话内就不能再关闭”。
-- **Workspace 会话查询与自动改名（1.152.0-rc15）** —— Agent 新增 `list_workspace_sessions` 只读工具查看当前 workspace 分组下的会话列表，并新增 `suggest_session_title` 通过标题总结 flash 模型生成当前会话短标题候选；系统提示会在新用户输入后检查会话名是否仍贴合任务，普通模式通过 `rename_session` 询问用户确认，Goal 模式下 `rename_session` 自动通过且不打断目标执行，`change_workspace` 仍在 Goal 模式禁用。
+- **Workspace 会话查询与自动改名（1.152.0-rc15，1.228.0-rc5 全模式免审）** —— Agent 新增 `list_workspace_sessions` 只读工具查看当前 workspace 分组下的会话列表，并新增 `suggest_session_title` 通过标题总结 flash 模型生成当前会话短标题候选；系统提示会在新用户输入后检查会话名是否仍贴合任务。`rename_session` 现已在所有审批模式自动通过且不打断目标执行，`change_workspace` 仍在 Goal 模式禁用并在普通模式保持人工门禁。
 - **同会话后续请求待办刷新（1.152.0-rc14）** —— Plan 模式中已完成计划会重新进入计划门，后续同一会话的新需求必须先生成新 `plan`；捕获逻辑现在优先识别最新助手消息里的 `plan` 块并替换旧计划，右侧待办随新需求刷新。
 - **当前会话排队任务工具（1.152.0-rc14）** —— Agent 新增 `list_queued_tasks` 只读工具，可查看当前会话排队用户消息、provider dispatch 等候、后台 job、媒体任务和 `.codex-build/queue` 项目构建队列；系统提示要求在用户未明确要求时，完整编译、测试、归档、发布、上线等重操作前先查队列，若还有后续用户任务则优先推迟重操作。
 - **Agent 主界面与审核框重排（1.152.0-rc13）** —— Agent 窗口的聊天区、左侧会话栏和右侧任务监控做了更清晰的视觉层次；工具审核卡独立展示风险、命令预览和操作按钮，长命令限制在约 3 行内滚动，并提供“查看解释与解决建议”。解释模型按 some.im Coding Plan 订阅优先 `someim-coding-plan-low/flow`，无订阅回退 `someim-auto-flash`，未绑定 some.im 则使用当前 provider 的 flash 模型。

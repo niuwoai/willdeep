@@ -1955,7 +1955,8 @@ struct WillDeepTests {
         )
         #expect(normalApproval == .staticAllowlist)
 
-        // Goal 模式下允许自动改名，但 workspace 归属仍不能绕过人工确认。
+        // 会话标题在所有模式自动更新；Goal 模式仍记录自己的自动批准来源，
+        // workspace 归属则不能绕过人工确认。
         let titleApproval = await appState.autoApprovalSource(
             toolName: "rename_session",
             arguments: ["title": .string("New title")],

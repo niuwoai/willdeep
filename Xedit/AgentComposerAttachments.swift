@@ -20,6 +20,15 @@
 
 import SwiftUI
 
+nonisolated enum AgentComposerTurnControlPolicy {
+    static func showsStop(
+        isResponding: Bool,
+        isAwaitingProviderSlot: Bool
+    ) -> Bool {
+        isResponding || isAwaitingProviderSlot
+    }
+}
+
 struct AttachButton: View {
     let action: () -> Void
 
@@ -52,10 +61,27 @@ struct SendStopButton: View {
     @EnvironmentObject var appState: AppState
 
     var body: some View {
+        if let runtime = appState.activeRuntime {
+            AgentRuntimeSendStopButton(runtime: runtime)
+        } else {
+            AgentRuntimeUnavailableSendButton()
+        }
+    }
+}
+
+/// Observe the active runtime directly. AppState intentionally coalesces
+/// runtime change forwarding for transcript performance; using only the
+/// delegated `appState.isAgentResponding` value could therefore leave this
+/// control painted as Send while the transcript was visibly still streaming.
+private struct AgentRuntimeSendStopButton: View {
+    @EnvironmentObject var appState: AppState
+    @ObservedObject var runtime: AgentRuntime
+
+    var body: some View {
         HStack(spacing: 6) {
             Button {
-                if appState.isAgentResponding {
-                    appState.stopAgentResponse()
+                if showsStop {
+                    appState.stopAgentResponse(for: runtime)
                 } else {
                     appState.sendAgentMessage()
                 }
@@ -67,7 +93,7 @@ struct SendStopButton: View {
                     // it's a soft red-tinted disc with a red stroke and a
                     // red-foreground glyph: still unmistakably the stop
                     // action, but no longer alarm-bell red.
-                    if appState.isAgentResponding {
+                    if showsStop {
                         Circle()
                             .fill(Color.red.opacity(0.12))
                             .frame(width: 26, height: 26)
@@ -89,11 +115,11 @@ struct SendStopButton: View {
                 }
             }
             .buttonStyle(.plain)
-            .disabled(!appState.isAgentResponding && !canSend)
+            .disabled(!showsStop && !canSend)
             .help(
-                appState.isAgentResponding
+                showsStop
                     ? L10n.Composer.stopHelp
-                    : (appState.hasParsingAgentFileAttachments
+                    : (hasParsingAttachments
                         ? L10n.Composer.waitForAttachmentParsing
                         : L10n.Composer.sendHelp)
             )
@@ -101,14 +127,44 @@ struct SendStopButton: View {
         .fixedSize()
     }
 
+    private var showsStop: Bool {
+        AgentComposerTurnControlPolicy.showsStop(
+            isResponding: runtime.isResponding,
+            isAwaitingProviderSlot: runtime.isAwaitingProviderSlot
+        )
+    }
+
     private var canSend: Bool {
-        !appState.hasParsingAgentFileAttachments
-            && (!appState.agentInput.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-            || !appState.agentPendingImages.isEmpty
-            || !appState.agentPendingTextAttachments.isEmpty
-            || !appState.agentPendingSkills.isEmpty
-            || !appState.agentPendingFiles.isEmpty
-            || appState.agentPendingIncludeWorkspaceOverview)
+        !hasParsingAttachments
+            && (!runtime.input.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            || !runtime.pendingImages.isEmpty
+            || !runtime.pendingTextAttachments.isEmpty
+            || !runtime.pendingSkills.isEmpty
+            || !runtime.pendingFiles.isEmpty
+            || runtime.pendingIncludeWorkspaceOverview)
+    }
+
+    private var hasParsingAttachments: Bool {
+        runtime.pendingFiles.contains { $0.parseStatus == .parsing }
+            || runtime.documentAttachments.contains { $0.isEnabled && $0.parseStatus == .parsing }
+            || runtime.knowledgeFolders.contains { $0.isEnabled && $0.status == .indexing }
+    }
+}
+
+/// A new conversation normally materializes a runtime on the first
+/// keystroke. Keep a disabled placeholder for the brief pre-runtime frame so
+/// layout does not jump while that session is being created.
+private struct AgentRuntimeUnavailableSendButton: View {
+    var body: some View {
+        Circle()
+            .fill(Color.secondary.opacity(0.3))
+            .frame(width: 26, height: 26)
+            .overlay {
+                Image(systemName: "arrow.up")
+                    .font(.system(size: 11, weight: .bold))
+                    .foregroundStyle(.white)
+            }
+            .accessibilityHidden(true)
     }
 }
 

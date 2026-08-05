@@ -76,6 +76,31 @@ struct AgentThinkingStatusVisualTests {
         ) == .waitingForProvider)
     }
 
+    @Test("composer stop control follows the live runtime state")
+    func composerStopControlPolicy() throws {
+        #expect(!AgentComposerTurnControlPolicy.showsStop(
+            isResponding: false,
+            isAwaitingProviderSlot: false
+        ))
+        #expect(AgentComposerTurnControlPolicy.showsStop(
+            isResponding: true,
+            isAwaitingProviderSlot: false
+        ))
+        #expect(AgentComposerTurnControlPolicy.showsStop(
+            isResponding: false,
+            isAwaitingProviderSlot: true
+        ))
+
+        let repositoryRoot = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+        let source = try String(
+            contentsOf: repositoryRoot.appendingPathComponent("Xedit/AgentComposerAttachments.swift"),
+            encoding: .utf8
+        )
+        #expect(source.contains("@ObservedObject var runtime: AgentRuntime"))
+    }
+
     @Test("composer keeps a generic thinking fallback while the rail stays explicit")
     func composerThinkingFallbackScopedToComposerStyle() throws {
         let repositoryRoot = URL(fileURLWithPath: #filePath)

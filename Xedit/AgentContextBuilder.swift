@@ -169,7 +169,7 @@ enum AgentContextBuilder {
             sections.append("""
             Current session title: \(currentSessionTitle)
             Session title locked: \(currentSessionTitleIsLocked ? "yes" : "no")
-            On each new user input, consider whether this title still describes the current task. If it is stale or too generic, call suggest_session_title, then call rename_session with the suggested title only when the rename is clearly useful. In normal mode the user will approve it; in Goal mode it auto-applies.
+            On each new user input, consider whether this title still describes the current task. If it is stale or too generic, call suggest_session_title, then call rename_session with the suggested title only when the rename is clearly useful. The bounded local rename auto-applies without user approval, so never ask the user to confirm it.
             """)
         }
 
@@ -349,7 +349,7 @@ enum AgentContextBuilder {
         }
 
         if interactionMode == .goal {
-            sections.append("Goal mode restriction: change_workspace is unavailable. rename_session is allowed and auto-approved so the session title can follow the goal without pausing execution; do not ask the user for rename approval in Goal mode.")
+            sections.append("Goal mode restriction: change_workspace is unavailable. rename_session remains available and auto-approved so the session title can follow the goal without pausing execution.")
         }
 
         if toolsEnabled {

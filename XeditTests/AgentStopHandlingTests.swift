@@ -96,6 +96,36 @@ struct AgentStopHandlingTests {
         #expect(runtime.userStoppedTurnID == turnID)
     }
 
+    @Test("stop button removes a provider-slot queued dispatch")
+    @MainActor
+    func stopButtonCancelsProviderQueuedDispatch() throws {
+        let state = AppState()
+        let session = state.startNewAgentSession()
+        defer { AgentSessionStore.delete(id: session.id) }
+        let runtime = try #require(state.activeRuntime)
+        let userMessage = AgentMessage(role: .user, content: "等待 provider")
+        runtime.messages.append(userMessage)
+        runtime.isAwaitingProviderSlot = true
+        state.pendingDispatchQueue = [
+            AppState.PendingDispatch(
+                runtimeID: runtime.id,
+                userMessageID: userMessage.id,
+                text: userMessage.content,
+                images: [],
+                textAttachments: [],
+                attachedSkills: [],
+                providerID: "test-provider",
+                enqueuedAt: Date()
+            )
+        ]
+
+        state.stopAgentResponse(for: runtime)
+
+        #expect(!runtime.isAwaitingProviderSlot)
+        #expect(state.pendingDispatchQueue.isEmpty)
+        #expect(runtime.messages.last?.transcriptEvent == .responseStopped)
+    }
+
     @Test("cancelling a foreground command terminates its process promptly")
     @MainActor
     func foregroundCommandStopsWithTurn() async throws {

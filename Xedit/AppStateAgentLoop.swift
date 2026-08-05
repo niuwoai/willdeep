@@ -1262,15 +1262,11 @@ extension AppState {
             // turn-level baseline.
             var roundNeedsGitStatusRefresh = false
 
-            // Stage 1 — surface the whole round before running any of it.
-            // Every tool call is parsed, risk-classified, auto-approval-
-            // resolved, and appended to the transcript up front, so all the
-            // approval cards this round needs light up at once (and can be
-            // resolved in one click via 全部允许) instead of appearing one by
-            // one as each earlier call finishes. Execution stays strictly
-            // sequential in stage 2 below; decisions submitted ahead of
-            // execution are parked in `runtime.pendingToolDecisions` and
-            // consumed by `awaitToolDecision`'s fast path.
+            // Stage 1 — parse and classify the whole round before execution.
+            // Calls that need a human decision remain visibly queued; stage 2
+            // promotes exactly one call to an interactive approval card only
+            // when its continuation is ready. This keeps transcript context
+            // visible without accepting decisions that no waiter can consume.
             struct StagedRoundToolCall {
                 let call: AgentMessageToolCall
                 let arguments: [String: AgentJSONValue]
@@ -1417,17 +1413,13 @@ extension AppState {
                     )
                 }
                 let isAlwaysAllowed = autoApproval != nil
-                let initialStatus: AgentToolCallStatus
-                if isAlwaysAllowed {
-                    initialStatus = .running
-                } else {
-                    switch risk {
-                    case .read: initialStatus = .running
-                    case .write: initialStatus = .pendingApproval
-                    case .danger: initialStatus = .awaitingConfirm
-                    case .userInput: initialStatus = .awaitingUserAnswer
-                    }
-                }
+                // Manual decisions are activated only when stage 2 reaches
+                // this exact call. Pre-creating every card as interactive let
+                // users approve a later call while the single continuation
+                // still belonged to an earlier one, leaving a misleading
+                // "decision submitted" spinner that could never make progress.
+                let requiresSerialApproval = !isAlwaysAllowed && risk != .read
+                let initialStatus: AgentToolCallStatus = .running
 
                 var displayArgsDict = argsDict
                 if call.toolName == "run_command",
@@ -1442,6 +1434,9 @@ extension AppState {
                     if let prefixRule = sandboxDecision.prefixRule, !prefixRule.isEmpty {
                         displayArgsDict["_prefix_rule"] = .string(prefixRule.joined(separator: " "))
                     }
+                }
+                if requiresSerialApproval {
+                    displayArgsDict[AgentSerialToolApprovalQueue.argumentKey] = .bool(true)
                 }
 
                 let record = AgentToolCall(
@@ -1473,17 +1468,6 @@ extension AppState {
                     )
                     continue
                 }
-
-                // rc2: if the user isn't looking at the app when a tool
-                // call needs them (approve / confirm / answer), surface
-                // a system banner so they don't sit on a stalled turn.
-                // No-op when the app is the active foreground app or
-                // when the call auto-ran via .running.
-                AgentToolApprovalNotifier.notifyIfBackgrounded(
-                    toolName: record.toolName,
-                    arguments: record.arguments,
-                    status: initialStatus
-                )
 
                 // Goal evidence planning blocks writes until the host validates
                 // a plan, while still allowing validated public web GETs needed
@@ -1525,10 +1509,9 @@ extension AppState {
                 ))
             }
 
-            // Stage 2 — run the staged calls strictly in order, waiting on
-            // each pending user decision individually. A decision the user
-            // already submitted (per card, or via the batch 全部允许 action)
-            // is consumed instantly by `awaitToolDecision`'s fast path.
+            // Stage 2 — run the staged calls strictly in order, promoting and
+            // waiting on at most one human decision at a time. Trusted policy
+            // decisions may still use `awaitToolDecision`'s internal fast path.
             //
             // Because staging pre-created records for calls that have not
             // executed yet (including auto-approved ones already showing
@@ -1668,7 +1651,7 @@ extension AppState {
                     terminalController: agentTerminalController,
                     delegatedProgressSink: delegatedProgressSink,
                     sessionRenameSink: { title in
-                        try self.renameAgentSessionAfterApproval(
+                        try self.renameAgentSessionFromTool(
                             runtimeID: runtime.id,
                             to: title
                         )
@@ -1689,7 +1672,8 @@ extension AppState {
                 let argsDict = staged.arguments
                 let risk = staged.risk
                 let sandboxDecision = staged.sandboxDecision
-                let autoApproval = staged.autoApproval
+                let autoApproval = runtime.toolCalls.first(where: { $0.id == staged.recordID })?.approvalSource
+                    ?? staged.autoApproval
                 let isAlwaysAllowed = autoApproval != nil
                 let recordID = staged.recordID
                 let currentPatchReviewPathKeys = Self.patchReviewPathKeys(
@@ -1787,6 +1771,11 @@ extension AppState {
                 }
 
                 if risk == .userInput {
+                    activateSerialToolDecision(
+                        recordID: recordID,
+                        status: .awaitingUserAnswer,
+                        runtime: runtime
+                    )
                     let decision = await awaitToolDecision(for: runtime, forCallID: recordID)
                     if Task.isCancelled {
                         settleUnexecutedStagedCalls(from: stagedIndex, reason: "Cancelled")
@@ -1832,6 +1821,11 @@ extension AppState {
                 }
 
                 if risk != .read && !isAlwaysAllowed {
+                    activateSerialToolDecision(
+                        recordID: recordID,
+                        status: risk == .danger ? .awaitingConfirm : .pendingApproval,
+                        runtime: runtime
+                    )
                     let decision = await awaitToolDecision(for: runtime, forCallID: recordID)
                     if Task.isCancelled {
                         settleUnexecutedStagedCalls(from: stagedIndex, reason: "Cancelled")
@@ -1850,6 +1844,9 @@ extension AppState {
                             approvalSource: nil,
                             outcome: "denied"
                         )
+                        if Self.isCommandShapedTool(call.toolName) {
+                            cachedJudgeHistoryBuiltAt = nil
+                        }
                         appendToolMessage(
                             for: runtime,
                             toolCallID: call.externalID,
@@ -2114,6 +2111,7 @@ extension AppState {
                                 approvalSource: nil,
                                 outcome: "sandbox_escalation_denied"
                             )
+                            cachedJudgeHistoryBuiltAt = nil
                             appendToolMessage(
                                 for: runtime,
                                 toolCallID: call.externalID,
@@ -2156,6 +2154,13 @@ extension AppState {
                         approvalSource: effectiveApprovalSource,
                         outcome: "succeeded"
                     )
+                    if Self.isCommandShapedTool(call.toolName),
+                       effectiveApprovalSource == .user || effectiveApprovalSource == .escalated {
+                        // Invalidate after the audit append as well as at the
+                        // click boundary. Concurrent judge work cannot rebuild
+                        // and retain a stale history snapshot in between.
+                        cachedJudgeHistoryBuiltAt = nil
+                    }
                     if call.toolName != "change_workspace",
                        call.toolName == "run_command" || risk != .read || patchAutoApplySource != nil {
                         if producesArtifacts {
@@ -2566,9 +2571,31 @@ extension AppState {
         return nil
     }
 
+    /// Promote exactly one queued manual decision into an interactive card.
+    /// Stage 2 calls this immediately before registering its continuation;
+    /// because both operations run on the main actor, SwiftUI cannot expose
+    /// the buttons early enough for a click to target the wrong waiter.
+    private func activateSerialToolDecision(
+        recordID: AgentToolCall.ID,
+        status: AgentToolCallStatus,
+        runtime: AgentRuntime
+    ) {
+        guard let index = runtime.toolCalls.firstIndex(where: { $0.id == recordID }) else {
+            return
+        }
+        runtime.toolCalls[index].arguments.removeValue(
+            forKey: AgentSerialToolApprovalQueue.argumentKey
+        )
+        runtime.toolCalls[index].status = status
+        AgentToolApprovalNotifier.notifyIfBackgrounded(
+            toolName: runtime.toolCalls[index].toolName,
+            arguments: runtime.toolCalls[index].arguments,
+            status: status
+        )
+    }
+
     /// Suspend until the user resolves the tool call. Three resume paths:
-    ///   1. The call is already resolved by the time we register
-    ///      (race: user clicked Deny while a prior tool was still running) —
+    ///   1. A trusted internal decision was queued before registration —
     ///      resume immediately from the synchronous fast-path.
     ///   2. UI delivers an .approved / .denied / .answered — `resumeToolDecision`
     ///      pulls `toolDecisionWaiter` off the runtime and resumes it.

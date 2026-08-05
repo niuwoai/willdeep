@@ -158,11 +158,19 @@ extension AppState {
         if let rule = alwaysAllowedCommand(for: call) {
             addAgentAlwaysAllowedCommand(rule)
         }
+        approveQueuedSerialToolCalls(
+            for: runtime,
+            source: .alwaysAllowList
+        ) { pending in
+            isAgentToolCallAlwaysAllowed(
+                toolName: pending.toolName,
+                arguments: pending.arguments,
+                risk: pending.risk
+            )
+        }
         resolveAgentToolCallDecision(id: id, decision: .approved)
-        // The staged pre-pass can have sibling cards of the same command
-        // family already on screen — release them under the freshly pinned
-        // rule too. Candidates are pre-filtered to pin matches, so this
-        // never pays an LLM-judge round trip.
+        // Release queued siblings covered by the freshly pinned rule too.
+        // Candidates are pre-filtered, so this never judges unrelated work.
         reevaluatePendingAgentToolApprovals(for: runtime) { pending in
             isAgentToolCallAlwaysAllowed(
                 toolName: pending.toolName,
@@ -182,9 +190,13 @@ extension AppState {
             toolName: call.toolName
         ) else { return }
         runtime.conversationAllowedToolSignatures.insert(signature)
+        approveQueuedSerialToolCalls(for: runtime, source: .user) { pending in
+            AgentToolAuthorization.interactiveSurfaceSignature(
+                toolName: pending.toolName
+            ) == signature
+        }
         resolveAgentToolCallDecision(id: id, decision: .approved)
-        // Same-surface cards staged for this round unlock with the new
-        // conversation grant instead of asking once per card.
+        // Same-surface queued calls unlock with the conversation grant.
         reevaluatePendingAgentToolApprovals(for: runtime) { pending in
             AgentToolAuthorization.interactiveSurfaceSignature(
                 toolName: pending.toolName
@@ -194,43 +206,6 @@ extension AppState {
 
     func denyAgentToolCall(id: AgentToolCall.ID) {
         resolveAgentToolCallDecision(id: id, decision: .denied(reason: "User denied"))
-    }
-
-    /// Whether a call is eligible for the one-click batch 全部允许 action.
-    /// Only ordinary write-tier approval cards qualify. Explicitly excluded:
-    /// danger-tier typed confirmations (`.awaitingConfirm` — those cards ask
-    /// for a deliberate per-command "confirm"), sandbox-escalation retries
-    /// (same `.pendingApproval` status, but the question is "leave the
-    /// sandbox?", flagged via `sandboxEscalationRequestArgumentKey`), and
-    /// `ask_user` cards. Local `#1983#` preview cards are filtered by the
-    /// instance-level helpers below, not here — this predicate stays pure so
-    /// it can be unit-tested without an AppState.
-    nonisolated static func isBatchApprovableAgentToolCall(_ call: AgentToolCall) -> Bool {
-        call.status == .pendingApproval
-            && call.risk == .write
-            && call.arguments[AgentSandboxPolicy.sandboxEscalationRequestArgumentKey]?.boolValue() != true
-    }
-
-    /// IDs among `calls` that one 全部允许 click would resolve right now.
-    /// Calls whose decision was already submitted (approve/deny clicked while
-    /// an earlier tool was still running) and local confirmation previews are
-    /// skipped.
-    func batchApprovableAgentToolCallIDs(among calls: [AgentToolCall]) -> [AgentToolCall.ID] {
-        calls.filter { call in
-            Self.isBatchApprovableAgentToolCall(call)
-                && !hasPendingAgentToolDecision(id: call.id)
-                && !isLocalConfirmationPreviewCall(id: call.id)
-        }.map(\.id)
-    }
-
-    /// Resolve a batch of approval cards in one action. Each ID goes through
-    /// the normal `resolveAgentToolCallDecision` path: the call the loop is
-    /// currently awaiting resumes immediately; the rest park their approval
-    /// in `pendingToolDecisions` and are consumed in execution order.
-    func approveAgentToolCalls(ids: [AgentToolCall.ID]) {
-        for id in ids {
-            resolveAgentToolCallDecision(id: id, decision: .approved)
-        }
     }
 
     func confirmAgentToolCall(id: AgentToolCall.ID, typedConfirmation: String) -> Bool {
@@ -247,10 +222,6 @@ extension AppState {
     /// provided"; use `denyAgentToolCall` to skip outright.
     func answerAgentToolCall(id: AgentToolCall.ID, answer: String) {
         resolveAgentToolCallDecision(id: id, decision: .answered(answer))
-    }
-
-    func hasPendingAgentToolDecision(id: AgentToolCall.ID) -> Bool {
-        runtimeAndToolCallIndex(containing: id)?.runtime.pendingToolDecisions[id] != nil
     }
 
     func isLocalConfirmationPreviewCall(id: AgentToolCall.ID) -> Bool {
@@ -339,15 +310,15 @@ extension AppState {
     ) async -> AgentToolApprovalSource? {
         guard risk == .write else { return nil }
 
-        // Conversation identity and workspace binding are user-facing host
-        // state. Normal sessions keep them behind an explicit per-call
-        // approval card. Goal mode is the exception for rename_session only:
-        // a title change should not pause an autonomous goal run, while
-        // workspace rebinding remains unavailable in Goal mode elsewhere.
-        if toolName == "rename_session", interactionMode == .goal {
-            return .goalMode
+        // Renaming the originating session is a bounded, reversible local
+        // metadata write. Keep it write-tier for ordering and auditability,
+        // but never interrupt the user for it — even Strict mode should be
+        // reserved for actions with a meaningful security or data boundary.
+        // Workspace rebinding can redirect every later tool and stays gated.
+        if toolName == "rename_session" {
+            return interactionMode == .goal ? .goalMode : .staticAllowlist
         }
-        if toolName == "rename_session" || toolName == "change_workspace" {
+        if toolName == "change_workspace" {
             return nil
         }
 
@@ -557,7 +528,13 @@ extension AppState {
             }
             switch SafeCommand.classify(command: command) {
             case .alwaysSafe:
-                return .staticAllowlist
+                // Only context-independent reads are static in a visible
+                // terminal. SafeCommand also certifies bounded workspace
+                // builders/creators, but this terminal may currently point
+                // at a remote host or directory, so those still need review.
+                if sandboxDecision.mode == .readOnly {
+                    return .staticAllowlist
+                }
             case .alwaysDangerous:
                 return nil
             case .needsJudgment:
@@ -659,8 +636,8 @@ extension AppState {
     /// approve-this habits show up quickly" against cache thrash.
     private static let safetyJudgeHistoryTTL: TimeInterval = 30 * 60
 
-    /// How long a judge YES stays reusable for the same tool + command
-    /// family before the next occurrence pays a real judge round trip
+    /// How long a judge YES stays reusable for the same tool + exact command
+    /// before the next occurrence pays a real judge round trip
     /// again. 30 min mirrors the few-shot history TTL: long enough to cover
     /// a work session's repeated `git commit` / `swift build` cadence,
     /// short enough that a stale allow doesn't outlive the session context
@@ -700,11 +677,11 @@ extension AppState {
         toolName: String,
         command: String
     ) async -> AgentToolApprovalSource? {
-        // A recent YES for this tool + command family skips the network
+        // A recent YES for this tool + exact normalized command skips the network
         // round trip entirely. Only allows are cached (a deny still falls
         // through to the user each time), and the static danger gates run
-        // BEFORE this point, so a cached family can never smuggle a
-        // typed-confirmation command past the judge.
+        // BEFORE this point, so a changed argument or typed-confirmation
+        // command can never ride an earlier verdict.
         let cacheKey = AgentToolAuthorization.judgeVerdictCacheKey(
             toolName: toolName,
             command: command
@@ -716,34 +693,45 @@ extension AppState {
                 command: command,
                 model: "verdict-cache",
                 verdict: "allow",
-                detail: "cached family: \(cacheKey)"
+                detail: "cached exact command: \(cacheKey)"
             )
             return .llmJudge
         }
 
         let configuration = configurationForSafetyJudge()
-        let client = AgentClient(configuration: configuration)
-        let result = await client.judgeCommandSafety(
+        var effectiveConfiguration = configuration
+        var fallbackDetail = ""
+        var result = await AgentClient(configuration: configuration).judgeCommandSafety(
             command: command,
             historyContext: safetyJudgeHistoryContext()
         )
+        if case .unavailable(let primaryReason) = result,
+           let fallback = someIMManagedJudgeConfiguration(),
+           fallback != configuration {
+            effectiveConfiguration = fallback
+            fallbackDetail = "managed fallback after \(primaryReason)"
+            result = await AgentClient(configuration: fallback).judgeCommandSafety(
+                command: command,
+                historyContext: safetyJudgeHistoryContext()
+            )
+        }
         let verdict: String
         let detail: String
         switch result {
         case .allow:
             verdict = "allow"
-            detail = ""
+            detail = fallbackDetail
         case .deny:
             verdict = "deny"
-            detail = ""
+            detail = fallbackDetail
         case .unavailable(let reason):
             verdict = "unavailable"
-            detail = reason
+            detail = fallbackDetail.isEmpty ? reason : "\(fallbackDetail); \(reason)"
         }
         AgentSandboxAuditLog.recordJudge(
             toolName: toolName,
             command: command,
-            model: configuration.model,
+            model: effectiveConfiguration.model,
             verdict: verdict,
             detail: detail
         )
@@ -822,7 +810,7 @@ extension AppState {
     ) -> Bool {
         guard !sandboxDecision.requiresTypedConfirmation else { return false }
         if sandboxDecision.mode == .escalated {
-            return toolName == "run_command"
+            return toolName == "run_command" || toolName == "terminal_send_command"
         }
         return true
     }
@@ -986,20 +974,30 @@ extension AppState {
             || runtime.toolCalls[index].status == .awaitingUserAnswer else {
             return
         }
+        // Only the call that currently owns the continuation may accept UI
+        // input. Future calls are marked as serially queued and have no
+        // controls; rejecting an out-of-order delivery here is the final
+        // safety net against the old "submitted, waiting for loop" deadlock.
+        guard let waiter = runtime.toolDecisionWaiter,
+              runtime.toolDecisionWaiterCallID == id else {
+            return
+        }
 
-        runtime.pendingToolDecisions[id] = decision
+        // The safety judge consumes recent human decisions as bounded
+        // few-shot context. Do not leave a fresh approval or rejection hidden
+        // behind the normal 30-minute cache: the next command in this session
+        // should benefit from the operator's feedback immediately.
+        if runtime.toolCalls[index].toolName == "run_command"
+            || runtime.toolCalls[index].toolName == "terminal_send_command"
+            || runtime.toolCalls[index].toolName == "call_mcp_tool" {
+            cachedJudgeHistoryBuiltAt = nil
+        }
 
         if case .denied(let reason) = decision {
             runtime.toolCalls[index].status = .denied
             runtime.toolCalls[index].errorMessage = reason
         }
 
-        guard let waiter = runtime.toolDecisionWaiter else { return }
-        guard runtime.toolDecisionWaiterCallID == nil || runtime.toolDecisionWaiterCallID == id else {
-            return
-        }
-
-        runtime.pendingToolDecisions.removeValue(forKey: id)
         runtime.toolDecisionWaiter = nil
         runtime.toolDecisionWaiterCallID = nil
 
@@ -1009,6 +1007,27 @@ extension AppState {
             runtime.toolCalls[index].status = .running
         }
         waiter.resume(returning: decision)
+    }
+
+    /// Apply an explicit user-pinned grant to future calls that are still in
+    /// the serial queue. This is not an early human decision: the queued calls
+    /// become genuinely auto-approved and stage 2 observes the approval source
+    /// when their execution slot arrives.
+    private func approveQueuedSerialToolCalls(
+        for runtime: AgentRuntime,
+        source: AgentToolApprovalSource,
+        matching predicate: (AgentToolCall) -> Bool
+    ) {
+        for index in runtime.toolCalls.indices {
+            guard AgentSerialToolApprovalQueue.contains(runtime.toolCalls[index]),
+                  predicate(runtime.toolCalls[index]) else {
+                continue
+            }
+            runtime.toolCalls[index].approvalSource = source
+            runtime.toolCalls[index].arguments.removeValue(
+                forKey: AgentSerialToolApprovalQueue.argumentKey
+            )
+        }
     }
 
     /// Apply a newly selected Workspace-access posture to calls that are
@@ -1027,13 +1046,8 @@ extension AppState {
         ) { _ in true }
     }
 
-    /// Re-run the auto-approval policy for calls already parked at
-    /// `.pendingApproval`, resolving the ones the policy now clears. Shared
-    /// by the Workspace-access posture bridge above and by the Always-Allow /
-    /// conversation-allow click hooks: with the staged pre-pass, a whole
-    /// round's approval cards are on screen at once, so a rule pinned from
-    /// one card must release its siblings too instead of forcing one click
-    /// per card.
+    /// Re-run the auto-approval policy for the active `.pendingApproval` call
+    /// and serially queued siblings, resolving the ones the policy now clears.
     ///
     /// `candidateFilter` narrows which pending calls are re-evaluated —
     /// rule-change callers pass a filter matching only the new rule, so a
@@ -1048,8 +1062,7 @@ extension AppState {
         matching candidateFilter: (AgentToolCall) -> Bool
     ) -> Task<Void, Never>? {
         let pendingCallIDs = runtime.toolCalls.compactMap { call in
-            Self.isBatchApprovableAgentToolCall(call)
-                && runtime.pendingToolDecisions[call.id] == nil
+            (call.status == .pendingApproval || AgentSerialToolApprovalQueue.contains(call))
                 && !runtime.localConfirmationPreviewCallIDs.contains(call.id)
                 && candidateFilter(call)
                 ? call.id : nil
@@ -1065,7 +1078,8 @@ extension AppState {
                     continue
                 }
                 guard let index = runtime.toolCalls.firstIndex(where: { $0.id == callID }),
-                      runtime.toolCalls[index].status == .pendingApproval else {
+                      runtime.toolCalls[index].status == .pendingApproval
+                        || AgentSerialToolApprovalQueue.contains(runtime.toolCalls[index]) else {
                     continue
                 }
 
@@ -1093,12 +1107,19 @@ extension AppState {
                 guard let source,
                       requiringApprovalMode == nil || runtime.approvalMode == requiringApprovalMode,
                       let currentIndex = runtime.toolCalls.firstIndex(where: { $0.id == callID }),
-                      runtime.toolCalls[currentIndex].status == .pendingApproval else {
+                      runtime.toolCalls[currentIndex].status == .pendingApproval
+                        || AgentSerialToolApprovalQueue.contains(runtime.toolCalls[currentIndex]) else {
                     continue
                 }
 
                 runtime.toolCalls[currentIndex].approvalSource = source
-                resolveAgentToolCallDecision(id: callID, decision: .approved)
+                if AgentSerialToolApprovalQueue.contains(runtime.toolCalls[currentIndex]) {
+                    runtime.toolCalls[currentIndex].arguments.removeValue(
+                        forKey: AgentSerialToolApprovalQueue.argumentKey
+                    )
+                } else {
+                    resolveAgentToolCallDecision(id: callID, decision: .approved)
+                }
             }
         }
     }

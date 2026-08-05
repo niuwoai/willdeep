@@ -67,6 +67,10 @@ enum AgentSandboxAuditLog {
         if toolName == "run_command", let command = arguments["command"]?.stringValue() {
             return command
         }
+        if toolName == "terminal_send_command",
+           let command = arguments["command"]?.stringValue() {
+            return command
+        }
         if toolName == "web_fetch", let url = arguments["url"]?.stringValue() {
             return url
         }
@@ -129,7 +133,11 @@ enum AgentSandboxAuditLog {
             guard !summary.isEmpty, summary != entry.toolName else { continue }
             if entry.outcome == "denied" {
                 if rejected.count < rejectedLimit { rejected.append(summary) }
-            } else if entry.approvedBy == "user" {
+            } else if entry.approvedBy == "user" || entry.approvedBy == "escalated" {
+                // Escalated is still a hand approval: it means the operator
+                // explicitly allowed an unsandboxed/external command. Omitting
+                // it taught the judge from easy local approvals while ignoring
+                // the network/remote decisions where learning mattered most.
                 if approved.count < approvedLimit { approved.append(summary) }
             }
             if approved.count >= approvedLimit && rejected.count >= rejectedLimit { break }
@@ -273,14 +281,15 @@ enum AgentCommandAuthorization {
         }
 
         if tokenizedSegments.allSatisfy(isKubernetesOrHarmlessCompanionSegment),
-           tokenizedSegments.contains(where: isKubernetesSegment) {
-            return "shell_category:kubernetes"
+           tokenizedSegments.contains(where: isKubernetesSegment),
+           SafeCommand.classify(command: command) == .alwaysSafe {
+            return "shell_category:kubernetes_read"
         }
 
         if tokenizedSegments.count == 1,
-           isCurlGetSegment(tokenizedSegments[0]),
+           let host = curlGetHost(tokenizedSegments[0]),
            !containsShellRedirectionOrPipe(command) {
-            return "shell_category:http_get"
+            return "shell_category:http_get:\(host)"
         }
 
         if tokenizedSegments.allSatisfy(isReadOnlyInspectionSegment),
@@ -365,7 +374,10 @@ enum AgentCommandAuthorization {
 
     nonisolated private static func isKubernetesSegment(_ tokens: [String]) -> Bool {
         guard let executable = executableName(from: tokens) else { return false }
-        return ["kubectl", "k", "oc"].contains(executable)
+        // `k` is an arbitrary local executable/alias and `oc` has additional
+        // mutation verbs. Only the classifier-covered kubectl binary earns a
+        // reusable read-only category.
+        return executable == "kubectl"
     }
 
     nonisolated private static func isKubernetesOrHarmlessCompanionSegment(_ tokens: [String]) -> Bool {
@@ -382,40 +394,79 @@ enum AgentCommandAuthorization {
         ].contains(executable)
     }
 
-    nonisolated private static func isCurlGetSegment(_ tokens: [String]) -> Bool {
-        guard executableName(from: tokens) == "curl" else { return false }
+    nonisolated private static func curlGetHost(_ tokens: [String]) -> String? {
+        guard executableName(from: tokens) == "curl" else { return nil }
         var explicitMethod: String?
-        var hasRequestBody = false
+        var publicHosts: [String] = []
         var index = 1
-        let bodyFlags: Set<String> = [
-            "-d", "--data", "--data-raw", "--data-binary", "--data-ascii",
-            "--data-urlencode", "-F", "--form", "--form-string", "--json",
-            "-T", "--upload-file"
+        let safeNoArgumentLongFlags: Set<String> = [
+            "--fail", "--fail-with-body", "--silent", "--show-error",
+            "--verbose", "--head", "--include", "--compressed",
+            "--http1.1", "--http2", "--http3", "--ipv4", "--ipv6",
+            "--insecure", "--no-progress-meter"
+        ]
+        let safeArgumentLongFlags: Set<String> = [
+            "--connect-timeout", "--max-time", "--retry", "--retry-delay",
+            "--retry-max-time"
         ]
         while index < tokens.count {
             let token = tokens[index]
             let lower = token.lowercased()
-            if lower == "-x" || lower == "--request" {
+            if token == "-X" || lower == "--request" {
                 if index + 1 < tokens.count {
                     explicitMethod = tokens[index + 1].trimmingCharacters(in: .whitespacesAndNewlines)
+                } else {
+                    return nil
                 }
                 index += 2
                 continue
             }
-            if lower.hasPrefix("-x"), lower.count > 2 {
+            if token.hasPrefix("-X"), token.count > 2 {
                 explicitMethod = String(token.dropFirst(2))
             } else if lower.hasPrefix("--request=") {
                 explicitMethod = String(token.dropFirst("--request=".count))
-            } else if lower == "-i" || lower == "--head" {
+            } else if token == "-I" || lower == "--head" {
                 explicitMethod = "HEAD"
-            } else if bodyFlags.contains(lower) || bodyFlags.contains(where: { lower.hasPrefix($0 + "=") }) {
-                hasRequestBody = true
+            } else if safeNoArgumentLongFlags.contains(lower) {
+                // no-op
+            } else if safeArgumentLongFlags.contains(lower) {
+                guard index + 1 < tokens.count else { return nil }
+                index += 2
+                continue
+            } else if safeArgumentLongFlags.contains(where: { lower.hasPrefix($0 + "=") }) {
+                // accepted bounded transport tuning
+            } else if lower == "--url" {
+                guard index + 1 < tokens.count,
+                      let host = AgentWebTools.validatedPublicURL(tokens[index + 1])?.host?.lowercased() else {
+                    return nil
+                }
+                publicHosts.append(host)
+                index += 2
+                continue
+            } else if lower.hasPrefix("--url=") {
+                let rawURL = String(token.dropFirst("--url=".count))
+                guard let host = AgentWebTools.validatedPublicURL(rawURL)?.host?.lowercased() else {
+                    return nil
+                }
+                publicHosts.append(host)
+            } else if token.hasPrefix("-") {
+                let safeShortFlags = Set("fsSIivk46")
+                guard token.dropFirst().allSatisfy(safeShortFlags.contains) else {
+                    return nil
+                }
+            } else {
+                guard let host = AgentWebTools.validatedPublicURL(token)?.host?.lowercased() else {
+                    return nil
+                }
+                publicHosts.append(host)
             }
             index += 1
         }
-        guard !hasRequestBody else { return false }
         let method = explicitMethod?.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
-        return method == nil || method == "GET" || method == "HEAD"
+        guard method == nil || method == "GET" || method == "HEAD" else { return nil }
+        let uniqueHosts = Set(publicHosts)
+        guard uniqueHosts.count == 1 else { return nil }
+        return uniqueHosts.first
     }
 
     nonisolated private static func containsShellRedirectionOrPipe(_ command: String) -> Bool {
@@ -541,18 +592,17 @@ enum AgentCommandAuthorization {
 ///    file_remove are deliberately not pinnable because their blast
 ///    radius depends entirely on the path argument.
 enum AgentToolAuthorization {
-    /// Cache key for safety-judge YES verdicts: tool name + command family
-    /// signature. Family granularity matches the Always-Allow pin contract
-    /// (`AgentCommandAuthorization.signature`); commands with no derivable
-    /// family (MCP pseudo-commands, exotic shells) fall back to the exact
-    /// trimmed command text so caching stays strictly per-command there.
+    /// Cache key for safety-judge YES verdicts: tool name + exact normalized
+    /// command. A hidden, short-lived machine verdict must never broaden one
+    /// `git push`/`gh pr` decision to different arguments merely because the
+    /// executable and subcommand match. Durable family rules remain a
+    /// separate, explicit user choice.
     nonisolated static func judgeVerdictCacheKey(
         toolName: String,
         command: String
     ) -> String {
-        let family = AgentCommandAuthorization.signature(for: command)
-            ?? command.trimmingCharacters(in: .whitespacesAndNewlines)
-        return "\(toolName)|\(family)"
+        let exactCommand = command.trimmingCharacters(in: .whitespacesAndNewlines)
+        return "\(toolName)|\(exactCommand)"
     }
 
     static func interactiveSurfaceSignature(toolName: String) -> String? {

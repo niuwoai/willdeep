@@ -85,6 +85,7 @@ struct RuntimeTerminalProfile: Codable, Equatable {
 struct AgentTerminalRawSnapshot: Sendable {
     let tabID: UUID
     let isRunning: Bool
+    let inputState: AgentTerminalInputState
     let isZModemTransferActive: Bool
     let runtimeName: String
     let runtimeTarget: String
@@ -95,6 +96,53 @@ struct AgentTerminalRawSnapshot: Sendable {
     /// up before capture even if a resize hasn't reflowed it yet.
     let cols: Int
     let rows: Int
+}
+
+/// What currently owns keyboard input on a terminal PTY. The distinction is
+/// intentionally narrower than "the root process is alive": a login shell can
+/// remain alive while a quiet foreground child owns the terminal for minutes.
+nonisolated enum AgentTerminalInputState: String, Equatable, Sendable {
+    case starting
+    case shellReady = "shell_ready"
+    case foregroundTask = "foreground_task"
+    case interactiveProgram = "interactive_program"
+    case unknown
+    case exited
+
+    static func classify(
+        processIsRunning: Bool,
+        shellProcessGroupID: pid_t?,
+        foregroundProcessGroupID: pid_t?,
+        echoEnabled: Bool?,
+        canonicalInputEnabled: Bool?
+    ) -> AgentTerminalInputState {
+        guard processIsRunning else { return .exited }
+        guard let shellProcessGroupID,
+              let foregroundProcessGroupID,
+              shellProcessGroupID > 0,
+              foregroundProcessGroupID > 0 else {
+            return .unknown
+        }
+        if shellProcessGroupID == foregroundProcessGroupID {
+            return .shellReady
+        }
+        guard let echoEnabled, let canonicalInputEnabled else {
+            return .unknown
+        }
+        // A foreground child that deliberately owns an interactive terminal
+        // (SSH, vim, tmux, a REPL) normally switches the PTY to raw/no-echo.
+        // Canonical + echo is the characteristic state of a non-interactive
+        // foreground job such as sleep/load-test runners. Arrow keys in this
+        // state are echoed as ^[[A instead of reaching shell history.
+        return echoEnabled && canonicalInputEnabled ? .foregroundTask : .interactiveProgram
+    }
+}
+
+nonisolated enum AgentTerminalCommandDispatchPolicy {
+    static func refusalMessage(for inputState: AgentTerminalInputState) -> String? {
+        guard inputState == .foregroundTask else { return nil }
+        return "A non-interactive foreground task currently owns this terminal. Nothing was sent. Wait for it to finish, interrupt it with terminal_send_control ctrl_c, or open a new local terminal tab. For long-running work that does not need the visible terminal, use run_command with run_in_background=true."
+    }
 }
 
 struct AgentTerminalCommandDispatch: Sendable {
@@ -1085,8 +1133,16 @@ final class AgentLocalProcessTerminalView: TerminalView, TerminalViewDelegate, L
         if zmodemActive, zmodemBridge.handleUserInput(Array(data)) {
             return
         }
+        let bytes = Array(data)
+        if currentInputState == .foregroundTask,
+           Self.isNavigationEscapeSequence(bytes) {
+            // The shell line editor is not active while a canonical foreground
+            // task owns the PTY. Passing arrows through only paints ^[[A/^[[B
+            // into the screen (and may leave them queued as later shell input).
+            NSSound.beep()
+            return
+        }
         if shouldRecordInput?() == true {
-            let bytes = Array(data)
             let echoEnabled = cachedTerminalEchoEnabled()
             onSendToProcess?(bytes, echoEnabled)
             if echoEnabled {
@@ -1094,6 +1150,22 @@ final class AgentLocalProcessTerminalView: TerminalView, TerminalViewDelegate, L
             }
         }
         process.send(data: data)
+    }
+
+    nonisolated static func isNavigationEscapeSequence(_ bytes: [UInt8]) -> Bool {
+        guard bytes.count >= 3, bytes[0] == 0x1B else { return false }
+        if bytes[1] == 0x4F, bytes.count == 3 { // ESC O A-D/H/F
+            return [0x41, 0x42, 0x43, 0x44, 0x48, 0x46].contains(bytes[2])
+        }
+        guard bytes[1] == 0x5B,
+              let final = bytes.last,
+              [0x41, 0x42, 0x43, 0x44, 0x48, 0x46].contains(final) else {
+            return false
+        }
+        // CSI arrows may carry numeric modifier parameters, e.g. ESC[1;5A.
+        return bytes.dropFirst(2).dropLast().allSatisfy {
+            (0x30...0x39).contains($0) || $0 == 0x3B
+        }
     }
 
     /// Debounce window for geometry propagation. SwiftUI mount animations
@@ -1239,6 +1311,25 @@ final class AgentLocalProcessTerminalView: TerminalView, TerminalViewDelegate, L
         return (attributes.c_lflag & tcflag_t(ECHO)) != 0
     }
 
+    var currentInputState: AgentTerminalInputState {
+        guard process.running else {
+            return process.shellPid > 0 ? .exited : .starting
+        }
+        let shellPID = pid_t(process.shellPid)
+        guard shellPID > 0 else { return .starting }
+        let rawShellGroup = getpgid(shellPID)
+        let rawForegroundGroup = tcgetpgrp(process.childfd)
+        var attributes = termios()
+        let hasAttributes = tcgetattr(process.childfd, &attributes) == 0
+        return AgentTerminalInputState.classify(
+            processIsRunning: true,
+            shellProcessGroupID: rawShellGroup > 0 ? rawShellGroup : nil,
+            foregroundProcessGroupID: rawForegroundGroup > 0 ? rawForegroundGroup : nil,
+            echoEnabled: hasAttributes ? (attributes.c_lflag & tcflag_t(ECHO)) != 0 : nil,
+            canonicalInputEnabled: hasAttributes ? (attributes.c_lflag & tcflag_t(ICANON)) != 0 : nil
+        )
+    }
+
     func invalidateTerminalEchoCache() {
         cachedEchoEnabled = nil
         cachedEchoCheckedAt = 0
@@ -1295,6 +1386,7 @@ final class AgentTerminalTab: ObservableObject, Identifiable, AgentTerminalProce
 
     @Published var title: String
     @Published private(set) var isRunning = false
+    @Published private(set) var inputState: AgentTerminalInputState = .starting
     @Published private(set) var recentCommands: [String] = []
     @Published private(set) var activeRecordingStartedAt: Date?
     @Published private(set) var isPlayingShortcut = false
@@ -1384,6 +1476,7 @@ final class AgentTerminalTab: ObservableObject, Identifiable, AgentTerminalProce
         case .ssh(_, _, let target):
             guard let descriptor = sshDescriptor() else {
                 isRunning = false
+                inputState = .exited
                 return
             }
             var args = ["-tt", "-p", "\(descriptor.port)"]
@@ -1402,6 +1495,7 @@ final class AgentTerminalTab: ObservableObject, Identifiable, AgentTerminalProce
             }
         }
         isRunning = true
+        refreshInputState()
         lastActivity = Date()
     }
 
@@ -1436,6 +1530,7 @@ final class AgentTerminalTab: ObservableObject, Identifiable, AgentTerminalProce
         finishShortcutPlayback(status: .cancelled(reason: "terminal_stopped"))
         terminalView.terminate()
         isRunning = false
+        inputState = .exited
     }
 
     var isRecording: Bool { recorder != nil }
@@ -1463,11 +1558,13 @@ final class AgentTerminalTab: ObservableObject, Identifiable, AgentTerminalProce
     }
 
     func playShortcut(_ shortcut: TerminalShortcut) {
+        refreshInputState()
         guard isRunning,
               shortcut.isPlayable,
               !shortcut.hasPendingProtectedInput,
               !isRecording,
-              !isPlayingShortcut else { return }
+              !isPlayingShortcut,
+              inputState != .foregroundTask else { return }
         isPlayingShortcut = true
         let startedAt = Date()
         let totalDelay = shortcut.playbackDurationMilliseconds
@@ -1569,7 +1666,8 @@ final class AgentTerminalTab: ObservableObject, Identifiable, AgentTerminalProce
     /// Send the identity probe into the tab's live shell, poll the snapshot
     /// mirror for the marker line, then adopt the hostname as the tab title.
     func extractHostIdentity() {
-        guard isRunning, !isAutomationBusy, !isExtractingHostIdentity else { return }
+        refreshInputState()
+        guard canExtractHostIdentity else { return }
         isExtractingHostIdentity = true
         recordCommand(Self.hostIdentityProbeCommand)
         lastActivity = Date()
@@ -1637,6 +1735,10 @@ final class AgentTerminalTab: ObservableObject, Identifiable, AgentTerminalProce
         guard isRunning else {
             throw AgentToolError.invalidArgument("Open and start an Agent Terminal tab before sending commands.")
         }
+        refreshInputState()
+        if let refusal = AgentTerminalCommandDispatchPolicy.refusalMessage(for: inputState) {
+            throw AgentToolError.invalidArgument(refusal)
+        }
         let visibleCommand = AgentSecretStore.redact(trimmed, secretValues: secretRedactionValues)
         recordCommand(visibleCommand)
         lastActivity = Date()
@@ -1684,6 +1786,12 @@ final class AgentTerminalTab: ObservableObject, Identifiable, AgentTerminalProce
         }
         guard !isAutomationBusy else {
             throw AgentToolError.invalidArgument("The bound Agent Terminal tab is already running another delegated task.")
+        }
+        refreshInputState()
+        guard inputState != .foregroundTask, inputState != .interactiveProgram else {
+            throw AgentToolError.invalidArgument(
+                "The delegated terminal is still owned by a foreground or interactive program. Nothing was sent; wait for the shell prompt, interrupt that program, or use another delegated tab."
+            )
         }
         // Typed into the pty as input, so it is bound by the tty input queue —
         // see AgentDelegatedTerminalRunner for the full failure mode. Anything
@@ -1762,6 +1870,17 @@ final class AgentTerminalTab: ObservableObject, Identifiable, AgentTerminalProce
         return false
     }
 
+    func refreshInputState() {
+        let next = isRunning ? terminalView.currentInputState : .exited
+        guard next != inputState else { return }
+        inputState = next
+    }
+
+    var canExtractHostIdentity: Bool {
+        guard isRunning, !isAutomationBusy, !isExtractingHostIdentity else { return false }
+        return inputState != .foregroundTask
+    }
+
     // MARK: AgentTerminalProcessDelegate
 
     func sizeChanged(source: AgentLocalProcessTerminalView, newCols: Int, newRows: Int) {}
@@ -1781,6 +1900,7 @@ final class AgentTerminalTab: ObservableObject, Identifiable, AgentTerminalProce
 
     func processTerminated(source: AgentLocalProcessTerminalView, exitCode: Int32?) {
         isRunning = false
+        inputState = .exited
         finishShortcutPlayback(status: .cancelled(reason: "terminal_exited"))
     }
 
@@ -1839,6 +1959,7 @@ final class AgentInteractiveTerminalController: ObservableObject {
     /// looking at.
     private let idleTimeout: TimeInterval = 300
     private var idleTimer: Timer?
+    private var inputStateTimer: Timer?
     private var localShellCounter = 0
     private var tabChangePublishScheduled = false
 
@@ -1848,6 +1969,7 @@ final class AgentInteractiveTerminalController: ObservableObject {
 
     deinit {
         idleTimer?.invalidate()
+        inputStateTimer?.invalidate()
     }
 
     var activeTab: AgentTerminalTab? {
@@ -1963,6 +2085,7 @@ final class AgentInteractiveTerminalController: ObservableObject {
         tabSubscriptions[tab.id] = cancellable
         tabs.append(tab)
         activeTabID = tab.id
+        startInputStateMonitorIfNeeded()
     }
 
     func activateTab(id: UUID) {
@@ -1996,6 +2119,7 @@ final class AgentInteractiveTerminalController: ObservableObject {
         tabSubscriptions[id]?.cancel()
         tabSubscriptions[id] = nil
         tabs.remove(at: index)
+        stopInputStateMonitorIfIdle()
         if activeTabID == id {
             activeTabID = tabs.last?.id
         }
@@ -2442,6 +2566,23 @@ final class AgentInteractiveTerminalController: ObservableObject {
         idleTimer = timer
     }
 
+    private func startInputStateMonitorIfNeeded() {
+        guard inputStateTimer == nil else { return }
+        let timer = Timer(timeInterval: 0.5, repeats: true) { [weak self] _ in
+            Task { @MainActor [weak self] in
+                self?.tabs.forEach { $0.refreshInputState() }
+            }
+        }
+        RunLoop.main.add(timer, forMode: .common)
+        inputStateTimer = timer
+    }
+
+    private func stopInputStateMonitorIfIdle() {
+        guard tabs.isEmpty else { return }
+        inputStateTimer?.invalidate()
+        inputStateTimer = nil
+    }
+
     private func tickIdle() {
         guard !tabs.isEmpty else { return }
         let now = Date()
@@ -2476,10 +2617,12 @@ final class AgentInteractiveTerminalController: ObservableObject {
             sessionID: sessionID,
             opensLocalTabIfNeeded: false
         )
+        tab.refreshInputState()
         let source = tab.snapshotSource()
         return AgentTerminalRawSnapshot(
             tabID: tab.id,
             isRunning: tab.isRunning,
+            inputState: tab.inputState,
             isZModemTransferActive: tab.terminalView.isZModemTransferActive,
             runtimeName: tab.title,
             runtimeTarget: tab.runtimeTarget,
@@ -2773,8 +2916,9 @@ final class AgentInteractiveTerminalController: ObservableObject {
             }
 
             let pool = tabs.filter { $0.kind.isDelegatedShell }
+            pool.forEach { $0.refreshInputState() }
             if let reusable = pool
-                .filter({ $0.isRunning && !$0.isAutomationBusy })
+                .filter({ $0.isRunning && !$0.isAutomationBusy && $0.inputState == .shellReady })
                 .min(by: { $0.lastActivity < $1.lastActivity }) {
                 return reusable
             }
