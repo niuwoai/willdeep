@@ -70,7 +70,12 @@ struct EditorView: NSViewRepresentable {
     var languageServiceFoldingGuides: [ScopeGuide] = []
     var languageServiceFoldingIsAuthoritative = false
 
-    /// Called whenever the user makes a text change (not during programmatic updates).
+    /// Immediate, constant-time dirty-state hook. This must stay cheap so the
+    /// native text view can paint the just-entered glyph without waiting for
+    /// language-service or document-analysis work.
+    var onImmediateEdit: (() -> Void)?
+
+    /// Debounced edit hook for document analysis and other auxiliary work.
     var onEdit: (() -> Void)?
 
     /// Called when the caret or selection moves so the status bar can stay current.
@@ -451,6 +456,17 @@ struct EditorView: NSViewRepresentable {
         private var highlightWorkItem: DispatchWorkItem?
         private var highlightGeneration = 0
 
+        /// Non-rendering editor work is intentionally kept off the immediate
+        /// NSTextView edit callback. AppKit can paint the inserted glyph as
+        /// soon as `textDidChange` returns; folding, CJK attribute repair,
+        /// LSP scheduling, cursor publication, and gutter refresh are safely
+        /// coalesced across a short typing burst.
+        private var postInputWorkItem: DispatchWorkItem?
+        private weak var pendingInputTextView: WillDeepTextView?
+        private var pendingInputChangedText = false
+        private var pendingInputMarksDocumentDirty = false
+        private static let postInputDelay: TimeInterval = 0.05
+
         // MARK: Viewport highlighting (large files)
 
         /// Files at or above this UTF-16 length highlight only the visible range
@@ -523,24 +539,77 @@ struct EditorView: NSViewRepresentable {
                 cancelPendingHighlightForIMEComposition()
                 return
             }
-            textView.invalidateFoldableGuidesCache()
-            textView.clearFoldedScopes()
+            // Keep the document model current synchronously so Save/Save As
+            // can never miss the newest keystroke. Everything that does not
+            // affect that correctness contract is deferred below, allowing
+            // AppKit to return to glyph display immediately.
             parent.text = textView.string
-            applyLiveEditorCJKFallbackFonts(to: textView)
-
             if !suppressDirtyFlag {
-                parent.onEdit?()
+                parent.onImmediateEdit?()
             }
-
-            scheduleHighlight(textView: textView)
-            publishCursorPosition(for: textView)
-            refreshEditorChrome(for: textView)
+            schedulePostInputWork(
+                for: textView,
+                textChanged: true,
+                marksDocumentDirty: !suppressDirtyFlag
+            )
         }
 
         func textViewDidChangeSelection(_ notification: Notification) {
             guard let textView = notification.object as? WillDeepTextView else { return }
             textView.invalidateCurrentLineHighlight()
             guard !textView.hasMarkedText() else { return }
+            schedulePostInputWork(
+                for: textView,
+                textChanged: false,
+                marksDocumentDirty: false
+            )
+        }
+
+        private func schedulePostInputWork(
+            for textView: WillDeepTextView,
+            textChanged: Bool,
+            marksDocumentDirty: Bool
+        ) {
+            if let pendingInputTextView, pendingInputTextView !== textView {
+                performPendingInputWork()
+            }
+            pendingInputTextView = textView
+            pendingInputChangedText = pendingInputChangedText || textChanged
+            pendingInputMarksDocumentDirty = pendingInputMarksDocumentDirty || marksDocumentDirty
+            postInputWorkItem?.cancel()
+            let workItem = DispatchWorkItem { [weak self] in
+                self?.performPendingInputWork()
+            }
+            postInputWorkItem = workItem
+            DispatchQueue.main.asyncAfter(
+                deadline: .now() + Self.postInputDelay,
+                execute: workItem
+            )
+        }
+
+        private func performPendingInputWork() {
+            postInputWorkItem?.cancel()
+            postInputWorkItem = nil
+            guard let textView = pendingInputTextView else {
+                pendingInputChangedText = false
+                pendingInputMarksDocumentDirty = false
+                return
+            }
+            let textChanged = pendingInputChangedText
+            let marksDocumentDirty = pendingInputMarksDocumentDirty
+            pendingInputTextView = nil
+            pendingInputChangedText = false
+            pendingInputMarksDocumentDirty = false
+
+            if textChanged {
+                textView.invalidateFoldableGuidesCache()
+                textView.clearFoldedScopes()
+                applyLiveEditorCJKFallbackFonts(to: textView)
+                if marksDocumentDirty {
+                    parent.onEdit?()
+                }
+                scheduleHighlight(textView: textView)
+            }
             publishCursorPosition(for: textView)
             applyBracketHighlight(to: textView)
             refreshEditorChrome(for: textView, redrawTextView: false)
@@ -549,6 +618,11 @@ struct EditorView: NSViewRepresentable {
         private func cancelPendingHighlightForIMEComposition() {
             highlightWorkItem?.cancel()
             viewportHighlightWorkItem?.cancel()
+            postInputWorkItem?.cancel()
+            postInputWorkItem = nil
+            pendingInputTextView = nil
+            pendingInputChangedText = false
+            pendingInputMarksDocumentDirty = false
             highlightGeneration += 1
         }
 

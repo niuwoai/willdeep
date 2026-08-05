@@ -69,6 +69,19 @@ struct AgentWindowRootView: View {
             // provider 保存等步骤始终拿得到完整环境。
             onboarding.presentIfNeeded()
         }
+        // A cold CLI launch (`willdeep some-file.txt`) activates the first
+        // scene, which is intentionally the Agent window. The URL-backed
+        // Editor scene is not created automatically in that case, so forward
+        // every non-OAuth external URL explicitly instead of dropping it in
+        // the Agent-only scene.
+        .onOpenURL { url in
+            if CollaborationConnectorOAuthCoordinator.handleCallback(url) {
+                return
+            }
+            if InitialLaunchPolicy.shouldOpenEditor(forInitialExternalURL: url) {
+                openWindow(value: url)
+            }
+        }
         .sheet(isPresented: $onboarding.isPresented) {
             if let appState = registry.current {
                 OnboardingView()

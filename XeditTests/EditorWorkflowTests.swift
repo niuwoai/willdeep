@@ -46,6 +46,16 @@ extension WillDeepTests {
         ))
     }
 
+    @Test("cold external URL launch is routed away from the Agent-only scene")
+    func testColdExternalURLLaunchRequiresEditor() {
+        var components = URLComponents()
+        components.scheme = "willdeep"
+        components.host = "open"
+        components.queryItems = [URLQueryItem(name: "path", value: "/tmp/from-cli.txt")]
+
+        #expect(InitialLaunchPolicy.shouldOpenEditor(forInitialExternalURL: components.url))
+    }
+
     @Test("closing the last editor tab closes the window instead of showing an empty state")
     func testLastEditorTabClosesWindow() {
         #expect(!EditorWindowLifecyclePolicy.shouldCloseAfterTabCountChange(from: 0, to: 1))
@@ -550,13 +560,18 @@ extension WillDeepTests {
         #expect(changed == Set([2, 4]))
     }
 
-    @Test("active tab exposes dirty gutter line numbers")
-    func testActiveTabExposesDirtyGutterLineNumbers() {
+    @MainActor
+    @Test("active tab computes dirty gutter line numbers without blocking typing")
+    func testActiveTabExposesDirtyGutterLineNumbers() async throws {
         let tempDir = FileManager.default.temporaryDirectory
         let fileURL = tempDir.appendingPathComponent("willdeep_dirty_gutter_\(UUID().uuidString).swift")
         let appState = AppState(openedFileURL: fileURL, fileContent: "let a = 1\nlet b = 2")
 
         appState.fileContent = "let a = 1\nlet b = 3"
+        appState.isEdited = true
+        for _ in 0..<20 where appState.changedLineNumbers != Set([2]) {
+            try await Task.sleep(for: .milliseconds(50))
+        }
 
         #expect(appState.changedLineNumbers == Set([2]))
     }

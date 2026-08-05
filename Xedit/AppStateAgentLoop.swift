@@ -1162,7 +1162,7 @@ extension AppState {
                     // owned child runtimes, then end the planner turn.
                     persistAgentSession(runtime: runtime, touchUpdatedAt: false, moveToFront: false)
                     agentDispatchCoordinator.synchronize(with: agentSessions)
-                    resumeDispatchGoal(goalID: runtime.id)
+                    _ = launchReadyDispatchTasks(goalID: runtime.id)
                     return
                 }
                 let goalChecklistCount = runtime.currentGoal?.checklist.count

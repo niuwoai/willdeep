@@ -462,6 +462,7 @@ private struct AgentDispatchBoardContent: View {
                 )
                 return
             }
+            _ = appState.launchReadyDispatchTasks(goalID: goal.id)
             return
         }
 
@@ -496,6 +497,9 @@ private struct AgentDispatchBoardContent: View {
             text: text,
             effect: .appliedImmediately
         )
+        if !paused {
+            _ = appState.launchReadyDispatchTasks(goalID: goal.id)
+        }
     }
 
     private func selectGraphNode(_ selection: AgentDispatchGraphSelection) {

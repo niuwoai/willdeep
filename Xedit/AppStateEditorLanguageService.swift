@@ -71,7 +71,8 @@ extension AppState {
         let safeOffset = min(max(0, characterOffset), nsText.length)
         let language = effectiveLanguage
         let root = rootDirectory
-        let requestKey = "\(fileURL.absoluteString)#\(safeOffset)#\(text.hashValue)"
+        let contentRevision = activeTab?.contentRevision ?? 0
+        let requestKey = "\(fileURL.absoluteString)#\(safeOffset)#\(contentRevision)"
         guard requestKey != editorDocumentHighlightRequestKey else { return }
 
         editorDocumentHighlightRevision += 1

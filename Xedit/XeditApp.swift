@@ -33,6 +33,9 @@ struct WillDeepApp: App {
         }
         .windowStyle(.hiddenTitleBar)
         .defaultSize(width: defaultSize.width, height: defaultSize.height)
+        .commands {
+            WillDeepCommands()
+        }
         WindowGroup(for: URL.self) { $url in
             WindowRootView(initialExternalURL: url)
         }

@@ -41,6 +41,7 @@ private final class InvalidationSpyLayoutManager: NSLayoutManager {
 
 private final class EditorIMEBindingSpy {
     var text: String
+    var immediateEditCount = 0
     var editCount = 0
 
     init(text: String) {
@@ -276,6 +277,48 @@ extension WillDeepTests {
 
         #expect(!textView.hasMarkedText())
         #expect(spy.text == "abcni")
+        #expect(spy.editCount == 0)
+
+        try await Task.sleep(nanoseconds: 100_000_000)
+
+        #expect(spy.editCount == 1)
+    }
+
+    @Test("editor coalesces auxiliary work across a typing burst")
+    @MainActor
+    func testEditorCoalescesPostInputWork() async throws {
+        let spy = EditorIMEBindingSpy(text: "")
+        let editor = EditorView(
+            text: Binding(
+                get: { spy.text },
+                set: { spy.text = $0 }
+            ),
+            language: .swift,
+            detectedLanguage: .swift,
+            settings: .default,
+            activeTabID: nil,
+            onImmediateEdit: { spy.immediateEditCount += 1 },
+            onEdit: { spy.editCount += 1 }
+        )
+        let coordinator = editor.makeCoordinator()
+        let (textView, _) = Self.makeLiveEditorTextSystem(
+            text: "",
+            font: EditorSettings.default.editorFont()
+        )
+
+        for text in ["a", "ab", "abc"] {
+            textView.string = text
+            coordinator.textDidChange(
+                Notification(name: NSText.didChangeNotification, object: textView)
+            )
+        }
+
+        #expect(spy.text == "abc")
+        #expect(spy.immediateEditCount == 3)
+        #expect(spy.editCount == 0)
+
+        try await Task.sleep(nanoseconds: 100_000_000)
+
         #expect(spy.editCount == 1)
     }
 }

@@ -960,21 +960,76 @@ final class AppState: ObservableObject {
         let lines: Set<Int>
     }
     private var changedLinesCache: ChangedLinesCache?
+    private struct ChangedLinesComputationKey: Equatable {
+        let tabID: EditorTab.ID
+        let currentRevision: Int
+        let savedRevision: Int
+    }
+    private var changedLinesComputationKey: ChangedLinesComputationKey?
+    private var changedLinesComputationWorkItem: DispatchWorkItem?
 
     var changedLineNumbers: Set<Int> {
         guard let activeTab else { return [] }
+        if !activeTab.isEdited {
+            changedLinesComputationWorkItem?.cancel()
+            changedLinesComputationWorkItem = nil
+            changedLinesComputationKey = nil
+            let cache = ChangedLinesCache(
+                currentRevision: activeTab.contentRevision,
+                savedRevision: activeTab.savedContentRevision,
+                lines: []
+            )
+            changedLinesCache = cache
+            return cache.lines
+        }
         if let cached = changedLinesCache,
            cached.currentRevision == activeTab.contentRevision,
            cached.savedRevision == activeTab.savedContentRevision {
             return cached.lines
         }
-        let lines = Self.changedLineNumbers(current: activeTab.content, saved: activeTab.savedContent)
-        changedLinesCache = ChangedLinesCache(
-            currentRevision: activeTab.contentRevision,
-            savedRevision: activeTab.savedContentRevision,
-            lines: lines
+        scheduleChangedLinesComputation(for: activeTab)
+        var provisional = changedLinesCache?.lines ?? []
+        provisional.insert(max(1, cursorLine))
+        return provisional
+    }
+
+    private func scheduleChangedLinesComputation(for tab: EditorTab) {
+        let key = ChangedLinesComputationKey(
+            tabID: tab.id,
+            currentRevision: tab.contentRevision,
+            savedRevision: tab.savedContentRevision
         )
-        return lines
+        guard changedLinesComputationKey != key else { return }
+        changedLinesComputationWorkItem?.cancel()
+        changedLinesComputationKey = key
+        let current = tab.content
+        let saved = tab.savedContent
+        let workItem = DispatchWorkItem { [weak self] in
+            guard let self else { return }
+            let lines = Self.changedLineNumbers(current: current, saved: saved)
+            DispatchQueue.main.async { [weak self] in
+                guard let self,
+                      self.changedLinesComputationKey == key,
+                      self.activeTab?.id == key.tabID,
+                      self.activeTab?.contentRevision == key.currentRevision,
+                      self.activeTab?.savedContentRevision == key.savedRevision else {
+                    return
+                }
+                self.changedLinesCache = ChangedLinesCache(
+                    currentRevision: key.currentRevision,
+                    savedRevision: key.savedRevision,
+                    lines: lines
+                )
+                self.changedLinesComputationKey = nil
+                self.changedLinesComputationWorkItem = nil
+                self.objectWillChange.send()
+            }
+        }
+        changedLinesComputationWorkItem = workItem
+        DispatchQueue.global(qos: .userInitiated).asyncAfter(
+            deadline: .now() + 0.08,
+            execute: workItem
+        )
     }
 
     func updateSelectionInfo(

@@ -1,6 +1,6 @@
 # WillDeep Product Overview
 
-> Last updated: 2026-08-05 | Current version: v1.228.0-rc7
+> Last updated: 2026-08-06 | Current version: v1.228.0-rc8
 
 ## Positioning
 
@@ -12,6 +12,7 @@ WillDeep is configured for non-App-Store distribution without App Sandbox so it 
 
 ## 架构概览
 
+- **Editor 启动、输入与调度恢复边界修正（1.228.0-rc8）** —— `willdeep <file>` 冷启动 URL 会从默认 Agent 场景可靠转交 Editor，普通 Editor 窗口也拥有保存与另存为菜单。输入时仅同步正文和脏状态，折叠、字体、LSP、高亮、光标与 gutter 工作短延迟合并，整文件变更行计算移出主线程。历史调度恢复只观察既有运行，不会重新启动已结束或排队节点；后台节点不再抢占聊天导航，旧会话 runtime 在切换期间受缓存保护。
 - **审批卡严格串行且 Composer 状态可靠（1.228.0-rc7）** —— 同一回合的多个人工审核项只会逐条激活，后续调用以不可操作的排队行展示，不再提前提交决定后卡在执行循环；Always-Allow 等明确授权仍可把匹配项转为可审计的自动批准。Composer 直接观察当前 runtime，输出中与 Provider 排队时持续显示停止图标。成功工具活动仅保留具体动作摘要，不再追加时有时无的“完成”。
 - **终端前台占用可见且防误投（1.228.0-rc6）** —— 终端按 PTY 前台进程组与 canonical/echo 模式区分 Shell 就绪、非交互前台任务和 SSH/TUI/REPL 交互程序；压测等静默任务运行时会显示“前台任务运行中”，方向键不再产生 `^[[A` 乱码。Agent 快照与标签列表可读取 `input_state`，且不能把新命令注入仍占用 PTY 的前台任务，可改为等待、Ctrl-C、新标签页或后台执行。
 - **会话标题更新不再打扰用户（1.228.0-rc5）** —— `rename_session` 只修改发起调用的当前会话，是可逆的本地元数据写入；普通、Goal 与“每次询问”模式均由宿主确定性免审，同时保留 write-tier 顺序、审计记录、非空单行与 120 字符校验。会改变后续工具边界的工作区切换继续要求人工批准。
