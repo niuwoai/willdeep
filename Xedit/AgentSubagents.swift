@@ -839,6 +839,8 @@ private actor SubagentTurnCollector {
             turn.reasoning += delta
         case .toolCallsUpdated(let calls):
             turn.toolCalls = calls
+        case .sourceReferencesUpdated:
+            break
         case .finishedTurn:
             break
         case .usageReported(_, _, let total, _, _, _):
@@ -902,6 +904,8 @@ private actor AgentSubagentTextStreamCollector {
         case .toolCallsUpdated:
             // `runStreamingText` advertises no tools. Ignore a provider's
             // defensive empty tool snapshot rather than exposing it as text.
+            return nil
+        case .sourceReferencesUpdated:
             return nil
         case .finishedTurn(let reason):
             didFinish = true

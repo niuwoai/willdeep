@@ -79,7 +79,7 @@ extension AgentTurnReport {
             // rows to reveal initially; truncating here also made copied
             // reports permanently lose every call after the eighth.
             tools: tools,
-            sourceReferences: summarizeSources(tools),
+            sourceReferences: summarizeSources(tools, assistantMessages: assistantMessages),
             learningEvents: Array(learningEvents.prefix(6))
         )
         return report.hasUsefulContent ? report : nil
@@ -140,10 +140,15 @@ extension AgentTurnReport {
         )
     }
 
-    private static func summarizeSources(_ tools: [AgentToolCall]) -> [AgentSourceReference] {
+    private static func summarizeSources(
+        _ tools: [AgentToolCall],
+        assistantMessages: [AgentMessage]
+    ) -> [AgentSourceReference] {
         var seen = Set<String>()
         var result: [AgentSourceReference] = []
-        for reference in tools.flatMap({ $0.result?.references ?? [] }) {
+        let references = tools.flatMap { $0.result?.references ?? [] }
+            + assistantMessages.flatMap(\.sourceReferences)
+        for reference in references {
             let key = reference.url.lowercased()
             guard !key.isEmpty, !seen.contains(key) else { continue }
             seen.insert(key)

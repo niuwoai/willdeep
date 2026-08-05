@@ -1,7 +1,22 @@
 # Changelog
 
-> 当前文件保留最新版本（1.227.0-rc3 至 1.109.0-rc340）。
+> 当前文件保留最新版本（1.227.0-rc4 至 1.109.0-rc340）。
 > 更早的 1000 个版本已移至 [CHANGELOG-ARCHIVE.md](CHANGELOG-ARCHIVE.md)。
+
+## 1.227.0-rc4 - 2026-08-05
+
+### Fixed
+
+- DeepSeek V4 Flash 的 Responses 请求优先把 `web_search` 编码为服务端 hosted tool；网关以 400/422 明确拒绝或不识别该工具时，当前请求自动失效续接游标并回退到原有本地函数工具，其他模型的搜索策略保持不变。
+- 解析并持久化服务端流式及完成事件中的 `url_citation`，统一并入现有来源胶囊与回合报告，避免服务端搜索完成后丢失引用。
+
+### Tests
+
+- 新增 DeepSeek V4 Flash hosted `web_search` 编码、服务端拒绝后的本地回退，以及引用保留回归测试；相关 18 个模型适配器测试全部通过。
+
+### Meta
+
+- Bugfix 预发布版本从 **1.227.0-rc3** 递增为 **1.227.0-rc4**，内部构建号从 **282** 递增为 **283**，Help 与 Computer Use Helper 构建号从 **199** 递增为 **200**；App、Go agent、Help、Helper、浏览器扩展、README、响应头契约与产品文档保持一致。
 
 ## 1.227.0-rc3 - 2026-08-05
 
