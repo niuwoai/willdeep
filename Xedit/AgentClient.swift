@@ -31,6 +31,8 @@ enum AgentClientEvent {
     /// arguments in fragments; the adapter merges them and re-emits the full
     /// list on every change so the caller always has the latest view.
     case toolCallsUpdated([AgentMessageToolCall])
+    /// Cumulative public references reported by provider-hosted tools.
+    case sourceReferencesUpdated([AgentSourceReference])
     /// Finish reason reported by the provider (e.g. "stop", "tool_calls").
     case finishedTurn(String?)
     /// Token usage emitted by the provider on the final streaming chunk

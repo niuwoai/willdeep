@@ -242,12 +242,15 @@ struct OpenAIResponsesAdapter {
             messages,
             supportsImages: configuration.supportsImageInput
         )
-        let fullRequestBody = try Self.encodeRequestBody(
+        var usesHostedWebSearch = configuration.prefersHostedWebSearch
+            && tools.contains { $0.name == "web_search" }
+        var fullRequestBody = try Self.encodeRequestBody(
             model: configuration.model,
             messages: requestMessages,
             tools: tools,
             supportsImages: configuration.supportsImageInput,
-            store: !configuration.isDeepSeekV4FlashResponsesModel
+            store: !configuration.isDeepSeekV4FlashResponsesModel,
+            useHostedWebSearch: usesHostedWebSearch
         )
         var mayUseContinuation = !configuration.usesStatelessDeepSeekResponses
         var mayRequestGatewayState = configuration.usesWillDeepGatewayResponsesState
@@ -311,6 +314,29 @@ struct OpenAIResponsesAdapter {
                    ) {
                     continuationState.invalidate(responseID: preparedRequest.responseID)
                     mayUseContinuation = false
+                    continue
+                }
+                if usesHostedWebSearch,
+                   Self.isHostedWebSearchRejected(
+                       statusCode: httpResponse.statusCode,
+                       responseBody: responseBody
+                   ) {
+                    // DeepSeek V4 Flash normally executes hosted web search
+                    // inside the Responses request. Older relays may reject
+                    // that hosted tool shape, so retry once with the existing
+                    // client-executed function tool instead of failing the
+                    // whole user turn.
+                    continuationState.invalidate()
+                    usesHostedWebSearch = false
+                    mayUseContinuation = false
+                    fullRequestBody = try Self.encodeRequestBody(
+                        model: configuration.model,
+                        messages: requestMessages,
+                        tools: tools,
+                        supportsImages: configuration.supportsImageInput,
+                        store: !configuration.isDeepSeekV4FlashResponsesModel,
+                        useHostedWebSearch: false
+                    )
                     continue
                 }
                 throw AgentClientError.serverStatus(
@@ -617,6 +643,9 @@ struct OpenAIResponsesAdapter {
         var functionCalls: [String: PendingFunctionCall] = [:]
         var orderedItemIDs: [String] = []
         var toolCallEmissionGate = AgentToolCallStreamEmissionGate()
+        var sourceReferences: [AgentSourceReference] = []
+        var sourceReferenceURLs = Set<String>()
+        var lastEmittedSourceReferenceURLs: [String] = []
         /// True once the stream carries a real signal (text, reasoning, a
         /// function call, a completion, or a mid-stream error). A 2xx
         /// response that closes with none of these would look like a silent
@@ -687,6 +716,15 @@ struct OpenAIResponsesAdapter {
                let delta = event.delta, !delta.isEmpty {
                 state.didEmitStreamEvent = true
                 await onEvent(.reasoningDelta(delta))
+            }
+
+        case "response.output_text.annotation.added":
+            if let event = try? JSONDecoder().decode(OutputTextAnnotationAddedEvent.self, from: payload),
+               let annotation = event.annotation,
+               let reference = Self.sourceReference(from: annotation) {
+                state.didEmitStreamEvent = true
+                Self.appendSourceReference(reference, to: &state)
+                await emitSourceReferencesIfChanged(state: &state, onEvent: onEvent)
             }
 
         case "response.output_item.added":
@@ -765,6 +803,14 @@ struct OpenAIResponsesAdapter {
                     state.responseID = responseID
                 }
                 state.didCompleteResponse = true
+                for annotation in event.response?.output?
+                    .flatMap({ $0.content ?? [] })
+                    .flatMap({ $0.annotations ?? [] }) ?? [] {
+                    if let reference = Self.sourceReference(from: annotation) {
+                        Self.appendSourceReference(reference, to: &state)
+                    }
+                }
+                await emitSourceReferencesIfChanged(state: &state, onEvent: onEvent)
                 if let usage = event.response?.usage {
                     let prompt = usage.input_tokens ?? 0
                     let completion = usage.output_tokens ?? 0
@@ -828,6 +874,43 @@ struct OpenAIResponsesAdapter {
         if state.toolCallEmissionGate.shouldEmit(signature: signature, force: force) {
             await onEvent(.toolCallsUpdated(Self.snapshot(of: state)))
         }
+    }
+
+    private func emitSourceReferencesIfChanged(
+        state: inout StreamState,
+        onEvent: @escaping @Sendable (AgentClientEvent) async -> Void
+    ) async {
+        let urls = state.sourceReferences.map(\.url)
+        guard urls != state.lastEmittedSourceReferenceURLs else { return }
+        state.lastEmittedSourceReferenceURLs = urls
+        await onEvent(.sourceReferencesUpdated(state.sourceReferences))
+    }
+
+    private static func appendSourceReference(
+        _ reference: AgentSourceReference,
+        to state: inout StreamState
+    ) {
+        let key = reference.url.lowercased()
+        guard state.sourceReferenceURLs.insert(key).inserted else { return }
+        state.sourceReferences.append(reference)
+    }
+
+    private static func sourceReference(
+        from annotation: ResponsesURLCitation
+    ) -> AgentSourceReference? {
+        guard annotation.type == "url_citation",
+              let rawURL = annotation.url?.trimmingCharacters(in: .whitespacesAndNewlines),
+              let url = URL(string: rawURL),
+              let scheme = url.scheme?.lowercased(),
+              scheme == "http" || scheme == "https" else {
+            return nil
+        }
+        let title = annotation.title?.trimmingCharacters(in: .whitespacesAndNewlines)
+        return AgentSourceReference(
+            title: title.flatMap { $0.isEmpty ? nil : $0 },
+            url: rawURL,
+            toolName: "web_search"
+        )
     }
 
     private static func snapshot(of state: StreamState) -> [AgentMessageToolCall] {
@@ -950,6 +1033,21 @@ struct OpenAIResponsesAdapter {
             || lower.contains("responses state")
     }
 
+    private static func isHostedWebSearchRejected(
+        statusCode: Int,
+        responseBody: String
+    ) -> Bool {
+        guard statusCode == 400 || statusCode == 422 else { return false }
+        let lower = responseBody.lowercased()
+        let mentionsWebSearch = lower.contains("web_search") || lower.contains("web search")
+        let rejectsTool = lower.contains("unsupported")
+            || lower.contains("not supported")
+            || lower.contains("unknown tool")
+            || lower.contains("invalid tool")
+            || lower.contains("unrecognized")
+        return mentionsWebSearch && rejectsTool
+    }
+
     // MARK: - Request body encoding
 
     /// Translate the chat history + tools into the OpenAI Responses
@@ -974,7 +1072,8 @@ struct OpenAIResponsesAdapter {
         messages: [AgentMessage],
         tools: [AgentToolDescriptor],
         supportsImages: Bool,
-        store: Bool = true
+        store: Bool = true,
+        useHostedWebSearch: Bool = false
     ) throws -> Data {
         var systemBlobs: [String] = []
         var input: [[String: Any]] = []
@@ -1091,7 +1190,12 @@ struct OpenAIResponsesAdapter {
             body["instructions"] = systemBlobs.joined(separator: "\n\n")
         }
         if !tools.isEmpty {
-            body["tools"] = tools.map(encodeTool)
+            body["tools"] = tools.map { descriptor -> [String: Any] in
+                if useHostedWebSearch, descriptor.name == "web_search" {
+                    return ["type": "web_search"]
+                }
+                return encodeTool(descriptor)
+            }
         }
         return try JSONSerialization.data(withJSONObject: body, options: [.sortedKeys])
     }
@@ -1176,6 +1280,16 @@ private struct ReasoningDeltaEvent: Decodable {
     let item_id: String?
 }
 
+private struct OutputTextAnnotationAddedEvent: Decodable {
+    let annotation: ResponsesURLCitation?
+}
+
+private struct ResponsesURLCitation: Decodable {
+    let type: String?
+    let url: String?
+    let title: String?
+}
+
 private struct OutputItemAddedEvent: Decodable {
     let item: Item?
 
@@ -1229,6 +1343,11 @@ private struct ResponseCompletedEvent: Decodable {
 
     struct Output: Decodable {
         let type: String?
+        let content: [Content]?
+    }
+
+    struct Content: Decodable {
+        let annotations: [ResponsesURLCitation]?
     }
 
     struct IncompleteDetails: Decodable {
