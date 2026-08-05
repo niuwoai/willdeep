@@ -607,9 +607,9 @@ extension WillDeepTests {
         #expect(segments[1].count == 1)
     }
 
-    @Test("tool approval clicked before waiter registration is delivered")
+    @Test("tool approval clicked before waiter registration is ignored")
     @MainActor
-    func testToolApprovalClickedBeforeWaiterRegistrationIsDelivered() async throws {
+    func testToolApprovalClickedBeforeWaiterRegistrationIsIgnored() async throws {
         let appState = AppState()
         let session = appState.startNewAgentSession()
         defer { AgentSessionStore.delete(id: session.id) }
@@ -630,14 +630,20 @@ extension WillDeepTests {
 
         appState.approveAgentToolCall(id: call.id)
 
-        #expect(appState.hasPendingAgentToolDecision(id: call.id))
-        let decision = await appState.awaitToolDecision(for: runtime, forCallID: call.id)
+        #expect(runtime.pendingToolDecisions.isEmpty)
+        #expect(runtime.toolCalls.first?.status == .pendingApproval)
+
+        let waiter = Task { @MainActor in
+            await appState.awaitToolDecision(for: runtime, forCallID: call.id)
+        }
+        while runtime.toolDecisionWaiterCallID != call.id { await Task.yield() }
+        appState.approveAgentToolCall(id: call.id)
+        let decision = await waiter.value
         if case .approved = decision {
             // Expected path.
         } else {
             Issue.record("Expected approved decision, got \(decision)")
         }
-        #expect(!appState.hasPendingAgentToolDecision(id: call.id))
         #expect(runtime.toolCalls.first?.status == .running)
     }
 
@@ -754,9 +760,11 @@ extension WillDeepTests {
             toolName: "run_command",
             arguments: ["command": .string("deploy second")],
             risk: .write,
-            status: .pendingApproval
+            status: .running
         )
-        appState.agentToolCalls = [first, second]
+        var queuedSecond = second
+        queuedSecond.arguments[AgentSerialToolApprovalQueue.argumentKey] = .bool(true)
+        appState.agentToolCalls = [first, queuedSecond]
 
         let firstWait = Task { @MainActor in
             await appState.awaitToolDecision(for: runtime, forCallID: first.id)
@@ -768,7 +776,8 @@ extension WillDeepTests {
         #expect(runtime.toolDecisionWaiterCallID == first.id)
         appState.approveAgentToolCall(id: second.id)
         #expect(runtime.toolDecisionWaiterCallID == first.id)
-        #expect(appState.hasPendingAgentToolDecision(id: second.id))
+        #expect(runtime.pendingToolDecisions.isEmpty)
+        #expect(AgentSerialToolApprovalQueue.contains(runtime.toolCalls[1]))
 
         appState.approveAgentToolCall(id: first.id)
         let firstDecision = await firstWait.value
@@ -778,7 +787,14 @@ extension WillDeepTests {
             Issue.record("Expected first call to be approved, got \(firstDecision)")
         }
 
-        let secondDecision = await appState.awaitToolDecision(for: runtime, forCallID: second.id)
+        runtime.toolCalls[1].arguments.removeValue(forKey: AgentSerialToolApprovalQueue.argumentKey)
+        runtime.toolCalls[1].status = .pendingApproval
+        let secondWaiter = Task { @MainActor in
+            await appState.awaitToolDecision(for: runtime, forCallID: second.id)
+        }
+        while runtime.toolDecisionWaiterCallID != second.id { await Task.yield() }
+        appState.approveAgentToolCall(id: second.id)
+        let secondDecision = await secondWaiter.value
         if case .approved = secondDecision {
             // Expected path.
         } else {

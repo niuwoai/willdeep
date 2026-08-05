@@ -4794,6 +4794,34 @@
         }
       }
     },
+    "agent-terminal.session.starting" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Starting…" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "启动中…" } }
+      }
+    },
+    "agent-terminal.session.shell-ready" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Shell Ready" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "Shell 就绪" } }
+      }
+    },
+    "agent-terminal.session.foreground-task" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Foreground Task" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "前台任务运行中" } }
+      }
+    },
+    "agent-terminal.session.interactive-program" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Interactive Program" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "交互程序" } }
+      }
+    },
     "agent-terminal.session.ssh" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -6493,13 +6521,13 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Ask before every write or external action."
+            "value" : "Ask before security-relevant writes or external actions; harmless title updates auto-run."
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "每次写入或外部操作前都询问。"
+            "value" : "安全相关写入或外部操作前询问；无害的标题更新自动执行。"
           }
         }
       }

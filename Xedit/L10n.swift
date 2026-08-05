@@ -167,7 +167,7 @@ nonisolated enum L10n {
     enum ApprovalMode {
         static let pickerHelp = String(localized: "approval-mode.picker-help", defaultValue: "Choose how this session approves Agent tool calls.")
         static let requestEveryTime = String(localized: "approval-mode.request-every-time", defaultValue: "Strict mode")
-        static let requestEveryTimeSummary = String(localized: "approval-mode.request-every-time.summary", defaultValue: "Ask before every write or external action.")
+        static let requestEveryTimeSummary = String(localized: "approval-mode.request-every-time.summary", defaultValue: "Ask before security-relevant writes or external actions; harmless title updates auto-run.")
         static let smart = String(localized: "approval-mode.smart", defaultValue: "Smart review")
         static let smartSummary = String(localized: "approval-mode.smart.summary", defaultValue: "Auto-write in the workspace; intelligently review external actions.")
         static let workspaceAccess = String(localized: "approval-mode.workspace-access", defaultValue: "Workspace write")

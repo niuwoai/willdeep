@@ -458,7 +458,6 @@ struct AgentToolCallGroup: View {
 
     private var interactiveCallsBody: some View {
         VStack(alignment: .leading, spacing: 4) {
-            AgentToolBatchApprovalBar(calls: calls)
             ForEach(calls) { call in
                 AgentToolCallCard(call: call)
             }
@@ -512,7 +511,6 @@ struct AgentToolCallGroup: View {
 
             if detailsVisible {
                 VStack(alignment: .leading, spacing: 4) {
-                    AgentToolBatchApprovalBar(calls: calls)
                     ForEach(calls) { call in
                         AgentToolCallCard(call: call)
                     }
@@ -569,23 +567,18 @@ struct AgentToolCallGroup: View {
         let waiting = calls.filter {
             $0.status == .pendingApproval || $0.status == .awaitingConfirm || $0.status == .awaitingUserAnswer
         }.count
-        let running = calls.filter { $0.status == .running }.count
+        let queued = calls.filter(AgentSerialToolApprovalQueue.contains).count
+        let running = calls.filter {
+            $0.status == .running && !AgentSerialToolApprovalQueue.contains($0)
+        }.count
         let failed = calls.filter { $0.status == .failed }.count
         let denied = calls.filter { $0.status == .denied }.count
-        let succeeded = calls.filter { $0.status == .succeeded }.count
         var parts: [String] = []
-        // Previously an all-success group returned "" — the single most
-        // reassuring state (工具全干成了) rendered as *nothing*, leaving
-        // the user staring at a bare intent line. Give it an explicit
-        // receipt instead so "done" reads as done.
-        if succeeded == calls.count, waiting == 0, running == 0, failed == 0, denied == 0 {
-            return "✓ 全部完成"
-        }
         if waiting > 0 { parts.append("\(waiting) 待处理") }
+        if queued > 0 { parts.append("\(queued) 排队等待确认") }
         if running > 0 { parts.append("\(running) 运行中") }
         if failed > 0 { parts.append("✗ \(failed) 失败") }
         if denied > 0 { parts.append("✗ \(denied) 已拒绝") }
-        if succeeded > 0 { parts.append("✓ \(succeeded) 完成") }
         return parts.joined(separator: " · ")
     }
 
@@ -597,51 +590,6 @@ struct AgentToolCallGroup: View {
         if containsInteractiveCall { return appState.editorSettings.interfaceSkin.palette.accent.opacity(0.28) }
         if calls.contains(where: { $0.status == .failed }) { return Color.orange.opacity(0.28) }
         return Color.primary.opacity(0.04)
-    }
-}
-
-/// One-click batch release for a staged round: shown whenever two or more
-/// ordinary write-tier approval cards are waiting at once. Danger-tier typed
-/// confirmations, sandbox-escalation retries, and ask_user cards never enter
-/// the batch — they keep their individual controls.
-struct AgentToolBatchApprovalBar: View {
-    @EnvironmentObject var appState: AppState
-    let calls: [AgentToolCall]
-
-    var body: some View {
-        let approvableIDs = appState.batchApprovableAgentToolCallIDs(among: calls)
-        if approvableIDs.count >= 2 {
-            let palette = appState.editorSettings.interfaceSkin.palette
-            HStack(spacing: 8) {
-                Image(systemName: "checklist")
-                    .font(.system(size: 12, weight: .semibold))
-                    .foregroundStyle(palette.accent)
-                Text("本轮共 \(approvableIDs.count) 项操作待批准")
-                    .font(.system(size: 12, weight: .medium))
-                    .foregroundStyle(palette.primaryText)
-                Spacer(minLength: 12)
-                Button {
-                    appState.approveAgentToolCalls(ids: approvableIDs)
-                } label: {
-                    Text("全部允许")
-                        .font(.system(size: 12, weight: .semibold))
-                        .padding(.horizontal, 2)
-                }
-                .buttonStyle(.bordered)
-                .tint(palette.accent)
-                .cursor(.arrow)
-                .help("一键批准这 \(approvableIDs.count) 项待审批操作；危险操作与沙箱升权仍需单独确认")
-            }
-            .padding(.horizontal, 12)
-            .padding(.vertical, 8)
-            .background(palette.accent.opacity(0.06))
-            .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
-            .overlay(
-                RoundedRectangle(cornerRadius: 8, style: .continuous)
-                    .stroke(palette.accent.opacity(0.25), lineWidth: 1)
-            )
-            .accessibilityIdentifier("agent-batch-approval-bar")
-        }
     }
 }
 
@@ -660,7 +608,6 @@ struct AgentLiveActivityTimeline: View {
             if isExpanded, presentation.hiddenOperationCount > 0 {
                 AgentActivityTimelineSummaryRow(count: presentation.hiddenOperationCount)
             }
-            AgentToolBatchApprovalBar(calls: calls)
             ForEach(presentation.visibleCalls) { call in
                 if call.status.isBlockingForUserDecision {
                     AgentToolCallCard(call: call)
@@ -855,7 +802,7 @@ private struct AgentToolActivityTimelineRow: View {
                     .lineLimit(1)
                     .truncationMode(.middle)
             }
-            if presentation.status == .running {
+            if presentation.status == .running && !presentation.isQueuedForApproval {
                 ProgressView()
                     .controlSize(.small)
                     .scaleEffect(0.58)
@@ -869,6 +816,9 @@ private struct AgentToolActivityTimelineRow: View {
     }
 
     private var iconColor: Color {
+        if presentation.isQueuedForApproval {
+            return Color(nsColor: .secondaryLabelColor)
+        }
         switch presentation.status {
         case .running, .pendingApproval, .awaitingConfirm, .awaitingUserAnswer:
             return appState.editorSettings.interfaceSkin.palette.accent
@@ -880,6 +830,9 @@ private struct AgentToolActivityTimelineRow: View {
     }
 
     private var titleColor: Color {
+        if presentation.isQueuedForApproval {
+            return Color(nsColor: .secondaryLabelColor)
+        }
         switch presentation.status {
         case .running:
             return .primary
@@ -1225,13 +1178,23 @@ struct AgentToolCallCard: View {
 
     @ViewBuilder
     private var compactAuthorizationActions: some View {
-        if decisionAlreadySubmitted {
-            submittedDecisionNotice
-        } else {
-            ViewThatFits(in: .horizontal) {
+        ViewThatFits(in: .horizontal) {
+            HStack(spacing: AgentCompactAuthorizationMetrics.actionSpacing) {
+                compactDenyButton
+                Spacer(minLength: 16)
+                if alwaysAllowSignature != nil {
+                    compactAlwaysAllowButton
+                } else if conversationAllowSignature == nil {
+                    compactAllowOnceButton
+                }
+                if conversationAllowSignature != nil {
+                    compactConversationAllowButton
+                }
+            }
+            VStack(alignment: .leading, spacing: AgentCompactAuthorizationMetrics.actionSpacing) {
                 HStack(spacing: AgentCompactAuthorizationMetrics.actionSpacing) {
                     compactDenyButton
-                    Spacer(minLength: 16)
+                    Spacer(minLength: 0)
                     if alwaysAllowSignature != nil {
                         compactAlwaysAllowButton
                     } else if conversationAllowSignature == nil {
@@ -1241,23 +1204,9 @@ struct AgentToolCallCard: View {
                         compactConversationAllowButton
                     }
                 }
-                VStack(alignment: .leading, spacing: AgentCompactAuthorizationMetrics.actionSpacing) {
-                    HStack(spacing: AgentCompactAuthorizationMetrics.actionSpacing) {
-                        compactDenyButton
-                        Spacer(minLength: 0)
-                        if alwaysAllowSignature != nil {
-                            compactAlwaysAllowButton
-                        } else if conversationAllowSignature == nil {
-                            compactAllowOnceButton
-                        }
-                        if conversationAllowSignature != nil {
-                            compactConversationAllowButton
-                        }
-                    }
-                }
             }
-            .controlSize(.regular)
         }
+        .controlSize(.regular)
     }
 
     private var compactAlwaysAllowButton: some View {
@@ -1614,11 +1563,8 @@ struct AgentToolCallCard: View {
     private func authorizationActions(
         _ descriptor: AgentApprovalNoticeDescriptor
     ) -> some View {
-        if decisionAlreadySubmitted {
-            submittedDecisionNotice
-        } else {
-            let palette = appState.editorSettings.interfaceSkin.palette
-            VStack(alignment: .trailing, spacing: 8) {
+        let palette = appState.editorSettings.interfaceSkin.palette
+        VStack(alignment: .trailing, spacing: 8) {
                 HStack(spacing: AgentConfirmationReviewMetrics.actionButtonSpacing) {
                     Button {
                         appState.denyAgentToolCall(id: call.id)
@@ -1647,7 +1593,6 @@ struct AgentToolCallCard: View {
                     .foregroundStyle(palette.secondaryText)
                     .cursor(.arrow)
                 }
-            }
         }
     }
 
@@ -1843,10 +1788,7 @@ struct AgentToolCallCard: View {
 
             Spacer(minLength: 16)
 
-            if decisionAlreadySubmitted {
-                submittedDecisionNotice
-            } else {
-                HStack(spacing: AgentConfirmationReviewMetrics.actionButtonSpacing) {
+            HStack(spacing: AgentConfirmationReviewMetrics.actionButtonSpacing) {
                     Button {
                         appState.denyAgentToolCall(id: call.id)
                     } label: {
@@ -1874,8 +1816,7 @@ struct AgentToolCallCard: View {
                     .frame(maxWidth: AgentConfirmationReviewMetrics.actionButtonMaxWidth)
                 }
                 .controlSize(.regular)
-                .frame(maxWidth: .infinity, alignment: .center)
-            }
+            .frame(maxWidth: .infinity, alignment: .center)
         }
         .padding(AgentConfirmationReviewMetrics.contentPadding)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
@@ -2092,19 +2033,6 @@ struct AgentToolCallCard: View {
         }
     }
 
-    private var submittedDecisionNotice: some View {
-        HStack(spacing: 6) {
-            ProgressView()
-                .controlSize(.small)
-                .scaleEffect(0.58)
-                .frame(width: 12, height: 12)
-            Text("已提交决定，等待执行循环接收")
-                .font(.caption2)
-                .foregroundStyle(.secondary)
-        }
-        .padding(.vertical, 2)
-    }
-
     @ViewBuilder
     private var askUserBody: some View {
         let question = call.arguments["question"]?.stringValue() ?? ""
@@ -2124,43 +2052,39 @@ struct AgentToolCallCard: View {
                     .fixedSize(horizontal: false, vertical: true)
             }
 
-            if decisionAlreadySubmitted {
-                submittedDecisionNotice
-            } else {
-                if !options.isEmpty {
-                    if isMultiSelect {
-                        multiSelectChoices(options)
-                    } else {
-                        singleSelectChoices(options)
-                    }
+            if !options.isEmpty {
+                if isMultiSelect {
+                    multiSelectChoices(options)
+                } else {
+                    singleSelectChoices(options)
                 }
-
-                // Free-form text input is always available — even with preset
-                // options, the user may want to write "none of these".
-                TextField(options.isEmpty ? L10n.ToolCard.askUserAnswerPlaceholder : L10n.ToolCard.askUserOtherAnswerPlaceholder,
-                          text: $answerInput,
-                          axis: .vertical)
-                    .textFieldStyle(.roundedBorder)
-                    .font(.system(size: 12))
-                    .lineLimit(1...4)
-
-                // rc16:Skip 在左、Send 在右,对齐「正向操作右、误触概率低」的
-                // macOS 习惯。Send 的 disabled 状态自然把视觉重心保留在右侧。
-                HStack(spacing: 6) {
-                    Button(L10n.ToolCard.askUserSkip) {
-                        appState.denyAgentToolCall(id: call.id)
-                        resetAskUserInputs()
-                    }
-                    .cursor(.arrow)
-                    Spacer(minLength: 0)
-                    Button(L10n.ToolCard.askUserSend) {
-                        submitAnswer(options: options, isMultiSelect: isMultiSelect)
-                    }
-                    .disabled(!canSubmitAskUser(isMultiSelect: isMultiSelect))
-                    .cursor(.arrow)
-                }
-                .font(.caption)
             }
+
+            // Free-form text input is always available — even with preset
+            // options, the user may want to write "none of these".
+            TextField(options.isEmpty ? L10n.ToolCard.askUserAnswerPlaceholder : L10n.ToolCard.askUserOtherAnswerPlaceholder,
+                      text: $answerInput,
+                      axis: .vertical)
+                .textFieldStyle(.roundedBorder)
+                .font(.system(size: 12))
+                .lineLimit(1...4)
+
+            // rc16:Skip 在左、Send 在右,对齐「正向操作右、误触概率低」的
+            // macOS 习惯。Send 的 disabled 状态自然把视觉重心保留在右侧。
+            HStack(spacing: 6) {
+                Button(L10n.ToolCard.askUserSkip) {
+                    appState.denyAgentToolCall(id: call.id)
+                    resetAskUserInputs()
+                }
+                .cursor(.arrow)
+                Spacer(minLength: 0)
+                Button(L10n.ToolCard.askUserSend) {
+                    submitAnswer(options: options, isMultiSelect: isMultiSelect)
+                }
+                .disabled(!canSubmitAskUser(isMultiSelect: isMultiSelect))
+                .cursor(.arrow)
+            }
+            .font(.caption)
         }
     }
 
@@ -2541,10 +2465,6 @@ struct AgentToolCallCard: View {
         )
     }
 
-    private var decisionAlreadySubmitted: Bool {
-        appState.hasPendingAgentToolDecision(id: call.id)
-    }
-
     private var iconName: String {
         if terminalShortcutProtectedInputState != nil {
             return "lock.shield"
@@ -2650,7 +2570,7 @@ struct AgentToolCallCard: View {
         switch source {
         case .user: return nil
         case .alwaysAllowList: return "You pinned this command signature as always-allowed."
-        case .staticAllowlist: return "Matched the built-in read-only allowlist (safe shell commands / read-style MCP tools)."
+        case .staticAllowlist: return "Matched a built-in deterministic low-risk rule (safe inspection, bounded local metadata, or read-style MCP tools)."
         case .llmJudge: return "An LLM judge classified this call as non-malicious normal work."
         case .goalMode: return "Auto-approved because this session is in Goal mode. Danger-tier commands still ask."
         case .dispatchTask: return "Auto-approved because this scheduler-owned task is running unattended."

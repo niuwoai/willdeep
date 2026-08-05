@@ -1091,6 +1091,19 @@ extension AppState {
             runtime.goalTurnRecoveryCheckpoint = nil
             persistAgentSession(runtime: runtime, touchUpdatedAt: false, moveToFront: false)
         }
+        // A request waiting for a provider slot has no requestTask to cancel,
+        // but the composer deliberately exposes the same Stop affordance. Drop
+        // every queued dispatch owned by this runtime so a stopped request
+        // cannot unexpectedly start when another turn releases its slot.
+        if runtime.isAwaitingProviderSlot, !runtime.isResponding {
+            pendingDispatchQueue.removeAll { $0.runtimeID == runtime.id }
+            runtime.isAwaitingProviderSlot = false
+            runtime.errorMessage = nil
+            runtime.errorDetails = nil
+            runtime.errorRequiresSomeIMLogin = false
+            _ = appendStoppedTurnEvent(to: runtime, content: L10n.Composer.stopped)
+            return
+        }
         let stoppedTurnID = runtime.activeTurnID
         let stoppedTurnStartedAt = runtime.turnStartedAt
         let activeWorkflowIDs = runtime.messages.compactMap { message -> UUID? in
@@ -2089,7 +2102,7 @@ extension AppState {
         upsertAgentUsageSnapshot(for: agentSessions[index])
     }
 
-    func renameAgentSessionAfterApproval(
+    func renameAgentSessionFromTool(
         runtimeID: AgentSession.ID,
         to newTitle: String
     ) throws -> String {

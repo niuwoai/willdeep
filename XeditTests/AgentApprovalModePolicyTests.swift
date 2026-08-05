@@ -114,6 +114,15 @@ struct AgentApprovalModePolicyTests {
         )
         #expect(smartTerminalInspection == .staticAllowlist)
 
+        let smartKubernetesInspection = await appState.autoApprovalSource(
+            toolName: "terminal_send_command",
+            arguments: ["command": .string("kubectl -n tokenhub get pods")],
+            risk: .write,
+            rootDirectory: workspace,
+            approvalMode: .smart
+        )
+        #expect(smartKubernetesInspection == .staticAllowlist)
+
         let smartDelegatedAgent = await appState.autoApprovalSource(
             toolName: "codex_cli",
             arguments: ["prompt": .string("update the workspace")],

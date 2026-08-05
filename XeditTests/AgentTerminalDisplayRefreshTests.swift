@@ -3,6 +3,123 @@ import SwiftTerm
 import Testing
 @testable import WillDeep
 
+@Suite
+struct AgentTerminalInputStateTests {
+    @Test("PTY ownership separates a ready shell from foreground jobs and interactive programs")
+    func classifiesInputOwner() {
+        #expect(AgentTerminalInputState.classify(
+            processIsRunning: false,
+            shellProcessGroupID: 10,
+            foregroundProcessGroupID: 10,
+            echoEnabled: true,
+            canonicalInputEnabled: true
+        ) == .exited)
+        #expect(AgentTerminalInputState.classify(
+            processIsRunning: true,
+            shellProcessGroupID: 10,
+            foregroundProcessGroupID: 10,
+            echoEnabled: true,
+            canonicalInputEnabled: true
+        ) == .shellReady)
+        #expect(AgentTerminalInputState.classify(
+            processIsRunning: true,
+            shellProcessGroupID: 10,
+            foregroundProcessGroupID: 20,
+            echoEnabled: true,
+            canonicalInputEnabled: true
+        ) == .foregroundTask)
+        #expect(AgentTerminalInputState.classify(
+            processIsRunning: true,
+            shellProcessGroupID: 10,
+            foregroundProcessGroupID: 20,
+            echoEnabled: false,
+            canonicalInputEnabled: false
+        ) == .interactiveProgram)
+        #expect(AgentTerminalInputState.classify(
+            processIsRunning: true,
+            shellProcessGroupID: nil,
+            foregroundProcessGroupID: nil,
+            echoEnabled: nil,
+            canonicalInputEnabled: nil
+        ) == .unknown)
+    }
+
+    @Test("arrows are recognized narrowly without swallowing arbitrary escape input")
+    func recognizesNavigationEscapes() {
+        #expect(AgentLocalProcessTerminalView.isNavigationEscapeSequence([0x1B, 0x5B, 0x41]))
+        #expect(AgentLocalProcessTerminalView.isNavigationEscapeSequence([0x1B, 0x5B, 0x31, 0x3B, 0x35, 0x42]))
+        #expect(AgentLocalProcessTerminalView.isNavigationEscapeSequence([0x1B, 0x4F, 0x43]))
+        #expect(!AgentLocalProcessTerminalView.isNavigationEscapeSequence([0x1B]))
+        #expect(!AgentLocalProcessTerminalView.isNavigationEscapeSequence(Array("clear".utf8)))
+        #expect(!AgentLocalProcessTerminalView.isNavigationEscapeSequence([0x1B, 0x5B, 0x32, 0x7E]))
+    }
+
+    @Test("only canonical foreground tasks block Agent command injection")
+    func dispatchPolicyIsNarrow() {
+        #expect(AgentTerminalCommandDispatchPolicy.refusalMessage(for: .foregroundTask) != nil)
+        #expect(AgentTerminalCommandDispatchPolicy.refusalMessage(for: .shellReady) == nil)
+        #expect(AgentTerminalCommandDispatchPolicy.refusalMessage(for: .interactiveProgram) == nil)
+        #expect(AgentTerminalCommandDispatchPolicy.refusalMessage(for: .unknown) == nil)
+    }
+}
+
+@Suite(.serialized)
+struct AgentTerminalForegroundOwnershipIntegrationTests {
+    @Test("a live foreground job is detected and rejects command injection")
+    @MainActor
+    func liveForegroundJobBlocksDispatch() async throws {
+        let tab = AgentTerminalTab(
+            kind: .delegatedShell,
+            originAgentSessionID: UUID(),
+            title: "Foreground ownership test",
+            settings: .default
+        )
+        tab.start(
+            settings: .default,
+            workingDirectory: FileManager.default.temporaryDirectory.path,
+            profile: nil,
+            skin: nil
+        )
+        defer { tab.terminate() }
+
+        #expect(await waitForInputState(.shellReady, tab: tab))
+        tab.terminalView.send(txt: "sleep 10\n")
+        #expect(await waitForInputState(.foregroundTask, tab: tab))
+
+        do {
+            _ = try tab.sendApprovedCommand("printf 'must-not-run\\n'")
+            Issue.record("expected a foreground task to reject command injection")
+        } catch let error as AgentToolError {
+            let message = error.errorDescription ?? ""
+            #expect(message.contains("Nothing was sent"))
+            #expect(message.contains("ctrl_c"))
+        }
+        #expect(throws: AgentToolError.self) {
+            try tab.sendAutomationCommand(
+                "printf 'automation-must-not-run\\n'",
+                displayCommand: "blocked automation"
+            )
+        }
+        #expect(tab.recentCommands.isEmpty)
+
+        tab.sendUserControl(.ctrlC)
+        #expect(await waitForInputState(.shellReady, tab: tab))
+    }
+
+    @MainActor
+    private func waitForInputState(
+        _ expected: AgentTerminalInputState,
+        tab: AgentTerminalTab
+    ) async -> Bool {
+        for _ in 0..<60 {
+            tab.refreshInputState()
+            if tab.inputState == expected { return true }
+            try? await Task.sleep(for: .milliseconds(50))
+        }
+        return false
+    }
+}
+
 @Suite(.serialized)
 struct AgentTerminalDisplayRefreshTests {
     @Test("terminal refresh repositions SwiftTerm caret after model output")
