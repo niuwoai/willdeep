@@ -1,7 +1,23 @@
 # Changelog
 
-> 当前文件保留最新版本（1.228.0-rc9 至 1.109.0-rc340）。
+> 当前文件保留最新版本（1.228.0-rc10 至 1.109.0-rc340）。
 > 更早的 1000 个版本已移至 [CHANGELOG-ARCHIVE.md](CHANGELOG-ARCHIVE.md)。
+
+## 1.228.0-rc10 - 2026-08-06
+
+### Fixed
+
+- `willdeep <file>` 改走 macOS 原生文档打开事件，URL-backed Editor Scene 显式声明负责外部事件，并由 AppKit 应用入口提供排队兜底；SwiftUI 不再按默认回退规则把事件交给排在首位的 Agent Scene，可用 Editor 出现后会加载目标文件。既有 `willdeep://open` 继续兼容，但不再是 CLI 文件启动的单点依赖。
+- 已安装的用户级 `willdeep` 脚本在 App 升级后自动刷新到当前模板；从未安装过 CLI 的用户仍需主动安装，不会被静默新增命令。
+- AppKit 与 SwiftUI 可能重复投递同一 URL 时按短时间窗口去重，避免一次命令打开两个 Editor；已有 Editor 独占事件时也能直接认领队列，不留下稍后误开的陈旧请求。
+
+### Tests
+
+- 新增冷启动 URL 排队、原生文档 URL 解析与 AppKit/SwiftUI 双回调去重测试；完整单元测试共 272 项，仅保留既有工具 Schema Token 上限断言（37106 > 37000）失败，与本次路由变更无关。
+
+### Meta
+
+- Bugfix 预发布版本从 **1.228.0-rc9** 递增为 **1.228.0-rc10**，内部构建号从 **293** 递增为 **294**，Help 与 Computer Use Helper 构建号从 **210** 递增为 **211**；App、Go agent、Help、Helper、浏览器扩展、README、响应头契约与产品文档保持一致。
 
 ## 1.228.0-rc9 - 2026-08-06
 

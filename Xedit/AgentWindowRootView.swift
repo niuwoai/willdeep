@@ -68,6 +68,7 @@ struct AgentWindowRootView: View {
             // 先创建 headless AppState,确保 onboarding 的 some.im 登录、
             // provider 保存等步骤始终拿得到完整环境。
             onboarding.presentIfNeeded()
+            openPendingExternalEditorRequests()
         }
         // A cold CLI launch (`willdeep some-file.txt`) activates the first
         // scene, which is intentionally the Agent window. The URL-backed
@@ -79,8 +80,14 @@ struct AgentWindowRootView: View {
                 return
             }
             if InitialLaunchPolicy.shouldOpenEditor(forInitialExternalURL: url) {
-                openWindow(value: url)
+                WillDeepExternalOpenRouter.shared.enqueue(url)
+                openPendingExternalEditorRequests()
             }
+        }
+        .onReceive(
+            NotificationCenter.default.publisher(for: .willDeepExternalEditorOpenRequested)
+        ) { _ in
+            openPendingExternalEditorRequests()
         }
         .sheet(isPresented: $onboarding.isPresented) {
             if let appState = registry.current {
@@ -92,6 +99,12 @@ struct AgentWindowRootView: View {
         // where the Agent window is open but no editor window is).
         .onReceive(NotificationCenter.default.publisher(for: .willDeepRevealAgentSession)) { _ in
             openWindow(id: AgentWindowID.value)
+        }
+    }
+
+    private func openPendingExternalEditorRequests() {
+        for url in WillDeepExternalOpenRouter.shared.drain() {
+            openWindow(value: url)
         }
     }
 }

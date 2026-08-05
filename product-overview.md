@@ -1,6 +1,6 @@
 # WillDeep Product Overview
 
-> Last updated: 2026-08-06 | Current version: v1.228.0-rc9
+> Last updated: 2026-08-06 | Current version: v1.228.0-rc10
 
 ## Positioning
 
@@ -12,6 +12,7 @@ WillDeep is configured for non-App-Store distribution without App Sandbox so it 
 
 ## 架构概览
 
+- **CLI 文件启动走 AppKit 原生文档入口（1.228.0-rc10）** —— `willdeep <file>` 直接触发 macOS 文档打开事件，URL-backed Editor Scene 显式声明负责外部事件，不再让 SwiftUI 按默认回退规则误投给排在首位的 Agent Scene；应用委托队列提供冷启动兜底。自定义 URL保留兼容，重复回调按同一目标去重，确保一次命令只创建一个 Editor；App 升级时会自动刷新用户已安装的 CLI 脚本。
 - **Editor 光标与文件菜单同步（1.228.0-rc9）** —— 每次文本提交立即刷新 AppKit 原生插入点，光标竖线不再落后于已显示字符；昂贵的语言服务与高亮工作仍按输入突发合并。保存与另存为归入普通 Editor 窗口始终存在的文件命令组，不依赖 DocumentGroup 专用菜单锚点。
 - **Editor 启动、输入与调度恢复边界修正（1.228.0-rc8）** —— `willdeep <file>` 冷启动 URL 会从默认 Agent 场景可靠转交 Editor，普通 Editor 窗口也拥有保存与另存为菜单。输入时仅同步正文和脏状态，折叠、字体、LSP、高亮、光标与 gutter 工作短延迟合并，整文件变更行计算移出主线程。历史调度恢复只观察既有运行，不会重新启动已结束或排队节点；后台节点不再抢占聊天导航，旧会话 runtime 在切换期间受缓存保护。
 - **审批卡严格串行且 Composer 状态可靠（1.228.0-rc7）** —— 同一回合的多个人工审核项只会逐条激活，后续调用以不可操作的排队行展示，不再提前提交决定后卡在执行循环；Always-Allow 等明确授权仍可把匹配项转为可审计的自动批准。Composer 直接观察当前 runtime，输出中与 Provider 排队时持续显示停止图标。成功工具活动仅保留具体动作摘要，不再追加时有时无的“完成”。

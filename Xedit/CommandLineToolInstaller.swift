@@ -108,10 +108,6 @@ enum CommandLineToolInstaller {
           exec /usr/bin/open -a "$app_path"
         fi
 
-        encode_path() {
-          /usr/bin/perl -CS -MEncode=encode -e '$s = encode("UTF-8", $ARGV[0]); $s =~ s/([^A-Za-z0-9_.~-])/sprintf("%%%02X", ord($1))/eg; print $s' "$1"
-        }
-
         for target in "$@"; do
           if [[ "$target" == *"://"* ]]; then
             /usr/bin/open -a "$app_path" "$target"
@@ -122,8 +118,10 @@ enum CommandLineToolInstaller {
             target="$PWD/$target"
           fi
 
-          encoded_path="$(encode_path "$target")"
-          /usr/bin/open -a "$app_path" "willdeep://open?path=$encoded_path"
+          # Use macOS' native document-open event for filesystem paths. The
+          # app delegate receives this even when SwiftUI activates the default
+          # Agent scene before an Editor scene exists.
+          /usr/bin/open -a "$app_path" "$target"
         done
         """
     }

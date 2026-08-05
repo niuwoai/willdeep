@@ -39,6 +39,11 @@ struct WillDeepApp: App {
         WindowGroup(for: URL.self) { $url in
             WindowRootView(initialExternalURL: url)
         }
+        // Without an explicit external-event owner SwiftUI falls through to
+        // the first unqualified scene (Agent) and never creates this Editor
+        // WindowGroup. `*` is SwiftUI's documented match-all condition for
+        // URLs and document-open events claimed by this app.
+        .handlesExternalEvents(matching: ["*"])
         .windowStyle(.hiddenTitleBar)
         .defaultSize(width: defaultSize.width, height: defaultSize.height)
         .commands {
@@ -418,7 +423,7 @@ private struct WindowRootView: View {
                 }
             )
             .onOpenURL { url in
-                handleExternalURL(url)
+                handleRuntimeExternalURL(url)
             }
             .onCompatibleChange(of: appState.tabs.count) { oldCount, newCount in
                 if EditorWindowLifecyclePolicy.shouldCloseAfterTabCountChange(
@@ -461,10 +466,30 @@ private struct WindowRootView: View {
         }
         appState.openExternalURL(url)
     }
+
+    private func handleRuntimeExternalURL(_ url: URL) {
+        guard WillDeepExternalURLParser.fileURL(fromOpenURL: url) != nil else {
+            handleExternalURL(url)
+            return
+        }
+
+        // AppDelegate normally queued this request first. Enqueue again so
+        // direct SwiftUI delivery also works, then claim whatever remains. A
+        // two-second de-duplication window prevents AppKit + SwiftUI from
+        // opening the same CLI path twice.
+        WillDeepExternalOpenRouter.shared.enqueue(url)
+        for pendingURL in WillDeepExternalOpenRouter.shared.drain() {
+            handleExternalURL(pendingURL)
+        }
+    }
 }
 
 enum WillDeepExternalURLParser {
     static func fileURL(fromOpenURL url: URL) -> URL? {
+        if url.isFileURL {
+            return url.standardizedFileURL
+        }
+
         guard url.scheme == "willdeep",
               url.host == "open",
               let components = URLComponents(url: url, resolvingAgainstBaseURL: false),
@@ -474,6 +499,63 @@ enum WillDeepExternalURLParser {
         }
 
         return URL(fileURLWithPath: path).standardizedFileURL
+    }
+}
+
+extension Notification.Name {
+    static let willDeepExternalEditorOpenRequested = Notification.Name(
+        "WillDeepExternalEditorOpenRequested"
+    )
+}
+
+/// Lossless bridge between AppKit URL delivery and SwiftUI scenes.
+///
+/// AppKit can deliver `application(_:open:)` or `application(_:openFiles:)`
+/// before the default Agent scene has installed its URL handler. Keep requests
+/// queued until a live scene claims them, and suppress the duplicate callback
+/// SwiftUI may emit for the same URL immediately afterwards.
+@MainActor
+final class WillDeepExternalOpenRouter {
+    static let shared = WillDeepExternalOpenRouter()
+    static let duplicateSuppressionInterval: TimeInterval = 2
+
+    private var pendingURLs: [URL] = []
+    private var recentlySeenAt: [String: Date] = [:]
+
+    @discardableResult
+    func enqueue(_ urls: [URL], now: Date = Date()) -> Bool {
+        var didEnqueue = false
+        for url in urls {
+            didEnqueue = enqueue(url, now: now) || didEnqueue
+        }
+        return didEnqueue
+    }
+
+    @discardableResult
+    func enqueue(_ url: URL, now: Date = Date()) -> Bool {
+        guard WillDeepExternalURLParser.fileURL(fromOpenURL: url) != nil else {
+            return false
+        }
+
+        let cutoff = now.addingTimeInterval(-Self.duplicateSuppressionInterval)
+        recentlySeenAt = recentlySeenAt.filter { $0.value >= cutoff }
+
+        let key = url.absoluteString
+        guard recentlySeenAt[key] == nil else { return false }
+
+        recentlySeenAt[key] = now
+        pendingURLs.append(url)
+        NotificationCenter.default.post(
+            name: .willDeepExternalEditorOpenRequested,
+            object: self
+        )
+        return true
+    }
+
+    func drain() -> [URL] {
+        let urls = pendingURLs
+        pendingURLs.removeAll(keepingCapacity: true)
+        return urls
     }
 }
 
