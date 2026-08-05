@@ -194,9 +194,13 @@ private struct WillDeepCommands: Commands {
                     }
                 }
                 .keyboardShortcut("O", modifiers: [.command, .shift])
-            }
 
-            CommandGroup(replacing: .saveItem) {
+                // A plain SwiftUI Window/WindowGroup does not always install
+                // the platform's `.saveItem` command-placement anchor. Keep
+                // Save beside the file commands we already own so it cannot
+                // disappear from non-DocumentGroup editor windows.
+                Divider()
+
                 Button(L10n.Menu.fileSave) {
                     appState?.saveCurrentFile()
                 }

@@ -547,6 +547,11 @@ struct EditorView: NSViewRepresentable {
             if !suppressDirtyFlag {
                 parent.onImmediateEdit?()
             }
+            // Publishing into SwiftUI can invalidate this representable in the
+            // same run-loop turn. Refresh the native insertion point before
+            // yielding so the caret rectangle follows the newly inserted
+            // glyph instead of waiting for the debounced chrome pass.
+            textView.updateInsertionPointStateAndRestartTimer(true)
             schedulePostInputWork(
                 for: textView,
                 textChanged: true,
