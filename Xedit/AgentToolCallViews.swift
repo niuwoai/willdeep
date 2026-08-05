@@ -60,6 +60,7 @@ nonisolated enum AgentToolDisplay {
         "terminal_list_tabs": "终端标签列表",
         "terminal_select_tab": "切换终端标签",
         "create_file": "创建文件",
+        "write_file": "写入外部文件",
         "edit_file": "编辑文件",
         "apply_patch": "应用补丁",
         "list_jobs": "查看后台任务",

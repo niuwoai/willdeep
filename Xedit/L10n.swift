@@ -1429,6 +1429,7 @@ nonisolated enum L10n {
 
     enum AgentJobs {
         static let title = String(localized: "agent-jobs.title", defaultValue: "Background Jobs")
+        static let managerTitle = String(localized: "agent-jobs.manager-title", defaultValue: "Background Tasks")
         static let toggleHelp = String(localized: "agent-jobs.toggle-help", defaultValue: "Show background jobs panel")
         static let collapseHelp = String(localized: "agent-jobs.collapse-help", defaultValue: "Hide background jobs panel")
         static let empty = String(localized: "agent-jobs.empty", defaultValue: "No background jobs in this session.")
@@ -1445,6 +1446,55 @@ nonisolated enum L10n {
         static let notificationTitleCompleted = String(localized: "agent-jobs.notification.title.completed", defaultValue: "Background job finished")
         static let notificationTitleFailed = String(localized: "agent-jobs.notification.title.failed", defaultValue: "Background job failed")
         static let notificationTitleStopped = String(localized: "agent-jobs.notification.title.stopped", defaultValue: "Background job stopped")
+        static let scope = String(localized: "agent-jobs.scope", defaultValue: "Task scope")
+        static let currentSession = String(localized: "agent-jobs.scope.current-session", defaultValue: "Current session")
+        static let allSessions = String(localized: "agent-jobs.scope.all-sessions", defaultValue: "All sessions")
+        static let currentSessionBadge = String(localized: "agent-jobs.current-session-badge", defaultValue: "Current session")
+        static let searchPlaceholder = String(localized: "agent-jobs.search-placeholder", defaultValue: "Search tasks")
+        static let statusFilter = String(localized: "agent-jobs.status-filter", defaultValue: "Status filter")
+        static let filterAll = String(localized: "agent-jobs.filter.all", defaultValue: "All statuses")
+        static let filterRunning = String(localized: "agent-jobs.filter.running", defaultValue: "Running")
+        static let filterFinished = String(localized: "agent-jobs.filter.finished", defaultValue: "Finished")
+        static let emptyAllSessions = String(localized: "agent-jobs.empty-all-sessions", defaultValue: "No background tasks match these filters.")
+        static let processName = String(localized: "agent-jobs.process-name", defaultValue: "Process")
+        static let workingDirectory = String(localized: "agent-jobs.working-directory", defaultValue: "Working directory")
+        static let noWorkingDirectory = String(localized: "agent-jobs.no-working-directory", defaultValue: "No working directory")
+        static let command = String(localized: "agent-jobs.command", defaultValue: "Command")
+        static let pid = String(localized: "agent-jobs.pid", defaultValue: "PID")
+        static let startedAt = String(localized: "agent-jobs.started-at", defaultValue: "Started")
+        static let duration = String(localized: "agent-jobs.duration", defaultValue: "Duration")
+        static let stop = String(localized: "agent-jobs.stop", defaultValue: "Stop task")
+        static let copyCommand = String(localized: "agent-jobs.copy-command", defaultValue: "Copy command")
+        static let logLayout = String(localized: "agent-jobs.log-layout", defaultValue: "Log layout")
+        static let tabbedLogs = String(localized: "agent-jobs.logs.tabbed", defaultValue: "Tabbed")
+        static let splitLogs = String(localized: "agent-jobs.logs.split", defaultValue: "Split")
+        static let autoFollow = String(localized: "agent-jobs.auto-follow", defaultValue: "Follow")
+        static let outputStream = String(localized: "agent-jobs.output-stream", defaultValue: "Output stream")
+        static let combined = String(localized: "agent-jobs.output.combined", defaultValue: "Combined")
+        static let stdout = String(localized: "agent-jobs.output.stdout", defaultValue: "stdout")
+        static let stderr = String(localized: "agent-jobs.output.stderr", defaultValue: "stderr")
+        static let copyOutput = String(localized: "agent-jobs.copy-output", defaultValue: "Copy output")
+        static let openManagerHelp = String(localized: "agent-jobs.open-manager-help", defaultValue: "Open the background task manager")
+
+        static func runningSection(_ count: Int) -> String {
+            let template = String(localized: "agent-jobs.section.running", defaultValue: "Running %d")
+            return String(format: template, count)
+        }
+
+        static func recentSection(_ count: Int) -> String {
+            let template = String(localized: "agent-jobs.section.recent", defaultValue: "Recently finished %d")
+            return String(format: template, count)
+        }
+
+        static func lineCount(_ count: Int) -> String {
+            let template = String(localized: "agent-jobs.line-count", defaultValue: "%d lines")
+            return String(format: template, count)
+        }
+
+        static func composerSummary(_ total: Int, _ running: Int) -> String {
+            let template = String(localized: "agent-jobs.composer-summary", defaultValue: "%d background tasks · %d running")
+            return String(format: template, total, running)
+        }
 
         static func inspectOutputPrompt(_ jobID: String) -> String {
             let template = String(
@@ -2213,6 +2263,50 @@ nonisolated enum L10n {
             static let defaultTierLabel = String(localized: "settings.provider.default-tier", defaultValue: "Default tier")
             static let fetchModels = String(localized: "settings.provider.fetch-models", defaultValue: "Fetch Models")
             static let fetchingModels = String(localized: "settings.provider.fetching-models", defaultValue: "Fetching…")
+            static func modelListInvalidFormat(_ issue: String, _ actual: String, _ expected: String) -> String {
+                let template = String(
+                    localized: "settings.provider.model-list-invalid-format",
+                    defaultValue: "Invalid model-list response: %@. Received %@. Expected %@."
+                )
+                return String(format: template, issue, actual, expected)
+            }
+            static func v1ProbeSucceeded(_ count: String, _ url: String) -> String {
+                let template = String(
+                    localized: "settings.provider.v1-probe-succeeded",
+                    defaultValue: "Fetched %@ models from %@. Add /v1 to the Base URL?"
+                )
+                return String(format: template, count, url)
+            }
+            static let appendV1Action = String(
+                localized: "settings.provider.append-v1-action",
+                defaultValue: "Add /v1"
+            )
+            static let appendV1Help = String(
+                localized: "settings.provider.append-v1-help",
+                defaultValue: "Use the verified /v1 address as this provider's Base URL"
+            )
+            static let removeV1Action = String(
+                localized: "settings.provider.remove-v1-action",
+                defaultValue: "Remove /v1"
+            )
+            static let removeV1Help = String(
+                localized: "settings.provider.remove-v1-help",
+                defaultValue: "Use the verified address without /v1 as this provider's Base URL"
+            )
+            static func v1RemovalProbeSucceeded(_ count: String, _ url: String) -> String {
+                let template = String(
+                    localized: "settings.provider.v1-removal-probe-succeeded",
+                    defaultValue: "Fetched %@ models from %@. Remove /v1 from the Base URL?"
+                )
+                return String(format: template, count, url)
+            }
+            static func baseURLUpdated(_ url: String) -> String {
+                let template = String(
+                    localized: "settings.provider.base-url-updated",
+                    defaultValue: "Base URL updated to %@."
+                )
+                return String(format: template, url)
+            }
             static let alternatesHint = String(localized: "settings.provider.alternates-hint", defaultValue: "One model id per line — surfaces in the chat picker as one-click switches.")
             static let showAlternatesToggle = String(localized: "settings.provider.show-alternates-toggle", defaultValue: "Show alternate models")
             static let pickFromFetched = String(localized: "settings.provider.pick-from-fetched", defaultValue: "Pick from fetched models")

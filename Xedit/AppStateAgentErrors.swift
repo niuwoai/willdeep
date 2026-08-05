@@ -56,7 +56,7 @@ extension AppState {
         if let urlError = error as? URLError {
             switch urlError.code {
             case .timedOut:
-                return "连接模型超时（120 秒内没收到数据）。可能是网络慢、代理掉线，或者模型本身排队。点击「重试」再试一次，或检查网络/代理。"
+                return "连接模型超时（\(Int(AgentNetworkSupport.requestTimeout)) 秒内没收到数据）。可能是网络慢、代理掉线，或者模型本身排队。点击「重试」再试一次，或检查网络/代理。"
             case .notConnectedToInternet:
                 return "当前似乎没有网络。检查 Wi-Fi 或网线后点「重试」。"
             case .networkConnectionLost:

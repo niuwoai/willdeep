@@ -192,6 +192,7 @@ struct AgentToolActivityRowPresentation: Identifiable, Equatable {
         case "terminal_select_tab": return "切换终端标签"
         case "edit_file": return "编辑文件"
         case "create_file": return "创建文件"
+        case "write_file": return "写入外部文件"
         case "apply_patch": return "应用补丁"
         default: return AgentToolDisplay.name(for: call.toolName)
         }
@@ -202,14 +203,14 @@ struct AgentToolActivityRowPresentation: Identifiable, Equatable {
         case "read_file": return "book.pages"
         case "list_directory": return "folder"
         case "grep_files", "search_files": return "magnifyingglass"
-        case "edit_file", "create_file", "apply_patch": return "pencil"
+        case "edit_file", "create_file", "write_file", "apply_patch": return "pencil"
         default: return AgentToolKind.of(call).groupIcon
         }
     }
 
     private static func detail(for call: AgentToolCall) -> String? {
         switch call.toolName {
-        case "read_file", "list_directory", "edit_file", "create_file":
+        case "read_file", "list_directory", "edit_file", "create_file", "write_file":
             return fileName(call.arguments["path"]?.stringValue())
         case "grep_files":
             return compact(call.arguments["pattern"]?.stringValue())

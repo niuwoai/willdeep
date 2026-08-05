@@ -148,6 +148,9 @@ final class AgentRuntime: ObservableObject, Identifiable {
     /// ask the chat loop to run tools, but never execute them directly.
     @Published var latestWidgetToolAction: AgentWidgetToolAction?
     @Published var sessionModelOverride: String?
+    /// Exact provider-library entry pinned to this conversation. This keeps
+    /// two custom providers (which both use providerID == "custom") isolated.
+    @Published var sessionProviderEntryID: UUID?
     /// Runtime-scoped provider pin used by dispatch Workers. A Worker profile
     /// binds both model and provider so its visible assignment matches the
     /// transport that actually handles the request.
@@ -333,6 +336,8 @@ final class AgentRuntime: ObservableObject, Identifiable {
         self.redactSensitiveAttachmentContent = session.redactSensitiveAttachmentContent
         self.sidePanelState = session.sidePanelState
         self.managedRouting = session.managedRouting
+        self.sessionProviderEntryID = session.providerEntryID
+        self.sessionProviderIDOverride = session.providerID
         if session.dispatchParentProjectID != nil {
             self.sessionProviderIDOverride = session.providerID
         }

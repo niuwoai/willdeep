@@ -22,6 +22,8 @@
 
 import Testing
 import Foundation
+import AppKit
+import SwiftUI
 @testable import WillDeep
 
 @Suite
@@ -115,6 +117,54 @@ struct AgentBackgroundJobsTests {
         #expect(prompt.contains("job_ab12cd"))
         #expect(prompt.contains("get_job_output"))
         #expect(prompt.contains("job_id"))
+    }
+
+    @Test
+    func taskManagerExtractsProcessNameAfterEnvironmentAssignments() {
+        let process = AgentBackgroundTaskPresentation.processName(
+            command: "env CI=1 SDKROOT=macosx /usr/bin/xcodebuild test"
+        )
+
+        #expect(process == "xcodebuild")
+    }
+
+    @Test
+    func taskManagerFiltersBySessionStatusAndQuery() {
+        let activeRuntimeID = UUID()
+        let running = makeStubJob(
+            command: "yarn test",
+            workingDirectoryPath: "/tmp/current",
+            runtimeID: activeRuntimeID
+        )
+        let finished = makeStubJob(
+            command: "go test ./...",
+            status: .completed,
+            finishedAfter: 2,
+            workingDirectoryPath: "/tmp/other",
+            runtimeID: UUID()
+        )
+
+        #expect(AgentBackgroundTaskPresentation.matches(
+            job: running,
+            activeSessionID: activeRuntimeID,
+            scope: .currentSession,
+            status: .running,
+            query: "yarn"
+        ))
+        #expect(!AgentBackgroundTaskPresentation.matches(
+            job: finished,
+            activeSessionID: activeRuntimeID,
+            scope: .currentSession,
+            status: .all,
+            query: ""
+        ))
+        #expect(AgentBackgroundTaskPresentation.matches(
+            job: finished,
+            activeSessionID: activeRuntimeID,
+            scope: .allSessions,
+            status: .finished,
+            query: "/tmp/other"
+        ))
     }
 
     /// Empty / whitespace-only commands are rejected at the registry
@@ -503,6 +553,107 @@ struct AgentBackgroundJobsTests {
         _ = await waitUntilFinished(registry: registry, id: job.id)
         let output = registry.output(id: job.id, tailLines: nil)
         #expect(output.contains("hello-from-bg"))
+    }
+
+    @Test
+    func capturedOutputKeepsStdoutAndStderrSeparate() async throws {
+        let registry = AgentJobRegistry()
+        let runtimeID = UUID()
+        let job = try registry.start(
+            command: "printf 'stdout-only\\n'; printf 'stderr-only\\n' >&2",
+            workingDirectory: nil,
+            runtimeID: runtimeID,
+            timeoutSeconds: nil
+        )
+        _ = await waitUntilFinished(registry: registry, id: job.id)
+
+        let stdout = registry.output(id: job.id, stream: .stdout)
+        let stderr = registry.output(id: job.id, stream: .stderr)
+        let combined = registry.output(id: job.id)
+
+        #expect(stdout.contains("stdout-only"))
+        #expect(stdout.contains("stderr-only") == false)
+        #expect(stderr.contains("stderr-only"))
+        #expect(stderr.contains("stdout-only") == false)
+        #expect(combined.contains("stdout-only"))
+        #expect(combined.contains("stderr-only"))
+    }
+
+    @Test("render selected background task manager design for visual QA")
+    func rendersBackgroundTaskManagerForVisualQA() async throws {
+        let outputURL = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .appendingPathComponent("build/visual-qa/background-task-manager/implementation.png")
+        try FileManager.default.createDirectory(
+            at: outputURL.deletingLastPathComponent(),
+            withIntermediateDirectories: true
+        )
+
+        let appState = AppState()
+        let session = AgentSession(title: "后台构建与测试")
+        appState.agentSessions = [session]
+        appState.activeAgentSessionID = session.id
+        let workspace = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+
+        let completedJob = try appState.agentJobRegistry.start(
+            command: "swift test --filter AgentBackgroundJobsTests",
+            workingDirectory: workspace,
+            runtimeID: session.id,
+            timeoutSeconds: nil
+        )
+        _ = await waitUntilFinished(
+            registry: appState.agentJobRegistry,
+            id: completedJob.id
+        )
+
+        let runningJob = try appState.agentJobRegistry.start(
+            command: "printf 'Compiling AgentBackgroundTasksPanel.swift\\nLinking WillDeep\\n'; printf 'warning: preview fixture uses sample output\\n' >&2; trap 'exit 143' TERM; while true; do sleep 1; done",
+            workingDirectory: workspace,
+            runtimeID: session.id,
+            timeoutSeconds: nil
+        )
+        try await Task.sleep(nanoseconds: 120_000_000)
+        defer { _ = appState.agentJobRegistry.kill(id: runningJob.id) }
+
+        // Match the selected ImageGen reference's right-side panel viewport so
+        // the Design QA comparison is spatially meaningful rather than scaled.
+        let size = NSSize(width: 626, height: 1_024)
+        let fixture = VStack(spacing: 0) {
+            HStack(spacing: 8) {
+                Image(systemName: AgentSidePanelKind.backgroundTasks.systemImage)
+                Text(L10n.AgentJobs.managerTitle)
+                    .font(.system(size: 13, weight: .semibold))
+                Spacer()
+            }
+            .padding(.horizontal, 12)
+            .frame(height: 42)
+            Divider()
+            AgentBackgroundTasksPanel(
+                width: size.width,
+                initialSelectedJobID: runningJob.id
+            )
+        }
+        .environmentObject(appState)
+        .frame(width: size.width, height: size.height)
+        .background(appState.editorSettings.interfaceSkin.palette.panelFill)
+        .preferredColorScheme(.light)
+
+        let hostingView = NSHostingView(rootView: fixture)
+        hostingView.appearance = NSAppearance(named: .aqua)
+        hostingView.frame = NSRect(origin: .zero, size: size)
+        hostingView.layoutSubtreeIfNeeded()
+        let bitmap = try #require(
+            hostingView.bitmapImageRepForCachingDisplay(in: hostingView.bounds)
+        )
+        hostingView.cacheDisplay(in: hostingView.bounds, to: bitmap)
+        let png = try #require(bitmap.representation(using: .png, properties: [:]))
+        try png.write(to: outputURL, options: .atomic)
+
+        #expect(png.count > 20_000)
+        #expect(FileManager.default.fileExists(atPath: outputURL.path))
     }
 
     /// `tail_lines` only returns the last N lines. Saves the model

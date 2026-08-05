@@ -372,6 +372,8 @@ enum AgentToolRunner {
                 result = try await AgentTerminalTools.selectTab(arguments: activeArguments, context: activeContext)
             case "create_file":
                 result = try await createFile(arguments: activeArguments, context: activeContext)
+            case "write_file":
+                result = try await AgentExternalFileTools.writeFile(arguments: activeArguments, context: activeContext)
             case "edit_file":
                 result = try await editFile(arguments: activeArguments, context: activeContext)
             case "apply_patch":

@@ -12,6 +12,15 @@ import Testing
 
 @Suite
 struct AgentNetworkSupportTests {
+    @Test
+    func modelRequestTimeoutAllowsLongReasoningGaps() {
+        let configuration = AgentNetworkSupport.defaultSession().configuration
+
+        #expect(AgentNetworkSupport.requestTimeout == 180)
+        #expect(configuration.timeoutIntervalForRequest == 180)
+        #expect(configuration.timeoutIntervalForResource == 600)
+    }
+
     /// The unified client identity must brand every request as a some.im-family
     /// WillDeep client and carry the running version:
     /// `some.im/WillDeep-{version} (macOS)`.

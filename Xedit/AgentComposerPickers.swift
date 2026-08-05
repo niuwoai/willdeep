@@ -2736,7 +2736,7 @@ struct ModelPickerPill: View {
     private func isKnownModelRelevantToActiveProvider(_ model: String) -> Bool {
         let trimmed = model.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return false }
-        guard let active = appState.agentProviderLibrary.active,
+        guard let active = appState.activeAgentProviderEntry,
               let preset = AgentProviderPreset.preset(id: active.providerID),
               preset.id != AgentProviderPreset.customID else {
             return true
@@ -2746,7 +2746,10 @@ struct ModelPickerPill: View {
 
     private func refreshMenuSnapshot() {
         let library = appState.agentProviderLibrary
-        let configured = appState.agentConfiguration.normalized.model(for: .interactive)
+        let sessionProvider = appState.activeAgentProviderEntry
+        let configured = appState.activeRuntime.map {
+            appState.configurationForCurrentTurn(for: $0).model(for: .interactive)
+        } ?? appState.agentConfiguration.normalized.model(for: .interactive)
         let libraryModels = libraryModelSet
         let used = adHocModels(from: appState.agentRecentlyUsedModelIDs, excluding: libraryModels)
         let hot = adHocModels(from: catalogModelIDs(where: \.isHot), excluding: libraryModels.union(used))
@@ -2758,14 +2761,14 @@ struct ModelPickerPill: View {
         menuSnapshot = ModelPickerMenuSnapshot(
             configuredModel: configured,
             providerEntries: library.entries,
-            activeProviderID: library.activeID,
+            activeProviderID: sessionProvider?.id,
             sessionOverride: appState.agentSessionModelOverride,
             recentlyUsedModels: used,
             hotModels: hot,
             newModels: newModels,
             fetchedModels: fetched,
             currentModelLabel: currentModelLabel,
-            isSomeIMActive: library.active?.providerID == AgentProviderPreset.someIMID,
+            isSomeIMActive: sessionProvider?.providerID == AgentProviderPreset.someIMID,
             isSomeIMAuthenticated: SomeIMIntegrationStore.hasAuthenticatedSessionForAutomaticDefaults(),
             managedActive: appState.activeRuntime?.managedRouting != nil,
             managedFloor: appState.activeRuntime?.managedRouting?.minimumTier
@@ -2787,22 +2790,24 @@ struct ModelPickerPill: View {
             case .premium: core = L10n.AgentManagedRouting.titlePremium
             }
             guard appState.agentProviderLibrary.entries.count > 1,
-                  let active = appState.agentProviderLibrary.active else {
+                  let active = appState.activeAgentProviderEntry else {
                 return core
             }
             return "\(active.displayName) · \(core)"
         }
-        let routed = appState.agentConfiguration.normalized.model(for: .interactive)
+        let routed = appState.activeRuntime.map {
+            appState.configurationForCurrentTurn(for: $0).model(for: .interactive)
+        } ?? appState.agentConfiguration.normalized.model(for: .interactive)
         let model = appState.agentSessionModelOverride?.trimmingCharacters(in: .whitespacesAndNewlines)
             .nilIfEmpty ?? routed
         let authenticated = SomeIMIntegrationStore.hasAuthenticatedSessionForAutomaticDefaults()
-        guard appState.agentProviderLibrary.active?.isUsableForChatSelection(
+        guard appState.activeAgentProviderEntry?.isUsableForChatSelection(
             isSomeIMAuthenticated: authenticated
         ) == true else {
             return ""
         }
         guard appState.agentProviderLibrary.entries.count > 1,
-              let active = appState.agentProviderLibrary.active else {
+              let active = appState.activeAgentProviderEntry else {
             return model
         }
         return "\(active.displayName) · \(model)"

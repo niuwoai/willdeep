@@ -331,7 +331,16 @@ struct OpenAIChatAdapter {
             )
         }
 
-        let responseBody = try JSONDecoder().decode(ModelsResponse.self, from: data)
+        let responseBody: ModelsResponse
+        do {
+            responseBody = try JSONDecoder().decode(ModelsResponse.self, from: data)
+        } catch {
+            throw AgentModelListResponseFormatError.wrapping(
+                error,
+                data: data,
+                expectedSchema: #"{"data":[{"id":"model-id"}]}"#
+            )
+        }
         return responseBody.data.map(\.id).filter { !$0.isEmpty }.sorted()
     }
 
@@ -364,7 +373,16 @@ struct OpenAIChatAdapter {
             )
         }
 
-        let responseBody = try JSONDecoder().decode(ModelsResponse.self, from: data)
+        let responseBody: ModelsResponse
+        do {
+            responseBody = try JSONDecoder().decode(ModelsResponse.self, from: data)
+        } catch {
+            throw AgentModelListResponseFormatError.wrapping(
+                error,
+                data: data,
+                expectedSchema: #"{"data":[{"id":"model-id"}]}"#
+            )
+        }
         return responseBody.discoveries
     }
 

@@ -8,21 +8,48 @@
 import Foundation
 
 extension AppState {
+    /// Resolve the exact provider entry pinned to a runtime. Legacy sessions
+    /// without an entry UUID fall back to provider id + display name before
+    /// using the current default, so existing history remains compatible.
+    func providerEntry(for runtime: AgentRuntime) -> AgentProviderEntry? {
+        if let entryID = runtime.sessionProviderEntryID,
+           let entry = agentProviderLibrary.entries.first(where: { $0.id == entryID }) {
+            return entry
+        }
+        let providerID = runtime.sessionProviderIDOverride?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        if let providerID, !providerID.isEmpty {
+            let storedName = runtime.session.providerDisplayName?
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            if let storedName, !storedName.isEmpty,
+               let exact = agentProviderLibrary.entries.first(where: {
+                   $0.providerID == providerID
+                       && $0.displayName.caseInsensitiveCompare(storedName) == .orderedSame
+               }) {
+                return exact
+            }
+            let matchingEntries = agentProviderLibrary.entries.filter {
+                $0.providerID == providerID
+            }
+            if matchingEntries.count == 1 {
+                return matchingEntries.first
+            }
+        }
+        return agentProviderLibrary.active
+    }
+
     /// Resolve the configuration to use for this turn. Honours the per-
     /// session concrete model override if one is set; otherwise follows the
     /// global Flash/Pro route. Takes the runtime so concurrent runs each
     /// pick up their own override rather than whatever happened to be on
     /// the currently-selected one.
     func configurationForCurrentTurn(for runtime: AgentRuntime) -> AgentConfiguration {
-        let providerID = runtime.sessionProviderIDOverride?
-            .trimmingCharacters(in: .whitespacesAndNewlines)
         var configuration: AgentConfiguration
-        if let providerID, !providerID.isEmpty {
-            if let entry = agentProviderLibrary.entries.first(where: { $0.providerID == providerID }) {
-                configuration = entry.makeConfiguration(
-                    imageDescription: agentConfiguration.imageDescription
-                ).normalized.resolved(for: .interactive)
-            } else if providerID == AgentProviderPreset.someIMID {
+        if let entry = providerEntry(for: runtime) {
+            configuration = entry.makeConfiguration(
+                imageDescription: agentConfiguration.imageDescription
+            ).normalized.resolved(for: .interactive)
+        } else if runtime.sessionProviderIDOverride == AgentProviderPreset.someIMID {
                 let settings = SomeIMIntegrationStore.loadSettings().normalized
                 let entry = AgentProviderEntry(
                     providerID: AgentProviderPreset.someIMID,
@@ -35,9 +62,6 @@ extension AppState {
                 configuration = entry.makeConfiguration(
                     imageDescription: agentConfiguration.imageDescription
                 ).normalized.resolved(for: .interactive)
-            } else {
-                configuration = agentConfiguration.normalized.resolved(for: .interactive)
-            }
         } else {
             configuration = agentConfiguration.normalized.resolved(for: .interactive)
         }
@@ -92,11 +116,13 @@ extension AppState {
 
     var activeAgentModelID: String {
         if let override = agentSessionModelOverride?.trimmingCharacters(in: .whitespacesAndNewlines),
-           !override.isEmpty,
-           agentModelIsCompatibleWithActiveProvider(override) {
+           !override.isEmpty {
             return override
         }
-        return agentConfiguration.normalized.model(for: .interactive)
+        guard let runtime = activeRuntime else {
+            return agentConfiguration.normalized.model(for: .interactive)
+        }
+        return configurationForCurrentTurn(for: runtime).model(for: .interactive)
     }
 
     var agentModelStatusText: String {

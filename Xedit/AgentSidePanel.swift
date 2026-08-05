@@ -94,7 +94,7 @@ nonisolated enum AgentSidePanelKind: String, CaseIterable, Identifiable, Codable
         case .files: return L10n.AgentSidePanel.files
         case .terminal: return L10n.AgentSidePanel.terminal
         case .devServer: return "Dev Server"
-        case .backgroundTasks: return "任务监控"
+        case .backgroundTasks: return L10n.AgentJobs.managerTitle
         case .mediaTasks: return "媒体任务"
         case .shortDrama: return "短剧"
         case .embeddedBrowser: return L10n.AgentSidePanel.embeddedBrowser
@@ -137,11 +137,7 @@ struct AgentSidePanelKindContent: View {
     var body: some View {
         switch kind {
         case .backgroundTasks:
-            // 必须把面板宽度传进去 —— Rail 默认把自己 `.frame(width: 320)`
-            // 锁死,侧面板拖到比 320 窄时它会溢出面板、向左盖住 chat
-            // (「突破左边界」)。传 layoutWidth:拖拽期间保持在拖拽
-            // 起点宽度,子面板不逐鼠标事件重排。
-            AgentTaskMonitorRail(width: layoutWidth)
+            AgentBackgroundTasksPanel(width: layoutWidth)
         case .mediaTasks:
             AgentMediaTasksPanel(width: layoutWidth)
         case .devServer:

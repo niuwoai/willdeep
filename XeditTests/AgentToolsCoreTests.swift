@@ -1429,6 +1429,188 @@ struct AgentToolsCoreTests {
         #expect(decision.requiresTypedConfirmation == true)
     }
 
+    @Test("non-sensitive external paths escalate before launch without typed confirmation")
+    func sandboxPolicyPreflightsOrdinaryExternalPaths() {
+        let root = URL(fileURLWithPath: "/tmp/willdeep-workspace")
+        let decision = AgentSandboxPolicy.commandDecision(
+            command: "printf '%s' report > /tmp/willdeep-report.md",
+            rootDirectory: root
+        )
+        #expect(decision.mode == .escalated)
+        #expect(decision.requiresUserApproval == true)
+        #expect(decision.requiresTypedConfirmation == false)
+        #expect(decision.reason.contains("outside the workspace"))
+    }
+
+    @Test("external file policy distinguishes exact user intent, overwrite, and sensitive paths")
+    func externalFileWritePolicyUsesRiskAndCurrentUserIntent() throws {
+        let base = FileManager.default.temporaryDirectory
+            .appendingPathComponent("willdeep_external_policy_\(UUID().uuidString)", isDirectory: true)
+        let workspace = base.appendingPathComponent("workspace", isDirectory: true)
+        let destination = base.appendingPathComponent("exports/report.md")
+        try FileManager.default.createDirectory(at: workspace, withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(
+            at: destination.deletingLastPathComponent(),
+            withIntermediateDirectories: true
+        )
+        defer { try? FileManager.default.removeItem(at: base) }
+
+        let createArguments: [String: AgentJSONValue] = [
+            "path": .string(destination.path),
+            "content": .string("verified report\n")
+        ]
+        let createDecision = AgentSandboxPolicy.decision(
+            toolName: "write_file",
+            arguments: createArguments,
+            rootDirectory: workspace
+        )
+        #expect(createDecision.mode == .escalated)
+        #expect(createDecision.requiresTypedConfirmation == false)
+        #expect(AgentExternalFileWritePolicy.canAutoApproveNewDocument(
+            arguments: createArguments,
+            rootDirectory: workspace
+        ))
+        #expect(AgentExternalFileWritePolicy.currentUserExplicitlyAuthorizes(
+            arguments: createArguments,
+            rootDirectory: workspace,
+            latestUserMessage: "请把报告写入 `\(destination.path)`"
+        ))
+        #expect(!AgentExternalFileWritePolicy.currentUserExplicitlyAuthorizes(
+            arguments: createArguments,
+            rootDirectory: workspace,
+            latestUserMessage: "不要写入 `\(destination.path)`，这里只读"
+        ))
+
+        try "old\n".write(to: destination, atomically: true, encoding: .utf8)
+        let overwriteArguments: [String: AgentJSONValue] = [
+            "path": .string(destination.path),
+            "content": .string("new\n"),
+            "overwrite": .bool(true)
+        ]
+        #expect(!AgentExternalFileWritePolicy.canAutoApproveNewDocument(
+            arguments: overwriteArguments,
+            rootDirectory: workspace
+        ))
+        #expect(!AgentExternalFileWritePolicy.currentUserExplicitlyAuthorizes(
+            arguments: overwriteArguments,
+            rootDirectory: workspace,
+            latestUserMessage: "请查看 `\(destination.path)`"
+        ))
+        #expect(AgentExternalFileWritePolicy.currentUserExplicitlyAuthorizes(
+            arguments: overwriteArguments,
+            rootDirectory: workspace,
+            latestUserMessage: "请覆盖更新 `\(destination.path)`"
+        ))
+
+        let sensitiveArguments: [String: AgentJSONValue] = [
+            "path": .string("~/.ssh/authorized_keys"),
+            "content": .string("ssh-ed25519 test")
+        ]
+        let sensitiveDecision = AgentSandboxPolicy.decision(
+            toolName: "write_file",
+            arguments: sensitiveArguments,
+            rootDirectory: workspace
+        )
+        #expect(sensitiveDecision.requiresTypedConfirmation == true)
+    }
+
+    @Test("write_file writes the exact external target atomically and verifies bytes")
+    func externalWriteFilePersistsAndVerifiesExactTarget() async throws {
+        let base = FileManager.default.temporaryDirectory
+            .appendingPathComponent("willdeep_external_write_\(UUID().uuidString)", isDirectory: true)
+        let workspace = base.appendingPathComponent("workspace", isDirectory: true)
+        let destinationDirectory = base.appendingPathComponent("exports", isDirectory: true)
+        let destination = destinationDirectory.appendingPathComponent("report.md")
+        try FileManager.default.createDirectory(at: workspace, withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: destinationDirectory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: base) }
+
+        let firstContent = "first verified report\n"
+        let firstResult = try await AgentToolRunner.run(
+            name: "write_file",
+            arguments: [
+                "path": .string(destination.path),
+                "content": .string(firstContent)
+            ],
+            context: AgentToolContext(rootDirectory: workspace, sandboxMode: .escalated)
+        )
+        #expect(try String(contentsOf: destination, encoding: .utf8) == firstContent)
+        #expect(firstResult.payload.contains(destination.path))
+        #expect(firstResult.payload.contains("byte-for-byte"))
+
+        await #expect(throws: AgentToolError.self) {
+            _ = try await AgentToolRunner.run(
+                name: "write_file",
+                arguments: [
+                    "path": .string(destination.path),
+                    "content": .string("unexpected overwrite\n")
+                ],
+                context: AgentToolContext(rootDirectory: workspace, sandboxMode: .escalated)
+            )
+        }
+
+        let replacement = "replacement verified\n"
+        _ = try await AgentToolRunner.run(
+            name: "write_file",
+            arguments: [
+                "path": .string(destination.path),
+                "content": .string(replacement),
+                "overwrite": .bool(true)
+            ],
+            context: AgentToolContext(rootDirectory: workspace, sandboxMode: .escalated)
+        )
+        #expect(try String(contentsOf: destination, encoding: .utf8) == replacement)
+    }
+
+    @Test("external file authorization honors exact user intent without weakening Strict mode")
+    @MainActor
+    func externalWriteFileAutoApprovalUsesRiskAndApprovalMode() async throws {
+        let base = FileManager.default.temporaryDirectory
+            .appendingPathComponent("willdeep_external_approval_\(UUID().uuidString)", isDirectory: true)
+        let workspace = base.appendingPathComponent("workspace", isDirectory: true)
+        let destinationDirectory = base.appendingPathComponent("exports", isDirectory: true)
+        let destination = destinationDirectory.appendingPathComponent("findings.md")
+        try FileManager.default.createDirectory(at: workspace, withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: destinationDirectory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: base) }
+
+        let appState = AppState()
+        let arguments: [String: AgentJSONValue] = [
+            "path": .string(destination.path),
+            "content": .string("findings\n")
+        ]
+
+        let explicitWorkspaceAccess = await appState.autoApprovalSource(
+            toolName: "write_file",
+            arguments: arguments,
+            risk: .write,
+            rootDirectory: workspace,
+            approvalMode: .workspaceAccess,
+            latestUserMessage: "请把结果写入 `\(destination.path)`"
+        )
+        #expect(explicitWorkspaceAccess == .user)
+
+        let smartLowRiskCreation = await appState.autoApprovalSource(
+            toolName: "write_file",
+            arguments: arguments,
+            risk: .write,
+            rootDirectory: workspace,
+            approvalMode: .smart,
+            latestUserMessage: "整理一下结果"
+        )
+        #expect(smartLowRiskCreation == .staticAllowlist)
+
+        let strict = await appState.autoApprovalSource(
+            toolName: "write_file",
+            arguments: arguments,
+            risk: .write,
+            rootDirectory: workspace,
+            approvalMode: .requestEveryTime,
+            latestUserMessage: "请把结果写入 `\(destination.path)`"
+        )
+        #expect(strict == nil)
+    }
+
     @Test("home-relative paths use direct escalation instead of the sandbox home")
     func sandboxPolicyPreservesRealHomePaths() {
         let root = URL(fileURLWithPath: "/tmp/willdeep-workspace")

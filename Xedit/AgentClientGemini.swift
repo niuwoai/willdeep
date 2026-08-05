@@ -239,7 +239,16 @@ struct GeminiAdapter {
             )
         }
 
-        let decoded = try JSONDecoder().decode(ModelsResponse.self, from: data)
+        let decoded: ModelsResponse
+        do {
+            decoded = try JSONDecoder().decode(ModelsResponse.self, from: data)
+        } catch {
+            throw AgentModelListResponseFormatError.wrapping(
+                error,
+                data: data,
+                expectedSchema: #"{"models":[{"name":"models/model-id","supportedGenerationMethods":["generateContent"]}]}"#
+            )
+        }
         return decoded.models
             .filter { ($0.supportedGenerationMethods ?? []).contains("generateContent") }
             .map { $0.name }
