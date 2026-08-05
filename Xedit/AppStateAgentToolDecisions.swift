@@ -383,11 +383,13 @@ extension AppState {
             return .user
         }
 
-        // Goal mode implicitly enables the auto-approve safety judge for
-        // command-shaped calls so it can stay autonomous without the user
-        // flipping the master toggle. In smart mode this stays exactly
-        // `autoApproveSafeCommands`, so non-goal behavior is unchanged.
-        let judgeAutoApprove = autoApproveSafeCommands || interactionMode == .goal
+        // Selecting Smart review is the user's approval policy choice; it
+        // must not be silently weakened by a second global toggle. Smart and
+        // Goal therefore both run command-shaped calls through the static
+        // classifier and, when needed, the one-shot AI safety judge. Strict
+        // mode returned above, while Workspace Access keeps its narrower
+        // workspace-only boundary below.
+        let judgeAutoApprove = approvalMode == .smart || interactionMode == .goal
 
         // Goal mode runs with high autonomy but no longer blanket-approves
         // every write-tier call. Sandbox-contained, non-command work (file
@@ -511,7 +513,7 @@ extension AppState {
 
         // MCP calls use the same two-tier policy as shell commands:
         // read-looking names pass statically, everything else can go to
-        // the safety judge when the master auto-approve toggle is enabled.
+        // the safety judge when Smart review (or Goal mode) is active.
         if toolName == "call_mcp_tool" {
             guard let server = arguments["server"]?.stringValue(),
                   let tool = arguments["tool"]?.stringValue() else {

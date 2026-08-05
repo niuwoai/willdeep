@@ -312,16 +312,6 @@ struct EditorSettingsView: View {
                     .foregroundStyle(.secondary)
             }
 
-            Section(L10n.Settings.sectionToolApproval) {
-                Toggle(L10n.Settings.toggleAutoApproveSafe, isOn: Binding(
-                    get: { appState.autoApproveSafeCommands },
-                    set: { appState.autoApproveSafeCommands = $0 }
-                ))
-                Text(L10n.Settings.AgentBehavior.toolApprovalDescription)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
-
             Section(L10n.Settings.sectionWebTools) {
                 Picker(L10n.Settings.WebTools.providerLabel, selection: $webSearchProviderBuffer) {
                     ForEach(AgentWebSearchProvider.allCases) { provider in

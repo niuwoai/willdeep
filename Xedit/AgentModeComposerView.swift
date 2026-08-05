@@ -1754,8 +1754,10 @@ struct AgentChatStatusBar: View {
             // 一个 AgentWorktreeSummaryPill,和顶部那条重复,移除。
             Spacer(minLength: 0)
 
-            CompressButton()
-            ContextRingIndicator()
+            if let runtime = appState.activeRuntime {
+                AgentContextUsageControls(runtime: runtime)
+                    .id(runtime.id)
+            }
 
             // Quick access: gear opens Settings (keeping the last tab),
             // phone jumps straight to the Mobile Gateway section.
@@ -1832,110 +1834,5 @@ private struct AgentChatStatusBarSettingsButtonsModern: View {
             openSettings()
             NSApp.activate(ignoringOtherApps: true)
         }
-    }
-}
-
-/// Button to manually compress the conversation. Surfaces only when the
-/// estimated context usage crosses 50% so light conversations don't see
-/// it. Replaced with a spinner while a compression is in flight.
-private struct CompressButton: View {
-    @EnvironmentObject var appState: AppState
-
-    var body: some View {
-        Group {
-            if appState.isCompressingAgentContext {
-                HStack(spacing: 4) {
-                    ProgressView().controlSize(.mini)
-                    Text(L10n.ContextCompression.compressing)
-                }
-            } else if shouldOffer {
-                Button {
-                    appState.compressAgentContext()
-                } label: {
-                    HStack(spacing: 3) {
-                        Image(systemName: "rectangle.compress.vertical")
-                            .font(.system(size: 9))
-                        Text(L10n.ContextCompression.compress)
-                    }
-                    .foregroundStyle(tint)
-                    .padding(.horizontal, 6)
-                    .padding(.vertical, 2)
-                    .background(tint.opacity(0.12))
-                    .clipShape(Capsule())
-                }
-                .buttonStyle(.plain)
-                .help(L10n.ContextCompression.compressHelp)
-                .disabled(appState.isAgentResponding)
-            }
-        }
-    }
-
-    private var usedFraction: Double {
-        let window = max(1, appState.agentContextWindow)
-        return min(1.0, Double(appState.estimatedAgentTokens) / Double(window))
-    }
-
-    private var shouldOffer: Bool {
-        usedFraction > 0.5 && appState.agentMessages.count > 6
-    }
-
-    private var tint: Color {
-        if usedFraction > 0.9 { return .red }
-        if usedFraction > 0.75 { return .orange }
-        return .accentColor
-    }
-}
-
-private struct ContextRingIndicator: View {
-    @EnvironmentObject var appState: AppState
-
-    var body: some View {
-        HStack(spacing: 5) {
-            ZStack {
-                Circle()
-                    .stroke(Color.secondary.opacity(0.25), lineWidth: 2)
-                    .frame(width: 12, height: 12)
-                Circle()
-                    .trim(from: 0, to: usedFraction)
-                    .stroke(barColor, style: StrokeStyle(lineWidth: 2, lineCap: .round))
-                    .rotationEffect(.degrees(-90))
-                    .frame(width: 12, height: 12)
-            }
-            Text("\(percent)%")
-                .monospacedDigit()
-        }
-        .help(L10n.ContextRing.tooltip(
-            formatTokens(conversationUsed),
-            formatTokens(usableWindow),
-            formatTokens(baseline),
-            formatTokens(remaining)
-        ))
-    }
-
-    private var window: Int { max(1, appState.agentContextWindow) }
-    private var used: Int { appState.estimatedAgentTokens }
-    /// Fixed system-prompt + tool-schema overhead, present before the user
-    /// sends anything. Clamped to `used` so we never report negative
-    /// conversation usage if the estimate jitters.
-    private var baseline: Int { min(appState.estimatedAgentBaselineTokens, used) }
-    /// Window left for the conversation once the fixed overhead is set aside.
-    private var usableWindow: Int { max(1, window - baseline) }
-    /// Tokens the conversation itself has added — what the ring tracks. A
-    /// brand-new chat (no messages) has 0 here, so the ring reads 0%.
-    private var conversationUsed: Int { max(0, used - baseline) }
-    private var usedFraction: CGFloat { min(1, max(0, CGFloat(conversationUsed) / CGFloat(usableWindow))) }
-    private var remaining: Int { max(0, window - used) }
-    private var percent: Int { Int(usedFraction * 100) }
-
-    private var barColor: Color {
-        if usedFraction > 0.9 { return .red }
-        if usedFraction > 0.75 { return .orange }
-        return .accentColor
-    }
-
-    private func formatTokens(_ count: Int) -> String {
-        if count >= 1_000_000 { return String(format: "%.1fM", Double(count) / 1_000_000) }
-        if count >= 1_000 { return "\(count / 1_000)k" }
-        return "\(count)"
     }
 }

@@ -998,6 +998,14 @@ extension AppState {
                 } else {
                     runtime.messages[index].toolCalls = latestToolCalls
                 }
+                // Some OpenAI-compatible gateways emit only whitespace in
+                // `content` before a tool call. Normalize the settled round so
+                // persistence, provider replay, and every transcript surface
+                // agree that this is a tool-only assistant message.
+                if !runtime.messages[index].content.isEmpty,
+                   !runtime.messages[index].hasRenderableTextContent {
+                    runtime.messages[index].content = ""
+                }
                 runtime.messages[index].elapsedSeconds = Date().timeIntervalSince(turnStartedAt)
                 runtime.messages[index].managedRoute = managedRouteDecision
             }

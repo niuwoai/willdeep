@@ -225,13 +225,6 @@ final class AppState: ObservableObject {
     /// Command families the user has explicitly allowed Agent mode to run
     /// without prompting again, e.g. `git push`.
     @Published var agentAlwaysAllowedCommands: [AgentAlwaysAllowedCommand] = []
-    /// When true, `run_command` invocations the static SafeCommand
-    /// allowlist marks as `.alwaysSafe` (or the LLM judge confirms as
-    /// safe) skip the Allow/Deny prompt and run immediately. Defaults
-    /// to true so a fresh install gets the no-friction experience.
-    @Published var autoApproveSafeCommands: Bool = AgentSettingsStore.loadAutoApproveSafeCommands() {
-        didSet { AgentSettingsStore.saveAutoApproveSafeCommands(autoApproveSafeCommands) }
-    }
     /// Cached few-shot block of the operator's prior hand-review decisions,
     /// appended to the auto-approve safety-judge system prompt. Rebuilt
     /// lazily behind `safetyJudgeHistoryTTL` (see safetyJudgeHistoryContext)
@@ -409,37 +402,6 @@ final class AppState: ObservableObject {
     /// don't fan out into multiple parallel title requests against
     /// the same provider. Not @Published — UI doesn't need to react.
     var titleSummarizationsInFlight: Set<AgentSession.ID> = []
-
-    /// `estimatedAgentTokens`（AppStateAgentLoop.swift）的 memo。该估算
-    /// 要重建完整请求（含 system prompt 的项目规则磁盘读取）并逐字符
-    /// 扫描全部消息，而状态栏的 ContextRingIndicator / CompressButton
-    /// 每次 body 求值会读它 6+ 次——不缓存的话流式期间每个 token 都
-    /// 全量重算（1.58.0-rc9 CPU 修复的一环）。消息条数或会话切换立即
-    /// 失效；同条数下（流式追加中）最多每秒重算一次。Not @Published。
-    var agentTokenEstimateCache: (messageCount: Int, sessionID: AgentSession.ID?, value: Int, at: Date)?
-
-    /// Companion cache for the composer ring's *baseline* — the fixed
-    /// system-prompt + tool-schema overhead that is present before the user
-    /// sends anything. The ring subtracts it so an empty chat reads 0%.
-    /// Same invalidation rules as `agentTokenEstimateCache`. Not @Published.
-    var agentBaselineEstimateCache: (messageCount: Int, sessionID: AgentSession.ID?, value: Int, at: Date)?
-
-    /// Memo for the estimated request prompt split: stable `system` message
-    /// plus per-turn context appended to the latest user message. Both `estimatedAgentTokens` and
-    /// `estimatedAgentBaselineTokens` independently build it, so on a session
-    /// switch (which misses BOTH value caches at once) the full system-prompt
-    /// construction + memory retrieval ran twice on the main thread inside the
-    /// click path — a measurable slice of the switch "慢半拍". Sharing one
-    /// build across the two estimators halves it. Same (messageCount,
-    /// sessionID, 1s) invalidation as the value caches above, so it inherits
-    /// their precision tradeoff and adds no new staleness. Not @Published.
-    var agentSystemMessageCache: (
-        messageCount: Int,
-        sessionID: AgentSession.ID?,
-        systemMessage: AgentMessage,
-        turnContext: String,
-        at: Date
-    )?
 
     /// Active Agent-mode session id. nil means "scratch" — Editor-mode
     /// chat keeps working without forcing a session to exist.
