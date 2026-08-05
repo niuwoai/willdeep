@@ -1757,12 +1757,9 @@ struct WillDeepTests {
     @Test("trusted-server MCP calls with read-style names auto-approve")
     @MainActor
     func testMCPAutoApprovalForReadStyleTools() async {
-        // autoApproveSafeCommands 的 didSet 会写 UserDefaults——沙箱化,
-        // 防止测试翻转开发机上的真实设置。
         let sandbox = KeychainSandbox()
         defer { withExtendedLifetime(sandbox) {} }
         let appState = AppState()
-        appState.autoApproveSafeCommands = true
         let root = URL(fileURLWithPath: "/tmp/willdeep-test-workspace")
 
         let approved = await appState.autoApprovalSource(
@@ -1777,8 +1774,7 @@ struct WillDeepTests {
         )
         #expect(approved == .staticAllowlist)
 
-        // 主开关关掉 → 一切回到人工。
-        appState.autoApproveSafeCommands = false
+        // 严格模式仍会把同一调用交给人工。
         let gated = await appState.autoApprovalSource(
             toolName: "call_mcp_tool",
             arguments: [
@@ -1786,7 +1782,8 @@ struct WillDeepTests {
                 "tool": .string("list_issues"),
             ],
             risk: .write,
-            rootDirectory: root
+            rootDirectory: root,
+            approvalMode: .requestEveryTime
         )
         #expect(gated == nil)
     }
@@ -2093,7 +2090,6 @@ struct WillDeepTests {
         let sandbox = KeychainSandbox()
         defer { withExtendedLifetime(sandbox) {} }
         let appState = AppState()
-        appState.autoApproveSafeCommands = true
         let testRoot = FileManager.default.temporaryDirectory
             .appendingPathComponent("willdeep_approval_modes_\(UUID().uuidString)", isDirectory: true)
         let gitRoot = testRoot.appendingPathComponent("git-workspace", isDirectory: true)
@@ -2826,6 +2822,13 @@ struct WillDeepTests {
 
         #expect(withTools > withoutTools)
         #expect(withTools < maximumExpectedToolSchemaTokens)
+    }
+
+    @Test("agent token estimate ignores Unicode whitespace")
+    func testAgentTokenEstimateIgnoresUnicodeWhitespace() {
+        #expect(AppState.estimateTextTokens("abcd") == 1)
+        #expect(AppState.estimateTextTokens("a b\nc\td") == 1)
+        #expect(AppState.estimateTextTokens("你\u{3000}好") == 2)
     }
 
     @Test("agent tool-round safety limit supports long multi-step work")

@@ -1,7 +1,62 @@
 # Changelog
 
-> 当前文件保留最新版本（1.227.0-rc4 至 1.109.0-rc340）。
+> 当前文件保留最新版本（1.228.0-rc2 至 1.109.0-rc340）。
 > 更早的 1000 个版本已移至 [CHANGELOG-ARCHIVE.md](CHANGELOG-ARCHIVE.md)。
+
+## 1.228.0-rc2 - 2026-08-05
+
+### Fixed
+
+- 会话列表不再为普通会话残留的 `currentPlan` 渲染计划模式 `checklist` 图标；目标模式仍保留独立的靶心状态提示。
+
+### Tests
+
+- 新增旧计划进度不占用会话行宽度的 SwiftUI 回归覆盖，并保留 Goal 模式单一徽标验证。
+
+### Meta
+
+- Bugfix 预发布版本从 **1.228.0-rc1** 递增为 **1.228.0-rc2**，内部构建号从 **285** 递增为 **286**，Help 与 Computer Use Helper 构建号从 **202** 递增为 **203**；App、Go agent、Help、Helper、浏览器扩展、README、响应头契约与产品文档保持一致。
+
+## 1.228.0-rc1 - 2026-08-05
+
+### Added
+
+- “智能审核”现在是完整、单一的会话授权策略：`run_command`、`terminal_send_command`、终端控制和标准可信 MCP 写操作会自动经过静态分类与一次性 Flash AI 安全裁判，不再要求用户另外开启全局“AI 批准正常命令”开关。
+
+### Changed
+
+- 移除设置页中与会话授权模式重复的 AI 自动批准总开关；需要逐次人工确认时，直接选择“每次询问”，Workspace Access 继续只授权工作区边界内操作。
+
+### Fixed
+
+- Agent 状态栏不再于 SwiftUI 热路径同步重建并扫描完整请求；Token 估算改为尾随防抖、可取消的 utility 后台任务，并降低 Unicode 空白判断分配，减少流式回复期间的 CPU 占用。
+
+### Security
+
+- 破坏性命令、需要输入式确认的操作、ZMODEM 本地路径选择、不受信 MCP、AI 明确拒绝或裁判不可用仍回退人工审批；严格模式不会调用自动批准链路。
+
+### Tests
+
+- 新增智能模式终端检查命令自动批准与严格模式保持人工确认的回归覆盖，并保留 Token Unicode 空白估算测试；完成版本一致性、构建及发布前测试验证。
+
+### Meta
+
+- 功能预发布版本从 **1.227.0-rc5** 提升为 **1.228.0-rc1**，内部构建号从 **284** 递增为 **285**，Help 与 Computer Use Helper 构建号从 **201** 递增为 **202**；App、Go agent、Help、Helper、浏览器扩展、README、响应头契约与产品文档保持一致。
+
+## 1.227.0-rc5 - 2026-08-05
+
+### Fixed
+
+- Agent 状态栏不再于每次 SwiftUI `body` 求值时同步重建请求并扫描完整消息与工具 schema；上下文 Token 使用量改为读取稳定快照，相关状态变化后以 750ms 尾随防抖触发可取消的 utility 后台重算，降低流式回复期间的主线程 CPU 占用。
+- Token 估算器改用 Unicode scalar 自带的空白属性判断，避免逐字符查询 `CharacterSet` 产生额外分配，同时保持 ASCII、CJK 与其他字符的既有估算口径。
+
+### Tests
+
+- 新增 Unicode 普通空格、换行、制表符与全角空格的 Token 估算回归测试，并完成 WillDeep Debug 全量构建验证。
+
+### Meta
+
+- Bugfix 预发布版本从 **1.227.0-rc4** 递增为 **1.227.0-rc5**，内部构建号从 **283** 递增为 **284**，Help 与 Computer Use Helper 构建号从 **200** 递增为 **201**；App、Go agent、Help、Helper、浏览器扩展、README、响应头契约与产品文档保持一致。
 
 ## 1.227.0-rc4 - 2026-08-05
 

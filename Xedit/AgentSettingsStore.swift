@@ -43,7 +43,6 @@ enum AgentSettingsStore {
     private static let recentlyUsedModelsKey = "com.willdeep.agentSettings.recentlyUsedModels.v1"
     private static let defaultModelModePreferenceKey = "com.willdeep.agentSettings.defaultModelModePreference.v1"
     private static let alwaysAllowedCommandsKey = "com.willdeep.agentSettings.alwaysAllowedCommands.v1"
-    private static let autoApproveKey = "com.willdeep.agentSettings.autoApproveSafeCommands.v1"
     private static let perProviderConcurrencyKey = "com.willdeep.agentSettings.perProviderConcurrencyLimit.v1"
     private static let chatBaseFontSizeKey = "com.willdeep.agentSettings.chatBaseFontSize.v1"
     private static let anthropicMaxOutputTokensKey = "com.willdeep.agentSettings.anthropicMaxOutputTokens.v1"
@@ -253,20 +252,6 @@ enum AgentSettingsStore {
         return decoded
             .filter { !$0.commandSignature.isEmpty }
             .sorted { $0.commandSignature < $1.commandSignature }
-    }
-
-    /// Whether `run_command` should auto-approve commands the static
-    /// allowlist (or the LLM judge) certifies as safe. Defaults to true
-    /// on a fresh install; the toggle lives in Settings > Agent.
-    static func loadAutoApproveSafeCommands() -> Bool {
-        if defaults.object(forKey: autoApproveKey) == nil {
-            return true
-        }
-        return defaults.bool(forKey: autoApproveKey)
-    }
-
-    static func saveAutoApproveSafeCommands(_ enabled: Bool) {
-        defaults.set(enabled, forKey: autoApproveKey)
     }
 
     static func loadLocalModelSettings() -> AgentLocalModelSettings {

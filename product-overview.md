@@ -1,6 +1,6 @@
 # WillDeep Product Overview
 
-> Last updated: 2026-08-05 | Current version: v1.227.0-rc4
+> Last updated: 2026-08-05 | Current version: v1.228.0-rc2
 
 ## Positioning
 
@@ -12,6 +12,9 @@ WillDeep is configured for non-App-Store distribution without App Sandbox so it 
 
 ## 架构概览
 
+- **会话列表移除计划模式残留徽标（1.228.0-rc2）** —— 普通会话即使保留过渡期 `currentPlan` 数据，也不再显示已取消的计划模式 `checklist` 图标；Goal 会话的靶心提示继续作为有效模式标识。
+- **智能审核成为单一授权策略（1.228.0-rc1）** —— 会话选择“智能审核”后，终端命令、工作区命令和标准可信 MCP 写操作会直接进入静态风险分类与一次性 Flash AI 安全裁判，不再受第二个全局开关阻断；严格模式仍逐次询问，Workspace Access 仍只自动批准工作区边界内操作，破坏性命令、ZMODEM 本地路径选择、AI 拒绝或不可用继续交给人工确认。
+- **上下文 Token 估算退出 SwiftUI 热路径（1.227.0-rc5）** —— 状态栏上下文圆环与压缩按钮仅读取已发布的估算快照；消息、模型或工作区上下文变化后统一尾随防抖，过期任务会被取消，完整 Unicode 扫描转入 utility 后台任务，避免流式输出期间反复在主线程重建并扫描整份请求。
 - **DeepSeek V4 Flash 服务端优先联网搜索（1.227.0-rc4）** —— DeepSeek V4 Flash 的 Responses 请求会把 `web_search` 作为 hosted tool 交给模型服务端执行，并把服务端 `url_citation` 持久化到助手消息和现有来源胶囊；若网关以 400/422 明确拒绝该 hosted tool，则同一轮自动回退到既有本地工具编排（Exa、Brave 或 some.im managed search）。其他模型仍维持原有执行策略。
 - **长思考模型 180 秒静默等待（1.227.0-rc3）** —— OpenAI Chat/Responses、Anthropic 与 Gemini 请求统一允许连续 180 秒没有响应字节，资源总时限仍为 600 秒；错误提示直接读取同一超时常量，避免客户端行为与提示文案再次漂移。muchtoken 网关默认上游总时限保持 600 秒。
 - **终端时间线与工作区 revision 低开销化（1.227.0-rc3）** —— 终端快捷记录面板仅让录制计时和当前播放进度按秒更新，静态 `LazyVStack`、`ViewThatFits` 与快捷项集合不再被外层时间线反复布局。Git 变更保护以轻量仓库身份获取替代 pre-lease 全量快照；未跟踪目录使用 Git 原生枚举和批量内容哈希，正式 CAS 仍执行完整 revision 校验并保留遍历回退。
