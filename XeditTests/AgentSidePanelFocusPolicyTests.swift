@@ -84,16 +84,16 @@ struct AgentSidePanelFocusPolicyTests {
         #expect(!localization.contains("defaultValue: \"Replay\""))
     }
 
-    @Test("Retired task monitor cannot return from persisted session state")
-    func retiredTaskMonitorIsNormalizedOnSessionChanges() throws {
-        let source = try Self.source(named: "AgentModeView.swift")
+    @Test("Background task manager remains a renderable request-driven side panel")
+    func backgroundTaskManagerCanOpenFromComposerRequests() throws {
+        let modeSource = try Self.source(named: "AgentModeView.swift")
+        let panelSource = try Self.source(named: "AgentSidePanel.swift")
 
-        #expect(source.contains("if appState.agentSidePanelKind == .backgroundTasks"))
-        #expect(source.contains("if newPanel == .backgroundTasks"))
-        #expect(source.contains("guard request.kind != .backgroundTasks else"))
-        #expect(source.contains("let activeSidePanel: AgentSidePanelKind? = if appState.agentPrimaryDestination == .scheduledTasks"))
-        #expect(source.contains("else if appState.agentSidePanelKind == .backgroundTasks"))
-        #expect(source.contains("newPanel == .backgroundTasks ? nil : newPanel"))
+        #expect(modeSource.contains("request.kind == .backgroundTasks"))
+        #expect(modeSource.contains("appState.agentSidePanelKind = request.kind"))
+        #expect(!modeSource.contains("guard request.kind != .backgroundTasks else"))
+        #expect(!modeSource.contains("newPanel == .backgroundTasks ? nil : newPanel"))
+        #expect(panelSource.contains("AgentBackgroundTasksPanel(width: layoutWidth)"))
     }
 
     @Test("Activity cards use a light gray border and dismiss control")

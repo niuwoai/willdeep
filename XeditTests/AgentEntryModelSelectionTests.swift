@@ -88,7 +88,8 @@ struct AgentEntryModelSelectionTests {
 
         #expect(app.activeRuntime != nil)
         #expect(app.activeRuntime?.workspaceRootPath == nil)
-        #expect(app.agentProviderLibrary.activeID == deepseek.id)
+        #expect(app.agentProviderLibrary.activeID != deepseek.id)
+        #expect(app.activeRuntime?.sessionProviderEntryID == deepseek.id)
         #expect(app.agentSessionModelOverride == "deepseek-v4-pro")
 
         let workspacePath = FileManager.default.temporaryDirectory.standardizedFileURL.path
@@ -98,13 +99,15 @@ struct AgentEntryModelSelectionTests {
     }
 
     @Test
-    func switchingToDifferentEntryFlipsActiveAndConfig() {
+    func switchingToDifferentEntryPinsOnlyCurrentSession() throws {
         let _sandbox = installKeychainSandbox(); _ = _sandbox
         let (app, _, deepseek) = makeAppStateWithTwoEntries()
         app.selectAgentEntryAndModel(entryID: deepseek.id, model: "deepseek-v4-pro")
-        #expect(app.agentProviderLibrary.activeID == deepseek.id)
-        #expect(app.agentConfiguration.providerID == "deepseek")
-        #expect(app.agentConfiguration.apiKey == "test-fixture-deepseek-key")
+        #expect(app.agentProviderLibrary.activeID != deepseek.id)
+        #expect(app.agentConfiguration.providerID == "openai")
+        let turn = app.configurationForCurrentTurn(for: try #require(app.activeRuntime))
+        #expect(turn.providerID == "deepseek")
+        #expect(turn.apiKey == "test-fixture-deepseek-key")
         #expect(app.agentSessionModelOverride == "deepseek-v4-pro")
     }
 
@@ -201,7 +204,7 @@ struct AgentEntryModelSelectionTests {
     }
 
     @Test
-    func switchingProviderClearsForeignSessionOverride() {
+    func changingSettingsDefaultDoesNotRewritePinnedSession() throws {
         let _sandbox = installKeychainSandbox(); _ = _sandbox
         let (app, openai, deepseek) = makeAppStateWithTwoEntries()
         app.selectAgentEntryAndModel(entryID: openai.id, model: "gpt-4o-mini")
@@ -210,8 +213,9 @@ struct AgentEntryModelSelectionTests {
         app.setActiveProviderLibraryEntry(id: deepseek.id)
 
         #expect(app.agentConfiguration.providerID == "deepseek")
-        #expect(app.agentSessionModelOverride == nil)
-        #expect(app.activeAgentModelID == "deepseek-v4-flash")
+        #expect(app.agentSessionModelOverride == "gpt-4o-mini")
+        #expect(app.activeAgentModelID == "gpt-4o-mini")
+        #expect(app.configurationForCurrentTurn(for: try #require(app.activeRuntime)).providerID == "openai")
     }
 
     /// Regression: before 1.57.0-rc6 the `KeychainSandbox` only
@@ -253,7 +257,7 @@ struct AgentEntryModelSelectionTests {
     }
 
     @Test
-    func entryRoutingModeDrivesEffectiveModel() {
+    func entryRoutingModeDrivesEffectiveModel() throws {
         let _sandbox = installKeychainSandbox(); _ = _sandbox
         // DeepSeek entry forces Pro — the live config's
         // routingMode should follow when we switch active.
@@ -262,10 +266,33 @@ struct AgentEntryModelSelectionTests {
         deepseek.routingMode = .pro
         app.agentProviderLibrary.upsert(deepseek)
         app.selectAgentEntryAndModel(entryID: deepseek.id, model: "deepseek-v4-pro")
-        #expect(app.agentConfiguration.routingMode == .pro)
+        #expect(app.configurationForCurrentTurn(for: try #require(app.activeRuntime)).routingMode == .pro)
         // No override needed because Pro routing already maps to
         // deepseek-v4-pro.
         #expect(app.agentSessionModelOverride == nil)
+    }
+
+    @Test
+    func modelAndProviderSelectionDoNotLeakAcrossConversations() throws {
+        let _sandbox = installKeychainSandbox(); _ = _sandbox
+        let (app, openai, deepseek) = makeAppStateWithTwoEntries()
+        let sessionA = try #require(app.activeAgentSessionID)
+        app.selectAgentEntryAndModel(entryID: deepseek.id, model: "deepseek-v4-pro")
+        app.persistActiveAgentSession()
+
+        let sessionB = app.startNewAgentSession()
+        #expect(app.activeAgentProviderEntry?.id == openai.id)
+        #expect(app.activeAgentModelID == "gpt-4.1-mini")
+
+        #expect(app.selectAgentSession(id: sessionA))
+        #expect(app.activeAgentProviderEntry?.id == deepseek.id)
+        #expect(app.activeAgentModelID == "deepseek-v4-pro")
+        #expect(app.configurationForCurrentTurn(for: try #require(app.activeRuntime)).providerID == "deepseek")
+
+        #expect(app.selectAgentSession(id: sessionB.id))
+        #expect(app.activeAgentProviderEntry?.id == openai.id)
+        #expect(app.activeAgentModelID == "gpt-4.1-mini")
+        #expect(app.configurationForCurrentTurn(for: try #require(app.activeRuntime)).providerID == "openai")
     }
 
     @Test
@@ -372,7 +399,7 @@ struct AgentEntryModelSelectionTests {
     }
 
     @Test
-    func selectingManagedRoutingSwitchesFromAnotherProviderToSomeIM() {
+    func selectingManagedRoutingPinsSomeIMOnlyToCurrentSession() throws {
         let _sandbox = installKeychainSandbox(); _ = _sandbox
         let (app, openAI, _) = makeAppStateWithTwoEntries()
         SomeIMIntegrationStore._setTestSharedSessionOverride(enabled: true)
@@ -387,8 +414,10 @@ struct AgentEntryModelSelectionTests {
 
         app.selectSomeIMManagedRouting()
 
-        #expect(app.agentProviderLibrary.active?.providerID == AgentProviderPreset.someIMID)
-        #expect(app.agentConfiguration.providerID == AgentProviderPreset.someIMID)
+        #expect(app.agentProviderLibrary.active?.id == openAI.id)
+        #expect(app.agentConfiguration.providerID == openAI.providerID)
+        #expect(app.activeAgentProviderEntry?.providerID == AgentProviderPreset.someIMID)
+        #expect(app.configurationForCurrentTurn(for: try #require(app.activeRuntime)).providerID == AgentProviderPreset.someIMID)
         #expect(app.activeRuntime?.managedRouting != nil)
         #expect(app.agentSessionModelOverride == nil)
     }

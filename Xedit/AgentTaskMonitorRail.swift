@@ -651,7 +651,9 @@ struct AgentSemanticActivityStatusLine: View {
 
     @ViewBuilder
     var body: some View {
-        if let phase {
+        if style == .composer, !currentSessionAliveJobs.isEmpty {
+            backgroundTaskComposerCard
+        } else if let phase {
             TimelineView(.periodic(from: .now, by: 1.0)) { context in
                 HStack(spacing: 7) {
                     Image(systemName: phase.systemImage)
@@ -693,6 +695,60 @@ struct AgentSemanticActivityStatusLine: View {
                 }
             }
         }
+    }
+
+    private var backgroundTaskComposerCard: some View {
+        let runningJobs = currentSessionAliveJobs
+        let leadJob = runningJobs.first
+        return Button {
+            appState.agentSidePanelRequest = AgentSidePanelOpenRequest(kind: .backgroundTasks)
+        } label: {
+            HStack(spacing: 7) {
+                Image(systemName: runningJobs.isEmpty ? "checkmark.circle" : "play.circle.fill")
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(runningJobs.isEmpty ? Color.secondary : Color.green)
+                Text(L10n.AgentJobs.composerSummary(currentSessionJobs.count, runningJobs.count))
+                    .font(.system(size: 12, weight: .semibold))
+                    .lineLimit(1)
+                if let leadJob {
+                    Text("·")
+                        .foregroundStyle(.tertiary)
+                    Text(AgentBackgroundTaskPresentation.processName(command: leadJob.command))
+                        .font(.system(size: 11.5, design: .monospaced))
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                }
+                Spacer(minLength: 4)
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 9, weight: .bold))
+                    .foregroundStyle(.secondary)
+            }
+            .padding(.horizontal, 12)
+            .frame(height: 30)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .contentShape(Rectangle())
+            .background(
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    .fill(Color.green.opacity(runningJobs.isEmpty ? 0.05 : 0.09))
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    .stroke(Color.green.opacity(runningJobs.isEmpty ? 0.10 : 0.18), lineWidth: 1)
+            )
+        }
+        .buttonStyle(.plain)
+        .focusable(false)
+        .accessibilityLabel(Text(L10n.AgentJobs.managerTitle))
+        .accessibilityHint(Text(L10n.AgentJobs.openManagerHelp))
+    }
+
+    private var currentSessionJobs: [AgentBackgroundJob] {
+        guard let runtimeID = appState.activeAgentSessionID else { return [] }
+        return appState.agentJobRegistry.jobs(forRuntime: runtimeID)
+    }
+
+    private var currentSessionAliveJobs: [AgentBackgroundJob] {
+        currentSessionJobs.filter(\.isAlive)
     }
 
     private var shouldAnimateCurrentAction: Bool {

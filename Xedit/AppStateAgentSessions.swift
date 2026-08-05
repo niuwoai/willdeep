@@ -78,7 +78,6 @@ extension AppState {
         cfg.routingMode = entry.routingMode
         if cfg.model.isEmpty { cfg.model = entry.flashPrimary }
         agentConfiguration = cfg.normalized
-        clearIncompatibleAgentSessionModelOverride()
     }
 
     /// Activate a different library entry by id and immediately apply
@@ -1384,10 +1383,14 @@ extension AppState {
         ensureActiveProviderIsUsableForChatSelection()
         let defaultManagedRouting = defaultSomeIMManagedRoutingState()
         let defaultModelID = defaultAgentModelIDForNewSession(managedRouting: defaultManagedRouting)
+        let defaultProvider = agentProviderLibrary.active
         let session = AgentSession(
             workspaceRootPath: rootDirectory?.standardizedFileURL.path,
             workspaceLocation: (rootDirectory?.standardizedFileURL.path).map { WorkspaceLocation.local(path: $0) },
             modelID: defaultModelID,
+            providerEntryID: defaultProvider?.id,
+            providerID: defaultProvider?.providerID,
+            providerDisplayName: defaultProvider?.displayName,
             managedRouting: defaultManagedRouting
         )
         agentSessions.insert(session, at: 0)
@@ -1443,10 +1446,14 @@ extension AppState {
         ensureActiveProviderIsUsableForChatSelection()
         let defaultManagedRouting = defaultSomeIMManagedRoutingState()
         let defaultModelID = defaultAgentModelIDForNewSession(managedRouting: defaultManagedRouting)
+        let defaultProvider = agentProviderLibrary.active
         let session = AgentSession(
             workspaceRootPath: normalizedPath,
             workspaceLocation: normalizedPath.map { WorkspaceLocation.local(path: $0) },
             modelID: defaultModelID,
+            providerEntryID: defaultProvider?.id,
+            providerID: defaultProvider?.providerID,
+            providerDisplayName: defaultProvider?.displayName,
             managedRouting: defaultManagedRouting
         )
         agentSessions.insert(session, at: 0)
@@ -1946,11 +1953,15 @@ extension AppState {
         // Build the session and its runtime, but DO NOT touch
         // activeAgentSessionID or appMode — that would yank the user
         // out of whatever they're reading.
+        let routineProvider = agentProviderLibrary.active
         let session = AgentSession(
             workspaceRootPath: routine.workspaceRootPath,
             modelID: routine.modelID?.isEmpty == false
                 ? routine.modelID
-                : agentConfiguration.normalized.model(for: .interactive)
+                : agentConfiguration.normalized.model(for: .interactive),
+            providerEntryID: routineProvider?.id,
+            providerID: routineProvider?.providerID,
+            providerDisplayName: routineProvider?.displayName
         )
         agentSessions.insert(session, at: 0)
         // saveAsync, not save: sync save can beachball behind another
@@ -2181,18 +2192,19 @@ extension AppState {
             runtime.session.modelID = nil
         } else if let override = runtime.sessionModelOverride, !override.isEmpty {
             runtime.session.modelID = override
-        } else if runtime.id == activeAgentSessionID {
-            runtime.session.modelID = agentConfiguration.normalized.model(for: .interactive)
-        } else if runtime.session.modelID == nil {
-            runtime.session.modelID = agentConfiguration.normalized.model(for: .interactive)
+        } else {
+            runtime.session.modelID = configurationForCurrentTurn(for: runtime)
+                .model(for: .interactive)
         }
-        let activeProvider = agentProviderLibrary.active
+        let sessionProvider = providerEntry(for: runtime)
+        runtime.session.providerEntryID = runtime.sessionProviderEntryID ?? sessionProvider?.id
         runtime.session.providerID = runtime.sessionProviderIDOverride
-            ?? activeProvider?.providerID
+            ?? sessionProvider?.providerID
+            ?? runtime.session.providerID
             ?? agentConfiguration.normalized.providerID
         runtime.session.providerDisplayName = AgentProviderPreset.normalizedDisplayName(
             providerID: runtime.session.providerID,
-            storedDisplayName: activeProvider?.displayName
+            storedDisplayName: sessionProvider?.displayName ?? runtime.session.providerDisplayName
         )
         runtime.persist(touchUpdatedAt: touchUpdatedAt)
         agentSessions[index] = runtime.session
@@ -2249,10 +2261,9 @@ extension AppState {
         // an unbound conversation so the user's selection has a real session to
         // land on; choosing a folder later rebinds this empty runtime in place.
         ensureActiveAgentSessionForInteractiveControl()
-        ensureActiveProviderIsUsableForChatSelection()
         let previousModel = previousModelForNotice ?? activeAgentModelSelectionLabel
         let authenticated = SomeIMIntegrationStore.hasAuthenticatedSessionForAutomaticDefaults()
-        guard agentProviderLibrary.active?.isUsableForChatSelection(
+        guard activeAgentProviderEntry?.isUsableForChatSelection(
             isSomeIMAuthenticated: authenticated
         ) == true else {
             agentSessionModelOverride = nil
@@ -2307,7 +2318,7 @@ extension AppState {
     func agentModelIsCompatibleWithActiveProvider(_ model: String) -> Bool {
         let trimmed = model.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return false }
-        guard let active = agentProviderLibrary.active,
+        guard let active = activeAgentProviderEntry,
               let preset = AgentProviderPreset.preset(id: active.providerID),
               preset.id != AgentProviderPreset.customID else {
             return true
@@ -2326,24 +2337,26 @@ extension AppState {
     }
 
     /// Chat-mode picker entry point — pick a (library entry, model)
-    /// pair in one shot. When `entryID` differs from the current
-    /// active, activates that entry first (rebuilds configuration),
-    /// then sets the session override to `model`. Picking a model
+    /// pair in one shot. The provider is pinned only to the current
+    /// conversation, leaving the Settings-wide default and other sessions
+    /// unchanged. Picking a model
     /// that already matches the route default clears the override so
     /// the chip falls back to displaying the routed name.
     func selectAgentEntryAndModel(entryID: UUID, model: String) {
         let previousModel = activeAgentModelSelectionLabel
         materializeProviderLibraryEntryAPIKey(id: entryID)
         let authenticated = SomeIMIntegrationStore.hasAuthenticatedSessionForAutomaticDefaults()
-        guard agentProviderLibrary.entries.first(where: { $0.id == entryID })?
-            .isUsableForChatSelection(isSomeIMAuthenticated: authenticated) == true else {
+        guard let entry = agentProviderLibrary.entries.first(where: { $0.id == entryID }),
+              entry.isUsableForChatSelection(isSomeIMAuthenticated: authenticated) else {
             return
         }
-        // Activate the target library entry — this rebuilds
-        // agentConfiguration's provider / base URL / key / primaries.
-        if agentProviderLibrary.activeID != entryID {
-            setActiveProviderLibraryEntry(id: entryID)
-        }
+        ensureActiveAgentSessionForInteractiveControl()
+        guard let runtime = activeRuntime else { return }
+        runtime.sessionProviderEntryID = entry.id
+        runtime.sessionProviderIDOverride = entry.providerID
+        runtime.session.providerEntryID = entry.id
+        runtime.session.providerID = entry.providerID
+        runtime.session.providerDisplayName = entry.displayName
         let trimmed = model.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else {
             setAgentSessionModel(nil, previousModelForNotice: previousModel)
@@ -2352,7 +2365,9 @@ extension AppState {
         // If the chosen model is already what the route would pick by
         // default, clear the override so the picker shows the natural
         // "Use route default" state instead of a redundant lock.
-        let routed = agentConfiguration.normalized.model(for: .interactive)
+        let routed = entry.makeConfiguration(
+            imageDescription: agentConfiguration.imageDescription
+        ).normalized.model(for: .interactive)
         if trimmed == routed {
             recordRecentlyUsedAgentModel(trimmed)
             setAgentSessionModel(nil, previousModelForNotice: previousModel)
@@ -2369,13 +2384,9 @@ extension AppState {
     /// states stay mutually exclusive.
     func selectSomeIMManagedRouting() {
         let previousModel = activeAgentModelSelectionLabel
-        if agentProviderLibrary.active?.providerID != AgentProviderPreset.someIMID {
-            guard let someIMEntry = agentProviderLibrary.entries.first(where: {
-                $0.providerID == AgentProviderPreset.someIMID
-            }) else { return }
-            setActiveProviderLibraryEntry(id: someIMEntry.id)
-        }
-        guard agentProviderLibrary.active?.providerID == AgentProviderPreset.someIMID else { return }
+        guard let someIMEntry = agentProviderLibrary.entries.first(where: {
+            $0.providerID == AgentProviderPreset.someIMID
+        }) else { return }
         // Model choice comes before workspace choice in the composer. Keep that
         // order valid by creating an empty, workspace-less conversation now;
         // moveActiveAgentSessionToWorkspace will preserve it when a folder is
@@ -2384,6 +2395,11 @@ extension AppState {
             startNewAgentSession(inWorkspaceAt: nil)
         }
         guard let runtime = activeRuntime else { return }
+        runtime.sessionProviderEntryID = someIMEntry.id
+        runtime.sessionProviderIDOverride = someIMEntry.providerID
+        runtime.session.providerEntryID = someIMEntry.id
+        runtime.session.providerID = someIMEntry.providerID
+        runtime.session.providerDisplayName = someIMEntry.displayName
         let wasUsingManagedRouting = runtime.managedRouting != nil
         runtime.sessionModelOverride = nil
         if runtime.managedRouting == nil {
@@ -2428,7 +2444,7 @@ extension AppState {
            !AgentSettingsStore.loadDefaultModelModePreference().usesManagedRoutingForNewSessions {
             return SomeIMIntegrationSettings.defaultTextModel
         }
-        return activeAgentModelID
+        return agentConfiguration.normalized.model(for: .interactive)
     }
 
     /// Rebuild the runtime-only model override from the persisted session.
@@ -2439,7 +2455,7 @@ extension AppState {
             runtime.sessionModelOverride = nil
             return
         }
-        let routedModel = agentConfiguration.normalized.model(for: .interactive)
+        let routedModel = configurationForCurrentTurn(for: runtime).model(for: .interactive)
         runtime.sessionModelOverride = runtime.session.modelID == routedModel
             ? nil
             : runtime.session.modelID

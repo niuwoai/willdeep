@@ -124,19 +124,23 @@ struct AgentProviderLibraryTests {
     }
 
     @Test
-    func openAIBaseURLProbeAppendsV1WithoutDuplicatingIt() {
+    func openAIBaseURLProbeAdjustsV1InBothDirections() {
         #expect(AgentProviderBaseURLV1Probe.candidate(
             baseURL: "https://hub.example.com",
             providerKind: .openAIChat
-        ) == "https://hub.example.com/v1")
+        ) == AgentProviderBaseURLV1Candidate(baseURL: "https://hub.example.com/v1", adjustment: .append))
         #expect(AgentProviderBaseURLV1Probe.candidate(
             baseURL: "https://hub.example.com/gateway/",
             providerKind: .openAIResponses
-        ) == "https://hub.example.com/gateway/v1")
+        ) == AgentProviderBaseURLV1Candidate(baseURL: "https://hub.example.com/gateway/v1", adjustment: .append))
         #expect(AgentProviderBaseURLV1Probe.candidate(
             baseURL: "https://hub.example.com/v1/",
             providerKind: .openAIChat
-        ) == nil)
+        ) == AgentProviderBaseURLV1Candidate(baseURL: "https://hub.example.com", adjustment: .remove))
+        #expect(AgentProviderBaseURLV1Probe.candidate(
+            baseURL: "https://hub.example.com/gateway/v1",
+            providerKind: .openAIResponses
+        ) == AgentProviderBaseURLV1Candidate(baseURL: "https://hub.example.com/gateway", adjustment: .remove))
         #expect(AgentProviderBaseURLV1Probe.candidate(
             baseURL: "https://api.anthropic.com",
             providerKind: .anthropicMessages

@@ -799,14 +799,14 @@ struct EditorSettingsView: View {
                        providerKind: configuration.providerKind
                    ) {
                     var candidateConfiguration = configuration
-                    candidateConfiguration.baseURL = candidate
+                    candidateConfiguration.baseURL = candidate.baseURL
                     do {
                         let models = try await AgentClient(
                             configuration: candidateConfiguration
                         ).fetchModelDiscoveries()
                         result = .success(AgentProviderModelFetchResult(
                             discoveries: models,
-                            suggestedBaseURL: candidate
+                            baseURLCandidate: candidate
                         ))
                     } catch {
                         // The recovery candidate failed too. Keep the original
@@ -827,16 +827,25 @@ struct EditorSettingsView: View {
                     let modelIDs = discoveries.map(\.id)
                     fetchedAgentModels = modelIDs
                     appState.recordFetchedAgentModelDiscoveries(discoveries)
-                    if let suggestedBaseURL = fetchResult.suggestedBaseURL {
+                    if let candidate = fetchResult.baseURLCandidate {
                         agentModelFetchBaseURLSuggestion = AgentProviderBaseURLSuggestion(
                             entryID: entry.id,
                             originalBaseURL: entry.baseURL,
-                            suggestedBaseURL: suggestedBaseURL
+                            suggestedBaseURL: candidate.baseURL,
+                            adjustment: candidate.adjustment
                         )
-                        agentModelFetchMessage = L10n.Settings.Provider.v1ProbeSucceeded(
-                            String(modelIDs.count),
-                            suggestedBaseURL
-                        )
+                        switch candidate.adjustment {
+                        case .append:
+                            agentModelFetchMessage = L10n.Settings.Provider.v1ProbeSucceeded(
+                                String(modelIDs.count),
+                                candidate.baseURL
+                            )
+                        case .remove:
+                            agentModelFetchMessage = L10n.Settings.Provider.v1RemovalProbeSucceeded(
+                                String(modelIDs.count),
+                                candidate.baseURL
+                            )
+                        }
                     } else if modelIDs.isEmpty {
                         agentModelFetchMessage = "No models returned."
                     } else {
@@ -863,7 +872,7 @@ struct EditorSettingsView: View {
 
     private struct AgentProviderModelFetchResult {
         let discoveries: [AgentModelDiscovery]
-        var suggestedBaseURL: String? = nil
+        var baseURLCandidate: AgentProviderBaseURLV1Candidate? = nil
     }
 
     private func fetchImageModels() {

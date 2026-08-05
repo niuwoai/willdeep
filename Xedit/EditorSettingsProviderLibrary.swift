@@ -6,6 +6,7 @@ struct AgentProviderBaseURLSuggestion: Equatable {
     let entryID: UUID
     let originalBaseURL: String
     let suggestedBaseURL: String
+    let adjustment: AgentProviderBaseURLV1Candidate.Adjustment
 }
 
 /// Phase C: Settings UI for the multi-provider library. Left pane lists
@@ -644,7 +645,7 @@ private struct AgentProviderEntryEditor: View {
                     .lineLimit(4)
             }
             if let suggestion = applicableBaseURLSuggestion {
-                Button(L10n.Settings.Provider.appendV1Action) {
+                Button(baseURLSuggestionAction(suggestion)) {
                     baseURL = suggestion.suggestedBaseURL
                     commit()
                     agentModelFetchMessage = L10n.Settings.Provider.baseURLUpdated(
@@ -655,7 +656,7 @@ private struct AgentProviderEntryEditor: View {
                 .buttonStyle(.borderless)
                 .foregroundStyle(Color.accentColor)
                 .fixedSize()
-                .help(L10n.Settings.Provider.appendV1Help)
+                .help(baseURLSuggestionHelp(for: suggestion))
             }
             Spacer(minLength: 0)
         }
@@ -848,6 +849,20 @@ private struct AgentProviderEntryEditor: View {
             return nil
         }
         return suggestion
+    }
+
+    private func baseURLSuggestionAction(_ suggestion: AgentProviderBaseURLSuggestion) -> String {
+        switch suggestion.adjustment {
+        case .append: return L10n.Settings.Provider.appendV1Action
+        case .remove: return L10n.Settings.Provider.removeV1Action
+        }
+    }
+
+    private func baseURLSuggestionHelp(for suggestion: AgentProviderBaseURLSuggestion) -> String {
+        switch suggestion.adjustment {
+        case .append: return L10n.Settings.Provider.appendV1Help
+        case .remove: return L10n.Settings.Provider.removeV1Help
+        }
     }
 
     private func normalizedBaseURL(_ value: String) -> String {

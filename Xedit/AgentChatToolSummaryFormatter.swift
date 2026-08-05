@@ -103,7 +103,7 @@ enum AgentChatToolSummaryFormatter {
             preferredKeys = ["label", "prompt"]
         case "claude_code", "codex_cli", "hermes_cli", "cursor_agent", "cline_cli":
             preferredKeys = ["prompt", "permission_mode"]
-        case "create_file":
+        case "create_file", "write_file":
             preferredKeys = ["path", "title"]
         case "apply_patch":
             preferredKeys = ["title", "diff"]
@@ -264,6 +264,15 @@ enum AgentCollapsedToolActivitySummary {
             switch call.toolName {
             case "create_file":
                 createdFiles.insert(path: path, fallbackIdentity: call.identity)
+            case "write_file":
+                let overwrite = call.arguments["overwrite"]
+                    .map(AgentJSONValue.wrap)
+                    .flatMap { $0.boolValue() }
+                if overwrite == true {
+                    editedFiles.insert(path: path, fallbackIdentity: call.identity)
+                } else {
+                    createdFiles.insert(path: path, fallbackIdentity: call.identity)
+                }
             case "edit_file":
                 editedFiles.insert(path: path, fallbackIdentity: call.identity)
             case "read_file":

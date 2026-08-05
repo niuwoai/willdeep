@@ -48,6 +48,207 @@ struct AgentSandboxLaunch: Equatable {
     let arguments: [String]
 }
 
+/// Risk and intent checks for the one host-native file tool that may cross
+/// the workspace boundary. External access is granted to one exact file for
+/// one call; it never turns into a directory-wide or persistent allow rule.
+nonisolated enum AgentExternalFileWritePolicy {
+    private static let autoApprovedContentLimit = 1 * 1024 * 1024
+    private static let explicitIntentContentLimit = 4 * 1024 * 1024
+
+    private static let lowRiskTextExtensions: Set<String> = [
+        "c", "cc", "cpp", "css", "csv", "go", "h", "hpp", "html",
+        "java", "js", "json", "jsx", "kt", "kts", "md", "markdown",
+        "mjs", "rb", "rs", "scss", "sql", "swift", "toml", "ts",
+        "tsx", "txt", "xml", "yaml", "yml"
+    ]
+
+    private static let writeIntentMarkers = [
+        "写", "保存", "生成", "创建", "修改", "更新", "覆盖", "替换",
+        "write", "save", "create", "generate", "edit", "update",
+        "overwrite", "replace"
+    ]
+
+    private static let overwriteIntentMarkers = [
+        "修改", "更新", "覆盖", "替换", "重写",
+        "edit", "update", "overwrite", "replace", "rewrite"
+    ]
+
+    private static let deniedWriteIntentMarkers = [
+        "不要写", "别写", "禁止写", "不要保存", "不要创建", "不要修改",
+        "不要更新", "不要覆盖", "不要替换", "不可写", "只读",
+        "do not write", "don't write", "dont write", "never write",
+        "do not save", "don't save", "do not create", "do not edit",
+        "do not update", "do not overwrite", "read only", "read-only"
+    ]
+
+    struct Target: Equatable {
+        let url: URL
+        let existedBeforeWrite: Bool
+        let overwriteRequested: Bool
+        let isSensitive: Bool
+        let isLowRiskText: Bool
+        let parentExists: Bool
+    }
+
+    static func target(
+        arguments: [String: AgentJSONValue],
+        rootDirectory: URL?
+    ) -> Target? {
+        guard let rawPath = arguments["path"]?.stringValue()?
+            .trimmingCharacters(in: .whitespacesAndNewlines),
+            !rawPath.isEmpty,
+            let resolved = resolveAbsolutePath(rawPath) else {
+            return nil
+        }
+
+        let root = rootDirectory?.standardizedFileURL
+        guard root.map({ !isInside(resolved, root: $0) }) ?? true else {
+            return nil
+        }
+
+        let fileManager = FileManager.default
+        var isDirectory: ObjCBool = false
+        let existed = fileManager.fileExists(atPath: resolved.path, isDirectory: &isDirectory)
+        guard !existed || !isDirectory.boolValue else { return nil }
+
+        let canonicalURL: URL
+        if existed {
+            canonicalURL = resolved.resolvingSymlinksInPath().standardizedFileURL
+        } else {
+            canonicalURL = resolved.deletingLastPathComponent()
+                .resolvingSymlinksInPath()
+                .appendingPathComponent(resolved.lastPathComponent)
+                .standardizedFileURL
+        }
+        guard root.map({ !isInside(canonicalURL, root: $0) }) ?? true else {
+            return nil
+        }
+
+        let parent = canonicalURL.deletingLastPathComponent()
+        var parentIsDirectory: ObjCBool = false
+        let parentExists = fileManager.fileExists(
+            atPath: parent.path,
+            isDirectory: &parentIsDirectory
+        ) && parentIsDirectory.boolValue
+        let path = canonicalURL.path.lowercased()
+        let fileName = canonicalURL.lastPathComponent.lowercased()
+        let pathExtension = canonicalURL.pathExtension.lowercased()
+
+        return Target(
+            url: canonicalURL,
+            existedBeforeWrite: existed,
+            overwriteRequested: arguments["overwrite"]?.boolValue() ?? false,
+            isSensitive: isSensitivePath(path, fileName: fileName),
+            isLowRiskText: lowRiskTextExtensions.contains(pathExtension),
+            parentExists: parentExists
+        )
+    }
+
+    static func canAutoApproveNewDocument(
+        arguments: [String: AgentJSONValue],
+        rootDirectory: URL?
+    ) -> Bool {
+        guard let target = target(arguments: arguments, rootDirectory: rootDirectory),
+              !target.existedBeforeWrite,
+              !target.isSensitive,
+              target.isLowRiskText,
+              target.parentExists,
+              let content = arguments["content"]?.stringValue(),
+              content.utf8.count <= autoApprovedContentLimit else {
+            return false
+        }
+        return true
+    }
+
+    static func currentUserExplicitlyAuthorizes(
+        arguments: [String: AgentJSONValue],
+        rootDirectory: URL?,
+        latestUserMessage: String
+    ) -> Bool {
+        guard let target = target(arguments: arguments, rootDirectory: rootDirectory),
+              !target.isSensitive,
+              target.parentExists,
+              let content = arguments["content"]?.stringValue(),
+              content.utf8.count <= explicitIntentContentLimit else {
+            return false
+        }
+        if target.existedBeforeWrite && !target.overwriteRequested {
+            return false
+        }
+
+        let normalizedMessage = latestUserMessage
+            .precomposedStringWithCanonicalMapping
+            .lowercased()
+        guard !deniedWriteIntentMarkers.contains(where: normalizedMessage.contains) else {
+            return false
+        }
+        guard writeIntentMarkers.contains(where: normalizedMessage.contains) else {
+            return false
+        }
+        if target.existedBeforeWrite,
+           !overwriteIntentMarkers.contains(where: normalizedMessage.contains) {
+            return false
+        }
+
+        let absolutePath = target.url.path
+            .precomposedStringWithCanonicalMapping
+            .lowercased()
+        var acceptedSpellings = [absolutePath]
+        let home = FileManager.default.homeDirectoryForCurrentUser
+            .standardizedFileURL.path
+            .precomposedStringWithCanonicalMapping
+            .lowercased()
+        if absolutePath == home {
+            acceptedSpellings.append("~")
+        } else if absolutePath.hasPrefix(home + "/") {
+            acceptedSpellings.append("~" + String(absolutePath.dropFirst(home.count)))
+        }
+        return acceptedSpellings.contains(where: normalizedMessage.contains)
+    }
+
+    static func resolveAbsolutePath(_ rawPath: String) -> URL? {
+        let expanded: String
+        if rawPath == "~" {
+            expanded = FileManager.default.homeDirectoryForCurrentUser.path
+        } else if rawPath.hasPrefix("~/") {
+            expanded = FileManager.default.homeDirectoryForCurrentUser
+                .appendingPathComponent(String(rawPath.dropFirst(2)))
+                .path
+        } else {
+            expanded = rawPath
+        }
+        guard expanded.hasPrefix("/") else { return nil }
+        return URL(fileURLWithPath: expanded).standardizedFileURL
+    }
+
+    private static func isInside(_ candidate: URL, root: URL) -> Bool {
+        let candidatePath = candidate.standardizedFileURL.path
+        let rootPath = root.standardizedFileURL.path
+        return candidatePath == rootPath || candidatePath.hasPrefix(rootPath + "/")
+    }
+
+    private static func isSensitivePath(_ path: String, fileName: String) -> Bool {
+        let protectedPrefixes = [
+            "/system/", "/library/", "/applications/", "/usr/", "/bin/",
+            "/sbin/", "/etc/", "/private/etc/", "/private/var/db/"
+        ]
+        if protectedPrefixes.contains(where: path.hasPrefix) { return true }
+
+        let protectedFragments = [
+            "/.ssh/", "/.gnupg/", "/.aws/", "/.config/gh/",
+            "/library/keychains/", "/library/launchagents/",
+            "/library/launchdaemons/", "/.git/hooks/"
+        ]
+        if protectedFragments.contains(where: path.contains) { return true }
+
+        let protectedNames: Set<String> = [
+            ".bash_profile", ".bashrc", ".env", ".profile", ".zprofile",
+            ".zshenv", ".zshrc", "authorized_keys", "hosts", "sudoers"
+        ]
+        return protectedNames.contains(fileName)
+    }
+}
+
 /// Codex-style local execution policy for agent tools.
 ///
 /// The app cannot create the exact same Linux/macOS seatbelt sandbox that
@@ -128,6 +329,38 @@ enum AgentSandboxPolicy {
                 )
             }
             return commandDecision(command: command, rootDirectory: rootDirectory)
+        case "write_file":
+            guard let target = AgentExternalFileWritePolicy.target(
+                arguments: arguments,
+                rootDirectory: rootDirectory
+            ) else {
+                return AgentSandboxDecision(
+                    mode: .escalated,
+                    requiresUserApproval: true,
+                    requiresTypedConfirmation: false,
+                    reason: "External file target must be an absolute or home-relative path outside the workspace, with an existing parent directory.",
+                    prefixRule: nil
+                )
+            }
+            if target.isSensitive {
+                return AgentSandboxDecision(
+                    mode: .escalated,
+                    requiresUserApproval: true,
+                    requiresTypedConfirmation: true,
+                    reason: "Writing this sensitive, system, credential, shell-profile, or persistence path requires typed confirmation.",
+                    prefixRule: nil
+                )
+            }
+            let reason = target.existedBeforeWrite
+                ? "Replacing an existing file outside the workspace requires an exact user instruction or explicit approval."
+                : "Creating a bounded text file outside the workspace is reviewed by target risk instead of workspace membership alone."
+            return AgentSandboxDecision(
+                mode: .escalated,
+                requiresUserApproval: true,
+                requiresTypedConfirmation: false,
+                reason: reason,
+                prefixRule: nil
+            )
         case "web_fetch":
             return AgentSandboxDecision(
                 mode: .escalated,
@@ -336,8 +569,8 @@ enum AgentSandboxPolicy {
                 }
                 return !isInsideWorkspace(resolved, rootDirectory: rootDirectory)
             }) {
-                needsWorkspaceWrite = true
-                reasons.append("Environment assignment references a path outside the workspace.")
+                needsEscalation = true
+                reasons.append("Environment assignment references a path outside the workspace and must preserve the real target before launch.")
             }
 
             if forcefulGitMutation(tokens) {
@@ -363,8 +596,8 @@ enum AgentSandboxPolicy {
                             workingDirectory = resolveRelativeDirectoryHop(next, workingDirectory: workingDirectory)
                         }
                     } else {
-                        needsWorkspaceWrite = true
-                        reasons.append("Changing directory outside the workspace requires approval.")
+                        needsEscalation = true
+                        reasons.append("Changing directory outside the workspace requires direct preflight escalation.")
                     }
                 } else {
                     if !segment.runsInPipeline {
@@ -443,8 +676,8 @@ enum AgentSandboxPolicy {
                 }
                 return !isInsideWorkspace(resolved, rootDirectory: rootDirectory)
             }) {
-                needsWorkspaceWrite = true
-                reasons.append("Command references a path outside the workspace.")
+                needsEscalation = true
+                reasons.append("Command references a path outside the workspace and must be reviewed before running without the workspace sandbox.")
             }
         }
 

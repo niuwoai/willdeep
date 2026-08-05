@@ -18,6 +18,31 @@ nonisolated enum AgentTranscriptScrollPolicy {
     }
 }
 
+/// Maps a viewport to the same relative reading position after a horizontal
+/// transcript reflow. Opening or closing the right side panel changes the
+/// chat width, so a fixed vertical offset no longer points at the same part of
+/// the conversation.
+nonisolated enum AgentTranscriptViewportPolicy {
+    static func relativeProgress(
+        documentHeight: CGFloat,
+        viewportHeight: CGFloat,
+        offsetFromTop: CGFloat
+    ) -> CGFloat {
+        let scrollableHeight = max(0, documentHeight - viewportHeight)
+        guard scrollableHeight > 0 else { return 0 }
+        return min(max(offsetFromTop / scrollableHeight, 0), 1)
+    }
+
+    static func restoredOffsetFromTop(
+        progress: CGFloat,
+        documentHeight: CGFloat,
+        viewportHeight: CGFloat
+    ) -> CGFloat {
+        let scrollableHeight = max(0, documentHeight - viewportHeight)
+        return min(max(progress, 0), 1) * scrollableHeight
+    }
+}
+
 /// Observes the AppKit scroll view underneath a SwiftUI `ScrollView`.
 ///
 /// Tracking user intent instead of recomputing "at bottom" after each layout
@@ -71,12 +96,23 @@ struct AgentTranscriptScrollObserver: NSViewRepresentable {
 
     final class Coordinator {
         private static let bottomTolerance: CGFloat = 56
+        private static let geometryTolerance: CGFloat = 0.5
+
+        private struct ViewportAnchor {
+            let relativeProgress: CGFloat
+            let followsBottom: Bool
+        }
 
         weak var scrollView: NSScrollView?
         weak var documentView: NSView?
         var isFollowingBottom = true
         var onChange: ((Bool) -> Void)?
         private var notificationTokens: [NSObjectProtocol] = []
+        private var lastDocumentSize: CGSize?
+        private var viewportAnchor: ViewportAnchor?
+        private var viewportCaptureGeneration = 0
+        private var viewportRestoreGeneration = 0
+        private var isViewportRestorePending = false
 
         deinit {
             removeObservers()
@@ -129,6 +165,8 @@ struct AgentTranscriptScrollObserver: NSViewRepresentable {
                 )
             }
             publish(isNearBottom(in: candidate))
+            lastDocumentSize = candidateDocument?.bounds.size
+            captureViewportAnchor(in: candidate)
         }
 
         private func enclosingScrollView(from view: NSView) -> NSScrollView? {
@@ -145,16 +183,134 @@ struct AgentTranscriptScrollObserver: NSViewRepresentable {
         private func handleViewportChange() {
             guard let scrollView else { return }
             publish(isNearBottom(in: scrollView))
+            scheduleViewportAnchorCapture(in: scrollView)
         }
 
         private func handleDocumentGeometryChange() {
-            guard let scrollView else { return }
+            guard let scrollView, let documentView = scrollView.documentView else { return }
+            let previousSize = lastDocumentSize
+            let currentSize = documentView.bounds.size
+            lastDocumentSize = currentSize
+
             if isFollowingBottom {
+                cancelPendingViewportRestore()
                 scrollToBottom(scrollView)
                 publish(true)
-            } else if isNearBottom(in: scrollView) {
+                captureViewportAnchor(in: scrollView)
+                return
+            }
+
+            let widthChanged = previousSize.map {
+                abs($0.width - currentSize.width) > Self.geometryTolerance
+            } ?? false
+            if widthChanged, let viewportAnchor {
+                scheduleViewportRestore(viewportAnchor, in: scrollView)
+            } else if !isViewportRestorePending, isNearBottom(in: scrollView) {
                 publish(true)
             }
+        }
+
+        /// Bounds notifications can be emitted during the same layout pass
+        /// that changes the document width. Defer the capture so a transient
+        /// zero/top offset cannot overwrite the last operator-selected anchor
+        /// before the width-change handler restores it.
+        private func scheduleViewportAnchorCapture(in scrollView: NSScrollView) {
+            viewportCaptureGeneration += 1
+            let generation = viewportCaptureGeneration
+            DispatchQueue.main.async { [weak self, weak scrollView] in
+                guard let self,
+                      let scrollView,
+                      generation == self.viewportCaptureGeneration,
+                      !self.isViewportRestorePending else {
+                    return
+                }
+                self.captureViewportAnchor(in: scrollView)
+            }
+        }
+
+        private func captureViewportAnchor(in scrollView: NSScrollView) {
+            guard let metrics = viewportMetrics(in: scrollView) else {
+                viewportAnchor = nil
+                return
+            }
+            viewportAnchor = ViewportAnchor(
+                relativeProgress: AgentTranscriptViewportPolicy.relativeProgress(
+                    documentHeight: metrics.documentHeight,
+                    viewportHeight: metrics.viewportHeight,
+                    offsetFromTop: metrics.offsetFromTop
+                ),
+                followsBottom: isFollowingBottom
+            )
+        }
+
+        private func scheduleViewportRestore(
+            _ anchor: ViewportAnchor,
+            in scrollView: NSScrollView
+        ) {
+            isViewportRestorePending = true
+            viewportCaptureGeneration += 1
+            viewportRestoreGeneration += 1
+            let generation = viewportRestoreGeneration
+            DispatchQueue.main.async { [weak self, weak scrollView] in
+                guard let self,
+                      let scrollView,
+                      generation == self.viewportRestoreGeneration else {
+                    return
+                }
+                self.restoreViewport(anchor, in: scrollView)
+                self.isViewportRestorePending = false
+                self.publish(self.isNearBottom(in: scrollView))
+                self.captureViewportAnchor(in: scrollView)
+            }
+        }
+
+        private func cancelPendingViewportRestore() {
+            viewportRestoreGeneration += 1
+            isViewportRestorePending = false
+        }
+
+        private func restoreViewport(_ anchor: ViewportAnchor, in scrollView: NSScrollView) {
+            if anchor.followsBottom {
+                scrollToBottom(scrollView)
+                return
+            }
+            guard let documentView = scrollView.documentView,
+                  let metrics = viewportMetrics(in: scrollView) else {
+                return
+            }
+            let offsetFromTop = AgentTranscriptViewportPolicy.restoredOffsetFromTop(
+                progress: anchor.relativeProgress,
+                documentHeight: metrics.documentHeight,
+                viewportHeight: metrics.viewportHeight
+            )
+            let targetY: CGFloat
+            if documentView.isFlipped {
+                targetY = documentView.bounds.minY + offsetFromTop
+            } else {
+                targetY = documentView.bounds.maxY - metrics.viewportHeight - offsetFromTop
+            }
+            let clipView = scrollView.contentView
+            clipView.scroll(to: NSPoint(x: clipView.bounds.minX, y: targetY))
+            scrollView.reflectScrolledClipView(clipView)
+        }
+
+        private func viewportMetrics(
+            in scrollView: NSScrollView
+        ) -> (documentHeight: CGFloat, viewportHeight: CGFloat, offsetFromTop: CGFloat)? {
+            guard let documentView = scrollView.documentView else { return nil }
+            let visible = scrollView.contentView.documentVisibleRect
+            let bounds = documentView.bounds
+            let offsetFromTop: CGFloat
+            if documentView.isFlipped {
+                offsetFromTop = visible.minY - bounds.minY
+            } else {
+                offsetFromTop = bounds.maxY - visible.maxY
+            }
+            return (
+                documentHeight: bounds.height,
+                viewportHeight: visible.height,
+                offsetFromTop: max(0, offsetFromTop)
+            )
         }
 
         private func isNearBottom(in scrollView: NSScrollView) -> Bool {
@@ -199,6 +355,11 @@ struct AgentTranscriptScrollObserver: NSViewRepresentable {
             let center = NotificationCenter.default
             notificationTokens.forEach(center.removeObserver)
             notificationTokens.removeAll()
+            viewportCaptureGeneration += 1
+            viewportRestoreGeneration += 1
+            isViewportRestorePending = false
+            lastDocumentSize = nil
+            viewportAnchor = nil
         }
     }
 }

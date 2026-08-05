@@ -70,6 +70,10 @@ enum AgentSandboxAuditLog {
         if toolName == "web_fetch", let url = arguments["url"]?.stringValue() {
             return url
         }
+        if toolName == "write_file", let path = arguments["path"]?.stringValue() {
+            let overwrite = arguments["overwrite"]?.boolValue() ?? false
+            return "path=\(path) overwrite=\(overwrite)"
+        }
         if toolName == "call_mcp_tool" {
             let server = arguments["server"]?.stringValue() ?? "?"
             let tool = arguments["tool"]?.stringValue() ?? "?"

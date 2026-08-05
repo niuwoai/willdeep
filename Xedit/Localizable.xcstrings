@@ -2580,6 +2580,40 @@
         }
       }
     },
+    "agent-jobs.manager-title" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Background Tasks" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "后台任务" } } } },
+    "agent-jobs.scope" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Task scope" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "任务范围" } } } },
+    "agent-jobs.scope.current-session" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Current session" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "当前会话" } } } },
+    "agent-jobs.scope.all-sessions" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "All sessions" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "全部会话" } } } },
+    "agent-jobs.current-session-badge" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Current session" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "当前会话" } } } },
+    "agent-jobs.search-placeholder" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Search tasks" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "搜索任务" } } } },
+    "agent-jobs.status-filter" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Status filter" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "状态筛选" } } } },
+    "agent-jobs.filter.all" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "All statuses" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "全部状态" } } } },
+    "agent-jobs.filter.running" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Running" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "运行中" } } } },
+    "agent-jobs.filter.finished" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Finished" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "已结束" } } } },
+    "agent-jobs.empty-all-sessions" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "No background tasks match these filters." } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "没有符合筛选条件的后台任务。" } } } },
+    "agent-jobs.process-name" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Process" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "进程名称" } } } },
+    "agent-jobs.working-directory" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Working directory" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "工作目录" } } } },
+    "agent-jobs.no-working-directory" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "No working directory" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "无工作目录" } } } },
+    "agent-jobs.command" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Command" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "命令" } } } },
+    "agent-jobs.pid" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "PID" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "PID" } } } },
+    "agent-jobs.started-at" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Started" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "开始时间" } } } },
+    "agent-jobs.duration" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Duration" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "运行时长" } } } },
+    "agent-jobs.stop" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Stop task" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "停止任务" } } } },
+    "agent-jobs.copy-command" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Copy command" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "复制命令" } } } },
+    "agent-jobs.log-layout" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Log layout" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "日志布局" } } } },
+    "agent-jobs.logs.tabbed" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Tabbed" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "标签页" } } } },
+    "agent-jobs.logs.split" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Split" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "双栏" } } } },
+    "agent-jobs.auto-follow" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Follow" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "自动跟随" } } } },
+    "agent-jobs.output-stream" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Output stream" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "输出流" } } } },
+    "agent-jobs.output.combined" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Combined" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "全部" } } } },
+    "agent-jobs.output.stdout" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "stdout" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "stdout" } } } },
+    "agent-jobs.output.stderr" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "stderr" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "stderr" } } } },
+    "agent-jobs.copy-output" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Copy output" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "复制输出" } } } },
+    "agent-jobs.open-manager-help" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Open the background task manager" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "打开后台任务管理" } } } },
+    "agent-jobs.section.running" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Running %d" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "正在运行 %d" } } } },
+    "agent-jobs.section.recent" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Recently finished %d" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "最近完成 %d" } } } },
+    "agent-jobs.line-count" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "%d lines" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "%d 行" } } } },
+    "agent-jobs.composer-summary" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "%d background tasks · %d running" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "%d 个后台任务 · %d 个运行中" } } } },
     "agent-jobs.empty" : {
       "comment" : "Empty state in the background-jobs drawer",
       "extractionState" : "manual",
@@ -23608,6 +23642,40 @@
         }
       }
     },
+    "settings.provider.remove-v1-action" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Remove /v1"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "移除 /v1"
+          }
+        }
+      }
+    },
+    "settings.provider.remove-v1-help" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Use the verified address without /v1 as this provider's Base URL"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "将已经验证可用的不带 /v1 地址保存为此服务商的基础地址"
+          }
+        }
+      }
+    },
     "settings.provider.alternates-suffix" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -24165,6 +24233,23 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "已通过 %2$@ 获取 %1$@ 个模型。要将 /v1 补入基础地址吗？"
+          }
+        }
+      }
+    },
+    "settings.provider.v1-removal-probe-succeeded" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Fetched %1$@ models from %2$@. Remove /v1 from the Base URL?"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已通过 %2$@ 获取 %1$@ 个模型。要从基础地址移除 /v1 吗？"
           }
         }
       }

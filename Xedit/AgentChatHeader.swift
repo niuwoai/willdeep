@@ -178,9 +178,7 @@ struct AgentChatHeader: View {
             guard kind.isAvailable(activeExperts: appState.agentActiveExperts) else { return false }
             switch kind {
             case .backgroundTasks:
-                // Legacy persistence-only case. Activity now appears as
-                // event-driven cards inside the conversation surface.
-                return false
+                return !appState.agentJobRegistry.jobs.isEmpty
             case .plan: return appState.agentCurrentPlan != nil
             default: return true
             }

@@ -2301,14 +2301,24 @@ struct AgentModelListResponseFormatError: LocalizedError {
     }
 }
 
+struct AgentProviderBaseURLV1Candidate: Equatable {
+    enum Adjustment: Equatable {
+        case append
+        case remove
+    }
+
+    let baseURL: String
+    let adjustment: Adjustment
+}
+
 /// Conservative `/v1` recovery for OpenAI-compatible endpoints. We only use
-/// the candidate after the original model-list request returned HTTP 404, and
-/// Settings still requires an explicit user click before persisting it.
+/// the opposite candidate after the original model-list request returned HTTP
+/// 404, and Settings still requires an explicit user click before persisting it.
 struct AgentProviderBaseURLV1Probe {
     static func candidate(
         baseURL: String,
         providerKind: AgentProviderKind
-    ) -> String? {
+    ) -> AgentProviderBaseURLV1Candidate? {
         guard providerKind == .openAIChat || providerKind == .openAIResponses else {
             return nil
         }
@@ -2329,9 +2339,17 @@ struct AgentProviderBaseURLV1Probe {
             return nil
         }
         let segments = path.split(separator: "/").map(String.init)
-        guard segments.last?.lowercased() != "v1" else { return nil }
-        components.path = path.isEmpty ? "/v1" : "/\(path)/v1"
-        return components.url?.absoluteString
+        let adjustment: AgentProviderBaseURLV1Candidate.Adjustment
+        if segments.last?.lowercased() == "v1" {
+            let parent = segments.dropLast().joined(separator: "/")
+            components.path = parent.isEmpty ? "" : "/\(parent)"
+            adjustment = .remove
+        } else {
+            components.path = path.isEmpty ? "/v1" : "/\(path)/v1"
+            adjustment = .append
+        }
+        guard let candidate = components.url?.absoluteString else { return nil }
+        return AgentProviderBaseURLV1Candidate(baseURL: candidate, adjustment: adjustment)
     }
 
     static func shouldRetry(after error: Error) -> Bool {
