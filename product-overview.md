@@ -1,6 +1,6 @@
 # WillDeep Product Overview
 
-> Last updated: 2026-08-04 | Current version: v1.226.0-rc4
+> Last updated: 2026-08-05 | Current version: v1.226.0-rc8
 
 ## Positioning
 
@@ -12,6 +12,10 @@ WillDeep is configured for non-App-Store distribution without App Sandbox so it 
 
 ## 架构概览
 
+- **Provider 精确回退与单向 `/v1` 探测（1.226.0-rc8）** —— 旧会话缺少 Provider 条目 UUID 时只接受唯一的 Provider ID 匹配；OpenAI 兼容地址只在 404 且缺少 `/v1` 时生成追加候选，不对已有 `/v1` 地址做反向改写。
+- **桌面宠物低开销动画（1.226.0-rc7）** —— 高频时间线仅驱动固定尺寸的宠物画面，消息气泡、菜单、拖动手势与窗口外层布局保持静态；前后台动画分别限制为 8/12 FPS，降低 SwiftUI 与 AttributeGraph 主线程消耗。
+- **OpenAI 兼容地址 `/v1` 探测与确认补全（1.226.0-rc6）** —— 获取模型列表遇到 HTTP 404 时，仅对末尾没有 `/v1` 的 OpenAI Chat / Responses 地址追加 `/v1` 做一次临时探测；探测成功会展示实际验证地址与“一键补全 /v1”，只有用户点击后才保存基础地址，运行中请求不会被后台静默改写。
+- **Provider 配置顺序与可诊断模型列表（1.226.0-rc5）** —— AI Provider 连接表单先选择服务商，再自动生成仍可编辑的显示名称；基础地址只保留输入框，不再重复渲染预设 URL。OpenAI Chat、OpenAI Responses、Anthropic 与 Gemini 的模型列表解码失败会指出缺失或类型错误字段、实际 JSON 顶层结构及预期格式，并避免回显响应正文中的潜在敏感内容。
 - **ZMODEM 大文件有序传输与失败隔离（1.226.0-rc4）** —— rz/sz 数据通过专用同步 PTY 写入器严格保持协议块顺序，完整处理短写、可重试错误和写入超时，并启用控制字符转义；本地 lrzsz 异常退出后继续隔离远端 PTY 中尚未排空的二进制回显，待静默后才恢复普通终端渲染，避免上传中断时出现满屏 `^@` 乱码。
 - **终端版本号不再误脱敏（1.226.0-rc3）** —— 终端输出的凭据脱敏仅把 `token`、`secret`、`password` 等作为独立 snake_case / kebab-case 字段时视为敏感键；镜像仓库 `tokenhub`、版本号 `0.196.0-rc2` 与类似业务标识保持原文，真实 API Token、密码和 Bearer 凭据仍会脱敏。
 - **中文文件路径完整渲染（1.226.0-rc3）** —— Agent 最终历史消息的本地文件路径识别支持 Unicode 字母与数字；像 `docs/中文文件名.md` 这样的路径会保留完整 basename、作为一个可点击文件引用渲染，并与流式输出阶段的显示保持一致。

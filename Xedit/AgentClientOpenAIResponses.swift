@@ -549,7 +549,16 @@ struct OpenAIResponsesAdapter {
             )
         }
 
-        let decoded = try JSONDecoder().decode(ModelsResponse.self, from: data)
+        let decoded: ModelsResponse
+        do {
+            decoded = try JSONDecoder().decode(ModelsResponse.self, from: data)
+        } catch {
+            throw AgentModelListResponseFormatError.wrapping(
+                error,
+                data: data,
+                expectedSchema: #"{"data":[{"id":"model-id"}]}"#
+            )
+        }
         return decoded.data.map(\.id).filter { !$0.isEmpty }.sorted()
     }
 
@@ -585,7 +594,16 @@ struct OpenAIResponsesAdapter {
             )
         }
 
-        let decoded = try JSONDecoder().decode(ModelsResponse.self, from: data)
+        let decoded: ModelsResponse
+        do {
+            decoded = try JSONDecoder().decode(ModelsResponse.self, from: data)
+        } catch {
+            throw AgentModelListResponseFormatError.wrapping(
+                error,
+                data: data,
+                expectedSchema: #"{"data":[{"id":"model-id"}]}"#
+            )
+        }
         return decoded.discoveries
     }
 

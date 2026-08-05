@@ -2213,6 +2213,35 @@ nonisolated enum L10n {
             static let defaultTierLabel = String(localized: "settings.provider.default-tier", defaultValue: "Default tier")
             static let fetchModels = String(localized: "settings.provider.fetch-models", defaultValue: "Fetch Models")
             static let fetchingModels = String(localized: "settings.provider.fetching-models", defaultValue: "Fetching…")
+            static func modelListInvalidFormat(_ issue: String, _ actual: String, _ expected: String) -> String {
+                let template = String(
+                    localized: "settings.provider.model-list-invalid-format",
+                    defaultValue: "Invalid model-list response: %@. Received %@. Expected %@."
+                )
+                return String(format: template, issue, actual, expected)
+            }
+            static func v1ProbeSucceeded(_ count: String, _ url: String) -> String {
+                let template = String(
+                    localized: "settings.provider.v1-probe-succeeded",
+                    defaultValue: "Fetched %@ models from %@. Add /v1 to the Base URL?"
+                )
+                return String(format: template, count, url)
+            }
+            static let appendV1Action = String(
+                localized: "settings.provider.append-v1-action",
+                defaultValue: "Add /v1"
+            )
+            static let appendV1Help = String(
+                localized: "settings.provider.append-v1-help",
+                defaultValue: "Use the verified /v1 address as this provider's Base URL"
+            )
+            static func baseURLUpdated(_ url: String) -> String {
+                let template = String(
+                    localized: "settings.provider.base-url-updated",
+                    defaultValue: "Base URL updated to %@."
+                )
+                return String(format: template, url)
+            }
             static let alternatesHint = String(localized: "settings.provider.alternates-hint", defaultValue: "One model id per line — surfaces in the chat picker as one-click switches.")
             static let showAlternatesToggle = String(localized: "settings.provider.show-alternates-toggle", defaultValue: "Show alternate models")
             static let pickFromFetched = String(localized: "settings.provider.pick-from-fetched", defaultValue: "Pick from fetched models")

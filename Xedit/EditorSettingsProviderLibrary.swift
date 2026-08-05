@@ -2,6 +2,12 @@ import SwiftUI
 
 // MARK: - Agent provider library section
 
+struct AgentProviderBaseURLSuggestion: Equatable {
+    let entryID: UUID
+    let originalBaseURL: String
+    let suggestedBaseURL: String
+}
+
 /// Phase C: Settings UI for the multi-provider library. Left pane lists
 /// the user's saved providers with active-marker / add / remove
 /// controls; right pane edits the selected entry's preset, base URL,
@@ -15,6 +21,7 @@ struct AgentProviderLibrarySection: View {
     @Binding var fetchedAgentModels: [String]
     @Binding var isFetchingAgentModels: Bool
     @Binding var agentModelFetchMessage: String
+    @Binding var baseURLSuggestion: AgentProviderBaseURLSuggestion?
     let onFetchModels: (AgentProviderEntry) -> Void
 
     @State private var selectedEntryID: UUID?
@@ -189,7 +196,8 @@ struct AgentProviderLibrarySection: View {
                 entry: entry,
                 fetchedAgentModels: fetchedAgentModels,
                 isFetchingAgentModels: isFetchingAgentModels,
-                agentModelFetchMessage: agentModelFetchMessage,
+                agentModelFetchMessage: $agentModelFetchMessage,
+                baseURLSuggestion: $baseURLSuggestion,
                 onFetch: { onFetchModels(entry) },
                 onChange: { updated in
                     appState.upsertProviderLibraryEntry(updated)
@@ -258,7 +266,8 @@ private struct AgentProviderEntryEditor: View {
     let entry: AgentProviderEntry
     let fetchedAgentModels: [String]
     let isFetchingAgentModels: Bool
-    let agentModelFetchMessage: String
+    @Binding var agentModelFetchMessage: String
+    @Binding var baseURLSuggestion: AgentProviderBaseURLSuggestion?
     let onFetch: () -> Void
     let onChange: (AgentProviderEntry) -> Void
 
@@ -315,11 +324,6 @@ private struct AgentProviderEntryEditor: View {
         )) {
             if isConnectionExpanded {
                 VStack(alignment: .leading, spacing: 10) {
-                    fieldRow(L10n.Settings.Provider.displayNameLabel) {
-                        TextField(L10n.Settings.Provider.displayNamePlaceholder, text: $displayName, onCommit: commit)
-                            .textFieldStyle(.roundedBorder)
-                            .onCompatibleChange(of: displayName) { _, _ in commit() }
-                    }
                     fieldRow(L10n.Settings.Provider.presetLabel) {
                         Picker("", selection: $providerID) {
                             ForEach(AgentProviderPreset.all) { p in
@@ -327,19 +331,27 @@ private struct AgentProviderEntryEditor: View {
                             }
                         }
                         .labelsHidden()
-                        .onCompatibleChange(of: providerID) { _, newID in
+                        .onCompatibleChange(of: providerID) { oldID, newID in
                             // Snap to preset defaults so the user doesn't have
                             // to retype everything when switching brands.
-                            if let preset = AgentProviderPreset.preset(id: newID), preset.id != AgentProviderPreset.customID {
-                                baseURL = preset.baseURL
-                                if !preset.recognizesModelID(flashPrimary) {
-                                    flashPrimary = preset.defaultFlashModel
+                            if let preset = AgentProviderPreset.preset(id: newID) {
+                                // `loadFromEntry()` starts from an empty local
+                                // provider id. Do not overwrite an existing
+                                // user-authored name during that initial load;
+                                // every real picker change starts from a
+                                // non-empty id and receives a fresh, editable
+                                // suggestion based on the selected provider.
+                                if !oldID.isEmpty, oldID != newID {
+                                    displayName = AgentProviderPreset.suggestedDisplayName(providerID: newID)
                                 }
-                                if !preset.recognizesModelID(proPrimary) {
-                                    proPrimary = preset.defaultProModel
-                                }
-                                if displayName.isEmpty || AgentProviderPreset.all.map(\.displayName).contains(displayName) {
-                                    displayName = preset.displayName
+                                if preset.id != AgentProviderPreset.customID {
+                                    baseURL = preset.baseURL
+                                    if !preset.recognizesModelID(flashPrimary) {
+                                        flashPrimary = preset.defaultFlashModel
+                                    }
+                                    if !preset.recognizesModelID(proPrimary) {
+                                        proPrimary = preset.defaultProModel
+                                    }
                                 }
                             }
                             if newID != AgentProviderPreset.customID {
@@ -351,12 +363,26 @@ private struct AgentProviderEntryEditor: View {
                             commit()
                         }
                     }
+                    fieldRow(L10n.Settings.Provider.displayNameLabel) {
+                        TextField(L10n.Settings.Provider.displayNamePlaceholder, text: $displayName, onCommit: commit)
+                            .textFieldStyle(.roundedBorder)
+                            .onCompatibleChange(of: displayName) { _, _ in commit() }
+                    }
                     customKindPickerRow
                     protocolHelpCard
                     fieldRow(L10n.Settings.Provider.baseURLLabel) {
-                        TextField(baseURLPlaceholder, text: $baseURL, onCommit: commit)
+                        TextField("", text: $baseURL, prompt: Text(baseURLPlaceholder))
                             .textFieldStyle(.roundedBorder)
-                            .onCompatibleChange(of: baseURL) { _, _ in commit() }
+                            .accessibilityLabel(L10n.Settings.Provider.baseURLLabel)
+                            .onSubmit(commit)
+                            .onCompatibleChange(of: baseURL) { _, newValue in
+                                if let suggestion = baseURLSuggestion,
+                                   suggestion.entryID == entry.id,
+                                   normalizedBaseURL(newValue) != normalizedBaseURL(suggestion.originalBaseURL) {
+                                    baseURLSuggestion = nil
+                                }
+                                commit()
+                            }
                     }
                     baseURLStatusRow
                     fieldRow(L10n.Settings.Provider.apiKeyLabel) {
@@ -615,7 +641,21 @@ private struct AgentProviderEntryEditor: View {
                 Text(agentModelFetchMessage)
                     .font(.caption)
                     .foregroundStyle(.secondary)
-                    .lineLimit(2)
+                    .lineLimit(4)
+            }
+            if let suggestion = applicableBaseURLSuggestion {
+                Button(L10n.Settings.Provider.appendV1Action) {
+                    baseURL = suggestion.suggestedBaseURL
+                    commit()
+                    agentModelFetchMessage = L10n.Settings.Provider.baseURLUpdated(
+                        suggestion.suggestedBaseURL
+                    )
+                    baseURLSuggestion = nil
+                }
+                .buttonStyle(.borderless)
+                .foregroundStyle(Color.accentColor)
+                .fixedSize()
+                .help(L10n.Settings.Provider.appendV1Help)
             }
             Spacer(minLength: 0)
         }
@@ -799,5 +839,18 @@ private struct AgentProviderEntryEditor: View {
         text.components(separatedBy: .newlines)
             .map { $0.trimmingCharacters(in: .whitespaces) }
             .filter { !$0.isEmpty }
+    }
+
+    private var applicableBaseURLSuggestion: AgentProviderBaseURLSuggestion? {
+        guard let suggestion = baseURLSuggestion,
+              suggestion.entryID == entry.id,
+              normalizedBaseURL(baseURL) == normalizedBaseURL(suggestion.originalBaseURL) else {
+            return nil
+        }
+        return suggestion
+    }
+
+    private func normalizedBaseURL(_ value: String) -> String {
+        value.trimmingCharacters(in: CharacterSet(charactersIn: "/ \n\t")).lowercased()
     }
 }

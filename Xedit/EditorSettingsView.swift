@@ -17,6 +17,7 @@ struct EditorSettingsView: View {
     @State private var fetchedAgentModels: [String] = []
     @State private var isFetchingAgentModels = false
     @State private var agentModelFetchMessage = ""
+    @State private var agentModelFetchBaseURLSuggestion: AgentProviderBaseURLSuggestion?
     @State private var fetchedImageModels: [String] = []
     @State private var isFetchingImageModels = false
     @State private var imageModelFetchMessage = ""
@@ -215,6 +216,7 @@ struct EditorSettingsView: View {
                     fetchedAgentModels: $fetchedAgentModels,
                     isFetchingAgentModels: $isFetchingAgentModels,
                     agentModelFetchMessage: $agentModelFetchMessage,
+                    baseURLSuggestion: $agentModelFetchBaseURLSuggestion,
                     onFetchModels: { entry in
                         fetchAgentModels(forEntry: entry)
                     }
@@ -782,25 +784,60 @@ struct EditorSettingsView: View {
     private func fetchAgentModels(forEntry entry: AgentProviderEntry) {
         isFetchingAgentModels = true
         agentModelFetchMessage = ""
+        agentModelFetchBaseURLSuggestion = nil
         let configuration = entry.makeConfiguration().normalized
 
         Task {
-            let result: Result<[AgentModelDiscovery], Error>
+            let result: Result<AgentProviderModelFetchResult, Error>
             do {
                 let models = try await AgentClient(configuration: configuration).fetchModelDiscoveries()
-                result = .success(models)
-            } catch {
-                result = .failure(error)
+                result = .success(AgentProviderModelFetchResult(discoveries: models))
+            } catch let originalError {
+                if AgentProviderBaseURLV1Probe.shouldRetry(after: originalError),
+                   let candidate = AgentProviderBaseURLV1Probe.candidate(
+                       baseURL: configuration.baseURL,
+                       providerKind: configuration.providerKind
+                   ) {
+                    var candidateConfiguration = configuration
+                    candidateConfiguration.baseURL = candidate
+                    do {
+                        let models = try await AgentClient(
+                            configuration: candidateConfiguration
+                        ).fetchModelDiscoveries()
+                        result = .success(AgentProviderModelFetchResult(
+                            discoveries: models,
+                            suggestedBaseURL: candidate
+                        ))
+                    } catch {
+                        // The recovery candidate failed too. Keep the original
+                        // 404 because it describes the address the user
+                        // actually entered, rather than implying we saved /v1.
+                        result = .failure(originalError)
+                    }
+                } else {
+                    result = .failure(originalError)
+                }
             }
 
             await MainActor.run {
                 isFetchingAgentModels = false
                 switch result {
-                case .success(let discoveries):
+                case .success(let fetchResult):
+                    let discoveries = fetchResult.discoveries
                     let modelIDs = discoveries.map(\.id)
                     fetchedAgentModels = modelIDs
                     appState.recordFetchedAgentModelDiscoveries(discoveries)
-                    if modelIDs.isEmpty {
+                    if let suggestedBaseURL = fetchResult.suggestedBaseURL {
+                        agentModelFetchBaseURLSuggestion = AgentProviderBaseURLSuggestion(
+                            entryID: entry.id,
+                            originalBaseURL: entry.baseURL,
+                            suggestedBaseURL: suggestedBaseURL
+                        )
+                        agentModelFetchMessage = L10n.Settings.Provider.v1ProbeSucceeded(
+                            String(modelIDs.count),
+                            suggestedBaseURL
+                        )
+                    } else if modelIDs.isEmpty {
                         agentModelFetchMessage = "No models returned."
                     } else {
                         // Auto-activate this entry: fetching is a strong
@@ -822,6 +859,11 @@ struct EditorSettingsView: View {
                 }
             }
         }
+    }
+
+    private struct AgentProviderModelFetchResult {
+        let discoveries: [AgentModelDiscovery]
+        var suggestedBaseURL: String? = nil
     }
 
     private func fetchImageModels() {

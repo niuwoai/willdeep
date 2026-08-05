@@ -23574,6 +23574,40 @@
         }
       }
     },
+    "settings.provider.append-v1-action" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Add /v1"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "补全 /v1"
+          }
+        }
+      }
+    },
+    "settings.provider.append-v1-help" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Use the verified /v1 address as this provider's Base URL"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "将已经验证可用的 /v1 地址保存为此服务商的基础地址"
+          }
+        }
+      }
+    },
     "settings.provider.alternates-suffix" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -23638,6 +23672,23 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "已自定义"
+          }
+        }
+      }
+    },
+    "settings.provider.base-url-updated" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Base URL updated to %@."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "基础地址已更新为 %@。"
           }
         }
       }
@@ -23791,6 +23842,23 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "获取中…"
+          }
+        }
+      }
+    },
+    "settings.provider.model-list-invalid-format" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Invalid model-list response: %1$@. Received %2$@. Expected %3$@."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "模型列表响应格式不正确：%1$@。实际收到的是%2$@。预期格式：%3$@。"
           }
         }
       }
@@ -24080,6 +24148,23 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "显示 Key"
+          }
+        }
+      }
+    },
+    "settings.provider.v1-probe-succeeded" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Fetched %1$@ models from %2$@. Add /v1 to the Base URL?"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已通过 %2$@ 获取 %1$@ 个模型。要将 /v1 补入基础地址吗？"
           }
         }
       }
