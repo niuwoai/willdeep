@@ -866,6 +866,34 @@ struct AgentChatHistoryRendererTests {
     }
 
     @Test
+    func whitespaceOnlyAssistantMessageRendersAsToolEventWithoutEmptyTurnChrome() {
+        let message = AgentMessage(
+            role: .assistant,
+            content: "\n\n\t\n",
+            toolCalls: [
+                AgentMessageToolCall(
+                    externalID: "call_whitespace",
+                    toolName: "run_command",
+                    argumentsJSON: #"{"command":"git status --short"}"#
+                )
+            ],
+            promptTokens: 31_050,
+            completionTokens: 183,
+            elapsedSeconds: 26
+        )
+
+        let rendered = AgentChatHistoryRenderer.render(messages: [message], isDark: false)
+
+        #expect(!message.hasRenderableTextContent)
+        #expect(rendered.string.contains("已运行 1 条命令"))
+        #expect(!rendered.string.contains(AgentChatMessageMetrics.assistantStatus(
+            for: message,
+            isStreaming: false
+        )))
+        #expect(!rendered.string.contains(AgentChatMessageMetrics.tokenSummary(for: message) ?? "31.1k/183"))
+    }
+
+    @Test
     func collapsedToolSummaryDescribesCreatedFilesWithoutExposingTheirPaths() {
         let message = AgentMessage(
             role: .assistant,

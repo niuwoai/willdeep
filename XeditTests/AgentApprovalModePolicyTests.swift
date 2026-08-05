@@ -95,7 +95,6 @@ struct AgentApprovalModePolicyTests {
         defer { try? FileManager.default.removeItem(at: workspace) }
 
         let appState = AppState()
-        appState.autoApproveSafeCommands = true
 
         let smartBuild = await appState.autoApprovalSource(
             toolName: "run_command",
@@ -105,6 +104,15 @@ struct AgentApprovalModePolicyTests {
             approvalMode: .smart
         )
         #expect(smartBuild == .staticAllowlist)
+
+        let smartTerminalInspection = await appState.autoApprovalSource(
+            toolName: "terminal_send_command",
+            arguments: ["command": .string("git status --short --branch")],
+            risk: .write,
+            rootDirectory: workspace,
+            approvalMode: .smart
+        )
+        #expect(smartTerminalInspection == .staticAllowlist)
 
         let smartDelegatedAgent = await appState.autoApprovalSource(
             toolName: "codex_cli",
@@ -123,6 +131,15 @@ struct AgentApprovalModePolicyTests {
             approvalMode: .requestEveryTime
         )
         #expect(strictBuild == nil)
+
+        let strictTerminalInspection = await appState.autoApprovalSource(
+            toolName: "terminal_send_command",
+            arguments: ["command": .string("git status --short --branch")],
+            risk: .write,
+            rootDirectory: workspace,
+            approvalMode: .requestEveryTime
+        )
+        #expect(strictTerminalInspection == nil)
     }
 
     @Test("Approval picker orders Strict mode last")

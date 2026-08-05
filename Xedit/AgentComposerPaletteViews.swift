@@ -696,30 +696,22 @@ private struct AgentSessionModeBadgeContent: View {
     let baseFontSize: CGFloat
 
     var body: some View {
-        if let summary = AgentSessionTodoSummaryLogic.summary(for: session) {
+        if let summary = AgentSessionTodoSummaryLogic.summary(for: session),
+           summary.kind == .goal {
             badge(summary)
         }
     }
 
     private func badge(_ summary: AgentSessionTodoSummary) -> some View {
-        // A single mode icon replaces the wordy "计划 x/x" / "目标 x/x"
-        // label so plan/goal rows keep their sidebar rhythm and stop
-        // stealing width from the session title. Progress stays in the
-        // tooltip. The icon is sized to the title's cap height (not scaled
-        // down) so its strokes read at the same visual weight as the
-        // surrounding text, and it stays a quiet grey in every state.
-        Image(systemName: modeIcon(summary.kind))
+        // Plan mode no longer exists as a user-facing session mode, so a
+        // legacy/transient currentPlan must not leave a checklist glyph in
+        // conversation navigation. Goal remains a real mode and keeps its
+        // quiet target badge, with progress available from the tooltip.
+        Image(systemName: "target")
             .font(.system(size: max(11, baseFontSize), weight: .regular))
             .foregroundStyle(Color.primary.opacity(0.55))
             .help(summaryHelp(summary))
             .accessibilityLabel(Text(summaryHelp(summary)))
-    }
-
-    private func modeIcon(_ kind: AgentSessionTodoSummary.Kind) -> String {
-        switch kind {
-        case .plan: return "checklist"
-        case .goal: return "target"
-        }
     }
 
     private func summaryHelp(_ summary: AgentSessionTodoSummary) -> String {

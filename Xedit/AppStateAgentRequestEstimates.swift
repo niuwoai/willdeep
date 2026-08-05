@@ -7,6 +7,23 @@
 
 import Foundation
 
+nonisolated struct AgentContextTokenUsageSnapshot: Equatable, Sendable {
+    static let placeholder = AgentContextTokenUsageSnapshot(
+        usedTokens: 0,
+        baselineTokens: 0,
+        contextWindow: 128_000
+    )
+
+    let usedTokens: Int
+    let baselineTokens: Int
+    let contextWindow: Int
+}
+
+private nonisolated struct AgentTokenEstimateWorkload: Sendable {
+    var fixedTokens = 2
+    var texts: [String] = []
+}
+
 extension AppState {
     /// Resolve the exact provider entry pinned to a runtime. Legacy sessions
     /// without an entry UUID fall back to provider id + display name before
@@ -76,13 +93,6 @@ extension AppState {
         agentConfiguration.normalized.resolved(for: .compression)
     }
 
-    /// the actual Agent request shape instead of only counting visible chat
-    /// bubbles, so system context, tool schemas, collapsed tool history, and
-    /// provider-ready message normalization are all represented.
-    ///
-    /// 带 memo：消息条数 / 会话不变时 1 秒内直接回缓存值——这是个给
-    /// 状态栏圆环看的估算值，不需要逐 token 精确；全量重算的成本见
-    /// `agentTokenEstimateCache` 的注释。
     /// The tool set the next real request will actually send — filtered by
     /// active experts / interaction mode / executor, exactly like the loop's
     /// streamChat call. Estimating with the full registry counted the
@@ -95,23 +105,6 @@ extension AppState {
             interactionMode: runtime.interactionMode,
             executionAgent: runtime.executionAgent
         )
-    }
-
-    var estimatedAgentTokens: Int {
-        let now = Date()
-        let messageCount = agentMessages.count
-        let sessionID = activeAgentSessionID
-        if let cached = agentTokenEstimateCache,
-           cached.messageCount == messageCount,
-           cached.sessionID == sessionID,
-           now.timeIntervalSince(cached.at) < 1.0 {
-            return cached.value
-        }
-        let requestMessages = estimatedAgentRequestMessages
-        let tools = estimatedAgentToolset
-        let value = Self.estimateAgentTokens(messages: requestMessages, tools: tools)
-        agentTokenEstimateCache = (messageCount, sessionID, value, now)
-        return value
     }
 
     var activeAgentModelID: String {
@@ -142,35 +135,6 @@ extension AppState {
     /// the exact same stable system content, which makes the baseline cancel
     /// cleanly out of `used`; dynamic turn context is intentionally counted
     /// with the conversation that carries it.
-    var estimatedAgentSystemMessage: AgentMessage {
-        estimatedAgentPromptComponents.systemMessage
-    }
-
-    private var estimatedAgentPromptComponents: (systemMessage: AgentMessage, turnContext: String) {
-        let now = Date()
-        let messageCount = agentMessages.count
-        let sessionID = activeAgentSessionID
-        if let cached = agentSystemMessageCache,
-           cached.messageCount == messageCount,
-           cached.sessionID == sessionID,
-           now.timeIntervalSince(cached.at) < 1.0 {
-            return (cached.systemMessage, cached.turnContext)
-        }
-        let prompt = buildEstimatedAgentPromptComponents()
-        agentSystemMessageCache = (
-            messageCount,
-            sessionID,
-            prompt.systemMessage,
-            prompt.turnContext,
-            now
-        )
-        return prompt
-    }
-
-    /// Uncached construction behind `estimatedAgentPromptComponents`. Builds the
-    /// full system prompt and runs memory retrieval (both touch UserDefaults /
-    /// project rules), so callers must go through the cached accessor above —
-    /// this is the expensive path the switch used to run twice.
     private func buildEstimatedAgentPromptComponents() -> (
         systemMessage: AgentMessage,
         turnContext: String
@@ -222,7 +186,9 @@ extension AppState {
         )
     }
 
-    var estimatedAgentRequestMessages: [AgentMessage] {
+    private func estimatedAgentRequestMessages(
+        prompt: (systemMessage: AgentMessage, turnContext: String)
+    ) -> [AgentMessage] {
         // 估算口径必须与发往模型的 history 对齐:已经存在的 context
         // summary 在请求阶段会把旧消息折叠成一段 system 摘要,本地
         // estimator 也得用同一个 modelFacingHistory,不然「Compress」
@@ -233,7 +199,6 @@ extension AppState {
             contextSummaryThroughMessageID: activeRuntime?.contextSummaryThroughMessageID
         )
         let collapsedHistory = Self.collapseOldToolResults(in: modelFacing)
-        let prompt = estimatedAgentPromptComponents
         let contextualHistory = AgentContextBuilder.appendingTurnContext(
             prompt.turnContext,
             to: collapsedHistory
@@ -244,68 +209,114 @@ extension AppState {
         )
     }
 
-    /// Fixed overhead present before the user sends a single message: the
-    /// system prompt (incl. injected memory) and every tool schema, with no
-    /// conversation history. The composer ring subtracts this so a fresh
-    /// chat reads 0% and fills as the *conversation* grows — see
-    /// `ContextRingIndicator`. Cached on the same key as the full estimate
-    /// so it isn't rebuilt (system prompt + memory retrieval) every redraw.
-    var estimatedAgentBaselineTokens: Int {
-        let now = Date()
-        let messageCount = agentMessages.count
-        let sessionID = activeAgentSessionID
-        if let cached = agentBaselineEstimateCache,
-           cached.messageCount == messageCount,
-           cached.sessionID == sessionID,
-           now.timeIntervalSince(cached.at) < 1.0 {
-            return cached.value
-        }
-        let value = Self.estimateAgentTokens(
-            messages: [estimatedAgentSystemMessage],
-            tools: estimatedAgentToolset
+    /// Builds the exact request-shaped inputs on the main actor, then moves the
+    /// expensive Unicode scan to a utility worker. The status bar calls this
+    /// only after relevant state has settled, never during `body` evaluation.
+    @MainActor
+    func estimateAgentContextUsageSnapshot(
+        for sessionID: AgentSession.ID
+    ) async -> AgentContextTokenUsageSnapshot? {
+        guard activeAgentSessionID == sessionID else { return nil }
+
+        let prompt = buildEstimatedAgentPromptComponents()
+        let tools = estimatedAgentToolset
+        let requestMessages = estimatedAgentRequestMessages(prompt: prompt)
+        let usedWorkload = Self.makeTokenEstimateWorkload(
+            messages: requestMessages,
+            tools: tools,
+            normalizeMessages: false
         )
-        agentBaselineEstimateCache = (messageCount, sessionID, value, now)
-        return value
+        let baselineWorkload = Self.makeTokenEstimateWorkload(
+            messages: [prompt.systemMessage],
+            tools: tools,
+            normalizeMessages: true
+        )
+        let contextWindow = agentContextWindow
+
+        let worker = Task.detached(priority: .utility) { () -> AgentContextTokenUsageSnapshot? in
+            let usedTokens = Self.estimateAgentTokens(workload: usedWorkload)
+            guard !Task.isCancelled else { return nil }
+            let baselineTokens = Self.estimateAgentTokens(workload: baselineWorkload)
+            guard !Task.isCancelled else { return nil }
+            return AgentContextTokenUsageSnapshot(
+                usedTokens: usedTokens,
+                baselineTokens: baselineTokens,
+                contextWindow: contextWindow
+            )
+        }
+        let snapshot = await withTaskCancellationHandler {
+            await worker.value
+        } onCancel: {
+            worker.cancel()
+        }
+
+        guard !Task.isCancelled, activeAgentSessionID == sessionID else { return nil }
+        return snapshot
     }
 
     nonisolated static func estimateAgentTokens(
         messages: [AgentMessage],
         tools: [AgentToolDescriptor]
     ) -> Int {
-        var total = 0
+        estimateAgentTokens(
+            workload: makeTokenEstimateWorkload(
+                messages: messages,
+                tools: tools,
+                normalizeMessages: true
+            )
+        )
+    }
 
-        for message in AgentClient.providerReadyMessages(messages) {
-            total += 4
-            total += estimateTextTokens(message.role.rawValue)
-            total += estimateTextTokens(message.modelContent)
-            total += message.images.count * 600
+    private nonisolated static func makeTokenEstimateWorkload(
+        messages: [AgentMessage],
+        tools: [AgentToolDescriptor],
+        normalizeMessages: Bool
+    ) -> AgentTokenEstimateWorkload {
+        var workload = AgentTokenEstimateWorkload()
+        let preparedMessages = normalizeMessages
+            ? AgentClient.providerReadyMessages(messages)
+            : messages
+
+        for message in preparedMessages {
+            workload.fixedTokens += 4 + (message.images.count * 600)
+            workload.texts.append(message.role.rawValue)
+            workload.texts.append(message.modelContent)
             for call in message.toolCalls {
-                total += 12
-                total += estimateTextTokens(call.externalID)
-                total += estimateTextTokens(call.toolName)
-                total += estimateTextTokens(call.argumentsJSON)
+                workload.fixedTokens += 12
+                workload.texts.append(call.externalID)
+                workload.texts.append(call.toolName)
+                workload.texts.append(call.argumentsJSON)
             }
             if let toolCallID = message.toolCallID {
-                total += estimateTextTokens(toolCallID)
+                workload.texts.append(toolCallID)
             }
         }
 
         if !tools.isEmpty {
-            total += 16
+            workload.fixedTokens += 16
             for tool in tools {
-                total += 24
-                total += estimateTextTokens(tool.name)
-                total += estimateTextTokens(tool.description)
+                workload.fixedTokens += 24
+                workload.texts.append(tool.name)
+                workload.texts.append(tool.description)
                 for parameter in tool.parameters {
-                    total += 8
-                    total += estimateTextTokens(parameter.name)
-                    total += estimateTextTokens(parameter.type.rawValue)
-                    total += estimateTextTokens(parameter.description)
+                    workload.fixedTokens += 8
+                    workload.texts.append(parameter.name)
+                    workload.texts.append(parameter.type.rawValue)
+                    workload.texts.append(parameter.description)
                 }
             }
         }
+        return workload
+    }
 
-        total += 2
+    private nonisolated static func estimateAgentTokens(
+        workload: AgentTokenEstimateWorkload
+    ) -> Int {
+        var total = workload.fixedTokens
+        for text in workload.texts {
+            guard !Task.isCancelled else { return total }
+            total += estimateTextTokens(text)
+        }
         return total
     }
 
@@ -317,7 +328,7 @@ extension AppState {
         var otherScalars = 0
 
         for scalar in text.unicodeScalars {
-            if CharacterSet.whitespacesAndNewlines.contains(scalar) {
+            if scalar.properties.isWhitespace {
                 continue
             }
             if scalar.value <= 0x7F {

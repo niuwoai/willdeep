@@ -148,9 +148,9 @@ struct AgentSidebarListVisualMetricsTests {
         )
     }
 
-    @Test("mode progress summary stays compact under hover-sized pressure")
+    @Test("legacy plan progress no longer renders a sidebar mode badge")
     @MainActor
-    func planProgressBadgeResistsHorizontalCompression() {
+    func legacyPlanProgressBadgeStaysHidden() {
         var session = AgentSession(title: "A deliberately long conversation title")
         session.currentPlan = AgentPlan(
             status: .executing,
@@ -169,7 +169,7 @@ struct AgentSidebarListVisualMetricsTests {
             in: NSSize(width: 1, height: AgentDesign.sidebarRowHeight)
         )
 
-        #expect(unconstrained.width > 1)
+        #expect(unconstrained.width == 0)
         #expect(abs(constrained.width - unconstrained.width) < 0.5)
     }
 

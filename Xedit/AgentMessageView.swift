@@ -233,7 +233,7 @@ struct AgentModeMessageView: View {
     // correctly while still being typed.
     private var assistantContent: some View {
         let activityHeadline = AgentActivityHeadlinePresentation.make(from: message.content)
-        let showsMessageText = !message.content.isEmpty
+        let showsMessageText = message.hasRenderableTextContent
             && (activityHeadline == nil || !suppressesActivityHeadline)
         return Group {
             if showsMessageText || !message.images.isEmpty {

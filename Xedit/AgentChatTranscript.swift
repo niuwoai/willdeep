@@ -746,16 +746,21 @@ struct AgentChatTranscript: View {
     }
 
     private func isEmptyThinkingPlaceholder(_ message: AgentMessage) -> Bool {
-        message.role == .assistant && message.content.isEmpty && message.images.isEmpty && message.toolCalls.isEmpty
+        message.role == .assistant
+            && !message.hasRenderableTextContent
+            && message.images.isEmpty
+            && message.toolCalls.isEmpty
     }
 
     private func shouldShowMessageBubble(_ message: AgentMessage) -> Bool {
-        !(message.role == .assistant && message.content.isEmpty && !message.toolCalls.isEmpty)
+        !(message.role == .assistant
+            && !message.hasRenderableTextContent
+            && !message.toolCalls.isEmpty)
     }
 
     private func isSettledToolCallOnlyMessage(_ message: AgentMessage) -> Bool {
         guard message.role == .assistant,
-              message.content.isEmpty,
+              !message.hasRenderableTextContent,
               !message.toolCalls.isEmpty,
               !appState.isAgentResponding else {
             return false
