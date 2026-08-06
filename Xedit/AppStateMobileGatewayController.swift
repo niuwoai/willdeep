@@ -15,6 +15,61 @@ private struct AgentState_MobileGatewayWorkspaceBucket {
     var isCurrent: Bool
 }
 
+/// Memoizes the two filesystem probes behind `mobileGatewayWorkspaceList`.
+///
+/// That property runs both probes for **every** workspace on **every** gateway
+/// snapshot — once per 400ms for as long as a phone stays connected — and
+/// `mobileGatewayRepositoryRoot` additionally walks *up* the directory tree
+/// stat-ing `.git` at each level. All of it is synchronous file IO on
+/// @MainActor; a 5s sample of 1.228.0-rc10 caught `lstat` as a main-thread leaf
+/// while the window was doing nothing but rendering.
+///
+/// Whether a directory is a git repo is a human-scale fact, so entries expire on
+/// a short TTL rather than living forever: a `git init` in an open workspace
+/// still reaches the phone within a snapshot or two, while the steady state
+/// costs a dictionary lookup instead of a syscall.
+///
+/// The probes are injected rather than called directly so the cache semantics
+/// can be tested without touching a filesystem.
+struct AgentMobileGatewayRepoProbeCache {
+    /// Chosen against the 400ms snapshot cadence: long enough that ~75
+    /// consecutive snapshots reuse one probe, short enough that a repo
+    /// appearing or disappearing is never stale for more than half a minute.
+    static let ttl: TimeInterval = 30
+
+    private var isRepoByPath: [String: (value: Bool, readAt: Date)] = [:]
+    private var repositoryRootByPath: [String: (value: String?, readAt: Date)] = [:]
+
+    mutating func isGitRepo(_ path: String, now: Date = Date(), probe: () -> Bool) -> Bool {
+        if let hit = isRepoByPath[path], now.timeIntervalSince(hit.readAt) < Self.ttl {
+            return hit.value
+        }
+        let value = probe()
+        isRepoByPath[path] = (value, now)
+        return value
+    }
+
+    mutating func repositoryRoot(
+        for path: String,
+        now: Date = Date(),
+        probe: () -> String?
+    ) -> String? {
+        if let hit = repositoryRootByPath[path], now.timeIntervalSince(hit.readAt) < Self.ttl {
+            return hit.value
+        }
+        let value = probe()
+        repositoryRootByPath[path] = (value, now)
+        return value
+    }
+
+    mutating func reset() {
+        isRepoByPath.removeAll()
+        repositoryRootByPath.removeAll()
+    }
+}
+
+@MainActor private var agentState_mobileGatewayRepoProbes = AgentMobileGatewayRepoProbeCache()
+
 extension AppState: AgentMobileGatewayControlling {
     var mobileGatewaySessions: [AgentSession] { agentSessions }
     var mobileGatewayActiveSessionID: UUID? { activeAgentSessionID }
@@ -214,16 +269,32 @@ extension AppState: AgentMobileGatewayControlling {
         }
 
         let now = Date()
-        let snapshots = buckets.values.map { bucket -> AgentMobileGatewayWorkspaceSnapshot in
+        var snapshots: [AgentMobileGatewayWorkspaceSnapshot] = []
+        snapshots.reserveCapacity(buckets.count)
+        for bucket in buckets.values {
             let url = URL(fileURLWithPath: bucket.path)
-            return AgentMobileGatewayWorkspaceSnapshot(
-                path: bucket.path,
-                name: bucket.name,
-                lastUsedAt: bucket.lastUsedAt ?? (bucket.isCurrent ? now : nil),
-                sessionCount: bucket.sessionCount,
-                isCurrent: bucket.isCurrent,
-                isGitRepo: Self.mobileGatewayIsGitRepo(url),
-                repositoryRoot: Self.mobileGatewayRepositoryRoot(for: url)
+            // Both probes go through the TTL cache: this loop runs on every
+            // gateway snapshot, and each miss is a `.git` stat plus (for the
+            // root) a walk to the filesystem root.
+            let isGitRepo = agentState_mobileGatewayRepoProbes.isGitRepo(bucket.path, now: now) {
+                Self.mobileGatewayIsGitRepo(url)
+            }
+            let repositoryRoot = agentState_mobileGatewayRepoProbes.repositoryRoot(
+                for: bucket.path,
+                now: now
+            ) {
+                Self.mobileGatewayRepositoryRoot(for: url)
+            }
+            snapshots.append(
+                AgentMobileGatewayWorkspaceSnapshot(
+                    path: bucket.path,
+                    name: bucket.name,
+                    lastUsedAt: bucket.lastUsedAt ?? (bucket.isCurrent ? now : nil),
+                    sessionCount: bucket.sessionCount,
+                    isCurrent: bucket.isCurrent,
+                    isGitRepo: isGitRepo,
+                    repositoryRoot: repositoryRoot
+                )
             )
         }
         return snapshots.sorted { lhs, rhs in
