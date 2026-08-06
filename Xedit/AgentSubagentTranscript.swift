@@ -54,6 +54,13 @@ nonisolated struct AgentSubagentTranscript: Codable, Equatable, Sendable {
     var finishedAt: Date?
     /// True when at least one field in this record hit a storage cap.
     var didTruncate: Bool
+    /// Which trade ran (`scout` / `reader` / `deep` / `editor`). Nil for
+    /// records written before profiles existed.
+    var profileID: String?
+    /// Set when a cheap trade stalled and the run was re-done on the
+    /// parent's model; carries the model that was escalated away from.
+    /// Escalation is recorded rather than silent — see AgentSubagentEscalation.
+    var escalatedFromModel: String?
 
     var toolInvocationCount: Int {
         rounds.reduce(0) { $0 + $1.toolCalls.count }
@@ -70,7 +77,9 @@ nonisolated struct AgentSubagentTranscript: Codable, Equatable, Sendable {
         usageTokens: Int = 0,
         startedAt: Date = Date(),
         finishedAt: Date? = nil,
-        didTruncate: Bool = false
+        didTruncate: Bool = false,
+        profileID: String? = nil,
+        escalatedFromModel: String? = nil
     ) {
         self.runID = runID
         self.label = label
@@ -83,6 +92,8 @@ nonisolated struct AgentSubagentTranscript: Codable, Equatable, Sendable {
         self.startedAt = startedAt
         self.finishedAt = finishedAt
         self.didTruncate = didTruncate
+        self.profileID = profileID
+        self.escalatedFromModel = escalatedFromModel
     }
 }
 

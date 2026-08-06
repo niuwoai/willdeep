@@ -576,6 +576,10 @@ enum AgentToolApprovalSource: String, Equatable, Codable {
     /// The user marked this MCP server as fully trusted ("my own MCP")
     /// in MCP settings -- every call to it auto-runs, writes included.
     case trustedServer
+    /// An editor-trade subagent patching the single file the user approved
+    /// when the spawn itself was confirmed. The approval is per-file and
+    /// granted up front, so its patches apply without re-asking per hunk.
+    case subagentEditor
 }
 
 struct AgentToolCall: Identifiable, Equatable {
