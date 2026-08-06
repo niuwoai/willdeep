@@ -21,6 +21,14 @@
 import AppKit
 import SwiftUI
 
+/// Identifies what the project sheet is editing: an existing project, or a
+/// plain folder group about to become one.
+struct AgentProjectEditorTarget: Identifiable {
+    let id = UUID()
+    let project: AgentProject?
+    let seedFolderPath: String?
+}
+
 private struct SidebarWorkspaceGroup: Identifiable {
     let id: String
     let displayName: String
@@ -143,6 +151,7 @@ enum AgentSidebarSessionTrailingLayout {
 struct AgentSessionsSidebar: View {
     @EnvironmentObject var appState: AppState
     @Environment(\.openWindow) private var openWindow
+    @State private var editingProject: AgentProjectEditorTarget?
     @State private var expandedWorkspaces = AgentSidebarWorkspaceStateStore.load(.expandedWorkspaces)
     /// Workspace keys the user has manually collapsed by clicking the
     /// folder icon — the whole group hides every session row and only
@@ -233,6 +242,13 @@ struct AgentSessionsSidebar: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
             someIMAccountFooter
+        }
+        .sheet(item: $editingProject) { target in
+            AgentProjectEditorSheet(
+                existingProject: target.project,
+                seedFolderPath: target.seedFolderPath
+            )
+            .environmentObject(appState)
         }
         // sidebar 整体再 clip 一次:即便 SwiftUI 在 narrow window 下
         // 没把某个子 view 完美约束,溢出的部分也不会糊到 chat / side
@@ -490,6 +506,17 @@ struct AgentSessionsSidebar: View {
                 }
                 if workspace != AgentSession.noWorkspaceSidebarGroupKey {
                     Divider()
+                    // Already a project → edit it. A plain folder group can be
+                    // promoted into one, which is how projects get created.
+                    if let project = appState.agentProject(forSidebarGroupKey: workspace) {
+                        Button(L10n.AgentProjectStrings.editProject) {
+                            editingProject = AgentProjectEditorTarget(project: project, seedFolderPath: nil)
+                        }
+                    } else if let path = localWorkspacePath(for: workspace) {
+                        Button(L10n.AgentProjectStrings.createProject) {
+                            editingProject = AgentProjectEditorTarget(project: nil, seedFolderPath: path)
+                        }
+                    }
                     // Removal only hides the group — sessions stay on disk
                     // and reappear if the same folder is re-added later.
                     Button(L10n.Sidebar.workspaceMenuRemove, role: .destructive) {
