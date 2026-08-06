@@ -1037,6 +1037,7 @@ final class AgentLocalProcessTerminalView: TerminalView, TerminalViewDelegate, L
         // view has computed it from the frame + font.
         let live = getTerminal()
         snapshotMirror.resize(cols: live.cols, rows: live.rows)
+        isGridClampArmed = true
     }
 
     required init?(coder: NSCoder) {
@@ -1055,13 +1056,67 @@ final class AgentLocalProcessTerminalView: TerminalView, TerminalViewDelegate, L
         super.paste(sender)
     }
 
+    /// Smallest grid the emulator may ever be driven to. SwiftTerm's own
+    /// floor is 2 cols x 1 row, and it reflows the whole buffer on the way
+    /// down: a populated scrollback rewrapped through two columns explodes
+    /// far past `rows + scrollback`, so the buffer trims from the top — and
+    /// widening back cannot undo it. The tab then comes back blank or with
+    /// mangled rows while the scroller still advertises scrollback, which is
+    /// the "side panel has no characters but still has a scrollbar" report.
+    /// The side panel is clamped to 240pt (~24 cols), so this floor only
+    /// ever rejects frames no real layout asks for.
+    private static let minimumUsableGrid = (cols: 20, rows: 3)
+
+    /// Armed at the end of `init`. Before that SwiftTerm is still wiring up
+    /// its font metrics and terminal — asking for the optimal frame size
+    /// would touch them — and there is no buffer content worth protecting.
+    private var isGridClampArmed = false
+
     override func setFrameSize(_ newSize: NSSize) {
+        // A frame too small to host a usable grid is never a real layout: it
+        // is SwiftUI mounting, unmounting, or collapsing the host (panel
+        // switch, detach-to-window, window restore). Dropping it keeps the
+        // last real geometry — the view is off screen at that moment anyway
+        // and the panel host clips, so nothing can overflow.
+        guard acceptsFrameSize(newSize) else { return }
         super.setFrameSize(newSize)
         refreshVisibleTerminalDisplay()
     }
 
+    /// Visible for testing: the grid floor as a pixel size, given the view's
+    /// current font metrics.
+    func acceptsFrameSize(_ size: NSSize) -> Bool {
+        guard isGridClampArmed else { return true }
+        let cell = currentCellSize()
+        guard cell.width > 0, cell.height > 0 else { return true }
+        let minWidth = cell.width * CGFloat(Self.minimumUsableGrid.cols) + Self.scrollerWidth
+        let minHeight = cell.height * CGFloat(Self.minimumUsableGrid.rows)
+        return size.width >= minWidth && size.height >= minHeight
+    }
+
+    /// SwiftTerm keeps `cellDimension` internal to the package, so the cell
+    /// metrics are read back out of its own optimal-frame math instead.
+    private func currentCellSize() -> CGSize {
+        let live = getTerminal()
+        guard live.cols > 0, live.rows > 0 else { return .zero }
+        let optimal = getOptimalFrameSize()
+        return CGSize(
+            width: (optimal.width - Self.scrollerWidth) / CGFloat(live.cols),
+            height: optimal.height / CGFloat(live.rows)
+        )
+    }
+
+    /// Matches the scroller style SwiftTerm hardcodes for its own layout.
+    private static var scrollerWidth: CGFloat {
+        NSScroller.scrollerWidth(for: .regular, scrollerStyle: .legacy)
+    }
+
     override func viewDidMoveToWindow() {
         super.viewDidMoveToWindow()
+        // Only a remount warrants the forced layout below. Running it while
+        // detached is how a degenerate frame gets computed and pushed into
+        // the emulator in the first place.
+        guard window != nil else { return }
         DispatchQueue.main.async { [weak self] in
             guard let self else { return }
             // Remount is the one place a forced layout is warranted: the
