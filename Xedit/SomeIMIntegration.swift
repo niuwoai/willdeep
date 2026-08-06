@@ -1213,8 +1213,32 @@ enum SomeIMClient {
         return SomeIMIntegrationStore.saveRefreshedAccount(account)
     }
 
+    /// Fetch nickname/avatar, renewing the session token once if it has
+    /// expired.
+    ///
+    /// Customer sessions last 7 days and `/customer/me` accepts nothing else,
+    /// while balance runs on the long-lived api_key. Without this renewal the
+    /// account settles into "credits still update, name and picture never do"
+    /// and cannot recover on its own.
     private static func fetchCustomerProfile(
-        settings _: SomeIMIntegrationSettings,
+        settings: SomeIMIntegrationSettings,
+        sessionToken: String,
+        session: URLSession
+    ) async throws -> (account: AccountData, tenantID: String?) {
+        do {
+            return try await requestCustomerProfile(sessionToken: sessionToken, session: session)
+        } catch {
+            // Exactly one renewal attempt. Looping on a key the server keeps
+            // rejecting would hammer the exchange endpoint for nothing.
+            guard isAuthenticationFailure(error),
+                  let renewed = try? await exchangeSessionToken(settings: settings, session: session) else {
+                throw error
+            }
+            return try await requestCustomerProfile(sessionToken: renewed, session: session)
+        }
+    }
+
+    private static func requestCustomerProfile(
         sessionToken: String,
         session: URLSession
     ) async throws -> (account: AccountData, tenantID: String?) {
@@ -1231,6 +1255,56 @@ enum SomeIMClient {
         let decoded = try decodeEnvelope(CustomerMeData.self, from: data)
         guard let account = decoded.user else { throw AgentClientError.invalidResponse }
         return (account, decoded.tenant?.id)
+    }
+
+    /// Trade the long-lived api_key for a fresh customer session token and
+    /// store it. Returns the new token.
+    ///
+    /// Only the expired-session case should reach here; a failure is left to
+    /// the caller so the profile it already has is kept rather than cleared.
+    @discardableResult
+    static func exchangeSessionToken(
+        settings: SomeIMIntegrationSettings,
+        session: URLSession
+    ) async throws -> String {
+        let apiKey = SomeIMIntegrationStore.loadAPIKey().trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !apiKey.isEmpty else { throw AgentClientError.missingAPIKey }
+        let endpoint = try publicAPIEndpoint(
+            from: controlPlaneOrigin,
+            suffix: "public/client-login/session/exchange"
+        )
+        var request = URLRequest(url: endpoint)
+        request.httpMethod = "POST"
+        request.timeoutInterval = 12
+        request.setValue("application/json", forHTTPHeaderField: "Accept")
+        request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
+        applyClientLoginSecret(to: &request)
+        AgentNetworkSupport.applyStandardHeaders(to: &request)
+        let data = try await send(request, session: session)
+        let decoded = try decodeEnvelope(SessionExchangeData.self, from: data)
+        let token = decoded.token.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !token.isEmpty else { throw AgentClientError.invalidResponse }
+        _ = SomeIMIntegrationStore.saveSessionToken(token)
+        return token
+    }
+
+    /// Whether an error means "this session token is no longer valid", as
+    /// opposed to a network blip or a server fault — renewing on anything
+    /// else would turn transient failures into pointless exchange traffic.
+    nonisolated static func isAuthenticationFailure(_ error: Error) -> Bool {
+        if case AgentToolError.httpFailed(let status, _) = error {
+            return status == 401 || status == 403
+        }
+        if let urlError = error as? URLError {
+            return urlError.code == .userAuthenticationRequired
+        }
+        return false
+    }
+
+    fileprivate struct SessionExchangeData: Decodable {
+        let token: String
+        let expires_at: String?
+        let tenant_id: String?
     }
 
     static func fetchCodingPlanStatus() async throws -> SomeIMCodingPlanStatus {
