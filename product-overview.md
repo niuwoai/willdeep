@@ -1,6 +1,6 @@
 # WillDeep Product Overview
 
-> Last updated: 2026-08-05 | Current version: v1.233.0-rc3
+> Last updated: 2026-08-06 | Current version: v1.233.0-rc4
 
 ## Positioning
 
@@ -12,6 +12,7 @@ WillDeep is configured for non-App-Store distribution without App Sandbox so it 
 
 ## 架构概览
 
+- **聊天正文排版贴近 Codex（1.233.0-rc4）** —— 助手消息与用户消息的正文额外行距由 5pt 收紧为 3pt，改善中文长段落的阅读节奏；灰色内联代码 chip 改为上 1.5pt、下 0.5pt 的非对称留白，减少底部显厚的问题。
 - **审批卡严格串行且 Composer 状态可靠（1.228.0-rc7）** —— 同一回合的多个人工审核项只会逐条激活，后续调用以不可操作的排队行展示，不再提前提交决定后卡在执行循环；Always-Allow 等明确授权仍可把匹配项转为可审计的自动批准。Composer 直接观察当前 runtime，输出中与 Provider 排队时持续显示停止图标。成功工具活动仅保留具体动作摘要，不再追加时有时无的“完成”。
 - **终端前台占用可见且防误投（1.228.0-rc6）** —— 终端按 PTY 前台进程组与 canonical/echo 模式区分 Shell 就绪、非交互前台任务和 SSH/TUI/REPL 交互程序；压测等静默任务运行时会显示“前台任务运行中”，方向键不再产生 `^[[A` 乱码。Agent 快照与标签列表可读取 `input_state`，且不能把新命令注入仍占用 PTY 的前台任务，可改为等待、Ctrl-C、新标签页或后台执行。
 - **会话标题更新不再打扰用户（1.228.0-rc5）** —— `rename_session` 只修改发起调用的当前会话，是可逆的本地元数据写入；普通、Goal 与“每次询问”模式均由宿主确定性免审，同时保留 write-tier 顺序、审计记录、非空单行与 120 字符校验。会改变后续工具边界的工作区切换继续要求人工批准。
