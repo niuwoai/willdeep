@@ -75,6 +75,17 @@ enum AgentToolRegistry {
             ]
         ),
         AgentToolDescriptor(
+            name: "search_sessions",
+            description: "Search the text of PAST WillDeep conversations for a phrase and return matching excerpts with their session ids. Use this when the user refers to something discussed before (\"we talked about this last week\", \"what did we decide about X\") instead of asking them to repeat it. Searches the current workspace by default; `scope: \"all\"` covers every workspace and requires the user's approval. Returns short excerpts with session ids, never whole transcripts. If an excerpt is not enough, search again with a more specific phrase; there is deliberately no way to pull an entire past conversation into this context.",
+            risk: .read,
+            parameters: [
+                AgentToolParameter(name: "query", type: .string, description: "Literal phrase to look for. Case- and accent-insensitive substring match, not a regex. Prefer a distinctive few words over a long sentence.", required: true),
+                AgentToolParameter(name: "scope", type: .string, description: "`workspace` (default) searches conversations in the current workspace. `all` searches every workspace and requires user approval — only use it when the answer is clearly not in this project.", required: false),
+                AgentToolParameter(name: "limit", type: .integer, description: "Maximum excerpts to return. Defaults to 10, capped at 30.", required: false),
+                AgentToolParameter(name: "include_archived", type: .boolean, description: "Include archived conversations. Defaults to true — archived work is exactly what tends to be forgotten.", required: false)
+            ]
+        ),
+        AgentToolDescriptor(
             name: "suggest_session_title",
             description: "Use WillDeep's configured title-summary flash model to suggest a concise title for the CURRENT session from the latest conversation context. Read-only. On a new user input, call this when the current session title looks stale or too generic; then call rename_session with the suggestion when appropriate. rename_session applies automatically without asking the user.",
             risk: .read,
@@ -1894,6 +1905,15 @@ enum AgentToolRegistry {
                 id: arguments["profile"]?.stringValue()
             )
             return profile.requiresWriteAccess ? .write : .read
+        }
+        // Reading this workspace's own history is ordinary; reaching into
+        // every other project's conversations is the user's call, so that
+        // variant is routed through the approval card.
+        if name == "search_sessions" {
+            let scope = arguments["scope"]?.stringValue()?
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+                .lowercased()
+            return scope == "all" ? .write : .read
         }
         guard let descriptor = descriptor(for: name) else { return .danger }
         if descriptor.name == "run_command", let command = arguments["command"]?.stringValue() {
