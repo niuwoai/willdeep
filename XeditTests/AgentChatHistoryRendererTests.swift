@@ -646,6 +646,8 @@ struct AgentChatHistoryRendererTests {
         #expect(chipRect.minX >= precedingRect.maxX)
         #expect(chipRect.minX < slashRect.minX)
         #expect(chipRect.maxX > slashRect.maxX)
+        #expect(slashRect.minY - chipRect.minY <= AgentChatHistoryLayoutMetrics.inlineCodeChipBottomPadding + 1)
+        #expect(chipRect.maxY - slashRect.maxY >= AgentChatHistoryLayoutMetrics.inlineCodeChipTopPadding)
     }
 
     @Test
@@ -1332,7 +1334,7 @@ struct AgentChatHistoryRendererTests {
         #expect(processedFont.pointSize == bodyFont.pointSize)
         #expect(processedColor == NSColor.tertiaryLabelColor)
         #expect(bodyParagraphStyle.lineSpacing == AgentChatHistoryLayoutMetrics.bodyLineSpacing)
-        #expect(bodyParagraphStyle.lineSpacing == 5)
+        #expect(bodyParagraphStyle.lineSpacing == 3)
         let dividerLocation = NSMaxRange(processedRange) + 1
         let dividerColor = try #require(rendered.attribute(
             .agentChatHistoryAssistantStatusDividerColor,
