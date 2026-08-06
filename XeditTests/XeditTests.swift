@@ -1018,7 +1018,12 @@ struct WillDeepTests {
             skin: nil
         )
         defer { controller.closeTab(id: tab.id) }
-        try await Task.sleep(nanoseconds: 300_000_000)
+        // The login shell's rc files run as foreground children of this pty,
+        // and dispatch is (correctly) refused while they do. Wait for the
+        // prompt instead of a fixed sleep — under a full-load run the startup
+        // easily outlives any constant.
+        let readyState = await AgentTerminalTestSupport.waitForShellReady(tab)
+        #expect(readyState == .shellReady, "login shell never reached its prompt: \(readyState.rawValue)")
 
         let marker = "willdeep-terminal-follow-up-\(UUID().uuidString)"
         let result = try await AgentTerminalTools.sendCommand(

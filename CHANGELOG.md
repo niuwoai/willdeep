@@ -1,7 +1,20 @@
 # Changelog
 
-> 当前文件保留最新版本（1.234.0-rc2 至 1.109.0-rc340）。
+> 当前文件保留最新版本（1.234.0-rc4 至 1.109.0-rc340）。
 > 更早的 1000 个版本已移至 [CHANGELOG-ARCHIVE.md](CHANGELOG-ARCHIVE.md)。
+
+## 1.234.0-rc4 - 2026-08-06
+
+### Tests
+
+- 加固满载并行下随机红的 `terminal command returns an automatic follow-up snapshot instead of dispatch-only output`。该用例本来就用独立的 `AgentInteractiveTerminalController` 和独立 PTY，`AgentInteractiveTerminalController` 也没有单例或进程级共享状态，不存在跨测试共享的终端占用标记；随机红的真实原因是它自己的登录 Shell 还没启动完——本地 tab 起的是 `zsh -l`，rc 文件里每条外部命令都是这条 PTY 的前台子进程且保持 canonical+echo，`AgentTerminalInputState.classify` 据此正确判为 `foreground_task`，`sendApprovedCommandDispatch` 于是按策略拒发并抛出「A non-interactive foreground task currently owns this terminal」。旧实现靠固定 `Task.sleep(300ms)` 赌启动完成，空载够用、满载（1900+ 用例并行）随机被击穿。
+- 新增 `XeditTests/AgentTerminalTestSupport.swift`：`waitForShellReady` 轮询 `refreshInputState()`，要求连续 3 次采样均为 `shell_ready` 才放行（单次采样可能落在两个 rc 子进程之间的空档），30 秒上限，Shell 已退出则立即返回。等不到就绪时断言直接报「login shell never reached its prompt」，不再以「前台任务正占用该终端」的形式误导排查方向。生产代码未改动——前台任务拒发是正确行为，问题只在测试的等待方式。
+
+- 同族加固：`run_command receives the terminal-configured local environment` 与 `testRunCommandUsesHomeDirectoryWithoutWorkspace` 的 `timeout_seconds` 从 **5 秒**放宽到 30 秒（复用 `headlessCommandTimeoutSeconds` 常量）。两条断言的都是环境变量传递与工作目录，不是延迟；`printf`/`pwd` 本身单跑 8ms，但满载 fork 风暴下 `posix_spawn` 加沙箱启动就能吃掉 5 秒预算，实测在全量并行中连挂两轮（12.0s / 12.7s）、单跑必过。与仓库既有做法一致——git 类测试的 5 秒超时此前也是因同样原因放宽的。
+
+### Meta
+
+- Bugfix 预发布版本从 **1.234.0-rc2** 递增为 **1.234.0-rc4**，内部构建号从 **291** 递增为 **293**，Help 与 Computer Use Helper 构建号从 **208** 递增为 **210**；App、Go agent、Help、Helper、浏览器扩展、README、响应头契约与产品文档保持一致。
 
 ## 1.234.0-rc2 - 2026-08-06
 
