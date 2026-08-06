@@ -1412,6 +1412,66 @@ struct WillDeepTests {
         withExtendedLifetime(observation) {}
     }
 
+    @MainActor
+    @Test("streaming buffer feeds the overlay per flush and lags the canonical array")
+    func testAgentStreamingBufferTierSplit() {
+        let assistant = AgentMessage(role: .assistant, content: "")
+        let runtime = AgentRuntime(session: AgentSession(messages: [assistant]))
+        let buffer = AgentStreamingMessageBuffer(runtime: runtime, assistantID: assistant.id)
+        var publishCount = 0
+        let observation = runtime.objectWillChange.sink { publishCount += 1 }
+
+        // ≥2400 chars takes the synchronous immediate-flush path, keeping
+        // the test clock-free. The first visible content additionally syncs
+        // the canonical array right away so the bubble mounts without lag.
+        let first = String(repeating: "a", count: 2_400)
+        buffer.appendTextDelta(first)
+        #expect(publishCount == 1)
+        #expect(runtime.messages[0].content == first)
+        #expect(runtime.streamingOverlay.snapshot(for: assistant.id)?.content == first)
+
+        // Subsequent flushes update only the overlay; the canonical array
+        // (whose publish is forwarded into AppState.objectWillChange, i.e.
+        // a whole-window invalidation) waits for the slow-tier sync.
+        let second = String(repeating: "b", count: 2_400)
+        buffer.appendTextDelta(second)
+        #expect(publishCount == 1)
+        #expect(runtime.messages[0].content == first)
+        #expect(runtime.streamingOverlay.snapshot(for: assistant.id)?.content == first + second)
+
+        // flushPending drains both tiers synchronously.
+        buffer.flushPending()
+        #expect(publishCount == 2)
+        #expect(runtime.messages[0].content == first + second)
+        withExtendedLifetime(observation) {}
+    }
+
+    @MainActor
+    @Test("streaming overlay applies live text onto the canonical message and ignores stale snapshots")
+    func testAgentStreamingOverlayApplying() {
+        let overlay = AgentStreamingContentOverlay()
+        var message = AgentMessage(role: .assistant, content: "hello")
+        overlay.replace(AgentStreamingContentOverlay.Snapshot(
+            messageID: message.id,
+            content: "hello world",
+            reasoningContent: "thinking"
+        ))
+
+        let live = overlay.applying(to: message)
+        #expect(live.content == "hello world")
+        #expect(live.reasoningContent == "thinking")
+
+        // A canonical value that grew beyond the snapshot (external rewrite,
+        // or a snapshot left over from an earlier turn) wins over the overlay.
+        message.content = "hello world, finalized with a longer rewrite"
+        #expect(overlay.applying(to: message).content == "hello world, finalized with a longer rewrite")
+
+        // Unrelated message ids pass through untouched.
+        let other = AgentMessage(role: .assistant, content: "other")
+        #expect(overlay.applying(to: other).content == "other")
+        #expect(overlay.snapshot(for: other.id) == nil)
+    }
+
     @Test("command palette matcher supports fuzzy and keyword lookup")
     func testCommandPaletteMatcher() {
         let command = PaletteCommand(

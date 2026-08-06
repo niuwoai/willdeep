@@ -44,6 +44,14 @@ final class AgentRuntime: ObservableObject, Identifiable {
     // MARK: - Conversation state
 
     @Published var messages: [AgentMessage] = []
+    /// Live text of the currently-streaming assistant message. Fed by
+    /// `AgentStreamingMessageBuffer` at bubble cadence (~10 Hz) and observed
+    /// ONLY by the transcript's streaming bubble subtree. Deliberately a
+    /// plain `let` — its `objectWillChange` must NOT forward through this
+    /// runtime (and from there through AppState) or every flush would again
+    /// invalidate the whole window. Canonical `messages` publishes sync at
+    /// a slower cadence; see AgentStreamingMessageBuffer's header comment.
+    let streamingOverlay = AgentStreamingContentOverlay()
     @Published var contextSummary: String?
     @Published var contextSummaryThroughMessageID: AgentMessage.ID?
     @Published var patchProposals: [AgentPatchProposal] = []
