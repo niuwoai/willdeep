@@ -780,11 +780,26 @@ struct AgentSessionsSidebar: View {
     /// TruncatedTooltipText 的 hugWidth 用：同步测出结果，首帧就有正确
     /// 上限。+2 的余量抵消 NSString 测宽与 SwiftUI Text 渲染间的
     /// 亚像素差，防止刚好放得下的标题被削掉最后一个字符的边。
+    ///
+    /// 结果按标题缓存：`sessionRow` 每行调用一次，而侧栏 body 每帧都重跑，于是
+    /// 同一批标题被反复量给同一个字号。采样(1.228.0-rc10,5 秒)里这个函数独占
+    /// 主线程 37 个样本,量的全是上一帧刚量过的东西。`sidebarRowFontSize` 是
+    /// 编译期常量,所以标题本身就是完整的缓存键。
     private static func sessionTitleNaturalWidth(_ title: String) -> CGFloat {
+        if let cached = titleNaturalWidthCache[title] { return cached }
         let font = NSFont.systemFont(ofSize: AgentDesign.sidebarRowFontSize)
-        let width = (title as NSString).size(withAttributes: [.font: font]).width
-        return ceil(width) + 2
+        let width = ceil((title as NSString).size(withAttributes: [.font: font]).width) + 2
+        // 标题数随历史无限增长,缓存不能无界。到顶整体清空而不是做 LRU:代价只是
+        // 接下来一帧重新测量一遍,换掉一整套淘汰逻辑。
+        if titleNaturalWidthCache.count >= titleNaturalWidthCacheLimit {
+            titleNaturalWidthCache.removeAll(keepingCapacity: true)
+        }
+        titleNaturalWidthCache[title] = width
+        return width
     }
+
+    private static var titleNaturalWidthCache: [String: CGFloat] = [:]
+    private static let titleNaturalWidthCacheLimit = 1024
 
     private func presentRenameAlert(for session: AgentSession) {
         let alert = NSAlert()
