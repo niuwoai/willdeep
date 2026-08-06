@@ -6,6 +6,12 @@ require "json"
 require "open3"
 require "time"
 
+# Pinned like the sibling guards: these read UTF-8 repo files, and a shell
+# without LANG leaves Ruby on US-ASCII, which turns any non-ASCII byte into
+# an Encoding::InvalidByteSequenceError instead of a real check result.
+Encoding.default_external = Encoding::UTF_8
+Encoding.default_internal = Encoding::UTF_8
+
 ROOT_DIR = File.expand_path("..", __dir__)
 OUT_MD = File.expand_path(ARGV[0] || "build/ci/short_drama_mvp_handoff_bundle_contract_report.md", ROOT_DIR)
 OUT_JSON = File.expand_path(ARGV[1] || "build/ci/short_drama_mvp_handoff_bundle_contract_report.json", ROOT_DIR)

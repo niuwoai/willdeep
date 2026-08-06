@@ -304,7 +304,10 @@ struct AgentDispatchTaskTakeoverTests {
             arguments: [
                 "condition": .string("text"),
                 "value": .string("Background ready"),
-                "timeout_ms": .number(3_000),
+                // What is under test is that each node gets its own browser,
+                // not how fast WebKit paints. 3s was enough on an idle box and
+                // lost the whole test under a full-load parallel run.
+                "timeout_ms": .number(20_000),
             ],
             runtimeID: firstID
         )
