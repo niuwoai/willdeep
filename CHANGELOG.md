@@ -1,7 +1,17 @@
 # Changelog
 
-> 当前文件保留最新版本（1.234.0-rc6 至 1.109.0-rc340）。
+> 当前文件保留最新版本（1.234.0-rc7 至 1.109.0-rc340）。
 > 更早的 1000 个版本已移至 [CHANGELOG-ARCHIVE.md](CHANGELOG-ARCHIVE.md)。
+
+## 1.234.0-rc7 - 2026-08-06
+
+### Fixed
+
+- 流式输出期间整窗 SwiftUI 全量重布局的风暴（`sample` 实测：主线程 93% CPU 钉死在 `GraphHost.flushTransactions` 的 StackLayout 递归里，连设置页的 `body` 都在陪跑）。根因是发布链路：每 100ms 一次流式 flush 改写 `runtime.messages`（`@Published`）→ 经 `activeRuntimeSubscription` 转发成 `AppState.objectWillChange` → 每个观察 `appState` 的视图重估 + 整窗重测，10Hz 持续整个回合。与 rc482 composer 键击风暴同病，本次给流式内容同款解法：新增 `AgentStreamingContentOverlay` 专用发布通道挂在 `AgentRuntime` 上，只有 transcript 的流式气泡子树（新增 `StreamingBubbleHost`，长消息截断逻辑随之内移）观察它，10Hz 的 token 刷新只失效这一小块；canonical `messages` 数组降为 1Hz 慢档同步（首个正文/reasoning token 仍立即同步，气泡挂载与思考预览无感知延迟），全局失效频率降到原来的 1/10。`flushPending()` 同步排干两档，工具调用/用量/回合结束事件周围的 canonical 时序不变。
+
+### Tests
+
+- 新增流式两档发布测试：`testAgentStreamingBufferTierSplit`（overlay 每 flush 更新、canonical 滞后、`flushPending` 全排干、首 token 立即发布）与 `testAgentStreamingOverlayApplying`（overlay 叠加到 canonical 消息、陈旧快照按单调性丢弃、无关消息 id 直通）。原有原子性测试 `testAgentStreamingBufferPublishesAtomically` 语义不变继续通过。
 
 ## 1.234.0-rc6 - 2026-08-06
 

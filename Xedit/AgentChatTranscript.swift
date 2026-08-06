@@ -359,17 +359,22 @@ struct AgentChatTranscript: View {
                         // Render the active streaming message — and
                         // only it — through the SwiftUI bubble path
                         // so markdown formatting + the streaming
-                        // cursor stay live during the turn.
+                        // cursor stay live during the turn. The bubble
+                        // reads its live text from the runtime's
+                        // streaming overlay (its own publisher) so the
+                        // ~10 Hz flush cadence invalidates just this
+                        // subtree; this parent body only re-runs on the
+                        // slower canonical `messages` publishes.
                         if let streamingID = streamingMessageID,
                            let streamingMessage = rendered.first(where: { $0.id == streamingID }),
+                           let runtime = appState.activeRuntime,
                            shouldShowMessageBubble(streamingMessage) {
-                            let display = truncatedForBubble(streamingMessage)
-                            let turnPresentation = currentAssistantTurnPresentation(for: streamingID)
-                            AgentModeMessageView(
-                                message: display.rendered,
-                                isStreamingThisMessage: true,
-                                assistantTurnPresentation: turnPresentation,
+                            StreamingBubbleHost(
+                                overlay: runtime.streamingOverlay,
+                                base: streamingMessage,
+                                turnPresentation: currentAssistantTurnPresentation(for: streamingID),
                                 baseFontSize: appState.agentChatBaseFontSize,
+                                suppressesActivityHeadline: activeToolPresentation?.calls.isEmpty == false,
                                 onReferenceGeneratedImage: appState.appendGeneratedImageReferenceToAgentInput,
                                 progressPlan: appState.agentCurrentPlan,
                                 onShowPlan: {
@@ -377,16 +382,13 @@ struct AgentChatTranscript: View {
                                     // bump the token so the overlay expands it.
                                     appState.agentPlanOverlayExpandRequestToken += 1
                                 },
-                                suppressesActivityHeadline: activeToolPresentation?.calls.isEmpty == false
+                                onOpenFullMessage: { message in
+                                    let sessionTitle = appState.agentSessions
+                                        .first(where: { $0.id == appState.activeAgentSessionID })?.title ?? ""
+                                    AgentTranscriptReader.openSingleMessage(message, sessionTitle: sessionTitle)
+                                }
                             )
                                 .id(streamingMessage.id)
-                                .frame(maxWidth: AgentDesign.chatMaxContentWidth, alignment: .leading)
-                            if display.truncated {
-                                longMessageTruncationCard(
-                                    original: streamingMessage,
-                                    omittedLength: display.omittedLength
-                                )
-                            }
                         }
 
                         // Tool call groups are a working-state surface.
@@ -916,7 +918,9 @@ struct AgentChatTranscript: View {
     /// and the end so the latest conclusion/error is still visible while
     /// SwiftUI avoids laying out the full streaming body.
     /// `(rendered, wasTruncated, omittedLength)`.
-    private func truncatedForBubble(_ message: AgentMessage) -> (rendered: AgentMessage, truncated: Bool, omittedLength: Int) {
+    /// Static because the streaming bubble host re-runs it at flush
+    /// cadence on the live overlay content, outside this view's body.
+    static func truncatedForBubble(_ message: AgentMessage) -> (rendered: AgentMessage, truncated: Bool, omittedLength: Int) {
         let originalLength = message.content.count
         guard originalLength > Self.messageContentRenderCap else {
             return (message, false, 0)
@@ -974,44 +978,77 @@ struct AgentChatTranscript: View {
         return Array(all.prefix(all.count - Self.renderedMessageCap))
     }
 
-    /// Inline disclosure shown right under a message whose content
-    /// was truncated for the chat-pane render (see
-    /// `messageContentRenderCap`). One tap opens the full message
-    /// content in a standalone NSTextView window — same idea as the
-    /// session-wide reader, but for one bubble at a time.
-    @ViewBuilder
-    private func longMessageTruncationCard(original: AgentMessage, omittedLength: Int) -> some View {
-        Button {
-            let sessionTitle = appState.agentSessions
-                .first(where: { $0.id == appState.activeAgentSessionID })?.title ?? ""
-            AgentTranscriptReader.openSingleMessage(original, sessionTitle: sessionTitle)
-        } label: {
-            HStack(spacing: 6) {
-                Image(systemName: "doc.text.magnifyingglass")
-                    .font(.system(size: 10, weight: .medium))
-                    .foregroundStyle(.secondary)
-                Text(L10n.Transcript.messageTruncatedText(String(AgentChatTranscript.messageContentRenderCap), String(omittedLength)))
-                    .agentChatSupportingFont()
-                    .foregroundStyle(.secondary)
-                Spacer(minLength: 0)
-                Image(systemName: "arrow.up.right.square")
-                    .font(.system(size: 10, weight: .medium))
-                    .foregroundStyle(.secondary)
+    /// Hosts the live streaming bubble. Observes the runtime's streaming
+    /// overlay directly, so the ~10 Hz flush cadence re-renders only this
+    /// subtree — the transcript body above re-runs only on the slower
+    /// canonical `messages` publishes (see AgentStreamingMessageBuffer).
+    private struct StreamingBubbleHost: View {
+        @ObservedObject var overlay: AgentStreamingContentOverlay
+        let base: AgentMessage
+        let turnPresentation: AgentAssistantTurnPresentation?
+        let baseFontSize: CGFloat
+        let suppressesActivityHeadline: Bool
+        let onReferenceGeneratedImage: (String) -> Void
+        let progressPlan: AgentPlan?
+        let onShowPlan: () -> Void
+        let onOpenFullMessage: (AgentMessage) -> Void
+
+        var body: some View {
+            let live = overlay.applying(to: base)
+            let display = AgentChatTranscript.truncatedForBubble(live)
+            AgentModeMessageView(
+                message: display.rendered,
+                isStreamingThisMessage: true,
+                assistantTurnPresentation: turnPresentation,
+                baseFontSize: baseFontSize,
+                onReferenceGeneratedImage: onReferenceGeneratedImage,
+                progressPlan: progressPlan,
+                onShowPlan: onShowPlan,
+                suppressesActivityHeadline: suppressesActivityHeadline
+            )
+                .frame(maxWidth: AgentDesign.chatMaxContentWidth, alignment: .leading)
+            if display.truncated {
+                longMessageTruncationCard(original: live, omittedLength: display.omittedLength)
             }
-            .padding(.horizontal, 10)
-            .padding(.vertical, 6)
-            .frame(maxWidth: AgentDesign.chatMaxContentWidth, alignment: .leading)
-            .background(
-                RoundedRectangle(cornerRadius: 6, style: .continuous)
-                    .fill(Color(nsColor: .controlBackgroundColor).opacity(0.45))
-            )
-            .overlay(
-                RoundedRectangle(cornerRadius: 6, style: .continuous)
-                    .stroke(Color.primary.opacity(0.05), lineWidth: 1)
-            )
         }
-        .buttonStyle(.plain)
-        .help(L10n.Transcript.messageTruncatedHelp)
+
+        /// Inline disclosure shown right under a message whose content
+        /// was truncated for the chat-pane render (see
+        /// `messageContentRenderCap`). One tap opens the full message
+        /// content in a standalone NSTextView window — same idea as the
+        /// session-wide reader, but for one bubble at a time.
+        @ViewBuilder
+        private func longMessageTruncationCard(original: AgentMessage, omittedLength: Int) -> some View {
+            Button {
+                onOpenFullMessage(original)
+            } label: {
+                HStack(spacing: 6) {
+                    Image(systemName: "doc.text.magnifyingglass")
+                        .font(.system(size: 10, weight: .medium))
+                        .foregroundStyle(.secondary)
+                    Text(L10n.Transcript.messageTruncatedText(String(AgentChatTranscript.messageContentRenderCap), String(omittedLength)))
+                        .agentChatSupportingFont()
+                        .foregroundStyle(.secondary)
+                    Spacer(minLength: 0)
+                    Image(systemName: "arrow.up.right.square")
+                        .font(.system(size: 10, weight: .medium))
+                        .foregroundStyle(.secondary)
+                }
+                .padding(.horizontal, 10)
+                .padding(.vertical, 6)
+                .frame(maxWidth: AgentDesign.chatMaxContentWidth, alignment: .leading)
+                .background(
+                    RoundedRectangle(cornerRadius: 6, style: .continuous)
+                        .fill(Color(nsColor: .controlBackgroundColor).opacity(0.45))
+                )
+                .overlay(
+                    RoundedRectangle(cornerRadius: 6, style: .continuous)
+                        .stroke(Color.primary.opacity(0.05), lineWidth: 1)
+                )
+            }
+            .buttonStyle(.plain)
+            .help(L10n.Transcript.messageTruncatedHelp)
+        }
     }
 
     /// Banner shown at the top of the transcript when older messages
