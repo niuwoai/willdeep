@@ -25,6 +25,34 @@
 
 - 新增 19 条单测：路径包含按边界判定（`/a/b` 不吞 `/a/bc`）、路径规范化（尾斜杠/空白/根目录）、一个项目跨多文件夹、空名回退主文件夹名、最具体项目胜出、并列按时间且与数组顺序无关、未命中返回 nil、共享文件夹的其他claimant可枚举、项目主导分组 key、两个仓库同组、无项目会话分组不变、项目优先于 worktree 根、key 命名空间不碰撞、会话与项目的编解码往返、旧会话 JSON 兼容、store 缺失即空、store 位置在会话目录之外。
 
+## 1.232.0-rc3 - 2026-08-06
+
+### Fixed
+
+- 修掉「上下文压缩必然失败」的死锁。压缩请求此前把待压缩的 head 用 `message.content` **原文**拼成单条 user message 一次性发出，而普通对话请求走的是 `collapseOldToolResults`（长 tool result 截成 head/tail）——也就是说压缩把普通请求已经折叠掉的内容又全量塞了回去，成为全 App 最大的一个请求。现场实测：1M 窗口的会话，压缩请求 1,621,884 tokens，provider 直接 400 `maximum context length`。越需要压缩越压不动，唯一的自救手段恰好在最需要它的时刻卡死。
+- 压缩改为 map-reduce 分块：head 先按「每条消息一段」切开（tool result 走 `preferCompactSummary` 压实），再按压缩模型窗口的 15% 打包成块，逐块摘要后把分块摘要再折一轮，直到只剩一份。单条消息本身超预算的（比如一个巨大的 tool result）做头尾截断而不是丢弃，一条超长记录不会再卡死整条流水线。
+- 压缩识别 provider 的「超长」类 400（`maximum context length` / `context_length_exceeded` / `prompt is too long` 等），命中时把分块预算减半重折，而不是把一个用户无法处理的 400 直接甩到界面上。
+- 修掉上下文占用百分比的严重低估。同一个会话，环形指示器显示 54%，provider 实际已经收到 155% 的窗口用量。根因在本地估算口径 `estimateTextTokens`：**所有空白字符直接跳过不计费**（代码、JSON、终端输出里缩进换行占 20–40%），ASCII 一律按 4 字符/token（而 `call_00_JHrT6ia9tttWsQbHglDu8236`、UUID、路径这类符号密集串真实约 2 字符/token）。现在空白按 1/4 token 计，ASCII 拆成「字母」与「数字/符号」两档分别计价。
+- 上下文占用改为优先采信 provider 自己报的 `prompt_tokens`。这个真值一直躺在 `AgentMessage.promptTokens` 上（消息页脚那个 `46.68M/15.1k` 就是它），环形指示器却从来没看过一眼，全程自己按字符猜。现在取「最近一次真实读数 + 其后新增消息的本地估算」与纯本地估算的较大者；自动压缩阈值判定用同一口径，所以 75% 自动压缩不会再因为低估而整场不触发。
+- 压缩落地后真实读数会作废（该摘要已经缩小了 provider 看到的请求），此时退回纯本地估算——否则指示器会被旧读数钉在高位，反而盖掉刚刚生效的那次压缩。
+
+### Tests
+
+- 新增 12 条单测：分块后每块都在预算内且首尾段不丢失、超预算单段被截断且带 `elided` 标记、tool result 在压缩段落里被压实到原文一半以下、旧摘要排在段落首位、分块预算对 1M/8k 窗口的取值、真实 400 报文（现场原文）被识别为超长而普通 400 与 500 不被误判、`prompt_tokens` 锚点生效且压缩后作废、空白与符号密集串的新计价口径。
+- 工具 schema 估算上限由 38k 调至 48k：同一份注册表在新口径下报 42,951（tool schema 正是符号与空白密集、旧口径低估最多的那类文本），不是注册表变大。
+
+## 1.232.0-rc2 - 2026-08-06
+
+### Fixed
+
+- 修掉左侧「用户输入 minimap」在主线程上的持续空转。对 1.228.0-rc10 采样 5 秒，主线程 3748 个样本里 2699 个（72%）压在 SwiftUI 事务 flush 上，其中 450 个样本单独来自 minimap 这一个 `.overlay`——它挂在会话根视图上，SwiftUI 每次布局都会重跑好几遍，而每一遍都从头重算 `visibleMessages` 并重建全部回合摘要。窗口没人碰也在烧 CPU。
+- `AgentTranscriptTurnSummary.build` 由 O(消息数 × 工具调用数) 降为 O(消息数 + 工具调用数)：编辑类工具调用先按所属消息聚合成字典一次，不再为每条 assistant 消息重扫整个 `agentToolCalls` 数组。旧的内层循环每次迭代都要拷贝并 retain/release 一个完整的 `AgentToolCall`（含 arguments 字典），采样显示这是该函数的绝对大头（326 个样本）。长会话里消息数百、调用上千，一次重建就是几十万次迭代。
+- minimap 摘要改为按输入指纹缓存，输入没变时直接复用，不再随 `body` 反复重算整条链。指纹沿用 `AgentChatHistoryNSTextView.inputFingerprint` 的既有做法，只取 `content.count` 而不哈希正文，避免流式输出时每来一个 token 就重走多 KB 内容；工具调用只参与数量与末位 id，因为 minimap 读的 `messageID`/`toolName`/`path` 在调用创建后不再变化，状态更新不影响摘要结果。
+
+### Tests
+
+- 新增 8 条单测钉住 minimap 行为，覆盖改算法前后必须一致的语义：回合折叠 assistant 回复与编辑文件、编辑文件不跨回合泄漏、重复路径去重且保持首次出现顺序、非编辑工具与无 path 调用被忽略、只取首条非空 assistant 回复、host instruction 不产生刻度；外加缓存本身的两条——指纹不变只重建一次、指纹变化才重建。
+
 ## 1.232.0-rc1 - 2026-08-06
 
 ### Added
