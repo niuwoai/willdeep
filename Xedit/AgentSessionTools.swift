@@ -10,6 +10,88 @@ import Foundation
 enum AgentSessionTools {
     private static let maximumTitleCharacters = 120
 
+    /// Search past conversations for a phrase.
+    ///
+    /// Scoped to the current workspace unless the caller explicitly asks for
+    /// everything — and `scope: "all"` is write-tier in the registry, so the
+    /// user approves reading other projects' history rather than the model
+    /// deciding on its own.
+    ///
+    /// Loads sessions one at a time and stops early: the store keeps full
+    /// messages out of the catalog on purpose, and this must not undo that.
+    static func searchSessions(
+        arguments: [String: AgentJSONValue],
+        context: AgentToolContext
+    ) async throws -> AgentToolResult {
+        let query = arguments["query"]?.stringValue()?
+            .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        guard !query.isEmpty else {
+            throw AgentToolError.missingArgument("query")
+        }
+
+        let searchesEverywhere = (arguments["scope"]?.stringValue()?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .lowercased() ?? "workspace") == "all"
+        let includeArchived = arguments["include_archived"]?.boolValue() ?? true
+        let rawLimit = arguments["limit"]?.intValue() ?? 10
+        let limit = max(1, min(rawLimit, 30))
+
+        // Group key, not raw path: a conversation running in a Git worktree
+        // still belongs to its project, exactly as the sidebar shows it.
+        let currentGroupKey: String? = searchesEverywhere
+            ? nil
+            : context.rootDirectory?.standardizedFileURL.path
+        if !searchesEverywhere, currentGroupKey == nil {
+            return AgentToolResult(
+                summary: "no workspace",
+                payload: "This session has no workspace, so there is nothing to scope the search to. Pass `scope: \"all\"` to search every conversation — that asks the user for approval first."
+            )
+        }
+
+        let catalog = AgentSessionStore.loadAllWithMetadata().sessions
+            .filter { $0.presentationScope == .workspace }
+            .filter { includeArchived || !$0.isArchived }
+            .filter { AgentSessionSearch.belongsToWorkspace($0, groupKey: currentGroupKey) }
+            .sorted { $0.lastActivityAt > $1.lastActivityAt }
+
+        let candidates = catalog.prefix(AgentSessionSearch.Limits.sessionsScanned)
+        let wasTruncated = catalog.count > candidates.count
+
+        var matches: [AgentSessionSearchMatch] = []
+        var scanned = 0
+        for candidate in candidates {
+            if matches.count >= limit { break }
+            scanned += 1
+            // The catalog entry may be metadata-only; this materializes the
+            // transcript for just this one conversation.
+            guard let full = AgentSessionStore.load(id: candidate.id) else { continue }
+            let remaining = limit - matches.count
+            matches.append(
+                contentsOf: AgentSessionSearch.matches(
+                    in: full,
+                    query: query,
+                    limit: min(AgentSessionSearch.Limits.matchesPerSession, remaining)
+                )
+            )
+        }
+
+        let scopeDescription = searchesEverywhere
+            ? "all workspaces"
+            : "this workspace"
+        return AgentToolResult(
+            summary: matches.isEmpty
+                ? "no matches"
+                : "\(matches.count) match\(matches.count == 1 ? "" : "es")",
+            payload: AgentSessionSearch.renderPayload(
+                matches,
+                query: query,
+                scopeDescription: scopeDescription,
+                sessionsScanned: scanned,
+                wasTruncated: wasTruncated
+            )
+        )
+    }
+
     static func listWorkspaceSessions(
         arguments: [String: AgentJSONValue],
         context: AgentToolContext

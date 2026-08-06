@@ -483,6 +483,8 @@ struct AgentTurnReportCard: View {
             return L10n.Transcript.turnReportApprovalEscalated
         case .trustedServer:
             return L10n.Transcript.turnReportApprovalTrustedServer
+        case .subagentEditor:
+            return L10n.AgentDelegation.profileEditorName
         }
     }
 }

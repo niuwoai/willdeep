@@ -1083,6 +1083,18 @@ extension AppState {
     /// selected conversation first, this preserves the user's place in the
     /// console and interrupts only the runtime that owns the selected Goal.
     func stopAgentResponse(for runtime: AgentRuntime) {
+        if let projectID = runtime.session.dispatchParentProjectID,
+           let taskID = runtime.session.dispatchTaskID {
+            // Stop means stop for an unattended dispatch node as well. Without
+            // persisting this project-level pause, reopening the board would
+            // attach a fresh monitor and quietly continue the task.
+            _ = agentDispatchCoordinator.setPaused(true, goalID: projectID)
+            agentDispatchCoordinator.updateTaskState(
+                goalID: projectID,
+                taskID: taskID,
+                state: .reviewing
+            )
+        }
         if let activeTurnID = runtime.activeTurnID,
            runtime.userStoppedTurnID == activeTurnID {
             return
@@ -1679,7 +1691,20 @@ extension AppState {
         }
         guard let targetSession = agentSessions.first(where: { $0.id == id }) else { return false }
         guard activeAgentSessionID != id else {
+            // A previous switch may have selected the row just after a lazy
+            // runtime was created but before cache eviction completed. Heal
+            // that already-highlighted row on the next click instead of
+            // returning success while the transcript delegates read nil and
+            // render the new-chat dashboard.
+            guard runtime(for: id) != nil else {
+                agentSessionLoadFailure = AgentSessionLoadFailure(
+                    id: targetSession.id,
+                    title: targetSession.title
+                )
+                return false
+            }
             agentSessionLoadFailure = nil
+            subscribeToActiveRuntime()
             return true
         }
         let outgoingRuntime = activeRuntime
@@ -1793,7 +1818,12 @@ extension AppState {
             _ = autoApplyPendingAgentPatchProposals(for: runtime, source: .dispatchTask)
         }
         startAgentKnowledgeFolderWatchers(for: runtime)
-        evictInactiveAgentRuntimesIfNeeded()
+        // The caller still needs this runtime after we return. In particular,
+        // selectAgentSession flips activeAgentSessionID only after this method
+        // succeeds. Without temporary protection an older conversation can be
+        // the first cache entry evicted here, leaving a highlighted sidebar
+        // row whose transcript reads from a missing runtime.
+        evictInactiveAgentRuntimesIfNeeded(protecting: sessionID)
         return runtime
     }
 
@@ -1811,9 +1841,14 @@ extension AppState {
         return fullSession
     }
 
-    private func evictInactiveAgentRuntimesIfNeeded() {
+    private func evictInactiveAgentRuntimesIfNeeded(
+        protecting additionalProtectedID: AgentSession.ID? = nil
+    ) {
         let maximumIdleRuntimes = 6
         var protectedIDs = Set([activeAgentSessionID].compactMap { $0 })
+        if let additionalProtectedID {
+            protectedIDs.insert(additionalProtectedID)
+        }
         protectedIDs.formUnion(pendingDispatchQueue.map(\.runtimeID))
         protectedIDs.formUnion(titleSummarizationsInFlight)
         let idle = agentRuntimes.values

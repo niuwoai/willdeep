@@ -81,6 +81,14 @@ nonisolated struct AgentSession: Identifiable, Codable, Equatable {
     /// Git worktree. The tools use `workspaceLocation`; the sidebar continues
     /// to group the conversation under the original project workspace.
     var sidebarWorkspaceRootPath: String?
+    /// Explicit project ownership, once resolved. Nil means "not in a managed
+    /// project" and falls back to the path-based grouping below, which is
+    /// what every session predating projects decodes to.
+    ///
+    /// Resolution is persisted rather than recomputed: a folder may belong to
+    /// several projects, so leaving it dynamic would let adding a project
+    /// silently move old conversations into a different group.
+    var projectID: UUID?
     /// Dedicated workflow sessions are persisted like conversations, but are
     /// presented only by their owning surface.
     var presentationScope: AgentSessionPresentationScope
@@ -217,6 +225,7 @@ nonisolated struct AgentSession: Identifiable, Codable, Equatable {
         workspaceRootPath: String? = nil,
         workspaceLocation: WorkspaceLocation? = nil,
         sidebarWorkspaceRootPath: String? = nil,
+        projectID: UUID? = nil,
         presentationScope: AgentSessionPresentationScope = .workspace,
         dispatchParentProjectID: UUID? = nil,
         dispatchTaskID: UUID? = nil,
@@ -260,6 +269,7 @@ nonisolated struct AgentSession: Identifiable, Codable, Equatable {
         self.workspaceRootPath = workspaceRootPath
         self.workspaceLocation = workspaceLocation ?? workspaceRootPath.map { .local(path: $0) }
         self.sidebarWorkspaceRootPath = sidebarWorkspaceRootPath
+        self.projectID = projectID
         self.presentationScope = presentationScope
         self.dispatchParentProjectID = dispatchParentProjectID
         self.dispatchTaskID = dispatchTaskID
@@ -302,10 +312,26 @@ nonisolated struct AgentSession: Identifiable, Codable, Equatable {
 
     var isPinned: Bool { pinnedAt != nil }
     var isArchived: Bool { archivedAt != nil }
+    /// A session that has become a board goal moves to the Goals destination
+    /// and leaves the workspace sidebar, so it is listed in exactly one place.
+    ///
+    /// The test is deliberately the same one the board uses to adopt a
+    /// session (`AgentDispatchCoordinator.synchronizedGoals`): a non-empty
+    /// goal. Excluding on `interactionMode == .goal` instead used to hide the
+    /// session the moment Goal mode was switched on — before any goal had
+    /// been stated, when the board would not adopt it either — so it vanished
+    /// from both surfaces, taking its workspace group with it if it was the
+    /// only session there.
     var belongsInWorkspaceSidebar: Bool {
-        presentationScope == .workspace
-            && interactionMode != .goal
-            && currentGoal == nil
+        presentationScope == .workspace && !hasBoardGoal
+    }
+
+    /// True once this session carries a goal substantial enough for the
+    /// Goals board to own it. Must stay in lockstep with the board's own
+    /// adoption filter — see `AgentSidebarGoalVisibilityTests`.
+    var hasBoardGoal: Bool {
+        guard let currentGoal else { return false }
+        return !currentGoal.isEmpty
     }
 
     /// When the AI last produced output in this session — the timestamp the
@@ -338,6 +364,11 @@ nonisolated struct AgentSession: Identifiable, Codable, Equatable {
     }
 
     var workspaceSidebarGroupKey: String {
+        // A managed project owns the grouping outright: that is the whole
+        // point of letting several folders share one group.
+        if let projectID {
+            return Self.projectSidebarGroupKeyPrefix + projectID.uuidString
+        }
         if let sidebarWorkspaceRootPath, !sidebarWorkspaceRootPath.isEmpty {
             return sidebarWorkspaceRootPath
         }
@@ -357,13 +388,22 @@ nonisolated struct AgentSession: Identifiable, Codable, Equatable {
     }
 
     static let noWorkspaceSidebarGroupKey = "_no_workspace_"
+    /// Distinguishes a project group key from a filesystem path, so the two
+    /// can never collide in the same namespace.
+    static let projectSidebarGroupKeyPrefix = "project:"
+
+    /// The project id encoded in a sidebar group key, if it is one.
+    static func projectID(fromSidebarGroupKey key: String) -> UUID? {
+        guard key.hasPrefix(projectSidebarGroupKeyPrefix) else { return nil }
+        return UUID(uuidString: String(key.dropFirst(projectSidebarGroupKeyPrefix.count)))
+    }
 
     // Custom decoding so older session JSON without the newer fields
     // (didEditFiles, agentEditedPaths, interactionMode, approvalMode, currentPlan,
     // currentGoal) loads cleanly — every newer field uses
     // decodeIfPresent with a default.
     enum CodingKeys: String, CodingKey {
-        case id, title, workspaceRootPath, workspaceLocation, sidebarWorkspaceRootPath, presentationScope, dispatchParentProjectID, dispatchTaskID, localWorkspaceIdentity, modelID
+        case id, title, workspaceRootPath, workspaceLocation, sidebarWorkspaceRootPath, projectID, presentationScope, dispatchParentProjectID, dispatchTaskID, localWorkspaceIdentity, modelID
         case providerEntryID, providerID, providerDisplayName, openAIResponsesContinuation, managedRouting
         case createdAt, updatedAt, messages, contextSummary, contextSummaryThroughMessageID
         case didEditFiles, agentEditedPaths, agentArtifactPaths, interactionMode, approvalMode, executionAgent, delegatedTaskRuns, activeExperts, currentPlan, currentGoal, goalPlanningState, goalTurnRecoveryCheckpoint, learningEvents, latestTurnRecall, documentAttachments, knowledgeFolders, documentTaskMode, redactSensitiveAttachmentContent, sidePanelState
@@ -378,6 +418,7 @@ nonisolated struct AgentSession: Identifiable, Codable, Equatable {
         self.workspaceLocation = try c.decodeIfPresent(WorkspaceLocation.self, forKey: .workspaceLocation)
             ?? self.workspaceRootPath.map { .local(path: $0) }
         self.sidebarWorkspaceRootPath = try c.decodeIfPresent(String.self, forKey: .sidebarWorkspaceRootPath)
+        self.projectID = try c.decodeIfPresent(UUID.self, forKey: .projectID)
         self.dispatchParentProjectID = try c.decodeIfPresent(
             UUID.self,
             forKey: .dispatchParentProjectID

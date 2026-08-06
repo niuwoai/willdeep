@@ -35,7 +35,7 @@ import Combine
 /// The heavy transcript stays inside the runner; this snapshot only
 /// carries displayable metadata plus the final report.
 struct AgentSubagentRun: Identifiable, Equatable {
-    enum Status: String, Equatable {
+    enum Status: String, Codable, Equatable, Sendable {
         case running
         case completed
         case failed
@@ -135,7 +135,8 @@ final class AgentSubagentRegistry: ObservableObject {
         _ runtimeDescriptor: RuntimeDescriptor?,
         _ workspaceLocation: WorkspaceLocation?,
         _ someIMContext: SomeIMRequestContext?,
-        _ outputSchema: AgentStructuredSchema?
+        _ outputSchema: AgentStructuredSchema?,
+        _ profile: AgentSubagentProfile
     ) async throws -> AgentSubagentRunner.Outcome
 
     @Published private(set) var runs: [AgentSubagentRun] = []
@@ -161,7 +162,7 @@ final class AgentSubagentRegistry: ObservableObject {
     private var coordinatorOwnedRunIDs: Set<UUID> = []
     /// Injectable only so coordinator orchestration can be covered without a
     /// live provider. Production keeps the real read-only runner.
-    var runOperation: RunOperation = { prompt, configuration, workspaceURL, runtimeDescriptor, workspaceLocation, someIMContext, outputSchema in
+    var runOperation: RunOperation = { prompt, configuration, workspaceURL, runtimeDescriptor, workspaceLocation, someIMContext, outputSchema, profile in
         try await AgentSubagentRunner.run(
             prompt: prompt,
             configuration: configuration,
@@ -169,7 +170,8 @@ final class AgentSubagentRegistry: ObservableObject {
             runtimeDescriptor: runtimeDescriptor,
             workspaceLocation: workspaceLocation,
             someIMContext: someIMContext,
-            outputSchema: outputSchema
+            outputSchema: outputSchema,
+            profile: profile
         )
     }
 
@@ -209,6 +211,7 @@ final class AgentSubagentRegistry: ObservableObject {
         originatingTurnID: UUID? = nil,
         someIMContext: SomeIMRequestContext? = nil,
         outputSchema: AgentStructuredSchema? = nil,
+        profile: AgentSubagentProfile = AgentSubagentProfileCatalog.deep,
         queuesParentReport: Bool = true
     ) throws -> AgentSubagentRun {
         guard activeCount(forParentRuntime: parentRuntimeID) < Self.maxConcurrentPerRuntime else {
@@ -243,7 +246,8 @@ final class AgentSubagentRegistry: ObservableObject {
                     runtimeDescriptor,
                     workspaceLocation,
                     someIMContext,
-                    outputSchema
+                    outputSchema,
+                    profile
                 ) ?? AgentSubagentRunner.Outcome(
                     report: "",
                     usageTokens: 0,
@@ -251,10 +255,10 @@ final class AgentSubagentRegistry: ObservableObject {
                     toolInvocationCount: 0
                 )
             } catch is CancellationError {
-                self?.finish(id: id, status: .cancelled, report: "(subagent cancelled)")
+                self?.finish(id: id, status: .cancelled, report: "(subagent cancelled)", profileID: profile.id)
                 return
             } catch {
-                self?.finish(id: id, status: .failed, report: "Subagent failed: \(error.localizedDescription)")
+                self?.finish(id: id, status: .failed, report: "Subagent failed: \(error.localizedDescription)", profileID: profile.id)
                 return
             }
             self?.finish(
@@ -263,7 +267,10 @@ final class AgentSubagentRegistry: ObservableObject {
                 report: outcome.report,
                 usageTokens: outcome.usageTokens,
                 roundCount: outcome.roundCount,
-                toolInvocationCount: outcome.toolInvocationCount
+                toolInvocationCount: outcome.toolInvocationCount,
+                rounds: outcome.rounds,
+                didTruncate: outcome.didTruncate,
+                profileID: profile.id
             )
         }
         return run
@@ -314,7 +321,10 @@ final class AgentSubagentRegistry: ObservableObject {
             runtimeDescriptor,
             workspaceLocation,
             someIMContext,
-            outputSchema
+            outputSchema,
+            // Goal planning is a parent-owned deliberation, not a cost
+            // optimization — it stays on the parent's model and tool set.
+            AgentSubagentProfileCatalog.deep
         )
     }
 
@@ -324,7 +334,10 @@ final class AgentSubagentRegistry: ObservableObject {
         report: String,
         usageTokens: Int = 0,
         roundCount: Int = 0,
-        toolInvocationCount: Int = 0
+        toolInvocationCount: Int = 0,
+        rounds: [AgentSubagentTranscript.Round] = [],
+        didTruncate: Bool = false,
+        profileID: String? = nil
     ) {
         tasks[id] = nil
         guard let index = runs.firstIndex(where: { $0.id == id }) else { return }
@@ -334,6 +347,32 @@ final class AgentSubagentRegistry: ObservableObject {
         runs[index].usageTokens = usageTokens
         runs[index].roundCount = roundCount
         runs[index].toolInvocationCount = toolInvocationCount
+
+        // Persist the inspector record before the run snapshot can be
+        // evicted from `runs` by the history cap below.
+        let finishedRun = runs[index]
+        AppState.persistSubagentTranscript(
+            AgentSubagentTranscript(
+                runID: id,
+                label: finishedRun.label,
+                prompt: AgentSubagentTranscript.clamped(
+                    finishedRun.prompt,
+                    to: AgentSubagentTranscript.Limits.promptCharacters
+                ).text,
+                model: finishedRun.model,
+                status: status,
+                rounds: rounds,
+                report: AgentSubagentTranscript.clamped(
+                    report,
+                    to: AgentSubagentTranscript.Limits.reportCharacters
+                ).text,
+                usageTokens: usageTokens,
+                startedAt: finishedRun.startedAt,
+                finishedAt: finishedRun.finishedAt,
+                didTruncate: didTruncate,
+                profileID: profileID
+            )
+        )
 
         let parentID = runs[index].parentRuntimeID
         let coordinatorOwned = coordinatorOwnedRunIDs.contains(id)
@@ -449,6 +488,16 @@ enum AgentSubagentRunner {
         AgentToolRegistry.all.filter { allowedToolNames.contains($0.name) }
     }
 
+    /// The trade's tool table. This is the per-round cost that profiles
+    /// exist to shrink: it is resent on every round of the child loop.
+    static func toolDescriptors(
+        profile: AgentSubagentProfile,
+        writeAccessGranted: Bool = false
+    ) -> [AgentToolDescriptor] {
+        let permitted = profile.effectiveToolNames(writeAccessGranted: writeAccessGranted)
+        return AgentToolRegistry.all.filter { permitted.contains($0.name) }
+    }
+
     /// 1.85.0-rc18:虚拟工具名 —— 当 caller 传了 `outputSchema` 时,这条
     /// 工具会被追加到 sub-agent 可见的工具表里;系统提示同步要求模型
     /// 在答完后必须调它,把 JSON 字符串塞进 `data` 字段。我们这边的
@@ -462,17 +511,56 @@ enum AgentSubagentRunner {
         let usageTokens: Int
         let roundCount: Int
         let toolInvocationCount: Int
+        /// Per-round record for the subagent inspector. The runner produces
+        /// the rounds; the caller owns the run identity and stamps them into
+        /// an `AgentSubagentTranscript` before persisting.
+        var rounds: [AgentSubagentTranscript.Round] = []
+        /// True when any recorded field hit `AgentSubagentTranscript.Limits`.
+        var didTruncate: Bool = false
     }
 
     typealias StreamingTextEventHandler = @Sendable (
         AgentSubagentStreamingTextEvent
     ) async -> Void
 
-    static func systemPrompt(workspaceURL: URL?, outputSchema: AgentStructuredSchema? = nil) -> String {
+    /// The child's system prompt: invariant rules the runner owns, plus the
+    /// trade's capability section.
+    ///
+    /// Prompt order matters for prefix caching — the invariant opening and
+    /// the trade section are compile-time constants, so they stay ahead of
+    /// the per-run workspace path.
+    static func systemPrompt(
+        workspaceURL: URL?,
+        outputSchema: AgentStructuredSchema? = nil,
+        profile: AgentSubagentProfile = AgentSubagentProfileCatalog.deep,
+        writeAccess: AgentSubagentWriteAccess? = nil
+    ) -> String {
         var lines: [String] = []
         lines.append("You are a focused subagent spawned by a coding agent to complete one task.")
+        if profile.id != AgentSubagentProfileCatalog.deepID {
+            lines.append(profile.capabilityPromptSection)
+        }
+        if let writeAccess {
+            lines.append("""
+            The ONLY file you may edit is `\(writeAccess.targetRelativePath)`. Patches touching any \
+            other path are rejected automatically.
+            """)
+        }
         if let workspaceURL {
             lines.append("Workspace root: \(workspaceURL.path)")
+        }
+        if writeAccess != nil {
+            // The read-only rule block below is wrong for this trade, and a
+            // contradicted rule is worse than no rule.
+            lines.append("""
+            Rules:
+            - You have READ access plus ONE write tool (`apply_patch`), scoped to the single file named above. Everything else is denied.
+            - You cannot ask the user anything. Make reasonable assumptions and note them.
+            - Read the file before patching it. Keep the change minimal and consistent with surrounding code.
+            - Work autonomously until the edit is done, then STOP calling tools and write your final report as a normal message.
+            - Your final message IS the deliverable returned to the parent agent. State exactly what you changed and why, and flag anything you deliberately left alone.
+            """)
+            return lines.joined(separator: "\n")
         }
         if outputSchema == nil {
             lines.append("""
@@ -506,23 +594,32 @@ enum AgentSubagentRunner {
     static func toolDescriptors(includingStructuredOutput: Bool) -> [AgentToolDescriptor] {
         var descriptors = toolDescriptors
         guard includingStructuredOutput else { return descriptors }
-        descriptors.append(
-            AgentToolDescriptor(
-                name: structuredOutputToolName,
-                description: "Submit the final answer as a JSON string that satisfies the structured-output schema declared in the system prompt. Call this exactly once when done.",
-                risk: .read,
-                parameters: [
-                    AgentToolParameter(
-                        name: "data",
-                        type: .string,
-                        description: "JSON string that decodes into the required structured payload.",
-                        required: true
-                    )
-                ]
-            )
-        )
+        descriptors.append(structuredOutputDescriptor)
         return descriptors
     }
+
+    /// Caps one tool result before it enters the child's history. Unlike the
+    /// inspector's cap (storage), this one protects the model's context
+    /// window, so the notice has to be legible to the model itself.
+    static func clampedToolPayload(_ payload: String, limit: Int) -> String {
+        guard limit > 0, payload.count > limit else { return payload }
+        return String(payload.prefix(limit))
+            + "\n...[tool output truncated at \(limit) characters for this subagent trade. Narrow the request — grep for a pattern, or read a specific line range.]"
+    }
+
+    static let structuredOutputDescriptor = AgentToolDescriptor(
+        name: structuredOutputToolName,
+        description: "Submit the final answer as a JSON string that satisfies the structured-output schema declared in the system prompt. Call this exactly once when done.",
+        risk: .read,
+        parameters: [
+            AgentToolParameter(
+                name: "data",
+                type: .string,
+                description: "JSON string that decodes into the required structured payload.",
+                required: true
+            )
+        ]
+    )
 
     /// Generate one visible, free-text answer and surface it as real provider
     /// deltas. This is the first half of the roundtable's two-stage expert
@@ -592,6 +689,9 @@ enum AgentSubagentRunner {
         workspaceLocation: WorkspaceLocation? = nil,
         someIMContext: SomeIMRequestContext? = nil,
         outputSchema: AgentStructuredSchema? = nil,
+        profile: AgentSubagentProfile = AgentSubagentProfileCatalog.deep,
+        writeAccess: AgentSubagentWriteAccess? = nil,
+        patchProposalSink: (@MainActor (String?, String, Bool) async throws -> AgentPatchProposal)? = nil,
         onProgress: ((_ round: Int, _ toolInvocations: Int) -> Void)? = nil
     ) async throws -> Outcome {
         // some.im-gated providers require the session/workspace context headers on
@@ -600,18 +700,41 @@ enum AgentSubagentRunner {
         // on a some.im model hung as an empty card. Forward it here.
         let client = AgentClient(configuration: configuration, someIMContext: someIMContext)
         var transcript: [AgentMessage] = [
-            AgentMessage(role: .system, content: systemPrompt(workspaceURL: workspaceURL, outputSchema: outputSchema)),
+            AgentMessage(
+                role: .system,
+                content: systemPrompt(
+                    workspaceURL: workspaceURL,
+                    outputSchema: outputSchema,
+                    profile: profile,
+                    writeAccess: writeAccess
+                )
+            ),
             AgentMessage(role: .user, content: prompt),
         ]
         var totalTokens = 0
         var toolInvocations = 0
-        let toolList = toolDescriptors(includingStructuredOutput: outputSchema != nil)
+        // The trade's narrowed tool table — resent every round, so this is
+        // where a cheap profile earns most of its savings.
+        var toolList = toolDescriptors(
+            profile: profile,
+            writeAccessGranted: writeAccess != nil
+        )
+        if outputSchema != nil {
+            toolList.append(structuredOutputDescriptor)
+        }
+        let roundLimit = max(1, profile.maxRounds)
+        // Inspector record, built alongside the provider-facing transcript.
+        // Kept separate because this one is capped, keeps per-call timings,
+        // and drops the system prompt.
+        var recordedRounds: [AgentSubagentTranscript.Round] = []
+        var didTruncateRecord = false
 
-        for round in 1...maxRounds {
+        for round in 1...roundLimit {
             // Surface "entering round N" to the card before the (potentially
             // long) streaming round begins — this is the window the user
             // otherwise stares at a still spinner during.
             onProgress?(round, toolInvocations)
+            let roundStartedAt = Date()
             var content = ""
             var reasoning = ""
             var toolCalls: [AgentMessageToolCall] = []
@@ -636,24 +759,78 @@ enum AgentSubagentRunner {
                 toolCalls: toolCalls
             ))
 
+            let clampedContent = AgentSubagentTranscript.clamped(
+                content,
+                to: AgentSubagentTranscript.Limits.roundContentCharacters
+            )
+            let clampedReasoning = AgentSubagentTranscript.clamped(
+                reasoning,
+                to: AgentSubagentTranscript.Limits.roundContentCharacters
+            )
+            didTruncateRecord = didTruncateRecord
+                || clampedContent.didTruncate
+                || clampedReasoning.didTruncate
+            var recordedRound = AgentSubagentTranscript.Round(
+                index: round,
+                content: clampedContent.text,
+                // Only what the provider actually emitted as visible
+                // reasoning — never a reconstructed chain of thought.
+                reasoning: reasoning.isEmpty ? nil : clampedReasoning.text,
+                toolCalls: [],
+                usageTokens: turn.usageTokens,
+                startedAt: roundStartedAt,
+                finishedAt: nil
+            )
+            /// Closes the in-progress round so an early `return` still records it.
+            func sealingRound() -> [AgentSubagentTranscript.Round] {
+                var sealed = recordedRound
+                sealed.finishedAt = Date()
+                return recordedRounds + [sealed]
+            }
+            func recordToolCall(
+                _ call: AgentMessageToolCall,
+                payload: String,
+                startedAt: Date
+            ) {
+                let clampedResult = AgentSubagentTranscript.clamped(
+                    payload,
+                    to: AgentSubagentTranscript.Limits.toolResultCharacters
+                )
+                didTruncateRecord = didTruncateRecord || clampedResult.didTruncate
+                recordedRound.toolCalls.append(
+                    AgentSubagentTranscript.ToolCall(
+                        externalID: call.externalID,
+                        name: call.toolName,
+                        argumentsJSON: call.argumentsJSON,
+                        result: clampedResult.text,
+                        resultWasTruncated: clampedResult.didTruncate,
+                        durationSeconds: Date().timeIntervalSince(startedAt)
+                    )
+                )
+            }
+
             // schema 模式下:本轮里若已经成功调过 structured_output,
             // 立即结束 loop —— 别等模型再吐自由文本。
             if let outputSchema {
                 for call in toolCalls where call.toolName == structuredOutputToolName {
                     try Task.checkCancellation()
                     toolInvocations += 1
+                    let callStartedAt = Date()
                     let (ok, payload) = handleStructuredOutputCall(call, schema: outputSchema)
                     transcript.append(AgentMessage(
                         role: .tool,
                         content: payload,
                         toolCallID: call.externalID
                     ))
+                    recordToolCall(call, payload: payload, startedAt: callStartedAt)
                     if ok {
                         return Outcome(
                             report: payload,
                             usageTokens: totalTokens,
                             roundCount: round,
-                            toolInvocationCount: toolInvocations
+                            toolInvocationCount: toolInvocations,
+                            rounds: sealingRound(),
+                            didTruncate: didTruncateRecord
                         )
                     }
                 }
@@ -673,7 +850,9 @@ enum AgentSubagentRunner {
                     report: report.isEmpty ? "(subagent finished without producing a report)" : report,
                     usageTokens: totalTokens,
                     roundCount: round,
-                    toolInvocationCount: toolInvocations
+                    toolInvocationCount: toolInvocations,
+                    rounds: sealingRound(),
+                    didTruncate: didTruncateRecord
                 )
             }
 
@@ -682,37 +861,52 @@ enum AgentSubagentRunner {
             for call in toolCalls where call.toolName != structuredOutputToolName {
                 try Task.checkCancellation()
                 toolInvocations += 1
-                let payload = await executeToolCall(
+                let callStartedAt = Date()
+                let rawPayload = await executeToolCall(
                     call,
                     workspaceURL: workspaceURL,
                     runtimeDescriptor: runtimeDescriptor,
-                    workspaceLocation: workspaceLocation
+                    workspaceLocation: workspaceLocation,
+                    profile: profile,
+                    writeAccess: writeAccess,
+                    patchProposalSink: patchProposalSink
+                )
+                // Budgeted per trade: a 128K-window child cannot afford the
+                // same tool payloads a 1M-window parent shrugs off.
+                let payload = clampedToolPayload(
+                    rawPayload,
+                    limit: profile.toolPayloadCharacterLimit
                 )
                 transcript.append(AgentMessage(
                     role: .tool,
                     content: payload,
                     toolCallID: call.externalID
                 ))
+                recordToolCall(call, payload: payload, startedAt: callStartedAt)
             }
+            recordedRound.finishedAt = Date()
+            recordedRounds.append(recordedRound)
         }
 
         // schema 模式下 round cap 到了 = 没有合规的结构化答案;别给
         // caller 返回半成品。
         if outputSchema != nil {
             throw WorkflowError.structuredOutputUnavailable(
-                reason: "Subagent exhausted \(maxRounds) rounds without producing valid structured output."
+                reason: "Subagent exhausted \(roundLimit) rounds without producing valid structured output."
             )
         }
 
         // Free-text 模式 round cap 到了 — return partial value rather than
         // throwing away every token the child already spent.
         let lastText = transcript.last(where: { $0.role == .assistant && !$0.content.isEmpty })?.content ?? ""
-        let note = "[Subagent stopped after \(maxRounds) tool rounds without a final report. Last progress shown below.]"
+        let note = "[Subagent stopped after \(roundLimit) tool rounds without a final report. Last progress shown below.]"
         return Outcome(
             report: lastText.isEmpty ? note : "\(note)\n\n\(lastText)",
             usageTokens: totalTokens,
-            roundCount: maxRounds,
-            toolInvocationCount: toolInvocations
+            roundCount: roundLimit,
+            toolInvocationCount: toolInvocations,
+            rounds: recordedRounds,
+            didTruncate: didTruncateRecord
         )
     }
 
@@ -771,10 +965,33 @@ enum AgentSubagentRunner {
         _ call: AgentMessageToolCall,
         workspaceURL: URL?,
         runtimeDescriptor: RuntimeDescriptor? = nil,
-        workspaceLocation: WorkspaceLocation? = nil
+        workspaceLocation: WorkspaceLocation? = nil,
+        profile: AgentSubagentProfile = AgentSubagentProfileCatalog.deep,
+        writeAccess: AgentSubagentWriteAccess? = nil,
+        patchProposalSink: (@MainActor (String?, String, Bool) async throws -> AgentPatchProposal)? = nil
     ) async -> String {
-        guard allowedToolNames.contains(call.toolName) else {
-            return "Denied: tool `\(call.toolName)` is not available to subagents. Available tools: \(allowedToolNames.sorted().joined(separator: ", "))."
+        let permitted = profile.effectiveToolNames(writeAccessGranted: writeAccess != nil)
+        guard permitted.contains(call.toolName) else {
+            // A narrow trade being asked for a tool it does not carry is a
+            // routing mistake, not a capability gap — tell the parent how to
+            // fix it instead of leaving it to guess.
+            let available = permitted.sorted().joined(separator: ", ")
+            let redirect = profile.id == AgentSubagentProfileCatalog.deepID
+                ? ""
+                : " If this task genuinely needs `\(call.toolName)`, the parent should re-spawn with `profile=\"deep\"`."
+            return "Denied: tool `\(call.toolName)` is not available to the `\(profile.id)` subagent trade. Available tools: \(available).\(redirect)"
+        }
+
+        // The editor trade's single-file lock. Its write tool is the only
+        // way a subagent can mutate anything, so the path check lives on the
+        // execution path rather than in the prompt.
+        if let writeAccess, AgentSubagentProfileCatalog.editorWriteToolNames.contains(call.toolName) {
+            if let violation = writeAccess.violationMessage(
+                forArgumentsJSON: call.argumentsJSON,
+                workspaceURL: workspaceURL
+            ) {
+                return violation
+            }
         }
 
         var argsDict: [String: AgentJSONValue] = [:]
@@ -793,17 +1010,25 @@ enum AgentSubagentRunner {
             arguments: argsDict,
             rootDirectory: workspaceURL
         )
-        guard risk == .read else {
+        // Editor trades carry one write tool, already approved by the user
+        // for one specific file. Everything else stays read-only.
+        let isApprovedWrite = writeAccess != nil
+            && AgentSubagentProfileCatalog.editorWriteToolNames.contains(call.toolName)
+        guard risk == .read || isApprovedWrite else {
             return "Denied: subagents may only run read-only operations, and this call classified as `\(risk.rawValue)`. Report the suggested change to the parent agent instead of performing it."
         }
 
         // Forward the parent's remote runtime binding so read-only tools
         // resolve `context.remoteBackend` and execute on the same ssh/daemon
         // box the parent uses — not the local Mac.
+        // The patch sink is handed down only for an approved editor trade,
+        // so `apply_patch` remains unreachable for every other subagent —
+        // the tool errors out without a sink even if it somehow got called.
         let context = AgentToolContext(
             rootDirectory: workspaceURL,
             workspaceLocation: workspaceLocation,
-            runtimeDescriptor: runtimeDescriptor
+            runtimeDescriptor: runtimeDescriptor,
+            patchProposalSink: writeAccess == nil ? nil : patchProposalSink
         )
         do {
             let result = try await AgentToolRunner.run(

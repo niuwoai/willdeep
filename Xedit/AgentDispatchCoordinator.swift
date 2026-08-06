@@ -81,8 +81,10 @@ final class AgentDispatchCoordinator: ObservableObject {
             existingGoals.flatMap { $0.tasks.compactMap(\.runtimeSessionID) }
         )
         let sourceSessions = sessions.filter { session in
-            guard let goal = session.currentGoal else { return false }
-            guard !goal.isEmpty else { return false }
+            // Same predicate as `AgentSession.belongsInWorkspaceSidebar`'s
+            // exclusion, so the two surfaces partition sessions instead of
+            // leaving a gap one can fall into.
+            guard session.hasBoardGoal else { return false }
             // Explicit ownership handles new task sessions. Persisted task
             // IDs also remove duplicate projects created by older builds.
             return session.dispatchParentProjectID == nil

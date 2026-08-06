@@ -75,6 +75,17 @@ enum AgentToolRegistry {
             ]
         ),
         AgentToolDescriptor(
+            name: "search_sessions",
+            description: "Search the text of PAST WillDeep conversations for a phrase and return matching excerpts with their session ids. Use this when the user refers to something discussed before (\"we talked about this last week\", \"what did we decide about X\") instead of asking them to repeat it. Searches the current workspace by default; `scope: \"all\"` covers every workspace and requires the user's approval. Returns short excerpts with session ids, never whole transcripts. If an excerpt is not enough, search again with a more specific phrase; there is deliberately no way to pull an entire past conversation into this context.",
+            risk: .read,
+            parameters: [
+                AgentToolParameter(name: "query", type: .string, description: "Literal phrase to look for. Case- and accent-insensitive substring match, not a regex. Prefer a distinctive few words over a long sentence.", required: true),
+                AgentToolParameter(name: "scope", type: .string, description: "`workspace` (default) searches conversations in the current workspace. `all` searches every workspace and requires user approval — only use it when the answer is clearly not in this project.", required: false),
+                AgentToolParameter(name: "limit", type: .integer, description: "Maximum excerpts to return. Defaults to 10, capped at 30.", required: false),
+                AgentToolParameter(name: "include_archived", type: .boolean, description: "Include archived conversations. Defaults to true — archived work is exactly what tends to be forgotten.", required: false)
+            ]
+        ),
+        AgentToolDescriptor(
             name: "suggest_session_title",
             description: "Use WillDeep's configured title-summary flash model to suggest a concise title for the CURRENT session from the latest conversation context. Read-only. On a new user input, call this when the current session title looks stale or too generic; then call rename_session with the suggestion when appropriate. rename_session applies automatically without asking the user.",
             risk: .read,
@@ -1742,7 +1753,8 @@ enum AgentToolRegistry {
                 AgentToolParameter(name: "prompt", type: .string, description: "Self-contained task description for the subagent. Include all needed context — it cannot see the parent conversation or ask questions.", required: true),
                 AgentToolParameter(name: "label", type: .string, description: "Short display label for the UI (e.g. `explore-auth-flow`). Defaults to a prompt prefix.", required: false),
                 AgentToolParameter(name: "run_in_background", type: .boolean, description: "When true, return immediately with an agent handle (agent_xxxxxx); the report is injected as a system message when the subagent finishes. Up to 3 subagents may run in parallel per session. Defaults to false (wait for the report inline).", required: false),
-                AgentToolParameter(name: "model", type: .string, description: "Optional model id override for the subagent (same provider). Use a cheaper/faster model for broad exploration.", required: false)
+                AgentToolParameter(name: "profile", type: .string, description: "Which subagent trade to spawn. Each trade runs on its own model with a narrowed tool set, so prefer the narrowest one that fits the task — it is faster and far cheaper. Trades: \(AgentSubagentProfileCatalog.toolDescriptionCatalog) Defaults to `deep`.", required: false),
+                AgentToolParameter(name: "target_file", type: .string, description: "Required for `profile=\"editor\"`, ignored otherwise. Workspace-relative path of the single file the subagent may edit. The user approves this file explicitly; patches touching any other path are rejected.", required: false)
             ]
         ),
         AgentToolDescriptor(
@@ -1812,9 +1824,15 @@ enum AgentToolRegistry {
     static func tools(
         activeExperts: Set<AgentExpert>,
         interactionMode: AgentInteractionMode = .normal,
-        executionAgent: AgentExecutionAgent = .willDeep
+        executionAgent: AgentExecutionAgent = .willDeep,
+        delegationPolicy: AgentDelegationPolicy = .automatic
     ) -> [AgentToolDescriptor] {
         all.filter { descriptor in
+            // `/no-subagent` is enforced here rather than by prompt, so a
+            // model that ignores the instruction still cannot delegate.
+            if !delegationPolicy.allowsTool(named: descriptor.name) {
+                return false
+            }
             if isDelegatedCodingTool(descriptor.name),
                !shouldExposeDelegatedCodingTool(
                    descriptor.name,
@@ -1879,6 +1897,24 @@ enum AgentToolRegistry {
         // which would pop a bogus "destructive command" confirm for a plain
         // file listing. See AgentFileTools.glob / AgentTools.run.
         if name == "glob" { return .read }
+        // Spawning is read-tier except for the editor trade, which hands a
+        // child one write tool. The user approves that spawn ("let a subagent
+        // edit <file>") rather than each patch it produces.
+        if name == "spawn_agent" {
+            let profile = AgentSubagentProfileCatalog.profile(
+                id: arguments["profile"]?.stringValue()
+            )
+            return profile.requiresWriteAccess ? .write : .read
+        }
+        // Reading this workspace's own history is ordinary; reaching into
+        // every other project's conversations is the user's call, so that
+        // variant is routed through the approval card.
+        if name == "search_sessions" {
+            let scope = arguments["scope"]?.stringValue()?
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+                .lowercased()
+            return scope == "all" ? .write : .read
+        }
         guard let descriptor = descriptor(for: name) else { return .danger }
         if descriptor.name == "run_command", let command = arguments["command"]?.stringValue() {
             let sandboxDecision = AgentSandboxPolicy.commandDecision(command: command, rootDirectory: rootDirectory)

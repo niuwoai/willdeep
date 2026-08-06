@@ -12,6 +12,35 @@
 
 import SwiftUI
 
+/// Memoizes the minimap turn summaries across `body` evaluations.
+///
+/// The minimap hangs off an `.overlay` on the transcript root, so SwiftUI
+/// re-evaluates that closure several times per layout pass, and each run used
+/// to rebuild `visibleMessages` and every turn summary from scratch. A 5s
+/// main-thread sample of 1.228.0-rc10 showed the overlay alone taking ~12% of
+/// the samples on a window nobody was even touching.
+///
+/// Deliberately a reference type parked in `@State`: recomputing during a
+/// `body` evaluation must NOT invalidate the view, or the cache would feed the
+/// very re-render loop it exists to damp.
+final class AgentTranscriptMinimapCache {
+    private var fingerprint: Int?
+    private var cached: [AgentTranscriptTurnSummary] = []
+
+    /// Returns the memoized summaries when `fingerprint` is unchanged,
+    /// otherwise runs `rebuild` and stores its result.
+    func turns(
+        fingerprint incoming: Int,
+        rebuild: () -> [AgentTranscriptTurnSummary]
+    ) -> [AgentTranscriptTurnSummary] {
+        if incoming == fingerprint { return cached }
+        let fresh = rebuild()
+        fingerprint = incoming
+        cached = fresh
+        return fresh
+    }
+}
+
 /// One rendered user turn, distilled for the minimap hover card.
 struct AgentTranscriptTurnSummary: Identifiable, Equatable {
     let id: UUID            // the user message id (matches agentChatHistoryUserMessageID)
@@ -29,6 +58,7 @@ struct AgentTranscriptTurnSummary: Identifiable, Equatable {
         from messages: [AgentMessage],
         toolCalls: [AgentToolCall]
     ) -> [AgentTranscriptTurnSummary] {
+        let editedPaths = editedPathsByMessageID(in: toolCalls)
         var result: [AgentTranscriptTurnSummary] = []
         for (index, message) in messages.enumerated() where message.isOperatorInput {
             var assistantText = ""
@@ -41,12 +71,8 @@ struct AgentTranscriptTurnSummary: Identifiable, Equatable {
                         let content = next.content.trimmingCharacters(in: .whitespacesAndNewlines)
                         if !content.isEmpty { assistantText = content }
                     }
-                    for call in toolCalls where call.messageID == next.id
-                        && editToolNames.contains(call.toolName) {
-                        if let path = call.arguments["path"]?.stringValue()?
-                            .trimmingCharacters(in: .whitespacesAndNewlines), !path.isEmpty {
-                            files.append(path)
-                        }
+                    if let paths = editedPaths[next.id] {
+                        files.append(contentsOf: paths)
                     }
                 }
                 cursor += 1
@@ -63,6 +89,28 @@ struct AgentTranscriptTurnSummary: Identifiable, Equatable {
             )
         }
         return result
+    }
+
+    /// Edit-tool paths grouped by the assistant message that issued them.
+    ///
+    /// Built once per `build` call (O(toolCalls)) instead of rescanning the
+    /// whole `toolCalls` array for every assistant message of every turn.
+    /// The old nested scan was O(messages × toolCalls) — a long session has
+    /// hundreds of messages and thousands of calls, and each inner iteration
+    /// also copy/retain/released a whole `AgentToolCall`, which a main-thread
+    /// sample showed dominating this function.
+    private static func editedPathsByMessageID(
+        in toolCalls: [AgentToolCall]
+    ) -> [UUID: [String]] {
+        var grouped: [UUID: [String]] = [:]
+        for call in toolCalls where editToolNames.contains(call.toolName) {
+            guard let path = call.arguments["path"]?.stringValue()?
+                .trimmingCharacters(in: .whitespacesAndNewlines), !path.isEmpty else {
+                continue
+            }
+            grouped[call.messageID, default: []].append(path)
+        }
+        return grouped
     }
 
     private static func userVisibleText(_ message: AgentMessage) -> String {

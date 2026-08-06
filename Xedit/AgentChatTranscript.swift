@@ -201,6 +201,7 @@ struct AgentChatTranscript: View {
     /// token bumps on each tick click so re-selecting the same turn re-scrolls.
     @State private var minimapScrollToken = 0
     @State private var minimapScrollUserMessageID: UUID?
+    @State private var minimapCache = AgentTranscriptMinimapCache()
     @State private var isOlderHistoryPreviewExpanded = false
     @State private var isConversationSearchPresented = false
     @State private var conversationSearchQuery = ""
@@ -646,9 +647,39 @@ struct AgentChatTranscript: View {
     /// Turns for the left-edge user-input minimap: one entry per user message
     /// in the currently-rendered window, with its reply + edited files folded in.
     private var userInputMinimapTurns: [AgentTranscriptTurnSummary] {
-        let all = visibleMessages
-        let rendered = isConversationSearchActive ? all : renderedMessages(from: all)
-        return AgentTranscriptTurnSummary.build(from: rendered, toolCalls: appState.agentToolCalls)
+        minimapCache.turns(fingerprint: minimapInputFingerprint) {
+            let all = visibleMessages
+            let rendered = isConversationSearchActive ? all : renderedMessages(from: all)
+            return AgentTranscriptTurnSummary.build(from: rendered, toolCalls: appState.agentToolCalls)
+        }
+    }
+
+    /// Identity-only digest of everything `userInputMinimapTurns` reads, so a
+    /// repeat `body` evaluation with unchanged inputs reuses the cached
+    /// summaries instead of rebuilding the whole chain.
+    ///
+    /// Uses `content.count` rather than the bytes — same trick, and same
+    /// reasoning, as `AgentChatHistoryNSTextView.inputFingerprint`: hashing
+    /// multi-KB tool output on every streaming token would just move the cost
+    /// around. Tool calls contribute only their count and last id: the minimap
+    /// reads `messageID` / `toolName` / `arguments["path"]`, and a call's
+    /// identity and target are fixed when it is created, so a status or result
+    /// update on an existing call cannot change a summary.
+    private var minimapInputFingerprint: Int {
+        var hasher = Hasher()
+        hasher.combine(appState.agentInteractionMode)
+        hasher.combine(appState.isAgentResponding)
+        hasher.combine(isConversationSearchActive)
+        hasher.combine(appState.agentToolCalls.count)
+        hasher.combine(appState.agentToolCalls.last?.id)
+        for message in appState.agentMessages {
+            hasher.combine(message.id)
+            hasher.combine(message.role.rawValue)
+            hasher.combine(message.content.count)
+            hasher.combine(message.toolCalls.count)
+            hasher.combine(message.toolCallStatus)
+        }
+        return hasher.finalize()
     }
 
     private var isConversationSearchActive: Bool {
