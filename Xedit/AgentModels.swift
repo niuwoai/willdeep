@@ -302,10 +302,26 @@ nonisolated struct AgentSession: Identifiable, Codable, Equatable {
 
     var isPinned: Bool { pinnedAt != nil }
     var isArchived: Bool { archivedAt != nil }
+    /// A session that has become a board goal moves to the Goals destination
+    /// and leaves the workspace sidebar, so it is listed in exactly one place.
+    ///
+    /// The test is deliberately the same one the board uses to adopt a
+    /// session (`AgentDispatchCoordinator.synchronizedGoals`): a non-empty
+    /// goal. Excluding on `interactionMode == .goal` instead used to hide the
+    /// session the moment Goal mode was switched on — before any goal had
+    /// been stated, when the board would not adopt it either — so it vanished
+    /// from both surfaces, taking its workspace group with it if it was the
+    /// only session there.
     var belongsInWorkspaceSidebar: Bool {
-        presentationScope == .workspace
-            && interactionMode != .goal
-            && currentGoal == nil
+        presentationScope == .workspace && !hasBoardGoal
+    }
+
+    /// True once this session carries a goal substantial enough for the
+    /// Goals board to own it. Must stay in lockstep with the board's own
+    /// adoption filter — see `AgentSidebarGoalVisibilityTests`.
+    var hasBoardGoal: Bool {
+        guard let currentGoal else { return false }
+        return !currentGoal.isEmpty
     }
 
     /// When the AI last produced output in this session — the timestamp the
