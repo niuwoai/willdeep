@@ -233,14 +233,21 @@ extension AppState {
             normalizeMessages: true
         )
         let contextWindow = agentContextWindow
+        let historyForAnchor = agentMessages
+        let summaryThroughID = activeRuntime?.contextSummaryThroughMessageID
 
         let worker = Task.detached(priority: .utility) { () -> AgentContextTokenUsageSnapshot? in
-            let usedTokens = Self.estimateAgentTokens(workload: usedWorkload)
+            let estimated = Self.estimateAgentTokens(workload: usedWorkload)
             guard !Task.isCancelled else { return nil }
             let baselineTokens = Self.estimateAgentTokens(workload: baselineWorkload)
             guard !Task.isCancelled else { return nil }
+            let anchored = Self.providerAnchoredUsedTokens(
+                messages: historyForAnchor,
+                contextSummaryThroughMessageID: summaryThroughID
+            )
+            guard !Task.isCancelled else { return nil }
             return AgentContextTokenUsageSnapshot(
-                usedTokens: usedTokens,
+                usedTokens: max(estimated, anchored ?? 0),
                 baselineTokens: baselineTokens,
                 contextWindow: contextWindow
             )
@@ -253,6 +260,47 @@ extension AppState {
 
         guard !Task.isCancelled, activeAgentSessionID == sessionID else { return nil }
         return snapshot
+    }
+
+    /// Anchor the local estimate to the provider's own `prompt_tokens` for the
+    /// most recent request, plus a local estimate for everything appended
+    /// since. A character heuristic can only approximate a real BPE tokenizer,
+    /// and the gap is what let a 1M-window session read 54% while the provider
+    /// rejected it at 1.62M tokens — the true number was already on
+    /// `AgentMessage.promptTokens`, the gauge just never looked at it.
+    ///
+    /// Returns `nil` when no usable reading exists, including when a
+    /// compression landed at or after the reading: that summary already shrank
+    /// what the provider sees, so the old figure would pin the gauge high
+    /// forever and hide the very compression that fixed it.
+    nonisolated static func providerAnchoredUsedTokens(
+        messages: [AgentMessage],
+        contextSummaryThroughMessageID: AgentMessage.ID?
+    ) -> Int? {
+        guard let anchorIndex = messages.lastIndex(where: {
+            $0.role == .assistant && ($0.promptTokens ?? 0) > 0
+        }) else { return nil }
+        let anchorTokens = messages[anchorIndex].promptTokens ?? 0
+
+        if let throughID = contextSummaryThroughMessageID,
+           let summaryIndex = messages.firstIndex(where: { $0.id == throughID }),
+           summaryIndex >= anchorIndex {
+            return nil
+        }
+
+        // From the anchor inclusive: `prompt_tokens` priced the request that
+        // produced this assistant turn, so its own reply is new weight too.
+        let appended = modelFacingHistory(
+            messages: Array(messages[anchorIndex...]),
+            contextSummary: nil,
+            contextSummaryThroughMessageID: nil
+        )
+        // Tools and the system prompt are already inside `anchorTokens`.
+        let delta = estimateAgentTokens(
+            messages: collapseOldToolResults(in: appended),
+            tools: []
+        )
+        return anchorTokens + delta
     }
 
     nonisolated static func estimateAgentTokens(
@@ -321,19 +369,36 @@ extension AppState {
         return total
     }
 
+    /// Character-class heuristic. The previous口径 (`ascii / 4`, whitespace
+    /// free) was tuned on English prose and under-counted an agent transcript
+    /// by ~3x: tool-call ids, UUIDs, paths, JSON and terminal output are
+    /// symbol-dense (real tokenizers land near 2 chars/token there), and the
+    /// indentation/newlines that dominate code and logs were priced at zero.
+    /// A 1M-window session read as 54% full while the provider rejected the
+    /// request at 1.62M tokens. Whitespace is now billed and ASCII is split
+    /// into prose-like letters vs dense symbols; `calibratedTokenScale` still
+    /// corrects the remainder against real provider usage.
     nonisolated static func estimateTextTokens(_ text: String) -> Int {
         guard !text.isEmpty else { return 0 }
 
-        var asciiNonWhitespace = 0
+        var asciiLetters = 0
+        var asciiDense = 0
+        var whitespaceScalars = 0
         var cjkScalars = 0
         var otherScalars = 0
 
         for scalar in text.unicodeScalars {
             if scalar.properties.isWhitespace {
-                continue
-            }
-            if scalar.value <= 0x7F {
-                asciiNonWhitespace += 1
+                whitespaceScalars += 1
+            } else if scalar.value <= 0x7F {
+                let value = scalar.value
+                let isLetter = (value >= 0x41 && value <= 0x5A)
+                    || (value >= 0x61 && value <= 0x7A)
+                if isLetter {
+                    asciiLetters += 1
+                } else {
+                    asciiDense += 1
+                }
             } else if isCJKScalar(scalar) {
                 cjkScalars += 1
             } else {
@@ -341,9 +406,12 @@ extension AppState {
             }
         }
 
-        let asciiTokens = Int(ceil(Double(asciiNonWhitespace) / 4.0))
-        let otherTokens = Int(ceil(Double(otherScalars) * 0.8))
-        return max(1, asciiTokens + cjkScalars + otherTokens)
+        let total = Double(asciiLetters) / 4.0
+            + Double(asciiDense) / 2.0
+            + Double(whitespaceScalars) / 4.0
+            + Double(cjkScalars)
+            + Double(otherScalars) * 0.8
+        return max(1, Int(ceil(total)))
     }
 
     nonisolated static func isCJKScalar(_ scalar: UnicodeScalar) -> Bool {
