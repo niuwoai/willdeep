@@ -30,6 +30,22 @@ nonisolated enum AgentComposerLocalPanelTrigger {
 }
 
 extension AppState {
+    /// `/subagent` and `/no-subagent` entry point: send `text` as an ordinary
+    /// user turn, but under an explicit delegation directive.
+    ///
+    /// The text arrives as the slash command's arguments (the composer was
+    /// already cleared by `executeSlashCommand`), so it is written back into
+    /// the input before reusing the normal send path — that keeps staged
+    /// images, skills and file attachments attached to this turn.
+    func sendAgentMessage(withDelegationPolicy policy: AgentDelegationPolicy, text: String) {
+        guard let runtime = activeRuntime ?? activeRuntimeAfterCreatingNewSession() else { return }
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+        runtime.input = trimmed
+        runtime.pendingDelegationPolicy = policy
+        sendAgentMessage()
+    }
+
     func sendAgentMessage() {
         // The UI's send button always targets whatever session is on
         // screen — that's the active runtime by definition. If there
@@ -124,13 +140,19 @@ extension AppState {
         runtime.pendingIncludeWorkspaceOverview = false
 
         if runtime.isResponding {
+            // The directive belongs to this message, not to whatever turn is
+            // still streaming — park it on the queue entry and clear the
+            // staging slot so the in-flight turn is unaffected.
+            let queuedDelegationPolicy = runtime.pendingDelegationPolicy
+            runtime.pendingDelegationPolicy = .automatic
             runtime.queuedMessages.append(
                 AgentQueuedMessage(
                     text: prompt,
                     images: images,
                     textAttachments: textAttachments,
                     attachedSkills: skills,
-                    executionAgent: executionAgent
+                    executionAgent: executionAgent,
+                    delegationPolicy: queuedDelegationPolicy
                 )
             )
             if closeBlockingAgentToolDecision(for: runtime, reason: "New message sent") {

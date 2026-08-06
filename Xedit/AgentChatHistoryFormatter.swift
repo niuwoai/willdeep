@@ -142,6 +142,11 @@ enum AgentChatHistoryRenderer {
             hasher.combine(attachment.content)
         }
         hasher.combine(m.toolCallID)
+        // Both drive the delegation marker line above the user bubble; the
+        // "unhonored" verdict lands after the turn ends, so a stale cached
+        // render would otherwise keep showing the pre-verdict marker.
+        hasher.combine(m.delegationPolicy?.rawValue)
+        hasher.combine(m.delegationPolicyUnhonored)
         hasher.combine(m.createdAt)
         hasher.combine(m.reasoningContent)
         hasher.combine(m.usageTokens)
@@ -502,6 +507,19 @@ enum AgentChatHistoryRenderer {
 
             let hasUserTextBubbleContent = message.role == .user
                 && (!message.textAttachments.isEmpty || !body.isEmpty)
+            // `/subagent` / `/no-subagent` audit marker, above the bubble so a
+            // reopened session still shows which directive the turn ran under.
+            if message.role == .user, let delegationMarker = message.delegationMarkerTitle {
+                result.append(NSAttributedString(
+                    string: delegationMarker + "\n",
+                    attributes: [
+                        .font: NSFont.systemFont(ofSize: max(9, baseFontSize - 3)),
+                        .foregroundColor: secondaryColor,
+                        .paragraphStyle: bodyParagraphStyle(for: message.role, layoutWidth: layoutWidth),
+                        .agentChatHistoryUserMessageID: message.id.uuidString,
+                    ]
+                ))
+            }
             if message.role == .user, !message.images.isEmpty {
                 let imageStyle = userImageParagraphStyle(layoutWidth: layoutWidth)
                 let imageStart = result.length

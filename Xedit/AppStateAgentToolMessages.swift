@@ -38,6 +38,26 @@ extension AppState {
         )
     }
 
+    /// Record whether a `/subagent` turn actually delegated.
+    ///
+    /// `.required` cannot be enforced in code (see `AgentDelegationPolicy`),
+    /// so instead of silently pretending the directive held, the turn's user
+    /// message keeps an honest verdict that the transcript marker renders.
+    /// `.forbidden` needs no audit — the tool table already guaranteed it.
+    func auditDelegationPolicyForFinishedTurn(in runtime: AgentRuntime) {
+        let policy = runtime.currentTurnDelegationPolicy
+        runtime.currentTurnDelegationPolicy = .automatic
+        guard policy == .required else { return }
+        guard let index = runtime.messages.lastIndex(where: {
+            $0.role == .user && $0.delegationPolicy == .required
+        }) else { return }
+
+        let unhonored = !policy.isHonored(spawnCallCount: runtime.currentTurnSpawnAgentCallCount)
+        guard runtime.messages[index].delegationPolicyUnhonored != unhonored else { return }
+        runtime.messages[index].delegationPolicyUnhonored = unhonored
+        persistAgentSession(runtime: runtime, touchUpdatedAt: false, moveToFront: false)
+    }
+
     /// Execute one `spawn_agent` tool call: synchronous runs await the
     /// child loop and return its report inline; background runs return
     /// a handle and deliver via `subagentReportNotice` on a later round.
@@ -51,6 +71,10 @@ extension AppState {
         runtimeDescriptor: RuntimeDescriptor?,
         workspaceLocation: WorkspaceLocation?
     ) async {
+        // Counted before any validation: a `/subagent` turn that tried to
+        // delegate and failed still honored the directive.
+        runtime.currentTurnSpawnAgentCallCount += 1
+
         func finishRecord(status: AgentToolCallStatus, summary: String, payload: String, errorMessage: String? = nil) {
             if let index = runtime.toolCalls.firstIndex(where: { $0.id == recordID }) {
                 runtime.toolCalls[index].status = status
@@ -77,6 +101,20 @@ extension AppState {
             guard let index = runtime.toolCalls.firstIndex(where: { $0.id == recordID }) else { return }
             if let model { runtime.toolCalls[index].subagentModel = model }
             if let progress { runtime.toolCalls[index].subagentProgress = progress }
+        }
+
+        // Bind the run to both the live card and the persisted assistant
+        // message: the former drives the inspector button this session, the
+        // latter is what survives a reopen.
+        func bindSubagentRun(_ runID: UUID) {
+            if let index = runtime.toolCalls.firstIndex(where: { $0.id == recordID }) {
+                runtime.toolCalls[index].subagentRunID = runID
+            }
+            bindSubagentRunToPersistedToolCall(
+                runID: runID,
+                externalID: call.externalID,
+                runtime: runtime
+            )
         }
 
         let prompt = arguments["prompt"]?.stringValue()?
@@ -119,6 +157,7 @@ extension AppState {
                     parentRuntimeID: runtime.id,
                     originatingTurnID: runtime.activeTurnID
                 )
+                bindSubagentRun(run.id)
                 finishRecord(
                     status: .succeeded,
                     summary: "started \(run.displayHandle)",
@@ -135,6 +174,37 @@ extension AppState {
             return
         }
 
+        // Synchronous runs bypass the registry, so mint the inspector
+        // identity here — without it this run would finish with a report and
+        // no reviewable record, which is the gap the inspector exists to fix.
+        let runID = UUID()
+        let startedAt = Date()
+        bindSubagentRun(runID)
+
+        func persist(status: AgentSubagentRun.Status, outcome: AgentSubagentRunner.Outcome?, report: String) {
+            AppState.persistSubagentTranscript(
+                AgentSubagentTranscript(
+                    runID: runID,
+                    label: label,
+                    prompt: AgentSubagentTranscript.clamped(
+                        prompt,
+                        to: AgentSubagentTranscript.Limits.promptCharacters
+                    ).text,
+                    model: childConfiguration.model,
+                    status: status,
+                    rounds: outcome?.rounds ?? [],
+                    report: AgentSubagentTranscript.clamped(
+                        report,
+                        to: AgentSubagentTranscript.Limits.reportCharacters
+                    ).text,
+                    usageTokens: outcome?.usageTokens ?? 0,
+                    startedAt: startedAt,
+                    finishedAt: Date(),
+                    didTruncate: outcome?.didTruncate ?? false
+                )
+            )
+        }
+
         do {
             let outcome = try await AgentSubagentRunner.run(
                 prompt: prompt,
@@ -148,12 +218,17 @@ extension AppState {
                 }
             )
             let stats = "(subagent \(label): \(outcome.roundCount) round\(outcome.roundCount == 1 ? "" : "s"), \(outcome.toolInvocationCount) tool call\(outcome.toolInvocationCount == 1 ? "" : "s")\(outcome.usageTokens > 0 ? ", \(outcome.usageTokens) tokens" : ""))"
+            persist(status: .completed, outcome: outcome, report: outcome.report)
             finishRecord(
                 status: .succeeded,
                 summary: stats,
                 payload: "\(outcome.report)\n\n\(stats)"
             )
         } catch is CancellationError {
+            // No outcome to record, but the prompt/model/timing still explain
+            // what was cancelled — better than an inspector button that opens
+            // onto nothing.
+            persist(status: .cancelled, outcome: nil, report: "(subagent cancelled)")
             finishRecord(
                 status: .failed,
                 summary: "cancelled",
@@ -161,12 +236,39 @@ extension AppState {
                 errorMessage: "Cancelled"
             )
         } catch {
+            persist(status: .failed, outcome: nil, report: "Subagent failed: \(error.localizedDescription)")
             finishRecord(
                 status: .failed,
                 summary: "subagent failed",
                 payload: "Tool error: \(error.localizedDescription)",
                 errorMessage: error.localizedDescription
             )
+        }
+    }
+
+    /// Copy the run id onto the persisted assistant tool call so reopening
+    /// the session still resolves the inspector record. `runtime.toolCalls`
+    /// is render-only state and does not survive a restart.
+    func bindSubagentRunToPersistedToolCall(
+        runID: UUID,
+        externalID: String,
+        runtime: AgentRuntime
+    ) {
+        guard let messageIndex = runtime.messages.lastIndex(where: { message in
+            message.toolCalls.contains { $0.externalID == externalID }
+        }) else { return }
+        guard let callIndex = runtime.messages[messageIndex].toolCalls
+            .firstIndex(where: { $0.externalID == externalID }) else { return }
+        runtime.messages[messageIndex].toolCalls[callIndex].subagentRunID = runID
+        persistAgentSession(runtime: runtime, touchUpdatedAt: false, moveToFront: false)
+    }
+
+    /// Writes off the main actor: a long child loop's record can run to
+    /// hundreds of KB, and this is autosave-adjacent work the UI must not
+    /// wait on.
+    nonisolated static func persistSubagentTranscript(_ transcript: AgentSubagentTranscript) {
+        Task.detached(priority: .utility) {
+            AgentSubagentTranscriptStore.save(transcript)
         }
     }
 

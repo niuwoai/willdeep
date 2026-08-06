@@ -35,7 +35,7 @@ import Combine
 /// The heavy transcript stays inside the runner; this snapshot only
 /// carries displayable metadata plus the final report.
 struct AgentSubagentRun: Identifiable, Equatable {
-    enum Status: String, Equatable {
+    enum Status: String, Codable, Equatable, Sendable {
         case running
         case completed
         case failed
@@ -263,7 +263,9 @@ final class AgentSubagentRegistry: ObservableObject {
                 report: outcome.report,
                 usageTokens: outcome.usageTokens,
                 roundCount: outcome.roundCount,
-                toolInvocationCount: outcome.toolInvocationCount
+                toolInvocationCount: outcome.toolInvocationCount,
+                rounds: outcome.rounds,
+                didTruncate: outcome.didTruncate
             )
         }
         return run
@@ -324,7 +326,9 @@ final class AgentSubagentRegistry: ObservableObject {
         report: String,
         usageTokens: Int = 0,
         roundCount: Int = 0,
-        toolInvocationCount: Int = 0
+        toolInvocationCount: Int = 0,
+        rounds: [AgentSubagentTranscript.Round] = [],
+        didTruncate: Bool = false
     ) {
         tasks[id] = nil
         guard let index = runs.firstIndex(where: { $0.id == id }) else { return }
@@ -334,6 +338,31 @@ final class AgentSubagentRegistry: ObservableObject {
         runs[index].usageTokens = usageTokens
         runs[index].roundCount = roundCount
         runs[index].toolInvocationCount = toolInvocationCount
+
+        // Persist the inspector record before the run snapshot can be
+        // evicted from `runs` by the history cap below.
+        let finishedRun = runs[index]
+        AppState.persistSubagentTranscript(
+            AgentSubagentTranscript(
+                runID: id,
+                label: finishedRun.label,
+                prompt: AgentSubagentTranscript.clamped(
+                    finishedRun.prompt,
+                    to: AgentSubagentTranscript.Limits.promptCharacters
+                ).text,
+                model: finishedRun.model,
+                status: status,
+                rounds: rounds,
+                report: AgentSubagentTranscript.clamped(
+                    report,
+                    to: AgentSubagentTranscript.Limits.reportCharacters
+                ).text,
+                usageTokens: usageTokens,
+                startedAt: finishedRun.startedAt,
+                finishedAt: finishedRun.finishedAt,
+                didTruncate: didTruncate
+            )
+        )
 
         let parentID = runs[index].parentRuntimeID
         let coordinatorOwned = coordinatorOwnedRunIDs.contains(id)
@@ -462,6 +491,12 @@ enum AgentSubagentRunner {
         let usageTokens: Int
         let roundCount: Int
         let toolInvocationCount: Int
+        /// Per-round record for the subagent inspector. The runner produces
+        /// the rounds; the caller owns the run identity and stamps them into
+        /// an `AgentSubagentTranscript` before persisting.
+        var rounds: [AgentSubagentTranscript.Round] = []
+        /// True when any recorded field hit `AgentSubagentTranscript.Limits`.
+        var didTruncate: Bool = false
     }
 
     typealias StreamingTextEventHandler = @Sendable (
@@ -606,12 +641,18 @@ enum AgentSubagentRunner {
         var totalTokens = 0
         var toolInvocations = 0
         let toolList = toolDescriptors(includingStructuredOutput: outputSchema != nil)
+        // Inspector record, built alongside the provider-facing transcript.
+        // Kept separate because this one is capped, keeps per-call timings,
+        // and drops the system prompt.
+        var recordedRounds: [AgentSubagentTranscript.Round] = []
+        var didTruncateRecord = false
 
         for round in 1...maxRounds {
             // Surface "entering round N" to the card before the (potentially
             // long) streaming round begins — this is the window the user
             // otherwise stares at a still spinner during.
             onProgress?(round, toolInvocations)
+            let roundStartedAt = Date()
             var content = ""
             var reasoning = ""
             var toolCalls: [AgentMessageToolCall] = []
@@ -636,24 +677,78 @@ enum AgentSubagentRunner {
                 toolCalls: toolCalls
             ))
 
+            let clampedContent = AgentSubagentTranscript.clamped(
+                content,
+                to: AgentSubagentTranscript.Limits.roundContentCharacters
+            )
+            let clampedReasoning = AgentSubagentTranscript.clamped(
+                reasoning,
+                to: AgentSubagentTranscript.Limits.roundContentCharacters
+            )
+            didTruncateRecord = didTruncateRecord
+                || clampedContent.didTruncate
+                || clampedReasoning.didTruncate
+            var recordedRound = AgentSubagentTranscript.Round(
+                index: round,
+                content: clampedContent.text,
+                // Only what the provider actually emitted as visible
+                // reasoning — never a reconstructed chain of thought.
+                reasoning: reasoning.isEmpty ? nil : clampedReasoning.text,
+                toolCalls: [],
+                usageTokens: turn.usageTokens,
+                startedAt: roundStartedAt,
+                finishedAt: nil
+            )
+            /// Closes the in-progress round so an early `return` still records it.
+            func sealingRound() -> [AgentSubagentTranscript.Round] {
+                var sealed = recordedRound
+                sealed.finishedAt = Date()
+                return recordedRounds + [sealed]
+            }
+            func recordToolCall(
+                _ call: AgentMessageToolCall,
+                payload: String,
+                startedAt: Date
+            ) {
+                let clampedResult = AgentSubagentTranscript.clamped(
+                    payload,
+                    to: AgentSubagentTranscript.Limits.toolResultCharacters
+                )
+                didTruncateRecord = didTruncateRecord || clampedResult.didTruncate
+                recordedRound.toolCalls.append(
+                    AgentSubagentTranscript.ToolCall(
+                        externalID: call.externalID,
+                        name: call.toolName,
+                        argumentsJSON: call.argumentsJSON,
+                        result: clampedResult.text,
+                        resultWasTruncated: clampedResult.didTruncate,
+                        durationSeconds: Date().timeIntervalSince(startedAt)
+                    )
+                )
+            }
+
             // schema 模式下:本轮里若已经成功调过 structured_output,
             // 立即结束 loop —— 别等模型再吐自由文本。
             if let outputSchema {
                 for call in toolCalls where call.toolName == structuredOutputToolName {
                     try Task.checkCancellation()
                     toolInvocations += 1
+                    let callStartedAt = Date()
                     let (ok, payload) = handleStructuredOutputCall(call, schema: outputSchema)
                     transcript.append(AgentMessage(
                         role: .tool,
                         content: payload,
                         toolCallID: call.externalID
                     ))
+                    recordToolCall(call, payload: payload, startedAt: callStartedAt)
                     if ok {
                         return Outcome(
                             report: payload,
                             usageTokens: totalTokens,
                             roundCount: round,
-                            toolInvocationCount: toolInvocations
+                            toolInvocationCount: toolInvocations,
+                            rounds: sealingRound(),
+                            didTruncate: didTruncateRecord
                         )
                     }
                 }
@@ -673,7 +768,9 @@ enum AgentSubagentRunner {
                     report: report.isEmpty ? "(subagent finished without producing a report)" : report,
                     usageTokens: totalTokens,
                     roundCount: round,
-                    toolInvocationCount: toolInvocations
+                    toolInvocationCount: toolInvocations,
+                    rounds: sealingRound(),
+                    didTruncate: didTruncateRecord
                 )
             }
 
@@ -682,6 +779,7 @@ enum AgentSubagentRunner {
             for call in toolCalls where call.toolName != structuredOutputToolName {
                 try Task.checkCancellation()
                 toolInvocations += 1
+                let callStartedAt = Date()
                 let payload = await executeToolCall(
                     call,
                     workspaceURL: workspaceURL,
@@ -693,7 +791,10 @@ enum AgentSubagentRunner {
                     content: payload,
                     toolCallID: call.externalID
                 ))
+                recordToolCall(call, payload: payload, startedAt: callStartedAt)
             }
+            recordedRound.finishedAt = Date()
+            recordedRounds.append(recordedRound)
         }
 
         // schema 模式下 round cap 到了 = 没有合规的结构化答案;别给
@@ -712,7 +813,9 @@ enum AgentSubagentRunner {
             report: lastText.isEmpty ? note : "\(note)\n\n\(lastText)",
             usageTokens: totalTokens,
             roundCount: maxRounds,
-            toolInvocationCount: toolInvocations
+            toolInvocationCount: toolInvocations,
+            rounds: recordedRounds,
+            didTruncate: didTruncateRecord
         )
     }
 
