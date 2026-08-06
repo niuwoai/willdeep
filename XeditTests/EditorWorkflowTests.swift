@@ -37,6 +37,15 @@ extension WillDeepTests {
         #expect(decoded.path == path)
     }
 
+    @Test("native document-open URLs pass through unchanged")
+    func testNativeDocumentOpenURL() throws {
+        let fileURL = URL(fileURLWithPath: "/tmp/native-open.txt")
+
+        let decoded = try #require(WillDeepExternalURLParser.fileURL(fromOpenURL: fileURL))
+
+        #expect(decoded == fileURL.standardizedFileURL)
+    }
+
     @Test("plain launch opens Agent directly while explicit URLs open Editor")
     func testPlainLaunchOpensAgentDirectly() {
         #expect(InitialLaunchPolicy.plainLaunchWindowID == AgentWindowID.value)
@@ -44,6 +53,41 @@ extension WillDeepTests {
         #expect(InitialLaunchPolicy.shouldOpenEditor(
             forInitialExternalURL: URL(fileURLWithPath: "/tmp/willdeep-explicit-open.md")
         ))
+    }
+
+    @Test("cold external URL launch is routed away from the Agent-only scene")
+    func testColdExternalURLLaunchRequiresEditor() {
+        var components = URLComponents()
+        components.scheme = "willdeep"
+        components.host = "open"
+        components.queryItems = [URLQueryItem(name: "path", value: "/tmp/from-cli.txt")]
+
+        #expect(InitialLaunchPolicy.shouldOpenEditor(forInitialExternalURL: components.url))
+    }
+
+    @Test("AppKit queues a cold CLI URL until an Editor-capable scene appears")
+    @MainActor
+    func testColdCLIURLIsQueuedForEditorScene() throws {
+        let router = WillDeepExternalOpenRouter()
+        let url = try #require(URL(string: "willdeep://open?path=%2Ftmp%2Ffrom-cli.txt"))
+
+        #expect(router.enqueue(url, now: Date(timeIntervalSince1970: 100)))
+        #expect(router.drain() == [url])
+        #expect(router.drain().isEmpty)
+    }
+
+    @Test("AppKit and SwiftUI duplicate URL callbacks open one Editor")
+    @MainActor
+    func testDuplicateCLIURLCallbacksAreSuppressed() throws {
+        let router = WillDeepExternalOpenRouter()
+        let url = try #require(URL(string: "willdeep://open?path=%2Ftmp%2Fonce.txt"))
+        let firstDelivery = Date(timeIntervalSince1970: 100)
+
+        #expect(router.enqueue(url, now: firstDelivery))
+        #expect(router.drain() == [url])
+        #expect(!router.enqueue(url, now: firstDelivery.addingTimeInterval(0.5)))
+        #expect(router.drain().isEmpty)
+        #expect(router.enqueue(url, now: firstDelivery.addingTimeInterval(3)))
     }
 
     @Test("closing the last editor tab closes the window instead of showing an empty state")
@@ -550,13 +594,18 @@ extension WillDeepTests {
         #expect(changed == Set([2, 4]))
     }
 
-    @Test("active tab exposes dirty gutter line numbers")
-    func testActiveTabExposesDirtyGutterLineNumbers() {
+    @MainActor
+    @Test("active tab computes dirty gutter line numbers without blocking typing")
+    func testActiveTabExposesDirtyGutterLineNumbers() async throws {
         let tempDir = FileManager.default.temporaryDirectory
         let fileURL = tempDir.appendingPathComponent("willdeep_dirty_gutter_\(UUID().uuidString).swift")
         let appState = AppState(openedFileURL: fileURL, fileContent: "let a = 1\nlet b = 2")
 
         appState.fileContent = "let a = 1\nlet b = 3"
+        appState.isEdited = true
+        for _ in 0..<20 where appState.changedLineNumbers != Set([2]) {
+            try await Task.sleep(for: .milliseconds(50))
+        }
 
         #expect(appState.changedLineNumbers == Set([2]))
     }

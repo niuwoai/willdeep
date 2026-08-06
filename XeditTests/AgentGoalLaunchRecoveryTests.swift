@@ -76,6 +76,19 @@ struct AgentGoalLaunchRecoveryTests {
         #expect(AgentGoalLaunchRecoveryPolicy.action(for: completed) == .discardStaleCheckpoint)
     }
 
+    @Test("dispatch child checkpoints are owned by the dispatch scheduler")
+    func dispatchChildDoesNotUseGenericGoalRecovery() {
+        var session = makeSession(
+            planStatus: .executing,
+            checkpoint: AgentGoalTurnRecoveryCheckpoint()
+        )
+        session.presentationScope = .dispatchBoard
+        session.dispatchParentProjectID = UUID()
+        session.dispatchTaskID = UUID()
+
+        #expect(AgentGoalLaunchRecoveryPolicy.action(for: session) == .discardStaleCheckpoint)
+    }
+
     @Test("checkpoint arming requires native approved Goal work")
     func checkpointArmingIsNarrow() {
         let goal = makeGoal()

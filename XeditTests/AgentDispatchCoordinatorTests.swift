@@ -1654,6 +1654,110 @@ struct AgentDispatchCoordinatorTests {
         #expect(appState.agentDispatchCoordinator.selectedGoalID == project.id)
     }
 
+    @Test("stopping a dispatch child pauses its project instead of allowing hidden recovery")
+    func stoppingDispatchChildPausesProject() throws {
+        let appState = AppState()
+        appState.agentDispatchCoordinator.resetForTests()
+        let project = appState.startDispatchGoalSession(
+            inWorkspaceAt: FileManager.default.temporaryDirectory.path
+        )
+        appState.setAgentGoal(statement: "停止后保持停止", items: ["不得自动重跑"])
+        appState.agentDispatchCoordinator.synchronize(with: appState.agentSessions)
+        let task = try #require(appState.agentDispatchCoordinator.appendTask(
+            title: "后台节点",
+            goalID: project.id
+        ))
+        let child = appState.startNewAgentSession(
+            inWorkspaceAt: FileManager.default.temporaryDirectory.path
+        )
+        let childRuntime = try #require(appState.runtime(for: child.id))
+        childRuntime.session.presentationScope = .dispatchBoard
+        childRuntime.session.dispatchParentProjectID = project.id
+        childRuntime.session.dispatchTaskID = task.id
+        appState.agentDispatchCoordinator.updateTaskState(
+            goalID: project.id,
+            taskID: task.id,
+            state: .running
+        )
+
+        appState.stopAgentResponse(for: childRuntime)
+
+        let persisted = try #require(
+            appState.agentDispatchCoordinator.goals.first(where: { $0.id == project.id })
+        )
+        #expect(persisted.isPaused)
+        #expect(persisted.tasks.first(where: { $0.id == task.id })?.state == .reviewing)
+    }
+
+    @Test("reopening a dispatch project observes completion without launching downstream work")
+    func reopeningDispatchProjectDoesNotLaunchQueuedTask() async throws {
+        let workspace = FileManager.default.temporaryDirectory
+            .appendingPathComponent("willdeep-dispatch-observe-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: workspace, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: workspace) }
+
+        let completedTaskID = UUID()
+        let queuedTaskID = UUID()
+        let appState = AppState()
+        appState.agentDispatchCoordinator.resetForTests()
+        let project = appState.startDispatchGoalSession(inWorkspaceAt: workspace.path)
+        let projectRuntime = try #require(appState.runtime(for: project.id))
+        projectRuntime.currentGoal = AgentGoal(
+            statement: "恢复时只观察",
+            checklist: [AgentGoal.Item(text: "全部完成")],
+            dispatchPlan: AgentGoalDispatchPlan(nodes: [
+                .init(
+                    id: completedTaskID,
+                    key: "DONE-1",
+                    title: "已结束节点",
+                    dependencyIDs: [],
+                    primaryProfileID: nil,
+                    fallbackProfileIDs: [],
+                    acceptanceCriteria: ["节点完成"]
+                ),
+                .init(
+                    id: queuedTaskID,
+                    key: "NEXT-1",
+                    title: "不得自动启动",
+                    dependencyIDs: [completedTaskID],
+                    primaryProfileID: nil,
+                    fallbackProfileIDs: [],
+                    acceptanceCriteria: ["等待明确恢复"]
+                ),
+            ])
+        )
+        appState.persistAgentSession(runtime: projectRuntime)
+        appState.agentDispatchCoordinator.synchronize(with: appState.agentSessions)
+
+        let child = appState.startNewAgentSession(inWorkspaceAt: workspace.path)
+        let childRuntime = try #require(appState.runtime(for: child.id))
+        childRuntime.session.presentationScope = .dispatchBoard
+        childRuntime.session.dispatchParentProjectID = project.id
+        childRuntime.session.dispatchTaskID = completedTaskID
+        childRuntime.currentGoal = AgentGoal(
+            statement: "已结束节点",
+            checklist: [AgentGoal.Item(text: "节点完成", done: true)]
+        )
+        appState.persistAgentSession(runtime: childRuntime)
+        appState.agentDispatchCoordinator.markTaskStarted(
+            goalID: project.id,
+            taskID: completedTaskID,
+            executor: .willDeep,
+            target: .local,
+            runtimeSessionID: child.id
+        )
+
+        appState.resumeDispatchGoal(goalID: project.id)
+        try await Task.sleep(for: .milliseconds(700))
+
+        let refreshed = try #require(
+            appState.agentDispatchCoordinator.goals.first(where: { $0.id == project.id })
+        )
+        #expect(refreshed.tasks.first(where: { $0.id == completedTaskID })?.state == .merged)
+        #expect(refreshed.tasks.first(where: { $0.id == queuedTaskID })?.state == .queued)
+        #expect(refreshed.tasks.first(where: { $0.id == queuedTaskID })?.runtimeSessionID == nil)
+    }
+
     private func makeSandbox() throws -> DefaultsSandbox {
         let suiteName = "willdeep-dispatch-\(UUID().uuidString)"
         let defaults = try #require(UserDefaults(suiteName: suiteName))
