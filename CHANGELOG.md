@@ -1,7 +1,26 @@
 # Changelog
 
-> 当前文件保留最新版本（1.234.0-rc4 至 1.109.0-rc340）。
+> 当前文件保留最新版本（1.234.0-rc5 至 1.109.0-rc340）。
 > 更早的 1000 个版本已移至 [CHANGELOG-ARCHIVE.md](CHANGELOG-ARCHIVE.md)。
+
+## 1.234.0-rc5 - 2026-08-06
+
+### Fixed
+
+- `edit_file` 精确匹配失败时不再直接报错：新增两级空白容错回退——先忽略行尾空白，再容忍统一的缩进偏移并把 new_string 自动重排到文件真实缩进；仍无法定位时错误里附带针对性诊断（old_string 残留 read_file 行号前缀、首行能对上但后续分叉时报出锚点行号），模型可以据此自我修正而不是盲目重试。歧义（多处匹配）与真实分叉照旧硬报错，不放宽写入边界。
+- `read_file` 修复 64KB 字节硬截断切断多字节 UTF-8 → 整段读取回退 Latin-1 解码 → 所有中文变乱码的问题：16MB 以内文件改为整文件解码 + 行边界窗口，超大文件的字节窗口也会先退到 UTF-8 字符边界再解码。
+- `read_file` 新增 `offset`（起始行）与 `limit`（行数）参数，截断提示明确给出续读 offset；此前超过 256KB 的文件尾部对模型完全不可达，只能凭记忆构造 old_string。
+- `read_file` 改为优先读取打开标签页的编辑缓冲区（与 `edit_file` 匹配的是同一份内容）；此前标签页有未保存修改时，模型读到的磁盘旧内容与编辑目标不一致，后续编辑必然失败。
+- `search_files` / `grep_files` 结果行超过 200 字符截断时显式标注 `…[line truncated]`，并在 `edit_file.old_string` 参数说明中禁止用 grep 片段拼 old_string，避免残行被当成精确匹配源。
+- 修复 `edit_file` diff 合成器在 CRLF 文件上的存量问题：`\r\n` 在 Swift 中是单个 Character，按字符扫描找不到换行、按字符数偏移会触发 String 索引越界崩溃。行扫描全部改为 `range(of: "\n", options: .literal)` 的索引运算；由于共享 diff 管线按 LF 设计（applier 以 `.newlines` 切分），CRLF 文件的编辑现在返回明确的「先转 LF 再编辑」错误提示，取代此前的内部 roundTrip 报错。
+
+### Tests
+
+- 新增行尾空白/统一缩进偏移回退、歧义与非统一缩进拒绝、行号前缀与首行锚点诊断、CRLF 明确报错，以及 read_file 行窗口、UTF-8 安全截断、越界 offset、标签缓冲一致性的回归测试。
+
+### Meta
+
+- Bugfix 预发布版本从 **1.234.0-rc4** 递增为 **1.234.0-rc5**，内部构建号从 **293** 递增为 **294**，Help 与 Computer Use Helper 构建号从 **210** 递增为 **211**；App、Go agent、Help、Helper、浏览器扩展、README、响应头契约与产品文档保持一致。
 
 ## 1.234.0-rc4 - 2026-08-06
 

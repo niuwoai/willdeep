@@ -44,11 +44,13 @@ enum AgentToolRegistry {
         ),
         AgentToolDescriptor(
             name: "read_file",
-            description: "Read a UTF-8 text file inside the workspace. Returns the file content with line numbers.",
+            description: "Read a UTF-8 text file inside the workspace. Returns the file content with line numbers (a right-aligned number, two spaces, then the line — strip that prefix before quoting content or building edit_file old_string). Large files are truncated at a line boundary with a note telling you the offset to continue from.",
             risk: .read,
             parameters: [
                 AgentToolParameter(name: "path", type: .string, description: "Workspace-relative path to read.", required: true),
-                AgentToolParameter(name: "max_bytes", type: .integer, description: "Maximum bytes to return. Defaults to 64KB.", required: false)
+                AgentToolParameter(name: "offset", type: .integer, description: "1-based line number to start reading from. Defaults to 1. Use the offset suggested in a previous read's truncation note to continue.", required: false),
+                AgentToolParameter(name: "limit", type: .integer, description: "Maximum number of lines to return. Defaults to as many as fit in max_bytes.", required: false),
+                AgentToolParameter(name: "max_bytes", type: .integer, description: "Maximum bytes to return. Defaults to 64KB, capped at 256KB.", required: false)
             ]
         ),
         AgentToolDescriptor(
@@ -223,7 +225,7 @@ enum AgentToolRegistry {
             risk: .read,
             parameters: [
                 AgentToolParameter(name: "path", type: .string, description: "Workspace-relative path of the EXISTING file to edit, e.g. `src/utils/date.ts`.", required: true),
-                AgentToolParameter(name: "old_string", type: .string, description: "Exact text currently in the file to replace, copied verbatim — same whitespace/indentation, no line-number prefixes. Must be unique in the file unless replace_all=true.", required: true),
+                AgentToolParameter(name: "old_string", type: .string, description: "Exact text currently in the file to replace, copied verbatim from read_file output — same whitespace/indentation, with the line-number prefixes stripped. NEVER build it from grep/search results: those lines are truncated at 200 characters. Must be unique in the file unless replace_all=true.", required: true),
                 AgentToolParameter(name: "new_string", type: .string, description: "Replacement text. Pass an empty string to delete old_string. Must differ from old_string.", required: true),
                 AgentToolParameter(name: "replace_all", type: .boolean, description: "Replace EVERY occurrence of old_string instead of requiring a unique match (e.g. renaming a symbol). Defaults to false.", required: false),
                 AgentToolParameter(name: "title", type: .string, description: "Optional short title for the patch card. Defaults to `编辑文件: <path>`.", required: false),
