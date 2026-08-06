@@ -11,6 +11,11 @@ import Testing
 import Foundation
 @testable import WillDeep
 
+/// Ceiling for headless `run_command` spawns driven from tests. Mirrors the
+/// constant in AgentToolsCoreTests: these tests assert behavior, not latency,
+/// and a tight budget is blown by spawn contention under a full-load run.
+private let headlessCommandTimeoutSeconds = 30.0
+
 extension WillDeepTests {
     // MARK: - SafeCommand classification
 
@@ -682,7 +687,11 @@ extension WillDeepTests {
             name: "run_command",
             arguments: [
                 "command": .string("pwd"),
-                "timeout_seconds": .number(5)
+                // Asserts the working directory, not how fast a spawn is. Under
+                // a full-load parallel run the spawn alone can outlast a tight
+                // budget, so keep the same headless ceiling the other
+                // run_command tests use.
+                "timeout_seconds": .number(headlessCommandTimeoutSeconds)
             ],
             context: context
         )
