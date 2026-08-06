@@ -450,6 +450,15 @@ extension AppState {
         """
     }
 
+    /// Append a `tool` message to runtime.messages, running it through
+    /// `AgentInjectionDefense` first. Default `source` is `.toolOutput`
+    /// — the conservative case where the payload contains arbitrary
+    /// bytes from the workspace / MCP / shell, any of which could carry
+    /// injection markers. Callers that hand-author the payload string
+    /// (denial notices, host-owned Goal gates) should pass `.systemNotice`
+    /// to skip the neutralizer; the `ask_user` reply path should pass
+    /// `.userAnswer` so the content gets wrapped in `<user_answer>` and
+    /// the model can tell a typed reply apart from a tool result.
     func appendToolMessage(
         for runtime: AgentRuntime,
         toolCallID: String,

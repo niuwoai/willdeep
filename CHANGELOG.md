@@ -1,7 +1,25 @@
 # Changelog
 
-> 当前文件保留最新版本（1.234.0-rc5 至 1.109.0-rc340）。
+> 当前文件保留最新版本（1.234.0-rc6 至 1.109.0-rc340）。
 > 更早的 1000 个版本已移至 [CHANGELOG-ARCHIVE.md](CHANGELOG-ARCHIVE.md)。
+
+## 1.234.0-rc6 - 2026-08-06
+
+### Fixed
+
+- 关闭终端标签页时的偶发崩溃（`EXC_BREAKPOINT`，栈为 `AgentTerminalTab.terminate` → `LocalProcess.childStopped` → `childMonitor` getter → `_os_object_retain`）。`LocalProcess.terminate()` 与其退出事件源的回调都会执行 `childStopped()`，二者 cancel 并置空同一个 `DispatchSourceProcess`。上游 SwiftTerm 不受影响是因为它在 `DispatchQueue.main` 上投递；我们为了让 `terminal_snapshot` 不被繁忙主线程饿死，刻意把投递队列换成了快照镜像的后台队列，于是这对操作变成并发——`AgentTerminalTab.terminate()` 又是先杀进程树、退出事件已在镜像队列上在途，主线程随即拆源，造成 dispatch 对象过度释放。现把拆除动作放到投递队列上同步执行，补回上游白拿的那份串行化。**已知局限**：该修复依据是崩溃栈与代码推理，不是实验复现——无同步内存竞争无法靠时序稳定触发，新增的回归测试在退回修复后照样通过（已在测试文件注释中写明）。
+
+### Changed
+
+- 拆分四个触及仓库 3000 行硬上限的文件，`scripts/complexity_guard.rb` 恢复 pass（此前它是 `run_tests.sh` 的第一步，本地整条脚本跑不动）：`L10n.swift`（3089→1759，析出 `L10n+Settings.swift`）、`AppStateAgentLoop.swift`（3058→2378，析出 `AppStateAgentLoopToolBatching.swift` 与 `AppStateAgentBackgroundJobNotices.swift`，媒体任务通知则并入既有的 `AppStateAgentMediaTaskNotices.swift`——那本就是它的家，而 `scripts/short_drama_media_contract_test.rb` 的源码扫描正是按「AppStateAgentLoop + 该文件」拼接取材的）、`AgentChatHistoryRendererTests.swift`（3039→1611，析出 `AgentChatHistoryRendererGoalTests.swift` 与共享探针 `AgentChatHistoryRendererTestSupport.swift`）、`AgentInteractiveTerminal.swift`（3038→2292，析出 `AgentTerminalShortcuts.swift`）。纯搬运，无行为变更；`executeParallelReadBatch` / `patchAutoApplySource` / `activateSerialToolDecision` 因跨文件调用由 `private` 放宽为 internal（调用方仍只有 `runAgentLoop`）。
+- 顺带把一段掉队的文档注释送回本主：`appendToolMessage` 的说明早年拆文件时留在了 `AppStateAgentLoop.swift`，贴在不相干的函数头上，而函数本体在 `AppStateAgentToolMessages.swift` 且无文档。
+
+### Tests
+
+- 新增 `AgentTerminalTerminationRaceTests`：覆盖两种拆除次序（杀树后拆、Shell 自然退出后拆），并作为 Thread Sanitizer 的载具。TSan 确实证实 `childStopped()` 被并发进入，但它按栈签名去重，只报出同函数内的 `running` 字段。**注意那条 `running` 竞争是上游的**（镜像队列 vs `LocalProcess` 私有 `readQueue`），本次修复不触及，且不 fork SwiftTerm 就够不着。
+- 同族继续加固三处满载下必挂的时间预算，判据一致——**断言的是行为就别让延迟当门槛**：`AgentDispatchTaskTakeoverTests` 等内置浏览器渲染文字的 `timeout_ms` 从 3 秒抬到 20 秒（它断言的是各调度节点浏览器互不抢页）；`AgentExecutorProtocolTests` 五处 `timeoutSeconds: 5` 抽成 `fullSuiteJobTimeoutSeconds = 30`，等待预算 `fullSuiteCompletionAllowanceSeconds` 同步 20→45——此前等待侧已被加固而任务侧没跟上，等 20 秒却让任务 5 秒就被 SIGTERM，加固只做了一半，272 KB 走 stdin 的用例因此报 `.timedOut`。
+- `run_tests.sh` 调用的 10 个 Ruby 脚本补上 `Encoding.default_external/internal = UTF-8`（`chrome_extension_contract_test.rb`、`computer_use_helper_contract_test.rb`、`xcodebuild_ci.rb`、`xcresult_report_contract_test.rb` 及 6 个短剧 MVP 脚本），与 `complexity_guard.rb`、`version_consistency.rb` 等既有兄弟脚本一致。未设 `LANG` 的 shell（裸终端、CI 容器）里 Ruby 默认外部编码是 US-ASCII，读到带中文的仓库文件会抛 `Encoding::InvalidByteSequenceError`，于是守门以「编码异常」而非检查结论的形式炸掉。
+- `AgentBackgroundJobsTests` 的 `waitUntilFinished` 等待预算从 **15 秒**抬到 60 秒并抽成常量 `finishBudgetMs`。那是「等到终态」的存活预算，不是速度断言——用例跑的是 `true` 和带 trap 的 sleep 循环，空载毫秒级完成；满载全量并行时一次同时挂掉三条（`echoCommandCompletesWithExitZero` / `timeoutSurfacesTimedOutStatus` / `unattendedSandboxDenialAutomaticallyReplaysOnceEscalated`），而同一 suite 单跑 9.8 秒 38 条全过。与 rc4 对 `run_command`、以及更早对 git 类测试的处理同源。
 
 ## 1.234.0-rc5 - 2026-08-06
 
