@@ -19,6 +19,10 @@ nonisolated enum AgentFileTools {
     private static let defaultMaxReadBytes = 64 * 1024
     private static let absoluteMaxReadBytes = 256 * 1024
     private static let maxDirectoryEntries = 400
+    /// Files up to this size are decoded whole so read_file can serve
+    /// line-accurate windows (offset/limit); larger files fall back to a
+    /// head-only byte window.
+    private static let maxFullDecodeBytes = 16 * 1024 * 1024
 
     static func searchFiles(
         arguments: [String: AgentJSONValue],
@@ -93,7 +97,9 @@ nonisolated enum AgentFileTools {
                 for line in content.split(separator: "\n", omittingEmptySubsequences: false) {
                     lineNumber += 1
                     if line.lowercased().contains(needle) {
-                        let snippet = line.prefix(200)
+                        let snippet = line.count > 200
+                            ? line.prefix(200) + "…[line truncated]"
+                            : line
                         matches.append("\(relativePath):\(lineNumber): \(snippet)")
                         if matches.count >= limit { break }
                     }
@@ -214,7 +220,9 @@ nonisolated enum AgentFileTools {
                     let lineString = String(line)
                     let range = NSRange(lineString.startIndex..<lineString.endIndex, in: lineString)
                     if regex.firstMatch(in: lineString, options: [], range: range) != nil {
-                        let snippet = lineString.prefix(200)
+                        let snippet = lineString.count > 200
+                            ? lineString.prefix(200) + "…[line truncated]"
+                            : Substring(lineString)
                         matches.append("\(relativePath):\(lineNumber): \(snippet)")
                         if matches.count >= limit { break }
                     }
@@ -244,41 +252,141 @@ nonisolated enum AgentFileTools {
         }
 
         let requested = arguments["max_bytes"]?.intValue() ?? defaultMaxReadBytes
-        let limit = max(1, min(requested, absoluteMaxReadBytes))
+        let byteBudget = max(1, min(requested, absoluteMaxReadBytes))
+        let offset = max(1, arguments["offset"]?.intValue() ?? 1)
+        let lineLimit = arguments["limit"]?.intValue().map { max(1, $0) }
+
+        let resolved = try resolveWorkspaceURL(path, root: root)
+        var isDirectory: ObjCBool = false
+        guard FileManager.default.fileExists(atPath: resolved.path, isDirectory: &isDirectory) else {
+            throw AgentToolError.notFound(path)
+        }
+        guard !isDirectory.boolValue else {
+            throw AgentToolError.notRegular(path)
+        }
+        if AppState.isBinaryFile(at: resolved) {
+            throw AgentToolError.binaryFile(path)
+        }
+
+        let fileSize = (try? FileManager.default.attributesOfItem(atPath: resolved.path)[.size] as? Int) ?? 0
+
+        guard fileSize <= maxFullDecodeBytes else {
+            // Head-only byte window for huge files. The cut lands on a UTF-8
+            // character boundary — a mid-character cut used to fail whole-
+            // buffer UTF-8 decoding and mojibake every non-ASCII character.
+            return try await Task.detached(priority: .userInitiated) {
+                let handle = try FileHandle(forReadingFrom: resolved)
+                defer { try? handle.close() }
+                let data = handle.readData(ofLength: byteBudget + 1)
+                let truncated = data.count > byteBudget
+                var usable = Data(truncated ? data.prefix(byteBudget) : data)
+                if truncated { usable = utf8SafePrefix(usable) }
+                let text = String(data: usable, encoding: .utf8) ?? AppState.decodeText(from: usable)
+
+                var numbered: [String] = []
+                var lineNumber = 0
+                // components, not split(separator:): Character-based split
+                // sees CRLF "\r\n" as a single non-"\n" Character and would
+                // number the whole file as one line.
+                for line in text.components(separatedBy: "\n") {
+                    lineNumber += 1
+                    numbered.append(String(format: "%5d  %@", lineNumber, line))
+                }
+                if truncated {
+                    numbered.append("...[truncated: file is \(fileSize) bytes, showing the first \(usable.count); line offsets are unavailable for files over \(maxFullDecodeBytes) bytes — use grep_files or run_command to reach the rest]")
+                }
+                let summary = "\(path) (\(lineNumber) line\(lineNumber == 1 ? "" : "s"))"
+                return AgentToolResult(summary: summary, payload: numbered.joined(separator: "\n"))
+            }.value
+        }
+
+        // read_file must show the SAME content edit_file will match against
+        // (open tab buffer first, then disk) — otherwise an unsaved tab makes
+        // every subsequent edit_file old_string fail.
+        let bufferedText: String?
+        if let provider = context.editableContentProvider {
+            bufferedText = try await MainActor.run { try provider(resolved) }
+        } else {
+            bufferedText = nil
+        }
 
         return try await Task.detached(priority: .userInitiated) {
-            let resolved = try resolveWorkspaceURL(path, root: root)
-            var isDirectory: ObjCBool = false
-            guard FileManager.default.fileExists(atPath: resolved.path, isDirectory: &isDirectory) else {
-                throw AgentToolError.notFound(path)
-            }
-            guard !isDirectory.boolValue else {
-                throw AgentToolError.notRegular(path)
-            }
-            if AppState.isBinaryFile(at: resolved) {
-                throw AgentToolError.binaryFile(path)
+            let text: String
+            if let bufferedText {
+                text = bufferedText
+            } else {
+                let data = try Data(contentsOf: resolved, options: [.mappedIfSafe])
+                text = String(data: data, encoding: .utf8) ?? AppState.decodeText(from: data)
             }
 
-            let handle = try FileHandle(forReadingFrom: resolved)
-            defer { try? handle.close() }
-            let data = handle.readData(ofLength: limit + 1)
-            let truncated = data.count > limit
-            let usable = truncated ? data.prefix(limit) : data
-            let text = String(data: usable, encoding: .utf8) ?? AppState.decodeText(from: Data(usable))
+            var allLines = text.components(separatedBy: "\n")
+            // A trailing newline yields a final empty component, not a line.
+            if allLines.last == "", allLines.count > 1 || text.isEmpty {
+                allLines.removeLast()
+            }
+            let totalLines = allLines.count
+            guard totalLines > 0 else {
+                return AgentToolResult(summary: "\(path) (0 lines)", payload: "(empty file)")
+            }
+            guard offset <= totalLines else {
+                throw AgentToolError.invalidArgument("offset \(offset) is beyond the end of \(path) (\(totalLines) lines).")
+            }
 
             var numbered: [String] = []
-            var lineNumber = 0
-            for line in text.split(separator: "\n", omittingEmptySubsequences: false) {
-                lineNumber += 1
-                numbered.append(String(format: "%5d  %@", lineNumber, String(line)))
+            var usedBytes = 0
+            var lastLine = offset - 1
+            var index = offset - 1
+            while index < totalLines {
+                if let lineLimit, numbered.count >= lineLimit { break }
+                var line = allLines[index]
+                let cost = line.utf8.count + 1
+                if usedBytes + cost > byteBudget {
+                    guard numbered.isEmpty else { break }
+                    // A single line larger than the whole budget: emit a
+                    // marked prefix rather than nothing (or a huge blob).
+                    line = String(line.prefix(byteBudget)) + "…[line truncated]"
+                }
+                usedBytes += cost
+                lastLine = index + 1
+                numbered.append(String(format: "%5d  %@", lastLine, line))
+                index += 1
             }
-            if truncated {
-                numbered.append("...[truncated, read \(limit) bytes]")
+            if lastLine < totalLines {
+                numbered.append("...[truncated: showing lines \(offset)-\(lastLine) of \(totalLines); call read_file with offset=\(lastLine + 1) to continue]")
             }
 
-            let summary = "\(path) (\(lineNumber) line\(lineNumber == 1 ? "" : "s"))"
+            let summary: String
+            if offset == 1 && lastLine == totalLines {
+                summary = "\(path) (\(totalLines) line\(totalLines == 1 ? "" : "s"))"
+            } else {
+                summary = "\(path) (lines \(offset)-\(lastLine) of \(totalLines))"
+            }
             return AgentToolResult(summary: summary, payload: numbered.joined(separator: "\n"))
         }.value
+    }
+
+    /// Drop a trailing INCOMPLETE UTF-8 sequence left behind by a byte-count
+    /// cut. Without this, `String(data:encoding:.utf8)` fails for the entire
+    /// buffer and the caller's fallback decoder turns every multi-byte
+    /// character (all CJK text) into mojibake.
+    static func utf8SafePrefix(_ data: Data) -> Data {
+        let tail = [UInt8](data.suffix(4))
+        guard !tail.isEmpty else { return data }
+        var idx = tail.count - 1
+        var continuations = 0
+        while idx > 0, tail[idx] & 0xC0 == 0x80 {
+            continuations += 1
+            idx -= 1
+        }
+        let lead = tail[idx]
+        let expected: Int
+        if lead & 0x80 == 0x00 { expected = 1 }
+        else if lead & 0xE0 == 0xC0 { expected = 2 }
+        else if lead & 0xF0 == 0xE0 { expected = 3 }
+        else if lead & 0xF8 == 0xF0 { expected = 4 }
+        else { return data } // invalid lead byte — not our cut, leave it alone
+        let have = 1 + continuations
+        return have < expected ? Data(data.dropLast(have)) : data
     }
 
     static func listDirectory(
