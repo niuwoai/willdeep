@@ -1016,6 +1016,15 @@ struct AgentSessionsSidebar: View {
         remoteDescriptors: [UUID: RuntimeDescriptor]
     ) -> String {
         if key == AgentSession.noWorkspaceSidebarGroupKey { return L10n.Workspace.noWorkspace }
+        // A managed project names its own group. Falls through when the
+        // project has since been removed, so a stale key still renders as
+        // something readable rather than "project:<uuid>".
+        if let projectID = AgentSession.projectID(fromSidebarGroupKey: key) {
+            if let project = appState.agentProjects.first(where: { $0.id == projectID }) {
+                return project.resolvedDisplayName
+            }
+            return L10n.Workspace.noWorkspace
+        }
         if let remote = remoteWorkspaceGroup(from: key) {
             let runtime = remoteDescriptors[remote.runtimeID]
             return WorkspacePresentation.remoteDisplayName(runtime: runtime, path: remote.path)

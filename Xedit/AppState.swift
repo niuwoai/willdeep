@@ -260,6 +260,11 @@ final class AppState: ObservableObject {
     }
     /// Persisted Agent-mode chat sessions, newest-updated first.
     @Published var agentSessions: [AgentSession] = []
+    /// User-managed projects: a name plus several source folders. Purely a
+    /// grouping layer — tools still execute against each session's own
+    /// workspace. Empty until the user creates one, which is why every
+    /// pre-project session keeps its path-based group unchanged.
+    @Published var agentProjects: [AgentProject] = AgentProjectStore.load()
     /// Launch catalog loading is asynchronous. The Agent window uses this
     /// edge to run Goal recovery only after every persisted candidate is
     /// visible, avoiding a race with the initial empty in-memory list.
