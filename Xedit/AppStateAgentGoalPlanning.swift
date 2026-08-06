@@ -481,7 +481,7 @@ extension AppState {
             if outcome == .captured {
                 persistAgentSession(runtime: runtime, touchUpdatedAt: false, moveToFront: false)
                 agentDispatchCoordinator.synchronize(with: agentSessions)
-                resumeDispatchGoal(goalID: runtime.id)
+                _ = launchReadyDispatchTasks(goalID: runtime.id)
                 return false
             }
         }

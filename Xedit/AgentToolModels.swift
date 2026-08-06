@@ -576,6 +576,10 @@ enum AgentToolApprovalSource: String, Equatable, Codable {
     /// The user marked this MCP server as fully trusted ("my own MCP")
     /// in MCP settings -- every call to it auto-runs, writes included.
     case trustedServer
+    /// An editor-trade subagent patching the single file the user approved
+    /// when the spawn itself was confirmed. The approval is per-file and
+    /// granted up front, so its patches apply without re-asking per hunk.
+    case subagentEditor
 }
 
 struct AgentToolCall: Identifiable, Equatable {
@@ -602,6 +606,10 @@ struct AgentToolCall: Identifiable, Equatable {
     /// ("第 3/12 轮 · 5 次工具"), refreshed each round so the card shows
     /// forward motion instead of an opaque "委派中" spinner.
     var subagentProgress: String?
+    /// For `spawn_agent`: stable id of the child run, used to look its
+    /// per-round transcript up in `AgentSubagentTranscriptStore` when the
+    /// user opens the inspector from this card.
+    var subagentRunID: UUID?
     /// For Claude Code / Codex CLI / Cursor Agent / Cline CLI: host-owned
     /// phase, attempt and bounded redacted output tail. Render-only; the
     /// durable acceptance state lives in `AgentDelegatedTaskRun`.
@@ -620,6 +628,7 @@ struct AgentToolCall: Identifiable, Equatable {
         approvalSource: AgentToolApprovalSource? = nil,
         subagentModel: String? = nil,
         subagentProgress: String? = nil,
+        subagentRunID: UUID? = nil,
         delegatedProgress: AgentDelegatedLiveProgress? = nil
     ) {
         self.id = id
@@ -634,6 +643,7 @@ struct AgentToolCall: Identifiable, Equatable {
         self.approvalSource = approvalSource
         self.subagentModel = subagentModel
         self.subagentProgress = subagentProgress
+        self.subagentRunID = subagentRunID
         self.delegatedProgress = delegatedProgress
     }
 }

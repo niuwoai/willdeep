@@ -91,6 +91,30 @@ struct SlashCommand: Identifiable {
                 NSPasteboard.general.setString(last.content, forType: .string)
             },
         ]
+        // 委派开关：正文照常作为普通用户消息发送，只是这一回合带上
+        // 明确的 delegation policy。`/no-subagent` 是硬保证（工具表里
+        // 直接摘掉 spawn_agent），`/subagent` 是强指令 + 事后审计 ——
+        // 两者不对称的原因见 AgentDelegationPolicy 的文件头注释。
+        let delegationCommands: [SlashCommand] = [
+            SlashCommand(
+                id: "subagent",
+                title: "/subagent",
+                subtitle: L10n.AgentDelegation.subagentCommandSubtitle,
+                symbol: "person.2.badge.gearshape",
+                argumentMode: .required(placeholder: L10n.AgentDelegation.subagentCommandPlaceholder)
+            ) { args in
+                state.sendAgentMessage(withDelegationPolicy: .required, text: args)
+            },
+            SlashCommand(
+                id: "no-subagent",
+                title: "/no-subagent",
+                subtitle: L10n.AgentDelegation.noSubagentCommandSubtitle,
+                symbol: "person.2.slash",
+                argumentMode: .required(placeholder: L10n.AgentDelegation.noSubagentCommandPlaceholder)
+            ) { args in
+                state.sendAgentMessage(withDelegationPolicy: .forbidden, text: args)
+            },
+        ]
         // 1.81.0-rc1：注册内置 workflow 为 slash 命令（/research,
         // /code-review, /bug-hunt, /competitor）。args 部分作为 query
         // 转给 startWorkflow，runtime 内起后台 task 跑 engine。
@@ -118,7 +142,7 @@ struct SlashCommand: Identifiable {
                 state.startWorkflow(slashCommand: workflow.slashCommand, args: args)
             }
         }
-        return core + [designToCode] + workflows
+        return core + delegationCommands + [designToCode] + workflows
     }
 
     /// Filters by fuzzy-ish prefix on the slash-stripped query. The text

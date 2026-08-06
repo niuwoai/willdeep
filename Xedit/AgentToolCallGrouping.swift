@@ -117,8 +117,22 @@ nonisolated struct AgentActivityHeadlinePresentation: Equatable {
         )
     }
 
+    /// How much of the tail to consider. The status line is by definition the
+    /// last usable line, so everything before this window is dead weight.
+    ///
+    /// This bound is the point: the reasoning buffer is re-read on every
+    /// stream flush (~10×/s) and grows monotonically all turn, so scanning
+    /// the whole string made a long thinking phase cost O(n²) and showed up
+    /// as CPU that climbed the longer the model thought.
+    private static let statusLineScanWindow = 2_000
+
     private static func latestStatusLine(in reasoning: String) -> String? {
-        let line = reasoning
+        let window = reasoning.count > statusLineScanWindow
+            ? String(reasoning.suffix(statusLineScanWindow))
+            : reasoning
+        // Reversed scan over the window only: the first acceptable line from
+        // the end wins, and lines beyond it are never even materialized.
+        let line = window
             .split(whereSeparator: \.isNewline)
             .reversed()
             .lazy

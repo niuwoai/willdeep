@@ -1061,21 +1061,42 @@ struct AgentToolCallCard: View {
                 .help("\(riskBadge): \(argumentsSummary)")
             }
 
-            if let badge = subagentBadgeText {
+            if subagentBadgeText != nil || call.subagentRunID != nil {
                 HStack(spacing: 5) {
                     Image(systemName: "person.2.fill")
                         .font(.system(size: 9, weight: .semibold))
                         .foregroundStyle(Color.accentColor)
-                    Text(badge)
-                        .font(AgentDesign.chatSupportingFont(
-                            baseFontSize: appState.agentChatBaseFontSize,
-                            visualMinimum: 10,
-                            weight: .medium
-                        ))
-                        .foregroundStyle(.secondary)
-                        .lineLimit(1)
-                        .truncationMode(.middle)
+                    if let badge = subagentBadgeText {
+                        Text(badge)
+                            .font(AgentDesign.chatSupportingFont(
+                                baseFontSize: appState.agentChatBaseFontSize,
+                                visualMinimum: 10,
+                                weight: .medium
+                            ))
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
+                            .truncationMode(.middle)
+                    }
                     Spacer(minLength: 0)
+                    // Entry point into the per-round record. Present as soon
+                    // as the run has an id: a cancelled or failed child still
+                    // has a prompt and partial rounds worth reading.
+                    if let runID = call.subagentRunID {
+                        Button {
+                            AgentSubagentInspectorWindowRegistry.shared.open(
+                                runID: runID,
+                                fallbackLabel: call.subagentModel
+                            )
+                        } label: {
+                            Label(
+                                L10n.AgentDelegation.inspectorTitle,
+                                systemImage: "list.bullet.rectangle"
+                            )
+                            .font(.system(size: 10))
+                        }
+                        .buttonStyle(.borderless)
+                        .help(L10n.AgentDelegation.inspectorTitle)
+                    }
                 }
             }
 
@@ -2562,6 +2583,7 @@ struct AgentToolCallCard: View {
         case .controlLease: return L10n.ToolCard.approvalControlLeaseBadge
         case .escalated: return "ESCALATED"
         case .trustedServer: return "TRUSTED"
+        case .subagentEditor: return "SUBAGENT"
         }
     }
 
@@ -2578,6 +2600,7 @@ struct AgentToolCallCard: View {
         case .controlLease: return L10n.ToolCard.approvalControlLeaseTooltip
         case .escalated: return "You approved this call to run outside the default sandbox boundary."
         case .trustedServer: return "You marked this MCP server as fully trusted — all its calls auto-run."
+        case .subagentEditor: return "Applied by an editor subagent, limited to the single file you approved when the spawn was confirmed."
         }
     }
 

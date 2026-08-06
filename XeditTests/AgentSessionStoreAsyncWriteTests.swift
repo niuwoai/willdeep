@@ -201,6 +201,50 @@ struct AgentSessionStoreAsyncWriteTests {
         #expect(appState.agentSessionLoadFailure == nil)
     }
 
+    @Test("selecting an old conversation cannot evict its runtime before activation")
+    func selectingOldConversationProtectsMaterializedRuntime() {
+        let appState = AppState(rootDirectory: nil)
+        let now = Date()
+        let active = AgentSession(title: "active", updatedAt: now)
+        let target = AgentSession(
+            title: "old conversation",
+            updatedAt: now.addingTimeInterval(-3_600),
+            messages: [AgentMessage(role: .user, content: "persisted history")]
+        )
+        let fillers = (0..<7).map { offset in
+            AgentSession(
+                title: "cached-\(offset)",
+                updatedAt: now.addingTimeInterval(TimeInterval(-offset))
+            )
+        }
+
+        appState.agentSessions = [active, target] + fillers
+        appState.activeAgentSessionID = active.id
+        appState.agentRuntimes[active.id] = AgentRuntime(session: active)
+        for filler in fillers {
+            appState.agentRuntimes[filler.id] = AgentRuntime(session: filler)
+        }
+
+        #expect(appState.selectAgentSession(id: target.id))
+        #expect(appState.activeAgentSessionID == target.id)
+        #expect(appState.loadedRuntime(for: target.id)?.messages.first?.content == "persisted history")
+    }
+
+    @Test("reselecting a highlighted conversation repairs a missing runtime")
+    func reselectingActiveConversationRepairsMissingRuntime() {
+        let appState = AppState(rootDirectory: nil)
+        let session = AgentSession(
+            title: "highlighted conversation",
+            messages: [AgentMessage(role: .user, content: "history is still here")]
+        )
+        appState.agentSessions = [session]
+        appState.activeAgentSessionID = session.id
+
+        #expect(appState.loadedRuntime(for: session.id) == nil)
+        #expect(appState.selectAgentSession(id: session.id))
+        #expect(appState.loadedRuntime(for: session.id)?.messages.first?.content == "history is still here")
+    }
+
     @Test("pin/archive survive the runtime's next persist")
     func pinAndArchiveSurviveRuntimePersist() throws {
         let appState = AppState(rootDirectory: nil)
