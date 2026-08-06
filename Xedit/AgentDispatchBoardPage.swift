@@ -58,7 +58,7 @@ private struct AgentDispatchBoardContent: View {
             resumeSelectedGoalAfterSynchronization()
         }
         .onReceive(appState.$agentSessions) { sessions in
-            coordinator.synchronizeInBackground(with: sessions)
+            coordinator.synchronizeInBackground(with: sessions, projects: appState.agentProjects)
             resumeSelectedGoalAfterSynchronization()
         }
         .onChange(of: coordinator.selectedGoalID) { _ in

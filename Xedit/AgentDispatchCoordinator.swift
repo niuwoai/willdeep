@@ -35,11 +35,12 @@ final class AgentDispatchCoordinator: ObservableObject {
         return selectedGoal.tasks.first { $0.id == selectedTaskID } ?? selectedGoal.tasks.first
     }
 
-    func synchronize(with sessions: [AgentSession]) {
+    func synchronize(with sessions: [AgentSession], projects: [AgentProject] = []) {
         backgroundSynchronizationRevision += 1
         applySynchronizedGoals(
             Self.synchronizedGoals(
                 from: sessions,
+                projects: projects,
                 existingGoals: goals,
                 defaultAcceptanceCriterion: L10n.Dispatch.defaultAcceptanceCriterion
             )
@@ -49,7 +50,7 @@ final class AgentDispatchCoordinator: ObservableObject {
     /// Projects repository-backed session metadata away from the main actor.
     /// Rapid SwiftUI `onReceive` updates are coalesced by revision so an older
     /// projection can never overwrite a newer one.
-    func synchronizeInBackground(with sessions: [AgentSession]) {
+    func synchronizeInBackground(with sessions: [AgentSession], projects: [AgentProject] = []) {
         backgroundSynchronizationRevision += 1
         let revision = backgroundSynchronizationRevision
         let existingGoals = goals
@@ -58,6 +59,7 @@ final class AgentDispatchCoordinator: ObservableObject {
         Task.detached(priority: .utility) {
             let synchronizedGoals = Self.synchronizedGoals(
                 from: sessions,
+                projects: projects,
                 existingGoals: existingGoals,
                 defaultAcceptanceCriterion: defaultAcceptanceCriterion
             )
@@ -74,6 +76,7 @@ final class AgentDispatchCoordinator: ObservableObject {
 
     private nonisolated static func synchronizedGoals(
         from sessions: [AgentSession],
+        projects: [AgentProject],
         existingGoals: [AgentDispatchGoal],
         defaultAcceptanceCriterion: String
     ) -> [AgentDispatchGoal] {
@@ -94,6 +97,7 @@ final class AgentDispatchCoordinator: ObservableObject {
         let projected = sourceSessions.map { session in
             Self.project(
                 session: session,
+                managedProject: projects.first { $0.id == session.projectID },
                 existing: existingByID[session.id],
                 defaultAcceptanceCriterion: defaultAcceptanceCriterion
             )
@@ -688,6 +692,7 @@ final class AgentDispatchCoordinator: ObservableObject {
 
     private nonisolated static func project(
         session: AgentSession,
+        managedProject: AgentProject? = nil,
         existing: AgentDispatchGoal?,
         defaultAcceptanceCriterion: String
     ) -> AgentDispatchGoal {
@@ -703,14 +708,16 @@ final class AgentDispatchCoordinator: ObservableObject {
                 ?? existing.workspaceLocation.map {
                     AgentDispatchLogicalProjectResolver.resolve(
                         location: $0,
-                        preferredLocalProjectPath: session.sidebarWorkspaceRootPath
+                        preferredLocalProjectPath: session.sidebarWorkspaceRootPath,
+                        managedProject: managedProject
                     )
                 }
         } else {
             sourceWorkspace.map {
                 AgentDispatchLogicalProjectResolver.resolve(
                     location: $0,
-                    preferredLocalProjectPath: session.sidebarWorkspaceRootPath
+                    preferredLocalProjectPath: session.sidebarWorkspaceRootPath,
+                    managedProject: managedProject
                 )
             }
         }
@@ -831,9 +838,16 @@ final class AgentDispatchCoordinator: ObservableObject {
 }
 
 nonisolated enum AgentDispatchLogicalProjectResolver {
+    /// Derive the board's logical project for a workspace.
+    ///
+    /// When the session belongs to a user-managed `AgentProject`, that
+    /// project supplies the name and primary folder, so the board and the
+    /// sidebar can never disagree about what a project is called. Without
+    /// one, the pre-existing path-derived behaviour is unchanged.
     static func resolve(
         location: WorkspaceLocation,
-        preferredLocalProjectPath: String? = nil
+        preferredLocalProjectPath: String? = nil,
+        managedProject: AgentProject? = nil
     ) -> AgentDispatchLogicalProject {
         let primaryPath: String
         let repositoryIdentity: String?
@@ -851,11 +865,15 @@ nonisolated enum AgentDispatchLogicalProjectResolver {
             repositoryIdentity = nil
         }
         let url = URL(fileURLWithPath: primaryPath)
-        let name = url.lastPathComponent.isEmpty ? primaryPath : url.lastPathComponent
+        let derivedName = url.lastPathComponent.isEmpty ? primaryPath : url.lastPathComponent
         return AgentDispatchLogicalProject(
-            displayName: name,
-            primaryWorkspacePath: primaryPath,
-            localRepositoryIdentity: repositoryIdentity
+            displayName: managedProject?.resolvedDisplayName ?? derivedName,
+            // The managed project's own primary folder wins: a project may
+            // span several folders, and the board must anchor on the same one
+            // the sidebar treats as primary.
+            primaryWorkspacePath: managedProject?.primaryFolderPath ?? primaryPath,
+            localRepositoryIdentity: repositoryIdentity,
+            managedProjectID: managedProject?.id
         )
     }
 
@@ -874,6 +892,11 @@ nonisolated enum AgentDispatchLogicalProjectResolver {
         _ lhs: AgentDispatchLogicalProject,
         _ rhs: AgentDispatchLogicalProject
     ) -> Bool {
+        // A managed project is an exact answer; the checks below only ever
+        // approximated one from paths and repository fingerprints.
+        if let lhsManaged = lhs.managedProjectID, let rhsManaged = rhs.managedProjectID {
+            return lhsManaged == rhsManaged
+        }
         if let lhsIdentity = lhs.localRepositoryIdentity,
            let rhsIdentity = rhs.localRepositoryIdentity {
             return lhsIdentity == rhsIdentity
