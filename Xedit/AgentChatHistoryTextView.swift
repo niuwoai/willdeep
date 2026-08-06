@@ -1189,8 +1189,9 @@ enum AgentChatHistoryBubbleKind: Int {
 
 enum AgentChatHistoryLayoutMetrics {
     /// Shared body leading for live SwiftUI messages and TextKit history.
-    /// Five points keeps dense chat readable without making paragraphs float.
-    static let bodyLineSpacing: CGFloat = 5
+    /// Three points matches Codex's compact reading rhythm without making
+    /// wrapped Chinese prose look vertically crowded.
+    static let bodyLineSpacing: CGFloat = 3
     static let assistantContentHeadIndent: CGFloat = 32
     static let assistantContentTailInset: CGFloat = 18
     /// Measured from the Codex reference at 1x: 9 pt from the status line
@@ -1233,7 +1234,8 @@ enum AgentChatHistoryLayoutMetrics {
     /// Keep the horizontal expansion below that space's advance so a
     /// one-glyph chip such as `/` cannot paint over the preceding text.
     static let inlineCodeChipHorizontalPadding: CGFloat = 2
-    static let inlineCodeChipVerticalPadding: CGFloat = 1.5
+    static let inlineCodeChipTopPadding: CGFloat = 1.5
+    static let inlineCodeChipBottomPadding: CGFloat = 0.5
     /// Code/table text is inset from the assistant paragraph. Their rounded
     /// background extends another 10 points around that text, so the right
     /// edge always covers the line-break boundary instead of ending early.
@@ -1248,13 +1250,13 @@ enum AgentChatHistoryLayoutMetrics {
     }
 
     static func inlineCodeChipRect(for glyphRect: NSRect, at origin: NSPoint) -> NSRect {
-        glyphRect
-            .offsetBy(dx: origin.x, dy: origin.y)
-            .insetBy(
-                dx: -inlineCodeChipHorizontalPadding,
-                dy: -inlineCodeChipVerticalPadding
-            )
-            .integral
+        let positionedRect = glyphRect.offsetBy(dx: origin.x, dy: origin.y)
+        return NSRect(
+            x: positionedRect.minX - inlineCodeChipHorizontalPadding,
+            y: positionedRect.minY - inlineCodeChipBottomPadding,
+            width: positionedRect.width + inlineCodeChipHorizontalPadding * 2,
+            height: positionedRect.height + inlineCodeChipTopPadding + inlineCodeChipBottomPadding
+        ).integral
     }
 
     static func assistantStatusDividerColor(isDark: Bool) -> NSColor {
