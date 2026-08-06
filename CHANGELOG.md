@@ -1,9 +1,9 @@
 # Changelog
 
-> 当前文件保留最新版本（1.232.0-rc4 至 1.109.0-rc340）。
+> 当前文件保留最新版本（1.233.0-rc2 至 1.109.0-rc340）。
 > 更早的 1000 个版本已移至 [CHANGELOG-ARCHIVE.md](CHANGELOG-ARCHIVE.md)。
 
-## 1.232.0-rc4 - 2026-08-06
+## 1.233.0-rc2 - 2026-08-06
 
 ### Fixed
 
@@ -13,6 +13,28 @@
 ### Tests
 
 - 新增 2 条单测：退化 frame（0×0）往返后可见区文本与 `canScroll` 必须与往返前逐字节一致、且 cols/rows 不被改动；网格下限仍然接受最窄真实侧栏布局（240pt 减去 8pt 左右内缩），并拒绝零宽、零高与全零 frame。
+
+## 1.233.0-rc1 - 2026-08-06
+
+### Added
+
+- 多文件夹项目一期（模型层）：新增 `AgentProject`（名称 + 多个源文件夹 + 仓库指纹）与 `AgentProjectStore`（`projects.json`，与会话目录同级）。会话新增可选 `projectID`，侧栏分组 key 优先级变为 `projectID → sidebarWorkspaceRootPath → workspaceLocation → workspaceRootPath`。前后端分离的两个仓库因此可以归入同一个侧栏分组，分组名也不再被目录名锁死。
+- 归属解析 `AgentProjectResolver`：一个文件夹可属于多个项目（已确认的决策 2），并列时**最具体的文件夹胜**，仍并列则取 `updatedAt` 最新者；解析结果需固化到会话，避免新增项目让旧会话悄悄换组。
+- `AgentProjectResolver.otherProjectsClaiming` 为二期的「移除项目只删独占会话」提供判定依据。
+
+### Changed
+
+- 项目文件的日期沿用会话既有的数值编码而非 ISO8601：后者丢弃亚秒精度，而 `updatedAt` 正是并列归属的裁决依据，每次读写漂移会让裁决不稳定。
+- 侧栏分组名在命中项目时显示项目名；项目已被删除的陈旧 key 回退为「无工作区」而不是裸露 `project:<uuid>`。
+- 项目分组 key 带 `project:` 前缀，与绝对路径（恒以 `/` 开头）天然不同命名空间，不会碰撞。
+
+### Compatibility
+
+- 未创建任何项目时 `projects.json` 不存在，全部会话 `projectID == nil`，侧栏行为与此前逐字节一致；旧会话 JSON 直接解码为 nil。worktree 的 `sidebarWorkspaceRootPath` 行为不变，仅在未纳入项目时生效。
+
+### Tests
+
+- 新增 19 条单测：路径包含按边界判定（`/a/b` 不吞 `/a/bc`）、路径规范化（尾斜杠/空白/根目录）、一个项目跨多文件夹、空名回退主文件夹名、最具体项目胜出、并列按时间且与数组顺序无关、未命中返回 nil、共享文件夹的其他claimant可枚举、项目主导分组 key、两个仓库同组、无项目会话分组不变、项目优先于 worktree 根、key 命名空间不碰撞、会话与项目的编解码往返、旧会话 JSON 兼容、store 缺失即空、store 位置在会话目录之外。
 
 ## 1.232.0-rc3 - 2026-08-06
 
