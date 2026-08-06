@@ -344,6 +344,8 @@ enum AgentToolRunner {
                 result = try await AgentFileTools.gitStatus(context: activeContext)
             case "list_workspace_sessions":
                 result = try await AgentSessionTools.listWorkspaceSessions(arguments: activeArguments, context: activeContext)
+            case "search_sessions":
+                result = try await AgentSessionTools.searchSessions(arguments: activeArguments, context: activeContext)
             case "suggest_session_title":
                 result = try await AgentSessionTools.suggestSessionTitle(context: activeContext)
             case "rename_session":
