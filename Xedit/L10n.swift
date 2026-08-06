@@ -258,6 +258,19 @@ nonisolated enum L10n {
         static let createTitle = String(localized: "automation.create-title", defaultValue: "New Automation")
         static let defaultName = String(localized: "automation.default-name", defaultValue: "Untitled Automation")
         static let delete = String(localized: "automation.delete", defaultValue: "Delete Automation")
+        static let deleteAlertTitle = String(
+            localized: "automation.delete.alert-title",
+            defaultValue: "Delete Automation"
+        )
+        static func deleteAlertMessage(_ name: String) -> String {
+            let template = String(
+                localized: "automation.delete.alert-message",
+                defaultValue: "“%@” will stop running and its schedule, prompt, and settings will be removed. This cannot be undone."
+            )
+            return String(format: template, name)
+        }
+        static let deleteConfirm = String(localized: "automation.delete.confirm", defaultValue: "Delete")
+        static let deleteCancel = String(localized: "automation.delete.cancel", defaultValue: "Cancel")
         static let edit = String(localized: "automation.edit", defaultValue: "Edit…")
         static let editTitle = String(localized: "automation.edit-title", defaultValue: "Edit Automation")
         static let emptyState = String(localized: "automation.empty-state", defaultValue: "Create your first automation")
