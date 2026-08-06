@@ -1728,7 +1728,11 @@ struct WillDeepTests {
         #expect(descriptor?.risk == .read)
         #expect(descriptor?.parameters.first(where: { $0.name == "prompt" })?.required == true)
         #expect(descriptor?.parameters.contains(where: { $0.name == "run_in_background" }) == true)
-        #expect(descriptor?.parameters.contains(where: { $0.name == "model" }) == true)
+        // Trades replaced the free-form `model` override: cost policy is the
+        // user's configuration, not a per-call decision by the model.
+        #expect(descriptor?.parameters.contains(where: { $0.name == "model" }) == false)
+        #expect(descriptor?.parameters.contains(where: { $0.name == "profile" }) == true)
+        #expect(descriptor?.parameters.contains(where: { $0.name == "target_file" }) == true)
     }
 
     @Test("run_command exposes background override and user-facing label")

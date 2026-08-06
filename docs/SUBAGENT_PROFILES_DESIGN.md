@@ -1,7 +1,7 @@
 # 子代理 Profile 设计（Subagent Profiles）
 
-> 状态：**草案，待 review**。Review 通过后按「分期实施」落地。
-> 关联版本：基于 1.229.0-rc1（`/subagent`、`/no-subagent` 委派开关与子代理检视器已合入 develop）。
+> 状态：**已实现**（一期 + 二期，1.230.0-rc1）。本文保留为设计依据；实现与本文的差异见文末「实现记录」。
+> 关联版本：设计基于 1.229.0-rc1（`/subagent`、`/no-subagent` 委派开关与子代理检视器）。
 > 关联文档：`docs/SOME_IM_MANAGED_ROUTING_DESIGN.md`（升级阶梯心智模型的出处）。
 
 ## 1. 动机
@@ -194,3 +194,26 @@ spawn_agent(
 6. spawn 即审批、单文件锁、patch 管线接入、失败放锁（§7 全部）。
 
 每期照常：全量单测绿 → bump 版本 + CHANGELOG → 合回 develop。
+
+## 14. 实现记录（1.230.0-rc1）
+
+一期与二期在同一批改动中落地，全量单测 1965 条绿。代码锚点：
+
+| 部件 | 位置 |
+| --- | --- |
+| 工种模型、内置目录、设置持久化 | `AgentSubagentProfile.swift` |
+| 写权限凭据、diff 路径校验、单文件锁 | `AgentSubagentWriteAccess.swift` |
+| 升级阶梯 | `AgentSubagentEscalation.swift` |
+| 绑定解析（some.im 可用性回退） | `AppStateSubagentProfiles.swift` |
+| 工种设置区 | `AgentSubagentProfileSettingsSection.swift` |
+| runner 按工种取能力 | `AgentSubagents.swift` `systemPrompt` / `toolDescriptors(profile:)` / `run` / `executeToolCall` |
+| spawn 侧编排（工种解析、锁、升级、记账） | `AppStateAgentToolMessages.swift` `executeSpawnAgentToolCall` |
+
+与设计稿的差异（均为实现时的收紧，非放宽）：
+
+1. **`editor` 一期即落地**，未按原计划推迟——写通道的三道门（spawn 审批、逐条 diff 路径校验、单文件锁）与只读工种共用同一条执行路径，分期反而要引入临时占位分支。
+2. **`editor` 禁止后台运行**。原设计未提及；实现时发现文件锁与审批都是回合内语义，后台化会让锁的生命周期脱离用户视野，故直接拒绝并提示改前台。
+3. **升级重跑放宽到 `deep` 的工具集与轮数**（`editor` 除外，保持单文件写作用域）。原设计只说「换父模型重跑」；实测同样的窄工具集换大模型往往复现同一个死胡同。
+4. **`ModelBinding` 用 `preferredProviderID` 而非 `providerEntryID`**。绑定到具体 entry UUID 会在用户删改 provider 条目后悬空；按 preset id 在 spawn 时挑一条可用 entry 更稳。
+5. **升级触发条件增加「报告过短」**（< 40 字符）。原设计只列了爆窗与打满轮数，但小模型更常见的失败是早早停下并回一句「没找到」。
+6. **`AgentToolApprovalSource` 新增 `.subagentEditor`**，使 editor 补丁在工具卡、回合报告与沙箱决策里都能被识别与审计，而不是混进 `.user`。

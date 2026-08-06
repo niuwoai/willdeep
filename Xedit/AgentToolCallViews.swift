@@ -2583,6 +2583,7 @@ struct AgentToolCallCard: View {
         case .controlLease: return L10n.ToolCard.approvalControlLeaseBadge
         case .escalated: return "ESCALATED"
         case .trustedServer: return "TRUSTED"
+        case .subagentEditor: return "SUBAGENT"
         }
     }
 
@@ -2599,6 +2600,7 @@ struct AgentToolCallCard: View {
         case .controlLease: return L10n.ToolCard.approvalControlLeaseTooltip
         case .escalated: return "You approved this call to run outside the default sandbox boundary."
         case .trustedServer: return "You marked this MCP server as fully trusted — all its calls auto-run."
+        case .subagentEditor: return "Applied by an editor subagent, limited to the single file you approved when the spawn was confirmed."
         }
     }
 

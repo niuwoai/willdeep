@@ -94,5 +94,80 @@ extension L10n {
             localized: "agent-delegation.inspector-truncated",
             defaultValue: "Output truncated for storage."
         )
+
+        // MARK: Subagent profiles (trades)
+
+        static let profileScoutName = String(
+            localized: "agent-delegation.profile-scout-name",
+            defaultValue: "Scout"
+        )
+        static let profileReaderName = String(
+            localized: "agent-delegation.profile-reader-name",
+            defaultValue: "Reader"
+        )
+        static let profileDeepName = String(
+            localized: "agent-delegation.profile-deep-name",
+            defaultValue: "Deep"
+        )
+        static let profileEditorName = String(
+            localized: "agent-delegation.profile-editor-name",
+            defaultValue: "Editor"
+        )
+
+        static let profilesSectionTitle = String(
+            localized: "agent-delegation.profiles-section-title",
+            defaultValue: "Subagent trades"
+        )
+        static let profilesSectionFooter = String(
+            localized: "agent-delegation.profiles-section-footer",
+            defaultValue: "Each trade runs on its own model with a narrowed tool set. Tool sets are fixed; only the model binding is configurable."
+        )
+        static let profileInheritsParent = String(
+            localized: "agent-delegation.profile-inherits-parent",
+            defaultValue: "Same as this chat"
+        )
+        static let profileToolsLabel = String(
+            localized: "agent-delegation.profile-tools-label",
+            defaultValue: "Tools"
+        )
+        static let profileModelLabel = String(
+            localized: "agent-delegation.profile-model-label",
+            defaultValue: "Model"
+        )
+        static let profileUnavailableFallback = String(
+            localized: "agent-delegation.profile-unavailable-fallback",
+            defaultValue: "Unavailable — falls back to this chat's model"
+        )
+
+        // MARK: Escalation
+
+        static func escalatedFrom(_ a1: String) -> String {
+            let template = String(
+                localized: "agent-delegation.escalated-from",
+                defaultValue: "Escalated from %@ to this chat's model"
+            )
+            return String(format: template, a1)
+        }
+        static func inspectorProfile(_ a1: String) -> String {
+            let template = String(
+                localized: "agent-delegation.inspector-profile",
+                defaultValue: "Trade: %@"
+            )
+            return String(format: template, a1)
+        }
+
+        // MARK: Editor trade
+
+        static func editorApprovalTitle(_ a1: String) -> String {
+            let template = String(
+                localized: "agent-delegation.editor-approval-title",
+                defaultValue: "Let a subagent edit %@?"
+            )
+            return String(format: template, a1)
+        }
+        static let editorTargetLocked = String(
+            localized: "agent-delegation.editor-target-locked",
+            defaultValue: "Another subagent is already editing this file."
+        )
     }
 }

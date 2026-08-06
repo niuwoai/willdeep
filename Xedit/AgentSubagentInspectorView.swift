@@ -151,6 +151,21 @@ struct AgentSubagentInspectorView: View {
             Text(transcript.model)
                 .font(.caption)
                 .foregroundStyle(.secondary)
+            if let profileID = transcript.profileID {
+                Text(L10n.AgentDelegation.inspectorProfile(profileID))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            // An escalation the user cannot see is indistinguishable from one
+            // that never fired — this row is the whole point of recording it.
+            if let escalatedFrom = transcript.escalatedFromModel {
+                Label(
+                    L10n.AgentDelegation.escalatedFrom(escalatedFrom),
+                    systemImage: "arrow.up.circle"
+                )
+                .font(.caption)
+                .foregroundStyle(.orange)
+            }
             Text(L10n.AgentDelegation.inspectorStats(
                 "\(transcript.rounds.count)",
                 "\(transcript.toolInvocationCount)",
