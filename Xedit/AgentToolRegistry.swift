@@ -1812,9 +1812,15 @@ enum AgentToolRegistry {
     static func tools(
         activeExperts: Set<AgentExpert>,
         interactionMode: AgentInteractionMode = .normal,
-        executionAgent: AgentExecutionAgent = .willDeep
+        executionAgent: AgentExecutionAgent = .willDeep,
+        delegationPolicy: AgentDelegationPolicy = .automatic
     ) -> [AgentToolDescriptor] {
         all.filter { descriptor in
+            // `/no-subagent` is enforced here rather than by prompt, so a
+            // model that ignores the instruction still cannot delegate.
+            if !delegationPolicy.allowsTool(named: descriptor.name) {
+                return false
+            }
             if isDelegatedCodingTool(descriptor.name),
                !shouldExposeDelegatedCodingTool(
                    descriptor.name,

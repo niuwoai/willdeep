@@ -103,7 +103,8 @@ extension AppState {
         return AgentToolRegistry.tools(
             activeExperts: runtime.activeExperts,
             interactionMode: runtime.interactionMode,
-            executionAgent: runtime.executionAgent
+            executionAgent: runtime.executionAgent,
+            delegationPolicy: runtime.currentTurnDelegationPolicy
         )
     }
 

@@ -107,7 +107,8 @@ extension AppState {
         let tools = AgentToolRegistry.tools(
             activeExperts: runtime.activeExperts,
             interactionMode: runtime.interactionMode,
-            executionAgent: runtime.executionAgent
+            executionAgent: runtime.executionAgent,
+            delegationPolicy: runtime.currentTurnDelegationPolicy
         )
         let used = Self.estimateAgentTokens(messages: collapsed, tools: tools)
         let fixedToolOverhead = Self.estimateAgentTokens(messages: [], tools: tools)

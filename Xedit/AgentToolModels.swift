@@ -602,6 +602,10 @@ struct AgentToolCall: Identifiable, Equatable {
     /// ("第 3/12 轮 · 5 次工具"), refreshed each round so the card shows
     /// forward motion instead of an opaque "委派中" spinner.
     var subagentProgress: String?
+    /// For `spawn_agent`: stable id of the child run, used to look its
+    /// per-round transcript up in `AgentSubagentTranscriptStore` when the
+    /// user opens the inspector from this card.
+    var subagentRunID: UUID?
     /// For Claude Code / Codex CLI / Cursor Agent / Cline CLI: host-owned
     /// phase, attempt and bounded redacted output tail. Render-only; the
     /// durable acceptance state lives in `AgentDelegatedTaskRun`.
@@ -620,6 +624,7 @@ struct AgentToolCall: Identifiable, Equatable {
         approvalSource: AgentToolApprovalSource? = nil,
         subagentModel: String? = nil,
         subagentProgress: String? = nil,
+        subagentRunID: UUID? = nil,
         delegatedProgress: AgentDelegatedLiveProgress? = nil
     ) {
         self.id = id
@@ -634,6 +639,7 @@ struct AgentToolCall: Identifiable, Equatable {
         self.approvalSource = approvalSource
         self.subagentModel = subagentModel
         self.subagentProgress = subagentProgress
+        self.subagentRunID = subagentRunID
         self.delegatedProgress = delegatedProgress
     }
 }

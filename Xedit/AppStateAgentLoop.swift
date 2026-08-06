@@ -41,6 +41,11 @@ extension AppState {
     ) {
         runtime.currentTurnPlanningOnly = source == .operatorInput
             && AgentExecutionIntentPolicy.requestsPlanningOnly(text)
+        // Slash-staged delegation directive applies to exactly this turn.
+        let delegationPolicy = runtime.pendingDelegationPolicy
+        runtime.pendingDelegationPolicy = .automatic
+        runtime.currentTurnDelegationPolicy = delegationPolicy
+        runtime.currentTurnSpawnAgentCallCount = 0
         if source == .operatorInput {
             runtime.consecutiveGoalRoundsWithoutChecklistProgress = 0
         }
@@ -91,7 +96,8 @@ extension AppState {
                 content: text,
                 images: images,
                 textAttachments: textAttachments,
-                source: source
+                source: source,
+                delegationPolicy: delegationPolicy.isExplicit ? delegationPolicy : nil
             )
             runtime.messages.append(userMessage)
             runtime.latestTurnRecall = nil
@@ -253,6 +259,9 @@ extension AppState {
         guard !runtime.isResponding, !runtime.isCompressingContext else { return }
         guard let next = runtime.queuedMessages.first else { return }
         runtime.queuedMessages.removeFirst()
+        // Re-stage the queued turn's delegation directive: dispatch reads it
+        // off the runtime, and it was cleared when the previous turn started.
+        runtime.pendingDelegationPolicy = next.delegationPolicy
         dispatchAgentMessageUsingSelectedExecutor(
             next.executionAgent,
             for: runtime,
@@ -453,6 +462,7 @@ extension AppState {
             }
             runtime.goalTurnRecoveryCheckpoint = nil
             runtime.shouldConsumeQueueAfterStop = false
+            auditDelegationPolicyForFinishedTurn(in: runtime)
             // Turn finished — one fewer concurrent worker on this checkout.
             refreshAgentWorkspaceCollision()
             captureAgentPlanFromLatestMessage(for: runtime)
@@ -849,6 +859,13 @@ extension AppState {
             if let memoryContextBlock {
                 assembledPrompt += "\n\n\(memoryContextBlock)"
             }
+            // Per-turn `/subagent` / `/no-subagent` directive. `.forbidden`
+            // is already enforced by the tool table below; this paragraph
+            // only stops the model from burning a round on a call that the
+            // transport would reject.
+            if let delegationInstruction = runtime.currentTurnDelegationPolicy.systemPromptInstruction {
+                assembledPrompt += "\n\n\(delegationInstruction)"
+            }
             let promptComponents = AgentContextBuilder.requestComponents(from: assembledPrompt)
             // allowRefresh only on the dispatch's first round: rounds 2+ of
             // the same tool loop keep already-sent history byte-stable, and
@@ -900,7 +917,8 @@ extension AppState {
                             tools: AgentToolRegistry.tools(
                                 activeExperts: activeExperts,
                                 interactionMode: runtime.interactionMode,
-                                executionAgent: runtime.executionAgent
+                                executionAgent: runtime.executionAgent,
+                                delegationPolicy: runtime.currentTurnDelegationPolicy
                             )
                         ) { event in
                             await MainActor.run { [weak runtime] in
