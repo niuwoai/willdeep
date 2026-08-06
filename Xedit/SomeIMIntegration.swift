@@ -769,6 +769,47 @@ struct SomeIMAccount: Codable, Equatable {
         let rendered = formatter.string(from: NSNumber(value: scaled)) ?? String(format: "%.2f", scaled)
         return rendered + unit.suffix
     }
+
+    /// Carry the display profile (nickname, avatar, email) forward from the
+    /// account this one replaces.
+    ///
+    /// Login responses carry balance but never nickname or avatar — the
+    /// server only returns those from `/customer/me`. Saving a login result
+    /// verbatim therefore blanked whatever profile the app had already
+    /// fetched, which is why an account could end up showing credits with no
+    /// name or picture.
+    ///
+    /// Switching accounts must NOT inherit: a different email means a
+    /// different person, and showing the previous user's avatar would be
+    /// worse than showing none.
+    nonisolated func preservingProfile(from previous: SomeIMAccount?) -> SomeIMAccount {
+        guard let previous else { return self }
+        let incomingEmail = email.trimmingCharacters(in: .whitespacesAndNewlines)
+        let previousEmail = previous.email.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !incomingEmail.isEmpty,
+           !previousEmail.isEmpty,
+           incomingEmail.caseInsensitiveCompare(previousEmail) != .orderedSame {
+            return self
+        }
+
+        var merged = self
+        if merged.email.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            merged.email = previous.email
+        }
+        if merged.nickname?.trimmingCharacters(in: .whitespacesAndNewlines).nonEmpty == nil {
+            merged.nickname = previous.nickname
+        }
+        if merged.avatarURL?.trimmingCharacters(in: .whitespacesAndNewlines).nonEmpty == nil {
+            merged.avatarURL = previous.avatarURL
+        }
+        if merged.tenantID?.trimmingCharacters(in: .whitespacesAndNewlines).nonEmpty == nil {
+            merged.tenantID = previous.tenantID
+        }
+        if merged.profileUpdatedAt == nil {
+            merged.profileUpdatedAt = previous.profileUpdatedAt
+        }
+        return merged
+    }
 }
 
 struct SomeIMAuthenticationSnapshot: Equatable {
@@ -1028,10 +1069,13 @@ enum SomeIMClient {
             return SomeIMBrowserLoginStatus(state: .connected, account: nil)
         }
         let accountData = decoded.account ?? .empty
+        // Browser login can come back without any account block at all; even
+        // when present it carries no nickname/avatar. Keep the profile the
+        // app already has instead of overwriting it with blanks.
         let account = accountData.account(
             fallbackEmail: "",
             fallbackModel: decoded.default_model?.nonEmpty ?? SomeIMIntegrationSettings.defaultTextModel
-        )
+        ).preservingProfile(from: SomeIMIntegrationStore.loadAccount())
         var nextSettings = normalized
         nextSettings.enabled = true
         guard SomeIMIntegrationStore.saveAuthenticatedSession(
@@ -1107,7 +1151,7 @@ enum SomeIMClient {
         let account = decoded.account.account(
             fallbackEmail: email,
             fallbackModel: decoded.default_model.nonEmpty ?? SomeIMIntegrationSettings.defaultTextModel
-        )
+        ).preservingProfile(from: SomeIMIntegrationStore.loadAccount())
         var nextSettings = normalized
         nextSettings.enabled = true
         guard SomeIMIntegrationStore.saveAuthenticatedSession(
