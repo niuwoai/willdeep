@@ -367,6 +367,12 @@ final class AppState: ObservableObject {
     /// for the lifecycle contract.
     let agentSubagentRegistry = AgentSubagentRegistry()
 
+    /// Memoizes the live activity headline across the several views that read
+    /// it, and holds its text steady while reasoning streams. Deliberately
+    /// not `@Published`: it is a render-cost optimization, and publishing it
+    /// would create the update storm it exists to prevent.
+    var agentLiveActivityHeadlineCache = AgentLiveActivityHeadlineCache()
+
     /// In-flight multi-expert consultations. Keyed by the transcript report
     /// id so the specialized card can stop exactly its own orchestration.
     var agentConsultationTasks: [UUID: Task<Void, Never>] = [:]
