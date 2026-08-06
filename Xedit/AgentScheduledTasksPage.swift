@@ -6,6 +6,7 @@
 //  single navigation entry while this page scales to any number of routines.
 //
 
+import AppKit
 import SwiftUI
 
 enum AgentPrimaryDestination: Equatable {
@@ -297,8 +298,28 @@ struct AgentScheduledTasksPage: View {
             editing = RoutineSheetTarget(routine: routine, isNew: false)
         }
         Button(L10n.Automation.delete, role: .destructive) {
-            appState.deleteAgentRoutine(id: routine.id)
+            presentDeleteAlert(for: routine)
         }
+    }
+
+    /// Deleting an automation is unrecoverable — the schedule, prompt and
+    /// settings go with it — and it sits one row below Edit in a context
+    /// menu, so a mis-click used to destroy it outright. Same explicit
+    /// NSAlert gate the session list already uses.
+    private func presentDeleteAlert(for routine: AgentRoutine) {
+        let alert = NSAlert()
+        alert.messageText = L10n.Automation.deleteAlertTitle
+        alert.informativeText = L10n.Automation.deleteAlertMessage(
+            AgentRoutineDeletionPrompt.displayName(for: routine)
+        )
+        alert.alertStyle = .warning
+        alert.addButton(withTitle: L10n.Automation.deleteConfirm)
+        alert.addButton(withTitle: L10n.Automation.deleteCancel)
+        if let deleteButton = alert.buttons.first {
+            deleteButton.hasDestructiveAction = true
+        }
+        guard alert.runModal() == .alertFirstButtonReturn else { return }
+        appState.deleteAgentRoutine(id: routine.id)
     }
 
     private func templateRow(_ template: AgentAutomationTemplate) -> some View {
