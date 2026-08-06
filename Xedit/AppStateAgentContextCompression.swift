@@ -110,7 +110,15 @@ extension AppState {
             executionAgent: runtime.executionAgent,
             delegationPolicy: runtime.currentTurnDelegationPolicy
         )
-        let used = Self.estimateAgentTokens(messages: collapsed, tools: tools)
+        let estimated = Self.estimateAgentTokens(messages: collapsed, tools: tools)
+        // Prefer the provider's own reading when it is higher — the local
+        // heuristic under-counts symbol-dense transcripts, which is exactly
+        // how a session reached 155% of its window without ever tripping 75%.
+        let anchored = Self.providerAnchoredUsedTokens(
+            messages: runtime.messages,
+            contextSummaryThroughMessageID: runtime.contextSummaryThroughMessageID
+        )
+        let used = max(estimated, anchored ?? 0)
         let fixedToolOverhead = Self.estimateAgentTokens(messages: [], tools: tools)
         let compressibleUsed = max(0, used - fixedToolOverhead)
         let usedFraction = Double(compressibleUsed) / Double(window)
@@ -155,83 +163,18 @@ extension AppState {
             resumeAgentLoopForPendingBackgroundCompletions(for: runtime)
         }
 
-        let transcriptBody = head
-            .filter { $0.role != .system }
-            .map { message -> String in
-                let label: String
-                switch message.role {
-                case .user: label = "USER"
-                case .assistant: label = "ASSISTANT"
-                case .tool: label = "TOOL(\(message.toolCallID ?? "?"))"
-                case .system: label = "SYSTEM"
-                case .workflowReport: label = "WORKFLOW(\(message.workflowReport?.workflowName ?? "?"))"
-                case .widget: label = "WIDGET(\(message.widget?.title ?? "?"))"
-                case .scheduledTask: label = "SCHEDULED_TASK(\(message.scheduledTask?.title ?? "?"))"
-                }
-                return "\(label):\n\(message.content)"
-            }
-            .joined(separator: "\n\n---\n\n")
-        let transcript: String = {
-            guard let prior = priorSummary?.trimmingCharacters(in: .whitespacesAndNewlines),
-                  !prior.isEmpty else {
-                return transcriptBody
-            }
-            return """
-            EARLIER SUMMARY (from prior compression — fold into the new summary, don't drop):
-            \(prior)
-
-            ---
-
-            \(transcriptBody)
-            """
-        }()
-
-        let system = AgentMessage(
-            role: .system,
-            content: """
-            You compress a coding-agent conversation transcript into a tight summary.
-            Goal: preserve enough state that the agent can continue without re-reading the old turns.
-            Output exactly these sections in this order, omitting bullets that do not apply:
-
-            User goal:
-            - ...
-
-            Decisions and constraints:
-            - ...
-
-            Files and commands:
-            - ...
-
-            Current state:
-            - ...
-
-            Open questions / next steps:
-            - ...
-
-            Skip pleasantries and verbatim quotes. Keep under 300 words. Output plain text only.
-            """
-        )
-        let payload = AgentMessage(
-            role: .user,
-            content: "Transcript to compress:\n\n\(transcript)"
+        let segments = Self.compressionTranscriptSegments(
+            head: head,
+            priorSummary: priorSummary
         )
 
         var lastError: Error?
         for configuration in configurations {
-            let client = AgentClient(configuration: configuration)
-            let collector = CompressionSummaryCollector()
-            let messages = AgentLocalModelPrompting.messagesWithLanguageInstruction(
-                systemPrompt: system.content,
-                userMessages: [payload],
-                configuration: configuration
-            )
             do {
-                try await client.streamChat(messages: messages) { event in
-                    if case .textDelta(let delta) = event {
-                        await collector.append(delta)
-                    }
-                }
-                let trimmed = await collector.value.trimmingCharacters(in: .whitespacesAndNewlines)
+                let trimmed = try await summarizeForCompression(
+                    segments: segments,
+                    configuration: configuration
+                )
                 guard !trimmed.isEmpty else {
                     lastError = AgentClientError.serverStatus(
                         AgentProviderHTTPError(
@@ -263,6 +206,242 @@ extension AppState {
             runtime.errorMessage = "Context compression failed: no usable summary provider is configured."
             runtime.errorDetails = nil
         }
+    }
+
+    /// Fold the transcript in budget-sized chunks, then fold the partial
+    /// summaries again until a single summary remains.
+    ///
+    /// Compression used to post the whole head as one request. That request
+    /// grows with the very thing compression exists to shrink, so once a
+    /// session filled its window the summariser overflowed too and returned
+    /// 400 — the only escape hatch jammed exactly when it was needed. Chunking
+    /// keeps every request bounded regardless of transcript size.
+    @MainActor
+    private func summarizeForCompression(
+        segments: [String],
+        configuration: AgentConfiguration
+    ) async throws -> String {
+        let window = Self.agentContextWindow(
+            model: configuration.model,
+            providerID: configuration.providerID
+        )
+        var budget = Self.compressionChunkTokenBudget(contextWindow: window)
+        var current = segments
+        var foldDepth = 0
+
+        while true {
+            let chunks = Self.compressionChunks(segments: current, tokenBudget: budget)
+            guard !chunks.isEmpty else { return "" }
+            do {
+                var summaries: [String] = []
+                for (index, chunk) in chunks.enumerated() {
+                    let summary = try await requestCompressionSummary(
+                        transcript: chunk,
+                        configuration: configuration,
+                        part: index + 1,
+                        partCount: chunks.count
+                    )
+                    if !summary.isEmpty {
+                        summaries.append(summary)
+                    }
+                }
+                if chunks.count == 1 || summaries.count <= 1 {
+                    return summaries.first ?? ""
+                }
+                foldDepth += 1
+                guard foldDepth < 3 else {
+                    // Converging too slowly. Joined part summaries are still a
+                    // large win over the raw transcript, and shipping them
+                    // beats failing the compression outright.
+                    return summaries.joined(separator: "\n\n")
+                }
+                current = summaries.enumerated().map { "PART \($0.offset + 1) SUMMARY:\n\($0.element)" }
+            } catch let error where Self.isContextOverflowError(error) && budget > Self.minimumCompressionChunkTokens {
+                // The heuristic still under-counted this provider's tokenizer.
+                // Halve and refold rather than surfacing a 400 the user has no
+                // way to act on.
+                budget /= 2
+                continue
+            }
+        }
+    }
+
+    @MainActor
+    private func requestCompressionSummary(
+        transcript: String,
+        configuration: AgentConfiguration,
+        part: Int,
+        partCount: Int
+    ) async throws -> String {
+        let client = AgentClient(configuration: configuration)
+        let collector = CompressionSummaryCollector()
+        let messages = AgentLocalModelPrompting.messagesWithLanguageInstruction(
+            systemPrompt: Self.compressionSystemPrompt(part: part, partCount: partCount),
+            userMessages: [
+                AgentMessage(role: .user, content: "Transcript to compress:\n\n\(transcript)")
+            ],
+            configuration: configuration
+        )
+        try await client.streamChat(messages: messages) { event in
+            if case .textDelta(let delta) = event {
+                await collector.append(delta)
+            }
+        }
+        return await collector.value.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    nonisolated static func compressionSystemPrompt(part: Int, partCount: Int) -> String {
+        var prompt = """
+        You compress a coding-agent conversation transcript into a tight summary.
+        Goal: preserve enough state that the agent can continue without re-reading the old turns.
+        Output exactly these sections in this order, omitting bullets that do not apply:
+
+        User goal:
+        - ...
+
+        Decisions and constraints:
+        - ...
+
+        Files and commands:
+        - ...
+
+        Current state:
+        - ...
+
+        Open questions / next steps:
+        - ...
+
+        Skip pleasantries and verbatim quotes. Keep under 300 words. Output plain text only.
+        """
+        if partCount > 1 {
+            prompt += """
+
+
+            This is part \(part) of \(partCount) of a longer transcript, given in order. \
+            Summarize only what this part contains; a later pass merges the parts. \
+            Do not speculate about content outside this part.
+            """
+        }
+        return prompt
+    }
+
+    /// One transcript segment per message, with tool results compacted.
+    ///
+    /// The previous implementation interpolated `message.content` verbatim, so
+    /// the summary request carried *more* bytes than an ordinary chat request
+    /// (which runs `collapseOldToolResults`) — compression was the single
+    /// largest request the app ever sent.
+    nonisolated static func compressionTranscriptSegments(
+        head: [AgentMessage],
+        priorSummary: String?
+    ) -> [String] {
+        let toolNames = toolNameLookup(in: head)
+        var segments: [String] = []
+
+        if let prior = priorSummary?.trimmingCharacters(in: .whitespacesAndNewlines),
+           !prior.isEmpty {
+            segments.append(
+                "EARLIER SUMMARY (from prior compression — fold into the new summary, don't drop):\n\(prior)"
+            )
+        }
+
+        for message in head where message.role != .system {
+            let label: String
+            switch message.role {
+            case .user: label = "USER"
+            case .assistant: label = "ASSISTANT"
+            case .tool: label = "TOOL(\(message.toolCallID ?? "?"))"
+            case .system: label = "SYSTEM"
+            case .workflowReport: label = "WORKFLOW(\(message.workflowReport?.workflowName ?? "?"))"
+            case .widget: label = "WIDGET(\(message.widget?.title ?? "?"))"
+            case .scheduledTask: label = "SCHEDULED_TASK(\(message.scheduledTask?.title ?? "?"))"
+            }
+            let body: String
+            if message.role == .tool {
+                body = modelFacingToolResultContent(
+                    message.content,
+                    toolName: message.toolCallID.flatMap { toolNames[$0] },
+                    aggressivelyCollapse: false,
+                    preferCompactSummary: true
+                )
+            } else {
+                body = message.content
+            }
+            segments.append("\(label):\n\(body)")
+        }
+        return segments
+    }
+
+    nonisolated static let minimumCompressionChunkTokens = 2_000
+
+    /// Per-request token budget for the summariser. Deliberately a small
+    /// fraction of the window: it has to cover the instruction prompt and the
+    /// generated summary, and absorb the gap between this character heuristic
+    /// and the provider's real tokenizer.
+    nonisolated static func compressionChunkTokenBudget(contextWindow: Int) -> Int {
+        max(minimumCompressionChunkTokens, Int(Double(max(1, contextWindow)) * 0.15))
+    }
+
+    /// Greedily pack segments into chunks that fit `tokenBudget`. A segment
+    /// larger than the budget on its own is head/tail truncated rather than
+    /// dropped, so a single giant tool result can never wedge the pipeline.
+    nonisolated static func compressionChunks(
+        segments: [String],
+        tokenBudget: Int
+    ) -> [String] {
+        let budget = max(500, tokenBudget)
+        var chunks: [String] = []
+        var current: [String] = []
+        var currentTokens = 0
+
+        for segment in segments where !segment.isEmpty {
+            let fitted = truncateCompressionSegment(segment, tokenBudget: budget)
+            let tokens = estimateTextTokens(fitted)
+            if !current.isEmpty, currentTokens + tokens > budget {
+                chunks.append(current.joined(separator: "\n\n---\n\n"))
+                current = []
+                currentTokens = 0
+            }
+            current.append(fitted)
+            currentTokens += tokens
+        }
+        if !current.isEmpty {
+            chunks.append(current.joined(separator: "\n\n---\n\n"))
+        }
+        return chunks
+    }
+
+    nonisolated private static func truncateCompressionSegment(
+        _ segment: String,
+        tokenBudget: Int
+    ) -> String {
+        guard estimateTextTokens(segment) > tokenBudget else { return segment }
+        // CJK is the worst case at 1 token per character, so a character limit
+        // equal to the token budget holds for any character mix.
+        let characterLimit = max(200, tokenBudget)
+        let headLimit = characterLimit / 2
+        let tailLimit = characterLimit - headLimit
+        let elided = max(0, segment.count - headLimit - tailLimit)
+        return """
+        \(String(segment.prefix(headLimit)))
+        [... \(elided) characters elided for compression ...]
+        \(String(segment.suffix(tailLimit)))
+        """
+    }
+
+    /// True when a provider rejected the request purely for length. Matched on
+    /// the response body because the status code alone (400) covers every
+    /// malformed-request case too.
+    nonisolated static func isContextOverflowError(_ error: Error) -> Bool {
+        guard case AgentClientError.serverStatus(let http) = error else { return false }
+        guard http.statusCode == 400 || http.statusCode == 413 else { return false }
+        let body = http.responseBody.lowercased()
+        return body.contains("maximum context length")
+            || body.contains("context_length_exceeded")
+            || body.contains("context length")
+            || body.contains("prompt is too long")
+            || body.contains("too many tokens")
+            || body.contains("reduce the length")
     }
 
     /// Returns the transcript slice that should be sent to the model. Local
