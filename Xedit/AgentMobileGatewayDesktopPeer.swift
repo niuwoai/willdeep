@@ -9,6 +9,59 @@ import Combine
 import Foundation
 import Network
 
+/// Remembers the last payload published per envelope `type`, so a periodic
+/// envelope that has not actually changed can be dropped before it costs a JSON
+/// encode, a WebSocket frame and phone-side work.
+///
+/// Compares payloads rather than whole envelopes on purpose: every envelope
+/// carries a freshly formatted `ts`, so envelope equality would never hold and
+/// the dedup would be dead code.
+struct AgentMobileGatewayPayloadDedup {
+    private var lastPayloadByType: [String: [String: AgentMobileGatewayJSON]] = [:]
+
+    /// Records `envelope` as the latest for its type and reports whether it
+    /// should go on the wire.
+    mutating func shouldSend(_ envelope: AgentMobileGatewayEnvelope) -> Bool {
+        guard lastPayloadByType[envelope.type] != envelope.payload else { return false }
+        lastPayloadByType[envelope.type] = envelope.payload
+        return true
+    }
+
+    /// Forgets everything. Callers **must** do this whenever a new socket is
+    /// opened: the memory describes what one connection has been told, and a
+    /// reconnecting phone needs a full picture, not a diff against a dead peer.
+    mutating func reset() {
+        lastPayloadByType.removeAll()
+    }
+}
+
+/// A one-bit "already queued" latch that is safe to read off the main actor.
+///
+/// Combine's `sink` closure is not actor-isolated, so the coalescing check that
+/// guards the hop into `scheduleSnapshot()` runs on whatever thread published
+/// the change and needs its own synchronization.
+final class AgentMobileGatewayAtomicFlag: @unchecked Sendable {
+    private let lock = NSLock()
+    private var isSet = false
+
+    /// Sets the flag, reporting whether *this* call is the one that set it.
+    /// Exactly one caller per clear→set cycle is told `true`; that caller owns
+    /// the follow-up work, everyone else drops out.
+    func takeIfClear() -> Bool {
+        lock.lock()
+        defer { lock.unlock() }
+        if isSet { return false }
+        isSet = true
+        return true
+    }
+
+    func clear() {
+        lock.lock()
+        isSet = false
+        lock.unlock()
+    }
+}
+
 @MainActor
 final class AgentMobileGatewayDesktopPeer: ObservableObject {
     @Published private(set) var isConnected = false
@@ -39,7 +92,17 @@ final class AgentMobileGatewayDesktopPeer: ObservableObject {
     private var lastPathSatisfied = false
     private static let pathMonitorQueue = DispatchQueue(label: "com.willdeep.mobileGateway.pathMonitor")
     private var snapshotTask: Task<Void, Never>?
+    /// Mirrors "a snapshot is already queued", readable from outside the main
+    /// actor. `AppState` publishes `objectWillChange` on every field change —
+    /// during a streaming reply that is once per token — and each one used to
+    /// allocate a `Task` and hop to the main actor purely to fail the
+    /// `snapshotTask == nil` guard and return. Checking here moves the dedup
+    /// ahead of the hop, so one 400ms window costs a single Task instead of
+    /// however many tokens arrived in it.
+    private let snapshotQueued = AgentMobileGatewayAtomicFlag()
     private var messageEventState = AgentMobileGatewayMessageEventState()
+    /// Drops the periodic envelopes that came out identical to the last tick.
+    private var payloadDedup = AgentMobileGatewayPayloadDedup()
     private let encoder: JSONEncoder
     private let decoder: JSONDecoder
 
@@ -48,6 +111,7 @@ final class AgentMobileGatewayDesktopPeer: ObservableObject {
         self.encoder = JSONEncoder()
         self.decoder = JSONDecoder()
         self.appStateCancellable = appState.objectWillChange.sink { [weak self] _ in
+            guard let self, self.snapshotQueued.takeIfClear() else { return }
             Task { @MainActor [weak self] in
                 self?.scheduleSnapshot()
             }
@@ -86,7 +150,9 @@ final class AgentMobileGatewayDesktopPeer: ObservableObject {
         connectionVerificationTask = nil
         snapshotTask?.cancel()
         snapshotTask = nil
+        snapshotQueued.clear()
         messageEventState.reset()
+        payloadDedup.reset()
         webSocketTask?.cancel(with: .goingAway, reason: nil)
         webSocketTask = nil
         isConnected = false
@@ -109,9 +175,9 @@ final class AgentMobileGatewayDesktopPeer: ObservableObject {
         ) {
             send(event)
         }
-        send(AgentMobileGatewayCommandRouter.snapshotEnvelope(controller: appState))
-        send(AgentMobileGatewayCommandRouter.workspaceListEnvelope(controller: appState))
-        send(AgentMobileGatewayCommandRouter.capabilitiesEnvelope(controller: appState))
+        sendIfChanged(AgentMobileGatewayCommandRouter.snapshotEnvelope(controller: appState))
+        sendIfChanged(AgentMobileGatewayCommandRouter.workspaceListEnvelope(controller: appState))
+        sendIfChanged(AgentMobileGatewayCommandRouter.capabilitiesEnvelope(controller: appState))
         for approval in appState.mobileGatewayPendingToolApprovals {
             send(AgentMobileGatewayCommandRouter.toolPendingEnvelope(approval))
             if isRelayConnection {
@@ -141,6 +207,10 @@ final class AgentMobileGatewayDesktopPeer: ObservableObject {
         request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
         let task = session.webSocketTask(with: request)
         webSocketTask = task
+        // A fresh socket knows nothing. Drop the per-type payload memory so the
+        // first publish after the handshake is a full picture rather than a diff
+        // against whatever the previous connection had already been told.
+        payloadDedup.reset()
         // `resume()` only starts the HTTP upgrade. Treating that moment as a
         // live WebSocket made Settings report "connected" even when the relay
         // later rejected or stalled the handshake. A successful WebSocket
@@ -209,6 +279,12 @@ final class AgentMobileGatewayDesktopPeer: ObservableObject {
     }
 
     private func scheduleSnapshot() {
+        // Whatever happens below, the latch has done its job: it exists only to
+        // collapse the burst of `objectWillChange` that piled up between the
+        // first change and this hop actually running. Clearing it here — rather
+        // than after the sleep — lets the next change re-arm the window, while
+        // `snapshotTask` goes on capping the real publish rate at one per 400ms.
+        snapshotQueued.clear()
         guard isConnected, webSocketTask != nil else { return }
         guard snapshotTask == nil else { return }
         snapshotTask = Task { @MainActor [weak self] in
@@ -258,6 +334,22 @@ final class AgentMobileGatewayDesktopPeer: ObservableObject {
         } catch {
             lastErrorMessage = error.localizedDescription
         }
+    }
+
+    /// Sends `envelope` only when its payload differs from the last one sent
+    /// under the same `type`.
+    ///
+    /// The three periodic envelopes are rebuilt on every 400ms tick, but during
+    /// a streaming reply only `state.snapshot` actually moves — `workspace.list`
+    /// and `capabilities` come out byte-identical tick after tick, and each one
+    /// still cost a JSON encode, a WebSocket frame and phone-side work to say
+    /// nothing at all.
+    ///
+    /// Only safe because `payloadDedup` is reset whenever a socket is opened:
+    /// the comparison is against what *this* connection has been told.
+    private func sendIfChanged(_ envelope: AgentMobileGatewayEnvelope) {
+        guard payloadDedup.shouldSend(envelope) else { return }
+        send(envelope)
     }
 
     private func send(_ envelope: AgentMobileGatewayEnvelope) {

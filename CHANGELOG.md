@@ -1,7 +1,29 @@
 # Changelog
 
-> 当前文件保留最新版本（1.233.0-rc4 至 1.109.0-rc340）。
+> 当前文件保留最新版本（1.233.0-rc5 至 1.109.0-rc340）。
 > 更早的 1000 个版本已移至 [CHANGELOG-ARCHIVE.md](CHANGELOG-ARCHIVE.md)。
+
+## 1.233.0-rc5 - 2026-08-06
+
+### Fixed
+
+- 移动网关的周期快照不再在主线程上打磁盘。`mobileGatewayWorkspaceList` 对每个工作区各做两次文件系统探测——`.git` 的 `fileExists`，以及为找仓库根**逐级向上**遍历目录、每层再 stat 一次——而这个属性每 400ms 就被完整重算一遍，只要手机连着就一直在跑。对 1.228.0-rc10 采样 5 秒，`lstat` 作为主线程叶子帧被抓到 12 次，彼时窗口除了渲染什么也没做。两个探测现在按路径缓存，30s 过期：一个目录是不是 git 仓库属于人类时间尺度的事实，`git init` 之后一两个快照周期内照样能传到手机，稳态则从系统调用降为一次字典查找。
+- 三个周期性 envelope（`state.snapshot` / `workspace.list` / `capabilities`）内容没变时不再发送。它们每个 tick 都会被重建，但流式回复期间真正在动的只有 `state.snapshot`——另外两个逐 tick 完全一致，却仍要付一次 JSON 编码、一帧 WebSocket 和手机端的处理，只为了说「什么也没变」。比较的是 payload 而非整个 envelope：后者每次都带新的 `ts`，比出来永远不等，去重会变成死代码。
+- 建立新连接时清空这份 payload 记忆。它描述的是「这条连接已经被告知了什么」，重连后的手机需要的是完整画面而不是对着一个已死连接做的 diff。
+- `AppState.objectWillChange` 不再对每次字段变化都排一个 `Task` 上主 actor。流式回复期间那是每个 token 一次，而每一次的全部作用只是跑到主线程上撞掉 `snapshotTask == nil` 的判断然后返回；主线程当时正忙于布局，于是这些空转的 hop 排成长队（采样里 `@isolated(any)` 的 async thunk 有 154 个样本，比真正干活的快照闭包还多 33 个）。改为在 hop **之前**用一个线程安全的一位闩锁合并，一个 400ms 窗口只排一个 Task。真正的 400ms 节流仍由 `snapshotTask` 负责，发布频率不变。
+- 侧栏会话标题的自然宽度按标题缓存。`sessionRow` 每行调用一次 `sessionTitleNaturalWidth`，而侧栏 body 每帧重跑，于是同一批标题被反复量给同一个字号——采样里这个函数独占主线程 37 个样本，量的全是上一帧刚量过的东西。`sidebarRowFontSize` 是编译期常量，标题本身即完整缓存键；缓存到 1024 条整体清空，不做 LRU。
+
+### Tests
+
+- 新增 13 条单测：payload 去重（首条必发、payload 相同仅 `ts` 变必须压掉、payload 变化必发、A→B→A 必须重发、不同 type 互不遮蔽、`reset` 后即使内容没变也要全量重发——最后一条钉的是重连回归）；一位闩锁（一个 clear→set 周期只放行一个调用者、64 个并发调用者恰好一个胜出）；仓库探测缓存（TTL 内 75 次调用只探测一次、TTL 过期后重探、否定结果同样被缓存、不同路径互不覆盖、仓库根按路径缓存、`reset` 后重新探测）。
+
+### Note
+
+- 「主线程同步读 Keychain」那条不在本轮，已由 **1.233.0-rc3** 单独处理。两轮针对的是同一次采样里的不同热点：rc3 消掉 `SecItemCopyMatching` 的往返，本轮消掉 `lstat` 与空转的快照发布。
+
+### Meta
+
+- Bugfix 预发布版本从 **1.233.0-rc4** 递增为 **1.233.0-rc5**，内部构建号从 **293** 递增为 **294**，Help 与 Computer Use Helper 构建号从 **210** 递增为 **211**；App、Go agent、Help、Helper、浏览器扩展、README、响应头契约与产品文档保持一致。
 
 ## 1.233.0-rc4 - 2026-08-06
 
