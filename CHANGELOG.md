@@ -1,9 +1,9 @@
 # Changelog
 
-> 当前文件保留最新版本（1.232.0-rc2 至 1.109.0-rc340）。
+> 当前文件保留最新版本（1.232.0-rc3 至 1.109.0-rc340）。
 > 更早的 1000 个版本已移至 [CHANGELOG-ARCHIVE.md](CHANGELOG-ARCHIVE.md)。
 
-## 1.232.0-rc2 - 2026-08-06
+## 1.232.0-rc3 - 2026-08-06
 
 ### Fixed
 
@@ -13,6 +13,18 @@
 ### Tests
 
 - 新增 2 条单测：退化 frame（0×0）往返后可见区文本与 `canScroll` 必须与往返前逐字节一致、且 cols/rows 不被改动；网格下限仍然接受最窄真实侧栏布局（240pt 减去 8pt 左右内缩），并拒绝零宽、零高与全零 frame。
+
+## 1.232.0-rc2 - 2026-08-06
+
+### Fixed
+
+- 修掉左侧「用户输入 minimap」在主线程上的持续空转。对 1.228.0-rc10 采样 5 秒，主线程 3748 个样本里 2699 个（72%）压在 SwiftUI 事务 flush 上，其中 450 个样本单独来自 minimap 这一个 `.overlay`——它挂在会话根视图上，SwiftUI 每次布局都会重跑好几遍，而每一遍都从头重算 `visibleMessages` 并重建全部回合摘要。窗口没人碰也在烧 CPU。
+- `AgentTranscriptTurnSummary.build` 由 O(消息数 × 工具调用数) 降为 O(消息数 + 工具调用数)：编辑类工具调用先按所属消息聚合成字典一次，不再为每条 assistant 消息重扫整个 `agentToolCalls` 数组。旧的内层循环每次迭代都要拷贝并 retain/release 一个完整的 `AgentToolCall`（含 arguments 字典），采样显示这是该函数的绝对大头（326 个样本）。长会话里消息数百、调用上千，一次重建就是几十万次迭代。
+- minimap 摘要改为按输入指纹缓存，输入没变时直接复用，不再随 `body` 反复重算整条链。指纹沿用 `AgentChatHistoryNSTextView.inputFingerprint` 的既有做法，只取 `content.count` 而不哈希正文，避免流式输出时每来一个 token 就重走多 KB 内容；工具调用只参与数量与末位 id，因为 minimap 读的 `messageID`/`toolName`/`path` 在调用创建后不再变化，状态更新不影响摘要结果。
+
+### Tests
+
+- 新增 8 条单测钉住 minimap 行为，覆盖改算法前后必须一致的语义：回合折叠 assistant 回复与编辑文件、编辑文件不跨回合泄漏、重复路径去重且保持首次出现顺序、非编辑工具与无 path 调用被忽略、只取首条非空 assistant 回复、host instruction 不产生刻度；外加缓存本身的两条——指纹不变只重建一次、指纹变化才重建。
 
 ## 1.232.0-rc1 - 2026-08-06
 
