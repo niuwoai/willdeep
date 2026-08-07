@@ -496,5 +496,27 @@ final class KeychainSandbox {
             sandboxDefaults.removePersistentDomain(forName: suiteName)
             AgentSettingsStore._setTestDefaultsOverride(nil)
         }
+        Self.removeSuiteFile(named: suiteName)
+    }
+
+    /// `removePersistentDomain` empties the suite but leaves a ~42-byte husk
+    /// plist on disk, and every sandbox instance mints a fresh UUID-suffixed
+    /// suite. Clearing only the contents let those husks pile up: a dev machine
+    /// was found carrying 4712 of them in ~/Library/Preferences, all listed by
+    /// `defaults domains`. Delete the file itself so the suite leaves nothing.
+    ///
+    /// Best-effort by design — `cfprefsd` may still hold the domain and rewrite
+    /// an empty plist as the process exits. Failing to remove it is not worth
+    /// failing a test over, so errors are swallowed.
+    /// `nonisolated` because `deinit` runs outside the class's `@MainActor`
+    /// isolation; this touches only the file system, no actor state.
+    private nonisolated static func removeSuiteFile(named suiteName: String) {
+        let fileManager = FileManager.default
+        for library in fileManager.urls(for: .libraryDirectory, in: .userDomainMask) {
+            let plist = library
+                .appendingPathComponent("Preferences", isDirectory: true)
+                .appendingPathComponent("\(suiteName).plist")
+            try? fileManager.removeItem(at: plist)
+        }
     }
 }
