@@ -139,6 +139,10 @@ enum AgentContextBuilder {
 
         sections.append(dynamicContextMarker)
 
+        // Deliberately after the marker: the clock changes every turn, and
+        // anything before the marker is the cached stable prefix.
+        sections.append(AgentTimeContext.block())
+
         if let rootDirectory,
            let scoped = scopedProjectRules(in: rootDirectory, openedFileURL: openedFileURL) {
             sections.append("""

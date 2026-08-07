@@ -156,6 +156,9 @@ nonisolated enum AgentDelegatedApprovalDecision: Sendable {
 struct AgentToolContext {
     /// Workspace root. All filesystem tools must refuse paths outside this.
     let rootDirectory: URL?
+    /// Every local folder explicitly attached to the owning Project. The
+    /// session root remains first/default; absolute paths may target any root.
+    let workspaceRoots: [URL]
     /// Canonical workspace binding. For local workspaces this mirrors
     /// `rootDirectory`; for remote workspaces it carries the runtime id
     /// plus remote root path.
@@ -220,7 +223,7 @@ struct AgentToolContext {
     /// Optional bridge for proposal-only patch tools. The tool submits a
     /// unified diff into the session's review UI; applying it to disk is
     /// still handled by the existing user-approved patch flow.
-    let patchProposalSink: (@MainActor (String?, String, Bool) async throws -> AgentPatchProposal)?
+    let patchProposalSink: (@MainActor (String?, String, Bool, URL) async throws -> AgentPatchProposal)?
     /// Returns the CURRENT editable content for a workspace file — the open
     /// tab's (possibly unsaved) buffer when the file is open in the editor,
     /// falling back to disk. `edit_file` matches old_string against this so
@@ -258,6 +261,7 @@ struct AgentToolContext {
 
     init(
         rootDirectory: URL?,
+        additionalWorkspaceRoots: [URL] = [],
         workspaceLocation: WorkspaceLocation? = nil,
         runtimeDescriptor: RuntimeDescriptor? = nil,
         runtimeID: UUID? = nil,
@@ -273,7 +277,7 @@ struct AgentToolContext {
         localCommandEnvironment: [String: String]? = nil,
         sandboxMode: AgentSandboxMode = .readOnly,
         isUnattendedDispatchTask: Bool = false,
-        patchProposalSink: (@MainActor (String?, String, Bool) async throws -> AgentPatchProposal)? = nil,
+        patchProposalSink: (@MainActor (String?, String, Bool, URL) async throws -> AgentPatchProposal)? = nil,
         editableContentProvider: (@MainActor (URL) throws -> String)? = nil,
         delegatedFileWriteHandler: (@MainActor (URL, String) throws -> Void)? = nil,
         patchAutoApplySource: AgentToolApprovalSource? = nil,
@@ -285,6 +289,9 @@ struct AgentToolContext {
         secretRedactionValues: [String] = []
     ) {
         self.rootDirectory = rootDirectory
+        self.workspaceRoots = Self.uniqueWorkspaceRoots(
+            [rootDirectory].compactMap { $0 } + additionalWorkspaceRoots
+        )
         self.workspaceLocation = workspaceLocation ?? rootDirectory.map { .local(path: $0.standardizedFileURL.path) }
         self.runtimeDescriptor = runtimeDescriptor
         self.runtimeID = runtimeID
@@ -339,6 +346,7 @@ struct AgentToolContext {
     func withAdditionalSecretRedactionValues(_ values: [String]) -> AgentToolContext {
         AgentToolContext(
             rootDirectory: rootDirectory,
+            additionalWorkspaceRoots: Array(workspaceRoots.dropFirst()),
             workspaceLocation: workspaceLocation,
             runtimeDescriptor: runtimeDescriptor,
             runtimeID: runtimeID,
@@ -370,6 +378,7 @@ struct AgentToolContext {
     func withSandboxMode(_ mode: AgentSandboxMode) -> AgentToolContext {
         AgentToolContext(
             rootDirectory: rootDirectory,
+            additionalWorkspaceRoots: Array(workspaceRoots.dropFirst()),
             workspaceLocation: workspaceLocation,
             runtimeDescriptor: runtimeDescriptor,
             runtimeID: runtimeID,
@@ -406,6 +415,35 @@ struct AgentToolContext {
             result.append(value)
         }
         return result
+    }
+
+    nonisolated private static func uniqueWorkspaceRoots(_ roots: [URL]) -> [URL] {
+        var seen = Set<String>()
+        return roots.compactMap { root in
+            let standardized = root.standardizedFileURL
+            return seen.insert(standardized.path).inserted ? standardized : nil
+        }
+    }
+
+    /// Resolve a tool path against the Project's authorized folder set.
+    /// Relative paths intentionally keep their historical meaning and use the
+    /// session root; callers use absolute paths to address another folder.
+    nonisolated func resolveWorkspaceURL(_ rawPath: String) throws -> (url: URL, root: URL) {
+        guard let primaryRoot = rootDirectory?.standardizedFileURL else {
+            throw AgentToolError.noWorkspace
+        }
+        let candidate: URL
+        if rawPath.hasPrefix("/") {
+            candidate = URL(fileURLWithPath: rawPath).standardizedFileURL
+        } else {
+            candidate = primaryRoot.appendingPathComponent(rawPath).standardizedFileURL
+        }
+        guard let matchedRoot = workspaceRoots
+            .filter({ candidate.path == $0.path || candidate.path.hasPrefix($0.path + "/") })
+            .max(by: { $0.path.count < $1.path.count }) else {
+            throw AgentToolError.pathOutsideWorkspace(rawPath)
+        }
+        return (candidate, matchedRoot)
     }
 }
 
@@ -576,6 +614,10 @@ enum AgentToolApprovalSource: String, Equatable, Codable {
     /// The user marked this MCP server as fully trusted ("my own MCP")
     /// in MCP settings -- every call to it auto-runs, writes included.
     case trustedServer
+    /// An editor-trade subagent patching the single file the user approved
+    /// when the spawn itself was confirmed. The approval is per-file and
+    /// granted up front, so its patches apply without re-asking per hunk.
+    case subagentEditor
 }
 
 struct AgentToolCall: Identifiable, Equatable {
@@ -602,6 +644,10 @@ struct AgentToolCall: Identifiable, Equatable {
     /// ("第 3/12 轮 · 5 次工具"), refreshed each round so the card shows
     /// forward motion instead of an opaque "委派中" spinner.
     var subagentProgress: String?
+    /// For `spawn_agent`: stable id of the child run, used to look its
+    /// per-round transcript up in `AgentSubagentTranscriptStore` when the
+    /// user opens the inspector from this card.
+    var subagentRunID: UUID?
     /// For Claude Code / Codex CLI / Cursor Agent / Cline CLI: host-owned
     /// phase, attempt and bounded redacted output tail. Render-only; the
     /// durable acceptance state lives in `AgentDelegatedTaskRun`.
@@ -620,6 +666,7 @@ struct AgentToolCall: Identifiable, Equatable {
         approvalSource: AgentToolApprovalSource? = nil,
         subagentModel: String? = nil,
         subagentProgress: String? = nil,
+        subagentRunID: UUID? = nil,
         delegatedProgress: AgentDelegatedLiveProgress? = nil
     ) {
         self.id = id
@@ -634,6 +681,7 @@ struct AgentToolCall: Identifiable, Equatable {
         self.approvalSource = approvalSource
         self.subagentModel = subagentModel
         self.subagentProgress = subagentProgress
+        self.subagentRunID = subagentRunID
         self.delegatedProgress = delegatedProgress
     }
 }

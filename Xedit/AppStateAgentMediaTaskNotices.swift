@@ -112,4 +112,321 @@ extension AppState {
         }
         return value
     }
+
+    nonisolated static func mediaTaskCompletionNotice(for task: AgentMediaTask) -> String {
+        let artifactLines: [String] = task.artifacts.isEmpty
+            ? ["Artifacts: none."]
+            : ["Artifacts:"] + task.artifacts.map { "- \($0.title): \($0.filePath)" }
+        let anchorLines = mediaTaskAnchorLines(for: task)
+        let followUpLines = mediaTaskFollowUpLines(for: task)
+        let actionLines = mediaTaskActionLines(for: task)
+        var lines = [
+            "<media-task-notification>",
+            "Remote media task \(task.displayHandle) finished while you were not in this turn.",
+            "Provider: \(task.provider.displayName)",
+            "Kind: \(task.kind.displayName)",
+            "Title: \(task.title)",
+            "Status: \(task.status.rawValue).",
+            "Created at: \(mediaTaskNoticeTimestamp(task.createdAt))",
+            "Updated at: \(mediaTaskNoticeTimestamp(task.updatedAt))"
+        ]
+        if let finishedAt = task.finishedAt {
+            lines.append("Finished at: \(mediaTaskNoticeTimestamp(finishedAt))")
+        }
+        if let model = task.model, !model.isEmpty {
+            lines.append("Model: \(model)")
+        }
+        if let remoteTaskID = task.remoteTaskID, !remoteTaskID.isEmpty {
+            lines.append("Remote task id: \(remoteTaskID)")
+        }
+        if let statusURL = task.statusURL, !statusURL.isEmpty {
+            lines.append("Status URL: \(statusURL)")
+        }
+        if let cancelURL = task.cancelURL, !cancelURL.isEmpty {
+            lines.append("Cancel URL: \(cancelURL)")
+        }
+        if let sourceImagePath = task.sourceImagePath, !sourceImagePath.isEmpty {
+            lines.append("Source image: \(sourceImagePath)")
+        }
+        if let maskPath = task.maskPath, !maskPath.isEmpty {
+            lines.append("Mask: \(maskPath)")
+        }
+        if let message = task.statusMessage, !message.isEmpty {
+            lines.append("Status message: \(message)")
+        }
+        if !anchorLines.isEmpty {
+            lines.append("Anchors:")
+            lines.append(contentsOf: anchorLines)
+        }
+        lines.append(contentsOf: artifactLines)
+        if !followUpLines.isEmpty {
+            lines.append("Suggested follow-up:")
+            lines.append(contentsOf: followUpLines)
+        }
+        if !actionLines.isEmpty {
+            lines.append("Structured action context:")
+            lines.append(contentsOf: actionLines)
+        }
+        lines.append("</media-task-notification>")
+        return lines.joined(separator: "\n")
+    }
+
+    nonisolated private static func mediaTaskAnchorLines(for task: AgentMediaTask) -> [String] {
+        var lines: [String] = []
+        if let projectID = cleanMediaTaskNoticeValue(task.projectID) ?? cleanMediaTaskNoticeValue(task.projectPath) {
+            lines.append("- project_id: \(projectID)")
+        }
+        if let episodeID = cleanMediaTaskNoticeValue(task.episodeID) {
+            lines.append("- episode_id: \(episodeID)")
+        }
+        if let shotID = cleanMediaTaskNoticeValue(task.shotID) {
+            lines.append("- shot_id: \(shotID)")
+        }
+        if let assetKind = cleanMediaTaskNoticeValue(task.assetKind) {
+            lines.append("- asset_kind: \(assetKind)")
+        }
+        if let assetID = cleanMediaTaskNoticeValue(task.assetID) {
+            lines.append("- asset_id: \(assetID)")
+        }
+        if let reviewItemID = cleanMediaTaskNoticeValue(task.reviewItemID) {
+            lines.append("- review_item_id: \(reviewItemID)")
+        }
+        return lines
+    }
+
+    nonisolated private static func mediaTaskPanelScope(for task: AgentMediaTask) -> AgentMediaTaskScope? {
+        let projectID = cleanMediaTaskNoticeValue(task.projectID) ?? cleanMediaTaskNoticeValue(task.projectPath)
+        let episodeID = cleanMediaTaskNoticeValue(task.episodeID)
+        let shotID = cleanMediaTaskNoticeValue(task.shotID)
+        let assetKind = cleanMediaTaskNoticeValue(task.assetKind)
+        let assetID = cleanMediaTaskNoticeValue(task.assetID)
+        let reviewItemID = cleanMediaTaskNoticeValue(task.reviewItemID)
+        if let reviewItemID {
+            return AgentMediaTaskScope(
+                label: "检查项任务：\(task.title)",
+                projectID: projectID,
+                episodeID: episodeID,
+                shotID: shotID,
+                reviewItemID: reviewItemID
+            )
+        }
+        if let shotID {
+            return AgentMediaTaskScope(
+                label: "分镜任务：\(task.title)",
+                projectID: projectID,
+                episodeID: episodeID,
+                shotID: shotID
+            )
+        }
+        if let assetKind, let assetID {
+            let assetLabel = assetKind == "scene" ? "场景资产任务" : "人物资产任务"
+            return AgentMediaTaskScope(
+                label: "\(assetLabel)：\(task.title)",
+                projectID: projectID,
+                assetKind: assetKind,
+                assetID: assetID
+            )
+        }
+        if let projectID {
+            return AgentMediaTaskScope(
+                label: "项目任务：\(task.title)",
+                projectID: projectID
+            )
+        }
+        return nil
+    }
+
+    nonisolated private static func mediaTaskActionLines(for task: AgentMediaTask) -> [String] {
+        var lines = [
+            "<media-task-action>",
+            "task_id: \(task.displayHandle)",
+            "task_uuid: \(task.id.uuidString)",
+            "status: \(task.status.rawValue)",
+            "provider: \(task.provider.rawValue)",
+            "kind: \(task.kind.rawValue)",
+            "created_at: \(mediaTaskNoticeTimestamp(task.createdAt))",
+            "updated_at: \(mediaTaskNoticeTimestamp(task.updatedAt))"
+        ]
+        if let finishedAt = task.finishedAt {
+            lines.append("finished_at: \(mediaTaskNoticeTimestamp(finishedAt))")
+        }
+        let projectID = cleanMediaTaskNoticeValue(task.projectID) ?? cleanMediaTaskNoticeValue(task.projectPath)
+        let episodeID = cleanMediaTaskNoticeValue(task.episodeID)
+        let shotID = cleanMediaTaskNoticeValue(task.shotID)
+        let assetKind = cleanMediaTaskNoticeValue(task.assetKind)
+        let assetID = cleanMediaTaskNoticeValue(task.assetID)
+        let reviewItemID = cleanMediaTaskNoticeValue(task.reviewItemID)
+        let statusURL = cleanMediaTaskNoticeValue(task.statusURL)
+        let cancelURL = cleanMediaTaskNoticeValue(task.cancelURL)
+        let statusEndpointSuffix = cleanMediaTaskNoticeValue(task.statusEndpointSuffix)
+        let cancelEndpointSuffix = cleanMediaTaskNoticeValue(task.cancelEndpointSuffix)
+        let sourceImagePath = cleanMediaTaskNoticeValue(task.sourceImagePath)
+        let maskPath = cleanMediaTaskNoticeValue(task.maskPath)
+        if let statusURL { lines.append("status_url: \(statusURL)") }
+        if let cancelURL { lines.append("cancel_url: \(cancelURL)") }
+        if let statusEndpointSuffix { lines.append("status_endpoint_suffix: \(statusEndpointSuffix)") }
+        if let cancelEndpointSuffix { lines.append("cancel_endpoint_suffix: \(cancelEndpointSuffix)") }
+        if let sourceImagePath { lines.append("source_image_path: \(sourceImagePath)") }
+        if let maskPath { lines.append("mask_path: \(maskPath)") }
+        if let projectID { lines.append("project_id: \(projectID)") }
+        if let episodeID { lines.append("episode_id: \(episodeID)") }
+        if let shotID { lines.append("shot_id: \(shotID)") }
+        if let assetKind { lines.append("asset_kind: \(assetKind)") }
+        if let assetID { lines.append("asset_id: \(assetID)") }
+        if let reviewItemID { lines.append("review_item_id: \(reviewItemID)") }
+        if let scopeArguments = mediaTaskNoticeScopeArguments(
+            projectID: projectID,
+            episodeID: episodeID,
+            shotID: shotID,
+            assetKind: assetKind,
+            assetID: assetID,
+            reviewItemID: reviewItemID
+        ) {
+            lines.append("open_scope_tasks_tool: short_drama_open_media_tasks")
+            lines.append("open_scope_tasks_arguments: \(scopeArguments)")
+            lines.append("refresh_scope_tasks_tool: short_drama_refresh_media_tasks")
+            lines.append("refresh_scope_tasks_arguments: \(scopeArguments)")
+        }
+
+        if task.status == .succeeded {
+            if let projectID, let episodeID, let shotID {
+                lines.append("open_tasks_tool: short_drama_open_media_tasks")
+                lines.append("open_tasks_arguments: project_id=\(projectID), episode_id=\(episodeID), shot_id=\(shotID), scope=shot")
+                let candidateImagePaths = task.artifacts.filter(Self.isImageArtifact).map(\.filePath)
+                if candidateImagePaths.count > 1 {
+                    lines.append("candidate_tool: short_drama_show_image_choice_widget")
+                    let reviewSuffix = reviewItemID.map { ", review_item_id=\($0)" } ?? ""
+                    lines.append("candidate_arguments: project_id=\(projectID), episode_id=\(episodeID), shot_id=\(shotID)\(reviewSuffix)")
+                    let candidateImages = candidateImagePaths.joined(separator: " | ")
+                    lines.append("candidate_image_paths: \(candidateImages)")
+                    lines.append("candidate_preview_tool: show_image_choice_widget")
+                    lines.append("candidate_preview_arguments: image_paths=\(candidateImages), project_id=\(projectID), episode_id=\(episodeID), shot_id=\(shotID)\(reviewSuffix)")
+                } else if let artifact = task.artifacts.first(where: Self.isImageArtifact) {
+                    lines.append("select_primary_tool: short_drama_select_shot_artifact")
+                    lines.append("select_primary_arguments: project_id=\(projectID), episode_id=\(episodeID), shot_id=\(shotID), artifact_path=\(artifact.filePath)")
+                }
+                if let videoArtifact = task.artifacts.first(where: Self.isVideoArtifact) {
+                    lines.append("completed_video_path: \(videoArtifact.filePath)")
+                    lines.append("completed_video_action: continue_from_completed_video_artifact")
+                    lines.append("open_shot_tasks_tool: short_drama_open_media_tasks")
+                    lines.append("open_shot_tasks_arguments: project_id=\(projectID), episode_id=\(episodeID), shot_id=\(shotID), scope=shot")
+                    lines.append("refresh_shot_tasks_tool: short_drama_refresh_media_tasks")
+                    lines.append("refresh_shot_tasks_arguments: project_id=\(projectID), episode_id=\(episodeID), shot_id=\(shotID), scope=shot")
+                    lines.append("storyboard_widget_tool: short_drama_show_storyboard_widget")
+                    lines.append("storyboard_widget_arguments: project_id=\(projectID), episode_id=\(episodeID)")
+                }
+                if isImageFollowUpKind(task.kind) {
+                    if let artifact = task.artifacts.first(where: Self.isImageArtifact) {
+                        let reviewSuffix = reviewItemID.map { ", review_item_id=\($0)" } ?? ""
+                        let artifactArguments = "project_id=\(projectID), episode_id=\(episodeID), shot_id=\(shotID), artifact_path=\(artifact.filePath)\(reviewSuffix)"
+                        lines.append("video_from_image_tool: generate_video_from_image")
+                        lines.append("video_from_image_arguments: image_path=\(artifact.filePath), project_id=\(projectID), episode_id=\(episodeID), shot_id=\(shotID)\(reviewSuffix)")
+                        lines.append("edit_tool: short_drama_open_image_editor")
+                        lines.append("edit_arguments: \(artifactArguments), operation=inpaint")
+                        lines.append("erase_tool: short_drama_open_image_editor")
+                        lines.append("erase_arguments: \(artifactArguments), operation=erase")
+                        lines.append("upscale_tool: short_drama_upscale_shot_artifact")
+                        lines.append("upscale_arguments: \(artifactArguments)")
+                    }
+                    lines.append("video_tool: short_drama_generate_shot_media")
+                    lines.append("video_arguments: project_id=\(projectID), episode_id=\(episodeID), shot_id=\(shotID), kind=video_generation")
+                }
+                if let reviewItemID {
+                    lines.append("open_review_tasks_tool: short_drama_open_media_tasks")
+                    lines.append("open_review_tasks_arguments: project_id=\(projectID), episode_id=\(episodeID), shot_id=\(shotID), scope=review_item, review_item_id=\(reviewItemID)")
+                    lines.append("resolve_review_tool: short_drama_resolve_review_item")
+                    lines.append("resolve_review_arguments: project_id=\(projectID), episode_id=\(episodeID), shot_id=\(shotID), item_id=\(reviewItemID)")
+                }
+            } else if let projectID, let assetKind, let assetID {
+                lines.append("open_tasks_tool: short_drama_open_media_tasks")
+                lines.append("open_tasks_arguments: project_id=\(projectID), scope=asset, asset_kind=\(assetKind), asset_id=\(assetID)")
+                lines.append("refresh_tasks_tool: short_drama_refresh_media_tasks")
+                lines.append("refresh_tasks_arguments: project_id=\(projectID), scope=asset, asset_kind=\(assetKind), asset_id=\(assetID)")
+                lines.append("generate_asset_reference_tool: short_drama_generate_asset_media")
+                lines.append("generate_asset_reference_arguments: project_id=\(projectID), asset_kind=\(assetKind), asset_id=\(assetID)")
+                if let artifact = task.artifacts.first(where: Self.isImageArtifact) {
+                    lines.append("attach_reference_tool: short_drama_attach_asset_reference_image")
+                    lines.append("attach_reference_arguments: project_id=\(projectID), asset_kind=\(assetKind), asset_id=\(assetID), image_path=\(artifact.filePath)")
+                    lines.append("edit_tool: open_image_editor")
+                    lines.append("edit_arguments: image_path=\(artifact.filePath), operation=inpaint, project_id=\(projectID), asset_kind=\(assetKind), asset_id=\(assetID)")
+                    lines.append("erase_tool: open_image_editor")
+                    lines.append("erase_arguments: image_path=\(artifact.filePath), operation=erase, project_id=\(projectID), asset_kind=\(assetKind), asset_id=\(assetID)")
+                    lines.append("upscale_tool: upscale_image")
+                    lines.append("upscale_arguments: image_path=\(artifact.filePath), project_id=\(projectID), asset_kind=\(assetKind), asset_id=\(assetID)")
+                }
+                lines.append("next_step: use this reference image when generating related short-drama shots.")
+            } else if isImageFollowUpKind(task.kind) {
+                let imageArtifacts = task.artifacts.filter(Self.isImageArtifact)
+                if imageArtifacts.count > 1 {
+                    let imagePaths = imageArtifacts.map(\.filePath).joined(separator: " | ")
+                    lines.append("candidate_tool: show_image_choice_widget")
+                    lines.append("candidate_arguments: image_paths=\(imagePaths)")
+                } else if let artifact = imageArtifacts.first {
+                    lines.append("edit_tool: open_image_editor")
+                    lines.append("edit_arguments: image_path=\(artifact.filePath), operation=inpaint")
+                    lines.append("erase_tool: open_image_editor")
+                    lines.append("erase_arguments: image_path=\(artifact.filePath), operation=erase")
+                    lines.append("upscale_tool: upscale_image")
+                    lines.append("upscale_arguments: image_path=\(artifact.filePath)")
+                    lines.append("video_from_image_tool: generate_video_from_image")
+                    lines.append("video_from_image_arguments: image_path=\(artifact.filePath)")
+                }
+                lines.append("next_step: attach one artifact to chat, open it in the image editor, upscale it, generate video from it, or import it into a short-drama shot or asset.")
+            }
+        } else {
+            if let sourceImagePath, let maskPath, isImageFollowUpKind(task.kind) {
+                let operation = task.kind == .imageErase ? "erase" : "inpaint"
+                if let projectID, let episodeID, let shotID {
+                    lines.append("reopen_editor_tool: short_drama_open_image_editor")
+                    var reopenArguments = "project_id=\(projectID), episode_id=\(episodeID), shot_id=\(shotID), artifact_path=\(sourceImagePath), mask_path=\(maskPath), operation=\(operation)"
+                    if let reviewItemID {
+                        reopenArguments += ", review_item_id=\(reviewItemID)"
+                    }
+                    lines.append("reopen_editor_arguments: \(reopenArguments)")
+                } else {
+                    lines.append("reopen_editor_tool: open_image_editor")
+                    var reopenArguments = "image_path=\(sourceImagePath), mask_path=\(maskPath), operation=\(operation)"
+                    if let projectID {
+                        reopenArguments += ", project_id=\(projectID)"
+                    }
+                    if let assetKind {
+                        reopenArguments += ", asset_kind=\(assetKind)"
+                    }
+                    if let assetID {
+                        reopenArguments += ", asset_id=\(assetID)"
+                    }
+                    if let reviewItemID {
+                        reopenArguments += ", review_item_id=\(reviewItemID)"
+                    }
+                    lines.append("reopen_editor_arguments: \(reopenArguments)")
+                }
+            }
+            if projectID != nil {
+                lines.append("retry_tool: short_drama_retry_media_task")
+                lines.append("retry_arguments: task_id=\(task.displayHandle)")
+            }
+            if let projectID {
+                let scopeArguments: String
+                if let episodeID, let shotID {
+                    scopeArguments = "project_id=\(projectID), episode_id=\(episodeID), shot_id=\(shotID), scope=shot"
+                } else if let assetKind, let assetID {
+                    scopeArguments = "project_id=\(projectID), scope=asset, asset_kind=\(assetKind), asset_id=\(assetID)"
+                } else {
+                    scopeArguments = "project_id=\(projectID), scope=project"
+                }
+                lines.append("open_tasks_tool: short_drama_open_media_tasks")
+                lines.append("open_tasks_arguments: \(scopeArguments)")
+            }
+        }
+
+        if !task.artifacts.isEmpty {
+            lines.append("artifact_paths:")
+            lines.append(contentsOf: task.artifacts.prefix(12).map { "- \($0.filePath)" })
+            if task.artifacts.count > 12 {
+                lines.append("- ... \(task.artifacts.count - 12) more")
+            }
+        }
+        lines.append("</media-task-action>")
+        return lines
+    }
 }

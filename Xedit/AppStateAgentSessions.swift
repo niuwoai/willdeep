@@ -484,9 +484,9 @@ extension AppState {
 
     // MARK: - Interaction modes (ordinary / goal)
 
-    /// Flip between ordinary and Goal conversation behavior. Plans are task
-    /// progress rather than a mode, so leaving Goal preserves its current
-    /// execution plan while entering Goal starts a clean goal cycle.
+    /// Flip how the next turn executes. The selection is presentation-neutral:
+    /// it must not clear history, plans, goals, or move the conversation between
+    /// navigation surfaces.
     func setAgentInteractionMode(_ mode: AgentInteractionMode) {
         ensureActiveAgentSessionForInteractiveControl()
         if mode == .goal,
@@ -498,14 +498,6 @@ extension AppState {
         }
         guard agentInteractionMode != mode else { return }
         agentInteractionMode = mode
-        if mode == .goal {
-            agentCurrentPlan = nil
-        }
-        if mode != .goal {
-            agentCurrentGoal = nil
-            activeRuntime?.goalPlanningState = nil
-            activeRuntime?.goalTurnRecoveryCheckpoint = nil
-        }
         persistActiveAgentSession()
     }
 
@@ -1083,6 +1075,18 @@ extension AppState {
     /// selected conversation first, this preserves the user's place in the
     /// console and interrupts only the runtime that owns the selected Goal.
     func stopAgentResponse(for runtime: AgentRuntime) {
+        if let projectID = runtime.session.dispatchParentProjectID,
+           let taskID = runtime.session.dispatchTaskID {
+            // Stop means stop for an unattended dispatch node as well. Without
+            // persisting this project-level pause, reopening the board would
+            // attach a fresh monitor and quietly continue the task.
+            _ = agentDispatchCoordinator.setPaused(true, goalID: projectID)
+            agentDispatchCoordinator.updateTaskState(
+                goalID: projectID,
+                taskID: taskID,
+                state: .reviewing
+            )
+        }
         if let activeTurnID = runtime.activeTurnID,
            runtime.userStoppedTurnID == activeTurnID {
             return
@@ -1681,7 +1685,20 @@ extension AppState {
         }
         guard let targetSession = agentSessions.first(where: { $0.id == id }) else { return false }
         guard activeAgentSessionID != id else {
+            // A previous switch may have selected the row just after a lazy
+            // runtime was created but before cache eviction completed. Heal
+            // that already-highlighted row on the next click instead of
+            // returning success while the transcript delegates read nil and
+            // render the new-chat dashboard.
+            guard runtime(for: id) != nil else {
+                agentSessionLoadFailure = AgentSessionLoadFailure(
+                    id: targetSession.id,
+                    title: targetSession.title
+                )
+                return false
+            }
             agentSessionLoadFailure = nil
+            subscribeToActiveRuntime()
             return true
         }
         let outgoingRuntime = activeRuntime
@@ -1758,20 +1775,13 @@ extension AppState {
     /// 窗口保持用户当前的浏览状态。这里只确保子进程拿到该路径的
     /// security scope。Remote 会话本来就不动 editor。
     private func syncWorkspaceContext(for session: AgentSession) {
-        let location = session.workspaceLocation ?? session.workspaceRootPath.map { .local(path: $0) }
-        guard case .local(let path) = location, !path.isEmpty else {
-            return
+        for url in agentWorkspaceRoots(for: session) {
+            // Already validated + security-scoped this Project folder on an
+            // earlier switch. A Project may contain several repositories.
+            if securityScopedAccessURLs.contains(url) { continue }
+            guard Self.isExistingDirectory(url) else { continue }
+            _ = activateSecurityScope(for: url)
         }
-
-        let url = URL(fileURLWithPath: path).standardizedFileURL
-        // Already validated + security-scoped this workspace on an earlier
-        // switch (the common case: hopping between two sessions in the same
-        // folder). `activateSecurityScope` would early-return anyway, but the
-        // `isExistingDirectory` stat below still hit the filesystem on every
-        // single session switch — skip it once the scope is live.
-        if securityScopedAccessURLs.contains(url) { return }
-        guard Self.isExistingDirectory(url) else { return }
-        _ = activateSecurityScope(for: url)
     }
 
     /// Lazy lookup: returns the existing runtime for `sessionID` or
@@ -1795,7 +1805,12 @@ extension AppState {
             _ = autoApplyPendingAgentPatchProposals(for: runtime, source: .dispatchTask)
         }
         startAgentKnowledgeFolderWatchers(for: runtime)
-        evictInactiveAgentRuntimesIfNeeded()
+        // The caller still needs this runtime after we return. In particular,
+        // selectAgentSession flips activeAgentSessionID only after this method
+        // succeeds. Without temporary protection an older conversation can be
+        // the first cache entry evicted here, leaving a highlighted sidebar
+        // row whose transcript reads from a missing runtime.
+        evictInactiveAgentRuntimesIfNeeded(protecting: sessionID)
         return runtime
     }
 
@@ -1813,9 +1828,14 @@ extension AppState {
         return fullSession
     }
 
-    private func evictInactiveAgentRuntimesIfNeeded() {
+    private func evictInactiveAgentRuntimesIfNeeded(
+        protecting additionalProtectedID: AgentSession.ID? = nil
+    ) {
         let maximumIdleRuntimes = 6
         var protectedIDs = Set([activeAgentSessionID].compactMap { $0 })
+        if let additionalProtectedID {
+            protectedIDs.insert(additionalProtectedID)
+        }
         protectedIDs.formUnion(pendingDispatchQueue.map(\.runtimeID))
         protectedIDs.formUnion(titleSummarizationsInFlight)
         let idle = agentRuntimes.values

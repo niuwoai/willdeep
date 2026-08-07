@@ -53,6 +53,14 @@ final class AgentRuntime: ObservableObject, Identifiable {
     // MARK: - Conversation state
 
     @Published var messages: [AgentMessage] = []
+    /// Live text of the currently-streaming assistant message. Fed by
+    /// `AgentStreamingMessageBuffer` at bubble cadence (~10 Hz) and observed
+    /// ONLY by the transcript's streaming bubble subtree. Deliberately a
+    /// plain `let` — its `objectWillChange` must NOT forward through this
+    /// runtime (and from there through AppState) or every flush would again
+    /// invalidate the whole window. Canonical `messages` publishes sync at
+    /// a slower cadence; see AgentStreamingMessageBuffer's header comment.
+    let streamingOverlay = AgentStreamingContentOverlay()
     @Published var contextSummary: String?
     @Published var contextSummaryThroughMessageID: AgentMessage.ID?
     @Published var patchProposals: [AgentPatchProposal] = []
@@ -260,6 +268,18 @@ final class AgentRuntime: ObservableObject, Identifiable {
     /// without execution. The plan remains visible, but host auto-continuation
     /// must stop after the planning reply.
     var currentTurnPlanningOnly: Bool = false
+    /// Subagent delegation policy for the turn currently in flight, set from
+    /// the `/subagent` / `/no-subagent` composer commands. `.forbidden`
+    /// removes `spawn_agent` from this turn's tool table; `.required` only
+    /// injects an instruction (see `AgentDelegationPolicy`).
+    var currentTurnDelegationPolicy: AgentDelegationPolicy = .automatic
+    /// Policy staged by a slash command for the *next* dispatch. Consumed
+    /// (and reset) by `dispatchAgentMessage`, or carried into the queued
+    /// message when the runtime is still responding.
+    var pendingDelegationPolicy: AgentDelegationPolicy = .automatic
+    /// `spawn_agent` invocations observed during the current turn. Only used
+    /// to audit whether a `.required` policy was actually honored.
+    var currentTurnSpawnAgentCallCount: Int = 0
     /// Goal may continue across several provider turns, but repeated
     /// no-change self-checks must pause instead of spinning forever.
     var consecutiveGoalRoundsWithoutChecklistProgress: Int = 0

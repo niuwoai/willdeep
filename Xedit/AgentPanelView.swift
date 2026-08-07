@@ -584,10 +584,24 @@ struct AgentActivitySweepLabel: View {
                     }
                 }
             }
-            .onChange(of: text) { _ in
+            .onChange(of: text) { [text] newText in
+                // Restart the sweep only for a genuinely different line. While
+                // reasoning streams, the same line keeps growing; restarting on
+                // every increment meant the sweep never completed a cycle and
+                // read as flicker.
+                guard !Self.isContinuation(of: text, in: newText) else { return }
                 animationStartedAt = Date()
             }
             .accessibilityLabel(text)
+    }
+
+    /// Same prefix test the headline cache uses: a line that is still being
+    /// written is the same line, not a new one.
+    static func isContinuation(of previous: String, in candidate: String) -> Bool {
+        if candidate == previous { return true }
+        let previousStem = previous.hasSuffix("…") ? String(previous.dropLast()) : previous
+        guard !previousStem.isEmpty else { return candidate.isEmpty }
+        return candidate.hasPrefix(previousStem) || previousStem.hasPrefix(candidate)
     }
 
     private func sweepLayer(progress: CGFloat) -> some View {

@@ -4,6 +4,12 @@
 require "json"
 require "pathname"
 
+# Pinned like the sibling guards: these read UTF-8 repo files, and a shell
+# without LANG leaves Ruby on US-ASCII, which turns any non-ASCII byte into
+# an Encoding::InvalidByteSequenceError instead of a real check result.
+Encoding.default_external = Encoding::UTF_8
+Encoding.default_internal = Encoding::UTF_8
+
 ROOT = Pathname.new(__dir__).parent
 HELPER = ROOT.join("ComputerUseHelper", "main.swift")
 TOOLS = ROOT.join("Xedit", "AgentComputerUseTools.swift")

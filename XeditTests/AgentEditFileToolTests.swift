@@ -195,7 +195,7 @@ struct AgentEditFileToolTests {
 
     @Test
     func oldStringNotFoundThrows() {
-        #expect(throws: AgentEditFileError.oldStringNotFound("sample.txt")) {
+        #expect(throws: AgentEditFileError.oldStringNotFound("sample.txt", hint: nil)) {
             try AgentEditFileSupport.makeEdit(
                 path: "sample.txt",
                 oldContent: "alpha\nbeta\n",
@@ -245,6 +245,103 @@ struct AgentEditFileToolTests {
         }
     }
 
+    // MARK: - Whitespace-tolerant fallback
+
+    @Test("trailing whitespace differences no longer fail the edit")
+    func trailingWhitespaceMismatchStillMatches() throws {
+        // File has trailing spaces the model can't see in read_file output.
+        let content = "func a() {   \n    body()\t\n}\n"
+        let edit = try roundTrip(
+            content: content,
+            old: "func a() {\n    body()\n}",
+            new: "func a() {\n    body2()\n}"
+        )
+        #expect(edit.newContent == "func a() {\n    body2()\n}\n")
+    }
+
+    @Test("CRLF files fail with an actionable line-ending hint, not a crash or internal error")
+    func crlfContentReportsLineEndingHint() {
+        // The applier's diff parser splits on .newlines, so "\r" hunk lines
+        // can never round-trip — the fallback must refuse CRLF windows and
+        // the error must tell the model to normalize line endings.
+        let content = "one\r\ntwo\r\nthree\r\n"
+        do {
+            _ = try AgentEditFileSupport.makeEdit(
+                path: "sample.txt",
+                oldContent: content,
+                oldString: "two\nthree",
+                newString: "TWO\nTHREE",
+                replaceAll: false
+            )
+            Issue.record("expected a CRLF-related error")
+        } catch let error as AgentEditFileError {
+            #expect(error.errorDescription?.contains("CRLF") == true)
+        } catch {
+            Issue.record("unexpected error type: \(error)")
+        }
+    }
+
+    @Test("uniformly shifted indentation matches and re-indents new_string")
+    func uniformIndentShiftMatchesAndReindents() throws {
+        let content = "start\n        let a = 1\n        let b = 2\nend\n"
+        // Model lost one indent level on every line; new_string is written
+        // at the same (wrong) level and must be shifted back.
+        let edit = try roundTrip(
+            content: content,
+            old: "    let a = 1\n    let b = 2",
+            new: "    let a = 10\n    let b = 20"
+        )
+        #expect(edit.newContent == "start\n        let a = 10\n        let b = 20\nend\n")
+    }
+
+    @Test("indent-tolerant match still rejects ambiguity")
+    func indentTolerantMatchRejectsAmbiguity() {
+        let content = "if x {\n    call()\n}\nif y {\n        call()\n}\n"
+        #expect(throws: AgentEditFileError.oldStringNotUnique("sample.txt", 2)) {
+            try AgentEditFileSupport.makeEdit(
+                path: "sample.txt",
+                oldContent: content,
+                oldString: "  call()",
+                newString: "  other()",
+                replaceAll: false
+            )
+        }
+    }
+
+    @Test("non-uniform indentation divergence stays a hard error")
+    func nonUniformIndentDoesNotMatch() {
+        // Line 1 is over-indented by 2, line 2 by 4 — no uniform shift
+        // explains both, so this must NOT silently match anywhere.
+        let content = "    aa\n    b\n"
+        #expect(throws: AgentEditFileError.self) {
+            try AgentEditFileSupport.makeEdit(
+                path: "sample.txt",
+                oldContent: content,
+                oldString: "  aa\n      b",
+                newString: "x",
+                replaceAll: false
+            )
+        }
+    }
+
+    @Test("line-number prefixes in old_string produce a targeted hint")
+    func lineNumberPrefixHint() {
+        let hint = AgentEditFileSupport.notFoundHint(
+            oldContent: "alpha\nbeta\n",
+            oldString: "    1  alpha\n    2  beta"
+        )
+        #expect(hint?.contains("line-number prefixes") == true)
+    }
+
+    @Test("diverging-after-first-line failures report the anchor line")
+    func firstLineAnchorHint() {
+        let hint = AgentEditFileSupport.notFoundHint(
+            oldContent: "one\ntwo\nthree\n",
+            oldString: "two\nTHREE-noexist"
+        )
+        #expect(hint?.contains("file line 2") == true)
+    }
+
     // MARK: - Tool surface
 
     @Test("edit_file queues a patch proposal without writing files")
@@ -261,7 +358,7 @@ struct AgentEditFileToolTests {
         var queuedProposal: AgentPatchProposal?
         let context = AgentToolContext(
             rootDirectory: workspace,
-            patchProposalSink: { title, diff, _ in
+            patchProposalSink: { title, diff, _, _ in
                 let proposal = AgentPatchProposal(
                     messageID: UUID(),
                     title: title ?? "Agent Patch",
@@ -309,7 +406,7 @@ struct AgentEditFileToolTests {
         var queuedDiff: String?
         let context = AgentToolContext(
             rootDirectory: workspace,
-            patchProposalSink: { title, diff, _ in
+            patchProposalSink: { title, diff, _, _ in
                 queuedDiff = diff
                 return AgentPatchProposal(messageID: UUID(), title: title ?? "Agent Patch", diff: diff)
             },
@@ -344,7 +441,7 @@ struct AgentEditFileToolTests {
 
         let context = AgentToolContext(
             rootDirectory: workspace,
-            patchProposalSink: { _, diff, _ in
+            patchProposalSink: { _, diff, _, _ in
                 AgentPatchProposal(messageID: UUID(), title: "unused", diff: diff)
             }
         )
@@ -362,5 +459,49 @@ struct AgentEditFileToolTests {
         }
         // Nothing queued, nothing written.
         #expect(try String(contentsOf: fileURL, encoding: .utf8) == "dup\nother\ndup\n")
+    }
+
+    @Test("edit_file keeps the selected secondary Project root on its proposal")
+    @MainActor
+    func toolTargetsAdditionalProjectRoot() async throws {
+        let primary = FileManager.default.temporaryDirectory
+            .appendingPathComponent("willdeep_edit_primary_\(UUID().uuidString)", isDirectory: true)
+        let secondary = FileManager.default.temporaryDirectory
+            .appendingPathComponent("willdeep_edit_secondary_\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: primary, withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: secondary, withIntermediateDirectories: true)
+        defer {
+            try? FileManager.default.removeItem(at: primary)
+            try? FileManager.default.removeItem(at: secondary)
+        }
+        let target = secondary.appendingPathComponent("Backend.swift")
+        try "let port = 80\n".write(to: target, atomically: true, encoding: .utf8)
+
+        var proposalRoot: URL?
+        var queuedDiff: String?
+        let context = AgentToolContext(
+            rootDirectory: primary,
+            additionalWorkspaceRoots: [secondary],
+            patchProposalSink: { _, diff, _, root in
+                proposalRoot = root
+                queuedDiff = diff
+                return AgentPatchProposal(messageID: UUID(), title: "Backend", diff: diff)
+            }
+        )
+
+        _ = try await AgentToolRunner.run(
+            name: "edit_file",
+            arguments: [
+                "path": .string(target.path),
+                "old_string": .string("let port = 80"),
+                "new_string": .string("let port = 443")
+            ],
+            context: context
+        )
+
+        #expect(proposalRoot?.standardizedFileURL.path == secondary.standardizedFileURL.path)
+        let diff = try #require(queuedDiff)
+        let change = try #require(try AgentPatchApplier.parse(diff).first)
+        #expect(change.path == "Backend.swift")
     }
 }

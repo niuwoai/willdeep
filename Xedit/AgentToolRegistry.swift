@@ -44,11 +44,13 @@ enum AgentToolRegistry {
         ),
         AgentToolDescriptor(
             name: "read_file",
-            description: "Read a UTF-8 text file inside the workspace. Returns the file content with line numbers.",
+            description: "Read a UTF-8 text file inside the workspace. Returns the file content with line numbers (a right-aligned number, two spaces, then the line — strip that prefix before quoting content or building edit_file old_string). Large files are truncated at a line boundary with a note telling you the offset to continue from.",
             risk: .read,
             parameters: [
                 AgentToolParameter(name: "path", type: .string, description: "Workspace-relative path to read.", required: true),
-                AgentToolParameter(name: "max_bytes", type: .integer, description: "Maximum bytes to return. Defaults to 64KB.", required: false)
+                AgentToolParameter(name: "offset", type: .integer, description: "1-based line number to start reading from. Defaults to 1. Use the offset suggested in a previous read's truncation note to continue.", required: false),
+                AgentToolParameter(name: "limit", type: .integer, description: "Maximum number of lines to return. Defaults to as many as fit in max_bytes.", required: false),
+                AgentToolParameter(name: "max_bytes", type: .integer, description: "Maximum bytes to return. Defaults to 64KB, capped at 256KB.", required: false)
             ]
         ),
         AgentToolDescriptor(
@@ -72,6 +74,17 @@ enum AgentToolRegistry {
             parameters: [
                 AgentToolParameter(name: "include_archived", type: .boolean, description: "When true, include archived sessions in this workspace. Defaults to false.", required: false),
                 AgentToolParameter(name: "limit", type: .integer, description: "Maximum sessions to return. Defaults to 20, capped at 100.", required: false)
+            ]
+        ),
+        AgentToolDescriptor(
+            name: "search_sessions",
+            description: "Search the text of PAST WillDeep conversations for a phrase and return matching excerpts with their session ids. Use this when the user refers to something discussed before (\"we talked about this last week\", \"what did we decide about X\") instead of asking them to repeat it. Searches the current workspace by default; `scope: \"all\"` covers every workspace and requires the user's approval. Returns short excerpts with session ids, never whole transcripts. If an excerpt is not enough, search again with a more specific phrase; there is deliberately no way to pull an entire past conversation into this context.",
+            risk: .read,
+            parameters: [
+                AgentToolParameter(name: "query", type: .string, description: "Literal phrase to look for. Case- and accent-insensitive substring match, not a regex. Prefer a distinctive few words over a long sentence.", required: true),
+                AgentToolParameter(name: "scope", type: .string, description: "`workspace` (default) searches conversations in the current workspace. `all` searches every workspace and requires user approval — only use it when the answer is clearly not in this project.", required: false),
+                AgentToolParameter(name: "limit", type: .integer, description: "Maximum excerpts to return. Defaults to 10, capped at 30.", required: false),
+                AgentToolParameter(name: "include_archived", type: .boolean, description: "Include archived conversations. Defaults to true — archived work is exactly what tends to be forgotten.", required: false)
             ]
         ),
         AgentToolDescriptor(
@@ -191,7 +204,7 @@ enum AgentToolRegistry {
             description: "Create a BRAND-NEW file. This is the ONLY correct way to make a new file — do NOT use edit_file or apply_patch for creation. Pass the workspace-relative path and the full file content directly; no diff to hand-craft. Content is written literally: GitHub Actions expressions such as `${{ secrets.DEPLOY_TOKEN }}` are supported and are references, not secret values. Never switch to shell/Python merely because content contains `${{ ... }}`. Fails if the path already exists. Goal mode, Smart review, and Workspace Access write validated workspace files immediately; Strict mode presents an inline file card for the user to Apply. For several independent files, emit all create_file/edit_file calls in one assistant response so WillDeep can present one Apply All review group.",
             risk: .read,
             parameters: [
-                AgentToolParameter(name: "path", type: .string, description: "Workspace-relative path of the NEW file, e.g. `src/utils/date.ts` or `docs/README.md`. Must not already exist.", required: true),
+                AgentToolParameter(name: "path", type: .string, description: "Workspace-relative path of the NEW file, or an absolute path inside another folder attached to this Project. Must not already exist.", required: true),
                 AgentToolParameter(name: "content", type: .string, description: "Full contents of the new file, written verbatim. Pass an empty string for an empty file.", required: true),
                 AgentToolParameter(name: "title", type: .string, description: "Optional short title for the file card. Defaults to `创建文件: <path>`.", required: false)
             ]
@@ -211,8 +224,8 @@ enum AgentToolRegistry {
             description: "EDIT an EXISTING file by EXACT STRING REPLACEMENT — the PREFERRED way to edit files. Pass the workspace-relative path, the exact current text to replace (old_string) and its replacement (new_string). Text is matched and written literally: GitHub Actions expressions such as `${{ secrets.DEPLOY_TOKEN }}` are supported and are references, not secret values. Never switch to shell/Python merely because content contains `${{ ... }}`. old_string must match the file content EXACTLY and appear exactly ONCE unless replace_all=true. Goal mode, Smart review, and Workspace Access apply validated workspace edits immediately; Strict mode always asks. For several independent files, emit all create_file/edit_file calls in one assistant response so WillDeep can present one Apply All review group. Keep dependent edits to the same file ordered. To CREATE a new file, use `create_file`.",
             risk: .read,
             parameters: [
-                AgentToolParameter(name: "path", type: .string, description: "Workspace-relative path of the EXISTING file to edit, e.g. `src/utils/date.ts`.", required: true),
-                AgentToolParameter(name: "old_string", type: .string, description: "Exact text currently in the file to replace, copied verbatim — same whitespace/indentation, no line-number prefixes. Must be unique in the file unless replace_all=true.", required: true),
+                AgentToolParameter(name: "path", type: .string, description: "Workspace-relative path of the EXISTING file, or an absolute path inside another folder attached to this Project.", required: true),
+                AgentToolParameter(name: "old_string", type: .string, description: "Exact text currently in the file to replace, copied verbatim from read_file output — same whitespace/indentation, with the line-number prefixes stripped. NEVER build it from grep/search results: those lines are truncated at 200 characters. Must be unique in the file unless replace_all=true.", required: true),
                 AgentToolParameter(name: "new_string", type: .string, description: "Replacement text. Pass an empty string to delete old_string. Must differ from old_string.", required: true),
                 AgentToolParameter(name: "replace_all", type: .boolean, description: "Replace EVERY occurrence of old_string instead of requiring a unique match (e.g. renaming a symbol). Defaults to false.", required: false),
                 AgentToolParameter(name: "title", type: .string, description: "Optional short title for the patch card. Defaults to `编辑文件: <path>`.", required: false),
@@ -225,6 +238,7 @@ enum AgentToolRegistry {
             risk: .read,
             parameters: [
                 AgentToolParameter(name: "diff", type: .string, description: "Unified diff for an EXISTING file. Use workspace-relative paths (`--- a/path`, `+++ b/path`) and standard @@ hunks. (New files: use `create_file`, not a `/dev/null` diff here.)", required: true),
+                AgentToolParameter(name: "workspace_root", type: .string, description: "Optional absolute Project folder root for the relative diff paths. Omit to use the session's primary workspace.", required: false),
                 AgentToolParameter(name: "title", type: .string, description: "Optional short title for the patch card. Defaults to Agent Patch.", required: false),
                 AgentToolParameter(name: "apply_immediately", type: .boolean, description: "Set true ONLY when the user explicitly asked to write / save directly without review (e.g. \"直接写\", \"直接落盘\", \"不用审核\", \"just write it\", \"save it directly\"). Smart review and Workspace Access already write immediately. Strict mode ignores this flag because every workspace change requires review. Defaults to false.", required: false)
             ]
@@ -1742,7 +1756,8 @@ enum AgentToolRegistry {
                 AgentToolParameter(name: "prompt", type: .string, description: "Self-contained task description for the subagent. Include all needed context — it cannot see the parent conversation or ask questions.", required: true),
                 AgentToolParameter(name: "label", type: .string, description: "Short display label for the UI (e.g. `explore-auth-flow`). Defaults to a prompt prefix.", required: false),
                 AgentToolParameter(name: "run_in_background", type: .boolean, description: "When true, return immediately with an agent handle (agent_xxxxxx); the report is injected as a system message when the subagent finishes. Up to 3 subagents may run in parallel per session. Defaults to false (wait for the report inline).", required: false),
-                AgentToolParameter(name: "model", type: .string, description: "Optional model id override for the subagent (same provider). Use a cheaper/faster model for broad exploration.", required: false)
+                AgentToolParameter(name: "profile", type: .string, description: "Which subagent trade to spawn. Each trade runs on its own model with a narrowed tool set, so prefer the narrowest one that fits the task — it is faster and far cheaper. Trades: \(AgentSubagentProfileCatalog.toolDescriptionCatalog) Defaults to `deep`.", required: false),
+                AgentToolParameter(name: "target_file", type: .string, description: "Required for `profile=\"editor\"`, ignored otherwise. Workspace-relative path of the single file the subagent may edit. The user approves this file explicitly; patches touching any other path are rejected.", required: false)
             ]
         ),
         AgentToolDescriptor(
@@ -1812,9 +1827,15 @@ enum AgentToolRegistry {
     static func tools(
         activeExperts: Set<AgentExpert>,
         interactionMode: AgentInteractionMode = .normal,
-        executionAgent: AgentExecutionAgent = .willDeep
+        executionAgent: AgentExecutionAgent = .willDeep,
+        delegationPolicy: AgentDelegationPolicy = .automatic
     ) -> [AgentToolDescriptor] {
         all.filter { descriptor in
+            // `/no-subagent` is enforced here rather than by prompt, so a
+            // model that ignores the instruction still cannot delegate.
+            if !delegationPolicy.allowsTool(named: descriptor.name) {
+                return false
+            }
             if isDelegatedCodingTool(descriptor.name),
                !shouldExposeDelegatedCodingTool(
                    descriptor.name,
@@ -1871,7 +1892,8 @@ enum AgentToolRegistry {
     static func risk(
         for name: String,
         arguments: [String: AgentJSONValue],
-        rootDirectory: URL? = nil
+        rootDirectory: URL? = nil,
+        additionalWorkspaceRoots: [URL] = []
     ) -> AgentToolRisk {
         // `glob` isn't an advertised tool, but some models hallucinate it
         // (they've seen `Glob` elsewhere). Treat it as the read-only
@@ -1879,9 +1901,31 @@ enum AgentToolRegistry {
         // which would pop a bogus "destructive command" confirm for a plain
         // file listing. See AgentFileTools.glob / AgentTools.run.
         if name == "glob" { return .read }
+        // Spawning is read-tier except for the editor trade, which hands a
+        // child one write tool. The user approves that spawn ("let a subagent
+        // edit <file>") rather than each patch it produces.
+        if name == "spawn_agent" {
+            let profile = AgentSubagentProfileCatalog.profile(
+                id: arguments["profile"]?.stringValue()
+            )
+            return profile.requiresWriteAccess ? .write : .read
+        }
+        // Reading this workspace's own history is ordinary; reaching into
+        // every other project's conversations is the user's call, so that
+        // variant is routed through the approval card.
+        if name == "search_sessions" {
+            let scope = arguments["scope"]?.stringValue()?
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+                .lowercased()
+            return scope == "all" ? .write : .read
+        }
         guard let descriptor = descriptor(for: name) else { return .danger }
         if descriptor.name == "run_command", let command = arguments["command"]?.stringValue() {
-            let sandboxDecision = AgentSandboxPolicy.commandDecision(command: command, rootDirectory: rootDirectory)
+            let sandboxDecision = AgentSandboxPolicy.commandDecision(
+                command: command,
+                rootDirectory: rootDirectory,
+                additionalWorkspaceRoots: additionalWorkspaceRoots
+            )
             if sandboxDecision.requiresTypedConfirmation {
                 return .danger
             }

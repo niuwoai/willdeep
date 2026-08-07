@@ -231,16 +231,21 @@ struct ContentView: View {
                             documentLinkSpans: appState.editorDocumentLinkSpans,
                             languageServiceFoldingGuides: appState.editorLanguageServiceFoldingGuides,
                             languageServiceFoldingIsAuthoritative: appState.editorLanguageServiceFoldingIsAuthoritative,
-                            onEdit: {
-                                // Mark dirty when the user types.
+                            onImmediateEdit: {
+                                // Dirty state is the only synchronous side
+                                // effect of typing. Keep close/save safety
+                                // immediate while letting NSTextView paint
+                                // before LSP and outline work begins.
                                 if !appState.isEdited {
                                     appState.isEdited = true
                                 }
+                                NSApplication.shared.keyWindow?.isDocumentEdited = true
+                            },
+                            onEdit: {
                                 appState.synchronizeEditorLanguageServiceDocument()
                                 if appState.inspectorMode == .structure || appState.isSymbolJumpVisible {
                                     appState.refreshEditorLanguageServiceOutline()
                                 }
-                                NSApplication.shared.keyWindow?.isDocumentEdited = true
                             },
                             onSelectionChange: { line, column, selectedCharacters, selectedLines, selectedText, characterOffset in
                                 appState.updateSelectionInfo(

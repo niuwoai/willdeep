@@ -23,7 +23,12 @@
 //  live in AppStateAgentContextCompression.swift and
 //  AppStateAgentPatches.swift. Provider dispatch gating lives in
 //  AppStateAgentDispatchQueue.swift; request previews / token-window
-//  estimates live in AppStateAgentRequestEstimates.swift.
+//  estimates live in AppStateAgentRequestEstimates.swift. What runAgentLoop
+//  delegates to — the read-only parallel tool batch, patch-review path keys
+//  and the serial tool-decision handoff — lives in
+//  AppStateAgentLoopToolBatching.swift; the background-job completion
+//  notice lives in AppStateAgentBackgroundJobNotices.swift and the
+//  media-task one in AppStateAgentMediaTaskNotices.swift.
 //
 
 import AppKit
@@ -41,6 +46,11 @@ extension AppState {
     ) {
         runtime.currentTurnPlanningOnly = source == .operatorInput
             && AgentExecutionIntentPolicy.requestsPlanningOnly(text)
+        // Slash-staged delegation directive applies to exactly this turn.
+        let delegationPolicy = runtime.pendingDelegationPolicy
+        runtime.pendingDelegationPolicy = .automatic
+        runtime.currentTurnDelegationPolicy = delegationPolicy
+        runtime.currentTurnSpawnAgentCallCount = 0
         if source == .operatorInput {
             runtime.consecutiveGoalRoundsWithoutChecklistProgress = 0
         }
@@ -91,7 +101,8 @@ extension AppState {
                 content: text,
                 images: images,
                 textAttachments: textAttachments,
-                source: source
+                source: source,
+                delegationPolicy: delegationPolicy.isExplicit ? delegationPolicy : nil
             )
             runtime.messages.append(userMessage)
             runtime.latestTurnRecall = nil
@@ -254,6 +265,9 @@ extension AppState {
         guard !runtime.isResponding, !runtime.isCompressingContext else { return }
         guard let next = runtime.queuedMessages.first else { return }
         runtime.queuedMessages.removeFirst()
+        // Re-stage the queued turn's delegation directive: dispatch reads it
+        // off the runtime, and it was cleared when the previous turn started.
+        runtime.pendingDelegationPolicy = next.delegationPolicy
         dispatchAgentMessageUsingSelectedExecutor(
             next.executionAgent,
             for: runtime,
@@ -454,6 +468,7 @@ extension AppState {
             }
             runtime.goalTurnRecoveryCheckpoint = nil
             runtime.shouldConsumeQueueAfterStop = false
+            auditDelegationPolicyForFinishedTurn(in: runtime)
             // Turn finished — one fewer concurrent worker on this checkout.
             refreshAgentWorkspaceCollision()
             captureAgentPlanFromLatestMessage(for: runtime)
@@ -807,6 +822,15 @@ extension AppState {
                 activeExperts: activeExperts,
                 promptProfile: promptProfile
             )
+            let projectWorkspaceRoots = agentWorkspaceRoots(for: runtime.session)
+            if projectWorkspaceRoots.count > 1 {
+                assembledPrompt += """
+
+                === PROJECT WORKSPACE ROOTS ===
+                This Project explicitly authorizes all folders below. Relative paths resolve against the first root; use an absolute path for another root.
+                \(projectWorkspaceRoots.map { "- \($0.path)" }.joined(separator: "\n"))
+                """
+            }
             if let remoteRuntimeDescriptor,
                case .remote(_, let remotePath) = workspaceLocation {
                 let transportLabel = remoteRuntimeDescriptor.transport == .daemon ? "daemon" : "SSH"
@@ -856,6 +880,13 @@ extension AppState {
             }
             if let memoryContextBlock {
                 assembledPrompt += "\n\n\(memoryContextBlock)"
+            }
+            // Per-turn `/subagent` / `/no-subagent` directive. `.forbidden`
+            // is already enforced by the tool table below; this paragraph
+            // only stops the model from burning a round on a call that the
+            // transport would reject.
+            if let delegationInstruction = runtime.currentTurnDelegationPolicy.systemPromptInstruction {
+                assembledPrompt += "\n\n\(delegationInstruction)"
             }
             let promptComponents = AgentContextBuilder.requestComponents(from: assembledPrompt)
             // allowRefresh only on the dispatch's first round: rounds 2+ of
@@ -908,7 +939,8 @@ extension AppState {
                             tools: AgentToolRegistry.tools(
                                 activeExperts: activeExperts,
                                 interactionMode: runtime.interactionMode,
-                                executionAgent: runtime.executionAgent
+                                executionAgent: runtime.executionAgent,
+                                delegationPolicy: runtime.currentTurnDelegationPolicy
                             )
                         ) { event in
                             await MainActor.run { [weak runtime] in
@@ -922,8 +954,11 @@ extension AppState {
                                 case .reasoningDelta(let delta):
                                     streamBuffer.appendReasoningDelta(delta)
                                 case .toolCallsUpdated(let calls):
-                                    streamBuffer.flushPending()
-                                    runtime.messages[index].toolCalls = calls
+                                    // Rides the streaming buffer's overlay/slow
+                                    // tier: argument-fragment growth no longer
+                                    // publishes the whole messages array at
+                                    // ~10 Hz (see updateToolCalls).
+                                    streamBuffer.updateToolCalls(calls)
                                     latestToolCalls = calls
                                 case .sourceReferencesUpdated(let references):
                                     streamBuffer.flushPending()
@@ -1170,7 +1205,7 @@ extension AppState {
                     // owned child runtimes, then end the planner turn.
                     persistAgentSession(runtime: runtime, touchUpdatedAt: false, moveToFront: false)
                     agentDispatchCoordinator.synchronize(with: agentSessions)
-                    resumeDispatchGoal(goalID: runtime.id)
+                    _ = launchReadyDispatchTasks(goalID: runtime.id)
                     return
                 }
                 let goalChecklistCount = runtime.currentGoal?.checklist.count
@@ -1381,7 +1416,10 @@ extension AppState {
                 let risk = AgentToolRegistry.risk(
                     for: call.toolName,
                     arguments: argsDict,
-                    rootDirectory: workspaceURL
+                    rootDirectory: workspaceURL,
+                    additionalWorkspaceRoots: Array(
+                        self.agentWorkspaceRoots(for: runtime.session).dropFirst()
+                    )
                 )
                 if isPlanProgressReconciliationActive,
                    !AgentPlanAutoContinuationPolicy.allowsToolRiskDuringProgressReconciliation(risk) {
@@ -1394,7 +1432,10 @@ extension AppState {
                 let sandboxDecision = AgentSandboxPolicy.decision(
                     toolName: call.toolName,
                     arguments: argsDict,
-                    rootDirectory: workspaceURL
+                    rootDirectory: workspaceURL,
+                    additionalWorkspaceRoots: Array(
+                        self.agentWorkspaceRoots(for: runtime.session).dropFirst()
+                    )
                 )
 
                 // A dispatch-board child has no operator attached. Never
@@ -1606,6 +1647,9 @@ extension AppState {
                 }
                 return AgentToolContext(
                     rootDirectory: workspaceURL,
+                    additionalWorkspaceRoots: Array(
+                        self.agentWorkspaceRoots(for: runtime.session).dropFirst()
+                    ),
                     workspaceLocation: workspaceLocation,
                     runtimeDescriptor: remoteRuntimeDescriptor,
                     runtimeID: runtime.id,
@@ -1651,12 +1695,13 @@ extension AppState {
                     ),
                     sandboxMode: sandboxMode,
                     isUnattendedDispatchTask: runtime.isUnattendedDispatchTask,
-                    patchProposalSink: { title, diff, applyImmediately in
+                    patchProposalSink: { title, diff, applyImmediately, workspaceRoot in
                         try self.enqueueAgentPatchProposal(
                             for: runtime,
                             messageID: assistantID,
                             title: title,
                             diff: diff,
+                            workspaceRoot: workspaceRoot,
                             autoApplySource: patchAutoApplySource,
                             applyImmediately: applyImmediately
                         )
@@ -2381,690 +2426,6 @@ extension AppState {
 
         runtime.errorMessage = "Agent paused after \(Self.maxAgentToolRounds) tool-call rounds to avoid an accidental loop. Send another message to continue."
         runtime.errorDetails = nil
-    }
-
-    /// Read-tier tools safe to execute concurrently inside one model round:
-    /// pure local workspace reads with no side effects. `.read` risk already
-    /// guarantees auto-run (no approval card, no plan gate), and none of
-    /// these can enter the sandbox-escalation flow — that flow suspends on
-    /// the runtime's single tool-decision waiter, which concurrent calls
-    /// must never share. `run_command` stays serial even when classified
-    /// read-only for exactly that reason; `spawn_agent` has its own
-    /// dispatch path and is likewise excluded.
-    nonisolated static let parallelReadBatchToolNames: Set<String> = [
-        "read_file", "search_files", "grep_files", "list_directory", "glob", "git_status"
-    ]
-
-    /// Local file tools whose pending proposals can share one review boundary
-    /// when the model emits them consecutively in the same assistant turn.
-    /// Other write surfaces keep their existing per-call authorization.
-    nonisolated static let patchReviewToolNames: Set<String> = [
-        "create_file", "edit_file", "apply_patch"
-    ]
-
-    /// Conservative path identities used only to decide whether adjacent
-    /// patch tools may share a review boundary. Nil means "unknown target" and
-    /// forces the current batch to settle before another file tool runs.
-    static func patchReviewPathKeys(
-        toolName: String,
-        arguments: [String: AgentJSONValue]
-    ) -> Set<String>? {
-        let rawPaths: [String]
-        switch toolName {
-        case "create_file", "edit_file":
-            guard let path = arguments["path"]?.stringValue() else { return nil }
-            rawPaths = [path]
-        case "apply_patch":
-            guard let rawDiff = arguments["diff"]?.stringValue()?
-                .trimmingCharacters(in: .whitespacesAndNewlines),
-                !rawDiff.isEmpty else {
-                return nil
-            }
-            let extractedBlocks = AgentPatchApplier.extractDiffBlocks(from: rawDiff)
-            let diff = extractedBlocks.count == 1 ? extractedBlocks[0] : rawDiff
-            guard let changes = try? AgentPatchApplier.parse(diff), !changes.isEmpty else {
-                return nil
-            }
-            rawPaths = changes.map(\.path)
-        default:
-            return nil
-        }
-
-        let keys = rawPaths.compactMap { rawPath -> String? in
-            let trimmed = rawPath.trimmingCharacters(in: .whitespacesAndNewlines)
-            guard !trimmed.isEmpty else { return nil }
-            return URL(fileURLWithPath: trimmed)
-                .standardizedFileURL
-                .path
-                .precomposedStringWithCanonicalMapping
-                .lowercased()
-        }
-        guard keys.count == rawPaths.count else { return nil }
-        return Set(keys)
-    }
-
-    /// One read-tier staged call collected for concurrent execution. Risk,
-    /// sandbox decision, tool record, and execution context are all resolved
-    /// at collection time; only `AgentToolRunner.run` itself fans out.
-    struct AgentPendingParallelRead {
-        let externalID: String
-        let toolName: String
-        let arguments: [String: AgentJSONValue]
-        let sandboxDecision: AgentSandboxDecision
-        let recordID: AgentToolCall.ID
-        let context: AgentToolContext
-    }
-
-    /// Execute a collected batch of read-tier tool calls concurrently and
-    /// fold the outcomes back in the model's original call order — records
-    /// in `runtime.toolCalls` were already appended in order during staging,
-    /// and tool messages are appended in order here. Returns `true` when the
-    /// enclosing turn must stop (cancellation), mirroring the serial path's
-    /// early return.
-    private func executeParallelReadBatch(
-        _ batch: inout [AgentPendingParallelRead],
-        runtime: AgentRuntime
-    ) async -> Bool {
-        guard !batch.isEmpty else { return false }
-        let entries = batch
-        batch.removeAll()
-
-        var outcomes = [Result<AgentToolResult, Error>?](repeating: nil, count: entries.count)
-        if entries.count == 1 {
-            // Single read: skip the group machinery, byte-identical to the
-            // old serial execution.
-            do {
-                outcomes[0] = .success(
-                    try await AgentToolRunner.run(
-                        name: entries[0].toolName,
-                        arguments: entries[0].arguments,
-                        context: entries[0].context
-                    )
-                )
-            } catch {
-                outcomes[0] = .failure(error)
-            }
-        } else {
-            await withTaskGroup(of: (Int, Result<AgentToolResult, Error>).self) { group in
-                for (index, entry) in entries.enumerated() {
-                    let toolName = entry.toolName
-                    let arguments = entry.arguments
-                    let context = entry.context
-                    group.addTask {
-                        do {
-                            let result = try await AgentToolRunner.run(
-                                name: toolName,
-                                arguments: arguments,
-                                context: context
-                            )
-                            return (index, .success(result))
-                        } catch {
-                            return (index, .failure(error))
-                        }
-                    }
-                }
-                for await (index, outcome) in group {
-                    outcomes[index] = outcome
-                }
-            }
-        }
-
-        var stopTurn = false
-        for (index, entry) in entries.enumerated() {
-            switch outcomes[index] {
-            case .success(let result):
-                if let recordIndex = runtime.toolCalls.firstIndex(where: { $0.id == entry.recordID }) {
-                    runtime.toolCalls[recordIndex].status = .succeeded
-                    runtime.toolCalls[recordIndex].result = result
-                    runtime.toolCalls[recordIndex].arguments[AgentSandboxPolicy.sandboxEscalationRequestArgumentKey] = .bool(false)
-                }
-                runtime.recordComputerUseActivity(toolName: entry.toolName, images: result.images)
-                AgentSandboxAuditLog.append(
-                    toolName: entry.toolName,
-                    arguments: entry.arguments,
-                    decision: entry.sandboxDecision,
-                    approvalSource: nil,
-                    outcome: "succeeded"
-                )
-                appendToolMessage(
-                    for: runtime,
-                    toolCallID: entry.externalID,
-                    payload: result.payload,
-                    images: result.images,
-                    outcomeStatus: .succeeded
-                )
-            case .failure(is CancellationError), nil:
-                // User stopped the turn mid-batch. Answer this call like the
-                // serial cancel path so no record is left spinning, and stop
-                // the turn after the whole batch is folded back.
-                stopTurn = true
-                if let recordIndex = runtime.toolCalls.firstIndex(where: { $0.id == entry.recordID }) {
-                    runtime.toolCalls[recordIndex].status = .denied
-                    runtime.toolCalls[recordIndex].errorMessage = "Response stopped"
-                }
-                appendToolMessage(
-                    for: runtime,
-                    toolCallID: entry.externalID,
-                    payload: "Tool execution stopped with the current Agent turn.",
-                    source: .systemNotice,
-                    outcomeStatus: .denied,
-                    errorMessage: "Response stopped"
-                )
-            case .failure(let error):
-                let workspaceIssue = diagnoseLocalWorkspaceIfNeeded(
-                    after: error,
-                    runtime: runtime,
-                    workspaceURL: entry.context.rootDirectory
-                )
-                let errorMessage = workspaceIssue ?? error.localizedDescription
-                if let recordIndex = runtime.toolCalls.firstIndex(where: { $0.id == entry.recordID }) {
-                    runtime.toolCalls[recordIndex].status = .failed
-                    runtime.toolCalls[recordIndex].errorMessage = errorMessage
-                }
-                AgentSandboxAuditLog.append(
-                    toolName: entry.toolName,
-                    arguments: entry.arguments,
-                    decision: entry.sandboxDecision,
-                    approvalSource: nil,
-                    outcome: "failed"
-                )
-                appendToolMessage(
-                    for: runtime,
-                    toolCallID: entry.externalID,
-                    payload: "Tool error: \(errorMessage)\n\n(WillDeep: this tool call failed. Do not stop here — diagnose the cause from the exit code/stderr above and try another approach to accomplish the goal. Only give up if you are genuinely blocked, and then explain what you tried and what you still need.)",
-                    source: .systemNotice,
-                    outcomeStatus: .failed,
-                    errorMessage: errorMessage
-                )
-            }
-        }
-        return stopTurn
-    }
-
-    private func patchAutoApplySource(
-        forToolName toolName: String,
-        runtime: AgentRuntime
-    ) -> AgentToolApprovalSource? {
-        guard toolName == "apply_patch" || toolName == "edit_file" || toolName == "create_file" else { return nil }
-        if runtime.isUnattendedDispatchTask {
-            return .dispatchTask
-        }
-        if runtime.interactionMode == .goal {
-            return .goalMode
-        }
-        if runtime.approvalMode == .workspaceAccess {
-            return .workspaceAccess
-        }
-        if runtime.approvalMode == .smart {
-            return .staticAllowlist
-        }
-        return nil
-    }
-
-    /// Promote exactly one queued manual decision into an interactive card.
-    /// Stage 2 calls this immediately before registering its continuation;
-    /// because both operations run on the main actor, SwiftUI cannot expose
-    /// the buttons early enough for a click to target the wrong waiter.
-    private func activateSerialToolDecision(
-        recordID: AgentToolCall.ID,
-        status: AgentToolCallStatus,
-        runtime: AgentRuntime
-    ) {
-        guard let index = runtime.toolCalls.firstIndex(where: { $0.id == recordID }) else {
-            return
-        }
-        runtime.toolCalls[index].arguments.removeValue(
-            forKey: AgentSerialToolApprovalQueue.argumentKey
-        )
-        runtime.toolCalls[index].status = status
-        AgentToolApprovalNotifier.notifyIfBackgrounded(
-            toolName: runtime.toolCalls[index].toolName,
-            arguments: runtime.toolCalls[index].arguments,
-            status: status
-        )
-    }
-
-    /// Suspend until the user resolves the tool call. Three resume paths:
-    ///   1. A trusted internal decision was queued before registration —
-    ///      resume immediately from the synchronous fast-path.
-    ///   2. UI delivers an .approved / .denied / .answered — `resumeToolDecision`
-    ///      pulls `toolDecisionWaiter` off the runtime and resumes it.
-    ///   3. The enclosing Task is cancelled (session deleted, app shutdown,
-    ///      user hit Stop) — `withTaskCancellationHandler` reaches in and
-    ///      resumes with .denied so the caller unwinds cleanly. Pre-rc38
-    ///      this path leaked: the continuation was stored but never resumed,
-    ///      hanging the tool dispatch loop on the next user action.
-    func awaitToolDecision(for runtime: AgentRuntime, forCallID id: AgentToolCall.ID) async -> AgentToolDecision {
-        await withTaskCancellationHandler {
-            await withCheckedContinuation { continuation in
-                if let decision = runtime.pendingToolDecisions.removeValue(forKey: id) {
-                    if let index = runtime.toolCalls.firstIndex(where: { $0.id == id }),
-                       runtime.toolCalls[index].status.isBlockingForUserDecision {
-                        switch decision {
-                        case .approved, .answered:
-                            runtime.toolCalls[index].status = .running
-                        case .denied(let reason):
-                            runtime.toolCalls[index].status = .denied
-                            runtime.toolCalls[index].errorMessage = reason
-                        }
-                    }
-                    continuation.resume(returning: decision)
-                    return
-                }
-                if Task.isCancelled {
-                    continuation.resume(returning: .denied(reason: "Cancelled"))
-                    return
-                }
-                if let call = runtime.toolCalls.first(where: { $0.id == id }),
-                   call.status != .pendingApproval, call.status != .awaitingConfirm,
-                   call.status != .awaitingUserAnswer {
-                    if call.status == .denied {
-                        continuation.resume(returning: .denied(reason: call.errorMessage ?? "User denied"))
-                    } else {
-                        continuation.resume(returning: .approved)
-                    }
-                    return
-                }
-                runtime.toolDecisionWaiterCallID = id
-                runtime.toolDecisionWaiter = continuation
-            }
-        } onCancel: {
-            // The cancellation handler runs synchronously off the cancelling
-            // task — it's nonisolated, so we hop back to the main actor to
-            // touch the runtime's continuation slot.
-            Task { @MainActor [weak runtime] in
-                guard let runtime else { return }
-                if let waiter = runtime.toolDecisionWaiter,
-                   runtime.toolDecisionWaiterCallID == nil || runtime.toolDecisionWaiterCallID == id {
-                    runtime.toolDecisionWaiter = nil
-                    runtime.toolDecisionWaiterCallID = nil
-                    runtime.pendingToolDecisions.removeValue(forKey: id)
-                    waiter.resume(returning: .denied(reason: "Cancelled"))
-                }
-            }
-        }
-    }
-
-    /// Append a `tool` message to runtime.messages, running it through
-    /// `AgentInjectionDefense` first. Default `source` is `.toolOutput`
-    /// — the conservative case where the payload contains arbitrary
-    /// bytes from the workspace / MCP / shell, any of which could carry
-    /// injection markers. Callers that hand-author the payload string
-    /// (denial notices, host-owned Goal gates) should pass `.systemNotice`
-    /// to skip the neutralizer; the `ask_user` reply path should pass
-    /// `.userAnswer` so the content gets wrapped in `<user_answer>` and
-    /// the model can tell a typed reply apart from a tool result.
-    /// Build the `<background-task-notification>` body the agent loop
-    /// pushes into the model when a backgrounded `run_command` job
-    /// finishes. Kept short and unambiguous: the model should react to
-    /// it (summarize, follow up, kick off next steps) or quietly note
-    /// it depending on the originating user intent.
-    ///
-    /// `recentOutput` is an already-tailed, already-secret-redacted slice
-    /// the caller inlines for jobs that need attention (failed / timed out
-    /// / launch failed). Surfacing *why* a job failed in the notice itself
-    /// saves the model a `get_job_output` round-trip before it can react —
-    /// without it, a backgrounded `docker build` that fails just reads as
-    /// "exit=1, 5 KB captured" and the model has to fetch the log to learn
-    /// anything. Pass `nil` (the default) for success / killed jobs, which
-    /// keep the lighter byte-count hint.
-    nonisolated static func backgroundJobCompletionNotice(
-        for job: AgentBackgroundJob,
-        recentOutput: String? = nil
-    ) -> String {
-        let durationText: String = {
-            let total = Int(job.duration.rounded())
-            if total < 60 { return "\(total)s" }
-            let m = total / 60, s = total % 60
-            if m < 60 { return "\(m)m\(s)s" }
-            let h = m / 60, mm = m % 60
-            return "\(h)h\(mm)m"
-        }()
-        let exitText = job.exitCode.map { "exit=\($0)" } ?? "exit=?"
-        let trimmedCommand = job.command.count > 200
-            ? String(job.command.prefix(200)) + "…"
-            : job.command
-        let outputHint = job.outputByteCount > 0
-            ? "\(job.outputByteCount) bytes of output captured — call `get_job_output(job_id: \"\(job.displayHandle)\")` to read."
-            : "no output captured."
-
-        var lines = [
-            "<background-task-notification>",
-            "Background job \(job.displayHandle) finished while you were not in this turn.",
-            "Command: \(trimmedCommand)",
-            "Status: \(job.status.rawValue) (\(exitText)), duration \(durationText).",
-            outputHint
-        ]
-        if let executor = job.executor, let sessionID = job.executorSessionID {
-            lines.append(
-                "Reusable session: executor=\(executor.rawValue), session_id=\(sessionID)."
-            )
-        }
-        if let recentOutput, !recentOutput.isEmpty {
-            lines.append("Recent output (tail, secrets redacted):")
-            lines.append("```")
-            lines.append(recentOutput)
-            lines.append("```")
-        }
-        lines.append("</background-task-notification>")
-        return lines.joined(separator: "\n")
-    }
-
-    nonisolated static func mediaTaskCompletionNotice(for task: AgentMediaTask) -> String {
-        let artifactLines: [String] = task.artifacts.isEmpty
-            ? ["Artifacts: none."]
-            : ["Artifacts:"] + task.artifacts.map { "- \($0.title): \($0.filePath)" }
-        let anchorLines = mediaTaskAnchorLines(for: task)
-        let followUpLines = mediaTaskFollowUpLines(for: task)
-        let actionLines = mediaTaskActionLines(for: task)
-        var lines = [
-            "<media-task-notification>",
-            "Remote media task \(task.displayHandle) finished while you were not in this turn.",
-            "Provider: \(task.provider.displayName)",
-            "Kind: \(task.kind.displayName)",
-            "Title: \(task.title)",
-            "Status: \(task.status.rawValue).",
-            "Created at: \(mediaTaskNoticeTimestamp(task.createdAt))",
-            "Updated at: \(mediaTaskNoticeTimestamp(task.updatedAt))"
-        ]
-        if let finishedAt = task.finishedAt {
-            lines.append("Finished at: \(mediaTaskNoticeTimestamp(finishedAt))")
-        }
-        if let model = task.model, !model.isEmpty {
-            lines.append("Model: \(model)")
-        }
-        if let remoteTaskID = task.remoteTaskID, !remoteTaskID.isEmpty {
-            lines.append("Remote task id: \(remoteTaskID)")
-        }
-        if let statusURL = task.statusURL, !statusURL.isEmpty {
-            lines.append("Status URL: \(statusURL)")
-        }
-        if let cancelURL = task.cancelURL, !cancelURL.isEmpty {
-            lines.append("Cancel URL: \(cancelURL)")
-        }
-        if let sourceImagePath = task.sourceImagePath, !sourceImagePath.isEmpty {
-            lines.append("Source image: \(sourceImagePath)")
-        }
-        if let maskPath = task.maskPath, !maskPath.isEmpty {
-            lines.append("Mask: \(maskPath)")
-        }
-        if let message = task.statusMessage, !message.isEmpty {
-            lines.append("Status message: \(message)")
-        }
-        if !anchorLines.isEmpty {
-            lines.append("Anchors:")
-            lines.append(contentsOf: anchorLines)
-        }
-        lines.append(contentsOf: artifactLines)
-        if !followUpLines.isEmpty {
-            lines.append("Suggested follow-up:")
-            lines.append(contentsOf: followUpLines)
-        }
-        if !actionLines.isEmpty {
-            lines.append("Structured action context:")
-            lines.append(contentsOf: actionLines)
-        }
-        lines.append("</media-task-notification>")
-        return lines.joined(separator: "\n")
-    }
-
-    nonisolated private static func mediaTaskAnchorLines(for task: AgentMediaTask) -> [String] {
-        var lines: [String] = []
-        if let projectID = cleanMediaTaskNoticeValue(task.projectID) ?? cleanMediaTaskNoticeValue(task.projectPath) {
-            lines.append("- project_id: \(projectID)")
-        }
-        if let episodeID = cleanMediaTaskNoticeValue(task.episodeID) {
-            lines.append("- episode_id: \(episodeID)")
-        }
-        if let shotID = cleanMediaTaskNoticeValue(task.shotID) {
-            lines.append("- shot_id: \(shotID)")
-        }
-        if let assetKind = cleanMediaTaskNoticeValue(task.assetKind) {
-            lines.append("- asset_kind: \(assetKind)")
-        }
-        if let assetID = cleanMediaTaskNoticeValue(task.assetID) {
-            lines.append("- asset_id: \(assetID)")
-        }
-        if let reviewItemID = cleanMediaTaskNoticeValue(task.reviewItemID) {
-            lines.append("- review_item_id: \(reviewItemID)")
-        }
-        return lines
-    }
-
-    nonisolated private static func mediaTaskPanelScope(for task: AgentMediaTask) -> AgentMediaTaskScope? {
-        let projectID = cleanMediaTaskNoticeValue(task.projectID) ?? cleanMediaTaskNoticeValue(task.projectPath)
-        let episodeID = cleanMediaTaskNoticeValue(task.episodeID)
-        let shotID = cleanMediaTaskNoticeValue(task.shotID)
-        let assetKind = cleanMediaTaskNoticeValue(task.assetKind)
-        let assetID = cleanMediaTaskNoticeValue(task.assetID)
-        let reviewItemID = cleanMediaTaskNoticeValue(task.reviewItemID)
-        if let reviewItemID {
-            return AgentMediaTaskScope(
-                label: "检查项任务：\(task.title)",
-                projectID: projectID,
-                episodeID: episodeID,
-                shotID: shotID,
-                reviewItemID: reviewItemID
-            )
-        }
-        if let shotID {
-            return AgentMediaTaskScope(
-                label: "分镜任务：\(task.title)",
-                projectID: projectID,
-                episodeID: episodeID,
-                shotID: shotID
-            )
-        }
-        if let assetKind, let assetID {
-            let assetLabel = assetKind == "scene" ? "场景资产任务" : "人物资产任务"
-            return AgentMediaTaskScope(
-                label: "\(assetLabel)：\(task.title)",
-                projectID: projectID,
-                assetKind: assetKind,
-                assetID: assetID
-            )
-        }
-        if let projectID {
-            return AgentMediaTaskScope(
-                label: "项目任务：\(task.title)",
-                projectID: projectID
-            )
-        }
-        return nil
-    }
-
-    nonisolated private static func mediaTaskActionLines(for task: AgentMediaTask) -> [String] {
-        var lines = [
-            "<media-task-action>",
-            "task_id: \(task.displayHandle)",
-            "task_uuid: \(task.id.uuidString)",
-            "status: \(task.status.rawValue)",
-            "provider: \(task.provider.rawValue)",
-            "kind: \(task.kind.rawValue)",
-            "created_at: \(mediaTaskNoticeTimestamp(task.createdAt))",
-            "updated_at: \(mediaTaskNoticeTimestamp(task.updatedAt))"
-        ]
-        if let finishedAt = task.finishedAt {
-            lines.append("finished_at: \(mediaTaskNoticeTimestamp(finishedAt))")
-        }
-        let projectID = cleanMediaTaskNoticeValue(task.projectID) ?? cleanMediaTaskNoticeValue(task.projectPath)
-        let episodeID = cleanMediaTaskNoticeValue(task.episodeID)
-        let shotID = cleanMediaTaskNoticeValue(task.shotID)
-        let assetKind = cleanMediaTaskNoticeValue(task.assetKind)
-        let assetID = cleanMediaTaskNoticeValue(task.assetID)
-        let reviewItemID = cleanMediaTaskNoticeValue(task.reviewItemID)
-        let statusURL = cleanMediaTaskNoticeValue(task.statusURL)
-        let cancelURL = cleanMediaTaskNoticeValue(task.cancelURL)
-        let statusEndpointSuffix = cleanMediaTaskNoticeValue(task.statusEndpointSuffix)
-        let cancelEndpointSuffix = cleanMediaTaskNoticeValue(task.cancelEndpointSuffix)
-        let sourceImagePath = cleanMediaTaskNoticeValue(task.sourceImagePath)
-        let maskPath = cleanMediaTaskNoticeValue(task.maskPath)
-        if let statusURL { lines.append("status_url: \(statusURL)") }
-        if let cancelURL { lines.append("cancel_url: \(cancelURL)") }
-        if let statusEndpointSuffix { lines.append("status_endpoint_suffix: \(statusEndpointSuffix)") }
-        if let cancelEndpointSuffix { lines.append("cancel_endpoint_suffix: \(cancelEndpointSuffix)") }
-        if let sourceImagePath { lines.append("source_image_path: \(sourceImagePath)") }
-        if let maskPath { lines.append("mask_path: \(maskPath)") }
-        if let projectID { lines.append("project_id: \(projectID)") }
-        if let episodeID { lines.append("episode_id: \(episodeID)") }
-        if let shotID { lines.append("shot_id: \(shotID)") }
-        if let assetKind { lines.append("asset_kind: \(assetKind)") }
-        if let assetID { lines.append("asset_id: \(assetID)") }
-        if let reviewItemID { lines.append("review_item_id: \(reviewItemID)") }
-        if let scopeArguments = mediaTaskNoticeScopeArguments(
-            projectID: projectID,
-            episodeID: episodeID,
-            shotID: shotID,
-            assetKind: assetKind,
-            assetID: assetID,
-            reviewItemID: reviewItemID
-        ) {
-            lines.append("open_scope_tasks_tool: short_drama_open_media_tasks")
-            lines.append("open_scope_tasks_arguments: \(scopeArguments)")
-            lines.append("refresh_scope_tasks_tool: short_drama_refresh_media_tasks")
-            lines.append("refresh_scope_tasks_arguments: \(scopeArguments)")
-        }
-
-        if task.status == .succeeded {
-            if let projectID, let episodeID, let shotID {
-                lines.append("open_tasks_tool: short_drama_open_media_tasks")
-                lines.append("open_tasks_arguments: project_id=\(projectID), episode_id=\(episodeID), shot_id=\(shotID), scope=shot")
-                let candidateImagePaths = task.artifacts.filter(Self.isImageArtifact).map(\.filePath)
-                if candidateImagePaths.count > 1 {
-                    lines.append("candidate_tool: short_drama_show_image_choice_widget")
-                    let reviewSuffix = reviewItemID.map { ", review_item_id=\($0)" } ?? ""
-                    lines.append("candidate_arguments: project_id=\(projectID), episode_id=\(episodeID), shot_id=\(shotID)\(reviewSuffix)")
-                    let candidateImages = candidateImagePaths.joined(separator: " | ")
-                    lines.append("candidate_image_paths: \(candidateImages)")
-                    lines.append("candidate_preview_tool: show_image_choice_widget")
-                    lines.append("candidate_preview_arguments: image_paths=\(candidateImages), project_id=\(projectID), episode_id=\(episodeID), shot_id=\(shotID)\(reviewSuffix)")
-                } else if let artifact = task.artifacts.first(where: Self.isImageArtifact) {
-                    lines.append("select_primary_tool: short_drama_select_shot_artifact")
-                    lines.append("select_primary_arguments: project_id=\(projectID), episode_id=\(episodeID), shot_id=\(shotID), artifact_path=\(artifact.filePath)")
-                }
-                if let videoArtifact = task.artifacts.first(where: Self.isVideoArtifact) {
-                    lines.append("completed_video_path: \(videoArtifact.filePath)")
-                    lines.append("completed_video_action: continue_from_completed_video_artifact")
-                    lines.append("open_shot_tasks_tool: short_drama_open_media_tasks")
-                    lines.append("open_shot_tasks_arguments: project_id=\(projectID), episode_id=\(episodeID), shot_id=\(shotID), scope=shot")
-                    lines.append("refresh_shot_tasks_tool: short_drama_refresh_media_tasks")
-                    lines.append("refresh_shot_tasks_arguments: project_id=\(projectID), episode_id=\(episodeID), shot_id=\(shotID), scope=shot")
-                    lines.append("storyboard_widget_tool: short_drama_show_storyboard_widget")
-                    lines.append("storyboard_widget_arguments: project_id=\(projectID), episode_id=\(episodeID)")
-                }
-                if isImageFollowUpKind(task.kind) {
-                    if let artifact = task.artifacts.first(where: Self.isImageArtifact) {
-                        let reviewSuffix = reviewItemID.map { ", review_item_id=\($0)" } ?? ""
-                        let artifactArguments = "project_id=\(projectID), episode_id=\(episodeID), shot_id=\(shotID), artifact_path=\(artifact.filePath)\(reviewSuffix)"
-                        lines.append("video_from_image_tool: generate_video_from_image")
-                        lines.append("video_from_image_arguments: image_path=\(artifact.filePath), project_id=\(projectID), episode_id=\(episodeID), shot_id=\(shotID)\(reviewSuffix)")
-                        lines.append("edit_tool: short_drama_open_image_editor")
-                        lines.append("edit_arguments: \(artifactArguments), operation=inpaint")
-                        lines.append("erase_tool: short_drama_open_image_editor")
-                        lines.append("erase_arguments: \(artifactArguments), operation=erase")
-                        lines.append("upscale_tool: short_drama_upscale_shot_artifact")
-                        lines.append("upscale_arguments: \(artifactArguments)")
-                    }
-                    lines.append("video_tool: short_drama_generate_shot_media")
-                    lines.append("video_arguments: project_id=\(projectID), episode_id=\(episodeID), shot_id=\(shotID), kind=video_generation")
-                }
-                if let reviewItemID {
-                    lines.append("open_review_tasks_tool: short_drama_open_media_tasks")
-                    lines.append("open_review_tasks_arguments: project_id=\(projectID), episode_id=\(episodeID), shot_id=\(shotID), scope=review_item, review_item_id=\(reviewItemID)")
-                    lines.append("resolve_review_tool: short_drama_resolve_review_item")
-                    lines.append("resolve_review_arguments: project_id=\(projectID), episode_id=\(episodeID), shot_id=\(shotID), item_id=\(reviewItemID)")
-                }
-            } else if let projectID, let assetKind, let assetID {
-                lines.append("open_tasks_tool: short_drama_open_media_tasks")
-                lines.append("open_tasks_arguments: project_id=\(projectID), scope=asset, asset_kind=\(assetKind), asset_id=\(assetID)")
-                lines.append("refresh_tasks_tool: short_drama_refresh_media_tasks")
-                lines.append("refresh_tasks_arguments: project_id=\(projectID), scope=asset, asset_kind=\(assetKind), asset_id=\(assetID)")
-                lines.append("generate_asset_reference_tool: short_drama_generate_asset_media")
-                lines.append("generate_asset_reference_arguments: project_id=\(projectID), asset_kind=\(assetKind), asset_id=\(assetID)")
-                if let artifact = task.artifacts.first(where: Self.isImageArtifact) {
-                    lines.append("attach_reference_tool: short_drama_attach_asset_reference_image")
-                    lines.append("attach_reference_arguments: project_id=\(projectID), asset_kind=\(assetKind), asset_id=\(assetID), image_path=\(artifact.filePath)")
-                    lines.append("edit_tool: open_image_editor")
-                    lines.append("edit_arguments: image_path=\(artifact.filePath), operation=inpaint, project_id=\(projectID), asset_kind=\(assetKind), asset_id=\(assetID)")
-                    lines.append("erase_tool: open_image_editor")
-                    lines.append("erase_arguments: image_path=\(artifact.filePath), operation=erase, project_id=\(projectID), asset_kind=\(assetKind), asset_id=\(assetID)")
-                    lines.append("upscale_tool: upscale_image")
-                    lines.append("upscale_arguments: image_path=\(artifact.filePath), project_id=\(projectID), asset_kind=\(assetKind), asset_id=\(assetID)")
-                }
-                lines.append("next_step: use this reference image when generating related short-drama shots.")
-            } else if isImageFollowUpKind(task.kind) {
-                let imageArtifacts = task.artifacts.filter(Self.isImageArtifact)
-                if imageArtifacts.count > 1 {
-                    let imagePaths = imageArtifacts.map(\.filePath).joined(separator: " | ")
-                    lines.append("candidate_tool: show_image_choice_widget")
-                    lines.append("candidate_arguments: image_paths=\(imagePaths)")
-                } else if let artifact = imageArtifacts.first {
-                    lines.append("edit_tool: open_image_editor")
-                    lines.append("edit_arguments: image_path=\(artifact.filePath), operation=inpaint")
-                    lines.append("erase_tool: open_image_editor")
-                    lines.append("erase_arguments: image_path=\(artifact.filePath), operation=erase")
-                    lines.append("upscale_tool: upscale_image")
-                    lines.append("upscale_arguments: image_path=\(artifact.filePath)")
-                    lines.append("video_from_image_tool: generate_video_from_image")
-                    lines.append("video_from_image_arguments: image_path=\(artifact.filePath)")
-                }
-                lines.append("next_step: attach one artifact to chat, open it in the image editor, upscale it, generate video from it, or import it into a short-drama shot or asset.")
-            }
-        } else {
-            if let sourceImagePath, let maskPath, isImageFollowUpKind(task.kind) {
-                let operation = task.kind == .imageErase ? "erase" : "inpaint"
-                if let projectID, let episodeID, let shotID {
-                    lines.append("reopen_editor_tool: short_drama_open_image_editor")
-                    var reopenArguments = "project_id=\(projectID), episode_id=\(episodeID), shot_id=\(shotID), artifact_path=\(sourceImagePath), mask_path=\(maskPath), operation=\(operation)"
-                    if let reviewItemID {
-                        reopenArguments += ", review_item_id=\(reviewItemID)"
-                    }
-                    lines.append("reopen_editor_arguments: \(reopenArguments)")
-                } else {
-                    lines.append("reopen_editor_tool: open_image_editor")
-                    var reopenArguments = "image_path=\(sourceImagePath), mask_path=\(maskPath), operation=\(operation)"
-                    if let projectID {
-                        reopenArguments += ", project_id=\(projectID)"
-                    }
-                    if let assetKind {
-                        reopenArguments += ", asset_kind=\(assetKind)"
-                    }
-                    if let assetID {
-                        reopenArguments += ", asset_id=\(assetID)"
-                    }
-                    if let reviewItemID {
-                        reopenArguments += ", review_item_id=\(reviewItemID)"
-                    }
-                    lines.append("reopen_editor_arguments: \(reopenArguments)")
-                }
-            }
-            if projectID != nil {
-                lines.append("retry_tool: short_drama_retry_media_task")
-                lines.append("retry_arguments: task_id=\(task.displayHandle)")
-            }
-            if let projectID {
-                let scopeArguments: String
-                if let episodeID, let shotID {
-                    scopeArguments = "project_id=\(projectID), episode_id=\(episodeID), shot_id=\(shotID), scope=shot"
-                } else if let assetKind, let assetID {
-                    scopeArguments = "project_id=\(projectID), scope=asset, asset_kind=\(assetKind), asset_id=\(assetID)"
-                } else {
-                    scopeArguments = "project_id=\(projectID), scope=project"
-                }
-                lines.append("open_tasks_tool: short_drama_open_media_tasks")
-                lines.append("open_tasks_arguments: \(scopeArguments)")
-            }
-        }
-
-        if !task.artifacts.isEmpty {
-            lines.append("artifact_paths:")
-            lines.append(contentsOf: task.artifacts.prefix(12).map { "- \($0.filePath)" })
-            if task.artifacts.count > 12 {
-                lines.append("- ... \(task.artifacts.count - 12) more")
-            }
-        }
-        lines.append("</media-task-action>")
-        return lines
     }
 
 }

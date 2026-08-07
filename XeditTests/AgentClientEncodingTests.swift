@@ -443,6 +443,107 @@ struct AgentContextCompressionSplitTests {
         ]
         #expect(AppState.compressionTailStart(messages: messages, keepRecent: 2) == 0)
     }
+
+    // MARK: - Compression request budgeting
+
+    /// Compression used to post the entire head as one request, so the
+    /// summariser overflowed exactly when the window was full — the escape
+    /// hatch jammed shut at the only moment it mattered. Every chunk must now
+    /// stay inside the per-request budget no matter how large the transcript.
+    @Test
+    func compressionChunksStayWithinBudget() {
+        let budget = 1_000
+        let segments = (0..<20).map { index in
+            "USER:\n" + String(repeating: "word ", count: 400) + "#\(index)"
+        }
+        let chunks = AppState.compressionChunks(segments: segments, tokenBudget: budget)
+
+        #expect(chunks.count > 1)
+        for chunk in chunks {
+            #expect(AppState.estimateTextTokens(chunk) <= budget)
+        }
+        // Nothing silently vanishes: the first and last segments survive.
+        #expect(chunks.first?.contains("#0") == true)
+        #expect(chunks.last?.contains("#19") == true)
+    }
+
+    /// A single tool result bigger than the whole budget must be truncated,
+    /// never dropped and never allowed to blow the request.
+    @Test
+    func compressionChunksTruncateOversizedSegment() {
+        let budget = 600
+        let giant = "TOOL(call_1):\n" + String(repeating: "x", count: 40_000)
+        let chunks = AppState.compressionChunks(segments: [giant], tokenBudget: budget)
+
+        #expect(chunks.count == 1)
+        #expect(AppState.estimateTextTokens(chunks[0]) <= budget)
+        #expect(chunks[0].contains("elided for compression"))
+    }
+
+    /// The summary request must not carry more bytes than an ordinary chat
+    /// request — tool results go through the same compaction.
+    @Test
+    func compressionSegmentsCompactToolResults() {
+        let payload = String(repeating: "log line 12345\n", count: 2_000)
+        let head: [AgentMessage] = [
+            AgentMessage(role: .user, content: "run it"),
+            AgentMessage(role: .tool, content: payload)
+        ]
+        let segments = AppState.compressionTranscriptSegments(head: head, priorSummary: nil)
+
+        #expect(segments.count == 2)
+        #expect(segments[1].count < payload.count / 2)
+        #expect(segments[1].contains("tool result summarized for model context"))
+    }
+
+    @Test
+    func compressionSegmentsKeepPriorSummaryFirst() {
+        let segments = AppState.compressionTranscriptSegments(
+            head: [AgentMessage(role: .user, content: "hi")],
+            priorSummary: "earlier state"
+        )
+        #expect(segments.count == 2)
+        #expect(segments[0].contains("earlier state"))
+        #expect(segments[1].hasPrefix("USER:"))
+    }
+
+    /// The budget has to absorb the gap between our character heuristic and
+    /// the provider's real tokenizer, so it stays a small slice of the window.
+    @Test
+    func compressionChunkBudgetLeavesHeadroom() {
+        #expect(AppState.compressionChunkTokenBudget(contextWindow: 1_000_000) == 150_000)
+        // Tiny windows still get a workable floor rather than a useless budget.
+        #expect(AppState.compressionChunkTokenBudget(contextWindow: 8_000) == 2_000)
+    }
+
+    /// The real rejection observed in the field, verbatim. Recognising it is
+    /// what lets compression halve its chunk budget and retry instead of
+    /// surfacing a 400 the user cannot act on.
+    @Test
+    func contextOverflowErrorIsRecognised() {
+        func httpError(status: Int, body: String) -> AgentClientError {
+            .serverStatus(
+                AgentProviderHTTPError(
+                    statusCode: status,
+                    method: "POST",
+                    url: "https://example.test/v1/chat/completions",
+                    providerID: "someim",
+                    model: "deepseek-v4-flash",
+                    requestSummary: "compress",
+                    requestBody: "(streamed request)",
+                    responseBody: body
+                )
+            )
+        }
+
+        let overflow = #"{"error":{"message":"This model's maximum context length is 1048576 tokens. However, you requested 1621884 tokens (1621884 in the messages, 0 in the completion). Please reduce the length of the messages or completion.","type":"invalid_request_error","param":null,"code":"invalid_request_error"}}"#
+        #expect(AppState.isContextOverflowError(httpError(status: 400, body: overflow)))
+        #expect(AppState.isContextOverflowError(httpError(status: 400, body: #"{"error":{"code":"context_length_exceeded"}}"#)))
+
+        // Ordinary 400s must not trigger the halve-and-retry path.
+        #expect(!AppState.isContextOverflowError(httpError(status: 400, body: #"{"error":{"message":"invalid api key"}}"#)))
+        #expect(!AppState.isContextOverflowError(httpError(status: 500, body: overflow)))
+    }
 }
 
 // MARK: - Helpers

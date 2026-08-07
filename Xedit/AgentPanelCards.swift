@@ -348,6 +348,17 @@ struct AgentMessageBubble: View {
             alignment: .leading,
             spacing: AgentChatHistoryLayoutMetrics.userMessageElementSpacing
         ) {
+            if message.role == .user, let delegationMarker = message.delegationMarkerTitle {
+                Label {
+                    Text(delegationMarker)
+                } icon: {
+                    if let symbol = message.delegationMarkerSymbol {
+                        Image(systemName: symbol)
+                    }
+                }
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+            }
             if message.role == .user, !message.images.isEmpty {
                 AgentUserImageStrip(images: message.images)
                     .padding(

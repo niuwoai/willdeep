@@ -10,6 +10,10 @@ import Foundation
 
 extension L10n {
     enum ScheduledTaskCard {
+        static let open = String(
+            localized: "scheduled-task-card.open",
+            defaultValue: "Open"
+        )
         static let badge = String(
             localized: "scheduled-task-card.badge",
             defaultValue: "Scheduled task"

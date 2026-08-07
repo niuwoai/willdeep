@@ -34474,6 +34474,23 @@
         }
       }
     },
+    "scheduled-task-card.open" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Open"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "打开"
+          }
+        }
+      }
+    },
     "transcript.older-history.role.scheduled-task" : {
       "comment" : "role label in lightweight older history preview",
       "extractionState" : "manual",
