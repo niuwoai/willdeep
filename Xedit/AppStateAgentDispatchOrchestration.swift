@@ -689,6 +689,48 @@ extension AppState {
         }
     }
 
+    /// Operator-initiated stop for a single node.
+    ///
+    /// Three things have to happen together or the node comes back to life:
+    /// the completion monitor must be retired first (otherwise it wakes up
+    /// half a second later, reads `isResponding == false`, and writes
+    /// `failed`/`reviewing` — or worse, spends a fallback profile on an
+    /// automatic retry), the in-flight turn has to be cancelled, and the node
+    /// has to be parked in a state the scheduler will not pick up again.
+    /// `cancelled` is that state: `launchReadyDispatchTasks` only ever
+    /// launches `queued` nodes, and `resumeDispatchGoal` only re-monitors
+    /// `running`/`reviewing` ones, so a stopped node stays stopped across a
+    /// board reopen while the operator can still relaunch it by hand.
+    @discardableResult
+    func stopDispatchTask(goalID: UUID, taskID: UUID) -> Bool {
+        guard let goal = agentDispatchCoordinator.goals.first(where: { $0.id == goalID }),
+              let task = goal.tasks.first(where: { $0.id == taskID }) else {
+            return false
+        }
+        dispatchMonitoredRuntimeIDsByTaskID[taskID] = nil
+        dispatchAutomaticRecoveryAttemptsByTaskID[taskID] = nil
+        if let runtimeSessionID = task.runtimeSessionID,
+           let taskRuntime = runtime(for: runtimeSessionID) {
+            stopAgentResponse(
+                for: taskRuntime,
+                pausingOwningDispatchProject: false
+            )
+            // A chat keeps its queued follow-up after Stop — send-then-stop
+            // there means "drop this answer, ask the next question". A node
+            // has no one watching: letting the queue drain would start a
+            // fresh turn on a node the operator just stopped, with no monitor
+            // attached to ever notice it finished. The queued text stays in
+            // the transcript; it just will not auto-fire.
+            taskRuntime.shouldConsumeQueueAfterStop = false
+        }
+        agentDispatchCoordinator.updateTaskState(
+            goalID: goalID,
+            taskID: taskID,
+            state: .cancelled
+        )
+        return true
+    }
+
     func openDispatchTaskConversation(runtimeSessionID: UUID) {
         guard selectAgentSession(id: runtimeSessionID) else { return }
         agentPrimaryDestination = .conversation
@@ -767,23 +809,38 @@ extension AppState {
         }
     }
 
+    /// Keeps `body` from moving the operator to another primary destination.
+    ///
+    /// `startNewAgentSession(inWorkspaceAt:)` routes ordinary callers to the
+    /// conversation destination — right for "new chat", wrong for every node
+    /// the scheduler starts on its own. Without this restore, pressing Launch
+    /// on the board threw the operator into the plain chat transcript of
+    /// whichever node started last, and a multi-node launch did it per node.
+    func withPreservedAgentPrimaryDestination<T>(_ body: () -> T) -> T {
+        let previousDestination = agentPrimaryDestination
+        defer { agentPrimaryDestination = previousDestination }
+        return body()
+    }
+
     private func createDispatchTaskRuntime(
         workspaceLocation: WorkspaceLocation
     ) -> AgentRuntime? {
-        switch workspaceLocation {
-        case .local(let path):
-            let session = startNewAgentSession(inWorkspaceAt: path)
-            return runtime(for: session.id)
-        case .remote(let runtimeID, let path):
-            guard AgentRuntimeStore.descriptor(id: runtimeID) != nil else { return nil }
-            let session = startNewAgentSession(inWorkspaceAt: nil)
-            guard let taskRuntime = runtime(for: session.id) else { return nil }
-            taskRuntime.rebindRemoteWorkspace(
-                runtimeID: runtimeID,
-                path: path
-            )
-            persistAgentSession(runtime: taskRuntime)
-            return taskRuntime
+        withPreservedAgentPrimaryDestination {
+            switch workspaceLocation {
+            case .local(let path):
+                let session = startNewAgentSession(inWorkspaceAt: path)
+                return runtime(for: session.id)
+            case .remote(let runtimeID, let path):
+                guard AgentRuntimeStore.descriptor(id: runtimeID) != nil else { return nil }
+                let session = startNewAgentSession(inWorkspaceAt: nil)
+                guard let taskRuntime = runtime(for: session.id) else { return nil }
+                taskRuntime.rebindRemoteWorkspace(
+                    runtimeID: runtimeID,
+                    path: path
+                )
+                persistAgentSession(runtime: taskRuntime)
+                return taskRuntime
+            }
         }
     }
 
@@ -839,6 +896,15 @@ extension AppState {
                 while runtime.isResponding || runtime.isAwaitingProviderSlot {
                     try? await Task.sleep(nanoseconds: 500_000_000)
                     guard !Task.isCancelled else { return }
+                }
+                // The registry entry doubles as this monitor's lease. An
+                // operator Stop (or a relaunch that installed a newer monitor)
+                // clears/replaces it, and a retired monitor must not write the
+                // node's state — its verdict would overwrite `cancelled` and
+                // could even trigger an automatic retry the operator just
+                // stopped.
+                guard self.dispatchMonitoredRuntimeIDsByTaskID[taskID] == runtime.id else {
+                    return
                 }
                 let hasCompletedAcceptance = runtime.currentGoal.map {
                     !$0.checklist.isEmpty && $0.checklist.allSatisfy(\.done)

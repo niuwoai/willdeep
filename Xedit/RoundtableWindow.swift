@@ -141,7 +141,7 @@ struct RoundtableHomeView: View {
 
     private var composer: some View {
         VStack(alignment: .leading, spacing: 10) {
-            RoundtableComposerTextView(
+            SubmitOnReturnTextView(
                 text: $topic,
                 placeholder: L10n.Roundtable.topicPlaceholder,
                 onSubmit: start

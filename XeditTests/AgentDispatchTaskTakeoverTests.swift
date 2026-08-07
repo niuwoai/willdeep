@@ -4,6 +4,7 @@
 //
 
 
+import AppKit
 import Foundation
 import Testing
 @testable import WillDeep
@@ -317,6 +318,126 @@ struct AgentDispatchTaskTakeoverTests {
         #expect(waitResult.payload.contains("\"matched\" : true"))
         #expect(AgentEmbeddedBrowserController.hasController(for: firstID))
         #expect(AgentEmbeddedBrowserController.hasController(for: secondID))
+    }
+
+    @Test("停止单个节点只叫停该节点，不暂停整个项目，且监听不再回写状态")
+    func stoppingOneNodeCancelsItWithoutPausingTheProject() async throws {
+        let workspace = FileManager.default.temporaryDirectory
+            .appendingPathComponent("willdeep-dispatch-stop-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: workspace, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: workspace) }
+
+        let rootTaskID = UUID()
+        let downstreamTaskID = UUID()
+        let appState = AppState()
+        appState.agentDispatchCoordinator.resetForTests()
+        let projectSession = appState.startDispatchGoalSession(inWorkspaceAt: workspace.path)
+        let projectRuntime = try #require(appState.runtime(for: projectSession.id))
+        projectRuntime.currentGoal = AgentGoal(
+            statement: "停止单个节点",
+            checklist: [AgentGoal.Item(text: "全部节点完成")],
+            dispatchPlan: AgentGoalDispatchPlan(nodes: [
+                .init(
+                    id: rootTaskID,
+                    key: "ROOT-1",
+                    title: "首节点",
+                    dependencyIDs: [],
+                    primaryProfileID: nil,
+                    fallbackProfileIDs: [],
+                    acceptanceCriteria: ["首节点完成"]
+                ),
+                .init(
+                    id: downstreamTaskID,
+                    key: "NEXT-1",
+                    title: "后续节点",
+                    dependencyIDs: [rootTaskID],
+                    primaryProfileID: nil,
+                    fallbackProfileIDs: [],
+                    acceptanceCriteria: ["后续节点完成"]
+                ),
+            ])
+        )
+        appState.persistAgentSession(runtime: projectRuntime)
+        appState.agentDispatchCoordinator.synchronize(with: appState.agentSessions)
+
+        let childSession = appState.startNewAgentSession(inWorkspaceAt: workspace.path)
+        let childRuntime = try #require(appState.runtime(for: childSession.id))
+        childRuntime.session.dispatchParentProjectID = projectSession.id
+        childRuntime.session.dispatchTaskID = rootTaskID
+        // 验收全绿：监听一旦还活着就会把节点写成 merged 并解锁下游，
+        // 用它来证明停止之后监听确实退租了。
+        childRuntime.currentGoal = AgentGoal(
+            statement: "完成首节点",
+            checklist: [AgentGoal.Item(text: "验收通过", done: true)]
+        )
+        appState.persistAgentSession(runtime: childRuntime)
+        appState.agentDispatchCoordinator.markTaskStarted(
+            goalID: projectSession.id,
+            taskID: rootTaskID,
+            executor: .willDeep,
+            target: .local,
+            runtimeSessionID: childSession.id
+        )
+
+        childRuntime.isResponding = true
+        childRuntime.input = "继续处理"
+        #expect(appState.sendDispatchTaskTakeoverInstruction(
+            goalID: projectSession.id,
+            taskID: rootTaskID,
+            runtimeSessionID: childSession.id
+        ))
+        #expect(appState.dispatchMonitoredRuntimeIDsByTaskID[rootTaskID] == childSession.id)
+
+        #expect(appState.stopDispatchTask(goalID: projectSession.id, taskID: rootTaskID))
+
+        let stoppedGoal = try #require(
+            appState.agentDispatchCoordinator.goals.first(where: { $0.id == projectSession.id })
+        )
+        #expect(stoppedGoal.tasks.first(where: { $0.id == rootTaskID })?.state == .cancelled)
+        #expect(!stoppedGoal.isPaused)
+        #expect(appState.dispatchMonitoredRuntimeIDsByTaskID[rootTaskID] == nil)
+        #expect(!childRuntime.shouldConsumeQueueAfterStop)
+
+        childRuntime.isResponding = false
+        try await Task.sleep(for: .milliseconds(700))
+
+        let tasks = try #require(
+            appState.agentDispatchCoordinator.goals
+                .first(where: { $0.id == projectSession.id })?.tasks
+        )
+        #expect(tasks.first(where: { $0.id == rootTaskID })?.state == .cancelled)
+        #expect(tasks.first(where: { $0.id == downstreamTaskID })?.state == .blocked)
+    }
+
+    @Test("调度台启动节点不会把操作员甩进普通聊天界面")
+    func launchingDispatchRuntimeKeepsOperatorOnTheBoard() throws {
+        let workspace = FileManager.default.temporaryDirectory
+            .appendingPathComponent("willdeep-dispatch-destination-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: workspace, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: workspace) }
+
+        let appState = AppState()
+        appState.agentPrimaryDestination = .dispatchBoard
+
+        let taskSession = appState.withPreservedAgentPrimaryDestination {
+            appState.startNewAgentSession(inWorkspaceAt: workspace.path)
+        }
+        #expect(appState.activeAgentSessionID == taskSession.id)
+        #expect(appState.agentPrimaryDestination == .dispatchBoard)
+
+        // 对照组：普通「新建聊天」照旧切到会话界面，包裹的存在才有意义。
+        _ = appState.startNewAgentSession(inWorkspaceAt: workspace.path)
+        #expect(appState.agentPrimaryDestination == .conversation)
+    }
+
+    @Test("回车发送、修饰键换行、输入法组字期间的回车属于候选词上屏")
+    func returnKeySubmitsUnlessModifiedOrComposing() {
+        #expect(SubmitOnReturnKeyPolicy.submits(modifiers: [], hasMarkedText: false))
+        #expect(!SubmitOnReturnKeyPolicy.submits(modifiers: [.shift], hasMarkedText: false))
+        #expect(!SubmitOnReturnKeyPolicy.submits(modifiers: [.option], hasMarkedText: false))
+        #expect(!SubmitOnReturnKeyPolicy.submits(modifiers: [.control], hasMarkedText: false))
+        #expect(!SubmitOnReturnKeyPolicy.submits(modifiers: [], hasMarkedText: true))
+        #expect(SubmitOnReturnKeyPolicy.submits(modifiers: [.capsLock], hasMarkedText: false))
     }
 
     @Test("调度台抽屉选中任务会话时不离开调度台")

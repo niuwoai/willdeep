@@ -308,7 +308,7 @@ struct RoundtableDiscussionView: View {
             }
 
             HStack(alignment: .bottom, spacing: 8) {
-                RoundtableComposerTextView(
+                SubmitOnReturnTextView(
                     text: $hostInput,
                     placeholder: isAwaiting
                         ? L10n.Roundtable.answerPlaceholder
