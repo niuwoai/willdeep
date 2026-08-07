@@ -792,6 +792,12 @@ final class AppState: ObservableObject {
             self.metadataOnlySessionIDs = metadataOnlyIDs
             self.metadataOnlyUserMessageIDs = metadataOnlyUserMessageIDs
             self.hasLoadedAgentSessionCatalog = true
+            // Projects are the only grouping concept now; any session still
+            // keyed to a bare folder gets that folder promoted to a project of
+            // the same name. Runs after the catalog lands because it reads
+            // every session's group key. Idempotent, so later launches are
+            // no-ops once everything has been promoted.
+            self.migrateAgentWorkspacesToProjects()
 
             // Empty placeholders are filtered by sidebar visibility instead
             // of being deleted from disk. Automatic deletion previously made

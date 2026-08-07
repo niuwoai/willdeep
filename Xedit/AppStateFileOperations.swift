@@ -84,9 +84,15 @@ extension AppState {
                 _ = self.activateSecurityScope(for: standardized)
                 self.registerRecentFolder(standardized)
                 self.unhideWorkspace(key: runtime.session.workspaceSidebarGroupKey)
+                self.ensureAgentProject(forFolderPath: standardized.path)
                 return
             }
             _ = self.moveActiveAgentSessionToWorkspace(at: standardized.path)
+            // Adding a folder means adding a project: anchoring the session
+            // first and creating the project second lets the project's own
+            // rebind pick the session up, so the group shows up named rather
+            // than as a bare folder path.
+            self.ensureAgentProject(forFolderPath: standardized.path)
         }
     }
 

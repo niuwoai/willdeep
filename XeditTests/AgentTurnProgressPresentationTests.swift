@@ -17,6 +17,53 @@ struct AgentTurnProgressPresentationTests {
         #expect(AgentTurnProgressLayoutMetrics.contentSpacing == 14)
     }
 
+    /// 每一轮都留着自己的进度卡时，长会话会摞出一列内容雷同、计数早已过期
+    /// 的小卡片。只有最新一条 assistant 消息保留卡片；更早的照旧剥掉
+    /// progress 协议块，但不再渲染卡片。
+    @Test("历史轮次不再各留一张本轮进度卡")
+    func onlyTheNewestTurnKeepsItsProgressCard() {
+        let plan = AgentPlan(
+            status: .executing,
+            steps: [
+                AgentPlan.Step(text: "读取工程"),
+                AgentPlan.Step(text: "实现播放器"),
+            ],
+            summary: ""
+        )
+        func turn(_ body: String) -> String {
+            """
+            \(body)
+
+            ```progress
+            1: done
+            2: in_progress
+            ```
+            """
+        }
+        let messages = [
+            AgentMessage(role: .user, content: "开始"),
+            AgentMessage(role: .assistant, content: turn("第一轮")),
+            AgentMessage(role: .user, content: "继续"),
+            AgentMessage(role: .assistant, content: turn("第二轮")),
+        ]
+
+        let rendered = AgentChatHistoryRenderer.render(
+            messages: messages,
+            isDark: false,
+            progressPlan: plan
+        ).string
+
+        let title = L10n.AgentTurnProgress.title
+        let cardCount = rendered.components(separatedBy: title).count - 1
+        #expect(cardCount == 1, "期望只有最新一轮保留进度卡，实际出现 \(cardCount) 张")
+
+        // 两轮正文都还在，且都不该漏出原始 progress 协议块。
+        #expect(rendered.contains("第一轮"))
+        #expect(rendered.contains("第二轮"))
+        #expect(!rendered.contains("```progress"))
+        #expect(!rendered.contains("1: done"))
+    }
+
     @Test("隐藏 progress 协议并合并本轮最后状态")
     func extractsAndMergesProgressBlocks() throws {
         let plan = AgentPlan(

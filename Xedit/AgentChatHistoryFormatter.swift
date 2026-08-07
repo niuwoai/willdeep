@@ -325,6 +325,19 @@ enum AgentChatHistoryRenderer {
         latestTurnReportToolCount: Int?
     ) -> NSAttributedString {
         let result = NSMutableAttributedString()
+        // Only the newest assistant/system message keeps its turn-progress
+        // card. Every earlier turn used to keep rendering its own, so a long
+        // session stacked up a column of near-identical "turn progress" boxes
+        // whose counts were all stale. The progress block is still stripped
+        // from every message's body below — dropping the card must not let the
+        // raw protocol text back into the transcript.
+        //
+        // Deliberately not part of `render`'s cache key: which message is
+        // newest is a pure function of `messages`, which the key already
+        // covers via count plus per-message hash.
+        let latestProgressCardMessageID = messages.last(where: {
+            $0.role == .assistant || $0.role == .system
+        })?.id
         // `bodyFont` / `monoFont` follow the user's chat-base size
         // knob (Q1=A) — they're used for message prose, plain tool
         // outputs, fenced code blocks, and inline-Markdown spans.
@@ -497,7 +510,9 @@ enum AgentChatHistoryRenderer {
                     plan: progressPlan
                 )
                 body = extraction.visibleContent
-                progressPresentation = extraction.presentation
+                progressPresentation = message.id == latestProgressCardMessageID
+                    ? extraction.presentation
+                    : nil
             } else {
                 body = displaySourceContent
             }

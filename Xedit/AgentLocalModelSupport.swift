@@ -575,10 +575,17 @@ final class AgentLocalModelDownloader: ObservableObject {
                 }
             }
             self.task = downloadTask
-            observer = downloadTask.progress.observe(\.fractionCompleted, options: [.new]) { [weak self] progress, _ in
+            // Byte counts come from the task, not from `progress`: a download
+            // task drives `fractionCompleted` internally without necessarily
+            // populating `completedUnitCount`, which pinned the transferred
+            // figure at 0 while the bar advanced.
+            observer = downloadTask.progress.observe(\.fractionCompleted, options: [.new]) { [weak self, weak downloadTask] progress, _ in
                 guard let self else { return }
-                let received = progress.completedUnitCount
-                let reportedTotal = progress.totalUnitCount > 0 ? progress.totalUnitCount : file.approximateBytes
+                let received = downloadTask?.countOfBytesReceived ?? progress.completedUnitCount
+                let reportedByTask = downloadTask?.countOfBytesExpectedToReceive ?? 0
+                let reportedTotal = reportedByTask > 0
+                    ? reportedByTask
+                    : (progress.totalUnitCount > 0 ? progress.totalUnitCount : file.approximateBytes)
                 let fileProgress = max(0, min(1, progress.fractionCompleted.isFinite ? progress.fractionCompleted : 0))
                 let overall = (Double(index) + fileProgress) / Double(max(fileCount, 1))
                 Task { @MainActor in

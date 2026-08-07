@@ -425,6 +425,7 @@ struct AgentBackgroundTasksPanel: View {
                 Text(L10n.AgentJobs.duration)
                     .font(.system(size: 10.5, weight: .medium))
                     .foregroundStyle(.secondary)
+                    .gridColumnAlignment(.leading)
                 AgentBackgroundTaskDurationLabel(
                     startedAt: job.startedAt,
                     finishedAt: job.finishedAt
@@ -432,6 +433,7 @@ struct AgentBackgroundTasksPanel: View {
                 .font(.system(size: 10.5))
                 .foregroundStyle(.primary)
                 .textSelection(.enabled)
+                .frame(maxWidth: .infinity, alignment: .leading)
             }
         }
         .padding(10)
@@ -450,12 +452,21 @@ struct AgentBackgroundTasksPanel: View {
             Text(label)
                 .font(.system(size: 10.5, weight: .medium))
                 .foregroundStyle(.secondary)
+                .gridColumnAlignment(.leading)
             Text(value)
                 .font(.system(size: 10.5, design: label == L10n.AgentJobs.command ? .monospaced : .default))
                 .foregroundStyle(.primary)
                 .lineLimit(label == L10n.AgentJobs.command ? 3 : 2)
                 .truncationMode(.middle)
                 .textSelection(.enabled)
+                // Without a width to work against, a long command line reports
+                // its full single-line width as its ideal size: the grid column
+                // stretches past the panel, `lineLimit` never has a reason to
+                // wrap, and the text paints straight over the rows beneath it.
+                // Filling the available width forces the wrap-then-truncate the
+                // line limit is there to produce.
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .fixedSize(horizontal: false, vertical: true)
         }
     }
 

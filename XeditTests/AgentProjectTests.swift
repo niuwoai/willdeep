@@ -13,6 +13,147 @@ struct AgentProjectTests {
         AgentProject(displayName: name, folderPaths: folders, updatedAt: updatedAt)
     }
 
+    // MARK: Workspace → project migration
+
+    private func session(
+        workspacePath: String?,
+        projectID: UUID? = nil
+    ) -> AgentSession {
+        AgentSession(
+            title: "s",
+            workspaceRootPath: workspacePath,
+            projectID: projectID
+        )
+    }
+
+    /// Projects replace workspaces outright, so every bare folder group has to
+    /// become a project — otherwise the sidebar keeps listing both kinds of row.
+    @Test("裸文件夹分组会被挑出来升级为项目")
+    func bareFoldersAreSelectedForPromotion() {
+        let sessions = [
+            session(workspacePath: "/Users/rocky/Sites/tokenhub"),
+            session(workspacePath: "/Users/rocky/Sites/juhe"),
+        ]
+
+        let folders = AgentWorkspaceProjectMigration.foldersNeedingProject(
+            sessions: sessions,
+            existing: []
+        )
+
+        #expect(folders == ["/Users/rocky/Sites/tokenhub", "/Users/rocky/Sites/juhe"])
+    }
+
+    @Test("同一文件夹只升级一次")
+    func duplicateFoldersCollapse() {
+        let sessions = [
+            session(workspacePath: "/Users/rocky/Sites/tokenhub"),
+            session(workspacePath: "/Users/rocky/Sites/tokenhub"),
+        ]
+
+        #expect(AgentWorkspaceProjectMigration.foldersNeedingProject(
+            sessions: sessions,
+            existing: []
+        ) == ["/Users/rocky/Sites/tokenhub"])
+    }
+
+    /// Re-running on every launch must not keep minting projects.
+    @Test("已被项目认领的文件夹不再重复升级")
+    func claimedFoldersAreSkipped() {
+        let sessions = [session(workspacePath: "/Users/rocky/Sites/tokenhub")]
+        let existing = [project(name: "tokenhub", folders: ["/Users/rocky/Sites/tokenhub"])]
+
+        #expect(AgentWorkspaceProjectMigration.foldersNeedingProject(
+            sessions: sessions,
+            existing: existing
+        ).isEmpty)
+    }
+
+    /// A child of an already-claimed tree must not spawn a rival group.
+    @Test("父目录已属于项目时子目录不另起一组")
+    func childOfClaimedFolderIsSkipped() {
+        let sessions = [session(workspacePath: "/Users/rocky/Sites/tokenhub/web")]
+        let existing = [project(name: "tokenhub", folders: ["/Users/rocky/Sites/tokenhub"])]
+
+        #expect(AgentWorkspaceProjectMigration.foldersNeedingProject(
+            sessions: sessions,
+            existing: existing
+        ).isEmpty)
+    }
+
+    @Test("无工作区与已属项目的会话被跳过")
+    func sessionsWithoutAPromotableFolderAreSkipped() {
+        let sessions = [
+            session(workspacePath: nil),
+            session(workspacePath: "/Users/rocky/Sites/tokenhub", projectID: UUID()),
+        ]
+
+        #expect(AgentWorkspaceProjectMigration.foldersNeedingProject(
+            sessions: sessions,
+            existing: []
+        ).isEmpty)
+    }
+
+    /// A remote workspace has no local folder a project could be built from.
+    @Test("远程工作区不参与升级")
+    func remoteWorkspacesAreSkipped() {
+        var remote = session(workspacePath: nil)
+        remote.workspaceLocation = .remote(runtimeID: UUID(), path: "/srv/app")
+
+        #expect(AgentWorkspaceProjectMigration.foldersNeedingProject(
+            sessions: [remote],
+            existing: []
+        ).isEmpty)
+    }
+
+    /// Guards the shape of the migration loop. The candidate list has to be a
+    /// finite snapshot: an earlier version re-queried until the list came back
+    /// empty, which never terminates if a created project fails to claim its
+    /// own folder. Feeding a path that cannot become a project (it normalizes
+    /// to nil) must still yield a finite result rather than a folder that
+    /// stays "needing a project" forever.
+    @Test("升级候选是有限快照，不会因无法认领而反复出现")
+    func migrationCandidateListIsAFiniteSnapshot() {
+        let sessions = [
+            session(workspacePath: "/"),
+            session(workspacePath: ""),
+            session(workspacePath: "/Users/rocky/Sites/tokenhub"),
+        ]
+
+        let folders = AgentWorkspaceProjectMigration.foldersNeedingProject(
+            sessions: sessions,
+            existing: []
+        )
+
+        // "/" and "" cannot normalize into a project folder and must be
+        // dropped outright, not returned as perpetual candidates.
+        #expect(folders == ["/Users/rocky/Sites/tokenhub"])
+
+        // Building the projects the migration would build must leave nothing
+        // outstanding — the fixed point is reached in one pass.
+        let built = folders.map {
+            AgentProject(
+                displayName: WorkspacePresentation.localDisplayName(path: $0),
+                folderPaths: [$0]
+            )
+        }
+        #expect(AgentWorkspaceProjectMigration.foldersNeedingProject(
+            sessions: sessions,
+            existing: built
+        ).isEmpty)
+    }
+
+    /// The promoted project is named after the folder, not left blank or
+    /// showing the raw group key.
+    @Test("升级后的项目沿用文件夹名")
+    func promotedProjectUsesFolderName() {
+        let promoted = AgentProject(
+            displayName: WorkspacePresentation.localDisplayName(path: "/Users/rocky/Sites/tokenhub"),
+            folderPaths: ["/Users/rocky/Sites/tokenhub"]
+        )
+
+        #expect(promoted.resolvedDisplayName == "tokenhub")
+    }
+
     // MARK: Path matching
 
     @Test("a folder claims itself and everything beneath it")
