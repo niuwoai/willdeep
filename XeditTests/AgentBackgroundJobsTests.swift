@@ -201,6 +201,23 @@ struct AgentBackgroundJobsTests {
         #expect(split.finished.map(\.id) == [done.id])
     }
 
+    /// The composer bar reports work in flight, not history. No live job means
+    /// no bar at all — it must not linger summarizing finished tasks.
+    @Test
+    func composerCardOnlyAppearsWhileSomethingIsRunning() {
+        #expect(!AgentBackgroundTaskComposerCardVisibility.shouldShow(runningJobCount: 0))
+        #expect(AgentBackgroundTaskComposerCardVisibility.shouldShow(runningJobCount: 1))
+        #expect(AgentBackgroundTaskComposerCardVisibility.shouldShow(runningJobCount: 7))
+    }
+
+    /// The summary counts only running jobs. It used to lead with a total that
+    /// folded in finished ones ("7 background tasks · 1 running").
+    @Test
+    func composerSummaryCountsOnlyRunningJobs() {
+        #expect(L10n.AgentJobs.composerRunningSummary(1).contains("1"))
+        #expect(!L10n.AgentJobs.composerRunningSummary(1).contains("7"))
+    }
+
     @Test
     func durationFormattingRollsUpSecondsAndMinutes() {
         #expect(AgentBackgroundTaskPresentation.formatDuration(-5) == "0s")

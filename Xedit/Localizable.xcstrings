@@ -2613,7 +2613,7 @@
     "agent-jobs.section.running" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Running %d" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "正在运行 %d" } } } },
     "agent-jobs.section.recent" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Recently finished %d" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "最近完成 %d" } } } },
     "agent-jobs.line-count" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "%d lines" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "%d 行" } } } },
-    "agent-jobs.composer-summary" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "%d background tasks · %d running" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "%d 个后台任务 · %d 个运行中" } } } },
+    "agent-jobs.composer-running-summary" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "%d running" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "%d 个运行中" } } } },
     "agent-jobs.empty" : {
       "comment" : "Empty state in the background-jobs drawer",
       "extractionState" : "manual",

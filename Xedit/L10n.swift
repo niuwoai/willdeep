@@ -1504,9 +1504,12 @@ nonisolated enum L10n {
             return String(format: template, count)
         }
 
-        static func composerSummary(_ total: Int, _ running: Int) -> String {
-            let template = String(localized: "agent-jobs.composer-summary", defaultValue: "%d background tasks · %d running")
-            return String(format: template, total, running)
+        /// Only the running count. The composer card is shown exclusively while
+        /// something is running, so a total that also counted finished jobs was
+        /// reporting on tasks the user had no pending stake in.
+        static func composerRunningSummary(_ running: Int) -> String {
+            let template = String(localized: "agent-jobs.composer-running-summary", defaultValue: "%d running")
+            return String(format: template, running)
         }
 
         static func inspectOutputPrompt(_ jobID: String) -> String {

@@ -482,18 +482,19 @@ struct AgentBackgroundTasksPanel: View {
     @ViewBuilder
     private func logs(job: AgentBackgroundJob) -> some View {
         if logLayout == .split {
-            let axis = width >= 520 ? Axis.Set.horizontal : Axis.Set.vertical
-            ScrollView(axis, showsIndicators: false) {
-                if width >= 520 {
-                    HStack(alignment: .top, spacing: 8) {
-                        logConsole(job: job, stream: .stdout)
-                        logConsole(job: job, stream: .stderr)
-                    }
-                } else {
-                    VStack(spacing: 8) {
-                        logConsole(job: job, stream: .stdout)
-                        logConsole(job: job, stream: .stderr)
-                    }
+            // Each console already scrolls on both axes internally, so the
+            // panes must stay bounded by the panel width. An outer horizontal
+            // ScrollView here handed them an unbounded width proposal and each
+            // pane grew to its longest log line, shoving stderr off-panel.
+            if width >= 520 {
+                HStack(alignment: .top, spacing: 8) {
+                    logConsole(job: job, stream: .stdout)
+                    logConsole(job: job, stream: .stderr)
+                }
+            } else {
+                VStack(spacing: 8) {
+                    logConsole(job: job, stream: .stdout)
+                    logConsole(job: job, stream: .stderr)
                 }
             }
         } else {
@@ -520,7 +521,10 @@ struct AgentBackgroundTasksPanel: View {
             followsLatestOutput: followsLatestOutput,
             copyOutput: { copy(output) }
         )
-        .frame(minWidth: width >= 520 && logLayout == .split ? 220 : nil)
+        // `maxWidth: .infinity` rather than a `minWidth` floor: in the split
+        // HStack this makes the two panes share the panel evenly, and a floor
+        // would let them overflow instead of shrinking.
+        .frame(maxWidth: .infinity)
     }
 
     /// Builds each row once — `processName` included — then filters and sorts.
